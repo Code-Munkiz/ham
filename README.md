@@ -1,3 +1,5 @@
+![Ham — first code monkey in space](assets/ham-mascot.png)
+
 # Ham
 
 Open-source multi-agent autonomous developer swarm: CrewAI orchestration, Factory Droid execution, Hermes review/learning, and a local Context Engine (`memory_heist`).
