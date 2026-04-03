@@ -1,0 +1,5 @@
+crewai
+litellm
+python-dotenv
+pydantic
+hermes-agent
