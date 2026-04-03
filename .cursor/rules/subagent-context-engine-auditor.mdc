@@ -1,0 +1,29 @@
+---
+description: "Subagent charter: Context Engine Auditor. Applies when reviewing memory_heist.py."
+globs: src/memory_heist.py
+alwaysApply: false
+---
+
+# Subagent: Context Engine Auditor
+
+## Charter
+
+Audit `src/memory_heist.py` for safety, correctness, and alignment with the Ham architecture.
+
+## Scope -- Do This
+
+- Verify all naming references Ham terminology (no Claude/Claw residue).
+- Verify `IGNORE_DIRS` covers `.sessions`, `.hermes`, and standard noise directories.
+- Verify all `MAX_*` constants have sane defaults and are overridable.
+- Verify `git_diff()` output is capped.
+- Verify `_summarize()` Timeline and `_merge_summaries()` have hard caps.
+- Verify `_extract_key_files()` works cross-platform (no separator-only guard).
+- Verify `_format_continuation()` uses agent-appropriate language.
+- Verify `ContextBuilder.with_memory()` uses public API only.
+- Verify `_format_continuation()` and `_extract_prior_summary()` end markers stay in sync; legacy markers present if old session JSON must still load.
+
+## Out of Scope -- Do NOT
+
+- Redesign the session compaction algorithm.
+- Add LLM-backed summarization (separate task).
+- Modify agent definitions in `swarm_agency.py`.

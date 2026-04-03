@@ -1,0 +1,12 @@
+---
+description: Enforces minimal, scoped diffs. Apply always.
+alwaysApply: true
+---
+
+# Minimal Diff Policy
+
+- Change only what the task requires. Do not redesign unrelated modules.
+- Do not refactor stable code unless the task explicitly calls for it.
+- Do not add speculative features, utilities, or abstractions beyond the ask.
+- If a change spans more than 3 files, provide an impact map and justification before editing.
+- Preserve existing public API signatures unless breakage is the stated goal.

@@ -1,0 +1,17 @@
+---
+description: Enforces strict agent role boundaries in the swarm.
+alwaysApply: true
+---
+
+# Agent Role Boundaries
+
+Each agent has a fixed charter. Do not blur roles.
+
+| Agent | Does | Does NOT |
+|-------|------|----------|
+| **Architect** | Plan, design interfaces, set constraints, choose patterns | Write implementation code, invoke tools, execute commands |
+| **Commander** | Delegate work, invoke Droid tool, coordinate sequencing | Make design decisions, review quality, persist learnings |
+| **Hermes Critic** | Review outputs, flag regressions, feed FTS5 learning DB | Plan architecture, invoke Droid, modify source directly |
+
+- When adding a new agent, define its charter before writing code.
+- When modifying `swarm_agency.py`, verify no agent's `goal` or `tools` list violates these boundaries.

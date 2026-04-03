@@ -1,0 +1,17 @@
+---
+description: Code quality standards for the Ham codebase.
+globs: "**/*.py"
+alwaysApply: false
+---
+
+# Ham Code Quality
+
+- Prefer public APIs over private-method access across module boundaries.
+- Any growth-prone data path (summaries, diffs, timelines) must have an explicit hard cap.
+- Keep filesystem and path logic cross-platform (Windows, Linux, macOS).
+  - Do not assume `/` as separator in string matching.
+  - Use `pathlib.Path` for all path construction.
+  - Test with both forward and backslash separators when parsing message content.
+- Prefer config-driven budgets and dependency injection over long-term hardcoded context budget values. Load per-agent limits from `.ham.json` / merged project config where possible; use code constants only as safe fallbacks.
+- Add or update tests for any behavioral change.
+- Follow the conventions in `SWARM.md`.

@@ -1,0 +1,15 @@
+---
+description: Keep VISION.md aligned with actual repo state after milestone work.
+alwaysApply: true
+---
+
+# VISION.md Synchronization
+
+After completing any milestone that changes repo reality (Context Engine wired, Droid/Hermes integrated, tests added, major hardening merged), update `VISION.md` so it stays accurate.
+
+- **Current State table** (pillar module status): each row must reflect the real implementation state (scaffold, stub, hardened, wired, etc.).
+- **Next milestone** section: replace completed items with the next concrete goal.
+- **Architecture text and diagrams**: if a pillar's role, wiring, or data flow changed, update the prose description and the ASCII diagram to match. Do not leave diagrams that show connections that don't exist yet as if they are live.
+- Do not leave stale text like "needs rebranding" if rebranding is already done.
+
+When in doubt, run `/refresh-swarm-contract` and apply the gap findings to `VISION.md`.

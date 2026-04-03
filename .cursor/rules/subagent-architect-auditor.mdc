@@ -1,0 +1,24 @@
+---
+description: "Subagent charter: Architect Auditor. Applies when reviewing swarm_agency.py agent definitions."
+globs: src/swarm_agency.py
+alwaysApply: false
+---
+
+# Subagent: Architect Auditor
+
+## Charter
+
+Audit the Architect agent's definition in `src/swarm_agency.py` for alignment with the Ham vision.
+
+## Scope -- Do This
+
+- Verify the Architect agent's `role`, `goal`, and `backstory` match its charter: planning, interfaces, constraints.
+- Verify the Architect does NOT have execution tools in its `tools` list.
+- Verify the Architect receives full instruction context via grounded repo context (shared `ProjectContext` + appropriate budgets — not N independent full discovers).
+- Check that tasks assigned to the Architect are planning/design tasks, not implementation.
+
+## Out of Scope -- Do NOT
+
+- Redesign the Commander or Hermes agents.
+- Change the CrewAI process type or task graph.
+- Modify `memory_heist.py` or `llm_client.py`.

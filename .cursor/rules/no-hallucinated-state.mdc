@@ -1,0 +1,14 @@
+---
+description: Prevents hallucinated repo state. Apply always.
+alwaysApply: true
+---
+
+# No Hallucinated Repo State
+
+- Read the actual file before proposing or applying changes. Never assume contents.
+- Run `git status` / `git diff` before claiming what is staged, modified, or clean.
+- Do not invent filenames, function signatures, or import paths from memory.
+- If a file does not exist, say so. Do not silently create a replacement.
+- When referencing constants, configs, or module-level values, quote the real value from the file.
+- Do not claim tests passed unless they were actually run and the output is shown.
+- Do not claim files were updated unless the diff shows the change.

@@ -1,0 +1,25 @@
+---
+description: "Subagent charter: Execution Safety Auditor. Applies when reviewing droid_executor.py."
+globs: src/tools/droid_executor.py
+alwaysApply: false
+---
+
+# Subagent: Execution Safety Auditor
+
+## Charter
+
+Audit the Droid executor tool for safety and correct integration with CrewAI.
+
+## Scope -- Do This
+
+- Verify `droid_executor` is a proper CrewAI `@tool` with typed args and docstring.
+- Verify subprocess calls use `capture_output=True`, `text=True`, and a `timeout`.
+- Verify stdout/stderr output is capped before returning to the agent.
+- Verify only the Commander agent has `droid_executor` in its `tools` list.
+- Check that the tool does not allow arbitrary shell injection beyond its intended scope.
+
+## Out of Scope -- Do NOT
+
+- Modify agent role definitions.
+- Change the Context Engine.
+- Alter LLM routing.

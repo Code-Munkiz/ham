@@ -1,0 +1,26 @@
+---
+description: Conventions specific to the Context Engine module.
+globs: src/memory_heist.py
+alwaysApply: false
+---
+
+# memory_heist.py Conventions
+
+- If you encounter Claude-specific wording, config paths, or file references, replace them with Ham equivalents:
+  - `CLAUDE.md` -> `SWARM.md`
+  - `.claude` dir -> `.ham` dir
+  - `.claude.json` -> `.ham.json`
+  - "Stolen" / "Claw Code" -> neutral language
+- Instruction constants: `INSTRUCTION_FILENAMES`, `INSTRUCTION_DOT_DIR`, `INSTRUCTION_DOT_FILES` must reference Ham names only.
+- Config paths in `discover_config()` must reference `.ham.json` / `.ham/` only. No Claude fallbacks.
+- `IGNORE_DIRS` must include `.sessions` and `.hermes`.
+- Token budget constants (`MAX_*`) must remain configurable via `ContextBuilder` constructor params.
+- Session compaction output must have hard character caps to prevent unbounded growth.
+
+## Continuation / parser coupling (critical)
+
+`_format_continuation()` and `_extract_prior_summary()` are coupled: the latter uses substring markers to slice prior summaries out of the first system message.
+
+- If you change the closing lines of `_format_continuation()`, you **must** update `end_markers` in `_extract_prior_summary()` to match.
+- Preserve **backward compatibility**: keep markers for both the previous phrasing and the new phrasing until old `.sessions` JSON files are no longer loaded, or document a one-time migration.
+- After any change here, add or extend tests that parse a sample continuation string built with the new format (and optionally the legacy format).

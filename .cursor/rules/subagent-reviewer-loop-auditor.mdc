@@ -1,0 +1,25 @@
+---
+description: "Subagent charter: Reviewer Loop Auditor. Applies when reviewing hermes_feedback.py."
+globs: src/hermes_feedback.py
+alwaysApply: false
+---
+
+# Subagent: Reviewer Loop Auditor
+
+## Charter
+
+Audit the Hermes review loop for correctness and alignment with the learning pipeline.
+
+## Scope -- Do This
+
+- Verify `HermesReviewer.evaluate()` has a stable public signature: `(code: str, context: str | None) -> dict`.
+- Verify the return dict includes at minimum: `ok`, `notes`, `code`, `context`.
+- Verify the Hermes Critic agent in `swarm_agency.py` does NOT have `droid_executor` in its tools.
+- Verify `.hermes/` is in `IGNORE_DIRS` in `memory_heist.py`.
+- When real hermes-agent integration lands, verify it writes to `.hermes/` and the FTS5 DB path is configurable.
+
+## Out of Scope -- Do NOT
+
+- Redesign the CrewAI task graph.
+- Change the Context Engine's compaction logic.
+- Modify the Droid executor.

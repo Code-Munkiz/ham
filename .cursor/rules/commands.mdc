@@ -1,0 +1,66 @@
+---
+description: Custom slash commands for Ham project workflows. Apply always.
+alwaysApply: true
+---
+
+# Ham Commands
+
+## /audit-context-engine
+
+Run the Context Engine Auditor checklist against `src/memory_heist.py`.
+
+1. Read `src/memory_heist.py`.
+2. Walk the Context Engine Hardening skill checklist (`.cursor/skills/context-engine-hardening/SKILL.md`), including continuation/parser marker coupling.
+3. Report findings as a table: item, status (pass/fail), detail.
+4. Do not auto-fix. Present findings for review.
+
+## /wire-agent-context
+
+Wire `ContextBuilder` into all agents in `src/swarm_agency.py`.
+
+1. Read the Agent Context Wiring skill (`.cursor/skills/agent-context-wiring/SKILL.md`).
+2. Read `src/swarm_agency.py` and `src/memory_heist.py`.
+3. Add `from src.memory_heist import ContextBuilder` (or equivalent) if missing.
+4. **Single discovery pass**: build **one** `ProjectContext` (or one `ContextBuilder` that shares a single discovered context) and vary **only render budgets** per agent. Do not create multiple `ContextBuilder()` instances that each run a full `ProjectContext.discover()` (duplicate scans and git calls).
+5. Prefer loading per-agent budgets from `.ham.json` / config (`discover_config`) over long-term hardcoded magic numbers; use code defaults only as fallback.
+6. Inject per-agent rendered context strings into each agent's `backstory`.
+7. Run lints. Present diff for review. Update `VISION.md` status if wiring completes a milestone.
+
+## /review-role-boundaries
+
+Audit all agent definitions for role boundary violations.
+
+1. Read the Role Boundaries rule (`.cursor/rules/role-boundaries.mdc`).
+2. Read `src/swarm_agency.py`.
+3. For each agent, check: does its `goal`, `tools`, and task assignments stay within its charter?
+4. Report violations as a table: agent, field, violation, suggested fix.
+
+## /test-context-regressions
+
+Generate or run regression tests for `src/memory_heist.py`.
+
+1. Read the Repo Context Regression Testing skill (`.cursor/skills/repo-context-regression-testing/SKILL.md`).
+2. If `tests/test_memory_heist.py` exists, read it and check coverage against the skill's test categories.
+3. If it does not exist, generate it with `pytest` + `tmp_path` fixtures covering all 6 categories.
+4. Run `pytest tests/test_memory_heist.py -v` and report results.
+
+## /rebrand-memory-heist
+
+Scan `src/memory_heist.py` for any remaining Claude/Claw references and replace with Ham equivalents.
+
+1. Read `src/memory_heist.py`.
+2. Grep for `claude`, `Claude`, `CLAUDE`, `claw`, `Claw`, `stolen`, `Stolen` (case-insensitive).
+3. If matches found, apply replacements per the memory-heist-conventions rule.
+4. If no matches, report clean.
+
+## /refresh-swarm-contract
+
+Re-validate the entire swarm against `VISION.md`.
+
+1. Read `VISION.md`.
+2. Read all pillar modules: `src/swarm_agency.py`, `src/tools/droid_executor.py`, `src/hermes_feedback.py`, `src/memory_heist.py`, `src/llm_client.py`.
+3. For each pillar, check: does the module's current code match the role described in `VISION.md`?
+4. Check: is `memory_heist.py` actually imported and used by `swarm_agency.py`?
+5. Check: does each agent's definition respect role boundaries?
+6. Report as a table: pillar, module, vision role, actual status, gaps.
+7. If the table fixes factual drift, apply updates to `VISION.md` (status table and next milestone) per the vision-sync rule.
