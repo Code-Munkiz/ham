@@ -25,12 +25,11 @@ think, it executes.
 
 ### 3. The Critic / Learner — Hermes
 
-Hermes (NousResearch's hermes-agent) acts as a dedicated Reviewer Agent in
-the Crew. After Droid executes, Hermes reviews the output: checks code quality,
-catches regressions, and feeds learning signals back into a local FTS5 SQLite
-database. Over time Hermes accumulates institutional knowledge about the
-project — what patterns work, what breaks, what to avoid. This is the swarm's
-long-term memory and taste.
+The **Critic** pillar (`src/hermes_feedback.py`) runs a code review pass after
+execution-oriented work. Today it uses a **minimal LLM-backed** reviewer with a
+stable output schema and conservative fallback when critique cannot complete
+confidently. **Durable learning** (e.g. FTS5-backed persistence) is part of the
+long-term vision but is **not implemented yet** — see `GAPS.md`.
 
 ### 4. The Context Engine — memory_heist.py
 
@@ -44,7 +43,11 @@ agent in the swarm a grounded understanding of the local repository:
 - **Git state capture**: status, diff, recent log — injected into prompts so
   agents know what changed and what's staged.
 - **Session compaction**: conversation history summarization and persistence
-  so agents can survive context window limits across long tasks.
+  so agents can survive context window limits across long tasks (including
+  tool-output pruning and config-driven compaction thresholds).
+- **Instruction hygiene**: scanning of discovered instruction files for
+  obvious injection patterns and invisible unicode before injection into
+  rendered context.
 
 The Context Engine does NOT make decisions. It assembles ground truth and
 injects it into agent prompts so they don't hallucinate about repo state.
@@ -96,13 +99,16 @@ The skeleton is assembled. Each pillar has a module:
 |----------------|----------------------------|------------|
 | Orchestrator   | `src/swarm_agency.py`      | Wired — single `ProjectContext.discover()`, per-agent render budgets |
 | Muscle         | `src/tools/droid_executor.py` | Scaffold |
-| Critic         | `src/hermes_feedback.py`   | Stub       |
-| Context Engine | `src/memory_heist.py`      | Hardened — diff/summary caps, configurable budgets, marker coupling fixed, 12 regression tests passing |
+| Critic         | `src/hermes_feedback.py`   | MVP — LLM-backed `HermesReviewer.evaluate()`, stable schema, conservative fallback; FTS5 / durable learning **deferred** |
+| Context Engine | `src/memory_heist.py`      | Hardened + Phase 1 — caps, marker coupling, instruction scanning, tool-output pruning, config-driven session compaction; 18 tests in `tests/test_memory_heist.py` |
 | LLM Routing    | `src/llm_client.py`        | Working    |
 
-**Next milestone**: integrate real Hermes review loop (evaluate + FTS5
-persist), wire Droid CLI end-to-end, add task-graph expansion beyond single
-kickoff task, and validate full swarm run on a real user prompt.
+**Tests**: `tests/test_memory_heist.py` + `tests/test_hermes_feedback.py` — **25** regression/guardrail cases (run both files with pytest).
+
+**Next milestone**: wire Droid CLI end-to-end, add context refresh after Droid
+mutations, expand task graph beyond single kickoff task, validate a full swarm
+run on a real prompt. **Deferred:** FTS5 critic persistence, second orchestration
+harness, orchestration redesign.
 
 ## Design Principles
 
