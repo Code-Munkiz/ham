@@ -11,7 +11,7 @@ working on this repo should read these before proposing changes.
 
 - `src/memory_heist.py` — Context Engine (repo scan, git state, config, sessions)
 - `src/swarm_agency.py` — CrewAI orchestrator (agent + task definitions)
-- `src/hermes_feedback.py` — Hermes critic (review loop, FTS5 learning)
+- `src/hermes_feedback.py` — Critic / reviewer (`HermesReviewer` LLM-backed MVP; FTS5 learning **deferred**)
 - `src/tools/droid_executor.py` — Droid CLI tool (parallel shell execution)
 - `src/llm_client.py` — LiteLLM / OpenRouter wiring
 
@@ -39,4 +39,7 @@ working on this repo should read these before proposing changes.
 
 ## Tests
 
-- `tests/` — regression tests (bootstrap with `/test-context-regressions`)
+- `tests/test_memory_heist.py` — Context Engine + Phase 1/3 guardrails (18 cases)
+- `tests/test_hermes_feedback.py` — Critic MVP + Phase 3 guardrails (7 cases)
+- Run: `python -m pytest tests/test_memory_heist.py tests/test_hermes_feedback.py` (25 cases as of last doc sync)
+- Other tests under `tests/` as added; bootstrap with `/test-context-regressions` for Context Engine focus
