@@ -21,7 +21,7 @@ class HamRunAssembly:
     commander_backstory: str
     critic_backstory: str
     llm_client: Any
-    droid_executor: Callable[[str], str]
+    droid_executor: Callable[..., Any]
 
 
 def assemble_ham_run(user_prompt: str) -> HamRunAssembly:
