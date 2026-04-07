@@ -64,14 +64,14 @@ Run the Context Engine Auditor checklist against `src/memory_heist.py`.
 
 ## /wire-agent-context
 
-Wire `ContextBuilder` into all agents in `src/swarm_agency.py`.
+Wire shared repo context into active orchestration roles in `src/swarm_agency.py` (transitional scaffold).
 
 1. Read the Agent Context Wiring skill (`.cursor/skills/agent-context-wiring/SKILL.md`).
 2. Read `src/swarm_agency.py` and `src/memory_heist.py`.
 3. Add `from src.memory_heist import ContextBuilder` (or equivalent) if missing.
 4. **Single discovery pass**: build **one** `ProjectContext` (or one `ContextBuilder` that shares a single discovered context) and vary **only render budgets** per agent. Do not create multiple `ContextBuilder()` instances that each run a full `ProjectContext.discover()` (duplicate scans and git calls).
 5. Prefer loading per-agent budgets from `.ham.json` / config (`discover_config`) over long-term hardcoded magic numbers; use code defaults only as fallback.
-6. Inject per-agent rendered context strings into each agent's `backstory`.
+6. Inject per-role rendered context strings into each active role backstory/prompt surface.
 7. Run lints. Present diff for review. Update `VISION.md` status if wiring completes a milestone.
 
 ## /review-role-boundaries
@@ -108,8 +108,8 @@ Re-validate the entire swarm against `VISION.md`.
 1. Read `VISION.md`.
 2. Read all pillar modules: `src/swarm_agency.py`, `src/tools/droid_executor.py`, `src/hermes_feedback.py`, `src/memory_heist.py`, `src/llm_client.py`.
 3. For each pillar, check: does the module's current code match the role described in `VISION.md`?
-4. Check: is `memory_heist.py` actually imported and used by `swarm_agency.py`?
-5. Check: does each agent's definition respect role boundaries?
+4. Check: is `memory_heist.py` imported and used by the active orchestration path (currently `swarm_agency.py`)?
+5. Check: do current role definitions respect supervisory-vs-execution boundaries?
 6. Report as a table: pillar, module, vision role, actual status, gaps.
 7. If the table fixes factual drift, apply updates to `VISION.md` (status table and next milestone) per the vision-sync rule.
 ```
@@ -120,7 +120,7 @@ Re-validate the entire swarm against `VISION.md`.
 
 ```
 ---
-description: Enforces the Ham five-pillar architecture. Apply always.
+description: Enforces the Ham core architecture contract. Apply always.
 alwaysApply: true
 ---
 
@@ -128,20 +128,22 @@ alwaysApply: true
 
 The architecture is fixed unless the user explicitly approves a change.
 
-## Five Pillars
+## Core Pillars
 
 | Pillar | Module | Role |
 |--------|--------|------|
-| Orchestrator | CrewAI (`src/swarm_agency.py`) | Routes tasks, manages agents |
-| Muscle | Factory Droid CLI (`src/tools/droid_executor.py`) | Parallel shell execution via subprocess |
-| Critic | Hermes (`src/hermes_feedback.py`) | Reviews output, learns via FTS5 |
+| Supervisory Core | Hermes (`src/hermes_feedback.py`) | Supervisory orchestration, critique, and learning signals |
+| Execution Engine | Factory Droid CLI (`src/tools/droid_executor.py`) | Implementation-heavy execution with bounded local self-orchestration |
 | Context Engine | `src/memory_heist.py` | Repo scanning, git state, config, session memory |
 | LLM Routing | LiteLLM / OpenRouter (`src/llm_client.py`) | Model-agnostic API layer, BYOK |
 
 ## Rules
 
 - Do not merge, split, or reassign pillar responsibilities.
-- Do not introduce new orchestration frameworks alongside CrewAI.
+- Hermes is not a monolith and not a second execution engine.
+- Hermes may self-handle only tiny, bounded, critic-native tasks.
+- Droid retains execution ownership; do not collapse execution into Hermes.
+- Ambiguous execution work defaults to Droid.
 - Do not bypass memory_heist for repo context -- agents must consume `ContextBuilder.build()`.
 - Do not hardcode model names outside `llm_client.py`.
 - Reference `VISION.md` for the canonical architecture diagram.
@@ -237,11 +239,13 @@ Each agent has a fixed charter. Do not blur roles.
 | Agent | Does | Does NOT |
 |-------|------|----------|
 | **Architect** | Plan, design interfaces, set constraints, choose patterns | Write implementation code, invoke tools, execute commands |
-| **Commander** | Delegate work, invoke Droid tool, coordinate sequencing | Make design decisions, review quality, persist learnings |
-| **Hermes Critic** | Review outputs, flag regressions, feed FTS5 learning DB | Plan architecture, invoke Droid, modify source directly |
+| **Execution Coordinator (transitional Commander role)** | Delegate execution work to Droid, coordinate sequencing, preserve execution ownership boundaries | Replace Hermes supervisory policy, absorb critique/learning ownership |
+| **Hermes Supervisor/Critic** | Supervise routing policy, critique outputs, emit learning signals; self-handle tiny bounded critic-native tasks only | Become a second execution engine, own broad code/test/build execution, directly absorb Droid execution ownership |
+| **Droid Executor** | Execute implementation-heavy code/shell work; may self-orchestrate locally while executing | Own global supervisory policy, critique governance, or architecture planning |
 
 - When adding a new agent, define its charter before writing code.
-- When modifying `swarm_agency.py`, verify no agent's `goal` or `tools` list violates these boundaries.
+- Ambiguous execution work defaults to Droid.
+- When modifying orchestration files (including `swarm_agency.py` during transition), verify no role's `goal` or `tools` list violates these boundaries.
 ```
 
 ---
@@ -271,7 +275,7 @@ Audit the Architect agent's definition in `src/swarm_agency.py` for alignment wi
 ## Out of Scope -- Do NOT
 
 - Redesign the Commander or Hermes agents.
-- Change the CrewAI process type or task graph.
+- Change the active orchestration process or task graph.
 - Modify `memory_heist.py` or `llm_client.py`.
 ```
 
@@ -326,14 +330,14 @@ alwaysApply: false
 
 ## Charter
 
-Audit the Droid executor tool for safety and correct integration with CrewAI.
+Audit the Droid executor for safety and correct execution ownership boundaries.
 
 ## Scope -- Do This
 
-- Verify `droid_executor` is a proper CrewAI `@tool` with typed args and docstring.
+- Verify `droid_executor` has a clear, typed invocation surface and docstring.
 - Verify subprocess calls use `capture_output=True`, `text=True`, and a `timeout`.
 - Verify stdout/stderr output is capped before returning to the agent.
-- Verify only the Commander agent has `droid_executor` in its `tools` list.
+- Verify execution-heavy work remains delegated to Droid (not absorbed by Hermes supervisory logic).
 - Check that the tool does not allow arbitrary shell injection beyond its intended scope.
 
 ## Out of Scope -- Do NOT
@@ -364,13 +368,13 @@ Audit the Hermes review loop for correctness and alignment with the learning pip
 
 - Verify `HermesReviewer.evaluate()` has a stable public signature: `(code: str, context: str | None) -> dict`.
 - Verify the return dict includes at minimum: `ok`, `notes`, `code`, `context`.
-- Verify the Hermes Critic agent in `swarm_agency.py` does NOT have `droid_executor` in its tools.
+- Verify supervisory review wiring in `swarm_agency.py` does not absorb Droid execution responsibilities.
 - Verify `.hermes/` is in `IGNORE_DIRS` in `memory_heist.py`.
 - When real hermes-agent integration lands, verify it writes to `.hermes/` and the FTS5 DB path is configurable.
 
 ## Out of Scope -- Do NOT
 
-- Redesign the CrewAI task graph.
+- Redesign the orchestration graph.
 - Change the Context Engine's compaction logic.
 - Modify the Droid executor.
 ```
@@ -405,9 +409,9 @@ When in doubt, run `/refresh-swarm-contract` and apply the gap findings to `VISI
 ---
 name: agent-context-wiring
 description: >-
-  Wire memory_heist ContextBuilder into CrewAI agent backstories in swarm_agency.py
-  using a single shared ProjectContext and per-agent render budgets. Use when connecting
-  agents to repo context, adjusting budgets, or integrating SessionMemory into task callbacks.
+  Wire memory_heist ContextBuilder into active orchestration role prompts in swarm_agency.py
+  using a single shared ProjectContext and per-role render budgets. Use when connecting
+  supervisory/execution flows to repo context, adjusting budgets, or integrating SessionMemory.
 ---
 
 # Agent Context Wiring
@@ -415,8 +419,8 @@ description: >-
 ## When to Use
 
 - Integrating `ContextBuilder` into `src/swarm_agency.py`
-- Setting per-agent token / instruction / diff budgets
-- Wiring `SessionMemory` into CrewAI task callbacks
+- Setting per-role token / instruction / diff budgets
+- Wiring `SessionMemory` into the active orchestration flow
 
 ## Anti-pattern: N full scans
 
@@ -425,34 +429,35 @@ description: >-
 ## Preferred pattern: one discovery, vary render only
 
 1. Call `ProjectContext.discover()` **once** (or construct one `ContextBuilder` that owns a single `project` snapshot).
-2. For each agent, render context with **different budgets** (instruction caps, diff caps) by passing parameters into render helpers — or add a small API on `ContextBuilder` / `ProjectContext` such as `render_for_agent(budgets=...)`.
-3. Concatenate each agent's static role line + that rendered string into `backstory`.
+2. For each role, render context with **different budgets** (instruction caps, diff caps) by passing parameters into render helpers — or add a small API on `ContextBuilder` / `ProjectContext` such as `render_for_role(budgets=...)`.
+3. Concatenate each role's static instruction line + that rendered string into the active prompt/backstory surface.
 
 Example shape (adapt to actual `memory_heist` API after hardening):
 
 ```python
-from pathlib import Path
-from src.memory_heist import ProjectContext  # or ContextBuilder with shared project
+from src.memory_heist import ProjectContext
+from src.swarm_agency import HamRunAssembly
 
-def build_swarm_crew(user_prompt: str) -> Crew:
-    root = Path.cwd()
-    project = ProjectContext.discover(root)
+def assemble_ham_run(user_prompt: str) -> HamRunAssembly:
+    project = ProjectContext.discover()
 
     arch_text = project.render(
-        max_instruction_file_chars=4_000,
         max_total_instruction_chars=16_000,
         max_diff_chars=8_000,
     )
     cmd_text = project.render(
-        max_instruction_file_chars=2_000,
         max_total_instruction_chars=4_000,
         max_diff_chars=2_000,
     )
-    # ... critic with its own budgets ...
+    # ... critic with its own budgets; attach llm + droid per production wiring ...
 
-    architect = Agent(
-        backstory=f"You plan structure and interfaces.\n\n{arch_text}",
-        ...
+    return HamRunAssembly(
+        user_prompt=user_prompt,
+        architect_backstory=f"You plan structure and interfaces.\n\n{arch_text}",
+        commander_backstory=f"You coordinate execution.\n\n{cmd_text}",
+        critic_backstory="...",
+        llm_client=None,
+        droid_executor=lambda cmd: "...",
     )
 ```
 
@@ -460,20 +465,20 @@ Until `ProjectContext.render()` accepts budget overrides, implement the minimal 
 
 ## Config-driven budgets
 
-Prefer reading per-agent budgets from merged project config (`discover_config` / `.ham.json`) with sane code defaults. Avoid leaving magic numbers only in `swarm_agency.py` long-term.
+Prefer reading per-role budgets from merged project config (`discover_config` / `.ham.json`) with sane code defaults. Avoid leaving magic numbers only in `swarm_agency.py` long-term.
 
 ## Budget guidelines (defaults until config exists)
 
-| Agent | Instruction budget (total) | Diff budget | Rationale |
+| Role | Instruction budget (total) | Diff budget | Rationale |
 |-------|---------------------------|-------------|-----------|
-| Architect | Higher (e.g. 16,000) | Full (e.g. 8,000) | Needs design + instructions |
-| Commander | Lower (e.g. 4,000) | Tighter (e.g. 2,000) | Task scope, less prose |
-| Hermes Critic | Medium (e.g. 8,000) | Default | Enough to review |
+| Hermes supervisory context | Higher (e.g. 16,000) | Full (e.g. 8,000) | Routing, policy, quality context |
+| Droid execution context | Lower (e.g. 4,000) | Tighter (e.g. 2,000) | Task scope, actionable execution details |
+| Hermes review context | Medium (e.g. 8,000) | Default | Enough to critique and learn |
 
 ## Verification
 
-1. Every agent in `build_swarm_crew()` receives repo-grounded context in `backstory`.
-2. Repo scan + git capture runs **once** per crew build (unless explicitly refreshing after Droid).
+1. Every active orchestration role receives repo-grounded context in its prompt/backstory surface.
+2. Repo scan + git capture runs **once** per orchestration build (unless explicitly refreshing after Droid).
 3. Budgets are tunable via config when available.
 ```
 
@@ -536,10 +541,10 @@ All of these should be overridable via `ContextBuilder` constructor params once 
 ---
 name: hermes-review-loop-validation
 description: >-
-  Validate the Hermes critic review loop: verify the Critic agent receives
-  correct context, invokes HermesReviewer.evaluate(), and persists learning
-  signals to FTS5. Use when modifying hermes_feedback.py, the Critic agent
-  definition, or the review pipeline.
+  Validate the Hermes supervisory critic review loop: verify Hermes receives
+  correct context, invokes HermesReviewer.evaluate(), and preserves learning
+  signals for later persistence. Use when modifying hermes_feedback.py, the
+  supervisory review path, or the review pipeline.
 ---
 
 # Hermes Review Loop Validation
@@ -547,17 +552,17 @@ description: >-
 ## When to Use
 
 - Modifying `src/hermes_feedback.py`
-- Changing the Hermes Critic agent in `src/swarm_agency.py`
+- Changing supervisory/review wiring in `src/swarm_agency.py`
 - Integrating the real hermes-agent client
 - Verifying FTS5 persistence after reviews
 
 ## Review Loop Contract
 
 ```
-Commander output
+Execution output
       |
       v
-Hermes Critic agent (CrewAI)
+Hermes supervisory critic path
       |
       v
 HermesReviewer.evaluate(code, context)
@@ -568,10 +573,10 @@ FTS5 DB (persist learning signals)
 
 ## Validation Checklist
 
-1. The Critic agent's `goal` must reference review and learning, not planning or execution.
-2. The Critic agent must NOT have `droid_executor` in its `tools` list.
+1. Hermes review logic must reference critique and learning signals, not broad execution ownership.
+2. Hermes review path must not absorb Droid execution responsibilities.
 3. `HermesReviewer.evaluate()` must receive the actual code output, not a summary.
-4. `HermesReviewer.evaluate()` must receive context from `ContextBuilder` so it knows repo state.
+4. `HermesReviewer.evaluate()` must receive repo-grounded context (from `ContextBuilder` / `ProjectContext` render path).
 5. When the real hermes-agent client is integrated:
    - Verify it writes to `.hermes/` directory
    - Verify `.hermes/` is in `IGNORE_DIRS` so agents don't ingest the DB as source
@@ -579,8 +584,8 @@ FTS5 DB (persist learning signals)
 
 ## Current State
 
-`HermesReviewer` is a stub. The `evaluate()` method returns a hardcoded dict.
-Integration with the real hermes-agent API is pending.
+`HermesReviewer.evaluate()` is implemented with a stable schema and conservative
+fallback behavior. Durable FTS5 learning persistence remains deferred.
 ```
 
 ---
@@ -602,13 +607,13 @@ description: >-
 
 - Diagnosing agent output truncation or degraded quality
 - Reviewing `MAX_*` constants in `src/memory_heist.py`
-- Checking total prompt size before CrewAI kickoff
+- Checking total prompt size before supervisory orchestration execution
 - After changing instruction files, config, or git diff caps
 
 ## Audit Steps
 
 1. Read `src/memory_heist.py` and note all `MAX_*` constants.
-2. For each agent in `src/swarm_agency.py`, estimate the total backstory size:
+2. For each active role in `src/swarm_agency.py` (or current orchestration path), estimate total prompt/backstory size:
    - `ContextBuilder.build()` output size (instructions + git state + tree + config)
    - Plus the static backstory string
 3. Compare against the model's context window (check `src/llm_client.py` for model ID).
@@ -703,19 +708,19 @@ working on this repo should read these before proposing changes.
 
 ## Architecture
 
-- `VISION.md` — canonical architecture, five pillars, design principles
+- `VISION.md` — canonical architecture, core pillars, design principles
 
 ## Pillar modules
 
+- `src/hermes_feedback.py` — Hermes supervisory core + critic/learner surface (`HermesReviewer` MVP complete; supervisory wiring still transitional)
+- `src/tools/droid_executor.py` — Droid execution engine (implementation-heavy execution; local self-orchestration while executing)
 - `src/memory_heist.py` — Context Engine (repo scan, git state, config, sessions)
-- `src/swarm_agency.py` — CrewAI orchestrator (agent + task definitions)
-- `src/hermes_feedback.py` — Hermes critic (review loop, FTS5 learning)
-- `src/tools/droid_executor.py` — Droid CLI tool (parallel shell execution)
 - `src/llm_client.py` — LiteLLM / OpenRouter wiring
+- `src/swarm_agency.py` — transitional orchestration scaffold pending migration to Hermes-supervised flow
 
 ## Configuration & entry
 
-- `main.py` — runtime entrypoint (CLI arg parsing, env load, crew assembly)
+- `main.py` — runtime entrypoint (CLI arg parsing, env load, orchestration assembly)
 - `SWARM.md` — project-level coding instructions (loaded by memory_heist)
 - `AGENTS.md` — this file
 - `requirements.txt` — Python dependencies
@@ -737,7 +742,10 @@ working on this repo should read these before proposing changes.
 
 ## Tests
 
-- `tests/` — regression tests (bootstrap with `/test-context-regressions`)
+- `tests/test_memory_heist.py` — Context Engine + Phase 1/3 guardrails (18 cases)
+- `tests/test_hermes_feedback.py` — Critic MVP + Phase 3 guardrails (7 cases)
+- Run: `python -m pytest tests/test_memory_heist.py tests/test_hermes_feedback.py` (25 cases as of last doc sync)
+- Other tests under `tests/` as added; bootstrap with `/test-context-regressions` for Context Engine focus
 ```
 
 ---
@@ -753,33 +761,29 @@ Ham is an open-source, multi-agent autonomous developer swarm that executes
 the full Software Development Life Cycle (SDLC). It is not a chatbot wrapper.
 It is an opinionated assembly line: plan, build, review, learn, repeat.
 
-## The Five Pillars
+## The Four Core Pillars
 
-### 1. The Orchestrator — CrewAI
+### 1. Supervisory Core — Hermes
 
-CrewAI manages the workflow graph. It routes tasks between agents, enforces
-sequencing (sequential or hierarchical process), and owns the agent lifecycle.
-Every agent in the swarm is a CrewAI `Agent`; every unit of work is a CrewAI
-`Task`. CrewAI is the spine — nothing moves without it.
+Hermes is the supervisory control plane for the swarm. It coordinates droids,
+routes jobs, critiques outputs, and accumulates learning signals over time.
+Hermes owns orchestration and quality policy at the system level.
 
-### 2. The Muscle — Factory Droid CLI
+Hermes may self-handle only tiny, bounded, critic-native tasks (for example:
+small review normalization or bounded policy checks). Hermes is not the
+primary execution engine.
 
-Factory Droid CLI is the execution engine, wrapped as a CrewAI `@tool` so
-agents can trigger massive parallel shell execution. When the Commander agent
-needs to scaffold 40 files, run a test matrix, or batch-apply refactors, it
-delegates to Droid via `subprocess`. Droid is pure throughput — it does not
-think, it executes.
+### 2. Execution Engine — Factory Droid CLI
 
-### 3. The Critic / Learner — Hermes
+Factory Droid CLI is the execution-heavy implementation engine. Droid performs
+code and shell work (scaffolding, edits, tests, refactors, command execution)
+and may self-orchestrate locally while executing delegated work.
 
-Hermes (NousResearch's hermes-agent) acts as a dedicated Reviewer Agent in
-the Crew. After Droid executes, Hermes reviews the output: checks code quality,
-catches regressions, and feeds learning signals back into a local FTS5 SQLite
-database. Over time Hermes accumulates institutional knowledge about the
-project — what patterns work, what breaks, what to avoid. This is the swarm's
-long-term memory and taste.
+Droid is not a dumb worker: it can perform bounded local planning and
+sequencing inside an assigned execution job. Ambiguous execution work defaults
+to Droid.
 
-### 4. The Context Engine — memory_heist.py
+### 3. Context Engine — memory_heist.py
 
 Adapted from Claude Code's context-awareness runtime. This module gives every
 agent in the swarm a grounded understanding of the local repository:
@@ -791,17 +795,48 @@ agent in the swarm a grounded understanding of the local repository:
 - **Git state capture**: status, diff, recent log — injected into prompts so
   agents know what changed and what's staged.
 - **Session compaction**: conversation history summarization and persistence
-  so agents can survive context window limits across long tasks.
+  so agents can survive context window limits across long tasks (including
+  tool-output pruning and config-driven compaction thresholds).
+- **Instruction hygiene**: scanning of discovered instruction files for
+  obvious injection patterns and invisible unicode before injection into
+  rendered context.
 
 The Context Engine does NOT make decisions. It assembles ground truth and
 injects it into agent prompts so they don't hallucinate about repo state.
 
-### 5. LLM Routing — LiteLLM / OpenRouter
+### 4. LLM Routing — LiteLLM / OpenRouter
 
-LiteLLM provides the model-agnostic API layer. OpenRouter provides the BYOK
-(bring your own key) gateway. Together they let Ham hot-swap models on the
-fly — use a fast model for planning, a strong model for code generation, a
-cheap model for summarization. Model selection is config-driven, not hardcoded.
+LiteLLM and OpenRouter provide model/provider abstraction and routing. Model
+selection stays config-driven and decoupled from orchestration and execution
+roles.
+
+## Responsibilities Matrix
+
+| Component | Owns | Must Not Own |
+|-----------|------|--------------|
+| **Hermes (Supervisory Core)** | Job routing, supervisory orchestration, critique policy, learning policy, escalation/handoff decisions | Broad execution loops, heavy code/test/build operations, replacing Droid as execution engine |
+| **Droid (Execution Engine)** | Implementation-heavy execution, shell/code operations, bounded local self-orchestration while executing delegated jobs | Global supervisory policy, long-horizon learning governance, replacing Hermes as control plane |
+| **memory_heist (Context Engine)** | Repo truth, context discovery/plumbing, instruction/config/git/session context assembly | Execution orchestration policy, critique decision-making, execution ownership |
+| **LiteLLM/OpenRouter (Model Routing)** | Provider abstraction, model access, configurable routing | Orchestration policy, execution ownership, critique ownership |
+
+**Default routing rule:** if work may mutate code, invoke tools, or requires
+non-trivial execution judgment, route it to Droid.
+
+## Anti-Drift Guardrails (Separation of Duties)
+
+1. **Hermes is not a monolith.** Hermes coordinates, critiques, and learns; it
+   does not absorb all runtime behavior.
+2. **Hermes is not a second execution engine.** Hermes may run only tiny,
+   bounded, critic-native tasks directly.
+3. **Orchestration refactors must not absorb execution.** Shifting control flow
+   or framework choice must not move execution-heavy behavior into Hermes by
+   default.
+4. **Droid is not reduced to a dumb worker.** Droid retains bounded local
+   self-orchestration authority during execution.
+5. **Ambiguous execution defaults to Droid.** If ownership is unclear and task
+   impact is execution-heavy, route to Droid first.
+6. **No verdict-based role collapse.** Critique outcomes must not be used to
+   justify shifting execution ownership away from Droid.
 
 ## How They Connect
 
@@ -810,18 +845,24 @@ User Prompt
     │
     ▼
 ┌─────────────────────────────────────────────┐
-│  CrewAI Orchestrator                        │
+│  Hermes Supervisory Core                    │
 │                                             │
-│  ┌───────────┐  ┌───────────┐  ┌─────────┐ │
-│  │ Architect │→ │ Commander │→ │ Hermes  │ │
-│  │  (plan)   │  │ (execute) │  │ (review)│ │
-│  └───────────┘  └─────┬─────┘  └────┬────┘ │
-│                       │              │      │
-│                       ▼              ▼      │
-│               ┌──────────────┐  ┌────────┐  │
-│               │ Droid CLI    │  │ FTS5   │  │
-│               │ (subprocess) │  │ (learn)│  │
-│               └──────────────┘  └────────┘  │
+│  ┌───────────────────────────────────────┐  │
+│  │ route jobs / supervise / critique     │  │
+│  └───────────────────────┬───────────────┘  │
+│                          │                  │
+│                          ▼                  │
+│                 ┌──────────────────┐        │
+│                 │ Droid CLI        │        │
+│                 │ execute + local  │        │
+│                 │ self-orchestration│       │
+│                 └──────────────────┘        │
+│                          │                  │
+│                          ▼                  │
+│                 ┌──────────────────┐        │
+│                 │ Critique + learn │        │
+│                 │ (Hermes)         │        │
+│                 └──────────────────┘        │
 │                                             │
 │  ┌──────────────────────────────────────┐   │
 │  │ memory_heist.py — Context Engine     │   │
@@ -835,31 +876,44 @@ User Prompt
 └─────────────────────────────────────────────┘
 ```
 
-## Current State
+## Architecture Target (North Star)
 
-The skeleton is assembled. Each pillar has a module:
+| Pillar | Target Owner | Target Role |
+|--------|--------------|-------------|
+| Supervisory Core | `src/hermes_feedback.py` (and Hermes supervisory wiring) | Supervisory orchestration + critique + learning |
+| Execution Engine | `src/tools/droid_executor.py` | Execution-heavy implementation with bounded local self-orchestration |
+| Context Engine | `src/memory_heist.py` | Repo truth and context plumbing |
+| LLM Routing | `src/llm_client.py` | Model/provider abstraction and routing |
 
-| Pillar         | Module                     | Status     |
-|----------------|----------------------------|------------|
-| Orchestrator   | `src/swarm_agency.py`      | Scaffold   |
-| Muscle         | `src/tools/droid_executor.py` | Scaffold |
-| Critic         | `src/hermes_feedback.py`   | Stub       |
-| Context Engine | `src/memory_heist.py`      | Rebranded (Ham paths/ignores); hardening + wiring pending |
-| LLM Routing    | `src/llm_client.py`        | Working    |
+## Current Implementation State (Transitional)
 
-**Next milestone**: harden memory_heist.py (diff/summary caps, configurable
-budgets, continuation/parser marker safety), wire a **single** discovered
-`ProjectContext` into `swarm_agency.py` with per-agent render budgets, add
-regression tests, and keep this doc in sync.
+| Area | Primary Module(s) | Current Status |
+|------|--------------------|----------------|
+| Supervisory orchestration | `src/swarm_agency.py`, `src/hermes_feedback.py` | Transitional: orchestration path still scaffolded; Hermes reviewer MVP exists but supervisory wiring is incomplete |
+| Execution engine | `src/tools/droid_executor.py` | Stub/scaffold: no full real Droid execution path yet |
+| Context engine | `src/memory_heist.py` | Hardened + tested (Phase 1/3 guardrails complete) |
+| LLM routing | `src/llm_client.py` | Working |
+| Critique MVP | `src/hermes_feedback.py` | Implemented (`HermesReviewer.evaluate()`), conservative fallback, tested |
+
+**Interpretation rule:** "Target" defines architecture direction; "Current"
+reports implementation reality. Do not treat transitional scaffolding as
+architecture contract.
+
+**Tests**: `tests/test_memory_heist.py` + `tests/test_hermes_feedback.py` — **25** regression/guardrail cases (run both files with pytest).
+
+**Next milestone**: wire Hermes supervisory flow to route execution jobs through
+real Droid end-to-end, add context refresh after Droid mutations, and validate
+a full supervisory run on a real prompt. **Deferred:** FTS5 durable learning
+persistence, second orchestration harness, architecture sprawl.
 
 ## Design Principles
 
 1. **Agents don't freestyle** — every agent gets grounded context from
    memory_heist before it touches anything. No hallucinating about repo state.
-2. **Execution is dumb, review is smart** — Droid executes fast and blind;
-   Hermes catches mistakes after the fact. Speed + quality without bottleneck.
-3. **Learning compounds** — Hermes persists lessons in FTS5. The swarm gets
-   better at *this specific project* over time.
+2. **Separation of duties is enforced** — Hermes supervises and critiques;
+   Droid executes and may self-orchestrate locally during execution.
+3. **Learning compounds** — Hermes collects and applies learning signals over
+   time; durable FTS5 persistence is a planned follow-up.
 4. **Models are disposable** — swap providers, swap models, swap pricing.
    The architecture doesn't care which LLM is behind the API.
 5. **Local-first** — no cloud dependencies for context, memory, or learning.
@@ -873,20 +927,35 @@ regression tests, and keep this doc in sync.
 ```
 # Ham — Gap Tracker
 
-Gaps between the current codebase and the VISION.md next milestone.
+Gaps between the current codebase and the VISION.md architecture target.
 Each item tracks what is missing, why it matters, and what blocks it.
 
 ## Active implementation notes (Cursor / hardening)
 
-- The hardening plan is **mostly correct** but **incomplete** until `_extract_prior_summary` is updated **together with** `_format_continuation` (marker coupling); see `docs/HAM_HARDENING_REMEDIATION.md`.
+- Context Engine hardening and **Phase 1** (Hermes-aligned scanning, tool-output pruning, config-driven compaction thresholds) are **complete** in `src/memory_heist.py`; **Phase 3** guardrail tests are in `tests/test_memory_heist.py` (18 cases).
+- **Phase 2** Critic MVP is **complete** in `src/hermes_feedback.py` (LLM-backed `HermesReviewer.evaluate()`, stable schema, conservative fallback); **Phase 3** tests in `tests/test_hermes_feedback.py` (7 cases). **`python -m pytest tests/test_memory_heist.py tests/test_hermes_feedback.py` — 25 passed** (verify locally after edits).
+- Keep `_extract_prior_summary` marker parsing coupled with `_format_continuation` wording on future edits (see `docs/HAM_HARDENING_REMEDIATION.md`).
 - **`VISION.md` must stay in sync** with real module status after each milestone (see `.cursor/rules/vision-sync.mdc`).
-- **Avoid** multiple `ContextBuilder` instances each running a full `ProjectContext.discover()`; prefer one shared snapshot and per-agent render budgets (see `.cursor/skills/agent-context-wiring/SKILL.md`).
-- **Prefer config-driven** agent context budgets (`.ham.json` / merged config) over long-term hardcoded magic numbers in `swarm_agency.py`.
-- **Test coverage** is required before closing the Context Engine milestone; run `/test-context-regressions`.
+- **Avoid** multiple `ProjectContext.discover()` passes for one run; prefer one shared snapshot and role-appropriate render budgets.
+- **Prefer config-driven** context budgets (`.ham.json` / merged config) over long-term hardcoded magic numbers.
+- **Deferred (unchanged direction):** no second orchestration harness, no FTS5 durable learning persistence yet, no Phase 4 Droid execution-safety work until Droid is real.
 
 ## Active Gaps
 
-### 1. Context refresh after Droid mutations
+### 1. Hermes supervisory wiring into execution flow
+
+**Status**: Not started
+**Impact**: Architecture target names Hermes as supervisory orchestrator, but
+current runtime flow is still transitional scaffold code. This leaves an
+architecture-vs-runtime gap that must be closed without collapsing execution
+ownership into Hermes.
+**Blocked by**: Incremental runtime migration planning and test coverage for
+supervisory routing semantics.
+**Fix**: Add explicit supervisory routing flow that delegates execution-heavy
+work to Droid by default, preserves separation-of-duties, and keeps Hermes
+direct execution limited to tiny bounded critic-native tasks.
+
+### 2. Context refresh after Droid mutations
 
 **Status**: Not started
 **Impact**: After Droid modifies the repo (creates/deletes files), any previously
@@ -897,17 +966,16 @@ execution lands.
 **Fix**: Add a `ProjectContext.refresh()` method or rebuild `ContextBuilder` after
 each Droid execution step.
 
-### 2. Role-specific context shaping
+### 3. Role-specific context shaping (follow-up refinement)
 
-**Status**: Planned (in hardening plan, Phase 2 Fix #5)
-**Impact**: All agents currently get identical context strings. The Architect
-needs full instruction files; the Commander needs minimal instructions but full
-git state; Hermes needs enough to review but not the full tree.
-**Blocked by**: `ContextBuilder` token limit params not yet implemented.
-**Fix**: Make `MAX_*` constants overridable via `ContextBuilder` constructor and
-use different budgets per agent in `swarm_agency.py`.
+**Status**: Baseline implemented; further refinement optional
+**Impact**: Context consumers have different needs. Supervisory Hermes and
+execution paths should not consume identical prompt payloads by default.
+**Follow-up**: Current wiring already uses per-agent render budgets on a shared
+`ProjectContext` snapshot. Additional shaping (role-specific section filtering,
+different tree/config emphasis) is a next-phase quality improvement.
 
-### 3. LLM-backed session summarization
+### 4. LLM-backed session summarization
 
 **Status**: Not started
 **Impact**: `SessionMemory._summarize()` is string formatting, not real
@@ -915,40 +983,54 @@ summarization. Compacted summaries are verbose timelines that waste tokens.
 Repeated compaction causes unbounded nesting growth.
 **Blocked by**: Need to decide which model to use for summarization (cheap/fast
 via LiteLLM) and whether summarization happens inline or async.
-**Fix**: Call `llm_client.get_crew_llm()` from `_summarize()` with a short
+**Fix**: Call `llm_client.get_llm_client()` from `_summarize()` with a short
 system prompt. Add `MAX_SUMMARY_CHARS` hard cap as a safety net.
 
-### 4. Real Hermes integration
+### 5. Critic learning persistence (FTS5 / external Hermes client)
 
-**Status**: Stub (`HermesReviewer.evaluate()` returns hardcoded dict)
-**Impact**: No actual code review or learning is happening. The Critic agent
-exists but produces no real value.
-**Blocked by**: hermes-agent client API not yet integrated.
-**Fix**: Implement the real client in `hermes_feedback.py`, configure FTS5 DB
-path to `.hermes/`, verify `.hermes/` is in `IGNORE_DIRS`.
+**Status**: Deferred (not started)
+**Impact**: `HermesReviewer.evaluate()` is a **minimal LLM-backed critic MVP**
+(via `src/llm_client.py`); there is still no FTS5 persistence, no external
+hermes-agent-only client, and no durable “institutional memory” from reviews.
+**Blocked by**: Product choice and follow-up milestone after Hermes supervisory
+wiring + real Droid execution path are farther along.
+**Fix (later):** Add FTS5-backed persistence under `.hermes/` (with `.hermes/`
+already in `IGNORE_DIRS`), or integrate a dedicated hermes-agent API if required;
+wire reviewer into the supervisory execution flow explicitly if not already.
 
-### 5. Real Droid CLI integration
+### 6. Real Droid CLI integration
 
 **Status**: Stub (`droid_executor` returns placeholder string)
-**Impact**: No actual parallel execution. Commander agent can delegate but
+**Impact**: No actual parallel execution. Supervisory routing can delegate but
 nothing runs.
 **Blocked by**: Factory Droid CLI binary availability and API surface.
 **Fix**: Implement real `subprocess.run()` call with timeout, output capture,
 and size cap on returned stdout/stderr.
 
-### 6. Test coverage
+### 7. Test coverage (follow-up after Droid / supervisory wiring)
 
-**Status**: No tests exist
-**Impact**: Every behavioral change to `memory_heist.py` is unverified.
-Cross-platform path handling, config discovery, and compaction logic are
-untested.
-**Blocked by**: Nothing. Can be created now.
-**Fix**: Run `/test-context-regressions` to generate `tests/test_memory_heist.py`.
+**Status**: Phase 3 guardrail suite **complete** for current Context Engine + critic MVP
+**Impact**: `tests/test_memory_heist.py` and `tests/test_hermes_feedback.py`
+cover hardening, Phase 1–2 behavior, and follow-up guardrails (tail preservation,
+config precedence, repeated compaction bounds, reviewer schema/fallback). Further
+expansion waits on real Droid execution and supervisory integration tests.
+**Next (when Droid is real):** refresh-after-tool semantics, subprocess/output
+caps, optional end-to-end supervisory smoke without orchestration redesign.
 
 ## Completed Items
 
 - Rebrand memory_heist.py (Claude -> Ham naming): **Done** (Part 1)
 - Add `.sessions` and `.hermes` to IGNORE_DIRS: **Done** (Part 1)
+- Complete memory_heist hardening milestone: **Done** (caps, marker coupling,
+  render-time budgets, single-discover wiring, baseline regression tests)
+- **Phase 1** (Hermes-aligned Context Engine): instruction/context scanning,
+  tool-output pruning before compaction, config-driven session compaction thresholds
+  (`memory_heist` section + top-level keys), targeted tests — **Done**
+- **Phase 2** Critic MVP: `HermesReviewer.evaluate()` LLM-backed path, stable
+  `ok` / `notes` / `code` / `context` schema, conservative fallback, dict + string
+  `ok` normalization — **Done**
+- **Phase 3** guardrail/follow-up tests: expanded `test_memory_heist.py` and
+  strengthened `test_hermes_feedback.py` coverage — **Done**
 ```
 
 ---
@@ -962,37 +1044,46 @@ Canonical reference for the **memory_heist** hardening plan, audit findings, and
 
 ## Next milestone (VISION.md)
 
-Rebrand Context Engine, Ham ignore rules, wire `memory_heist` into `swarm_agency.py` so agents consume grounded repo context. Rebranding and ignore rules are **done** in code; wiring and hardening phases below are **pending** until implemented.
+The original Context Engine hardening goals (rebrand, ignore rules, wire
+`memory_heist` into `swarm_agency.py`, caps, marker coupling) are **complete**
+in code and tests. Subsequent **Phase 1–3** work added Hermes-aligned
+instruction scanning, tool-output pruning before compaction, config-driven
+session compaction thresholds, critic MVP tests, and guardrail coverage —
+see `GAPS.md` and `VISION.md` for current status. This document remains a
+**maintenance reference** for continuation/parser coupling and safe edit order.
 
 ## Audit summary (accurate)
 
 The hardening plan correctly targets: cross-platform `_extract_key_files`, agent-oriented `_format_continuation`, public `has_summary`, capped `git_diff`, configurable instruction/diff budgets on `ContextBuilder`, capped `_summarize` / `_merge_summaries`, and wiring into `swarm_agency.py`.
 
-## Critical gap (must fix with continuation change)
+## Critical coupling (maintain on future edits)
 
-`_extract_prior_summary()` uses hardcoded `end_markers` that must match `_format_continuation()` closing text. Changing continuation phrasing **without** updating markers breaks summary extraction and can cause unbounded summary growth.
+`_extract_prior_summary()` uses `end_markers` that must match `_format_continuation()` closing text. Changing continuation phrasing **without** updating markers breaks summary extraction and can cause unbounded summary growth.
 
-**Remediation**: Update `end_markers` in `_extract_prior_summary` whenever `_format_continuation` changes; keep **legacy** markers for old session JSON until migrated.
+**Status**: Addressed in the completed hardening milestone (legacy + new markers supported).
+**Maintenance rule**: Update `end_markers` in `_extract_prior_summary` whenever `_format_continuation` changes; keep **legacy** markers for old session JSON until migrated.
 
 ## Other guidance
 
 - **VISION.md**: Update the "Current State" table and "Next milestone" after each milestone that changes repo reality (see `.cursor/rules/vision-sync.mdc`).
-- **Single discover**: Avoid multiple `ContextBuilder()` / `ProjectContext.discover()` calls per crew build; share one snapshot and vary render budgets only (see Agent Context Wiring skill).
+- **Single discover**: Avoid multiple `ContextBuilder()` / `ProjectContext.discover()` calls per run assembly; share one snapshot and vary render budgets only (see Agent Context Wiring skill).
 - **Config-driven budgets**: Prefer `.ham.json` / merged config for per-agent caps; avoid permanent magic numbers only in `swarm_agency.py`.
-- **Tests**: Add/update tests before closing the milestone; cover marker parsing (new + legacy), diff caps, and key-file extraction.
+- **Tests**: `tests/test_memory_heist.py` — 18 cases (hardening + Phase 1 + Phase 3 guardrails). `tests/test_hermes_feedback.py` — 7 cases (Phase 2 critic MVP + Phase 3). Together **25 passed** with `python -m pytest tests/test_memory_heist.py tests/test_hermes_feedback.py` (re-run after changes to confirm).
 
-## Remediation order (dependency-safe)
+## Remediation order executed (record)
 
-1. Quick wins: `_extract_key_files`, `_format_continuation` + **sync `_extract_prior_summary` markers**, `has_summary` / `with_memory`.
-2. Safety caps: `MAX_DIFF_CHARS` + `git_diff`, budget params threaded through `ContextBuilder` / `render`, `MAX_SUMMARY_CHARS` + timeline cap + `_merge_summaries` cap.
-3. Wire `swarm_agency.py` with **one** `ProjectContext.discover`, per-agent `render` budgets.
-4. Tests + `VISION.md` status update.
+1. Quick wins completed: `_extract_key_files`, `_format_continuation` + **synced `_extract_prior_summary` markers**, `has_summary` / `with_memory`.
+2. Safety caps completed: `MAX_DIFF_CHARS` + `git_diff`, budget params threaded through `ContextBuilder` / `render`, `MAX_SUMMARY_CHARS` + timeline cap + `_merge_summaries` cap.
+3. Wiring completed: `swarm_agency.py` uses **one** `ProjectContext.discover` with per-agent `render` budgets.
+4. Verification/docs completed: regression tests added and passing; `VISION.md` status updated.
 
 ## Deferred (not in this milestone)
 
-- LLM-backed session summarization.
+- LLM-backed session summarization (`SessionMemory._summarize()` remains string-based).
 - Context refresh immediately after Droid writes (until Droid is real).
-- CrewAI callbacks for `SessionMemory` (separate integration task).
+- Supervisory-flow callbacks/hooks for `SessionMemory` (separate integration task).
+- Critic **learning** persistence (FTS5 / durable review store) — not started; no second harness layer.
+- Phase 4 Droid execution-safety hardening — deferred until `droid_executor` is real.
 ```
 
 ---

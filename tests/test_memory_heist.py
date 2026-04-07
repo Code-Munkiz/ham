@@ -3,6 +3,8 @@ Regression tests for src/memory_heist.py.
 """
 from __future__ import annotations
 
+import subprocess
+from pathlib import Path
 from unittest.mock import patch
 
 from src.memory_heist import (
@@ -176,7 +178,24 @@ def test_git_diff_capped_at_max_diff_chars(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Test 8 — ProjectContext.render() respects max_total_instruction_chars
+# Test 8 — _git handles missing stdout safely
+# ---------------------------------------------------------------------------
+
+def test_git_helper_handles_none_stdout():
+    completed = subprocess.CompletedProcess(
+        args=["git", "status"],
+        returncode=0,
+        stdout=None,
+        stderr="",
+    )
+    with patch("src.memory_heist.subprocess.run", return_value=completed):
+        from src.memory_heist import _git
+
+        assert _git(Path("."), ["status"]) is None
+
+
+# ---------------------------------------------------------------------------
+# Test 9 — ProjectContext.render() respects max_total_instruction_chars
 # ---------------------------------------------------------------------------
 
 def test_render_respects_instruction_budget(tmp_path):

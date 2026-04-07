@@ -3,7 +3,7 @@ memory_heist.py — Context-awareness primitives for the Ham developer swarm.
 
 Provides filesystem mapping, hierarchical config discovery, instruction file
 loading, git state capture, session compaction, and prompt context building.
-Drop into any CrewAI project and wire into your agents' memory layer.
+Use with Ham or other Python tooling that needs repo-grounded prompt context.
 """
 
 from __future__ import annotations
@@ -262,13 +262,15 @@ def _git(cwd: Path, args: list[str]) -> str | None:
             cwd=cwd,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=10,
         )
         if result.returncode != 0:
             return None
-        out = result.stdout.strip()
+        out = (result.stdout or "").strip()
         return out if out else None
-    except (FileNotFoundError, subprocess.TimeoutExpired):
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
         return None
 
 

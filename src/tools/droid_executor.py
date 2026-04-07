@@ -1,10 +1,8 @@
 """
-CrewAI tool: invoke Factory Droid CLI via subprocess (implementation TBD).
+Droid execution entrypoint: invoke Factory Droid CLI via subprocess (stub).
 """
-from crewai.tools import tool
 
 
-@tool("droid_executor")
 def droid_executor(command: str) -> str:
     """
     Run a Factory Droid CLI command in a subprocess.

@@ -56,7 +56,7 @@ summarization. Compacted summaries are verbose timelines that waste tokens.
 Repeated compaction causes unbounded nesting growth.
 **Blocked by**: Need to decide which model to use for summarization (cheap/fast
 via LiteLLM) and whether summarization happens inline or async.
-**Fix**: Call `llm_client.get_crew_llm()` from `_summarize()` with a short
+**Fix**: Call `llm_client.get_llm_client()` from `_summarize()` with a short
 system prompt. Add `MAX_SUMMARY_CHARS` hard cap as a safety net.
 
 ### 5. Critic learning persistence (FTS5 / external Hermes client)

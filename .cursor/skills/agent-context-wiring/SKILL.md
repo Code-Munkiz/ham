@@ -27,28 +27,29 @@ description: >-
 Example shape (adapt to actual `memory_heist` API after hardening):
 
 ```python
-from pathlib import Path
-from src.memory_heist import ProjectContext  # or ContextBuilder with shared project
+from src.memory_heist import ProjectContext
+from src.swarm_agency import HamRunAssembly
 
-def build_swarm_crew(user_prompt: str) -> Crew:
-    root = Path.cwd()
-    project = ProjectContext.discover(root)
+def assemble_ham_run(user_prompt: str) -> HamRunAssembly:
+    project = ProjectContext.discover()
 
     arch_text = project.render(
-        max_instruction_file_chars=4_000,
         max_total_instruction_chars=16_000,
         max_diff_chars=8_000,
     )
     cmd_text = project.render(
-        max_instruction_file_chars=2_000,
         max_total_instruction_chars=4_000,
         max_diff_chars=2_000,
     )
-    # ... critic with its own budgets ...
+    # ... critic with its own budgets; attach llm + droid per production wiring ...
 
-    architect = Agent(
-        backstory=f"You plan structure and interfaces.\n\n{arch_text}",
-        ...
+    return HamRunAssembly(
+        user_prompt=user_prompt,
+        architect_backstory=f"You plan structure and interfaces.\n\n{arch_text}",
+        commander_backstory=f"You coordinate execution.\n\n{cmd_text}",
+        critic_backstory="...",
+        llm_client=None,
+        droid_executor=lambda cmd: "...",
     )
 ```
 

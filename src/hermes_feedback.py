@@ -39,9 +39,9 @@ class HermesReviewer:
 
     def _run_review(self, *, code: str, context: str | None) -> Any:
         if self._client is None:
-            from src.llm_client import get_crew_llm
+            from src.llm_client import get_llm_client
 
-            self._client = get_crew_llm()
+            self._client = get_llm_client()
 
         prompt = self._build_prompt(code=code, context=context)
         return self._call_llm(prompt)

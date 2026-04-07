@@ -1,4 +1,4 @@
-"""CrewAI tools for the ham swarm (e.g. Factory Droid executor)."""
+"""Execution helpers for the Ham swarm (e.g. Droid executor)."""
 
 from .droid_executor import droid_executor
 

@@ -1,1 +1,1 @@
-"""ham — multi-agent autonomous developer swarm (CrewAI + LiteLLM + Hermes + Droid tools)."""
+"""ham — multi-agent autonomous developer swarm (LiteLLM + Hermes + Droid)."""

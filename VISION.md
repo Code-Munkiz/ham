@@ -55,12 +55,6 @@ LiteLLM and OpenRouter provide model/provider abstraction and routing. Model
 selection stays config-driven and decoupled from orchestration and execution
 roles.
 
-## CrewAI Status
-
-CrewAI is removed from the core architecture contract. If any CrewAI-based code
-remains during transition, treat it as implementation detail and migration
-surface, not as canonical system architecture.
-
 ## Responsibilities Matrix
 
 | Component | Owns | Must Not Own |
@@ -79,8 +73,9 @@ non-trivial execution judgment, route it to Droid.
    does not absorb all runtime behavior.
 2. **Hermes is not a second execution engine.** Hermes may run only tiny,
    bounded, critic-native tasks directly.
-3. **Removing CrewAI does not imply execution absorption.** Eliminating CrewAI
-   from core architecture does not move execution-heavy behavior into Hermes.
+3. **Orchestration refactors must not absorb execution.** Shifting control flow
+   or framework choice must not move execution-heavy behavior into Hermes by
+   default.
 4. **Droid is not reduced to a dumb worker.** Droid retains bounded local
    self-orchestration authority during execution.
 5. **Ambiguous execution defaults to Droid.** If ownership is unclear and task
