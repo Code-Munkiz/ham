@@ -16,14 +16,14 @@ Run the Context Engine Auditor checklist against `src/memory_heist.py`.
 
 ## /wire-agent-context
 
-Wire `ContextBuilder` into all agents in `src/swarm_agency.py`.
+Wire shared repo context into active orchestration roles in `src/swarm_agency.py` (transitional scaffold).
 
 1. Read the Agent Context Wiring skill (`.cursor/skills/agent-context-wiring/SKILL.md`).
 2. Read `src/swarm_agency.py` and `src/memory_heist.py`.
 3. Add `from src.memory_heist import ContextBuilder` (or equivalent) if missing.
 4. **Single discovery pass**: build **one** `ProjectContext` (or one `ContextBuilder` that shares a single discovered context) and vary **only render budgets** per agent. Do not create multiple `ContextBuilder()` instances that each run a full `ProjectContext.discover()` (duplicate scans and git calls).
 5. Prefer loading per-agent budgets from `.ham.json` / config (`discover_config`) over long-term hardcoded magic numbers; use code defaults only as fallback.
-6. Inject per-agent rendered context strings into each agent's `backstory`.
+6. Inject per-role rendered context strings into each active role backstory/prompt surface.
 7. Run lints. Present diff for review. Update `VISION.md` status if wiring completes a milestone.
 
 ## /review-role-boundaries
@@ -60,7 +60,7 @@ Re-validate the entire swarm against `VISION.md`.
 1. Read `VISION.md`.
 2. Read all pillar modules: `src/swarm_agency.py`, `src/tools/droid_executor.py`, `src/hermes_feedback.py`, `src/memory_heist.py`, `src/llm_client.py`.
 3. For each pillar, check: does the module's current code match the role described in `VISION.md`?
-4. Check: is `memory_heist.py` actually imported and used by `swarm_agency.py`?
-5. Check: does each agent's definition respect role boundaries?
+4. Check: is `memory_heist.py` imported and used by the active orchestration path (currently `swarm_agency.py`)?
+5. Check: do current role definitions respect supervisory-vs-execution boundaries?
 6. Report as a table: pillar, module, vision role, actual status, gaps.
 7. If the table fixes factual drift, apply updates to `VISION.md` (status table and next milestone) per the vision-sync rule.

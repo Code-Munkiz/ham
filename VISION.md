@@ -6,32 +6,29 @@ Ham is an open-source, multi-agent autonomous developer swarm that executes
 the full Software Development Life Cycle (SDLC). It is not a chatbot wrapper.
 It is an opinionated assembly line: plan, build, review, learn, repeat.
 
-## The Five Pillars
+## The Four Core Pillars
 
-### 1. The Orchestrator — CrewAI
+### 1. Supervisory Core — Hermes
 
-CrewAI manages the workflow graph. It routes tasks between agents, enforces
-sequencing (sequential or hierarchical process), and owns the agent lifecycle.
-Every agent in the swarm is a CrewAI `Agent`; every unit of work is a CrewAI
-`Task`. CrewAI is the spine — nothing moves without it.
+Hermes is the supervisory control plane for the swarm. It coordinates droids,
+routes jobs, critiques outputs, and accumulates learning signals over time.
+Hermes owns orchestration and quality policy at the system level.
 
-### 2. The Muscle — Factory Droid CLI
+Hermes may self-handle only tiny, bounded, critic-native tasks (for example:
+small review normalization or bounded policy checks). Hermes is not the
+primary execution engine.
 
-Factory Droid CLI is the execution engine, wrapped as a CrewAI `@tool` so
-agents can trigger massive parallel shell execution. When the Commander agent
-needs to scaffold 40 files, run a test matrix, or batch-apply refactors, it
-delegates to Droid via `subprocess`. Droid is pure throughput — it does not
-think, it executes.
+### 2. Execution Engine — Factory Droid CLI
 
-### 3. The Critic / Learner — Hermes
+Factory Droid CLI is the execution-heavy implementation engine. Droid performs
+code and shell work (scaffolding, edits, tests, refactors, command execution)
+and may self-orchestrate locally while executing delegated work.
 
-The **Critic** pillar (`src/hermes_feedback.py`) runs a code review pass after
-execution-oriented work. Today it uses a **minimal LLM-backed** reviewer with a
-stable output schema and conservative fallback when critique cannot complete
-confidently. **Durable learning** (e.g. FTS5-backed persistence) is part of the
-long-term vision but is **not implemented yet** — see `GAPS.md`.
+Droid is not a dumb worker: it can perform bounded local planning and
+sequencing inside an assigned execution job. Ambiguous execution work defaults
+to Droid.
 
-### 4. The Context Engine — memory_heist.py
+### 3. Context Engine — memory_heist.py
 
 Adapted from Claude Code's context-awareness runtime. This module gives every
 agent in the swarm a grounded understanding of the local repository:
@@ -52,12 +49,44 @@ agent in the swarm a grounded understanding of the local repository:
 The Context Engine does NOT make decisions. It assembles ground truth and
 injects it into agent prompts so they don't hallucinate about repo state.
 
-### 5. LLM Routing — LiteLLM / OpenRouter
+### 4. LLM Routing — LiteLLM / OpenRouter
 
-LiteLLM provides the model-agnostic API layer. OpenRouter provides the BYOK
-(bring your own key) gateway. Together they let Ham hot-swap models on the
-fly — use a fast model for planning, a strong model for code generation, a
-cheap model for summarization. Model selection is config-driven, not hardcoded.
+LiteLLM and OpenRouter provide model/provider abstraction and routing. Model
+selection stays config-driven and decoupled from orchestration and execution
+roles.
+
+## CrewAI Status
+
+CrewAI is removed from the core architecture contract. If any CrewAI-based code
+remains during transition, treat it as implementation detail and migration
+surface, not as canonical system architecture.
+
+## Responsibilities Matrix
+
+| Component | Owns | Must Not Own |
+|-----------|------|--------------|
+| **Hermes (Supervisory Core)** | Job routing, supervisory orchestration, critique policy, learning policy, escalation/handoff decisions | Broad execution loops, heavy code/test/build operations, replacing Droid as execution engine |
+| **Droid (Execution Engine)** | Implementation-heavy execution, shell/code operations, bounded local self-orchestration while executing delegated jobs | Global supervisory policy, long-horizon learning governance, replacing Hermes as control plane |
+| **memory_heist (Context Engine)** | Repo truth, context discovery/plumbing, instruction/config/git/session context assembly | Execution orchestration policy, critique decision-making, execution ownership |
+| **LiteLLM/OpenRouter (Model Routing)** | Provider abstraction, model access, configurable routing | Orchestration policy, execution ownership, critique ownership |
+
+**Default routing rule:** if work may mutate code, invoke tools, or requires
+non-trivial execution judgment, route it to Droid.
+
+## Anti-Drift Guardrails (Separation of Duties)
+
+1. **Hermes is not a monolith.** Hermes coordinates, critiques, and learns; it
+   does not absorb all runtime behavior.
+2. **Hermes is not a second execution engine.** Hermes may run only tiny,
+   bounded, critic-native tasks directly.
+3. **Removing CrewAI does not imply execution absorption.** Eliminating CrewAI
+   from core architecture does not move execution-heavy behavior into Hermes.
+4. **Droid is not reduced to a dumb worker.** Droid retains bounded local
+   self-orchestration authority during execution.
+5. **Ambiguous execution defaults to Droid.** If ownership is unclear and task
+   impact is execution-heavy, route to Droid first.
+6. **No verdict-based role collapse.** Critique outcomes must not be used to
+   justify shifting execution ownership away from Droid.
 
 ## How They Connect
 
@@ -66,18 +95,24 @@ User Prompt
     │
     ▼
 ┌─────────────────────────────────────────────┐
-│  CrewAI Orchestrator                        │
+│  Hermes Supervisory Core                    │
 │                                             │
-│  ┌───────────┐  ┌───────────┐  ┌─────────┐ │
-│  │ Architect │→ │ Commander │→ │ Hermes  │ │
-│  │  (plan)   │  │ (execute) │  │ (review)│ │
-│  └───────────┘  └─────┬─────┘  └────┬────┘ │
-│                       │              │      │
-│                       ▼              ▼      │
-│               ┌──────────────┐  ┌────────┐  │
-│               │ Droid CLI    │  │ FTS5   │  │
-│               │ (subprocess) │  │ (learn)│  │
-│               └──────────────┘  └────────┘  │
+│  ┌───────────────────────────────────────┐  │
+│  │ route jobs / supervise / critique     │  │
+│  └───────────────────────┬───────────────┘  │
+│                          │                  │
+│                          ▼                  │
+│                 ┌──────────────────┐        │
+│                 │ Droid CLI        │        │
+│                 │ execute + local  │        │
+│                 │ self-orchestration│       │
+│                 └──────────────────┘        │
+│                          │                  │
+│                          ▼                  │
+│                 ┌──────────────────┐        │
+│                 │ Critique + learn │        │
+│                 │ (Hermes)         │        │
+│                 └──────────────────┘        │
 │                                             │
 │  ┌──────────────────────────────────────┐   │
 │  │ memory_heist.py — Context Engine     │   │
@@ -91,33 +126,44 @@ User Prompt
 └─────────────────────────────────────────────┘
 ```
 
-## Current State
+## Architecture Target (North Star)
 
-The skeleton is assembled. Each pillar has a module:
+| Pillar | Target Owner | Target Role |
+|--------|--------------|-------------|
+| Supervisory Core | `src/hermes_feedback.py` (and Hermes supervisory wiring) | Supervisory orchestration + critique + learning |
+| Execution Engine | `src/tools/droid_executor.py` | Execution-heavy implementation with bounded local self-orchestration |
+| Context Engine | `src/memory_heist.py` | Repo truth and context plumbing |
+| LLM Routing | `src/llm_client.py` | Model/provider abstraction and routing |
 
-| Pillar         | Module                     | Status     |
-|----------------|----------------------------|------------|
-| Orchestrator   | `src/swarm_agency.py`      | Wired — single `ProjectContext.discover()`, per-agent render budgets |
-| Muscle         | `src/tools/droid_executor.py` | Scaffold |
-| Critic         | `src/hermes_feedback.py`   | MVP — LLM-backed `HermesReviewer.evaluate()`, stable schema, conservative fallback; FTS5 / durable learning **deferred** |
-| Context Engine | `src/memory_heist.py`      | Hardened + Phase 1 — caps, marker coupling, instruction scanning, tool-output pruning, config-driven session compaction; 18 tests in `tests/test_memory_heist.py` |
-| LLM Routing    | `src/llm_client.py`        | Working    |
+## Current Implementation State (Transitional)
+
+| Area | Primary Module(s) | Current Status |
+|------|--------------------|----------------|
+| Supervisory orchestration | `src/swarm_agency.py`, `src/hermes_feedback.py` | Transitional: orchestration path still scaffolded; Hermes reviewer MVP exists but supervisory wiring is incomplete |
+| Execution engine | `src/tools/droid_executor.py` | Stub/scaffold: no full real Droid execution path yet |
+| Context engine | `src/memory_heist.py` | Hardened + tested (Phase 1/3 guardrails complete) |
+| LLM routing | `src/llm_client.py` | Working |
+| Critique MVP | `src/hermes_feedback.py` | Implemented (`HermesReviewer.evaluate()`), conservative fallback, tested |
+
+**Interpretation rule:** "Target" defines architecture direction; "Current"
+reports implementation reality. Do not treat transitional scaffolding as
+architecture contract.
 
 **Tests**: `tests/test_memory_heist.py` + `tests/test_hermes_feedback.py` — **25** regression/guardrail cases (run both files with pytest).
 
-**Next milestone**: wire Droid CLI end-to-end, add context refresh after Droid
-mutations, expand task graph beyond single kickoff task, validate a full swarm
-run on a real prompt. **Deferred:** FTS5 critic persistence, second orchestration
-harness, orchestration redesign.
+**Next milestone**: wire Hermes supervisory flow to route execution jobs through
+real Droid end-to-end, add context refresh after Droid mutations, and validate
+a full supervisory run on a real prompt. **Deferred:** FTS5 durable learning
+persistence, second orchestration harness, architecture sprawl.
 
 ## Design Principles
 
 1. **Agents don't freestyle** — every agent gets grounded context from
    memory_heist before it touches anything. No hallucinating about repo state.
-2. **Execution is dumb, review is smart** — Droid executes fast and blind;
-   Hermes catches mistakes after the fact. Speed + quality without bottleneck.
-3. **Learning compounds** — Hermes persists lessons in FTS5. The swarm gets
-   better at *this specific project* over time.
+2. **Separation of duties is enforced** — Hermes supervises and critiques;
+   Droid executes and may self-orchestrate locally during execution.
+3. **Learning compounds** — Hermes collects and applies learning signals over
+   time; durable FTS5 persistence is a planned follow-up.
 4. **Models are disposable** — swap providers, swap models, swap pricing.
    The architecture doesn't care which LLM is behind the API.
 5. **Local-first** — no cloud dependencies for context, memory, or learning.

@@ -5,19 +5,19 @@ working on this repo should read these before proposing changes.
 
 ## Architecture
 
-- `VISION.md` — canonical architecture, five pillars, design principles
+- `VISION.md` — canonical architecture, core pillars, design principles
 
 ## Pillar modules
 
+- `src/hermes_feedback.py` — Hermes supervisory core + critic/learner surface (`HermesReviewer` MVP complete; supervisory wiring still transitional)
+- `src/tools/droid_executor.py` — Droid execution engine (implementation-heavy execution; local self-orchestration while executing)
 - `src/memory_heist.py` — Context Engine (repo scan, git state, config, sessions)
-- `src/swarm_agency.py` — CrewAI orchestrator (agent + task definitions)
-- `src/hermes_feedback.py` — Critic / reviewer (`HermesReviewer` LLM-backed MVP; FTS5 learning **deferred**)
-- `src/tools/droid_executor.py` — Droid CLI tool (parallel shell execution)
 - `src/llm_client.py` — LiteLLM / OpenRouter wiring
+- `src/swarm_agency.py` — transitional orchestration scaffold pending migration to Hermes-supervised flow
 
 ## Configuration & entry
 
-- `main.py` — runtime entrypoint (CLI arg parsing, env load, crew assembly)
+- `main.py` — runtime entrypoint (CLI arg parsing, env load, orchestration assembly)
 - `SWARM.md` — project-level coding instructions (loaded by memory_heist)
 - `AGENTS.md` — this file
 - `requirements.txt` — Python dependencies

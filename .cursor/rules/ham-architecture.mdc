@@ -1,5 +1,5 @@
 ---
-description: Enforces the Ham five-pillar architecture. Apply always.
+description: Enforces the Ham core architecture contract. Apply always.
 alwaysApply: true
 ---
 
@@ -7,20 +7,22 @@ alwaysApply: true
 
 The architecture is fixed unless the user explicitly approves a change.
 
-## Five Pillars
+## Core Pillars
 
 | Pillar | Module | Role |
 |--------|--------|------|
-| Orchestrator | CrewAI (`src/swarm_agency.py`) | Routes tasks, manages agents |
-| Muscle | Factory Droid CLI (`src/tools/droid_executor.py`) | Parallel shell execution via subprocess |
-| Critic | Hermes (`src/hermes_feedback.py`) | Reviews output, learns via FTS5 |
+| Supervisory Core | Hermes (`src/hermes_feedback.py`) | Supervisory orchestration, critique, and learning signals |
+| Execution Engine | Factory Droid CLI (`src/tools/droid_executor.py`) | Implementation-heavy execution with bounded local self-orchestration |
 | Context Engine | `src/memory_heist.py` | Repo scanning, git state, config, session memory |
 | LLM Routing | LiteLLM / OpenRouter (`src/llm_client.py`) | Model-agnostic API layer, BYOK |
 
 ## Rules
 
 - Do not merge, split, or reassign pillar responsibilities.
-- Do not introduce new orchestration frameworks alongside CrewAI.
+- Hermes is not a monolith and not a second execution engine.
+- Hermes may self-handle only tiny, bounded, critic-native tasks.
+- Droid retains execution ownership; do not collapse execution into Hermes.
+- Ambiguous execution work defaults to Droid.
 - Do not bypass memory_heist for repo context -- agents must consume `ContextBuilder.build()`.
 - Do not hardcode model names outside `llm_client.py`.
 - Reference `VISION.md` for the canonical architecture diagram.

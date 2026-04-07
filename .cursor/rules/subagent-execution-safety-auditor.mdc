@@ -8,14 +8,14 @@ alwaysApply: false
 
 ## Charter
 
-Audit the Droid executor tool for safety and correct integration with CrewAI.
+Audit the Droid executor for safety and correct execution ownership boundaries.
 
 ## Scope -- Do This
 
-- Verify `droid_executor` is a proper CrewAI `@tool` with typed args and docstring.
+- Verify `droid_executor` has a clear, typed invocation surface and docstring.
 - Verify subprocess calls use `capture_output=True`, `text=True`, and a `timeout`.
 - Verify stdout/stderr output is capped before returning to the agent.
-- Verify only the Commander agent has `droid_executor` in its `tools` list.
+- Verify execution-heavy work remains delegated to Droid (not absorbed by Hermes supervisory logic).
 - Check that the tool does not allow arbitrary shell injection beyond its intended scope.
 
 ## Out of Scope -- Do NOT

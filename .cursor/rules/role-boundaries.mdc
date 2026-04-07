@@ -10,8 +10,10 @@ Each agent has a fixed charter. Do not blur roles.
 | Agent | Does | Does NOT |
 |-------|------|----------|
 | **Architect** | Plan, design interfaces, set constraints, choose patterns | Write implementation code, invoke tools, execute commands |
-| **Commander** | Delegate work, invoke Droid tool, coordinate sequencing | Make design decisions, review quality, persist learnings |
-| **Hermes Critic** | Review outputs, flag regressions, feed FTS5 learning DB | Plan architecture, invoke Droid, modify source directly |
+| **Execution Coordinator (transitional Commander role)** | Delegate execution work to Droid, coordinate sequencing, preserve execution ownership boundaries | Replace Hermes supervisory policy, absorb critique/learning ownership |
+| **Hermes Supervisor/Critic** | Supervise routing policy, critique outputs, emit learning signals; self-handle tiny bounded critic-native tasks only | Become a second execution engine, own broad code/test/build execution, directly absorb Droid execution ownership |
+| **Droid Executor** | Execute implementation-heavy code/shell work; may self-orchestrate locally while executing | Own global supervisory policy, critique governance, or architecture planning |
 
 - When adding a new agent, define its charter before writing code.
-- When modifying `swarm_agency.py`, verify no agent's `goal` or `tools` list violates these boundaries.
+- Ambiguous execution work defaults to Droid.
+- When modifying orchestration files (including `swarm_agency.py` during transition), verify no role's `goal` or `tools` list violates these boundaries.

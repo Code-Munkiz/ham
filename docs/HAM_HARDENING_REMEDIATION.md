@@ -41,6 +41,6 @@ The hardening plan correctly targets: cross-platform `_extract_key_files`, agent
 
 - LLM-backed session summarization (`SessionMemory._summarize()` remains string-based).
 - Context refresh immediately after Droid writes (until Droid is real).
-- CrewAI callbacks for `SessionMemory` (separate integration task).
+- Supervisory-flow callbacks/hooks for `SessionMemory` (separate integration task).
 - Critic **learning** persistence (FTS5 / durable review store) — not started; no second harness layer.
 - Phase 4 Droid execution-safety hardening — deferred until `droid_executor` is real.

@@ -12,13 +12,13 @@ description: >-
 
 - Diagnosing agent output truncation or degraded quality
 - Reviewing `MAX_*` constants in `src/memory_heist.py`
-- Checking total prompt size before CrewAI kickoff
+- Checking total prompt size before supervisory orchestration execution
 - After changing instruction files, config, or git diff caps
 
 ## Audit Steps
 
 1. Read `src/memory_heist.py` and note all `MAX_*` constants.
-2. For each agent in `src/swarm_agency.py`, estimate the total backstory size:
+2. For each active role in `src/swarm_agency.py` (or current orchestration path), estimate total prompt/backstory size:
    - `ContextBuilder.build()` output size (instructions + git state + tree + config)
    - Plus the static backstory string
 3. Compare against the model's context window (check `src/llm_client.py` for model ID).

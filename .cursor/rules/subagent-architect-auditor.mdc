@@ -20,5 +20,5 @@ Audit the Architect agent's definition in `src/swarm_agency.py` for alignment wi
 ## Out of Scope -- Do NOT
 
 - Redesign the Commander or Hermes agents.
-- Change the CrewAI process type or task graph.
+- Change the active orchestration process or task graph.
 - Modify `memory_heist.py` or `llm_client.py`.

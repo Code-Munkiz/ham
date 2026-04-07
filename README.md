@@ -2,7 +2,7 @@
 
 # Ham
 
-Open-source multi-agent autonomous developer swarm: CrewAI orchestration, Factory Droid execution, Hermes review/learning, and a local Context Engine (`memory_heist`).
+Open-source multi-agent autonomous developer swarm: Hermes supervisory orchestration and critique, Factory Droid execution, and a local Context Engine (`memory_heist`) with LiteLLM/OpenRouter model routing.
 
 - **Architecture**: see [VISION.md](VISION.md)
 - **Agent / IDE context index**: [AGENTS.md](AGENTS.md)
@@ -19,8 +19,8 @@ python main.py "your task"
 
 ## Project layout
 
-- `src/swarm_agency.py` — CrewAI crew
+- `src/hermes_feedback.py` — Hermes supervisory/critic MVP surface (reviewer implemented)
+- `src/tools/droid_executor.py` — Droid execution engine stub (runtime migration still pending)
 - `src/memory_heist.py` — repo context, instructions, git, sessions
 - `src/llm_client.py` — LiteLLM / OpenRouter
-- `src/hermes_feedback.py` — Hermes critic stub
-- `src/tools/droid_executor.py` — Droid tool stub
+- `src/swarm_agency.py` — transitional orchestration scaffold during migration
