@@ -178,6 +178,6 @@ def _compute_mutation_signal(pre_git: str | None, post_git: str | None) -> bool 
         return None
     if pre_git == post_git:
         return False
-    # Coarse git-status deltas can include unrelated churn; avoid overconfident True.
-    return None
+    # Advisory-only signal: repo state snapshot changed during this run.
+    return True
 

@@ -22,6 +22,7 @@ INTENT_PROFILE_CATALOG: dict[str, list[str]] = {
     "inspect.git_status": ["git", "status", "--short"],
     "inspect.git_diff": ["git", "diff", "--name-only"],
 }
+MAX_REVIEW_CONTEXT_CHARS = 1_000
 
 
 def _select_intent_profile(prompt: str) -> str:
@@ -113,7 +114,10 @@ def main(argv: list[str] | None = None) -> int:
     profile_id = _select_intent_profile(assembly.user_prompt)
     intent = _build_runtime_intent(assembly.user_prompt, profile_id)
     bridge_result = run_bridge_v0(assembly, intent)
-    review_context = f"prompt={assembly.user_prompt[:200]}; summary={bridge_result.summary[:300]}"
+    review_assembly = assembly
+    if bridge_result.mutation_detected is True:
+        review_assembly = assemble_ham_run(assembly.user_prompt)
+    review_context = review_assembly.critic_backstory[:MAX_REVIEW_CONTEXT_CHARS]
     bridge_json = _dump_json(bridge_result)
 
     try:

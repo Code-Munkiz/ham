@@ -283,7 +283,7 @@ def test_mutation_detected_false_when_git_status_unchanged(tmp_path, monkeypatch
     assert result.mutation_detected is False
 
 
-def test_mutation_detected_none_when_git_status_changes(tmp_path, monkeypatch):
+def test_mutation_detected_true_when_git_status_changes(tmp_path, monkeypatch):
     assembly = _FakeAssembly(droid_executor=lambda *_a, **_k: _record(["python"], exit_code=0))
     intent = _intent(
         tmp_path,
@@ -296,6 +296,17 @@ def test_mutation_detected_none_when_git_status_changes(tmp_path, monkeypatch):
         return "clean" if calls["n"] == 1 else "changed"
 
     monkeypatch.setattr("src.bridge.runtime.git_status", fake_git_status)
+    result = run_bridge_v0(assembly, intent)
+    assert result.mutation_detected is True
+
+
+def test_mutation_detected_none_when_git_status_unavailable(tmp_path, monkeypatch):
+    assembly = _FakeAssembly(droid_executor=lambda *_a, **_k: _record(["python"], exit_code=0))
+    intent = _intent(
+        tmp_path,
+        [CommandSpec(command_id="c1", argv=["python", "-c", "print('ok')"], working_dir=str(tmp_path))],
+    )
+    monkeypatch.setattr("src.bridge.runtime.git_status", lambda _cwd: None)
     result = run_bridge_v0(assembly, intent)
     assert result.mutation_detected is None
 

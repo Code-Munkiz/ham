@@ -18,9 +18,10 @@ from src.bridge.contracts import (
 class _FakeAssembly:
     user_prompt: str
     droid_executor: object = object()
+    critic_backstory: str = "critic-context-initial"
 
 
-def _bridge_result() -> BridgeResult:
+def _bridge_result(*, mutation_detected: bool | None = False) -> BridgeResult:
     return BridgeResult(
         intent_id="intent-1",
         request_id="request-1",
@@ -52,6 +53,7 @@ def _bridge_result() -> BridgeResult:
             )
         ],
         summary="ok",
+        mutation_detected=mutation_detected,
     )
 
 
@@ -152,6 +154,61 @@ def test_main_output_shape_is_deterministic(monkeypatch, capsys):
     review = payload["hermes_review"]
     assert set(bridge.keys()) >= {"intent_id", "request_id", "run_id", "status", "commands"}
     assert set(review.keys()) == {"code", "context", "notes", "ok"}
+
+
+def test_main_no_mutation_signal_does_not_refresh_context(monkeypatch):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    calls = {"assemble": 0}
+
+    def fake_assemble(prompt: str):
+        calls["assemble"] += 1
+        return _FakeAssembly(user_prompt=prompt, critic_backstory="critic-context-initial")
+
+    class _FakeReviewer:
+        def evaluate(self, _code: str, context: str | None = None):
+            return {"ok": True, "notes": [], "code": "x", "context": context}
+
+    monkeypatch.setattr(main_mod, "assemble_ham_run", fake_assemble)
+    monkeypatch.setattr(
+        main_mod,
+        "run_bridge_v0",
+        lambda _assembly, _intent: _bridge_result(mutation_detected=None),
+    )
+    monkeypatch.setattr(main_mod, "HermesReviewer", _FakeReviewer)
+
+    rc = main_mod.main(["no refresh"])
+    assert rc == 0
+    assert calls["assemble"] == 1
+
+
+def test_main_confident_mutation_refreshes_exactly_once_and_reviewer_uses_refreshed_context(monkeypatch):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    calls = {"assemble": 0}
+    seen: dict[str, object] = {}
+
+    def fake_assemble(prompt: str):
+        calls["assemble"] += 1
+        if calls["assemble"] == 1:
+            return _FakeAssembly(user_prompt=prompt, critic_backstory="critic-context-initial")
+        return _FakeAssembly(user_prompt=prompt, critic_backstory="critic-context-refreshed")
+
+    class _FakeReviewer:
+        def evaluate(self, _code: str, context: str | None = None):
+            seen["context"] = context
+            return {"ok": True, "notes": [], "code": "x", "context": "y"}
+
+    monkeypatch.setattr(main_mod, "assemble_ham_run", fake_assemble)
+    monkeypatch.setattr(
+        main_mod,
+        "run_bridge_v0",
+        lambda _assembly, _intent: _bridge_result(mutation_detected=True),
+    )
+    monkeypatch.setattr(main_mod, "HermesReviewer", _FakeReviewer)
+
+    rc = main_mod.main(["refresh once"])
+    assert rc == 0
+    assert calls["assemble"] == 2
+    assert seen["context"] == "critic-context-refreshed"
 
 
 def test_selector_chooses_git_status_profile(monkeypatch):
