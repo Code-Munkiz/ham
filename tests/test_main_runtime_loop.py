@@ -280,3 +280,75 @@ def test_selector_falls_back_to_cwd_profile(monkeypatch):
     assert len(intent.commands) == 1
     assert intent.commands[0].argv == ["python", "-c", "import os; print(os.getcwd())"]
 
+
+def test_selector_does_not_match_diff_substring_in_different(monkeypatch):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    seen: dict[str, object] = {}
+    monkeypatch.setattr(main_mod, "assemble_ham_run", lambda prompt: _FakeAssembly(user_prompt=prompt))
+
+    def fake_bridge(_assembly, intent):
+        seen["intent"] = intent
+        return _bridge_result()
+
+    class _FakeReviewer:
+        def evaluate(self, _code: str, _context: str | None = None):
+            return {"ok": True, "notes": [], "code": "x", "context": "y"}
+
+    monkeypatch.setattr(main_mod, "run_bridge_v0", fake_bridge)
+    monkeypatch.setattr(main_mod, "HermesReviewer", _FakeReviewer)
+    rc = main_mod.main(["show me a different view"])
+    assert rc == 0
+    intent = seen["intent"]
+    assert len(intent.commands) == 1
+    assert intent.commands[0].argv == ["python", "-c", "import os; print(os.getcwd())"]
+    assert intent.scope.allow_write is False
+    assert intent.scope.allow_network is False
+
+
+def test_selector_does_not_match_diff_substring_in_difficult(monkeypatch):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    seen: dict[str, object] = {}
+    monkeypatch.setattr(main_mod, "assemble_ham_run", lambda prompt: _FakeAssembly(user_prompt=prompt))
+
+    def fake_bridge(_assembly, intent):
+        seen["intent"] = intent
+        return _bridge_result()
+
+    class _FakeReviewer:
+        def evaluate(self, _code: str, _context: str | None = None):
+            return {"ok": True, "notes": [], "code": "x", "context": "y"}
+
+    monkeypatch.setattr(main_mod, "run_bridge_v0", fake_bridge)
+    monkeypatch.setattr(main_mod, "HermesReviewer", _FakeReviewer)
+    rc = main_mod.main(["this is a difficult task"])
+    assert rc == 0
+    intent = seen["intent"]
+    assert len(intent.commands) == 1
+    assert intent.commands[0].argv == ["python", "-c", "import os; print(os.getcwd())"]
+    assert intent.scope.allow_write is False
+    assert intent.scope.allow_network is False
+
+
+def test_selector_precedence_status_wins_over_diff(monkeypatch):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    seen: dict[str, object] = {}
+    monkeypatch.setattr(main_mod, "assemble_ham_run", lambda prompt: _FakeAssembly(user_prompt=prompt))
+
+    def fake_bridge(_assembly, intent):
+        seen["intent"] = intent
+        return _bridge_result()
+
+    class _FakeReviewer:
+        def evaluate(self, _code: str, _context: str | None = None):
+            return {"ok": True, "notes": [], "code": "x", "context": "y"}
+
+    monkeypatch.setattr(main_mod, "run_bridge_v0", fake_bridge)
+    monkeypatch.setattr(main_mod, "HermesReviewer", _FakeReviewer)
+    rc = main_mod.main(["diff against status"])
+    assert rc == 0
+    intent = seen["intent"]
+    assert len(intent.commands) == 1
+    assert intent.commands[0].argv == ["git", "status", "--short"]
+    assert intent.scope.allow_write is False
+    assert intent.scope.allow_network is False
+

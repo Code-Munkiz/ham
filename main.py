@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -26,10 +27,11 @@ MAX_REVIEW_CONTEXT_CHARS = 1_000
 
 
 def _select_intent_profile(prompt: str) -> str:
-    lowered = prompt.lower()
-    if "status" in lowered:
+    tokens = set(re.findall(r"[a-z0-9_]+", prompt.lower()))
+    # Precedence is deliberate: status before diff. Do not reorder without updating tests.
+    if "status" in tokens:
         return "inspect.git_status"
-    if "diff" in lowered:
+    if "diff" in tokens:
         return "inspect.git_diff"
     return "inspect.cwd"
 
