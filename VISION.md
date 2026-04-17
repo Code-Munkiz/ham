@@ -136,7 +136,7 @@ User Prompt
 |------|--------------------|----------------|
 | Supervisory orchestration | `src/swarm_agency.py`, `src/hermes_feedback.py`, `main.py` | First real loop wired on primary path: typed `ExecutionIntent` emission now uses a tiny deterministic safe-profile selector, then Bridge execution and Hermes advisory review handoff; deeper supervisory routing remains transitional |
 | Execution engine | `src/tools/droid_executor.py` | Bridge v0 bounded backend implemented (`shell=False`, timeout, deterministic capture, capped output) |
-| Bridge runtime/policy | `src/bridge/contracts.py`, `src/bridge/policy.py`, `src/bridge/runtime.py` | Bridge v0 hardened: fail-closed policy gate with command-profile checks, env override restrictions, total-output cap enforcement, deterministic status mapping, and conservative mutation signal semantics |
+| Bridge runtime/policy | `src/bridge/contracts.py`, `src/bridge/policy.py`, `src/bridge/runtime.py`, `src/registry/profiles.py` | Bridge v0 hardened: fail-closed policy gate with command-profile checks, env override restrictions, total-output cap enforcement, deterministic status mapping, mutation-aware refresh gating, and registry-backed profile selection seam |
 | Context engine | `src/memory_heist.py` | Hardened + tested (Phase 1/3 guardrails complete) |
 | LLM routing | `src/llm_client.py` | Working |
 | Critique MVP | `src/hermes_feedback.py` | Implemented (`HermesReviewer.evaluate()`), conservative fallback, tested |
@@ -145,11 +145,14 @@ User Prompt
 reports implementation reality. Do not treat transitional scaffolding as
 architecture contract.
 
-**Tests**: `tests/test_memory_heist.py`, `tests/test_hermes_feedback.py`, `tests/test_bridge_contracts.py`, `tests/test_bridge_policy.py`, `tests/test_droid_executor.py`, `tests/test_bridge_runtime.py`, and `tests/test_main_runtime_loop.py` — **69** regression/guardrail cases (one symlink-escape case may skip on platforms without symlink permission).
+### Registries
 
-**Next milestone**: validate context refresh behavior after detected repo
-mutation, then tighten remaining read-only/no-network edge controls without
-broadening capability.
+The shipped registry surface is currently limited to `IntentProfile`, `ProfileRegistry`, `Selector`, `KeywordSelector`, and `DEFAULT_PROFILE_REGISTRY` in `src/registry/profiles.py`. `IntentProfile` records are pure data with `id`, `version`, `argv`, and `metadata` fields. The selection seam is a `Protocol` with one method (`select(prompt) -> str`) and currently has one default implementation (`KeywordSelector`). This is a single-registry, single-selector slice. No backend, persona, agent, team, or plugin registry exists yet.
+
+**Tests**: `tests/test_memory_heist.py`, `tests/test_hermes_feedback.py`, `tests/test_bridge_contracts.py`, `tests/test_bridge_policy.py`, `tests/test_droid_executor.py`, `tests/test_bridge_runtime.py`, `tests/test_main_runtime_loop.py`, and `tests/test_profile_registry.py` — **81 passed, 1 skipped** regression/guardrail cases.
+
+**Next milestone**: refine bounded selector and Bridge-profile seams with
+targeted edge-case hardening while preserving current safety envelopes.
 **Deferred:** FTS5 durable learning persistence, second orchestration harness,
 architecture sprawl.
 

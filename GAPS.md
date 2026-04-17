@@ -90,6 +90,24 @@ expansion waits on real Droid execution and supervisory integration tests.
 **Next (when Droid is real):** refresh-after-tool semantics, subprocess/output
 caps, optional end-to-end supervisory smoke without orchestration redesign.
 
+### 8. Productization direction (deferred / exploratory)
+
+**Status**: Deferred (exploratory)
+
+SaaS/control-plane expansion concepts (including gamification and marketplace
+surfaces) are tracked as exploratory direction, not committed architecture.
+Current architecture contracts remain Hermes/Bridge/Droid with bounded
+execution and review seams.
+
+Phases 0 and 1 shipped as enabling foundations: selector correctness hardening
+and intent profile registry promotion (`IntentProfile` / `ProfileRegistry` /
+`Selector` / `KeywordSelector`). No additional productization implementation is
+approved in the codebase at this time.
+
+No rules or skills should be added for this direction until the relevant code
+surface is implemented and has survived at least one follow-up use with stable
+interfaces.
+
 ## Completed Items
 
 - Rebrand memory_heist.py (Claude -> Ham naming): **Done** (Part 1)
