@@ -6,7 +6,6 @@ import argparse
 import hashlib
 import json
 import os
-import re
 import sys
 from pathlib import Path
 
@@ -16,30 +15,21 @@ from src.bridge.contracts import CommandSpec, ExecutionIntent, LimitSpec, ScopeS
 from src.bridge.runtime import run_bridge_v0
 from src.hermes_feedback import HermesReviewer
 from src.llm_client import configure_litellm_env
+from src.registry.profiles import DEFAULT_PROFILE_REGISTRY, KeywordSelector
 from src.swarm_agency import assemble_ham_run
 
-INTENT_PROFILE_CATALOG: dict[str, list[str]] = {
-    "inspect.cwd": ["python", "-c", "import os; print(os.getcwd())"],
-    "inspect.git_status": ["git", "status", "--short"],
-    "inspect.git_diff": ["git", "diff", "--name-only"],
-}
 MAX_REVIEW_CONTEXT_CHARS = 1_000
+_SELECTOR = KeywordSelector()
 
 
 def _select_intent_profile(prompt: str) -> str:
-    tokens = set(re.findall(r"[a-z0-9_]+", prompt.lower()))
-    # Precedence is deliberate: status before diff. Do not reorder without updating tests.
-    if "status" in tokens:
-        return "inspect.git_status"
-    if "diff" in tokens:
-        return "inspect.git_diff"
-    return "inspect.cwd"
+    return _SELECTOR.select(prompt)
 
 
 def _build_runtime_intent(prompt: str, profile_id: str) -> ExecutionIntent:
     root = Path.cwd().resolve()
     prompt_hash = hashlib.sha256(prompt.encode("utf-8", errors="replace")).hexdigest()[:12]
-    argv = INTENT_PROFILE_CATALOG[profile_id]
+    argv = DEFAULT_PROFILE_REGISTRY.get(profile_id).argv
     return ExecutionIntent(
         intent_id=f"intent-{prompt_hash}",
         request_id=f"request-{prompt_hash}",
