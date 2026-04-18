@@ -17,7 +17,7 @@ def test_default_registry_contains_only_local_droid():
 
 
 def test_default_backend_record_has_id_version_metadata():
-    record, _backend = DEFAULT_BACKEND_REGISTRY._backends[DEFAULT_BACKEND_ID]
+    record = DEFAULT_BACKEND_REGISTRY.get_record(DEFAULT_BACKEND_ID)
     assert record.id == "local.droid"
     assert record.version
     assert isinstance(record.metadata, dict)

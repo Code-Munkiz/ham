@@ -1,0 +1,34 @@
+---
+description: "Registry record conventions for src/registry/*.py — stable IDs, version fields, pure-data records, derived metrics live outside."
+globs: src/registry/*.py
+alwaysApply: false
+---
+
+# Registry Record Conventions
+
+Keep registry-layer record types small, serializable, and free of derived state so they stay portable and honest.
+
+## Scope
+
+Applies to record types and registry classes under `src/registry/`. Shipped examples: `IntentProfile` in `profiles.py`, `BackendRecord` in `backends.py`. Run JSON written under `.ham/runs/` from `main.py` is related in spirit—pure persisted facts, no derived metrics on the blob—but it is not a dedicated class and does not share the same field layout as those BaseModels.
+
+## Do This
+
+- Define record types as plain Pydantic `BaseModel` subclasses with no custom methods beyond what Pydantic provides.
+- Give every registry record a stable string `id` field.
+- Give every registry record a `version: str` field with a sensible default (currently `"1.0.0"`).
+- Add `metadata: dict[str, Any] = Field(default_factory=dict)` for untyped UX or display data that must not pollute the core contract.
+- Expose registry records through public accessors (e.g. `ProfileRegistry.get`, `BackendRegistry.get_record`); do not read `_profiles`, `_backends`, or other private attributes outside the defining module.
+- Keep derived metrics (progression, reliability, latency aggregates) out of registry records; compute them from run history under `.ham/runs/` when needed.
+
+## Do NOT
+
+- Do not add business logic methods to registry record types.
+- Do not add fields for computed or derived state on registry records.
+- Do not reach into `_backends`, `_profiles`, or other private registry internals from outside that registry module.
+- Do not introduce new registry record types outside `src/registry/` without strong cause; if another module needs one, define it in `src/registry/` and import from there.
+- Do not store gamification concepts (level, XP, rank, badges, aggregate stats) on registry records; treat those as views over run history, not record fields.
+
+## Rationale
+
+Registry records are pure data; derived metrics and rollups live elsewhere. That separation keeps artifacts portable (export/import, future marketplace) and avoids baking computed state into types that should round-trip cleanly. It also keeps honest progression and future provenance work tractable by confining derived views to run history and consumers—not to the registry record shapes themselves. Do not assume every persisted artifact uses the same field schema as those BaseModels.
