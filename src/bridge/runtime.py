@@ -12,6 +12,7 @@ from src.bridge.contracts import (
 )
 from src.bridge.policy import validate_intent
 from src.memory_heist import git_status
+from src.registry.backends import DEFAULT_BACKEND_ID
 from src.tools.droid_executor import DroidExecutionRecord
 
 
@@ -42,7 +43,7 @@ def run_bridge_v0(assembly, intent: ExecutionIntent) -> BridgeResult:
 
     for cmd in intent.commands:
         try:
-            record = assembly.droid_executor(
+            record = assembly.backend_registry.get(DEFAULT_BACKEND_ID).execute(
                 cmd.argv,
                 working_dir=cmd.working_dir,
                 timeout_sec=intent.limits.timeout_sec_per_command,

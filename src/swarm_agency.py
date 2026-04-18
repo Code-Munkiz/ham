@@ -9,6 +9,7 @@ from typing import Any, Callable
 
 from src.llm_client import configure_litellm_env, get_llm_client
 from src.memory_heist import ProjectContext
+from src.registry.backends import BackendRegistry, DEFAULT_BACKEND_REGISTRY
 from src.tools.droid_executor import droid_executor
 
 
@@ -21,6 +22,7 @@ class HamRunAssembly:
     commander_backstory: str
     critic_backstory: str
     llm_client: Any
+    backend_registry: BackendRegistry
     droid_executor: Callable[..., Any]
 
 
@@ -66,5 +68,6 @@ def assemble_ham_run(user_prompt: str) -> HamRunAssembly:
         commander_backstory=commander_backstory,
         critic_backstory=critic_backstory,
         llm_client=llm,
+        backend_registry=DEFAULT_BACKEND_REGISTRY,
         droid_executor=droid_executor,
     )

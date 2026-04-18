@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Callable
 
 from src.bridge.contracts import (
     BridgeStatus,
@@ -16,7 +17,44 @@ from src.tools.droid_executor import DroidExecutionRecord
 
 @dataclass
 class _FakeAssembly:
-    droid_executor: object
+    droid_executor: Callable[..., DroidExecutionRecord]
+    backend_registry: object | None = None
+
+    def __post_init__(self) -> None:
+        if self.backend_registry is None:
+            self.backend_registry = _FakeBackendRegistry(self.droid_executor)
+
+
+@dataclass
+class _FakeBackendRegistry:
+    droid_executor: Callable[..., DroidExecutionRecord]
+
+    def get(self, _backend_id: str):
+        return _FakeBackend(self.droid_executor)
+
+
+@dataclass
+class _FakeBackend:
+    droid_executor: Callable[..., DroidExecutionRecord]
+
+    def execute(
+        self,
+        argv: list[str],
+        *,
+        working_dir: str | None = None,
+        timeout_sec: int = 30,
+        max_stdout_chars: int = 8_000,
+        max_stderr_chars: int = 8_000,
+        env_overrides: dict[str, str] | None = None,
+    ) -> DroidExecutionRecord:
+        return self.droid_executor(
+            argv,
+            working_dir=working_dir,
+            timeout_sec=timeout_sec,
+            max_stdout_chars=max_stdout_chars,
+            max_stderr_chars=max_stderr_chars,
+            env_overrides=env_overrides,
+        )
 
 
 class _FakeLLM:
