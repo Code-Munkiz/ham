@@ -103,6 +103,9 @@ Phases 0 and 1 shipped as enabling foundations: selector correctness hardening
 and intent profile registry promotion (`IntentProfile` / `ProfileRegistry` /
 `Selector` / `KeywordSelector`). No additional productization implementation is
 approved in the codebase at this time.
+Phase 3 also shipped as an enabling foundation: a minimal backend abstraction
+seam (`ExecutionBackend` / `LocalDroidBackend` / `BackendRegistry`) now used by
+bridge runtime executor resolution.
 
 No rules or skills should be added for this direction until the relevant code
 surface is implemented and has survived at least one follow-up use with stable
