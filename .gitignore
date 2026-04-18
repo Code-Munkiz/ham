@@ -6,3 +6,9 @@ __pycache__/
 .eggs/
 dist/
 build/
+
+# Local vendored reference dumps (not source)
+docs/repomix-*
+
+# Local run artifacts (pre-ignored for future run persistence)
+.ham/
