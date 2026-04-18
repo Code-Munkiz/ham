@@ -106,6 +106,8 @@ approved in the codebase at this time.
 Phase 3 also shipped as an enabling foundation: a minimal backend abstraction
 seam (`ExecutionBackend` / `LocalDroidBackend` / `BackendRegistry`) now used by
 bridge runtime executor resolution.
+Phase 5 also shipped as an enabling foundation: completed runs now persist to
+`.ham/runs/` as structured JSON with canonical bridge-derived `run_id`.
 
 No rules or skills should be added for this direction until the relevant code
 surface is implemented and has survived at least one follow-up use with stable
