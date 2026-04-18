@@ -389,6 +389,29 @@ def test_persist_creates_file_in_ham_runs_with_expected_keys(monkeypatch, tmp_pa
     assert payload["backend_version"] == "1.0.0"
 
 
+def test_persisted_record_contains_author_from_env(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setenv("HAM_AUTHOR", "alice")
+    monkeypatch.setattr(main_mod, "assemble_ham_run", lambda prompt: _FakeAssembly(user_prompt=prompt))
+    monkeypatch.setattr(main_mod, "run_bridge_v0", lambda _assembly, _intent: _bridge_result())
+
+    class _FakeReviewer:
+        def evaluate(self, _code: str, _context: str | None = None):
+            return {"ok": True, "notes": [], "code": "x", "context": "y"}
+
+    monkeypatch.setattr(main_mod, "HermesReviewer", _FakeReviewer)
+
+    rc = main_mod.main(["show cwd"])
+    assert rc == 0
+
+    runs_dir = tmp_path / ".ham" / "runs"
+    files = list(runs_dir.glob("*.json"))
+    assert len(files) == 1
+    payload = json.loads(files[0].read_text(encoding="utf-8"))
+    assert payload["author"] == "alice"
+
+
 def test_persist_failure_does_not_break_runtime(monkeypatch, tmp_path, capsys):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")

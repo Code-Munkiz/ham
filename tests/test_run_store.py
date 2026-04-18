@@ -132,6 +132,22 @@ def test_list_runs_ignores_non_json_files(tmp_path: Path) -> None:
     assert len(store.list_runs()) == 1
 
 
+def test_run_record_parses_with_author_field(tmp_path: Path) -> None:
+    _write_run_file(tmp_path, "run-auth", "2026-01-01T00:00:00Z", author="aaron")
+    store = RunStore(tmp_path)
+    rec = store.get_run("run-auth")
+    assert rec is not None
+    assert rec.author == "aaron"
+
+
+def test_run_record_parses_without_author_field(tmp_path: Path) -> None:
+    _write_run_file(tmp_path, "run-no-auth", "2026-01-01T00:00:00Z")
+    store = RunStore(tmp_path)
+    rec = store.get_run("run-no-auth")
+    assert rec is not None
+    assert rec.author is None
+
+
 def test_list_runs_tolerates_extra_fields_in_json(tmp_path: Path) -> None:
     path = _write_run_file(
         tmp_path,

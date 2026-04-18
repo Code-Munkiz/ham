@@ -20,6 +20,7 @@ class RunRecord(BaseModel):
     backend_id: str
     backend_version: str
     prompt_summary: str
+    author: str | None = None
     bridge_result: dict[str, Any]
     hermes_review: dict[str, Any]
 

@@ -24,6 +24,14 @@ MAX_REVIEW_CONTEXT_CHARS = 1_000
 _SELECTOR = KeywordSelector()
 
 
+def _resolve_author() -> str:
+    for var in ("HAM_AUTHOR", "USER", "USERNAME"):
+        value = os.environ.get(var)
+        if value and value.strip():
+            return value.strip()
+    return "unknown"
+
+
 def _select_intent_profile(prompt: str) -> str:
     return _SELECTOR.select(prompt)
 
@@ -117,6 +125,7 @@ def _persist_run_record(
             "backend_id": DEFAULT_BACKEND_ID,
             "backend_version": backend_version,
             "prompt_summary": prompt[:200],
+            "author": _resolve_author(),
             "bridge_result": bridge_payload,
             "hermes_review": review,
         }
