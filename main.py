@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -15,6 +16,7 @@ from src.bridge.contracts import CommandSpec, ExecutionIntent, LimitSpec, ScopeS
 from src.bridge.runtime import run_bridge_v0
 from src.hermes_feedback import HermesReviewer
 from src.llm_client import configure_litellm_env
+from src.registry.backends import DEFAULT_BACKEND_ID, DEFAULT_BACKEND_REGISTRY
 from src.registry.profiles import DEFAULT_PROFILE_REGISTRY, KeywordSelector
 from src.swarm_agency import assemble_ham_run
 
@@ -84,6 +86,54 @@ def _dump_json(data: object) -> str:
     return json.dumps(payload, sort_keys=True, ensure_ascii=True)
 
 
+def _persist_run_record(
+    *,
+    prompt: str,
+    profile_id: str,
+    bridge_result: object,
+    review: dict[str, object],
+) -> Path | None:
+    try:
+        now = datetime.now(timezone.utc)
+        created_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+        created_at_for_filename = now.strftime("%Y%m%dT%H%M%SZ")
+
+        if hasattr(bridge_result, "model_dump"):
+            bridge_payload = bridge_result.model_dump()
+        elif hasattr(bridge_result, "dict"):
+            bridge_payload = bridge_result.dict()
+        else:
+            bridge_payload = bridge_result
+
+        run_id = str(getattr(bridge_result, "run_id", "")) or str(bridge_payload.get("run_id", ""))
+        profile_version = DEFAULT_PROFILE_REGISTRY.get(profile_id).version
+        backend_version = DEFAULT_BACKEND_REGISTRY.get_record(DEFAULT_BACKEND_ID).version
+
+        record = {
+            "run_id": run_id,
+            "created_at": created_at,
+            "profile_id": profile_id,
+            "profile_version": profile_version,
+            "backend_id": DEFAULT_BACKEND_ID,
+            "backend_version": backend_version,
+            "prompt_summary": prompt[:200],
+            "bridge_result": bridge_payload,
+            "hermes_review": review,
+        }
+
+        runs_dir = Path.cwd().resolve() / ".ham" / "runs"
+        runs_dir.mkdir(parents=True, exist_ok=True)
+        final_path = runs_dir / f"{created_at_for_filename}-{run_id}.json"
+        tmp_path = runs_dir / f"{created_at_for_filename}-{run_id}.json.tmp"
+        payload = json.dumps(record, sort_keys=True, ensure_ascii=True, indent=2)
+        tmp_path.write_text(payload, encoding="utf-8")
+        os.replace(tmp_path, final_path)
+        return final_path
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        print(f"Warning: run persistence failed ({type(exc).__name__}: {exc})", file=sys.stderr)
+        return None
+
+
 def main(argv: list[str] | None = None) -> int:
     load_dotenv()
     configure_litellm_env()
@@ -123,6 +173,12 @@ def main(argv: list[str] | None = None) -> int:
         }
 
     envelope = _build_runtime_envelope(
+        prompt=assembly.user_prompt,
+        profile_id=profile_id,
+        bridge_result=bridge_result,
+        review=review,
+    )
+    _persist_run_record(
         prompt=assembly.user_prompt,
         profile_id=profile_id,
         bridge_result=bridge_result,

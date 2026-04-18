@@ -4,6 +4,7 @@ import importlib
 import pytest
 
 from src.registry.backends import (
+    BackendRecord,
     DEFAULT_BACKEND_REGISTRY,
     DEFAULT_BACKEND_ID,
     LocalDroidBackend,
@@ -80,3 +81,15 @@ def test_local_droid_backend_delegates_to_droid_executor(monkeypatch):
     assert seen["max_stderr_chars"] == 456
     assert seen["env_overrides"] == {"PYTHONUTF8": "1"}
     assert result.stdout == "ok"
+
+
+def test_get_record_returns_record_for_known_id_and_raises_for_unknown():
+    record = DEFAULT_BACKEND_REGISTRY.get_record(DEFAULT_BACKEND_ID)
+    assert isinstance(record, BackendRecord)
+    assert record.id == DEFAULT_BACKEND_ID
+    assert record.version
+
+    unknown_id = "backend.unknown"
+    with pytest.raises(KeyError) as exc_info:
+        DEFAULT_BACKEND_REGISTRY.get_record(unknown_id)
+    assert unknown_id in str(exc_info.value)

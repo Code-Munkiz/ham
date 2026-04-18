@@ -59,6 +59,12 @@ class BackendRegistry:
         except KeyError as exc:
             raise KeyError(f"Unknown backend_id: {backend_id}") from exc
 
+    def get_record(self, backend_id: str) -> BackendRecord:
+        try:
+            return self._backends[backend_id][0]
+        except KeyError as exc:
+            raise KeyError(f"Unknown backend_id: {backend_id}") from exc
+
     def ids(self) -> list[str]:
         return sorted(self._backends.keys())
 

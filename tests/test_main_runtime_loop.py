@@ -352,3 +352,94 @@ def test_selector_precedence_status_wins_over_diff(monkeypatch):
     assert intent.scope.allow_write is False
     assert intent.scope.allow_network is False
 
+
+def test_persist_creates_file_in_ham_runs_with_expected_keys(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setattr(main_mod, "assemble_ham_run", lambda prompt: _FakeAssembly(user_prompt=prompt))
+    monkeypatch.setattr(main_mod, "run_bridge_v0", lambda _assembly, _intent: _bridge_result())
+
+    class _FakeReviewer:
+        def evaluate(self, _code: str, _context: str | None = None):
+            return {"ok": True, "notes": [], "code": "x", "context": "y"}
+
+    monkeypatch.setattr(main_mod, "HermesReviewer", _FakeReviewer)
+
+    rc = main_mod.main(["persist me"])
+    assert rc == 0
+
+    runs_dir = tmp_path / ".ham" / "runs"
+    files = list(runs_dir.glob("*.json"))
+    assert len(files) == 1
+    payload = json.loads(files[0].read_text(encoding="utf-8"))
+    assert {
+        "run_id",
+        "created_at",
+        "profile_id",
+        "profile_version",
+        "backend_id",
+        "backend_version",
+        "prompt_summary",
+        "bridge_result",
+        "hermes_review",
+    }.issubset(payload.keys())
+    assert payload["created_at"].endswith("Z")
+    assert payload["run_id"] == payload["bridge_result"]["run_id"]
+    assert payload["backend_id"] == "local.droid"
+    assert payload["backend_version"] == "1.0.0"
+
+
+def test_persist_failure_does_not_break_runtime(monkeypatch, tmp_path, capsys):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setattr(main_mod, "assemble_ham_run", lambda prompt: _FakeAssembly(user_prompt=prompt))
+    monkeypatch.setattr(main_mod, "run_bridge_v0", lambda _assembly, _intent: _bridge_result())
+
+    class _FakeReviewer:
+        def evaluate(self, _code: str, _context: str | None = None):
+            return {"ok": True, "notes": [], "code": "x", "context": "y"}
+
+    def boom_replace(_src, _dst):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(main_mod, "HermesReviewer", _FakeReviewer)
+    monkeypatch.setattr(main_mod.os, "replace", boom_replace)
+
+    rc = main_mod.main(["persist failure"])
+    captured = capsys.readouterr()
+    assert rc == 0
+    line = next(line for line in captured.out.splitlines() if line.startswith("RUNTIME_RESULT:"))
+    envelope = json.loads(line.split(":", 1)[1].strip())
+    assert set(envelope.keys()) == {
+        "bridge_result",
+        "hermes_review",
+        "intent_profile_id",
+        "prompt_summary",
+    }
+    assert "run persistence failed" in captured.err.lower()
+
+
+def test_envelope_shape_unchanged_after_persistence_slice(monkeypatch, tmp_path, capsys):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setattr(main_mod, "assemble_ham_run", lambda prompt: _FakeAssembly(user_prompt=prompt))
+    monkeypatch.setattr(main_mod, "run_bridge_v0", lambda _assembly, _intent: _bridge_result())
+
+    class _FakeReviewer:
+        def evaluate(self, _code: str, _context: str | None = None):
+            return {"ok": True, "notes": [], "code": "a", "context": "b"}
+
+    monkeypatch.setattr(main_mod, "HermesReviewer", _FakeReviewer)
+
+    rc = main_mod.main(["shape freeze"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    line = next(line for line in out.splitlines() if line.startswith("RUNTIME_RESULT:"))
+    payload = json.loads(line.split(":", 1)[1].strip())
+    assert set(payload.keys()) == {
+        "bridge_result",
+        "hermes_review",
+        "intent_profile_id",
+        "prompt_summary",
+    }
+
