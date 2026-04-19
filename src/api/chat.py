@@ -7,6 +7,7 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from src.ham.cursor_skills_catalog import list_cursor_skills, render_skills_for_system_prompt
 from src.integrations.nous_gateway_client import GatewayCallError, complete_chat_turn
 from src.persistence.chat_session_store import ChatTurn, InMemoryChatSessionStore
 
@@ -24,6 +25,8 @@ class ChatRequest(BaseModel):
     session_id: str | None = None
     messages: list[ChatMessageIn] = Field(min_length=1, max_length=50)
     client_request_id: str | None = Field(default=None, max_length=128)
+    # When true (default), append `.cursor/skills` catalog to system context so Ham maps intents to operator workflows.
+    include_operator_skills: bool = True
 
 
 class ChatResponse(BaseModel):
@@ -49,17 +52,24 @@ You are **Ham**, the in-dashboard copilot for the Ham workspace UI—warm, conci
 
 **What the UI has (high level):** A left **nav** (Chat, workspace, logs, etc.), this **Chat** page, **Settings** (context engine, droids, preferences), and workspace panels for runs and tooling. You **cannot** see the user’s screen, current route, or saved settings—if that matters, ask them to describe what they see or paste text.
 
+**Control plane (skills):** When the message includes an **Operator skills** appendix, treat each entry as a real Ham workflow the IDE can run (Context Engine hardening, agent context wiring, Hermes review validation, prompt budget audit, repo regression tests, GoHam navigation). Map user goals to the best-matching skill id and tell them the exact slash command or doc path (e.g. `/audit-context-engine`, `.cursor/skills/.../SKILL.md`). You still cannot change settings or invoke tools yourself from this chat—give precise steps.
+
 **How to engage:** Use short paragraphs or tight bullets; offer next steps; match energy without filler. If asked what you can do, explain Ham at a high level and suggest concrete actions (e.g. “open Settings → …”, “describe the error in Logs”). You do not execute code or call internal Ham APIs from here—you advise; heavier work happens via the rest of Ham (CLI / swarm / runs).
 
 **Honesty:** If you lack a fact, say so and ask a clarifying question instead of inventing menu labels or features.
 """.strip()
 
 
-def _chat_system_prompt() -> str:
+def _chat_system_prompt(*, include_operator_skills: bool) -> str:
     custom = (os.environ.get("HAM_CHAT_SYSTEM_PROMPT") or "").strip()
-    if custom:
-        return custom[:_MAX_SYSTEM_PROMPT_CHARS]
-    return _DEFAULT_CHAT_SYSTEM_PROMPT
+    base = custom[:_MAX_SYSTEM_PROMPT_CHARS] if custom else _DEFAULT_CHAT_SYSTEM_PROMPT
+    if not include_operator_skills:
+        return base
+    block = render_skills_for_system_prompt(list_cursor_skills())
+    if not block:
+        return base
+    combined = f"{base}\n\n{block}"
+    return combined[:_MAX_SYSTEM_PROMPT_CHARS]
 
 
 @router.post("/api/chat", response_model=ChatResponse)
@@ -97,7 +107,15 @@ async def post_chat(body: ChatRequest) -> ChatResponse:
 
     history = store.list_messages(sid)
     # System prompt is sent upstream only; it is not stored so the client transcript stays user/assistant.
-    llm_messages = [{"role": "system", "content": _chat_system_prompt()}, *history]
+    llm_messages = [
+        {
+            "role": "system",
+            "content": _chat_system_prompt(
+                include_operator_skills=body.include_operator_skills,
+            ),
+        },
+        *history,
+    ]
     try:
         assistant_text = complete_chat_turn(llm_messages)
     except GatewayCallError as exc:

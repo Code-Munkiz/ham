@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from src.api.chat import router as chat_router
+from src.api.cursor_skills import router as cursor_skills_router
 from src.memory_heist import context_engine_dashboard_payload
 from src.persistence.project_store import ProjectStore
 from src.persistence.run_store import RunStore
@@ -47,6 +48,7 @@ app.add_middleware(
 )
 
 app.include_router(chat_router)
+app.include_router(cursor_skills_router)
 
 _store = RunStore()
 _projects = ProjectStore()
@@ -66,6 +68,7 @@ async def root() -> dict[str, Any]:
         "docs": "/docs",
         "openapi": "/openapi.json",
         "status": "/api/status",
+        "cursor_skills": "/api/cursor-skills",
     }
 
 

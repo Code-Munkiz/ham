@@ -37,7 +37,9 @@ Shipped muscle today centers on **Bridge + Droid executor** (`src/tools/droid_ex
 - `src/swarm_agency.py` — Hermes-supervised **context assembly** (shared `ProjectContext` + per-role render budgets for Architect / routing / critic prompts); **not** a separate orchestration framework (no CrewAI)
 - `src/registry/droids.py` — `DroidRecord` + `DroidRegistry` + `DEFAULT_DROID_REGISTRY` (builder, reviewer)
 - `src/persistence/run_store.py` — read-side `RunStore` over `.ham/runs/*.json`
-- `src/api/server.py` — FastAPI app: read API (`/api/status`, `/api/runs`, …) plus **`POST /api/chat`** (see `src/api/chat.py`)
+- `src/api/server.py` — FastAPI app: read API (`/api/status`, `/api/runs`, …) plus **`POST /api/chat`** (see `src/api/chat.py`) and **`GET /api/cursor-skills`**
+- `src/ham/cursor_skills_catalog.py` — loads `.cursor/skills` for chat control plane + API index
+- `docs/HAM_CHAT_CONTROL_PLANE.md` — chat + skills intent mapping roadmap
 
 ## Deploy (API on GCP)
 
@@ -79,5 +81,5 @@ Shipped muscle today centers on **Bridge + Droid executor** (`src/tools/droid_ex
 - `tests/test_memory_heist.py` — Context Engine + Phase 1/3 guardrails (18 cases)
 - `tests/test_hermes_feedback.py` — Critic MVP + Phase 3 guardrails (7 cases)
 - `tests/test_droid_registry.py` — Droid registry conventions (10 cases)
-- Run: `python -m pytest` — full suite (`pytest.ini` sets `pythonpath = .`)
+- Run: `python -m pytest` — full suite (`pytest.ini` sets `pythonpath = .`; 154+ cases as of control-plane catalog)
 - Other tests under `tests/` as added; bootstrap with `/test-context-regressions` for Context Engine focus

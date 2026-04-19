@@ -16,6 +16,9 @@ COPY src/ src/
 # Repo instruction files optional but improve context-engine text if present in image.
 COPY AGENTS.md SWARM.md VISION.md ./
 
+# Operator skills catalog for chat system prompt + GET /api/cursor-skills (see src/ham/cursor_skills_catalog.py).
+COPY .cursor/skills .cursor/skills
+
 EXPOSE 8080
 
 CMD exec uvicorn src.api.server:app --host 0.0.0.0 --port "${PORT:-8080}"

@@ -60,6 +60,8 @@ export interface HamChatRequest {
   session_id?: string;
   messages: HamChatMessage[];
   client_request_id?: string;
+  /** When true (default), API injects `.cursor/skills` summary into system context for intent routing. */
+  include_operator_skills?: boolean;
 }
 
 export interface HamChatResponse {
@@ -92,12 +94,16 @@ function messageFromFastApiDetail(detail: unknown): string | null {
 
 export async function postChat(body: HamChatRequest): Promise<HamChatResponse> {
   const url = apiUrl("/api/chat");
+  const payload = {
+    ...body,
+    include_operator_skills: body.include_operator_skills ?? true,
+  };
   let res: Response;
   try {
     res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      body: JSON.stringify(payload),
     });
   } catch (cause) {
     const hint =

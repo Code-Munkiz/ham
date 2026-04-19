@@ -9,6 +9,7 @@ Open-source multi-agent autonomous developer swarm: Hermes supervisory orchestra
 - **Gaps vs vision**: [GAPS.md](GAPS.md)
 - **Product direction (non-binding)**: [PRODUCT_DIRECTION.md](PRODUCT_DIRECTION.md)
 - **Context Engine hardening plan**: [docs/HAM_HARDENING_REMEDIATION.md](docs/HAM_HARDENING_REMEDIATION.md)
+- **Chat control plane (skills + roadmap)**: [docs/HAM_CHAT_CONTROL_PLANE.md](docs/HAM_CHAT_CONTROL_PLANE.md)
 
 ## Quick start
 

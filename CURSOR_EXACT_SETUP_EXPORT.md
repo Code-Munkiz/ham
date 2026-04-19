@@ -845,7 +845,9 @@ Shipped muscle today centers on **Bridge + Droid executor** (`src/tools/droid_ex
 - `src/swarm_agency.py` — Hermes-supervised **context assembly** (shared `ProjectContext` + per-role render budgets for Architect / routing / critic prompts); **not** a separate orchestration framework (no CrewAI)
 - `src/registry/droids.py` — `DroidRecord` + `DroidRegistry` + `DEFAULT_DROID_REGISTRY` (builder, reviewer)
 - `src/persistence/run_store.py` — read-side `RunStore` over `.ham/runs/*.json`
-- `src/api/server.py` — FastAPI app: read API (`/api/status`, `/api/runs`, …) plus **`POST /api/chat`** (see `src/api/chat.py`)
+- `src/api/server.py` — FastAPI app: read API (`/api/status`, `/api/runs`, …) plus **`POST /api/chat`** (see `src/api/chat.py`) and **`GET /api/cursor-skills`**
+- `src/ham/cursor_skills_catalog.py` — loads `.cursor/skills` for chat control plane + API index
+- `docs/HAM_CHAT_CONTROL_PLANE.md` — chat + skills intent mapping roadmap
 
 ## Deploy (API on GCP)
 
@@ -887,7 +889,7 @@ Shipped muscle today centers on **Bridge + Droid executor** (`src/tools/droid_ex
 - `tests/test_memory_heist.py` — Context Engine + Phase 1/3 guardrails (18 cases)
 - `tests/test_hermes_feedback.py` — Critic MVP + Phase 3 guardrails (7 cases)
 - `tests/test_droid_registry.py` — Droid registry conventions (10 cases)
-- Run: `python -m pytest` — full suite (`pytest.ini` sets `pythonpath = .`)
+- Run: `python -m pytest` — full suite (`pytest.ini` sets `pythonpath = .`; 154+ cases as of control-plane catalog)
 - Other tests under `tests/` as added; bootstrap with `/test-context-regressions` for Context Engine focus
 ```
 
@@ -1059,9 +1061,9 @@ The shipped backend registry surface is `ExecutionBackend`, `LocalDroidBackend`,
 
 Completed runs are now persisted as structured JSON at `.ham/runs/<timestamp>-<run_id>.json`. Persisted records include `run_id`, `created_at`, `profile_id`, `profile_version`, `backend_id`, `backend_version`, `prompt_summary`, `bridge_result`, and `hermes_review`. `run_id` is canonical from `bridge_result.run_id` (never regenerated); the timestamp in the filename is metadata for sort/collision only. The stdout `RUNTIME_RESULT` envelope shape remains unchanged, and persistence is additive. `BackendRegistry.get_record()` is now the first public backend-record accessor.
 
-**Tests**: full `pytest` suite including registry, bridge, main loop, droid registry, API/CORS, and persistence tests — **151 passed** regression/guardrail cases (`pytest.ini` sets `pythonpath = .`; GitHub Actions runs `pytest` + frontend `tsc`).
+**Tests**: full `pytest` suite including registry, bridge, main loop, droid registry, API/CORS, control-plane catalog, and persistence tests — **154 passed** regression/guardrail cases (`pytest.ini` sets `pythonpath = .`; GitHub Actions runs `pytest` + frontend `tsc`).
 
-**Next milestone**: wire workspace UI to live `/api/*` where desired; continue edge-case hardening on Bridge-profile seams while preserving current safety envelopes.
+**Next milestone**: evolve **chat as control plane** (structured UI actions, safe settings mutations) on top of **`/api/cursor-skills`** + operator-skills injection in `POST /api/chat`; continue Bridge-profile hardening.
 
 **Deferred:** FTS5 durable learning persistence, second orchestration harness,
 architecture sprawl.
