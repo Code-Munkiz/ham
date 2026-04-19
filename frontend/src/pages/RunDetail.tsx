@@ -1,5 +1,7 @@
+import * as React from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { MOCK_RUNS } from "@/lib/ham/mocks";
+// import { MOCK_RUNS } from "@/lib/ham/mocks"; // fallback: find run in MOCK_RUNS by runId
+import { type RunRecord } from "@/lib/ham/types";
 import { Badge } from "@/components/ui/badge";
 import { 
   ChevronLeft, 
@@ -23,12 +25,72 @@ import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { isBridgeSuccess } from "@/lib/ham/types";
 
+const API_BASE = "http://localhost:8000";
+
 export default function RunDetail() {
   const { runId } = useParams();
   const navigate = useNavigate();
-  const run = MOCK_RUNS.find(r => r.run_id === runId);
+  const [run, setRun] = React.useState<RunRecord | null>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [notFound, setNotFound] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
 
-  if (!run) {
+  React.useEffect(() => {
+    if (!runId) {
+      setLoading(false);
+      setNotFound(true);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setError(null);
+      setNotFound(false);
+      try {
+        const res = await fetch(`${API_BASE}/api/runs/${encodeURIComponent(runId)}`);
+        if (res.status === 404) {
+          if (!cancelled) {
+            setRun(null);
+            setNotFound(true);
+          }
+          return;
+        }
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = (await res.json()) as RunRecord;
+        if (!cancelled) setRun(data);
+      } catch (e) {
+        if (!cancelled)
+          setError(e instanceof Error ? e.message : "Request failed");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [runId]);
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[60vh] gap-4">
+        <span className="text-[10px] font-black text-white/20 uppercase tracking-widest animate-pulse">
+          Loading...
+        </span>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[60vh] gap-4">
+        <AlertTriangle className="h-12 w-12 text-destructive opacity-30" />
+        <p className="text-[10px] font-black text-red-500/80 uppercase tracking-widest">{error}</p>
+        <button onClick={() => navigate('/runs')} className="text-primary hover:underline font-bold uppercase text-xs tracking-widest">Return to Operational Archive</button>
+      </div>
+    );
+  }
+
+  if (notFound || !run) {
     return (
       <div className="flex flex-col items-center justify-center h-[60vh] gap-4">
         <AlertTriangle className="h-12 w-12 text-destructive opacity-30" />
@@ -131,12 +193,12 @@ export default function RunDetail() {
                 </div>
                 <div className="space-y-1">
                   <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Trace Code</span>
-                  <p className="text-xs font-mono font-black">{run.hermes_review.code}</p>
+                  <p className="text-xs font-mono font-black">{run.hermes_review.code ?? "—"}</p>
                 </div>
                 <div className="space-y-2">
                   <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Audit Notes</span>
                   <p className="text-[11px] text-foreground/80 font-medium leading-relaxed italic border-l-2 border-border/60 pl-3">
-                    {run.hermes_review.notes.join(' — ')}
+                    {(run.hermes_review.notes ?? []).join(' — ')}
                   </p>
                 </div>
               </div>

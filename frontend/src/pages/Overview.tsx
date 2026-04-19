@@ -16,6 +16,8 @@ import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import * as React from "react";
 
+const API_BASE = "http://localhost:8000";
+
 interface Mission {
   id: string;
   title: string;
@@ -40,6 +42,32 @@ const MOCK_MISSIONS: Mission[] = [
 
 export default function Overview() {
   const [currentPage, setCurrentPage] = React.useState(0);
+  const [status, setStatus] = React.useState<{ run_count: number } | null>(null);
+  const [statusLoading, setStatusLoading] = React.useState(true);
+  const [statusError, setStatusError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setStatusLoading(true);
+      setStatusError(null);
+      try {
+        const res = await fetch(`${API_BASE}/api/status`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = (await res.json()) as { version?: string; run_count: number };
+        if (!cancelled) setStatus({ run_count: data.run_count });
+      } catch (e) {
+        if (!cancelled)
+          setStatusError(e instanceof Error ? e.message : "Request failed");
+      } finally {
+        if (!cancelled) setStatusLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const itemsPerPage = 5;
   const totalPages = Math.ceil(MOCK_MISSIONS.length / itemsPerPage);
   
@@ -63,8 +91,28 @@ export default function Overview() {
                     Live <span className="text-[#FF6B00] not-italic">Activity</span>
                  </h1>
                  <div className="flex gap-4">
-                    <div className="px-3 py-1 bg-white/[0.04] border border-white/5 rounded text-[9px] font-black uppercase tracking-widest text-[#FF6B00] italic">Running 04</div>
-                    <div className="px-3 py-1 bg-white/[0.04] border border-white/5 rounded text-[9px] font-black uppercase tracking-widest text-white/40 italic">Completed 122</div>
+                    {statusLoading ? (
+                      <>
+                        <div className="px-3 py-1 bg-white/[0.04] border border-white/5 rounded text-[9px] font-black uppercase tracking-widest text-[#FF6B00] italic flex items-center">
+                          <span className="text-[10px] font-black text-white/20 uppercase tracking-widest animate-pulse">Loading...</span>
+                        </div>
+                        <div className="px-3 py-1 bg-white/[0.04] border border-white/5 rounded text-[9px] font-black uppercase tracking-widest text-white/40 italic flex items-center">
+                          <span className="text-[10px] font-black text-white/20 uppercase tracking-widest animate-pulse">Loading...</span>
+                        </div>
+                      </>
+                    ) : statusError ? (
+                      <>
+                        <div className="px-3 py-1 bg-white/[0.04] border border-white/5 rounded text-[9px] font-black uppercase tracking-widest text-red-500/80 italic">
+                          {statusError}
+                        </div>
+                        <div className="px-3 py-1 bg-white/[0.04] border border-white/5 rounded text-[9px] font-black uppercase tracking-widest text-white/40 italic">—</div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="px-3 py-1 bg-white/[0.04] border border-white/5 rounded text-[9px] font-black uppercase tracking-widest text-[#FF6B00] italic">Running 00</div>
+                        <div className="px-3 py-1 bg-white/[0.04] border border-white/5 rounded text-[9px] font-black uppercase tracking-widest text-white/40 italic">Completed {status?.run_count ?? 0}</div>
+                      </>
+                    )}
                  </div>
               </div>
            </div>

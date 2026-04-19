@@ -1,20 +1,44 @@
-import { MOCK_RUNS } from "@/lib/ham/mocks";
-import { isBridgeSuccess } from "@/lib/ham/types";
+// import { MOCK_RUNS } from "@/lib/ham/mocks"; // fallback: restore and swap `runs` → MOCK_RUNS
+import * as React from "react";
+import { type RunRecord, isBridgeSuccess } from "@/lib/ham/types";
 import { 
   Search, 
   Terminal,
-  ChevronRight,
-  Shield,
   Activity,
-  History as HistoryIcon,
   ArrowUpRight,
   User,
-  MoreHorizontal
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Link } from "react-router-dom";
+
+const API_BASE = "http://localhost:8000";
 
 export default function Runs() {
+  const [runs, setRuns] = React.useState<RunRecord[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await fetch(`${API_BASE}/api/runs?limit=50`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const body = (await res.json()) as { runs: RunRecord[] };
+        if (!cancelled) setRuns(body.runs ?? []);
+      } catch (e) {
+        if (!cancelled)
+          setError(e instanceof Error ? e.message : "Request failed");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <div className="h-full flex flex-col bg-[#050505] font-sans">
       <div className="p-8 space-y-8 max-w-5xl mx-auto w-full">
@@ -36,9 +60,25 @@ export default function Runs() {
            </div>
         </div>
 
+        {loading && (
+          <span className="text-[10px] font-black text-white/20 uppercase tracking-widest animate-pulse block">
+            Loading...
+          </span>
+        )}
+        {error && (
+          <span className="text-[10px] font-black text-red-500/80 uppercase tracking-widest block">
+            {error}
+          </span>
+        )}
+
         {/* Audit Log Table-ish Interface */}
         <div className="space-y-px bg-white/5 border border-white/5">
-           {MOCK_RUNS.map((run) => (
+           {!loading && !error && runs.length === 0 && (
+             <div className="p-8 bg-[#080808] text-[10px] font-black uppercase tracking-widest text-white/30">
+               No runs recorded yet.
+             </div>
+           )}
+           {runs.map((run) => (
              <div key={run.run_id} className="group grid grid-cols-12 items-center bg-[#080808] hover:bg-white/[0.04] transition-colors border-b border-white/[0.02]">
                 <div className="col-span-1 p-4 flex justify-center">
                    <div className={cn(

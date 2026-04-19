@@ -1,320 +1,306 @@
-import { useState, useMemo } from 'react';
-import { BarChart, Bar, PieChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend, CartesianGrid } from 'recharts';
-import { BarChart2, TrendingUp, TrendingDown, Clock, Users as UsersIcon, ShieldCheck as ShieldCheckIcon, Calendar } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { type RunRecord, isBridgeSuccess } from '@/lib/ham/types';
+import * as React from "react";
+import { useMemo } from "react";
+import { type RunRecord, isBridgeSuccess } from "@/lib/ham/types";
+import { 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  LineChart,
+  Line
+} from "recharts";
+import { 
+  Activity, 
+  TrendingUp, 
+  Users, 
+  Zap,
+  ArrowUpRight,
+  ArrowDownRight,
+  ShieldCheck,
+  Cpu,
+  History
+} from "lucide-react";
+const API_BASE = "http://localhost:8000";
 
-// Mock Data Generation
-const AUTHORS = ['aaron', 'system', 'devops'];
-const PROFILES = ['inspect_repo_v1', 'review_diff_v1', 'audit_security_v2', 'generate_docs_v1', 'kernel_sync_v1'];
-const BACKENDS = ['local-droid-v0', 'cloud-bridge-v1', 'enterprise-cluster-v2'];
-
-const generateMockData = (days: number): RunRecord[] => {
-  const records: RunRecord[] = [];
-  const now = new Date();
-  
-  for (let i = 0; i < 60; i++) {
-    const date = new Date(now);
-    date.setDate(now.getDate() - Math.floor(Math.random() * days));
-    date.setHours(Math.floor(Math.random() * 24), Math.floor(Math.random() * 60));
-    
-    const runId = `run-${Math.random().toString(36).substring(2, 8)}${Math.random().toString(36).substring(2, 8)}`;
-    const ok = Math.random() > 0.15;
-    const reviewOk = ok ? Math.random() > 0.1 : Math.random() > 0.6;
-    const iso = date.toISOString();
-
-    records.push({
-      run_id: runId,
-      created_at: iso,
-      profile_id: PROFILES[Math.floor(Math.random() * PROFILES.length)],
-      profile_version: '1.0.0',
-      backend_id: BACKENDS[Math.floor(Math.random() * BACKENDS.length)],
-      backend_version: '1.0.0',
-      prompt_summary: 'Synthetic analytics row',
-      author: AUTHORS[Math.floor(Math.random() * AUTHORS.length)],
-      bridge_result: {
-        intent_id: `intent-${runId}`,
-        request_id: `request-${runId}`,
-        run_id: runId,
-        status: ok ? 'executed' : 'failed',
-        policy_decision: {
-          accepted: ok,
-          reasons: ok ? [] : ['synthetic failure'],
-          policy_version: 'bridge-v0',
-        },
-        started_at: iso,
-        ended_at: iso,
-        duration_ms: 100,
-        commands: [],
-        summary: ok ? 'executed' : 'failed',
-        mutation_detected: Math.random() > 0.5,
-        artifacts: [],
-      },
-      hermes_review: {
-        ok: reviewOk,
-        notes: reviewOk ? ['Validation passed'] : ['Security policy violation', 'Non-deterministic output detected']
-      }
-    });
-  }
-  return records.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-};
+const COLORS = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444'];
 
 export default function Analytics() {
-  const [range, setRange] = useState<7 | 14 | 30>(14);
-  const data = useMemo(() => generateMockData(range), [range]);
+  const [allRuns, setAllRuns] = React.useState<RunRecord[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
 
-  // Derived Stats
-  const totalRuns = data.length;
-  const successRate = Math.round((data.filter(r => isBridgeSuccess(r.bridge_result)).length / totalRuns) * 100);
-  const avgRunsPerDay = (totalRuns / range).toFixed(1);
-  const activeAuthors = new Set(data.map(r => r.author)).size;
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await fetch(`${API_BASE}/api/runs?limit=200`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = (await res.json()) as { runs: RunRecord[] };
+        if (!cancelled) setAllRuns(data.runs ?? []);
+      } catch (e) {
+        if (!cancelled)
+          setError(e instanceof Error ? e.message : "Request failed");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-  // Chart Data: Runs Per Day
-  const chartData = useMemo(() => {
-    const days: Record<string, number> = {};
-    const now = new Date();
-    for (let i = range - 1; i >= 0; i--) {
-      const d = new Date(now);
-      d.setDate(now.getDate() - i);
-      days[d.toISOString().split('T')[0]] = 0;
-    }
-    
-    data.forEach(r => {
-      const date = r.created_at.split('T')[0];
-      if (days[date] !== undefined) days[date]++;
+  const totalRuns = allRuns.length;
+  const successfulRuns = allRuns.filter(r => isBridgeSuccess(r.bridge_result)).length;
+  const successRate = totalRuns > 0 ? (successfulRuns / totalRuns) * 100 : 0;
+
+  const runsPerDay = useMemo(() => {
+    const map = new Map<string, number>();
+    allRuns.forEach(r => {
+      const day = r.created_at.split('T')[0];
+      map.set(day, (map.get(day) || 0) + 1);
     });
+    return Array.from(map.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([date, count]) => ({ date, count }));
+  }, [allRuns]);
 
-    return Object.entries(days).map(([date, count]) => ({
-      date: date.substring(5), // MM-DD
-      count,
-    }));
-  }, [data, range]);
-
-  // Chart Data: Outcome
-  const outcomeData = [
-    { name: 'SUCCESS', value: data.filter(r => isBridgeSuccess(r.bridge_result)).length },
-    { name: 'FAILED', value: data.filter(r => !isBridgeSuccess(r.bridge_result)).length },
-  ];
-
-  // Profile Usage Rankings
   const profileUsage = useMemo(() => {
-    const counts: Record<string, number> = {};
-    data.forEach(r => counts[r.profile_id] = (counts[r.profile_id] || 0) + 1);
-    return Object.entries(counts)
-      .sort((a, b) => b[1] - a[1])
-      .map(([name, count]) => ({ name, count }));
-  }, [data]);
+    const map = new Map<string, number>();
+    allRuns.forEach(r => {
+      map.set(r.profile_id, (map.get(r.profile_id) || 0) + 1);
+    });
+    return Array.from(map.entries()).map(([name, value]) => ({ name, value }));
+  }, [allRuns]);
 
-  const maxProfileCount = Math.max(...profileUsage.map(p => p.count));
-
-  const lastRuns = data.slice(0, 10);
+  const maxDaily = runsPerDay.length ? Math.max(...runsPerDay.map(d => d.count)) : 0;
+  const maxProfile = profileUsage.length ? Math.max(...profileUsage.map(p => p.value)) : 0;
 
   return (
-    <div className="h-full flex flex-col bg-[#050505] font-sans overflow-y-auto">
-      {/* Grid Pattern */}
-      <div 
-        className="fixed inset-0 pointer-events-none opacity-[0.02]" 
-        style={{ backgroundImage: 'linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)', backgroundSize: '64px 64px' }} 
-      />
-
-      <div className="p-8 pb-20 space-y-12 max-w-6xl mx-auto w-full animate-in fade-in duration-700 relative z-10">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-8 border-b border-white/10">
-          <div className="flex items-center gap-4">
-            <div className="bg-[#FF6B00]/10 border border-[#FF6B00]/20 rounded p-2">
-              <BarChart2 className="h-6 w-6 text-[#FF6B00]" />
-            </div>
-            <div>
-              <h1 className="text-4xl font-black text-white italic tracking-tighter uppercase leading-none">
-                Run <span className="text-[#FF6B00] not-italic">Analytics</span>
-              </h1>
-              <span className="mt-2 block text-[10px] font-black uppercase tracking-[0.3em] text-white/60">Global Directive Metrics</span>
-            </div>
+    <div className="space-y-8 animate-in fade-in duration-500 pb-12">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <div className="h-px w-8 bg-primary/40" />
+            <span className="text-[10px] font-black text-primary uppercase tracking-[0.3em]">Intelligence Layer</span>
           </div>
-
-          <div className="flex items-center bg-[#0a0a0a] rounded border border-white/5 p-1">
-            {([7, 14, 30] as const).map((r) => (
-              <button
-                key={r}
-                onClick={() => setRange(r)}
-                className={cn(
-                  "px-4 py-1.5 text-[10px] font-black uppercase tracking-widest rounded transition-all",
-                  range === r ? "bg-[#FF6B00] text-black shadow-[0_0_12px_#FF6B00]" : "text-white/30 hover:text-white"
-                )}
-              >
-                {r}D
-              </button>
-            ))}
+          <h1 className="text-4xl font-black tracking-tighter uppercase italic">Operational Analytics</h1>
+          <p className="text-muted-foreground font-mono text-xs mt-2 max-w-xl">
+            Deep telemetry on swarm efficiency, model routing, and execution stability across the Ham network.
+          </p>
+        </div>
+        <div className="flex gap-4">
+          <div className="px-4 py-2 rounded-xl bg-white/[0.02] border border-white/5 flex flex-col items-end">
+            <span className="text-[8px] font-black text-white/20 uppercase tracking-widest">Global Success</span>
+            {loading ? (
+              <span className="text-[10px] font-black text-white/20 uppercase tracking-widest animate-pulse">Loading...</span>
+            ) : error ? (
+              <span className="text-[10px] font-black text-red-500/80 uppercase tracking-widest">{error}</span>
+            ) : (
+              <span className="text-xl font-black text-emerald-500">{successRate.toFixed(1)}%</span>
+            )}
+          </div>
+          <div className="px-4 py-2 rounded-xl bg-white/[0.02] border border-white/5 flex flex-col items-end">
+            <span className="text-[8px] font-black text-white/20 uppercase tracking-widest">Total Volume</span>
+            {loading ? (
+              <span className="text-[10px] font-black text-white/20 uppercase tracking-widest animate-pulse">Loading...</span>
+            ) : error ? (
+              <span className="text-[10px] font-black text-red-500/80 uppercase tracking-widest">—</span>
+            ) : (
+              <span className="text-xl font-black">{totalRuns}</span>
+            )}
           </div>
         </div>
+      </div>
 
-        {/* Stats Row */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {[
-            { label: 'Total Runs', value: totalRuns, icon: BarChart2, delta: '+12%', pos: true },
-            { label: 'Success Rate', value: `${successRate}%`, icon: ShieldCheckIcon, delta: '+2.4%', pos: true },
-            { label: 'Avg Runs / Day', value: avgRunsPerDay, icon: Clock, delta: '-0.5%', pos: false },
-            { label: 'Active Authors', value: activeAuthors, icon: UsersIcon, delta: '0', pos: null },
-          ].map((stat, i) => (
-            <div key={i} className="bg-[#0a0a0a] border border-white/5 rounded-xl p-6 relative overflow-hidden group">
-              <div className="absolute top-0 left-0 bottom-0 w-1 bg-[#FF6B00] opacity-0 group-hover:opacity-100 transition-opacity" />
-              <div className="flex flex-col gap-1 relative z-10">
-                <span className="text-[10px] font-black uppercase tracking-[0.3em] text-white/40">{stat.label}</span>
-                <div className="flex items-end justify-between gap-2 mt-2">
-                  <span className="text-3xl font-black text-white tracking-tighter">{stat.value}</span>
-                  {stat.pos !== null && (
-                    <div className={cn(
-                      "flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] text-[10px] font-black italic",
-                      stat.pos ? "bg-green-500/10 text-green-500" : "bg-red-500/10 text-red-500"
-                    )}>
-                      {stat.pos ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-                      {stat.delta}
-                    </div>
-                  )}
-                </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 p-8 rounded-[2rem] bg-white/[0.02] border border-white/5 shadow-2xl relative overflow-hidden group">
+          <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-opacity">
+            <Activity className="h-32 w-32" />
+          </div>
+          <div className="flex items-center justify-between mb-8">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                <TrendingUp className="h-4 w-4" />
               </div>
+              <h3 className="text-sm font-black uppercase tracking-widest">Execution Velocity</h3>
             </div>
-          ))}
-        </div>
-
-        {/* Charts Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Runs Per Day */}
-          <div className="bg-[#0a0a0a] border border-white/5 rounded-xl p-8 space-y-6">
-            <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-white/60">Runs Per Day</h4>
-            <div className="h-[300px] w-full">
+            <div className="flex gap-4 text-[10px] font-mono font-bold text-white/20 uppercase">
+              <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-primary" /> Daily Runs</span>
+            </div>
+          </div>
+          <div className="h-[300px] w-full">
+            {loading ? (
+              <div className="h-full flex items-center justify-center">
+                <span className="text-[10px] font-black text-white/20 uppercase tracking-widest animate-pulse">Loading...</span>
+              </div>
+            ) : error ? (
+              <div className="h-full flex items-center justify-center">
+                <span className="text-[10px] font-black text-red-500/80 uppercase tracking-widest">{error}</span>
+              </div>
+            ) : runsPerDay.length === 0 ? (
+              <div className="h-full flex items-center justify-center">
+                <span className="text-[10px] font-black text-white/30 uppercase tracking-widest">No run data yet</span>
+              </div>
+            ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData}>
-                  <CartesianGrid vertical={false} stroke="#ffffff" strokeOpacity={0.05} />
+                <BarChart data={runsPerDay}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
                   <XAxis 
                     dataKey="date" 
-                    axisLine={false} 
+                    stroke="rgba(255,255,255,0.1)" 
+                    fontSize={10} 
                     tickLine={false} 
-                    tick={{ fill: '#ffffff66', fontSize: 10, fontWeight: 900 }}
+                    axisLine={false}
+                    tickFormatter={(val) => val.split('-').slice(1).join('/')}
                   />
                   <YAxis 
-                    axisLine={false} 
+                    stroke="rgba(255,255,255,0.1)" 
+                    fontSize={10} 
                     tickLine={false} 
-                    tick={{ fill: '#ffffff66', fontSize: 10, fontWeight: 900 }}
+                    axisLine={false}
+                    domain={[0, maxDaily > 0 ? Math.ceil(maxDaily * 1.2) : 1]}
                   />
                   <Tooltip 
-                    cursor={{ fill: '#ffffff05' }}
-                    contentStyle={{ backgroundColor: '#0a0a0a', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '8px' }}
-                    itemStyle={{ color: '#FF6B00', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase' }}
-                    labelStyle={{ color: 'rgba(255,255,255,0.4)', fontSize: '10px', marginBottom: '4px', textTransform: 'uppercase' }}
+                    contentStyle={{ backgroundColor: '#0a0a0a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', fontSize: '10px' }}
+                    itemStyle={{ color: '#fff' }}
                   />
-                  <Bar 
-                    dataKey="count" 
-                    fill="#FF6B00" 
-                    radius={[4, 4, 0, 0]}
-                    activeBar={{ fill: '#FF6B00', filter: 'drop-shadow(0 0 8px #FF6B0066)' }}
-                  />
+                  <Bar dataKey="count" fill="currentColor" className="text-primary fill-primary/40 hover:fill-primary transition-all duration-300" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
-            </div>
+            )}
           </div>
+        </div>
 
-          {/* Outcome Breakdown */}
-          <div className="bg-[#0a0a0a] border border-white/5 rounded-xl p-8 space-y-6 flex flex-col">
-            <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-white/60">Outcome Breakdown</h4>
-            <div className="h-[300px] w-full flex-1 relative flex items-center justify-center">
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none flex-col">
-                <span className="text-4xl font-black text-white italic pr-1">{successRate}%</span>
-                <span className="text-[8px] font-black uppercase tracking-widest text-white/20">Success rate</span>
+        <div className="p-8 rounded-[2rem] bg-white/[0.02] border border-white/5 shadow-2xl flex flex-col">
+          <div className="flex items-center gap-3 mb-8">
+            <div className="p-2 rounded-lg bg-purple-500/10 text-purple-400">
+              <Users className="h-4 w-4" />
+            </div>
+            <h3 className="text-sm font-black uppercase tracking-widest">Profile Load</h3>
+          </div>
+          <div className="flex-1 min-h-[200px] relative">
+            {loading ? (
+              <div className="h-full flex items-center justify-center">
+                <span className="text-[10px] font-black text-white/20 uppercase tracking-widest animate-pulse">Loading...</span>
               </div>
+            ) : error ? (
+              <div className="h-full flex items-center justify-center">
+                <span className="text-[10px] font-black text-red-500/80 uppercase tracking-widest">{error}</span>
+              </div>
+            ) : profileUsage.length === 0 ? (
+              <div className="h-full flex items-center justify-center">
+                <span className="text-[10px] font-black text-white/30 uppercase tracking-widest">No profile data</span>
+              </div>
+            ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
-                    data={outcomeData}
+                    data={profileUsage}
                     cx="50%"
                     cy="50%"
-                    innerRadius={80}
-                    outerRadius={110}
-                    paddingAngle={5}
+                    innerRadius={60}
+                    outerRadius={80}
+                    paddingAngle={8}
                     dataKey="value"
-                    stroke="none"
                   >
-                    <Cell fill="#FF6B00" />
-                    <Cell fill="#ef4444" />
+                    {profileUsage.map((_, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="rgba(0,0,0,0.2)" />
+                    ))}
                   </Pie>
                   <Tooltip 
-                    contentStyle={{ backgroundColor: '#0a0a0a', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '8px' }}
-                    itemStyle={{ fontSize: '11px', fontWeight: 'bold' }}
+                    contentStyle={{ backgroundColor: '#0a0a0a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', fontSize: '10px' }}
                   />
                 </PieChart>
               </ResponsiveContainer>
-            </div>
-            <div className="flex justify-center gap-8 border-t border-white/5 pt-6">
-              <div className="flex items-center gap-2">
-                <div className="h-2 w-2 rounded-full bg-[#FF6B00]" />
-                <span className="text-[8px] font-black uppercase tracking-widest text-white/60">SUCCESSFUL RUNS</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="h-2 w-2 rounded-full bg-[#ef4444]" />
-                <span className="text-[8px] font-black uppercase tracking-widest text-white/60">FAILED RUNS</span>
-              </div>
-            </div>
+            )}
           </div>
-        </div>
-
-        {/* Profile Usage */}
-        <div className="bg-[#0a0a0a] border border-white/5 rounded-xl p-8 space-y-6">
-          <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-white/60">Profile Usage Ranking</h4>
-          <div className="space-y-4">
-            {profileUsage.map((profile, i) => (
-              <div key={i} className="space-y-2">
-                <div className="flex justify-between items-end">
-                  <span className="text-[11px] font-bold text-white uppercase tracking-widest">{profile.name}</span>
-                  <span className="text-[11px] font-black text-[#FF6B00]">{profile.count} missions</span>
+          <div className="mt-6 space-y-3">
+            {profileUsage.map((p, i) => (
+              <div key={p.name} className="flex items-center justify-between text-[10px] font-mono font-bold uppercase">
+                <div className="flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
+                  <span className="text-white/40">{p.name}</span>
                 </div>
-                <div className="h-2 bg-white/5 rounded-full overflow-hidden border border-white/5">
-                  <div 
-                    className="h-full bg-gradient-to-r from-[#FF6B00]/40 to-[#FF6B00] shadow-[0_0_12px_#FF6B0033]" 
-                    style={{ width: `${(profile.count / maxProfileCount) * 100}%` }}
-                  />
-                </div>
+                <span>{maxProfile > 0 ? ((p.value / maxProfile) * 100).toFixed(0) : 0}% Load</span>
               </div>
             ))}
           </div>
         </div>
+      </div>
 
-        {/* History Table */}
-        <div className="space-y-6">
-          <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-white/60">Recent Run History</h4>
-          <div className="bg-[#0a0a0a] border border-white/5 rounded-xl overflow-hidden">
-            <div className="grid grid-cols-[1fr_2fr_1.5fr_1fr_1fr_1fr] p-4 border-b border-white/10 bg-[#0d0d0d]">
-              <span className="text-[9px] font-black uppercase tracking-widest text-white/30">Timestamp</span>
-              <span className="text-[9px] font-black uppercase tracking-widest text-white/30">Run ID</span>
-              <span className="text-[9px] font-black uppercase tracking-widest text-white/30">Profile</span>
-              <span className="text-[9px] font-black uppercase tracking-widest text-white/30">Author</span>
-              <span className="text-[9px] font-black uppercase tracking-widest text-white/30 text-center">Outcome</span>
-              <span className="text-[9px] font-black uppercase tracking-widest text-white/30 text-center">Review</span>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="p-8 rounded-[2rem] bg-white/[0.02] border border-white/5">
+          <div className="flex items-center justify-between mb-8">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400">
+                <ShieldCheck className="h-4 w-4" />
+              </div>
+              <h3 className="text-sm font-black uppercase tracking-widest">Stability Index</h3>
             </div>
-            <div className="divide-y divide-white/[0.02]">
-              {lastRuns.map((run) => (
-                <div key={run.run_id} className="grid grid-cols-[1fr_2fr_1.5fr_1fr_1fr_1fr] p-4 bg-[#080808] hover:bg-white/[0.04] transition-colors items-center">
-                  <span className="font-mono text-[10px] text-white/30">{new Date(run.created_at).toLocaleString().split(', ')[1]}</span>
-                  <span className="font-mono text-[9px] text-white/20 truncate pr-4">{run.run_id}</span>
-                  <span className="text-[11px] font-bold text-white/60 uppercase tracking-widest truncate pr-4">{run.profile_id}</span>
-                  <span className="text-[11px] font-bold text-white/40 uppercase tracking-widest">{run.author ?? 'unknown'}</span>
-                  <div className="flex justify-center">
-                    <span className={cn(
-                      "px-2 py-0.5 rounded text-[8px] font-black uppercase",
-                      isBridgeSuccess(run.bridge_result) ? "text-green-500 bg-green-500/10" : "text-red-500 bg-red-500/10"
-                    )}>
-                      {isBridgeSuccess(run.bridge_result) ? 'OK' : 'FAIL'}
-                    </span>
-                  </div>
-                  <div className="flex justify-center">
-                    <span className={cn(
-                      "px-2 py-0.5 rounded text-[8px] font-black uppercase",
-                      run.hermes_review.ok ? "text-green-500 bg-green-500/10" : "text-red-500 bg-red-500/10"
-                    )}>
-                      {run.hermes_review.ok ? 'PASS' : 'FAIL'}
-                    </span>
-                  </div>
+            <div className="flex items-center gap-1 text-emerald-500 text-[10px] font-black">
+              <ArrowUpRight className="h-3 w-3" />
+              OPTIMAL
+            </div>
+          </div>
+          <div className="h-[200px] w-full">
+            {loading ? (
+              <div className="h-full flex items-center justify-center">
+                <span className="text-[10px] font-black text-white/20 uppercase tracking-widest animate-pulse">Loading...</span>
+              </div>
+            ) : error ? (
+              <div className="h-full flex items-center justify-center">
+                <span className="text-[10px] font-black text-red-500/80 uppercase tracking-widest">{error}</span>
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={runsPerDay}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+                  <XAxis dataKey="date" hide />
+                  <YAxis hide domain={[0, 100]} />
+                  <Tooltip contentStyle={{ backgroundColor: '#0a0a0a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', fontSize: '10px' }} />
+                  <Line 
+                    type="monotone" 
+                    dataKey="count" 
+                    stroke="#10b981" 
+                    strokeWidth={3} 
+                    dot={false}
+                    strokeOpacity={0.4}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </div>
+
+        <div className="p-8 rounded-[2rem] bg-white/[0.02] border border-white/5 flex flex-col justify-center">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="p-6 rounded-2xl bg-white/[0.03] border border-white/5">
+              <Cpu className="h-5 w-5 text-blue-400 mb-4 opacity-50" />
+              <div className="text-[8px] font-black text-white/20 uppercase tracking-widest mb-1">Avg Latency</div>
+              <div className="text-2xl font-black italic">42ms</div>
+            </div>
+            <div className="p-6 rounded-2xl bg-white/[0.03] border border-white/5">
+              <Zap className="h-5 w-5 text-amber-400 mb-4 opacity-50" />
+              <div className="text-[8px] font-black text-white/20 uppercase tracking-widest mb-1">Token Velocity</div>
+              <div className="text-2xl font-black italic">1.2k/s</div>
+            </div>
+            <div className="col-span-2 p-6 rounded-2xl bg-primary/5 border border-primary/10 flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <History className="h-6 w-6 text-primary" />
+                <div>
+                  <div className="text-[10px] font-black uppercase tracking-widest text-primary">Historical Peak</div>
+                  <div className="text-xs font-mono text-white/40">Concurrent execution nodes reached maximum capacity on {runsPerDay.length ? runsPerDay[runsPerDay.length - 1].date : "—"}</div>
                 </div>
-              ))}
+              </div>
+              <ArrowDownRight className="h-5 w-5 text-white/10" />
             </div>
           </div>
         </div>
