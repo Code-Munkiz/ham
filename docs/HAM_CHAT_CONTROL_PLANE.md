@@ -30,11 +30,21 @@ Skills are **composable checklists** for Cursor/Hermes-aligned work, for example
 
 Chat should name the **skill id**, the **`.cursor/skills/.../SKILL.md`** path, and any **slash command** from `.cursor/rules/commands.mdc` when applicable.
 
+## Structured UI actions (Phase B — shipped)
+
+| Piece | Behavior |
+|-------|----------|
+| Marker line | Model adds final line: `HAM_UI_ACTIONS_JSON: {"actions":[...]}` (see `src/ham/ui_actions.py`). |
+| Server | Strips marker from stored assistant text; validates actions (allowlisted paths, settings tabs, toast length). |
+| `POST /api/chat` | Response field **`actions`**: `navigate`, `open_settings`, `toast`, `toggle_control_panel`. |
+| Client | `frontend/src/lib/ham/applyUiActions.ts` + `Chat.tsx` applies actions via `react-router` + Sonner + `WorkspaceContext`. |
+| Request flag | `enable_ui_actions` (default **true**); set **false** to omit instructions and always get `actions: []`. |
+
 ## Next (not built yet)
 
-1. **Structured actions** — model returns JSON `{ "action": "open_settings", "tab": "context" }`; UI executes (requires tool schema + UI handlers).
-2. **Settings writes** — audited `PATCH` for merged `.ham.json` / project config from the API (auth + validation + backups).
-3. **Subagent rule catalog** — optional read-only `GET /api/cursor-subagents` for `.cursor/rules/subagent-*.mdc` (heavier; keep separate from skills).
+1. **Settings writes** — audited `PATCH` for merged `.ham.json` / project config from the API (auth + validation + backups).
+2. **Subagent rule catalog** — optional read-only `GET /api/cursor-subagents` for `.cursor/rules/subagent-*.mdc` (heavier; keep separate from skills).
+3. **Stronger grounding** — optional second-pass JSON from a small model if marker parsing is too brittle in production.
 
 ## Constraints
 

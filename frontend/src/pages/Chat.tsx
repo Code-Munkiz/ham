@@ -26,7 +26,9 @@ import {
   AlertCircle
 } from "lucide-react";
 import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { applyHamUiActions } from "@/lib/ham/applyUiActions";
 import { postChat } from "@/lib/ham/api";
 import { useAgent } from "@/lib/ham/AgentContext";
 import { useWorkspace } from "@/lib/ham/WorkspaceContext";
@@ -39,8 +41,14 @@ type ChatRow = {
 };
 
 export default function Chat() {
+  const navigate = useNavigate();
   const { agents, selectedAgentId } = useAgent();
-  const { activeTask, setActiveTask, isControlPanelOpen, setIsControlPanelOpen } = useWorkspace();
+  const {
+    activeTask,
+    setActiveTask,
+    isControlPanelOpen,
+    setIsControlPanelOpen,
+  } = useWorkspace();
   const selectedAgent = agents.find(a => a.id === selectedAgentId) || agents[0];
 
   const [messages, setMessages] = React.useState<ChatRow[]>([]);
@@ -104,6 +112,11 @@ export default function Chat() {
           timestamp: timeStr(),
         })),
       );
+      applyHamUiActions(res.actions ?? [], {
+        navigate,
+        setIsControlPanelOpen,
+        isControlPanelOpen,
+      });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Request failed";
       setChatError(msg);

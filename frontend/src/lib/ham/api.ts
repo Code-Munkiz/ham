@@ -62,11 +62,25 @@ export interface HamChatRequest {
   client_request_id?: string;
   /** When true (default), API injects `.cursor/skills` summary into system context for intent routing. */
   include_operator_skills?: boolean;
+  /** When true (default), model may emit `HAM_UI_ACTIONS_JSON`; response includes `actions` for the UI. */
+  enable_ui_actions?: boolean;
 }
+
+/** Structured UI actions from `POST /api/chat` (server-validated). */
+export type HamUiAction =
+  | { type: "navigate"; path: string }
+  | { type: "open_settings"; tab?: string | null }
+  | {
+      type: "toast";
+      level: "info" | "success" | "warning" | "error";
+      message: string;
+    }
+  | { type: "toggle_control_panel"; open?: boolean | null };
 
 export interface HamChatResponse {
   session_id: string;
   messages: HamChatMessage[];
+  actions: HamUiAction[];
 }
 
 /**
@@ -97,6 +111,7 @@ export async function postChat(body: HamChatRequest): Promise<HamChatResponse> {
   const payload = {
     ...body,
     include_operator_skills: body.include_operator_skills ?? true,
+    enable_ui_actions: body.enable_ui_actions ?? true,
   };
   let res: Response;
   try {
@@ -125,5 +140,9 @@ export async function postChat(body: HamChatRequest): Promise<HamChatResponse> {
     }
     throw new Error(msg);
   }
-  return res.json() as Promise<HamChatResponse>;
+  const data = (await res.json()) as HamChatResponse;
+  if (!Array.isArray(data.actions)) {
+    data.actions = [];
+  }
+  return data;
 }
