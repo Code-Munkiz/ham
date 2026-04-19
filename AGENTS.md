@@ -3,6 +3,25 @@
 This file declares which files are first-class project context. Any agent
 working on this repo should read these before proposing changes.
 
+## Read order (recommended)
+
+1. `VISION.md` — pillars, boundaries, and how components connect
+2. This file — where implementation lives
+3. `SWARM.md` — repo coding instructions (loaded by `memory_heist`)
+4. `PRODUCT_DIRECTION.md` — product lens: HAM-native model vs reference ecosystems
+
+## Ham bet: memory, Hermes, and CLI-native muscle
+
+Three ideas stay stable while execution backends evolve:
+
+1. **Repo-grounded context (`memory_heist`)** — Workspace truth (scan, git, merged `.ham` config, instruction files, session compaction) is assembled once and injected into agents so supervision and planning do not hallucinate project state.
+
+2. **Hermes learning loop (`hermes_feedback`)** — Critique and structured review over **evidence-shaped outcomes** (bridge/run envelopes, capped text). The goal is a compounding signal: routing and quality improve over time; durable institutional memory is still incremental (see `GAPS.md` and hardening docs).
+
+3. **CLI-first execution surface** — Heavy work is delegated to **CLI-based agentic runtimes** (subprocess + framed IO), not re-embedded vendor HTTP stacks inside Ham. **Auth and account state stay with the tool** (its login flows, tokens on disk, device/browser steps). Ham supplies **scoped intent, policy limits, and capture**; Hermes reasons over **comparable envelopes** regardless of whether the muscle is Factory/Droid-style, Claude Code–style, ElizaOS-flavored hosts, OpenClaw-informed gateways, or future adapters—**one supervision vocabulary, many CLIs**.
+
+Shipped muscle today centers on **Bridge + Droid executor** (`src/tools/droid_executor.py`, `src/bridge/`). Reference notes (patterns only, not parity targets): `docs/reference/factory-droid-reference.md`, `docs/reference/openclaw-reference.md`, `docs/reference/elizaos-reference.md`. Ham remains **HAM-native** in naming and contracts; see `PRODUCT_DIRECTION.md`.
+
 ## Architecture
 
 - `VISION.md` — canonical architecture, core pillars, design principles
