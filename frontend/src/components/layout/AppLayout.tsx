@@ -44,8 +44,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       {/* Primary Navigation Rail */}
       <NavRail />
       
-      {/* Secondary Context Panel — hidden on Chat (space) and Settings (UnifiedSettings has its own nav) */}
-      {!isChatPage && !isSettingsPage && (
+      {/* Secondary panel: settings quick-links only (no contextual sidebars elsewhere) */}
+      {!isChatPage && isSettingsPage && (
         <Sidebar isVisible={isSidebarVisible} onToggle={() => setIsSidebarVisible(!isSidebarVisible)} />
       )}
       

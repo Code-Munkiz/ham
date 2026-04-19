@@ -28,6 +28,7 @@ export default function Settings() {
         activeSubSegment={activeSubSegment}
         onSubSegmentChange={onSubSegmentChange}
         variant="page"
+        showSubNav={false}
       />
     </div>
   );
