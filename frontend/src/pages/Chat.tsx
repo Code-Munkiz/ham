@@ -26,30 +26,64 @@ import {
   AlertCircle
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { postChat } from "@/lib/ham/api";
 import { useAgent } from "@/lib/ham/AgentContext";
 import { useWorkspace } from "@/lib/ham/WorkspaceContext";
+
+type ChatRow = {
+  id: string;
+  role: "user" | "assistant" | "system";
+  content: string;
+  timestamp: string;
+};
 
 export default function Chat() {
   const { agents, selectedAgentId } = useAgent();
   const { activeTask, setActiveTask, isControlPanelOpen, setIsControlPanelOpen } = useWorkspace();
   const selectedAgent = agents.find(a => a.id === selectedAgentId) || agents[0];
 
-  const [messages, setMessages] = React.useState([]);
+  const [messages, setMessages] = React.useState<ChatRow[]>([]);
   const [input, setInput] = React.useState("");
+  const [sessionId, setSessionId] = React.useState<string | null>(null);
+  const [sending, setSending] = React.useState(false);
+  const [chatError, setChatError] = React.useState<string | null>(null);
   
   // Workbench Modes
   const [viewMode, setViewMode] = React.useState<'chat' | 'preview' | 'browser' | 'split'>('chat');
 
-  const handleSend = (e: React.FormEvent) => {
+  const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim()) return;
-    setMessages([...messages, { 
-      id: Date.now(), 
-      role: 'user', 
-      content: input, 
-      timestamp: new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }) 
-    }]);
+    if (!input.trim() || sending) return;
+    const text = input.trim();
     setInput("");
+    setChatError(null);
+    setSending(true);
+    try {
+      const res = await postChat({
+        session_id: sessionId ?? undefined,
+        messages: [{ role: "user", content: text }],
+      });
+      setSessionId(res.session_id);
+      const ts = () =>
+        new Date().toLocaleTimeString([], {
+          hour12: false,
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        });
+      setMessages(
+        res.messages.map((m, i) => ({
+          id: `${res.session_id}-${i}-${m.role}`,
+          role: m.role,
+          content: m.content,
+          timestamp: ts(),
+        })),
+      );
+    } catch (err) {
+      setChatError(err instanceof Error ? err.message : "Request failed");
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
@@ -194,6 +228,12 @@ export default function Chat() {
         {/* COMPOSER Interface */}
         <div className="px-12 pb-10 pt-4 bg-gradient-to-t from-black via-black/95 to-transparent relative z-30">
           <div className="max-w-3xl mx-auto space-y-4">
+             {chatError ? (
+               <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-2 text-[11px] font-bold uppercase tracking-widest text-destructive">
+                 <AlertCircle className="h-4 w-4 shrink-0" />
+                 {chatError}
+               </div>
+             ) : null}
              {/* Integrated Context Chips (Compact display) */}
              <div className="flex items-center gap-2 animate-in slide-in-from-bottom-2 duration-500 overflow-x-auto scrollbar-hide">
                 <div className="flex items-center gap-3 px-3 py-1.5 bg-white/[0.05] border border-white/10 rounded-lg text-white/40 group shrink-0">
@@ -224,7 +264,7 @@ export default function Chat() {
                             onKeyDown={(e) => {
                               if (e.key === 'Enter' && !e.shiftKey) {
                                 e.preventDefault();
-                                handleSend(e as any);
+                                void handleSend(e as unknown as React.FormEvent);
                               }
                             }}
                             placeholder="Direct the workforce or press / for system commands..."
@@ -250,9 +290,9 @@ export default function Chat() {
                          </div>
 
                          <div className="flex items-center gap-4">
-                            <button type="submit" className="flex items-center gap-3 px-8 py-2 bg-[#FF6B00] text-black text-[11px] font-black uppercase tracking-widest hover:bg-[#FF6B00]/80 transition-all rounded-lg shadow-lg hover:shadow-[#FF6B00]/20">
+                            <button type="submit" disabled={sending} className="flex items-center gap-3 px-8 py-2 bg-[#FF6B00] text-black text-[11px] font-black uppercase tracking-widest hover:bg-[#FF6B00]/80 transition-all rounded-lg shadow-lg hover:shadow-[#FF6B00]/20 disabled:opacity-50 disabled:pointer-events-none">
                                <Send className="h-4 w-4" />
-                               Execute
+                               {sending ? "Sending…" : "Execute"}
                             </button>
                          </div>
                       </div>

@@ -44,3 +44,48 @@ export async function fetchProjectContextEngine(
   }
   return res.json() as Promise<ContextEnginePayload>;
 }
+
+/** Ham-native chat DTOs (matches `src/api/chat.py`). */
+export type HamChatRole = "user" | "assistant" | "system";
+
+export interface HamChatMessage {
+  role: HamChatRole;
+  content: string;
+}
+
+export interface HamChatRequest {
+  session_id?: string;
+  messages: HamChatMessage[];
+  client_request_id?: string;
+}
+
+export interface HamChatResponse {
+  session_id: string;
+  messages: HamChatMessage[];
+}
+
+/**
+ * Interactive assistant turn via Ham API (server may use a gateway adapter; browser only sees Ham).
+ */
+export async function postChat(body: HamChatRequest): Promise<HamChatResponse> {
+  const url = apiUrl("/api/chat");
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    let msg = `Chat request failed (HTTP ${res.status})`;
+    try {
+      const j = (await res.json()) as {
+        detail?: { error?: { message?: string; code?: string } };
+      };
+      const m = j?.detail?.error?.message;
+      if (m) msg = m;
+    } catch {
+      /* ignore JSON parse */
+    }
+    throw new Error(msg);
+  }
+  return res.json() as Promise<HamChatResponse>;
+}
