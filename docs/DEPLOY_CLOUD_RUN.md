@@ -48,13 +48,17 @@ gcloud builds submit --tag "${IMAGE}" .
 ```bash
 export SERVICE=ham-api-staging
 
+# Prefer an env YAML file: commas in HAM_CORS_ORIGINS break `--set-env-vars` parsing.
+# Create `.gcloud/ham-api-env.yaml` (gitignored), e.g.:
+#   HERMES_GATEWAY_MODE: mock
+#   HAM_CORS_ORIGINS: "https://your-app.vercel.app,http://localhost:3000"
+
 gcloud run deploy "${SERVICE}" \
   --image "${IMAGE}" \
   --region "${REGION}" \
   --platform managed \
   --allow-unauthenticated \
-  --set-env-vars "HERMES_GATEWAY_MODE=mock" \
-  --set-env-vars "HAM_CORS_ORIGINS=https://your-app.vercel.app,http://localhost:3000"
+  --env-vars-file .gcloud/ham-api-env.yaml
 ```
 
 Add more env vars as needed, e.g. **`HERMES_GATEWAY_MODE=http`**, **`HERMES_GATEWAY_BASE_URL`**, **`HERMES_GATEWAY_API_KEY`**, **`OPENROUTER_API_KEY`** (use **Secret Manager** for secrets in real deployments).

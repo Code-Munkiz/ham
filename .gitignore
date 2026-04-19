@@ -11,6 +11,9 @@ build/
 docs/repomix-*
 docs/reference/hermes-agent-reference.txt
 
+# Local GCP deploy env files (may contain project-specific URLs)
+.gcloud/
+
 # Local tooling / vendored zips
 .claude/
 ham-workspace*.zip
