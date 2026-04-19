@@ -39,6 +39,11 @@ Shipped muscle today centers on **Bridge + Droid executor** (`src/tools/droid_ex
 - `src/persistence/run_store.py` — read-side `RunStore` over `.ham/runs/*.json`
 - `src/api/server.py` — FastAPI app: read API (`/api/status`, `/api/runs`, …) plus **`POST /api/chat`** (see `src/api/chat.py`)
 
+## Deploy (API on GCP)
+
+- `Dockerfile` — Cloud Run–style image (`uvicorn src.api.server:app`, `PORT` aware)
+- `docs/DEPLOY_CLOUD_RUN.md` — Artifact Registry + `gcloud builds submit` + `gcloud run deploy` + env vars
+
 ## Configuration & entry
 
 - `main.py` — runtime entrypoint (CLI arg parsing, env load, orchestration assembly)
