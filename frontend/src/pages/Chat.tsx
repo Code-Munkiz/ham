@@ -51,12 +51,31 @@ export default function Chat() {
   // Workbench Modes
   const [viewMode, setViewMode] = React.useState<'chat' | 'preview' | 'browser' | 'split'>('chat');
 
+  const timeStr = () =>
+    new Date().toLocaleTimeString([], {
+      hour12: false,
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || sending) return;
     const text = input.trim();
+    // Preview/Web modes collapse the transcript to w-0 — user sees "nothing happens".
+    setViewMode("chat");
     setInput("");
     setChatError(null);
+
+    const userRow: ChatRow = {
+      id: `pending-user-${Date.now()}`,
+      role: "user",
+      content: text,
+      timestamp: timeStr(),
+    };
+    setMessages((prev) => [...prev, userRow]);
+
     setSending(true);
     try {
       const res = await postChat({
@@ -64,19 +83,12 @@ export default function Chat() {
         messages: [{ role: "user", content: text }],
       });
       setSessionId(res.session_id);
-      const ts = () =>
-        new Date().toLocaleTimeString([], {
-          hour12: false,
-          hour: "2-digit",
-          minute: "2-digit",
-          second: "2-digit",
-        });
       setMessages(
         res.messages.map((m, i) => ({
           id: `${res.session_id}-${i}-${m.role}`,
           role: m.role,
           content: m.content,
-          timestamp: ts(),
+          timestamp: timeStr(),
         })),
       );
     } catch (err) {
