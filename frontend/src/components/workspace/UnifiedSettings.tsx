@@ -289,12 +289,9 @@ interface UnifiedSettingsProps {
   activeSubSegment: SettingsSubSectionId;
   onSubSegmentChange: (id: SettingsSubSectionId) => void;
   variant?: "overlay" | "page";
-  /** When false, hide the internal left rail (e.g. global `Sidebar` shows settings links). */
-  showSubNav?: boolean;
 }
 
-/** Shared with `Sidebar` for the settings-only secondary panel. */
-export const settingsStructure = [
+const settingsStructure = [
   {
     group: "Secrets & environment",
     items: [
@@ -341,7 +338,6 @@ export function UnifiedSettings({
   activeSubSegment,
   onSubSegmentChange,
   variant = "overlay",
-  showSubNav = true,
 }: UnifiedSettingsProps) {
   const activeLabel = settingsStructure
     .flatMap((g) => g.items)
@@ -349,8 +345,7 @@ export function UnifiedSettings({
 
   return (
     <div className="flex h-full bg-[#050505] font-sans">
-      {/* Internal Settings Sub-Nav (hidden when global Sidebar owns settings links) */}
-      {showSubNav && (
+      {/* Internal Settings Sub-Nav */}
       <div className={cn(
         "w-64 border-r border-white/5 p-8 flex flex-col gap-10 overflow-y-auto shrink-0",
         variant === "page" ? "bg-transparent" : "bg-[#0c0c0c]"
@@ -389,7 +384,6 @@ export function UnifiedSettings({
           </div>
         ))}
       </div>
-      )}
 
       {/* Sub-Settings Content Area */}
       <div className="flex-1 overflow-y-auto p-12 pb-32 scrollbar-hide">

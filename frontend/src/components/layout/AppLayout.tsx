@@ -1,5 +1,4 @@
 import * as React from "react";
-import { Sidebar } from "./Sidebar";
 import { Header } from "./Header";
 import { NavRail } from "./NavRail";
 import { Toaster } from "sonner";
@@ -15,7 +14,6 @@ import { ControlPanelOverlay } from "../workspace/ControlPanelOverlay";
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
-  const [isSidebarVisible, setIsSidebarVisible] = React.useState(true);
   const [isInspectorVisible, setIsInspectorVisible] = React.useState(true);
   const { agents, selectedAgentId } = useAgent();
   const { activeTask, setActiveTask, isControlPanelOpen, setIsControlPanelOpen } = useWorkspace();
@@ -44,10 +42,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       {/* Primary Navigation Rail */}
       <NavRail />
       
-      {/* Secondary panel: settings quick-links only (no contextual sidebars elsewhere) */}
-      {!isChatPage && isSettingsPage && (
-        <Sidebar isVisible={isSidebarVisible} onToggle={() => setIsSidebarVisible(!isSidebarVisible)} />
-      )}
+      {/* No global secondary sidebar: settings uses `UnifiedSettings` internal nav; other routes are single-column. */}
       
       <div className="flex flex-col flex-1 overflow-hidden relative">
         <Header />
