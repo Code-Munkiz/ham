@@ -67,21 +67,50 @@ export interface HamChatResponse {
 /**
  * Interactive assistant turn via Ham API (server may use a gateway adapter; browser only sees Ham).
  */
+function messageFromFastApiDetail(detail: unknown): string | null {
+  if (detail == null) return null;
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    const parts = detail
+      .map((x) =>
+        typeof x === "object" && x !== null && "msg" in x
+          ? String((x as { msg: string }).msg)
+          : "",
+      )
+      .filter(Boolean);
+    return parts.length ? parts.join("; ") : null;
+  }
+  if (typeof detail === "object" && detail !== null && "error" in detail) {
+    const e = (detail as { error?: { message?: string } }).error;
+    return e?.message ?? null;
+  }
+  return null;
+}
+
 export async function postChat(body: HamChatRequest): Promise<HamChatResponse> {
   const url = apiUrl("/api/chat");
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch (cause) {
+    const hint =
+      typeof cause === "object" && cause !== null && "message" in cause
+        ? String((cause as Error).message)
+        : "Network error";
+    throw new Error(
+      `${hint}. Check that the Ham API is running and VITE_HAM_API_BASE points to it (production builds).`,
+    );
+  }
   if (!res.ok) {
     let msg = `Chat request failed (HTTP ${res.status})`;
     try {
-      const j = (await res.json()) as {
-        detail?: { error?: { message?: string; code?: string } };
-      };
-      const m = j?.detail?.error?.message;
-      if (m) msg = m;
+      const j = (await res.json()) as { detail?: unknown };
+      const parsed = messageFromFastApiDetail(j?.detail);
+      if (parsed) msg = parsed;
     } catch {
       /* ignore JSON parse */
     }

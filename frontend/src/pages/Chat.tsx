@@ -25,6 +25,7 @@ import {
   CheckCircle2,
   AlertCircle
 } from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { postChat } from "@/lib/ham/api";
 import { useAgent } from "@/lib/ham/AgentContext";
@@ -50,6 +51,18 @@ export default function Chat() {
   
   // Workbench Modes
   const [viewMode, setViewMode] = React.useState<'chat' | 'preview' | 'browser' | 'split'>('chat');
+
+  React.useEffect(() => {
+    if (!import.meta.env.DEV) {
+      const raw = import.meta.env.VITE_HAM_API_BASE as string | undefined;
+      if (!raw?.trim()) {
+        toast.error(
+          "Chat needs a Ham API URL. Set VITE_HAM_API_BASE in Vercel (or your host) and redeploy — otherwise the app calls localhost and replies never arrive.",
+          { duration: 12_000, id: "ham-api-base-missing" },
+        );
+      }
+    }
+  }, []);
 
   const timeStr = () =>
     new Date().toLocaleTimeString([], {
@@ -92,7 +105,9 @@ export default function Chat() {
         })),
       );
     } catch (err) {
-      setChatError(err instanceof Error ? err.message : "Request failed");
+      const msg = err instanceof Error ? err.message : "Request failed";
+      setChatError(msg);
+      toast.error(msg, { duration: 8_000 });
     } finally {
       setSending(false);
     }
