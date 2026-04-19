@@ -12,6 +12,7 @@ Each item tracks what is missing, why it matters, and what blocks it.
 - **Avoid** multiple `ProjectContext.discover()` passes for one run; prefer one shared snapshot and role-appropriate render budgets.
 - **Prefer config-driven** context budgets (`.ham.json` / merged config) over long-term hardcoded magic numbers.
 - **Deferred (unchanged direction):** no second orchestration harness, no FTS5 durable learning persistence yet, no Phase 4 Droid execution-safety work until Droid is real.
+- **Dashboard chat (Phase A):** `POST /api/chat` is **shipped** with HAM-native DTOs, in-memory `ChatSessionStore`, and `src/integrations/nous_gateway_client.py` (**mock** or **http** per env). Streaming, SQLite session persistence, and mission/walking APIs are **not** started here.
 
 ## Active Gaps
 
@@ -73,12 +74,10 @@ wire reviewer into the supervisory execution flow explicitly if not already.
 
 ### 6. Real Droid CLI integration
 
-**Status**: Stub (`droid_executor` returns placeholder string)
-**Impact**: No actual parallel execution. Supervisory routing can delegate but
-nothing runs.
-**Blocked by**: Factory Droid CLI binary availability and API surface.
-**Fix**: Implement real `subprocess.run()` call with timeout, output capture,
-and size cap on returned stdout/stderr.
+**Status**: **Executor implemented** — `src/tools/droid_executor.py` uses bounded `subprocess.run()` with timeout, capture, and stdout/stderr caps (see module). Meaningful **Factory/Droid** runs still depend on **profile argv** pointing at an installed CLI and policy allowing the command.
+**Impact**: Bridge can invoke real subprocesses; supervision and safety reviews still assume bounded inspect-style defaults in `main.py` until missions expand.
+**Blocked by**: Operator setup (binary on PATH, auth on disk per tool) and execution-safety policy hardening for mutating commands.
+**Fix (follow-up):** Execution-safety milestones (Phase 4 in remediation docs), refresh-after-mutation context, and richer mission orchestration—without collapsing Hermes/Droid roles.
 
 ### 7. Test coverage (follow-up after Droid / supervisory wiring)
 
