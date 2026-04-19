@@ -70,8 +70,8 @@ function ContextAndMemoryPanel() {
 
   const roleOrder = [
     { key: "architect" as const, label: "Architect" },
-    { key: "commander" as const, label: "Commander" },
-    { key: "critic" as const, label: "Critic" },
+    { key: "commander" as const, label: "Routing (Hermes)" },
+    { key: "critic" as const, label: "Review (Hermes)" },
   ];
 
   return (

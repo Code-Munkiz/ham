@@ -1,6 +1,9 @@
 """
-Transitional orchestration scaffold: repo context + role prompts for a future
-Hermes-supervised run (no third-party orchestration framework).
+Hermes-supervised context assembly: one `ProjectContext.discover()` and per-role
+render budgets for Architect, routing/delegation, and critic prompt surfaces.
+
+There is no CrewAI or third-party orchestration framework here—only shared repo
+context wired for Hermes-led supervisory flows (`main.py`, `hermes_feedback.py`).
 """
 from __future__ import annotations
 
@@ -54,7 +57,9 @@ def assemble_ham_run(user_prompt: str) -> HamRunAssembly:
         "You plan structure and interfaces before implementation.\n\n" + arch_ctx
     )
     commander_backstory = (
-        "You break goals into steps and invoke the Droid executor when needed.\n\n"
+        "You are the Hermes-supervised routing surface: break goals into steps, "
+        "delegate execution-heavy work to the Droid executor, and preserve "
+        "separation of duties.\n\n"
         + cmd_ctx
     )
     critic_backstory = (

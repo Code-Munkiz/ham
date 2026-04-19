@@ -26,4 +26,4 @@ python main.py "your task"
 - `src/tools/droid_executor.py` — Droid execution engine stub (runtime migration still pending)
 - `src/memory_heist.py` — repo context, instructions, git, sessions
 - `src/llm_client.py` — LiteLLM / OpenRouter
-- `src/swarm_agency.py` — transitional orchestration scaffold during migration
+- `src/swarm_agency.py` — Hermes-supervised role context assembly (no CrewAI; orchestration is Hermes-led)

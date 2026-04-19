@@ -6,6 +6,12 @@ Ham is an open-source, multi-agent autonomous developer swarm that executes
 the full Software Development Life Cycle (SDLC). It is not a chatbot wrapper.
 It is an opinionated assembly line: plan, build, review, learn, repeat.
 
+**Orchestration contract:** supervisory orchestration is **Hermes-led only**.
+There is **no CrewAI** (or any other third-party orchestration framework) in
+the architecture. `src/swarm_agency.py` assembles per-role context for
+Hermes-supervised reasoning surfaces; it does not constitute a parallel
+orchestrator.
+
 ## The Four Core Pillars
 
 ### 1. Supervisory Core — Hermes
@@ -134,7 +140,7 @@ User Prompt
 
 | Area | Primary Module(s) | Current Status |
 |------|--------------------|----------------|
-| Supervisory orchestration | `src/swarm_agency.py`, `src/hermes_feedback.py`, `main.py` | First real loop wired on primary path: typed `ExecutionIntent` emission now uses a tiny deterministic safe-profile selector, then Bridge execution and Hermes advisory review handoff; deeper supervisory routing remains transitional |
+| Supervisory orchestration | `src/hermes_feedback.py`, `main.py`, `src/swarm_agency.py` (context only) | **Hermes-led:** primary path uses profile selection, Bridge execution, and Hermes (`HermesReviewer`) review; `swarm_agency.py` provides shared `ProjectContext` render budgets for Architect / routing / critic prompts—**not** a separate orchestration engine |
 | Execution engine | `src/tools/droid_executor.py` | Bridge v0 bounded backend implemented (`shell=False`, timeout, deterministic capture, capped output) |
 | Bridge runtime/policy | `src/bridge/contracts.py`, `src/bridge/policy.py`, `src/bridge/runtime.py`, `src/registry/profiles.py`, `src/registry/backends.py`, `src/registry/droids.py` | Bridge v0 hardened: fail-closed policy gate with command-profile checks, env override restrictions, total-output cap enforcement, deterministic status mapping, mutation-aware refresh gating, and registry-backed profile selection seam with backend-registry executor resolution, plus structured run persistence to `.ham/runs/`; droid registry records for UI/API |
 | Read API + run store | `src/api/server.py`, `src/persistence/run_store.py` | Thin FastAPI layer over `RunStore` (`.ham/runs/`): status, runs list/detail, profiles, droids; read-only Context Engine snapshot (`/api/context-engine`, `/api/projects/{id}/context-engine`) for dashboard wiring |

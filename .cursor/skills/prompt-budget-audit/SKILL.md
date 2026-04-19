@@ -18,7 +18,7 @@ description: >-
 ## Audit Steps
 
 1. Read `src/memory_heist.py` and note all `MAX_*` constants.
-2. For each active role in `src/swarm_agency.py` (or current orchestration path), estimate total prompt/backstory size:
+2. For each Hermes-supervised role surface in `src/swarm_agency.py`, estimate total prompt/backstory size:
    - `ContextBuilder.build()` output size (instructions + git state + tree + config)
    - Plus the static backstory string
 3. Compare against the model's context window (check `src/llm_client.py` for model ID).

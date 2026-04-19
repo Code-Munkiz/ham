@@ -16,7 +16,7 @@ Run the Context Engine Auditor checklist against `src/memory_heist.py`.
 
 ## /wire-agent-context
 
-Wire shared repo context into active orchestration roles in `src/swarm_agency.py` (transitional scaffold).
+Wire shared repo context into Hermes-supervised role prompts in `src/swarm_agency.py` (context assembly only; no CrewAI).
 
 1. Read the Agent Context Wiring skill (`.cursor/skills/agent-context-wiring/SKILL.md`).
 2. Read `src/swarm_agency.py` and `src/memory_heist.py`.

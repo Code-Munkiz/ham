@@ -34,7 +34,7 @@ Shipped muscle today centers on **Bridge + Droid executor** (`src/tools/droid_ex
 - `src/tools/droid_executor.py` — Droid execution engine (implementation-heavy execution; local self-orchestration while executing)
 - `src/memory_heist.py` — Context Engine (repo scan, git state, config, sessions)
 - `src/llm_client.py` — LiteLLM / OpenRouter wiring
-- `src/swarm_agency.py` — transitional orchestration scaffold pending migration to Hermes-supervised flow
+- `src/swarm_agency.py` — Hermes-supervised **context assembly** (shared `ProjectContext` + per-role render budgets for Architect / routing / critic prompts); **not** a separate orchestration framework (no CrewAI)
 - `src/registry/droids.py` — `DroidRecord` + `DroidRegistry` + `DEFAULT_DROID_REGISTRY` (builder, reviewer)
 - `src/persistence/run_store.py` — read-side `RunStore` over `.ham/runs/*.json`
 - `src/api/server.py` — FastAPI app: read API (`/api/status`, `/api/runs`, …) plus **`POST /api/chat`** (see `src/api/chat.py`)

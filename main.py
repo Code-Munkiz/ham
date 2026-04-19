@@ -19,7 +19,7 @@ from src.hermes_feedback import HermesReviewer
 from src.llm_client import configure_litellm_env
 from src.registry.backends import DEFAULT_BACKEND_ID, DEFAULT_BACKEND_REGISTRY
 from src.registry.profiles import DEFAULT_PROFILE_REGISTRY, KeywordSelector
-from src.swarm_agency import assemble_ham_run
+from src.swarm_agency import assemble_ham_run  # Hermes-supervised context assembly (not CrewAI)
 
 MAX_REVIEW_CONTEXT_CHARS = 1_000
 # Hermes review echoes bridge JSON + context; huge strings break terminal wrap/reflow.

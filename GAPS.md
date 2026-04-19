@@ -18,16 +18,10 @@ Each item tracks what is missing, why it matters, and what blocks it.
 
 ### 1. Hermes supervisory wiring into execution flow
 
-**Status**: Not started
-**Impact**: Architecture target names Hermes as supervisory orchestrator, but
-current runtime flow is still transitional scaffold code. This leaves an
-architecture-vs-runtime gap that must be closed without collapsing execution
-ownership into Hermes.
-**Blocked by**: Incremental runtime migration planning and test coverage for
-supervisory routing semantics.
-**Fix**: Add explicit supervisory routing flow that delegates execution-heavy
-work to Droid by default, preserves separation-of-duties, and keeps Hermes
-direct execution limited to tiny bounded critic-native tasks.
+**Status**: In progress (Hermes-led orchestration is the contract; runtime wiring deepens over time)
+**Impact**: Docs and rules now state **Hermes as the sole supervisory orchestrator** (no CrewAI). Remaining work is richer routing/policy in code paths—not adopting another orchestration framework.
+**Blocked by**: Incremental runtime hardening and tests for supervisory routing semantics.
+**Fix**: Extend explicit Hermes-owned routing that delegates execution-heavy work to Droid by default, preserves separation-of-duties, and keeps Hermes direct execution limited to tiny bounded critic-native tasks.
 
 ### 2. Context refresh after Droid mutations
 

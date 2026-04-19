@@ -18,6 +18,9 @@ The architecture is fixed unless the user explicitly approves a change.
 
 ## Rules
 
+- **Hermes is the sole supervisory orchestrator.** Do not add CrewAI, LangGraph,
+  AutoGen, or other third-party *orchestration* frameworks. (LLM calls via
+  LiteLLM/OpenRouter are fine; orchestration policy lives in Hermes.)
 - Do not merge, split, or reassign pillar responsibilities.
 - Hermes is not a monolith and not a second execution engine.
 - Hermes may self-handle only tiny, bounded, critic-native tasks.

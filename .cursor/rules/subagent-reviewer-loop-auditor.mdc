@@ -14,12 +14,12 @@ Audit the Hermes review loop for correctness and alignment with the learning pip
 
 - Verify `HermesReviewer.evaluate()` has a stable public signature: `(code: str, context: str | None) -> dict`.
 - Verify the return dict includes at minimum: `ok`, `notes`, `code`, `context`.
-- Verify supervisory review wiring in `swarm_agency.py` does not absorb Droid execution responsibilities.
+- Verify Hermes-supervised role context in `swarm_agency.py` does not absorb Droid execution responsibilities.
 - Verify `.hermes/` is in `IGNORE_DIRS` in `memory_heist.py`.
 - When real hermes-agent integration lands, verify it writes to `.hermes/` and the FTS5 DB path is configurable.
 
 ## Out of Scope -- Do NOT
 
-- Redesign the orchestration graph.
+- Redesign the orchestration graph to use a non-Hermes framework (e.g. CrewAI).
 - Change the Context Engine's compaction logic.
 - Modify the Droid executor.

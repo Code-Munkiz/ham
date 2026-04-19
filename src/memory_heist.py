@@ -695,7 +695,8 @@ def _coerce_positive_int(raw: Any, default: int) -> int:
 def context_engine_dashboard_payload(cwd: Path | None = None) -> dict[str, Any]:
     """JSON-serializable snapshot for dashboards (no raw git diff / instruction body).
 
-    Aligns per-role render budgets with ``assemble_ham_run`` in ``swarm_agency``.
+    Aligns per-role render budgets with ``assemble_ham_run`` in ``swarm_agency``
+    (Hermes-supervised context assembly; not a separate orchestrator).
     """
     root = (cwd or Path.cwd()).resolve()
     project = ProjectContext.discover(root)

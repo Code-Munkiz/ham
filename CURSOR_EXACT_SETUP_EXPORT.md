@@ -6,10 +6,10 @@ Generated snapshot of `.cursor/` rules and skills, plus first-class context docu
 
 | Category | Count |
 |----------|-------|
-| Rules (`.mdc`) | 12 |
-| Skills (`SKILL.md`) | 5 |
+| Rules (`.mdc`) | 13 |
+| Skills (`SKILL.md`) | 6 |
 | First-class context | 4 |
-| **Total embedded files** | **21** |
+| **Total embedded files** | **23** |
 
 **Subagents** (4): `subagent-*.mdc`. **Commands**: embedded in `commands.mdc`.
 
@@ -64,7 +64,7 @@ Run the Context Engine Auditor checklist against `src/memory_heist.py`.
 
 ## /wire-agent-context
 
-Wire shared repo context into active orchestration roles in `src/swarm_agency.py` (transitional scaffold).
+Wire shared repo context into Hermes-supervised role prompts in `src/swarm_agency.py` (context assembly only; no CrewAI).
 
 1. Read the Agent Context Wiring skill (`.cursor/skills/agent-context-wiring/SKILL.md`).
 2. Read `src/swarm_agency.py` and `src/memory_heist.py`.
@@ -139,6 +139,9 @@ The architecture is fixed unless the user explicitly approves a change.
 
 ## Rules
 
+- **Hermes is the sole supervisory orchestrator.** Do not add CrewAI, LangGraph,
+  AutoGen, or other third-party *orchestration* frameworks. (LLM calls via
+  LiteLLM/OpenRouter are fine; orchestration policy lives in Hermes.)
 - Do not merge, split, or reassign pillar responsibilities.
 - Hermes is not a monolith and not a second execution engine.
 - Hermes may self-handle only tiny, bounded, critic-native tasks.
@@ -224,6 +227,47 @@ alwaysApply: true
 
 ---
 
+## `.cursor/rules/registry-record-conventions.mdc`
+
+```
+---
+description: "Registry record conventions for src/registry/*.py — stable IDs, version fields, pure-data records, derived metrics live outside."
+globs: src/registry/*.py
+alwaysApply: false
+---
+
+# Registry Record Conventions
+
+Keep registry-layer record types small, serializable, and free of derived state so they stay portable and honest.
+
+## Scope
+
+Applies to record types and registry classes under `src/registry/`. Shipped examples: `IntentProfile` in `profiles.py`, `BackendRecord` in `backends.py`. Run JSON written under `.ham/runs/` from `main.py` is related in spirit—pure persisted facts, no derived metrics on the blob—but it is not a dedicated class and does not share the same field layout as those BaseModels.
+
+## Do This
+
+- Define record types as plain Pydantic `BaseModel` subclasses with no custom methods beyond what Pydantic provides.
+- Give every registry record a stable string `id` field.
+- Give every registry record a `version: str` field with a sensible default (currently `"1.0.0"`).
+- Add `metadata: dict[str, Any] = Field(default_factory=dict)` for untyped UX or display data that must not pollute the core contract.
+- Expose registry records through public accessors (e.g. `ProfileRegistry.get`, `BackendRegistry.get_record`); do not read `_profiles`, `_backends`, or other private attributes outside the defining module.
+- Keep derived metrics (progression, reliability, latency aggregates) out of registry records; compute them from run history under `.ham/runs/` when needed.
+
+## Do NOT
+
+- Do not add business logic methods to registry record types.
+- Do not add fields for computed or derived state on registry records.
+- Do not reach into `_backends`, `_profiles`, or other private registry internals from outside that registry module.
+- Do not introduce new registry record types outside `src/registry/` without strong cause; if another module needs one, define it in `src/registry/` and import from there.
+- Do not store gamification concepts (level, XP, rank, badges, aggregate stats) on registry records; treat those as views over run history, not record fields.
+
+## Rationale
+
+Registry records are pure data; derived metrics and rollups live elsewhere. That separation keeps artifacts portable (export/import, future marketplace) and avoids baking computed state into types that should round-trip cleanly. It also keeps honest progression and future provenance work tractable by confining derived views to run history and consumers—not to the registry record shapes themselves. Do not assume every persisted artifact uses the same field schema as those BaseModels.
+```
+
+---
+
 ## `.cursor/rules/role-boundaries.mdc`
 
 ```
@@ -239,13 +283,12 @@ Each agent has a fixed charter. Do not blur roles.
 | Agent | Does | Does NOT |
 |-------|------|----------|
 | **Architect** | Plan, design interfaces, set constraints, choose patterns | Write implementation code, invoke tools, execute commands |
-| **Execution Coordinator (transitional Commander role)** | Delegate execution work to Droid, coordinate sequencing, preserve execution ownership boundaries | Replace Hermes supervisory policy, absorb critique/learning ownership |
-| **Hermes Supervisor/Critic** | Supervise routing policy, critique outputs, emit learning signals; self-handle tiny bounded critic-native tasks only | Become a second execution engine, own broad code/test/build execution, directly absorb Droid execution ownership |
+| **Hermes (sole supervisory orchestrator)** | Route jobs, coordinate execution handoffs to Droid, run critique / learning; self-handle only tiny bounded critic-native tasks | Become a second execution engine, own broad code/test/build execution, absorb the Architect planning charter |
 | **Droid Executor** | Execute implementation-heavy code/shell work; may self-orchestrate locally while executing | Own global supervisory policy, critique governance, or architecture planning |
 
 - When adding a new agent, define its charter before writing code.
 - Ambiguous execution work defaults to Droid.
-- When modifying orchestration files (including `swarm_agency.py` during transition), verify no role's `goal` or `tools` list violates these boundaries.
+- When modifying `swarm_agency.py` (Hermes-supervised **context assembly** only), verify backstories and budgets stay aligned with these boundaries—there is no CrewAI or second orchestrator.
 ```
 
 ---
@@ -274,8 +317,8 @@ Audit the Architect agent's definition in `src/swarm_agency.py` for alignment wi
 
 ## Out of Scope -- Do NOT
 
-- Redesign the Commander or Hermes agents.
-- Change the active orchestration process or task graph.
+- Redesign the Hermes-supervised routing/critic backstory surfaces or the active run graph.
+- Introduce CrewAI or another third-party orchestration framework.
 - Modify `memory_heist.py` or `llm_client.py`.
 ```
 
@@ -368,13 +411,13 @@ Audit the Hermes review loop for correctness and alignment with the learning pip
 
 - Verify `HermesReviewer.evaluate()` has a stable public signature: `(code: str, context: str | None) -> dict`.
 - Verify the return dict includes at minimum: `ok`, `notes`, `code`, `context`.
-- Verify supervisory review wiring in `swarm_agency.py` does not absorb Droid execution responsibilities.
+- Verify Hermes-supervised role context in `swarm_agency.py` does not absorb Droid execution responsibilities.
 - Verify `.hermes/` is in `IGNORE_DIRS` in `memory_heist.py`.
 - When real hermes-agent integration lands, verify it writes to `.hermes/` and the FTS5 DB path is configurable.
 
 ## Out of Scope -- Do NOT
 
-- Redesign the orchestration graph.
+- Redesign the orchestration graph to use a non-Hermes framework (e.g. CrewAI).
 - Change the Context Engine's compaction logic.
 - Modify the Droid executor.
 ```
@@ -409,9 +452,9 @@ When in doubt, run `/refresh-swarm-contract` and apply the gap findings to `VISI
 ---
 name: agent-context-wiring
 description: >-
-  Wire memory_heist ContextBuilder into active orchestration role prompts in swarm_agency.py
+  Wire memory_heist ContextBuilder into Hermes-supervised role prompts in swarm_agency.py
   using a single shared ProjectContext and per-role render budgets. Use when connecting
-  supervisory/execution flows to repo context, adjusting budgets, or integrating SessionMemory.
+  Hermes-led flows to repo context, adjusting budgets, or integrating SessionMemory. (No CrewAI.)
 ---
 
 # Agent Context Wiring
@@ -420,7 +463,7 @@ description: >-
 
 - Integrating `ContextBuilder` into `src/swarm_agency.py`
 - Setting per-role token / instruction / diff budgets
-- Wiring `SessionMemory` into the active orchestration flow
+- Wiring `SessionMemory` into the active Hermes-supervised flow
 
 ## Anti-pattern: N full scans
 
@@ -454,7 +497,10 @@ def assemble_ham_run(user_prompt: str) -> HamRunAssembly:
     return HamRunAssembly(
         user_prompt=user_prompt,
         architect_backstory=f"You plan structure and interfaces.\n\n{arch_text}",
-        commander_backstory=f"You coordinate execution.\n\n{cmd_text}",
+        commander_backstory=(
+            "You are the Hermes-supervised routing surface: delegate execution to Droid.\n\n"
+            f"{cmd_text}"
+        ),
         critic_backstory="...",
         llm_client=None,
         droid_executor=lambda cmd: "...",
@@ -469,16 +515,16 @@ Prefer reading per-role budgets from merged project config (`discover_config` / 
 
 ## Budget guidelines (defaults until config exists)
 
-| Role | Instruction budget (total) | Diff budget | Rationale |
+| Role surface | Instruction budget (total) | Diff budget | Rationale |
 |-------|---------------------------|-------------|-----------|
-| Hermes supervisory context | Higher (e.g. 16,000) | Full (e.g. 8,000) | Routing, policy, quality context |
-| Droid execution context | Lower (e.g. 4,000) | Tighter (e.g. 2,000) | Task scope, actionable execution details |
-| Hermes review context | Medium (e.g. 8,000) | Default | Enough to critique and learn |
+| Architect | Higher (e.g. 16,000) | Full (e.g. 8,000) | Planning / interfaces |
+| Hermes routing (`commander_*` config keys) | Lower (e.g. 4,000) | Tighter (e.g. 2,000) | Delegation & sequencing |
+| Hermes review / critic | Medium (e.g. 8,000) | Default | Critique & learning context |
 
 ## Verification
 
-1. Every active orchestration role receives repo-grounded context in its prompt/backstory surface.
-2. Repo scan + git capture runs **once** per orchestration build (unless explicitly refreshing after Droid).
+1. Every Hermes-supervised role surface receives repo-grounded context in its prompt/backstory.
+2. Repo scan + git capture runs **once** per `assemble_ham_run` build (unless explicitly refreshing after Droid).
 3. Budgets are tunable via config when available.
 ```
 
@@ -535,6 +581,65 @@ All of these should be overridable via `ContextBuilder` constructor params once 
 
 ---
 
+## `.cursor/skills/goham/SKILL.md`
+
+```
+---
+name: goham
+description: >-
+  Guides conversational navigation of the Ham dashboard: settings sections, projects,
+  Droids/registry, runs and activity, and how to scaffold sub-agent workflows or new
+  assets using existing APIs and configs. Use when the user wants natural-language help
+  finding settings, understanding Hermes vs Droid roles, creating workflows or agents, or
+  pairing chat with the workspace UI without reading raw logs.
+---
+
+# GoHam — conversational product navigation
+
+## When to use
+
+- User asks **where** something lives in Ham (settings, API, CLI).
+- User wants **step-by-step** setup: project, Droid profile, run inspection, context engine.
+- User is **designing or wiring** dashboard chat and needs **accurate** product truth (sections, routes, pillars).
+- User mentions **sub-agent workflows** or **creating** registry/workspace artifacts—ground answers in this repo, not generic agent tutorials.
+
+## Read order
+
+1. `AGENTS.md` — where implementation lives.
+2. `VISION.md` — pillars and boundaries.
+3. This skill — **UI/API/workflow map** (keep in sync when navigation changes).
+4. Repo `SWARM.md` — project coding instructions.
+
+## Pillars (short)
+
+| Piece | Module(s) | Role |
+|-------|-----------|------|
+| Supervisory / critic | `src/hermes_feedback.py` | Review, learning signals; not the primary chat product unless wired. |
+| Execution | `src/tools/droid_executor.py`, Bridge | Heavy work via CLI subprocess; auth stays with the tool. |
+| Context | `src/memory_heist.py` | Repo scan, git, config, sessions—inject for grounded NL. |
+| LLM | `src/llm_client.py` | Model calls; keys server-side. |
+| Hermes-supervised context | `src/swarm_agency.py` | Single shared `ProjectContext` discovery + per-role prompts; **Hermes-led** orchestration only (no CrewAI). |
+| API | `src/api/server.py` | Dashboard backend; extend with chat when implemented. |
+
+## Conversational layer (intent)
+
+- **Skill alone** improves accuracy for agents (e.g. Cursor) that load it.
+- **Product “talk to Ham”** still needs in-app chat wired to the backend plus optional **actions** (API calls, deep links). When chat is stub-only, tell the user the **exact** UI path or `curl`/endpoint.
+
+## Guardrails
+
+- Do not invent settings tabs or API paths—**read** `frontend` and `src/api/server.py` or documented reference when unsure.
+- Do not expose secrets in chat; API keys stay server/env.
+- If Hermes **Agent** (Nous product) vs **Hermes** (this repo critic) is ambiguous, disambiguate once.
+
+## Verification
+
+- Instructions match current `AGENTS.md` and actual routes/settings IDs after IA changes.
+- Prefer linking to canonical docs over duplicating `VISION.md`.
+```
+
+---
+
 ## `.cursor/skills/hermes-review-loop-validation/SKILL.md`
 
 ```
@@ -552,7 +657,7 @@ description: >-
 ## When to Use
 
 - Modifying `src/hermes_feedback.py`
-- Changing supervisory/review wiring in `src/swarm_agency.py`
+- Changing Hermes-supervised context/backstory wiring in `src/swarm_agency.py`
 - Integrating the real hermes-agent client
 - Verifying FTS5 persistence after reviews
 
@@ -613,7 +718,7 @@ description: >-
 ## Audit Steps
 
 1. Read `src/memory_heist.py` and note all `MAX_*` constants.
-2. For each active role in `src/swarm_agency.py` (or current orchestration path), estimate total prompt/backstory size:
+2. For each Hermes-supervised role surface in `src/swarm_agency.py`, estimate total prompt/backstory size:
    - `ContextBuilder.build()` output size (instructions + git state + tree + config)
    - Plus the static backstory string
 3. Compare against the model's context window (check `src/llm_client.py` for model ID).
@@ -706,6 +811,27 @@ All tests go in `tests/test_memory_heist.py`. Use `pytest` with `tmp_path` fixtu
 This file declares which files are first-class project context. Any agent
 working on this repo should read these before proposing changes.
 
+## Read order (recommended)
+
+1. `VISION.md` — pillars, boundaries, and how components connect
+2. This file — where implementation lives
+3. `SWARM.md` — repo coding instructions (loaded by `memory_heist`)
+4. `PRODUCT_DIRECTION.md` — product lens: HAM-native model vs reference ecosystems
+
+## Ham bet: memory, Hermes, and CLI-native muscle
+
+Three ideas stay stable while execution backends evolve:
+
+1. **Repo-grounded context (`memory_heist`)** — Workspace truth (scan, git, merged `.ham` config, instruction files, session compaction) is assembled once and injected into agents so supervision and planning do not hallucinate project state.
+
+2. **Hermes learning loop (`hermes_feedback`)** — Critique and structured review over **evidence-shaped outcomes** (bridge/run envelopes, capped text). The goal is a compounding signal: routing and quality improve over time; durable institutional memory is still incremental (see `GAPS.md` and hardening docs).
+
+3. **CLI-first execution surface** — Heavy work is delegated to **CLI-based agentic runtimes** (subprocess + framed IO), not re-embedded vendor HTTP stacks inside Ham. **Auth and account state stay with the tool** (its login flows, tokens on disk, device/browser steps). Ham supplies **scoped intent, policy limits, and capture**; Hermes reasons over **comparable envelopes** regardless of whether the muscle is Factory/Droid-style, Claude Code–style, ElizaOS-flavored hosts, OpenClaw-informed gateways, or future adapters—**one supervision vocabulary, many CLIs**.
+
+**Narrow exception (interactive dashboard chat):** The Ham API may expose **`POST /api/chat`** with **HAM-native** JSON to the browser and implement it via a **server-side adapter** to an external OpenAI-compatible agent API (see `docs/HERMES_GATEWAY_CONTRACT.md`, `src/integrations/nous_gateway_client.py`). The browser **never** calls that gateway directly. This does **not** replace **`HermesReviewer`** / `main.py` critique-on-run flow—they stay separate.
+
+Shipped muscle today centers on **Bridge + Droid executor** (`src/tools/droid_executor.py`, `src/bridge/`). Reference notes (patterns only, not parity targets): `docs/reference/factory-droid-reference.md`, `docs/reference/openclaw-reference.md`, `docs/reference/elizaos-reference.md`. Ham remains **HAM-native** in naming and contracts; see `PRODUCT_DIRECTION.md`.
+
 ## Architecture
 
 - `VISION.md` — canonical architecture, core pillars, design principles
@@ -716,7 +842,19 @@ working on this repo should read these before proposing changes.
 - `src/tools/droid_executor.py` — Droid execution engine (implementation-heavy execution; local self-orchestration while executing)
 - `src/memory_heist.py` — Context Engine (repo scan, git state, config, sessions)
 - `src/llm_client.py` — LiteLLM / OpenRouter wiring
-- `src/swarm_agency.py` — transitional orchestration scaffold pending migration to Hermes-supervised flow
+- `src/swarm_agency.py` — Hermes-supervised **context assembly** (shared `ProjectContext` + per-role render budgets for Architect / routing / critic prompts); **not** a separate orchestration framework (no CrewAI)
+- `src/registry/droids.py` — `DroidRecord` + `DroidRegistry` + `DEFAULT_DROID_REGISTRY` (builder, reviewer)
+- `src/persistence/run_store.py` — read-side `RunStore` over `.ham/runs/*.json`
+- `src/api/server.py` — FastAPI app: read API (`/api/status`, `/api/runs`, …) plus **`POST /api/chat`** (see `src/api/chat.py`)
+
+## Deploy (API on GCP)
+
+- `Dockerfile` — Cloud Run–style image (`uvicorn src.api.server:app`, `PORT` aware)
+- `docs/DEPLOY_CLOUD_RUN.md` — Artifact Registry + `gcloud builds submit` + `gcloud run deploy` + env vars
+- `docs/DEPLOY_HANDOFF.md` — Vercel + Cloud Run checklist (what to set in each host)
+- `docs/examples/ham-api-cloud-run-env.yaml` — copy to `.gcloud/ham-api-env.yaml` for `--env-vars-file`
+- `scripts/verify_ham_api_deploy.sh` — CORS + `/api/chat` smoke test against a deployed API
+- `scripts/render_cloud_run_env.py` — merge `.env` into `.gcloud/ham-api-env.yaml` for `gcloud run deploy --env-vars-file` (avoids committing OpenRouter keys)
 
 ## Configuration & entry
 
@@ -740,11 +878,16 @@ working on this repo should read these before proposing changes.
 - `CURSOR_EXACT_SETUP_EXPORT.md` — verbatim snapshot of Cursor setup + first-class docs (regenerate via `python scripts/build_cursor_export.py`)
 - `GAPS.md` — tracked gaps and active implementation notes
 
+## Frontend (workspace UI)
+
+- `frontend/` — Vite + React workspace; `npm run dev` (port 3000), `npm run lint` (`tsc --noEmit`)
+
 ## Tests
 
 - `tests/test_memory_heist.py` — Context Engine + Phase 1/3 guardrails (18 cases)
 - `tests/test_hermes_feedback.py` — Critic MVP + Phase 3 guardrails (7 cases)
-- Run: `python -m pytest tests/test_memory_heist.py tests/test_hermes_feedback.py` (25 cases as of last doc sync)
+- `tests/test_droid_registry.py` — Droid registry conventions (10 cases)
+- Run: `python -m pytest` — full suite (`pytest.ini` sets `pythonpath = .`)
 - Other tests under `tests/` as added; bootstrap with `/test-context-regressions` for Context Engine focus
 ```
 
@@ -760,6 +903,12 @@ working on this repo should read these before proposing changes.
 Ham is an open-source, multi-agent autonomous developer swarm that executes
 the full Software Development Life Cycle (SDLC). It is not a chatbot wrapper.
 It is an opinionated assembly line: plan, build, review, learn, repeat.
+
+**Orchestration contract:** supervisory orchestration is **Hermes-led only**.
+There is **no CrewAI** (or any other third-party orchestration framework) in
+the architecture. `src/swarm_agency.py` assembles per-role context for
+Hermes-supervised reasoning surfaces; it does not constitute a parallel
+orchestrator.
 
 ## The Four Core Pillars
 
@@ -889,8 +1038,11 @@ User Prompt
 
 | Area | Primary Module(s) | Current Status |
 |------|--------------------|----------------|
-| Supervisory orchestration | `src/swarm_agency.py`, `src/hermes_feedback.py` | Transitional: orchestration path still scaffolded; Hermes reviewer MVP exists but supervisory wiring is incomplete |
-| Execution engine | `src/tools/droid_executor.py` | Stub/scaffold: no full real Droid execution path yet |
+| Supervisory orchestration | `src/hermes_feedback.py`, `main.py`, `src/swarm_agency.py` (context only) | **Hermes-led:** primary path uses profile selection, Bridge execution, and Hermes (`HermesReviewer`) review; `swarm_agency.py` provides shared `ProjectContext` render budgets for Architect / routing / critic prompts—**not** a separate orchestration engine |
+| Execution engine | `src/tools/droid_executor.py` | Bridge v0 bounded backend implemented (`shell=False`, timeout, deterministic capture, capped output) |
+| Bridge runtime/policy | `src/bridge/contracts.py`, `src/bridge/policy.py`, `src/bridge/runtime.py`, `src/registry/profiles.py`, `src/registry/backends.py`, `src/registry/droids.py` | Bridge v0 hardened: fail-closed policy gate with command-profile checks, env override restrictions, total-output cap enforcement, deterministic status mapping, mutation-aware refresh gating, and registry-backed profile selection seam with backend-registry executor resolution, plus structured run persistence to `.ham/runs/`; droid registry records for UI/API |
+| Read API + run store | `src/api/server.py`, `src/persistence/run_store.py` | Thin FastAPI layer over `RunStore` (`.ham/runs/`): status, runs list/detail, profiles, droids; read-only Context Engine snapshot (`/api/context-engine`, `/api/projects/{id}/context-engine`) for dashboard wiring |
+| Workspace UI | `frontend/` (Vite + React) | Extracted workspace; TypeScript types aligned with persisted run / bridge shapes |
 | Context engine | `src/memory_heist.py` | Hardened + tested (Phase 1/3 guardrails complete) |
 | LLM routing | `src/llm_client.py` | Working |
 | Critique MVP | `src/hermes_feedback.py` | Implemented (`HermesReviewer.evaluate()`), conservative fallback, tested |
@@ -899,12 +1051,20 @@ User Prompt
 reports implementation reality. Do not treat transitional scaffolding as
 architecture contract.
 
-**Tests**: `tests/test_memory_heist.py` + `tests/test_hermes_feedback.py` — **25** regression/guardrail cases (run both files with pytest).
+### Registries
 
-**Next milestone**: wire Hermes supervisory flow to route execution jobs through
-real Droid end-to-end, add context refresh after Droid mutations, and validate
-a full supervisory run on a real prompt. **Deferred:** FTS5 durable learning
-persistence, second orchestration harness, architecture sprawl.
+The shipped registry surface includes `IntentProfile`, `ProfileRegistry`, `Selector`, `KeywordSelector`, and `DEFAULT_PROFILE_REGISTRY` in `src/registry/profiles.py`, plus `DroidRecord`, `DroidRegistry`, and `DEFAULT_DROID_REGISTRY` in `src/registry/droids.py` (builder and reviewer droids; pure-data records per registry conventions). `IntentProfile` records are pure data with `id`, `version`, `argv`, and `metadata` fields. The selection seam is a `Protocol` with one method (`select(prompt) -> str`) and currently has one default implementation (`KeywordSelector`).
+
+The shipped backend registry surface is `ExecutionBackend`, `LocalDroidBackend`, `BackendRecord`, `BackendRegistry`, `DEFAULT_BACKEND_ID`, and `DEFAULT_BACKEND_REGISTRY` in `src/registry/backends.py`. `BackendRecord` follows the same pure-data Pydantic convention as `IntentProfile` (`id`, `version`, `metadata`, no methods). Runtime backend resolution currently uses hardcoded `DEFAULT_BACKEND_ID` against a single registered backend; per-intent backend selection is deferred.
+
+Completed runs are now persisted as structured JSON at `.ham/runs/<timestamp>-<run_id>.json`. Persisted records include `run_id`, `created_at`, `profile_id`, `profile_version`, `backend_id`, `backend_version`, `prompt_summary`, `bridge_result`, and `hermes_review`. `run_id` is canonical from `bridge_result.run_id` (never regenerated); the timestamp in the filename is metadata for sort/collision only. The stdout `RUNTIME_RESULT` envelope shape remains unchanged, and persistence is additive. `BackendRegistry.get_record()` is now the first public backend-record accessor.
+
+**Tests**: full `pytest` suite including registry, bridge, main loop, droid registry, API/CORS, and persistence tests — **151 passed** regression/guardrail cases (`pytest.ini` sets `pythonpath = .`; GitHub Actions runs `pytest` + frontend `tsc`).
+
+**Next milestone**: wire workspace UI to live `/api/*` where desired; continue edge-case hardening on Bridge-profile seams while preserving current safety envelopes.
+
+**Deferred:** FTS5 durable learning persistence, second orchestration harness,
+architecture sprawl.
 
 ## Design Principles
 
@@ -939,21 +1099,16 @@ Each item tracks what is missing, why it matters, and what blocks it.
 - **Avoid** multiple `ProjectContext.discover()` passes for one run; prefer one shared snapshot and role-appropriate render budgets.
 - **Prefer config-driven** context budgets (`.ham.json` / merged config) over long-term hardcoded magic numbers.
 - **Deferred (unchanged direction):** no second orchestration harness, no FTS5 durable learning persistence yet, no Phase 4 Droid execution-safety work until Droid is real.
+- **Dashboard chat (Phase A):** `POST /api/chat` is **shipped** with HAM-native DTOs, in-memory `ChatSessionStore`, and `src/integrations/nous_gateway_client.py` (**mock** or **http** per env). Streaming, SQLite session persistence, and mission/walking APIs are **not** started here.
 
 ## Active Gaps
 
 ### 1. Hermes supervisory wiring into execution flow
 
-**Status**: Not started
-**Impact**: Architecture target names Hermes as supervisory orchestrator, but
-current runtime flow is still transitional scaffold code. This leaves an
-architecture-vs-runtime gap that must be closed without collapsing execution
-ownership into Hermes.
-**Blocked by**: Incremental runtime migration planning and test coverage for
-supervisory routing semantics.
-**Fix**: Add explicit supervisory routing flow that delegates execution-heavy
-work to Droid by default, preserves separation-of-duties, and keeps Hermes
-direct execution limited to tiny bounded critic-native tasks.
+**Status**: In progress (Hermes-led orchestration is the contract; runtime wiring deepens over time)
+**Impact**: Docs and rules now state **Hermes as the sole supervisory orchestrator** (no CrewAI). Remaining work is richer routing/policy in code paths—not adopting another orchestration framework.
+**Blocked by**: Incremental runtime hardening and tests for supervisory routing semantics.
+**Fix**: Extend explicit Hermes-owned routing that delegates execution-heavy work to Droid by default, preserves separation-of-duties, and keeps Hermes direct execution limited to tiny bounded critic-native tasks.
 
 ### 2. Context refresh after Droid mutations
 
@@ -1000,12 +1155,10 @@ wire reviewer into the supervisory execution flow explicitly if not already.
 
 ### 6. Real Droid CLI integration
 
-**Status**: Stub (`droid_executor` returns placeholder string)
-**Impact**: No actual parallel execution. Supervisory routing can delegate but
-nothing runs.
-**Blocked by**: Factory Droid CLI binary availability and API surface.
-**Fix**: Implement real `subprocess.run()` call with timeout, output capture,
-and size cap on returned stdout/stderr.
+**Status**: **Executor implemented** — `src/tools/droid_executor.py` uses bounded `subprocess.run()` with timeout, capture, and stdout/stderr caps (see module). Meaningful **Factory/Droid** runs still depend on **profile argv** pointing at an installed CLI and policy allowing the command.
+**Impact**: Bridge can invoke real subprocesses; supervision and safety reviews still assume bounded inspect-style defaults in `main.py` until missions expand.
+**Blocked by**: Operator setup (binary on PATH, auth on disk per tool) and execution-safety policy hardening for mutating commands.
+**Fix (follow-up):** Execution-safety milestones (Phase 4 in remediation docs), refresh-after-mutation context, and richer mission orchestration—without collapsing Hermes/Droid roles.
 
 ### 7. Test coverage (follow-up after Droid / supervisory wiring)
 
@@ -1016,6 +1169,29 @@ config precedence, repeated compaction bounds, reviewer schema/fallback). Furthe
 expansion waits on real Droid execution and supervisory integration tests.
 **Next (when Droid is real):** refresh-after-tool semantics, subprocess/output
 caps, optional end-to-end supervisory smoke without orchestration redesign.
+
+### 8. Productization direction (deferred / exploratory)
+
+**Status**: Deferred (exploratory)
+
+SaaS/control-plane expansion concepts (including gamification and marketplace
+surfaces) are tracked as exploratory direction, not committed architecture.
+Current architecture contracts remain Hermes/Bridge/Droid with bounded
+execution and review seams.
+
+Phases 0 and 1 shipped as enabling foundations: selector correctness hardening
+and intent profile registry promotion (`IntentProfile` / `ProfileRegistry` /
+`Selector` / `KeywordSelector`). No additional productization implementation is
+approved in the codebase at this time.
+Phase 3 also shipped as an enabling foundation: a minimal backend abstraction
+seam (`ExecutionBackend` / `LocalDroidBackend` / `BackendRegistry`) now used by
+bridge runtime executor resolution.
+Phase 5 also shipped as an enabling foundation: completed runs now persist to
+`.ham/runs/` as structured JSON with canonical bridge-derived `run_id`.
+
+No rules or skills should be added for this direction until the relevant code
+surface is implemented and has survived at least one follow-up use with stable
+interfaces.
 
 ## Completed Items
 

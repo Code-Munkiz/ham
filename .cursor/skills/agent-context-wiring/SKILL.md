@@ -1,9 +1,9 @@
 ---
 name: agent-context-wiring
 description: >-
-  Wire memory_heist ContextBuilder into active orchestration role prompts in swarm_agency.py
+  Wire memory_heist ContextBuilder into Hermes-supervised role prompts in swarm_agency.py
   using a single shared ProjectContext and per-role render budgets. Use when connecting
-  supervisory/execution flows to repo context, adjusting budgets, or integrating SessionMemory.
+  Hermes-led flows to repo context, adjusting budgets, or integrating SessionMemory. (No CrewAI.)
 ---
 
 # Agent Context Wiring
@@ -12,7 +12,7 @@ description: >-
 
 - Integrating `ContextBuilder` into `src/swarm_agency.py`
 - Setting per-role token / instruction / diff budgets
-- Wiring `SessionMemory` into the active orchestration flow
+- Wiring `SessionMemory` into the active Hermes-supervised flow
 
 ## Anti-pattern: N full scans
 
@@ -46,7 +46,10 @@ def assemble_ham_run(user_prompt: str) -> HamRunAssembly:
     return HamRunAssembly(
         user_prompt=user_prompt,
         architect_backstory=f"You plan structure and interfaces.\n\n{arch_text}",
-        commander_backstory=f"You coordinate execution.\n\n{cmd_text}",
+        commander_backstory=(
+            "You are the Hermes-supervised routing surface: delegate execution to Droid.\n\n"
+            f"{cmd_text}"
+        ),
         critic_backstory="...",
         llm_client=None,
         droid_executor=lambda cmd: "...",
@@ -61,14 +64,14 @@ Prefer reading per-role budgets from merged project config (`discover_config` / 
 
 ## Budget guidelines (defaults until config exists)
 
-| Role | Instruction budget (total) | Diff budget | Rationale |
+| Role surface | Instruction budget (total) | Diff budget | Rationale |
 |-------|---------------------------|-------------|-----------|
-| Hermes supervisory context | Higher (e.g. 16,000) | Full (e.g. 8,000) | Routing, policy, quality context |
-| Droid execution context | Lower (e.g. 4,000) | Tighter (e.g. 2,000) | Task scope, actionable execution details |
-| Hermes review context | Medium (e.g. 8,000) | Default | Enough to critique and learn |
+| Architect | Higher (e.g. 16,000) | Full (e.g. 8,000) | Planning / interfaces |
+| Hermes routing (`commander_*` config keys) | Lower (e.g. 4,000) | Tighter (e.g. 2,000) | Delegation & sequencing |
+| Hermes review / critic | Medium (e.g. 8,000) | Default | Critique & learning context |
 
 ## Verification
 
-1. Every active orchestration role receives repo-grounded context in its prompt/backstory surface.
-2. Repo scan + git capture runs **once** per orchestration build (unless explicitly refreshing after Droid).
+1. Every Hermes-supervised role surface receives repo-grounded context in its prompt/backstory.
+2. Repo scan + git capture runs **once** per `assemble_ham_run` build (unless explicitly refreshing after Droid).
 3. Budgets are tunable via config when available.

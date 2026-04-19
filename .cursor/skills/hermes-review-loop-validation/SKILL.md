@@ -12,7 +12,7 @@ description: >-
 ## When to Use
 
 - Modifying `src/hermes_feedback.py`
-- Changing supervisory/review wiring in `src/swarm_agency.py`
+- Changing Hermes-supervised context/backstory wiring in `src/swarm_agency.py`
 - Integrating the real hermes-agent client
 - Verifying FTS5 persistence after reviews
 
