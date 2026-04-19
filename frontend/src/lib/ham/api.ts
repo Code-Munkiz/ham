@@ -11,7 +11,10 @@ export function getApiBase(): string {
     .replace(/\/$/, "");
   if (explicit) return explicit;
   if (import.meta.env.DEV) return "";
-  return "http://127.0.0.1:8000";
+  // Production build without VITE_HAM_API_BASE → browser would call localhost and "Failed to fetch".
+  throw new Error(
+    "VITE_HAM_API_BASE was not set when this site was built. In Vercel: Settings → Environment Variables → add VITE_HAM_API_BASE = your Cloud Run URL (no trailing slash). Enable it for Production and Preview, then redeploy.",
+  );
 }
 
 /** Build an absolute or same-origin path for the Ham API (Vite dev uses relative `/api/...` + proxy). */
