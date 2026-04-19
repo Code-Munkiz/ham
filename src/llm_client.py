@@ -21,8 +21,10 @@ def get_openrouter_base_url() -> str:
 
 
 def get_default_model() -> str:
-    """Raw model id from env (e.g. anthropic/claude-3.5-sonnet)."""
-    return os.getenv("DEFAULT_MODEL", "anthropic/claude-3.5-sonnet")
+    """Raw model id from env (OpenRouter slug, e.g. openai/gpt-4o-mini)."""
+    # Default must be a model that stays routable on OpenRouter; older Claude
+    # slugs often 404 when renamed/retired.
+    return os.getenv("DEFAULT_MODEL", "openai/gpt-4o-mini")
 
 
 def resolve_openrouter_model_name() -> str:
@@ -50,6 +52,15 @@ class _OpenRouterChatClient:
         }
         if self._api_key:
             kwargs["api_key"] = self._api_key
+        extra_headers: dict[str, str] = {}
+        ref = os.getenv("OPENROUTER_HTTP_REFERER")
+        ttl = os.getenv("OPENROUTER_APP_TITLE")
+        if ref:
+            extra_headers["HTTP-Referer"] = ref
+        if ttl:
+            extra_headers["X-Title"] = ttl
+        if extra_headers:
+            kwargs["extra_headers"] = extra_headers
         resp = litellm.completion(**kwargs)
         msg = resp.choices[0].message
         content = getattr(msg, "content", None)
@@ -75,3 +86,10 @@ def configure_litellm_env() -> None:
     api_key = os.getenv("OPENROUTER_API_KEY")
     if api_key:
         os.environ.setdefault("OPENROUTER_API_KEY", api_key)
+    # LiteLLM OpenRouter paths also read OR_SITE_URL / OR_APP_NAME for headers.
+    referer = os.getenv("OPENROUTER_HTTP_REFERER")
+    title = os.getenv("OPENROUTER_APP_TITLE")
+    if referer:
+        os.environ.setdefault("OR_SITE_URL", referer)
+    if title:
+        os.environ.setdefault("OR_APP_NAME", title)

@@ -1,4 +1,6 @@
 litellm
 python-dotenv
 pydantic
-hermes-agent
+# Nous Hermes Agent CLI is not on PyPI; install separately if needed:
+#   PowerShell: irm https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.ps1 | iex
+#   Or: pip install "git+https://github.com/NousResearch/hermes-agent.git"

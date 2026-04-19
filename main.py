@@ -3,6 +3,7 @@
 Entry point: load env, assemble a minimal Ham run context, accept a CLI prompt.
 """
 import argparse
+import copy
 import hashlib
 import json
 import os
@@ -21,6 +22,9 @@ from src.registry.profiles import DEFAULT_PROFILE_REGISTRY, KeywordSelector
 from src.swarm_agency import assemble_ham_run
 
 MAX_REVIEW_CONTEXT_CHARS = 1_000
+# Hermes review echoes bridge JSON + context; huge strings break terminal wrap/reflow.
+MAX_STDOUT_HERMES_CODE_CHARS = 1_200
+MAX_STDOUT_HERMES_CONTEXT_CHARS = 900
 _SELECTOR = KeywordSelector()
 
 
@@ -84,14 +88,36 @@ def _build_runtime_envelope(
     }
 
 
-def _dump_json(data: object) -> str:
+def _truncate_envelope_for_stdout(envelope: dict[str, object]) -> dict[str, object]:
+    """Shorten review strings for human stdout; full envelope is still written under .ham/runs/."""
+    out = copy.deepcopy(envelope)
+    hr = out.get("hermes_review")
+    if not isinstance(hr, dict):
+        return out
+    for key, limit in (
+        ("code", MAX_STDOUT_HERMES_CODE_CHARS),
+        ("context", MAX_STDOUT_HERMES_CONTEXT_CHARS),
+    ):
+        val = hr.get(key)
+        if isinstance(val, str) and len(val) > limit:
+            omitted = len(val) - limit
+            hr[key] = (
+                val[:limit]
+                + f"... [truncated {omitted} chars; full JSON in .ham/runs/]"
+            )
+    return out
+
+
+def _dump_json(data: object, *, indent: int | None = None) -> str:
     if hasattr(data, "model_dump"):
         payload = data.model_dump()
     elif hasattr(data, "dict"):
         payload = data.dict()
     else:
         payload = data
-    return json.dumps(payload, sort_keys=True, ensure_ascii=True)
+    if indent is not None:
+        return json.dumps(payload, sort_keys=True, ensure_ascii=True, indent=indent)
+    return json.dumps(payload, sort_keys=True, ensure_ascii=True, separators=(",", ":"))
 
 
 def _persist_run_record(
@@ -149,6 +175,11 @@ def main(argv: list[str] | None = None) -> int:
 
     parser = argparse.ArgumentParser(description="ham — autonomous developer swarm")
     parser.add_argument(
+        "--compact-json",
+        action="store_true",
+        help="Emit RUNTIME_RESULT as a single line (for scripts). Default is indented JSON for readability in terminals.",
+    )
+    parser.add_argument(
         "prompt",
         nargs="?",
         default="Hello, swarm.",
@@ -193,7 +224,16 @@ def main(argv: list[str] | None = None) -> int:
         bridge_result=bridge_result,
         review=review,
     )
-    print("RUNTIME_RESULT:", _dump_json(envelope))
+    to_print = (
+        envelope
+        if args.compact_json
+        else _truncate_envelope_for_stdout(envelope)
+    )
+    dumped = _dump_json(to_print, indent=None if args.compact_json else 2)
+    if args.compact_json:
+        print("RUNTIME_RESULT:", dumped)
+    else:
+        print("RUNTIME_RESULT:\n" + dumped)
     return 0
 
 

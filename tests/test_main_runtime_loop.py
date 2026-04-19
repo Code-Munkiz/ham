@@ -21,6 +21,15 @@ class _FakeAssembly:
     critic_backstory: str = "critic-context-initial"
 
 
+def _parse_runtime_stdout(stdout: str) -> dict:
+    """Parse RUNTIME_RESULT payload (compact one-line or pretty-printed multiline)."""
+    marker = "RUNTIME_RESULT:"
+    idx = stdout.find(marker)
+    assert idx >= 0, stdout
+    rest = stdout[idx + len(marker) :].strip()
+    return json.loads(rest)
+
+
 def _bridge_result(*, mutation_detected: bool | None = False) -> BridgeResult:
     return BridgeResult(
         intent_id="intent-1",
@@ -94,9 +103,8 @@ def test_main_normal_path_builds_intent_and_invokes_bridge_and_review(monkeypatc
     assert "review_context" in seen
     assert counts["bridge"] == 1
     assert counts["review"] == 1
-    lines = [line for line in out.splitlines() if line.startswith("RUNTIME_RESULT:")]
-    assert len(lines) == 1
-    payload = json.loads(lines[0].split(":", 1)[1].strip())
+    assert "RUNTIME_RESULT:" in out
+    payload = _parse_runtime_stdout(out)
     assert set(payload.keys()) == {
         "bridge_result",
         "hermes_review",
@@ -121,8 +129,7 @@ def test_main_reviewer_failure_does_not_break_primary_artifact(monkeypatch, caps
     rc = main_mod.main(["do thing"])
     out = capsys.readouterr().out
     assert rc == 0
-    line = next(line for line in out.splitlines() if line.startswith("RUNTIME_RESULT:"))
-    payload = json.loads(line.split(":", 1)[1].strip())
+    payload = _parse_runtime_stdout(out)
     assert set(payload["bridge_result"].keys()) >= {"intent_id", "request_id", "run_id", "status", "commands"}
     assert payload["hermes_review"]["ok"] is False
 
@@ -142,8 +149,7 @@ def test_main_output_shape_is_deterministic(monkeypatch, capsys):
     out = capsys.readouterr().out
     assert rc == 0
 
-    line = next(line for line in out.splitlines() if line.startswith("RUNTIME_RESULT:"))
-    payload = json.loads(line.split(":", 1)[1].strip())
+    payload = _parse_runtime_stdout(out)
     assert set(payload.keys()) == {
         "bridge_result",
         "hermes_review",
@@ -431,8 +437,7 @@ def test_persist_failure_does_not_break_runtime(monkeypatch, tmp_path, capsys):
     rc = main_mod.main(["persist failure"])
     captured = capsys.readouterr()
     assert rc == 0
-    line = next(line for line in captured.out.splitlines() if line.startswith("RUNTIME_RESULT:"))
-    envelope = json.loads(line.split(":", 1)[1].strip())
+    envelope = _parse_runtime_stdout(captured.out)
     assert set(envelope.keys()) == {
         "bridge_result",
         "hermes_review",
@@ -457,8 +462,7 @@ def test_envelope_shape_unchanged_after_persistence_slice(monkeypatch, tmp_path,
     rc = main_mod.main(["shape freeze"])
     out = capsys.readouterr().out
     assert rc == 0
-    line = next(line for line in out.splitlines() if line.startswith("RUNTIME_RESULT:"))
-    payload = json.loads(line.split(":", 1)[1].strip())
+    payload = _parse_runtime_stdout(out)
     assert set(payload.keys()) == {
         "bridge_result",
         "hermes_review",
