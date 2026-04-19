@@ -20,6 +20,28 @@ def test_root_is_not_404_json() -> None:
     assert data.get("status") == "/api/status"
 
 
+def test_post_chat_prepends_system_prompt_for_llm(mock_mode: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, list] = {}
+
+    def capture(messages: list) -> str:
+        captured["messages"] = messages
+        return "stub-assistant"
+
+    monkeypatch.setattr("src.api.chat.complete_chat_turn", capture)
+    res = client.post(
+        "/api/chat",
+        json={"messages": [{"role": "user", "content": "hi"}]},
+    )
+    assert res.status_code == 200, res.text
+    msgs = captured.get("messages") or []
+    assert msgs and msgs[0].get("role") == "system"
+    assert "Ham" in (msgs[0].get("content") or "")
+    assert msgs[1] == {"role": "user", "content": "hi"}
+    # Client-visible transcript has no system row
+    body = res.json()["messages"]
+    assert all(m["role"] != "system" for m in body)
+
+
 @pytest.fixture
 def mock_mode(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HERMES_GATEWAY_MODE", "mock")

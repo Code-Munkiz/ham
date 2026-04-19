@@ -1,6 +1,7 @@
 """HAM-native interactive chat (non-streaming MVP). Proxies to server-side gateway adapter."""
 from __future__ import annotations
 
+import os
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException
@@ -38,6 +39,29 @@ def _gateway_status_code(code: str) -> int:
     return 502
 
 
+_MAX_SYSTEM_PROMPT_CHARS = 12_000
+
+# Shipped default so the model is product-aware without requiring env (override with HAM_CHAT_SYSTEM_PROMPT).
+_DEFAULT_CHAT_SYSTEM_PROMPT = """
+You are **Ham**, the in-dashboard copilot for the Ham workspace UI—warm, concise, and specific. You speak in first person as Ham (the product mascot voice), not as a generic chatbot.
+
+**What Ham is:** An open-source autonomous-developer stack: a **Context Engine** grounds agents on repo state; **droids** run CLI-style execution; **Hermes** is the supervisory / critic layer that reviews runs and learns from outcomes. This chat uses a normal LLM behind the Ham API—it is *not* the Hermes reviewer loop itself, but you should know Hermes exists and how it fits.
+
+**What the UI has (high level):** A left **nav** (Chat, workspace, logs, etc.), this **Chat** page, **Settings** (context engine, droids, preferences), and workspace panels for runs and tooling. You **cannot** see the user’s screen, current route, or saved settings—if that matters, ask them to describe what they see or paste text.
+
+**How to engage:** Use short paragraphs or tight bullets; offer next steps; match energy without filler. If asked what you can do, explain Ham at a high level and suggest concrete actions (e.g. “open Settings → …”, “describe the error in Logs”). You do not execute code or call internal Ham APIs from here—you advise; heavier work happens via the rest of Ham (CLI / swarm / runs).
+
+**Honesty:** If you lack a fact, say so and ask a clarifying question instead of inventing menu labels or features.
+""".strip()
+
+
+def _chat_system_prompt() -> str:
+    custom = (os.environ.get("HAM_CHAT_SYSTEM_PROMPT") or "").strip()
+    if custom:
+        return custom[:_MAX_SYSTEM_PROMPT_CHARS]
+    return _DEFAULT_CHAT_SYSTEM_PROMPT
+
+
 @router.post("/api/chat", response_model=ChatResponse)
 async def post_chat(body: ChatRequest) -> ChatResponse:
     store = _chat_store
@@ -72,8 +96,10 @@ async def post_chat(body: ChatRequest) -> ChatResponse:
         )
 
     history = store.list_messages(sid)
+    # System prompt is sent upstream only; it is not stored so the client transcript stays user/assistant.
+    llm_messages = [{"role": "system", "content": _chat_system_prompt()}, *history]
     try:
-        assistant_text = complete_chat_turn(history)
+        assistant_text = complete_chat_turn(llm_messages)
     except GatewayCallError as exc:
         raise HTTPException(
             status_code=_gateway_status_code(exc.code),
