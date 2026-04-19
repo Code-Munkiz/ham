@@ -9,6 +9,16 @@ build/
 
 # Local vendored reference dumps (not source)
 docs/repomix-*
+docs/reference/hermes-agent-reference.txt
+
+# Local tooling / vendored zips
+.claude/
+ham-workspace*.zip
 
 # Local run artifacts (pre-ignored for future run persistence)
 .ham/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env

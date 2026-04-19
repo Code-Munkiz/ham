@@ -136,7 +136,9 @@ User Prompt
 |------|--------------------|----------------|
 | Supervisory orchestration | `src/swarm_agency.py`, `src/hermes_feedback.py`, `main.py` | First real loop wired on primary path: typed `ExecutionIntent` emission now uses a tiny deterministic safe-profile selector, then Bridge execution and Hermes advisory review handoff; deeper supervisory routing remains transitional |
 | Execution engine | `src/tools/droid_executor.py` | Bridge v0 bounded backend implemented (`shell=False`, timeout, deterministic capture, capped output) |
-| Bridge runtime/policy | `src/bridge/contracts.py`, `src/bridge/policy.py`, `src/bridge/runtime.py`, `src/registry/profiles.py`, `src/registry/backends.py` | Bridge v0 hardened: fail-closed policy gate with command-profile checks, env override restrictions, total-output cap enforcement, deterministic status mapping, mutation-aware refresh gating, and registry-backed profile selection seam with backend-registry executor resolution, plus structured run persistence to `.ham/runs/` |
+| Bridge runtime/policy | `src/bridge/contracts.py`, `src/bridge/policy.py`, `src/bridge/runtime.py`, `src/registry/profiles.py`, `src/registry/backends.py`, `src/registry/droids.py` | Bridge v0 hardened: fail-closed policy gate with command-profile checks, env override restrictions, total-output cap enforcement, deterministic status mapping, mutation-aware refresh gating, and registry-backed profile selection seam with backend-registry executor resolution, plus structured run persistence to `.ham/runs/`; droid registry records for UI/API |
+| Read API + run store | `src/api/server.py`, `src/persistence/run_store.py` | Thin FastAPI layer over `RunStore` (`.ham/runs/`): status, runs list/detail, profiles, droids |
+| Workspace UI | `frontend/` (Vite + React) | Extracted workspace; TypeScript types aligned with persisted run / bridge shapes |
 | Context engine | `src/memory_heist.py` | Hardened + tested (Phase 1/3 guardrails complete) |
 | LLM routing | `src/llm_client.py` | Working |
 | Critique MVP | `src/hermes_feedback.py` | Implemented (`HermesReviewer.evaluate()`), conservative fallback, tested |
@@ -147,16 +149,16 @@ architecture contract.
 
 ### Registries
 
-The shipped registry surface is currently limited to `IntentProfile`, `ProfileRegistry`, `Selector`, `KeywordSelector`, and `DEFAULT_PROFILE_REGISTRY` in `src/registry/profiles.py`. `IntentProfile` records are pure data with `id`, `version`, `argv`, and `metadata` fields. The selection seam is a `Protocol` with one method (`select(prompt) -> str`) and currently has one default implementation (`KeywordSelector`). This is a single-registry, single-selector slice. No backend, persona, agent, team, or plugin registry exists yet.
+The shipped registry surface includes `IntentProfile`, `ProfileRegistry`, `Selector`, `KeywordSelector`, and `DEFAULT_PROFILE_REGISTRY` in `src/registry/profiles.py`, plus `DroidRecord`, `DroidRegistry`, and `DEFAULT_DROID_REGISTRY` in `src/registry/droids.py` (builder and reviewer droids; pure-data records per registry conventions). `IntentProfile` records are pure data with `id`, `version`, `argv`, and `metadata` fields. The selection seam is a `Protocol` with one method (`select(prompt) -> str`) and currently has one default implementation (`KeywordSelector`).
 
-The shipped backend registry surface is `ExecutionBackend`, `LocalDroidBackend`, `BackendRecord`, `BackendRegistry`, `DEFAULT_BACKEND_ID`, and `DEFAULT_BACKEND_REGISTRY` in `src/registry/backends.py`. `BackendRecord` follows the same pure-data Pydantic convention as `IntentProfile` (`id`, `version`, `metadata`, no methods). Runtime backend resolution currently uses hardcoded `DEFAULT_BACKEND_ID` against a single registered backend; per-intent backend selection is deferred. No persona, agent, team, or plugin registry exists yet.
+The shipped backend registry surface is `ExecutionBackend`, `LocalDroidBackend`, `BackendRecord`, `BackendRegistry`, `DEFAULT_BACKEND_ID`, and `DEFAULT_BACKEND_REGISTRY` in `src/registry/backends.py`. `BackendRecord` follows the same pure-data Pydantic convention as `IntentProfile` (`id`, `version`, `metadata`, no methods). Runtime backend resolution currently uses hardcoded `DEFAULT_BACKEND_ID` against a single registered backend; per-intent backend selection is deferred.
 
 Completed runs are now persisted as structured JSON at `.ham/runs/<timestamp>-<run_id>.json`. Persisted records include `run_id`, `created_at`, `profile_id`, `profile_version`, `backend_id`, `backend_version`, `prompt_summary`, `bridge_result`, and `hermes_review`. `run_id` is canonical from `bridge_result.run_id` (never regenerated); the timestamp in the filename is metadata for sort/collision only. The stdout `RUNTIME_RESULT` envelope shape remains unchanged, and persistence is additive. `BackendRegistry.get_record()` is now the first public backend-record accessor.
 
-**Tests**: `tests/test_memory_heist.py`, `tests/test_hermes_feedback.py`, `tests/test_bridge_contracts.py`, `tests/test_bridge_policy.py`, `tests/test_droid_executor.py`, `tests/test_bridge_runtime.py`, `tests/test_main_runtime_loop.py`, `tests/test_profile_registry.py`, and `tests/test_backend_registry.py` — **89 passed, 1 skipped** regression/guardrail cases.
+**Tests**: full `pytest` suite including registry, bridge, main loop, droid registry, and persistence tests — **115 passed, 1 skipped** regression/guardrail cases.
 
-**Next milestone**: refine bounded selector and Bridge-profile seams with
-targeted edge-case hardening while preserving current safety envelopes.
+**Next milestone**: wire workspace UI to live `/api/*` where desired; continue edge-case hardening on Bridge-profile seams while preserving current safety envelopes.
+
 **Deferred:** FTS5 durable learning persistence, second orchestration harness,
 architecture sprawl.
 

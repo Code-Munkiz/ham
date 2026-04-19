@@ -14,6 +14,9 @@ working on this repo should read these before proposing changes.
 - `src/memory_heist.py` — Context Engine (repo scan, git state, config, sessions)
 - `src/llm_client.py` — LiteLLM / OpenRouter wiring
 - `src/swarm_agency.py` — transitional orchestration scaffold pending migration to Hermes-supervised flow
+- `src/registry/droids.py` — `DroidRecord` + `DroidRegistry` + `DEFAULT_DROID_REGISTRY` (builder, reviewer)
+- `src/persistence/run_store.py` — read-side `RunStore` over `.ham/runs/*.json`
+- `src/api/server.py` — thin FastAPI read API (`/api/status`, `/api/runs`, `/api/runs/{run_id}`, `/api/profiles`, `/api/droids`)
 
 ## Configuration & entry
 
@@ -37,9 +40,14 @@ working on this repo should read these before proposing changes.
 - `CURSOR_EXACT_SETUP_EXPORT.md` — verbatim snapshot of Cursor setup + first-class docs (regenerate via `python scripts/build_cursor_export.py`)
 - `GAPS.md` — tracked gaps and active implementation notes
 
+## Frontend (workspace UI)
+
+- `frontend/` — Vite + React workspace; `npm run dev` (port 3000), `npm run lint` (`tsc --noEmit`)
+
 ## Tests
 
 - `tests/test_memory_heist.py` — Context Engine + Phase 1/3 guardrails (18 cases)
 - `tests/test_hermes_feedback.py` — Critic MVP + Phase 3 guardrails (7 cases)
-- Run: `python -m pytest tests/test_memory_heist.py tests/test_hermes_feedback.py` (25 cases as of last doc sync)
+- `tests/test_droid_registry.py` — Droid registry conventions (10 cases)
+- Run: `python -m pytest` — full suite (115 passed, 1 skipped as of Phase 10)
 - Other tests under `tests/` as added; bootstrap with `/test-context-regressions` for Context Engine focus
