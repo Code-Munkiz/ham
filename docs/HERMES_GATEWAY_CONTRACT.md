@@ -53,7 +53,7 @@ Content-Type: application/json
 | `mock` | `HERMES_GATEWAY_MODE=mock` | No HTTP; deterministic local reply for UI/dev. |
 | `http` | `HERMES_GATEWAY_MODE=http` (default when unset for production intent) | `httpx` POST to `/v1/chat/completions` as above. |
 
-**Note:** If `HERMES_GATEWAY_MODE` is unset, HAM treats it as **`http`** when `HERMES_GATEWAY_BASE_URL` is set, else **`mock`** for safe local dev. (See `nous_gateway_client.py` implementation.)
+**Note:** If `HERMES_GATEWAY_MODE` is unset, the adapter uses **`http`** when `HERMES_GATEWAY_BASE_URL` is non-empty, otherwise **`mock`** (safe local default). Set `HERMES_GATEWAY_MODE=mock` explicitly to force mock even when a base URL is present.
 
 ## Out of scope for this contract revision
 
