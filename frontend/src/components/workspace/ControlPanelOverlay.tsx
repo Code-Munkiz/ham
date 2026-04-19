@@ -20,7 +20,6 @@ import {
   Key,
   ToyBrick,
   Brain,
-  User,
   Monitor,
   Layout,
   Settings as SettingsIcon,
@@ -54,13 +53,13 @@ import {
   BarChart3,
   FileSearch,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { Agent } from "@/lib/ham/types";
 import { useWorkspace } from "@/lib/ham/WorkspaceContext";
 import { useAgent } from "@/lib/ham/AgentContext";
 
 import { DroidConfigPanel } from "./DroidConfigPanel";
-import { UnifiedSettings, SettingsSubSectionId } from "./UnifiedSettings";
 
 interface ControlPanelOverlayProps {
   isOpen: boolean;
@@ -70,13 +69,7 @@ interface ControlPanelOverlayProps {
   selectedAgent: Agent;
 }
 
-type SectionId =
-  | "general"
-  | "droids"
-  | "activity"
-  | "avatar"
-  | "settings";
-
+type SectionId = "general" | "droids" | "activity";
 
 export function ControlPanelOverlay({
   isOpen,
@@ -85,18 +78,11 @@ export function ControlPanelOverlay({
   onTaskChange,
   selectedAgent,
 }: ControlPanelOverlayProps) {
-  const {
-    showContextBudget,
-    setShowContextBudget,
-    contextUsage,
-    workspaceName,
-    branch,
-  } = useWorkspace();
+  const navigate = useNavigate();
+  const { workspaceName, branch } = useWorkspace();
   const { agents, selectedAgentId, setSelectedAgentId } = useAgent();
   const [activeSegment, setActiveSegment] =
     React.useState<SectionId>("general");
-  const [activeSettingsSubSegment, setActiveSettingsSubSegment] =
-    React.useState<SettingsSubSectionId>("api-keys");
   const [searchQuery, setSearchQuery] = React.useState("");
 
   if (!isOpen) return null;
@@ -108,14 +94,18 @@ export function ControlPanelOverlay({
         { id: "general", label: "Chat", icon: MessageSquare },
         { id: "activity", label: "Activity", icon: History },
         { id: "droids", label: "Droids", icon: Cpu },
-        { id: "avatar", label: "Avatar", icon: User },
       ],
     },
-    {
-      group: "CONFIGURE",
-      items: [{ id: "settings", label: "Settings", icon: SettingsIcon }],
-    },
   ];
+
+  const goToSettings = (tab?: string) => {
+    onClose();
+    if (tab) {
+      navigate(`/settings?tab=${encodeURIComponent(tab)}`);
+    } else {
+      navigate("/settings");
+    }
+  };
 
 
   return (
@@ -224,6 +214,46 @@ export function ControlPanelOverlay({
             ))}
           </div>
 
+          {/* Full settings live on /settings (nav rail cog) — jump links only */}
+          <div className="px-4 pb-4 space-y-2 border-t border-white/5 pt-4 shrink-0">
+            <h3 className="px-4 text-[9px] font-black text-white/10 uppercase tracking-[0.35em] mb-2">
+              Configuration
+            </h3>
+            <button
+              type="button"
+              onClick={() => goToSettings()}
+              className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all text-left bg-[#FF6B00]/10 text-[#FF6B00] border border-[#FF6B00]/25 hover:bg-[#FF6B00]/15"
+            >
+              <SettingsIcon className="h-4 w-4" />
+              <span className="text-[11px] font-bold uppercase tracking-wider">
+                Full settings
+              </span>
+            </button>
+            <div className="flex flex-col gap-1 px-2">
+              <button
+                type="button"
+                onClick={() => goToSettings("api-keys")}
+                className="text-left px-2 py-1.5 text-[10px] font-bold uppercase tracking-widest text-white/35 hover:text-[#FF6B00] transition-colors"
+              >
+                API keys
+              </button>
+              <button
+                type="button"
+                onClick={() => goToSettings("environment")}
+                className="text-left px-2 py-1.5 text-[10px] font-bold uppercase tracking-widest text-white/35 hover:text-[#FF6B00] transition-colors"
+              >
+                Environment
+              </button>
+              <button
+                type="button"
+                onClick={() => goToSettings("tools-extensions")}
+                className="text-left px-2 py-1.5 text-[10px] font-bold uppercase tracking-widest text-white/35 hover:text-[#FF6B00] transition-colors"
+              >
+                Tools &amp; extensions
+              </button>
+            </div>
+          </div>
+
           {/* User Profile Area */}
           <div className="p-6 border-t border-white/5 bg-black/20">
             <div className="flex items-center gap-4">
@@ -281,10 +311,7 @@ export function ControlPanelOverlay({
           </div>
 
           {/* Content Area */}
-          <div className={cn(
-            "flex-1 overflow-y-auto scrollbar-hide",
-            activeSegment === "settings" ? "p-0" : "p-10 space-y-12 pb-32"
-          )}>
+          <div className="flex-1 overflow-y-auto scrollbar-hide p-10 space-y-12 pb-32">
             {/* 1. CHAT (GENERAL) */}
             {activeSegment === "general" && (
               <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500 text-left pb-32 max-w-4xl">
@@ -696,19 +723,8 @@ export function ControlPanelOverlay({
               </div>
             )}
 
-            {/* 10. UNIFIED SETTINGS */}
-            {activeSegment === "settings" && (
-              <UnifiedSettings 
-                activeSubSegment={activeSettingsSubSegment}
-                onSubSegmentChange={setActiveSettingsSubSegment}
-              />
-            )}
-
             {/* REMAINING PLACEHOLDERS */}
-            {[
-              "activity",
-              "avatar",
-            ].includes(activeSegment) && (
+            {["activity"].includes(activeSegment) && (
               <div className="space-y-12 animate-in fade-in slide-in-from-bottom-2 duration-500 max-w-4xl">
                 <div className="space-y-2">
                   <div className="flex items-center gap-4">

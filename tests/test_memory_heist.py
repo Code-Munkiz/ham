@@ -17,6 +17,7 @@ from src.memory_heist import (
     Message,
     ProjectContext,
     SessionMemory,
+    context_engine_dashboard_payload,
     discover_instruction_files,
     git_diff,
 )
@@ -330,3 +331,23 @@ def test_repeated_compaction_bounded_with_pruning_enabled():
     second_summary = s.compact(preserve=4)
     assert len(second_summary) <= MAX_SUMMARY_CHARS + 3
     assert s.estimate_tokens() < 8_000
+
+
+def test_context_engine_dashboard_payload_structure(tmp_path: Path) -> None:
+    (tmp_path / "SWARM.md").write_text("# Project", encoding="utf-8")
+    (tmp_path / ".ham.json").write_text(
+        '{"memory_heist": {"session_compaction_max_tokens": 4000}, '
+        '"architect_instruction_chars": "9000"}',
+        encoding="utf-8",
+    )
+
+    payload = context_engine_dashboard_payload(tmp_path)
+
+    assert payload["cwd"] == str(tmp_path.resolve())
+    assert payload["instruction_file_count"] >= 1
+    assert set(payload["roles"].keys()) == {"architect", "commander", "critic"}
+    assert payload["roles"]["architect"]["instruction_budget_chars"] == 9000
+    assert payload["memory_heist_section"]["session_compaction_max_tokens"] == 4000
+    assert payload["session_memory"]["compact_max_tokens"] == 4000
+    for role in ("architect", "commander", "critic"):
+        assert payload["roles"][role]["rendered_chars"] > 0

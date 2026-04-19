@@ -676,6 +676,108 @@ class SessionMemory:
         return default
 
 
+def _coerce_positive_int(raw: Any, default: int) -> int:
+    """Parse instruction-budget style values from merged JSON config."""
+    if isinstance(raw, bool):
+        return default
+    if isinstance(raw, (int, float)):
+        v = int(raw)
+        return v if v > 0 else default
+    if isinstance(raw, str):
+        try:
+            v = int(raw.strip())
+            return v if v > 0 else default
+        except ValueError:
+            return default
+    return default
+
+
+def context_engine_dashboard_payload(cwd: Path | None = None) -> dict[str, Any]:
+    """JSON-serializable snapshot for dashboards (no raw git diff / instruction body).
+
+    Aligns per-role render budgets with ``assemble_ham_run`` in ``swarm_agency``.
+    """
+    root = (cwd or Path.cwd()).resolve()
+    project = ProjectContext.discover(root)
+
+    mem = SessionMemory()
+    mem.configure_from_project_config(project.config)
+
+    mh_raw = project.config.merged.get("memory_heist")
+    memory_heist_section: dict[str, Any] = mh_raw if isinstance(mh_raw, dict) else {}
+
+    arch_total = _coerce_positive_int(
+        project.config.get("architect_instruction_chars"), 16_000,
+    )
+    cmd_total = _coerce_positive_int(
+        project.config.get("commander_instruction_chars"), 4_000,
+    )
+    critic_total = _coerce_positive_int(
+        project.config.get("critic_instruction_chars"), 8_000,
+    )
+
+    arch_diff = 8_000
+    cmd_diff = 2_000
+    critic_diff = 8_000
+
+    def _role_block(total: int, diff_cap: int) -> dict[str, Any]:
+        body = project.render(
+            max_total_instruction_chars=total,
+            max_diff_chars=diff_cap,
+        )
+        return {
+            "instruction_budget_chars": total,
+            "max_diff_chars": diff_cap,
+            "rendered_chars": len(body),
+        }
+
+    instruction_files: list[dict[str, str]] = []
+    for f in project.instruction_files:
+        try:
+            rel = str(f.path.relative_to(project.cwd))
+        except ValueError:
+            rel = str(f.path)
+        instruction_files.append({"relative_path": rel, "scope": f.scope})
+
+    config_sources = [
+        {"source": e.source, "path": str(e.path)}
+        for e in project.config.loaded_entries
+    ]
+
+    return {
+        "cwd": str(project.cwd),
+        "current_date": project.current_date,
+        "platform_info": project.platform_info,
+        "file_count": project.file_count,
+        "instruction_file_count": len(project.instruction_files),
+        "instruction_files": instruction_files,
+        "config_sources": config_sources,
+        "memory_heist_section": memory_heist_section,
+        "session_memory": {
+            "compact_max_tokens": mem.compact_max_tokens,
+            "compact_preserve": mem.compact_preserve,
+            "tool_prune_chars": mem.tool_prune_chars,
+            "tool_prune_placeholder": mem.tool_prune_placeholder,
+        },
+        "module_defaults": {
+            "max_instruction_file_chars": MAX_INSTRUCTION_FILE_CHARS,
+            "max_total_instruction_chars": MAX_TOTAL_INSTRUCTION_CHARS,
+            "max_diff_chars": MAX_DIFF_CHARS,
+        },
+        "roles": {
+            "architect": _role_block(arch_total, arch_diff),
+            "commander": _role_block(cmd_total, cmd_diff),
+            "critic": _role_block(critic_total, critic_diff),
+        },
+        "git": {
+            "status_chars": len(project.git_status_snapshot or ""),
+            "diff_chars": len(project.git_diff_snapshot or ""),
+            "log_chars": len(project.git_log_snapshot or ""),
+            "has_repo": project.git_status_snapshot is not None,
+        },
+    }
+
+
 # ---------------------------------------------------------------------------
 # Context builder: assembles everything into a prompt-ready string
 # ---------------------------------------------------------------------------

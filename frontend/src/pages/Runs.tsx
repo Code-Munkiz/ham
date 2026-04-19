@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const API_BASE = "http://localhost:8000";
+import { apiUrl } from "@/lib/ham/api";
 
 export default function Runs() {
   const [runs, setRuns] = React.useState<RunRecord[]>([]);
@@ -23,7 +23,7 @@ export default function Runs() {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(`${API_BASE}/api/runs?limit=50`);
+        const res = await fetch(apiUrl("/api/runs?limit=50"));
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const body = (await res.json()) as { runs: RunRecord[] };
         if (!cancelled) setRuns(body.runs ?? []);

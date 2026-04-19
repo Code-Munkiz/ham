@@ -25,7 +25,7 @@ import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { isBridgeSuccess } from "@/lib/ham/types";
 
-const API_BASE = "http://localhost:8000";
+import { apiUrl } from "@/lib/ham/api";
 
 export default function RunDetail() {
   const { runId } = useParams();
@@ -47,7 +47,7 @@ export default function RunDetail() {
       setError(null);
       setNotFound(false);
       try {
-        const res = await fetch(`${API_BASE}/api/runs/${encodeURIComponent(runId)}`);
+        const res = await fetch(apiUrl(`/api/runs/${encodeURIComponent(runId)}`));
         if (res.status === 404) {
           if (!cancelled) {
             setRun(null);

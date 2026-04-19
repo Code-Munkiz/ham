@@ -25,7 +25,6 @@ export function Header() {
         'extensions': 'TOOLS',
         'droids': 'TEAM_SETUP',
         'settings': 'SETTINGS',
-        'avatar': 'IDENTITY',
         'advanced': 'SYSTEM'
       };
       return mapping[s] || s.toUpperCase();

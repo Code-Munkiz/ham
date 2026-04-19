@@ -26,7 +26,7 @@ import {
   Cpu,
   History
 } from "lucide-react";
-const API_BASE = "http://localhost:8000";
+import { apiUrl } from "@/lib/ham/api";
 
 const COLORS = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444'];
 
@@ -41,7 +41,7 @@ export default function Analytics() {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(`${API_BASE}/api/runs?limit=200`);
+        const res = await fetch(apiUrl("/api/runs?limit=200"));
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = (await res.json()) as { runs: RunRecord[] };
         if (!cancelled) setAllRuns(data.runs ?? []);

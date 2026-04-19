@@ -5,6 +5,7 @@ import {defineConfig, loadEnv} from 'vite';
 
 export default defineConfig(({mode}) => {
   const env = loadEnv(mode, '.', '');
+  const apiProxyTarget = env.VITE_HAM_API_PROXY_TARGET || 'http://127.0.0.1:8000';
   return {
     plugins: [react(), tailwindcss()],
     define: {
@@ -16,9 +17,20 @@ export default defineConfig(({mode}) => {
       },
     },
     server: {
+      port: 3000,
+      host: '0.0.0.0',
+      // Open the system browser when you run `npm run dev` (disable with BROWSER=none).
+      open: process.env.BROWSER === 'none' ? false : true,
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
       // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',
+      // Forward /api/* to FastAPI so the dashboard works same-origin in dev (no CORS drift).
+      proxy: {
+        '/api': {
+          target: apiProxyTarget,
+          changeOrigin: true,
+        },
+      },
     },
   };
 });

@@ -3,30 +3,23 @@ import {
   MessageSquare, 
   Activity, 
   Users, 
-  UserCircle,
   Settings, 
-  ShieldCheck,
-  Shield,
   ScrollText,
   BarChart2,
   SlidersHorizontal
 } from "lucide-react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 
 const primaryNav = [
   { icon: MessageSquare, label: "Chat", path: "/chat" },
   { icon: Activity, label: "Activity", path: "/" },
   { icon: Users, label: "Droids", path: "/droids" },
-  { icon: UserCircle, label: "Avatar", path: "/avatar" },
-];
-
-const secondaryNav = [
-  { icon: Settings, label: "Settings", path: "/settings" },
 ];
 
 export function NavRail() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [isOpsOpen, setIsOpsOpen] = useState(false);
   const opsRef = useRef<HTMLDivElement>(null);
 
@@ -44,8 +37,12 @@ export function NavRail() {
 
   return (
     <div className="w-[64px] h-full flex flex-col items-center py-6 bg-[#000000] border-r border-white/5 z-50 transition-colors shrink-0">
-      <div className="mb-10 text-[#FF6B00]">
-        <Shield className="h-7 w-7" />
+      <div className="mb-10 flex h-7 w-7 shrink-0 items-center justify-center" title="Ham">
+        <img
+          src="/ham-logo.png"
+          alt="Ham"
+          className="h-7 w-7 object-contain brightness-0 invert opacity-90"
+        />
       </div>
 
       <div className="flex-1 flex flex-col gap-5">
@@ -114,22 +111,32 @@ export function NavRail() {
             </div>
           )}
 
-          {secondaryNav.map((item) => {
-            const isActive = location.pathname.startsWith(item.path);
-            return (
-              <Link
-                key={item.path}
-                to={item.path}
-                className={cn(
-                  "group relative p-3 rounded-xl transition-all",
-                  isActive ? "bg-white/10 text-[#FF6B00]" : "text-white/20 hover:text-white hover:bg-white/5"
-                )}
-                title={item.label}
-              >
-                <item.icon className="h-5 w-5" />
-              </Link>
-            );
-          })}
+          <button
+            type="button"
+            onClick={() => {
+              if (location.pathname.startsWith("/settings")) {
+                navigate("/");
+              } else {
+                navigate("/settings");
+              }
+            }}
+            className={cn(
+              "group relative p-3 rounded-xl transition-all",
+              location.pathname.startsWith("/settings")
+                ? "bg-white/10 text-[#FF6B00]"
+                : "text-white/20 hover:text-white hover:bg-white/5",
+            )}
+            title={
+              location.pathname.startsWith("/settings")
+                ? "Back to Activity"
+                : "Settings"
+            }
+          >
+            <Settings className="h-5 w-5" />
+            {location.pathname.startsWith("/settings") && (
+              <div className="absolute left-[-12px] top-1/2 -translate-y-1/2 w-1 h-6 bg-[#FF6B00] rounded-r-full shadow-[0_0_8px_#FF6B00]" />
+            )}
+          </button>
         </div>
         
         <div className="p-3 grayscale contrast-125 opacity-30 hover:opacity-100 transition-opacity cursor-pointer">

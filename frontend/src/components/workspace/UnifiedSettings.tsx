@@ -4,9 +4,6 @@ import {
   Globe,
   ToyBrick,
   Database,
-  User,
-  Bell,
-  ShieldCheck,
   History,
   Activity,
   BarChart3,
@@ -45,18 +42,240 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { fetchContextEngine } from "@/lib/ham/api";
+import type { ContextEnginePayload } from "@/lib/ham/types";
+
+function ContextAndMemoryPanel() {
+  const [data, setData] = React.useState<ContextEnginePayload | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
+  const [loading, setLoading] = React.useState(true);
+
+  const load = React.useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const payload = await fetchContextEngine();
+      setData(payload);
+    } catch (e) {
+      setData(null);
+      setError(e instanceof Error ? e.message : "Failed to load context engine snapshot");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    void load();
+  }, [load]);
+
+  const roleOrder = [
+    { key: "architect" as const, label: "Architect" },
+    { key: "commander" as const, label: "Commander" },
+    { key: "critic" as const, label: "Critic" },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest max-w-xl leading-relaxed">
+          Live snapshot from <span className="font-mono text-[#FF6B00]/80">GET /api/context-engine</span>
+          {" "}(Vite dev proxies <span className="font-mono">/api</span> to FastAPI; production set{" "}
+          <span className="font-mono">VITE_HAM_API_BASE</span>). Snapshot uses the API process working directory unless you use a project-scoped route.
+        </p>
+        <button
+          type="button"
+          onClick={() => void load()}
+          disabled={loading}
+          className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-white/10 text-[9px] font-black uppercase tracking-widest text-white/50 hover:text-[#FF6B00] hover:border-[#FF6B00]/30 transition-colors disabled:opacity-40"
+        >
+          <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
+          Refresh
+        </button>
+      </div>
+
+      {error && (
+        <div className="p-4 rounded-xl border border-red-500/30 bg-red-500/5 text-[11px] font-bold text-red-400/90">
+          {error}
+        </div>
+      )}
+
+      {loading && !data && !error && (
+        <div className="p-12 rounded-xl border border-white/5 bg-black/30 text-center text-[10px] font-bold text-white/25 uppercase tracking-widest">
+          Loading context engine…
+        </div>
+      )}
+
+      {data && (
+        <>
+          <div className="p-6 bg-black/40 border border-white/5 rounded-xl space-y-3">
+            <div className="text-[9px] font-black text-white/25 uppercase tracking-widest">Working directory</div>
+            <div className="text-[11px] font-mono text-white/70 break-all leading-relaxed">{data.cwd}</div>
+            <div className="flex flex-wrap gap-4 text-[9px] font-bold text-white/35 uppercase tracking-wider">
+              <span>{data.current_date}</span>
+              <span>{data.platform_info}</span>
+              <span>{data.file_count} indexed files</span>
+              <span>{data.instruction_file_count} instruction files</span>
+              <span className={data.git.has_repo ? "text-green-500/70" : "text-amber-500/70"}>
+                Git {data.git.has_repo ? "detected" : "unavailable"}
+              </span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {roleOrder.map(({ key, label }) => {
+              const r = data.roles[key];
+              const pct = Math.min(
+                100,
+                (r.rendered_chars / Math.max(1, r.instruction_budget_chars + r.max_diff_chars)) * 100,
+              );
+              return (
+                <div
+                  key={key}
+                  className="p-6 bg-black/40 border border-white/5 rounded-xl space-y-4 shadow-xl"
+                >
+                  <div className="text-[10px] font-black text-[#FF6B00] uppercase tracking-widest italic">
+                    {label}
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-[10px] font-bold text-white/35 uppercase tracking-wider">
+                      <span>Assembled context</span>
+                      <span className="font-mono text-white/60">{r.rendered_chars.toLocaleString()} chars</span>
+                    </div>
+                    <div className="h-2 bg-white/5 rounded-full overflow-hidden border border-white/10">
+                      <div
+                        className="h-full bg-[#FF6B00]/80 shadow-[0_0_12px_rgba(255,107,0,0.35)]"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    <p className="text-[9px] font-bold text-white/25 uppercase tracking-wide leading-relaxed">
+                      Instruction budget {r.instruction_budget_chars.toLocaleString()} chars · Diff cap{" "}
+                      {r.max_diff_chars.toLocaleString()} chars (matches <span className="font-mono">swarm_agency</span>{" "}
+                      per-role render)
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="p-6 bg-black/40 border border-white/5 rounded-xl space-y-4">
+              <h4 className="text-[11px] font-black text-white uppercase tracking-widest italic">
+                Session memory (compaction)
+              </h4>
+              <dl className="space-y-2 text-[10px] font-mono text-white/55">
+                <div className="flex justify-between gap-4">
+                  <dt className="text-white/30 uppercase tracking-tighter">compact_max_tokens</dt>
+                  <dd>{data.session_memory.compact_max_tokens}</dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-white/30 uppercase tracking-tighter">compact_preserve</dt>
+                  <dd>{data.session_memory.compact_preserve}</dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-white/30 uppercase tracking-tighter">tool_prune_chars</dt>
+                  <dd>{data.session_memory.tool_prune_chars}</dd>
+                </div>
+              </dl>
+              <p className="text-[9px] font-bold text-white/25 uppercase tracking-widest leading-relaxed">
+                From merged config via <span className="font-mono">memory_heist</span> section (see JSON below).
+              </p>
+            </div>
+            <div className="p-6 bg-black/40 border border-white/5 rounded-xl space-y-4">
+              <h4 className="text-[11px] font-black text-white uppercase tracking-widest italic">
+                Module defaults (ContextBuilder)
+              </h4>
+              <dl className="space-y-2 text-[10px] font-mono text-white/55">
+                <div className="flex justify-between gap-4">
+                  <dt className="text-white/30 uppercase tracking-tighter">max_instruction_file_chars</dt>
+                  <dd>{data.module_defaults.max_instruction_file_chars}</dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-white/30 uppercase tracking-tighter">max_total_instruction_chars</dt>
+                  <dd>{data.module_defaults.max_total_instruction_chars}</dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-white/30 uppercase tracking-tighter">max_diff_chars</dt>
+                  <dd>{data.module_defaults.max_diff_chars}</dd>
+                </div>
+              </dl>
+            </div>
+          </div>
+
+          <div className="p-6 bg-black/40 border border-white/5 rounded-xl space-y-3">
+            <h4 className="text-[11px] font-black text-white uppercase tracking-widest italic">Git snapshot sizes</h4>
+            <p className="text-[9px] font-bold text-white/25 uppercase tracking-widest">
+              Character counts only — raw diff/log not exposed over the API.
+            </p>
+            <dl className="grid grid-cols-3 gap-4 text-[10px] font-mono text-white/55">
+              <div>
+                <dt className="text-white/30 uppercase text-[9px]">status</dt>
+                <dd>{data.git.status_chars}</dd>
+              </div>
+              <div>
+                <dt className="text-white/30 uppercase text-[9px]">diff</dt>
+                <dd>{data.git.diff_chars}</dd>
+              </div>
+              <div>
+                <dt className="text-white/30 uppercase text-[9px]">log</dt>
+                <dd>{data.git.log_chars}</dd>
+              </div>
+            </dl>
+          </div>
+
+          {data.config_sources.length > 0 && (
+            <div className="p-6 bg-black/40 border border-white/5 rounded-xl space-y-3">
+              <h4 className="text-[11px] font-black text-white uppercase tracking-widest italic">Loaded config files</h4>
+              <ul className="space-y-2 text-[10px] font-mono text-white/50 break-all">
+                {data.config_sources.map((s) => (
+                  <li key={s.path}>
+                    <span className="text-[#FF6B00]/60">[{s.source}]</span> {s.path}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {data.instruction_files.length > 0 && (
+            <div className="p-6 bg-black/40 border border-white/5 rounded-xl space-y-3">
+              <h4 className="text-[11px] font-black text-white uppercase tracking-widest italic">Instruction files</h4>
+              <ul className="space-y-1.5 text-[10px] font-mono text-white/50">
+                {data.instruction_files.map((f) => (
+                  <li key={`${f.scope}:${f.relative_path}`}>
+                    {f.relative_path}{" "}
+                    <span className="text-white/25">({f.scope})</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <div className="p-6 bg-black/40 border border-white/5 rounded-xl space-y-2">
+            <h4 className="text-[11px] font-black text-white uppercase tracking-widest italic">
+              Merged <span className="font-mono">memory_heist</span> keys
+            </h4>
+            {Object.keys(data.memory_heist_section).length === 0 ? (
+              <p className="text-[10px] font-bold text-white/25 uppercase tracking-widest">
+                No keys under <span className="font-mono">memory_heist</span> in merged JSON (defaults apply).
+              </p>
+            ) : (
+              <pre className="text-[9px] font-mono text-white/45 overflow-x-auto max-h-40 overflow-y-auto p-3 bg-black/50 rounded-lg border border-white/5">
+                {JSON.stringify(data.memory_heist_section, null, 2)}
+              </pre>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 export type SettingsSubSectionId =
   | "api-keys"
-  | "providers"
+  | "environment"
   | "tools-extensions"
-  | "databases"
-  | "account"
-  | "notifications"
-  | "security"
   | "context-memory"
-  | "control-panel"
-  | "mission-history"
+  | "execution-history"
   | "system-logs"
   | "diagnostics"
   | "kernel-health"
@@ -74,28 +293,21 @@ interface UnifiedSettingsProps {
 
 const settingsStructure = [
   {
-    group: "Core Setup",
+    group: "Secrets & environment",
     items: [
       { id: "api-keys", label: "API Keys", icon: Key },
-      { id: "providers", label: "Providers", icon: Globe },
+      { id: "environment", label: "Environment", icon: Terminal },
       { id: "tools-extensions", label: "Tools, Skills & Extensions", icon: ToyBrick },
-      { id: "databases", label: "Databases", icon: Database },
     ],
   },
   {
     group: "Workspace Preferences",
-    items: [
-      { id: "account", label: "Account", icon: User },
-      { id: "notifications", label: "Notifications", icon: Bell },
-      { id: "security", label: "Security", icon: ShieldCheck },
-      { id: "context-memory", label: "Context & Memory", icon: Brain },
-      { id: "control-panel", label: "Control Panel Preferences", icon: Layout },
-    ],
+    items: [{ id: "context-memory", label: "Context & Memory", icon: Brain }],
   },
   {
     group: "Advanced",
     items: [
-      { id: "mission-history", label: "Mission History", icon: History },
+      { id: "execution-history", label: "Execution History", icon: History },
       { id: "system-logs", label: "System Logs", icon: Activity },
       { id: "diagnostics", label: "Diagnostics", icon: BarChart3 },
       { id: "kernel-health", label: "Kernel Health", icon: Zap },
@@ -107,6 +319,20 @@ const settingsStructure = [
     ],
   },
 ];
+
+/** Valid `tab` query values for `/settings?tab=…`. */
+export function normalizeSettingsTabParam(
+  tab: string | null | undefined,
+): SettingsSubSectionId {
+  let t = tab;
+  if (t === "mission-history") {
+    t = "execution-history";
+  }
+  const ok = settingsStructure
+    .flatMap((g) => g.items)
+    .some((i) => i.id === t);
+  return ok ? (t as SettingsSubSectionId) : "api-keys";
+}
 
 export function UnifiedSettings({
   activeSubSegment,
@@ -168,13 +394,19 @@ export function UnifiedSettings({
               {activeLabel}
             </h2>
             <p className="text-[11px] font-bold text-white/20 uppercase tracking-[0.2em] italic max-w-2xl">
-              Industrial grade {activeSubSegment.replace("-", " ")} configuration for secure HAM operations.
+              {activeSubSegment === "environment" ? (
+                <>
+                  Read-only reference for local <span className="font-mono text-white/35">.env</span> variables. Edit the file on disk; values are never shown here (alpha).
+                </>
+              ) : (
+                <>Industrial grade {activeSubSegment.replace("-", " ")} configuration for secure HAM operations.</>
+              )}
             </p>
           </div>
 
           <div className="space-y-10">
             {/* --- CONFIGURATION PAGES --- */}
-            {["api-keys", "providers", "tools-extensions", "databases", "security", "notifications", "context-memory"].includes(activeSubSegment) && (
+            {["api-keys", "environment", "tools-extensions", "context-memory"].includes(activeSubSegment) && (
               <div className="space-y-6">
                 {activeSubSegment === "api-keys" && (
                   <div className="space-y-px bg-white/5 border border-white/5 rounded-lg overflow-hidden divide-y divide-white/5 shadow-2xl">
@@ -212,29 +444,72 @@ export function UnifiedSettings({
                   </div>
                 )}
 
-                {activeSubSegment === "providers" && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {[
-                      { name: "Google Vertex", desc: "Enterprise-grade AI substrate with direct HAM kernel integration.", active: true },
-                      { name: "Anthropic Claude", desc: "Advanced reasoning for complex extraction and droid logic.", active: true },
-                      { name: "OpenAI Foundry", desc: "High-throughput processing for batch data bridge operations.", active: false },
-                      { name: "Mistral Industrial", desc: "Local-first model support for privacy-locked secure units.", active: false },
-                    ].map((p, i) => (
-                      <div key={i} className="p-6 bg-black/40 border border-white/5 rounded-xl hover:bg-white/[0.02] transition-all group flex flex-col justify-between h-40 shadow-xl overflow-hidden relative">
-                        <div className="absolute inset-0 bg-gradient-to-br from-white/[0.02] to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                        <div className="flex items-center justify-between relative z-10">
-                          <div className="flex items-center gap-3">
-                             <Globe className="h-4 w-4 text-[#FF6B00]/40" />
-                             <span className="text-[11px] font-black text-white uppercase tracking-widest">{p.name}</span>
-                          </div>
-                          <div className={cn("h-4 w-8 rounded-full border border-white/10 p-0.5", p.active ? "bg-[#FF6B00]/20" : "bg-white/5 transition-colors")}>
-                            <div className={cn("h-2.5 w-2.5 rounded-full transition-all", p.active ? "bg-[#FF6B00] ml-auto" : "bg-white/10")} />
-                          </div>
-                        </div>
-                        <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest italic leading-relaxed relative z-10">{p.desc}</p>
-                        <button className="text-[9px] font-black text-[#FF6B00]/40 uppercase tracking-widest hover:text-[#FF6B00] text-left relative z-10">Configure Parameters</button>
-                      </div>
-                    ))}
+                {activeSubSegment === "environment" && (
+                  <div className="space-y-6">
+                    <div className="rounded-lg border border-white/10 bg-black/40 p-5 space-y-3">
+                      <p className="text-[11px] font-bold text-white/50 leading-relaxed">
+                        <span className="text-[#FF6B00] uppercase tracking-widest text-[10px] font-black">Secrets</span> — use{" "}
+                        <span className="font-mono text-white/60">API Keys</span> above for provider tokens. This page lists{" "}
+                        <span className="italic text-white/40">names</span> only so you know what Ham reads from the process environment (mostly model routing).
+                      </p>
+                      <p className="text-[10px] font-bold text-white/25 uppercase tracking-widest">
+                        Copy <span className="font-mono">.env.example</span> → <span className="font-mono">.env</span> at the repo root; restart CLI / API after edits.
+                      </p>
+                    </div>
+                    <div className="overflow-hidden rounded-lg border border-white/5 bg-white/[0.02]">
+                      <table className="w-full text-left text-[11px]">
+                        <thead className="border-b border-white/10 bg-black/50 text-[9px] font-black uppercase tracking-widest text-white/35">
+                          <tr>
+                            <th className="px-4 py-3">Variable</th>
+                            <th className="px-4 py-3">Kind</th>
+                            <th className="px-4 py-3">Role</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-white/5 text-white/55">
+                          {[
+                            {
+                              name: "OPENROUTER_API_KEY",
+                              kind: "Secret",
+                              role: "LLM calls via LiteLLM / OpenRouter (same key as API Keys conceptually).",
+                            },
+                            {
+                              name: "OPENROUTER_API_URL",
+                              kind: "Config",
+                              role: "Optional override; default https://openrouter.ai/api/v1",
+                            },
+                            {
+                              name: "DEFAULT_MODEL",
+                              kind: "Config",
+                              role: "Default model id when not set elsewhere (e.g. openai/gpt-4o-mini).",
+                            },
+                            {
+                              name: "OPENROUTER_HTTP_REFERER",
+                              kind: "Optional",
+                              role: "OpenRouter attribution / site URL.",
+                            },
+                            {
+                              name: "OPENROUTER_APP_TITLE",
+                              kind: "Optional",
+                              role: "OpenRouter app name string.",
+                            },
+                            {
+                              name: "HAM_AUTHOR",
+                              kind: "Optional",
+                              role: "Attributed author on persisted run records; falls back to USER / USERNAME.",
+                            },
+                          ].map((row) => (
+                            <tr key={row.name} className="hover:bg-white/[0.02]">
+                              <td className="px-4 py-3 font-mono text-[10px] text-[#FF6B00]/90">{row.name}</td>
+                              <td className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-white/35">{row.kind}</td>
+                              <td className="px-4 py-3 text-[10px] leading-snug text-white/40">{row.role}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <p className="text-[9px] font-bold text-white/20 uppercase tracking-widest">
+                      Alpha: no live env inspection — add server-backed <span className="font-mono">GET /api/env/names</span> later if needed.
+                    </p>
                   </div>
                 )}
 
@@ -434,74 +709,7 @@ export function UnifiedSettings({
                    </div>
                 )}
 
-                {activeSubSegment === "security" && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <div className="p-10 bg-black/40 border border-white/5 space-y-8 rounded-xl shadow-xl">
-                      <div className="flex items-center gap-4">
-                        <div className="h-10 w-10 bg-[#FF6B00]/10 border border-[#FF6B00]/20 rounded flex items-center justify-center">
-                          <ShieldCheck className="h-5 w-5 text-[#FF6B00]" />
-                        </div>
-                        <h4 className="text-[12px] font-black uppercase tracking-[0.3em] text-white italic">Identity Lockdown</h4>
-                      </div>
-                      <div className="space-y-3">
-                        {[
-                          { label: "Hardware Key Sync", status: "Secure", active: true },
-                          { label: "MFA Tunneling", status: "Active", active: true },
-                          { label: "Biometric Bridge", status: "Standby", active: false },
-                        ].map((row, i) => (
-                          <div key={i} className="flex items-center justify-between p-4 bg-white/[0.02] border border-white/5">
-                            <span className="text-[10px] font-bold text-white/30 uppercase tracking-widest">{row.label}</span>
-                            <span className={cn(
-                              "text-[9px] font-black uppercase italic tracking-widest",
-                              row.active ? "text-green-500/60" : "text-white/10"
-                            )}>{row.status}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="p-10 bg-black/40 border border-white/5 space-y-8 rounded-xl flex flex-col justify-between shadow-xl relative overflow-hidden group">
-                      <div className="absolute top-0 right-0 w-32 h-32 bg-[#FF6B00]/5 rounded-bl-full -mr-10 -mt-10 group-hover:bg-[#FF6B00]/10 transition-colors" />
-                      <div className="space-y-4 relative z-10">
-                        <div className="flex items-center gap-4">
-                          <Lock className="h-5 w-5 text-[#FF6B00]" />
-                          <h4 className="text-[12px] font-black uppercase tracking-[0.3em] text-white italic">Key Rotation</h4>
-                        </div>
-                        <p className="text-[11px] font-bold text-white/20 uppercase tracking-widest italic leading-relaxed">
-                          Enforce system-wide rotation protocols across all connections to prevent bridge leakage.
-                        </p>
-                      </div>
-                      <button className="w-full py-4 bg-white/5 border border-white/10 hover:border-[#FF6B00]/40 text-[10px] font-black text-white/40 hover:text-white uppercase tracking-[0.3em] transition-all rounded italic relative z-10">
-                        Initiate Global Rotation
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {activeSubSegment === "context-memory" && (
-                  <div className="space-y-6">
-                    <div className="p-8 bg-black/40 border border-white/5 shadow-2xl space-y-8 rounded-xl overflow-hidden relative">
-                      <div className="flex items-center justify-between relative z-10">
-                        <div className="space-y-1">
-                          <h4 className="text-[12px] font-black text-white uppercase italic tracking-widest">Context Budget Monitor</h4>
-                          <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest italic leading-relaxed">Optimization threshold for active workforce sessions.</p>
-                        </div>
-                        <div className="h-6 w-11 bg-[#FF6B00] rounded-full p-1 relative cursor-pointer shadow-[0_0_15px_rgba(255,107,0,0.3)]">
-                          <div className="h-4 w-4 bg-black rounded-full ml-auto" />
-                        </div>
-                      </div>
-                      <div className="pt-8 border-t border-white/5 space-y-6 relative z-10">
-                        <div className="flex justify-between text-[11px] font-black uppercase tracking-widest text-white/40 leading-none">
-                          <span>Max Context Window</span>
-                          <span className="text-white italic">1.28M Tokens</span>
-                        </div>
-                        <div className="h-3 bg-white/5 rounded-full overflow-hidden border border-white/10">
-                          <div className="h-full bg-[#FF6B00] w-[42%] shadow-[0_0_20px_#FF6B00]" />
-                        </div>
-                        <p className="text-[9px] font-black text-[#FF6B00]/40 uppercase tracking-[0.2em] italic">Current Session Intake: 537,600 tokens utilized</p>
-                      </div>
-                    </div>
-                  </div>
-                )}
+                {activeSubSegment === "context-memory" && <ContextAndMemoryPanel />}
               </div>
             )}
 
@@ -548,7 +756,7 @@ export function UnifiedSettings({
             )}
 
             {/* --- HISTORY / AUDIT PAGES --- */}
-            {["mission-history", "system-logs", "context-audit", "bridge-dump"].includes(activeSubSegment) && (
+            {["execution-history", "system-logs", "context-audit", "bridge-dump"].includes(activeSubSegment) && (
               <div className="space-y-8 animate-in fade-in slide-in-from-left-4 duration-700">
                 <div className="flex items-center justify-between px-6 py-4 bg-white/[0.02] border border-white/10 rounded-xl">
                    <div className="flex items-center gap-4">
@@ -605,7 +813,7 @@ export function UnifiedSettings({
             )}
 
             {/* General Placeholder for everything else */}
-            {!["api-keys", "providers", "tools-extensions", "security", "context-memory", "kernel-health", "diagnostics", "mission-history", "system-logs", "context-audit", "bridge-dump", "jobs"].includes(activeSubSegment) && (
+            {!["api-keys", "environment", "tools-extensions", "context-memory", "kernel-health", "diagnostics", "execution-history", "system-logs", "context-audit", "bridge-dump", "jobs"].includes(activeSubSegment) && (
               <div className="space-y-10">
                 <div className="p-16 bg-black/20 border border-white/5 border-dashed rounded-2xl flex flex-col items-center justify-center text-center space-y-8 group transition-all hover:bg-black/40">
                   <div className="h-16 w-16 rounded-2xl bg-white/[0.02] border border-white/5 flex items-center justify-center transition-transform group-hover:scale-110">

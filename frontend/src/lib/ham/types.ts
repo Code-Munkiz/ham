@@ -107,6 +107,46 @@ export interface ProjectRecord {
   metadata: Record<string, unknown>;
 }
 
+/** Matches `context_engine_dashboard_payload()` JSON from `/api/context-engine`. */
+export interface ContextEngineRoleSlice {
+  instruction_budget_chars: number;
+  max_diff_chars: number;
+  rendered_chars: number;
+}
+
+export interface ContextEnginePayload {
+  cwd: string;
+  current_date: string;
+  platform_info: string;
+  file_count: number;
+  instruction_file_count: number;
+  instruction_files: { relative_path: string; scope: string }[];
+  config_sources: { source: string; path: string }[];
+  memory_heist_section: Record<string, unknown>;
+  session_memory: {
+    compact_max_tokens: number;
+    compact_preserve: number;
+    tool_prune_chars: number;
+    tool_prune_placeholder: string;
+  };
+  module_defaults: {
+    max_instruction_file_chars: number;
+    max_total_instruction_chars: number;
+    max_diff_chars: number;
+  };
+  roles: {
+    architect: ContextEngineRoleSlice;
+    commander: ContextEngineRoleSlice;
+    critic: ContextEngineRoleSlice;
+  };
+  git: {
+    status_chars: number;
+    diff_chars: number;
+    log_chars: number;
+    has_repo: boolean;
+  };
+}
+
 export interface BackendRecord {
   id: string;
   version: string;

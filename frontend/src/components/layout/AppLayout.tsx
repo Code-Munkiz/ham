@@ -23,7 +23,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const selectedAgent = agents.find(a => a.id === selectedAgentId) || agents[0];
   const isLandingPage = location.pathname === "/";
   const isChatPage = location.pathname.startsWith("/chat");
-  const isAvatarPage = location.pathname === "/avatar";
+  const isSettingsPage = location.pathname.startsWith("/settings");
   const showDroidDetails = location.pathname.startsWith("/droids");
 
   // Control state for the global workbench console
@@ -32,13 +32,20 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   // Workbench Modes
   const [viewMode, setViewMode] = React.useState<'chat' | 'preview' | 'split'>('chat');
 
+  // Preview/split collapses the main route to w-0; reset when leaving workbench routes that use that layout.
+  React.useEffect(() => {
+    if (isSettingsPage || isChatPage) {
+      setViewMode('chat');
+    }
+  }, [isSettingsPage, isChatPage]);
+
   return (
     <div className="flex h-screen overflow-hidden bg-white dark:bg-[#080808] text-foreground transition-colors duration-300 selection:bg-primary/30 relative font-sans">
       {/* Primary Navigation Rail */}
       <NavRail />
       
-      {/* Secondary Context Panel (Sidebar) - Hidden on Chat to optimize space */}
-      {!isChatPage && (
+      {/* Secondary Context Panel — hidden on Chat (space) and Settings (UnifiedSettings has its own nav) */}
+      {!isChatPage && !isSettingsPage && (
         <Sidebar isVisible={isSidebarVisible} onToggle={() => setIsSidebarVisible(!isSidebarVisible)} />
       )}
       

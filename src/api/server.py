@@ -7,6 +7,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
+from src.memory_heist import context_engine_dashboard_payload
 from src.persistence.project_store import ProjectStore
 from src.persistence.run_store import RunStore
 from src.registry.droids import DEFAULT_DROID_REGISTRY
@@ -16,7 +17,12 @@ app = FastAPI(title="HAM API", version="0.1.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
     allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["*"],
 )
@@ -80,6 +86,25 @@ async def list_droids() -> dict:
             for did in DEFAULT_DROID_REGISTRY.ids()
         ]
     }
+
+
+# ---------------------------------------------------------------------------
+# Context engine (memory_heist) — read-only dashboard snapshot
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/context-engine")
+async def get_context_engine() -> dict:
+    """Snapshot for the API server's current working directory (repo root when started from repo)."""
+    return context_engine_dashboard_payload(Path.cwd())
+
+
+@app.get("/api/projects/{project_id}/context-engine")
+async def get_project_context_engine(project_id: str) -> dict:
+    record = _projects.get_project(project_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail=f"Project {project_id!r} not found")
+    return context_engine_dashboard_payload(Path(record.root))
 
 
 # ---------------------------------------------------------------------------

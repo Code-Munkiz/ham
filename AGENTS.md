@@ -16,7 +16,7 @@ working on this repo should read these before proposing changes.
 - `src/swarm_agency.py` — transitional orchestration scaffold pending migration to Hermes-supervised flow
 - `src/registry/droids.py` — `DroidRecord` + `DroidRegistry` + `DEFAULT_DROID_REGISTRY` (builder, reviewer)
 - `src/persistence/run_store.py` — read-side `RunStore` over `.ham/runs/*.json`
-- `src/api/server.py` — thin FastAPI read API (`/api/status`, `/api/runs`, `/api/runs/{run_id}`, `/api/profiles`, `/api/droids`)
+- `src/api/server.py` — thin FastAPI read API (`/api/status`, `/api/runs`, `/api/runs/{run_id}`, `/api/profiles`, `/api/droids`, `/api/context-engine`, `/api/projects/{id}/context-engine`)
 
 ## Configuration & entry
 

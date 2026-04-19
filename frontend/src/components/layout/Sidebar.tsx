@@ -4,9 +4,7 @@ import {
   Settings as SettingsIcon, 
   Activity as ActivityIcon,
   Layers,
-  Database,
   Terminal,
-  Shield,
   Users,
   ToyBrick,
   Store,
@@ -17,9 +15,6 @@ import {
   Sparkles,
   Command,
   Plus,
-  Palette,
-  Eye,
-  Wand2,
   Key,
   Puzzle,
   Cpu
@@ -38,8 +33,7 @@ export function Sidebar({ isVisible, onToggle, className, hideHeader = false }: 
     if (path.startsWith("/chat")) return "CONVERSATIONS";
     if (path === "/") return "MISSION DECK";
     if (path.startsWith("/droids")) return "CREW SETUP";
-    if (path.startsWith("/avatar")) return "STYLE MODS";
-    if (path.startsWith("/settings") || path.startsWith("/extensions")) return "INTEGRATIONS";
+    if (path.startsWith("/extensions")) return "INTEGRATIONS";
     if (path.startsWith("/advanced") || path.startsWith("/runs") || path.startsWith("/storage") || path.startsWith("/activity") || path.startsWith("/profiles")) return "CORE SYSTEM";
     return "NAVIGATOR";
   };
@@ -144,64 +138,22 @@ export function Sidebar({ isVisible, onToggle, className, hideHeader = false }: 
       );
     }
 
-    // 4. AVATAR CONTEXT
-    if (path.startsWith("/avatar")) {
-      return (
-        <div className="space-y-8 animate-in fade-in slide-in-from-left-4 duration-300">
-           <div className="px-4 space-y-4 pt-4">
-              <h3 className="px-4 text-[9px] font-black uppercase tracking-[0.4em] text-white/20 italic">Visual Mods</h3>
-              <nav className="space-y-px">
-                 {[
-                   { label: "Style Presets", icon: Wand2 },
-                   { label: "Appearance", icon: Palette },
-                   { label: "Identity Sync", icon: Eye },
-                 ].map((item) => (
-                   <div key={item.label} className="flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors cursor-pointer rounded-lg group">
-                      <item.icon className="h-3.5 w-3.5 text-white/10 group-hover:text-[#FF6B00]" />
-                      <span className="text-[11px] font-bold text-white/40 group-hover:text-white uppercase tracking-widest">{item.label}</span>
-                   </div>
-                 ))}
-              </nav>
-           </div>
-           <div className="px-4 space-y-4">
-              <h3 className="px-4 text-[9px] font-black uppercase tracking-[0.4em] text-white/20 italic">Saved Looks</h3>
-              <div className="px-4">
-                 <div className="p-4 border border-dashed border-white/5 rounded-lg bg-white/[0.01] text-center">
-                    <p className="text-[9px] font-bold text-white/10 uppercase tracking-widest leading-relaxed italic">No saved looks yet. Save a look from your identity stack.</p>
-                 </div>
-              </div>
-           </div>
-        </div>
-      );
-    }
-
-    // 5. SETTINGS CONTEXT
-    if (path.startsWith("/settings") || path.startsWith("/extensions")) {
+    // 4. EXTENSIONS CONTEXT (settings page has no secondary sidebar — see AppLayout)
+    if (path.startsWith("/extensions")) {
       return (
         <div className="space-y-8 animate-in fade-in duration-300 pt-4">
            <div className="px-4 space-y-4">
               <h3 className="px-4 text-[9px] font-black uppercase tracking-[0.4em] text-white/20 italic">Core Setup</h3>
               <nav className="space-y-px">
                  {[
-                   { label: "API Keys", icon: Key, path: "/settings" },
-                   { label: "Tools", icon: Puzzle, path: "/extensions" },
-                   { label: "Providers", icon: Users, path: "/settings" },
-                   { label: "Databases", icon: Database, path: "/storage" },
+                   { label: "API Keys", icon: Key, path: "/settings?tab=api-keys" },
+                   { label: "Environment", icon: Terminal, path: "/settings?tab=environment" },
+                   { label: "Tools", icon: Puzzle, path: "/settings?tab=tools-extensions" },
                  ].map((item) => (
                    <Link key={item.label} to={item.path} className="flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors cursor-pointer rounded-lg group">
                       <item.icon className="h-3.5 w-3.5 text-white/10 group-hover:text-[#FF6B00]" />
                       <span className="text-[11px] font-bold text-white/40 group-hover:text-white uppercase tracking-tight tracking-widest">{item.label}</span>
                    </Link>
-                 ))}
-              </nav>
-           </div>
-           <div className="px-4 space-y-4">
-              <h3 className="px-4 text-[9px] font-black uppercase tracking-[0.4em] text-white/20 italic">Preferences</h3>
-              <nav className="space-y-px">
-                 {["Account", "Notifications", "Security"].map(item => (
-                   <div key={item} className="px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white/10 hover:text-white/40 transition-colors cursor-pointer">
-                      {item}
-                   </div>
                  ))}
               </nav>
            </div>
@@ -217,7 +169,7 @@ export function Sidebar({ isVisible, onToggle, className, hideHeader = false }: 
               <h3 className="px-4 text-[9px] font-black uppercase tracking-[0.4em] text-white/20 italic">System Ops</h3>
               <nav className="space-y-px">
                  {[
-                   { label: "Mission History", icon: HistoryIcon, path: "/runs" },
+                   { label: "Execution History", icon: HistoryIcon, path: "/runs" },
                    { label: "System Logs", icon: ActivityIcon, path: "/activity" },
                    { label: "Diagnostics", icon: Cpu, path: "/advanced" },
                    { label: "Workforce Profiles", icon: Layers, path: "/profiles" },

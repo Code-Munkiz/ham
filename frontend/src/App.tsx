@@ -23,8 +23,6 @@ import Analytics from "./pages/Analytics";
 import { AgentProvider } from "./lib/ham/AgentContext";
 import { WorkspaceProvider } from "./lib/ham/WorkspaceContext";
 
-import Avatar from "./pages/Avatar";
-
 export default function App() {
   return (
     // @ts-ignore - ThemeProvider children type mismatch in some versions of next-themes with React 18/19
@@ -37,7 +35,6 @@ export default function App() {
                 <Route path="/" element={<Overview />} />
                 <Route path="/chat" element={<Chat />} />
                 <Route path="/droids" element={<Droids />} />
-                <Route path="/avatar" element={<Avatar />} />
                 <Route path="/extensions" element={<Extensions />} />
                 <Route path="/runs" element={<Runs />} />
                 <Route path="/runs/:runId" element={<RunDetail />} />

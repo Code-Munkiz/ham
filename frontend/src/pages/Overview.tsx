@@ -16,7 +16,7 @@ import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import * as React from "react";
 
-const API_BASE = "http://localhost:8000";
+import { apiUrl } from "@/lib/ham/api";
 
 interface Mission {
   id: string;
@@ -52,7 +52,7 @@ export default function Overview() {
       setStatusLoading(true);
       setStatusError(null);
       try {
-        const res = await fetch(`${API_BASE}/api/status`);
+        const res = await fetch(apiUrl("/api/status"));
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = (await res.json()) as { version?: string; run_count: number };
         if (!cancelled) setStatus({ run_count: data.run_count });
