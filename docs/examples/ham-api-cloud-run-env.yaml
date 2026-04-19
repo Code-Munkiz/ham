@@ -1,0 +1,19 @@
+# Example Cloud Run env file. Copy to `.gcloud/ham-api-env.yaml` (gitignored) and edit.
+# Deploy: gcloud run deploy SERVICE --env-vars-file .gcloud/ham-api-env.yaml ...
+#
+# Use an env file (not --set-env-vars) so commas in HAM_CORS_ORIGINS are not split by gcloud.
+
+# mock | openrouter (set OPENROUTER_API_KEY via Secret Manager or env) | http
+HERMES_GATEWAY_MODE: mock
+# For real chat on OpenRouter (BYOK):
+# HERMES_GATEWAY_MODE: openrouter
+# Use Secret Manager for production; do not commit real keys.
+# OPENROUTER_API_KEY: "sk-or-v1-..."
+# DEFAULT_MODEL is read from env at runtime if you set it here, or rely on repo default in code.
+
+# Exact origins (production custom domain + local dev). Add your real Vercel production URL.
+HAM_CORS_ORIGINS: "https://your-app.vercel.app,http://localhost:3000,http://127.0.0.1:3000"
+
+# All Vercel preview hostnames (https://*.vercel.app) without listing each deployment.
+# Omit in strict production if you only want explicit HAM_CORS_ORIGINS.
+HAM_CORS_ORIGIN_REGEX: "https://.*\\.vercel\\.app"

@@ -12,6 +12,14 @@ from src.integrations.nous_gateway_client import GatewayCallError
 client = TestClient(app)
 
 
+def test_root_is_not_404_json() -> None:
+    res = client.get("/")
+    assert res.status_code == 200
+    data = res.json()
+    assert data.get("service") == "HAM API"
+    assert data.get("status") == "/api/status"
+
+
 @pytest.fixture
 def mock_mode(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HERMES_GATEWAY_MODE", "mock")

@@ -43,6 +43,10 @@ Shipped muscle today centers on **Bridge + Droid executor** (`src/tools/droid_ex
 
 - `Dockerfile` — Cloud Run–style image (`uvicorn src.api.server:app`, `PORT` aware)
 - `docs/DEPLOY_CLOUD_RUN.md` — Artifact Registry + `gcloud builds submit` + `gcloud run deploy` + env vars
+- `docs/DEPLOY_HANDOFF.md` — Vercel + Cloud Run checklist (what to set in each host)
+- `docs/examples/ham-api-cloud-run-env.yaml` — copy to `.gcloud/ham-api-env.yaml` for `--env-vars-file`
+- `scripts/verify_ham_api_deploy.sh` — CORS + `/api/chat` smoke test against a deployed API
+- `scripts/render_cloud_run_env.py` — merge `.env` into `.gcloud/ham-api-env.yaml` for `gcloud run deploy --env-vars-file` (avoids committing OpenRouter keys)
 
 ## Configuration & entry
 
@@ -75,5 +79,5 @@ Shipped muscle today centers on **Bridge + Droid executor** (`src/tools/droid_ex
 - `tests/test_memory_heist.py` — Context Engine + Phase 1/3 guardrails (18 cases)
 - `tests/test_hermes_feedback.py` — Critic MVP + Phase 3 guardrails (7 cases)
 - `tests/test_droid_registry.py` — Droid registry conventions (10 cases)
-- Run: `python -m pytest` — full suite (115 passed, 1 skipped as of Phase 10)
+- Run: `python -m pytest` — full suite (`pytest.ini` sets `pythonpath = .`)
 - Other tests under `tests/` as added; bootstrap with `/test-context-regressions` for Context Engine focus

@@ -155,7 +155,7 @@ The shipped backend registry surface is `ExecutionBackend`, `LocalDroidBackend`,
 
 Completed runs are now persisted as structured JSON at `.ham/runs/<timestamp>-<run_id>.json`. Persisted records include `run_id`, `created_at`, `profile_id`, `profile_version`, `backend_id`, `backend_version`, `prompt_summary`, `bridge_result`, and `hermes_review`. `run_id` is canonical from `bridge_result.run_id` (never regenerated); the timestamp in the filename is metadata for sort/collision only. The stdout `RUNTIME_RESULT` envelope shape remains unchanged, and persistence is additive. `BackendRegistry.get_record()` is now the first public backend-record accessor.
 
-**Tests**: full `pytest` suite including registry, bridge, main loop, droid registry, and persistence tests — **115 passed, 1 skipped** regression/guardrail cases.
+**Tests**: full `pytest` suite including registry, bridge, main loop, droid registry, API/CORS, and persistence tests — **150 passed** regression/guardrail cases (`pytest.ini` sets `pythonpath = .`; GitHub Actions runs `pytest` + frontend `tsc`).
 
 **Next milestone**: wire workspace UI to live `/api/*` where desired; continue edge-case hardening on Bridge-profile seams while preserving current safety envelopes.
 

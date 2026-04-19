@@ -32,9 +32,16 @@ def _cors_allow_origins() -> list[str]:
     return [o.strip() for o in raw.split(",") if o.strip()]
 
 
+def _cors_allow_origin_regex() -> str | None:
+    """Optional regex for origins (e.g. all Vercel previews). See HAM_CORS_ORIGIN_REGEX."""
+    raw = (os.environ.get("HAM_CORS_ORIGIN_REGEX") or "").strip()
+    return raw or None
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_allow_origins(),
+    allow_origin_regex=_cors_allow_origin_regex(),
     allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["*"],
 )
@@ -43,6 +50,23 @@ app.include_router(chat_router)
 
 _store = RunStore()
 _projects = ProjectStore()
+
+
+# ---------------------------------------------------------------------------
+# Root (browser opens service URL with no path)
+# ---------------------------------------------------------------------------
+
+
+@app.get("/")
+async def root() -> dict[str, Any]:
+    """So opening the Cloud Run URL in a tab is not a bare 404 JSON."""
+    return {
+        "service": "HAM API",
+        "version": "0.1.0",
+        "docs": "/docs",
+        "openapi": "/openapi.json",
+        "status": "/api/status",
+    }
 
 
 # ---------------------------------------------------------------------------

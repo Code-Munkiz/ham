@@ -51,6 +51,7 @@ Content-Type: application/json
 | Mode | Env | Behavior |
 |------|-----|----------|
 | `mock` | `HERMES_GATEWAY_MODE=mock` | No HTTP; deterministic local reply for UI/dev. |
+| `openrouter` | `HERMES_GATEWAY_MODE=openrouter` | LiteLLM completion to [OpenRouter](https://openrouter.ai/) (`OPENROUTER_API_KEY`, `DEFAULT_MODEL` or `HERMES_GATEWAY_MODEL` as OpenRouter slug). Browser still only talks to Ham; keys stay server-side. |
 | `http` | `HERMES_GATEWAY_MODE=http` (default when unset for production intent) | `httpx` POST to `/v1/chat/completions` as above. |
 
 **Note:** If `HERMES_GATEWAY_MODE` is unset, the adapter uses **`http`** when `HERMES_GATEWAY_BASE_URL` is non-empty, otherwise **`mock`** (safe local default). Set `HERMES_GATEWAY_MODE=mock` explicitly to force mock even when a base URL is present.

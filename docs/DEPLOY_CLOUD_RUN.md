@@ -2,6 +2,8 @@
 
 This repo ships a **`Dockerfile`** that runs **`uvicorn src.api.server:app`**. The browser never talks to Cloud Run with vendor gateway paths; only Ham routes like **`POST /api/chat`**.
 
+**End-to-end checklist (Vercel + GCP):** [`docs/DEPLOY_HANDOFF.md`](DEPLOY_HANDOFF.md). After deploy, run **`scripts/verify_ham_api_deploy.sh`** with your API URL and the **exact** Vercel `Origin` you use in the browser.
+
 ## What you do in GCP (not automatable from this repo)
 
 1. Pick or create a **GCP project** (e.g. staging).
@@ -49,9 +51,7 @@ gcloud builds submit --tag "${IMAGE}" .
 export SERVICE=ham-api-staging
 
 # Prefer an env YAML file: commas in HAM_CORS_ORIGINS break `--set-env-vars` parsing.
-# Create `.gcloud/ham-api-env.yaml` (gitignored), e.g.:
-#   HERMES_GATEWAY_MODE: mock
-#   HAM_CORS_ORIGINS: "https://your-app.vercel.app,http://localhost:3000"
+# Copy `docs/examples/ham-api-cloud-run-env.yaml` to `.gcloud/ham-api-env.yaml` (gitignored) and edit.
 
 gcloud run deploy "${SERVICE}" \
   --image "${IMAGE}" \
@@ -81,6 +81,7 @@ Expect **`mock`** mode: assistant content containing **`Mock assistant reply`**.
 1. In Vercel project env: **`VITE_HAM_API_BASE`** = Cloud Run URL (no trailing slash).
 2. Redeploy the frontend (Vite bakes this at build time).
 3. Ensure **`HAM_CORS_ORIGINS`** on Cloud Run includes your exact Vercel origin(s).
+4. **Preview URLs:** each Vercel deployment gets a different hostname. Either add every preview origin to **`HAM_CORS_ORIGINS`**, or set **`HAM_CORS_ORIGIN_REGEX`** (e.g. `https://.*\.vercel\.app`) via the same env file and redeploy the service. Without a matching origin, the API may return **200** to `curl` but the **browser** will block the response (no `Access-Control-Allow-Origin`) → **Failed to fetch**.
 
 ## Local container (optional)
 

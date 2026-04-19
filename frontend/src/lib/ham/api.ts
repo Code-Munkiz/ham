@@ -105,7 +105,7 @@ export async function postChat(body: HamChatRequest): Promise<HamChatResponse> {
         ? String((cause as Error).message)
         : "Network error";
     throw new Error(
-      `${hint}. Check that the Ham API is running and VITE_HAM_API_BASE points to it (production builds).`,
+      `${hint}. Check VITE_HAM_API_BASE (redeploy after changing). If the API is up but chat still fails, the browser origin may be blocked by CORS: add it to HAM_CORS_ORIGINS or set HAM_CORS_ORIGIN_REGEX on the API (see docs/examples/ham-api-cloud-run-env.yaml).`,
     );
   }
   if (!res.ok) {

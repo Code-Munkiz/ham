@@ -35,6 +35,62 @@ def resolve_openrouter_model_name() -> str:
     return f"openrouter/{raw}"
 
 
+def resolve_openrouter_model_name_for_chat() -> str:
+    """
+    Model for dashboard/API chat when using OpenRouter.
+
+    Uses `HERMES_GATEWAY_MODEL` if set (OpenRouter slug, e.g. openai/gpt-4o-mini),
+    otherwise `DEFAULT_MODEL` via `resolve_openrouter_model_name()`.
+    """
+    override = (os.environ.get("HERMES_GATEWAY_MODEL") or "").strip()
+    if not override:
+        return resolve_openrouter_model_name()
+    if override.startswith("openrouter/"):
+        return override
+    return f"openrouter/{override}"
+
+
+def complete_chat_messages_openrouter(messages: list[dict[str, str]]) -> str:
+    """
+    Multi-turn chat completion via OpenRouter (LiteLLM).
+
+    Requires ``OPENROUTER_API_KEY``. Uses ``OPENROUTER_API_URL`` (default OpenRouter v1),
+    optional ``OPENROUTER_HTTP_REFERER`` / ``OPENROUTER_APP_TITLE`` headers.
+    """
+    import litellm
+
+    if not messages:
+        raise ValueError("messages must not be empty")
+
+    configure_litellm_env()
+    api_key = (os.getenv("OPENROUTER_API_KEY") or "").strip()
+    if not api_key:
+        raise RuntimeError("OPENROUTER_API_KEY is not set")
+
+    model = resolve_openrouter_model_name_for_chat()
+    kwargs: dict[str, Any] = {
+        "model": model,
+        "messages": messages,
+        "api_base": get_openrouter_base_url(),
+        "api_key": api_key,
+    }
+    extra_headers: dict[str, str] = {}
+    ref = os.getenv("OPENROUTER_HTTP_REFERER")
+    ttl = os.getenv("OPENROUTER_APP_TITLE")
+    if ref:
+        extra_headers["HTTP-Referer"] = ref
+    if ttl:
+        extra_headers["X-Title"] = ttl
+    if extra_headers:
+        kwargs["extra_headers"] = extra_headers
+
+    resp = litellm.completion(**kwargs)
+    msg = resp.choices[0].message
+    content = getattr(msg, "content", None)
+    out = content if isinstance(content, str) else str(content or "")
+    return out.strip()
+
+
 class _OpenRouterChatClient:
     """Thin adapter: .call(prompt) / invoke / callable — matches hermes reviewer usage."""
 

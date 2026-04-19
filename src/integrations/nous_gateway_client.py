@@ -28,6 +28,8 @@ def _resolve_mode() -> str:
     raw = (os.environ.get("HERMES_GATEWAY_MODE") or "").strip().lower()
     if raw == "mock":
         return "mock"
+    if raw == "openrouter":
+        return "openrouter"
     if raw == "http":
         return "http"
     base = (os.environ.get("HERMES_GATEWAY_BASE_URL") or "").strip()
@@ -63,6 +65,20 @@ def complete_chat_turn(
     mode = _resolve_mode()
     if mode == "mock":
         return _mock_assistant_text(messages)
+
+    if mode == "openrouter":
+        from src.llm_client import complete_chat_messages_openrouter
+
+        try:
+            return complete_chat_messages_openrouter(messages)
+        except RuntimeError as exc:
+            raise GatewayCallError("CONFIG_ERROR", str(exc)) from exc
+        except Exception as exc:
+            msg = str(exc).strip() or type(exc).__name__
+            lower = msg.lower()
+            if "timeout" in lower or "timed out" in lower:
+                raise GatewayCallError("UPSTREAM_TIMEOUT", msg) from exc
+            raise GatewayCallError("UPSTREAM_REJECTED", msg) from exc
 
     base = (os.environ.get("HERMES_GATEWAY_BASE_URL") or "").strip().rstrip("/")
     if not base:
