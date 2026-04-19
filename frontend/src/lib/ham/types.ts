@@ -97,6 +97,16 @@ export interface ProfileRecord {
   sample_command?: string;
 }
 
+/** Matches `src/registry/projects.py` ProjectRecord (JSON from /api/projects, /api/projects/{id}). */
+export interface ProjectRecord {
+  id: string;
+  version: string;
+  name: string;
+  root: string;
+  description: string;
+  metadata: Record<string, unknown>;
+}
+
 export interface BackendRecord {
   id: string;
   version: string;
