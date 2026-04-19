@@ -146,3 +146,124 @@ export async function postChat(body: HamChatRequest): Promise<HamChatResponse> {
   }
   return data;
 }
+
+/** One NDJSON line from `POST /api/chat/stream`. */
+export type HamChatStreamEvent =
+  | { type: "session"; session_id: string }
+  | { type: "delta"; text: string }
+  | {
+      type: "done";
+      session_id: string;
+      messages: HamChatMessage[];
+      actions?: HamUiAction[];
+    }
+  | { type: "error"; code: string; message: string };
+
+const streamNetworkHint =
+  "Check VITE_HAM_API_BASE (redeploy after changing). If the API is up but chat still fails, the browser origin may be blocked by CORS: add it to HAM_CORS_ORIGINS or set HAM_CORS_ORIGIN_REGEX on the API (see docs/examples/ham-api-cloud-run-env.yaml).";
+
+/**
+ * Streaming assistant turn (NDJSON). Tokens arrive as `delta` events; final transcript in `done`.
+ */
+export async function postChatStream(
+  body: HamChatRequest,
+  callbacks: {
+    onSession?: (sessionId: string) => void;
+    onDelta?: (text: string) => void;
+  } = {},
+): Promise<HamChatResponse> {
+  const url = apiUrl("/api/chat/stream");
+  const payload = {
+    ...body,
+    include_operator_skills: body.include_operator_skills ?? true,
+    enable_ui_actions: body.enable_ui_actions ?? true,
+  };
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/x-ndjson, application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch (cause) {
+    const hint =
+      typeof cause === "object" && cause !== null && "message" in cause
+        ? String((cause as Error).message)
+        : "Network error";
+    throw new Error(`${hint}. ${streamNetworkHint}`);
+  }
+  if (!res.ok) {
+    let msg = `Chat stream failed (HTTP ${res.status})`;
+    try {
+      const j = (await res.json()) as { detail?: unknown };
+      const parsed = messageFromFastApiDetail(j?.detail);
+      if (parsed) msg = parsed;
+    } catch {
+      /* ignore */
+    }
+    throw new Error(msg);
+  }
+  if (!res.body) {
+    throw new Error(`No response body. ${streamNetworkHint}`);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let final: HamChatResponse | null = null;
+
+  const handleLine = (line: string) => {
+    const trimmed = line.trim();
+    if (!trimmed) return;
+    let ev: HamChatStreamEvent;
+    try {
+      ev = JSON.parse(trimmed) as HamChatStreamEvent;
+    } catch {
+      throw new Error("Invalid NDJSON line from chat stream");
+    }
+    if (ev.type === "session") {
+      callbacks.onSession?.(ev.session_id);
+      return;
+    }
+    if (ev.type === "delta") {
+      callbacks.onDelta?.(ev.text);
+      return;
+    }
+    if (ev.type === "done") {
+      final = {
+        session_id: ev.session_id,
+        messages: ev.messages,
+        actions: Array.isArray(ev.actions) ? ev.actions : [],
+      };
+      return;
+    }
+    if (ev.type === "error") {
+      throw new Error(ev.message || ev.code || "Chat stream error");
+    }
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const line of lines) {
+      handleLine(line);
+    }
+  }
+  buffer += decoder.decode();
+  for (const line of buffer.split("\n")) {
+    if (line.trim()) {
+      handleLine(line);
+    }
+  }
+
+  if (!final) {
+    throw new Error("Chat stream ended without a done event");
+  }
+  return final;
+}

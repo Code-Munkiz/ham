@@ -23,14 +23,14 @@ def test_openrouter_mode_calls_litellm(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
     monkeypatch.setenv("DEFAULT_MODEL", "openai/gpt-4o-mini")
 
-    fake_msg = MagicMock()
-    fake_msg.content = "  Real reply  "
-    fake_choice = MagicMock()
-    fake_choice.message = fake_msg
-    fake_resp = MagicMock()
-    fake_resp.choices = [fake_choice]
+    def mock_completion(*args, **kwargs):
+        assert kwargs.get("stream") is True
+        chunk = MagicMock()
+        chunk.choices = [MagicMock()]
+        chunk.choices[0].delta.content = "  Real reply  "
+        yield chunk
 
-    with patch("litellm.completion", return_value=fake_resp) as mock_completion:
+    with patch("litellm.completion", side_effect=mock_completion) as mock_completion:
         out = complete_chat_turn([{"role": "user", "content": "hello"}])
 
     assert out == "Real reply"

@@ -6,7 +6,9 @@ See docs/HERMES_GATEWAY_CONTRACT.md.
 """
 from __future__ import annotations
 
+import json
 import os
+from collections.abc import Iterator
 from typing import Any
 
 import httpx
@@ -48,29 +50,33 @@ def _mock_assistant_text(messages: list[dict[str, str]]) -> str:
     return f"Mock assistant reply. Last message: {snippet}"
 
 
-def complete_chat_turn(
+def stream_chat_turn(
     messages: list[dict[str, str]],
     *,
     timeout_sec: float = DEFAULT_TIMEOUT_SEC,
-) -> str:
+) -> Iterator[str]:
     """
-    Run one non-streaming completion. `messages` are OpenAI-style dicts with role + content.
+    Stream one completion as content deltas (OpenAI-style ``delta.content`` chunks).
 
     Raises:
-        GatewayCallError: mock-safe errors and upstream failures.
+        GatewayCallError: mock-safe errors and upstream failures (on first chunk setup).
     """
     if not messages:
         raise GatewayCallError("INVALID_REQUEST", "messages must not be empty")
 
     mode = _resolve_mode()
     if mode == "mock":
-        return _mock_assistant_text(messages)
+        text = _mock_assistant_text(messages)
+        step = max(1, min(16, len(text) // 8 or 1))
+        for i in range(0, len(text), step):
+            yield text[i : i + step]
+        return
 
     if mode == "openrouter":
-        from src.llm_client import complete_chat_messages_openrouter
+        from src.llm_client import stream_chat_messages_openrouter
 
         try:
-            return complete_chat_messages_openrouter(messages)
+            yield from stream_chat_messages_openrouter(messages)
         except RuntimeError as exc:
             raise GatewayCallError("CONFIG_ERROR", str(exc)) from exc
         except Exception as exc:
@@ -79,6 +85,7 @@ def complete_chat_turn(
             if "timeout" in lower or "timed out" in lower:
                 raise GatewayCallError("UPSTREAM_TIMEOUT", msg) from exc
             raise GatewayCallError("UPSTREAM_REJECTED", msg) from exc
+        return
 
     base = (os.environ.get("HERMES_GATEWAY_BASE_URL") or "").strip().rstrip("/")
     if not base:
@@ -98,12 +105,36 @@ def complete_chat_turn(
     payload: dict[str, Any] = {
         "model": model,
         "messages": messages,
-        "stream": False,
+        "stream": True,
     }
 
     try:
         with httpx.Client(timeout=timeout_sec) as client:
-            resp = client.post(url, headers=headers, json=payload)
+            with client.stream("POST", url, headers=headers, json=payload) as resp:
+                if resp.status_code >= 400:
+                    raise GatewayCallError(
+                        "UPSTREAM_REJECTED",
+                        f"Gateway HTTP {resp.status_code}",
+                    )
+                for line in resp.iter_lines():
+                    if not line:
+                        continue
+                    if not line.startswith("data: "):
+                        continue
+                    data_str = line[6:].strip()
+                    if data_str == "[DONE]":
+                        break
+                    try:
+                        data = json.loads(data_str)
+                    except json.JSONDecodeError:
+                        continue
+                    choices = data.get("choices")
+                    if not choices:
+                        continue
+                    delta = (choices[0].get("delta") or {}) if isinstance(choices[0], dict) else {}
+                    content = delta.get("content")
+                    if content:
+                        yield str(content)
     except httpx.TimeoutException as exc:
         raise GatewayCallError(
             "UPSTREAM_TIMEOUT",
@@ -115,31 +146,16 @@ def complete_chat_turn(
             f"Gateway connection failed: {exc}",
         ) from exc
 
-    if resp.status_code >= 400:
-        raise GatewayCallError(
-            "UPSTREAM_REJECTED",
-            f"Gateway HTTP {resp.status_code}",
-        )
 
-    try:
-        data = resp.json()
-    except ValueError as exc:
-        raise GatewayCallError(
-            "UPSTREAM_INVALID",
-            "Gateway returned non-JSON body",
-        ) from exc
+def complete_chat_turn(
+    messages: list[dict[str, str]],
+    *,
+    timeout_sec: float = DEFAULT_TIMEOUT_SEC,
+) -> str:
+    """
+    Run one non-streaming completion. `messages` are OpenAI-style dicts with role + content.
 
-    try:
-        choices = data.get("choices")
-        if not choices:
-            raise KeyError("choices")
-        msg = choices[0].get("message") or {}
-        content = msg.get("content")
-        if content is None:
-            return ""
-        return str(content).strip()
-    except (KeyError, IndexError, TypeError) as exc:
-        raise GatewayCallError(
-            "UPSTREAM_INVALID",
-            f"Unexpected gateway response shape: {exc}",
-        ) from exc
+    Raises:
+        GatewayCallError: mock-safe errors and upstream failures.
+    """
+    return "".join(stream_chat_turn(messages, timeout_sec=timeout_sec)).strip()

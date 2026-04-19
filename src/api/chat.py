@@ -1,20 +1,40 @@
-"""HAM-native interactive chat (non-streaming MVP). Proxies to server-side gateway adapter."""
+"""HAM-native interactive chat. Proxies to server-side gateway adapter; optional NDJSON streaming."""
 from __future__ import annotations
 
+import json
 import os
+from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from src.ham.cursor_skills_catalog import list_cursor_skills, render_skills_for_system_prompt
 from src.ham.ui_actions import split_assistant_ui_actions, ui_actions_system_instructions
-from src.integrations.nous_gateway_client import GatewayCallError, complete_chat_turn
+from src.integrations.nous_gateway_client import (
+    GatewayCallError,
+    complete_chat_turn,
+    stream_chat_turn,
+)
 from src.persistence.chat_session_store import ChatTurn, InMemoryChatSessionStore
+from src.persistence.sqlite_chat_session_store import SqliteChatSessionStore
 
 router = APIRouter(tags=["chat"])
 
-_chat_store = InMemoryChatSessionStore()
+_ChatStore = InMemoryChatSessionStore | SqliteChatSessionStore
+
+
+def _build_chat_session_store() -> _ChatStore:
+    mode = (os.environ.get("HAM_CHAT_SESSION_STORE") or "memory").strip().lower()
+    if mode == "sqlite":
+        raw = (os.environ.get("HAM_CHAT_SESSION_DB") or "").strip()
+        db_path = Path(raw).expanduser() if raw else Path.home() / ".ham" / "chat_sessions.sqlite"
+        return SqliteChatSessionStore(db_path)
+    return InMemoryChatSessionStore()
+
+
+_chat_store = _build_chat_session_store()
 
 
 class ChatMessageIn(BaseModel):
@@ -82,10 +102,8 @@ def _chat_system_prompt(
     return combined[:_MAX_SYSTEM_PROMPT_CHARS]
 
 
-@router.post("/api/chat", response_model=ChatResponse)
-async def post_chat(body: ChatRequest) -> ChatResponse:
+def _prepare_chat_session(body: ChatRequest) -> tuple[str, list[dict[str, str]]]:
     store = _chat_store
-
     if body.session_id:
         if store.get_session(body.session_id) is None:
             raise HTTPException(
@@ -116,7 +134,6 @@ async def post_chat(body: ChatRequest) -> ChatResponse:
         )
 
     history = store.list_messages(sid)
-    # System prompt is sent upstream only; it is not stored so the client transcript stays user/assistant.
     llm_messages = [
         {
             "role": "system",
@@ -127,6 +144,13 @@ async def post_chat(body: ChatRequest) -> ChatResponse:
         },
         *history,
     ]
+    return sid, llm_messages
+
+
+@router.post("/api/chat", response_model=ChatResponse)
+async def post_chat(body: ChatRequest) -> ChatResponse:
+    store = _chat_store
+    sid, llm_messages = _prepare_chat_session(body)
     try:
         assistant_raw = complete_chat_turn(llm_messages)
     except GatewayCallError as exc:
@@ -145,4 +169,56 @@ async def post_chat(body: ChatRequest) -> ChatResponse:
         session_id=sid,
         messages=store.list_messages(sid),
         actions=actions,
+    )
+
+
+@router.post("/api/chat/stream")
+def post_chat_stream(body: ChatRequest) -> StreamingResponse:
+    """Stream assistant tokens as NDJSON lines: session, delta, done (or error)."""
+    store = _chat_store
+    sid, llm_messages = _prepare_chat_session(body)
+
+    def ndjson_gen():
+        yield json.dumps({"type": "session", "session_id": sid}) + "\n"
+        pieces: list[str] = []
+        try:
+            for part in stream_chat_turn(llm_messages):
+                pieces.append(part)
+                yield json.dumps({"type": "delta", "text": part}) + "\n"
+        except GatewayCallError as exc:
+            yield json.dumps(
+                {"type": "error", "code": exc.code, "message": exc.message},
+            ) + "\n"
+            return
+        assistant_raw = "".join(pieces)
+        assistant_visible, actions = (
+            split_assistant_ui_actions(assistant_raw)
+            if body.enable_ui_actions
+            else (assistant_raw, [])
+        )
+        try:
+            store.append_turns(sid, [ChatTurn(role="assistant", content=assistant_visible)])
+            payload = {
+                "type": "done",
+                "session_id": sid,
+                "messages": store.list_messages(sid),
+                "actions": actions,
+            }
+            yield json.dumps(payload) + "\n"
+        except KeyError:
+            yield json.dumps(
+                {
+                    "type": "error",
+                    "code": "SESSION_NOT_FOUND",
+                    "message": "Session disappeared during stream.",
+                },
+            ) + "\n"
+
+    return StreamingResponse(
+        ndjson_gen(),
+        media_type="application/x-ndjson; charset=utf-8",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
     )

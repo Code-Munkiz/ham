@@ -37,14 +37,30 @@ Chat should name the **skill id**, the **`.cursor/skills/.../SKILL.md`** path, a
 | Marker line | Model adds final line: `HAM_UI_ACTIONS_JSON: {"actions":[...]}` (see `src/ham/ui_actions.py`). |
 | Server | Strips marker from stored assistant text; validates actions (allowlisted paths, settings tabs, toast length). |
 | `POST /api/chat` | Response field **`actions`**: `navigate`, `open_settings`, `toast`, `toggle_control_panel`. |
-| Client | `frontend/src/lib/ham/applyUiActions.ts` + `Chat.tsx` applies actions via `react-router` + Sonner + `WorkspaceContext`. |
+| `POST /api/chat/stream` | NDJSON: `session` → `delta` (token chunks) → `done` (`messages`, `actions`) or `error`. Gateway uses streaming for **openrouter** / **http** (`stream: true`); **mock** chunks the reply. |
+| Client | `postChatStream` in `frontend/src/lib/ham/api.ts`; `Chat.tsx` shows tokens as they arrive; `applyUiActions` runs on `done`. |
+| Session persistence | Default in-memory; set **`HAM_CHAT_SESSION_STORE=sqlite`** (+ optional **`HAM_CHAT_SESSION_DB`**) so sessions survive API restarts (`src/persistence/sqlite_chat_session_store.py`). |
 | Request flag | `enable_ui_actions` (default **true**); set **false** to omit instructions and always get `actions: []`. |
+
+## Allowlisted settings writes (Phase C — shipped, v1)
+
+| Piece | Behavior |
+|-------|----------|
+| Write target | Server writes **only** `{project_root}/.ham/settings.json` (deep-merge allowlisted keys; unknown request fields rejected by Pydantic). |
+| `discover_config` | `project_settings_replacement=` in `src/memory_heist.py` previews merged config after a hypothetical write without touching disk. |
+| `POST .../settings/preview` | Dry-run: `effective_before` / `effective_after`, `diff`, `warnings` (e.g. `settings.local.json` overrides), `base_revision`, `proposal_digest`. No auth required. |
+| `POST .../settings/apply` | Requires `Authorization: Bearer` matching **`HAM_SETTINGS_WRITE_TOKEN`**; conflict if `base_revision` stale (**409**). Backup + audit JSON on disk. |
+| `POST .../settings/rollback` | Same bearer; restores from `backup_id` under `.ham/_backups/settings/`. |
+| `GET /api/settings/write-status` | `{ "writes_enabled": bool }` — whether the token is set (does not reveal the secret). |
+| Allowlist | `memory_heist.session_compaction_*`, `session_tool_prune_chars`; `architect_instruction_chars`, `commander_instruction_chars`, `critic_instruction_chars` (see `src/ham/settings_write.py`). |
+
+Chat and the LLM **do not** apply settings; the UI (or CLI) calls **preview** then **apply** after human confirmation.
 
 ## Next (not built yet)
 
-1. **Settings writes** — audited `PATCH` for merged `.ham.json` / project config from the API (auth + validation + backups).
-2. **Subagent rule catalog** — optional read-only `GET /api/cursor-subagents` for `.cursor/rules/subagent-*.mdc` (heavier; keep separate from skills).
-3. **Stronger grounding** — optional second-pass JSON from a small model if marker parsing is too brittle in production.
+1. **Subagent rule catalog** — optional read-only `GET /api/cursor-subagents` for `.cursor/rules/subagent-*.mdc` (heavier; keep separate from skills).
+2. **Stronger grounding** — optional second-pass JSON from a small model if marker parsing is too brittle in production.
+3. **Settings UX** — in-dashboard forms wired to preview/apply; optional proposal JSON from chat parsed only client-side (never auto-apply).
 
 ## Constraints
 

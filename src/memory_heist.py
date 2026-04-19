@@ -293,8 +293,20 @@ class ProjectConfig:
         return self.merged.get(key, default)
 
 
-def discover_config(cwd: Path) -> ProjectConfig:
+def discover_config(
+    cwd: Path,
+    *,
+    project_settings_replacement: dict[str, Any] | None = None,
+) -> ProjectConfig:
+    """Load merged Ham config from the standard candidate chain.
+
+    If ``project_settings_replacement`` is set, it stands in for the on-disk
+    contents of ``{cwd}/.ham/settings.json`` (used to preview post-write merge
+    without mutating disk). When ``None``, that layer is read from the filesystem
+    as usual.
+    """
     home = Path(os.environ.get("HOME", os.environ.get("USERPROFILE", ".")))
+    project_settings_path = cwd / ".ham" / "settings.json"
     candidates = [
         ConfigEntry("user", home / ".ham.json"),
         ConfigEntry("user", home / ".ham" / "settings.json"),
@@ -305,7 +317,10 @@ def discover_config(cwd: Path) -> ProjectConfig:
     merged: dict[str, Any] = {}
     loaded: list[ConfigEntry] = []
     for entry in candidates:
-        data = _read_json_object(entry.path)
+        if project_settings_replacement is not None and entry.path == project_settings_path:
+            data = dict(project_settings_replacement)
+        else:
+            data = _read_json_object(entry.path)
         if data is not None:
             _deep_merge(merged, data)
             loaded.append(entry)

@@ -12,7 +12,8 @@ Each item tracks what is missing, why it matters, and what blocks it.
 - **Avoid** multiple `ProjectContext.discover()` passes for one run; prefer one shared snapshot and role-appropriate render budgets.
 - **Prefer config-driven** context budgets (`.ham.json` / merged config) over long-term hardcoded magic numbers.
 - **Deferred (unchanged direction):** no second orchestration harness, no FTS5 durable learning persistence yet, no Phase 4 Droid execution-safety work until Droid is real.
-- **Dashboard chat (Phase A):** `POST /api/chat` is **shipped** with HAM-native DTOs, in-memory `ChatSessionStore`, and `src/integrations/nous_gateway_client.py` (**mock** or **http** per env). Streaming, SQLite session persistence, and mission/walking APIs are **not** started here.
+- **Dashboard chat (Phase A+):** `POST /api/chat` and **`POST /api/chat/stream`** (NDJSON deltas) are **shipped** with HAM-native DTOs and `src/integrations/nous_gateway_client.py` (**mock**, **openrouter**, or **http**; streaming uses upstream `stream: true` where supported). Session store defaults to **memory**; opt-in **`HAM_CHAT_SESSION_STORE=sqlite`** (`src/persistence/sqlite_chat_session_store.py`). Mission/walking APIs are **not** started here.
+- **Dashboard settings (Phase C v1):** `POST /api/projects/{id}/settings/preview|apply|rollback` and `GET /api/settings/write-status` are **shipped** (`src/ham/settings_write.py`, `src/api/project_settings.py`); in-dashboard **UI** wiring for preview/apply is **not** started (token must stay server-side).
 
 ## Active Gaps
 

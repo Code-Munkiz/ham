@@ -29,7 +29,7 @@ import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { applyHamUiActions } from "@/lib/ham/applyUiActions";
-import { postChat } from "@/lib/ham/api";
+import { postChatStream } from "@/lib/ham/api";
 import { useAgent } from "@/lib/ham/AgentContext";
 import { useWorkspace } from "@/lib/ham/WorkspaceContext";
 
@@ -95,14 +95,35 @@ export default function Chat() {
       content: text,
       timestamp: timeStr(),
     };
-    setMessages((prev) => [...prev, userRow]);
+    const assistantPlaceId = `assist-pending-${Date.now()}`;
+    const assistantRow: ChatRow = {
+      id: assistantPlaceId,
+      role: "assistant",
+      content: "",
+      timestamp: timeStr(),
+    };
+    setMessages((prev) => [...prev, userRow, assistantRow]);
 
     setSending(true);
     try {
-      const res = await postChat({
-        session_id: sessionId ?? undefined,
-        messages: [{ role: "user", content: text }],
-      });
+      const res = await postChatStream(
+        {
+          session_id: sessionId ?? undefined,
+          messages: [{ role: "user", content: text }],
+        },
+        {
+          onSession: (sid) => setSessionId(sid),
+          onDelta: (delta) => {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantPlaceId
+                  ? { ...m, content: m.content + delta }
+                  : m,
+              ),
+            );
+          },
+        },
+      );
       setSessionId(res.session_id);
       setMessages(
         res.messages.map((m, i) => ({

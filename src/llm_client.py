@@ -57,6 +57,11 @@ def complete_chat_messages_openrouter(messages: list[dict[str, str]]) -> str:
     Requires ``OPENROUTER_API_KEY``. Uses ``OPENROUTER_API_URL`` (default OpenRouter v1),
     optional ``OPENROUTER_HTTP_REFERER`` / ``OPENROUTER_APP_TITLE`` headers.
     """
+    return "".join(stream_chat_messages_openrouter(messages)).strip()
+
+
+def stream_chat_messages_openrouter(messages: list[dict[str, str]]):
+    """Streaming chat completion via OpenRouter (LiteLLM). Yields content deltas (str)."""
     import litellm
 
     if not messages:
@@ -73,6 +78,7 @@ def complete_chat_messages_openrouter(messages: list[dict[str, str]]) -> str:
         "messages": messages,
         "api_base": get_openrouter_base_url(),
         "api_key": api_key,
+        "stream": True,
     }
     extra_headers: dict[str, str] = {}
     ref = os.getenv("OPENROUTER_HTTP_REFERER")
@@ -84,11 +90,21 @@ def complete_chat_messages_openrouter(messages: list[dict[str, str]]) -> str:
     if extra_headers:
         kwargs["extra_headers"] = extra_headers
 
-    resp = litellm.completion(**kwargs)
-    msg = resp.choices[0].message
-    content = getattr(msg, "content", None)
-    out = content if isinstance(content, str) else str(content or "")
-    return out.strip()
+    stream = litellm.completion(**kwargs)
+    for chunk in stream:
+        try:
+            choices = getattr(chunk, "choices", None)
+            if not choices:
+                continue
+            ch0 = choices[0]
+            delta = getattr(ch0, "delta", None)
+            if delta is None:
+                continue
+            content = getattr(delta, "content", None)
+            if content:
+                yield str(content)
+        except (IndexError, AttributeError, TypeError):
+            continue
 
 
 class _OpenRouterChatClient:
