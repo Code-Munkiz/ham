@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -7,6 +8,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
+from src.api.chat import router as chat_router
 from src.memory_heist import context_engine_dashboard_payload
 from src.persistence.project_store import ProjectStore
 from src.persistence.run_store import RunStore
@@ -15,17 +17,29 @@ from src.registry.profiles import DEFAULT_PROFILE_REGISTRY
 
 app = FastAPI(title="HAM API", version="0.1.0")
 
+_DEFAULT_CORS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
+
+
+def _cors_allow_origins() -> list[str]:
+    raw = (os.environ.get("HAM_CORS_ORIGINS") or "").strip()
+    if not raw:
+        return list(_DEFAULT_CORS)
+    return [o.strip() for o in raw.split(",") if o.strip()]
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ],
+    allow_origins=_cors_allow_origins(),
     allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["*"],
 )
+
+app.include_router(chat_router)
 
 _store = RunStore()
 _projects = ProjectStore()
