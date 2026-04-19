@@ -41,9 +41,320 @@ import {
   ArrowUpRight,
 } from "lucide-react";
 
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { fetchContextEngine } from "@/lib/ham/api";
+import {
+  ensureProjectIdForWorkspaceRoot,
+  fetchContextEngine,
+  fetchSettingsWriteStatus,
+  postSettingsApply,
+  postSettingsPreview,
+  type HamSettingsChanges,
+  type HamSettingsMemoryHeistPatch,
+  type HamSettingsPreviewResponse,
+} from "@/lib/ham/api";
 import type { ContextEnginePayload } from "@/lib/ham/types";
+
+function buildHamSettingsChanges(fields: {
+  sessionMax: string;
+  sessionPreserve: string;
+  toolPrune: string;
+  arch: string;
+  cmd: string;
+  critic: string;
+}): HamSettingsChanges {
+  const p = (s: string): number | undefined => {
+    const n = Number(String(s).trim());
+    if (!Number.isFinite(n) || n <= 0) return undefined;
+    return Math.floor(n);
+  };
+  const mh: HamSettingsMemoryHeistPatch = {};
+  const sm = p(fields.sessionMax);
+  if (sm !== undefined) mh.session_compaction_max_tokens = sm;
+  const sp = p(fields.sessionPreserve);
+  if (sp !== undefined) mh.session_compaction_preserve = sp;
+  const tp = p(fields.toolPrune);
+  if (tp !== undefined) mh.session_tool_prune_chars = tp;
+  const out: HamSettingsChanges = {};
+  if (Object.keys(mh).length > 0) {
+    out.memory_heist = mh;
+  }
+  const ar = p(fields.arch);
+  if (ar !== undefined) out.architect_instruction_chars = ar;
+  const cm = p(fields.cmd);
+  if (cm !== undefined) out.commander_instruction_chars = cm;
+  const cr = p(fields.critic);
+  if (cr !== undefined) out.critic_instruction_chars = cr;
+  return out;
+}
+
+/** Preview / apply allowlisted keys to `.ham/settings.json` (server-validated). */
+function AllowlistedWorkspaceSettings({
+  data,
+  onApplied,
+}: {
+  data: ContextEnginePayload;
+  onApplied: () => void;
+}) {
+  const cwd = data.cwd;
+  const [projectId, setProjectId] = React.useState<string | null>(null);
+  const [projectErr, setProjectErr] = React.useState<string | null>(null);
+  const [writesEnabled, setWritesEnabled] = React.useState<boolean | null>(null);
+  const [sessionMax, setSessionMax] = React.useState("");
+  const [sessionPreserve, setSessionPreserve] = React.useState("");
+  const [toolPrune, setToolPrune] = React.useState("");
+  const [archChars, setArchChars] = React.useState("");
+  const [cmdChars, setCmdChars] = React.useState("");
+  const [criticChars, setCriticChars] = React.useState("");
+  const [preview, setPreview] = React.useState<HamSettingsPreviewResponse | null>(null);
+  const [writeToken, setWriteToken] = React.useState("");
+  const [busy, setBusy] = React.useState<"preview" | "apply" | null>(null);
+
+  React.useEffect(() => {
+    setSessionMax(String(data.session_memory.compact_max_tokens));
+    setSessionPreserve(String(data.session_memory.compact_preserve));
+    setToolPrune(String(data.session_memory.tool_prune_chars));
+    setArchChars(String(data.roles.architect.instruction_budget_chars));
+    setCmdChars(String(data.roles.commander.instruction_budget_chars));
+    setCriticChars(String(data.roles.critic.instruction_budget_chars));
+    setPreview(null);
+  }, [data]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setProjectErr(null);
+    setProjectId(null);
+    void (async () => {
+      try {
+        const id = await ensureProjectIdForWorkspaceRoot(cwd);
+        if (!cancelled) setProjectId(id);
+      } catch (e) {
+        if (!cancelled) {
+          setProjectErr(e instanceof Error ? e.message : "Could not resolve project for this workspace.");
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [cwd]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const s = await fetchSettingsWriteStatus();
+        if (!cancelled) setWritesEnabled(s.writes_enabled);
+      } catch {
+        if (!cancelled) setWritesEnabled(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const changes = React.useMemo(
+    () =>
+      buildHamSettingsChanges({
+        sessionMax,
+        sessionPreserve,
+        toolPrune,
+        arch: archChars,
+        cmd: cmdChars,
+        critic: criticChars,
+      }),
+    [sessionMax, sessionPreserve, toolPrune, archChars, cmdChars, criticChars],
+  );
+
+  const hasPatch =
+    (changes.memory_heist && Object.keys(changes.memory_heist).length > 0) ||
+    changes.architect_instruction_chars !== undefined ||
+    changes.commander_instruction_chars !== undefined ||
+    changes.critic_instruction_chars !== undefined;
+
+  const runPreview = async () => {
+    if (!projectId) return;
+    if (!hasPatch) {
+      toast.error("Enter at least one valid positive number.");
+      return;
+    }
+    setBusy("preview");
+    setPreview(null);
+    try {
+      const pr = await postSettingsPreview(projectId, changes);
+      setPreview(pr);
+      if (pr.diff.length === 0) {
+        toast.message("No effective change — values already match merged config.");
+      } else {
+        toast.success("Preview ready — review diff and warnings, then apply.");
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Preview failed");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const runApply = async () => {
+    if (!projectId || !preview) return;
+    const tok = writeToken.trim();
+    if (!tok) {
+      toast.error("Paste HAM_SETTINGS_WRITE_TOKEN to apply.");
+      return;
+    }
+    setBusy("apply");
+    try {
+      const result = await postSettingsApply(projectId, changes, preview.base_revision, tok);
+      toast.success(`Applied. Backup: ${result.backup_id}`);
+      setPreview(null);
+      setWriteToken("");
+      onApplied();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Apply failed");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const inputCls =
+    "w-full mt-1 px-3 py-2 rounded-lg bg-black/50 border border-white/10 text-[11px] font-mono text-white/80 placeholder:text-white/25 focus:outline-none focus:ring-1 focus:ring-[#FF6B00]/50";
+
+  return (
+    <div className="p-6 bg-black/40 border border-[#FF6B00]/20 rounded-xl space-y-5">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h4 className="text-[11px] font-black text-[#FF6B00] uppercase tracking-widest italic">
+            Allowlisted config writes
+          </h4>
+          <p className="text-[9px] font-bold text-white/30 uppercase tracking-widest mt-2 max-w-2xl leading-relaxed">
+            Writes only <span className="font-mono">.ham/settings.json</span> on the server (merge with validation,
+            backup, audit). Matches <span className="font-mono">POST .../settings/preview|apply</span>. Preview is
+            unauthenticated; apply uses your token for this browser session only (not stored in the app bundle).
+          </p>
+        </div>
+        {writesEnabled === false && (
+          <span className="text-[9px] font-bold text-amber-500/90 uppercase tracking-widest px-2 py-1 rounded border border-amber-500/30 bg-amber-500/5">
+            Apply disabled — set HAM_SETTINGS_WRITE_TOKEN on the API
+          </span>
+        )}
+      </div>
+
+      {projectErr && (
+        <div className="p-3 rounded-lg border border-red-500/30 bg-red-500/5 text-[10px] text-red-400/90">
+          {projectErr}
+        </div>
+      )}
+      {!projectId && !projectErr && (
+        <div className="text-[10px] font-bold text-white/35 uppercase tracking-widest">Resolving project…</div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className="text-[9px] font-black text-white/35 uppercase tracking-widest">session_compaction_max_tokens</label>
+          <input className={inputCls} value={sessionMax} onChange={(e) => setSessionMax(e.target.value)} inputMode="numeric" />
+        </div>
+        <div>
+          <label className="text-[9px] font-black text-white/35 uppercase tracking-widest">session_compaction_preserve</label>
+          <input className={inputCls} value={sessionPreserve} onChange={(e) => setSessionPreserve(e.target.value)} inputMode="numeric" />
+        </div>
+        <div>
+          <label className="text-[9px] font-black text-white/35 uppercase tracking-widest">session_tool_prune_chars</label>
+          <input className={inputCls} value={toolPrune} onChange={(e) => setToolPrune(e.target.value)} inputMode="numeric" />
+        </div>
+        <div>
+          <label className="text-[9px] font-black text-white/35 uppercase tracking-widest">architect_instruction_chars</label>
+          <input className={inputCls} value={archChars} onChange={(e) => setArchChars(e.target.value)} inputMode="numeric" />
+        </div>
+        <div>
+          <label className="text-[9px] font-black text-white/35 uppercase tracking-widest">commander_instruction_chars</label>
+          <input className={inputCls} value={cmdChars} onChange={(e) => setCmdChars(e.target.value)} inputMode="numeric" />
+        </div>
+        <div>
+          <label className="text-[9px] font-black text-white/35 uppercase tracking-widest">critic_instruction_chars</label>
+          <input className={inputCls} value={criticChars} onChange={(e) => setCriticChars(e.target.value)} inputMode="numeric" />
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-3">
+        <button
+          type="button"
+          disabled={!projectId || busy !== null}
+          onClick={() => void runPreview()}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#FF6B00]/20 border border-[#FF6B00]/40 text-[9px] font-black uppercase tracking-widest text-[#FF6B00] hover:bg-[#FF6B00]/30 disabled:opacity-40"
+        >
+          {busy === "preview" ? "Preview…" : "Preview"}
+        </button>
+        <button
+          type="button"
+          disabled={
+            !projectId ||
+            !preview ||
+            preview.diff.length === 0 ||
+            !writesEnabled ||
+            !writeToken.trim() ||
+            busy !== null
+          }
+          onClick={() => void runApply()}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white/5 border border-white/15 text-[9px] font-black uppercase tracking-widest text-white/70 hover:border-[#FF6B00]/40 hover:text-[#FF6B00] disabled:opacity-40"
+        >
+          {busy === "apply" ? "Apply…" : "Apply"}
+        </button>
+      </div>
+
+      <div>
+        <label className="text-[9px] font-black text-white/35 uppercase tracking-widest">
+          HAM_SETTINGS_WRITE_TOKEN (session only)
+        </label>
+        <input
+          className={inputCls}
+          type="password"
+          autoComplete="off"
+          value={writeToken}
+          onChange={(e) => setWriteToken(e.target.value)}
+          placeholder="Required to apply — paste from your API env"
+        />
+      </div>
+
+      {preview && (
+        <div className="space-y-3 border border-white/10 rounded-lg p-4 bg-black/30">
+          <div className="text-[9px] font-mono text-white/40 break-all">
+            base_revision: {preview.base_revision.slice(0, 16)}… → {preview.write_target}
+          </div>
+          {preview.warnings.length > 0 && (
+            <ul className="list-disc pl-4 space-y-1 text-[10px] text-amber-400/90">
+              {preview.warnings.map((w) => (
+                <li key={w}>{w}</li>
+              ))}
+            </ul>
+          )}
+          {preview.diff.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-[9px] font-mono text-left">
+                <thead>
+                  <tr className="text-white/35 uppercase tracking-tighter">
+                    <th className="py-1 pr-2">path</th>
+                    <th className="py-1 pr-2">old</th>
+                    <th className="py-1">new</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {preview.diff.map((d) => (
+                    <tr key={d.path} className="border-t border-white/5 text-white/55">
+                      <td className="py-1 pr-2 align-top">{d.path}</td>
+                      <td className="py-1 pr-2 align-top text-red-400/70">{String(d.old)}</td>
+                      <td className="py-1 align-top text-green-400/70">{String(d.new)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function ContextAndMemoryPanel() {
   const [data, setData] = React.useState<ContextEnginePayload | null>(null);
@@ -264,6 +575,8 @@ function ContextAndMemoryPanel() {
               </pre>
             )}
           </div>
+
+          <AllowlistedWorkspaceSettings data={data} onApplied={() => void load()} />
         </>
       )}
     </div>

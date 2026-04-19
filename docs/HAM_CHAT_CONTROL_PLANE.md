@@ -60,7 +60,7 @@ Chat and the LLM **do not** apply settings; the UI (or CLI) calls **preview** th
 
 1. **Subagent rule catalog** — optional read-only `GET /api/cursor-subagents` for `.cursor/rules/subagent-*.mdc` (heavier; keep separate from skills).
 2. **Stronger grounding** — optional second-pass JSON from a small model if marker parsing is too brittle in production.
-3. **Settings UX** — in-dashboard forms wired to preview/apply; optional proposal JSON from chat parsed only client-side (never auto-apply).
+3. **Settings UX (partial)** — Context & Memory panel: numeric fields → preview → diff/warnings → apply (pasted bearer token per session). Optional: chat-suggested proposal JSON parsed client-side only (never auto-apply).
 
 ## Constraints
 

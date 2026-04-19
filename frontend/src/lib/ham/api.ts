@@ -1,4 +1,4 @@
-import type { ContextEnginePayload } from "./types";
+import type { ContextEnginePayload, ProjectRecord } from "./types";
 
 /**
  * Ham API origin for `fetch`.
@@ -266,4 +266,167 @@ export async function postChatStream(
     throw new Error("Chat stream ended without a done event");
   }
   return final;
+}
+
+// --- Allowlisted project settings (v1 control plane) ---
+
+export interface HamSettingsMemoryHeistPatch {
+  session_compaction_max_tokens?: number;
+  session_compaction_preserve?: number;
+  session_tool_prune_chars?: number;
+}
+
+export interface HamSettingsChanges {
+  memory_heist?: HamSettingsMemoryHeistPatch;
+  architect_instruction_chars?: number;
+  commander_instruction_chars?: number;
+  critic_instruction_chars?: number;
+}
+
+export interface HamSettingsPreviewRow {
+  path: string;
+  old: unknown;
+  new: unknown;
+}
+
+export interface HamSettingsPreviewResponse {
+  project_id: string;
+  project_root: string;
+  client_proposal_id?: string | null;
+  effective_before: Record<string, unknown>;
+  effective_after: Record<string, unknown>;
+  diff: HamSettingsPreviewRow[];
+  warnings: string[];
+  write_target: string;
+  proposal_digest: string;
+  base_revision: string;
+}
+
+export async function fetchSettingsWriteStatus(): Promise<{ writes_enabled: boolean }> {
+  const res = await fetch(apiUrl("/api/settings/write-status"));
+  if (!res.ok) {
+    throw new Error(`write-status: HTTP ${res.status}`);
+  }
+  return res.json() as Promise<{ writes_enabled: boolean }>;
+}
+
+export async function listHamProjects(): Promise<{ projects: ProjectRecord[] }> {
+  const res = await fetch(apiUrl("/api/projects"));
+  if (!res.ok) {
+    throw new Error(`projects: HTTP ${res.status}`);
+  }
+  return res.json() as Promise<{ projects: ProjectRecord[] }>;
+}
+
+export async function registerHamProject(body: {
+  name: string;
+  root: string;
+  description?: string;
+}): Promise<ProjectRecord> {
+  const res = await fetch(apiUrl("/api/projects"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: body.name,
+      root: body.root,
+      description: body.description ?? "",
+      metadata: {},
+    }),
+  });
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(`register project failed (HTTP ${res.status}): ${t}`);
+  }
+  return res.json() as Promise<ProjectRecord>;
+}
+
+/**
+ * Find or create a Ham API project whose root matches the context-engine cwd
+ * (same path the API uses for GET /api/context-engine).
+ */
+export async function ensureProjectIdForWorkspaceRoot(cwd: string): Promise<string> {
+  const norm = cwd.replace(/\/$/, "");
+  const { projects } = await listHamProjects();
+  const hit = projects.find((p) => p.root.replace(/\/$/, "") === norm);
+  if (hit) {
+    return hit.id;
+  }
+  const name = norm.split("/").filter(Boolean).pop() || "workspace";
+  const rec = await registerHamProject({
+    name,
+    root: norm,
+    description: "Registered from Ham dashboard (Context & Memory).",
+  });
+  return rec.id;
+}
+
+async function detailMessageFromResponse(res: Response): Promise<string | null> {
+  try {
+    const j = (await res.json()) as { detail?: unknown };
+    return messageFromFastApiDetail(j?.detail);
+  } catch {
+    return null;
+  }
+}
+
+export async function postSettingsPreview(
+  projectId: string,
+  changes: HamSettingsChanges,
+  clientProposalId?: string,
+): Promise<HamSettingsPreviewResponse> {
+  const res = await fetch(
+    apiUrl(`/api/projects/${encodeURIComponent(projectId)}/settings/preview`),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        changes,
+        client_proposal_id: clientProposalId ?? null,
+      }),
+    },
+  );
+  if (!res.ok) {
+    const msg = await detailMessageFromResponse(res);
+    throw new Error(msg || `settings preview failed (HTTP ${res.status})`);
+  }
+  return res.json() as Promise<HamSettingsPreviewResponse>;
+}
+
+export async function postSettingsApply(
+  projectId: string,
+  changes: HamSettingsChanges,
+  baseRevision: string,
+  bearerToken: string,
+): Promise<{
+  backup_id: string;
+  audit_id: string;
+  effective_after: Record<string, unknown>;
+  diff_applied: HamSettingsPreviewRow[];
+  new_revision: string;
+}> {
+  const res = await fetch(
+    apiUrl(`/api/projects/${encodeURIComponent(projectId)}/settings/apply`),
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${bearerToken.trim()}`,
+      },
+      body: JSON.stringify({
+        changes,
+        base_revision: baseRevision,
+      }),
+    },
+  );
+  if (!res.ok) {
+    const msg = await detailMessageFromResponse(res);
+    throw new Error(msg || `settings apply failed (HTTP ${res.status})`);
+  }
+  return res.json() as Promise<{
+    backup_id: string;
+    audit_id: string;
+    effective_after: Record<string, unknown>;
+    diff_applied: HamSettingsPreviewRow[];
+    new_revision: string;
+  }>;
 }

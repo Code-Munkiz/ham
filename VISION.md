@@ -163,7 +163,7 @@ Completed runs are now persisted as structured JSON at `.ham/runs/<timestamp>-<r
 
 **Tests**: full `pytest` suite including registry, bridge, main loop, droid registry, API/CORS, control-plane catalog + UI action parsing, chat streaming + SQLite session store, project settings preview/apply/rollback, and persistence tests — **169 passed** regression/guardrail cases (`pytest.ini` sets `pythonpath = .`; GitHub Actions runs `pytest` + frontend `tsc`).
 
-**Next milestone**: **Dashboard UX** for settings (call preview/apply from the Context & Memory settings area with operator-held token / trusted channel); optional **`GET /api/cursor-subagents`** catalog; continue Bridge-profile hardening. Expand allowlisted keys only with explicit review.
+**Next milestone**: optional **`GET /api/cursor-subagents`** catalog; stronger **UI-actions** marker recovery; continue Bridge-profile hardening. Expand allowlisted settings keys only with explicit review. (Context & Memory **settings preview/apply** UI is shipped with session-pasted write token.)
 
 **Deferred:** FTS5 durable learning persistence, second orchestration harness,
 architecture sprawl.
