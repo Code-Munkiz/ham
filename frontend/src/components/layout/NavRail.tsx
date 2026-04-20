@@ -16,6 +16,7 @@ const primaryNav = [
   { icon: MessageSquare, label: "Chat", path: "/chat" },
   { icon: Activity, label: "Activity", path: "/" },
   { icon: Users, label: "Droids", path: "/droids" },
+  { icon: Sparkles, label: "Skills", path: "/skills" },
 ];
 
 export function NavRail() {
@@ -25,10 +26,7 @@ export function NavRail() {
   const opsRef = useRef<HTMLDivElement>(null);
 
   const isOpsActive =
-    location.pathname === "/analytics" ||
-    location.pathname === "/logs" ||
-    location.pathname === "/skills" ||
-    location.pathname === "/hermes-skills";
+    location.pathname === "/analytics" || location.pathname === "/logs";
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -93,7 +91,6 @@ export function NavRail() {
           {isOpsOpen && (
             <div className="absolute left-full ml-3 top-[-10px] w-48 bg-[#0a0a0a] border border-white/10 rounded-xl shadow-2xl py-2 overflow-hidden z-[100] animate-in fade-in slide-in-from-left-2 duration-200">
               {[
-                { label: "Skills", path: "/skills", icon: Sparkles },
                 { label: "Analytics", path: "/analytics", icon: BarChart2 },
                 { label: "Logs", path: "/logs", icon: ScrollText },
               ].map((item) => {
