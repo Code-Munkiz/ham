@@ -1,4 +1,4 @@
-import type { ContextEnginePayload, ProjectRecord } from "./types";
+import type { ContextEnginePayload, CursorCredentialsStatus, ProjectRecord } from "./types";
 
 /**
  * Ham API origin for `fetch`.
@@ -24,6 +24,20 @@ export function apiUrl(path: string): string {
   return base ? `${base}${p}` : p;
 }
 
+async function readFastApiDetail(res: Response): Promise<string | null> {
+  try {
+    const j = (await res.json()) as { detail?: unknown };
+    const d = j?.detail;
+    if (typeof d === "string") return d;
+    if (typeof d === "object" && d !== null && "detail" in d) {
+      return String((d as { detail?: string }).detail ?? "");
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
 export async function fetchContextEngine(): Promise<ContextEnginePayload> {
   const url = apiUrl("/api/context-engine");
   const res = await fetch(url);
@@ -35,6 +49,47 @@ export async function fetchContextEngine(): Promise<ContextEnginePayload> {
     throw new Error(`context-engine: HTTP ${res.status}${hint}`);
   }
   return res.json() as Promise<ContextEnginePayload>;
+}
+
+export async function fetchCursorCredentialsStatus(): Promise<CursorCredentialsStatus> {
+  const url = apiUrl("/api/cursor/credentials-status");
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`cursor credentials: HTTP ${res.status}`);
+  }
+  return res.json() as Promise<CursorCredentialsStatus>;
+}
+
+/** Proxy to Cursor `GET /v0/models` — uses the same team key as Settings. */
+export async function fetchCursorModels(): Promise<unknown> {
+  const res = await fetch(apiUrl("/api/cursor/models"));
+  if (!res.ok) {
+    const msg = (await readFastApiDetail(res)) ?? `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+  return res.json() as Promise<unknown>;
+}
+
+/** Save team Cursor API key server-side (~/.ham/cursor_credentials.json). Verifies via Cursor /v0/me. */
+export async function saveCursorApiKey(apiKey: string): Promise<void> {
+  const res = await fetch(apiUrl("/api/cursor/credentials"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ api_key: apiKey.trim() }),
+  });
+  if (!res.ok) {
+    const msg = (await readFastApiDetail(res)) ?? `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+}
+
+/** Remove UI-saved key; falls back to CURSOR_API_KEY env on the API host. */
+export async function clearSavedCursorApiKey(): Promise<void> {
+  const res = await fetch(apiUrl("/api/cursor/credentials"), { method: "DELETE" });
+  if (!res.ok) {
+    const msg = (await readFastApiDetail(res)) ?? `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
 }
 
 export async function fetchProjectContextEngine(

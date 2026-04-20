@@ -18,7 +18,6 @@ import {
   Box,
   Plus,
   RefreshCw,
-  Edit2,
   Lock,
   Calendar,
   Puzzle,
@@ -44,16 +43,317 @@ import {
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
+  clearSavedCursorApiKey,
   ensureProjectIdForWorkspaceRoot,
   fetchContextEngine,
+  fetchCursorCredentialsStatus,
+  fetchCursorModels,
   fetchSettingsWriteStatus,
   postSettingsApply,
   postSettingsPreview,
+  saveCursorApiKey,
   type HamSettingsChanges,
   type HamSettingsMemoryHeistPatch,
   type HamSettingsPreviewResponse,
 } from "@/lib/ham/api";
-import type { ContextEnginePayload } from "@/lib/ham/types";
+import type { ContextEnginePayload, CursorCredentialsStatus } from "@/lib/ham/types";
+
+function ApiKeysPanel() {
+  const [status, setStatus] = React.useState<CursorCredentialsStatus | null>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+  const [draftKey, setDraftKey] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const [modelsProbe, setModelsProbe] = React.useState<string | null>(null);
+  const [modelsBusy, setModelsBusy] = React.useState(false);
+
+  const load = React.useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const s = await fetchCursorCredentialsStatus();
+      setStatus(s);
+    } catch (e) {
+      setStatus(null);
+      setError(e instanceof Error ? e.message : "Failed to load Cursor key status");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    void load();
+  }, [load]);
+
+  const onSave = async () => {
+    if (!draftKey.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await saveCursorApiKey(draftKey.trim());
+      setDraftKey("");
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onClearSaved = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await clearSavedCursorApiKey();
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Clear failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onTestModels = async () => {
+    setModelsBusy(true);
+    setModelsProbe(null);
+    setError(null);
+    try {
+      const data = await fetchCursorModels();
+      const s =
+        typeof data === "object" && data !== null
+          ? JSON.stringify(data).slice(0, 1200)
+          : String(data);
+      setModelsProbe(s);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Models probe failed");
+    } finally {
+      setModelsBusy(false);
+    }
+  };
+
+  const sourceLabel =
+    status?.source === "ui"
+      ? "Saved in HAM (shared)"
+      : status?.source === "env"
+        ? "Server environment (CURSOR_API_KEY)"
+        : "Not configured";
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-xl border border-[#FF6B00]/20 bg-black/50 p-6 space-y-4 shadow-xl">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <Key className="h-4 w-4 text-[#FF6B00]" />
+              <h3 className="text-[13px] font-black text-white uppercase tracking-[0.2em] italic">
+                Cursor Cloud API key
+              </h3>
+            </div>
+            <p className="text-[10px] font-bold text-white/35 uppercase tracking-widest max-w-2xl leading-relaxed">
+              Ham proxies Cursor Cloud Agents (<span className="font-mono text-white/50">GET/POST /v0/*</span>) with
+              this key. Stored only on the API host filesystem (see path below). Set{" "}
+              <span className="font-mono text-white/45">HAM_CURSOR_CREDENTIALS_FILE</span> on Cloud Run/Docker with a
+              mounted volume so the key survives restarts. Anyone with access to this Settings page can rotate the team
+              key.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void load()}
+            disabled={loading || busy}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-white/10 text-[9px] font-black uppercase tracking-widest text-white/50 hover:text-[#FF6B00] hover:border-[#FF6B00]/30 transition-colors disabled:opacity-40"
+          >
+            <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
+            Refresh
+          </button>
+        </div>
+
+        {error && (
+          <div className="p-3 rounded-lg border border-red-500/30 bg-red-500/5 text-[11px] font-bold text-red-400/90">
+            {error}
+          </div>
+        )}
+
+        {loading && !status && (
+          <p className="text-[10px] font-bold text-white/25 uppercase tracking-widest">Loading key status…</p>
+        )}
+
+        {status && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="p-4 rounded-lg border border-white/5 bg-black/40 space-y-2">
+              <div className="text-[9px] font-black text-white/25 uppercase tracking-widest">Active key source</div>
+              <div className="text-[12px] font-black text-[#FF6B00] uppercase tracking-tight">{sourceLabel}</div>
+              {status.configured && status.masked_preview && (
+                <div className="text-[10px] font-mono text-white/45">Preview: {status.masked_preview}</div>
+              )}
+            </div>
+            <div className="p-4 rounded-lg border border-white/5 bg-black/40 space-y-2">
+              <div className="text-[9px] font-black text-white/25 uppercase tracking-widest">Who is paying / labeled</div>
+              {status.error && !status.user_email ? (
+                <div className="text-[11px] font-bold text-amber-500/80">{status.error}</div>
+              ) : (
+                <>
+                  <div className="text-[12px] font-black text-white">
+                    {status.api_key_name ?? "—"}{" "}
+                    <span className="text-white/30 font-bold text-[10px] uppercase tracking-widest">(key name)</span>
+                  </div>
+                  <div className="text-[11px] font-mono text-white/55 break-all">
+                    {status.user_email ?? "—"}{" "}
+                    <span className="text-white/25 text-[9px] font-bold uppercase tracking-widest">(account)</span>
+                  </div>
+                  {status.key_created_at && (
+                    <div className="text-[9px] font-bold text-white/25 uppercase tracking-wider">
+                      Key issued: {status.key_created_at}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {status?.storage_path && (
+          <div className="p-4 rounded-lg border border-white/5 bg-black/30 space-y-1">
+            <div className="text-[9px] font-black text-white/25 uppercase tracking-widest">Key file on API host</div>
+            <div className="text-[10px] font-mono text-white/55 break-all">{status.storage_path}</div>
+            {status.storage_override_env ? (
+              <div className="text-[9px] font-bold text-emerald-500/70 uppercase tracking-wider">
+                Override: HAM_CURSOR_CREDENTIALS_FILE is set
+              </div>
+            ) : null}
+          </div>
+        )}
+
+        {status?.wired_for && (
+          <div className="p-4 rounded-lg border border-[#FF6B00]/15 bg-black/40 space-y-3">
+            <div className="text-[9px] font-black text-white/25 uppercase tracking-widest">
+              What uses this key (backend, this deployment)
+            </div>
+            <ul className="space-y-2 text-[10px] font-bold text-white/45 uppercase tracking-wider">
+              <li className="flex items-start gap-2">
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500/90 shrink-0 mt-0.5" />
+                <span>
+                  <span className="text-white/70">Models list</span> — Ham{" "}
+                  <span className="font-mono text-white/50">GET /api/cursor/models</span> → Cursor{" "}
+                  <span className="font-mono text-white/50">GET /v0/models</span>
+                </span>
+              </li>
+              <li className="flex items-start gap-2">
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500/90 shrink-0 mt-0.5" />
+                <span>
+                  <span className="text-white/70">Run cloud agent / missions</span> — Ham{" "}
+                  <span className="font-mono text-white/50">POST /api/cursor/agents/launch</span> → Cursor{" "}
+                  <span className="font-mono text-white/50">POST /v0/agents</span>
+                </span>
+              </li>
+              <li className="flex items-start gap-2">
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500/90 shrink-0 mt-0.5" />
+                <span>
+                  <span className="text-white/70">CI hooks and automation</span> — same launch URL with a bearer-less
+                  server-to-server call to your Ham API (Basic auth key is server-side only).
+                </span>
+              </li>
+              <li className="text-[9px] font-bold text-white/30 normal-case tracking-normal pl-6 border-l border-white/10 ml-1">
+                {status.wired_for.ci_hooks_note}
+              </li>
+              <li className="flex items-start gap-2 pt-1 border-t border-white/5">
+                {status.wired_for.dashboard_chat_uses_cursor ? (
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500/90 shrink-0 mt-0.5" />
+                ) : (
+                  <span className="text-amber-500/90 font-black shrink-0 w-3.5 text-center">—</span>
+                )}
+                <span>
+                  <span className="text-white/70">Dashboard chat</span> —{" "}
+                  {status.wired_for.dashboard_chat_uses_cursor ? (
+                    "uses Cursor"
+                  ) : (
+                    <span className="text-amber-500/85">not routed through Cursor REST</span>
+                  )}
+                  . {status.wired_for.dashboard_chat_note}
+                </span>
+              </li>
+            </ul>
+            <div className="flex flex-wrap items-center gap-3 pt-1">
+              <button
+                type="button"
+                disabled={modelsBusy || !status.configured}
+                onClick={() => void onTestModels()}
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-[#FF6B00]/35 text-[9px] font-black uppercase tracking-widest text-[#FF6B00] hover:bg-[#FF6B00]/10 transition-colors disabled:opacity-30"
+              >
+                <Zap className={cn("h-3.5 w-3.5", modelsBusy && "animate-pulse")} />
+                Test Cursor API (models)
+              </button>
+              {!status.configured && (
+                <span className="text-[9px] font-bold text-white/25 uppercase tracking-widest">
+                  Configure a key first
+                </span>
+              )}
+            </div>
+            {modelsProbe && (
+              <pre className="text-[9px] font-mono text-white/45 whitespace-pre-wrap break-all max-h-32 overflow-y-auto p-2 rounded bg-black/50 border border-white/5">
+                {modelsProbe}
+              </pre>
+            )}
+          </div>
+        )}
+
+        <div className="space-y-2 pt-2 border-t border-white/5">
+          <label className="text-[9px] font-black text-white/30 uppercase tracking-widest block">
+            Paste new Cursor API key (replaces saved key)
+          </label>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <input
+              type="password"
+              autoComplete="off"
+              value={draftKey}
+              onChange={(e) => setDraftKey(e.target.value)}
+              placeholder="crsr_…"
+              className="flex-1 h-11 px-4 rounded-lg bg-black/60 border border-white/10 font-mono text-[11px] text-white/80 placeholder:text-white/15 focus:outline-none focus:border-[#FF6B00]/40"
+            />
+            <button
+              type="button"
+              disabled={busy || !draftKey.trim()}
+              onClick={() => void onSave()}
+              className="h-11 px-6 rounded-lg bg-[#FF6B00] text-[10px] font-black text-black uppercase tracking-widest hover:bg-[#ff8534] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              Save & verify
+            </button>
+          </div>
+          {status?.source === "ui" && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void onClearSaved()}
+              className="text-[9px] font-black text-white/35 uppercase tracking-widest hover:text-red-400/90 transition-colors"
+            >
+              Remove saved key (fall back to CURSOR_API_KEY env if set)
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-white/5 bg-white/[0.02] p-5 space-y-3">
+        <div className="flex items-center gap-2">
+          <Globe className="h-4 w-4 text-white/25" />
+          <h4 className="text-[11px] font-black text-white/60 uppercase tracking-widest">OpenRouter (chat gateway)</h4>
+        </div>
+        <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest leading-relaxed">
+          Dashboard chat still uses <span className="font-mono text-white/45">HERMES_GATEWAY_MODE=openrouter</span> and{" "}
+          <span className="font-mono text-white/45">OPENROUTER_API_KEY</span> unless you change the gateway on the API
+          host. Cursor and OpenRouter can both be configured; wiring chat to Composer is a separate gateway mode.
+        </p>
+      </div>
+
+      <div className="rounded-lg border border-white/5 border-dashed bg-black/20 p-5 space-y-2">
+        <div className="text-[10px] font-black text-white/25 uppercase tracking-widest">Roadmap</div>
+        <p className="text-[10px] font-bold text-white/35 uppercase tracking-wider">
+          <span className="text-white/50">Local Composer</span> — Node SDK / sidecar for repo-on-disk workflows (separate
+          from Cloud Agents REST above).
+        </p>
+      </div>
+    </div>
+  );
+}
 
 function buildHamSettingsChanges(fields: {
   sessionMax: string;
@@ -721,41 +1021,7 @@ export function UnifiedSettings({
             {/* --- CONFIGURATION PAGES --- */}
             {["api-keys", "environment", "tools-extensions", "context-memory"].includes(activeSubSegment) && (
               <div className="space-y-6">
-                {activeSubSegment === "api-keys" && (
-                  <div className="space-y-px bg-white/5 border border-white/5 rounded-lg overflow-hidden divide-y divide-white/5 shadow-2xl">
-                    {[
-                      { provider: "Gemini", status: "Verified", key: "AIzaSy...4rA", workers: 5 },
-                      { provider: "Anthropic", status: "Active", key: "sk-ant-...v1p", workers: 2 },
-                      { provider: "Custom Bridge", status: "Local", key: "127.0...902", workers: 1 },
-                    ].map((item, idx) => (
-                      <div key={idx} className="flex items-center justify-between p-5 bg-black/40 hover:bg-white/[0.04] transition-all group">
-                        <div className="flex items-center gap-6">
-                          <div className="h-10 w-10 bg-black border border-white/10 rounded flex items-center justify-center transition-colors group-hover:border-[#FF6B00]/40">
-                            <Key className="h-5 w-5 text-white/10 group-hover:text-[#FF6B00] transition-colors" />
-                          </div>
-                          <div className="space-y-1">
-                            <span className="text-[12px] font-black text-white uppercase tracking-widest leading-none block">{item.provider}</span>
-                            <span className={cn(
-                              "text-[8px] font-black uppercase italic tracking-widest",
-                              item.status === 'Verified' ? "text-green-500/60" : item.status === 'Active' ? "text-blue-500/60" : "text-white/20"
-                            )}>{item.status}</span>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-10">
-                          <code className="text-[10px] font-mono text-white/20 bg-black/60 px-3 py-1.5 rounded border border-white/5">{item.key}</code>
-                          <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button className="p-2 text-white/20 hover:text-white transition-colors" title="Rotate"><RefreshCw className="h-4 w-4" /></button>
-                            <button className="p-2 text-white/20 hover:text-white transition-colors" title="Edit"><Edit2 className="h-4 w-4" /></button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                    <button className="w-full flex items-center justify-center gap-3 py-5 bg-white/[0.01] hover:bg-white/[0.03] transition-all text-[#FF6B00]/40 hover:text-[#FF6B00]">
-                      <Plus className="h-4 w-4" />
-                      <span className="text-[10px] font-black uppercase tracking-widest leading-none">Connect Industrial Access Key</span>
-                    </button>
-                  </div>
-                )}
+                {activeSubSegment === "api-keys" && <ApiKeysPanel />}
 
                 {activeSubSegment === "environment" && (
                   <div className="space-y-6">
@@ -804,6 +1070,11 @@ export function UnifiedSettings({
                               name: "OPENROUTER_APP_TITLE",
                               kind: "Optional",
                               role: "OpenRouter app name string.",
+                            },
+                            {
+                              name: "CURSOR_API_KEY",
+                              kind: "Secret",
+                              role: "Cursor API key when not set via Settings (falls back after UI-saved key is cleared).",
                             },
                             {
                               name: "HAM_AUTHOR",

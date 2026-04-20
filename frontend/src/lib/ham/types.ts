@@ -107,6 +107,34 @@ export interface ProjectRecord {
   metadata: Record<string, unknown>;
 }
 
+/** From `GET /api/cursor/credentials-status` — never includes the full secret. */
+export interface CursorWiredFor {
+  models_list: boolean;
+  cloud_agents_launch: boolean;
+  missions_cloud_agent: boolean;
+  ci_hooks: boolean;
+  ci_hooks_note: string;
+  dashboard_chat_uses_cursor: boolean;
+  dashboard_chat_note: string;
+}
+
+/** From `GET /api/cursor/credentials-status` — never includes the full secret. */
+export interface CursorCredentialsStatus {
+  configured: boolean;
+  source: 'ui' | 'env' | 'none';
+  masked_preview: string | null;
+  api_key_name: string | null;
+  user_email: string | null;
+  key_created_at: string | null;
+  error: string | null;
+  /** Server path where UI-saved key is stored (API host filesystem). */
+  storage_path?: string;
+  /** Set when `HAM_CURSOR_CREDENTIALS_FILE` overrides the default ~/.ham path. */
+  storage_override_env?: string | null;
+  /** What Ham uses this key for (backend truth). */
+  wired_for?: CursorWiredFor;
+}
+
 /** Matches `context_engine_dashboard_payload()` JSON from `/api/context-engine`. */
 export interface ContextEngineRoleSlice {
   instruction_budget_chars: number;
