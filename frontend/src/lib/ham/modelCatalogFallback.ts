@@ -1,0 +1,112 @@
+import type { ModelCatalogPayload } from "./types";
+
+const CURSOR_NOTE =
+  "Dashboard chat is OpenRouter-backed; Cursor models use Cloud Agents API.";
+
+/**
+ * Shown when `GET /api/models` fails (API down, CORS, or wrong VITE_HAM_API_BASE).
+ * Keeps the composer list populated; selection still requires a live Ham API for chat.
+ */
+export const CLIENT_MODEL_CATALOG_FALLBACK: ModelCatalogPayload = {
+  source: "client_fallback",
+  gateway_mode: "unknown",
+  openrouter_chat_ready: false,
+  items: [
+    {
+      id: "openrouter:default",
+      label: "OpenRouter AI",
+      tag: "EXTERNAL",
+      tier: null,
+      provider: "openrouter",
+      description: "Unified access via Ham chat gateway (when API is reachable).",
+      supports_chat: false,
+      disabled_reason: "Could not load catalog from Ham API. Check VITE_HAM_API_BASE and that FastAPI is running.",
+    },
+    {
+      id: "tier:auto",
+      label: "Auto",
+      tag: "EFFICIENCY",
+      tier: "auto",
+      provider: "openrouter",
+      description: "Efficiency-oriented default.",
+      supports_chat: false,
+      disabled_reason: "Catalog unavailable offline.",
+    },
+    {
+      id: "tier:premium",
+      label: "Premium",
+      tag: "INTELLIGENCE",
+      tier: "premium",
+      provider: "openrouter",
+      description: "Higher-capability default.",
+      supports_chat: false,
+      disabled_reason: "Catalog unavailable offline.",
+    },
+    {
+      id: "cursor:composer-2",
+      label: "Composer 2",
+      tag: "LATEST",
+      tier: null,
+      provider: "cursor",
+      description: "Standard production engine for complex tasks.",
+      supports_chat: false,
+      disabled_reason: CURSOR_NOTE,
+      cursor_slug: "composer-2",
+    },
+    {
+      id: "cursor:composer-2-fast",
+      label: "Composer 2",
+      tag: "FAST",
+      tier: null,
+      provider: "cursor",
+      description: "Optimized for rapid iteration and small patches.",
+      supports_chat: false,
+      disabled_reason: CURSOR_NOTE,
+      cursor_slug: "composer-2",
+    },
+    {
+      id: "cursor:claude-opus-4-7-thinking-high",
+      label: "Opus 4.7",
+      tag: "HIGH",
+      tier: null,
+      provider: "cursor",
+      description: "Supreme logic for architectural decisions.",
+      supports_chat: false,
+      disabled_reason: CURSOR_NOTE,
+      cursor_slug: "claude-opus-4-7-thinking-high",
+    },
+    {
+      id: "cursor:gpt-5.3-codex-high",
+      label: "Codex 5.3",
+      tag: "MEDIUM",
+      tier: null,
+      provider: "cursor",
+      description: "Pure code generation and symbolic reasoning.",
+      supports_chat: false,
+      disabled_reason: CURSOR_NOTE,
+      cursor_slug: "gpt-5.3-codex-high",
+    },
+    {
+      id: "cursor:gpt-5.4-high",
+      label: "GPT-5.4",
+      tag: "MEDIUM",
+      tier: null,
+      provider: "cursor",
+      description: "Experimental next-gen frontier model.",
+      supports_chat: false,
+      disabled_reason: CURSOR_NOTE,
+      cursor_slug: "gpt-5.4-high",
+    },
+    {
+      id: "cursor:claude-4.6-opus-high-thinking-fast",
+      label: "Sonnet 4.6",
+      tag: "MEDIUM",
+      tier: null,
+      provider: "cursor",
+      description: "Ideal trade-off between speed and intelligence.",
+      supports_chat: false,
+      disabled_reason: CURSOR_NOTE,
+      cursor_slug: "claude-4.6-opus-high-thinking-fast",
+    },
+  ],
+};

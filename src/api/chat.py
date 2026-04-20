@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from src.api.models_catalog import resolve_model_id_for_chat
 from src.ham.cursor_skills_catalog import list_cursor_skills, render_skills_for_system_prompt
 from src.ham.cursor_subagents_catalog import list_cursor_subagents, render_subagents_for_system_prompt
 from src.ham.ui_actions import split_assistant_ui_actions, ui_actions_system_instructions
@@ -53,6 +54,10 @@ class ChatRequest(BaseModel):
     include_operator_subagents: bool = True
     # When true (default), system prompt includes HAM_UI_ACTIONS_JSON instructions; response may include `actions`.
     enable_ui_actions: bool = True
+    model_id: str | None = Field(default=None, max_length=256)
+    workbench_mode: Literal["ask", "plan", "agent"] | None = None
+    worker: str | None = Field(default=None, max_length=64)
+    max_mode: bool | None = None
 
 
 class ChatResponse(BaseModel):
@@ -110,6 +115,111 @@ def _chat_system_prompt(
     return combined[:_MAX_SYSTEM_PROMPT_CHARS]
 
 
+def _workbench_system_lines(
+    *,
+    workbench_mode: str | None,
+    worker: str | None,
+    max_mode: bool | None,
+) -> list[str]:
+    lines: list[str] = []
+    if workbench_mode:
+        mp = {
+            "ask": "Workbench mode: ASK — concise Q&A; prefer direct answers.",
+            "plan": "Workbench mode: PLAN — decompose and outline steps before substantive edits.",
+            "agent": "Workbench mode: AGENT — action-oriented execution; propose concrete next steps.",
+        }
+        if workbench_mode in mp:
+            lines.append(mp[workbench_mode])
+    if worker:
+        w = worker.strip().lower()
+        wp = {
+            "builder": "Worker: Builder — core developer and logic implementation.",
+            "reviewer": "Worker: Reviewer — code quality and security lens.",
+            "researcher": "Worker: Researcher — documentation and technical search.",
+            "coordinator": "Worker: Coordinator — task decomposition and planning.",
+            "qa": "Worker: QA — tests and validation.",
+        }
+        if w in wp:
+            lines.append(wp[w])
+    if max_mode:
+        lines.append(
+            "User preference: MAX mode — prefer deeper reasoning when trade-offs exist.",
+        )
+    return lines
+
+
+def _append_workbench_to_messages(
+    llm_messages: list[dict[str, str]],
+    body: ChatRequest,
+) -> list[dict[str, str]]:
+    extra = _workbench_system_lines(
+        workbench_mode=body.workbench_mode,
+        worker=body.worker,
+        max_mode=body.max_mode,
+    )
+    if not extra:
+        return llm_messages
+    block = "\n\n".join(extra)
+    out = [dict(m) for m in llm_messages]
+    if out and out[0].get("role") == "system":
+        first = (out[0].get("content") or "").strip()
+        out[0] = {
+            "role": "system",
+            "content": f"{first}\n\n{block}".strip() if first else block,
+        }
+    else:
+        out.insert(0, {"role": "system", "content": block})
+    return out
+
+
+def _resolve_openrouter_model_override(body: ChatRequest) -> str | None:
+    if body.model_id and (os.environ.get("HERMES_GATEWAY_MODE") or "").strip().lower() != "openrouter":
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": {
+                    "code": "MODEL_SELECTION_REQUIRES_OPENROUTER",
+                    "message": "Per-request model selection requires HERMES_GATEWAY_MODE=openrouter on the API host.",
+                }
+            },
+        )
+    if not body.model_id or not str(body.model_id).strip():
+        return None
+    try:
+        return resolve_model_id_for_chat(body.model_id)
+    except ValueError as exc:
+        code = str(exc)
+        if code == "CURSOR_MODEL_NOT_CHAT_ENABLED":
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "error": {
+                        "code": "CURSOR_MODEL_NOT_CHAT_ENABLED",
+                        "message": "Cursor API models are not available for dashboard chat; pick OpenRouter or a tier preset.",
+                    }
+                },
+            ) from exc
+        if code == "MODEL_NOT_AVAILABLE_FOR_CHAT":
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "error": {
+                        "code": "MODEL_NOT_AVAILABLE_FOR_CHAT",
+                        "message": "Selected model is not available for chat (gateway or configuration).",
+                    }
+                },
+            ) from exc
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": {
+                    "code": "UNKNOWN_MODEL_ID",
+                    "message": "Unknown model_id for chat.",
+                }
+            },
+        ) from exc
+
+
 def _prepare_chat_session(body: ChatRequest) -> tuple[str, list[dict[str, str]]]:
     store = _chat_store
     if body.session_id:
@@ -156,12 +266,22 @@ def _prepare_chat_session(body: ChatRequest) -> tuple[str, list[dict[str, str]]]
     return sid, llm_messages
 
 
+def _messages_for_completion(body: ChatRequest) -> tuple[str, list[dict[str, str]], str | None]:
+    sid, llm_messages = _prepare_chat_session(body)
+    or_override = _resolve_openrouter_model_override(body)
+    llm_messages = _append_workbench_to_messages(llm_messages, body)
+    return sid, llm_messages, or_override
+
+
 @router.post("/api/chat", response_model=ChatResponse)
 async def post_chat(body: ChatRequest) -> ChatResponse:
     store = _chat_store
-    sid, llm_messages = _prepare_chat_session(body)
+    sid, llm_messages, or_override = _messages_for_completion(body)
     try:
-        assistant_raw = complete_chat_turn(llm_messages)
+        assistant_raw = complete_chat_turn(
+            llm_messages,
+            openrouter_model_override=or_override,
+        )
     except GatewayCallError as exc:
         raise HTTPException(
             status_code=_gateway_status_code(exc.code),
@@ -185,13 +305,16 @@ async def post_chat(body: ChatRequest) -> ChatResponse:
 def post_chat_stream(body: ChatRequest) -> StreamingResponse:
     """Stream assistant tokens as NDJSON lines: session, delta, done (or error)."""
     store = _chat_store
-    sid, llm_messages = _prepare_chat_session(body)
+    sid, llm_messages, or_override = _messages_for_completion(body)
 
     def ndjson_gen():
         yield json.dumps({"type": "session", "session_id": sid}) + "\n"
         pieces: list[str] = []
         try:
-            for part in stream_chat_turn(llm_messages):
+            for part in stream_chat_turn(
+                llm_messages,
+                openrouter_model_override=or_override,
+            ):
                 pieces.append(part)
                 yield json.dumps({"type": "delta", "text": part}) + "\n"
         except GatewayCallError as exc:

@@ -10,7 +10,7 @@ from src.integrations.nous_gateway_client import GatewayCallError, complete_chat
 
 def test_openrouter_mode_requires_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HERMES_GATEWAY_MODE", "openrouter")
-    # Empty str (not unset): so llm_client's load_dotenv() does not refill from .env.
+    # Empty string overrides any OPENROUTER_API_KEY from .env loaded at import.
     monkeypatch.setenv("OPENROUTER_API_KEY", "")
     with pytest.raises(GatewayCallError) as ei:
         complete_chat_turn([{"role": "user", "content": "hi"}])

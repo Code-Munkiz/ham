@@ -118,6 +118,28 @@ export interface CursorWiredFor {
   dashboard_chat_note: string;
 }
 
+/** Single entry from `GET /api/models` (composer catalog). */
+export interface ModelCatalogItem {
+  id: string;
+  label: string;
+  tag: string | null;
+  tier: string | null;
+  provider: string;
+  description: string;
+  supports_chat: boolean;
+  disabled_reason?: string | null;
+  cursor_slug?: string;
+  openrouter_model?: string;
+}
+
+/** Response from `GET /api/models`. */
+export interface ModelCatalogPayload {
+  items: ModelCatalogItem[];
+  source: string;
+  gateway_mode: string;
+  openrouter_chat_ready: boolean;
+}
+
 /** From `GET /api/cursor/credentials-status` — never includes the full secret. */
 export interface CursorCredentialsStatus {
   configured: boolean;

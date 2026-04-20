@@ -54,6 +54,7 @@ def stream_chat_turn(
     messages: list[dict[str, str]],
     *,
     timeout_sec: float = DEFAULT_TIMEOUT_SEC,
+    openrouter_model_override: str | None = None,
 ) -> Iterator[str]:
     """
     Stream one completion as content deltas (OpenAI-style ``delta.content`` chunks).
@@ -76,7 +77,10 @@ def stream_chat_turn(
         from src.llm_client import stream_chat_messages_openrouter
 
         try:
-            yield from stream_chat_messages_openrouter(messages)
+            yield from stream_chat_messages_openrouter(
+                messages,
+                model_override=openrouter_model_override,
+            )
         except RuntimeError as exc:
             raise GatewayCallError("CONFIG_ERROR", str(exc)) from exc
         except Exception as exc:
@@ -151,6 +155,7 @@ def complete_chat_turn(
     messages: list[dict[str, str]],
     *,
     timeout_sec: float = DEFAULT_TIMEOUT_SEC,
+    openrouter_model_override: str | None = None,
 ) -> str:
     """
     Run one non-streaming completion. `messages` are OpenAI-style dicts with role + content.
@@ -158,4 +163,10 @@ def complete_chat_turn(
     Raises:
         GatewayCallError: mock-safe errors and upstream failures.
     """
-    return "".join(stream_chat_turn(messages, timeout_sec=timeout_sec)).strip()
+    return "".join(
+        stream_chat_turn(
+            messages,
+            timeout_sec=timeout_sec,
+            openrouter_model_override=openrouter_model_override,
+        ),
+    ).strip()

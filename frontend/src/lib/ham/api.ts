@@ -1,4 +1,9 @@
-import type { ContextEnginePayload, CursorCredentialsStatus, ProjectRecord } from "./types";
+import type {
+  ContextEnginePayload,
+  CursorCredentialsStatus,
+  ModelCatalogPayload,
+  ProjectRecord,
+} from "./types";
 
 /**
  * Ham API origin for `fetch`.
@@ -36,6 +41,15 @@ async function readFastApiDetail(res: Response): Promise<string | null> {
     /* ignore */
   }
   return null;
+}
+
+/** Unified composer catalog (OpenRouter chat rows + Cursor slugs, honest flags). */
+export async function fetchModelsCatalog(): Promise<ModelCatalogPayload> {
+  const res = await fetch(apiUrl("/api/models"));
+  if (!res.ok) {
+    throw new Error(`models catalog: HTTP ${res.status}`);
+  }
+  return res.json() as Promise<ModelCatalogPayload>;
 }
 
 export async function fetchContextEngine(): Promise<ContextEnginePayload> {
@@ -121,6 +135,10 @@ export interface HamChatRequest {
   include_operator_subagents?: boolean;
   /** When true (default), model may emit `HAM_UI_ACTIONS_JSON`; response includes `actions` for the UI. */
   enable_ui_actions?: boolean;
+  model_id?: string;
+  workbench_mode?: "ask" | "plan" | "agent";
+  worker?: string;
+  max_mode?: boolean;
 }
 
 /** Structured UI actions from `POST /api/chat` (server-validated). */

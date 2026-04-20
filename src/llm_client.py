@@ -50,17 +50,29 @@ def resolve_openrouter_model_name_for_chat() -> str:
     return f"openrouter/{override}"
 
 
-def complete_chat_messages_openrouter(messages: list[dict[str, str]]) -> str:
+def complete_chat_messages_openrouter(
+    messages: list[dict[str, str]],
+    *,
+    model_override: str | None = None,
+) -> str:
     """
     Multi-turn chat completion via OpenRouter (LiteLLM).
 
     Requires ``OPENROUTER_API_KEY``. Uses ``OPENROUTER_API_URL`` (default OpenRouter v1),
     optional ``OPENROUTER_HTTP_REFERER`` / ``OPENROUTER_APP_TITLE`` headers.
+
+    ``model_override`` must be a LiteLLM-ready id (e.g. ``openrouter/openai/gpt-4o-mini``).
     """
-    return "".join(stream_chat_messages_openrouter(messages)).strip()
+    return "".join(
+        stream_chat_messages_openrouter(messages, model_override=model_override),
+    ).strip()
 
 
-def stream_chat_messages_openrouter(messages: list[dict[str, str]]):
+def stream_chat_messages_openrouter(
+    messages: list[dict[str, str]],
+    *,
+    model_override: str | None = None,
+):
     """Streaming chat completion via OpenRouter (LiteLLM). Yields content deltas (str)."""
     import litellm
 
@@ -72,7 +84,7 @@ def stream_chat_messages_openrouter(messages: list[dict[str, str]]):
     if not api_key:
         raise RuntimeError("OPENROUTER_API_KEY is not set")
 
-    model = resolve_openrouter_model_name_for_chat()
+    model = (model_override or "").strip() or resolve_openrouter_model_name_for_chat()
     kwargs: dict[str, Any] = {
         "model": model,
         "messages": messages,

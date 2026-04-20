@@ -1,35 +1,29 @@
 import * as React from "react";
-import { 
-  Send, 
-  Paperclip, 
-  Sparkles, 
-  Shield, 
+import {
+  Send,
+  Paperclip,
+  Sparkles,
+  Shield,
   Terminal,
   MessageSquare,
-  Cpu,
-  History as HistoryIcon,
-  Search,
-  MoreHorizontal,
-  Command as CommandIcon,
   Activity,
-  ToyBrick,
-  User,
   Zap,
-  Lock,
   Globe,
   Monitor,
   Layout,
   ChevronDown,
   X,
-  Eye,
-  CheckCircle2,
-  AlertCircle
+  AlertCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { ChatComposerStrip } from "@/components/chat/ChatComposerStrip";
+import type { WorkbenchMode } from "@/components/chat/ChatComposerStrip";
 import { applyHamUiActions } from "@/lib/ham/applyUiActions";
-import { postChatStream } from "@/lib/ham/api";
+import { fetchModelsCatalog, postChatStream } from "@/lib/ham/api";
+import { CLIENT_MODEL_CATALOG_FALLBACK } from "@/lib/ham/modelCatalogFallback";
+import type { ModelCatalogPayload } from "@/lib/ham/types";
 import { useAgent } from "@/lib/ham/AgentContext";
 import { useWorkspace } from "@/lib/ham/WorkspaceContext";
 
@@ -56,9 +50,34 @@ export default function Chat() {
   const [sessionId, setSessionId] = React.useState<string | null>(null);
   const [sending, setSending] = React.useState(false);
   const [chatError, setChatError] = React.useState<string | null>(null);
-  
+
+  const [catalog, setCatalog] = React.useState<ModelCatalogPayload>(CLIENT_MODEL_CATALOG_FALLBACK);
+  const [catalogLoading, setCatalogLoading] = React.useState(true);
+  const [workbenchMode, setWorkbenchMode] = React.useState<WorkbenchMode>("agent");
+  const [modelId, setModelId] = React.useState<string | null>(null);
+  const [maxMode, setMaxMode] = React.useState(false);
+  const [worker, setWorker] = React.useState("builder");
+
   // Workbench Modes
-  const [viewMode, setViewMode] = React.useState<'chat' | 'preview' | 'browser' | 'split'>('chat');
+  const [viewMode, setViewMode] = React.useState<"chat" | "preview" | "browser" | "split">("chat");
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setCatalogLoading(true);
+    void fetchModelsCatalog()
+      .then((c) => {
+        if (!cancelled) setCatalog(c);
+      })
+      .catch(() => {
+        if (!cancelled) setCatalog(CLIENT_MODEL_CATALOG_FALLBACK);
+      })
+      .finally(() => {
+        if (!cancelled) setCatalogLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   React.useEffect(() => {
     if (!import.meta.env.DEV) {
@@ -110,6 +129,10 @@ export default function Chat() {
         {
           session_id: sessionId ?? undefined,
           messages: [{ role: "user", content: text }],
+          ...(modelId ? { model_id: modelId } : {}),
+          workbench_mode: workbenchMode,
+          worker,
+          max_mode: maxMode,
         },
         {
           onSession: (sid) => setSessionId(sid),
@@ -295,65 +318,90 @@ export default function Chat() {
                  {chatError}
                </div>
              ) : null}
-             {/* Integrated Context Chips (Compact display) */}
-             <div className="flex items-center gap-2 animate-in slide-in-from-bottom-2 duration-500 overflow-x-auto scrollbar-hide">
-                <div className="flex items-center gap-3 px-3 py-1.5 bg-white/[0.05] border border-white/10 rounded-lg text-white/40 group shrink-0">
-                   <User className="h-3 w-3 text-[#FF6B00]" />
-                   <span className="text-[9px] font-black uppercase tracking-widest">{selectedAgent.name}</span>
-                </div>
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-white/[0.02] border border-white/5 rounded-lg text-white/20 shrink-0">
-                   <Cpu className="h-3 w-3" />
-                   <span className="text-[9px] font-black uppercase tracking-widest">{selectedAgent.model}</span>
-                </div>
-                {selectedAgent.assignedTools && selectedAgent.assignedTools.length > 0 && (
-                   <div className="flex items-center gap-2 px-3 py-1.5 bg-white/[0.02] border border-white/5 rounded-lg text-white/20 shrink-0">
-                      <ToyBrick className="h-3 w-3" />
-                      <span className="text-[9px] font-black uppercase tracking-widest">{selectedAgent.assignedTools.length} Tools</span>
-                   </div>
-                )}
-             </div>
 
-             <form onSubmit={handleSend} className="relative group shadow-2xl">
-                <div className="absolute -inset-1 bg-gradient-to-r from-[#FF6B00]/20 to-[#FF6B00]/5 rounded-2xl blur opacity-20 group-focus-within:opacity-80 transition duration-700" />
-                <div className="relative bg-[#0d0d0d] border border-white/10 rounded-xl overflow-hidden shadow-2xl">
-                   <div className="flex flex-col">
-                      <div className="flex items-start px-6 pt-5 pb-3 gap-5">
-                         <Terminal className="h-5 w-5 text-[#FF6B00]/60 mt-0.5 shrink-0" />
-                         <textarea 
+             <form onSubmit={handleSend} className="relative isolate group shadow-2xl">
+                {/* Glow sits behind the composer; must not capture clicks or paint over controls */}
+                <div
+                  className="pointer-events-none absolute -inset-1 z-0 rounded-2xl bg-gradient-to-r from-[#FF6B00]/20 to-[#FF6B00]/5 opacity-20 blur transition duration-700 group-focus-within:opacity-80"
+                  aria-hidden
+                />
+                {/* Card + strip stack above the glow; overflow visible so model/mode dropdowns are not clipped */}
+                <div className="relative z-10 flex flex-col overflow-visible rounded-xl border border-white/10 bg-[#0d0d0d] shadow-2xl">
+                   <div className="relative z-20 rounded-t-xl bg-black/35">
+                      <ChatComposerStrip
+                        workbenchMode={workbenchMode}
+                        onWorkbenchMode={setWorkbenchMode}
+                        modelId={modelId}
+                        onModelId={setModelId}
+                        maxMode={maxMode}
+                        onMaxMode={setMaxMode}
+                        worker={worker}
+                        onWorker={setWorker}
+                        toolsCount={selectedAgent.assignedTools?.length ?? 0}
+                        catalog={catalog}
+                        catalogLoading={catalogLoading}
+                      />
+                   </div>
+                   <div className="flex flex-col border-t border-white/5">
+                      <div className="flex items-start px-6 pt-4 pb-3 gap-3">
+                         <Terminal className="h-5 w-5 text-[#FF6B00]/60 mt-1 shrink-0" />
+                         <div className="flex-1 min-w-0 flex items-start gap-2">
+                           <span className="text-[#FF6B00] font-mono text-[13px] font-bold mt-1.5 shrink-0 select-none">
+                             &gt;_
+                           </span>
+                           <textarea
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
                             onKeyDown={(e) => {
-                              if (e.key === 'Enter' && !e.shiftKey) {
+                              if (e.key === "Enter" && !e.shiftKey) {
                                 e.preventDefault();
                                 void handleSend(e as unknown as React.FormEvent);
                               }
                             }}
-                            placeholder="Direct the workforce or press / for system commands..."
-                            className="flex-1 bg-transparent border-none outline-none text-white text-[14px] font-bold uppercase tracking-[0.05em] placeholder:text-white/10 resize-none min-h-[60px] max-h-[200px] leading-relaxed"
+                            placeholder="Initiate mission directive or press / for system commands…"
+                            className="flex-1 bg-transparent border-none outline-none text-white text-[13px] font-bold uppercase tracking-[0.06em] placeholder:text-white/10 resize-none min-h-[72px] max-h-[220px] leading-relaxed"
                          />
+                         </div>
                       </div>
 
-                      <div className="flex h-12 items-center px-6 bg-white/[0.02] border-t border-white/5 justify-between">
-                         <div className="flex items-center gap-6">
+                      <div className="flex min-h-12 items-center px-6 py-2 bg-white/[0.02] border-t border-white/5 justify-between gap-4 flex-wrap">
+                         <div className="flex items-center gap-4 sm:gap-6">
                             <button type="button" className="flex items-center gap-2 text-[9px] text-white/20 hover:text-[#FF6B00] font-black uppercase tracking-widest transition-colors p-2">
                                <Paperclip className="h-3.5 w-3.5" />
                                Attach
                             </button>
-                            <button type="button" className="flex items-center gap-2 text-[9px] text-white/20 hover:text-[#FF6B00] font-black uppercase tracking-widest transition-colors p-2">
+                            <button
+                              type="button"
+                              onClick={() => setMaxMode((m) => !m)}
+                              className={cn(
+                                "flex items-center gap-2 text-[9px] font-black uppercase tracking-widest transition-colors p-2",
+                                maxMode ? "text-[#FF6B00]" : "text-white/20 hover:text-[#FF6B00]",
+                              )}
+                            >
                                <Zap className="h-3.5 w-3.5" />
-                               Fast
+                               FAST MODE
                             </button>
-                            <div className="h-4 w-px bg-white/5" />
-                            <div className={cn("flex items-center gap-2 text-[9px] font-black uppercase tracking-widest italic transition-colors", selectedAgent.keyConnected ? "text-green-500/40" : "text-red-500/40")}>
-                               <Shield className="h-3 w-3" />
-                               {selectedAgent.keyConnected ? "Connected" : "Unlinked"}
+                            <div className="h-4 w-px bg-white/5 hidden sm:block" />
+                            <div
+                              className={cn(
+                                "flex items-center gap-2 text-[9px] font-black uppercase tracking-widest",
+                                catalog?.openrouter_chat_ready ? "text-emerald-500/90" : "text-amber-500/75",
+                              )}
+                            >
+                               <span
+                                 className={cn(
+                                   "h-2 w-2 rounded-full shrink-0",
+                                   catalog?.openrouter_chat_ready ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]" : "bg-amber-500",
+                                 )}
+                               />
+                               {catalog?.openrouter_chat_ready ? "CONNECTED" : "CHAT GATEWAY OFFLINE"}
                             </div>
                          </div>
 
-                         <div className="flex items-center gap-4">
-                            <button type="submit" disabled={sending} className="flex items-center gap-3 px-8 py-2 bg-[#FF6B00] text-black text-[11px] font-black uppercase tracking-widest hover:bg-[#FF6B00]/80 transition-all rounded-lg shadow-lg hover:shadow-[#FF6B00]/20 disabled:opacity-50 disabled:pointer-events-none">
+                         <div className="flex items-center gap-4 ml-auto">
+                            <button type="submit" disabled={sending} className="flex items-center gap-3 px-6 sm:px-8 py-2 bg-[#FF6B00] text-black text-[10px] sm:text-[11px] font-black uppercase tracking-widest hover:bg-[#FF6B00]/90 transition-all rounded-lg shadow-lg hover:shadow-[#FF6B00]/20 disabled:opacity-50 disabled:pointer-events-none">
                                <Send className="h-4 w-4" />
-                               {sending ? "Sending…" : "Execute"}
+                               {sending ? "Sending…" : "Execute mission"}
                             </button>
                          </div>
                       </div>
