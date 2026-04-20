@@ -40,13 +40,18 @@ export function NavRail() {
 
   return (
     <div className="w-[64px] h-full flex flex-col items-center py-6 bg-[#000000] border-r border-white/5 z-50 transition-colors shrink-0">
-      <div className="mb-10 flex h-7 w-7 shrink-0 items-center justify-center" title="Ham">
+      <Link
+        to="/"
+        className="mb-10 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg hover:bg-white/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF6B00]/55 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
+        title="Ham — home"
+        aria-label="Return to landing page"
+      >
         <img
           src="/ham-logo.png"
-          alt="Ham"
-          className="h-7 w-7 object-contain brightness-0 invert opacity-90"
+          alt=""
+          className="h-7 w-7 object-contain brightness-0 invert opacity-90 pointer-events-none"
         />
-      </div>
+      </Link>
 
       <div className="flex-1 flex flex-col gap-5">
         {primaryNav.map((item) => {
