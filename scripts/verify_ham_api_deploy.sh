@@ -14,7 +14,35 @@ body="$(mktemp)"
 trap 'rm -f "$hdrs" "$body"' EXIT
 
 echo "== GET ${BASE}/api/status"
-curl -sS -f -o /dev/null -w "HTTP %{http_code}\n" "${BASE}/api/status"
+status_body="$(curl -sS -f "${BASE}/api/status")"
+echo "HTTP 200 (body length ${#status_body})"
+if ! STATUS_BODY="$status_body" python3 -c '
+import json, os, sys
+d = json.loads(os.environ["STATUS_BODY"])
+cap = d.get("capabilities") or {}
+if cap.get("project_agent_profiles_read") is not True:
+    print("Missing capabilities.project_agent_profiles_read=true — redeploy Ham API from current main.", file=sys.stderr)
+    sys.exit(1)
+' 2>/dev/null; then
+  echo "Capability check failed. Body:" >&2
+  echo "$status_body" >&2
+  exit 1
+fi
+
+echo "== GET ${BASE}/api/projects/__ham_deploy_verify__/agents (expect structured PROJECT_NOT_FOUND 404)"
+code_agents="$(curl -sS -o "$body" -w '%{http_code}' "${BASE}/api/projects/__ham_deploy_verify__/agents")"
+if [[ "$code_agents" != "404" ]]; then
+  echo "Expected HTTP 404 for unknown project_id, got ${code_agents}. Body:" >&2
+  cat "$body" >&2 || true
+  exit 1
+fi
+if ! grep -q "PROJECT_NOT_FOUND" "$body"; then
+  echo "Agent Builder route missing or wrong API: expected JSON with PROJECT_NOT_FOUND, got:" >&2
+  cat "$body" >&2 || true
+  echo >&2
+  echo "If body is {\"detail\":\"Not Found\"}, the running image has no GET /api/projects/{{id}}/agents — rebuild/redeploy. Also set VITE_HAM_API_BASE to the API origin only (no /api suffix)." >&2
+  exit 1
+fi
 
 echo "== OPTIONS ${BASE}/api/chat (preflight, Origin: ${ORIGIN})"
 code="$(

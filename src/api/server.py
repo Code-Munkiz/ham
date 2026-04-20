@@ -14,9 +14,9 @@ from src.api.cursor_skills import router as cursor_skills_router
 from src.api.cursor_subagents import router as cursor_subagents_router
 from src.api.hermes_skills import router as hermes_skills_router
 from src.api.models_catalog import router as models_catalog_router
-from src.api.agent_profiles import router as agent_profiles_router
 from src.api.project_settings import router as project_settings_router
-from src.memory_heist import context_engine_dashboard_payload
+from src.ham.agent_profiles import agents_config_from_merged
+from src.memory_heist import context_engine_dashboard_payload, discover_config
 from src.persistence.project_store import ProjectStore
 from src.persistence.run_store import RunStore
 from src.registry.droids import DEFAULT_DROID_REGISTRY
@@ -58,7 +58,6 @@ app.include_router(cursor_settings_router)
 app.include_router(cursor_skills_router)
 app.include_router(cursor_subagents_router)
 app.include_router(hermes_skills_router)
-app.include_router(agent_profiles_router)
 app.include_router(project_settings_router)
 app.include_router(models_catalog_router)
 
@@ -93,6 +92,7 @@ async def root() -> dict[str, Any]:
         "hermes_skills_install_apply": "/api/hermes-skills/install/apply",
         "chat_stream": "/api/chat/stream",
         "settings_write_status": "/api/settings/write-status",
+        "project_agents": "/api/projects/{project_id}/agents",
     }
 
 
@@ -106,6 +106,9 @@ async def get_status() -> dict:
     return {
         "version": "0.1.0",
         "run_count": _store.count(),
+        "capabilities": {
+            "project_agent_profiles_read": True,
+        },
     }
 
 
@@ -170,6 +173,28 @@ async def get_project_context_engine(project_id: str) -> dict:
     if record is None:
         raise HTTPException(status_code=404, detail=f"Project {project_id!r} not found")
     return context_engine_dashboard_payload(Path(record.root))
+
+
+@app.get("/api/projects/{project_id}/agents")
+async def get_project_agents(project_id: str) -> dict[str, Any]:
+    """HAM Agent Builder — effective profiles from merged Ham config (`.ham/settings.json` chain)."""
+    record = _projects.get_project(project_id)
+    if record is None:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": {
+                    "code": "PROJECT_NOT_FOUND",
+                    "message": f"Unknown project_id {project_id!r}.",
+                }
+            },
+        )
+    merged = discover_config(Path(record.root)).merged
+    cfg = agents_config_from_merged(merged)
+    return {
+        "kind": "ham_agent_profiles",
+        "agents": cfg.model_dump(mode="json"),
+    }
 
 
 # ---------------------------------------------------------------------------

@@ -19,6 +19,23 @@ from src.ham.agent_profiles import (
 from src.ham.settings_write import SettingsChanges, read_project_settings_document
 
 
+def test_api_status_includes_project_agent_profiles_capability() -> None:
+    client = TestClient(app)
+    res = client.get("/api/status")
+    assert res.status_code == 200, res.text
+    caps = res.json().get("capabilities") or {}
+    assert caps.get("project_agent_profiles_read") is True
+
+
+def test_get_project_agents_unknown_id_returns_project_not_found_json() -> None:
+    """Distinguishes registered route (structured 404) from missing route (plain Not Found)."""
+    client = TestClient(app)
+    res = client.get("/api/projects/__ham_test_no_such_project__/agents")
+    assert res.status_code == 404, res.text
+    err = (res.json().get("detail") or {}).get("error") or {}
+    assert err.get("code") == "PROJECT_NOT_FOUND"
+
+
 def test_default_agents_config() -> None:
     d = default_agents_config()
     assert d.primary_agent_id == PRIMARY_AGENT_DEFAULT_ID
