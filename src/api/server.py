@@ -12,6 +12,7 @@ from src.api.chat import router as chat_router
 from src.api.cursor_settings import router as cursor_settings_router
 from src.api.cursor_skills import router as cursor_skills_router
 from src.api.cursor_subagents import router as cursor_subagents_router
+from src.api.hermes_skills import router as hermes_skills_router
 from src.api.models_catalog import router as models_catalog_router
 from src.api.project_settings import router as project_settings_router
 from src.memory_heist import context_engine_dashboard_payload
@@ -55,6 +56,7 @@ app.include_router(chat_router)
 app.include_router(cursor_settings_router)
 app.include_router(cursor_skills_router)
 app.include_router(cursor_subagents_router)
+app.include_router(hermes_skills_router)
 app.include_router(project_settings_router)
 app.include_router(models_catalog_router)
 
@@ -83,6 +85,10 @@ async def root() -> dict[str, Any]:
         "status": "/api/status",
         "cursor_skills": "/api/cursor-skills",
         "cursor_subagents": "/api/cursor-subagents",
+        "hermes_skills_catalog": "/api/hermes-skills/catalog",
+        "hermes_skills_capabilities": "/api/hermes-skills/capabilities",
+        "hermes_skills_install_preview": "/api/hermes-skills/install/preview",
+        "hermes_skills_install_apply": "/api/hermes-skills/install/apply",
         "chat_stream": "/api/chat/stream",
         "settings_write_status": "/api/settings/write-status",
     }

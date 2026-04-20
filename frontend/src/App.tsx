@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { AppLayout } from "./components/layout/AppLayout";
 import Overview from "./pages/Overview";
@@ -19,6 +19,7 @@ import Settings from "./pages/Settings";
 
 import Logs from "./pages/Logs";
 import Analytics from "./pages/Analytics";
+import HermesSkills from "./pages/HermesSkills";
 
 import { AgentProvider } from "./lib/ham/AgentContext";
 import { WorkspaceProvider } from "./lib/ham/WorkspaceContext";
@@ -44,6 +45,8 @@ export default function App() {
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/logs" element={<Logs />} />
                 <Route path="/analytics" element={<Analytics />} />
+                <Route path="/skills" element={<HermesSkills />} />
+                <Route path="/hermes-skills" element={<Navigate to="/skills" replace />} />
               </Routes>
             </AppLayout>
           </BrowserRouter>

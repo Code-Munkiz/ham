@@ -37,8 +37,12 @@ Shipped muscle today centers on **Bridge + Droid executor** (`src/tools/droid_ex
 - `src/swarm_agency.py` — Hermes-supervised **context assembly** (shared `ProjectContext` + per-role render budgets for Architect / routing / critic prompts); **not** a separate orchestration framework (no CrewAI)
 - `src/registry/droids.py` — `DroidRecord` + `DroidRegistry` + `DEFAULT_DROID_REGISTRY` (builder, reviewer)
 - `src/persistence/run_store.py` — read-side `RunStore` over `.ham/runs/*.json`
-- `src/api/server.py` — FastAPI app: read API (`/api/status`, `/api/runs`, …) plus **`POST /api/chat`**, **`POST /api/chat/stream`** (see `src/api/chat.py`), **`GET /api/cursor-skills`**, **`GET /api/cursor-subagents`**, and **project settings** preview/apply (`src/api/project_settings.py`, `HAM_SETTINGS_WRITE_TOKEN` for mutating routes)
-- `src/ham/cursor_skills_catalog.py` — loads `.cursor/skills` for chat control plane + API index
+- `src/api/server.py` — FastAPI app: read API (`/api/status`, `/api/runs`, …) plus **`POST /api/chat`**, **`POST /api/chat/stream`** (see `src/api/chat.py`), **`GET /api/cursor-skills`** (Cursor operator skills), **`GET /api/hermes-skills/*`** (Hermes **runtime** skills catalog + host probe + **Phase 2a** shared install preview/apply; see `src/api/hermes_skills.py`, `src/ham/hermes_skills_install.py`), **`GET /api/cursor-subagents`**, and **project settings** preview/apply (`src/api/project_settings.py`, `HAM_SETTINGS_WRITE_TOKEN` for mutating routes)
+- `src/ham/cursor_skills_catalog.py` — loads `.cursor/skills` for chat control plane + API index (operator docs; **not** Hermes runtime skills)
+- `src/ham/hermes_skills_catalog.py` — vendored Hermes-runtime catalog manifest (`src/ham/data/hermes_skills_catalog.json`)
+- `scripts/build_hermes_skills_catalog.py` — regenerate catalog from pinned **NousResearch/hermes-agent** (`skills/` + `optional-skills/`); requires network unless `--repo-root` points at a checkout
+- `src/ham/hermes_skills_probe.py` — read-only Hermes home / profile discovery (`HAM_HERMES_SKILLS_MODE=remote_only` for non-co-located APIs)
+- `src/ham/hermes_skills_install.py` — Phase 2a shared-target install: HAM-managed bundles under `~/.hermes/ham-runtime-bundles/`, merge `skills.external_dirs` in Hermes `config.yaml`, atomic write, lock, backup + audit (`HAM_HERMES_SKILLS_SOURCE_ROOT` + `.ham-hermes-agent-commit` pin, `HAM_SKILLS_WRITE_TOKEN` for apply)
 - `src/ham/cursor_subagents_catalog.py` — loads `.cursor/rules/subagent-*.mdc` for chat + **`GET /api/cursor-subagents`**
 - `src/ham/ui_actions.py` — parse/validate `HAM_UI_ACTIONS_JSON` for chat → UI
 - `src/ham/settings_write.py` — allowlisted writes to `.ham/settings.json` (backup + audit)
@@ -78,6 +82,7 @@ Shipped muscle today centers on **Bridge + Droid executor** (`src/tools/droid_ex
 ## Frontend (workspace UI)
 
 - `frontend/` — Vite + React workspace; `npm run dev` (port 3000), `npm run lint` (`tsc --noEmit`)
+- `frontend/src/pages/HermesSkills.tsx` — **Skills** catalog UI (`/skills`, redirect from `/hermes-skills`); distinct from Cursor operator skills; API remains `/api/hermes-skills/*`
 
 ## Tests
 

@@ -1,5 +1,6 @@
 litellm
 python-dotenv
+pyyaml>=6.0
 pydantic
 fastapi
 uvicorn[standard]

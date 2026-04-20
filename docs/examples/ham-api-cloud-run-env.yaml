@@ -17,3 +17,6 @@ HAM_CORS_ORIGINS: "https://your-app.vercel.app,http://localhost:3000,http://127.
 # All Vercel preview hostnames (https://*.vercel.app) without listing each deployment.
 # Omit in strict production if you only want explicit HAM_CORS_ORIGINS.
 HAM_CORS_ORIGIN_REGEX: "https://.*\\.vercel\\.app"
+
+# Hermes runtime skills UI: Cloud Run is not co-located with ~/.hermes — mark remote-only.
+# HAM_HERMES_SKILLS_MODE: remote_only

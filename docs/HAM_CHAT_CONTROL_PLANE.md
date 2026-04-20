@@ -57,10 +57,28 @@ Chat should name the **skill id**, the **`.cursor/skills/.../SKILL.md`** path, a
 
 Chat and the LLM **do not** apply settings; the UI (or CLI) calls **preview** then **apply** after human confirmation.
 
+## Hermes runtime skills (Phase 1 catalog + Phase 2a shared install)
+
+**Distinct from** the Cursor operator catalog (`GET /api/cursor-skills`, `.cursor/skills`): Hermes skills are **runtime** agent skills (may include scripts) and follow Hermes semantics (`~/.hermes/skills`, `skills.external_dirs`, profiles).
+
+| Piece | Role |
+|-------|------|
+| `GET /api/hermes-skills/catalog` | Vendored catalog from pinned **hermes-agent** (`skills/` + `optional-skills/`). Regenerate: `python scripts/build_hermes_skills_catalog.py` (bumps commit via `--commit-sha` when you change the pin). |
+| `GET /api/hermes-skills/catalog/{catalog_id}` | Detail + manifest/warnings/provenance. |
+| `GET /api/hermes-skills/capabilities` | Host probe: `local` / `remote_only` / `unsupported`; **`shared_runtime_install_supported`** when local Hermes home + **`HAM_HERMES_SKILLS_SOURCE_ROOT`** + `.ham-hermes-agent-commit` match catalog pin; **`skills_apply_writes_enabled`** when **`HAM_SKILLS_WRITE_TOKEN`** is set. Set **`HAM_HERMES_SKILLS_MODE=remote_only`** when the API is not co-located with operator Hermes home. |
+| `GET /api/hermes-skills/targets` | Read-only **shared** + **Hermes profile** targets (filesystem discovery only; not Ham `IntentProfile`, not Cursor subagents). **Phase 2a install** accepts **`{"kind":"shared"}`** only. |
+| `GET /api/hermes-skills/install/write-status` | Whether apply is enabled (token set on server). |
+| `POST /api/hermes-skills/install/preview` | Dry-run: `proposal_digest`, `base_revision`, `config_diff`, bundle path; no mutations. Rejects **`REMOTE_UNSUPPORTED`** when not co-located. |
+| `POST /api/hermes-skills/install/apply` | Bearer **`HAM_SKILLS_WRITE_TOKEN`**: materialize bundle under **`~/.hermes/ham-runtime-bundles/`**, merge **`skills.external_dirs`**, atomic YAML write, backup + audit under **`~/.hermes/_ham_*`**. |
+| `frontend/src/pages/HermesSkills.tsx` | **Skills** page (`/skills`); Phase 2a **Preview / Apply** in detail panel when **`shared_runtime_install_supported`**. |
+
+**Phase 2a scope:** shared target only; no profile-target install, no uninstall, no rollback API, no Hermes CLI subprocess install, no arbitrary URL/GitHub installs from the client.
+
 ## Next (not built yet)
 
 1. **Stronger grounding** — optional second-pass JSON from a small model if marker parsing is too brittle in production.
 2. **Settings UX (partial)** — Context & Memory panel ships preview/apply; optional: chat-suggested proposal JSON parsed client-side only (never auto-apply); optional **rollback** button.
+3. **Hermes skills Phase 2b+** — Hermes profile-target install, uninstall/rollback endpoints if needed, optional remote/sidecar topologies without pretending local writes.
 
 ## Constraints
 

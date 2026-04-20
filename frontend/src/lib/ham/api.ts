@@ -345,6 +345,208 @@ export async function postChatStream(
   return final;
 }
 
+// --- Hermes runtime skills (Phase 1: read-only catalog + probe; not Cursor operator skills) ---
+
+export type HermesSkillsMode = "local" | "remote_only" | "unsupported";
+
+export interface HermesSkillCatalogEntry {
+  catalog_id: string;
+  display_name: string;
+  summary: string;
+  trust_level: string;
+  source_kind: string;
+  source_ref: string;
+  version_pin: string;
+  content_hash_sha256: string;
+  platforms: string[];
+  required_environment_variables: Array<{ name: string; description?: string }>;
+  config_keys: string[];
+  has_scripts: boolean;
+  installable_by_default: boolean;
+}
+
+export interface HermesSkillDetailBlock {
+  provenance_note: string;
+  warnings: string[];
+  manifest_files: string[];
+}
+
+export interface HermesSkillCatalogEntryDetail extends HermesSkillCatalogEntry {
+  detail: HermesSkillDetailBlock;
+}
+
+export interface HermesSkillsCatalogResponse {
+  kind: "hermes_runtime_skills_catalog";
+  schema_version: number;
+  count: number;
+  entries: HermesSkillCatalogEntry[];
+  /** Present when manifest was generated from a pinned hermes-agent commit. */
+  upstream?: { repo: string; commit: string };
+  catalog_note?: string;
+}
+
+export interface HermesSkillsCapabilities {
+  kind: "hermes_skills_capabilities";
+  hermes_home_detected: boolean;
+  hermes_home_path_hint: string | null;
+  shared_target_supported: boolean;
+  profile_target_supported: boolean;
+  profile_listing_supported: boolean;
+  mode: HermesSkillsMode;
+  warnings: string[];
+  profile_count?: number;
+  /** Phase 2a: local Hermes home + source pin + not remote_only — shared runtime install preview/apply is meaningful. */
+  shared_runtime_install_supported?: boolean;
+  /** Server has HAM_SKILLS_WRITE_TOKEN (apply may work). */
+  skills_apply_writes_enabled?: boolean;
+}
+
+export interface HermesSkillTarget {
+  kind: "shared" | "hermes_profile";
+  id: string;
+  label: string;
+  available: boolean;
+  notes?: string;
+}
+
+export interface HermesSkillsTargetsResponse {
+  kind: "hermes_skills_targets";
+  targets: HermesSkillTarget[];
+  capabilities_summary: {
+    mode?: HermesSkillsMode;
+    hermes_home_detected?: boolean;
+    profile_listing_supported?: boolean;
+  };
+  warnings: string[];
+}
+
+export async function fetchHermesSkillsCatalog(): Promise<HermesSkillsCatalogResponse> {
+  const res = await fetch(apiUrl("/api/hermes-skills/catalog"));
+  if (!res.ok) {
+    throw new Error(`hermes-skills/catalog: HTTP ${res.status}`);
+  }
+  return res.json() as Promise<HermesSkillsCatalogResponse>;
+}
+
+export async function fetchHermesSkillDetail(
+  catalogId: string,
+): Promise<{ kind: string; entry: HermesSkillCatalogEntryDetail }> {
+  const res = await fetch(
+    apiUrl(`/api/hermes-skills/catalog/${encodeURIComponent(catalogId)}`),
+  );
+  if (!res.ok) {
+    throw new Error(`hermes-skills/catalog/${catalogId}: HTTP ${res.status}`);
+  }
+  return res.json() as Promise<{ kind: string; entry: HermesSkillCatalogEntryDetail }>;
+}
+
+export async function fetchHermesSkillsCapabilities(): Promise<HermesSkillsCapabilities> {
+  const res = await fetch(apiUrl("/api/hermes-skills/capabilities"));
+  if (!res.ok) {
+    throw new Error(`hermes-skills/capabilities: HTTP ${res.status}`);
+  }
+  return res.json() as Promise<HermesSkillsCapabilities>;
+}
+
+export async function fetchHermesSkillsTargets(): Promise<HermesSkillsTargetsResponse> {
+  const res = await fetch(apiUrl("/api/hermes-skills/targets"));
+  if (!res.ok) {
+    throw new Error(`hermes-skills/targets: HTTP ${res.status}`);
+  }
+  return res.json() as Promise<HermesSkillsTargetsResponse>;
+}
+
+/** Phase 2a — Hermes runtime skill install (shared target only; not Cursor operator skills). */
+export interface HermesSkillsInstallPreviewResponse {
+  kind: "hermes_skills_install_preview";
+  catalog_id: string;
+  target: { kind: "shared" };
+  client_proposal_id?: string | null;
+  paths_touched: string[];
+  config_path: string;
+  config_diff: { before: string[]; after: string[]; added: string[] };
+  config_snippet_after: { skills: { external_dirs: string[] } };
+  warnings: string[];
+  proposal_digest: string;
+  base_revision: string;
+  bundle_dest: string;
+  entry: Record<string, unknown>;
+}
+
+export interface HermesSkillsInstallApplyResponse {
+  kind: "hermes_skills_install_apply";
+  audit_id: string;
+  backup_id: string;
+  catalog_id: string;
+  target: { kind: "shared" };
+  installed_paths: string[];
+  new_revision: string;
+  warnings: string[];
+  client_proposal_id?: string | null;
+}
+
+export async function fetchHermesSkillsInstallWriteStatus(): Promise<{
+  writes_enabled: boolean;
+}> {
+  const res = await fetch(apiUrl("/api/hermes-skills/install/write-status"));
+  if (!res.ok) {
+    throw new Error(`hermes-skills/install/write-status: HTTP ${res.status}`);
+  }
+  return res.json() as Promise<{ writes_enabled: boolean }>;
+}
+
+export async function postHermesSkillsInstallPreview(body: {
+  catalog_id: string;
+  target: { kind: "shared" };
+  client_proposal_id?: string | null;
+}): Promise<HermesSkillsInstallPreviewResponse> {
+  const res = await fetch(apiUrl("/api/hermes-skills/install/preview"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      catalog_id: body.catalog_id,
+      target: body.target,
+      client_proposal_id: body.client_proposal_id ?? null,
+    }),
+  });
+  if (!res.ok) {
+    const msg = await detailMessageFromResponse(res);
+    throw new Error(msg || `hermes-skills install preview failed (HTTP ${res.status})`);
+  }
+  return res.json() as Promise<HermesSkillsInstallPreviewResponse>;
+}
+
+export async function postHermesSkillsInstallApply(
+  body: {
+    catalog_id: string;
+    target: { kind: "shared" };
+    proposal_digest: string;
+    base_revision: string;
+    client_proposal_id?: string | null;
+  },
+  bearerToken: string,
+): Promise<HermesSkillsInstallApplyResponse> {
+  const res = await fetch(apiUrl("/api/hermes-skills/install/apply"), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${bearerToken.trim()}`,
+    },
+    body: JSON.stringify({
+      catalog_id: body.catalog_id,
+      target: body.target,
+      proposal_digest: body.proposal_digest,
+      base_revision: body.base_revision,
+      client_proposal_id: body.client_proposal_id ?? null,
+    }),
+  });
+  if (!res.ok) {
+    const msg = await detailMessageFromResponse(res);
+    throw new Error(msg || `hermes-skills install apply failed (HTTP ${res.status})`);
+  }
+  return res.json() as Promise<HermesSkillsInstallApplyResponse>;
+}
+
 // --- Allowlisted project settings (v1 control plane) ---
 
 export interface HamSettingsMemoryHeistPatch {
