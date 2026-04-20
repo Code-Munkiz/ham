@@ -3,10 +3,13 @@ import {
   Box,
   Brain,
   ChevronDown,
+  Factory,
   HelpCircle,
   Infinity,
   ListTree,
+  Radio,
   Search,
+  Sparkles,
   User,
   Wrench,
 } from "lucide-react";
@@ -16,10 +19,28 @@ import type { ModelCatalogItem, ModelCatalogPayload } from "@/lib/ham/types";
 
 export type WorkbenchMode = "ask" | "plan" | "agent";
 
+/** Execution system / backend family — not Ask/Plan/Agent (directive intent). */
+export type UplinkId = "cloud_agent" | "factory_ai" | "eliza_os";
+
 const MODES: { id: WorkbenchMode; label: string; hint: string; icon: React.ElementType }[] = [
-  { id: "ask", label: "Ask", hint: "Questions & answers", icon: HelpCircle },
-  { id: "plan", label: "Plan", hint: "Planning & decomposition", icon: ListTree },
-  { id: "agent", label: "Agent", hint: "Action-oriented execution", icon: Infinity },
+  {
+    id: "ask",
+    label: "Ask",
+    hint: "Direct help: explain, inspect, review, answer — lowest autonomy",
+    icon: HelpCircle,
+  },
+  {
+    id: "plan",
+    label: "Plan",
+    hint: "Structure the path: scope, risks, files, acceptance — before execution",
+    icon: ListTree,
+  },
+  {
+    id: "agent",
+    label: "Agent",
+    hint: "Delegated execution: carry the mission until blocked or done",
+    icon: Infinity,
+  },
 ];
 
 const WORKERS: { id: string; label: string; hint: string }[] = [
@@ -30,6 +51,42 @@ const WORKERS: { id: string; label: string; hint: string }[] = [
   { id: "qa", label: "QA", hint: "Test generation & validation" },
 ];
 
+const UPLINKS: {
+  id: UplinkId;
+  label: string;
+  short: string;
+  hint: string;
+  icon: React.ElementType;
+}[] = [
+  {
+    id: "cloud_agent",
+    label: "Cloud Agent",
+    short: "CLOUD",
+    hint: "Cursor Cloud Agents API (launch, status, conversation, follow-up)",
+    icon: Radio,
+  },
+  {
+    id: "factory_ai",
+    label: "Factory AI",
+    short: "FACTORY",
+    hint: "Hermes / OpenRouter path — factory-style execution profile",
+    icon: Factory,
+  },
+  {
+    id: "eliza_os",
+    label: "ELIZA_OS",
+    short: "ELIZA_OS",
+    hint: "ELIZA_OS profile — dashboard chat until dedicated backend ships",
+    icon: Sparkles,
+  },
+];
+
+function uplinkAccentClass(id: UplinkId): string {
+  if (id === "cloud_agent") return "text-[#00E5FF] border-[#00E5FF]/35";
+  if (id === "factory_ai") return "text-[#BC13FE] border-[#BC13FE]/35";
+  return "text-[#FF2BD6] border-[#FF2BD6]/35";
+}
+
 export interface ChatComposerStripProps {
   workbenchMode: WorkbenchMode;
   onWorkbenchMode: (m: WorkbenchMode) => void;
@@ -39,6 +96,8 @@ export interface ChatComposerStripProps {
   onMaxMode: (v: boolean) => void;
   worker: string;
   onWorker: (id: string) => void;
+  uplinkId: UplinkId;
+  onUplinkId: (id: UplinkId) => void;
   toolsCount: number;
   catalog: ModelCatalogPayload | null;
   catalogLoading: boolean;
@@ -58,6 +117,8 @@ export function ChatComposerStrip({
   onMaxMode,
   worker,
   onWorker,
+  uplinkId,
+  onUplinkId,
   toolsCount,
   catalog,
   catalogLoading,
@@ -65,11 +126,13 @@ export function ChatComposerStrip({
   const [modeOpen, setModeOpen] = React.useState(false);
   const [modelOpen, setModelOpen] = React.useState(false);
   const [workerOpen, setWorkerOpen] = React.useState(false);
+  const [uplinkOpen, setUplinkOpen] = React.useState(false);
   const [search, setSearch] = React.useState("");
 
   const modeRef = React.useRef<HTMLDivElement>(null);
   const modelRef = React.useRef<HTMLDivElement>(null);
   const workerRef = React.useRef<HTMLDivElement>(null);
+  const uplinkRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
     const close = (e: MouseEvent) => {
@@ -77,9 +140,11 @@ export function ChatComposerStrip({
       if (modeRef.current?.contains(t)) return;
       if (modelRef.current?.contains(t)) return;
       if (workerRef.current?.contains(t)) return;
+      if (uplinkRef.current?.contains(t)) return;
       setModeOpen(false);
       setModelOpen(false);
       setWorkerOpen(false);
+      setUplinkOpen(false);
     };
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
@@ -90,6 +155,8 @@ export function ChatComposerStrip({
   const modeDef = MODES.find((m) => m.id === workbenchMode) ?? MODES[2];
   const ModeIcon = modeDef.icon;
   const workerDef = WORKERS.find((w) => w.id === worker) ?? WORKERS[0];
+  const uplinkDef = UPLINKS.find((u) => u.id === uplinkId) ?? UPLINKS[1];
+  const UplinkIcon = uplinkDef.icon;
 
   const tierAuto = items.find((i) => i.id === "tier:auto");
   const tierPremium = items.find((i) => i.id === "tier:premium");
@@ -114,7 +181,7 @@ export function ChatComposerStrip({
 
   return (
     <div className="flex flex-wrap items-center gap-2 px-4 pt-4 pb-3">
-      {/* Mode */}
+      {/* Ask / Plan / Agent — directive intent */}
       <div className="relative" ref={modeRef}>
         <button
           type="button"
@@ -122,6 +189,7 @@ export function ChatComposerStrip({
             setModeOpen(!modeOpen);
             setModelOpen(false);
             setWorkerOpen(false);
+            setUplinkOpen(false);
           }}
           className={cn(
             "inline-flex items-center gap-2 h-10 px-3 rounded-lg border text-[10px] font-black uppercase tracking-widest transition-colors",
@@ -135,7 +203,7 @@ export function ChatComposerStrip({
           <ChevronDown className={cn("h-3 w-3 opacity-50", modeOpen && "rotate-180")} />
         </button>
         {modeOpen && (
-          <div className="absolute left-0 bottom-full mb-1 z-50 w-64 rounded-lg border border-white/10 bg-[#0a0a0a] shadow-2xl py-1">
+          <div className="absolute left-0 bottom-full mb-1 z-50 w-72 rounded-lg border border-white/10 bg-[#0a0a0a] shadow-2xl py-1">
             {MODES.map((m) => {
               const I = m.icon;
               return (
@@ -154,7 +222,7 @@ export function ChatComposerStrip({
                   <I className="h-4 w-4 mt-0.5 shrink-0 text-[#FF6B00]/80" />
                   <div>
                     <div className="text-[10px] font-black uppercase tracking-widest text-white">{m.label}</div>
-                    <div className="text-[9px] font-bold text-white/30 uppercase tracking-wider mt-0.5">{m.hint}</div>
+                    <div className="text-[9px] font-bold text-white/35 uppercase tracking-wider mt-0.5 leading-snug">{m.hint}</div>
                   </div>
                 </button>
               );
@@ -168,9 +236,10 @@ export function ChatComposerStrip({
         <button
           type="button"
           onClick={() => {
-            setModelOpen(!modelOpen);
             setModeOpen(false);
             setWorkerOpen(false);
+            setUplinkOpen(false);
+            setModelOpen(!modelOpen);
           }}
           className={cn(
             "flex items-center justify-between w-full h-10 px-3 rounded-lg border border-white/10 bg-white/[0.04] text-left hover:border-[#FF6B00]/30 transition-colors",
@@ -269,7 +338,6 @@ export function ChatComposerStrip({
                 </div>
               </div>
             )}
-            {/* Explicit height: flex-1 in an auto-height column was collapsing this region to 0px */}
             <div className="min-h-[200px] max-h-[min(42vh,320px)] overflow-y-auto overscroll-contain py-1 scrollbar-thin">
               {catalogLoading && (
                 <div className="px-3 py-4 text-[9px] font-bold uppercase tracking-widest text-white/25">Loading catalog…</div>
@@ -333,6 +401,7 @@ export function ChatComposerStrip({
             setWorkerOpen(!workerOpen);
             setModeOpen(false);
             setModelOpen(false);
+            setUplinkOpen(false);
           }}
           className={cn(
             "flex items-center justify-between w-full h-10 px-3 rounded-lg border border-white/10 bg-white/[0.04] text-left hover:border-white/20 transition-colors",
@@ -368,6 +437,58 @@ export function ChatComposerStrip({
                 </div>
               </button>
             ))}
+          </div>
+        )}
+      </div>
+
+      {/* Uplink — execution system / backend family */}
+      <div className="relative min-w-[130px]" ref={uplinkRef}>
+        <button
+          type="button"
+          onClick={() => {
+            setUplinkOpen(!uplinkOpen);
+            setModeOpen(false);
+            setModelOpen(false);
+            setWorkerOpen(false);
+          }}
+          className={cn(
+            "flex items-center justify-between w-full h-10 px-3 rounded-lg border bg-white/[0.04] text-left transition-colors",
+            uplinkOpen ? "border-[#FF6B00]/50" : "border-white/10 hover:border-white/20",
+            uplinkAccentClass(uplinkId),
+          )}
+        >
+          <span className="flex items-center gap-2 min-w-0">
+            <UplinkIcon className="h-3.5 w-3.5 shrink-0 opacity-90" />
+            <span className="text-[10px] font-black uppercase tracking-widest truncate">{uplinkDef.short}</span>
+          </span>
+          <ChevronDown className={cn("h-3.5 w-3.5 text-white/30 shrink-0", uplinkOpen && "rotate-180")} />
+        </button>
+        {uplinkOpen && (
+          <div className="absolute left-0 bottom-full mb-1 z-[200] w-80 rounded-lg border border-white/10 bg-[#0a0a0a] shadow-2xl py-1">
+            <div className="px-3 py-1.5 text-[8px] font-black text-white/25 uppercase tracking-[0.25em]">Uplink</div>
+            {UPLINKS.map((u) => {
+              const I = u.icon;
+              return (
+                <button
+                  key={u.id}
+                  type="button"
+                  onClick={() => {
+                    onUplinkId(u.id);
+                    setUplinkOpen(false);
+                  }}
+                  className={cn(
+                    "flex w-full items-start gap-3 px-3 py-2.5 text-left hover:bg-white/5 transition-colors",
+                    uplinkId === u.id ? "bg-white/[0.06]" : "",
+                  )}
+                >
+                  <I className={cn("h-4 w-4 mt-0.5 shrink-0", uplinkAccentClass(u.id))} />
+                  <div>
+                    <div className={cn("text-[10px] font-black uppercase tracking-widest", uplinkAccentClass(u.id))}>{u.label}</div>
+                    <div className="text-[9px] font-bold text-white/35 uppercase tracking-wider mt-0.5 leading-snug">{u.hint}</div>
+                  </div>
+                </button>
+              );
+            })}
           </div>
         )}
       </div>

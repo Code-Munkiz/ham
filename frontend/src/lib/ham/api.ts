@@ -111,6 +111,50 @@ export async function clearSavedCursorApiKey(): Promise<void> {
   }
 }
 
+/** Proxy `GET /v0/agents/{id}` — Cloud Agent status and metadata. */
+export async function fetchCursorAgent(agentId: string): Promise<Record<string, unknown>> {
+  const res = await fetch(apiUrl(`/api/cursor/agents/${encodeURIComponent(agentId)}`));
+  if (!res.ok) {
+    const msg = (await readFastApiDetail(res)) ?? `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+  return res.json() as Promise<Record<string, unknown>>;
+}
+
+/** Proxy `GET /v0/agents/{id}/conversation`. */
+export async function fetchCursorAgentConversation(
+  agentId: string,
+): Promise<Record<string, unknown>> {
+  const res = await fetch(
+    apiUrl(`/api/cursor/agents/${encodeURIComponent(agentId)}/conversation`),
+  );
+  if (!res.ok) {
+    const msg = (await readFastApiDetail(res)) ?? `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+  return res.json() as Promise<Record<string, unknown>>;
+}
+
+/** Proxy `POST /v0/agents/{id}/followup`. */
+export async function postCursorAgentFollowup(
+  agentId: string,
+  promptText: string,
+): Promise<Record<string, unknown>> {
+  const res = await fetch(
+    apiUrl(`/api/cursor/agents/${encodeURIComponent(agentId)}/followup`),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt_text: promptText }),
+    },
+  );
+  if (!res.ok) {
+    const msg = (await readFastApiDetail(res)) ?? `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+  return res.json() as Promise<Record<string, unknown>>;
+}
+
 export async function fetchProjectContextEngine(
   projectId: string,
 ): Promise<ContextEnginePayload> {

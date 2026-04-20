@@ -24,6 +24,12 @@ class CursorApiKeyBody(BaseModel):
     api_key: str = Field(min_length=1, max_length=4096)
 
 
+class CursorFollowupBody(BaseModel):
+    """Maps to Cursor `POST /v0/agents/{id}/followup`."""
+
+    prompt_text: str = Field(min_length=1, max_length=100_000)
+
+
 class LaunchCloudAgentBody(BaseModel):
     """Maps to Cursor Cloud Agents `POST /v0/agents` (minimal fields)."""
 
@@ -237,6 +243,66 @@ async def cursor_launch_agent(body: LaunchCloudAgentBody) -> dict[str, Any]:
     if resp.status_code >= 400:
         detail = resp.text[:2000] if resp.text else f"HTTP {resp.status_code}"
         raise HTTPException(status_code=502, detail=f"Cursor launch error: {detail}")
+    try:
+        return resp.json()
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail="Cursor returned non-JSON") from exc
+
+
+def _cursor_proxy_error(resp: httpx.Response, prefix: str) -> HTTPException:
+    detail = resp.text[:2000] if resp.text else f"HTTP {resp.status_code}"
+    return HTTPException(status_code=502, detail=f"{prefix}: {detail}")
+
+
+@router.get("/agents/{agent_id}")
+async def cursor_get_agent(agent_id: str) -> dict[str, Any]:
+    """Proxy `GET https://api.cursor.com/v0/agents/{id}` (status, summary, source, target)."""
+    key = _require_cursor_key()
+    aid = agent_id.strip()
+    if not aid:
+        raise HTTPException(status_code=422, detail="agent_id required")
+    resp = _cursor_get(f"/v0/agents/{aid}", api_key=key)
+    if resp.status_code == 401:
+        raise HTTPException(status_code=401, detail="Cursor rejected this API key (401).")
+    if resp.status_code >= 400:
+        raise _cursor_proxy_error(resp, "Cursor agent error")
+    try:
+        return resp.json()
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail="Cursor returned non-JSON") from exc
+
+
+@router.get("/agents/{agent_id}/conversation")
+async def cursor_get_agent_conversation(agent_id: str) -> dict[str, Any]:
+    """Proxy `GET https://api.cursor.com/v0/agents/{id}/conversation`."""
+    key = _require_cursor_key()
+    aid = agent_id.strip()
+    if not aid:
+        raise HTTPException(status_code=422, detail="agent_id required")
+    resp = _cursor_get(f"/v0/agents/{aid}/conversation", api_key=key)
+    if resp.status_code == 401:
+        raise HTTPException(status_code=401, detail="Cursor rejected this API key (401).")
+    if resp.status_code >= 400:
+        raise _cursor_proxy_error(resp, "Cursor conversation error")
+    try:
+        return resp.json()
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail="Cursor returned non-JSON") from exc
+
+
+@router.post("/agents/{agent_id}/followup")
+async def cursor_post_agent_followup(agent_id: str, body: CursorFollowupBody) -> dict[str, Any]:
+    """Proxy `POST https://api.cursor.com/v0/agents/{id}/followup`."""
+    key = _require_cursor_key()
+    aid = agent_id.strip()
+    if not aid:
+        raise HTTPException(status_code=422, detail="agent_id required")
+    payload: dict[str, Any] = {"prompt": {"text": body.prompt_text.strip()}}
+    resp = _cursor_post(f"/v0/agents/{aid}/followup", api_key=key, json_body=payload)
+    if resp.status_code == 401:
+        raise HTTPException(status_code=401, detail="Cursor rejected this API key (401).")
+    if resp.status_code >= 400:
+        raise _cursor_proxy_error(resp, "Cursor followup error")
     try:
         return resp.json()
     except ValueError as exc:

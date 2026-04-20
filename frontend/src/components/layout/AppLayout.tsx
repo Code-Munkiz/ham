@@ -59,7 +59,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         <div className="flex flex-1 overflow-hidden relative">
           <main className="flex-1 overflow-hidden relative flex flex-col">
             <div className="flex-1 overflow-hidden relative">
-              {/* Dynamic Workbench Layout */}
+              {/* Dynamic Workbench Layout — for `/chat`, layout/split is owned by `Chat.tsx` only; this block is for non-chat routes when preview/split is used here. */}
               <div className={cn(
                 "h-full w-full flex transition-all duration-500",
                 viewMode === 'split' ? "gap-px bg-white/5" : ""

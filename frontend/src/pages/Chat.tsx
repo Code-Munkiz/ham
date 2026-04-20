@@ -1,3 +1,7 @@
+/**
+ * `/chat` workbench: **single owner** for layout, split state, and right execution pane.
+ * `AppLayout` does not manage competing split logic for this route (see AppLayout comment).
+ */
 import * as React from "react";
 import {
   Send,
@@ -8,30 +12,37 @@ import {
   MessageSquare,
   Activity,
   Zap,
-  Globe,
   Monitor,
+  Globe,
   Layout,
   ChevronDown,
   X,
   AlertCircle,
+  Radar,
+  History,
+  Mic,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { ChatComposerStrip } from "@/components/chat/ChatComposerStrip";
-import type { WorkbenchMode } from "@/components/chat/ChatComposerStrip";
+import type { WorkbenchMode, UplinkId } from "@/components/chat/ChatComposerStrip";
 import { applyHamUiActions } from "@/lib/ham/applyUiActions";
 import {
   ensureProjectIdForWorkspaceRoot,
   fetchContextEngine,
   fetchModelsCatalog,
   fetchProjectAgents,
+  listHamProjects,
   postChatStream,
 } from "@/lib/ham/api";
 import { CLIENT_MODEL_CATALOG_FALLBACK } from "@/lib/ham/modelCatalogFallback";
 import type { ModelCatalogPayload } from "@/lib/ham/types";
 import { useAgent } from "@/lib/ham/AgentContext";
 import { useWorkspace } from "@/lib/ham/WorkspaceContext";
+import { ExecutionSurfaceChrome } from "@/components/war-room/ExecutionSurfaceChrome";
+import { ResizableWorkbenchSplit } from "@/components/war-room/ResizableWorkbenchSplit";
+import { WarRoomPane } from "@/components/war-room/WarRoomPane";
 
 type ChatRow = {
   id: string;
@@ -40,15 +51,139 @@ type ChatRow = {
   timestamp: string;
 };
 
+type ChatViewMode = "chat" | "split" | "preview" | "war_room";
+
+const RECENT_MISSIONS_KEY = "ham_recent_missions_v1";
+const MOUNT_STORAGE_KEY = "ham_project_mount_v1";
+const ACTIVE_CLOUD_AGENT_KEY = "ham_active_cloud_agent_id";
+
+type RecentMission = { id: string; label?: string; t: number };
+
+function loadRecentMissions(): RecentMission[] {
+  try {
+    const raw = localStorage.getItem(RECENT_MISSIONS_KEY);
+    if (!raw) return [];
+    const j = JSON.parse(raw) as unknown;
+    if (!Array.isArray(j)) return [];
+    return j.filter(
+      (x): x is RecentMission =>
+        typeof x === "object" &&
+        x !== null &&
+        typeof (x as RecentMission).id === "string" &&
+        typeof (x as RecentMission).t === "number",
+    );
+  } catch {
+    return [];
+  }
+}
+
+function saveRecentMissions(items: RecentMission[]) {
+  try {
+    localStorage.setItem(RECENT_MISSIONS_KEY, JSON.stringify(items.slice(0, 24)));
+  } catch {
+    /* ignore */
+  }
+}
+
+function directivePlaceholder(mode: WorkbenchMode): string {
+  if (mode === "ask") return "Ask HAM to inspect, explain, or answer…";
+  if (mode === "plan") return "Plan scope, risks, and the safest path before execution…";
+  return "Delegate execution — mission directive or follow-up…";
+}
+
+function primaryActionLabel(mode: WorkbenchMode, sending: boolean): string {
+  if (sending) return "Sending…";
+  if (mode === "ask") return "Send";
+  if (mode === "plan") return "Generate plan";
+  return "Execute mission";
+}
+
+function uplinkPipelineLabel(id: UplinkId): string {
+  if (id === "cloud_agent") return "CLOUD_AGENT";
+  if (id === "factory_ai") return "FACTORY_AI";
+  return "ELIZA_OS";
+}
+
+type TranscriptColumnProps = {
+  messages: ChatRow[];
+  primaryPersona: { name: string; avatarUrl: string | null } | null;
+};
+
+function TranscriptColumn({ messages, primaryPersona }: TranscriptColumnProps) {
+  return (
+    <div className="h-full min-h-0 flex flex-col overflow-hidden">
+      <div className="flex-1 overflow-y-auto p-12 space-y-16 scrollbar-hide relative">
+        <div className="max-w-3xl mx-auto space-y-16 pb-32">
+          {messages.map((msg) => (
+            <div
+              key={msg.id}
+              className={cn(
+                "flex gap-10 group animate-in fade-in slide-in-from-bottom-3 duration-700",
+                msg.role === "user" ? "flex-row-reverse" : "",
+              )}
+            >
+              <div
+                className={cn(
+                  "h-11 w-11 shrink-0 border flex items-center justify-center overflow-hidden transition-all rotate-3 group-hover:rotate-0",
+                  msg.role === "assistant"
+                    ? "bg-[#FF6B00]/10 border-[#FF6B00]/30 text-[#FF6B00] shadow-[0_0_30px_rgba(255,107,0,0.15)]"
+                    : msg.role === "system"
+                      ? "bg-white/5 border-white/10 text-white/20"
+                      : "bg-white border-white text-black shadow-xl",
+                )}
+              >
+                {msg.role === "assistant" ? (
+                  primaryPersona?.avatarUrl ? (
+                    <img src={primaryPersona.avatarUrl} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <Sparkles className="h-6 w-6" />
+                  )
+                ) : msg.role === "system" ? (
+                  <Shield className="h-5 w-5" />
+                ) : (
+                  <span className="text-[11px] font-black uppercase">User</span>
+                )}
+              </div>
+
+              <div className={cn("flex flex-col gap-4 min-w-0 max-w-2xl", msg.role === "user" ? "items-end" : "items-start")}>
+                <div className="flex items-center gap-4 opacity-40 group-hover:opacity-100 transition-opacity">
+                  <span className="text-[9px] font-black uppercase tracking-[0.4em] text-white italic">
+                    {msg.role === "assistant" && primaryPersona?.name ? primaryPersona.name : msg.role}
+                  </span>
+                  <span className="text-[8px] font-mono text-white/20">{msg.timestamp}</span>
+                </div>
+                <div
+                  className={cn(
+                    "relative p-8 border transition-all duration-300",
+                    msg.role === "user"
+                      ? "bg-white/[0.04] border-white/10 text-white/90 rounded-2xl rounded-tr-none shadow-2xl"
+                      : msg.role === "system"
+                        ? "bg-black border-white/10 text-[#FF6B00]/60 font-mono text-[10px] tracking-tight italic rounded-lg"
+                        : "bg-[#0a0a0a] border-white/5 text-white/80 group-hover:border-white/20 rounded-2xl rounded-tl-none shadow-lg",
+                  )}
+                >
+                  {msg.role === "assistant" && primaryPersona?.avatarUrl ? (
+                    <div className="absolute -right-6 -top-6 opacity-25 pointer-events-none overflow-hidden h-16 w-16 border border-white/10 rounded-2xl rotate-12 group-hover:rotate-0 transition-transform bg-black">
+                      <img src={primaryPersona.avatarUrl} alt="" className="w-full h-full object-cover" />
+                    </div>
+                  ) : null}
+                  <span className="text-[13px] font-medium leading-[1.6] uppercase tracking-[0.02em] whitespace-pre-wrap">
+                    {msg.content}
+                  </span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Chat() {
   const navigate = useNavigate();
   const { agents, selectedAgentId } = useAgent();
-  const {
-    activeTask,
-    setActiveTask,
-    isControlPanelOpen,
-    setIsControlPanelOpen,
-  } = useWorkspace();
+  const { isControlPanelOpen, setIsControlPanelOpen } = useWorkspace();
   const selectedAgent = agents.find(a => a.id === selectedAgentId) || agents[0];
 
   const [messages, setMessages] = React.useState<ChatRow[]>([]);
@@ -71,8 +206,87 @@ export default function Chat() {
     avatarUrl: string | null;
   } | null>(null);
 
-  // Workbench Modes
-  const [viewMode, setViewMode] = React.useState<"chat" | "preview" | "browser" | "split">("chat");
+  const [uplinkId, setUplinkId] = React.useState<UplinkId>("factory_ai");
+  const [viewMode, setViewMode] = React.useState<ChatViewMode>("chat");
+  const [projectsOpen, setProjectsOpen] = React.useState(false);
+  const [mountRepo, setMountRepo] = React.useState("");
+  const [mountRef, setMountRef] = React.useState("");
+  const [paneEmbedUrl, setPaneEmbedUrl] = React.useState("");
+  /** Cursor Cloud Agent id for War Room / Cloud Agent uplink (proxied via Ham API). */
+  const [activeCloudAgentId, setActiveCloudAgentId] = React.useState<string | null>(null);
+  const [recentMissions, setRecentMissions] = React.useState<RecentMission[]>([]);
+  const [hamProjects, setHamProjects] = React.useState<{ id: string; name: string; root: string }[]>([]);
+  const [projectsLoading, setProjectsLoading] = React.useState(false);
+  const [warBlink, setWarBlink] = React.useState(true);
+  const [reduceMotion, setReduceMotion] = React.useState(false);
+
+  React.useEffect(() => {
+    setRecentMissions(loadRecentMissions());
+    try {
+      const m = localStorage.getItem(MOUNT_STORAGE_KEY);
+      if (m) {
+        const o = JSON.parse(m) as { repository?: string; ref?: string };
+        if (typeof o.repository === "string") setMountRepo(o.repository);
+        if (typeof o.ref === "string") setMountRef(o.ref);
+      }
+    } catch {
+      /* ignore */
+    }
+    try {
+      const aid = localStorage.getItem(ACTIVE_CLOUD_AGENT_KEY)?.trim();
+      setActiveCloudAgentId(aid || null);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const persistActiveCloudAgentId = React.useCallback((id: string | null) => {
+    setActiveCloudAgentId(id);
+    try {
+      const t = id?.trim();
+      if (t) localStorage.setItem(ACTIVE_CLOUD_AGENT_KEY, t);
+      else localStorage.removeItem(ACTIVE_CLOUD_AGENT_KEY);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  React.useEffect(() => {
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    setReduceMotion(mq.matches);
+    const fn = () => setReduceMotion(mq.matches);
+    mq.addEventListener("change", fn);
+    return () => mq.removeEventListener("change", fn);
+  }, []);
+
+  React.useEffect(() => {
+    if (viewMode !== "war_room" || reduceMotion) return;
+    const id = window.setInterval(() => setWarBlink((b) => !b), 1000);
+    return () => window.clearInterval(id);
+  }, [viewMode, reduceMotion]);
+
+  React.useEffect(() => {
+    if (!projectsOpen) return;
+    let cancelled = false;
+    setProjectsLoading(true);
+    void listHamProjects()
+      .then((r) => {
+        if (!cancelled) {
+          setHamProjects(
+            r.projects.map((p) => ({ id: p.id, name: p.name ?? p.id, root: p.root })),
+          );
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setHamProjects([]);
+      })
+      .finally(() => {
+        if (!cancelled) setProjectsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectsOpen]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -158,8 +372,9 @@ export default function Chat() {
     e.preventDefault();
     if (!input.trim() || sending) return;
     const text = input.trim();
-    // Preview/Web modes collapse the transcript to w-0 — user sees "nothing happens".
-    setViewMode("chat");
+    if (viewMode === "preview") {
+      setViewMode("chat");
+    }
     setInput("");
     setChatError(null);
 
@@ -231,8 +446,12 @@ export default function Chat() {
     }
   };
 
+  const pipelineStatus = `${uplinkPipelineLabel(uplinkId)} · ${workbenchMode.toUpperCase()} — ${
+    sending ? "SENDING" : catalog?.openrouter_chat_ready ? "GATEWAY_READY" : "GATEWAY_OFFLINE"
+  }`;
+
   return (
-    <div className="flex h-full bg-[#050505] font-sans relative overflow-hidden">
+    <div className="flex h-full bg-[#000000] font-sans relative overflow-hidden">
       {/* Background Rail Grid */}
       <div className="absolute inset-0 opacity-[0.012] pointer-events-none" 
            style={{ backgroundImage: 'linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)', backgroundSize: '80px 80px' }} />
@@ -257,21 +476,22 @@ export default function Chat() {
               )}
            </div>
            
-           {/* View Selection Controls & Control Panel Toggle */}
-           <div className="flex items-center gap-4">
+           {/* CHAT | SPLIT | PREVIEW | WAR ROOM — WEB absorbed into right pane only */}
+           <div className="flex items-center gap-3 shrink-0">
               <div className="flex items-center gap-1 bg-white/5 border border-white/10 rounded-lg p-1">
                  {[
-                   { id: 'chat', icon: MessageSquare, label: 'Chat' },
-                   { id: 'split', icon: Layout, label: 'Split' },
-                   { id: 'preview', icon: Monitor, label: 'Preview' },
-                   { id: 'browser', icon: Globe, label: 'Web' },
+                   { id: "chat" as const, icon: MessageSquare, label: "Chat" },
+                   { id: "split" as const, icon: Layout, label: "Split" },
+                   { id: "preview" as const, icon: Monitor, label: "Preview" },
+                   { id: "war_room" as const, icon: Radar, label: "War Room" },
                  ].map((mode) => (
-                   <button 
+                   <button
                      key={mode.id}
-                     onClick={() => setViewMode(mode.id as any)}
+                     type="button"
+                     onClick={() => setViewMode(mode.id)}
                      className={cn(
                        "flex items-center gap-2 px-3 py-1.5 rounded-md transition-all group",
-                       viewMode === mode.id ? "bg-[#FF6B00] text-black" : "text-white/20 hover:text-white"
+                       viewMode === mode.id ? "bg-[#FF6B00] text-black" : "text-white/20 hover:text-white",
                      )}
                    >
                       <mode.icon className="h-3 w-3" />
@@ -279,130 +499,78 @@ export default function Chat() {
                    </button>
                  ))}
               </div>
-              <button 
+              <button
+                type="button"
                 onClick={() => setIsControlPanelOpen(!isControlPanelOpen)}
                 className={cn(
                   "flex items-center gap-3 px-4 py-1.5 border transition-all rounded-lg group shadow-xl",
-                  isControlPanelOpen 
-                    ? "bg-[#FF6B00]/10 border-[#FF6B00]/40 text-[#FF6B00]" 
-                    : "bg-white/5 border-white/10 text-white/40 hover:text-white"
+                  isControlPanelOpen
+                    ? "bg-[#FF6B00]/10 border-[#FF6B00]/40 text-[#FF6B00]"
+                    : "bg-white/5 border-white/10 text-white/40 hover:text-white",
                 )}
               >
                  <Activity className="h-3.5 w-3.5" />
                  <span className="text-[10px] font-black uppercase tracking-widest">Control Panel</span>
                  <ChevronDown className={cn("h-3 w-3 transition-transform duration-300", isControlPanelOpen ? "rotate-180" : "")} />
               </button>
+              <button
+                type="button"
+                onClick={() => setProjectsOpen(true)}
+                className="flex items-center gap-2 px-4 py-1.5 border border-white/10 bg-white/5 text-white/50 hover:text-white rounded-lg transition-colors"
+              >
+                <History className="h-3.5 w-3.5" />
+                <span className="text-[10px] font-black uppercase tracking-widest">Projects</span>
+              </button>
            </div>
         </div>
         
         {/* RIGHT-SIDE CONTROL PANEL OVERLAY - HANDLED BY APPLAYOUT NOW */}
 
-        {/* Dynamic Workbench Canvas */}
-        <div className="flex-1 flex relative overflow-hidden">
-          {/* Main Working Canvas (Chat/Split) */}
-          <div className={cn(
-            "h-full transition-all duration-700 overflow-hidden flex flex-col",
-            (viewMode === 'chat' || viewMode === 'split') ? "flex-1" : "w-0 opacity-0"
-          )}>
-            <div className="flex-1 overflow-y-auto p-12 space-y-16 scrollbar-hide relative">
-              <div className="max-w-3xl mx-auto space-y-16 pb-32">
-                {messages.map((msg) => (
-                  <div key={msg.id} className={cn("flex gap-10 group animate-in fade-in slide-in-from-bottom-3 duration-700", msg.role === 'user' ? "flex-row-reverse" : "")}>
-                    <div className={cn("h-11 w-11 shrink-0 border flex items-center justify-center overflow-hidden transition-all rotate-3 group-hover:rotate-0", msg.role === 'assistant' ? "bg-[#FF6B00]/10 border-[#FF6B00]/30 text-[#FF6B00] shadow-[0_0_30px_rgba(255,107,0,0.15)]" : msg.role === 'system' ? "bg-white/5 border-white/10 text-white/20" : "bg-white border-white text-black shadow-xl")}>
-                      {msg.role === 'assistant' ? (
-                        primaryPersona?.avatarUrl ? (
-                          <img
-                            src={primaryPersona.avatarUrl}
-                            alt=""
-                            className="h-full w-full object-cover"
-                          />
-                        ) : (
-                          <Sparkles className="h-6 w-6" />
-                        )
-                      ) : msg.role === 'system' ? (
-                        <Shield className="h-5 w-5" />
-                      ) : (
-                        <span className="text-[11px] font-black uppercase">User</span>
-                      )}
-                    </div>
-                    
-                    <div className={cn("flex flex-col gap-4 min-w-0 max-w-2xl", msg.role === 'user' ? "items-end" : "items-start")}>
-                      <div className="flex items-center gap-4 opacity-40 group-hover:opacity-100 transition-opacity">
-                        <span className="text-[9px] font-black uppercase tracking-[0.4em] text-white italic">
-                          {msg.role === "assistant" && primaryPersona?.name
-                            ? primaryPersona.name
-                            : msg.role}
-                        </span>
-                        <span className="text-[8px] font-mono text-white/20">{msg.timestamp}</span>
-                      </div>
-                      <div className={cn("relative p-8 border transition-all duration-300", msg.role === 'user' ? "bg-white/[0.04] border-white/10 text-white/90 rounded-2xl rounded-tr-none shadow-2xl" : msg.role === 'system' ? "bg-black border-white/10 text-[#FF6B00]/60 font-mono text-[10px] tracking-tight italic rounded-lg" : "bg-[#0a0a0a] border-white/5 text-white/80 group-hover:border-white/20 rounded-2xl rounded-tl-none shadow-lg")}>
-                        {msg.role === "assistant" && primaryPersona?.avatarUrl ? (
-                          <div className="absolute -right-6 -top-6 opacity-25 pointer-events-none overflow-hidden h-16 w-16 border border-white/10 rounded-2xl rotate-12 group-hover:rotate-0 transition-transform bg-black">
-                            <img
-                              src={primaryPersona.avatarUrl}
-                              alt=""
-                              className="w-full h-full object-cover"
-                            />
-                          </div>
-                        ) : null}
-                        <span className="text-[13px] font-medium leading-[1.6] uppercase tracking-[0.02em] whitespace-pre-wrap">{msg.content}</span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Split/Preview/Browser Overlay Panel */}
-          {viewMode !== 'chat' && (
-            <div className={cn(
-              "h-full border-l border-white/10 bg-[#0d0d0d] relative transition-all duration-700 overflow-hidden",
-              viewMode === 'split' ? "w-1/2 shadow-[-40px_0_60px_rgba(0,0,0,0.5)]" : "flex-1"
-            )}>
-               <div className="absolute inset-0 flex flex-col">
-                  {/* Internal Tab Bar for the Active Mode */}
-                  <div className="h-12 flex items-center px-6 bg-black/40 border-b border-white/5 justify-between shrink-0">
-                     <div className="flex items-center gap-3">
-                        {viewMode === 'preview' ? <Monitor className="h-3.5 w-3.5 text-[#FF6B00]" /> : <Globe className="h-3.5 w-3.5 text-[#FF6B00]" />}
-                        <div className="flex flex-col">
-                           <span className="text-[10px] font-black uppercase tracking-widest text-white/80 italic">{viewMode === 'preview' ? 'Live_Preview' : 'Internal_Browse'}</span>
-                           <span className="text-[8px] font-bold text-white/20 uppercase tracking-widest">{viewMode === 'preview' ? 'v1.2.0-beta' : 'secure.sandbox.ham'}</span>
-                        </div>
-                     </div>
-                     <button onClick={() => setViewMode('chat')} className="p-1.5 hover:bg-white/5 rounded text-white/20 hover:text-white transition-colors">
-                        <X className="h-4 w-4" />
-                     </button>
-                  </div>
-
-                  {/* Mode Content Content */}
-                  <div className="flex-1 bg-black flex items-center justify-center p-12 text-center group">
-                     <div className="absolute inset-0 opacity-[0.03] pointer-events-none" 
-                          style={{ backgroundImage: 'radial-gradient(circle, #fff 1px, transparent 1px)', backgroundSize: '16px 16px' }} />
-                     
-                     <div className="space-y-6 relative z-10 max-w-sm focus-within:ring-0">
-                        <div className="h-24 w-24 bg-white/[0.02] border border-white/10 rounded-[2.5rem] mx-auto flex items-center justify-center group-hover:border-[#FF6B00]/40 transition-all duration-500 group-hover:rotate-12">
-                           {viewMode === 'preview' ? <Monitor className="h-10 w-10 text-white/10 group-hover:text-[#FF6B00]/40" /> : <Globe className="h-10 w-10 text-white/10 group-hover:text-[#FF6B00]/40" />}
-                        </div>
-                        <div className="space-y-2">
-                           <p className="text-[12px] font-black text-white/40 uppercase tracking-[0.4em] italic leading-tight">Waiting for Deployment Directive</p>
-                           <p className="text-[10px] font-bold text-white/10 uppercase tracking-widest leading-relaxed">
-                              {viewMode === 'preview' 
-                                ? "Direct the droid workforce to generate a previewable endpoint for this session."
-                                : "The sandbox browser is currently offline. Initiate web browsing task to connect."}
-                           </p>
-                        </div>
-                        <div className="pt-4 h-8 animate-pulse text-[#FF6B00]/20 font-mono text-[10px]">SYSTEM_IDLE_BYPASS_MODE_OFF</div>
-                     </div>
-                  </div>
-               </div>
-            </div>
+        {/* Dynamic Workbench Canvas: chat-only, preview full-width, or resizable split + uplink panes */}
+        <div className="flex flex-1 min-h-0 flex-col relative overflow-hidden">
+          {viewMode === "chat" ? (
+            <TranscriptColumn messages={messages} primaryPersona={primaryPersona} />
+          ) : viewMode === "preview" ? (
+            <ExecutionSurfaceChrome
+              mode="preview"
+              onClose={() => setViewMode("chat")}
+            >
+              <WarRoomPane
+                uplinkId={uplinkId}
+                activeCloudAgentId={activeCloudAgentId}
+                embedUrl={paneEmbedUrl}
+                onEmbedUrlChange={setPaneEmbedUrl}
+              />
+            </ExecutionSurfaceChrome>
+          ) : (
+            <ResizableWorkbenchSplit
+              left={<TranscriptColumn messages={messages} primaryPersona={primaryPersona} />}
+              right={
+                <ExecutionSurfaceChrome
+                  mode={viewMode === "war_room" ? "war_room" : "split"}
+                  onClose={() => setViewMode("chat")}
+                  warRoomSignal={viewMode === "war_room"}
+                  reduceMotion={reduceMotion}
+                  warBlink={warBlink}
+                >
+                  <WarRoomPane
+                    uplinkId={uplinkId}
+                    activeCloudAgentId={activeCloudAgentId}
+                    embedUrl={paneEmbedUrl}
+                    onEmbedUrlChange={setPaneEmbedUrl}
+                  />
+                </ExecutionSurfaceChrome>
+              }
+            />
           )}
         </div>
 
         {/* COMPOSER Interface */}
         <div className="px-12 pb-10 pt-4 bg-gradient-to-t from-black via-black/95 to-transparent relative z-30">
           <div className="max-w-3xl mx-auto space-y-4">
+             <div className="flex flex-wrap items-center gap-2 px-1">
+               <span className="text-[9px] font-mono font-bold uppercase tracking-widest text-white/45">{pipelineStatus}</span>
+             </div>
              {chatError ? (
                <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-2 text-[11px] font-bold uppercase tracking-widest text-destructive">
                  <AlertCircle className="h-4 w-4 shrink-0" />
@@ -428,6 +596,8 @@ export default function Chat() {
                         onMaxMode={setMaxMode}
                         worker={worker}
                         onWorker={setWorker}
+                        uplinkId={uplinkId}
+                        onUplinkId={setUplinkId}
                         toolsCount={selectedAgent.assignedTools?.length ?? 0}
                         catalog={catalog}
                         catalogLoading={catalogLoading}
@@ -449,7 +619,7 @@ export default function Chat() {
                                 void handleSend(e as unknown as React.FormEvent);
                               }
                             }}
-                            placeholder="Initiate mission directive or press / for system commands…"
+                            placeholder={directivePlaceholder(workbenchMode)}
                             className="flex-1 bg-transparent border-none outline-none text-white text-[13px] font-bold uppercase tracking-[0.06em] placeholder:text-white/10 resize-none min-h-[72px] max-h-[220px] leading-relaxed"
                          />
                          </div>
@@ -460,6 +630,25 @@ export default function Chat() {
                             <button type="button" className="flex items-center gap-2 text-[9px] text-white/20 hover:text-[#FF6B00] font-black uppercase tracking-widest transition-colors p-2">
                                <Paperclip className="h-3.5 w-3.5" />
                                Attach
+                            </button>
+                            <button
+                              type="button"
+                              title="Dictation (browser-dependent)"
+                              className="flex items-center gap-2 text-[9px] text-white/20 hover:text-[#FF6B00] font-black uppercase tracking-widest transition-colors p-2"
+                            >
+                               <Mic className="h-3.5 w-3.5" />
+                               Mic
+                            </button>
+                            <button
+                              type="button"
+                              title="Open HTTPS preview URL in this workbench pane"
+                              onClick={() => {
+                                if (viewMode === "chat") setViewMode("split");
+                              }}
+                              className="flex items-center gap-2 text-[9px] text-white/20 hover:text-[#00E5FF] font-black uppercase tracking-widest transition-colors p-2"
+                            >
+                               <Globe className="h-3.5 w-3.5" />
+                               Browser
                             </button>
                             <button
                               type="button"
@@ -490,9 +679,16 @@ export default function Chat() {
                          </div>
 
                          <div className="flex items-center gap-4 ml-auto">
-                            <button type="submit" disabled={sending} className="flex items-center gap-3 px-6 sm:px-8 py-2 bg-[#FF6B00] text-black text-[10px] sm:text-[11px] font-black uppercase tracking-widest hover:bg-[#FF6B00]/90 transition-all rounded-lg shadow-lg hover:shadow-[#FF6B00]/20 disabled:opacity-50 disabled:pointer-events-none">
+                            <button
+                              type="submit"
+                              disabled={sending}
+                              className={cn(
+                                "flex items-center gap-3 px-6 sm:px-8 py-2 bg-[#FF6B00] text-black text-[10px] sm:text-[11px] font-black uppercase tracking-widest hover:bg-[#FF6B00]/90 transition-all rounded-lg shadow-lg hover:shadow-[#FF6B00]/20 disabled:opacity-50 disabled:pointer-events-none",
+                                sending && !reduceMotion && "shadow-[0_0_24px_rgba(255,107,0,0.45)] animate-pulse",
+                              )}
+                            >
                                <Send className="h-4 w-4" />
-                               {sending ? "Sending…" : "Execute mission"}
+                               {primaryActionLabel(workbenchMode, sending)}
                             </button>
                          </div>
                       </div>
@@ -502,6 +698,136 @@ export default function Chat() {
           </div>
         </div>
       </div>
+
+      {projectsOpen ? (
+        <div className="fixed inset-0 z-[100] flex">
+          <button
+            type="button"
+            aria-label="Close projects"
+            className="flex-1 bg-black/70 backdrop-blur-xl"
+            onClick={() => {
+              try {
+                localStorage.setItem(
+                  MOUNT_STORAGE_KEY,
+                  JSON.stringify({ repository: mountRepo.trim(), ref: mountRef.trim() }),
+                );
+              } catch {
+                /* ignore */
+              }
+              setProjectsOpen(false);
+            }}
+          />
+          <div className="w-full max-w-md h-full border-l border-white/10 bg-[#0a0a0a]/95 backdrop-blur-xl shadow-2xl flex flex-col text-white">
+            <div className="h-12 flex items-center justify-between px-4 border-b border-white/10 shrink-0">
+              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#BC13FE]">PROJECTS_REGISTRY</span>
+              <button
+                type="button"
+                onClick={() => {
+                  try {
+                    localStorage.setItem(
+                      MOUNT_STORAGE_KEY,
+                      JSON.stringify({ repository: mountRepo.trim(), ref: mountRef.trim() }),
+                    );
+                  } catch {
+                    /* ignore */
+                  }
+                  setProjectsOpen(false);
+                }}
+                className="p-1.5 text-white/40 hover:text-white"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-6">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[9px] font-black uppercase tracking-widest text-white/40">PROJECT_MOUNT</span>
+                </div>
+                <label className="text-[8px] font-black text-white/30 uppercase block mb-1">GitHub repository URL</label>
+                <input
+                  value={mountRepo}
+                  onChange={(e) => setMountRepo(e.target.value)}
+                  placeholder="https://github.com/org/repo"
+                  className="w-full bg-black/50 border border-white/10 px-3 py-2 text-[11px] text-white/90 mb-3 outline-none focus:border-[#FF6B00]/40"
+                />
+                <label className="text-[8px] font-black text-white/30 uppercase block mb-1">Ref (branch / tag)</label>
+                <input
+                  value={mountRef}
+                  onChange={(e) => setMountRef(e.target.value)}
+                  placeholder="main"
+                  className="w-full bg-black/50 border border-white/10 px-3 py-2 text-[11px] text-white/90 outline-none focus:border-[#FF6B00]/40"
+                />
+              </div>
+              <div>
+                <span className="text-[9px] font-black uppercase tracking-widest text-white/40 block mb-2">
+                  CLOUD_AGENT_ACTIVE_MISSION
+                </span>
+                <p className="text-[9px] text-white/25 mb-2 leading-relaxed">
+                  Paste a Cursor Cloud Agent id for the Cloud Agent uplink (transcript / tracker). Leave empty for a clear
+                  not-connected state. The Browser tab still works without an id.
+                </p>
+                <input
+                  value={activeCloudAgentId ?? ""}
+                  onChange={(e) => persistActiveCloudAgentId(e.target.value.trim() || null)}
+                  placeholder="Cursor agent id…"
+                  className="w-full bg-black/50 border border-white/10 px-3 py-2 text-[11px] text-white/90 font-mono outline-none focus:border-[#FF6B00]/40"
+                />
+              </div>
+              <div>
+                <span className="text-[9px] font-black uppercase tracking-widest text-white/40 block mb-2">
+                  Registered HAM projects
+                </span>
+                {projectsLoading ? (
+                  <p className="text-[10px] text-white/30">Loading…</p>
+                ) : hamProjects.length === 0 ? (
+                  <p className="text-[10px] text-white/25">No projects registered on this API.</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {hamProjects.map((p) => (
+                      <li
+                        key={p.id}
+                        className="border border-white/10 px-3 py-2 text-[10px] font-mono text-white/60 truncate"
+                        title={p.root}
+                      >
+                        {p.name}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <div>
+                <span className="text-[9px] font-black uppercase tracking-widest text-white/40 block mb-2">
+                  RECENT_MISSIONS
+                </span>
+                {recentMissions.length === 0 ? (
+                  <p className="text-[10px] text-white/25">No stored missions yet.</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {recentMissions.map((m) => (
+                      <li
+                        key={m.id}
+                        className="flex items-center justify-between gap-2 border border-white/10 px-3 py-2 text-[9px] text-white/50"
+                      >
+                        <span className="min-w-0 truncate">
+                          <span className="font-mono text-[#00E5FF]">{m.id}</span>
+                          {m.label ? ` · ${m.label}` : ""}
+                        </span>
+                        <button
+                          type="button"
+                          className="shrink-0 text-[8px] font-black uppercase tracking-wider text-[#FF6B00] hover:text-white"
+                          onClick={() => persistActiveCloudAgentId(m.id)}
+                        >
+                          Use
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
