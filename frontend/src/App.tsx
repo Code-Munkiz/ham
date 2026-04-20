@@ -20,6 +20,7 @@ import Settings from "./pages/Settings";
 import Logs from "./pages/Logs";
 import Analytics from "./pages/Analytics";
 import HermesSkills from "./pages/HermesSkills";
+import AgentBuilder from "./pages/AgentBuilder";
 import Landing from "./pages/Landing";
 
 import { AgentProvider } from "./lib/ham/AgentContext";
@@ -48,6 +49,7 @@ export default function App() {
                 <Route path="/logs" element={<Logs />} />
                 <Route path="/analytics" element={<Analytics />} />
                 <Route path="/skills" element={<HermesSkills />} />
+                <Route path="/agents" element={<AgentBuilder />} />
                 <Route path="/hermes-skills" element={<Navigate to="/skills" replace />} />
               </Routes>
             </AppLayout>

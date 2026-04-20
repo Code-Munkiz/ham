@@ -130,6 +130,16 @@ export interface HamChatMessage {
   content: string;
 }
 
+/** HAM-owned metadata when Agent Builder guidance was applied to the chat turn (not a Hermes runtime profile). */
+export interface HamChatActiveAgentMeta {
+  profile_id: string;
+  profile_name: string;
+  skills_requested: number;
+  skills_resolved: number;
+  skills_skipped_catalog_miss?: number;
+  guidance_applied: boolean;
+}
+
 export interface HamChatRequest {
   session_id?: string;
   messages: HamChatMessage[];
@@ -140,6 +150,10 @@ export interface HamChatRequest {
   include_operator_subagents?: boolean;
   /** When true (default), model may emit `HAM_UI_ACTIONS_JSON`; response includes `actions` for the UI. */
   enable_ui_actions?: boolean;
+  /** Registered HAM project id — when set, server may inject Agent Builder active-agent guidance (catalog descriptors only). */
+  project_id?: string;
+  /** When true (default), append compact HAM active-agent guidance from project settings. */
+  include_active_agent_guidance?: boolean;
   model_id?: string;
   workbench_mode?: "ask" | "plan" | "agent";
   worker?: string;
@@ -161,6 +175,7 @@ export interface HamChatResponse {
   session_id: string;
   messages: HamChatMessage[];
   actions: HamUiAction[];
+  active_agent?: HamChatActiveAgentMeta | null;
 }
 
 /**
@@ -193,6 +208,7 @@ export async function postChat(body: HamChatRequest): Promise<HamChatResponse> {
     include_operator_skills: body.include_operator_skills ?? true,
     include_operator_subagents: body.include_operator_subagents ?? true,
     enable_ui_actions: body.enable_ui_actions ?? true,
+    include_active_agent_guidance: body.include_active_agent_guidance ?? true,
   };
   let res: Response;
   try {
@@ -237,6 +253,7 @@ export type HamChatStreamEvent =
       session_id: string;
       messages: HamChatMessage[];
       actions?: HamUiAction[];
+      active_agent?: HamChatActiveAgentMeta | null;
     }
   | { type: "error"; code: string; message: string };
 
@@ -259,6 +276,7 @@ export async function postChatStream(
     include_operator_skills: body.include_operator_skills ?? true,
     include_operator_subagents: body.include_operator_subagents ?? true,
     enable_ui_actions: body.enable_ui_actions ?? true,
+    include_active_agent_guidance: body.include_active_agent_guidance ?? true,
   };
   let res: Response;
   try {
@@ -319,6 +337,7 @@ export async function postChatStream(
         session_id: ev.session_id,
         messages: ev.messages,
         actions: Array.isArray(ev.actions) ? ev.actions : [],
+        active_agent: ev.active_agent ?? undefined,
       };
       return;
     }
@@ -560,11 +579,27 @@ export interface HamSettingsMemoryHeistPatch {
   session_tool_prune_chars?: number;
 }
 
+/** HAM agent builder profile (project-scoped; not a Hermes runtime profile). */
+export interface HamAgentProfile {
+  id: string;
+  name: string;
+  description?: string;
+  skills: string[];
+  enabled: boolean;
+}
+
+export interface HamAgentsConfig {
+  profiles: HamAgentProfile[];
+  primary_agent_id: string;
+}
+
 export interface HamSettingsChanges {
   memory_heist?: HamSettingsMemoryHeistPatch;
   architect_instruction_chars?: number;
   commander_instruction_chars?: number;
   critic_instruction_chars?: number;
+  /** Full replacement for the `agents` key in `.ham/settings.json`. */
+  agents?: HamAgentsConfig;
 }
 
 export interface HamSettingsPreviewRow {
@@ -592,6 +627,20 @@ export async function fetchSettingsWriteStatus(): Promise<{ writes_enabled: bool
     throw new Error(`write-status: HTTP ${res.status}`);
   }
   return res.json() as Promise<{ writes_enabled: boolean }>;
+}
+
+/** Effective HAM agent profiles from merged project config. */
+export async function fetchProjectAgents(projectId: string): Promise<HamAgentsConfig> {
+  const res = await fetch(apiUrl(`/api/projects/${encodeURIComponent(projectId)}/agents`));
+  if (!res.ok) {
+    const msg = await detailMessageFromResponse(res);
+    throw new Error(msg || `agents: HTTP ${res.status}`);
+  }
+  const data = (await res.json()) as { agents?: HamAgentsConfig };
+  if (!data.agents?.profiles) {
+    throw new Error("Invalid agents response");
+  }
+  return data.agents;
 }
 
 export async function listHamProjects(): Promise<{ projects: ProjectRecord[] }> {

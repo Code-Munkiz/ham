@@ -21,7 +21,12 @@ import { cn } from "@/lib/utils";
 import { ChatComposerStrip } from "@/components/chat/ChatComposerStrip";
 import type { WorkbenchMode } from "@/components/chat/ChatComposerStrip";
 import { applyHamUiActions } from "@/lib/ham/applyUiActions";
-import { fetchModelsCatalog, postChatStream } from "@/lib/ham/api";
+import {
+  ensureProjectIdForWorkspaceRoot,
+  fetchContextEngine,
+  fetchModelsCatalog,
+  postChatStream,
+} from "@/lib/ham/api";
 import { CLIENT_MODEL_CATALOG_FALLBACK } from "@/lib/ham/modelCatalogFallback";
 import type { ModelCatalogPayload } from "@/lib/ham/types";
 import { useAgent } from "@/lib/ham/AgentContext";
@@ -57,6 +62,8 @@ export default function Chat() {
   const [modelId, setModelId] = React.useState<string | null>(null);
   const [maxMode, setMaxMode] = React.useState(false);
   const [worker, setWorker] = React.useState("builder");
+  const [projectId, setProjectId] = React.useState<string | null>(null);
+  const [activeAgentNote, setActiveAgentNote] = React.useState<string | null>(null);
 
   // Workbench Modes
   const [viewMode, setViewMode] = React.useState<"chat" | "preview" | "browser" | "split">("chat");
@@ -74,6 +81,22 @@ export default function Chat() {
       .finally(() => {
         if (!cancelled) setCatalogLoading(false);
       });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const ctx = await fetchContextEngine();
+        const id = await ensureProjectIdForWorkspaceRoot(ctx.cwd);
+        if (!cancelled) setProjectId(id);
+      } catch {
+        if (!cancelled) setProjectId(null);
+      }
+    })();
     return () => {
       cancelled = true;
     };
@@ -130,6 +153,7 @@ export default function Chat() {
           session_id: sessionId ?? undefined,
           messages: [{ role: "user", content: text }],
           ...(modelId ? { model_id: modelId } : {}),
+          ...(projectId ? { project_id: projectId } : {}),
           workbench_mode: workbenchMode,
           worker,
           max_mode: maxMode,
@@ -155,6 +179,11 @@ export default function Chat() {
           content: m.content,
           timestamp: timeStr(),
         })),
+      );
+      setActiveAgentNote(
+        res.active_agent?.guidance_applied
+          ? `Active agent guidance: ${res.active_agent.profile_name}`
+          : null,
       );
       applyHamUiActions(res.actions ?? [], {
         navigate,
@@ -186,6 +215,14 @@ export default function Chat() {
                  <div className="h-2 w-2 rounded-full bg-[#FF6B00] shadow-[0_0_10px_#FF6B00]" />
                  <span className="text-[10px] font-black tracking-[0.2em] text-[#FF6B00] uppercase italic">Workbench_Session</span>
               </div>
+              {activeAgentNote && (
+                <span
+                  className="text-[9px] font-bold text-emerald-500/80 uppercase tracking-widest truncate max-w-[min(280px,40vw)] hidden sm:inline"
+                  title={activeAgentNote}
+                >
+                  {activeAgentNote}
+                </span>
+              )}
            </div>
            
            {/* View Selection Controls & Control Panel Toggle */}

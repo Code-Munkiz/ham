@@ -14,6 +14,7 @@ from src.api.cursor_skills import router as cursor_skills_router
 from src.api.cursor_subagents import router as cursor_subagents_router
 from src.api.hermes_skills import router as hermes_skills_router
 from src.api.models_catalog import router as models_catalog_router
+from src.api.agent_profiles import router as agent_profiles_router
 from src.api.project_settings import router as project_settings_router
 from src.memory_heist import context_engine_dashboard_payload
 from src.persistence.project_store import ProjectStore
@@ -57,6 +58,7 @@ app.include_router(cursor_settings_router)
 app.include_router(cursor_skills_router)
 app.include_router(cursor_subagents_router)
 app.include_router(hermes_skills_router)
+app.include_router(agent_profiles_router)
 app.include_router(project_settings_router)
 app.include_router(models_catalog_router)
 

@@ -1,6 +1,8 @@
 """HAM /api/chat proxy and session behavior (gateway mocked)."""
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -10,6 +12,14 @@ from src.api.server import app
 from src.integrations.nous_gateway_client import GatewayCallError
 
 client = TestClient(app)
+
+
+@pytest.fixture
+def isolated_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    return home
 
 
 def test_root_is_not_404_json() -> None:
@@ -127,3 +137,134 @@ def test_post_chat_invalid_request_from_gateway(mock_mode: None) -> None:
             json={"messages": [{"role": "user", "content": "hi"}]},
         )
     assert res.status_code == 400
+
+
+def test_post_chat_no_project_id_skips_active_agent_guidance(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, list] = {}
+
+    def capture(messages: list, **_kwargs) -> str:
+        captured["messages"] = messages
+        return "stub"
+
+    monkeypatch.setattr("src.api.chat.complete_chat_turn", capture)
+    res = client.post(
+        "/api/chat",
+        json={"messages": [{"role": "user", "content": "hi"}]},
+    )
+    assert res.status_code == 200
+    assert "HAM active agent guidance" not in (captured["messages"][0].get("content") or "")
+    assert res.json().get("active_agent") is None
+
+
+def test_post_chat_project_id_injects_guidance_and_meta(
+    mock_mode: None, isolated_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = tmp_path / "proj_chat"
+    root.mkdir()
+    (root / ".ham").mkdir()
+    (root / ".ham" / "settings.json").write_text(
+        json.dumps(
+            {
+                "agents": {
+                    "profiles": [
+                        {
+                            "id": "ham.default",
+                            "name": "BenchProfile",
+                            "description": "For tests",
+                            "skills": ["bundled.apple.apple-notes"],
+                            "enabled": True,
+                        },
+                    ],
+                    "primary_agent_id": "ham.default",
+                },
+            },
+        ),
+        encoding="utf-8",
+    )
+    reg = client.post(
+        "/api/projects",
+        json={"name": "chatproj", "root": str(root), "description": ""},
+    )
+    assert reg.status_code == 201, reg.text
+    pid = reg.json()["id"]
+
+    captured: dict[str, list] = {}
+
+    def capture(messages: list, **_kwargs) -> str:
+        captured["messages"] = messages
+        return "stub"
+
+    monkeypatch.setattr("src.api.chat.complete_chat_turn", capture)
+    res = client.post(
+        "/api/chat",
+        json={
+            "messages": [{"role": "user", "content": "hi"}],
+            "project_id": pid,
+        },
+    )
+    assert res.status_code == 200
+    sys_content = captured["messages"][0].get("content") or ""
+    assert "HAM active agent guidance" in sys_content
+    assert "BenchProfile" in sys_content
+    assert "context only" in sys_content.lower() or "Context only" in sys_content
+    body = res.json()
+    aa = body.get("active_agent")
+    assert aa is not None
+    assert aa["profile_id"] == "ham.default"
+    assert aa["profile_name"] == "BenchProfile"
+    assert aa["skills_requested"] == 1
+    assert aa["skills_resolved"] == 1
+    assert aa["skills_skipped_catalog_miss"] == 0
+    assert aa["guidance_applied"] is True
+
+
+def test_post_chat_include_active_agent_guidance_false(
+    mock_mode: None, isolated_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = tmp_path / "proj_chat2"
+    root.mkdir()
+    (root / ".ham").mkdir()
+    (root / ".ham" / "settings.json").write_text(
+        json.dumps(
+            {
+                "agents": {
+                    "profiles": [
+                        {
+                            "id": "ham.default",
+                            "name": "X",
+                            "description": "",
+                            "skills": [],
+                            "enabled": True,
+                        },
+                    ],
+                    "primary_agent_id": "ham.default",
+                },
+            },
+        ),
+        encoding="utf-8",
+    )
+    reg = client.post(
+        "/api/projects",
+        json={"name": "p2", "root": str(root), "description": ""},
+    )
+    pid = reg.json()["id"]
+    captured: dict[str, list] = {}
+
+    def capture(messages: list, **_kwargs) -> str:
+        captured["messages"] = messages
+        return "stub"
+
+    monkeypatch.setattr("src.api.chat.complete_chat_turn", capture)
+    res = client.post(
+        "/api/chat",
+        json={
+            "messages": [{"role": "user", "content": "hi"}],
+            "project_id": pid,
+            "include_active_agent_guidance": False,
+        },
+    )
+    assert res.status_code == 200
+    assert "HAM active agent guidance" not in (captured["messages"][0].get("content") or "")
+    assert res.json().get("active_agent") is None

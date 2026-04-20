@@ -4,13 +4,14 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from src.api.models_catalog import resolve_model_id_for_chat
+from src.ham.active_agent_context import try_active_agent_guidance_for_project_root
 from src.ham.cursor_skills_catalog import list_cursor_skills, render_skills_for_system_prompt
 from src.ham.cursor_subagents_catalog import list_cursor_subagents, render_subagents_for_system_prompt
 from src.ham.ui_actions import split_assistant_ui_actions, ui_actions_system_instructions
@@ -54,16 +55,32 @@ class ChatRequest(BaseModel):
     include_operator_subagents: bool = True
     # When true (default), system prompt includes HAM_UI_ACTIONS_JSON instructions; response may include `actions`.
     enable_ui_actions: bool = True
+    # Registered HAM project id (see `GET /api/projects`); when set with `include_active_agent_guidance`, server injects Agent Builder profile guidance.
+    project_id: str | None = Field(default=None, max_length=180)
+    # When true (default), append compact HAM active-agent guidance from merged project config (Hermes catalog descriptors only; not execution).
+    include_active_agent_guidance: bool = True
     model_id: str | None = Field(default=None, max_length=256)
     workbench_mode: Literal["ask", "plan", "agent"] | None = None
     worker: str | None = Field(default=None, max_length=64)
     max_mode: bool | None = None
 
 
+class ChatActiveAgentMeta(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    profile_id: str
+    profile_name: str
+    skills_requested: int
+    skills_resolved: int
+    skills_skipped_catalog_miss: int = 0
+    guidance_applied: bool = True
+
+
 class ChatResponse(BaseModel):
     session_id: str
     messages: list[dict[str, str]]
     actions: list[dict] = Field(default_factory=list)
+    active_agent: ChatActiveAgentMeta | None = None
 
 
 def _gateway_status_code(code: str) -> int:
@@ -220,7 +237,18 @@ def _resolve_openrouter_model_override(body: ChatRequest) -> str | None:
         ) from exc
 
 
-def _prepare_chat_session(body: ChatRequest) -> tuple[str, list[dict[str, str]]]:
+def _resolve_project_root_for_chat(project_id: str | None) -> Path | None:
+    if not project_id or not str(project_id).strip():
+        return None
+    from src.api.server import get_project_store
+
+    rec = get_project_store().get_project(project_id.strip())
+    if rec is None:
+        return None
+    return Path(rec.root).expanduser().resolve()
+
+
+def _prepare_chat_session(body: ChatRequest) -> tuple[str, list[dict[str, str]], dict[str, Any] | None]:
     store = _chat_store
     if body.session_id:
         if store.get_session(body.session_id) is None:
@@ -252,31 +280,46 @@ def _prepare_chat_session(body: ChatRequest) -> tuple[str, list[dict[str, str]]]
         )
 
     history = store.list_messages(sid)
+    base_system = _chat_system_prompt(
+        include_operator_skills=body.include_operator_skills,
+        include_operator_subagents=body.include_operator_subagents,
+        enable_ui_actions=body.enable_ui_actions,
+    )
+    active_meta: dict[str, Any] | None = None
+    if body.include_active_agent_guidance:
+        root = _resolve_project_root_for_chat(body.project_id)
+        if root is not None:
+            guidance_pack = try_active_agent_guidance_for_project_root(root)
+            if guidance_pack is not None:
+                room = max(0, _MAX_SYSTEM_PROMPT_CHARS - len(base_system) - 4)
+                if room > 120:
+                    g = guidance_pack.guidance_text[:room]
+                    base_system = f"{base_system}\n\n{g}".strip()
+                    active_meta = guidance_pack.meta
+
     llm_messages = [
         {
             "role": "system",
-            "content": _chat_system_prompt(
-                include_operator_skills=body.include_operator_skills,
-                include_operator_subagents=body.include_operator_subagents,
-                enable_ui_actions=body.enable_ui_actions,
-            ),
+            "content": base_system,
         },
         *history,
     ]
-    return sid, llm_messages
+    return sid, llm_messages, active_meta
 
 
-def _messages_for_completion(body: ChatRequest) -> tuple[str, list[dict[str, str]], str | None]:
-    sid, llm_messages = _prepare_chat_session(body)
+def _messages_for_completion(
+    body: ChatRequest,
+) -> tuple[str, list[dict[str, str]], str | None, dict[str, Any] | None]:
+    sid, llm_messages, active_meta = _prepare_chat_session(body)
     or_override = _resolve_openrouter_model_override(body)
     llm_messages = _append_workbench_to_messages(llm_messages, body)
-    return sid, llm_messages, or_override
+    return sid, llm_messages, or_override, active_meta
 
 
 @router.post("/api/chat", response_model=ChatResponse)
 async def post_chat(body: ChatRequest) -> ChatResponse:
     store = _chat_store
-    sid, llm_messages, or_override = _messages_for_completion(body)
+    sid, llm_messages, or_override, active_meta = _messages_for_completion(body)
     try:
         assistant_raw = complete_chat_turn(
             llm_messages,
@@ -298,6 +341,7 @@ async def post_chat(body: ChatRequest) -> ChatResponse:
         session_id=sid,
         messages=store.list_messages(sid),
         actions=actions,
+        active_agent=ChatActiveAgentMeta.model_validate(active_meta) if active_meta else None,
     )
 
 
@@ -305,7 +349,7 @@ async def post_chat(body: ChatRequest) -> ChatResponse:
 def post_chat_stream(body: ChatRequest) -> StreamingResponse:
     """Stream assistant tokens as NDJSON lines: session, delta, done (or error)."""
     store = _chat_store
-    sid, llm_messages, or_override = _messages_for_completion(body)
+    sid, llm_messages, or_override, stream_active_meta = _messages_for_completion(body)
 
     def ndjson_gen():
         yield json.dumps({"type": "session", "session_id": sid}) + "\n"
@@ -330,12 +374,14 @@ def post_chat_stream(body: ChatRequest) -> StreamingResponse:
         )
         try:
             store.append_turns(sid, [ChatTurn(role="assistant", content=assistant_visible)])
-            payload = {
+            payload: dict[str, Any] = {
                 "type": "done",
                 "session_id": sid,
                 "messages": store.list_messages(sid),
                 "actions": actions,
             }
+            if stream_active_meta:
+                payload["active_agent"] = stream_active_meta
             yield json.dumps(payload) + "\n"
         except KeyError:
             yield json.dumps(

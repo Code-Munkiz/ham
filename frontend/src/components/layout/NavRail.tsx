@@ -8,6 +8,7 @@ import {
   BarChart2,
   SlidersHorizontal,
   Sparkles,
+  UserCog,
 } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -16,6 +17,7 @@ const primaryNav = [
   { icon: MessageSquare, label: "Chat", path: "/chat" },
   { icon: Activity, label: "Activity", path: "/overview" },
   { icon: Users, label: "Droids", path: "/droids" },
+  { icon: UserCog, label: "Agents", path: "/agents" },
   { icon: Sparkles, label: "Skills", path: "/skills" },
 ];
 

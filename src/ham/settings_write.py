@@ -13,6 +13,11 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from src.ham.agent_profiles import (
+    HamAgentsConfig,
+    agents_config_from_merged,
+    validate_agents_config,
+)
 from src.memory_heist import _deep_merge, discover_config
 
 MAX_SESSION_COMPACTION_MAX_TOKENS = 500_000
@@ -68,8 +73,14 @@ class SettingsChanges(BaseModel):
         ge=1,
         le=MAX_ROLE_INSTRUCTION_CHARS,
     )
+    agents: HamAgentsConfig | None = Field(
+        default=None,
+        description="Full replacement for the agents subtree in .ham/settings.json (HAM agent builder).",
+    )
 
     def has_patch(self) -> bool:
+        if self.agents is not None:
+            return True
         if self.memory_heist is not None and self.memory_heist.model_dump(exclude_none=True):
             return True
         return any(
@@ -119,12 +130,21 @@ def build_file_patch(changes: SettingsChanges) -> dict[str, Any]:
         patch["commander_instruction_chars"] = changes.commander_instruction_chars
     if changes.critic_instruction_chars is not None:
         patch["critic_instruction_chars"] = changes.critic_instruction_chars
+    if changes.agents is not None:
+        validate_agents_config(changes.agents, validate_skill_catalog=True)
+        patch["agents"] = changes.agents.model_dump(mode="json")
     return patch
 
 
 def merge_patch_into_document(doc: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
     out = copy.deepcopy(doc)
-    _deep_merge(out, patch)
+    patch = copy.deepcopy(patch)
+    # Replace entire `agents` subtree so removed profiles/skills do not linger from deep-merge.
+    if "agents" in patch:
+        out["agents"] = copy.deepcopy(patch["agents"])
+        patch = {k: v for k, v in patch.items() if k != "agents"}
+    if patch:
+        _deep_merge(out, patch)
     return out
 
 
@@ -146,6 +166,7 @@ def allowlisted_effective_slice(merged: dict[str, Any]) -> dict[str, Any]:
         "architect_instruction_chars": merged.get("architect_instruction_chars"),
         "commander_instruction_chars": merged.get("commander_instruction_chars"),
         "critic_instruction_chars": merged.get("critic_instruction_chars"),
+        "agents": agents_config_from_merged(merged).model_dump(mode="json"),
     }
 
 
@@ -169,6 +190,9 @@ def compute_leaf_diff(before: dict[str, Any], after: dict[str, Any]) -> list[dic
         vb, va = before.get(k), after.get(k)
         if vb != va:
             diffs.append({"path": k, "old": vb, "new": va})
+    ba, aa = before.get("agents"), after.get("agents")
+    if ba != aa:
+        diffs.append({"path": "agents", "old": ba, "new": aa})
     return diffs
 
 
@@ -198,6 +222,12 @@ def collect_warnings(root: Path, patch: dict[str, Any]) -> list[str]:
                 warnings.append(
                     f"settings.local.json sets memory_heist.{k}; it overrides .ham/settings.json."
                 )
+    if patch.get("agents") is not None:
+        loc_agents = local.get("agents")
+        if isinstance(loc_agents, dict) and loc_agents:
+            warnings.append(
+                "settings.local.json sets agents; it overrides .ham/settings.json for merged config."
+            )
     return warnings
 
 
