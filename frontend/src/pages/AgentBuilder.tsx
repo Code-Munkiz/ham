@@ -25,6 +25,7 @@ import {
   fetchSettingsWriteStatus,
   postSettingsApply,
   postSettingsPreview,
+  registerHamProject,
   type HamAgentProfile,
   type HamAgentsConfig,
   type HamSettingsPreviewResponse,
@@ -33,6 +34,24 @@ import {
 
 function cloneAgents(c: HamAgentsConfig): HamAgentsConfig {
   return JSON.parse(JSON.stringify(c)) as HamAgentsConfig;
+}
+
+async function fetchAgentsResilient(projectId: string, cwd: string): Promise<HamAgentsConfig> {
+  try {
+    return await fetchProjectAgents(projectId);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "";
+    if (!msg.includes("PROJECT_NOT_FOUND")) {
+      throw e;
+    }
+    const norm = cwd.replace(/\/$/, "");
+    await registerHamProject({
+      name: norm.split("/").filter(Boolean).pop() || "workspace",
+      root: norm,
+      description: "Re-registered from Agent Builder (registry miss on prior request).",
+    });
+    return await fetchProjectAgents(projectId);
+  }
 }
 
 function newProfileId(name: string, existing: Set<string>): string {
@@ -72,7 +91,7 @@ export default function AgentBuilder() {
       const ctx = await fetchContextEngine();
       const pid = await ensureProjectIdForWorkspaceRoot(ctx.cwd);
       const [agents, cat, ws] = await Promise.all([
-        fetchProjectAgents(pid),
+        fetchAgentsResilient(pid, ctx.cwd),
         fetchHermesSkillsCatalog(),
         fetchSettingsWriteStatus(),
       ]);

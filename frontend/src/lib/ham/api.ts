@@ -201,6 +201,13 @@ function messageFromFastApiDetail(detail: unknown): string | null {
   return null;
 }
 
+/** FastAPI `HTTPException` detail shape `{ "error": { "code", "message" } }`. */
+function fastApiStructuredErrorCode(detail: unknown): string | null {
+  if (typeof detail !== "object" || detail === null || !("error" in detail)) return null;
+  const e = (detail as { error?: { code?: string } }).error;
+  return typeof e?.code === "string" ? e.code : null;
+}
+
 export async function postChat(body: HamChatRequest): Promise<HamChatResponse> {
   const url = apiUrl("/api/chat");
   const payload = {
@@ -632,23 +639,50 @@ export async function fetchSettingsWriteStatus(): Promise<{ writes_enabled: bool
 /** Effective HAM agent profiles from merged project config. */
 export async function fetchProjectAgents(projectId: string): Promise<HamAgentsConfig> {
   const res = await fetch(apiUrl(`/api/projects/${encodeURIComponent(projectId)}/agents`));
+  const text = await res.text();
+  let payload: unknown;
+  try {
+    payload = text ? JSON.parse(text) : null;
+  } catch {
+    payload = null;
+  }
+  const detail =
+    payload && typeof payload === "object" && payload !== null && "detail" in payload
+      ? (payload as { detail: unknown }).detail
+      : null;
+  const apiMsg = messageFromFastApiDetail(detail);
+  const errCode = fastApiStructuredErrorCode(detail);
+
   if (!res.ok) {
-    const msg = await detailMessageFromResponse(res);
-    if (res.status === 404) {
+    if (res.status === 404 && errCode === "PROJECT_NOT_FOUND") {
       throw new Error(
         [
-          "Agent Builder could not load profiles: the API returned 404 for GET /api/projects/…/agents.",
-          "Redeploy the Ham API from a build that includes the agent profiles route, and set VITE_HAM_API_BASE to that API origin (no trailing /api).",
-          msg && msg !== "Not Found" ? `Detail: ${msg}` : "",
+          `Agent Builder: project ${projectId} is not registered on this API instance (PROJECT_NOT_FOUND).`,
+          "On Cloud Run / serverless, each instance has its own project registry file unless you use min instances = 1 or shared storage.",
+          "Try again (retry may hit a warm instance), run the API locally, or configure a single warm instance.",
+          apiMsg ? `(${apiMsg})` : "",
         ]
           .filter(Boolean)
           .join(" "),
       );
     }
-    throw new Error(msg || `agents: HTTP ${res.status}`);
+    if (res.status === 404) {
+      throw new Error(
+        [
+          "Agent Builder: GET /api/projects/…/agents returned 404.",
+          'If the response is plain "Not Found" with no structured error, the API may be missing this route — redeploy Ham API from current main.',
+          "Also confirm VITE_HAM_API_BASE is only the API origin (no /api suffix).",
+          apiMsg ? `Detail: ${apiMsg}` : "",
+        ]
+          .filter(Boolean)
+          .join(" "),
+      );
+    }
+    throw new Error(apiMsg || `agents: HTTP ${res.status}`);
   }
-  const data = (await res.json()) as { agents?: HamAgentsConfig };
-  if (!data.agents?.profiles) {
+
+  const data = payload as { agents?: HamAgentsConfig };
+  if (!data?.agents?.profiles) {
     throw new Error("Invalid agents response");
   }
   return data.agents;

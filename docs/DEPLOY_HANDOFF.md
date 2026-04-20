@@ -24,6 +24,8 @@ The repo already includes CORS support (`HAM_CORS_ORIGINS`, `HAM_CORS_ORIGIN_REG
    - Or edit **`.gcloud/ham-api-env.yaml`** directly (gitignored) and use that path — do **not** put `OPENROUTER_API_KEY` in tracked files.
 4. Note the **service URL** (no trailing slash), e.g. `https://ham-api-….run.app`.
 
+   **Dashboard project registry:** `POST /api/projects` and `GET /api/projects/{id}/agents` use a file-backed store on the API container (`~/.ham/projects.json`). With **Cloud Run scale-to-zero and multiple instances**, registration from the browser may land on instance A while the next request hits instance B, which returns **PROJECT_NOT_FOUND** until the project exists there. Mitigations: set **minimum instances = 1** for the API service, or accept that Agent Builder may need a **Retry** after deploy; local/single-process APIs do not see this.
+
 5. **Verify** (use the **exact** browser origin you will open — production or a preview URL):
 
    ```bash
