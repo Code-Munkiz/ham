@@ -136,26 +136,53 @@ export default function HermesSkills() {
   React.useEffect(() => {
     let cancelled = false;
     (async () => {
-      try {
-        setLoadErr(null);
-        const [c, cap, t] = await Promise.all([
-          fetchHermesSkillsCatalog(),
-          fetchHermesSkillsCapabilities(),
-          fetchHermesSkillsTargets(),
-        ]);
-        if (cancelled) return;
+      setLoadErr(null);
+      const results = await Promise.allSettled([
+        fetchHermesSkillsCatalog(),
+        fetchHermesSkillsCapabilities(),
+        fetchHermesSkillsTargets(),
+      ]);
+      if (cancelled) return;
+
+      const errMsg = (reason: unknown) =>
+        reason instanceof Error ? reason.message : String(reason);
+
+      const failures: string[] = [];
+      if (results[0].status === "fulfilled") {
+        const c = results[0].value;
         setCatalog(c.entries);
         setCatalogMeta({
           upstream: c.upstream,
           catalog_note: c.catalog_note,
           count: c.count,
         });
-        setCaps(cap);
-        setTargets(t);
-      } catch (e) {
-        if (!cancelled) {
-          setLoadErr(e instanceof Error ? e.message : "Failed to load skills catalog");
-        }
+      } else {
+        failures.push(`hermes-skills/catalog: ${errMsg(results[0].reason)}`);
+      }
+
+      if (results[1].status === "fulfilled") {
+        setCaps(results[1].value);
+      } else {
+        failures.push(`hermes-skills/capabilities: ${errMsg(results[1].reason)}`);
+      }
+
+      if (results[2].status === "fulfilled") {
+        setTargets(results[2].value);
+      } else {
+        failures.push(`hermes-skills/targets: ${errMsg(results[2].reason)}`);
+      }
+
+      if (failures.length === 3) {
+        setLoadErr(
+          failures.join(" · ") +
+            " — Check that Cloud Run is on a build that includes Hermes routes, and that VITE_HAM_API_BASE is the service origin only (e.g. https://….run.app), not …/api.",
+        );
+        setCatalog([]);
+        setCatalogMeta(null);
+        setCaps(null);
+        setTargets(null);
+      } else if (failures.length > 0) {
+        setLoadErr(`Some Hermes API calls failed: ${failures.join(" · ")}`);
       }
     })();
     return () => {

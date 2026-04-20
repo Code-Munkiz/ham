@@ -38,7 +38,7 @@ The repo already includes CORS support (`HAM_CORS_ORIGINS`, `HAM_CORS_ORIGIN_REG
 The **React dashboard** is built and served only from Vercel (see root `vercel.json`). The **Cloud Run image** (`Dockerfile`) ships **FastAPI only** — it does not contain `frontend/dist`. If you redeploy the API but not Vercel, new **UI** routes (e.g. **Skills** at `/skills`) will not appear until you trigger a **new Vercel production deployment** from the commit that includes those files.
 
 1. Project → **Settings → Environment Variables**:
-   - **`VITE_HAM_API_BASE`** = your Cloud Run URL (no trailing slash).
+   - **`VITE_HAM_API_BASE`** = your Cloud Run **origin** only, e.g. `https://ham-api-xxxxx.run.app` — **no trailing slash**, **no `/api` suffix** (the app requests `/api/...` itself; `…/api` + `/api/...` → 404).
    - Scope: enable for **Production** and **Preview** (previews need it too).
 2. **Redeploy** after any change to `VITE_*` (Vite inlines them at **build** time), and after merging **frontend** changes (new pages, nav, etc.).
 

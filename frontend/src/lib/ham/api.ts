@@ -6,19 +6,24 @@ import type {
 } from "./types";
 
 /**
- * Ham API origin for `fetch`.
+ * Ham API **origin** for `fetch` (scheme + host, optional port). Paths already include `/api/...`.
  * - **Dev (default):** `""` → same origin as Vite; `/api/*` is proxied to FastAPI (see `vite.config.ts`).
- * - **Override:** set `VITE_HAM_API_BASE` (e.g. production full URL to the API host).
+ * - **Override:** `VITE_HAM_API_BASE` = e.g. `https://ham-api-xxxxx.run.app` — **no** `/api` suffix (that would produce `/api/api/...` and HTTP 404).
  */
 export function getApiBase(): string {
-  const explicit = (import.meta.env.VITE_HAM_API_BASE as string | undefined)
-    ?.trim()
-    .replace(/\/$/, "");
-  if (explicit) return explicit;
+  const raw = (import.meta.env.VITE_HAM_API_BASE as string | undefined)?.trim();
+  if (raw) {
+    let base = raw.replace(/\/+$/, "");
+    // Common Vercel/operator mistake: set base to …/run.app/api — our paths already start with /api/
+    if (base.toLowerCase().endsWith("/api")) {
+      base = base.slice(0, -4).replace(/\/+$/, "");
+    }
+    return base;
+  }
   if (import.meta.env.DEV) return "";
   // Production build without VITE_HAM_API_BASE → browser would call localhost and "Failed to fetch".
   throw new Error(
-    "VITE_HAM_API_BASE was not set when this site was built. In Vercel: Settings → Environment Variables → add VITE_HAM_API_BASE = your Cloud Run URL (no trailing slash). Enable it for Production and Preview, then redeploy.",
+    "VITE_HAM_API_BASE was not set when this site was built. In Vercel: Settings → Environment Variables → add VITE_HAM_API_BASE = your Cloud Run URL (no trailing slash, no /api suffix). Enable it for Production and Preview, then redeploy.",
   );
 }
 
