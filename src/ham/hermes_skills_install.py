@@ -6,10 +6,10 @@ from __future__ import annotations
 
 import base64
 import copy
-import fcntl
 import hashlib
 import json
 import os
+import sys
 import re
 import shutil
 import uuid
@@ -20,6 +20,9 @@ from pathlib import Path
 from typing import Any, Iterator
 
 import yaml
+
+if sys.platform == "win32":
+    import msvcrt
 
 from src.ham.hermes_skills_catalog import catalog_upstream_meta, get_catalog_entry_detail
 from src.ham.hermes_skills_probe import probe_capabilities
@@ -389,16 +392,39 @@ def preview_shared_install(
     )
 
 
+def _acquire_install_lock_fd(fd: int) -> None:
+    if sys.platform == "win32":
+        # msvcrt locks byte ranges; ensure at least one byte exists.
+        if os.fstat(fd).st_size == 0:
+            os.write(fd, b"\n")
+        os.lseek(fd, 0, os.SEEK_SET)
+        msvcrt.locking(fd, msvcrt.LK_LOCK, 1)
+    else:
+        import fcntl
+
+        fcntl.flock(fd, fcntl.LOCK_EX)
+
+
+def _release_install_lock_fd(fd: int) -> None:
+    if sys.platform == "win32":
+        os.lseek(fd, 0, os.SEEK_SET)
+        msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+    else:
+        import fcntl
+
+        fcntl.flock(fd, fcntl.LOCK_UN)
+
+
 @contextmanager
 def _install_lock(hermes_home: Path) -> Iterator[None]:
     lock_path = hermes_home / _LOCK_NAME
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR, 0o644)
     try:
-        fcntl.flock(fd, fcntl.LOCK_EX)
+        _acquire_install_lock_fd(fd)
         yield
     finally:
-        fcntl.flock(fd, fcntl.LOCK_UN)
+        _release_install_lock_fd(fd)
         os.close(fd)
 
 
