@@ -63,7 +63,7 @@ def test_chat_stream_gateway_error_emits_error_line(mock_mode: None, monkeypatch
 
 
 def test_chat_stream_custom_chunks(mock_mode: None, monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_stream(_msgs: list):
+    def fake_stream(_msgs: list, **_kwargs):
         yield "a"
         yield "b"
 

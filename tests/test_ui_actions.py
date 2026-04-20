@@ -46,7 +46,7 @@ def mock_mode(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_post_chat_returns_actions_array(mock_mode: None, monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_turn(_msgs: list) -> str:
+    def fake_turn(_msgs: list, **_kwargs) -> str:
         return (
             "Done.\n"
             'HAM_UI_ACTIONS_JSON: {"actions":[{"type":"toast","level":"success","message":"ok"}]}'

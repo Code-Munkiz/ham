@@ -23,7 +23,7 @@ def test_root_is_not_404_json() -> None:
 def test_post_chat_prepends_system_prompt_for_llm(mock_mode: None, monkeypatch: pytest.MonkeyPatch) -> None:
     captured: dict[str, list] = {}
 
-    def capture(messages: list) -> str:
+    def capture(messages: list, **_kwargs) -> str:
         captured["messages"] = messages
         return "stub-assistant"
 
