@@ -12,6 +12,6 @@ router = APIRouter(tags=["control-plane"])
 
 @router.get("/api/cursor-skills")
 async def get_cursor_skills() -> dict[str, Any]:
-    """Ham `.cursor/skills` index (name + description); subagent rules are not listed."""
+    """Ham `.cursor/skills` index (name + description). Subagent charters: ``GET /api/cursor-subagents``."""
     skills = list_cursor_skills()
     return {"skills": skills, "count": len(skills)}

@@ -161,9 +161,9 @@ The shipped backend registry surface is `ExecutionBackend`, `LocalDroidBackend`,
 
 Completed runs are now persisted as structured JSON at `.ham/runs/<timestamp>-<run_id>.json`. Persisted records include `run_id`, `created_at`, `profile_id`, `profile_version`, `backend_id`, `backend_version`, `prompt_summary`, `bridge_result`, and `hermes_review`. `run_id` is canonical from `bridge_result.run_id` (never regenerated); the timestamp in the filename is metadata for sort/collision only. The stdout `RUNTIME_RESULT` envelope shape remains unchanged, and persistence is additive. `BackendRegistry.get_record()` is now the first public backend-record accessor.
 
-**Tests**: full `pytest` suite including registry, bridge, main loop, droid registry, API/CORS, control-plane catalog + UI action parsing, chat streaming + SQLite session store, project settings preview/apply/rollback, and persistence tests — **169 passed** regression/guardrail cases (`pytest.ini` sets `pythonpath = .`; GitHub Actions runs `pytest` + frontend `tsc`).
+**Tests**: full `pytest` suite including registry, bridge, main loop, droid registry, API/CORS, control-plane catalog (skills + subagents) + UI action parsing, chat streaming + SQLite session store, project settings preview/apply/rollback, and persistence tests — **173 passed** regression/guardrail cases (`pytest.ini` sets `pythonpath = .`; GitHub Actions runs `pytest` + frontend `tsc`).
 
-**Next milestone**: optional **`GET /api/cursor-subagents`** catalog; stronger **UI-actions** marker recovery; continue Bridge-profile hardening. Expand allowlisted settings keys only with explicit review. (Context & Memory **settings preview/apply** UI is shipped with session-pasted write token.)
+**Next milestone**: stronger **UI-actions** marker recovery; continue Bridge-profile hardening. Expand allowlisted settings keys only with explicit review. (Context & Memory **settings preview/apply** UI is shipped; **`GET /api/cursor-subagents`** + chat prompt injection for review charters is shipped.)
 
 **Deferred:** FTS5 durable learning persistence, second orchestration harness,
 architecture sprawl.

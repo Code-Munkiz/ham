@@ -11,6 +11,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from src.ham.cursor_skills_catalog import list_cursor_skills, render_skills_for_system_prompt
+from src.ham.cursor_subagents_catalog import list_cursor_subagents, render_subagents_for_system_prompt
 from src.ham.ui_actions import split_assistant_ui_actions, ui_actions_system_instructions
 from src.integrations.nous_gateway_client import (
     GatewayCallError,
@@ -48,6 +49,8 @@ class ChatRequest(BaseModel):
     client_request_id: str | None = Field(default=None, max_length=128)
     # When true (default), append `.cursor/skills` catalog to system context so Ham maps intents to operator workflows.
     include_operator_skills: bool = True
+    # When true (default), append `.cursor/rules/subagent-*.mdc` index (review charters; not executable skills).
+    include_operator_subagents: bool = True
     # When true (default), system prompt includes HAM_UI_ACTIONS_JSON instructions; response may include `actions`.
     enable_ui_actions: bool = True
 
@@ -76,7 +79,7 @@ You are **Ham**, the in-dashboard copilot for the Ham workspace UI—warm, conci
 
 **What the UI has (high level):** A left **nav** (Chat, workspace, logs, etc.), this **Chat** page, **Settings** (context engine, droids, preferences), and workspace panels for runs and tooling. You **cannot** see the user’s screen, current route, or saved settings—if that matters, ask them to describe what they see or paste text.
 
-**Control plane (skills):** When the message includes an **Operator skills** appendix, treat each entry as a real Ham workflow the IDE can run (Context Engine hardening, agent context wiring, Hermes review validation, prompt budget audit, repo regression tests, GoHam navigation). Map user goals to the best-matching skill id and tell them the exact slash command or doc path (e.g. `/audit-context-engine`, `.cursor/skills/.../SKILL.md`). When **structured UI actions** are enabled, you may also emit **`HAM_UI_ACTIONS_JSON`** so the browser can navigate or show toasts—you still **do not** edit `.ham.json`, run shell tools, or change secrets from this chat.
+**Control plane (skills & subagents):** When the message includes an **Operator skills** appendix, treat each entry as a real Ham workflow the IDE can run (Context Engine hardening, agent context wiring, Hermes review validation, prompt budget audit, repo regression tests, GoHam navigation). Map user goals to the best-matching skill id and tell them the exact slash command or doc path (e.g. `/audit-context-engine`, `.cursor/skills/.../SKILL.md`). When a **Cursor subagent rules** appendix is present, each entry is a **review/audit charter** (`.cursor/rules/subagent-*.mdc`): recommend the charter that fits the user’s review question using id, path, and `globs`; subagents are **not** execution SKILLS—they shape how to audit or review code. When **structured UI actions** are enabled, you may also emit **`HAM_UI_ACTIONS_JSON`** so the browser can navigate or show toasts—you still **do not** edit `.ham.json`, run shell tools, or change secrets from this chat.
 
 **How to engage:** Use short paragraphs or tight bullets; offer next steps; match energy without filler. If asked what you can do, explain Ham at a high level and suggest concrete actions (e.g. “open Settings → …”, “describe the error in Logs”). You do not execute code or call internal Ham APIs from here—you advise; heavier work happens via the rest of Ham (CLI / swarm / runs).
 
@@ -87,6 +90,7 @@ You are **Ham**, the in-dashboard copilot for the Ham workspace UI—warm, conci
 def _chat_system_prompt(
     *,
     include_operator_skills: bool,
+    include_operator_subagents: bool,
     enable_ui_actions: bool,
 ) -> str:
     custom = (os.environ.get("HAM_CHAT_SYSTEM_PROMPT") or "").strip()
@@ -96,6 +100,10 @@ def _chat_system_prompt(
         block = render_skills_for_system_prompt(list_cursor_skills())
         if block:
             parts.append(block)
+    if include_operator_subagents:
+        sub_block = render_subagents_for_system_prompt(list_cursor_subagents())
+        if sub_block:
+            parts.append(sub_block)
     if enable_ui_actions:
         parts.append(ui_actions_system_instructions())
     combined = "\n\n".join(parts)
@@ -139,6 +147,7 @@ def _prepare_chat_session(body: ChatRequest) -> tuple[str, list[dict[str, str]]]
             "role": "system",
             "content": _chat_system_prompt(
                 include_operator_skills=body.include_operator_skills,
+                include_operator_subagents=body.include_operator_subagents,
                 enable_ui_actions=body.enable_ui_actions,
             ),
         },

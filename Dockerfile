@@ -16,8 +16,9 @@ COPY src/ src/
 # Repo instruction files optional but improve context-engine text if present in image.
 COPY AGENTS.md SWARM.md VISION.md ./
 
-# Operator skills catalog for chat system prompt + GET /api/cursor-skills (see src/ham/cursor_skills_catalog.py).
+# Operator skills + subagent rule stubs for chat system prompt + control-plane GET routes.
 COPY .cursor/skills .cursor/skills
+COPY .cursor/rules .cursor/rules
 
 EXPOSE 8080
 

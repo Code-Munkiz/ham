@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from src.api.chat import router as chat_router
 from src.api.cursor_skills import router as cursor_skills_router
+from src.api.cursor_subagents import router as cursor_subagents_router
 from src.api.project_settings import router as project_settings_router
 from src.memory_heist import context_engine_dashboard_payload
 from src.persistence.project_store import ProjectStore
@@ -50,6 +51,7 @@ app.add_middleware(
 
 app.include_router(chat_router)
 app.include_router(cursor_skills_router)
+app.include_router(cursor_subagents_router)
 app.include_router(project_settings_router)
 
 _store = RunStore()
@@ -76,6 +78,7 @@ async def root() -> dict[str, Any]:
         "openapi": "/openapi.json",
         "status": "/api/status",
         "cursor_skills": "/api/cursor-skills",
+        "cursor_subagents": "/api/cursor-subagents",
         "chat_stream": "/api/chat/stream",
         "settings_write_status": "/api/settings/write-status",
     }

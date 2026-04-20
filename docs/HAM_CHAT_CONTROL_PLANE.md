@@ -11,9 +11,10 @@ Hermes remains the **sole supervisory orchestrator** for the Ham *runtime*; this
 | Piece | Role |
 |-------|------|
 | `GET /api/cursor-skills` | JSON index of `.cursor/skills/*/SKILL.md` (id, name, description, path). |
-| `include_operator_skills` on `POST /api/chat` | Default **true**: appends a capped skills summary to the **server-side system prompt** so the model can route intents to real workflows. |
+| `GET /api/cursor-subagents` | JSON index of `.cursor/rules/subagent-*.mdc` (id, title, description, globs, always_apply, path)—**review charters**, not runnable skills. |
+| `include_operator_skills` / `include_operator_subagents` on `POST /api/chat` (and stream) | Default **true**: append capped **skills** + **subagent** indexes to the **server-side system prompt** (workflows vs review charters). Set either flag **false** to save tokens. |
 | `src/ham/cursor_skills_catalog.py` | Loader + `render_skills_for_system_prompt()`. |
-| Docker image | `COPY .cursor/skills` so Cloud Run has the same catalog as local dev. |
+| Docker image | `COPY .cursor/skills` and `COPY .cursor/rules` so Cloud Run has skills + subagent stubs. |
 
 Set `HAM_REPO_ROOT` if the API process cwd is not the repo root (optional).
 
@@ -58,9 +59,8 @@ Chat and the LLM **do not** apply settings; the UI (or CLI) calls **preview** th
 
 ## Next (not built yet)
 
-1. **Subagent rule catalog** — optional read-only `GET /api/cursor-subagents` for `.cursor/rules/subagent-*.mdc` (heavier; keep separate from skills).
-2. **Stronger grounding** — optional second-pass JSON from a small model if marker parsing is too brittle in production.
-3. **Settings UX (partial)** — Context & Memory panel: numeric fields → preview → diff/warnings → apply (pasted bearer token per session). Optional: chat-suggested proposal JSON parsed client-side only (never auto-apply).
+1. **Stronger grounding** — optional second-pass JSON from a small model if marker parsing is too brittle in production.
+2. **Settings UX (partial)** — Context & Memory panel ships preview/apply; optional: chat-suggested proposal JSON parsed client-side only (never auto-apply); optional **rollback** button.
 
 ## Constraints
 

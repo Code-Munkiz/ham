@@ -62,6 +62,8 @@ export interface HamChatRequest {
   client_request_id?: string;
   /** When true (default), API injects `.cursor/skills` summary into system context for intent routing. */
   include_operator_skills?: boolean;
+  /** When true (default), API injects `.cursor/rules/subagent-*.mdc` index (review charters). */
+  include_operator_subagents?: boolean;
   /** When true (default), model may emit `HAM_UI_ACTIONS_JSON`; response includes `actions` for the UI. */
   enable_ui_actions?: boolean;
 }
@@ -111,6 +113,7 @@ export async function postChat(body: HamChatRequest): Promise<HamChatResponse> {
   const payload = {
     ...body,
     include_operator_skills: body.include_operator_skills ?? true,
+    include_operator_subagents: body.include_operator_subagents ?? true,
     enable_ui_actions: body.enable_ui_actions ?? true,
   };
   let res: Response;
@@ -176,6 +179,7 @@ export async function postChatStream(
   const payload = {
     ...body,
     include_operator_skills: body.include_operator_skills ?? true,
+    include_operator_subagents: body.include_operator_subagents ?? true,
     enable_ui_actions: body.enable_ui_actions ?? true,
   };
   let res: Response;
