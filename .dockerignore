@@ -1,7 +1,6 @@
 .git
 .github
-# Ship `.cursor/skills` in API image for chat control plane; omit heavy rules from build context.
-.cursor/rules
+# Ship `.cursor/skills` + `.cursor/rules` in API image (chat catalog + subagent index).
 .venv
 venv
 __pycache__

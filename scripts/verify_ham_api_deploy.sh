@@ -56,4 +56,51 @@ if [[ -z "$post_acao" ]]; then
 fi
 echo "$post_acao"
 echo "Body (preview): $(head -c 160 "$body")..."
+
+# Dashboard Chat.tsx calls POST /api/chat/stream (NDJSON), not only /api/chat.
+echo "== OPTIONS ${BASE}/api/chat/stream (preflight, Origin: ${ORIGIN}, headers: content-type + accept)"
+code_so="$(
+  curl -sS -D "$hdrs" -o "$body" -w '%{http_code}' -X OPTIONS "${BASE}/api/chat/stream" \
+    -H "Origin: ${ORIGIN}" \
+    -H "Access-Control-Request-Method: POST" \
+    -H "Access-Control-Request-Headers: content-type, accept"
+)"
+if [[ "$code_so" != "200" ]]; then
+  echo "OPTIONS /api/chat/stream expected HTTP 200, got ${code_so}. Body:" >&2
+  cat "$body" >&2 || true
+  exit 1
+fi
+acao_so="$(grep -i '^access-control-allow-origin:' "$hdrs" | tr -d '\r' || true)"
+if [[ -z "$acao_so" ]]; then
+  echo "Missing Access-Control-Allow-Origin on OPTIONS /api/chat/stream." >&2
+  exit 1
+fi
+echo "$acao_so"
+
+echo "== POST ${BASE}/api/chat/stream (Origin + Accept — matches browser)"
+code_stream="$(
+  curl -sS --max-time 120 -D "$hdrs" -o "$body" -w '%{http_code}' -X POST "${BASE}/api/chat/stream" \
+    -H "Origin: ${ORIGIN}" \
+    -H "Content-Type: application/json" \
+    -H "Accept: application/x-ndjson, application/json" \
+    -d '{"messages":[{"role":"user","content":"deploy verify stream"}]}'
+)"
+stream_acao="$(grep -i '^access-control-allow-origin:' "$hdrs" | tr -d '\r' || true)"
+if [[ "$code_stream" != "200" ]]; then
+  echo "POST /api/chat/stream returned HTTP ${code_stream} (dashboard chat uses this endpoint)." >&2
+  echo "If this is 404, your Cloud Run image is likely older than the repo — rebuild and redeploy the API." >&2
+  cat "$body" >&2 || true
+  exit 1
+fi
+if [[ -z "$stream_acao" ]]; then
+  echo "Missing Access-Control-Allow-Origin on POST /api/chat/stream." >&2
+  exit 1
+fi
+echo "$stream_acao"
+first="$(head -n 1 "$body")"
+if [[ "$first" != *"session"* ]]; then
+  echo "Expected first NDJSON line to be a session event, got: ${first:0:120}" >&2
+  exit 1
+fi
+echo "Stream body (first line): ${first:0:120}..."
 echo "OK"
