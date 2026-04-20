@@ -593,6 +593,8 @@ export interface HamAgentProfile {
   description?: string;
   skills: string[];
   enabled: boolean;
+  /** `https?://` or `data:image/jpeg;base64,...` from Agent Builder (optional). */
+  avatar_url?: string;
 }
 
 export interface HamAgentsConfig {

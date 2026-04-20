@@ -25,6 +25,7 @@ import {
   ensureProjectIdForWorkspaceRoot,
   fetchContextEngine,
   fetchModelsCatalog,
+  fetchProjectAgents,
   postChatStream,
 } from "@/lib/ham/api";
 import { CLIENT_MODEL_CATALOG_FALLBACK } from "@/lib/ham/modelCatalogFallback";
@@ -64,6 +65,11 @@ export default function Chat() {
   const [worker, setWorker] = React.useState("builder");
   const [projectId, setProjectId] = React.useState<string | null>(null);
   const [activeAgentNote, setActiveAgentNote] = React.useState<string | null>(null);
+  /** Primary HAM profile from Agent Builder (avatar + name in transcript). */
+  const [primaryPersona, setPrimaryPersona] = React.useState<{
+    name: string;
+    avatarUrl: string | null;
+  } | null>(null);
 
   // Workbench Modes
   const [viewMode, setViewMode] = React.useState<"chat" | "preview" | "browser" | "split">("chat");
@@ -101,6 +107,32 @@ export default function Chat() {
       cancelled = true;
     };
   }, []);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    if (!projectId) {
+      setPrimaryPersona(null);
+      return;
+    }
+    void (async () => {
+      try {
+        const cfg = await fetchProjectAgents(projectId);
+        const prof = cfg.profiles.find((p) => p.id === cfg.primary_agent_id);
+        if (cancelled) return;
+        if (!prof) {
+          setPrimaryPersona(null);
+          return;
+        }
+        const url = prof.avatar_url?.trim() || null;
+        setPrimaryPersona({ name: prof.name, avatarUrl: url });
+      } catch {
+        if (!cancelled) setPrimaryPersona(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
 
   React.useEffect(() => {
     if (!import.meta.env.DEV) {
@@ -276,21 +308,43 @@ export default function Chat() {
               <div className="max-w-3xl mx-auto space-y-16 pb-32">
                 {messages.map((msg) => (
                   <div key={msg.id} className={cn("flex gap-10 group animate-in fade-in slide-in-from-bottom-3 duration-700", msg.role === 'user' ? "flex-row-reverse" : "")}>
-                    <div className={cn("h-11 w-11 shrink-0 border flex items-center justify-center transition-all rotate-3 group-hover:rotate-0", msg.role === 'assistant' ? "bg-[#FF6B00]/10 border-[#FF6B00]/30 text-[#FF6B00] shadow-[0_0_30px_rgba(255,107,0,0.15)]" : msg.role === 'system' ? "bg-white/5 border-white/10 text-white/20" : "bg-white border-white text-black shadow-xl")}>
-                      {msg.role === 'assistant' ? <Sparkles className="h-6 w-6" /> : msg.role === 'system' ? <Shield className="h-5 w-5" /> : <span className="text-[11px] font-black uppercase">User</span>}
+                    <div className={cn("h-11 w-11 shrink-0 border flex items-center justify-center overflow-hidden transition-all rotate-3 group-hover:rotate-0", msg.role === 'assistant' ? "bg-[#FF6B00]/10 border-[#FF6B00]/30 text-[#FF6B00] shadow-[0_0_30px_rgba(255,107,0,0.15)]" : msg.role === 'system' ? "bg-white/5 border-white/10 text-white/20" : "bg-white border-white text-black shadow-xl")}>
+                      {msg.role === 'assistant' ? (
+                        primaryPersona?.avatarUrl ? (
+                          <img
+                            src={primaryPersona.avatarUrl}
+                            alt=""
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <Sparkles className="h-6 w-6" />
+                        )
+                      ) : msg.role === 'system' ? (
+                        <Shield className="h-5 w-5" />
+                      ) : (
+                        <span className="text-[11px] font-black uppercase">User</span>
+                      )}
                     </div>
                     
                     <div className={cn("flex flex-col gap-4 min-w-0 max-w-2xl", msg.role === 'user' ? "items-end" : "items-start")}>
                       <div className="flex items-center gap-4 opacity-40 group-hover:opacity-100 transition-opacity">
-                        <span className="text-[9px] font-black uppercase tracking-[0.4em] text-white italic">{msg.role}</span>
+                        <span className="text-[9px] font-black uppercase tracking-[0.4em] text-white italic">
+                          {msg.role === "assistant" && primaryPersona?.name
+                            ? primaryPersona.name
+                            : msg.role}
+                        </span>
                         <span className="text-[8px] font-mono text-white/20">{msg.timestamp}</span>
                       </div>
                       <div className={cn("relative p-8 border transition-all duration-300", msg.role === 'user' ? "bg-white/[0.04] border-white/10 text-white/90 rounded-2xl rounded-tr-none shadow-2xl" : msg.role === 'system' ? "bg-black border-white/10 text-[#FF6B00]/60 font-mono text-[10px] tracking-tight italic rounded-lg" : "bg-[#0a0a0a] border-white/5 text-white/80 group-hover:border-white/20 rounded-2xl rounded-tl-none shadow-lg")}>
-                        {msg.role === 'assistant' && (
-                           <div className="absolute -right-6 -top-6 grayscale opacity-20 pointer-events-none overflow-hidden h-16 w-16 border border-white/10 rounded-2xl rotate-12 group-hover:rotate-0 transition-transform bg-black">
-                              <img src={`https://picsum.photos/seed/${selectedAgent.name}/200/200`} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                           </div>
-                        )}
+                        {msg.role === "assistant" && primaryPersona?.avatarUrl ? (
+                          <div className="absolute -right-6 -top-6 opacity-25 pointer-events-none overflow-hidden h-16 w-16 border border-white/10 rounded-2xl rotate-12 group-hover:rotate-0 transition-transform bg-black">
+                            <img
+                              src={primaryPersona.avatarUrl}
+                              alt=""
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                        ) : null}
                         <span className="text-[13px] font-medium leading-[1.6] uppercase tracking-[0.02em] whitespace-pre-wrap">{msg.content}</span>
                       </div>
                     </div>

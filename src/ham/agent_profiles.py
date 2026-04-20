@@ -13,6 +13,10 @@ PRIMARY_AGENT_DEFAULT_ID = "ham.default"
 
 _PROFILE_ID_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$")
 
+_AVATAR_MAX_CHARS = 400_000
+_AVATAR_HTTP_MAX = 2048
+_AVATAR_IMAGE_SUBTYPES = frozenset({"png", "jpeg", "jpg", "webp", "gif"})
+
 
 class HamAgentProfile(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -22,6 +26,11 @@ class HamAgentProfile(BaseModel):
     description: str = Field(default="", max_length=4000)
     skills: list[str] = Field(default_factory=list)
     enabled: bool = True
+    avatar_url: str = Field(
+        default="",
+        max_length=_AVATAR_MAX_CHARS,
+        description="https?:// URL or data:image/*;base64,... avatar (persisted in settings).",
+    )
 
     @field_validator("id")
     @classmethod
@@ -33,6 +42,31 @@ class HamAgentProfile(BaseModel):
                 "letters, digits, dot, underscore, hyphen (max 128 chars)",
             )
         return s
+
+    @field_validator("avatar_url")
+    @classmethod
+    def avatar_url_shape(cls, v: str) -> str:
+        s = (v or "").strip()
+        if not s:
+            return ""
+        if len(s) > _AVATAR_MAX_CHARS:
+            raise ValueError("avatar_url exceeds maximum encoded size")
+        low = s.lower()
+        if low.startswith("https://") or low.startswith("http://"):
+            if len(s) > _AVATAR_HTTP_MAX:
+                raise ValueError("avatar http(s) URL too long")
+            return s
+        if low.startswith("data:image/"):
+            head, sep, _rest = s.partition(",")
+            if sep != "," or ";base64" not in head.lower():
+                raise ValueError("avatar data URL must use ;base64, encoding")
+            subtype = head.split(";")[0].split("/")[-1].lower()
+            if subtype not in _AVATAR_IMAGE_SUBTYPES:
+                raise ValueError("avatar image type must be png, jpeg, webp, or gif")
+            return s
+        raise ValueError(
+            "avatar_url must be empty, http(s) URL, or data:image/(png|jpeg|jpg|webp|gif);base64,..."
+        )
 
     @field_validator("skills")
     @classmethod

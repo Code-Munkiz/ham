@@ -66,6 +66,7 @@ def test_agents_from_merged_round_trip() -> None:
                     "description": "",
                     "skills": ["bundled.apple.apple-notes"],
                     "enabled": False,
+                    "avatar_url": _TINY_PNG_B64,
                 },
             ],
             "primary_agent_id": "ham.default",
@@ -120,6 +121,28 @@ def test_validate_rejects_duplicate_skill_in_profile() -> None:
             name="HAM",
             skills=["bundled.apple.apple-notes", "bundled.apple.apple-notes"],
         )
+
+
+_TINY_PNG_B64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+
+
+def test_avatar_url_accepts_https_and_data_png() -> None:
+    p = HamAgentProfile(id="ham.default", name="HAM", skills=[], avatar_url=_TINY_PNG_B64)
+    assert p.avatar_url == _TINY_PNG_B64
+    q = HamAgentProfile(
+        id="ham.default",
+        name="HAM",
+        skills=[],
+        avatar_url="https://example.com/a.png",
+    )
+    assert q.avatar_url.startswith("https://")
+
+
+def test_avatar_url_rejects_invalid() -> None:
+    with pytest.raises(ValidationError, match="avatar"):
+        HamAgentProfile(id="ham.default", name="HAM", skills=[], avatar_url="ftp://bad")
+    with pytest.raises(ValidationError, match="avatar"):
+        HamAgentProfile(id="ham.default", name="HAM", skills=[], avatar_url="data:text/plain;base64,AA")
 
 
 @pytest.mark.usefixtures("isolated_home")

@@ -11,12 +11,15 @@ import {
   Save,
   Star,
   Trash2,
+  Upload,
   User,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { HermesSkillPicker } from "@/components/agent-builder/HermesSkillPicker";
+import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
 import { Input } from "@/components/ui/input";
+import { imageFileToAvatarDataUrl } from "@/lib/ham/imageAvatar";
 import {
   ensureProjectIdForWorkspaceRoot,
   fetchContextEngine,
@@ -54,6 +57,9 @@ async function fetchAgentsResilient(projectId: string, cwd: string): Promise<Ham
   }
 }
 
+const labelClass =
+  "text-[8px] font-black text-white/20 uppercase tracking-[0.2em] mb-1.5 block";
+
 function newProfileId(name: string, existing: Set<string>): string {
   const base =
     name
@@ -82,6 +88,7 @@ export default function AgentBuilder() {
   const [writeToken, setWriteToken] = React.useState("");
   const [preview, setPreview] = React.useState<HamSettingsPreviewResponse | null>(null);
   const [busy, setBusy] = React.useState<"preview" | "apply" | null>(null);
+  const avatarInputRef = React.useRef<HTMLInputElement>(null);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -120,6 +127,38 @@ export default function AgentBuilder() {
 
   const selected = draft?.profiles.find((p) => p.id === selectedId) ?? null;
 
+  const onAvatarFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f || !selectedId) return;
+    try {
+      const dataUrl = await imageFileToAvatarDataUrl(f);
+      if (!draft) return;
+      setDraft({
+        ...draft,
+        profiles: draft.profiles.map((p) =>
+          p.id === selectedId ? { ...p, avatar_url: dataUrl } : p,
+        ),
+      });
+      setPreview(null);
+      toast.success("Avatar updated in draft — preview & save to persist.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not read image");
+    }
+  };
+
+  const clearAvatar = () => {
+    if (!draft || !selectedId) return;
+    setDraft({
+      ...draft,
+      profiles: draft.profiles.map((p) =>
+        p.id === selectedId ? { ...p, avatar_url: "" } : p,
+      ),
+    });
+    setPreview(null);
+    toast.message("Avatar cleared in draft.");
+  };
+
   const updateSelected = (patch: Partial<HamAgentProfile>) => {
     if (!draft || !selectedId) return;
     setDraft({
@@ -146,6 +185,7 @@ export default function AgentBuilder() {
       description: "",
       skills: [],
       enabled: true,
+      avatar_url: "",
     };
     setDraft({ ...draft, profiles: [...draft.profiles, p] });
     setSelectedId(id);
@@ -257,26 +297,33 @@ export default function AgentBuilder() {
 
   return (
     <div className="h-full flex flex-col bg-[#050505] text-white overflow-hidden">
-      <div className="shrink-0 border-b border-white/5 p-6 md:p-8 max-w-6xl mx-auto w-full">
-        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6">
-          <div className="space-y-3">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-[#FF6B00]/10 rounded border border-[#FF6B00]/20">
-                <User className="h-5 w-5 text-[#FF6B00]" />
-              </div>
-              <span className="text-[10px] font-black text-white/40 uppercase tracking-[0.35em]">
-                HAM / Agent builder
-              </span>
-            </div>
-            <h1 className="text-3xl md:text-4xl font-black italic uppercase tracking-tighter text-white leading-none">
+      <input
+        ref={avatarInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/jpg,image/webp,image/gif"
+        className="hidden"
+        onChange={(e) => void onAvatarFile(e)}
+      />
+
+      <div className="h-10 flex items-center px-4 border-b border-white/5 bg-black/40 justify-between shrink-0">
+        <span className="text-[9px] font-black text-white/30 uppercase tracking-[0.35em] italic leading-none">
+          Configuration · HAM agent profiles
+        </span>
+        <Save className="h-2.5 w-2.5 text-[#FF6B00]/60" />
+      </div>
+
+      <div className="shrink-0 border-b border-white/5 w-full px-4 py-4 md:px-6">
+        <div className="flex flex-col xl:flex-row xl:items-end justify-between gap-4 w-full">
+          <div className="space-y-2 min-w-0">
+            <h1 className="text-2xl md:text-3xl font-black italic uppercase tracking-tighter text-white leading-none">
               Agent <span className="text-[#FF6B00] not-italic">profiles</span>
             </h1>
-            <p className="text-[11px] font-bold text-white/35 uppercase tracking-widest max-w-xl leading-relaxed">
-              Named assistants for this project. Attached skills use Hermes runtime catalog ids. Chat uses
-              them as context-only guidance when the same project id is sent (not tool execution).
+            <p className="text-[10px] font-bold text-white/35 uppercase tracking-widest max-w-2xl leading-relaxed">
+              Full-width setup (like the droid panel, without the narrow sidebar). The primary profile’s
+              avatar appears in Chat. Skills stay catalog ids; chat uses them as context-only guidance.
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 shrink-0">
             <button
               type="button"
               onClick={addProfile}
@@ -304,139 +351,174 @@ export default function AgentBuilder() {
           </div>
         </div>
         {writesEnabled === false && (
-          <p className="mt-4 text-[10px] font-bold text-amber-500/80 uppercase tracking-widest">
+          <p className="mt-3 text-[10px] font-bold text-amber-500/80 uppercase tracking-widest">
             Apply is disabled on this server (HAM_SETTINGS_WRITE_TOKEN). Preview still works.
           </p>
         )}
-      </div>
 
-      <div className="flex-1 min-h-0 flex flex-col lg:flex-row max-w-6xl mx-auto w-full">
-        <aside className="lg:w-72 shrink-0 border-b lg:border-b-0 lg:border-r border-white/5 overflow-y-auto p-4 space-y-1">
+        <div className="mt-4 flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
           {draft.profiles.map((p) => {
             const isPri = draft.primary_agent_id === p.id;
             const active = selectedId === p.id;
+            const av = p.avatar_url?.trim();
             return (
               <button
                 key={p.id}
                 type="button"
                 onClick={() => setSelectedId(p.id)}
                 className={cn(
-                  "w-full text-left rounded-lg px-3 py-2.5 border transition-colors",
+                  "flex items-center gap-2 shrink-0 rounded-lg px-3 py-2 border transition-colors min-w-[8rem] max-w-[14rem]",
                   active
                     ? "border-[#FF6B00]/50 bg-[#FF6B00]/10"
-                    : "border-transparent bg-white/[0.02] hover:border-white/10",
+                    : "border-white/10 bg-white/[0.02] hover:border-white/20",
                 )}
               >
-                <div className="flex items-center gap-2">
-                  {isPri && <Star className="h-3 w-3 text-[#FF6B00] shrink-0 fill-[#FF6B00]/30" />}
-                  <span className="text-[11px] font-black uppercase tracking-tight truncate text-white">
-                    {p.name || p.id}
-                  </span>
+                <div className="h-9 w-9 rounded-md border border-white/10 bg-black/40 overflow-hidden flex items-center justify-center shrink-0">
+                  {av ? (
+                    <img src={av} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <User className="h-4 w-4 text-white/25" />
+                  )}
                 </div>
-                <div className="text-[8px] font-mono text-white/25 truncate mt-0.5 pl-5">{p.id}</div>
-                {!p.enabled && (
-                  <span className="text-[8px] font-black text-white/30 uppercase mt-1 block pl-5">
-                    Disabled
-                  </span>
-                )}
+                <div className="min-w-0 text-left">
+                  <div className="flex items-center gap-1">
+                    {isPri && (
+                      <Star className="h-2.5 w-2.5 text-[#FF6B00] shrink-0 fill-[#FF6B00]/30" />
+                    )}
+                    <span className="text-[10px] font-black uppercase tracking-tight truncate text-white">
+                      {p.name || p.id}
+                    </span>
+                  </div>
+                  <div className="text-[8px] font-mono text-white/25 truncate">{p.id}</div>
+                </div>
               </button>
             );
           })}
-        </aside>
+        </div>
+      </div>
 
-        <main className="flex-1 min-h-0 overflow-y-auto p-4 md:p-8 space-y-8">
+      <div className="flex-1 min-h-0 overflow-y-auto scrollbar-hide w-full">
+        <div className="w-full max-w-[1600px] mx-auto px-4 md:px-8 py-6 space-y-6">
           {selected ? (
             <>
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div className="space-y-1">
-                  <h2 className="text-lg font-black uppercase tracking-tight text-white">
-                    Edit profile
-                  </h2>
-                  <p className="text-[9px] font-mono text-white/30">{selected.id}</p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {draft.primary_agent_id !== selected.id && (
-                    <button
-                      type="button"
-                      onClick={() => setPrimary(selected.id)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-[#FF6B00]/30 text-[9px] font-black uppercase tracking-widest text-[#FF6B00] hover:bg-[#FF6B00]/10"
-                    >
-                      <Star className="h-3 w-3" />
-                      Set primary
-                    </button>
-                  )}
-                  {draft.primary_agent_id === selected.id && (
-                    <span className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-white/10 text-[9px] font-black uppercase tracking-widest text-white/40">
-                      <Check className="h-3 w-3 text-emerald-500" />
-                      Primary agent
-                    </span>
-                  )}
-                  {draft.profiles.length > 1 && draft.primary_agent_id !== selected.id && (
-                    <button
-                      type="button"
-                      onClick={() => deleteProfile(selected.id)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-red-500/30 text-[9px] font-black uppercase tracking-widest text-red-400/90 hover:bg-red-500/10"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                      Delete
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <label className="space-y-1.5 block">
-                  <span className="text-[9px] font-black text-white/40 uppercase tracking-widest">
-                    Name
+              <div className="flex flex-wrap items-start justify-end gap-2">
+                {draft.primary_agent_id !== selected.id && (
+                  <button
+                    type="button"
+                    onClick={() => setPrimary(selected.id)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-[#FF6B00]/30 text-[9px] font-black uppercase tracking-widest text-[#FF6B00] hover:bg-[#FF6B00]/10"
+                  >
+                    <Star className="h-3 w-3" />
+                    Set primary
+                  </button>
+                )}
+                {draft.primary_agent_id === selected.id && (
+                  <span className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-white/10 text-[9px] font-black uppercase tracking-widest text-white/40">
+                    <Check className="h-3 w-3 text-emerald-500" />
+                    Primary (shown in chat)
                   </span>
-                  <Input
-                    value={selected.name}
-                    onChange={(e) => updateSelected({ name: e.target.value })}
-                    className="h-10 bg-black/50 border-white/10 text-[12px] font-bold text-white"
-                  />
-                </label>
-                <label className="space-y-1.5 flex items-center gap-3 md:pt-6">
-                  <input
-                    type="checkbox"
-                    checked={selected.enabled}
-                    onChange={(e) => updateSelected({ enabled: e.target.checked })}
-                    className="rounded border-white/20 bg-black"
-                  />
-                  <span className="text-[10px] font-black text-white/50 uppercase tracking-widest">
-                    Enabled
-                  </span>
-                </label>
+                )}
+                {draft.profiles.length > 1 && draft.primary_agent_id !== selected.id && (
+                  <button
+                    type="button"
+                    onClick={() => deleteProfile(selected.id)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-red-500/30 text-[9px] font-black uppercase tracking-widest text-red-400/90 hover:bg-red-500/10"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                    Delete
+                  </button>
+                )}
               </div>
+              <p className="text-[9px] font-mono text-white/25 -mt-2">{selected.id}</p>
 
-              <label className="space-y-1.5 block">
-                <span className="text-[9px] font-black text-white/40 uppercase tracking-widest">
-                  Description
-                </span>
-                <textarea
-                  value={selected.description ?? ""}
-                  onChange={(e) => updateSelected({ description: e.target.value })}
-                  rows={3}
-                  className="w-full rounded-md border border-white/10 bg-black/50 px-3 py-2 text-[12px] font-bold text-white placeholder:text-white/20"
-                />
-              </label>
+              <CollapsibleSection title="Identity" defaultOpen>
+                <div className="space-y-4 pt-2">
+                  <div className="flex flex-col sm:flex-row sm:items-start gap-6">
+                    <div className="flex flex-col items-center gap-3 shrink-0">
+                      <div className="relative h-28 w-28 rounded-xl border border-white/10 bg-white/[0.03] overflow-hidden flex items-center justify-center shadow-[0_0_40px_rgba(255,107,0,0.08)]">
+                        {selected.avatar_url?.trim() ? (
+                          <img
+                            src={selected.avatar_url.trim()}
+                            alt=""
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <User className="h-12 w-12 text-white/15" />
+                        )}
+                      </div>
+                      <div className="flex flex-wrap justify-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => avatarInputRef.current?.click()}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-white/15 bg-black/40 text-[9px] font-black uppercase tracking-widest text-white/70 hover:border-[#FF6B00]/40"
+                        >
+                          <Upload className="h-3 w-3" />
+                          Upload image
+                        </button>
+                        <button
+                          type="button"
+                          disabled={!selected.avatar_url?.trim()}
+                          onClick={clearAvatar}
+                          className="px-3 py-1.5 rounded border border-white/10 text-[9px] font-black uppercase tracking-widest text-white/40 hover:text-white/60 disabled:opacity-25"
+                        >
+                          Clear
+                        </button>
+                      </div>
+                      <p className="text-[8px] font-bold text-white/25 uppercase tracking-widest text-center max-w-[11rem] leading-relaxed">
+                        JPEG after resize (~256px). Saved in settings when you apply.
+                      </p>
+                    </div>
+                    <div className="flex-1 space-y-4 min-w-0">
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <label className="space-y-1.5 block">
+                          <span className={labelClass}>Name</span>
+                          <Input
+                            value={selected.name}
+                            onChange={(e) => updateSelected({ name: e.target.value })}
+                            className="h-10 bg-black/40 border-white/10 text-[12px] font-bold text-white"
+                          />
+                        </label>
+                        <label className="space-y-1.5 flex items-center gap-3 md:pt-7">
+                          <input
+                            type="checkbox"
+                            checked={selected.enabled}
+                            onChange={(e) => updateSelected({ enabled: e.target.checked })}
+                            className="rounded border-white/20 bg-black"
+                          />
+                          <span className="text-[10px] font-black text-white/50 uppercase tracking-widest">
+                            Enabled
+                          </span>
+                        </label>
+                      </div>
+                      <label className="space-y-1.5 block">
+                        <span className={labelClass}>Description</span>
+                        <textarea
+                          value={selected.description ?? ""}
+                          onChange={(e) => updateSelected({ description: e.target.value })}
+                          rows={4}
+                          className="w-full rounded-md border border-white/10 bg-black/40 px-3 py-2 text-[12px] font-bold text-white placeholder:text-white/20 resize-none"
+                        />
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </CollapsibleSection>
 
-              <div className="space-y-2">
-                <h3 className="text-[10px] font-black text-white/50 uppercase tracking-[0.2em]">
-                  Hermes runtime skills (catalog)
-                </h3>
-                <p className="text-[10px] font-bold text-white/30 leading-relaxed">
-                  Attached skills are saved on this profile. Runtime chat use is a later step — they do
-                  not install or invoke Hermes tools from this UI.
-                </p>
-                <HermesSkillPicker
-                  entries={catalog}
-                  selectedIds={selected.skills}
-                  onChange={(ids) => updateSelected({ skills: ids })}
-                />
-              </div>
+              <CollapsibleSection title="Hermes runtime skills" count={selected.skills.length}>
+                <div className="space-y-3 pt-2">
+                  <p className="text-[10px] font-bold text-white/30 leading-relaxed">
+                    Catalog ids only — they do not install or invoke tools from this UI.
+                  </p>
+                  <HermesSkillPicker
+                    entries={catalog}
+                    selectedIds={selected.skills}
+                    onChange={(ids) => updateSelected({ skills: ids })}
+                  />
+                </div>
+              </CollapsibleSection>
             </>
           ) : (
-            <p className="text-sm text-white/40 font-bold">Select a profile</p>
+            <p className="text-sm text-white/40 font-bold">Select a profile above</p>
           )}
 
           {preview && (
@@ -489,7 +571,7 @@ export default function AgentBuilder() {
               </div>
             </div>
           )}
-        </main>
+        </div>
       </div>
     </div>
   );
