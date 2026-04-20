@@ -20,21 +20,16 @@ import {
   RefreshCw,
   Lock,
   Calendar,
-  Puzzle,
   Package,
   Search,
   Eye,
-  FileText,
-  Workflow,
   CheckCircle2,
-  SearchCode,
   Download,
   Settings2,
   UserPlus,
   Power,
   Terminal,
   Monitor,
-  Shield,
   BookOpen,
   ListFilter,
   ArrowUpRight,
@@ -910,7 +905,7 @@ const settingsStructure = [
     items: [
       { id: "api-keys", label: "API Keys", icon: Key },
       { id: "environment", label: "Environment", icon: Terminal },
-      { id: "tools-extensions", label: "Tools, Skills & Extensions", icon: ToyBrick },
+      { id: "tools-extensions", label: "Tools and Extensions", icon: ToyBrick },
     ],
   },
   {
@@ -1166,64 +1161,7 @@ export function UnifiedSettings({
                         </div>
                       </div>
 
-                      {/* Section 2: Skills & Behaviors */}
-                      <div className="space-y-6">
-                        <div className="flex items-center justify-between">
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-3">
-                              <Puzzle className="h-4 w-4 text-[#FF6B00]" />
-                              <h3 className="text-[14px] font-black text-white uppercase tracking-[0.2em] italic leading-none">Skills & Behaviors</h3>
-                            </div>
-                            <p className="text-[9px] font-bold text-white/20 uppercase tracking-widest leading-none pl-7">Unit-specific capabilities and workforce roles</p>
-                          </div>
-                          <div className="h-px flex-1 mx-8 bg-white/5" />
-                        </div>
-                        <div className="space-y-2">
-                          {[
-                            { name: "Reviewer", cat: "Quality Control", desc: "Autonomous audit of code and document integrity.", status: "enabled", assigned: "Core Droid Group", icon: CheckCircle2 },
-                            { name: "Researcher", cat: "Intelligence", desc: "Deep-dive data aggregation and verification.", status: "enabled", assigned: "Alpha Team", icon: Search },
-                            { name: "QA", cat: "Quality Control", desc: "Automated regression and stability testing.", status: "disabled", assigned: "Unassigned", icon: Shield },
-                            { name: "Planning", cat: "Orchestration", desc: "Long-horizon task decomposition and scheduling.", status: "enabled", assigned: "Command Unit", icon: Workflow },
-                            { name: "Documentation", cat: "Linguistics", desc: "Synthesizing technical specs from codebase deltas.", status: "enabled", assigned: "Linguistics Cluster", icon: FileText },
-                            { name: "Retrieval", cat: "Intelligence", desc: "Context-aware lookup across disparate bridge files.", status: "enabled", assigned: "Storage Node", icon: Box },
-                            { name: "Code Audit", cat: "Security", desc: "Vulnerability scanning and logic-leak detection.", status: "disabled", assigned: "Unassigned", icon: SearchCode },
-                          ].map((skill, i) => (
-                            <div key={i} className="group flex items-center gap-6 p-4 bg-black/40 border border-white/5 rounded-xl hover:border-white/20 transition-all relative overflow-hidden">
-                              <div className="h-10 w-10 shrink-0 bg-white/[0.03] rounded border border-white/5 flex items-center justify-center">
-                                <skill.icon className="h-4 w-4 text-white/40 group-hover:text-[#FF6B00] transition-colors" />
-                              </div>
-                              <div className="flex-1 min-w-0 space-y-1">
-                                <div className="flex items-center gap-3">
-                                  <span className="text-[11px] font-black text-white uppercase tracking-widest truncate">{skill.name}</span>
-                                  <span className="text-[8px] font-bold text-white/10 uppercase tracking-[0.2em] italic bg-white/5 px-1.5 py-0.5 rounded-[2px]">{skill.cat}</span>
-                                </div>
-                                <p className="text-[9px] font-bold text-white/30 uppercase tracking-widest truncate italic leading-none">{skill.desc}</p>
-                              </div>
-                              <div className="hidden lg:flex flex-col items-end gap-1 px-4 border-l border-white/5 min-w-[150px]">
-                                <span className="text-[7px] font-black text-white/10 uppercase tracking-widest">Linked Unit</span>
-                                <span className="text-[9px] font-black text-white/40 uppercase tracking-tighter italic truncate w-full text-right">{skill.assigned}</span>
-                              </div>
-                              <div className="flex items-center gap-4 shrink-0 px-4 border-l border-white/5">
-                                <div className="flex flex-col gap-1">
-                                  <button className="h-7 px-3 rounded bg-white/[0.03] border border-white/5 text-[8px] font-black text-white/40 uppercase tracking-widest hover:bg-white/10 hover:text-white transition-all">Assign</button>
-                                  <button className="h-7 px-3 rounded bg-white/[0.03] border border-white/5 text-[8px] font-black text-white/40 uppercase tracking-widest hover:bg-white/10 hover:text-white transition-all">Requirements</button>
-                                </div>
-                                <div className={cn(
-                                  "h-8 w-12 rounded cursor-pointer border flex items-center px-1 transition-all",
-                                  skill.status === 'enabled' ? "bg-green-500/10 border-green-500/30" : "bg-white/5 border-white/10"
-                                )}>
-                                  <div className={cn(
-                                    "h-6 w-5 rounded-sm transition-all shadow-sm",
-                                    skill.status === 'enabled' ? "bg-green-500 ml-auto" : "bg-white/20"
-                                  )} />
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Section 3: Extensions & Plugins */}
+                      {/* Section 2: Extensions & Plugins */}
                       <div className="space-y-6">
                         <div className="flex items-center justify-between">
                           <div className="space-y-1">
