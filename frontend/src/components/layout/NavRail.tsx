@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
 
 const primaryNav = [
   { icon: MessageSquare, label: "Chat", path: "/chat" },
-  { icon: Activity, label: "Activity", path: "/" },
+  { icon: Activity, label: "Activity", path: "/overview" },
   { icon: Users, label: "Droids", path: "/droids" },
   { icon: Sparkles, label: "Skills", path: "/skills" },
 ];
@@ -50,9 +50,7 @@ export function NavRail() {
 
       <div className="flex-1 flex flex-col gap-5">
         {primaryNav.map((item) => {
-          const isActive = item.path === "/" 
-            ? location.pathname === "/" 
-            : location.pathname.startsWith(item.path);
+          const isActive = location.pathname.startsWith(item.path);
           
           return (
             <Link
@@ -118,7 +116,7 @@ export function NavRail() {
             type="button"
             onClick={() => {
               if (location.pathname.startsWith("/settings")) {
-                navigate("/");
+                navigate("/overview");
               } else {
                 navigate("/settings");
               }

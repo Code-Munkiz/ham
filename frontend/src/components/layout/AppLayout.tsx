@@ -19,7 +19,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const { activeTask, setActiveTask, isControlPanelOpen, setIsControlPanelOpen } = useWorkspace();
 
   const selectedAgent = agents.find(a => a.id === selectedAgentId) || agents[0];
-  const isLandingPage = location.pathname === "/";
   const isChatPage = location.pathname.startsWith("/chat");
   const isSettingsPage = location.pathname.startsWith("/settings");
   const showDroidDetails = location.pathname.startsWith("/droids");

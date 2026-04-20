@@ -33,7 +33,8 @@ export default function App() {
           <BrowserRouter>
             <AppLayout>
               <Routes>
-                <Route path="/" element={<Overview />} />
+                <Route path="/" element={<Navigate to="/chat" replace />} />
+                <Route path="/overview" element={<Overview />} />
                 <Route path="/chat" element={<Chat />} />
                 <Route path="/droids" element={<Droids />} />
                 <Route path="/extensions" element={<Extensions />} />
