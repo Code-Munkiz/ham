@@ -10,7 +10,7 @@ The repo already includes CORS support (`HAM_CORS_ORIGINS`, `HAM_CORS_ORIGIN_REG
    - Replace `https://your-app.vercel.app` with your **production** Vercel URL (and any custom domain as `https://…`).
    - Keep **`HAM_CORS_ORIGIN_REGEX`** if you use **Vercel preview** deployments (`*.vercel.app`); remove it only if you want a strict allow-list.
    - **Real chat (OpenRouter):** set **`HERMES_GATEWAY_MODE=openrouter`** and **`OPENROUTER_API_KEY`** (Secret Manager recommended on Cloud Run). Optional: **`DEFAULT_MODEL`** / **`HERMES_GATEWAY_MODEL`** (OpenRouter slug, e.g. `openai/gpt-4o-mini`). See **`docs/HERMES_GATEWAY_CONTRACT.md`**.
-   - **Hermes HTTP gateway:** **`HERMES_GATEWAY_MODE=http`**, **`HERMES_GATEWAY_BASE_URL`**, **`HERMES_GATEWAY_API_KEY`** as needed.
+   - **Hermes HTTP gateway (e.g. private GCE VM):** **`HERMES_GATEWAY_MODE=http`**, **`HERMES_GATEWAY_BASE_URL`** (internal IP/DNS + port, no `/v1`), **`HERMES_GATEWAY_MODEL`**, and **`HERMES_GATEWAY_API_KEY`** via **Secret Manager**. Networking: **Direct VPC egress** preferred; **Serverless VPC Access connector** as fallback — see **`docs/DEPLOY_CLOUD_RUN.md`** (“Private Hermes on GCE”).
 3. Deploy with **`--env-vars-file`** (not `--set-env-vars` for comma-separated lists).
    - **Secrets from `.env` (recommended):** merge local `.env` into your template without committing keys:
      ```bash
@@ -33,7 +33,8 @@ The repo already includes CORS support (`HAM_CORS_ORIGINS`, `HAM_CORS_ORIGIN_REG
    ./scripts/verify_ham_api_deploy.sh 'https://YOUR-SERVICE.run.app' 'https://YOUR-VERCEL-HOST.vercel.app'
    ```
 
-   If this fails on OPTIONS or missing `Access-Control-Allow-Origin`, the API env does not allow that `Origin`.
+   If this fails on OPTIONS or missing `Access-Control-Allow-Origin`, the API env does not allow that `Origin`.  
+   If chat succeeds but the script fails with **mock-mode** detection, the API is still on **`HERMES_GATEWAY_MODE=mock`** (or miswired `http`). Set **`HAM_VERIFY_ALLOW_MOCK=1`** only when you **intentionally** verify a mock deployment.
 
 ## 2. Vercel (dashboard frontend)
 

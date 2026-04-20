@@ -53,11 +53,12 @@ Shipped muscle today centers on **Bridge + Droid executor** (`src/tools/droid_ex
 ## Deploy (API on GCP)
 
 - `Dockerfile` — Cloud Run–style image (`uvicorn src.api.server:app`, `PORT` aware)
-- `docs/DEPLOY_CLOUD_RUN.md` — Artifact Registry + `gcloud builds submit` + `gcloud run deploy` + env vars
+- `docs/DEPLOY_CLOUD_RUN.md` — Artifact Registry + `gcloud builds submit` + `gcloud run deploy` + env vars + **private Hermes on GCE** (Direct VPC egress preferred, Serverless VPC connector fallback)
 - `docs/DEPLOY_HANDOFF.md` — Vercel + Cloud Run checklist (what to set in each host)
 - `docs/examples/ham-api-cloud-run-env.yaml` — copy to `.gcloud/ham-api-env.yaml` for `--env-vars-file`
-- `scripts/verify_ham_api_deploy.sh` — CORS + `/api/chat` smoke test against a deployed API
-- `scripts/render_cloud_run_env.py` — merge `.env` into `.gcloud/ham-api-env.yaml` for `gcloud run deploy --env-vars-file` (avoids committing OpenRouter keys)
+- `docs/HERMES_GATEWAY_CONTRACT.md` — server-side adapter to Hermes/OpenAI-compatible chat (streaming `http` mode)
+- `scripts/verify_ham_api_deploy.sh` — CORS + `/api/chat` + stream smoke test; **fails if responses look like `mock`** unless `HAM_VERIFY_ALLOW_MOCK=1`
+- `scripts/render_cloud_run_env.py` — merge `.env` secrets into env YAML for deploy (`OPENROUTER_API_KEY` for openrouter; **`HERMES_GATEWAY_API_KEY`** for `http` when set in `.env`)
 
 ## Configuration & entry
 

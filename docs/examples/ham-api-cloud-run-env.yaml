@@ -9,7 +9,19 @@ HERMES_GATEWAY_MODE: mock
 # HERMES_GATEWAY_MODE: openrouter
 # Use Secret Manager for production; do not commit real keys.
 # OPENROUTER_API_KEY: "sk-or-v1-..."
-# DEFAULT_MODEL is read from env at runtime if you set it here, or rely on repo default in code.
+# DEFAULT_MODEL is read from env at runtime if you set here, or rely on repo default in code.
+
+# --- Private Hermes on GCE (HTTP gateway mode) ---
+# Browser never calls Hermes; only Ham Cloud Run does, over VPC private routing.
+# HERMES_GATEWAY_MODE: http
+# Origin only — no /v1 suffix. Use VM internal IP or internal DNS + port (Hermes API default often 8642).
+# HERMES_GATEWAY_BASE_URL: "http://10.0.0.5:8642"
+# Match Hermes API server bearer; inject via Secret Manager on Cloud Run (recommended), not committed YAML.
+# HERMES_GATEWAY_API_KEY: "replace-via-secret-manager"
+# Model id your Hermes server expects (code default is hermes-agent).
+# HERMES_GATEWAY_MODEL: "hermes-agent"
+# Networking: prefer Cloud Run Direct VPC egress to reach the VM; fallback Serverless VPC Access connector.
+# See docs/DEPLOY_CLOUD_RUN.md § "Private Hermes on GCE".
 
 # Exact origins (production custom domain + local dev). Add your real Vercel production URL.
 HAM_CORS_ORIGINS: "https://your-app.vercel.app,http://localhost:3000,http://127.0.0.1:3000"

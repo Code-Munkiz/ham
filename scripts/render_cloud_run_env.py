@@ -2,8 +2,13 @@
 """
 Merge `.env` secrets into `.gcloud/ham-api-env.yaml` for `gcloud run deploy --env-vars-file`.
 
-Reads OPENROUTER_API_KEY (required when template uses openrouter), and optionally
-DEFAULT_MODEL / HERMES_GATEWAY_MODEL from `.env`. Writes a temp YAML file and prints its path.
+Reads from `.env`:
+- OPENROUTER_API_KEY (required when template has HERMES_GATEWAY_MODE: openrouter)
+- HERMES_GATEWAY_API_KEY (merged when template has HERMES_GATEWAY_MODE: http and key is set in .env)
+- Optional DEFAULT_MODEL / HERMES_GATEWAY_MODEL
+
+Operators may omit keys from `.env` when using Secret Manager + `gcloud run deploy --update-secrets`
+instead; this script only injects values that are present in `.env`.
 
 Usage:
   ENV_FILE=$(python scripts/render_cloud_run_env.py)
@@ -50,9 +55,12 @@ def main() -> None:
     wants_openrouter = bool(
         re.search(r"^HERMES_GATEWAY_MODE:\s*openrouter\s*$", template_text, re.MULTILINE)
     )
+    wants_http = bool(
+        re.search(r"^HERMES_GATEWAY_MODE:\s*http\s*$", template_text, re.MULTILINE)
+    )
 
-    key = (os.environ.get("OPENROUTER_API_KEY") or "").strip()
-    if wants_openrouter and not key:
+    openrouter_key = (os.environ.get("OPENROUTER_API_KEY") or "").strip()
+    if wants_openrouter and not openrouter_key:
         print(
             "OPENROUTER_API_KEY missing in .env (required for openrouter deploy).",
             file=sys.stderr,
@@ -60,8 +68,13 @@ def main() -> None:
         sys.exit(1)
 
     replacements: dict[str, str] = {}
-    if key:
-        replacements["OPENROUTER_API_KEY"] = key
+    if openrouter_key:
+        replacements["OPENROUTER_API_KEY"] = openrouter_key
+
+    gw_api_key = (os.environ.get("HERMES_GATEWAY_API_KEY") or "").strip()
+    if wants_http and gw_api_key:
+        replacements["HERMES_GATEWAY_API_KEY"] = gw_api_key
+
     for env_name, yaml_key in (
         ("DEFAULT_MODEL", "DEFAULT_MODEL"),
         ("HERMES_GATEWAY_MODEL", "HERMES_GATEWAY_MODEL"),

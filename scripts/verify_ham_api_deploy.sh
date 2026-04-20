@@ -3,6 +3,9 @@
 # Usage:
 #   ./scripts/verify_ham_api_deploy.sh 'https://YOUR-SERVICE-xxxxx.run.app' 'https://YOUR-PREVIEW.vercel.app'
 # Second arg defaults to http://localhost:3000 (must be allowed by the API CORS config if testing a remote URL).
+#
+# If the API should use a real upstream (Hermes http / OpenRouter), responses must NOT contain the mock phrase.
+# Set HAM_VERIFY_ALLOW_MOCK=1 to skip that check (intentional mock deployments only).
 set -euo pipefail
 
 BASE="${1:?Usage: $0 <HAM_API_BASE_URL> [Origin URL]}"
@@ -84,6 +87,12 @@ if [[ -z "$post_acao" ]]; then
 fi
 echo "$post_acao"
 echo "Body (preview): $(head -c 160 "$body")..."
+if [[ -z "${HAM_VERIFY_ALLOW_MOCK:-}" ]] && grep -q "Mock assistant reply" "$body"; then
+  echo "Chat returned mock-mode text (substring: Mock assistant reply)." >&2
+  echo "Staging/prod should use HERMES_GATEWAY_MODE=http or openrouter with a working upstream." >&2
+  echo "If this service is intentionally mock, re-run with: HAM_VERIFY_ALLOW_MOCK=1 $0 ..." >&2
+  exit 1
+fi
 
 # Dashboard Chat.tsx calls POST /api/chat/stream (NDJSON), not only /api/chat.
 echo "== OPTIONS ${BASE}/api/chat/stream (preflight, Origin: ${ORIGIN}, headers: content-type + accept)"
@@ -131,4 +140,10 @@ if [[ "$first" != *"session"* ]]; then
   exit 1
 fi
 echo "Stream body (first line): ${first:0:120}..."
+if [[ -z "${HAM_VERIFY_ALLOW_MOCK:-}" ]] && grep -q "Mock assistant reply" "$body"; then
+  echo "Stream response contained mock-mode text (substring: Mock assistant reply)." >&2
+  echo "Staging/prod should use HERMES_GATEWAY_MODE=http or openrouter with a working upstream." >&2
+  echo "If this service is intentionally mock, re-run with: HAM_VERIFY_ALLOW_MOCK=1 $0 ..." >&2
+  exit 1
+fi
 echo "OK"

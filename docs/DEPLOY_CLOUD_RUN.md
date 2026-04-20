@@ -65,6 +65,39 @@ Add more env vars as needed, e.g. **`HERMES_GATEWAY_MODE=http`**, **`HERMES_GATE
 
 After deploy, Cloud Run prints the **service URL**.
 
+## Private Hermes on GCE (HTTP gateway mode)
+
+Use this when **Hermes Agent API** runs on a **private Compute Engine VM** and **Ham** on **Cloud Run** must call it over **RFC1918** addresses. The **browser never** calls Hermes; only Ham does.
+
+### Hermes VM (operator)
+
+- Run the **Hermes API server** on the VM; default listen port in docs is often **`8642`**.
+- Bind to **`0.0.0.0:<port>`** (or the NIC that carries the **internal IP**), **not** `127.0.0.1` only, or Cloud Run cannot reach the service.
+- Do **not** expose `<port>` to the public internet; restrict with VPC firewall.
+- Store the API bearer token securely; the same value must appear as **`HERMES_GATEWAY_API_KEY`** on Ham (prefer **Secret Manager** on Cloud Run).
+
+### Ham Cloud Run → VPC (operator)
+
+**Preferred:** **Direct VPC egress** for Cloud Run — attach the service to your **VPC network** and subnet in the **same region** as the service (e.g. `us-west1`), with egress configured so **private IP** traffic reaches the VM subnet. Use **`private-ranges-only`** (or equivalent) if you want public URLs (e.g. model APIs) to use default internet egress while **10.0.0.0/8**, **172.16.0.0/12**, **192.168.0.0/16** go through the VPC.
+
+**Fallback:** If Direct VPC egress is unavailable in your project/region, use a **Serverless VPC Access connector** in the same region and attach it to the Cloud Run service, with **`--vpc-egress private-ranges-only`** so traffic to the VM’s **internal IP** uses the VPC.
+
+### Firewall (operator)
+
+- Allow **TCP** from the **Cloud Run egress path** (connector subnet or documented Serverless source ranges / your org standard) to the **VM internal IP** on **Hermes’ port**.
+- Deny the same port from **`0.0.0.0/0`**.
+
+### Ham env (repo + operator)
+
+Set at least:
+
+- `HERMES_GATEWAY_MODE=http`
+- `HERMES_GATEWAY_BASE_URL=http://<VM_INTERNAL_IP>:8642` (or `http://<internal-dns>:8642`) — **no `/v1` suffix**
+- `HERMES_GATEWAY_API_KEY` — **Secret Manager** reference on Cloud Run (recommended)
+- `HERMES_GATEWAY_MODEL` — e.g. `hermes-agent` (must match Hermes server)
+
+See commented template in [`docs/examples/ham-api-cloud-run-env.yaml`](examples/ham-api-cloud-run-env.yaml) and [`docs/HERMES_GATEWAY_CONTRACT.md`](HERMES_GATEWAY_CONTRACT.md) (streaming **`stream: true`** behavior).
+
 ## Smoke tests
 
 ```bash
@@ -74,7 +107,8 @@ curl -sS -X POST "${SERVICE_URL}/api/chat" \
   -d '{"messages":[{"role":"user","content":"ping"}]}'
 ```
 
-Expect **`mock`** mode: assistant content containing **`Mock assistant reply`**.
+- If **`HERMES_GATEWAY_MODE=mock`**: assistant content typically contains **`Mock assistant reply`**.
+- If **`HERMES_GATEWAY_MODE=http`** or **`openrouter`** with a working upstream: assistant content should **not** be the mock phrase; use **`scripts/verify_ham_api_deploy.sh`** (fails on accidental mock unless `HAM_VERIFY_ALLOW_MOCK=1`).
 
 ## Wire the Vercel frontend
 
