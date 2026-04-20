@@ -1,0 +1,2 @@
+# SPA fallback for hosts that honor Netlify-style redirects (copy to dist via Vite public/)
+/*    /index.html   200

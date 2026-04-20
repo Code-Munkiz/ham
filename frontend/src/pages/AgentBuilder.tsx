@@ -253,8 +253,8 @@ export default function AgentBuilder() {
               Agent <span className="text-[#FF6B00] not-italic">profiles</span>
             </h1>
             <p className="text-[11px] font-bold text-white/35 uppercase tracking-widest max-w-xl leading-relaxed">
-              Named assistants for this project. Attached skills use Hermes runtime catalog ids — saved on
-              the profile for later chat wiring (not applied to /api/chat yet).
+              Named assistants for this project. Attached skills use Hermes runtime catalog ids. Chat uses
+              them as context-only guidance when the same project id is sent (not tool execution).
             </p>
           </div>
           <div className="flex flex-wrap gap-2">

@@ -634,6 +634,17 @@ export async function fetchProjectAgents(projectId: string): Promise<HamAgentsCo
   const res = await fetch(apiUrl(`/api/projects/${encodeURIComponent(projectId)}/agents`));
   if (!res.ok) {
     const msg = await detailMessageFromResponse(res);
+    if (res.status === 404) {
+      throw new Error(
+        [
+          "Agent Builder could not load profiles: the API returned 404 for GET /api/projects/…/agents.",
+          "Redeploy the Ham API from a build that includes the agent profiles route, and set VITE_HAM_API_BASE to that API origin (no trailing /api).",
+          msg && msg !== "Not Found" ? `Detail: ${msg}` : "",
+        ]
+          .filter(Boolean)
+          .join(" "),
+      );
+    }
     throw new Error(msg || `agents: HTTP ${res.status}`);
   }
   const data = (await res.json()) as { agents?: HamAgentsConfig };

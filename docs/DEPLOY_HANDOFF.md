@@ -35,7 +35,7 @@ The repo already includes CORS support (`HAM_CORS_ORIGINS`, `HAM_CORS_ORIGIN_REG
 
 ## 2. Vercel (dashboard frontend)
 
-The **React dashboard** is built and served only from Vercel (see root `vercel.json`). The **Cloud Run image** (`Dockerfile`) ships **FastAPI only** — it does not contain `frontend/dist`. If you redeploy the API but not Vercel, new **UI** routes (e.g. **Skills** at `/skills`) will not appear until you trigger a **new Vercel production deployment** from the commit that includes those files.
+The **React dashboard** is built and served only from Vercel. **If the Vercel project Root Directory is the repo root**, use root `vercel.json` (build + `outputDirectory` + SPA rewrite). **If Root Directory is `frontend`**, Vercel reads **`frontend/vercel.json`** for SPA rewrites — without that, direct visits to **`/agents`** (or refresh) can 404. The **Cloud Run image** (`Dockerfile`) ships **FastAPI only** — it does not contain `frontend/dist`. If you redeploy Vercel but not the API, pages like **Agent Builder** may load but fail with a clear error until **GET `/api/projects/{id}/agents`** exists on the API host. If you redeploy the API but not Vercel, new **UI** routes will not appear until you trigger a **new Vercel production deployment** from the commit that includes those files.
 
 1. Project → **Settings → Environment Variables**:
    - **`VITE_HAM_API_BASE`** = your Cloud Run **origin** only, e.g. `https://ham-api-xxxxx.run.app` — **no trailing slash**, **no `/api` suffix** (the app requests `/api/...` itself; `…/api` + `/api/...` → 404).
