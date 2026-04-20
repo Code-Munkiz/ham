@@ -20,6 +20,7 @@ import Settings from "./pages/Settings";
 import Logs from "./pages/Logs";
 import Analytics from "./pages/Analytics";
 import HermesSkills from "./pages/HermesSkills";
+import Landing from "./pages/Landing";
 
 import { AgentProvider } from "./lib/ham/AgentContext";
 import { WorkspaceProvider } from "./lib/ham/WorkspaceContext";
@@ -33,7 +34,7 @@ export default function App() {
           <BrowserRouter>
             <AppLayout>
               <Routes>
-                <Route path="/" element={<Navigate to="/chat" replace />} />
+                <Route path="/" element={<Landing />} />
                 <Route path="/overview" element={<Overview />} />
                 <Route path="/chat" element={<Chat />} />
                 <Route path="/droids" element={<Droids />} />

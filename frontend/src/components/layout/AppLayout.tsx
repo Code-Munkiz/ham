@@ -19,6 +19,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const { activeTask, setActiveTask, isControlPanelOpen, setIsControlPanelOpen } = useWorkspace();
 
   const selectedAgent = agents.find(a => a.id === selectedAgentId) || agents[0];
+  const isBareLanding = location.pathname === "/";
   const isChatPage = location.pathname.startsWith("/chat");
   const isSettingsPage = location.pathname.startsWith("/settings");
   const showDroidDetails = location.pathname.startsWith("/droids");
@@ -35,6 +36,15 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       setViewMode('chat');
     }
   }, [isSettingsPage, isChatPage]);
+
+  if (isBareLanding) {
+    return (
+      <>
+        {children}
+        <Toaster theme="dark" position="bottom-right" closeButton richColors />
+      </>
+    );
+  }
 
   return (
     <div className="flex h-screen overflow-hidden bg-white dark:bg-[#080808] text-foreground transition-colors duration-300 selection:bg-primary/30 relative font-sans">
