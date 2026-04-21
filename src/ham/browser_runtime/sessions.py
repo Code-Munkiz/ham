@@ -19,6 +19,22 @@ class BrowserSessionError(RuntimeError):
     """Raised when a Browser Runtime session operation fails."""
 
 
+class BrowserSessionNotFoundError(BrowserSessionError):
+    """Raised when session id does not exist or has expired/closed."""
+
+
+class BrowserSessionOwnerMismatchError(BrowserSessionError):
+    """Raised when a caller does not own the session."""
+
+
+class BrowserSessionConflictError(BrowserSessionError):
+    """Raised when session state disallows an operation."""
+
+
+class BrowserScreenshotTooLargeError(BrowserSessionError):
+    """Raised when screenshot bytes exceed configured v1 limit."""
+
+
 @dataclass
 class BrowserSessionRecord:
     session_id: str
@@ -94,6 +110,9 @@ class BrowserSessionManager:
         }
         self._allowed_domains = _split_csv_env("HAM_BROWSER_ALLOWED_DOMAINS")
         self._blocked_domains = _split_csv_env("HAM_BROWSER_BLOCKED_DOMAINS")
+        self._max_screenshot_bytes = max(
+            32_768, int((os.environ.get("HAM_BROWSER_MAX_SCREENSHOT_BYTES") or "5000000").strip())
+        )
         self._action_hits: dict[tuple[str, int], int] = {}
 
     def _ensure_browser(self) -> Any:
@@ -111,7 +130,7 @@ class BrowserSessionManager:
 
     def _check_owner(self, session: BrowserSessionRecord, owner_key: str) -> None:
         if session.owner_key != owner_key:
-            raise BrowserSessionError("Session owner mismatch.")
+            raise BrowserSessionOwnerMismatchError("Session owner mismatch.")
 
     def _touch(self, session: BrowserSessionRecord) -> None:
         session.touched_at_ms = _utc_now_ms()
@@ -137,7 +156,11 @@ class BrowserSessionManager:
         hits = self._action_hits.get(key, 0) + 1
         self._action_hits[key] = hits
         if hits > self._max_actions_per_minute:
-            raise BrowserSessionError("Action rate limit exceeded for this session.")
+            raise BrowserSessionConflictError("Action rate limit exceeded for this session.")
+
+    @staticmethod
+    def _host_matches_domain(host: str, domain: str) -> bool:
+        return host == domain or host.endswith(f".{domain}")
 
     def _enforce_domain_policy(self, url: str) -> None:
         parsed = urlparse(url.strip())
@@ -147,20 +170,27 @@ class BrowserSessionManager:
             raise BrowserPolicyError("Only http:// and https:// URLs are allowed.")
         if not host:
             raise BrowserPolicyError("URL host is required.")
-        if host in self._blocked_domains:
+        if any(self._host_matches_domain(host, blocked) for blocked in self._blocked_domains):
             raise BrowserPolicyError("Target domain is blocked by HAM_BROWSER_BLOCKED_DOMAINS.")
         if self._allowed_domains:
-            if not any(host == dom or host.endswith(f".{dom}") for dom in self._allowed_domains):
+            if not any(self._host_matches_domain(host, allowed) for allowed in self._allowed_domains):
                 raise BrowserPolicyError("Target domain is not allowed by HAM_BROWSER_ALLOWED_DOMAINS.")
         if not self._allow_private_network and _is_private_or_local_host(host):
             raise BrowserPolicyError(
                 "Local/private network targets are blocked. Set HAM_BROWSER_ALLOW_PRIVATE_NETWORK=true to override."
             )
 
+    @staticmethod
+    def _ensure_actionable(rec: BrowserSessionRecord, action_name: str) -> None:
+        if rec.status == "error" and action_name != "reset":
+            raise BrowserSessionConflictError(
+                "Session is in error state. Call reset before additional actions."
+            )
+
     def _get_session_locked(self, session_id: str) -> BrowserSessionRecord:
         rec = self._sessions.get(session_id)
         if rec is None:
-            raise BrowserSessionError(f"Unknown session_id: {session_id}")
+            raise BrowserSessionNotFoundError(f"Unknown session_id: {session_id}")
         return rec
 
     def create_session(
@@ -185,7 +215,7 @@ class BrowserSessionManager:
                 page=page,
                 context=context,
             )
-            return self.get_state(session_id=session_id, owner_key=owner_key)
+            return self._state_from_record(self._sessions[session_id])
 
     def close_session(self, *, session_id: str, owner_key: str) -> None:
         with self._lock:
@@ -203,6 +233,7 @@ class BrowserSessionManager:
             rec = self._get_session_locked(session_id)
             self._check_owner(rec, owner_key)
             self._check_rate_limit(session_id)
+            self._ensure_actionable(rec, "navigate")
             self._enforce_domain_policy(url)
             try:
                 rec.status = "busy"
@@ -223,6 +254,7 @@ class BrowserSessionManager:
             rec = self._get_session_locked(session_id)
             self._check_owner(rec, owner_key)
             self._check_rate_limit(session_id)
+            self._ensure_actionable(rec, "click")
             try:
                 rec.status = "busy"
                 rec.page.click(selector, timeout=15000)
@@ -244,6 +276,7 @@ class BrowserSessionManager:
             rec = self._get_session_locked(session_id)
             self._check_owner(rec, owner_key)
             self._check_rate_limit(session_id)
+            self._ensure_actionable(rec, "type")
             try:
                 rec.status = "busy"
                 if clear_first:
@@ -266,14 +299,21 @@ class BrowserSessionManager:
             rec = self._get_session_locked(session_id)
             self._check_owner(rec, owner_key)
             self._check_rate_limit(session_id)
+            self._ensure_actionable(rec, "screenshot")
             try:
                 rec.status = "busy"
                 image = rec.page.screenshot(type="png", full_page=False)
+                if len(image) > self._max_screenshot_bytes:
+                    raise BrowserScreenshotTooLargeError(
+                        "Screenshot exceeds HAM_BROWSER_MAX_SCREENSHOT_BYTES."
+                    )
                 rec.last_error = None
                 rec.status = "ready"
             except Exception as exc:
                 rec.status = "error"
                 rec.last_error = str(exc)
+                if isinstance(exc, BrowserScreenshotTooLargeError):
+                    raise exc
                 raise BrowserSessionError(f"Screenshot failed: {exc}") from exc
             finally:
                 self._touch(rec)
@@ -341,5 +381,6 @@ class BrowserSessionManager:
             "blocked_domains": list(self._blocked_domains),
             "session_ttl_seconds": self._ttl_seconds,
             "max_actions_per_minute": self._max_actions_per_minute,
+            "max_screenshot_bytes": self._max_screenshot_bytes,
         }
 

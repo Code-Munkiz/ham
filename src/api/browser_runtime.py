@@ -7,7 +7,14 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from src.ham.browser_runtime.service import get_browser_runtime_manager
-from src.ham.browser_runtime.sessions import BrowserPolicyError, BrowserSessionError
+from src.ham.browser_runtime.sessions import (
+    BrowserPolicyError,
+    BrowserScreenshotTooLargeError,
+    BrowserSessionConflictError,
+    BrowserSessionError,
+    BrowserSessionNotFoundError,
+    BrowserSessionOwnerMismatchError,
+)
 
 router = APIRouter(prefix="/api/browser", tags=["browser-runtime"])
 
@@ -39,6 +46,14 @@ class BrowserTypeBody(BrowserOwnerBody):
 def _to_http_error(exc: Exception) -> HTTPException:
     if isinstance(exc, BrowserPolicyError):
         return HTTPException(status_code=422, detail=str(exc))
+    if isinstance(exc, BrowserSessionNotFoundError):
+        return HTTPException(status_code=404, detail=str(exc))
+    if isinstance(exc, BrowserSessionOwnerMismatchError):
+        return HTTPException(status_code=403, detail=str(exc))
+    if isinstance(exc, BrowserSessionConflictError):
+        return HTTPException(status_code=409, detail=str(exc))
+    if isinstance(exc, BrowserScreenshotTooLargeError):
+        return HTTPException(status_code=413, detail=str(exc))
     if isinstance(exc, BrowserSessionError):
         return HTTPException(status_code=400, detail=str(exc))
     return HTTPException(status_code=500, detail="Browser runtime internal error.")
