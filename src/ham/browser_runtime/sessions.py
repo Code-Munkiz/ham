@@ -124,8 +124,13 @@ class BrowserSessionManager:
             raise BrowserSessionError(
                 "Playwright is not installed on this HAM API host. Install dependency `playwright` and run `playwright install chromium`."
             ) from exc
-        self._playwright = sync_playwright().start()
-        self._browser = self._playwright.chromium.launch(headless=True)
+        try:
+            self._playwright = sync_playwright().start()
+            self._browser = self._playwright.chromium.launch(headless=True)
+        except Exception as exc:
+            raise BrowserSessionError(
+                f"Playwright runtime failed to start: {exc}"
+            ) from exc
         return self._browser
 
     def _check_owner(self, session: BrowserSessionRecord, owner_key: str) -> None:

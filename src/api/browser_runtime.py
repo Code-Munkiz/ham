@@ -60,12 +60,12 @@ def _to_http_error(exc: Exception) -> HTTPException:
 
 
 @router.get("/policy")
-async def browser_runtime_policy() -> dict[str, Any]:
+def browser_runtime_policy() -> dict[str, Any]:
     return get_browser_runtime_manager().policy_snapshot()
 
 
 @router.post("/sessions")
-async def create_browser_session(body: BrowserCreateSessionBody) -> dict[str, Any]:
+def create_browser_session(body: BrowserCreateSessionBody) -> dict[str, Any]:
     manager = get_browser_runtime_manager()
     try:
         return manager.create_session(
@@ -78,7 +78,7 @@ async def create_browser_session(body: BrowserCreateSessionBody) -> dict[str, An
 
 
 @router.get("/sessions/{session_id}")
-async def get_browser_session_state(session_id: str, owner_key: str) -> dict[str, Any]:
+def get_browser_session_state(session_id: str, owner_key: str) -> dict[str, Any]:
     manager = get_browser_runtime_manager()
     try:
         return manager.get_state(session_id=session_id, owner_key=owner_key.strip())
@@ -87,7 +87,7 @@ async def get_browser_session_state(session_id: str, owner_key: str) -> dict[str
 
 
 @router.post("/sessions/{session_id}/navigate")
-async def navigate_browser_session(session_id: str, body: BrowserNavigateBody) -> dict[str, Any]:
+def navigate_browser_session(session_id: str, body: BrowserNavigateBody) -> dict[str, Any]:
     manager = get_browser_runtime_manager()
     try:
         return manager.navigate(
@@ -100,7 +100,7 @@ async def navigate_browser_session(session_id: str, body: BrowserNavigateBody) -
 
 
 @router.post("/sessions/{session_id}/actions/click")
-async def click_browser_session(session_id: str, body: BrowserClickBody) -> dict[str, Any]:
+def click_browser_session(session_id: str, body: BrowserClickBody) -> dict[str, Any]:
     manager = get_browser_runtime_manager()
     try:
         return manager.click(
@@ -113,7 +113,7 @@ async def click_browser_session(session_id: str, body: BrowserClickBody) -> dict
 
 
 @router.post("/sessions/{session_id}/actions/type")
-async def type_browser_session(session_id: str, body: BrowserTypeBody) -> dict[str, Any]:
+def type_browser_session(session_id: str, body: BrowserTypeBody) -> dict[str, Any]:
     manager = get_browser_runtime_manager()
     try:
         return manager.type_text(
@@ -128,7 +128,7 @@ async def type_browser_session(session_id: str, body: BrowserTypeBody) -> dict[s
 
 
 @router.post("/sessions/{session_id}/screenshot")
-async def screenshot_browser_session(session_id: str, body: BrowserOwnerBody) -> Response:
+def screenshot_browser_session(session_id: str, body: BrowserOwnerBody) -> Response:
     manager = get_browser_runtime_manager()
     try:
         image = manager.screenshot_png(session_id=session_id, owner_key=body.owner_key.strip())
@@ -138,7 +138,7 @@ async def screenshot_browser_session(session_id: str, body: BrowserOwnerBody) ->
 
 
 @router.post("/sessions/{session_id}/reset")
-async def reset_browser_session(session_id: str, body: BrowserOwnerBody) -> dict[str, Any]:
+def reset_browser_session(session_id: str, body: BrowserOwnerBody) -> dict[str, Any]:
     manager = get_browser_runtime_manager()
     try:
         return manager.reset(session_id=session_id, owner_key=body.owner_key.strip())
@@ -147,7 +147,7 @@ async def reset_browser_session(session_id: str, body: BrowserOwnerBody) -> dict
 
 
 @router.delete("/sessions/{session_id}")
-async def close_browser_session(session_id: str, owner_key: str) -> dict[str, Any]:
+def close_browser_session(session_id: str, owner_key: str) -> dict[str, Any]:
     manager = get_browser_runtime_manager()
     try:
         manager.close_session(session_id=session_id, owner_key=owner_key.strip())
