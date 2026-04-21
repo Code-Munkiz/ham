@@ -180,6 +180,135 @@ export function cloudAgentIdFromLaunchResponse(payload: Record<string, unknown>)
   return typeof id === "string" && id.trim() ? id.trim() : null;
 }
 
+export interface BrowserRuntimeState {
+  session_id: string;
+  status: "ready" | "busy" | "error";
+  last_error: string | null;
+  current_url: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  ownership: "pane_owner_key";
+  runtime_host: "ham_api_local";
+  screenshot_transport: "binary_png_endpoint";
+  streaming_supported: boolean;
+  cursor_embedding_supported: boolean;
+}
+
+export interface BrowserSessionCreateRequest {
+  owner_key: string;
+  viewport_width?: number;
+  viewport_height?: number;
+}
+
+async function browserRuntimeJson<T>(path: string, body?: unknown, method = "POST"): Promise<T> {
+  const res = await fetch(apiUrl(path), {
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: body == null ? undefined : JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const msg = (await readFastApiDetail(res)) ?? `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+  return res.json() as Promise<T>;
+}
+
+export async function createBrowserSession(
+  body: BrowserSessionCreateRequest,
+): Promise<BrowserRuntimeState> {
+  return browserRuntimeJson<BrowserRuntimeState>("/api/browser/sessions", body, "POST");
+}
+
+export async function getBrowserSessionState(
+  sessionId: string,
+  ownerKey: string,
+): Promise<BrowserRuntimeState> {
+  const q = new URLSearchParams({ owner_key: ownerKey.trim() }).toString();
+  const res = await fetch(apiUrl(`/api/browser/sessions/${encodeURIComponent(sessionId)}?${q}`));
+  if (!res.ok) {
+    const msg = (await readFastApiDetail(res)) ?? `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+  return res.json() as Promise<BrowserRuntimeState>;
+}
+
+export async function navigateBrowserSession(
+  sessionId: string,
+  ownerKey: string,
+  url: string,
+): Promise<BrowserRuntimeState> {
+  return browserRuntimeJson<BrowserRuntimeState>(
+    `/api/browser/sessions/${encodeURIComponent(sessionId)}/navigate`,
+    { owner_key: ownerKey, url },
+    "POST",
+  );
+}
+
+export async function clickBrowserSession(
+  sessionId: string,
+  ownerKey: string,
+  selector: string,
+): Promise<BrowserRuntimeState> {
+  return browserRuntimeJson<BrowserRuntimeState>(
+    `/api/browser/sessions/${encodeURIComponent(sessionId)}/actions/click`,
+    { owner_key: ownerKey, selector },
+    "POST",
+  );
+}
+
+export async function typeBrowserSession(
+  sessionId: string,
+  ownerKey: string,
+  selector: string,
+  text: string,
+  clearFirst = true,
+): Promise<BrowserRuntimeState> {
+  return browserRuntimeJson<BrowserRuntimeState>(
+    `/api/browser/sessions/${encodeURIComponent(sessionId)}/actions/type`,
+    { owner_key: ownerKey, selector, text, clear_first: clearFirst },
+    "POST",
+  );
+}
+
+export async function resetBrowserSession(
+  sessionId: string,
+  ownerKey: string,
+): Promise<BrowserRuntimeState> {
+  return browserRuntimeJson<BrowserRuntimeState>(
+    `/api/browser/sessions/${encodeURIComponent(sessionId)}/reset`,
+    { owner_key: ownerKey },
+    "POST",
+  );
+}
+
+export async function closeBrowserSession(sessionId: string, ownerKey: string): Promise<void> {
+  const q = new URLSearchParams({ owner_key: ownerKey.trim() }).toString();
+  const res = await fetch(apiUrl(`/api/browser/sessions/${encodeURIComponent(sessionId)}?${q}`), {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    const msg = (await readFastApiDetail(res)) ?? `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+}
+
+export async function captureBrowserScreenshot(
+  sessionId: string,
+  ownerKey: string,
+): Promise<Blob> {
+  const res = await fetch(apiUrl(`/api/browser/sessions/${encodeURIComponent(sessionId)}/screenshot`), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ owner_key: ownerKey }),
+  });
+  if (!res.ok) {
+    const msg = (await readFastApiDetail(res)) ?? `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+  return res.blob();
+}
+
 /** Proxy `POST /v0/agents/{id}/followup`. */
 export async function postCursorAgentFollowup(
   agentId: string,
