@@ -219,6 +219,9 @@ export interface HamChatRequest {
   } | null;
 }
 
+/** Matches `/chat` workbench header: CHAT | SPLIT | PREVIEW | WAR ROOM */
+export type HamWorkbenchViewMode = "chat" | "split" | "preview" | "war_room";
+
 /** Structured UI actions from `POST /api/chat` (server-validated). */
 export type HamUiAction =
   | { type: "navigate"; path: string }
@@ -228,7 +231,8 @@ export type HamUiAction =
       level: "info" | "success" | "warning" | "error";
       message: string;
     }
-  | { type: "toggle_control_panel"; open?: boolean | null };
+  | { type: "toggle_control_panel"; open?: boolean | null }
+  | { type: "set_workbench_view"; mode: HamWorkbenchViewMode };
 
 export interface HamOperatorResult {
   handled: boolean;

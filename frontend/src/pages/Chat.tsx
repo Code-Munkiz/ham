@@ -481,6 +481,7 @@ export default function Chat() {
         navigate,
         setIsControlPanelOpen,
         isControlPanelOpen,
+        setWorkbenchView: setViewMode,
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Request failed";
@@ -561,6 +562,7 @@ export default function Chat() {
         navigate,
         setIsControlPanelOpen,
         isControlPanelOpen,
+        setWorkbenchView: setViewMode,
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Request failed";

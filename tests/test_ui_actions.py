@@ -40,6 +40,21 @@ def test_split_accepts_settings_query_path() -> None:
     assert actions[0]["path"] == "/settings?tab=context-memory"
 
 
+def test_split_accepts_set_workbench_view() -> None:
+    raw = (
+        'Done.\nHAM_UI_ACTIONS_JSON: {"actions":[{"type":"set_workbench_view","mode":"war_room"}]}'
+    )
+    visible, actions = split_assistant_ui_actions(raw)
+    assert visible == "Done."
+    assert actions == [{"type": "set_workbench_view", "mode": "war_room"}]
+
+
+def test_split_rejects_invalid_workbench_mode() -> None:
+    raw = 'HAM_UI_ACTIONS_JSON: {"actions":[{"type":"set_workbench_view","mode":"fullscreen"}]}'
+    _, actions = split_assistant_ui_actions(raw)
+    assert actions == []
+
+
 @pytest.fixture
 def mock_mode(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HERMES_GATEWAY_MODE", "mock")

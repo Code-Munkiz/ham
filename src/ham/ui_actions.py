@@ -52,7 +52,21 @@ class ToggleControlPanelAction(BaseModel):
     open: bool | None = None
 
 
-UiAction = NavigateAction | OpenSettingsAction | ToastAction | ToggleControlPanelAction
+WorkbenchViewMode = Literal["chat", "split", "preview", "war_room"]
+
+
+class SetWorkbenchViewAction(BaseModel):
+    type: Literal["set_workbench_view"] = "set_workbench_view"
+    mode: WorkbenchViewMode
+
+
+UiAction = (
+    NavigateAction
+    | OpenSettingsAction
+    | ToastAction
+    | ToggleControlPanelAction
+    | SetWorkbenchViewAction
+)
 _action_adapter: TypeAdapter[UiAction] = TypeAdapter(UiAction)
 
 
@@ -126,7 +140,7 @@ def ui_actions_system_instructions() -> str:
     )
     paths = ", ".join(sorted(x for x in _ALLOWED_NAV_PREFIXES if x != "/")) + ", / (home)"
     return f"""
-**Structured UI actions:** If the user clearly wants navigation, a settings tab, a toast, or the control panel toggled, add **one final line** after your reply (no code fence):
+**Structured UI actions:** If the user clearly wants navigation, a settings tab, a toast, the control panel toggled, or the **/chat workbench header mode** (CHAT / SPLIT / PREVIEW / WAR ROOM), add **one final line** after your reply (no code fence):
 {_MARKER}{{"actions":[...]}}
 
 Allowed action objects (array may be empty):
@@ -134,6 +148,7 @@ Allowed action objects (array may be empty):
 - `{{"type":"open_settings","tab":"<optional>"}}` — tab one of: {tabs}
 - `{{"type":"toast","level":"info|success|warning|error","message":"<short>"}}`
 - `{{"type":"toggle_control_panel","open":true|false}}` — omit `open` to toggle
+- `{{"type":"set_workbench_view","mode":"chat|split|preview|war_room"}}` — matches the workbench top bar on `/chat`
 
 If no UI change is needed, omit the line entirely or use {{"actions":[]}}.
 Do not repeat the marker elsewhere in your message.

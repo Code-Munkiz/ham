@@ -3,7 +3,7 @@ import { toast } from "sonner";
 
 import { normalizeSettingsTabParam } from "@/components/workspace/UnifiedSettings";
 
-import type { HamUiAction } from "./api";
+import type { HamUiAction, HamWorkbenchViewMode } from "./api";
 
 export function applyHamUiActions(
   actions: HamUiAction[],
@@ -11,6 +11,7 @@ export function applyHamUiActions(
     navigate: NavigateFunction;
     setIsControlPanelOpen: (open: boolean) => void;
     isControlPanelOpen: boolean;
+    setWorkbenchView: (mode: HamWorkbenchViewMode) => void;
   },
 ): void {
   for (const a of actions) {
@@ -46,6 +47,9 @@ export function applyHamUiActions(
         } else {
           ctx.setIsControlPanelOpen(a.open);
         }
+        break;
+      case "set_workbench_view":
+        ctx.setWorkbenchView(a.mode);
         break;
       default:
         break;
