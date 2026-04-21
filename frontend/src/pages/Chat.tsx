@@ -9,7 +9,6 @@ import {
   Sparkles,
   Shield,
   Terminal,
-  MessageSquare,
   Activity,
   Zap,
   Monitor,
@@ -603,29 +602,7 @@ export default function Chat() {
               )}
            </div>
            
-           {/* CHAT | SPLIT | PREVIEW | WAR ROOM — WEB absorbed into right pane only */}
            <div className="flex items-center gap-3 shrink-0">
-              <div className="flex items-center gap-1 bg-white/5 border border-white/10 rounded-lg p-1">
-                 {[
-                   { id: "chat" as const, icon: MessageSquare, label: "Chat" },
-                   { id: "split" as const, icon: Layout, label: "Split" },
-                   { id: "preview" as const, icon: Monitor, label: "Preview" },
-                   { id: "war_room" as const, icon: Radar, label: "War Room" },
-                 ].map((mode) => (
-                   <button
-                     key={mode.id}
-                     type="button"
-                     onClick={() => setViewMode(mode.id)}
-                     className={cn(
-                       "flex items-center gap-2 px-3 py-1.5 rounded-md transition-all group",
-                       viewMode === mode.id ? "bg-[#FF6B00] text-black" : "text-white/20 hover:text-white",
-                     )}
-                   >
-                      <mode.icon className="h-3 w-3" />
-                      <span className="text-[9px] font-black uppercase tracking-widest hidden lg:block">{mode.label}</span>
-                   </button>
-                 ))}
-              </div>
               <button
                 type="button"
                 onClick={() => setIsControlPanelOpen(!isControlPanelOpen)}
@@ -961,6 +938,39 @@ export default function Chat() {
                                {primaryActionLabel(workbenchMode, sending)}
                             </button>
                          </div>
+                      </div>
+
+                      {/* Split / Preview / War Room — moved from workbench header; chat-only = none selected or close pane */}
+                      <div className="flex flex-wrap items-center gap-2 px-6 py-2.5 bg-black/25 border-t border-white/5">
+                        <span className="text-[8px] font-black uppercase tracking-[0.2em] text-white/35 shrink-0">
+                          Workbench layout
+                        </span>
+                        <div className="flex items-center gap-1 bg-white/5 border border-white/10 rounded-lg p-1">
+                          {(
+                            [
+                              { id: "split" as const, icon: Layout, label: "Split" },
+                              { id: "preview" as const, icon: Monitor, label: "Preview" },
+                              { id: "war_room" as const, icon: Radar, label: "War Room" },
+                            ] as const
+                          ).map((mode) => (
+                            <button
+                              key={mode.id}
+                              type="button"
+                              onClick={() => setViewMode(mode.id)}
+                              className={cn(
+                                "flex items-center gap-2 px-3 py-1.5 rounded-md transition-all",
+                                viewMode === mode.id
+                                  ? "bg-[#FF6B00] text-black"
+                                  : "text-white/25 hover:text-white",
+                              )}
+                            >
+                              <mode.icon className="h-3 w-3 shrink-0" />
+                              <span className="text-[9px] font-black uppercase tracking-widest">
+                                {mode.label}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
                       </div>
                    </div>
                 </div>
