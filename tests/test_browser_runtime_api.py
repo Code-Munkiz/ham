@@ -100,6 +100,66 @@ class _FakeManager:
         _ = self.get_state(session_id=session_id, owner_key=owner_key)
         self._sessions.pop(session_id, None)
 
+    def click_xy(
+        self, *, session_id: str, owner_key: str, x: float, y: float, button: str
+    ) -> dict[str, Any]:
+        _ = (x, y, button)
+        return self.get_state(session_id=session_id, owner_key=owner_key)
+
+    def scroll(
+        self, *, session_id: str, owner_key: str, delta_x: float, delta_y: float
+    ) -> dict[str, Any]:
+        _ = (delta_x, delta_y)
+        return self.get_state(session_id=session_id, owner_key=owner_key)
+
+    def key_press(self, *, session_id: str, owner_key: str, key: str) -> dict[str, Any]:
+        _ = key
+        return self.get_state(session_id=session_id, owner_key=owner_key)
+
+    def start_stream(
+        self, *, session_id: str, owner_key: str, requested_transport: str
+    ) -> dict[str, Any]:
+        _ = requested_transport
+        self.get_state(session_id=session_id, owner_key=owner_key)
+        return {
+            "status": "live",
+            "mode": "screenshot_loop",
+            "requested_transport": "screenshot_loop",
+            "last_error": None,
+        }
+
+    def get_stream_state(self, *, session_id: str, owner_key: str) -> dict[str, Any]:
+        self.get_state(session_id=session_id, owner_key=owner_key)
+        return {
+            "status": "live",
+            "mode": "screenshot_loop",
+            "requested_transport": "screenshot_loop",
+            "last_error": None,
+        }
+
+    def stop_stream(self, *, session_id: str, owner_key: str) -> dict[str, Any]:
+        self.get_state(session_id=session_id, owner_key=owner_key)
+        return {
+            "status": "disconnected",
+            "mode": "none",
+            "requested_transport": "screenshot_loop",
+            "last_error": None,
+        }
+
+    def handle_webrtc_offer(
+        self, *, session_id: str, owner_key: str, sdp: str, offer_type: str
+    ) -> dict[str, Any]:
+        _ = (sdp, offer_type)
+        self.get_state(session_id=session_id, owner_key=owner_key)
+        raise BrowserSessionConflictError("WebRTC handshake is not enabled on this HAM host.")
+
+    def handle_webrtc_candidate(
+        self, *, session_id: str, owner_key: str, candidate: str
+    ) -> dict[str, Any]:
+        _ = candidate
+        self.get_state(session_id=session_id, owner_key=owner_key)
+        raise BrowserSessionConflictError("WebRTC candidate handling is not enabled on this HAM host.")
+
 
 @pytest.fixture
 def api_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
@@ -178,3 +238,53 @@ def test_error_mapping_not_found_owner_mismatch_policy_conflict(api_client: Test
         json={"owner_key": "pane_a", "selector": "conflict"},
     )
     assert conflict.status_code == 409
+
+
+def test_live_stream_and_interactive_endpoints(api_client: TestClient) -> None:
+    created = api_client.post("/api/browser/sessions", json={"owner_key": "pane_a"})
+    sid = created.json()["session_id"]
+
+    started = api_client.post(
+        f"/api/browser/sessions/{sid}/stream/start",
+        json={"owner_key": "pane_a", "requested_transport": "screenshot_loop"},
+    )
+    assert started.status_code == 200
+    assert started.json()["status"] == "live"
+
+    stream_state = api_client.get(f"/api/browser/sessions/{sid}/stream/state", params={"owner_key": "pane_a"})
+    assert stream_state.status_code == 200
+    assert stream_state.json()["mode"] == "screenshot_loop"
+
+    click_xy = api_client.post(
+        f"/api/browser/sessions/{sid}/actions/click-xy",
+        json={"owner_key": "pane_a", "x": 100, "y": 80, "button": "left"},
+    )
+    assert click_xy.status_code == 200
+
+    scroll = api_client.post(
+        f"/api/browser/sessions/{sid}/actions/scroll",
+        json={"owner_key": "pane_a", "delta_x": 0, "delta_y": 120},
+    )
+    assert scroll.status_code == 200
+
+    key = api_client.post(
+        f"/api/browser/sessions/{sid}/actions/key",
+        json={"owner_key": "pane_a", "key": "Enter"},
+    )
+    assert key.status_code == 200
+
+    offer = api_client.post(
+        f"/api/browser/sessions/{sid}/stream/offer",
+        json={"owner_key": "pane_a", "type": "offer", "sdp": "v=0"},
+    )
+    assert offer.status_code == 409
+
+    candidate = api_client.post(
+        f"/api/browser/sessions/{sid}/stream/candidate",
+        json={"owner_key": "pane_a", "candidate": "candidate:1 1 udp 2122260223 127.0.0.1 9 typ host"},
+    )
+    assert candidate.status_code == 409
+
+    stopped = api_client.post(f"/api/browser/sessions/{sid}/stream/stop", json={"owner_key": "pane_a"})
+    assert stopped.status_code == 200
+    assert stopped.json()["status"] == "disconnected"

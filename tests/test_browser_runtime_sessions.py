@@ -17,6 +17,8 @@ class _FakePage:
         self.url = "about:blank"
         self._title = "Blank"
         self.fail_next_goto = False
+        self.mouse = _FakeMouse()
+        self.keyboard = _FakeKeyboard()
 
     def goto(self, url: str, wait_until: str, timeout: int) -> None:
         if self.fail_next_goto:
@@ -63,6 +65,19 @@ class _FakeBrowser:
         ctx = _FakeContext()
         self.contexts.append(ctx)
         return ctx
+
+
+class _FakeMouse:
+    def click(self, x: float, y: float, button: str = "left") -> None:
+        _ = (x, y, button)
+
+    def wheel(self, delta_x: float, delta_y: float) -> None:
+        _ = (delta_x, delta_y)
+
+
+class _FakeKeyboard:
+    def press(self, key: str) -> None:
+        _ = key
 
 
 @pytest.fixture
@@ -166,3 +181,27 @@ def test_screenshot_too_large(monkeypatch: pytest.MonkeyPatch) -> None:
     sid = mgr.create_session(owner_key="pane_a")["session_id"]
     with pytest.raises(BrowserScreenshotTooLargeError):
         mgr.screenshot_png(session_id=sid, owner_key="pane_a")
+
+
+def test_stream_and_interactive_input_paths(manager: BrowserSessionManager) -> None:
+    sid = manager.create_session(owner_key="pane_a")["session_id"]
+
+    started = manager.start_stream(
+        session_id=sid,
+        owner_key="pane_a",
+        requested_transport="screenshot_loop",
+    )
+    assert started["status"] == "live"
+    assert started["mode"] == "screenshot_loop"
+
+    click_state = manager.click_xy(session_id=sid, owner_key="pane_a", x=120, y=80)
+    assert click_state["status"] == "ready"
+
+    scroll_state = manager.scroll(session_id=sid, owner_key="pane_a", delta_x=0, delta_y=150)
+    assert scroll_state["status"] == "ready"
+
+    key_state = manager.key_press(session_id=sid, owner_key="pane_a", key="Enter")
+    assert key_state["status"] == "ready"
+
+    stopped = manager.stop_stream(session_id=sid, owner_key="pane_a")
+    assert stopped["status"] == "disconnected"

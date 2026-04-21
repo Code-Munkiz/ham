@@ -45,6 +45,10 @@ class BrowserSessionRecord:
     context: Any
     status: str = "ready"
     last_error: str | None = None
+    stream_status: str = "disconnected"
+    stream_mode: str = "none"
+    stream_requested_transport: str = "none"
+    stream_last_error: str | None = None
 
 
 def _utc_now_ms() -> int:
@@ -114,6 +118,11 @@ class BrowserSessionManager:
             32_768, int((os.environ.get("HAM_BROWSER_MAX_SCREENSHOT_BYTES") or "5000000").strip())
         )
         self._action_hits: dict[tuple[str, int], int] = {}
+        self._webrtc_enabled = (os.environ.get("HAM_BROWSER_ENABLE_WEBRTC") or "").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+        }
 
     def _ensure_browser(self) -> Any:
         if self._browser is not None:
@@ -372,6 +381,16 @@ class BrowserSessionManager:
             "screenshot_transport": "binary_png_endpoint",
             "streaming_supported": False,
             "cursor_embedding_supported": False,
+            "stream_state": self._stream_payload(rec),
+        }
+
+    @staticmethod
+    def _stream_payload(rec: BrowserSessionRecord) -> dict[str, Any]:
+        return {
+            "status": rec.stream_status,
+            "mode": rec.stream_mode,
+            "requested_transport": rec.stream_requested_transport,
+            "last_error": rec.stream_last_error,
         }
 
     def policy_snapshot(self) -> dict[str, Any]:
@@ -379,8 +398,10 @@ class BrowserSessionManager:
             "runtime_host": "ham_api_local",
             "session_ownership": "pane_owner_key",
             "screenshot_transport": "binary_png_endpoint",
-            "streaming_supported": False,
+            "streaming_supported": True,
             "cursor_embedding_supported": False,
+            "supported_live_transports": ["screenshot_loop"],
+            "webrtc_enabled": self._webrtc_enabled,
             "allow_private_network": self._allow_private_network,
             "allowed_domains": list(self._allowed_domains),
             "blocked_domains": list(self._blocked_domains),
@@ -388,4 +409,135 @@ class BrowserSessionManager:
             "max_actions_per_minute": self._max_actions_per_minute,
             "max_screenshot_bytes": self._max_screenshot_bytes,
         }
+
+    def start_stream(self, *, session_id: str, owner_key: str, requested_transport: str) -> dict[str, Any]:
+        with self._lock:
+            self._evict_expired_locked()
+            rec = self._get_session_locked(session_id)
+            self._check_owner(rec, owner_key)
+            transport = (requested_transport or "").strip().lower() or "screenshot_loop"
+            rec.stream_requested_transport = transport
+            if transport == "webrtc" and not self._webrtc_enabled:
+                rec.stream_status = "degraded"
+                rec.stream_mode = "screenshot_loop"
+                rec.stream_last_error = (
+                    "WebRTC transport is not enabled on this HAM host. Falling back to screenshot_loop live transport."
+                )
+            else:
+                rec.stream_status = "live"
+                rec.stream_mode = "screenshot_loop"
+                rec.stream_last_error = None
+            self._touch(rec)
+            return self._stream_payload(rec)
+
+    def stop_stream(self, *, session_id: str, owner_key: str) -> dict[str, Any]:
+        with self._lock:
+            self._evict_expired_locked()
+            rec = self._get_session_locked(session_id)
+            self._check_owner(rec, owner_key)
+            rec.stream_status = "disconnected"
+            rec.stream_mode = "none"
+            rec.stream_last_error = None
+            self._touch(rec)
+            return self._stream_payload(rec)
+
+    def get_stream_state(self, *, session_id: str, owner_key: str) -> dict[str, Any]:
+        with self._lock:
+            self._evict_expired_locked()
+            rec = self._get_session_locked(session_id)
+            self._check_owner(rec, owner_key)
+            self._touch(rec)
+            return self._stream_payload(rec)
+
+    def handle_webrtc_offer(
+        self, *, session_id: str, owner_key: str, sdp: str, offer_type: str
+    ) -> dict[str, Any]:
+        _ = (sdp, offer_type)
+        with self._lock:
+            self._evict_expired_locked()
+            rec = self._get_session_locked(session_id)
+            self._check_owner(rec, owner_key)
+            if not self._webrtc_enabled:
+                raise BrowserSessionConflictError(
+                    "WebRTC handshake is not enabled on this HAM host."
+                )
+            raise BrowserSessionConflictError("WebRTC handshake path is reserved but not active in this build.")
+
+    def handle_webrtc_candidate(
+        self, *, session_id: str, owner_key: str, candidate: str
+    ) -> dict[str, Any]:
+        _ = candidate
+        with self._lock:
+            self._evict_expired_locked()
+            rec = self._get_session_locked(session_id)
+            self._check_owner(rec, owner_key)
+            if not self._webrtc_enabled:
+                raise BrowserSessionConflictError(
+                    "WebRTC candidate handling is not enabled on this HAM host."
+                )
+            raise BrowserSessionConflictError("WebRTC candidate path is reserved but not active in this build.")
+
+    def click_xy(
+        self, *, session_id: str, owner_key: str, x: float, y: float, button: str = "left"
+    ) -> dict[str, Any]:
+        with self._lock:
+            self._evict_expired_locked()
+            rec = self._get_session_locked(session_id)
+            self._check_owner(rec, owner_key)
+            self._check_rate_limit(session_id)
+            self._ensure_actionable(rec, "click_xy")
+            try:
+                rec.status = "busy"
+                rec.page.mouse.click(x, y, button=button)
+                rec.last_error = None
+                rec.status = "ready"
+            except Exception as exc:
+                rec.status = "error"
+                rec.last_error = str(exc)
+                raise BrowserSessionError(f"Coordinate click failed: {exc}") from exc
+            finally:
+                self._touch(rec)
+            return self._state_from_record(rec)
+
+    def scroll(
+        self, *, session_id: str, owner_key: str, delta_x: float = 0.0, delta_y: float = 0.0
+    ) -> dict[str, Any]:
+        with self._lock:
+            self._evict_expired_locked()
+            rec = self._get_session_locked(session_id)
+            self._check_owner(rec, owner_key)
+            self._check_rate_limit(session_id)
+            self._ensure_actionable(rec, "scroll")
+            try:
+                rec.status = "busy"
+                rec.page.mouse.wheel(delta_x, delta_y)
+                rec.last_error = None
+                rec.status = "ready"
+            except Exception as exc:
+                rec.status = "error"
+                rec.last_error = str(exc)
+                raise BrowserSessionError(f"Scroll failed: {exc}") from exc
+            finally:
+                self._touch(rec)
+            return self._state_from_record(rec)
+
+    def key_press(self, *, session_id: str, owner_key: str, key: str) -> dict[str, Any]:
+        with self._lock:
+            self._evict_expired_locked()
+            rec = self._get_session_locked(session_id)
+            self._check_owner(rec, owner_key)
+            self._check_rate_limit(session_id)
+            self._ensure_actionable(rec, "key_press")
+            try:
+                rec.status = "busy"
+                rec.page.keyboard.press(key)
+                rec.last_error = None
+                rec.status = "ready"
+            except Exception as exc:
+                rec.status = "error"
+                rec.last_error = str(exc)
+                raise BrowserSessionError(f"Key press failed: {exc}") from exc
+            finally:
+                self._touch(rec)
+            return self._state_from_record(rec)
 

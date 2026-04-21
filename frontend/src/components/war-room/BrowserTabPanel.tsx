@@ -3,14 +3,19 @@ import { ExternalLink, Loader2 } from "lucide-react";
 
 import {
   captureBrowserScreenshot,
-  clickBrowserSession,
+  clickBrowserSessionXY,
   closeBrowserSession,
   createBrowserSession,
+  getBrowserLiveStreamState,
   getBrowserSessionState,
   navigateBrowserSession,
   resetBrowserSession,
+  scrollBrowserSession,
+  sendBrowserSessionKey,
+  startBrowserLiveStream,
+  stopBrowserLiveStream,
+  type BrowserStreamState,
   type BrowserRuntimeState,
-  typeBrowserSession,
 } from "@/lib/ham/api";
 import { cn } from "@/lib/utils";
 
@@ -31,20 +36,33 @@ function normalizeBrowserUrl(raw: string): string {
 export function BrowserTabPanel({ embedUrl, onEmbedUrlChange, autoStart = false }: BrowserTabPanelProps) {
   const ownerKeyRef = React.useRef<string>(`pane_${crypto.randomUUID()}`);
   const autoStartedRef = React.useRef(false);
+  const imageRef = React.useRef<HTMLImageElement | null>(null);
+  const pollInFlightRef = React.useRef(false);
+  const reconnectCountRef = React.useRef(0);
   const [session, setSession] = React.useState<BrowserRuntimeState | null>(null);
   const [busy, setBusy] = React.useState(false);
-  const [selector, setSelector] = React.useState("");
-  const [typeSelector, setTypeSelector] = React.useState("");
-  const [typeText, setTypeText] = React.useState("");
+  const [streamState, setStreamState] = React.useState<BrowserStreamState>({
+    status: "disconnected",
+    mode: "none",
+    requested_transport: "none",
+    last_error: null,
+  });
   const [error, setError] = React.useState<string | null>(null);
   const [screenshotUrl, setScreenshotUrl] = React.useState<string | null>(null);
   const normalizedUrl = normalizeBrowserUrl(embedUrl);
   const canOpen = normalizedUrl.startsWith("http");
   const hasSession = session !== null;
+
+  function replaceScreenshot(next: Blob) {
+    setScreenshotUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return URL.createObjectURL(next);
+    });
+  }
+
   async function capture(sessionId: string) {
     const png = await captureBrowserScreenshot(sessionId, ownerKeyRef.current);
-    if (screenshotUrl) URL.revokeObjectURL(screenshotUrl);
-    setScreenshotUrl(URL.createObjectURL(png));
+    replaceScreenshot(png);
   }
 
 
@@ -60,6 +78,7 @@ export function BrowserTabPanel({ embedUrl, onEmbedUrlChange, autoStart = false 
     try {
       const next = await action();
       setSession(next);
+      if (next.stream_state) setStreamState(next.stream_state);
       if (next.current_url && next.current_url !== "about:blank") {
         onEmbedUrlChange(next.current_url);
       }
@@ -75,18 +94,34 @@ export function BrowserTabPanel({ embedUrl, onEmbedUrlChange, autoStart = false 
     setBusy(true);
     setError(null);
     try {
-      const [state, png] = await Promise.all([
+      const [state, live, png] = await Promise.all([
         getBrowserSessionState(session.session_id, ownerKeyRef.current),
+        getBrowserLiveStreamState(session.session_id, ownerKeyRef.current),
         captureBrowserScreenshot(session.session_id, ownerKeyRef.current),
       ]);
       setSession(state);
-      if (screenshotUrl) URL.revokeObjectURL(screenshotUrl);
-      setScreenshotUrl(URL.createObjectURL(png));
+      setStreamState(live);
+      replaceScreenshot(png);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to refresh browser state.");
     } finally {
       setBusy(false);
     }
+  }
+
+  async function startLiveStream(sessionId: string) {
+    setStreamState({
+      status: "connecting",
+      mode: "negotiating",
+      requested_transport: "screenshot_loop",
+      last_error: null,
+    });
+    const started = await startBrowserLiveStream(
+      sessionId,
+      ownerKeyRef.current,
+      "screenshot_loop",
+    );
+    setStreamState(started);
   }
 
   async function handleCreateSession() {
@@ -102,9 +137,16 @@ export function BrowserTabPanel({ embedUrl, onEmbedUrlChange, autoStart = false 
       const next = await navigateBrowserSession(created.session_id, ownerKeyRef.current, bootUrl);
       setSession(next);
       onEmbedUrlChange(bootUrl);
+      await startLiveStream(created.session_id);
       await capture(created.session_id);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to start browser session.");
+      setStreamState({
+        status: "error",
+        mode: "none",
+        requested_transport: "screenshot_loop",
+        last_error: e instanceof Error ? e.message : "Failed to initialize stream.",
+      });
     } finally {
       setBusy(false);
     }
@@ -121,10 +163,17 @@ export function BrowserTabPanel({ embedUrl, onEmbedUrlChange, autoStart = false 
     setBusy(true);
     setError(null);
     try {
+      await stopBrowserLiveStream(session.session_id, ownerKeyRef.current);
       await closeBrowserSession(session.session_id, ownerKeyRef.current);
       setSession(null);
       if (screenshotUrl) URL.revokeObjectURL(screenshotUrl);
       setScreenshotUrl(null);
+      setStreamState({
+        status: "disconnected",
+        mode: "none",
+        requested_transport: "none",
+        last_error: null,
+      });
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to close browser session.");
     } finally {
@@ -132,15 +181,86 @@ export function BrowserTabPanel({ embedUrl, onEmbedUrlChange, autoStart = false 
     }
   }
 
+  React.useEffect(() => {
+    if (!session) return;
+    if (!["live", "degraded", "reconnecting"].includes(streamState.status)) return;
+
+    const id = window.setInterval(() => {
+      if (pollInFlightRef.current) return;
+      pollInFlightRef.current = true;
+      Promise.all([
+        captureBrowserScreenshot(session.session_id, ownerKeyRef.current),
+        getBrowserLiveStreamState(session.session_id, ownerKeyRef.current),
+      ])
+        .then(([png, live]) => {
+          replaceScreenshot(png);
+          setStreamState(live);
+          reconnectCountRef.current = 0;
+        })
+        .catch((e: unknown) => {
+          reconnectCountRef.current += 1;
+          if (reconnectCountRef.current < 4) {
+            setStreamState((prev) => ({
+              ...prev,
+              status: "reconnecting",
+              last_error: e instanceof Error ? e.message : "Live stream reconnecting",
+            }));
+            return;
+          }
+          setStreamState((prev) => ({
+            ...prev,
+            status: "degraded",
+            last_error: e instanceof Error ? e.message : "Live stream degraded",
+          }));
+        })
+        .finally(() => {
+          pollInFlightRef.current = false;
+        });
+    }, 700);
+
+    return () => window.clearInterval(id);
+  }, [session, streamState.status]);
+
+  async function handleViewportClick(event: React.MouseEvent<HTMLImageElement>) {
+    if (!session || !imageRef.current) return;
+    const rect = imageRef.current.getBoundingClientRect();
+    const nx = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+    const ny = Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height));
+    const x = nx * imageRef.current.naturalWidth;
+    const y = ny * imageRef.current.naturalHeight;
+    await run(() => clickBrowserSessionXY(session.session_id, ownerKeyRef.current, x, y));
+    await capture(session.session_id);
+  }
+
+  async function handleViewportWheel(event: React.WheelEvent<HTMLImageElement>) {
+    if (!session) return;
+    event.preventDefault();
+    await run(() =>
+      scrollBrowserSession(session.session_id, ownerKeyRef.current, event.deltaX, event.deltaY),
+    );
+  }
+
+  async function handleViewportKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    if (!session) return;
+    let key = event.key;
+    if (key === " ") key = "Space";
+    if (key.length > 1 && !/^F\d{1,2}$/.test(key) && !key.startsWith("Arrow")) {
+      const allowed = new Set(["Enter", "Backspace", "Tab", "Escape", "Delete", "Home", "End", "PageUp", "PageDown"]);
+      if (!allowed.has(key)) return;
+    }
+    event.preventDefault();
+    await run(() => sendBrowserSessionKey(session.session_id, ownerKeyRef.current, key));
+  }
+
   return (
     <div className="space-y-3 flex flex-col min-h-0 flex-1">
       <p className="text-[9px] font-bold text-white/35 uppercase tracking-widest">
-        HAM-owned Browser Runtime (in-pane) — no live streaming and no Cursor embedding in v1.
+        HAM Browser Surface (in-pane live transport)
       </p>
       {!hasSession ? (
         <div className="space-y-3 border border-dashed border-white/15 rounded p-4">
           <p className="text-[10px] text-white/45 leading-relaxed">
-            Start a Browser Runtime session to enable real navigate/click/type/screenshot actions.
+            Start a browser session to open a live in-pane viewport.
           </p>
           <button
             type="button"
@@ -196,94 +316,42 @@ export function BrowserTabPanel({ embedUrl, onEmbedUrlChange, autoStart = false 
             </button>
           </div>
 
-          <div className="grid gap-2 md:grid-cols-2">
-            <div className="space-y-2">
-              <label className="text-[8px] font-black uppercase tracking-widest text-white/40">
-                Click selector
-              </label>
-              <div className="flex gap-2">
-                <input
-                  value={selector}
-                  onChange={(e) => setSelector(e.target.value)}
-                  placeholder="button[type=submit]"
-                  className="flex-1 bg-black/50 border border-white/10 px-3 py-2 text-[10px] font-mono text-white/80 placeholder:text-white/20 outline-none focus:border-[#00E5FF]/40"
-                />
-                <button
-                  type="button"
-                  disabled={busy || !selector.trim()}
-                  onClick={() =>
-                    run(() => clickBrowserSession(session.session_id, ownerKeyRef.current, selector.trim()))
-                  }
-                  className={cn(
-                    "text-[9px] font-black uppercase tracking-widest px-3 py-2 border border-white/15",
-                    busy ? "text-white/20" : "text-white/70 hover:bg-white/5",
-                  )}
-                >
-                  Click
-                </button>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <label className="text-[8px] font-black uppercase tracking-widest text-white/40">
-                Type action
-              </label>
-              <div className="grid grid-cols-1 gap-2">
-                <input
-                  value={typeSelector}
-                  onChange={(e) => setTypeSelector(e.target.value)}
-                  placeholder="input[name=email]"
-                  className="w-full bg-black/50 border border-white/10 px-3 py-2 text-[10px] font-mono text-white/80 placeholder:text-white/20 outline-none focus:border-[#00E5FF]/40"
-                />
-                <div className="flex gap-2">
-                  <input
-                    value={typeText}
-                    onChange={(e) => setTypeText(e.target.value)}
-                    placeholder="text to type"
-                    className="flex-1 bg-black/50 border border-white/10 px-3 py-2 text-[10px] font-mono text-white/80 placeholder:text-white/20 outline-none focus:border-[#00E5FF]/40"
-                  />
-                  <button
-                    type="button"
-                    disabled={busy || !typeSelector.trim()}
-                    onClick={() =>
-                      run(() =>
-                        typeBrowserSession(
-                          session.session_id,
-                          ownerKeyRef.current,
-                          typeSelector.trim(),
-                          typeText,
-                          true,
-                        ),
-                      )
-                    }
-                    className={cn(
-                      "text-[9px] font-black uppercase tracking-widest px-3 py-2 border border-white/15",
-                      busy ? "text-white/20" : "text-white/70 hover:bg-white/5",
-                    )}
-                  >
-                    Type
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-
           <div className="flex flex-wrap items-center gap-2 text-[9px] text-white/50 font-mono">
             <span>status={session.status}</span>
             <span>host={session.runtime_host}</span>
-            <span>transport={session.screenshot_transport}</span>
+            <span>transport={streamState.mode}</span>
+            <span>stream={streamState.status}</span>
           </div>
 
           {error ? <p className="text-[10px] text-amber-500/90 font-mono">{error}</p> : null}
+          {streamState.last_error ? (
+            <p className="text-[10px] text-amber-400/90 font-mono">{streamState.last_error}</p>
+          ) : null}
 
           {screenshotUrl ? (
-            <img
-              src={screenshotUrl}
-              alt="Latest browser screenshot"
-              className="w-full border border-[#00E5FF]/20 bg-black object-contain max-h-[360px]"
-            />
+            <div
+              tabIndex={0}
+              onKeyDown={(e) => {
+                void handleViewportKeyDown(e);
+              }}
+              className="outline-none focus:ring-1 focus:ring-[#00E5FF]/40 rounded"
+            >
+              <img
+                ref={imageRef}
+                src={screenshotUrl}
+                alt="Live in-pane browser viewport"
+                onClick={(e) => {
+                  void handleViewportClick(e);
+                }}
+                onWheel={(e) => {
+                  void handleViewportWheel(e);
+                }}
+                className="w-full border border-[#00E5FF]/20 bg-black object-contain max-h-[480px] cursor-crosshair select-none"
+              />
+            </div>
           ) : (
             <div className="border border-dashed border-white/15 rounded p-5 text-[10px] text-white/30 text-center uppercase tracking-widest">
-              Capture a screenshot to view current page output
+              Connecting to browser viewport
             </div>
           )}
 
@@ -298,6 +366,20 @@ export function BrowserTabPanel({ embedUrl, onEmbedUrlChange, autoStart = false 
               )}
             >
               Reset
+            </button>
+            <button
+              type="button"
+              disabled={busy || !session}
+              onClick={() => {
+                if (!session) return;
+                void startLiveStream(session.session_id);
+              }}
+              className={cn(
+                "text-[9px] font-black uppercase tracking-widest px-3 py-2 border border-white/15",
+                busy ? "text-white/20" : "text-white/70 hover:bg-white/5",
+              )}
+            >
+              Reconnect
             </button>
             <button
               type="button"

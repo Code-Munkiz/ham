@@ -193,6 +193,14 @@ export interface BrowserRuntimeState {
   screenshot_transport: "binary_png_endpoint";
   streaming_supported: boolean;
   cursor_embedding_supported: boolean;
+  stream_state?: BrowserStreamState;
+}
+
+export interface BrowserStreamState {
+  status: "disconnected" | "connecting" | "live" | "reconnecting" | "degraded" | "error";
+  mode: string;
+  requested_transport: string;
+  last_error: string | null;
 }
 
 export interface BrowserSessionCreateRequest {
@@ -307,6 +315,83 @@ export async function captureBrowserScreenshot(
     throw new Error(msg);
   }
   return res.blob();
+}
+
+export async function clickBrowserSessionXY(
+  sessionId: string,
+  ownerKey: string,
+  x: number,
+  y: number,
+  button: "left" | "right" | "middle" = "left",
+): Promise<BrowserRuntimeState> {
+  return browserRuntimeJson<BrowserRuntimeState>(
+    `/api/browser/sessions/${encodeURIComponent(sessionId)}/actions/click-xy`,
+    { owner_key: ownerKey, x, y, button },
+    "POST",
+  );
+}
+
+export async function scrollBrowserSession(
+  sessionId: string,
+  ownerKey: string,
+  deltaX: number,
+  deltaY: number,
+): Promise<BrowserRuntimeState> {
+  return browserRuntimeJson<BrowserRuntimeState>(
+    `/api/browser/sessions/${encodeURIComponent(sessionId)}/actions/scroll`,
+    { owner_key: ownerKey, delta_x: deltaX, delta_y: deltaY },
+    "POST",
+  );
+}
+
+export async function sendBrowserSessionKey(
+  sessionId: string,
+  ownerKey: string,
+  key: string,
+): Promise<BrowserRuntimeState> {
+  return browserRuntimeJson<BrowserRuntimeState>(
+    `/api/browser/sessions/${encodeURIComponent(sessionId)}/actions/key`,
+    { owner_key: ownerKey, key },
+    "POST",
+  );
+}
+
+export async function startBrowserLiveStream(
+  sessionId: string,
+  ownerKey: string,
+  requestedTransport = "webrtc",
+): Promise<BrowserStreamState> {
+  return browserRuntimeJson<BrowserStreamState>(
+    `/api/browser/sessions/${encodeURIComponent(sessionId)}/stream/start`,
+    { owner_key: ownerKey, requested_transport: requestedTransport },
+    "POST",
+  );
+}
+
+export async function getBrowserLiveStreamState(
+  sessionId: string,
+  ownerKey: string,
+): Promise<BrowserStreamState> {
+  const q = new URLSearchParams({ owner_key: ownerKey.trim() }).toString();
+  const res = await fetch(
+    apiUrl(`/api/browser/sessions/${encodeURIComponent(sessionId)}/stream/state?${q}`),
+  );
+  if (!res.ok) {
+    const msg = (await readFastApiDetail(res)) ?? `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+  return res.json() as Promise<BrowserStreamState>;
+}
+
+export async function stopBrowserLiveStream(
+  sessionId: string,
+  ownerKey: string,
+): Promise<BrowserStreamState> {
+  return browserRuntimeJson<BrowserStreamState>(
+    `/api/browser/sessions/${encodeURIComponent(sessionId)}/stream/stop`,
+    { owner_key: ownerKey },
+    "POST",
+  );
 }
 
 /** Proxy `POST /v0/agents/{id}/followup`. */
