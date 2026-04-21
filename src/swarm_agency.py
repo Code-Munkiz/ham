@@ -8,6 +8,7 @@ context wired for Hermes-led supervisory flows (`main.py`, `hermes_feedback.py`)
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Callable
 
 from src.llm_client import configure_litellm_env, get_llm_client
@@ -29,12 +30,12 @@ class HamRunAssembly:
     droid_executor: Callable[..., Any]
 
 
-def assemble_ham_run(user_prompt: str) -> HamRunAssembly:
+def assemble_ham_run(user_prompt: str, project_root: Path | None = None) -> HamRunAssembly:
     """Discover repo context once, render per-role budgets, attach Droid + LLM handles."""
     configure_litellm_env()
     llm = get_llm_client()
 
-    project = ProjectContext.discover()
+    project = ProjectContext.discover(project_root)
 
     arch_total = project.config.get("architect_instruction_chars", 16_000)
     cmd_total = project.config.get("commander_instruction_chars", 4_000)

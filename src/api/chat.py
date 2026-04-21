@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 from typing import Any, Literal
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Header, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -14,6 +14,12 @@ from src.api.models_catalog import resolve_model_id_for_chat
 from src.ham.active_agent_context import try_active_agent_guidance_for_project_root
 from src.ham.cursor_skills_catalog import list_cursor_skills, render_skills_for_system_prompt
 from src.ham.cursor_subagents_catalog import list_cursor_subagents, render_subagents_for_system_prompt
+from src.ham.chat_operator import (
+    ChatOperatorPayload,
+    format_operator_assistant_message,
+    operator_enabled,
+    process_operator_turn,
+)
 from src.ham.ui_actions import split_assistant_ui_actions, ui_actions_system_instructions
 from src.integrations.nous_gateway_client import (
     GatewayCallError,
@@ -63,6 +69,9 @@ class ChatRequest(BaseModel):
     workbench_mode: Literal["ask", "plan", "agent"] | None = None
     worker: str | None = Field(default=None, max_length=64)
     max_mode: bool | None = None
+    # Server-side operator (projects, agents preview/apply, runs, launch) — see docs/HAM_CHAT_CONTROL_PLANE.md
+    enable_operator: bool = True
+    operator: ChatOperatorPayload | None = None
 
 
 class ChatActiveAgentMeta(BaseModel):
@@ -81,6 +90,7 @@ class ChatResponse(BaseModel):
     messages: list[dict[str, str]]
     actions: list[dict] = Field(default_factory=list)
     active_agent: ChatActiveAgentMeta | None = None
+    operator_result: dict[str, Any] | None = None
 
 
 def _gateway_status_code(code: str) -> int:
@@ -103,7 +113,9 @@ You are **Ham**, the in-dashboard copilot for the Ham workspace UI—warm, conci
 
 **Control plane (skills & subagents):** When the message includes an **Operator skills** appendix, treat each entry as a real Ham workflow the IDE can run (Context Engine hardening, agent context wiring, Hermes review validation, prompt budget audit, repo regression tests, GoHam navigation). Map user goals to the best-matching skill id and tell them the exact slash command or doc path (e.g. `/audit-context-engine`, `.cursor/skills/.../SKILL.md`). When a **Cursor subagent rules** appendix is present, each entry is a **review/audit charter** (`.cursor/rules/subagent-*.mdc`): recommend the charter that fits the user’s review question using id, path, and `globs`; subagents are **not** execution SKILLS—they shape how to audit or review code. When **structured UI actions** are enabled, you may also emit **`HAM_UI_ACTIONS_JSON`** so the browser can navigate or show toasts—you still **do not** edit `.ham.json`, run shell tools, or change secrets from this chat.
 
-**How to engage:** Use short paragraphs or tight bullets; offer next steps; match energy without filler. If asked what you can do, explain Ham at a high level and suggest concrete actions (e.g. “open Settings → …”, “describe the error in Logs”). You do not execute code or call internal Ham APIs from here—you advise; heavier work happens via the rest of Ham (CLI / swarm / runs).
+**How to engage:** Use short paragraphs or tight bullets; offer next steps; match energy without filler. If asked what you can do, explain Ham at a high level and suggest concrete actions (e.g. “open Settings → …”, “describe the error in Logs”).
+
+**Operational chat (server-side):** For supported phrases, the Ham API runs a real **operator** turn first: listing projects, inspecting a project or Agent Builder profiles, listing/inspecting runs, previewing agent skill changes, and (when configured) registering a project or launching a bridge run. Those actions hit the same APIs as the dashboard—they are not LLM hallucinations. Writes require confirmation + bearer tokens on the API host. If the user’s repo path is not visible to the API process (typical on Cloud Run vs local disk), the operator will say so honestly.
 
 **Honesty:** If you lack a fact, say so and ask a clarifying question instead of inventing menu labels or features.
 """.strip()
@@ -317,9 +329,32 @@ def _messages_for_completion(
 
 
 @router.post("/api/chat", response_model=ChatResponse)
-async def post_chat(body: ChatRequest) -> ChatResponse:
+async def post_chat(
+    body: ChatRequest,
+    authorization: str | None = Header(None, alias="Authorization"),
+) -> ChatResponse:
     store = _chat_store
     sid, llm_messages, or_override, active_meta = _messages_for_completion(body)
+    if body.enable_operator and operator_enabled() and body.messages[-1].role == "user":
+        from src.api.server import get_project_store
+
+        op = process_operator_turn(
+            user_text=body.messages[-1].content,
+            project_store=get_project_store(),
+            default_project_id=body.project_id,
+            operator_payload=body.operator,
+            authorization=authorization,
+        )
+        if op is not None and op.handled:
+            msg = format_operator_assistant_message(op)
+            store.append_turns(sid, [ChatTurn(role="assistant", content=msg)])
+            return ChatResponse(
+                session_id=sid,
+                messages=store.list_messages(sid),
+                actions=[],
+                active_agent=ChatActiveAgentMeta.model_validate(active_meta) if active_meta else None,
+                operator_result=op.model_dump(mode="json"),
+            )
     try:
         assistant_raw = complete_chat_turn(
             llm_messages,
@@ -342,14 +377,56 @@ async def post_chat(body: ChatRequest) -> ChatResponse:
         messages=store.list_messages(sid),
         actions=actions,
         active_agent=ChatActiveAgentMeta.model_validate(active_meta) if active_meta else None,
+        operator_result=None,
     )
 
 
 @router.post("/api/chat/stream")
-def post_chat_stream(body: ChatRequest) -> StreamingResponse:
+def post_chat_stream(
+    body: ChatRequest,
+    authorization: str | None = Header(None, alias="Authorization"),
+) -> StreamingResponse:
     """Stream assistant tokens as NDJSON lines: session, delta, done (or error)."""
     store = _chat_store
     sid, llm_messages, or_override, stream_active_meta = _messages_for_completion(body)
+
+    if body.enable_operator and operator_enabled() and body.messages[-1].role == "user":
+        from src.api.server import get_project_store
+
+        op = process_operator_turn(
+            user_text=body.messages[-1].content,
+            project_store=get_project_store(),
+            default_project_id=body.project_id,
+            operator_payload=body.operator,
+            authorization=authorization,
+        )
+        if op is not None and op.handled:
+            msg = format_operator_assistant_message(op)
+            store.append_turns(sid, [ChatTurn(role="assistant", content=msg)])
+            msgs = store.list_messages(sid)
+            op_dict = op.model_dump(mode="json")
+
+            def operator_only():
+                yield json.dumps({"type": "session", "session_id": sid}) + "\n"
+                payload: dict[str, Any] = {
+                    "type": "done",
+                    "session_id": sid,
+                    "messages": msgs,
+                    "actions": [],
+                    "operator_result": op_dict,
+                }
+                if stream_active_meta:
+                    payload["active_agent"] = stream_active_meta
+                yield json.dumps(payload) + "\n"
+
+            return StreamingResponse(
+                operator_only(),
+                media_type="application/x-ndjson; charset=utf-8",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "X-Accel-Buffering": "no",
+                },
+            )
 
     def ndjson_gen():
         yield json.dumps({"type": "session", "session_id": sid}) + "\n"
@@ -379,6 +456,7 @@ def post_chat_stream(body: ChatRequest) -> StreamingResponse:
                 "session_id": sid,
                 "messages": store.list_messages(sid),
                 "actions": actions,
+                "operator_result": None,
             }
             if stream_active_meta:
                 payload["active_agent"] = stream_active_meta

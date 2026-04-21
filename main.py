@@ -4,68 +4,24 @@ Entry point: load env, assemble a minimal Ham run context, accept a CLI prompt.
 """
 import argparse
 import copy
-import hashlib
 import json
 import os
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 from dotenv import load_dotenv
 
-from src.bridge.contracts import CommandSpec, ExecutionIntent, LimitSpec, ScopeSpec
 from src.bridge.runtime import run_bridge_v0
 from src.hermes_feedback import HermesReviewer
+from src.ham.run_persist import persist_ham_run_record
+from src.ham.one_shot_run import build_runtime_intent, select_intent_profile
 from src.llm_client import configure_litellm_env
-from src.registry.backends import DEFAULT_BACKEND_ID, DEFAULT_BACKEND_REGISTRY
-from src.registry.profiles import DEFAULT_PROFILE_REGISTRY, KeywordSelector
-from src.swarm_agency import assemble_ham_run  # Hermes-supervised context assembly (not CrewAI)
+from src.swarm_agency import assemble_ham_run
 
 MAX_REVIEW_CONTEXT_CHARS = 1_000
 # Hermes review echoes bridge JSON + context; huge strings break terminal wrap/reflow.
 MAX_STDOUT_HERMES_CODE_CHARS = 1_200
 MAX_STDOUT_HERMES_CONTEXT_CHARS = 900
-_SELECTOR = KeywordSelector()
-
-
-def _resolve_author() -> str:
-    for var in ("HAM_AUTHOR", "USER", "USERNAME"):
-        value = os.environ.get(var)
-        if value and value.strip():
-            return value.strip()
-    return "unknown"
-
-
-def _select_intent_profile(prompt: str) -> str:
-    return _SELECTOR.select(prompt)
-
-
-def _build_runtime_intent(prompt: str, profile_id: str) -> ExecutionIntent:
-    root = Path.cwd().resolve()
-    prompt_hash = hashlib.sha256(prompt.encode("utf-8", errors="replace")).hexdigest()[:12]
-    argv = DEFAULT_PROFILE_REGISTRY.get(profile_id).argv
-    return ExecutionIntent(
-        intent_id=f"intent-{prompt_hash}",
-        request_id=f"request-{prompt_hash}",
-        run_id=f"run-{prompt_hash}",
-        task_class="inspect",
-        commands=[
-            CommandSpec(
-                command_id="inspect-1",
-                argv=argv,
-                working_dir=str(root),
-            )
-        ],
-        scope=ScopeSpec(allowed_roots=[str(root)], allow_network=False, allow_write=False),
-        limits=LimitSpec(
-            max_commands=1,
-            timeout_sec_per_command=5,
-            max_stdout_chars=2000,
-            max_stderr_chars=2000,
-            max_total_output_chars=4000,
-        ),
-        reason=f"supervisory runtime intent ({profile_id}) for prompt hash {prompt_hash}",
-    )
 
 
 def _build_runtime_envelope(
@@ -120,55 +76,6 @@ def _dump_json(data: object, *, indent: int | None = None) -> str:
     return json.dumps(payload, sort_keys=True, ensure_ascii=True, separators=(",", ":"))
 
 
-def _persist_run_record(
-    *,
-    prompt: str,
-    profile_id: str,
-    bridge_result: object,
-    review: dict[str, object],
-) -> Path | None:
-    try:
-        now = datetime.now(timezone.utc)
-        created_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
-        created_at_for_filename = now.strftime("%Y%m%dT%H%M%SZ")
-
-        if hasattr(bridge_result, "model_dump"):
-            bridge_payload = bridge_result.model_dump()
-        elif hasattr(bridge_result, "dict"):
-            bridge_payload = bridge_result.dict()
-        else:
-            bridge_payload = bridge_result
-
-        run_id = str(getattr(bridge_result, "run_id", "")) or str(bridge_payload.get("run_id", ""))
-        profile_version = DEFAULT_PROFILE_REGISTRY.get(profile_id).version
-        backend_version = DEFAULT_BACKEND_REGISTRY.get_record(DEFAULT_BACKEND_ID).version
-
-        record = {
-            "run_id": run_id,
-            "created_at": created_at,
-            "profile_id": profile_id,
-            "profile_version": profile_version,
-            "backend_id": DEFAULT_BACKEND_ID,
-            "backend_version": backend_version,
-            "prompt_summary": prompt[:200],
-            "author": _resolve_author(),
-            "bridge_result": bridge_payload,
-            "hermes_review": review,
-        }
-
-        runs_dir = Path.cwd().resolve() / ".ham" / "runs"
-        runs_dir.mkdir(parents=True, exist_ok=True)
-        final_path = runs_dir / f"{created_at_for_filename}-{run_id}.json"
-        tmp_path = runs_dir / f"{created_at_for_filename}-{run_id}.json.tmp"
-        payload = json.dumps(record, sort_keys=True, ensure_ascii=True, indent=2)
-        tmp_path.write_text(payload, encoding="utf-8")
-        os.replace(tmp_path, final_path)
-        return final_path
-    except Exception as exc:  # pylint: disable=broad-exception-caught
-        print(f"Warning: run persistence failed ({type(exc).__name__}: {exc})", file=sys.stderr)
-        return None
-
-
 def main(argv: list[str] | None = None) -> int:
     load_dotenv()
     configure_litellm_env()
@@ -192,13 +99,14 @@ def main(argv: list[str] | None = None) -> int:
         print("Prompt (would be used for this run):", args.prompt)
         return 0
 
-    assembly = assemble_ham_run(args.prompt)
-    profile_id = _select_intent_profile(assembly.user_prompt)
-    intent = _build_runtime_intent(assembly.user_prompt, profile_id)
+    cwd = Path.cwd().resolve()
+    assembly = assemble_ham_run(args.prompt, project_root=cwd)
+    profile_id = select_intent_profile(assembly.user_prompt)
+    intent = build_runtime_intent(assembly.user_prompt, profile_id, cwd)
     bridge_result = run_bridge_v0(assembly, intent)
     review_assembly = assembly
     if bridge_result.mutation_detected is True:
-        review_assembly = assemble_ham_run(assembly.user_prompt)
+        review_assembly = assemble_ham_run(assembly.user_prompt, project_root=cwd)
     review_context = review_assembly.critic_backstory[:MAX_REVIEW_CONTEXT_CHARS]
     bridge_json = _dump_json(bridge_result)
 
@@ -218,7 +126,8 @@ def main(argv: list[str] | None = None) -> int:
         bridge_result=bridge_result,
         review=review,
     )
-    _persist_run_record(
+    persist_ham_run_record(
+        cwd,
         prompt=assembly.user_prompt,
         profile_id=profile_id,
         bridge_result=bridge_result,

@@ -4,6 +4,7 @@ import json
 from dataclasses import dataclass
 
 import main as main_mod
+import src.ham.run_persist as run_persist_mod
 from src.bridge.contracts import (
     BridgeResult,
     BridgeStatus,
@@ -71,7 +72,11 @@ def test_main_normal_path_builds_intent_and_invokes_bridge_and_review(monkeypatc
     counts = {"bridge": 0, "review": 0}
 
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
-    monkeypatch.setattr(main_mod, "assemble_ham_run", lambda prompt: _FakeAssembly(user_prompt=prompt))
+    monkeypatch.setattr(
+        main_mod,
+        "assemble_ham_run",
+        lambda prompt, project_root=None: _FakeAssembly(user_prompt=prompt),
+    )
 
     def fake_bridge(assembly, intent):
         counts["bridge"] += 1
@@ -117,7 +122,11 @@ def test_main_normal_path_builds_intent_and_invokes_bridge_and_review(monkeypatc
 
 def test_main_reviewer_failure_does_not_break_primary_artifact(monkeypatch, capsys):
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
-    monkeypatch.setattr(main_mod, "assemble_ham_run", lambda prompt: _FakeAssembly(user_prompt=prompt))
+    monkeypatch.setattr(
+        main_mod,
+        "assemble_ham_run",
+        lambda prompt, project_root=None: _FakeAssembly(user_prompt=prompt),
+    )
     monkeypatch.setattr(main_mod, "run_bridge_v0", lambda _assembly, _intent: _bridge_result())
 
     class _BoomReviewer:
@@ -136,7 +145,11 @@ def test_main_reviewer_failure_does_not_break_primary_artifact(monkeypatch, caps
 
 def test_main_output_shape_is_deterministic(monkeypatch, capsys):
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
-    monkeypatch.setattr(main_mod, "assemble_ham_run", lambda prompt: _FakeAssembly(user_prompt=prompt))
+    monkeypatch.setattr(
+        main_mod,
+        "assemble_ham_run",
+        lambda prompt, project_root=None: _FakeAssembly(user_prompt=prompt),
+    )
     monkeypatch.setattr(main_mod, "run_bridge_v0", lambda _assembly, _intent: _bridge_result())
 
     class _FakeReviewer:
@@ -166,7 +179,7 @@ def test_main_no_mutation_signal_does_not_refresh_context(monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     calls = {"assemble": 0}
 
-    def fake_assemble(prompt: str):
+    def fake_assemble(prompt: str, project_root=None):
         calls["assemble"] += 1
         return _FakeAssembly(user_prompt=prompt, critic_backstory="critic-context-initial")
 
@@ -192,7 +205,7 @@ def test_main_confident_mutation_refreshes_exactly_once_and_reviewer_uses_refres
     calls = {"assemble": 0}
     seen: dict[str, object] = {}
 
-    def fake_assemble(prompt: str):
+    def fake_assemble(prompt: str, project_root=None):
         calls["assemble"] += 1
         if calls["assemble"] == 1:
             return _FakeAssembly(user_prompt=prompt, critic_backstory="critic-context-initial")
@@ -220,7 +233,11 @@ def test_main_confident_mutation_refreshes_exactly_once_and_reviewer_uses_refres
 def test_selector_chooses_git_status_profile(monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     seen: dict[str, object] = {}
-    monkeypatch.setattr(main_mod, "assemble_ham_run", lambda prompt: _FakeAssembly(user_prompt=prompt))
+    monkeypatch.setattr(
+        main_mod,
+        "assemble_ham_run",
+        lambda prompt, project_root=None: _FakeAssembly(user_prompt=prompt),
+    )
 
     def fake_bridge(_assembly, intent):
         seen["intent"] = intent
@@ -244,7 +261,11 @@ def test_selector_chooses_git_status_profile(monkeypatch):
 def test_selector_chooses_git_diff_profile(monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     seen: dict[str, object] = {}
-    monkeypatch.setattr(main_mod, "assemble_ham_run", lambda prompt: _FakeAssembly(user_prompt=prompt))
+    monkeypatch.setattr(
+        main_mod,
+        "assemble_ham_run",
+        lambda prompt, project_root=None: _FakeAssembly(user_prompt=prompt),
+    )
 
     def fake_bridge(_assembly, intent):
         seen["intent"] = intent
@@ -268,7 +289,11 @@ def test_selector_chooses_git_diff_profile(monkeypatch):
 def test_selector_falls_back_to_cwd_profile(monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     seen: dict[str, object] = {}
-    monkeypatch.setattr(main_mod, "assemble_ham_run", lambda prompt: _FakeAssembly(user_prompt=prompt))
+    monkeypatch.setattr(
+        main_mod,
+        "assemble_ham_run",
+        lambda prompt, project_root=None: _FakeAssembly(user_prompt=prompt),
+    )
 
     def fake_bridge(_assembly, intent):
         seen["intent"] = intent
@@ -290,7 +315,11 @@ def test_selector_falls_back_to_cwd_profile(monkeypatch):
 def test_selector_does_not_match_diff_substring_in_different(monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     seen: dict[str, object] = {}
-    monkeypatch.setattr(main_mod, "assemble_ham_run", lambda prompt: _FakeAssembly(user_prompt=prompt))
+    monkeypatch.setattr(
+        main_mod,
+        "assemble_ham_run",
+        lambda prompt, project_root=None: _FakeAssembly(user_prompt=prompt),
+    )
 
     def fake_bridge(_assembly, intent):
         seen["intent"] = intent
@@ -314,7 +343,11 @@ def test_selector_does_not_match_diff_substring_in_different(monkeypatch):
 def test_selector_does_not_match_diff_substring_in_difficult(monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     seen: dict[str, object] = {}
-    monkeypatch.setattr(main_mod, "assemble_ham_run", lambda prompt: _FakeAssembly(user_prompt=prompt))
+    monkeypatch.setattr(
+        main_mod,
+        "assemble_ham_run",
+        lambda prompt, project_root=None: _FakeAssembly(user_prompt=prompt),
+    )
 
     def fake_bridge(_assembly, intent):
         seen["intent"] = intent
@@ -338,7 +371,11 @@ def test_selector_does_not_match_diff_substring_in_difficult(monkeypatch):
 def test_selector_precedence_status_wins_over_diff(monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     seen: dict[str, object] = {}
-    monkeypatch.setattr(main_mod, "assemble_ham_run", lambda prompt: _FakeAssembly(user_prompt=prompt))
+    monkeypatch.setattr(
+        main_mod,
+        "assemble_ham_run",
+        lambda prompt, project_root=None: _FakeAssembly(user_prompt=prompt),
+    )
 
     def fake_bridge(_assembly, intent):
         seen["intent"] = intent
@@ -362,7 +399,11 @@ def test_selector_precedence_status_wins_over_diff(monkeypatch):
 def test_persist_creates_file_in_ham_runs_with_expected_keys(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
-    monkeypatch.setattr(main_mod, "assemble_ham_run", lambda prompt: _FakeAssembly(user_prompt=prompt))
+    monkeypatch.setattr(
+        main_mod,
+        "assemble_ham_run",
+        lambda prompt, project_root=None: _FakeAssembly(user_prompt=prompt),
+    )
     monkeypatch.setattr(main_mod, "run_bridge_v0", lambda _assembly, _intent: _bridge_result())
 
     class _FakeReviewer:
@@ -399,7 +440,11 @@ def test_persisted_record_contains_author_from_env(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     monkeypatch.setenv("HAM_AUTHOR", "alice")
-    monkeypatch.setattr(main_mod, "assemble_ham_run", lambda prompt: _FakeAssembly(user_prompt=prompt))
+    monkeypatch.setattr(
+        main_mod,
+        "assemble_ham_run",
+        lambda prompt, project_root=None: _FakeAssembly(user_prompt=prompt),
+    )
     monkeypatch.setattr(main_mod, "run_bridge_v0", lambda _assembly, _intent: _bridge_result())
 
     class _FakeReviewer:
@@ -421,7 +466,11 @@ def test_persisted_record_contains_author_from_env(monkeypatch, tmp_path):
 def test_persist_failure_does_not_break_runtime(monkeypatch, tmp_path, capsys):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
-    monkeypatch.setattr(main_mod, "assemble_ham_run", lambda prompt: _FakeAssembly(user_prompt=prompt))
+    monkeypatch.setattr(
+        main_mod,
+        "assemble_ham_run",
+        lambda prompt, project_root=None: _FakeAssembly(user_prompt=prompt),
+    )
     monkeypatch.setattr(main_mod, "run_bridge_v0", lambda _assembly, _intent: _bridge_result())
 
     class _FakeReviewer:
@@ -432,7 +481,7 @@ def test_persist_failure_does_not_break_runtime(monkeypatch, tmp_path, capsys):
         raise OSError("disk full")
 
     monkeypatch.setattr(main_mod, "HermesReviewer", _FakeReviewer)
-    monkeypatch.setattr(main_mod.os, "replace", boom_replace)
+    monkeypatch.setattr(run_persist_mod.os, "replace", boom_replace)
 
     rc = main_mod.main(["persist failure"])
     captured = capsys.readouterr()
@@ -450,7 +499,11 @@ def test_persist_failure_does_not_break_runtime(monkeypatch, tmp_path, capsys):
 def test_envelope_shape_unchanged_after_persistence_slice(monkeypatch, tmp_path, capsys):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
-    monkeypatch.setattr(main_mod, "assemble_ham_run", lambda prompt: _FakeAssembly(user_prompt=prompt))
+    monkeypatch.setattr(
+        main_mod,
+        "assemble_ham_run",
+        lambda prompt, project_root=None: _FakeAssembly(user_prompt=prompt),
+    )
     monkeypatch.setattr(main_mod, "run_bridge_v0", lambda _assembly, _intent: _bridge_result())
 
     class _FakeReviewer:

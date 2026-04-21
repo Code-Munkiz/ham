@@ -16,7 +16,7 @@ def _created_at_for_filename(created_at: str) -> str:
 
 
 def _write_run_file(root: Path, run_id: str, created_at: str, **extra: Any) -> Path:
-    """Write a valid run JSON to root/.ham/runs/<timestamp>-<run_id>.json. Matches main.py::_persist_run_record serialization."""
+    """Write a valid run JSON to root/.ham/runs/<timestamp>-<run_id>.json. Matches src.ham.run_persist.persist_ham_run_record serialization."""
     ex = dict(extra)
     bridge_result = ex.pop("bridge_result", {})
     hermes_review = ex.pop("hermes_review", {})

@@ -202,6 +202,21 @@ export interface HamChatRequest {
   workbench_mode?: "ask" | "plan" | "agent";
   worker?: string;
   max_mode?: boolean;
+  /** Server-side operator (projects, agents, runs). */
+  enable_operator?: boolean;
+  /** Structured confirm/apply/register/launch (see API `ChatOperatorPayload`). */
+  operator?: {
+    phase?: "apply_settings" | "register_project" | "launch_run" | null;
+    confirmed?: boolean;
+    project_id?: string | null;
+    changes?: Record<string, unknown> | null;
+    base_revision?: string | null;
+    name?: string | null;
+    root?: string | null;
+    description?: string | null;
+    prompt?: string | null;
+    profile_id?: string | null;
+  } | null;
 }
 
 /** Structured UI actions from `POST /api/chat` (server-validated). */
@@ -215,11 +230,23 @@ export type HamUiAction =
     }
   | { type: "toggle_control_panel"; open?: boolean | null };
 
+export interface HamOperatorResult {
+  handled: boolean;
+  intent?: string | null;
+  ok: boolean;
+  blocking_reason?: string | null;
+  pending_apply?: Record<string, unknown> | null;
+  pending_launch?: Record<string, unknown> | null;
+  pending_register?: Record<string, unknown> | null;
+  data?: Record<string, unknown>;
+}
+
 export interface HamChatResponse {
   session_id: string;
   messages: HamChatMessage[];
   actions: HamUiAction[];
   active_agent?: HamChatActiveAgentMeta | null;
+  operator_result?: HamOperatorResult | null;
 }
 
 /**
@@ -305,6 +332,7 @@ export type HamChatStreamEvent =
       messages: HamChatMessage[];
       actions?: HamUiAction[];
       active_agent?: HamChatActiveAgentMeta | null;
+      operator_result?: HamOperatorResult | null;
     }
   | { type: "error"; code: string; message: string };
 
@@ -320,6 +348,7 @@ export async function postChatStream(
     onSession?: (sessionId: string) => void;
     onDelta?: (text: string) => void;
   } = {},
+  authorization?: string,
 ): Promise<HamChatResponse> {
   const url = apiUrl("/api/chat/stream");
   const payload = {
@@ -328,15 +357,19 @@ export async function postChatStream(
     include_operator_subagents: body.include_operator_subagents ?? true,
     enable_ui_actions: body.enable_ui_actions ?? true,
     include_active_agent_guidance: body.include_active_agent_guidance ?? true,
+    enable_operator: body.enable_operator ?? true,
   };
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Accept: "application/x-ndjson, application/json",
+  };
+  const auth = authorization?.trim();
+  if (auth) headers.Authorization = `Bearer ${auth}`;
   let res: Response;
   try {
     res = await fetch(url, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/x-ndjson, application/json",
-      },
+      headers,
       body: JSON.stringify(payload),
     });
   } catch (cause) {
@@ -389,6 +422,7 @@ export async function postChatStream(
         messages: ev.messages,
         actions: Array.isArray(ev.actions) ? ev.actions : [],
         active_agent: ev.active_agent ?? undefined,
+        operator_result: ev.operator_result ?? undefined,
       };
       return;
     }

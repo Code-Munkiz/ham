@@ -74,10 +74,25 @@ Chat and the LLM **do not** apply settings; the UI (or CLI) calls **preview** th
 
 **Phase 2a scope:** shared target only; no profile-target install, no uninstall, no rollback API, no Hermes CLI subprocess install, no arbitrary URL/GitHub installs from the client.
 
+## Operational chat (Phase 1 — shipped)
+
+Server-side **`src/ham/chat_operator.py`** runs **before** the LLM when `HAM_CHAT_OPERATOR` is true (default) and the last message is from the user.
+
+| Intent (heuristic or `operator` payload) | Behavior |
+|------------------------------------------|----------|
+| `list_projects` / `inspect_project` / `inspect_agents` | Registry + merged config; **blocked** if API host cannot `stat` `project.root`. |
+| `list_runs` / `inspect_run` | `RunStore` under project root or API cwd. |
+| `update_agents_preview` | Hermes catalog skill add/remove → `settings/preview` → response includes **`pending_apply`** for UI + token. |
+| `apply_settings` | Client **`operator.phase=apply_settings`**, `confirmed=true`, echoes preview `changes` + `base_revision`; **`Authorization: Bearer HAM_SETTINGS_WRITE_TOKEN`**. |
+| `register_project` | Path must exist on API host; confirm + same settings token as apply. |
+| `launch_run` | One-shot `run_bridge_v0` + reviewer + **`persist_ham_run_record`** at project root; requires **`HAM_RUN_LAUNCH_TOKEN`** and **`OPENROUTER_API_KEY`** on host. |
+
+`POST /api/chat` and **`POST /api/chat/stream`** accept optional **`operator`** (see `ChatOperatorPayload` in `src/api/chat.py`) and return **`operator_result`** JSON. The Chat page shows **Apply / Confirm launch / Confirm register** when `pending_*` is present.
+
 ## Next (not built yet)
 
 1. **Stronger grounding** — optional second-pass JSON from a small model if marker parsing is too brittle in production.
-2. **Settings UX (partial)** — Context & Memory panel ships preview/apply; optional: chat-suggested proposal JSON parsed client-side only (never auto-apply); optional **rollback** button.
+2. **Settings UX (partial)** — Context & Memory panel ships preview/apply; chat can now drive preview/apply for Agent Builder; optional **rollback** button in chat.
 3. **Hermes skills Phase 2b+** — Hermes profile-target install, uninstall/rollback endpoints if needed, optional remote/sidecar topologies without pretending local writes.
 
 ## Constraints

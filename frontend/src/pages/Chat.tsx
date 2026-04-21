@@ -35,6 +35,7 @@ import {
   fetchProjectAgents,
   listHamProjects,
   postChatStream,
+  type HamOperatorResult,
 } from "@/lib/ham/api";
 import { CLIENT_MODEL_CATALOG_FALLBACK } from "@/lib/ham/modelCatalogFallback";
 import type { ModelCatalogPayload } from "@/lib/ham/types";
@@ -200,6 +201,26 @@ export default function Chat() {
   const [worker, setWorker] = React.useState("builder");
   const [projectId, setProjectId] = React.useState<string | null>(null);
   const [activeAgentNote, setActiveAgentNote] = React.useState<string | null>(null);
+  const SETTINGS_OP_KEY = "ham_operator_settings_token";
+  const LAUNCH_OP_KEY = "ham_operator_launch_token";
+  const [operatorSettingsToken, setOperatorSettingsToken] = React.useState(() =>
+    typeof sessionStorage !== "undefined"
+      ? sessionStorage.getItem(SETTINGS_OP_KEY) ?? ""
+      : "",
+  );
+  const [operatorLaunchToken, setOperatorLaunchToken] = React.useState(() =>
+    typeof sessionStorage !== "undefined" ? sessionStorage.getItem(LAUNCH_OP_KEY) ?? "" : "",
+  );
+  const [pendingApply, setPendingApply] = React.useState<Record<string, unknown> | null>(
+    null,
+  );
+  const [pendingLaunch, setPendingLaunch] = React.useState<Record<string, unknown> | null>(
+    null,
+  );
+  const [pendingRegister, setPendingRegister] = React.useState<Record<
+    string,
+    unknown
+  > | null>(null);
   /** Primary HAM profile from Agent Builder (avatar + name in transcript). */
   const [primaryPersona, setPrimaryPersona] = React.useState<{
     name: string;
@@ -368,6 +389,108 @@ export default function Chat() {
       second: "2-digit",
     });
 
+  const applyOperatorResultSideEffects = React.useCallback((op: HamOperatorResult | null | undefined) => {
+    if (!op?.handled) return;
+    if (op.pending_apply) {
+      setPendingApply(op.pending_apply as Record<string, unknown>);
+    } else if (op.intent === "apply_settings" && op.ok) {
+      setPendingApply(null);
+    }
+    if (op.pending_launch) {
+      setPendingLaunch(op.pending_launch as Record<string, unknown>);
+    } else if (op.intent === "launch_run" && op.ok) {
+      setPendingLaunch(null);
+    }
+    if (op.pending_register) {
+      setPendingRegister(op.pending_register as Record<string, unknown>);
+    } else if (op.intent === "register_project" && op.ok) {
+      setPendingRegister(null);
+    }
+  }, []);
+
+  const runOperatorConfirm = async (opts: {
+    messages: { role: "user" | "assistant" | "system"; content: string }[];
+    operator: {
+      phase: "apply_settings" | "register_project" | "launch_run";
+      confirmed: boolean;
+      project_id?: string | null;
+      changes?: Record<string, unknown> | null;
+      base_revision?: string | null;
+      name?: string | null;
+      root?: string | null;
+      prompt?: string | null;
+    };
+    bearer: string;
+  }) => {
+    if (!opts.bearer.trim()) {
+      toast.error("Paste the operator token to confirm.");
+      return;
+    }
+    setChatError(null);
+    setSending(true);
+    const userRow: ChatRow = {
+      id: `pending-user-${Date.now()}`,
+      role: "user",
+      content: opts.messages[0]?.content ?? "[operator]",
+      timestamp: timeStr(),
+    };
+    const assistantPlaceId = `assist-pending-${Date.now()}`;
+    const assistantRow: ChatRow = {
+      id: assistantPlaceId,
+      role: "assistant",
+      content: "",
+      timestamp: timeStr(),
+    };
+    setMessages((prev) => [...prev, userRow, assistantRow]);
+    setViewMode("chat");
+    try {
+      const res = await postChatStream(
+        {
+          session_id: sessionId ?? undefined,
+          messages: opts.messages,
+          ...(modelId ? { model_id: modelId } : {}),
+          ...(projectId ? { project_id: projectId } : {}),
+          workbench_mode: workbenchMode,
+          worker,
+          max_mode: maxMode,
+          operator: opts.operator,
+        },
+        {
+          onSession: (sid) => setSessionId(sid),
+          onDelta: (delta) => {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantPlaceId ? { ...m, content: m.content + delta } : m,
+              ),
+            );
+          },
+        },
+        opts.bearer,
+      );
+      setSessionId(res.session_id);
+      setMessages(
+        res.messages.map((m, i) => ({
+          id: `${res.session_id}-${i}-${m.role}`,
+          role: m.role,
+          content: m.content,
+          timestamp: timeStr(),
+        })),
+      );
+      applyOperatorResultSideEffects(res.operator_result);
+      applyHamUiActions(res.actions ?? [], {
+        navigate,
+        setIsControlPanelOpen,
+        isControlPanelOpen,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Request failed";
+      setChatError(msg);
+      toast.error(msg, { duration: 8_000 });
+    } finally {
+      setSending(false);
+    }
+  };
+
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || sending) return;
@@ -417,8 +540,10 @@ export default function Chat() {
             );
           },
         },
+        undefined,
       );
       setSessionId(res.session_id);
+      applyOperatorResultSideEffects(res.operator_result);
       setMessages(
         res.messages.map((m, i) => ({
           id: `${res.session_id}-${i}-${m.role}`,
@@ -577,6 +702,149 @@ export default function Chat() {
                  {chatError}
                </div>
              ) : null}
+
+             {(pendingApply || pendingLaunch || pendingRegister) && (
+               <div className="rounded-lg border border-[#FF6B00]/30 bg-[#FF6B00]/5 px-4 py-3 space-y-3 text-[11px] text-white/80">
+                 <div className="font-black uppercase tracking-widest text-[#FF6B00]">
+                   Operator confirmation
+                 </div>
+                 {pendingApply && (
+                   <div className="space-y-2">
+                     <p>
+                       Agent Builder preview is ready for project{" "}
+                       <span className="font-mono text-white">
+                         {String(pendingApply.project_id)}
+                       </span>
+                       . Paste{" "}
+                       <span className="font-mono">HAM_SETTINGS_WRITE_TOKEN</span> and
+                       apply.
+                     </p>
+                     <input
+                       type="password"
+                       autoComplete="off"
+                       placeholder="HAM_SETTINGS_WRITE_TOKEN"
+                       value={operatorSettingsToken}
+                       onChange={(e) => {
+                         const v = e.target.value;
+                         setOperatorSettingsToken(v);
+                         sessionStorage.setItem(SETTINGS_OP_KEY, v);
+                       }}
+                       className="w-full rounded border border-white/15 bg-black/40 px-3 py-2 font-mono text-[11px] text-white"
+                     />
+                     <button
+                       type="button"
+                       disabled={sending}
+                       onClick={() =>
+                         void runOperatorConfirm({
+                           messages: [
+                             {
+                               role: "user",
+                               content: "[confirm apply Agent Builder preview]",
+                             },
+                           ],
+                           operator: {
+                             phase: "apply_settings",
+                             confirmed: true,
+                             project_id: String(pendingApply.project_id),
+                             changes: pendingApply.changes as Record<string, unknown>,
+                             base_revision: String(pendingApply.base_revision),
+                           },
+                           bearer: operatorSettingsToken,
+                         })
+                       }
+                       className="rounded bg-[#FF6B00] px-4 py-2 text-[10px] font-black uppercase tracking-widest text-black disabled:opacity-50"
+                     >
+                       Apply preview
+                     </button>
+                   </div>
+                 )}
+                 {pendingLaunch && (
+                   <div className="space-y-2">
+                     <p>
+                       Launch bridge run for{" "}
+                       <span className="font-mono">{String(pendingLaunch.project_id)}</span>{" "}
+                       (requires <span className="font-mono">HAM_RUN_LAUNCH_TOKEN</span> on
+                       API).
+                     </p>
+                     <input
+                       type="password"
+                       autoComplete="off"
+                       placeholder="HAM_RUN_LAUNCH_TOKEN"
+                       value={operatorLaunchToken}
+                       onChange={(e) => {
+                         const v = e.target.value;
+                         setOperatorLaunchToken(v);
+                         sessionStorage.setItem(LAUNCH_OP_KEY, v);
+                       }}
+                       className="w-full rounded border border-white/15 bg-black/40 px-3 py-2 font-mono text-[11px] text-white"
+                     />
+                     <button
+                       type="button"
+                       disabled={sending}
+                       onClick={() =>
+                         void runOperatorConfirm({
+                           messages: [
+                             { role: "user", content: "[confirm launch bridge run]" },
+                           ],
+                           operator: {
+                             phase: "launch_run",
+                             confirmed: true,
+                             project_id: String(pendingLaunch.project_id),
+                             prompt: String(pendingLaunch.prompt ?? ""),
+                           },
+                           bearer: operatorLaunchToken,
+                         })
+                       }
+                       className="rounded bg-[#FF6B00] px-4 py-2 text-[10px] font-black uppercase tracking-widest text-black disabled:opacity-50"
+                     >
+                       Confirm launch
+                     </button>
+                   </div>
+                 )}
+                 {pendingRegister && (
+                   <div className="space-y-2">
+                     <p>
+                       Register{" "}
+                       <span className="font-mono">{String(pendingRegister.name)}</span> →{" "}
+                       <span className="font-mono">{String(pendingRegister.root)}</span>
+                     </p>
+                     <input
+                       type="password"
+                       autoComplete="off"
+                       placeholder="HAM_SETTINGS_WRITE_TOKEN"
+                       value={operatorSettingsToken}
+                       onChange={(e) => {
+                         const v = e.target.value;
+                         setOperatorSettingsToken(v);
+                         sessionStorage.setItem(SETTINGS_OP_KEY, v);
+                       }}
+                       className="w-full rounded border border-white/15 bg-black/40 px-3 py-2 font-mono text-[11px] text-white"
+                     />
+                     <button
+                       type="button"
+                       disabled={sending}
+                       onClick={() =>
+                         void runOperatorConfirm({
+                           messages: [
+                             { role: "user", content: "[confirm register project]" },
+                           ],
+                           operator: {
+                             phase: "register_project",
+                             confirmed: true,
+                             name: String(pendingRegister.name),
+                             root: String(pendingRegister.root),
+                           },
+                           bearer: operatorSettingsToken,
+                         })
+                       }
+                       className="rounded bg-[#FF6B00] px-4 py-2 text-[10px] font-black uppercase tracking-widest text-black disabled:opacity-50"
+                     >
+                       Confirm register
+                     </button>
+                   </div>
+                 )}
+               </div>
+             )}
 
              <form onSubmit={handleSend} className="relative isolate group shadow-2xl">
                 {/* Glow sits behind the composer; must not capture clicks or paint over controls */}
