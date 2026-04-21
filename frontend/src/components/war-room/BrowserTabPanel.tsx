@@ -33,10 +33,69 @@ function normalizeBrowserUrl(raw: string): string {
   return t;
 }
 
+const LIVE_POLL_FAST_MS = 450;
+const LIVE_POLL_RECOVER_MS = 900;
+const LIVE_POLL_DEGRADED_MS = 1400;
+const MAX_RECONNECT_ATTEMPTS = 4;
+
+function readErrorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : "Browser runtime action failed.";
+}
+
+function isSessionMissingError(message: string): boolean {
+  return /unknown session_id|404/i.test(message);
+}
+
+function isOwnerMismatchError(message: string): boolean {
+  return /owner mismatch|403/i.test(message);
+}
+
+function userFacingError(message: string): string {
+  if (isSessionMissingError(message)) return "Session ended. Start a new browser session.";
+  if (isOwnerMismatchError(message)) return "Session ownership changed. Open a new browser session.";
+  if (/blocked|allow_private_network|allowed_domains|422/i.test(message)) {
+    return "Target URL is blocked by browser policy.";
+  }
+  if (/only http:\/\/ and https:\/\//i.test(message)) return "Only http(s) URLs are supported.";
+  if (/playwright runtime failed to start|playwright is not installed/i.test(message)) {
+    return "Browser runtime is unavailable on this API host.";
+  }
+  return message;
+}
+
+function pollDelayForStatus(status: BrowserStreamState["status"]): number {
+  if (status === "live") return LIVE_POLL_FAST_MS;
+  if (status === "reconnecting") return LIVE_POLL_RECOVER_MS;
+  return LIVE_POLL_DEGRADED_MS;
+}
+
+function mapViewportClick(
+  event: React.MouseEvent<HTMLImageElement>,
+  imageEl: HTMLImageElement,
+  viewport: { width: number; height: number },
+): { x: number; y: number } | null {
+  const rect = imageEl.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0 || viewport.width <= 0 || viewport.height <= 0) return null;
+  const sourceAspect = viewport.width / viewport.height;
+  const boxAspect = rect.width / rect.height;
+  const drawWidth = sourceAspect >= boxAspect ? rect.width : rect.height * sourceAspect;
+  const drawHeight = sourceAspect >= boxAspect ? rect.width / sourceAspect : rect.height;
+  const offsetX = (rect.width - drawWidth) / 2;
+  const offsetY = (rect.height - drawHeight) / 2;
+  const localX = event.clientX - rect.left - offsetX;
+  const localY = event.clientY - rect.top - offsetY;
+  if (localX < 0 || localY < 0 || localX > drawWidth || localY > drawHeight) return null;
+  const nx = localX / drawWidth;
+  const ny = localY / drawHeight;
+  // Playwright mouse coordinates use CSS pixels in page viewport space.
+  return { x: nx * viewport.width, y: ny * viewport.height };
+}
+
 export function BrowserTabPanel({ embedUrl, onEmbedUrlChange, autoStart = false }: BrowserTabPanelProps) {
   const ownerKeyRef = React.useRef<string>(`pane_${crypto.randomUUID()}`);
   const autoStartedRef = React.useRef(false);
   const imageRef = React.useRef<HTMLImageElement | null>(null);
+  const viewportFrameRef = React.useRef<HTMLDivElement | null>(null);
   const pollInFlightRef = React.useRef(false);
   const reconnectCountRef = React.useRef(0);
   const [session, setSession] = React.useState<BrowserRuntimeState | null>(null);
@@ -78,12 +137,22 @@ export function BrowserTabPanel({ embedUrl, onEmbedUrlChange, autoStart = false 
     try {
       const next = await action();
       setSession(next);
-      if (next.stream_state) setStreamState(next.stream_state);
+      setStreamState(next.stream_state);
       if (next.current_url && next.current_url !== "about:blank") {
         onEmbedUrlChange(next.current_url);
       }
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Browser runtime action failed.");
+      const message = readErrorMessage(e);
+      if (isSessionMissingError(message)) {
+        setSession(null);
+        setStreamState({
+          status: "disconnected",
+          mode: "none",
+          requested_transport: "none",
+          last_error: message,
+        });
+      }
+      setError(userFacingError(message));
     } finally {
       setBusy(false);
     }
@@ -103,7 +172,17 @@ export function BrowserTabPanel({ embedUrl, onEmbedUrlChange, autoStart = false 
       setStreamState(live);
       replaceScreenshot(png);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Failed to refresh browser state.");
+      const message = readErrorMessage(e);
+      if (isSessionMissingError(message)) {
+        setSession(null);
+        setStreamState({
+          status: "disconnected",
+          mode: "none",
+          requested_transport: "none",
+          last_error: message,
+        });
+      }
+      setError(userFacingError(message));
     } finally {
       setBusy(false);
     }
@@ -140,12 +219,13 @@ export function BrowserTabPanel({ embedUrl, onEmbedUrlChange, autoStart = false 
       await startLiveStream(created.session_id);
       await capture(created.session_id);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Failed to start browser session.");
+      const message = readErrorMessage(e);
+      setError(userFacingError(message));
       setStreamState({
         status: "error",
         mode: "none",
         requested_transport: "screenshot_loop",
-        last_error: e instanceof Error ? e.message : "Failed to initialize stream.",
+        last_error: message,
       });
     } finally {
       setBusy(false);
@@ -175,7 +255,7 @@ export function BrowserTabPanel({ embedUrl, onEmbedUrlChange, autoStart = false 
         last_error: null,
       });
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Failed to close browser session.");
+      setError(userFacingError(readErrorMessage(e)));
     } finally {
       setBusy(false);
     }
@@ -183,10 +263,16 @@ export function BrowserTabPanel({ embedUrl, onEmbedUrlChange, autoStart = false 
 
   React.useEffect(() => {
     if (!session) return;
-    if (!["live", "degraded", "reconnecting"].includes(streamState.status)) return;
+    if (!["live", "degraded", "reconnecting", "connecting"].includes(streamState.status)) return;
+    let cancelled = false;
+    let timeoutId: number | null = null;
 
-    const id = window.setInterval(() => {
-      if (pollInFlightRef.current) return;
+    const poll = () => {
+      if (cancelled || pollInFlightRef.current || busy) {
+        const wait = pollDelayForStatus(streamState.status);
+        timeoutId = window.setTimeout(poll, wait);
+        return;
+      }
       pollInFlightRef.current = true;
       Promise.all([
         captureBrowserScreenshot(session.session_id, ownerKeyRef.current),
@@ -198,37 +284,58 @@ export function BrowserTabPanel({ embedUrl, onEmbedUrlChange, autoStart = false 
           reconnectCountRef.current = 0;
         })
         .catch((e: unknown) => {
+          const message = readErrorMessage(e);
+          if (isSessionMissingError(message) || isOwnerMismatchError(message)) {
+            setSession(null);
+            setStreamState({
+              status: "disconnected",
+              mode: "none",
+              requested_transport: "none",
+              last_error: message,
+            });
+            setError(userFacingError(message));
+            return;
+          }
           reconnectCountRef.current += 1;
-          if (reconnectCountRef.current < 4) {
+          if (reconnectCountRef.current < MAX_RECONNECT_ATTEMPTS) {
             setStreamState((prev) => ({
               ...prev,
               status: "reconnecting",
-              last_error: e instanceof Error ? e.message : "Live stream reconnecting",
+              last_error: message,
             }));
             return;
           }
           setStreamState((prev) => ({
             ...prev,
             status: "degraded",
-            last_error: e instanceof Error ? e.message : "Live stream degraded",
+            last_error: message,
           }));
+          setError("Live updates degraded. Use Navigate/Capture/Reset while reconnecting.");
         })
         .finally(() => {
           pollInFlightRef.current = false;
+          if (!cancelled) {
+            const wait = pollDelayForStatus(streamState.status);
+            timeoutId = window.setTimeout(poll, wait);
+          }
         });
-    }, 700);
+    };
 
-    return () => window.clearInterval(id);
-  }, [session, streamState.status]);
+    poll();
+
+    return () => {
+      cancelled = true;
+      if (timeoutId != null) window.clearTimeout(timeoutId);
+    };
+  }, [busy, session, streamState.status]);
 
   async function handleViewportClick(event: React.MouseEvent<HTMLImageElement>) {
     if (!session || !imageRef.current) return;
-    const rect = imageRef.current.getBoundingClientRect();
-    const nx = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
-    const ny = Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height));
-    const x = nx * imageRef.current.naturalWidth;
-    const y = ny * imageRef.current.naturalHeight;
-    await run(() => clickBrowserSessionXY(session.session_id, ownerKeyRef.current, x, y));
+    const mapped = mapViewportClick(event, imageRef.current, session.viewport);
+    if (!mapped) return;
+    await run(() =>
+      clickBrowserSessionXY(session.session_id, ownerKeyRef.current, mapped.x, mapped.y),
+    );
     await capture(session.session_id);
   }
 
@@ -236,7 +343,12 @@ export function BrowserTabPanel({ embedUrl, onEmbedUrlChange, autoStart = false 
     if (!session) return;
     event.preventDefault();
     await run(() =>
-      scrollBrowserSession(session.session_id, ownerKeyRef.current, event.deltaX, event.deltaY),
+      scrollBrowserSession(
+        session.session_id,
+        ownerKeyRef.current,
+        Math.max(-2000, Math.min(2000, event.deltaX)),
+        Math.max(-2000, Math.min(2000, event.deltaY)),
+      ),
     );
   }
 
@@ -249,6 +361,7 @@ export function BrowserTabPanel({ embedUrl, onEmbedUrlChange, autoStart = false 
       if (!allowed.has(key)) return;
     }
     event.preventDefault();
+    viewportFrameRef.current?.focus();
     await run(() => sendBrowserSessionKey(session.session_id, ownerKeyRef.current, key));
   }
 
@@ -330,6 +443,7 @@ export function BrowserTabPanel({ embedUrl, onEmbedUrlChange, autoStart = false 
 
           {screenshotUrl ? (
             <div
+              ref={viewportFrameRef}
               tabIndex={0}
               onKeyDown={(e) => {
                 void handleViewportKeyDown(e);
@@ -341,6 +455,7 @@ export function BrowserTabPanel({ embedUrl, onEmbedUrlChange, autoStart = false 
                 src={screenshotUrl}
                 alt="Live in-pane browser viewport"
                 onClick={(e) => {
+                  viewportFrameRef.current?.focus();
                   void handleViewportClick(e);
                 }}
                 onWheel={(e) => {

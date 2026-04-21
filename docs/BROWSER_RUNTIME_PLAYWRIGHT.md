@@ -8,7 +8,8 @@ This doc covers local setup and runtime caveats for the HAM-owned Browser Runtim
 - Screenshot transport: `binary_png_endpoint`
 - Session ownership: `pane_owner_key`
 - Domain policy: private/local targets blocked by default
-- Not in v1: live streaming, Cursor browser embedding
+- Primary in-pane transport: HAM live `screenshot_loop` (poll + direct input forwarding)
+- Not in v1: WebRTC media transport, Cursor browser embedding
 
 ## Install and local setup
 
@@ -37,8 +38,16 @@ uvicorn src.api.server:app --reload --port 8000
 - `GET /api/browser/sessions/{session_id}?owner_key=...`
 - `POST /api/browser/sessions/{session_id}/navigate`
 - `POST /api/browser/sessions/{session_id}/actions/click`
+- `POST /api/browser/sessions/{session_id}/actions/click-xy`
+- `POST /api/browser/sessions/{session_id}/actions/scroll`
+- `POST /api/browser/sessions/{session_id}/actions/key`
 - `POST /api/browser/sessions/{session_id}/actions/type`
 - `POST /api/browser/sessions/{session_id}/screenshot`
+- `POST /api/browser/sessions/{session_id}/stream/start`
+- `GET /api/browser/sessions/{session_id}/stream/state?owner_key=...`
+- `POST /api/browser/sessions/{session_id}/stream/offer`
+- `POST /api/browser/sessions/{session_id}/stream/candidate`
+- `POST /api/browser/sessions/{session_id}/stream/stop`
 - `POST /api/browser/sessions/{session_id}/reset`
 - `DELETE /api/browser/sessions/{session_id}?owner_key=...`
 
@@ -68,6 +77,9 @@ Optional env controls:
 
 ## Known v1 limitations
 
-- No continuous remote-desktop/live stream transport.
-- Selector-based action APIs only (no advanced DOM extraction contract yet).
+- This mode is a screenshot-loop live pane, not media-streaming remote desktop.
+- Click accuracy depends on viewport/image alignment (`object-contain` mapping in pane code).
+- Input path is single-controller (`pane_owner_key`), no collaborative co-control.
+- WebRTC signaling routes exist for contract continuity but are not active transport in this pass.
+- Selector/DOM extraction remains limited (no advanced extraction contract yet).
 - Session ownership is per pane owner key; no multi-user auth architecture in this pass.

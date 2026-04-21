@@ -7,6 +7,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from ipaddress import ip_address
+from math import isfinite
 from typing import Any
 from urllib.parse import urlparse
 
@@ -43,6 +44,8 @@ class BrowserSessionRecord:
     touched_at_ms: int
     page: Any
     context: Any
+    viewport_width: int
+    viewport_height: int
     status: str = "ready"
     last_error: str | None = None
     stream_status: str = "disconnected"
@@ -196,9 +199,10 @@ class BrowserSessionManager:
 
     @staticmethod
     def _ensure_actionable(rec: BrowserSessionRecord, action_name: str) -> None:
-        if rec.status == "error" and action_name != "reset":
+        blocked_while_error = {"click", "type", "click_xy", "scroll", "key_press"}
+        if rec.status == "error" and action_name in blocked_while_error:
             raise BrowserSessionConflictError(
-                "Session is in error state. Call reset before additional actions."
+                "Session is in error state for interactive input. Use navigate/reset to recover."
             )
 
     def _get_session_locked(self, session_id: str) -> BrowserSessionRecord:
@@ -228,6 +232,8 @@ class BrowserSessionManager:
                 touched_at_ms=now,
                 page=page,
                 context=context,
+                viewport_width=viewport_width,
+                viewport_height=viewport_height,
             )
             return self._state_from_record(self._sessions[session_id])
 
@@ -374,6 +380,10 @@ class BrowserSessionManager:
             "last_error": rec.last_error,
             "current_url": current_url,
             "title": title,
+            "viewport": {
+                "width": rec.viewport_width,
+                "height": rec.viewport_height,
+            },
             "created_at": _utc_iso_from_ms(rec.created_at_ms),
             "updated_at": _utc_iso_from_ms(rec.touched_at_ms),
             "ownership": "pane_owner_key",
@@ -417,6 +427,12 @@ class BrowserSessionManager:
             self._check_owner(rec, owner_key)
             transport = (requested_transport or "").strip().lower() or "screenshot_loop"
             rec.stream_requested_transport = transport
+            if rec.status == "error":
+                rec.stream_status = "degraded"
+                rec.stream_mode = "screenshot_loop"
+                rec.stream_last_error = "Session is in error state. Use navigate/reset to recover live updates."
+                self._touch(rec)
+                return self._stream_payload(rec)
             if transport == "webrtc" and not self._webrtc_enabled:
                 rec.stream_status = "degraded"
                 rec.stream_mode = "screenshot_loop"
@@ -486,6 +502,12 @@ class BrowserSessionManager:
             self._check_owner(rec, owner_key)
             self._check_rate_limit(session_id)
             self._ensure_actionable(rec, "click_xy")
+            if not isfinite(x) or not isfinite(y):
+                raise BrowserPolicyError("Click coordinates must be finite numbers.")
+            if x < 0 or y < 0 or x > rec.viewport_width or y > rec.viewport_height:
+                raise BrowserPolicyError(
+                    f"Click coordinates out of viewport bounds (0..{rec.viewport_width}, 0..{rec.viewport_height})."
+                )
             try:
                 rec.status = "busy"
                 rec.page.mouse.click(x, y, button=button)
@@ -508,6 +530,10 @@ class BrowserSessionManager:
             self._check_owner(rec, owner_key)
             self._check_rate_limit(session_id)
             self._ensure_actionable(rec, "scroll")
+            if not isfinite(delta_x) or not isfinite(delta_y):
+                raise BrowserPolicyError("Scroll deltas must be finite numbers.")
+            delta_x = max(-2000.0, min(2000.0, delta_x))
+            delta_y = max(-2000.0, min(2000.0, delta_y))
             try:
                 rec.status = "busy"
                 rec.page.mouse.wheel(delta_x, delta_y)

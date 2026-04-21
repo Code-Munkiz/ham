@@ -68,11 +68,15 @@ class _FakeBrowser:
 
 
 class _FakeMouse:
+    def __init__(self) -> None:
+        self.last_click: tuple[float, float, str] | None = None
+        self.last_wheel: tuple[float, float] | None = None
+
     def click(self, x: float, y: float, button: str = "left") -> None:
-        _ = (x, y, button)
+        self.last_click = (x, y, button)
 
     def wheel(self, delta_x: float, delta_y: float) -> None:
-        _ = (delta_x, delta_y)
+        self.last_wheel = (delta_x, delta_y)
 
 
 class _FakeKeyboard:
@@ -98,6 +102,8 @@ def test_create_get_reset_close_session(manager: BrowserSessionManager) -> None:
     state = manager.get_state(session_id=sid, owner_key="pane_a")
     assert state["ownership"] == "pane_owner_key"
     assert state["runtime_host"] == "ham_api_local"
+    assert state["viewport"]["width"] == 1280
+    assert state["stream_state"]["status"] == "disconnected"
     reset_state = manager.reset(session_id=sid, owner_key="pane_a")
     assert reset_state["current_url"] == "about:blank"
     manager.close_session(session_id=sid, owner_key="pane_a")
@@ -117,6 +123,9 @@ def test_navigate_success_and_fail_sets_error(manager: BrowserSessionManager) ->
     assert manager._sessions[sid].status == "error"
     with pytest.raises(BrowserSessionConflictError):
         manager.click(session_id=sid, owner_key="pane_a", selector="button")
+    recovered = manager.navigate(session_id=sid, owner_key="pane_a", url="https://example.com/recover")
+    assert recovered["status"] == "ready"
+    _ = manager.screenshot_png(session_id=sid, owner_key="pane_a")
 
 
 def test_owner_key_enforcement(manager: BrowserSessionManager) -> None:
@@ -196,12 +205,24 @@ def test_stream_and_interactive_input_paths(manager: BrowserSessionManager) -> N
 
     click_state = manager.click_xy(session_id=sid, owner_key="pane_a", x=120, y=80)
     assert click_state["status"] == "ready"
+    rec = manager._sessions[sid]
+    assert rec.page.mouse.last_click == (120, 80, "left")
 
     scroll_state = manager.scroll(session_id=sid, owner_key="pane_a", delta_x=0, delta_y=150)
     assert scroll_state["status"] == "ready"
+    assert rec.page.mouse.last_wheel == (0, 150)
 
     key_state = manager.key_press(session_id=sid, owner_key="pane_a", key="Enter")
     assert key_state["status"] == "ready"
 
     stopped = manager.stop_stream(session_id=sid, owner_key="pane_a")
     assert stopped["status"] == "disconnected"
+
+
+def test_coordinate_bounds_and_scroll_clamp(manager: BrowserSessionManager) -> None:
+    sid = manager.create_session(owner_key="pane_a")["session_id"]
+    with pytest.raises(BrowserPolicyError):
+        manager.click_xy(session_id=sid, owner_key="pane_a", x=1600, y=50)
+    manager.scroll(session_id=sid, owner_key="pane_a", delta_x=99999, delta_y=-99999)
+    rec = manager._sessions[sid]
+    assert rec.page.mouse.last_wheel == (2000.0, -2000.0)

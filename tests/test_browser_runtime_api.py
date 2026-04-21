@@ -23,8 +23,9 @@ class _FakeManager:
             "runtime_host": "ham_api_local",
             "session_ownership": "pane_owner_key",
             "screenshot_transport": "binary_png_endpoint",
-            "streaming_supported": False,
+            "streaming_supported": True,
             "cursor_embedding_supported": False,
+            "supported_live_transports": ["screenshot_loop"],
             "allow_private_network": False,
             "allowed_domains": [],
             "blocked_domains": [],
@@ -44,13 +45,20 @@ class _FakeManager:
             "last_error": None,
             "current_url": "about:blank",
             "title": "Blank",
+            "viewport": {"width": 1280, "height": 720},
             "created_at": "2026-01-01T00:00:00+00:00",
             "updated_at": "2026-01-01T00:00:00+00:00",
             "ownership": "pane_owner_key",
             "runtime_host": "ham_api_local",
             "screenshot_transport": "binary_png_endpoint",
-            "streaming_supported": False,
+            "streaming_supported": True,
             "cursor_embedding_supported": False,
+            "stream_state": {
+                "status": "disconnected",
+                "mode": "none",
+                "requested_transport": "none",
+                "last_error": None,
+            },
             "owner_key": owner_key,
         }
         self._sessions[sid] = state
@@ -103,7 +111,9 @@ class _FakeManager:
     def click_xy(
         self, *, session_id: str, owner_key: str, x: float, y: float, button: str
     ) -> dict[str, Any]:
-        _ = (x, y, button)
+        _ = button
+        if x < 0 or y < 0:
+            raise BrowserPolicyError("Click coordinates out of viewport bounds.")
         return self.get_state(session_id=session_id, owner_key=owner_key)
 
     def scroll(
@@ -260,6 +270,12 @@ def test_live_stream_and_interactive_endpoints(api_client: TestClient) -> None:
         json={"owner_key": "pane_a", "x": 100, "y": 80, "button": "left"},
     )
     assert click_xy.status_code == 200
+
+    click_xy_bad = api_client.post(
+        f"/api/browser/sessions/{sid}/actions/click-xy",
+        json={"owner_key": "pane_a", "x": -1, "y": 80, "button": "left"},
+    )
+    assert click_xy_bad.status_code == 422
 
     scroll = api_client.post(
         f"/api/browser/sessions/{sid}/actions/scroll",

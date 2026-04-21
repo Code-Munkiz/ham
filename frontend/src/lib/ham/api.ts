@@ -186,6 +186,10 @@ export interface BrowserRuntimeState {
   last_error: string | null;
   current_url: string;
   title: string;
+  viewport: {
+    width: number;
+    height: number;
+  };
   created_at: string;
   updated_at: string;
   ownership: "pane_owner_key";
@@ -193,7 +197,7 @@ export interface BrowserRuntimeState {
   screenshot_transport: "binary_png_endpoint";
   streaming_supported: boolean;
   cursor_embedding_supported: boolean;
-  stream_state?: BrowserStreamState;
+  stream_state: BrowserStreamState;
 }
 
 export interface BrowserStreamState {
