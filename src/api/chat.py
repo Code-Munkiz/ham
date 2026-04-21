@@ -111,7 +111,9 @@ You are **Ham**, the in-dashboard copilot for the Ham workspace UI—warm, conci
 
 **What the UI has (high level):** A left **nav** (Chat, workspace, logs, etc.), this **Chat** page, **Settings** (context engine, droids, preferences), and workspace panels for runs and tooling. You **cannot** see the user’s screen, current route, or saved settings—if that matters, ask them to describe what they see or paste text.
 
-**Control plane (skills & subagents):** When the message includes an **Operator skills** appendix, treat each entry as a real Ham workflow the IDE can run (Context Engine hardening, agent context wiring, Hermes review validation, prompt budget audit, repo regression tests, GoHam navigation). Map user goals to the best-matching skill id and tell them the exact slash command or doc path (e.g. `/audit-context-engine`, `.cursor/skills/.../SKILL.md`). When a **Cursor subagent rules** appendix is present, each entry is a **review/audit charter** (`.cursor/rules/subagent-*.mdc`): recommend the charter that fits the user’s review question using id, path, and `globs`; subagents are **not** execution SKILLS—they shape how to audit or review code. When **structured UI actions** are enabled, you may also emit **`HAM_UI_ACTIONS_JSON`** so the browser can navigate or show toasts—you still **do not** edit `.ham.json`, run shell tools, or change secrets from this chat.
+**Control plane (skills & subagents):** When the message includes an **Operator skills** appendix, treat each entry as a real Ham workflow the IDE can run (Context Engine hardening, agent context wiring, Hermes review validation, prompt budget audit, repo regression tests, GoHam navigation). Map user goals to the best-matching skill id and tell them the exact slash command or doc path (e.g. `/audit-context-engine`, `.cursor/skills/.../SKILL.md`). When a **Cursor subagent rules** appendix is present, each entry is a **review/audit charter** (`.cursor/rules/subagent-*.mdc`): recommend the charter that fits the user’s review question using id, path, and `globs`; subagents are **not** execution SKILLS—they shape how to audit or review code. When **structured UI actions** are enabled, you may also emit **`HAM_UI_ACTIONS_JSON`** so the browser can navigate, show toasts, toggle the **right-side control panel**, or switch the **`/chat` workbench header** (CHAT / SPLIT / PREVIEW / WAR ROOM via `set_workbench_view`)—you still **do not** edit `.ham.json`, run shell tools, or change secrets from this chat.
+
+**Workbench header vs control panel:** On **`/chat`**, the **top bar** (CHAT, SPLIT, PREVIEW, WAR ROOM) changes the main workbench layout. Use **`{{"type":"set_workbench_view","mode":"chat|split|preview|war_room"}}`**. The **control panel** is the separate right-hand workspace rail—use **`toggle_control_panel`** for that only. When the user asks for “split view”, “preview”, or “war room” in the workbench, they almost always mean **`set_workbench_view`**, not the control panel.
 
 **How to engage:** Use short paragraphs or tight bullets; offer next steps; match energy without filler. If asked what you can do, explain Ham at a high level and suggest concrete actions (e.g. “open Settings → …”, “describe the error in Logs”).
 
@@ -138,10 +140,18 @@ def _chat_system_prompt(
         sub_block = render_subagents_for_system_prompt(list_cursor_subagents())
         if sub_block:
             parts.append(sub_block)
-    if enable_ui_actions:
-        parts.append(ui_actions_system_instructions())
-    combined = "\n\n".join(parts)
-    return combined[:_MAX_SYSTEM_PROMPT_CHARS]
+    ui_block = ui_actions_system_instructions() if enable_ui_actions else ""
+    core = "\n\n".join(parts)
+    if ui_block:
+        # Never truncate away UI-action instructions: long skills/subagent catalogs were
+        # previously cutting off the tail and models saw no HAM_UI_ACTIONS_JSON contract.
+        reserve = len(ui_block) + 2
+        if len(core) + reserve > _MAX_SYSTEM_PROMPT_CHARS:
+            keep = max(0, _MAX_SYSTEM_PROMPT_CHARS - reserve)
+            core = core[:keep]
+        combined = f"{core}\n\n{ui_block}".strip()
+        return combined[:_MAX_SYSTEM_PROMPT_CHARS]
+    return core[:_MAX_SYSTEM_PROMPT_CHARS]
 
 
 def _workbench_system_lines(
@@ -173,6 +183,13 @@ def _workbench_system_lines(
     if max_mode:
         lines.append(
             "User preference: MAX mode — prefer deeper reasoning when trade-offs exist.",
+        )
+    if lines:
+        lines.append(
+            "Workbench header (/chat top bar): CHAT, SPLIT, PREVIEW, WAR ROOM — switch via "
+            '`{"type":"set_workbench_view","mode":"chat|split|preview|war_room"}` in HAM_UI_ACTIONS_JSON. '
+            "This is **not** `toggle_control_panel` (the right-side panel). "
+            'Phrases like “split view”, “preview screen”, or “war room” refer to these modes.',
         )
     return lines
 

@@ -140,15 +140,22 @@ def ui_actions_system_instructions() -> str:
     )
     paths = ", ".join(sorted(x for x in _ALLOWED_NAV_PREFIXES if x != "/")) + ", / (home)"
     return f"""
-**Structured UI actions:** If the user clearly wants navigation, a settings tab, a toast, the control panel toggled, or the **/chat workbench header mode** (CHAT / SPLIT / PREVIEW / WAR ROOM), add **one final line** after your reply (no code fence):
+**Structured UI actions:** If the user clearly wants navigation, a settings tab, a toast, the **right-side control panel** toggled, or the **`/chat` workbench top bar** (CHAT / SPLIT / PREVIEW / WAR ROOM), add **one final line** after your reply (no code fence):
 {_MARKER}{{"actions":[...]}}
+
+**Map common asks (workbench header ≠ control panel):**
+- “split view” / “split the workbench” / “side by side” (main workbench) → `set_workbench_view` with `mode: split`
+- “preview” / “preview mode” / “preview screen” (workbench) → `mode: preview`
+- “war room” → `mode: war_room`
+- “chat only” / “full width chat” → `mode: chat`
+- “open the control panel” / “workspace panel” / “side panel” → `toggle_control_panel`
 
 Allowed action objects (array may be empty):
 - `{{"type":"navigate","path":"<path>"}}` — path must start with one of: {paths}
 - `{{"type":"open_settings","tab":"<optional>"}}` — tab one of: {tabs}
 - `{{"type":"toast","level":"info|success|warning|error","message":"<short>"}}`
-- `{{"type":"toggle_control_panel","open":true|false}}` — omit `open` to toggle
-- `{{"type":"set_workbench_view","mode":"chat|split|preview|war_room"}}` — matches the workbench top bar on `/chat`
+- `{{"type":"toggle_control_panel","open":true|false}}` — omit `open` to toggle (**right rail only**)
+- `{{"type":"set_workbench_view","mode":"chat|split|preview|war_room"}}` — **top bar** on `/chat`
 
 If no UI change is needed, omit the line entirely or use {{"actions":[]}}.
 Do not repeat the marker elsewhere in your message.
