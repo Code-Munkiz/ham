@@ -17,10 +17,20 @@ import { cn } from "@/lib/utils";
 export interface BrowserTabPanelProps {
   embedUrl: string;
   onEmbedUrlChange: (v: string) => void;
+  autoStart?: boolean;
 }
 
-export function BrowserTabPanel({ embedUrl, onEmbedUrlChange }: BrowserTabPanelProps) {
+function normalizeBrowserUrl(raw: string): string {
+  const t = raw.trim();
+  if (!t) return "";
+  if (/^https?:\/\//i.test(t)) return t;
+  if (/^[a-z0-9.-]+\.[a-z]{2,}(\/.*)?$/i.test(t)) return `https://${t}`;
+  return t;
+}
+
+export function BrowserTabPanel({ embedUrl, onEmbedUrlChange, autoStart = false }: BrowserTabPanelProps) {
   const ownerKeyRef = React.useRef<string>(`pane_${crypto.randomUUID()}`);
+  const autoStartedRef = React.useRef(false);
   const [session, setSession] = React.useState<BrowserRuntimeState | null>(null);
   const [busy, setBusy] = React.useState(false);
   const [selector, setSelector] = React.useState("");
@@ -28,8 +38,15 @@ export function BrowserTabPanel({ embedUrl, onEmbedUrlChange }: BrowserTabPanelP
   const [typeText, setTypeText] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
   const [screenshotUrl, setScreenshotUrl] = React.useState<string | null>(null);
-  const canOpen = embedUrl.trim().startsWith("http");
+  const normalizedUrl = normalizeBrowserUrl(embedUrl);
+  const canOpen = normalizedUrl.startsWith("http");
   const hasSession = session !== null;
+  async function capture(sessionId: string) {
+    const png = await captureBrowserScreenshot(sessionId, ownerKeyRef.current);
+    if (screenshotUrl) URL.revokeObjectURL(screenshotUrl);
+    setScreenshotUrl(URL.createObjectURL(png));
+  }
+
 
   React.useEffect(() => {
     return () => {
@@ -81,14 +98,23 @@ export function BrowserTabPanel({ embedUrl, onEmbedUrlChange }: BrowserTabPanelP
         viewport_width: 1280,
         viewport_height: 720,
       });
-      setSession(created);
-      setScreenshotUrl(null);
+      const bootUrl = normalizedUrl || "https://www.google.com";
+      const next = await navigateBrowserSession(created.session_id, ownerKeyRef.current, bootUrl);
+      setSession(next);
+      onEmbedUrlChange(bootUrl);
+      await capture(created.session_id);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to start browser session.");
     } finally {
       setBusy(false);
     }
   }
+
+  React.useEffect(() => {
+    if (!autoStart || autoStartedRef.current || hasSession || busy) return;
+    autoStartedRef.current = true;
+    void handleCreateSession();
+  }, [autoStart, hasSession, busy]);
 
   async function handleCloseSession() {
     if (!session) return;
@@ -143,7 +169,11 @@ export function BrowserTabPanel({ embedUrl, onEmbedUrlChange }: BrowserTabPanelP
               disabled={busy || !embedUrl.trim()}
               onClick={() =>
                 run(() =>
-                  navigateBrowserSession(session.session_id, ownerKeyRef.current, embedUrl.trim()),
+                  navigateBrowserSession(
+                    session.session_id,
+                    ownerKeyRef.current,
+                    normalizeBrowserUrl(embedUrl),
+                  ),
                 )
               }
               className={cn(
@@ -284,7 +314,7 @@ export function BrowserTabPanel({ embedUrl, onEmbedUrlChange }: BrowserTabPanelP
         </div>
       )}
       <a
-        href={canOpen ? embedUrl.trim() : "#"}
+        href={canOpen ? normalizedUrl : "#"}
         target="_blank"
         rel="noreferrer"
         className={cn(

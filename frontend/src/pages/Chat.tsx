@@ -236,6 +236,7 @@ export default function Chat() {
   const [paneEmbedUrl, setPaneEmbedUrl] = React.useState("");
   const [requestedTabId, setRequestedTabId] = React.useState<WarRoomTabId | undefined>(undefined);
   const [requestedTabNonce, setRequestedTabNonce] = React.useState(0);
+  const [browserOnly, setBrowserOnly] = React.useState(false);
   /** Cursor Cloud Agent id for War Room / Cloud Agent uplink (proxied via Ham API). */
   const [activeCloudAgentId, setActiveCloudAgentId] = React.useState<string | null>(null);
   const [recentMissions, setRecentMissions] = React.useState<RecentMission[]>([]);
@@ -708,6 +709,7 @@ export default function Chat() {
             <ExecutionSurfaceChrome
               mode="preview"
               onClose={() => setViewMode("chat")}
+              browserOnly={browserOnly}
             >
               <WarRoomPane
                 uplinkId={uplinkId}
@@ -716,6 +718,7 @@ export default function Chat() {
                 onEmbedUrlChange={setPaneEmbedUrl}
                 requestedTabId={requestedTabId}
                 requestedTabNonce={requestedTabNonce}
+                browserOnly={browserOnly}
               />
             </ExecutionSurfaceChrome>
           ) : (
@@ -728,6 +731,7 @@ export default function Chat() {
                   warRoomSignal={viewMode === "war_room"}
                   reduceMotion={reduceMotion}
                   warBlink={warBlink}
+                  browserOnly={browserOnly}
                 >
                   <WarRoomPane
                     uplinkId={uplinkId}
@@ -736,6 +740,7 @@ export default function Chat() {
                     onEmbedUrlChange={setPaneEmbedUrl}
                     requestedTabId={requestedTabId}
                     requestedTabNonce={requestedTabNonce}
+                    browserOnly={browserOnly}
                   />
                 </ExecutionSurfaceChrome>
               }
@@ -1006,6 +1011,7 @@ export default function Chat() {
                                         setViewMode("split");
                                         setRequestedTabId("browser");
                                         setRequestedTabNonce((n) => n + 1);
+                                        setBrowserOnly(true);
                                         setLayoutMenuOpen(false);
                                       }}
                                     >
@@ -1023,6 +1029,7 @@ export default function Chat() {
                                       )}
                                       onClick={() => {
                                         setViewMode("split");
+                                        setBrowserOnly(false);
                                         setLayoutMenuOpen(false);
                                       }}
                                     >
@@ -1040,6 +1047,7 @@ export default function Chat() {
                                       )}
                                       onClick={() => {
                                         setViewMode("preview");
+                                        setBrowserOnly(false);
                                         setLayoutMenuOpen(false);
                                       }}
                                     >
@@ -1057,6 +1065,7 @@ export default function Chat() {
                                       )}
                                       onClick={() => {
                                         setViewMode("war_room");
+                                        setBrowserOnly(false);
                                         setLayoutMenuOpen(false);
                                       }}
                                     >

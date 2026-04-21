@@ -3,6 +3,7 @@ import type { UplinkId } from "@/components/chat/ChatComposerStrip";
 import { CloudAgentPanel } from "./CloudAgentPanel";
 import { ElizaOsPanel } from "./ElizaOsPanel";
 import { FactoryAIPanel } from "./FactoryAIPanel";
+import { BrowserTabPanel } from "./BrowserTabPanel";
 import type { WarRoomTabId } from "./uplinkConfig";
 
 export interface WarRoomPaneProps {
@@ -12,6 +13,7 @@ export interface WarRoomPaneProps {
   onEmbedUrlChange: (v: string) => void;
   requestedTabId?: WarRoomTabId;
   requestedTabNonce?: number;
+  browserOnly?: boolean;
 }
 
 /**
@@ -24,10 +26,15 @@ export function WarRoomPane({
   onEmbedUrlChange,
   requestedTabId,
   requestedTabNonce,
+  browserOnly,
 }: WarRoomPaneProps) {
   return (
     <div className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col">
-      {uplinkId === "cloud_agent" ? (
+      {browserOnly ? (
+        <div className="flex flex-1 min-h-0 p-2">
+          <BrowserTabPanel embedUrl={embedUrl} onEmbedUrlChange={onEmbedUrlChange} autoStart />
+        </div>
+      ) : uplinkId === "cloud_agent" ? (
         <CloudAgentPanel
           activeCloudAgentId={activeCloudAgentId}
           embedUrl={embedUrl}
