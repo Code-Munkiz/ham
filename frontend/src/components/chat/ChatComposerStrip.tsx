@@ -180,7 +180,7 @@ export function ChatComposerStrip({
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-2 px-4 pt-4 pb-3">
+    <div className="flex flex-wrap items-center gap-1.5 px-3 pt-2 pb-2">
       {/* Ask / Plan / Agent — directive intent */}
       <div className="relative" ref={modeRef}>
         <button
@@ -192,7 +192,7 @@ export function ChatComposerStrip({
             setUplinkOpen(false);
           }}
           className={cn(
-            "inline-flex items-center gap-2 h-10 px-3 rounded-lg border text-[10px] font-black uppercase tracking-widest transition-colors",
+            "inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border text-[9px] font-black uppercase tracking-widest transition-colors",
             modeOpen
               ? "bg-[#FF6B00] border-[#FF6B00] text-black ring-2 ring-[#FF6B00]/30"
               : "bg-[#FF6B00] border-[#FF6B00] text-black hover:brightness-110",
@@ -242,7 +242,7 @@ export function ChatComposerStrip({
             setModelOpen(!modelOpen);
           }}
           className={cn(
-            "flex items-center justify-between w-full h-10 px-3 rounded-lg border border-white/10 bg-white/[0.04] text-left hover:border-[#FF6B00]/30 transition-colors",
+            "flex items-center justify-between w-full h-8 px-2.5 rounded-md border border-white/10 bg-white/[0.04] text-left hover:border-[#FF6B00]/30 transition-colors",
             modelOpen && "border-[#FF6B00]/50",
           )}
         >
@@ -404,7 +404,7 @@ export function ChatComposerStrip({
             setUplinkOpen(false);
           }}
           className={cn(
-            "flex items-center justify-between w-full h-10 px-3 rounded-lg border border-white/10 bg-white/[0.04] text-left hover:border-white/20 transition-colors",
+            "flex items-center justify-between w-full h-8 px-2.5 rounded-md border border-white/10 bg-white/[0.04] text-left hover:border-white/20 transition-colors",
             workerOpen && "border-[#FF6B00]/30",
           )}
         >
@@ -452,7 +452,7 @@ export function ChatComposerStrip({
             setWorkerOpen(false);
           }}
           className={cn(
-            "flex items-center justify-between w-full h-10 px-3 rounded-lg border bg-white/[0.04] text-left transition-colors",
+            "flex items-center justify-between w-full h-8 px-2.5 rounded-md border bg-white/[0.04] text-left transition-colors",
             uplinkOpen ? "border-[#FF6B00]/50" : "border-white/10 hover:border-white/20",
             uplinkAccentClass(uplinkId),
           )}
@@ -494,9 +494,9 @@ export function ChatComposerStrip({
       </div>
 
       {/* Tools */}
-      <div className="inline-flex items-center gap-2 h-10 px-3 rounded-lg border border-white/10 bg-white/[0.02] text-white/35 shrink-0">
-        <Wrench className="h-3.5 w-3.5" />
-        <span className="text-[9px] font-black uppercase tracking-widest">{toolsCount} tools enabled</span>
+      <div className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-white/10 bg-white/[0.02] text-white/35 shrink-0">
+        <Wrench className="h-3 w-3" />
+        <span className="text-[8px] font-black uppercase tracking-widest">{toolsCount} tools</span>
       </div>
     </div>
   );

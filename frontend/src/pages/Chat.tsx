@@ -4,11 +4,9 @@
  */
 import * as React from "react";
 import {
-  Send,
   Paperclip,
   Sparkles,
   Shield,
-  Terminal,
   Activity,
   Zap,
   Monitor,
@@ -91,17 +89,17 @@ function directivePlaceholder(mode: WorkbenchMode): string {
   return "Delegate execution — mission directive or follow-up…";
 }
 
-function primaryActionLabel(mode: WorkbenchMode, sending: boolean): string {
-  if (sending) return "Sending…";
-  if (mode === "ask") return "Send";
-  if (mode === "plan") return "Generate plan";
-  return "Execute mission";
-}
-
 function uplinkPipelineLabel(id: UplinkId): string {
   if (id === "cloud_agent") return "CLOUD_AGENT";
   if (id === "factory_ai") return "FACTORY_AI";
   return "ELIZA_OS";
+}
+
+function workbenchLayoutTriggerLabel(mode: ChatViewMode): string {
+  if (mode === "split") return "Split";
+  if (mode === "preview") return "Preview";
+  if (mode === "war_room") return "War Room";
+  return "View";
 }
 
 type TranscriptColumnProps = {
@@ -228,6 +226,8 @@ export default function Chat() {
 
   const [uplinkId, setUplinkId] = React.useState<UplinkId>("factory_ai");
   const [viewMode, setViewMode] = React.useState<ChatViewMode>("chat");
+  const [layoutMenuOpen, setLayoutMenuOpen] = React.useState(false);
+  const layoutMenuRef = React.useRef<HTMLDivElement>(null);
   const [projectsOpen, setProjectsOpen] = React.useState(false);
   const [mountRepo, setMountRepo] = React.useState("");
   const [mountRef, setMountRef] = React.useState("");
@@ -239,6 +239,15 @@ export default function Chat() {
   const [projectsLoading, setProjectsLoading] = React.useState(false);
   const [warBlink, setWarBlink] = React.useState(true);
   const [reduceMotion, setReduceMotion] = React.useState(false);
+
+  React.useEffect(() => {
+    const onDocMouseDown = (e: MouseEvent) => {
+      if (layoutMenuRef.current?.contains(e.target as Node)) return;
+      setLayoutMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onDocMouseDown);
+    return () => document.removeEventListener("mousedown", onDocMouseDown);
+  }, []);
 
   React.useEffect(() => {
     setRecentMissions(loadRecentMissions());
@@ -669,11 +678,11 @@ export default function Chat() {
           )}
         </div>
 
-        {/* COMPOSER Interface */}
-        <div className="px-12 pb-10 pt-4 bg-gradient-to-t from-black via-black/95 to-transparent relative z-30">
-          <div className="max-w-3xl mx-auto space-y-4">
-             <div className="flex flex-wrap items-center gap-2 px-1">
-               <span className="text-[9px] font-mono font-bold uppercase tracking-widest text-white/45">{pipelineStatus}</span>
+        {/* COMPOSER Interface — compact (~⅓ shorter than prior) */}
+        <div className="px-6 sm:px-10 pb-6 pt-2 bg-gradient-to-t from-black via-black/95 to-transparent relative z-30">
+          <div className="max-w-3xl mx-auto space-y-2">
+             <div className="flex flex-wrap items-center gap-2 px-0.5">
+               <span className="text-[8px] font-mono font-bold uppercase tracking-widest text-white/40">{pipelineStatus}</span>
              </div>
              {chatError ? (
                <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-2 text-[11px] font-bold uppercase tracking-widest text-destructive">
@@ -825,15 +834,13 @@ export default function Chat() {
                </div>
              )}
 
-             <form onSubmit={handleSend} className="relative isolate group shadow-2xl">
-                {/* Glow sits behind the composer; must not capture clicks or paint over controls */}
+             <form onSubmit={handleSend} className="relative isolate group shadow-xl">
                 <div
-                  className="pointer-events-none absolute -inset-1 z-0 rounded-2xl bg-gradient-to-r from-[#FF6B00]/20 to-[#FF6B00]/5 opacity-20 blur transition duration-700 group-focus-within:opacity-80"
+                  className="pointer-events-none absolute -inset-0.5 z-0 rounded-xl bg-gradient-to-r from-[#FF6B00]/15 to-[#FF6B00]/5 opacity-15 blur-md transition duration-500 group-focus-within:opacity-50"
                   aria-hidden
                 />
-                {/* Card + strip stack above the glow; overflow visible so model/mode dropdowns are not clipped */}
-                <div className="relative z-10 flex flex-col overflow-visible rounded-xl border border-white/10 bg-[#0d0d0d] shadow-2xl">
-                   <div className="relative z-20 rounded-t-xl bg-black/35">
+                <div className="relative z-10 flex flex-col overflow-visible rounded-lg border border-white/10 bg-[#0d0d0d] shadow-xl">
+                   <div className="relative z-20 rounded-t-lg bg-black/35">
                       <ChatComposerStrip
                         workbenchMode={workbenchMode}
                         onWorkbenchMode={setWorkbenchMode}
@@ -851,13 +858,11 @@ export default function Chat() {
                       />
                    </div>
                    <div className="flex flex-col border-t border-white/5">
-                      <div className="flex items-start px-6 pt-4 pb-3 gap-3">
-                         <Terminal className="h-5 w-5 text-[#FF6B00]/60 mt-1 shrink-0" />
-                         <div className="flex-1 min-w-0 flex items-start gap-2">
-                           <span className="text-[#FF6B00] font-mono text-[13px] font-bold mt-1.5 shrink-0 select-none">
-                             &gt;_
-                           </span>
-                           <textarea
+                      <div className="flex items-start px-4 pt-2 pb-2 gap-2">
+                         <span className="text-[#FF6B00] font-mono text-[12px] font-bold mt-1 shrink-0 select-none" aria-hidden>
+                           &gt;_
+                         </span>
+                         <textarea
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
                             onKeyDown={(e) => {
@@ -867,111 +872,138 @@ export default function Chat() {
                               }
                             }}
                             placeholder={directivePlaceholder(workbenchMode)}
-                            className="flex-1 bg-transparent border-none outline-none text-white text-[13px] font-bold uppercase tracking-[0.06em] placeholder:text-white/10 resize-none min-h-[72px] max-h-[220px] leading-relaxed"
+                            className="flex-1 bg-transparent border-none outline-none text-white text-[12px] font-bold uppercase tracking-[0.05em] placeholder:text-white/10 resize-none min-h-[48px] max-h-[140px] leading-snug"
                          />
-                         </div>
                       </div>
 
-                      <div className="flex min-h-12 items-center px-6 py-2 bg-white/[0.02] border-t border-white/5 justify-between gap-4 flex-wrap">
-                         <div className="flex items-center gap-4 sm:gap-6">
-                            <button type="button" className="flex items-center gap-2 text-[9px] text-white/20 hover:text-[#FF6B00] font-black uppercase tracking-widest transition-colors p-2">
-                               <Paperclip className="h-3.5 w-3.5" />
+                      <div className="flex min-h-8 items-center px-4 py-1 bg-white/[0.02] border-t border-white/5 justify-between gap-2 flex-wrap">
+                         <div className="flex items-center gap-1 sm:gap-2">
+                            <button
+                              type="button"
+                              className="flex items-center gap-1.5 text-[8px] text-white/25 hover:text-[#FF6B00] font-black uppercase tracking-widest transition-colors px-1.5 py-1 rounded"
+                            >
+                               <Paperclip className="h-3 w-3" />
                                Attach
                             </button>
                             <button
                               type="button"
                               title="Dictation (browser-dependent)"
-                              className="flex items-center gap-2 text-[9px] text-white/20 hover:text-[#FF6B00] font-black uppercase tracking-widest transition-colors p-2"
+                              className="flex items-center gap-1.5 text-[8px] text-white/25 hover:text-[#FF6B00] font-black uppercase tracking-widest transition-colors px-1.5 py-1 rounded"
                             >
-                               <Mic className="h-3.5 w-3.5" />
+                               <Mic className="h-3 w-3" />
                                Mic
-                            </button>
-                            <button
-                              type="button"
-                              title="Open HTTPS preview URL in this workbench pane"
-                              onClick={() => {
-                                if (viewMode === "chat") setViewMode("split");
-                              }}
-                              className="flex items-center gap-2 text-[9px] text-white/20 hover:text-[#00E5FF] font-black uppercase tracking-widest transition-colors p-2"
-                            >
-                               <Globe className="h-3.5 w-3.5" />
-                               Browser
                             </button>
                             <button
                               type="button"
                               onClick={() => setMaxMode((m) => !m)}
                               className={cn(
-                                "flex items-center gap-2 text-[9px] font-black uppercase tracking-widest transition-colors p-2",
-                                maxMode ? "text-[#FF6B00]" : "text-white/20 hover:text-[#FF6B00]",
+                                "flex items-center gap-1.5 text-[8px] font-black uppercase tracking-widest transition-colors px-1.5 py-1 rounded",
+                                maxMode ? "text-[#FF6B00]" : "text-white/25 hover:text-[#FF6B00]",
                               )}
                             >
-                               <Zap className="h-3.5 w-3.5" />
-                               FAST MODE
+                               <Zap className="h-3 w-3" />
+                               Fast
                             </button>
-                            <div className="h-4 w-px bg-white/5 hidden sm:block" />
-                            <div
-                              className={cn(
-                                "flex items-center gap-2 text-[9px] font-black uppercase tracking-widest",
-                                catalog?.openrouter_chat_ready ? "text-emerald-500/90" : "text-amber-500/75",
-                              )}
-                            >
-                               <span
-                                 className={cn(
-                                   "h-2 w-2 rounded-full shrink-0",
-                                   catalog?.openrouter_chat_ready ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]" : "bg-amber-500",
-                                 )}
-                               />
-                               {catalog?.openrouter_chat_ready ? "CONNECTED" : "CHAT GATEWAY OFFLINE"}
+                         </div>
+
+                         <div className="flex items-center gap-2 ml-auto">
+                            <span className="text-[8px] font-bold uppercase tracking-widest text-white/20 hidden sm:inline">
+                              Enter — send
+                            </span>
+                            <div className="relative" ref={layoutMenuRef}>
+                              <button
+                                type="button"
+                                onClick={() => setLayoutMenuOpen((o) => !o)}
+                                className={cn(
+                                  "inline-flex items-center gap-1.5 h-7 pl-2.5 pr-2 rounded-md border text-[8px] font-black uppercase tracking-widest transition-colors",
+                                  layoutMenuOpen
+                                    ? "border-[#FF6B00]/50 bg-[#FF6B00]/10 text-[#FF6B00]"
+                                    : "border-white/10 bg-white/[0.04] text-white/70 hover:border-white/20 hover:text-white",
+                                )}
+                                aria-expanded={layoutMenuOpen}
+                                aria-haspopup="listbox"
+                              >
+                                {workbenchLayoutTriggerLabel(viewMode)}
+                                <ChevronDown className={cn("h-3 w-3 opacity-60", layoutMenuOpen && "rotate-180")} />
+                              </button>
+                              {layoutMenuOpen ? (
+                                <ul
+                                  className="absolute right-0 bottom-full z-[200] mb-1 w-48 rounded-md border border-white/10 bg-[#0a0a0a] py-1 shadow-2xl"
+                                  role="listbox"
+                                >
+                                  <li>
+                                    <button
+                                      type="button"
+                                      role="option"
+                                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-[9px] font-black uppercase tracking-widest text-white/80 hover:bg-white/5"
+                                      onClick={() => {
+                                        if (viewMode === "chat") setViewMode("split");
+                                        setLayoutMenuOpen(false);
+                                      }}
+                                    >
+                                      <Globe className="h-3.5 w-3.5 text-[#00E5FF]/80" />
+                                      Browser
+                                    </button>
+                                  </li>
+                                  <li>
+                                    <button
+                                      type="button"
+                                      role="option"
+                                      className={cn(
+                                        "flex w-full items-center gap-2 px-3 py-2 text-left text-[9px] font-black uppercase tracking-widest hover:bg-white/5",
+                                        viewMode === "split" ? "bg-[#FF6B00]/15 text-[#FF6B00]" : "text-white/80",
+                                      )}
+                                      onClick={() => {
+                                        setViewMode("split");
+                                        setLayoutMenuOpen(false);
+                                      }}
+                                    >
+                                      <Layout className="h-3.5 w-3.5 opacity-80" />
+                                      Split
+                                    </button>
+                                  </li>
+                                  <li>
+                                    <button
+                                      type="button"
+                                      role="option"
+                                      className={cn(
+                                        "flex w-full items-center gap-2 px-3 py-2 text-left text-[9px] font-black uppercase tracking-widest hover:bg-white/5",
+                                        viewMode === "preview" ? "bg-[#FF6B00]/15 text-[#FF6B00]" : "text-white/80",
+                                      )}
+                                      onClick={() => {
+                                        setViewMode("preview");
+                                        setLayoutMenuOpen(false);
+                                      }}
+                                    >
+                                      <Monitor className="h-3.5 w-3.5 opacity-80" />
+                                      Preview
+                                    </button>
+                                  </li>
+                                  <li>
+                                    <button
+                                      type="button"
+                                      role="option"
+                                      className={cn(
+                                        "flex w-full items-center gap-2 px-3 py-2 text-left text-[9px] font-black uppercase tracking-widest hover:bg-white/5",
+                                        viewMode === "war_room" ? "bg-[#FF6B00]/15 text-[#FF6B00]" : "text-white/80",
+                                      )}
+                                      onClick={() => {
+                                        setViewMode("war_room");
+                                        setLayoutMenuOpen(false);
+                                      }}
+                                    >
+                                      <Radar className="h-3.5 w-3.5 opacity-80" />
+                                      War room
+                                    </button>
+                                  </li>
+                                </ul>
+                              ) : null}
                             </div>
                          </div>
-
-                         <div className="flex items-center gap-4 ml-auto">
-                            <button
-                              type="submit"
-                              disabled={sending}
-                              className={cn(
-                                "flex items-center gap-3 px-6 sm:px-8 py-2 bg-[#FF6B00] text-black text-[10px] sm:text-[11px] font-black uppercase tracking-widest hover:bg-[#FF6B00]/90 transition-all rounded-lg shadow-lg hover:shadow-[#FF6B00]/20 disabled:opacity-50 disabled:pointer-events-none",
-                                sending && !reduceMotion && "shadow-[0_0_24px_rgba(255,107,0,0.45)] animate-pulse",
-                              )}
-                            >
-                               <Send className="h-4 w-4" />
-                               {primaryActionLabel(workbenchMode, sending)}
-                            </button>
-                         </div>
                       </div>
-
-                      {/* Split / Preview / War Room — moved from workbench header; chat-only = none selected or close pane */}
-                      <div className="flex flex-wrap items-center gap-2 px-6 py-2.5 bg-black/25 border-t border-white/5">
-                        <span className="text-[8px] font-black uppercase tracking-[0.2em] text-white/35 shrink-0">
-                          Workbench layout
-                        </span>
-                        <div className="flex items-center gap-1 bg-white/5 border border-white/10 rounded-lg p-1">
-                          {(
-                            [
-                              { id: "split" as const, icon: Layout, label: "Split" },
-                              { id: "preview" as const, icon: Monitor, label: "Preview" },
-                              { id: "war_room" as const, icon: Radar, label: "War Room" },
-                            ] as const
-                          ).map((mode) => (
-                            <button
-                              key={mode.id}
-                              type="button"
-                              onClick={() => setViewMode(mode.id)}
-                              className={cn(
-                                "flex items-center gap-2 px-3 py-1.5 rounded-md transition-all",
-                                viewMode === mode.id
-                                  ? "bg-[#FF6B00] text-black"
-                                  : "text-white/25 hover:text-white",
-                              )}
-                            >
-                              <mode.icon className="h-3 w-3 shrink-0" />
-                              <span className="text-[9px] font-black uppercase tracking-widest">
-                                {mode.label}
-                              </span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
+                      <button type="submit" className="sr-only" tabIndex={-1}>
+                        Send message
+                      </button>
                    </div>
                 </div>
              </form>
