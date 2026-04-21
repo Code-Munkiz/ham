@@ -9,9 +9,11 @@ export function CloudAgentNotConnected() {
     <div className="flex flex-col items-center justify-center min-h-[200px] px-6 py-10 border border-white/10 bg-black/40 text-center">
       <Radio className="h-10 w-10 text-[#00E5FF]/40 mb-4" aria-hidden />
       <p className="text-[11px] font-black uppercase tracking-[0.2em] text-[#00E5FF]/90 mb-2">Not connected</p>
-      <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest leading-relaxed max-w-sm">
-        No active Cloud Agent mission. Launch an agent from CI/API or set an agent id in Projects to hydrate
-        tracker, transcript, and artifacts.
+      <p className="text-[10px] font-bold text-white/50 uppercase tracking-widest leading-relaxed max-w-sm mb-1">
+        No active mission.
+      </p>
+      <p className="text-[9px] font-bold text-white/35 uppercase tracking-wider leading-relaxed max-w-sm">
+        Use Launch in the chat bar (Cloud uplink) or set an agent id under Projects to load tracker and transcript.
       </p>
     </div>
   );

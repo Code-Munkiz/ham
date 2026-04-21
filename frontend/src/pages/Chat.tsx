@@ -24,6 +24,7 @@ import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { ChatComposerStrip } from "@/components/chat/ChatComposerStrip";
 import type { WorkbenchMode, UplinkId } from "@/components/chat/ChatComposerStrip";
+import { CloudAgentLaunchModal } from "@/components/chat/CloudAgentLaunchModal";
 import { applyHamUiActions } from "@/lib/ham/applyUiActions";
 import {
   ensureProjectIdForWorkspaceRoot,
@@ -86,7 +87,7 @@ function saveRecentMissions(items: RecentMission[]) {
 function directivePlaceholder(mode: WorkbenchMode): string {
   if (mode === "ask") return "Ask HAM to inspect, explain, or answer…";
   if (mode === "plan") return "Plan scope, risks, and the safest path before execution…";
-  return "Delegate execution — mission directive or follow-up…";
+  return "Delegate execution — mission directive…";
 }
 
 function uplinkPipelineLabel(id: UplinkId): string {
@@ -239,6 +240,62 @@ export default function Chat() {
   const [projectsLoading, setProjectsLoading] = React.useState(false);
   const [warBlink, setWarBlink] = React.useState(true);
   const [reduceMotion, setReduceMotion] = React.useState(false);
+  const [cloudLaunchOpen, setCloudLaunchOpen] = React.useState(false);
+
+  /** Dedupe recent missions: same id → newest timestamp wins (single list order: newest first after push). */
+  const pushRecentMission = React.useCallback((id: string, label?: string) => {
+    const trimmed = id.trim();
+    if (!trimmed) return;
+    setRecentMissions((prev) => {
+      const filtered = prev.filter((m) => m.id !== trimmed);
+      const entry: RecentMission = { id: trimmed, t: Date.now(), ...(label ? { label } : {}) };
+      const next = [entry, ...filtered].slice(0, 24);
+      saveRecentMissions(next);
+      return next;
+    });
+  }, []);
+
+  const removeRecentMission = React.useCallback((id: string) => {
+    setRecentMissions((prev) => {
+      const next = prev.filter((m) => m.id !== id);
+      saveRecentMissions(next);
+      return next;
+    });
+  }, []);
+
+  /** SSOT for `activeCloudAgentId` without mutating recent list (typing in Projects field). */
+  const setActiveCloudAgentIdLive = React.useCallback((id: string | null) => {
+    const trimmed = id?.trim() || null;
+    setActiveCloudAgentId(trimmed);
+    try {
+      if (trimmed) localStorage.setItem(ACTIVE_CLOUD_AGENT_KEY, trimmed);
+      else localStorage.removeItem(ACTIVE_CLOUD_AGENT_KEY);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  /**
+   * Single activation path for an established mission id: state + localStorage + recent (dedupe, newest wins).
+   * Use for Launch modal, Projects “Use”, and committing the mission field (blur).
+   */
+  const activateCloudMission = React.useCallback(
+    (id: string | null, opts?: { label?: string }) => {
+      const trimmed = id?.trim() || null;
+      setActiveCloudAgentId(trimmed);
+      try {
+        if (trimmed) {
+          localStorage.setItem(ACTIVE_CLOUD_AGENT_KEY, trimmed);
+          pushRecentMission(trimmed, opts?.label);
+        } else {
+          localStorage.removeItem(ACTIVE_CLOUD_AGENT_KEY);
+        }
+      } catch {
+        /* ignore */
+      }
+    },
+    [pushRecentMission],
+  );
 
   React.useEffect(() => {
     const onDocMouseDown = (e: MouseEvent) => {
@@ -250,7 +307,7 @@ export default function Chat() {
   }, []);
 
   React.useEffect(() => {
-    setRecentMissions(loadRecentMissions());
+    let initialRecent = loadRecentMissions();
     try {
       const m = localStorage.getItem(MOUNT_STORAGE_KEY);
       if (m) {
@@ -261,24 +318,25 @@ export default function Chat() {
     } catch {
       /* ignore */
     }
+    let aid: string | null = null;
     try {
-      const aid = localStorage.getItem(ACTIVE_CLOUD_AGENT_KEY)?.trim();
-      setActiveCloudAgentId(aid || null);
+      aid = localStorage.getItem(ACTIVE_CLOUD_AGENT_KEY)?.trim() || null;
+      setActiveCloudAgentId(aid);
     } catch {
       /* ignore */
     }
+    if (aid && !initialRecent.some((m) => m.id === aid)) {
+      initialRecent = [{ id: aid, t: Date.now() }, ...initialRecent.filter((m) => m.id !== aid)].slice(0, 24);
+      saveRecentMissions(initialRecent);
+    }
+    setRecentMissions(initialRecent);
   }, []);
 
-  const persistActiveCloudAgentId = React.useCallback((id: string | null) => {
-    setActiveCloudAgentId(id);
-    try {
-      const t = id?.trim();
-      if (t) localStorage.setItem(ACTIVE_CLOUD_AGENT_KEY, t);
-      else localStorage.removeItem(ACTIVE_CLOUD_AGENT_KEY);
-    } catch {
-      /* ignore */
-    }
-  }, []);
+  const mountDefaultsForLaunch = React.useMemo(() => {
+    const r = mountRepo.trim();
+    if (!r) return undefined;
+    return { repository: r, ref: mountRef.trim() };
+  }, [mountRepo, mountRef]);
 
   React.useEffect(() => {
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -853,6 +911,7 @@ export default function Chat() {
                         uplinkId={uplinkId}
                         onUplinkId={setUplinkId}
                         toolsCount={selectedAgent.assignedTools?.length ?? 0}
+                        onOpenCloudAgentLaunch={() => setCloudLaunchOpen(true)}
                         catalog={catalog}
                         catalogLoading={catalogLoading}
                       />
@@ -1075,12 +1134,16 @@ export default function Chat() {
                   CLOUD_AGENT_ACTIVE_MISSION
                 </span>
                 <p className="text-[9px] text-white/25 mb-2 leading-relaxed">
-                  Paste a Cursor Cloud Agent id for the Cloud Agent uplink (transcript / tracker). Leave empty for a clear
-                  not-connected state. The Browser tab still works without an id.
+                  Active mission id for tracker / transcript. Leave empty for not connected / no active mission. You can also
+                  use Launch in the chat bar (Cloud uplink).
                 </p>
                 <input
                   value={activeCloudAgentId ?? ""}
-                  onChange={(e) => persistActiveCloudAgentId(e.target.value.trim() || null)}
+                  onChange={(e) => setActiveCloudAgentIdLive(e.target.value.trim() || null)}
+                  onBlur={(e) => {
+                    const v = e.target.value.trim();
+                    if (v) activateCloudMission(v);
+                  }}
                   placeholder="Cursor agent id…"
                   className="w-full bg-black/50 border border-white/10 px-3 py-2 text-[11px] text-white/90 font-mono outline-none focus:border-[#FF6B00]/40"
                 />
@@ -1115,24 +1178,26 @@ export default function Chat() {
                   <p className="text-[10px] text-white/25">No stored missions yet.</p>
                 ) : (
                   <ul className="space-y-2">
-                    {recentMissions.map((m) => (
-                      <li
-                        key={m.id}
-                        className="flex items-center justify-between gap-2 border border-white/10 px-3 py-2 text-[9px] text-white/50"
-                      >
-                        <span className="min-w-0 truncate">
-                          <span className="font-mono text-[#00E5FF]">{m.id}</span>
-                          {m.label ? ` · ${m.label}` : ""}
-                        </span>
-                        <button
-                          type="button"
-                          className="shrink-0 text-[8px] font-black uppercase tracking-wider text-[#FF6B00] hover:text-white"
-                          onClick={() => persistActiveCloudAgentId(m.id)}
+                    {[...recentMissions]
+                      .sort((a, b) => b.t - a.t)
+                      .map((m) => (
+                        <li
+                          key={m.id}
+                          className="flex items-center justify-between gap-2 border border-white/10 px-3 py-2 text-[9px] text-white/50"
                         >
-                          Use
-                        </button>
-                      </li>
-                    ))}
+                          <span className="min-w-0 truncate">
+                            <span className="font-mono text-[#00E5FF]">{m.id}</span>
+                            {m.label ? ` · ${m.label}` : ""}
+                          </span>
+                          <button
+                            type="button"
+                            className="shrink-0 text-[8px] font-black uppercase tracking-wider text-[#FF6B00] hover:text-white"
+                            onClick={() => activateCloudMission(m.id)}
+                          >
+                            Use
+                          </button>
+                        </li>
+                      ))}
                   </ul>
                 )}
               </div>
@@ -1140,6 +1205,15 @@ export default function Chat() {
           </div>
         </div>
       ) : null}
+
+      <CloudAgentLaunchModal
+        open={cloudLaunchOpen}
+        onClose={() => setCloudLaunchOpen(false)}
+        onActivateMission={(id, label) => activateCloudMission(id, { label })}
+        recentMissions={recentMissions}
+        onRemoveRecent={removeRecentMission}
+        mountDefaults={mountDefaultsForLaunch}
+      />
     </div>
   );
 }

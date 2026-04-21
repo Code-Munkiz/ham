@@ -8,6 +8,7 @@ import {
   Infinity,
   ListTree,
   Radio,
+  Rocket,
   Search,
   Sparkles,
   User,
@@ -62,7 +63,7 @@ const UPLINKS: {
     id: "cloud_agent",
     label: "Cloud Agent",
     short: "CLOUD",
-    hint: "Cursor Cloud Agents API (launch, status, conversation, follow-up)",
+    hint: "Cursor Cloud Agents API — launch, status, and conversation via Ham",
     icon: Radio,
   },
   {
@@ -99,6 +100,8 @@ export interface ChatComposerStripProps {
   uplinkId: UplinkId;
   onUplinkId: (id: UplinkId) => void;
   toolsCount: number;
+  /** When uplink is Cloud Agent, opens mission attach / launch modal. */
+  onOpenCloudAgentLaunch?: () => void;
   catalog: ModelCatalogPayload | null;
   catalogLoading: boolean;
 }
@@ -120,6 +123,7 @@ export function ChatComposerStrip({
   uplinkId,
   onUplinkId,
   toolsCount,
+  onOpenCloudAgentLaunch,
   catalog,
   catalogLoading,
 }: ChatComposerStripProps) {
@@ -493,11 +497,21 @@ export function ChatComposerStrip({
         )}
       </div>
 
-      {/* Tools */}
-      <div className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-white/10 bg-white/[0.02] text-white/35 shrink-0">
-        <Wrench className="h-3 w-3" />
-        <span className="text-[8px] font-black uppercase tracking-widest">{toolsCount} tools</span>
-      </div>
+      {uplinkId === "cloud_agent" && onOpenCloudAgentLaunch ? (
+        <button
+          type="button"
+          onClick={() => onOpenCloudAgentLaunch()}
+          className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-[#00E5FF]/35 bg-white/[0.04] text-[#00E5FF] shrink-0 hover:bg-[#00E5FF]/10 transition-colors"
+        >
+          <Rocket className="h-3 w-3" />
+          <span className="text-[8px] font-black uppercase tracking-widest">Launch</span>
+        </button>
+      ) : (
+        <div className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-white/10 bg-white/[0.02] text-white/35 shrink-0">
+          <Wrench className="h-3 w-3" />
+          <span className="text-[8px] font-black uppercase tracking-widest">{toolsCount} tools</span>
+        </div>
+      )}
     </div>
   );
 }

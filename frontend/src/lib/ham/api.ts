@@ -135,6 +135,51 @@ export async function fetchCursorAgentConversation(
   return res.json() as Promise<Record<string, unknown>>;
 }
 
+/** Body for Ham → Cursor `POST /v0/agents` (see `LaunchCloudAgentBody` on server). */
+export interface LaunchCursorAgentRequest {
+  prompt_text: string;
+  repository: string;
+  ref?: string | null;
+  model?: string;
+  auto_create_pr?: boolean;
+  branch_name?: string | null;
+}
+
+/** Turn FastAPI / proxy error text into a short UI string (single line, capped). */
+export function shortenHamApiErrorMessage(raw: string, maxLen = 120): string {
+  const oneLine = raw.replace(/\s+/g, " ").trim();
+  if (oneLine.length <= maxLen) return oneLine;
+  return `${oneLine.slice(0, maxLen - 1)}…`;
+}
+
+/** `POST /api/cursor/agents/launch` — Cursor Cloud Agent create; returns Cursor JSON (incl. `id` when successful). */
+export async function launchCursorAgent(
+  body: LaunchCursorAgentRequest,
+): Promise<Record<string, unknown>> {
+  const res = await fetch(apiUrl("/api/cursor/agents/launch"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      prompt_text: body.prompt_text.trim(),
+      repository: body.repository.trim(),
+      ref: body.ref?.trim() || undefined,
+      model: (body.model ?? "default").trim() || "default",
+      auto_create_pr: Boolean(body.auto_create_pr),
+      branch_name: body.branch_name?.trim() || undefined,
+    }),
+  });
+  if (!res.ok) {
+    const detail = (await readFastApiDetail(res)) ?? `HTTP ${res.status}`;
+    throw new Error(shortenHamApiErrorMessage(detail));
+  }
+  return res.json() as Promise<Record<string, unknown>>;
+}
+
+export function cloudAgentIdFromLaunchResponse(payload: Record<string, unknown>): string | null {
+  const id = payload.id;
+  return typeof id === "string" && id.trim() ? id.trim() : null;
+}
+
 /** Proxy `POST /v0/agents/{id}/followup`. */
 export async function postCursorAgentFollowup(
   agentId: string,
