@@ -1,4 +1,6 @@
 # Example Cloud Run env file. Copy to `.gcloud/ham-api-env.yaml` (gitignored) and edit.
+# Staging SOT: GCP project clarity-staging-488201, region us-central1, service ham-api
+# (see docs/DEPLOY_CLOUD_RUN.md). Do NOT put CURSOR_API_KEY here — use Secret Manager + --set-secrets.
 # Deploy: gcloud run deploy SERVICE --env-vars-file .gcloud/ham-api-env.yaml ...
 #
 # Use an env file (not --set-env-vars) so commas in HAM_CORS_ORIGINS are not split by gcloud.

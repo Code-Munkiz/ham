@@ -2,6 +2,8 @@
 
 The repo already includes CORS support (`HAM_CORS_ORIGINS`, `HAM_CORS_ORIGIN_REGEX`), an example API env file, and a verify script. **You** wire secrets and host-specific URLs in each provider.
 
+**Staging source of truth (GCP):** project **`clarity-staging-488201`**, region **`us-central1`**, Cloud Run service **`ham-api`**. Commands and examples in **`docs/DEPLOY_CLOUD_RUN.md`** use these defaults. Production should live in a separate GCP project when your org requires it.
+
 ## 1. Cloud Run (Ham API)
 
 1. **Build and push** the image (see `docs/DEPLOY_CLOUD_RUN.md`).
@@ -11,17 +13,18 @@ The repo already includes CORS support (`HAM_CORS_ORIGINS`, `HAM_CORS_ORIGIN_REG
    - Keep **`HAM_CORS_ORIGIN_REGEX`** if you use **Vercel preview** deployments (`*.vercel.app`); remove it only if you want a strict allow-list.
    - **Real chat (OpenRouter):** set **`HERMES_GATEWAY_MODE=openrouter`** and **`OPENROUTER_API_KEY`** (Secret Manager recommended on Cloud Run). Optional: **`DEFAULT_MODEL`** / **`HERMES_GATEWAY_MODEL`** (OpenRouter slug, e.g. `openai/gpt-4o-mini`). See **`docs/HERMES_GATEWAY_CONTRACT.md`**.
    - **Hermes HTTP gateway (e.g. private GCE VM):** **`HERMES_GATEWAY_MODE=http`**, **`HERMES_GATEWAY_BASE_URL`** (internal IP/DNS + port, no `/v1`), **`HERMES_GATEWAY_MODEL`**, and **`HERMES_GATEWAY_API_KEY`** via **Secret Manager**. Networking: **Direct VPC egress** preferred; **Serverless VPC Access connector** as fallback — see **`docs/DEPLOY_CLOUD_RUN.md`** (“Private Hermes on GCE”).
-3. Deploy with **`--env-vars-file`** (not `--set-env-vars` for comma-separated lists).
+3. Deploy with **`--env-vars-file`** (not `--set-env-vars` for comma-separated lists). For **Cursor Cloud Agents**, also pass **`--set-secrets=CURSOR_API_KEY=ham-cursor-api-key:latest`** after creating the secret in **Secret Manager** (see **`docs/DEPLOY_CLOUD_RUN.md`** § “Cursor Cloud API key”).
    - **Secrets from `.env` (recommended):** merge local `.env` into your template without committing keys:
      ```bash
      ENV_FILE=$(python scripts/render_cloud_run_env.py)
-     gcloud run deploy ham-api-staging \
-       --image us-west1-docker.pkg.dev/PROJECT_ID/ham/ham-api:staging \
-       --region us-west1 --platform managed --allow-unauthenticated \
-       --env-vars-file "$ENV_FILE" --project PROJECT_ID
+     gcloud run deploy ham-api \
+       --image us-central1-docker.pkg.dev/clarity-staging-488201/ham/ham-api:staging \
+       --region us-central1 --platform managed --allow-unauthenticated \
+       --env-vars-file "$ENV_FILE" --project clarity-staging-488201 \
+       --set-secrets=CURSOR_API_KEY=ham-cursor-api-key:latest
      rm -f "$ENV_FILE"
      ```
-   - Or edit **`.gcloud/ham-api-env.yaml`** directly (gitignored) and use that path — do **not** put `OPENROUTER_API_KEY` in tracked files.
+   - Or edit **`.gcloud/ham-api-env.yaml`** directly (gitignored) and use that path — do **not** put `OPENROUTER_API_KEY` or `CURSOR_API_KEY` in tracked files.
 4. Note the **service URL** (no trailing slash), e.g. `https://ham-api-….run.app`.
 
    **Dashboard project registry:** `POST /api/projects` and `GET /api/projects/{id}/agents` use a file-backed store on the API container (`~/.ham/projects.json`). With **Cloud Run scale-to-zero and multiple instances**, registration from the browser may land on instance A while the next request hits instance B, which returns **PROJECT_NOT_FOUND** until the project exists there. Mitigations: set **minimum instances = 1** for the API service, or accept that Agent Builder may need a **Retry** after deploy; local/single-process APIs do not see this.

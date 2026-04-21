@@ -52,6 +52,7 @@ Shipped muscle today centers on **Bridge + Droid executor** (`src/tools/droid_ex
 
 ## Deploy (API on GCP)
 
+- **Staging SOT:** GCP project **`clarity-staging-488201`**, region **`us-central1`**, Cloud Run **`ham-api`** — see `docs/DEPLOY_CLOUD_RUN.md` (Cursor key via **Secret Manager** `ham-cursor-api-key` → env `CURSOR_API_KEY`).
 - `Dockerfile` — Cloud Run–style image (`uvicorn src.api.server:app`, `PORT` aware)
 - `docs/DEPLOY_CLOUD_RUN.md` — Artifact Registry + `gcloud builds submit` + `gcloud run deploy` + env vars + **private Hermes on GCE** (Direct VPC egress preferred, Serverless VPC connector fallback)
 - `docs/DEPLOY_HANDOFF.md` — Vercel + Cloud Run checklist (what to set in each host)

@@ -4,32 +4,45 @@ This repo ships a **`Dockerfile`** that runs **`uvicorn src.api.server:app`**. T
 
 **End-to-end checklist (Vercel + GCP):** [`docs/DEPLOY_HANDOFF.md`](DEPLOY_HANDOFF.md). After deploy, run **`scripts/verify_ham_api_deploy.sh`** with your API URL and the **exact** Vercel `Origin` you use in the browser.
 
+## Source of truth: Clarity Staging (team GCP)
+
+**Staging** Ham API deployments use this GCP project (console name **Clarity-Staging**):
+
+| Setting | Value |
+|--------|--------|
+| **Project ID** | `clarity-staging-488201` |
+| **Region** | `us-central1` |
+| **Artifact Registry repo** | `ham` (Docker) |
+| **Cloud Run service** | `ham-api` |
+
+Use a **different** GCP project for production when your org splits prod/staging; this repo documents **staging** IDs only.
+
 ## What you do in GCP (not automatable from this repo)
 
-1. Pick or create a **GCP project** (e.g. staging).
+1. Confirm you are in the right project: **`gcloud config set project clarity-staging-488201`** (or another project for a one-off).
 2. Enable billing if required.
 3. Enable APIs (Console or `gcloud`):
    - **Cloud Run Admin API**
    - **Artifact Registry API**
    - **Cloud Build API** (if you use `gcloud builds submit`)
-4. Choose a **region** (e.g. `us-central1`).
-5. Create an **Artifact Registry** Docker repository (one-time), e.g. `ham`.
-6. **Deploy** the image and set **environment variables** / secrets (see below).
-7. Note the **service URL** (e.g. `https://ham-api-staging-xxxxx-uc.a.run.app`) for **`VITE_HAM_API_BASE`** on Vercel.
+   - **Secret Manager API** (for `CURSOR_API_KEY` and other secrets)
+4. Create an **Artifact Registry** Docker repository (one-time), e.g. `ham`.
+5. **Deploy** the image and set **environment variables** / secrets (see below).
+6. Note the **service URL** (e.g. `https://ham-api-….run.app`) for **`VITE_HAM_API_BASE`** on Vercel.
 
 IAM: start with **allow unauthenticated invoke** for a quick staging smoke test, or use **IAM** + **identity tokens** / API keys later.
 
 ## One-time: Artifact Registry
 
-Replace `PROJECT_ID`, `REGION`, and repo name `ham` as needed.
+Defaults below match **Clarity Staging**. Substitute `PROJECT_ID` / `REGION` only for another environment.
 
 ```bash
-gcloud config set project PROJECT_ID
-gcloud services enable run.googleapis.com artifactregistry.googleapis.com cloudbuild.googleapis.com
+gcloud config set project clarity-staging-488201
+gcloud services enable run.googleapis.com artifactregistry.googleapis.com cloudbuild.googleapis.com secretmanager.googleapis.com
 
 gcloud artifacts repositories create ham \
   --repository-format=docker \
-  --location=REGION \
+  --location=us-central1 \
   --description="Ham API images"
 ```
 
@@ -38,17 +51,47 @@ gcloud artifacts repositories create ham \
 From the **repository root** (where this `Dockerfile` lives):
 
 ```bash
-export PROJECT_ID=your-project-id
+export PROJECT_ID=clarity-staging-488201
 export REGION=us-central1
 export IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/ham/ham-api:staging"
 
-gcloud builds submit --tag "${IMAGE}" .
+gcloud builds submit --tag "${IMAGE}" . --project="${PROJECT_ID}"
 ```
+
+## Cursor Cloud API key (Secret Manager)
+
+**Do not** put the Cursor API key in `ham-api-env.yaml` or other tracked files. On Cloud Run, inject **`CURSOR_API_KEY`** from Secret Manager. The app reads it from the environment (`get_effective_cursor_api_key`); the dashboard “save key” file is optional and is not durable on ephemeral containers without a volume.
+
+1. **Create** the secret once, or **add a version** to rotate (use one or the other):
+
+   ```bash
+   export PROJECT_ID=clarity-staging-488201
+   # First time only (fails if the secret id already exists):
+   printf '%s' "$CURSOR_API_KEY" | gcloud secrets create ham-cursor-api-key --data-file=- --project="${PROJECT_ID}" --replication-policy=automatic
+   # Rotate / update (when the secret already exists):
+   printf '%s' "$CURSOR_API_KEY" | gcloud secrets versions add ham-cursor-api-key --data-file=- --project="${PROJECT_ID}"
+   ```
+
+2. **Grant** the Cloud Run runtime service account access (replace **`PROJECT_NUMBER`** with `gcloud projects describe clarity-staging-488201 --format='value(projectNumber)'`):
+
+   ```bash
+   gcloud secrets add-iam-policy-binding ham-cursor-api-key \
+     --project=clarity-staging-488201 \
+     --member="serviceAccount:PROJECT_NUMBER-compute@developer.gserviceaccount.com" \
+     --role="roles/secretmanager.secretAccessor"
+   ```
+
+   If the service uses a **custom** service account, bind that identity instead.
+
+3. **Deploy** with **`--set-secrets=CURSOR_API_KEY=ham-cursor-api-key:latest`** (see below) in addition to **`--env-vars-file`**.
 
 ## Deploy to Cloud Run
 
 ```bash
-export SERVICE=ham-api-staging
+export PROJECT_ID=clarity-staging-488201
+export REGION=us-central1
+export SERVICE=ham-api
+export IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/ham/ham-api:staging"
 
 # Prefer an env YAML file: commas in HAM_CORS_ORIGINS break `--set-env-vars` parsing.
 # Copy `docs/examples/ham-api-cloud-run-env.yaml` to `.gcloud/ham-api-env.yaml` (gitignored) and edit.
@@ -58,7 +101,9 @@ gcloud run deploy "${SERVICE}" \
   --region "${REGION}" \
   --platform managed \
   --allow-unauthenticated \
-  --env-vars-file .gcloud/ham-api-env.yaml
+  --project "${PROJECT_ID}" \
+  --env-vars-file .gcloud/ham-api-env.yaml \
+  --set-secrets=CURSOR_API_KEY=ham-cursor-api-key:latest
 ```
 
 Add more env vars as needed, e.g. **`HERMES_GATEWAY_MODE=http`**, **`HERMES_GATEWAY_BASE_URL`**, **`HERMES_GATEWAY_API_KEY`**, **`OPENROUTER_API_KEY`** (use **Secret Manager** for secrets in real deployments).
