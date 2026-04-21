@@ -8,11 +8,23 @@ import { getDefaultWarRoomTab, getWarRoomTabs, type WarRoomTabId } from "./uplin
 export interface ElizaOsPanelProps {
   embedUrl: string;
   onEmbedUrlChange: (v: string) => void;
+  requestedTabId?: WarRoomTabId;
+  requestedTabNonce?: number;
 }
 
-export function ElizaOsPanel({ embedUrl, onEmbedUrlChange }: ElizaOsPanelProps) {
+export function ElizaOsPanel({
+  embedUrl,
+  onEmbedUrlChange,
+  requestedTabId,
+  requestedTabNonce,
+}: ElizaOsPanelProps) {
   const [tabId, setTabId] = React.useState<WarRoomTabId>(() => getDefaultWarRoomTab("eliza_os"));
   const tabs = getWarRoomTabs("eliza_os");
+
+  React.useEffect(() => {
+    if (!requestedTabId || !tabs.some((t) => t.id === requestedTabId)) return;
+    setTabId(requestedTabId);
+  }, [requestedTabId, requestedTabNonce, tabs]);
 
   return (
     <div className="flex flex-col flex-1 min-h-0">

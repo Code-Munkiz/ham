@@ -8,11 +8,23 @@ import { getDefaultWarRoomTab, getWarRoomTabs, type FactoryAiTabId, type WarRoom
 export interface FactoryAIPanelProps {
   embedUrl: string;
   onEmbedUrlChange: (v: string) => void;
+  requestedTabId?: WarRoomTabId;
+  requestedTabNonce?: number;
 }
 
-export function FactoryAIPanel({ embedUrl, onEmbedUrlChange }: FactoryAIPanelProps) {
+export function FactoryAIPanel({
+  embedUrl,
+  onEmbedUrlChange,
+  requestedTabId,
+  requestedTabNonce,
+}: FactoryAIPanelProps) {
   const [tabId, setTabId] = React.useState<WarRoomTabId>(() => getDefaultWarRoomTab("factory_ai"));
   const tabs = getWarRoomTabs("factory_ai");
+
+  React.useEffect(() => {
+    if (!requestedTabId || !tabs.some((t) => t.id === requestedTabId)) return;
+    setTabId(requestedTabId);
+  }, [requestedTabId, requestedTabNonce, tabs]);
 
   return (
     <div className="flex flex-col flex-1 min-h-0">

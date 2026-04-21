@@ -42,6 +42,7 @@ import { useWorkspace } from "@/lib/ham/WorkspaceContext";
 import { ExecutionSurfaceChrome } from "@/components/war-room/ExecutionSurfaceChrome";
 import { ResizableWorkbenchSplit } from "@/components/war-room/ResizableWorkbenchSplit";
 import { WarRoomPane } from "@/components/war-room/WarRoomPane";
+import type { WarRoomTabId } from "@/components/war-room/uplinkConfig";
 
 type ChatRow = {
   id: string;
@@ -233,6 +234,8 @@ export default function Chat() {
   const [mountRepo, setMountRepo] = React.useState("");
   const [mountRef, setMountRef] = React.useState("");
   const [paneEmbedUrl, setPaneEmbedUrl] = React.useState("");
+  const [requestedTabId, setRequestedTabId] = React.useState<WarRoomTabId | undefined>(undefined);
+  const [requestedTabNonce, setRequestedTabNonce] = React.useState(0);
   /** Cursor Cloud Agent id for War Room / Cloud Agent uplink (proxied via Ham API). */
   const [activeCloudAgentId, setActiveCloudAgentId] = React.useState<string | null>(null);
   const [recentMissions, setRecentMissions] = React.useState<RecentMission[]>([]);
@@ -711,6 +714,8 @@ export default function Chat() {
                 activeCloudAgentId={activeCloudAgentId}
                 embedUrl={paneEmbedUrl}
                 onEmbedUrlChange={setPaneEmbedUrl}
+                requestedTabId={requestedTabId}
+                requestedTabNonce={requestedTabNonce}
               />
             </ExecutionSurfaceChrome>
           ) : (
@@ -729,6 +734,8 @@ export default function Chat() {
                     activeCloudAgentId={activeCloudAgentId}
                     embedUrl={paneEmbedUrl}
                     onEmbedUrlChange={setPaneEmbedUrl}
+                    requestedTabId={requestedTabId}
+                    requestedTabNonce={requestedTabNonce}
                   />
                 </ExecutionSurfaceChrome>
               }
@@ -996,7 +1003,9 @@ export default function Chat() {
                                       role="option"
                                       className="flex w-full items-center gap-2 px-3 py-2 text-left text-[9px] font-black uppercase tracking-widest text-white/80 hover:bg-white/5"
                                       onClick={() => {
-                                        if (viewMode === "chat") setViewMode("split");
+                                        setViewMode("split");
+                                        setRequestedTabId("browser");
+                                        setRequestedTabNonce((n) => n + 1);
                                         setLayoutMenuOpen(false);
                                       }}
                                     >

@@ -12,9 +12,17 @@ export interface CloudAgentPanelProps {
   activeCloudAgentId: string | null;
   embedUrl: string;
   onEmbedUrlChange: (v: string) => void;
+  requestedTabId?: WarRoomTabId;
+  requestedTabNonce?: number;
 }
 
-export function CloudAgentPanel({ activeCloudAgentId, embedUrl, onEmbedUrlChange }: CloudAgentPanelProps) {
+export function CloudAgentPanel({
+  activeCloudAgentId,
+  embedUrl,
+  onEmbedUrlChange,
+  requestedTabId,
+  requestedTabNonce,
+}: CloudAgentPanelProps) {
   const [tabId, setTabId] = React.useState<WarRoomTabId>(() => getDefaultWarRoomTab("cloud_agent"));
   const tabs = getWarRoomTabs("cloud_agent");
 
@@ -28,6 +36,11 @@ export function CloudAgentPanel({ activeCloudAgentId, embedUrl, onEmbedUrlChange
   React.useEffect(() => {
     setErr(null);
   }, [tabId, activeCloudAgentId]);
+
+  React.useEffect(() => {
+    if (!requestedTabId || !tabs.some((t) => t.id === requestedTabId)) return;
+    setTabId(requestedTabId);
+  }, [requestedTabId, requestedTabNonce, tabs]);
 
   React.useEffect(() => {
     if (!hasAgent || tabId !== "transcript") {
