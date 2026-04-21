@@ -21,6 +21,7 @@ from src.ham.chat_operator import (
     process_operator_turn,
 )
 from src.ham.ui_actions import split_assistant_ui_actions, ui_actions_system_instructions
+from src.ham.workbench_view_intent import augment_workbench_view_actions
 from src.integrations.nous_gateway_client import (
     GatewayCallError,
     complete_chat_turn,
@@ -388,6 +389,16 @@ async def post_chat(
         if body.enable_ui_actions
         else (assistant_raw, [])
     )
+    last_user_text = (
+        body.messages[-1].content
+        if body.messages and body.messages[-1].role == "user"
+        else ""
+    )
+    actions = augment_workbench_view_actions(
+        last_user_text,
+        actions,
+        enable_ui_actions=body.enable_ui_actions,
+    )
     store.append_turns(sid, [ChatTurn(role="assistant", content=assistant_visible)])
     return ChatResponse(
         session_id=sid,
@@ -465,6 +476,16 @@ def post_chat_stream(
             split_assistant_ui_actions(assistant_raw)
             if body.enable_ui_actions
             else (assistant_raw, [])
+        )
+        last_user_text = (
+            body.messages[-1].content
+            if body.messages and body.messages[-1].role == "user"
+            else ""
+        )
+        actions = augment_workbench_view_actions(
+            last_user_text,
+            actions,
+            enable_ui_actions=body.enable_ui_actions,
         )
         try:
             store.append_turns(sid, [ChatTurn(role="assistant", content=assistant_visible)])
