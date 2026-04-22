@@ -38,6 +38,8 @@ export function CloudAgentLaunchModal({
   const [advancedOpen, setAdvancedOpen] = React.useState(false);
   const [launchBusy, setLaunchBusy] = React.useState(false);
   const [launchErr, setLaunchErr] = React.useState<string | null>(null);
+  /** Invalid attach (e.g. user previously pasted a repo URL as an "agent id"). */
+  const [attachErr, setAttachErr] = React.useState<string | null>(null);
 
   const sortedRecent = React.useMemo(
     () => [...recentMissions].sort((a, b) => b.t - a.t),
@@ -47,6 +49,7 @@ export function CloudAgentLaunchModal({
   React.useEffect(() => {
     if (!open) return;
     setLaunchErr(null);
+    setAttachErr(null);
     setManualId("");
     setPromptText("");
     setRepository(mountDefaults?.repository?.trim() ?? "");
@@ -66,10 +69,26 @@ export function CloudAgentLaunchModal({
     return () => document.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
+  const attachReasonIfInvalid = (raw: string): string | null => {
+    const t = raw.trim();
+    if (!t) return "Empty id.";
+    if (/^https?:\/\//i.test(t)) {
+      return "That is a URL, not a Cursor agent id. Use Start new mission with the repo URL, or paste an id like bc_…";
+    }
+    if (/\bgithub\.com\b/i.test(t) && !t.startsWith("bc_")) {
+      return "That looks like a GitHub path, not an agent id. Remove this row or launch a new mission below with the repository field.";
+    }
+    return null;
+  };
+
   const attach = (id: string) => {
-    const t = id.trim();
-    if (!t) return;
-    onActivateMission(t);
+    const why = attachReasonIfInvalid(id);
+    if (why) {
+      setAttachErr(why);
+      return;
+    }
+    setAttachErr(null);
+    onActivateMission(id.trim());
     onClose();
   };
 
@@ -147,16 +166,34 @@ export function CloudAgentLaunchModal({
         <div className="p-4 space-y-6">
           <section className="space-y-2">
             <div className="text-[9px] font-black text-white/30 uppercase tracking-widest">Attach existing</div>
+            <p className="text-[9px] text-white/35 leading-snug">
+              Re-attach a past <span className="text-white/55">Cursor Cloud Agent id</span> (usually <span className="font-mono text-white/50">bc_…</span>). To
+              target a GitHub repo, use <span className="text-white/55">Start new mission</span> — not this list.
+            </p>
+            {attachErr ? (
+              <p className="text-[10px] font-bold text-amber-500/90 uppercase tracking-wide whitespace-pre-wrap">
+                {attachErr}
+              </p>
+            ) : null}
             {sortedRecent.length === 0 ? (
               <p className="text-[10px] text-white/35">No saved mission ids yet — start a new mission below.</p>
             ) : (
               <ul className="space-y-2 max-h-40 overflow-y-auto">
                 {sortedRecent.map((m) => (
                   <li
-                    key={m.id}
+                    key={`${m.id}-${m.t}`}
                     className="flex items-center justify-between gap-2 border border-white/10 rounded-lg px-3 py-2"
                   >
-                    <span className="min-w-0 text-[10px] font-mono text-[#00E5FF] truncate">{m.id}</span>
+                    <span className="min-w-0 flex flex-col gap-0.5">
+                      <span className="text-[10px] font-mono text-[#00E5FF] truncate" title={m.id}>
+                        {m.id}
+                      </span>
+                      {m.label ? (
+                        <span className="text-[9px] text-white/40 truncate" title={m.label}>
+                          {m.label}
+                        </span>
+                      ) : null}
+                    </span>
                     <span className="flex items-center gap-2 shrink-0">
                       <button
                         type="button"
