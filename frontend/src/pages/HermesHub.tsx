@@ -6,6 +6,7 @@ import * as React from "react";
 import { Link } from "react-router-dom";
 import {
   AlertTriangle,
+  AppWindow,
   ArrowRight,
   BookOpen,
   Info,
@@ -14,12 +15,20 @@ import {
   Shield,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { fetchHermesHubSnapshot, type HermesHubSnapshot } from "@/lib/ham/api";
+import {
+  fetchBrowserRuntimePolicy,
+  fetchHermesHubSnapshot,
+  type BrowserRuntimePolicySnapshot,
+  type HermesHubSnapshot,
+} from "@/lib/ham/api";
 
 export default function HermesHub() {
   const [snap, setSnap] = React.useState<HermesHubSnapshot | null>(null);
   const [err, setErr] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
+  const [browserPolicy, setBrowserPolicy] = React.useState<BrowserRuntimePolicySnapshot | null>(null);
+  const [browserPolicyErr, setBrowserPolicyErr] = React.useState<string | null>(null);
+  const [browserPolicyLoading, setBrowserPolicyLoading] = React.useState(true);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -43,6 +52,30 @@ export default function HermesHub() {
     };
   }, []);
 
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setBrowserPolicyLoading(true);
+      setBrowserPolicyErr(null);
+      try {
+        const p = await fetchBrowserRuntimePolicy();
+        if (!cancelled) setBrowserPolicy(p);
+      } catch (e) {
+        if (!cancelled) {
+          setBrowserPolicy(null);
+          setBrowserPolicyErr(
+            e instanceof Error ? e.message : "Failed to load browser policy",
+          );
+        }
+      } finally {
+        if (!cancelled) setBrowserPolicyLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const caps = snap?.skills_capabilities;
 
   return (
@@ -54,11 +87,15 @@ export default function HermesHub() {
             <h1 className="text-2xl font-black tracking-tight text-white">Hermes</h1>
           </div>
           <p className="text-sm text-white/55 leading-relaxed max-w-2xl">
-            HAM-native view of Hermes-related runtime signals: how dashboard chat reaches an upstream
-            model, and what this API host can do with{" "}
+            HAM-native view of Hermes-related runtime signals: how dashboard chat uses a
+            Hermes-compatible upstream from gateway configuration, in-browser live sessions use HAM
+            Playwright and this host&apos;s{" "}
+            <span className="text-white/75 font-semibold">browser policy</span> (see below), and
+            what the API can do with{" "}
             <span className="text-white/75 font-semibold">Hermes runtime skills</span> (catalog /
-            install). This is not a Hermes CLI mirror and does not list agents or workflows — those
-            surfaces are not in this repo yet.
+            install). This is not a Hermes CLI mirror, there is no separate Hermes terminal API in
+            HAM today, and it does not list agents or workflows — those surfaces are not in this
+            repo yet.
           </p>
         </header>
 
@@ -116,6 +153,11 @@ export default function HermesHub() {
               </div>
               <p className="text-sm text-white/70 leading-relaxed">{snap.dashboard_chat.summary}</p>
               <p className="text-[11px] text-white/45">
+                <span className="text-white/55">
+                  There is no dedicated Hermes terminal/TTY API in this codebase — shell or tool
+                  access goes through the configured upstream in HTTP mode, or other HAM entry
+                  points (e.g. Droid) when applicable.
+                </span>{" "}
                 Composer detail and model rows:{" "}
                 <Link
                   to="/chat"
@@ -125,6 +167,117 @@ export default function HermesHub() {
                 </Link>{" "}
                 uses the API; raw catalog: <span className="font-mono">GET /api/models</span>.
               </p>
+            </section>
+
+            <section className="rounded-xl border border-white/10 bg-white/[0.03] p-6 space-y-4">
+              <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-white/45">
+                <AppWindow className="h-4 w-4 text-[#FF6B00]" />
+                Browser runtime readiness
+              </div>
+              <p className="text-sm text-white/70 leading-relaxed">
+                In HAM, the live browser is Playwright on this API host, enforced by{" "}
+                <span className="text-white/85 font-semibold">browser policy</span> — not a
+                separate Hermes-managed browser product. The same policy applies when you use the
+                browser pane from{" "}
+                <Link to="/chat" className="text-[#FF6B00] font-semibold hover:underline">
+                  Chat
+                </Link>{" "}
+                in <span className="text-white/85">War Room</span> mode.
+              </p>
+              {browserPolicyLoading && (
+                <p className="text-xs font-bold uppercase tracking-widest text-white/40">Loading…</p>
+              )}
+              {browserPolicyErr && (
+                <div
+                  role="alert"
+                  className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-100"
+                >
+                  {browserPolicyErr}
+                </div>
+              )}
+              {browserPolicy && !browserPolicyLoading && (
+                <>
+                  <div className="flex flex-wrap gap-2 items-center">
+                    <span className="text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded border border-white/15 bg-white/[0.05]">
+                      {browserPolicy.runtime_host}
+                    </span>
+                    {browserPolicy.streaming_supported ? (
+                      <span className="text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded border border-emerald-500/40 text-emerald-200/90">
+                        Streaming: on
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded border border-white/20 text-white/50">
+                        Streaming: off
+                      </span>
+                    )}
+                    <span className="text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded border border-white/15">
+                      WebRTC {browserPolicy.webrtc_enabled ? "enabled" : "disabled"}
+                    </span>
+                    {browserPolicy.allow_private_network ? (
+                      <span className="text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded border border-amber-500/40 text-amber-200/90">
+                        Private network: allowed
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded border border-white/15">
+                        Private network: blocked
+                      </span>
+                    )}
+                    <span className="text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded border border-white/15">
+                      TTL {browserPolicy.session_ttl_seconds}s
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-white/50 font-mono break-all">
+                    <span className="text-white/40 not-italic">Policy endpoint </span>GET{" "}
+                    /api/browser/policy
+                  </p>
+                  <div className="grid gap-2 md:grid-cols-2 text-[11px] text-white/60">
+                    <div>
+                      <div className="text-[10px] font-black uppercase tracking-widest text-white/40 mb-1">
+                        Allowed domains
+                      </div>
+                      {browserPolicy.allowed_domains.length === 0 ? (
+                        <p className="text-white/45">
+                          (no allowlist; blocklist and private-network rules still apply)
+                        </p>
+                      ) : (
+                        <ul className="list-disc pl-4 space-y-0.5">
+                          {browserPolicy.allowed_domains.slice(0, 6).map((d) => (
+                            <li key={d} className="font-mono break-all">
+                              {d}
+                            </li>
+                          ))}
+                          {browserPolicy.allowed_domains.length > 6 && (
+                            <li className="list-none -ml-4 text-white/45">
+                              +{browserPolicy.allowed_domains.length - 6} more
+                            </li>
+                          )}
+                        </ul>
+                      )}
+                    </div>
+                    <div>
+                      <div className="text-[10px] font-black uppercase tracking-widest text-white/40 mb-1">
+                        Blocked domains
+                      </div>
+                      {browserPolicy.blocked_domains.length === 0 ? (
+                        <p className="text-white/45">(none)</p>
+                      ) : (
+                        <ul className="list-disc pl-4 space-y-0.5">
+                          {browserPolicy.blocked_domains.slice(0, 6).map((d) => (
+                            <li key={d} className="font-mono break-all">
+                              {d}
+                            </li>
+                          ))}
+                          {browserPolicy.blocked_domains.length > 6 && (
+                            <li className="list-none -ml-4 text-white/45">
+                              +{browserPolicy.blocked_domains.length - 6} more
+                            </li>
+                          )}
+                        </ul>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
             </section>
 
             <section className="rounded-xl border border-white/10 bg-white/[0.03] p-6 space-y-4">

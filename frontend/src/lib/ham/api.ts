@@ -121,6 +121,31 @@ export async function fetchHermesHubSnapshot(): Promise<HermesHubSnapshot> {
   return res.json() as Promise<HermesHubSnapshot>;
 }
 
+/** GET /api/browser/policy — HAM Playwright policy snapshot (not a remote Hermes service). */
+export interface BrowserRuntimePolicySnapshot {
+  runtime_host: string;
+  session_ownership: string;
+  screenshot_transport: string;
+  streaming_supported: boolean;
+  cursor_embedding_supported: boolean;
+  supported_live_transports: string[];
+  webrtc_enabled: boolean;
+  allow_private_network: boolean;
+  allowed_domains: string[];
+  blocked_domains: string[];
+  session_ttl_seconds: number;
+  max_actions_per_minute: number;
+  max_screenshot_bytes: number;
+}
+
+export async function fetchBrowserRuntimePolicy(): Promise<BrowserRuntimePolicySnapshot> {
+  const res = await hamApiFetch("/api/browser/policy");
+  if (!res.ok) {
+    throw new Error(`browser policy: HTTP ${res.status}`);
+  }
+  return res.json() as Promise<BrowserRuntimePolicySnapshot>;
+}
+
 export async function fetchContextEngine(): Promise<ContextEnginePayload> {
   const res = await hamApiFetch("/api/context-engine");
   if (!res.ok) {
