@@ -9,6 +9,7 @@ import {
   SlidersHorizontal,
   Sparkles,
   UserCog,
+  Orbit,
 } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -18,6 +19,7 @@ const primaryNav = [
   { icon: Activity, label: "Activity", path: "/overview" },
   { icon: Users, label: "Droids", path: "/droids" },
   { icon: UserCog, label: "Agents", path: "/agents" },
+  { icon: Orbit, label: "Hermes", path: "/hermes" },
   { icon: Sparkles, label: "Skills", path: "/skills" },
 ];
 

@@ -50,7 +50,7 @@ def test_process_list_projects(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
         project_store=store,
         default_project_id=None,
         operator_payload=None,
-        authorization=None,
+        ham_operator_authorization=None,
     )
     assert op is not None and op.handled and op.ok
     assert op.data.get("count") == 1
@@ -69,7 +69,7 @@ def test_inspect_project_inaccessible_root(tmp_path: Path) -> None:
         project_store=store,
         default_project_id=None,
         operator_payload=None,
-        authorization=None,
+        ham_operator_authorization=None,
     )
     assert op is not None and op.handled
     assert not op.ok
@@ -109,7 +109,7 @@ def test_update_agents_preview_roundtrip(tmp_path: Path, monkeypatch: pytest.Mon
         project_store=store,
         default_project_id=rec.id,
         operator_payload=None,
-        authorization=None,
+        ham_operator_authorization=None,
     )
     assert op is not None and op.handled and op.ok
     assert op.pending_apply is not None
@@ -160,7 +160,7 @@ def test_explicit_apply_requires_token(tmp_path: Path, monkeypatch: pytest.Monke
             project_store=store,
             default_project_id=None,
             operator_payload=payload,
-            authorization=None,
+            ham_operator_authorization=None,
         )
     assert ei.value.status_code == 403
 
@@ -170,7 +170,7 @@ def test_launch_blocked_without_token(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("HAM_RUN_LAUNCH_TOKEN", raising=False)
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-v1-hamtests-only-fake-key-000000000")
     store_path = tmp_path / "reg.json"
     store = ProjectStore(store_path=store_path)
     rec = store.make_record(name="p", root=str(tmp_path), description="")
@@ -180,7 +180,7 @@ def test_launch_blocked_without_token(
         project_store=store,
         default_project_id=rec.id,
         operator_payload=None,
-        authorization=None,
+        ham_operator_authorization=None,
     )
     assert op is not None and op.handled
     assert not op.ok

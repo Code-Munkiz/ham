@@ -110,6 +110,22 @@ Add more env vars as needed, e.g. **`HERMES_GATEWAY_MODE=http`**, **`HERMES_GATE
 
 After deploy, Cloud Run prints the **service URL**.
 
+## OpenRouter key (`OPENROUTER_API_KEY`)
+
+- **Mount via Secret Manager** as **`OPENROUTER_API_KEY`** (see **`--set-secrets`** / **`--update-secrets`** above). The value must be **only** the raw key (**one line**, no `Bearer ` prefix, no shell commands). Pasting a whole terminal snippet into the secret produces **`UPSTREAM_REJECTED`** from OpenRouter; Ham also treats malformed values as **not chat-ready** in **`GET /api/models`** (see `openrouter_api_key_is_plausible` in `src/llm_client.py`).
+- **`GET /api/models` with `openrouter_chat_ready: true`** means the key **looks** usable, not that billing/upstream is healthy—always smoke-test **`POST /api/chat`** after rotation.
+- **Safe upload (no key on the shell command line):** create a file that contains **only** the key, then:
+
+  ```bash
+  gcloud secrets versions add ham-openrouter-api-key --data-file=./openrouter.key --project=PROJECT_ID
+  gcloud run services update SERVICE --region=REGION --project=PROJECT_ID \
+    --update-secrets=OPENROUTER_API_KEY=ham-openrouter-api-key:latest
+  rm -f ./openrouter.key
+  ```
+
+  Edit **`openrouter.key`** with **`nano`** (or similar)—avoid **`cat <<EOF`** if you might paste more than the token. If **`cat`** is waiting for input, **Ctrl+C** cancels.
+- **Stuck terminal:** **Ctrl+C** returns to the shell; delete any partial file and recreate the secret version from a clean one-line file.
+
 ## Private Hermes on GCE (HTTP gateway mode)
 
 Use this when **Hermes Agent API** runs on a **private Compute Engine VM** and **Ham** on **Cloud Run** must call it over **RFC1918** addresses. The **browser never** calls Hermes; only Ham does.

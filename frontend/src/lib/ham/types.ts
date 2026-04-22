@@ -138,6 +138,19 @@ export interface ModelCatalogPayload {
   source: string;
   gateway_mode: string;
   openrouter_chat_ready: boolean;
+  /** True when HERMES_GATEWAY_MODE=http and HERMES_GATEWAY_BASE_URL is non-empty. */
+  http_chat_ready?: boolean;
+  /** True when dashboard chat can run (OpenRouter path ready, or HTTP gateway configured, or mock). */
+  dashboard_chat_ready?: boolean;
+}
+
+/** Uses `dashboard_chat_ready` from API when present; otherwise infers from legacy fields. */
+export function isDashboardChatGatewayReady(c: ModelCatalogPayload | null | undefined): boolean {
+  if (!c) return false;
+  if (typeof c.dashboard_chat_ready === "boolean") return c.dashboard_chat_ready;
+  return Boolean(
+    c.openrouter_chat_ready || c.http_chat_ready === true || c.gateway_mode === "mock",
+  );
 }
 
 /** From `GET /api/cursor/credentials-status` — never includes the full secret. */

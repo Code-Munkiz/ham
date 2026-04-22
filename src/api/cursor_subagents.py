@@ -3,11 +3,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
+from src.api.clerk_gate import get_ham_clerk_actor
 from src.ham.cursor_subagents_catalog import list_cursor_subagents
 
-router = APIRouter(tags=["control-plane"])
+router = APIRouter(tags=["control-plane"], dependencies=[Depends(get_ham_clerk_actor)])
 
 
 @router.get("/api/cursor-subagents")

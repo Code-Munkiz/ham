@@ -8,15 +8,18 @@ import { useLocation } from "react-router-dom";
 
 import { useAgent } from "@/lib/ham/AgentContext";
 import { useWorkspace } from "@/lib/ham/WorkspaceContext";
+import { useHamDeploymentAccess } from "@/lib/ham/ClerkAccessBridge";
 
 import { DroidConfigPanel } from "../workspace/DroidConfigPanel";
 import { ControlPanelOverlay } from "../workspace/ControlPanelOverlay";
+import { HamDeploymentRestrictedBanner } from "./HamDeploymentRestrictedBanner";
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const [isInspectorVisible, setIsInspectorVisible] = React.useState(true);
   const { agents, selectedAgentId } = useAgent();
   const { activeTask, setActiveTask, isControlPanelOpen, setIsControlPanelOpen } = useWorkspace();
+  const { restricted: hamDeploymentRestricted } = useHamDeploymentAccess();
 
   const selectedAgent = agents.find(a => a.id === selectedAgentId) || agents[0];
   const isBareLanding = location.pathname === "/";
@@ -40,6 +43,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   if (isBareLanding) {
     return (
       <>
+        <HamDeploymentRestrictedBanner show={hamDeploymentRestricted} />
         {children}
         <Toaster theme="dark" position="bottom-right" closeButton richColors />
       </>
@@ -55,7 +59,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       
       <div className="flex flex-col flex-1 overflow-hidden relative">
         <Header />
-        
+        <HamDeploymentRestrictedBanner show={hamDeploymentRestricted} />
+
         <div className="flex flex-1 overflow-hidden relative">
           <main className="flex-1 overflow-hidden relative flex flex-col">
             <div className="flex-1 overflow-hidden relative">

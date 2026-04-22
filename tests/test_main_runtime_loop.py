@@ -71,7 +71,7 @@ def test_main_normal_path_builds_intent_and_invokes_bridge_and_review(monkeypatc
     seen: dict[str, object] = {}
     counts = {"bridge": 0, "review": 0}
 
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-v1-hamtests-only-fake-key-000000000")
     monkeypatch.setattr(
         main_mod,
         "assemble_ham_run",
@@ -121,7 +121,7 @@ def test_main_normal_path_builds_intent_and_invokes_bridge_and_review(monkeypatc
 
 
 def test_main_reviewer_failure_does_not_break_primary_artifact(monkeypatch, capsys):
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-v1-hamtests-only-fake-key-000000000")
     monkeypatch.setattr(
         main_mod,
         "assemble_ham_run",
@@ -144,7 +144,7 @@ def test_main_reviewer_failure_does_not_break_primary_artifact(monkeypatch, caps
 
 
 def test_main_output_shape_is_deterministic(monkeypatch, capsys):
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-v1-hamtests-only-fake-key-000000000")
     monkeypatch.setattr(
         main_mod,
         "assemble_ham_run",
@@ -176,7 +176,7 @@ def test_main_output_shape_is_deterministic(monkeypatch, capsys):
 
 
 def test_main_no_mutation_signal_does_not_refresh_context(monkeypatch):
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-v1-hamtests-only-fake-key-000000000")
     calls = {"assemble": 0}
 
     def fake_assemble(prompt: str, project_root=None):
@@ -201,7 +201,7 @@ def test_main_no_mutation_signal_does_not_refresh_context(monkeypatch):
 
 
 def test_main_confident_mutation_refreshes_exactly_once_and_reviewer_uses_refreshed_context(monkeypatch):
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-v1-hamtests-only-fake-key-000000000")
     calls = {"assemble": 0}
     seen: dict[str, object] = {}
 
@@ -231,7 +231,7 @@ def test_main_confident_mutation_refreshes_exactly_once_and_reviewer_uses_refres
 
 
 def test_selector_chooses_git_status_profile(monkeypatch):
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-v1-hamtests-only-fake-key-000000000")
     seen: dict[str, object] = {}
     monkeypatch.setattr(
         main_mod,
@@ -259,7 +259,7 @@ def test_selector_chooses_git_status_profile(monkeypatch):
 
 
 def test_selector_chooses_git_diff_profile(monkeypatch):
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-v1-hamtests-only-fake-key-000000000")
     seen: dict[str, object] = {}
     monkeypatch.setattr(
         main_mod,
@@ -287,7 +287,7 @@ def test_selector_chooses_git_diff_profile(monkeypatch):
 
 
 def test_selector_falls_back_to_cwd_profile(monkeypatch):
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-v1-hamtests-only-fake-key-000000000")
     seen: dict[str, object] = {}
     monkeypatch.setattr(
         main_mod,
@@ -313,7 +313,7 @@ def test_selector_falls_back_to_cwd_profile(monkeypatch):
 
 
 def test_selector_does_not_match_diff_substring_in_different(monkeypatch):
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-v1-hamtests-only-fake-key-000000000")
     seen: dict[str, object] = {}
     monkeypatch.setattr(
         main_mod,
@@ -341,7 +341,7 @@ def test_selector_does_not_match_diff_substring_in_different(monkeypatch):
 
 
 def test_selector_does_not_match_diff_substring_in_difficult(monkeypatch):
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-v1-hamtests-only-fake-key-000000000")
     seen: dict[str, object] = {}
     monkeypatch.setattr(
         main_mod,
@@ -369,7 +369,7 @@ def test_selector_does_not_match_diff_substring_in_difficult(monkeypatch):
 
 
 def test_selector_precedence_status_wins_over_diff(monkeypatch):
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-v1-hamtests-only-fake-key-000000000")
     seen: dict[str, object] = {}
     monkeypatch.setattr(
         main_mod,
@@ -398,7 +398,7 @@ def test_selector_precedence_status_wins_over_diff(monkeypatch):
 
 def test_persist_creates_file_in_ham_runs_with_expected_keys(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-v1-hamtests-only-fake-key-000000000")
     monkeypatch.setattr(
         main_mod,
         "assemble_ham_run",
@@ -438,7 +438,7 @@ def test_persist_creates_file_in_ham_runs_with_expected_keys(monkeypatch, tmp_pa
 
 def test_persisted_record_contains_author_from_env(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-v1-hamtests-only-fake-key-000000000")
     monkeypatch.setenv("HAM_AUTHOR", "alice")
     monkeypatch.setattr(
         main_mod,
@@ -465,7 +465,7 @@ def test_persisted_record_contains_author_from_env(monkeypatch, tmp_path):
 
 def test_persist_failure_does_not_break_runtime(monkeypatch, tmp_path, capsys):
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-v1-hamtests-only-fake-key-000000000")
     monkeypatch.setattr(
         main_mod,
         "assemble_ham_run",
@@ -498,7 +498,7 @@ def test_persist_failure_does_not_break_runtime(monkeypatch, tmp_path, capsys):
 
 def test_envelope_shape_unchanged_after_persistence_slice(monkeypatch, tmp_path, capsys):
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-v1-hamtests-only-fake-key-000000000")
     monkeypatch.setattr(
         main_mod,
         "assemble_ham_run",

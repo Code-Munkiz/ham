@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from src.integrations.nous_gateway_client import GatewayCallError, complete_chat_turn
+from src.llm_client import stream_chat_messages_openrouter
 
 
 def test_openrouter_mode_requires_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -18,9 +19,15 @@ def test_openrouter_mode_requires_api_key(monkeypatch: pytest.MonkeyPatch) -> No
     assert "OPENROUTER_API_KEY" in ei.value.message
 
 
+def test_openrouter_stream_rejects_poisoned_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "printf '%s' sk-or-v1-fake-key-0000000000000")
+    with pytest.raises(RuntimeError, match="plausible"):
+        next(stream_chat_messages_openrouter([{"role": "user", "content": "hi"}]))
+
+
 def test_openrouter_mode_calls_litellm(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HERMES_GATEWAY_MODE", "openrouter")
-    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-v1-hamtests-only-fake-key-000000000")
     monkeypatch.setenv("DEFAULT_MODEL", "openai/gpt-4o-mini")
 
     def mock_completion(*args, **kwargs):

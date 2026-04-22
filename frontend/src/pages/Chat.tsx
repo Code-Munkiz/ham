@@ -3,6 +3,7 @@
  * `AppLayout` does not manage competing split logic for this route (see AppLayout comment).
  */
 import * as React from "react";
+import { useAuth } from "@clerk/clerk-react";
 import {
   Paperclip,
   Sparkles,
@@ -32,11 +33,14 @@ import {
   fetchModelsCatalog,
   fetchProjectAgents,
   listHamProjects,
+  HamAccessRestrictedError,
   postChatStream,
+  type HamChatStreamAuth,
   type HamOperatorResult,
 } from "@/lib/ham/api";
 import { CLIENT_MODEL_CATALOG_FALLBACK } from "@/lib/ham/modelCatalogFallback";
 import type { ModelCatalogPayload } from "@/lib/ham/types";
+import { isDashboardChatGatewayReady } from "@/lib/ham/types";
 import { useAgent } from "@/lib/ham/AgentContext";
 import { useWorkspace } from "@/lib/ham/WorkspaceContext";
 import { ExecutionSurfaceChrome } from "@/components/war-room/ExecutionSurfaceChrome";
@@ -180,7 +184,14 @@ function TranscriptColumn({ messages, primaryPersona }: TranscriptColumnProps) {
   );
 }
 
-export default function Chat() {
+function ChatPageInner({
+  getClerkSessionToken,
+}: {
+  getClerkSessionToken: () => Promise<string | null>;
+}) {
+  const clerkEnabled = Boolean(
+    (import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined)?.trim(),
+  );
   const navigate = useNavigate();
   const { agents, selectedAgentId } = useAgent();
   const { isControlPanelOpen, setIsControlPanelOpen } = useWorkspace();
@@ -514,6 +525,9 @@ export default function Chat() {
     setMessages((prev) => [...prev, userRow, assistantRow]);
     setViewMode("chat");
     try {
+      const streamAuth: HamChatStreamAuth = clerkEnabled
+        ? { sessionToken: await getClerkSessionToken(), hamOperatorToken: opts.bearer }
+        : opts.bearer;
       const res = await postChatStream(
         {
           session_id: sessionId ?? undefined,
@@ -535,7 +549,7 @@ export default function Chat() {
             );
           },
         },
-        opts.bearer,
+        streamAuth,
       );
       setSessionId(res.session_id);
       setMessages(
@@ -554,9 +568,16 @@ export default function Chat() {
         setWorkbenchView: setViewMode,
       });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Request failed";
-      setChatError(msg);
-      toast.error(msg, { duration: 8_000 });
+      if (err instanceof HamAccessRestrictedError) {
+        const msg =
+          "Access restricted: this Ham deployment only allows approved email addresses or domains. Ask an admin or check Clerk sign-up restrictions.";
+        setChatError(msg);
+        toast.error(msg, { duration: 12_000, id: "ham-access-restricted" });
+      } else {
+        const msg = err instanceof Error ? err.message : "Request failed";
+        setChatError(msg);
+        toast.error(msg, { duration: 8_000 });
+      }
     } finally {
       setSending(false);
     }
@@ -589,6 +610,9 @@ export default function Chat() {
 
     setSending(true);
     try {
+      const streamAuth: HamChatStreamAuth | undefined = clerkEnabled
+        ? { sessionToken: await getClerkSessionToken() }
+        : undefined;
       const res = await postChatStream(
         {
           session_id: sessionId ?? undefined,
@@ -611,7 +635,7 @@ export default function Chat() {
             );
           },
         },
-        undefined,
+        streamAuth,
       );
       setSessionId(res.session_id);
       applyOperatorResultSideEffects(res.operator_result);
@@ -635,16 +659,23 @@ export default function Chat() {
         setWorkbenchView: setViewMode,
       });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Request failed";
-      setChatError(msg);
-      toast.error(msg, { duration: 8_000 });
+      if (err instanceof HamAccessRestrictedError) {
+        const msg =
+          "Access restricted: this Ham deployment only allows approved email addresses or domains. Ask an admin or check Clerk sign-up restrictions.";
+        setChatError(msg);
+        toast.error(msg, { duration: 12_000, id: "ham-access-restricted" });
+      } else {
+        const msg = err instanceof Error ? err.message : "Request failed";
+        setChatError(msg);
+        toast.error(msg, { duration: 8_000 });
+      }
     } finally {
       setSending(false);
     }
   };
 
   const pipelineStatus = `${uplinkPipelineLabel(uplinkId)} · ${workbenchMode.toUpperCase()} — ${
-    sending ? "SENDING" : catalog?.openrouter_chat_ready ? "GATEWAY_READY" : "GATEWAY_OFFLINE"
+    sending ? "SENDING" : isDashboardChatGatewayReady(catalog) ? "GATEWAY_READY" : "GATEWAY_OFFLINE"
   }`;
 
   return (
@@ -1234,4 +1265,17 @@ export default function Chat() {
       />
     </div>
   );
+}
+
+export default function Chat() {
+  const clerkPk = (import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined)?.trim();
+  if (clerkPk) {
+    return <ChatWithClerkSession />;
+  }
+  return <ChatPageInner getClerkSessionToken={async () => null} />;
+}
+
+function ChatWithClerkSession() {
+  const { getToken } = useAuth();
+  return <ChatPageInner getClerkSessionToken={() => getToken()} />;
 }

@@ -7,7 +7,10 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
+
+from src.api.clerk_gate import get_ham_clerk_actor
+from src.ham.clerk_auth import resolve_ham_operator_authorization_header
 from pydantic import BaseModel, ConfigDict, Field
 
 from src.ham.hermes_skills_catalog import (
@@ -27,7 +30,7 @@ from src.ham.hermes_skills_install import (
 )
 from src.ham.hermes_skills_probe import list_hermes_targets, probe_capabilities
 
-router = APIRouter(tags=["hermes-skills"])
+router = APIRouter(tags=["hermes-skills"], dependencies=[Depends(get_ham_clerk_actor)])
 
 
 def _not_found(catalog_id: str) -> HTTPException:
@@ -184,10 +187,15 @@ async def post_hermes_skills_install_preview(body: InstallPreviewRequest) -> dic
 @router.post("/api/hermes-skills/install/apply")
 async def post_hermes_skills_install_apply(
     body: InstallApplyRequest,
-    authorization: str | None = Header(None),
+    authorization: str | None = Header(None, alias="Authorization"),
+    x_ham_operator_authorization: str | None = Header(None, alias="X-Ham-Operator-Authorization"),
 ) -> dict[str, Any]:
     """Apply shared install: token, lock, backup, bundle materialize, atomic config write, audit."""
-    _require_skills_write_token(authorization)
+    ham_bearer = resolve_ham_operator_authorization_header(
+        authorization=authorization,
+        x_ham_operator_authorization=x_ham_operator_authorization,
+    )
+    _require_skills_write_token(ham_bearer)
     try:
         assert_shared_target(body.target)
         result = apply_shared_install(

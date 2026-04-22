@@ -5,7 +5,10 @@ import os
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
+
+from src.api.clerk_gate import get_ham_clerk_actor
+from src.ham.clerk_auth import resolve_ham_operator_authorization_header
 from pydantic import BaseModel, ConfigDict, Field
 
 from src.ham.settings_write import (
@@ -144,9 +147,14 @@ async def post_settings_preview(project_id: str, body: PreviewRequest) -> dict[s
 async def post_settings_apply(
     project_id: str,
     body: ApplyRequest,
-    authorization: str | None = Header(None),
+    authorization: str | None = Header(None, alias="Authorization"),
+    x_ham_operator_authorization: str | None = Header(None, alias="X-Ham-Operator-Authorization"),
 ) -> dict[str, Any]:
-    _require_settings_write_token(authorization)
+    ham_bearer = resolve_ham_operator_authorization_header(
+        authorization=authorization,
+        x_ham_operator_authorization=x_ham_operator_authorization,
+    )
+    _require_settings_write_token(ham_bearer)
     root = _get_project_root(project_id)
     try:
         result: ApplyResult = apply_project_settings(
@@ -189,9 +197,14 @@ async def post_settings_apply(
 async def post_settings_rollback(
     project_id: str,
     body: RollbackRequest,
-    authorization: str | None = Header(None),
+    authorization: str | None = Header(None, alias="Authorization"),
+    x_ham_operator_authorization: str | None = Header(None, alias="X-Ham-Operator-Authorization"),
 ) -> dict[str, Any]:
-    _require_settings_write_token(authorization)
+    ham_bearer = resolve_ham_operator_authorization_header(
+        authorization=authorization,
+        x_ham_operator_authorization=x_ham_operator_authorization,
+    )
+    _require_settings_write_token(ham_bearer)
     root = _get_project_root(project_id)
     try:
         result: RollbackResult = rollback_project_settings(

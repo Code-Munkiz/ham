@@ -71,8 +71,20 @@ Chat and the LLM **do not** apply settings; the UI (or CLI) calls **preview** th
 | `POST /api/hermes-skills/install/preview` | Dry-run: `proposal_digest`, `base_revision`, `config_diff`, bundle path; no mutations. Rejects **`REMOTE_UNSUPPORTED`** when not co-located. |
 | `POST /api/hermes-skills/install/apply` | Bearer **`HAM_SKILLS_WRITE_TOKEN`**: materialize bundle under **`~/.hermes/ham-runtime-bundles/`**, merge **`skills.external_dirs`**, atomic YAML write, backup + audit under **`~/.hermes/_ham_*`**. |
 | `frontend/src/pages/HermesSkills.tsx` | **Skills** page (`/skills`); Phase 2a **Preview / Apply** in detail panel when **`shared_runtime_install_supported`**. |
+| `GET /api/hermes-hub` | Read-only snapshot: **`gateway_mode`** / dashboard chat summary + same Hermes **skills capabilities** probe as `/api/hermes-skills/capabilities` (no fake inventory). |
+| `frontend/src/pages/HermesHub.tsx` | **Hermes** hub (`/hermes`): honest control-plane cards + link to **`/skills`**; not a Hermes CLI or runtime explorer. |
 
 **Phase 2a scope:** shared target only; no profile-target install, no uninstall, no rollback API, no Hermes CLI subprocess install, no arbitrary URL/GitHub installs from the client.
+
+### `GET /api/models` readiness fields (re-exported on `GET /api/hermes-hub`)
+
+The model catalog includes three booleans so clients do not have to infer gateway health from individual row `supports_chat` flags:
+
+- **`openrouter_chat_ready`** — `true` only when **`gateway_mode`** is **`openrouter`** and **`OPENROUTER_API_KEY`** is set and passes the server’s plausibility check (upstream billing/health is still a separate smoke test).
+- **`http_chat_ready`** — `true` only when **`gateway_mode`** is **`http`** (including the case where **`HERMES_GATEWAY_MODE`** is unset but **`HERMES_GATEWAY_BASE_URL`** is set, which implies HTTP mode) **and** that base URL is non-empty.
+- **`dashboard_chat_ready`** — umbrella signal: **`true`** if dashboard chat should be considered available on a supported path — **`openrouter_chat_ready`**, **`http_chat_ready`**, or **mock** mode (built-in mock assistant).
+
+OpenRouter-labeled composer rows may stay **`supports_chat: false`** in **HTTP** mode with a message aimed at those tiers, not at the whole app. **`openrouter_chat_ready: false`** in that situation does **not** by itself mean chat is unavailable; use **`http_chat_ready`** / **`dashboard_chat_ready`** for the active path.
 
 ## Operational chat (Phase 1 — shipped)
 
@@ -86,8 +98,37 @@ Server-side **`src/ham/chat_operator.py`** runs **before** the LLM when `HAM_CHA
 | `apply_settings` | Client **`operator.phase=apply_settings`**, `confirmed=true`, echoes preview `changes` + `base_revision`; **`Authorization: Bearer HAM_SETTINGS_WRITE_TOKEN`**. |
 | `register_project` | Path must exist on API host; confirm + same settings token as apply. |
 | `launch_run` | One-shot `run_bridge_v0` + reviewer + **`persist_ham_run_record`** at project root; requires **`HAM_RUN_LAUNCH_TOKEN`** and **`OPENROUTER_API_KEY`** on host. |
+| `droid_preview` / NL `preview factory droid …` | Allowlisted Factory **`droid exec`** workflows (`readonly_repo_audit`, `safe_edit_low`): structured preview + `proposal_digest` + registry revision; blocked on bad root or missing Custom Droid file. See **`docs/FACTORY_DROID_CONTRACT.md`**. |
+| `droid_launch` | After preview: `confirmed=true`, matching digest + `droid_base_revision`. **`safe_edit_low`** requires **`Authorization: Bearer`** = **`HAM_DROID_EXEC_TOKEN`**. Audit line in **`<root>/.ham/_audit/droid_exec.jsonl`**. |
+| `cursor_agent_preview` | **Cursor Cloud Agents** (official `api.cursor.com`): structured preview + `cursor_proposal_digest` + `cursor_base_revision` (`cursor-agent-v1`). Resolves **repository URL only** from operator `cursor_repository`, then `project.metadata.cursor_cloud_repository`, then optional **`HAM_CURSOR_DEFAULT_REPOSITORY`**. Does **not** require local `project.root` to exist. **No** Cursor launch during preview. Requires server-side **Cursor API key** (`CURSOR_API_KEY` or saved credentials). |
+| `cursor_agent_launch` | After preview: `confirmed=true`, matching digest + `cursor_base_revision`, **`Authorization: Bearer`** = **`HAM_CURSOR_AGENT_LAUNCH_TOKEN`**. Calls Cursor **`POST /v0/agents`** via [`src/integrations/cursor_cloud_client.py`](src/integrations/cursor_cloud_client.py) (Bearer auth). **Primary audit:** central JSONL (**`HAM_CURSOR_AGENT_AUDIT_FILE`** or default `~/.ham/_audit/cursor_cloud_agent.jsonl`). **Mirror** append to `<root>/.ham/_audit/cursor_cloud_agent.jsonl` only if `project.root` is a writable directory. |
+| `cursor_agent_status` | **`cursor_agent_id`** + `project_id`; **`GET /v0/agents/{id}`** with server-side Cursor key only (no Ham launch token). Same central + optional mirror audit. NL: `cursor agent status` + `bc_…` + project mention. |
 
-`POST /api/chat` and **`POST /api/chat/stream`** accept optional **`operator`** (see `ChatOperatorPayload` in `src/api/chat.py`) and return **`operator_result`** JSON. The Chat page shows **Apply / Confirm launch / Confirm register** when `pending_*` is present.
+`POST /api/chat` and **`POST /api/chat/stream`** accept optional **`operator`** (see `ChatOperatorPayload` in `src/api/chat.py`) and return **`operator_result`** JSON. The Chat page shows **Apply / Confirm launch / Confirm register** when `pending_*` is present. **`pending_droid`** carries Factory droid preview fields for a client confirm step (UI wiring optional in Phase 1). **`pending_cursor_agent`** carries Cursor Cloud Agent preview fields for confirm + launch.
+
+## Clerk (identity + authz slice)
+
+### Where app-wide access really lives (Clerk Dashboard)
+
+1. **Restricted mode** and **Allowlist** (exact emails and/or whole email domains) in the [Clerk Dashboard](https://dashboard.clerk.com) are the **intended primary** control plane for who can sign up or sign in to your Clerk application. Configure those first.
+2. **Organizations → Verified Domains** is for **org membership / enrollment** flows (e.g. auto-join by domain inside an organization). It is **not** the same as a global “only these domains may use the app” gate—do not confuse it with Dashboard allowlist/restricted mode.
+3. **HAM server-side** checks below are **defense in depth**: they catch misconfiguration or drift and enforce policy on the API even if Dashboard settings are incomplete.
+
+### HAM API behavior
+
+| Piece | Role |
+|-------|------|
+| **Who / allowed** | **`HAM_CLERK_REQUIRE_AUTH`** or **`HAM_CLERK_ENFORCE_EMAIL_RESTRICTIONS`** + **`CLERK_JWT_ISSUER`**: when Clerk session auth is active, protected dashboard and control-plane routes (including **`POST /api/chat`**, **`POST /api/chat/stream`**, **`GET /api/models`**, runs/projects/context-engine/cursor-settings proxies, Hermes skills install, project settings, and **`GET /api/clerk-access-probe`**) require **`Authorization: Bearer`** Clerk session JWT; server verifies via JWKS (`src/ham/clerk_auth.py`). **`GET /api/status`** and **`GET /`** stay public. Include **`email`** in the Clerk session JWT template so HAM can evaluate allowlists. Chat operator permissions come from JWT **`permissions`** (or **`org_role`** fallback: `org:member` → `ham:preview` + `ham:status`; `org:admin` → includes `ham:launch`). Custom claims: `ham:preview`, `ham:status`, `ham:launch`, `ham:admin`. |
+| **Email / domain gate** | Optional **`HAM_CLERK_ENFORCE_EMAIL_RESTRICTIONS`** with **`HAM_CLERK_ALLOWED_EMAILS`** and/or **`HAM_CLERK_ALLOWED_EMAIL_DOMAINS`** (comma-separated, case-insensitive). If enforcement is on and **both** lists are empty after parsing, HAM **denies everyone** (fail closed). The same gate applies to **all** Clerk-protected API routes above (defense in depth alongside [Clerk Dashboard](https://dashboard.clerk.com) allowlists). Denials return **`403`** with **`HAM_EMAIL_RESTRICTION`** and append a row to **`HAM_OPERATOR_AUDIT_FILE`** (`event: ham_access_denied`, `denial_reason`, `route`, evaluated email) — **not** Clerk metadata (`src/ham/clerk_email_access.py`). |
+| **HAM operator secrets** | When **`Authorization`** is the Clerk session, **`HAM_*_TOKEN`** values are **`X-Ham-Operator-Authorization: Bearer …`**. Legacy: single header **`Authorization`** = HAM token when neither Clerk flag is on. |
+| **Phases** | Preview-style operator phases require **`ham:preview`**; read/status intents **`ham:status`**; mutating launch/apply/register **`ham:launch`**. Enforcement is in **`process_operator_turn`** (`src/ham/chat_operator.py` + `src/ham/clerk_policy.py`) — not client-only. |
+| **Audit** | Handled operator turns append **`HAM_OPERATOR_AUDIT_FILE`** with Clerk user/org id and permission evaluation. Email denials append the same sink with **`event: ham_access_denied`**. |
+| **Cursor API** | Unchanged: **`CURSOR_API_KEY`** / saved credentials for **`api.cursor.com`**; Clerk does **not** replace the Cursor team key. |
+| **M2M (future)** | `clerk_m2m_note()` documents the seam; keep **`HAM_DROID_RUNNER_SERVICE_TOKEN`** / launch tokens for service paths until M2M is wired. |
+
+Frontend: set **`VITE_CLERK_PUBLISHABLE_KEY`** to wrap the app with **`ClerkProvider`**; **`ClerkAccessBridge`** registers **`getToken()`** for shared **`api.ts`** fetches and shows a shell banner when the probe returns **`HAM_EMAIL_RESTRICTION`**. Chat also passes the session JWT on stream requests (`frontend/src/pages/Chat.tsx`). **`HamAccessRestrictedError`** maps **`HAM_EMAIL_RESTRICTION`** to a clear toast + transcript error on chat failures.
+
+**Instructional skill (not policy):** `.cursor/skills/factory-droid-workflows/SKILL.md`.
 
 ## Next (not built yet)
 

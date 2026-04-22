@@ -2,21 +2,24 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from src.api.browser_runtime import router as browser_runtime_router
 from src.api.chat import router as chat_router
+from src.api.clerk_gate import get_ham_clerk_actor
 from src.api.cursor_settings import router as cursor_settings_router
 from src.api.cursor_skills import router as cursor_skills_router
 from src.api.cursor_subagents import router as cursor_subagents_router
+from src.api.hermes_hub import router as hermes_hub_router
 from src.api.hermes_skills import router as hermes_skills_router
 from src.api.models_catalog import router as models_catalog_router
 from src.api.project_settings import router as project_settings_router
 from src.ham.agent_profiles import agents_config_from_merged
+from src.ham.clerk_auth import HamActor, clerk_authorization_is_clerk_session
 from src.memory_heist import context_engine_dashboard_payload, discover_config
 from src.persistence.project_store import ProjectStore
 from src.persistence.run_store import RunStore
@@ -59,6 +62,7 @@ app.include_router(browser_runtime_router)
 app.include_router(cursor_settings_router)
 app.include_router(cursor_skills_router)
 app.include_router(cursor_subagents_router)
+app.include_router(hermes_hub_router)
 app.include_router(hermes_skills_router)
 app.include_router(project_settings_router)
 app.include_router(models_catalog_router)
@@ -114,19 +118,33 @@ async def get_status() -> dict:
     }
 
 
+@app.get("/api/clerk-access-probe")
+async def clerk_access_probe(
+    _: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
+) -> dict[str, Any]:
+    """Lightweight check for the dashboard: same Clerk + email gate as other protected routes."""
+    return {"ok": True, "clerk_gate_active": clerk_authorization_is_clerk_session()}
+
+
 # ---------------------------------------------------------------------------
 # Runs (CWD-scoped — the "current" project)
 # ---------------------------------------------------------------------------
 
 
 @app.get("/api/runs")
-async def list_runs(limit: int = 50) -> dict:
+async def list_runs(
+    _ham_gate: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
+    limit: int = 50,
+) -> dict:
     runs = _store.list_runs(limit=max(1, min(limit, 200)))
     return {"runs": [r.model_dump() for r in runs]}
 
 
 @app.get("/api/runs/{run_id}")
-async def get_run(run_id: str) -> dict:
+async def get_run(
+    run_id: str,
+    _ham_gate: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
+) -> dict:
     record = _store.get_run(run_id)
     if record is None:
         raise HTTPException(status_code=404, detail=f"Run {run_id!r} not found")
@@ -139,7 +157,9 @@ async def get_run(run_id: str) -> dict:
 
 
 @app.get("/api/profiles")
-async def list_profiles() -> dict:
+async def list_profiles(
+    _ham_gate: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
+) -> dict:
     return {
         "profiles": [
             DEFAULT_PROFILE_REGISTRY.get(pid).model_dump()
@@ -149,7 +169,9 @@ async def list_profiles() -> dict:
 
 
 @app.get("/api/droids")
-async def list_droids() -> dict:
+async def list_droids(
+    _ham_gate: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
+) -> dict:
     return {
         "droids": [
             DEFAULT_DROID_REGISTRY.get(did).model_dump()
@@ -164,13 +186,18 @@ async def list_droids() -> dict:
 
 
 @app.get("/api/context-engine")
-async def get_context_engine() -> dict:
+async def get_context_engine(
+    _ham_gate: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
+) -> dict:
     """Snapshot for the API server's current working directory (repo root when started from repo)."""
     return context_engine_dashboard_payload(Path.cwd())
 
 
 @app.get("/api/projects/{project_id}/context-engine")
-async def get_project_context_engine(project_id: str) -> dict:
+async def get_project_context_engine(
+    project_id: str,
+    _ham_gate: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
+) -> dict:
     record = _projects.get_project(project_id)
     if record is None:
         raise HTTPException(status_code=404, detail=f"Project {project_id!r} not found")
@@ -178,7 +205,10 @@ async def get_project_context_engine(project_id: str) -> dict:
 
 
 @app.get("/api/projects/{project_id}/agents")
-async def get_project_agents(project_id: str) -> dict[str, Any]:
+async def get_project_agents(
+    project_id: str,
+    _ham_gate: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
+) -> dict[str, Any]:
     """HAM Agent Builder — effective profiles from merged Ham config (`.ham/settings.json` chain)."""
     record = _projects.get_project(project_id)
     if record is None:
@@ -212,12 +242,17 @@ class RegisterProjectRequest(BaseModel):
 
 
 @app.get("/api/projects")
-async def list_projects() -> dict:
+async def list_projects(
+    _ham_gate: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
+) -> dict:
     return {"projects": [p.model_dump() for p in _projects.list_projects()]}
 
 
 @app.post("/api/projects", status_code=201)
-async def register_project(body: RegisterProjectRequest) -> dict:
+async def register_project(
+    body: RegisterProjectRequest,
+    _ham_gate: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
+) -> dict:
     root_path = Path(body.root)
     if not root_path.is_dir():
         raise HTTPException(
@@ -235,7 +270,10 @@ async def register_project(body: RegisterProjectRequest) -> dict:
 
 
 @app.get("/api/projects/{project_id}")
-async def get_project(project_id: str) -> dict:
+async def get_project(
+    project_id: str,
+    _ham_gate: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
+) -> dict:
     record = _projects.get_project(project_id)
     if record is None:
         raise HTTPException(status_code=404, detail=f"Project {project_id!r} not found")
@@ -243,13 +281,19 @@ async def get_project(project_id: str) -> dict:
 
 
 @app.delete("/api/projects/{project_id}", status_code=204)
-async def remove_project(project_id: str) -> None:
+async def remove_project(
+    project_id: str,
+    _ham_gate: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
+) -> None:
     if not _projects.remove(project_id):
         raise HTTPException(status_code=404, detail=f"Project {project_id!r} not found")
 
 
 @app.get("/api/projects/{project_id}/status")
-async def get_project_status(project_id: str) -> dict:
+async def get_project_status(
+    project_id: str,
+    _ham_gate: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
+) -> dict:
     record = _projects.get_project(project_id)
     if record is None:
         raise HTTPException(status_code=404, detail=f"Project {project_id!r} not found")
@@ -261,7 +305,11 @@ async def get_project_status(project_id: str) -> dict:
 
 
 @app.get("/api/projects/{project_id}/runs")
-async def list_project_runs(project_id: str, limit: int = 50) -> dict:
+async def list_project_runs(
+    project_id: str,
+    _ham_gate: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
+    limit: int = 50,
+) -> dict:
     record = _projects.get_project(project_id)
     if record is None:
         raise HTTPException(status_code=404, detail=f"Project {project_id!r} not found")

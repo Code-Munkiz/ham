@@ -19,6 +19,28 @@ from src.ham.agent_profiles import (
     agents_config_from_merged,
     validate_agents_config,
 )
+from src.ham.cursor_agent_workflow import (
+    audit_cursor_preview,
+    build_cursor_agent_preview,
+    resolve_cursor_repository_url,
+    run_cursor_agent_launch,
+    run_cursor_agent_status,
+    sanitize_cursor_agent_id,
+    verify_cursor_launch_against_preview,
+)
+from src.ham.droid_workflows import (
+    build_droid_preview,
+    execute_droid_workflow,
+    get_workflow,
+    verify_launch_against_preview,
+)
+from src.ham.clerk_auth import HamActor
+from src.ham.clerk_policy import (
+    enforce_operator_permission,
+    permission_for_intent,
+    permission_for_phase,
+)
+from src.persistence.cursor_credentials import get_effective_cursor_api_key
 from src.ham.one_shot_run import run_ham_one_shot
 from src.ham.settings_write import (
     ApplyResult,
@@ -76,12 +98,95 @@ def _launch_token() -> str:
     return (os.environ.get("HAM_RUN_LAUNCH_TOKEN") or "").strip()
 
 
+def _droid_exec_token() -> str:
+    return (os.environ.get("HAM_DROID_EXEC_TOKEN") or "").strip()
+
+
+def _cursor_agent_launch_token() -> str:
+    return (os.environ.get("HAM_CURSOR_AGENT_LAUNCH_TOKEN") or "").strip()
+
+
+def _droid_preview_turn(
+    *,
+    project_store: ProjectStore,
+    project_id: str,
+    workflow_id: str,
+    user_prompt: str,
+) -> OperatorTurnResult:
+    prec = project_store.get_project(project_id.strip())
+    if prec is None:
+        return OperatorTurnResult(
+            handled=True,
+            intent="droid_preview",
+            ok=False,
+            blocking_reason=f"Unknown project_id {project_id!r}.",
+        )
+    ok_path, why = project_root_accessible(Path(prec.root))
+    if not ok_path:
+        return OperatorTurnResult(
+            handled=True,
+            intent="droid_preview",
+            ok=False,
+            blocking_reason=f"Cannot preview droid workflow: {why}",
+        )
+    preview = build_droid_preview(
+        workflow_id=workflow_id.strip(),
+        project_id=project_id.strip(),
+        project_root=Path(prec.root),
+        user_prompt=user_prompt,
+    )
+    if not preview.ok:
+        return OperatorTurnResult(
+            handled=True,
+            intent="droid_preview",
+            ok=False,
+            blocking_reason=preview.blocking_reason,
+        )
+    wf = get_workflow(workflow_id.strip())
+    token_note = ""
+    if wf and wf.requires_launch_token and not _droid_exec_token():
+        token_note = (
+            "\n\n_Note: `HAM_DROID_EXEC_TOKEN` is not set on this API host — "
+            "mutating launches will be rejected until it is configured._"
+        )
+    pending = {
+        "project_id": project_id.strip(),
+        "workflow_id": preview.workflow_id,
+        "proposal_digest": preview.proposal_digest,
+        "base_revision": preview.base_revision,
+        "droid_user_prompt": preview.user_prompt,
+        "mutates": preview.mutates,
+        "tier": preview.tier,
+        "summary_preview": (preview.summary_preview or "") + token_note,
+    }
+    return OperatorTurnResult(
+        handled=True,
+        intent="droid_preview",
+        ok=True,
+        pending_droid=pending,
+        data={
+            "workflow_id": preview.workflow_id,
+            "proposal_digest": preview.proposal_digest,
+            "message": (preview.summary_preview or "") + token_note,
+        },
+    )
+
+
 class ChatOperatorPayload(BaseModel):
     """Explicit operator follow-up (confirm apply / register / launch) from the client."""
 
     model_config = ConfigDict(extra="forbid")
 
-    phase: Literal["apply_settings", "register_project", "launch_run"] | None = None
+    phase: Literal[
+        "apply_settings",
+        "register_project",
+        "launch_run",
+        "droid_preview",
+        "droid_launch",
+        "cursor_agent_preview",
+        "cursor_agent_launch",
+        "cursor_agent_status",
+    ] | None = None
     confirmed: bool = False
     project_id: str | None = Field(default=None, max_length=180)
     changes: dict[str, Any] | None = None
@@ -91,6 +196,20 @@ class ChatOperatorPayload(BaseModel):
     description: str | None = Field(default=None, max_length=2000)
     prompt: str | None = Field(default=None, max_length=50_000)
     profile_id: str | None = Field(default=None, max_length=128)
+    droid_workflow_id: str | None = Field(default=None, max_length=64)
+    droid_user_prompt: str | None = Field(default=None, max_length=50_000)
+    droid_proposal_digest: str | None = Field(default=None, max_length=80)
+    droid_base_revision: str | None = Field(default=None, max_length=64)
+    cursor_task_prompt: str | None = Field(default=None, max_length=100_000)
+    cursor_repository: str | None = Field(default=None, max_length=2048)
+    cursor_ref: str | None = Field(default=None, max_length=512)
+    cursor_model: str = Field(default="default", max_length=128)
+    cursor_auto_create_pr: bool = False
+    cursor_branch_name: str | None = Field(default=None, max_length=512)
+    cursor_expected_deliverable: str | None = Field(default=None, max_length=10_000)
+    cursor_proposal_digest: str | None = Field(default=None, max_length=80)
+    cursor_base_revision: str | None = Field(default=None, max_length=64)
+    cursor_agent_id: str | None = Field(default=None, max_length=128)
 
 
 class OperatorTurnResult(BaseModel):
@@ -105,6 +224,8 @@ class OperatorTurnResult(BaseModel):
     pending_apply: dict[str, Any] | None = None
     pending_launch: dict[str, Any] | None = None
     pending_register: dict[str, Any] | None = None
+    pending_droid: dict[str, Any] | None = None
+    pending_cursor_agent: dict[str, Any] | None = None
     data: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -190,6 +311,11 @@ def _extract_run_id(text: str) -> str | None:
         return m.group(1)
     m2 = re.search(r"\binspect\s+run\s+([a-z0-9._-]+)", text, re.I)
     return m2.group(1) if m2 else None
+
+
+def _extract_cursor_agent_id(text: str) -> str | None:
+    m = re.search(r"\b(bc_[a-z0-9._-]+)\b", text, re.I)
+    return m.group(1) if m else None
 
 
 def _parse_skill_mutation(text: str) -> tuple[str | None, list[str], list[str], str | None]:
@@ -292,6 +418,29 @@ def try_heuristic_intent(
             prompt = re.sub(prefix, "", t, flags=re.I).strip()
         return "launch_run", {"project_id": pid, "prompt": prompt or t}
 
+    if re.search(r"\bpreview\s+(?:factory\s+)?droid\b", low):
+        m_wf = re.search(r"\b(readonly_repo_audit|safe_edit_low)\b", t, re.I)
+        if not m_wf:
+            return "droid_preview", {"missing": "workflow_id"}
+        wf_id = m_wf.group(1).lower()
+        tail = t[m_wf.end() :].strip()
+        focus = re.sub(r"^[:\s—\-]+", "", tail).strip()
+        pid = _extract_project_id(t) or default_project_id
+        if not pid:
+            return "droid_preview", {"missing": "project_id", "workflow_id": wf_id}
+        if not focus:
+            return "droid_preview", {"missing": "user_prompt", "workflow_id": wf_id, "project_id": pid}
+        return "droid_preview", {"project_id": pid, "workflow_id": wf_id, "user_prompt": focus}
+
+    if re.search(r"\bcursor\s+agent\s+status\b", low):
+        aid = _extract_cursor_agent_id(t)
+        pid = _extract_project_id(t) or default_project_id
+        if not aid:
+            return "cursor_agent_status", {"missing": "agent_id"}
+        if not pid:
+            return "cursor_agent_status", {"missing": "project_id"}
+        return "cursor_agent_status", {"project_id": pid, "cursor_agent_id": aid}
+
     return None
 
 
@@ -301,28 +450,31 @@ def process_operator_turn(
     project_store: ProjectStore,
     default_project_id: str | None,
     operator_payload: ChatOperatorPayload | None,
-    authorization: str | None,
+    ham_operator_authorization: str | None,
+    ham_actor: HamActor | None = None,
 ) -> OperatorTurnResult | None:
     if not operator_enabled():
         return None
 
     # Explicit client phase takes precedence
     if operator_payload and operator_payload.phase:
+        enforce_operator_permission(ham_actor, permission_for_phase(operator_payload.phase))
         return _execute_explicit_phase(
             operator_payload,
             project_store=project_store,
-            authorization=authorization,
+            ham_operator_authorization=ham_operator_authorization,
         )
 
     parsed = try_heuristic_intent(user_text, default_project_id=default_project_id)
     if not parsed:
         return None
     intent, params = parsed
+    enforce_operator_permission(ham_actor, permission_for_intent(intent))
     out = _dispatch_intent(
         intent,
         params,
         project_store=project_store,
-        authorization=authorization,
+        ham_operator_authorization=ham_operator_authorization,
         confirmed=False,
     )
     if not out.handled:
@@ -334,7 +486,7 @@ def _execute_explicit_phase(
     op: ChatOperatorPayload,
     *,
     project_store: ProjectStore,
-    authorization: str | None,
+    ham_operator_authorization: str | None,
 ) -> OperatorTurnResult:
     if op.phase == "apply_settings":
         if not op.confirmed:
@@ -344,7 +496,7 @@ def _execute_explicit_phase(
                 ok=False,
                 blocking_reason="Apply requires confirmed=true from the client.",
             )
-        _require_bearer(authorization, _settings_token(), code="SETTINGS_WRITES_DISABLED")
+        _require_bearer(ham_operator_authorization, _settings_token(), code="SETTINGS_WRITES_DISABLED")
         if not op.project_id or not op.changes or not op.base_revision:
             return OperatorTurnResult(
                 handled=True,
@@ -410,7 +562,7 @@ def _execute_explicit_phase(
                 ok=False,
                 blocking_reason="Registration requires confirmed=true.",
             )
-        _require_bearer(authorization, _settings_token(), code="OPERATOR_REGISTER")
+        _require_bearer(ham_operator_authorization, _settings_token(), code="OPERATOR_REGISTER")
         if not op.root or not op.name:
             return OperatorTurnResult(
                 handled=True,
@@ -449,7 +601,7 @@ def _execute_explicit_phase(
                 ok=False,
                 blocking_reason="launch_run requires confirmed=true.",
             )
-        _require_bearer(authorization, _launch_token(), code="RUN_LAUNCH")
+        _require_bearer(ham_operator_authorization, _launch_token(), code="RUN_LAUNCH")
         if not op.project_id or not op.prompt or not str(op.prompt).strip():
             return OperatorTurnResult(
                 handled=True,
@@ -497,6 +649,339 @@ def _execute_explicit_phase(
             },
         )
 
+    if op.phase == "cursor_agent_preview":
+        if not op.project_id or not op.cursor_task_prompt or not str(op.cursor_task_prompt).strip():
+            return OperatorTurnResult(
+                handled=True,
+                intent="cursor_agent_preview",
+                ok=False,
+                blocking_reason="cursor_agent_preview requires project_id and cursor_task_prompt.",
+            )
+        prec = project_store.get_project(op.project_id.strip())
+        if prec is None:
+            return OperatorTurnResult(
+                handled=True,
+                intent="cursor_agent_preview",
+                ok=False,
+                blocking_reason=f"Unknown project_id {op.project_id!r}.",
+            )
+        prev = build_cursor_agent_preview(
+            project_id=prec.id,
+            project_metadata=dict(prec.metadata or {}),
+            cursor_repository=(op.cursor_repository.strip() if op.cursor_repository else None),
+            cursor_task_prompt=op.cursor_task_prompt.strip(),
+            cursor_ref=op.cursor_ref.strip() if op.cursor_ref else None,
+            cursor_model=(op.cursor_model or "default").strip(),
+            cursor_auto_create_pr=bool(op.cursor_auto_create_pr),
+            cursor_branch_name=op.cursor_branch_name.strip() if op.cursor_branch_name else None,
+            cursor_expected_deliverable=(
+                op.cursor_expected_deliverable.strip() if op.cursor_expected_deliverable else None
+            ),
+        )
+        audit_cursor_preview(
+            project_id=prec.id,
+            proposal_digest=prev.proposal_digest,
+            repository=prev.repository,
+            ok=prev.ok,
+            summary=prev.summary_preview if prev.ok else None,
+            blocking_reason=prev.blocking_reason,
+            project_root_for_mirror=str(prec.root),
+        )
+        if not prev.ok:
+            return OperatorTurnResult(
+                handled=True,
+                intent="cursor_agent_preview",
+                ok=False,
+                blocking_reason=prev.blocking_reason,
+            )
+        tok_note = ""
+        if not _cursor_agent_launch_token():
+            tok_note = (
+                "\n\n_Note: `HAM_CURSOR_AGENT_LAUNCH_TOKEN` is not set — launches will be rejected until it is configured._"
+            )
+        pending = {
+            "project_id": prec.id,
+            "proposal_digest": prev.proposal_digest,
+            "base_revision": prev.base_revision,
+            "repository": prev.repository,
+            "cursor_task_prompt": op.cursor_task_prompt.strip(),
+            "cursor_ref": op.cursor_ref.strip() if op.cursor_ref else None,
+            "cursor_model": (op.cursor_model or "default").strip(),
+            "cursor_auto_create_pr": bool(op.cursor_auto_create_pr),
+            "cursor_branch_name": op.cursor_branch_name.strip() if op.cursor_branch_name else None,
+            "cursor_expected_deliverable": (
+                op.cursor_expected_deliverable.strip() if op.cursor_expected_deliverable else None
+            ),
+            "mutates": prev.mutates,
+            "summary_preview": (prev.summary_preview or "") + tok_note,
+        }
+        return OperatorTurnResult(
+            handled=True,
+            intent="cursor_agent_preview",
+            ok=True,
+            pending_cursor_agent=pending,
+            data={
+                "proposal_digest": prev.proposal_digest,
+                "repository": prev.repository,
+                "message": (prev.summary_preview or "") + tok_note,
+            },
+        )
+
+    if op.phase == "cursor_agent_launch":
+        if not op.confirmed:
+            return OperatorTurnResult(
+                handled=True,
+                intent="cursor_agent_launch",
+                ok=False,
+                blocking_reason="cursor_agent_launch requires confirmed=true.",
+            )
+        _require_bearer(ham_operator_authorization, _cursor_agent_launch_token(), code="CURSOR_AGENT_LAUNCH")
+        if (
+            not op.project_id
+            or not op.cursor_task_prompt
+            or not op.cursor_proposal_digest
+            or not op.cursor_base_revision
+        ):
+            return OperatorTurnResult(
+                handled=True,
+                intent="cursor_agent_launch",
+                ok=False,
+                blocking_reason=(
+                    "cursor_agent_launch requires project_id, cursor_task_prompt, "
+                    "cursor_proposal_digest, and cursor_base_revision."
+                ),
+            )
+        prec = project_store.get_project(op.project_id.strip())
+        if prec is None:
+            return OperatorTurnResult(
+                handled=True,
+                intent="cursor_agent_launch",
+                ok=False,
+                blocking_reason=f"Unknown project_id {op.project_id!r}.",
+            )
+        repo = resolve_cursor_repository_url(
+            explicit=op.cursor_repository.strip() if op.cursor_repository else None,
+            project_metadata=dict(prec.metadata or {}),
+        )
+        if not repo:
+            return OperatorTurnResult(
+                handled=True,
+                intent="cursor_agent_launch",
+                ok=False,
+                blocking_reason="Could not resolve repository for launch.",
+            )
+        v_err = verify_cursor_launch_against_preview(
+            project_id=prec.id,
+            repository=repo,
+            ref=op.cursor_ref.strip() if op.cursor_ref else None,
+            model=(op.cursor_model or "default").strip(),
+            auto_create_pr=bool(op.cursor_auto_create_pr),
+            branch_name=op.cursor_branch_name.strip() if op.cursor_branch_name else None,
+            expected_deliverable=(
+                op.cursor_expected_deliverable.strip() if op.cursor_expected_deliverable else None
+            ),
+            task_prompt=op.cursor_task_prompt.strip(),
+            proposal_digest=op.cursor_proposal_digest.strip(),
+            base_revision=op.cursor_base_revision.strip(),
+        )
+        if v_err:
+            return OperatorTurnResult(
+                handled=True,
+                intent="cursor_agent_launch",
+                ok=False,
+                blocking_reason=v_err,
+            )
+        api_key = get_effective_cursor_api_key()
+        if not api_key:
+            return OperatorTurnResult(
+                handled=True,
+                intent="cursor_agent_launch",
+                ok=False,
+                blocking_reason="No Cursor API key configured on this API host.",
+            )
+        ok_launch, payload, blocking = run_cursor_agent_launch(
+            api_key=api_key,
+            project_id=prec.id,
+            repository=repo,
+            ref=op.cursor_ref.strip() if op.cursor_ref else None,
+            model=(op.cursor_model or "default").strip(),
+            auto_create_pr=bool(op.cursor_auto_create_pr),
+            branch_name=op.cursor_branch_name.strip() if op.cursor_branch_name else None,
+            expected_deliverable=(
+                op.cursor_expected_deliverable.strip() if op.cursor_expected_deliverable else None
+            ),
+            task_prompt=op.cursor_task_prompt.strip(),
+            proposal_digest=op.cursor_proposal_digest.strip(),
+            project_root_for_mirror=str(prec.root),
+        )
+        return OperatorTurnResult(
+            handled=True,
+            intent="cursor_agent_launch",
+            ok=ok_launch,
+            blocking_reason=blocking,
+            data=payload if ok_launch else {**payload, "provider": "cursor_cloud_agent"},
+        )
+
+    if op.phase == "cursor_agent_status":
+        if not op.project_id or not op.cursor_agent_id or not str(op.cursor_agent_id).strip():
+            return OperatorTurnResult(
+                handled=True,
+                intent="cursor_agent_status",
+                ok=False,
+                blocking_reason="cursor_agent_status requires project_id and cursor_agent_id.",
+            )
+        prec = project_store.get_project(op.project_id.strip())
+        if prec is None:
+            return OperatorTurnResult(
+                handled=True,
+                intent="cursor_agent_status",
+                ok=False,
+                blocking_reason=f"Unknown project_id {op.project_id!r}.",
+            )
+        try:
+            aid = sanitize_cursor_agent_id(op.cursor_agent_id)
+        except ValueError as exc:
+            return OperatorTurnResult(
+                handled=True,
+                intent="cursor_agent_status",
+                ok=False,
+                blocking_reason=str(exc),
+            )
+        api_key = get_effective_cursor_api_key()
+        if not api_key:
+            return OperatorTurnResult(
+                handled=True,
+                intent="cursor_agent_status",
+                ok=False,
+                blocking_reason="No Cursor API key configured on this API host.",
+            )
+        ok_st, payload, blocking = run_cursor_agent_status(
+            api_key=api_key,
+            project_id=prec.id,
+            agent_id=aid,
+            project_root_for_mirror=str(prec.root),
+        )
+        return OperatorTurnResult(
+            handled=True,
+            intent="cursor_agent_status",
+            ok=ok_st,
+            blocking_reason=blocking,
+            data=payload if ok_st else {**payload, "provider": "cursor_cloud_agent"},
+        )
+
+    if op.phase == "droid_preview":
+        if not op.project_id or not op.droid_workflow_id or not op.droid_user_prompt:
+            return OperatorTurnResult(
+                handled=True,
+                intent="droid_preview",
+                ok=False,
+                blocking_reason=(
+                    "droid_preview requires project_id, droid_workflow_id, and droid_user_prompt."
+                ),
+            )
+        return _droid_preview_turn(
+            project_store=project_store,
+            project_id=op.project_id.strip(),
+            workflow_id=op.droid_workflow_id.strip(),
+            user_prompt=op.droid_user_prompt.strip(),
+        )
+
+    if op.phase == "droid_launch":
+        if not op.confirmed:
+            return OperatorTurnResult(
+                handled=True,
+                intent="droid_launch",
+                ok=False,
+                blocking_reason="droid_launch requires confirmed=true.",
+            )
+        if (
+            not op.project_id
+            or not op.droid_workflow_id
+            or not op.droid_user_prompt
+            or not op.droid_proposal_digest
+            or not op.droid_base_revision
+        ):
+            return OperatorTurnResult(
+                handled=True,
+                intent="droid_launch",
+                ok=False,
+                blocking_reason=(
+                    "droid_launch requires project_id, droid_workflow_id, droid_user_prompt, "
+                    "droid_proposal_digest, and droid_base_revision (re-run preview if stale)."
+                ),
+            )
+        rec = project_store.get_project(op.project_id.strip())
+        if rec is None:
+            return OperatorTurnResult(
+                handled=True,
+                intent="droid_launch",
+                ok=False,
+                blocking_reason=f"Unknown project_id {op.project_id!r}.",
+            )
+        root = Path(rec.root)
+        ok_path, why = project_root_accessible(root)
+        if not ok_path:
+            return OperatorTurnResult(
+                handled=True,
+                intent="droid_launch",
+                ok=False,
+                blocking_reason=f"Cannot launch droid workflow: {why}",
+            )
+        v_err = verify_launch_against_preview(
+            workflow_id=op.droid_workflow_id.strip(),
+            project_id=op.project_id.strip(),
+            project_root=root,
+            user_prompt=op.droid_user_prompt.strip(),
+            proposal_digest=op.droid_proposal_digest.strip(),
+            base_revision=op.droid_base_revision.strip(),
+        )
+        if v_err:
+            return OperatorTurnResult(
+                handled=True,
+                intent="droid_launch",
+                ok=False,
+                blocking_reason=v_err,
+            )
+        wf = get_workflow(op.droid_workflow_id.strip())
+        if wf is None:
+            return OperatorTurnResult(
+                handled=True,
+                intent="droid_launch",
+                ok=False,
+                blocking_reason=f"Unknown workflow_id {op.droid_workflow_id!r}.",
+            )
+        if wf.requires_launch_token:
+            _require_bearer(ham_operator_authorization, _droid_exec_token(), code="DROID_EXEC")
+        launch = execute_droid_workflow(
+            workflow_id=op.droid_workflow_id.strip(),
+            project_root=root,
+            user_prompt=op.droid_user_prompt.strip(),
+            project_id=op.project_id.strip(),
+            proposal_digest=op.droid_proposal_digest.strip(),
+        )
+        return OperatorTurnResult(
+            handled=True,
+            intent="droid_launch",
+            ok=launch.ok,
+            blocking_reason=launch.blocking_reason if not launch.ok else None,
+            data={
+                "workflow_id": launch.workflow_id,
+                "audit_id": launch.audit_id,
+                "runner_id": launch.runner_id,
+                "cwd": launch.cwd,
+                "exit_code": launch.exit_code,
+                "duration_ms": launch.duration_ms,
+                "summary": launch.summary,
+                "stdout": launch.stdout,
+                "stderr": launch.stderr,
+                "stdout_truncated": launch.stdout_truncated,
+                "stderr_truncated": launch.stderr_truncated,
+                "parsed_json": launch.parsed_json,
+                "session_id": launch.session_id,
+                "timed_out": launch.timed_out,
+            },
+        )
+
     return OperatorTurnResult(handled=False, ok=True, data={})
 
 
@@ -505,7 +990,7 @@ def _dispatch_intent(
     params: dict[str, Any],
     *,
     project_store: ProjectStore,
-    authorization: str | None,
+    ham_operator_authorization: str | None,
     confirmed: bool,
 ) -> OperatorTurnResult:
     if intent == "list_projects":
@@ -828,6 +1313,94 @@ def _dispatch_intent(
             },
         )
 
+    if intent == "droid_preview":
+        if params.get("missing") == "workflow_id":
+            return OperatorTurnResult(
+                handled=True,
+                intent=intent,
+                ok=False,
+                blocking_reason=(
+                    "Say which allowlisted workflow: `readonly_repo_audit` or `safe_edit_low` "
+                    "(e.g. preview factory droid readonly_repo_audit: …)."
+                ),
+            )
+        if params.get("missing") == "project_id":
+            return OperatorTurnResult(
+                handled=True,
+                intent=intent,
+                ok=False,
+                blocking_reason="Mention a registered `project.…` id or open Chat from a workspace with project context.",
+            )
+        if params.get("missing") == "user_prompt":
+            return OperatorTurnResult(
+                handled=True,
+                intent=intent,
+                ok=False,
+                blocking_reason="Add a focus line after the workflow id (what to audit or edit).",
+            )
+        return _droid_preview_turn(
+            project_store=project_store,
+            project_id=str(params["project_id"]),
+            workflow_id=str(params["workflow_id"]),
+            user_prompt=str(params["user_prompt"]),
+        )
+
+    if intent == "cursor_agent_status":
+        if params.get("missing") == "agent_id":
+            return OperatorTurnResult(
+                handled=True,
+                intent=intent,
+                ok=False,
+                blocking_reason="Include a Cursor agent id (e.g. `bc_…`) in your message.",
+            )
+        if params.get("missing") == "project_id":
+            return OperatorTurnResult(
+                handled=True,
+                intent=intent,
+                ok=False,
+                blocking_reason="Mention a registered `project.…` id or set workspace project context.",
+            )
+        pid = str(params["project_id"])
+        aid_raw = str(params["cursor_agent_id"])
+        prec = project_store.get_project(pid)
+        if prec is None:
+            return OperatorTurnResult(
+                handled=True,
+                intent=intent,
+                ok=False,
+                blocking_reason=f"Unknown project_id {pid!r}.",
+            )
+        try:
+            aid = sanitize_cursor_agent_id(aid_raw)
+        except ValueError as exc:
+            return OperatorTurnResult(
+                handled=True,
+                intent=intent,
+                ok=False,
+                blocking_reason=str(exc),
+            )
+        api_key = get_effective_cursor_api_key()
+        if not api_key:
+            return OperatorTurnResult(
+                handled=True,
+                intent=intent,
+                ok=False,
+                blocking_reason="No Cursor API key configured on this API host.",
+            )
+        ok_st, payload, blocking = run_cursor_agent_status(
+            api_key=api_key,
+            project_id=prec.id,
+            agent_id=aid,
+            project_root_for_mirror=str(prec.root),
+        )
+        return OperatorTurnResult(
+            handled=True,
+            intent=intent,
+            ok=ok_st,
+            blocking_reason=blocking,
+            data=payload if ok_st else {**payload, "provider": "cursor_cloud_agent"},
+        )
+
     return OperatorTurnResult(handled=False, ok=True, data={})
 
 
@@ -866,6 +1439,34 @@ def format_operator_assistant_message(op: OperatorTurnResult) -> str:
             f"**Operator — register pending ({intent})**\n\n"
             f"**{d.get('name')}** → `{d.get('root')}`\n\n"
             f"Confirm with **Confirm register** (requires `HAM_SETTINGS_WRITE_TOKEN` on the API host)."
+        )
+    if op.pending_droid:
+        d = op.pending_droid or {}
+        mut = d.get("mutates")
+        tok = (
+            "\n\n**Mutating workflow** — launch requires `confirmed=true` plus "
+            "`Authorization: Bearer` matching `HAM_DROID_EXEC_TOKEN` on the API host."
+            if mut
+            else "\n\n**Read-only workflow** — launch requires `confirmed=true` (no droid exec token)."
+        )
+        prev = d.get("summary_preview") or ""
+        return (
+            f"**Operator — droid preview ready**\n\n"
+            f"Project `{d.get('project_id')}` — workflow `{d.get('workflow_id')}`.\n\n"
+            f"{prev}{tok}\n\n"
+            "Send `operator.phase=droid_launch` with the same `droid_user_prompt`, "
+            "`droid_proposal_digest`, and `droid_base_revision` from `operator_result.pending_droid`."
+        )
+    if op.pending_cursor_agent:
+        d = op.pending_cursor_agent or {}
+        prev = d.get("summary_preview") or ""
+        return (
+            f"**Operator — Cursor Cloud Agent preview**\n\n"
+            f"Project `{d.get('project_id')}` → `{d.get('repository')}`\n\n"
+            f"{prev}\n\n"
+            "Launch with `operator.phase=cursor_agent_launch`, `confirmed=true`, matching "
+            "`cursor_proposal_digest` / `cursor_base_revision`, and "
+            "`Authorization: Bearer` = `HAM_CURSOR_AGENT_LAUNCH_TOKEN`."
         )
     if intent == "list_projects":
         data = op.data.get("projects") or []
@@ -920,6 +1521,49 @@ def format_operator_assistant_message(op: OperatorTurnResult) -> str:
             "**Operator — launch_run**\n\n"
             f"Run **`{op.data.get('run_id')}`** completed (bridge status: `{op.data.get('bridge_status')}`). "
             f"Persisted: `{op.data.get('persist_path')}`."
+        )
+    if intent == "droid_launch":
+        data = op.data or {}
+        extra = ""
+        if data.get("stderr") and not op.ok:
+            err = str(data.get("stderr") or "")[:2000]
+            extra = f"\n\n```text\n{err}\n```"
+        elif data.get("stdout") and not data.get("parsed_json"):
+            out = str(data.get("stdout") or "")[:2000]
+            extra = f"\n\n```text\n{out}\n```"
+        return (
+            f"**Operator — droid_launch** ({'ok' if op.ok else 'failed'})\n\n"
+            f"- **workflow:** `{data.get('workflow_id')}`\n"
+            f"- **audit_id:** `{data.get('audit_id')}`\n"
+            f"- **runner:** `{data.get('runner_id')}`\n"
+            f"- **cwd:** `{data.get('cwd')}`\n"
+            f"- **exit_code:** `{data.get('exit_code')}`\n"
+            f"- **duration_ms:** `{data.get('duration_ms')}`\n"
+            f"- **session_id:** `{data.get('session_id')}`\n\n"
+            f"**Summary:** {data.get('summary') or '(none)'}"
+            f"{extra}"
+        )
+    if intent == "cursor_agent_launch":
+        data = op.data or {}
+        return (
+            f"**Operator — cursor_agent_launch** ({'ok' if op.ok else 'failed'})\n\n"
+            f"- **agent_id:** `{data.get('agent_id')}`\n"
+            f"- **status:** `{data.get('status')}`\n"
+            f"- **repository:** `{data.get('repository')}`\n"
+            f"- **ref:** `{data.get('ref')}`\n"
+            f"- **pr_url:** `{data.get('pr_url')}`\n\n"
+            f"**Summary:** {data.get('summary') or '(none)'}"
+        )
+    if intent == "cursor_agent_status":
+        data = op.data or {}
+        return (
+            f"**Operator — cursor_agent_status** ({'ok' if op.ok else 'failed'})\n\n"
+            f"- **agent_id:** `{data.get('agent_id')}`\n"
+            f"- **status:** `{data.get('status')}`\n"
+            f"- **repository:** `{data.get('repository')}`\n"
+            f"- **ref:** `{data.get('ref')}`\n"
+            f"- **pr_url:** `{data.get('pr_url')}`\n\n"
+            f"**Summary:** {data.get('summary') or '(none)'}"
         )
     if op.data.get("message"):
         return f"**Operator — {intent}**\n\n{op.data['message']}"

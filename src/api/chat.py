@@ -16,10 +16,23 @@ from src.ham.cursor_skills_catalog import list_cursor_skills, render_skills_for_
 from src.ham.cursor_subagents_catalog import list_cursor_subagents, render_subagents_for_system_prompt
 from src.ham.chat_operator import (
     ChatOperatorPayload,
+    OperatorTurnResult,
     format_operator_assistant_message,
     operator_enabled,
     process_operator_turn,
 )
+from src.api.clerk_gate import enforce_clerk_session_and_email_for_request
+from src.ham.clerk_auth import (
+    HamActor,
+    actor_attribution_dict,
+    resolve_ham_operator_authorization_header,
+)
+from src.ham.clerk_policy import (
+    actor_has_permission,
+    permission_for_intent,
+    permission_for_phase,
+)
+from src.ham.operator_audit import append_operator_action_audit
 from src.ham.ui_actions import split_assistant_ui_actions, ui_actions_system_instructions
 from src.ham.workbench_view_intent import augment_workbench_view_actions
 from src.integrations.nous_gateway_client import (
@@ -103,6 +116,49 @@ def _gateway_status_code(code: str) -> int:
 
 
 _MAX_SYSTEM_PROMPT_CHARS = 12_000
+
+
+def _resolve_chat_clerk_context(
+    authorization: str | None,
+    x_ham_operator_authorization: str | None,
+    *,
+    route: str,
+) -> tuple[HamActor | None, str | None]:
+    """Clerk session on ``Authorization`` when operator auth or email enforcement is on; HAM tokens on ``X-Ham-Operator-Authorization``."""
+    ham_hdr = resolve_ham_operator_authorization_header(
+        authorization=authorization,
+        x_ham_operator_authorization=x_ham_operator_authorization,
+    )
+    actor = enforce_clerk_session_and_email_for_request(authorization, route=route)
+    return actor, ham_hdr
+
+
+def _record_operator_audit(
+    *,
+    body: ChatRequest,
+    op: OperatorTurnResult,
+    ham_actor: HamActor | None,
+    route: str,
+) -> None:
+    req = (
+        permission_for_phase(body.operator.phase)
+        if body.operator and body.operator.phase
+        else permission_for_intent(op.intent)
+    )
+    append_operator_action_audit(
+        {
+            **actor_attribution_dict(ham_actor),
+            "required_permission": req,
+            "permission_granted": actor_has_permission(ham_actor, req) if (ham_actor and req) else None,
+            "intent": op.intent,
+            "operator_phase": body.operator.phase if body.operator else None,
+            "operator_ok": op.ok,
+            "blocking_reason": op.blocking_reason,
+            "route": route,
+            "audit_sink": "ham_local_jsonl",
+        }
+    )
+
 
 # Shipped default so the model is product-aware without requiring env (override with HAM_CHAT_SYSTEM_PROMPT).
 _DEFAULT_CHAT_SYSTEM_PROMPT = """
@@ -350,7 +406,13 @@ def _messages_for_completion(
 async def post_chat(
     body: ChatRequest,
     authorization: str | None = Header(None, alias="Authorization"),
+    x_ham_operator_authorization: str | None = Header(None, alias="X-Ham-Operator-Authorization"),
 ) -> ChatResponse:
+    ham_actor, ham_op_hdr = _resolve_chat_clerk_context(
+        authorization,
+        x_ham_operator_authorization,
+        route="post_chat",
+    )
     store = _chat_store
     sid, llm_messages, or_override, active_meta = _messages_for_completion(body)
     if body.enable_operator and operator_enabled() and body.messages[-1].role == "user":
@@ -361,9 +423,11 @@ async def post_chat(
             project_store=get_project_store(),
             default_project_id=body.project_id,
             operator_payload=body.operator,
-            authorization=authorization,
+            ham_operator_authorization=ham_op_hdr,
+            ham_actor=ham_actor,
         )
         if op is not None and op.handled:
+            _record_operator_audit(body=body, op=op, ham_actor=ham_actor, route="post_chat")
             msg = format_operator_assistant_message(op)
             store.append_turns(sid, [ChatTurn(role="assistant", content=msg)])
             return ChatResponse(
@@ -413,8 +477,14 @@ async def post_chat(
 def post_chat_stream(
     body: ChatRequest,
     authorization: str | None = Header(None, alias="Authorization"),
+    x_ham_operator_authorization: str | None = Header(None, alias="X-Ham-Operator-Authorization"),
 ) -> StreamingResponse:
     """Stream assistant tokens as NDJSON lines: session, delta, done (or error)."""
+    ham_actor, ham_op_hdr = _resolve_chat_clerk_context(
+        authorization,
+        x_ham_operator_authorization,
+        route="post_chat_stream",
+    )
     store = _chat_store
     sid, llm_messages, or_override, stream_active_meta = _messages_for_completion(body)
 
@@ -426,9 +496,11 @@ def post_chat_stream(
             project_store=get_project_store(),
             default_project_id=body.project_id,
             operator_payload=body.operator,
-            authorization=authorization,
+            ham_operator_authorization=ham_op_hdr,
+            ham_actor=ham_actor,
         )
         if op is not None and op.handled:
+            _record_operator_audit(body=body, op=op, ham_actor=ham_actor, route="post_chat_stream")
             msg = format_operator_assistant_message(op)
             store.append_turns(sid, [ChatTurn(role="assistant", content=msg)])
             msgs = store.list_messages(sid)

@@ -4,6 +4,7 @@ import type {
   ModelCatalogPayload,
   ProjectRecord,
 } from "./types";
+import { getRegisteredClerkSessionToken } from "./clerkSession";
 
 /**
  * Ham API **origin** for `fetch` (scheme + host, optional port). Paths already include `/api/...`.
@@ -34,6 +35,38 @@ export function apiUrl(path: string): string {
   return base ? `${base}${p}` : p;
 }
 
+/** If `Authorization` is unset and the dashboard has a Clerk publishable key, attach the session JWT. */
+export async function mergeClerkAuthBearerIfNeeded(headers: Headers): Promise<void> {
+  if (headers.has("Authorization")) return;
+  const pk = (import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined)?.trim();
+  if (!pk) return;
+  const tok = (await getRegisteredClerkSessionToken())?.trim();
+  if (tok) headers.set("Authorization", `Bearer ${tok}`);
+}
+
+/**
+ * Clerk session on `Authorization` when present; otherwise legacy `Authorization: Bearer` for HAM secrets.
+ * When both are needed, sets `X-Ham-Operator-Authorization` for the HAM token.
+ */
+export async function applyHamOperatorSecretHeaders(headers: Headers, hamBearerToken: string): Promise<void> {
+  await mergeClerkAuthBearerIfNeeded(headers);
+  const ham = hamBearerToken.trim();
+  if (!ham) return;
+  if (headers.has("Authorization")) {
+    headers.set("X-Ham-Operator-Authorization", `Bearer ${ham}`);
+  } else {
+    headers.set("Authorization", `Bearer ${ham}`);
+  }
+}
+
+/** Same-origin Ham API `fetch` with optional Clerk `Authorization` (skips if already set). */
+export async function hamApiFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  const url = apiUrl(path);
+  const headers = new Headers(init.headers as HeadersInit | undefined);
+  await mergeClerkAuthBearerIfNeeded(headers);
+  return fetch(url, { ...init, headers });
+}
+
 async function readFastApiDetail(res: Response): Promise<string | null> {
   try {
     const j = (await res.json()) as { detail?: unknown };
@@ -50,16 +83,46 @@ async function readFastApiDetail(res: Response): Promise<string | null> {
 
 /** Unified composer catalog (OpenRouter chat rows + Cursor slugs, honest flags). */
 export async function fetchModelsCatalog(): Promise<ModelCatalogPayload> {
-  const res = await fetch(apiUrl("/api/models"));
+  const res = await hamApiFetch("/api/models");
   if (!res.ok) {
     throw new Error(`models catalog: HTTP ${res.status}`);
   }
   return res.json() as Promise<ModelCatalogPayload>;
 }
 
+/** GET /api/hermes-hub — gateway + Hermes skills capabilities; no fake Hermes inventory. */
+export interface HermesHubDashboardChat {
+  active_upstream: string;
+  short_label: string;
+  summary: string;
+}
+
+export interface HermesHubScopeNotes {
+  in_ham_today: string[];
+  not_in_ham_yet: string[];
+}
+
+export interface HermesHubSnapshot {
+  kind: "ham_hermes_control_plane_snapshot";
+  gateway_mode: string;
+  openrouter_chat_ready: boolean;
+  http_chat_ready?: boolean;
+  dashboard_chat_ready?: boolean;
+  dashboard_chat: HermesHubDashboardChat;
+  skills_capabilities: HermesSkillsCapabilities;
+  scope_notes: HermesHubScopeNotes;
+}
+
+export async function fetchHermesHubSnapshot(): Promise<HermesHubSnapshot> {
+  const res = await hamApiFetch("/api/hermes-hub");
+  if (!res.ok) {
+    throw new Error(`hermes-hub: HTTP ${res.status}`);
+  }
+  return res.json() as Promise<HermesHubSnapshot>;
+}
+
 export async function fetchContextEngine(): Promise<ContextEnginePayload> {
-  const url = apiUrl("/api/context-engine");
-  const res = await fetch(url);
+  const res = await hamApiFetch("/api/context-engine");
   if (!res.ok) {
     const hint =
       res.status === 404
@@ -71,8 +134,7 @@ export async function fetchContextEngine(): Promise<ContextEnginePayload> {
 }
 
 export async function fetchCursorCredentialsStatus(): Promise<CursorCredentialsStatus> {
-  const url = apiUrl("/api/cursor/credentials-status");
-  const res = await fetch(url);
+  const res = await hamApiFetch("/api/cursor/credentials-status");
   if (!res.ok) {
     throw new Error(`cursor credentials: HTTP ${res.status}`);
   }
@@ -81,7 +143,7 @@ export async function fetchCursorCredentialsStatus(): Promise<CursorCredentialsS
 
 /** Proxy to Cursor `GET /v0/models` — uses the same team key as Settings. */
 export async function fetchCursorModels(): Promise<unknown> {
-  const res = await fetch(apiUrl("/api/cursor/models"));
+  const res = await hamApiFetch("/api/cursor/models");
   if (!res.ok) {
     const msg = (await readFastApiDetail(res)) ?? `HTTP ${res.status}`;
     throw new Error(msg);
@@ -91,9 +153,11 @@ export async function fetchCursorModels(): Promise<unknown> {
 
 /** Save team Cursor API key server-side (~/.ham/cursor_credentials.json). Verifies via Cursor /v0/me. */
 export async function saveCursorApiKey(apiKey: string): Promise<void> {
+  const headers = new Headers({ "Content-Type": "application/json" });
+  await mergeClerkAuthBearerIfNeeded(headers);
   const res = await fetch(apiUrl("/api/cursor/credentials"), {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({ api_key: apiKey.trim() }),
   });
   if (!res.ok) {
@@ -104,7 +168,9 @@ export async function saveCursorApiKey(apiKey: string): Promise<void> {
 
 /** Remove UI-saved key; falls back to CURSOR_API_KEY env on the API host. */
 export async function clearSavedCursorApiKey(): Promise<void> {
-  const res = await fetch(apiUrl("/api/cursor/credentials"), { method: "DELETE" });
+  const headers = new Headers();
+  await mergeClerkAuthBearerIfNeeded(headers);
+  const res = await fetch(apiUrl("/api/cursor/credentials"), { method: "DELETE", headers });
   if (!res.ok) {
     const msg = (await readFastApiDetail(res)) ?? `HTTP ${res.status}`;
     throw new Error(msg);
@@ -113,7 +179,7 @@ export async function clearSavedCursorApiKey(): Promise<void> {
 
 /** Proxy `GET /v0/agents/{id}` — Cloud Agent status and metadata. */
 export async function fetchCursorAgent(agentId: string): Promise<Record<string, unknown>> {
-  const res = await fetch(apiUrl(`/api/cursor/agents/${encodeURIComponent(agentId)}`));
+  const res = await hamApiFetch(`/api/cursor/agents/${encodeURIComponent(agentId)}`);
   if (!res.ok) {
     const msg = (await readFastApiDetail(res)) ?? `HTTP ${res.status}`;
     throw new Error(msg);
@@ -125,9 +191,7 @@ export async function fetchCursorAgent(agentId: string): Promise<Record<string, 
 export async function fetchCursorAgentConversation(
   agentId: string,
 ): Promise<Record<string, unknown>> {
-  const res = await fetch(
-    apiUrl(`/api/cursor/agents/${encodeURIComponent(agentId)}/conversation`),
-  );
+  const res = await hamApiFetch(`/api/cursor/agents/${encodeURIComponent(agentId)}/conversation`);
   if (!res.ok) {
     const msg = (await readFastApiDetail(res)) ?? `HTTP ${res.status}`;
     throw new Error(msg);
@@ -403,14 +467,13 @@ export async function postCursorAgentFollowup(
   agentId: string,
   promptText: string,
 ): Promise<Record<string, unknown>> {
-  const res = await fetch(
-    apiUrl(`/api/cursor/agents/${encodeURIComponent(agentId)}/followup`),
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt_text: promptText }),
-    },
-  );
+  const headers = new Headers({ "Content-Type": "application/json" });
+  await mergeClerkAuthBearerIfNeeded(headers);
+  const res = await fetch(apiUrl(`/api/cursor/agents/${encodeURIComponent(agentId)}/followup`), {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ prompt_text: promptText }),
+  });
   if (!res.ok) {
     const msg = (await readFastApiDetail(res)) ?? `HTTP ${res.status}`;
     throw new Error(msg);
@@ -421,8 +484,7 @@ export async function postCursorAgentFollowup(
 export async function fetchProjectContextEngine(
   projectId: string,
 ): Promise<ContextEnginePayload> {
-  const url = apiUrl(`/api/projects/${encodeURIComponent(projectId)}/context-engine`);
-  const res = await fetch(url);
+  const res = await hamApiFetch(`/api/projects/${encodeURIComponent(projectId)}/context-engine`);
   if (!res.ok) {
     throw new Error(`project context-engine: HTTP ${res.status}`);
   }
@@ -540,10 +602,20 @@ function messageFromFastApiDetail(detail: unknown): string | null {
 }
 
 /** FastAPI `HTTPException` detail shape `{ "error": { "code", "message" } }`. */
-function fastApiStructuredErrorCode(detail: unknown): string | null {
+export function fastApiStructuredErrorCode(detail: unknown): string | null {
   if (typeof detail !== "object" || detail === null || !("error" in detail)) return null;
   const e = (detail as { error?: { code?: string } }).error;
   return typeof e?.code === "string" ? e.code : null;
+}
+
+/** Ham API rejected the Clerk identity (email/domain allowlist). */
+export class HamAccessRestrictedError extends Error {
+  readonly code = "HAM_EMAIL_RESTRICTION";
+
+  constructor(message: string) {
+    super(message);
+    this.name = "HamAccessRestrictedError";
+  }
 }
 
 export async function postChat(body: HamChatRequest): Promise<HamChatResponse> {
@@ -575,9 +647,15 @@ export async function postChat(body: HamChatRequest): Promise<HamChatResponse> {
     let msg = `Chat request failed (HTTP ${res.status})`;
     try {
       const j = (await res.json()) as { detail?: unknown };
+      if (fastApiStructuredErrorCode(j?.detail) === "HAM_EMAIL_RESTRICTION") {
+        throw new HamAccessRestrictedError(
+          messageFromFastApiDetail(j?.detail) ?? "Access restricted for this Ham deployment.",
+        );
+      }
       const parsed = messageFromFastApiDetail(j?.detail);
       if (parsed) msg = parsed;
-    } catch {
+    } catch (err) {
+      if (err instanceof HamAccessRestrictedError) throw err;
       /* ignore JSON parse */
     }
     throw new Error(msg);
@@ -606,6 +684,33 @@ export type HamChatStreamEvent =
 const streamNetworkHint =
   "Check VITE_HAM_API_BASE (redeploy after changing). If the API is up but chat still fails, the browser origin may be blocked by CORS: add it to HAM_CORS_ORIGINS or set HAM_CORS_ORIGIN_REGEX on the API (see docs/examples/ham-api-cloud-run-env.yaml).";
 
+/** When Clerk is enabled: Clerk session JWT as `Authorization`; HAM operator secrets on `X-Ham-Operator-Authorization`. */
+export type HamChatStreamAuth =
+  | string
+  | {
+      sessionToken?: string | null;
+      hamOperatorToken?: string | null;
+    };
+
+function applyChatStreamAuthHeaders(
+  headers: Record<string, string>,
+  authorization?: HamChatStreamAuth,
+) {
+  if (authorization == null) return;
+  if (typeof authorization === "string") {
+    const raw = authorization.trim();
+    if (!raw) return;
+    headers.Authorization = raw.startsWith("Bearer ") ? raw : `Bearer ${raw}`;
+    return;
+  }
+  const s = authorization.sessionToken?.trim();
+  const h = authorization.hamOperatorToken?.trim();
+  if (s) headers.Authorization = `Bearer ${s}`;
+  if (h) {
+    headers["X-Ham-Operator-Authorization"] = h.startsWith("Bearer ") ? h : `Bearer ${h}`;
+  }
+}
+
 /**
  * Streaming assistant turn (NDJSON). Tokens arrive as `delta` events; final transcript in `done`.
  */
@@ -615,7 +720,7 @@ export async function postChatStream(
     onSession?: (sessionId: string) => void;
     onDelta?: (text: string) => void;
   } = {},
-  authorization?: string,
+  authorization?: HamChatStreamAuth,
 ): Promise<HamChatResponse> {
   const url = apiUrl("/api/chat/stream");
   const payload = {
@@ -630,8 +735,7 @@ export async function postChatStream(
     "Content-Type": "application/json",
     Accept: "application/x-ndjson, application/json",
   };
-  const auth = authorization?.trim();
-  if (auth) headers.Authorization = `Bearer ${auth}`;
+  applyChatStreamAuthHeaders(headers, authorization);
   let res: Response;
   try {
     res = await fetch(url, {
@@ -650,10 +754,16 @@ export async function postChatStream(
     let msg = `Chat stream failed (HTTP ${res.status})`;
     try {
       const j = (await res.json()) as { detail?: unknown };
+      if (fastApiStructuredErrorCode(j?.detail) === "HAM_EMAIL_RESTRICTION") {
+        throw new HamAccessRestrictedError(
+          messageFromFastApiDetail(j?.detail) ?? "Access restricted for this Ham deployment.",
+        );
+      }
       const parsed = messageFromFastApiDetail(j?.detail);
       if (parsed) msg = parsed;
-    } catch {
-      /* ignore */
+    } catch (err) {
+      if (err instanceof HamAccessRestrictedError) throw err;
+      /* ignore JSON parse */
     }
     throw new Error(msg);
   }
@@ -797,7 +907,7 @@ export interface HermesSkillsTargetsResponse {
 }
 
 export async function fetchHermesSkillsCatalog(): Promise<HermesSkillsCatalogResponse> {
-  const res = await fetch(apiUrl("/api/hermes-skills/catalog"));
+  const res = await hamApiFetch("/api/hermes-skills/catalog");
   if (!res.ok) {
     throw new Error(`hermes-skills/catalog: HTTP ${res.status}`);
   }
@@ -807,9 +917,7 @@ export async function fetchHermesSkillsCatalog(): Promise<HermesSkillsCatalogRes
 export async function fetchHermesSkillDetail(
   catalogId: string,
 ): Promise<{ kind: string; entry: HermesSkillCatalogEntryDetail }> {
-  const res = await fetch(
-    apiUrl(`/api/hermes-skills/catalog/${encodeURIComponent(catalogId)}`),
-  );
+  const res = await hamApiFetch(`/api/hermes-skills/catalog/${encodeURIComponent(catalogId)}`);
   if (!res.ok) {
     throw new Error(`hermes-skills/catalog/${catalogId}: HTTP ${res.status}`);
   }
@@ -817,7 +925,7 @@ export async function fetchHermesSkillDetail(
 }
 
 export async function fetchHermesSkillsCapabilities(): Promise<HermesSkillsCapabilities> {
-  const res = await fetch(apiUrl("/api/hermes-skills/capabilities"));
+  const res = await hamApiFetch("/api/hermes-skills/capabilities");
   if (!res.ok) {
     throw new Error(`hermes-skills/capabilities: HTTP ${res.status}`);
   }
@@ -825,7 +933,7 @@ export async function fetchHermesSkillsCapabilities(): Promise<HermesSkillsCapab
 }
 
 export async function fetchHermesSkillsTargets(): Promise<HermesSkillsTargetsResponse> {
-  const res = await fetch(apiUrl("/api/hermes-skills/targets"));
+  const res = await hamApiFetch("/api/hermes-skills/targets");
   if (!res.ok) {
     throw new Error(`hermes-skills/targets: HTTP ${res.status}`);
   }
@@ -864,7 +972,7 @@ export interface HermesSkillsInstallApplyResponse {
 export async function fetchHermesSkillsInstallWriteStatus(): Promise<{
   writes_enabled: boolean;
 }> {
-  const res = await fetch(apiUrl("/api/hermes-skills/install/write-status"));
+  const res = await hamApiFetch("/api/hermes-skills/install/write-status");
   if (!res.ok) {
     throw new Error(`hermes-skills/install/write-status: HTTP ${res.status}`);
   }
@@ -876,9 +984,11 @@ export async function postHermesSkillsInstallPreview(body: {
   target: { kind: "shared" };
   client_proposal_id?: string | null;
 }): Promise<HermesSkillsInstallPreviewResponse> {
+  const headers = new Headers({ "Content-Type": "application/json" });
+  await mergeClerkAuthBearerIfNeeded(headers);
   const res = await fetch(apiUrl("/api/hermes-skills/install/preview"), {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({
       catalog_id: body.catalog_id,
       target: body.target,
@@ -902,12 +1012,11 @@ export async function postHermesSkillsInstallApply(
   },
   bearerToken: string,
 ): Promise<HermesSkillsInstallApplyResponse> {
+  const headers = new Headers({ "Content-Type": "application/json" });
+  await applyHamOperatorSecretHeaders(headers, bearerToken);
   const res = await fetch(apiUrl("/api/hermes-skills/install/apply"), {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${bearerToken.trim()}`,
-    },
+    headers,
     body: JSON.stringify({
       catalog_id: body.catalog_id,
       target: body.target,
@@ -976,7 +1085,7 @@ export interface HamSettingsPreviewResponse {
 }
 
 export async function fetchSettingsWriteStatus(): Promise<{ writes_enabled: boolean }> {
-  const res = await fetch(apiUrl("/api/settings/write-status"));
+  const res = await hamApiFetch("/api/settings/write-status");
   if (!res.ok) {
     throw new Error(`write-status: HTTP ${res.status}`);
   }
@@ -985,7 +1094,7 @@ export async function fetchSettingsWriteStatus(): Promise<{ writes_enabled: bool
 
 /** Effective HAM agent profiles from merged project config. */
 export async function fetchProjectAgents(projectId: string): Promise<HamAgentsConfig> {
-  const res = await fetch(apiUrl(`/api/projects/${encodeURIComponent(projectId)}/agents`));
+  const res = await hamApiFetch(`/api/projects/${encodeURIComponent(projectId)}/agents`);
   const text = await res.text();
   let payload: unknown;
   try {
@@ -1036,7 +1145,7 @@ export async function fetchProjectAgents(projectId: string): Promise<HamAgentsCo
 }
 
 export async function listHamProjects(): Promise<{ projects: ProjectRecord[] }> {
-  const res = await fetch(apiUrl("/api/projects"));
+  const res = await hamApiFetch("/api/projects");
   if (!res.ok) {
     throw new Error(`projects: HTTP ${res.status}`);
   }
@@ -1048,7 +1157,7 @@ export async function registerHamProject(body: {
   root: string;
   description?: string;
 }): Promise<ProjectRecord> {
-  const res = await fetch(apiUrl("/api/projects"), {
+  const res = await hamApiFetch("/api/projects", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -1099,17 +1208,14 @@ export async function postSettingsPreview(
   changes: HamSettingsChanges,
   clientProposalId?: string,
 ): Promise<HamSettingsPreviewResponse> {
-  const res = await fetch(
-    apiUrl(`/api/projects/${encodeURIComponent(projectId)}/settings/preview`),
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        changes,
-        client_proposal_id: clientProposalId ?? null,
-      }),
-    },
-  );
+  const res = await hamApiFetch(`/api/projects/${encodeURIComponent(projectId)}/settings/preview`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      changes,
+      client_proposal_id: clientProposalId ?? null,
+    }),
+  });
   if (!res.ok) {
     const msg = await detailMessageFromResponse(res);
     throw new Error(msg || `settings preview failed (HTTP ${res.status})`);
@@ -1129,14 +1235,13 @@ export async function postSettingsApply(
   diff_applied: HamSettingsPreviewRow[];
   new_revision: string;
 }> {
+  const headers = new Headers({ "Content-Type": "application/json" });
+  await applyHamOperatorSecretHeaders(headers, bearerToken);
   const res = await fetch(
     apiUrl(`/api/projects/${encodeURIComponent(projectId)}/settings/apply`),
     {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${bearerToken.trim()}`,
-      },
+      headers,
       body: JSON.stringify({
         changes,
         base_revision: baseRevision,

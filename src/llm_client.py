@@ -35,6 +35,37 @@ def resolve_openrouter_model_name() -> str:
     return f"openrouter/{raw}"
 
 
+def normalized_openrouter_api_key() -> str:
+    """Stripped ``OPENROUTER_API_KEY`` from the environment (may be empty)."""
+    return (os.getenv("OPENROUTER_API_KEY") or "").strip()
+
+
+def openrouter_api_key_is_plausible(raw: str | None = None) -> bool:
+    """
+    Heuristic: value should be a single-line token for OpenRouter/LiteLLM (not shell paste noise).
+
+    Rejects common Secret Manager accidents: newlines, a leading ``Bearer `` prefix, or embedded
+    command snippets. Real OpenRouter keys normally start with ``sk-or-`` and are long; generic
+    high-entropy tokens are accepted when length and charset look reasonable.
+    """
+    k = normalized_openrouter_api_key() if raw is None else (raw or "").strip()
+    if not k:
+        return False
+    if any(c in k for c in "\n\r\t"):
+        return False
+    kl = k.lower()
+    if kl.startswith("bearer "):
+        return False
+    for needle in ("echo ", "export ", "gcloud ", "curl ", "printf ", "$(", "${"):
+        if needle in kl:
+            return False
+    if k.startswith("sk-or-"):
+        return len(k) >= 24
+    if all(c.isalnum() or c in "_-" for c in k) and 32 <= len(k) <= 256:
+        return True
+    return False
+
+
 def resolve_openrouter_model_name_for_chat() -> str:
     """
     Model for dashboard/API chat when using OpenRouter.
@@ -80,9 +111,15 @@ def stream_chat_messages_openrouter(
         raise ValueError("messages must not be empty")
 
     configure_litellm_env()
-    api_key = (os.getenv("OPENROUTER_API_KEY") or "").strip()
+    api_key = normalized_openrouter_api_key()
     if not api_key:
         raise RuntimeError("OPENROUTER_API_KEY is not set")
+    if not openrouter_api_key_is_plausible(api_key):
+        raise RuntimeError(
+            "OPENROUTER_API_KEY is set but is not a plausible raw API token "
+            "(expected one line only: no shell commands, no 'Bearer ' prefix, no newlines). "
+            "Fix the Secret Manager value and redeploy Cloud Run."
+        )
 
     model = (model_override or "").strip() or resolve_openrouter_model_name_for_chat()
     kwargs: dict[str, Any] = {
@@ -161,7 +198,12 @@ def get_llm_client() -> _OpenRouterChatClient:
     """Return a LiteLLM-backed client for OpenRouter (BYOK via OPENROUTER_API_KEY)."""
     configure_litellm_env()
     model = resolve_openrouter_model_name()
-    api_key = os.getenv("OPENROUTER_API_KEY")
+    api_key = normalized_openrouter_api_key() or None
+    if api_key and not openrouter_api_key_is_plausible(api_key):
+        raise RuntimeError(
+            "OPENROUTER_API_KEY is set but is not a plausible raw API token "
+            "(one line only; no shell/Bearer noise). Fix Secret Manager and redeploy."
+        )
     return _OpenRouterChatClient(model=model, api_key=api_key)
 
 

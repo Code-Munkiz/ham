@@ -1,11 +1,18 @@
-"""Dashboard endpoints for Cursor API key identity and team key rotation (server-side only)."""
+"""Dashboard endpoints for Cursor API key identity and team key rotation (server-side only).
+
+Chat operator **Cursor Cloud Agent** launch/status uses Bearer auth via
+``src/integrations/cursor_cloud_client.py``; the REST routes here still proxy with the
+existing httpx auth style for backward compatibility.
+"""
 from __future__ import annotations
 
 import os
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+
+from src.api.clerk_gate import get_ham_clerk_actor
 from pydantic import BaseModel, Field
 
 from src.persistence.cursor_credentials import (
@@ -17,7 +24,11 @@ from src.persistence.cursor_credentials import (
     save_cursor_api_key,
 )
 
-router = APIRouter(prefix="/api/cursor", tags=["cursor"])
+router = APIRouter(
+    prefix="/api/cursor",
+    tags=["cursor"],
+    dependencies=[Depends(get_ham_clerk_actor)],
+)
 
 
 class CursorApiKeyBody(BaseModel):

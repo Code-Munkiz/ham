@@ -11,6 +11,8 @@ export const CLIENT_MODEL_CATALOG_FALLBACK: ModelCatalogPayload = {
   source: "client_fallback",
   gateway_mode: "unknown",
   openrouter_chat_ready: false,
+  http_chat_ready: false,
+  dashboard_chat_ready: false,
   items: [
     {
       id: "openrouter:default",

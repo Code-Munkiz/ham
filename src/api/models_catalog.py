@@ -5,12 +5,17 @@ import os
 from typing import Any, Literal
 
 import httpx
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
-from src.llm_client import resolve_openrouter_model_name_for_chat
+from src.api.clerk_gate import get_ham_clerk_actor
+
+from src.llm_client import (
+    openrouter_api_key_is_plausible,
+    resolve_openrouter_model_name_for_chat,
+)
 from src.persistence.cursor_credentials import get_effective_cursor_api_key
 
-router = APIRouter(prefix="/api", tags=["models"])
+router = APIRouter(prefix="/api", tags=["models"], dependencies=[Depends(get_ham_clerk_actor)])
 
 CURSOR_CHAT_DISABLED_REASON = (
     "Dashboard chat is OpenRouter-backed only. Cursor API models are listed for alignment; "
@@ -68,10 +73,51 @@ def _gateway_mode() -> str:
     return "http" if base else "mock"
 
 
-def _openrouter_chat_ready() -> bool:
-    if _gateway_mode() != "openrouter":
-        return False
-    return bool((os.environ.get("OPENROUTER_API_KEY") or "").strip())
+# OpenRouter-labeled composer rows are inactive in non-openrouter modes (precise copy per mode).
+_HTTP_MODE_OPENROUTER_TIERS_DISABLED = (
+    "Inactive while HERMES_GATEWAY_MODE=http: dashboard chat uses the HTTP/SSE gateway "
+    "(HERMES_GATEWAY_BASE_URL; typically Hermes Agent API). The upstream model is configured "
+    "on the API host (e.g. HERMES_GATEWAY_MODEL), not these OpenRouter composer tiers."
+)
+_MOCK_MODE_OPENROUTER_TIERS_DISABLED = (
+    "Inactive while the gateway is mock: chat uses the built-in mock assistant. "
+    "These OpenRouter tiers apply when HERMES_GATEWAY_MODE=openrouter with a valid OPENROUTER_API_KEY."
+)
+_FALLBACK_OPENROUTER_TIERS_DISABLED = (
+    "These OpenRouter composer tiers are active only when HERMES_GATEWAY_MODE=openrouter."
+)
+
+
+def _openrouter_path_disabled_reason() -> str | None:
+    """When ``HERMES_GATEWAY_MODE=openrouter``: None if key is usable; else a short reason."""
+    key = (os.environ.get("OPENROUTER_API_KEY") or "").strip()
+    if not key:
+        return "OPENROUTER_API_KEY is not set."
+    if not openrouter_api_key_is_plausible(key):
+        return (
+            "OPENROUTER_API_KEY is not a single raw token (often pasted shell text in Secret Manager). "
+            "Store only the key, one line, redeploy; see docs/DEPLOY_CLOUD_RUN.md § OpenRouter key."
+        )
+    return None
+
+
+def _openrouter_composer_row_chat() -> tuple[bool, str | None]:
+    """``(supports_chat, disabled_reason)`` for OpenRouter-tier catalog rows (honest per gateway mode)."""
+    gw = _gateway_mode()
+    if gw == "openrouter":
+        reason = _openrouter_path_disabled_reason()
+        return (reason is None, reason)
+    if gw == "http":
+        return (False, _HTTP_MODE_OPENROUTER_TIERS_DISABLED)
+    if gw == "mock":
+        return (False, _MOCK_MODE_OPENROUTER_TIERS_DISABLED)
+    return (False, _FALLBACK_OPENROUTER_TIERS_DISABLED)
+
+
+def _http_chat_ready() -> bool:
+    return _gateway_mode() == "http" and bool(
+        (os.environ.get("HERMES_GATEWAY_BASE_URL") or "").strip(),
+    )
 
 
 def _normalize_openrouter_litellm_model(raw: str) -> str:
@@ -152,12 +198,11 @@ def build_catalog_payload() -> dict[str, Any]:
                 },
             )
 
-    or_ready = _openrouter_chat_ready()
-    or_reason = None if or_ready else (
-        "Set HERMES_GATEWAY_MODE=openrouter and OPENROUTER_API_KEY on the API host for chat."
-        if _gateway_mode() != "openrouter"
-        else "OPENROUTER_API_KEY is not set."
-    )
+    gw = _gateway_mode()
+    or_ready = gw == "openrouter" and _openrouter_path_disabled_reason() is None
+    or_row_chat, or_row_reason = _openrouter_composer_row_chat()
+    http_ready = _http_chat_ready()
+    dashboard_chat_ready = or_ready or http_ready or (gw == "mock")
 
     openrouter_items: list[dict[str, Any]] = [
         {
@@ -167,8 +212,8 @@ def build_catalog_payload() -> dict[str, Any]:
             "tier": None,
             "provider": "openrouter",
             "description": "Unified access via Ham chat gateway (OpenRouter).",
-            "supports_chat": or_ready,
-            "disabled_reason": or_reason,
+            "supports_chat": or_row_chat,
+            "disabled_reason": or_row_reason,
             "openrouter_model": resolve_openrouter_model_name_for_chat(),
         },
         {
@@ -178,8 +223,8 @@ def build_catalog_payload() -> dict[str, Any]:
             "tier": "auto",
             "provider": "openrouter",
             "description": "Efficiency-oriented default (DEFAULT_MODEL / gateway default).",
-            "supports_chat": or_ready,
-            "disabled_reason": or_reason,
+            "supports_chat": or_row_chat,
+            "disabled_reason": or_row_reason,
             "openrouter_model": _normalize_openrouter_litellm_model(
                 (os.environ.get("DEFAULT_MODEL") or "openai/gpt-4o-mini").strip(),
             ),
@@ -191,8 +236,8 @@ def build_catalog_payload() -> dict[str, Any]:
             "tier": "premium",
             "provider": "openrouter",
             "description": "Higher-capability default (HAM_CHAT_PREMIUM_MODEL or HERMES_GATEWAY_MODEL).",
-            "supports_chat": or_ready,
-            "disabled_reason": or_reason,
+            "supports_chat": or_row_chat,
+            "disabled_reason": or_row_reason,
             "openrouter_model": _normalize_openrouter_litellm_model(
                 (
                     (os.environ.get("HAM_CHAT_PREMIUM_MODEL") or "").strip()
@@ -207,8 +252,10 @@ def build_catalog_payload() -> dict[str, Any]:
     return {
         "items": items,
         "source": source,
-        "gateway_mode": _gateway_mode(),
+        "gateway_mode": gw,
         "openrouter_chat_ready": or_ready,
+        "http_chat_ready": http_ready,
+        "dashboard_chat_ready": dashboard_chat_ready,
     }
 
 
