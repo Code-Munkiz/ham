@@ -6,6 +6,8 @@ Use **dashboard chat** as the conversational front-end for **operator intent**: 
 
 Hermes remains the **sole supervisory orchestrator** for the Ham *runtime*; this document is about **product control plane** UX (chat + API), not replacing `hermes_feedback.py`.
 
+**ControlPlaneRun (v1):** [`docs/CONTROL_PLANE_RUN.md`](CONTROL_PLANE_RUN.md) describes the **ControlPlaneRun** durable record for **provider** launches (Cursor / Droid) and Cursor status polling—implemented under `src/persistence/control_plane_run.py` (separate from bridge `.ham/runs`, audit JSONL, and memory; not a full orchestration graph).
+
 ## Shipped (Phase A)
 
 | Piece | Role |

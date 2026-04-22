@@ -18,6 +18,17 @@ from src.ham.droid_workflows.registry import (
     list_workflow_ids,
 )
 from src.integrations.droid_runner_client import RemoteRunnerError, run_droid_argv
+from src.persistence.control_plane_run import (
+    ControlPlaneAuditRef,
+    ControlPlaneProviderAuditRef,
+    ControlPlaneRun,
+    ControlPlaneRunStore,
+    cap_error_summary,
+    cap_summary,
+    droid_outcome_to_ham_status,
+    new_ham_run_id,
+    utc_now_iso,
+)
 
 
 @dataclass(frozen=True)
@@ -54,6 +65,8 @@ class DroidLaunchResult:
     parsed_json: dict[str, Any] | None
     session_id: str | None
     timed_out: bool
+    ham_run_id: str | None = None
+    control_plane_status: str | None = None
 
 
 def _runner_id() -> str:
@@ -313,6 +326,60 @@ def parse_droid_json_stdout(stdout: str) -> tuple[dict[str, Any] | None, str | N
     return data, result_str, session_id
 
 
+def _droid_control_plane_audit_ref(project_root: Path) -> ControlPlaneAuditRef:
+    return ControlPlaneAuditRef(
+        provider_audit=ControlPlaneProviderAuditRef(
+            sink="droid_jsonl",
+            path=str((project_root / ".ham" / "_audit" / "droid_exec.jsonl").resolve()),
+        ),
+    )
+
+
+def _persist_droid_control_plane_run(
+    store: ControlPlaneRunStore,
+    *,
+    project_id: str,
+    workflow_id: str,
+    proposal_digest: str,
+    project_root: Path,
+    created_by: dict[str, Any] | None,
+    status: str,
+    status_reason: str,
+    summary: str | None,
+    error_summary: str | None,
+    session_id: str | None,
+) -> str:
+    now = utc_now_iso()
+    rid = new_ham_run_id()
+    prs = str(project_root.resolve())
+    run = ControlPlaneRun(
+        ham_run_id=rid,
+        provider="factory_droid",
+        action_kind="launch",
+        project_id=project_id,
+        created_by=created_by,
+        created_at=now,
+        updated_at=now,
+        committed_at=now,
+        started_at=now,
+        finished_at=now,
+        last_observed_at=now,
+        status=status,
+        status_reason=status_reason,
+        proposal_digest=proposal_digest,
+        base_revision=REGISTRY_REVISION,
+        external_id=session_id,
+        workflow_id=workflow_id,
+        summary=cap_summary(summary),
+        error_summary=cap_error_summary(error_summary),
+        last_provider_status=None,
+        audit_ref=_droid_control_plane_audit_ref(project_root),
+        project_root=prs,
+    )
+    store.save(run, project_root_for_mirror=prs)
+    return rid
+
+
 def append_droid_audit(project_root: Path, record: dict[str, Any]) -> str:
     audit_dir = project_root / ".ham" / "_audit"
     audit_dir.mkdir(parents=True, exist_ok=True)
@@ -331,9 +398,31 @@ def execute_droid_workflow(
     user_prompt: str,
     project_id: str | None = None,
     proposal_digest: str | None = None,
+    created_by: dict[str, Any] | None = None,
+    control_plane_run_store: ControlPlaneRunStore | None = None,
 ) -> DroidLaunchResult:
+    st = control_plane_run_store or ControlPlaneRunStore()
+    digest_key = (proposal_digest or "").strip() or ("0" * 64)
+    pid_s = (project_id or "").strip()
+
     wf = get_workflow(workflow_id)
     if wf is None:
+        hid: str | None = None
+        if pid_s:
+            pr0 = project_root.expanduser().resolve()
+            hid = _persist_droid_control_plane_run(
+                st,
+                project_id=pid_s,
+                workflow_id=workflow_id,
+                proposal_digest=digest_key,
+                project_root=pr0,
+                created_by=created_by,
+                status="failed",
+                status_reason="unknown_workflow",
+                summary=None,
+                error_summary=f"Unknown workflow_id {workflow_id!r}",
+                session_id=None,
+            )
         return DroidLaunchResult(
             ok=False,
             blocking_reason=f"Unknown workflow_id {workflow_id!r}",
@@ -351,12 +440,29 @@ def execute_droid_workflow(
             parsed_json=None,
             session_id=None,
             timed_out=False,
+            ham_run_id=hid,
+            control_plane_status="failed" if hid else None,
         )
     root = project_root.expanduser().resolve()
     focus = _sanitize_user_focus(user_prompt)
     try:
         argv = build_exec_argv(wf, root, focus)
     except ValueError as exc:
+        hid_ve: str | None = None
+        if pid_s:
+            hid_ve = _persist_droid_control_plane_run(
+                st,
+                project_id=pid_s,
+                workflow_id=workflow_id,
+                proposal_digest=digest_key,
+                project_root=root,
+                created_by=created_by,
+                status="failed",
+                status_reason="argv_build_error",
+                summary=None,
+                error_summary=str(exc),
+                session_id=None,
+            )
         return DroidLaunchResult(
             ok=False,
             blocking_reason=str(exc),
@@ -374,6 +480,8 @@ def execute_droid_workflow(
             parsed_json=None,
             session_id=None,
             timed_out=False,
+            ham_run_id=hid_ve,
+            control_plane_status="failed" if hid_ve else None,
         )
 
     ham_audit_id = str(uuid.uuid4())
@@ -409,6 +517,21 @@ def execute_droid_workflow(
             "proposal_digest": proposal_digest,
         }
         audit_id = append_droid_audit(root, audit_payload)
+        hid_re: str | None = None
+        if pid_s:
+            hid_re = _persist_droid_control_plane_run(
+                st,
+                project_id=pid_s,
+                workflow_id=workflow_id,
+                proposal_digest=digest_key,
+                project_root=root,
+                created_by=created_by,
+                status="failed",
+                status_reason="remote_runner",
+                summary=None,
+                error_summary=str(exc),
+                session_id=None,
+            )
         return DroidLaunchResult(
             ok=False,
             blocking_reason=str(exc),
@@ -426,6 +549,8 @@ def execute_droid_workflow(
             parsed_json=None,
             session_id=None,
             timed_out=False,
+            ham_run_id=hid_re,
+            control_plane_status="failed" if hid_re else None,
         )
     parsed, result_text, session_id = parse_droid_json_stdout(rec.stdout)
     ok_exec = not rec.timed_out and rec.exit_code == 0
@@ -464,6 +589,29 @@ def execute_droid_workflow(
     elif not ok_exec:
         blocking = "droid exec did not succeed"
 
+    hst, hsr = droid_outcome_to_ham_status(
+        ok=ok_exec,
+        timed_out=rec.timed_out,
+        exit_code=rec.exit_code,
+        had_runner_body=True,
+    )
+    hid_f: str | None = None
+    if pid_s:
+        err_end = cap_error_summary(blocking) if not ok_exec and blocking else None
+        hid_f = _persist_droid_control_plane_run(
+            st,
+            project_id=pid_s,
+            workflow_id=workflow_id,
+            proposal_digest=digest_key,
+            project_root=root,
+            created_by=created_by,
+            status=hst,
+            status_reason=hsr,
+            summary=summary,
+            error_summary=err_end,
+            session_id=session_id,
+        )
+
     return DroidLaunchResult(
         ok=ok_exec,
         blocking_reason=blocking,
@@ -481,4 +629,6 @@ def execute_droid_workflow(
         parsed_json=parsed,
         session_id=session_id,
         timed_out=rec.timed_out,
+        ham_run_id=hid_f,
+        control_plane_status=hst if hid_f else None,
     )

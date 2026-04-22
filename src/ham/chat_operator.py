@@ -55,6 +55,21 @@ from src.persistence.project_store import ProjectStore
 from src.persistence.run_store import RunRecord, RunStore
 
 
+def _control_plane_created_by(ham_actor: HamActor | None) -> dict[str, Any] | None:
+    if ham_actor is None:
+        return None
+    d: dict[str, Any] = {
+        "user_id": ham_actor.user_id,
+    }
+    if ham_actor.org_id:
+        d["org_id"] = ham_actor.org_id
+    if ham_actor.email:
+        d["email"] = ham_actor.email
+    if ham_actor.session_id:
+        d["session_id"] = ham_actor.session_id
+    return d
+
+
 def operator_enabled() -> bool:
     raw = (os.environ.get("HAM_CHAT_OPERATOR") or "true").strip().lower()
     return raw not in ("0", "false", "no", "off")
@@ -463,6 +478,7 @@ def process_operator_turn(
             operator_payload,
             project_store=project_store,
             ham_operator_authorization=ham_operator_authorization,
+            ham_actor=ham_actor,
         )
 
     parsed = try_heuristic_intent(user_text, default_project_id=default_project_id)
@@ -476,6 +492,7 @@ def process_operator_turn(
         project_store=project_store,
         ham_operator_authorization=ham_operator_authorization,
         confirmed=False,
+        ham_actor=ham_actor,
     )
     if not out.handled:
         return None
@@ -487,6 +504,7 @@ def _execute_explicit_phase(
     *,
     project_store: ProjectStore,
     ham_operator_authorization: str | None,
+    ham_actor: HamActor | None = None,
 ) -> OperatorTurnResult:
     if op.phase == "apply_settings":
         if not op.confirmed:
@@ -799,7 +817,7 @@ def _execute_explicit_phase(
                 ok=False,
                 blocking_reason="No Cursor API key configured on this API host.",
             )
-        ok_launch, payload, blocking = run_cursor_agent_launch(
+        ok_launch, payload, blocking, _cp_lid = run_cursor_agent_launch(
             api_key=api_key,
             project_id=prec.id,
             repository=repo,
@@ -813,13 +831,19 @@ def _execute_explicit_phase(
             task_prompt=op.cursor_task_prompt.strip(),
             proposal_digest=op.cursor_proposal_digest.strip(),
             project_root_for_mirror=str(prec.root),
+            created_by=_control_plane_created_by(ham_actor),
         )
+        out_data: dict[str, Any] = {**payload}
+        out_data.setdefault("provider", "cursor_cloud_agent")
+        ext = out_data.get("agent_id")
+        if ext not in (None, ""):
+            out_data["external_id"] = str(ext)
         return OperatorTurnResult(
             handled=True,
             intent="cursor_agent_launch",
             ok=ok_launch,
             blocking_reason=blocking,
-            data=payload if ok_launch else {**payload, "provider": "cursor_cloud_agent"},
+            data=out_data,
         )
 
     if op.phase == "cursor_agent_status":
@@ -855,18 +879,21 @@ def _execute_explicit_phase(
                 ok=False,
                 blocking_reason="No Cursor API key configured on this API host.",
             )
-        ok_st, payload, blocking = run_cursor_agent_status(
+        ok_st, payload, blocking, _cp_sid = run_cursor_agent_status(
             api_key=api_key,
             project_id=prec.id,
             agent_id=aid,
             project_root_for_mirror=str(prec.root),
         )
+        st_data: dict[str, Any] = {**payload}
+        st_data.setdefault("provider", "cursor_cloud_agent")
+        st_data["external_id"] = aid
         return OperatorTurnResult(
             handled=True,
             intent="cursor_agent_status",
             ok=ok_st,
             blocking_reason=blocking,
-            data=payload if ok_st else {**payload, "provider": "cursor_cloud_agent"},
+            data=st_data,
         )
 
     if op.phase == "droid_preview":
@@ -958,28 +985,37 @@ def _execute_explicit_phase(
             user_prompt=op.droid_user_prompt.strip(),
             project_id=op.project_id.strip(),
             proposal_digest=op.droid_proposal_digest.strip(),
+            created_by=_control_plane_created_by(ham_actor),
         )
+        droid_data: dict[str, Any] = {
+            "provider": "factory_droid",
+            "workflow_id": launch.workflow_id,
+            "audit_id": launch.audit_id,
+            "runner_id": launch.runner_id,
+            "cwd": launch.cwd,
+            "exit_code": launch.exit_code,
+            "duration_ms": launch.duration_ms,
+            "summary": launch.summary,
+            "stdout": launch.stdout,
+            "stderr": launch.stderr,
+            "stdout_truncated": launch.stdout_truncated,
+            "stderr_truncated": launch.stderr_truncated,
+            "parsed_json": launch.parsed_json,
+            "session_id": launch.session_id,
+            "timed_out": launch.timed_out,
+        }
+        if launch.ham_run_id:
+            droid_data["ham_run_id"] = launch.ham_run_id
+        if launch.control_plane_status:
+            droid_data["control_plane_status"] = launch.control_plane_status
+        if launch.session_id:
+            droid_data["external_id"] = launch.session_id
         return OperatorTurnResult(
             handled=True,
             intent="droid_launch",
             ok=launch.ok,
             blocking_reason=launch.blocking_reason if not launch.ok else None,
-            data={
-                "workflow_id": launch.workflow_id,
-                "audit_id": launch.audit_id,
-                "runner_id": launch.runner_id,
-                "cwd": launch.cwd,
-                "exit_code": launch.exit_code,
-                "duration_ms": launch.duration_ms,
-                "summary": launch.summary,
-                "stdout": launch.stdout,
-                "stderr": launch.stderr,
-                "stdout_truncated": launch.stdout_truncated,
-                "stderr_truncated": launch.stderr_truncated,
-                "parsed_json": launch.parsed_json,
-                "session_id": launch.session_id,
-                "timed_out": launch.timed_out,
-            },
+            data=droid_data,
         )
 
     return OperatorTurnResult(handled=False, ok=True, data={})
@@ -992,6 +1028,7 @@ def _dispatch_intent(
     project_store: ProjectStore,
     ham_operator_authorization: str | None,
     confirmed: bool,
+    ham_actor: HamActor | None = None,
 ) -> OperatorTurnResult:
     if intent == "list_projects":
         projects = project_store.list_projects()
@@ -1387,18 +1424,21 @@ def _dispatch_intent(
                 ok=False,
                 blocking_reason="No Cursor API key configured on this API host.",
             )
-        ok_st, payload, blocking = run_cursor_agent_status(
+        ok_st, payload, blocking, _cp_hid = run_cursor_agent_status(
             api_key=api_key,
             project_id=prec.id,
             agent_id=aid,
             project_root_for_mirror=str(prec.root),
         )
+        st_d: dict[str, Any] = {**payload}
+        st_d.setdefault("provider", "cursor_cloud_agent")
+        st_d["external_id"] = aid
         return OperatorTurnResult(
             handled=True,
             intent=intent,
             ok=ok_st,
             blocking_reason=blocking,
-            data=payload if ok_st else {**payload, "provider": "cursor_cloud_agent"},
+            data=st_d,
         )
 
     return OperatorTurnResult(handled=False, ok=True, data={})

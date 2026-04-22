@@ -18,6 +18,18 @@ from src.integrations.cursor_cloud_client import (
     cursor_api_get_agent,
     cursor_api_launch_agent,
 )
+from src.persistence.control_plane_run import (
+    ControlPlaneAuditRef,
+    ControlPlaneProviderAuditRef,
+    ControlPlaneRun,
+    ControlPlaneRunStore,
+    cap_error_summary,
+    cap_last_provider_status,
+    cap_summary,
+    map_cursor_raw_status,
+    new_ham_run_id,
+    utc_now_iso,
+)
 from src.persistence.cursor_credentials import get_effective_cursor_api_key
 
 CURSOR_AGENT_BASE_REVISION = "cursor-agent-v1"
@@ -282,6 +294,15 @@ def append_cursor_agent_audit(
         pass
 
 
+def _cursor_control_plane_audit_ref() -> ControlPlaneAuditRef:
+    return ControlPlaneAuditRef(
+        provider_audit=ControlPlaneProviderAuditRef(
+            sink="cursor_jsonl",
+            path=str(central_audit_file_path()),
+        ),
+    )
+
+
 def _audit_row_common(
     *,
     action: str,
@@ -346,16 +367,27 @@ def run_cursor_agent_launch(
     task_prompt: str,
     proposal_digest: str,
     project_root_for_mirror: str | None,
-) -> tuple[bool, dict[str, Any], str | None]:
+    created_by: dict[str, Any] | None = None,
+    control_plane_run_store: ControlPlaneRunStore | None = None,
+) -> tuple[bool, dict[str, Any], str | None, str | None]:
     """
-    Call Cursor launch; return (ok, ham_summary_or_error_dict, blocking_reason).
-    On failure ok is False; ham dict may contain error detail for operator data.
+    Call Cursor launch; return (ok, ham_summary_or_error_dict, blocking_reason, ham_run_id).
+
+    On failure after commit, ok is False and a **failed** ControlPlaneRun row is still created
+    when a durable run record is possible.
     """
+    st_global = control_plane_run_store or ControlPlaneRunStore()
     prompt_text = compose_prompt_for_cursor(
         task_prompt=task_prompt,
         expected_deliverable=expected_deliverable,
     )
     excerpt: str | None = None
+    pr_root: str | None = None
+    if project_root_for_mirror and str(project_root_for_mirror).strip():
+        p = Path(project_root_for_mirror).expanduser().resolve()
+        if p.is_dir():
+            pr_root = str(p)
+    now = utc_now_iso()
     try:
         raw = cursor_api_launch_agent(
             api_key=api_key,
@@ -382,7 +414,48 @@ def run_cursor_agent_launch(
             ),
             project_root_for_mirror=project_root_for_mirror,
         )
-        return True, summary, None
+        ham_status, s_reason = map_cursor_raw_status(
+            str(summary.get("status")) if summary.get("status") is not None else None,
+        )
+        ext_id: str | None
+        a = summary.get("agent_id")
+        ext_id = str(a).strip() if a not in (None, "") else None
+        if not ext_id:
+            r_id = raw.get("id") or raw.get("agentId")
+            ext_id = str(r_id).strip() if r_id not in (None, "") else None
+        fin = now if ham_status in ("succeeded", "failed") else None
+        rid = new_ham_run_id()
+        run = ControlPlaneRun(
+            ham_run_id=rid,
+            provider="cursor_cloud_agent",
+            action_kind="launch",
+            project_id=project_id,
+            created_by=created_by,
+            created_at=now,
+            updated_at=now,
+            committed_at=now,
+            started_at=now,
+            finished_at=fin,
+            last_observed_at=now,
+            status=ham_status,
+            status_reason=s_reason,
+            proposal_digest=proposal_digest,
+            base_revision=CURSOR_AGENT_BASE_REVISION,
+            external_id=ext_id,
+            workflow_id=None,
+            summary=cap_summary(
+                str(summary.get("summary")) if summary.get("summary") is not None else None,
+            ),
+            error_summary=None,
+            last_provider_status=cap_last_provider_status(
+                str(summary.get("status")) if summary.get("status") is not None else None,
+            ),
+            audit_ref=_cursor_control_plane_audit_ref(),
+            project_root=pr_root,
+        )
+        st_global.save(run, project_root_for_mirror=pr_root)
+        out = {**summary, "ham_run_id": rid, "control_plane_status": run.status}
+        return True, out, None, rid
     except CursorCloudApiError as exc:
         excerpt = exc.body_excerpt
         append_cursor_agent_audit(
@@ -399,7 +472,45 @@ def run_cursor_agent_launch(
             ),
             project_root_for_mirror=project_root_for_mirror,
         )
-        return False, {"error": str(exc), "status_code": exc.status_code}, str(exc)
+        fail_id = new_ham_run_id()
+        err_text = str(exc)
+        frun = ControlPlaneRun(
+            ham_run_id=fail_id,
+            provider="cursor_cloud_agent",
+            action_kind="launch",
+            project_id=project_id,
+            created_by=created_by,
+            created_at=now,
+            updated_at=now,
+            committed_at=now,
+            started_at=now,
+            finished_at=now,
+            last_observed_at=now,
+            status="failed",
+            status_reason="cursor_api:launch",
+            proposal_digest=proposal_digest,
+            base_revision=CURSOR_AGENT_BASE_REVISION,
+            external_id=None,
+            workflow_id=None,
+            summary=None,
+            error_summary=cap_error_summary(err_text),
+            last_provider_status=None,
+            audit_ref=_cursor_control_plane_audit_ref(),
+            project_root=pr_root,
+        )
+        st_global.save(frun, project_root_for_mirror=pr_root)
+        return (
+            False,
+            {
+                "error": err_text,
+                "status_code": exc.status_code,
+                "ham_run_id": fail_id,
+                "control_plane_status": "failed",
+                "provider": "cursor_cloud_agent",
+            },
+            err_text,
+            fail_id,
+        )
 
 
 def run_cursor_agent_status(
@@ -408,7 +519,20 @@ def run_cursor_agent_status(
     project_id: str,
     agent_id: str,
     project_root_for_mirror: str | None,
-) -> tuple[bool, dict[str, Any], str | None]:
+    control_plane_run_store: ControlPlaneRunStore | None = None,
+) -> tuple[bool, dict[str, Any], str | None, str | None]:
+    """Return (ok, payload, blocking_reason, ham_run_id) — ``ham_run_id`` is set when a run row is updated."""
+    st_global = control_plane_run_store or ControlPlaneRunStore()
+    pr_root: str | None = None
+    if project_root_for_mirror and str(project_root_for_mirror).strip():
+        p = Path(project_root_for_mirror).expanduser().resolve()
+        if p.is_dir():
+            pr_root = str(p)
+    existing = st_global.find_by_project_and_external(
+        project_id=project_id,
+        provider="cursor_cloud_agent",
+        external_id=agent_id,
+    )
     excerpt: str | None = None
     try:
         raw = cursor_api_get_agent(api_key=api_key, agent_id=agent_id)
@@ -428,7 +552,35 @@ def run_cursor_agent_status(
             ),
             project_root_for_mirror=project_root_for_mirror,
         )
-        return True, summary, None
+        n = utc_now_iso()
+        hst_out: str | None = None
+        if existing:
+            hst, sre = map_cursor_raw_status(
+                str(summary.get("status")) if summary.get("status") is not None else None,
+            )
+            hst_out = hst
+            upd = {
+                "updated_at": n,
+                "last_observed_at": n,
+                "last_provider_status": cap_last_provider_status(
+                    str(summary.get("status")) if summary.get("status") is not None else None,
+                ),
+                "status": hst,
+                "status_reason": sre,
+                "summary": cap_summary(
+                    str(summary.get("summary")) if summary.get("summary") is not None else None,
+                ),
+            }
+            if hst in ("succeeded", "failed"):
+                upd["finished_at"] = n
+            merged = existing.model_copy(update=upd)
+            st_global.save(merged, project_root_for_mirror=pr_root)
+        out = {**summary}
+        if hst_out is not None:
+            out["control_plane_status"] = hst_out
+        if existing:
+            out["ham_run_id"] = existing.ham_run_id
+        return True, out, None, (existing.ham_run_id if existing else None)
     except CursorCloudApiError as exc:
         excerpt = exc.body_excerpt
         append_cursor_agent_audit(
@@ -445,7 +597,28 @@ def run_cursor_agent_status(
             ),
             project_root_for_mirror=project_root_for_mirror,
         )
-        return False, {"error": str(exc), "status_code": exc.status_code}, str(exc)
+        n = utc_now_iso()
+        if existing:
+            upd = existing.model_copy(
+                update={
+                    "updated_at": n,
+                    "last_observed_at": n,
+                    "status": "unknown",
+                    "status_reason": "status_poll:cursor_api_error",
+                    "error_summary": cap_error_summary(str(exc)),
+                },
+            )
+            st_global.save(upd, project_root_for_mirror=pr_root)
+        return (
+            False,
+            {
+                "error": str(exc),
+                "status_code": exc.status_code,
+                "provider": "cursor_cloud_agent",
+            },
+            str(exc),
+            (existing.ham_run_id if existing else None),
+        )
 
 
 def sanitize_cursor_agent_id(agent_id: str) -> str:
