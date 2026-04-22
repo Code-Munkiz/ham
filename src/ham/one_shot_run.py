@@ -115,7 +115,7 @@ def run_ham_one_shot(
     review_assembly = assembly
     if bridge_result.mutation_detected is True:
         review_assembly = assemble_ham_run(prompt, project_root=root)
-    review_context = review_assembly.critic_backstory[:MAX_REVIEW_CONTEXT_CHARS]
+    review_context = review_assembly.critic_backstory[:_MAX_REVIEW_CONTEXT_CHARS]
 
     if hasattr(bridge_result, "model_dump"):
         bridge_json = json.dumps(
