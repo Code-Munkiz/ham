@@ -18,6 +18,7 @@ from src.api.hermes_hub import router as hermes_hub_router
 from src.api.hermes_skills import router as hermes_skills_router
 from src.api.models_catalog import router as models_catalog_router
 from src.api.project_settings import router as project_settings_router
+from src.api.control_plane_runs import router as control_plane_runs_router
 from src.ham.agent_profiles import agents_config_from_merged
 from src.ham.clerk_auth import HamActor, clerk_authorization_is_clerk_session
 from src.memory_heist import context_engine_dashboard_payload, discover_config
@@ -65,6 +66,7 @@ app.include_router(cursor_subagents_router)
 app.include_router(hermes_hub_router)
 app.include_router(hermes_skills_router)
 app.include_router(project_settings_router)
+app.include_router(control_plane_runs_router)
 app.include_router(models_catalog_router)
 
 _store = RunStore()
@@ -99,6 +101,7 @@ async def root() -> dict[str, Any]:
         "chat_stream": "/api/chat/stream",
         "settings_write_status": "/api/settings/write-status",
         "project_agents": "/api/projects/{project_id}/agents",
+        "control_plane_runs": "/api/control-plane-runs?project_id=<id>",
     }
 
 

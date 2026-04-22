@@ -27,7 +27,7 @@ Shipped muscle today centers on **Bridge + Droid executor** (`src/tools/droid_ex
 ## Architecture
 
 - `VISION.md` — canonical architecture, core pillars, design principles
-- `docs/CONTROL_PLANE_RUN.md` — `ControlPlaneRun` substrate (v1 file-backed: `src/persistence/control_plane_run.py`): durable provider-neutral launch record (Cursor/Droid) + Cursor status updates, separate from bridge runs and audit JSONL
+- `docs/CONTROL_PLANE_RUN.md` — `ControlPlaneRun` substrate (v1 file-backed: `src/persistence/control_plane_run.py`): durable provider-neutral launch record (Cursor/Droid) + Cursor status updates, separate from bridge runs and audit JSONL; read API: `src/api/control_plane_runs.py` (`GET /api/control-plane-runs`, `GET /api/control-plane-runs/{ham_run_id}`) — not orchestration, queues, or mission graphs
 
 ## Pillar modules
 

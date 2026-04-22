@@ -269,3 +269,30 @@ export interface ApiKey {
   status: 'Connected' | 'Error' | 'Inactive';
   assignedAgents: string[];
 }
+
+/** Public `GET /api/control-plane-runs` row (no digests or host paths beyond audit pointers). */
+export interface ControlPlaneAuditRef {
+  operator_audit_id?: string | null;
+  provider_audit?: { sink: string; path?: string | null } | null;
+}
+
+export interface ControlPlaneRunPublic {
+  ham_run_id: string;
+  provider: string;
+  action_kind: string;
+  project_id: string;
+  status: string;
+  status_reason: string;
+  external_id: string | null;
+  workflow_id: string | null;
+  summary: string | null;
+  error_summary: string | null;
+  created_at: string;
+  updated_at: string;
+  committed_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  last_observed_at: string | null;
+  last_provider_status: string | null;
+  audit_ref: ControlPlaneAuditRef | null;
+}

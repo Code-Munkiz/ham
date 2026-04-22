@@ -261,15 +261,32 @@ class ControlPlaneRunStore:
             return None
         return None
 
-    def list_for_project(self, project_id: str) -> list[ControlPlaneRun]:
+    def list_for_project(
+        self,
+        project_id: str,
+        *,
+        provider: str | None = None,
+        limit: int = 100,
+    ) -> list[ControlPlaneRun]:
+        """Newest first; optional exact ``provider`` filter and ``limit`` (capped 1–500)."""
+        pid = project_id.strip()
+        if not pid:
+            return []
+        cap = max(1, min(int(limit), 500))
+        prov = provider.strip() if (provider and str(provider).strip()) else None
         out: list[ControlPlaneRun] = []
         try:
             for p in sorted(self._base.glob("*.json"), key=lambda x: x.name, reverse=True):
                 if not p.is_file():
                     continue
                 data = json.loads(p.read_text(encoding="utf-8"))
-                if data.get("project_id") == project_id:
-                    out.append(ControlPlaneRun.model_validate(data))
+                if data.get("project_id") != pid:
+                    continue
+                if prov and str(data.get("provider") or "") != prov:
+                    continue
+                out.append(ControlPlaneRun.model_validate(data))
+                if len(out) >= cap:
+                    break
         except (OSError, json.JSONDecodeError, ValueError) as exc:
             print(
                 f"Warning: list control plane runs failed ({type(exc).__name__}: {exc})",

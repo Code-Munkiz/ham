@@ -10,6 +10,7 @@ import {
   Sparkles,
   UserCog,
   Orbit,
+  Layers,
 } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -100,6 +101,7 @@ export function NavRail() {
               {[
                 { label: "Analytics", path: "/analytics", icon: BarChart2 },
                 { label: "Logs", path: "/logs", icon: ScrollText },
+                { label: "Control plane", path: "/control-plane", icon: Layers },
               ].map((item) => {
                 const isActive = location.pathname === item.path;
                 return (
