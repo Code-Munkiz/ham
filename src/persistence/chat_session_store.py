@@ -22,6 +22,17 @@ class ChatSessionRecord:
     session_id: str
     turns: list[ChatTurn] = field(default_factory=list)
     upstream_ref: str | None = None
+    created_at: str | None = None  # ISO-8601; populated by SQLite store
+
+
+@dataclass
+class ChatSessionSummary:
+    """Lightweight record returned by ``list_sessions`` (no full turns)."""
+
+    session_id: str
+    preview: str
+    turn_count: int
+    created_at: str | None = None
 
 
 def _normalize_turns(turns: Sequence[ChatTurn | dict[str, Any]]) -> list[ChatTurn]:
@@ -49,6 +60,8 @@ class ChatSessionStore(Protocol):
     def set_upstream_ref(self, session_id: str, ref: str | None) -> None: ...
 
     def list_messages(self, session_id: str) -> list[dict[str, str]]: ...
+
+    def list_sessions(self, *, limit: int = 50, offset: int = 0) -> list[ChatSessionSummary]: ...
 
 
 class InMemoryChatSessionStore:
@@ -92,3 +105,24 @@ class InMemoryChatSessionStore:
             if rec is None:
                 raise KeyError(session_id)
             return [{"role": t.role, "content": t.content} for t in rec.turns]
+
+    def list_sessions(self, *, limit: int = 50, offset: int = 0) -> list[ChatSessionSummary]:
+        with self._lock:
+            items = sorted(self._sessions.values(), key=lambda r: r.session_id, reverse=True)
+            page = items[offset : offset + limit]
+            out: list[ChatSessionSummary] = []
+            for rec in page:
+                first_user = next(
+                    (t.content for t in rec.turns if t.role == "user"),
+                    "",
+                )
+                preview = (first_user[:120] + "…") if len(first_user) > 120 else first_user
+                out.append(
+                    ChatSessionSummary(
+                        session_id=rec.session_id,
+                        preview=preview,
+                        turn_count=len(rec.turns),
+                        created_at=rec.created_at,
+                    )
+                )
+            return out

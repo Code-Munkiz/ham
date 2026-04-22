@@ -7,7 +7,7 @@ from threading import RLock
 from typing import Any, Sequence
 from uuid import uuid4
 
-from src.persistence.chat_session_store import ChatSessionRecord, ChatTurn, _normalize_turns
+from src.persistence.chat_session_store import ChatSessionRecord, ChatSessionSummary, ChatTurn, _normalize_turns
 
 
 class SqliteChatSessionStore:
@@ -32,10 +32,18 @@ class SqliteChatSessionStore:
                 """
                 CREATE TABLE IF NOT EXISTS sessions (
                     session_id TEXT PRIMARY KEY,
-                    upstream_ref TEXT
+                    upstream_ref TEXT,
+                    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
                 )
                 """
             )
+            # Backfill: add created_at if upgrading from old schema.
+            try:
+                self._conn.execute("SELECT created_at FROM sessions LIMIT 0")
+            except sqlite3.OperationalError:
+                self._conn.execute(
+                    "ALTER TABLE sessions ADD COLUMN created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"
+                )
             self._conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS turns (
@@ -62,7 +70,7 @@ class SqliteChatSessionStore:
     def get_session(self, session_id: str) -> ChatSessionRecord | None:
         with self._lock:
             row = self._conn.execute(
-                "SELECT session_id, upstream_ref FROM sessions WHERE session_id = ?",
+                "SELECT session_id, upstream_ref, created_at FROM sessions WHERE session_id = ?",
                 (session_id,),
             ).fetchone()
             if row is None:
@@ -76,6 +84,7 @@ class SqliteChatSessionStore:
                 session_id=str(row["session_id"]),
                 turns=turns,
                 upstream_ref=row["upstream_ref"],
+                created_at=row["created_at"] if "created_at" in row.keys() else None,
             )
 
     def append_turns(self, session_id: str, turns: Sequence[ChatTurn | dict[str, Any]]) -> None:
@@ -120,3 +129,39 @@ class SqliteChatSessionStore:
                 (session_id,),
             )
             return [{"role": str(r["role"]), "content": str(r["content"])} for r in cur.fetchall()]
+
+    def list_sessions(self, *, limit: int = 50, offset: int = 0) -> list[ChatSessionSummary]:
+        with self._lock:
+            rows = self._conn.execute(
+                """
+                SELECT
+                    s.session_id,
+                    s.created_at,
+                    COUNT(t.id) AS turn_count,
+                    (
+                        SELECT t2.content FROM turns t2
+                        WHERE t2.session_id = s.session_id AND t2.role = 'user'
+                        ORDER BY t2.seq ASC LIMIT 1
+                    ) AS first_user_content
+                FROM sessions s
+                LEFT JOIN turns t ON t.session_id = s.session_id
+                GROUP BY s.session_id
+                HAVING turn_count > 0
+                ORDER BY s.created_at DESC
+                LIMIT ? OFFSET ?
+                """,
+                (limit, offset),
+            ).fetchall()
+            out: list[ChatSessionSummary] = []
+            for r in rows:
+                raw = str(r["first_user_content"] or "")
+                preview = (raw[:120] + "…") if len(raw) > 120 else raw
+                out.append(
+                    ChatSessionSummary(
+                        session_id=str(r["session_id"]),
+                        preview=preview,
+                        turn_count=int(r["turn_count"]),
+                        created_at=r["created_at"],
+                    )
+                )
+            return out

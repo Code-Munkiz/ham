@@ -13,7 +13,7 @@ from typing import Any
 
 import httpx
 
-DEFAULT_TIMEOUT_SEC = 120.0
+DEFAULT_TIMEOUT_SEC = 300.0
 DEFAULT_MODEL = "hermes-agent"
 
 

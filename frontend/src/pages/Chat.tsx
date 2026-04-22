@@ -19,6 +19,8 @@ import {
   Radar,
   History,
   Mic,
+  MessageSquare,
+  Plus,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
@@ -32,11 +34,14 @@ import {
   fetchContextEngine,
   fetchModelsCatalog,
   fetchProjectAgents,
+  fetchChatSessions,
+  fetchChatSession,
   listHamProjects,
   HamAccessRestrictedError,
   postChatStream,
   type HamChatStreamAuth,
   type HamOperatorResult,
+  type ChatSessionSummary,
 } from "@/lib/ham/api";
 import { CLIENT_MODEL_CATALOG_FALLBACK } from "@/lib/ham/modelCatalogFallback";
 import type { ModelCatalogPayload } from "@/lib/ham/types";
@@ -60,6 +65,7 @@ type ChatViewMode = "chat" | "split" | "preview" | "war_room";
 const RECENT_MISSIONS_KEY = "ham_recent_missions_v1";
 const MOUNT_STORAGE_KEY = "ham_project_mount_v1";
 const ACTIVE_CLOUD_AGENT_KEY = "ham_active_cloud_agent_id";
+const ACTIVE_SESSION_KEY = "ham_active_chat_session_id";
 
 type RecentMission = { id: string; label?: string; t: number };
 
@@ -199,7 +205,13 @@ function ChatPageInner({
 
   const [messages, setMessages] = React.useState<ChatRow[]>([]);
   const [input, setInput] = React.useState("");
-  const [sessionId, setSessionId] = React.useState<string | null>(null);
+  const [sessionId, setSessionId] = React.useState<string | null>(() => {
+    try {
+      return localStorage.getItem(ACTIVE_SESSION_KEY) || null;
+    } catch {
+      return null;
+    }
+  });
   const [sending, setSending] = React.useState(false);
   const [chatError, setChatError] = React.useState<string | null>(null);
 
@@ -256,6 +268,11 @@ function ChatPageInner({
   const [warBlink, setWarBlink] = React.useState(true);
   const [reduceMotion, setReduceMotion] = React.useState(false);
   const [cloudLaunchOpen, setCloudLaunchOpen] = React.useState(false);
+
+  /** Chat history sidebar */
+  const [historyOpen, setHistoryOpen] = React.useState(false);
+  const [historySessions, setHistorySessions] = React.useState<ChatSessionSummary[]>([]);
+  const [historyLoading, setHistoryLoading] = React.useState(false);
 
   /** Dedupe recent missions: same id → newest timestamp wins (single list order: newest first after push). */
   const pushRecentMission = React.useCallback((id: string, label?: string) => {
@@ -462,6 +479,108 @@ function ChatPageInner({
     }
   }, []);
 
+  // Persist sessionId to localStorage whenever it changes.
+  React.useEffect(() => {
+    try {
+      if (sessionId) {
+        localStorage.setItem(ACTIVE_SESSION_KEY, sessionId);
+      } else {
+        localStorage.removeItem(ACTIVE_SESSION_KEY);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [sessionId]);
+
+  // On mount: if we have a saved sessionId, reload its history from the backend.
+  React.useEffect(() => {
+    if (!sessionId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const detail = await fetchChatSession(sessionId);
+        if (cancelled) return;
+        const ts = () =>
+          new Date().toLocaleTimeString([], {
+            hour12: false,
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          });
+        setMessages(
+          detail.messages.map((m, i) => ({
+            id: `${sessionId}-restored-${i}-${m.role}`,
+            role: m.role,
+            content: m.content,
+            timestamp: ts(),
+          })),
+        );
+      } catch {
+        // Session not found on backend — stale localStorage. Clear and start fresh.
+        setSessionId(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Fetch chat history list when the history sidebar opens.
+  React.useEffect(() => {
+    if (!historyOpen) return;
+    let cancelled = false;
+    setHistoryLoading(true);
+    void fetchChatSessions(50, 0)
+      .then((r) => {
+        if (!cancelled) setHistorySessions(r.sessions);
+      })
+      .catch(() => {
+        if (!cancelled) setHistorySessions([]);
+      })
+      .finally(() => {
+        if (!cancelled) setHistoryLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [historyOpen]);
+
+  /** Start a brand-new chat session. */
+  const startNewChat = React.useCallback(() => {
+    setSessionId(null);
+    setMessages([]);
+    setChatError(null);
+    setHistoryOpen(false);
+  }, []);
+
+  /** Load a past session into the transcript. */
+  const loadSession = React.useCallback(async (sid: string) => {
+    try {
+      const detail = await fetchChatSession(sid);
+      const ts = () =>
+        new Date().toLocaleTimeString([], {
+          hour12: false,
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        });
+      setSessionId(sid);
+      setMessages(
+        detail.messages.map((m, i) => ({
+          id: `${sid}-loaded-${i}-${m.role}`,
+          role: m.role,
+          content: m.content,
+          timestamp: ts(),
+        })),
+      );
+      setChatError(null);
+      setHistoryOpen(false);
+    } catch {
+      toast.error("Failed to load chat session.");
+    }
+  }, []);
+
   const timeStr = () =>
     new Date().toLocaleTimeString([], {
       hour12: false,
@@ -573,6 +692,16 @@ function ChatPageInner({
           "Access restricted: this Ham deployment only allows approved email addresses or domains. Ask an admin or check Clerk sign-up restrictions.";
         setChatError(msg);
         toast.error(msg, { duration: 12_000, id: "ham-access-restricted" });
+      } else if (
+        err instanceof Error &&
+        err.message === "Chat stream ended without a done event"
+      ) {
+        // Stream dropped mid-response — partial content is already in messages
+        // state via onDelta. Don't clear it; the backend persists partial turns.
+        const msg =
+          "Response was interrupted — your partial message has been saved.";
+        setChatError(msg);
+        toast.error(msg, { duration: 8_000, id: "ham-stream-interrupted" });
       } else {
         const msg = err instanceof Error ? err.message : "Request failed";
         setChatError(msg);
@@ -664,6 +793,16 @@ function ChatPageInner({
           "Access restricted: this Ham deployment only allows approved email addresses or domains. Ask an admin or check Clerk sign-up restrictions.";
         setChatError(msg);
         toast.error(msg, { duration: 12_000, id: "ham-access-restricted" });
+      } else if (
+        err instanceof Error &&
+        err.message === "Chat stream ended without a done event"
+      ) {
+        // Stream dropped mid-response — partial content is already in messages
+        // state via onDelta. Don't clear it; the backend persists partial turns.
+        const msg =
+          "Response was interrupted — your partial message has been saved.";
+        setChatError(msg);
+        toast.error(msg, { duration: 8_000, id: "ham-stream-interrupted" });
       } else {
         const msg = err instanceof Error ? err.message : "Request failed";
         setChatError(msg);
@@ -718,6 +857,28 @@ function ChatPageInner({
                  <Activity className="h-3.5 w-3.5" />
                  <span className="text-[10px] font-black uppercase tracking-widest">Control Panel</span>
                  <ChevronDown className={cn("h-3 w-3 transition-transform duration-300", isControlPanelOpen ? "rotate-180" : "")} />
+              </button>
+              <button
+                type="button"
+                onClick={startNewChat}
+                title="New chat"
+                className="flex items-center gap-2 px-4 py-1.5 border border-white/10 bg-white/5 text-white/50 hover:text-white rounded-lg transition-colors"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                <span className="text-[10px] font-black uppercase tracking-widest">New</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setHistoryOpen(true)}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-1.5 border rounded-lg transition-colors",
+                  historyOpen
+                    ? "bg-[#FF6B00]/10 border-[#FF6B00]/40 text-[#FF6B00]"
+                    : "border-white/10 bg-white/5 text-white/50 hover:text-white",
+                )}
+              >
+                <MessageSquare className="h-3.5 w-3.5" />
+                <span className="text-[10px] font-black uppercase tracking-widest">History</span>
               </button>
               <button
                 type="button"
@@ -1118,6 +1279,78 @@ function ChatPageInner({
           </div>
         </div>
       </div>
+
+      {/* Chat history sidebar overlay */}
+      {historyOpen ? (
+        <div className="fixed inset-0 z-[100] flex">
+          <button
+            type="button"
+            aria-label="Close chat history"
+            className="flex-1 bg-black/70 backdrop-blur-xl"
+            onClick={() => setHistoryOpen(false)}
+          />
+          <div className="w-full max-w-md h-full border-l border-white/10 bg-[#0a0a0a]/95 backdrop-blur-xl shadow-2xl flex flex-col text-white">
+            <div className="h-12 flex items-center justify-between px-4 border-b border-white/10 shrink-0">
+              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#FF6B00]">CHAT_HISTORY</span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={startNewChat}
+                  className="flex items-center gap-1.5 px-3 py-1 text-[8px] font-black uppercase tracking-widest text-[#FF6B00] border border-[#FF6B00]/30 rounded hover:bg-[#FF6B00]/10 transition-colors"
+                >
+                  <Plus className="h-3 w-3" />
+                  New
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setHistoryOpen(false)}
+                  className="p-1.5 text-white/40 hover:text-white"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-2">
+              {historyLoading ? (
+                <p className="text-[10px] text-white/30">Loading…</p>
+              ) : historySessions.length === 0 ? (
+                <p className="text-[10px] text-white/25">No past chats yet. Start a conversation and it'll appear here.</p>
+              ) : (
+                historySessions.map((s) => (
+                  <button
+                    key={s.session_id}
+                    type="button"
+                    onClick={() => void loadSession(s.session_id)}
+                    className={cn(
+                      "w-full text-left border rounded-lg px-4 py-3 transition-colors group",
+                      s.session_id === sessionId
+                        ? "border-[#FF6B00]/40 bg-[#FF6B00]/10"
+                        : "border-white/10 bg-white/[0.02] hover:border-white/20 hover:bg-white/5",
+                    )}
+                  >
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <span className="text-[8px] font-mono text-white/30 truncate">
+                        {s.session_id.slice(0, 8)}…
+                      </span>
+                      <span className="text-[8px] font-mono text-white/20 shrink-0">
+                        {s.turn_count} msg{s.turn_count !== 1 ? "s" : ""}
+                      </span>
+                    </div>
+                    <p className="text-[11px] font-bold text-white/70 group-hover:text-white/90 truncate leading-snug">
+                      {s.preview || "Empty session"}
+                    </p>
+                    {s.created_at && (
+                      <span className="text-[8px] text-white/20 mt-1 block">
+                        {new Date(s.created_at).toLocaleString()}
+                      </span>
+                    )}
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {projectsOpen ? (
         <div className="fixed inset-0 z-[100] flex">

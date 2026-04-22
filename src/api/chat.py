@@ -49,12 +49,12 @@ _ChatStore = InMemoryChatSessionStore | SqliteChatSessionStore
 
 
 def _build_chat_session_store() -> _ChatStore:
-    mode = (os.environ.get("HAM_CHAT_SESSION_STORE") or "memory").strip().lower()
-    if mode == "sqlite":
-        raw = (os.environ.get("HAM_CHAT_SESSION_DB") or "").strip()
-        db_path = Path(raw).expanduser() if raw else Path.home() / ".ham" / "chat_sessions.sqlite"
-        return SqliteChatSessionStore(db_path)
-    return InMemoryChatSessionStore()
+    mode = (os.environ.get("HAM_CHAT_SESSION_STORE") or "sqlite").strip().lower()
+    if mode == "memory":
+        return InMemoryChatSessionStore()
+    raw = (os.environ.get("HAM_CHAT_SESSION_DB") or "").strip()
+    db_path = Path(raw).expanduser() if raw else Path.home() / ".ham" / "chat_sessions.sqlite"
+    return SqliteChatSessionStore(db_path)
 
 
 _chat_store = _build_chat_session_store()
@@ -402,6 +402,50 @@ def _messages_for_completion(
     return sid, llm_messages, or_override, active_meta
 
 
+@router.get("/api/chat/sessions")
+async def list_chat_sessions(
+    limit: int = 50,
+    offset: int = 0,
+    authorization: str | None = Header(None, alias="Authorization"),
+) -> dict:
+    """List chat sessions with previews (newest first)."""
+    enforce_clerk_session_and_email_for_request(authorization, route="list_chat_sessions")
+    clamped_limit = max(1, min(limit, 100))
+    clamped_offset = max(0, offset)
+    items = _chat_store.list_sessions(limit=clamped_limit, offset=clamped_offset)
+    return {
+        "sessions": [
+            {
+                "session_id": s.session_id,
+                "preview": s.preview,
+                "turn_count": s.turn_count,
+                "created_at": s.created_at,
+            }
+            for s in items
+        ],
+    }
+
+
+@router.get("/api/chat/sessions/{session_id}")
+async def get_chat_session(
+    session_id: str,
+    authorization: str | None = Header(None, alias="Authorization"),
+) -> dict:
+    """Get full message history for a single chat session."""
+    enforce_clerk_session_and_email_for_request(authorization, route="get_chat_session")
+    rec = _chat_store.get_session(session_id)
+    if rec is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": {"code": "SESSION_NOT_FOUND", "message": "Unknown chat session."}},
+        )
+    return {
+        "session_id": rec.session_id,
+        "messages": [{"role": t.role, "content": t.content} for t in rec.turns],
+        "created_at": rec.created_at,
+    }
+
+
 @router.post("/api/chat", response_model=ChatResponse)
 async def post_chat(
     body: ChatRequest,
@@ -531,54 +575,71 @@ def post_chat_stream(
     def ndjson_gen():
         yield json.dumps({"type": "session", "session_id": sid}) + "\n"
         pieces: list[str] = []
+        stream_completed = False
         try:
-            for part in stream_chat_turn(
-                llm_messages,
-                openrouter_model_override=or_override,
-            ):
-                pieces.append(part)
-                yield json.dumps({"type": "delta", "text": part}) + "\n"
-        except GatewayCallError as exc:
-            yield json.dumps(
-                {"type": "error", "code": exc.code, "message": exc.message},
-            ) + "\n"
-            return
-        assistant_raw = "".join(pieces)
-        assistant_visible, actions = (
-            split_assistant_ui_actions(assistant_raw)
-            if body.enable_ui_actions
-            else (assistant_raw, [])
-        )
-        last_user_text = (
-            body.messages[-1].content
-            if body.messages and body.messages[-1].role == "user"
-            else ""
-        )
-        actions = augment_workbench_view_actions(
-            last_user_text,
-            actions,
-            enable_ui_actions=body.enable_ui_actions,
-        )
-        try:
-            store.append_turns(sid, [ChatTurn(role="assistant", content=assistant_visible)])
-            payload: dict[str, Any] = {
-                "type": "done",
-                "session_id": sid,
-                "messages": store.list_messages(sid),
-                "actions": actions,
-                "operator_result": None,
-            }
-            if stream_active_meta:
-                payload["active_agent"] = stream_active_meta
-            yield json.dumps(payload) + "\n"
-        except KeyError:
-            yield json.dumps(
-                {
-                    "type": "error",
-                    "code": "SESSION_NOT_FOUND",
-                    "message": "Session disappeared during stream.",
-                },
-            ) + "\n"
+            try:
+                for part in stream_chat_turn(
+                    llm_messages,
+                    openrouter_model_override=or_override,
+                ):
+                    pieces.append(part)
+                    yield json.dumps({"type": "delta", "text": part}) + "\n"
+            except GatewayCallError as exc:
+                yield json.dumps(
+                    {"type": "error", "code": exc.code, "message": exc.message},
+                ) + "\n"
+                return
+            stream_completed = True
+            assistant_raw = "".join(pieces)
+            assistant_visible, actions = (
+                split_assistant_ui_actions(assistant_raw)
+                if body.enable_ui_actions
+                else (assistant_raw, [])
+            )
+            last_user_text = (
+                body.messages[-1].content
+                if body.messages and body.messages[-1].role == "user"
+                else ""
+            )
+            actions = augment_workbench_view_actions(
+                last_user_text,
+                actions,
+                enable_ui_actions=body.enable_ui_actions,
+            )
+            try:
+                store.append_turns(sid, [ChatTurn(role="assistant", content=assistant_visible)])
+                payload: dict[str, Any] = {
+                    "type": "done",
+                    "session_id": sid,
+                    "messages": store.list_messages(sid),
+                    "actions": actions,
+                    "operator_result": None,
+                }
+                if stream_active_meta:
+                    payload["active_agent"] = stream_active_meta
+                yield json.dumps(payload) + "\n"
+            except KeyError:
+                yield json.dumps(
+                    {
+                        "type": "error",
+                        "code": "SESSION_NOT_FOUND",
+                        "message": "Session disappeared during stream.",
+                    },
+                ) + "\n"
+        finally:
+            # If stream was interrupted (generator closed), save partial content.
+            if not stream_completed and pieces:
+                partial = "".join(pieces)
+                if partial.strip():
+                    try:
+                        visible, _ = (
+                            split_assistant_ui_actions(partial)
+                            if body.enable_ui_actions
+                            else (partial, [])
+                        )
+                        store.append_turns(sid, [ChatTurn(role="assistant", content=visible)])
+                    except Exception:
+                        pass  # Best-effort: don't crash on cleanup
 
     return StreamingResponse(
         ndjson_gen(),

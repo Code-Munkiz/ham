@@ -618,6 +618,43 @@ export class HamAccessRestrictedError extends Error {
   }
 }
 
+/* ─── Chat session history ────────────────────────────────────────── */
+
+export type ChatSessionSummary = {
+  session_id: string;
+  preview: string;
+  turn_count: number;
+  created_at: string | null;
+};
+
+export type ChatSessionDetail = {
+  session_id: string;
+  messages: HamChatMessage[];
+  created_at: string | null;
+};
+
+/** List past chat sessions (newest first). */
+export async function fetchChatSessions(
+  limit = 50,
+  offset = 0,
+): Promise<{ sessions: ChatSessionSummary[] }> {
+  const res = await hamApiFetch(`/api/chat/sessions?limit=${limit}&offset=${offset}`);
+  if (!res.ok) {
+    throw new Error(`Failed to list chat sessions (HTTP ${res.status})`);
+  }
+  return (await res.json()) as { sessions: ChatSessionSummary[] };
+}
+
+/** Fetch full message history for a single chat session. */
+export async function fetchChatSession(sessionId: string): Promise<ChatSessionDetail> {
+  const res = await hamApiFetch(`/api/chat/sessions/${encodeURIComponent(sessionId)}`);
+  if (!res.ok) {
+    if (res.status === 404) throw new Error("Session not found");
+    throw new Error(`Failed to fetch chat session (HTTP ${res.status})`);
+  }
+  return (await res.json()) as ChatSessionDetail;
+}
+
 export async function postChat(body: HamChatRequest): Promise<HamChatResponse> {
   const url = apiUrl("/api/chat");
   const payload = {
