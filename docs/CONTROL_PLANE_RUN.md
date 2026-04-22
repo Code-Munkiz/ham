@@ -1,5 +1,7 @@
 # ControlPlaneRun — architecture spec (HAM)
 
+**See also:** [`HARNESS_PROVIDER_CONTRACT.md`](HARNESS_PROVIDER_CONTRACT.md) — harness/provider **behavior** and **capability** contract (Cursor + Droid); this file stays focused on the **factual run record** and its schema.
+
 This document is the **v1-bounded** spec for a durable **ControlPlaneRun** record: HAM’s **provider-neutral** account of a **committed** control-plane action. It is **separate** from bridge/Hermes `.ham/runs` JSON ([`src/ham/run_persist.py`](../src/ham/run_persist.py)), from **append-only audit** JSONL, from **memory/context** systems, and from **Hermes review** artifacts. The first **file-backed** implementation lives in [`src/persistence/control_plane_run.py`](../src/persistence/control_plane_run.py), wired from [`src/ham/cursor_agent_workflow.py`](../src/ham/cursor_agent_workflow.py), [`src/ham/droid_workflows/preview_launch.py`](../src/ham/droid_workflows/preview_launch.py), and [`src/ham/chat_operator.py`](../src/ham/chat_operator.py) (v1: launches + Cursor status; no graph/queue/orchestrator).
 
 **Core separation (restate):**

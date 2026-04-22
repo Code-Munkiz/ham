@@ -8,6 +8,8 @@ Hermes remains the **sole supervisory orchestrator** for the Ham *runtime*; this
 
 **ControlPlaneRun (v1):** [`docs/CONTROL_PLANE_RUN.md`](CONTROL_PLANE_RUN.md) describes the **ControlPlaneRun** durable record for **provider** launches (Cursor / Droid) and Cursor status polling—implemented under `src/persistence/control_plane_run.py` (separate from bridge `.ham/runs`, audit JSONL, and memory; not a full orchestration graph).
 
+**Harness contract (Cursor + Droid):** [`docs/HARNESS_PROVIDER_CONTRACT.md`](HARNESS_PROVIDER_CONTRACT.md) defines provider **capabilities**, **preservation** rules, and how they relate to `ControlPlaneRun` (Hermes is not the harness anchor there).
+
 ## Shipped (Phase A)
 
 | Piece | Role |

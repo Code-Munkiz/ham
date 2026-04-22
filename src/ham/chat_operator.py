@@ -40,6 +40,13 @@ from src.ham.clerk_policy import (
     permission_for_intent,
     permission_for_phase,
 )
+from src.ham.harness_advisory import (
+    HarnessAdvisory,
+    build_harness_advisory_for_cursor_preview,
+    build_harness_advisory_for_droid_preview,
+    format_harness_advisory_for_operator_message,
+    harness_advisory_enabled,
+)
 from src.persistence.cursor_credentials import get_effective_cursor_api_key
 from src.ham.one_shot_run import run_ham_one_shot
 from src.ham.settings_write import (
@@ -174,11 +181,22 @@ def _droid_preview_turn(
         "tier": preview.tier,
         "summary_preview": (preview.summary_preview or "") + token_note,
     }
+    hadv: HarnessAdvisory | None = None
+    if harness_advisory_enabled():
+        hadv = build_harness_advisory_for_droid_preview(
+            workflow_id=str(preview.workflow_id or workflow_id).strip(),
+            mutates=preview.mutates,
+            tier=preview.tier,
+            requires_launch_token=bool(wf.requires_launch_token) if wf is not None else False,
+            droid_exec_token_configured=bool(_droid_exec_token()),
+            user_prompt=str(preview.user_prompt or user_prompt),
+        )
     return OperatorTurnResult(
         handled=True,
         intent="droid_preview",
         ok=True,
         pending_droid=pending,
+        harness_advisory=hadv,
         data={
             "workflow_id": preview.workflow_id,
             "proposal_digest": preview.proposal_digest,
@@ -241,6 +259,7 @@ class OperatorTurnResult(BaseModel):
     pending_register: dict[str, Any] | None = None
     pending_droid: dict[str, Any] | None = None
     pending_cursor_agent: dict[str, Any] | None = None
+    harness_advisory: HarnessAdvisory | None = None
     data: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -733,11 +752,21 @@ def _execute_explicit_phase(
             "mutates": prev.mutates,
             "summary_preview": (prev.summary_preview or "") + tok_note,
         }
+        hadv_c: HarnessAdvisory | None = None
+        if harness_advisory_enabled():
+            hadv_c = build_harness_advisory_for_cursor_preview(
+                repository_resolved=bool(prev.repository and str(prev.repository).strip()),
+                mutates=prev.mutates,
+                auto_create_pr=bool(op.cursor_auto_create_pr),
+                cursor_launch_token_configured=bool(_cursor_agent_launch_token()),
+                task_prompt=op.cursor_task_prompt.strip(),
+            )
         return OperatorTurnResult(
             handled=True,
             intent="cursor_agent_preview",
             ok=True,
             pending_cursor_agent=pending,
+            harness_advisory=hadv_c,
             data={
                 "proposal_digest": prev.proposal_digest,
                 "repository": prev.repository,
@@ -1490,17 +1519,20 @@ def format_operator_assistant_message(op: OperatorTurnResult) -> str:
             else "\n\n**Read-only workflow** — launch requires `confirmed=true` (no droid exec token)."
         )
         prev = d.get("summary_preview") or ""
-        return (
+        body = (
             f"**Operator — droid preview ready**\n\n"
             f"Project `{d.get('project_id')}` — workflow `{d.get('workflow_id')}`.\n\n"
             f"{prev}{tok}\n\n"
             "Send `operator.phase=droid_launch` with the same `droid_user_prompt`, "
             "`droid_proposal_digest`, and `droid_base_revision` from `operator_result.pending_droid`."
         )
+        if op.harness_advisory:
+            body += format_harness_advisory_for_operator_message(op.harness_advisory)
+        return body
     if op.pending_cursor_agent:
         d = op.pending_cursor_agent or {}
         prev = d.get("summary_preview") or ""
-        return (
+        body = (
             f"**Operator — Cursor Cloud Agent preview**\n\n"
             f"Project `{d.get('project_id')}` → `{d.get('repository')}`\n\n"
             f"{prev}\n\n"
@@ -1508,6 +1540,9 @@ def format_operator_assistant_message(op: OperatorTurnResult) -> str:
             "`cursor_proposal_digest` / `cursor_base_revision`, and "
             "`Authorization: Bearer` = `HAM_CURSOR_AGENT_LAUNCH_TOKEN`."
         )
+        if op.harness_advisory:
+            body += format_harness_advisory_for_operator_message(op.harness_advisory)
+        return body
     if intent == "list_projects":
         data = op.data.get("projects") or []
         if not data:
