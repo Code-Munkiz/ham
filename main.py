@@ -109,14 +109,17 @@ def main(argv: list[str] | None = None) -> int:
         review_assembly = assemble_ham_run(assembly.user_prompt, project_root=cwd)
     review_context = review_assembly.critic_backstory[:MAX_REVIEW_CONTEXT_CHARS]
     bridge_json = _dump_json(bridge_result)
+    # Prefer the actual workspace mutation over the bridge metadata envelope so
+    # Hermes reviews the code Droid changed rather than the command evidence.
+    review_code = bridge_result.mutation_diff or bridge_json
 
     try:
-        review = HermesReviewer().evaluate(bridge_json, review_context)
+        review = HermesReviewer().evaluate(review_code, review_context)
     except Exception as exc:  # pylint: disable=broad-exception-caught
         review = {
             "ok": False,
             "notes": [f"Hermes review handoff failed ({type(exc).__name__})."],
-            "code": bridge_json[:1000],
+            "code": review_code[:1000],
             "context": review_context[:1000],
         }
 

@@ -11,7 +11,7 @@ from src.bridge.contracts import (
     ExecutionIntent,
 )
 from src.bridge.policy import validate_intent
-from src.memory_heist import git_status
+from src.memory_heist import MAX_DIFF_CHARS, git_diff, git_status
 from src.registry.backends import DEFAULT_BACKEND_ID
 from src.tools.droid_executor import DroidExecutionRecord
 
@@ -36,6 +36,7 @@ def run_bridge_v0(assembly, intent: ExecutionIntent) -> BridgeResult:
 
     cwd = Path.cwd()
     pre_git = git_status(cwd)
+    pre_git_diff = git_diff(cwd)
     command_evidence: list[CommandEvidence] = []
     saw_timeout = False
     saw_failure = False
@@ -82,6 +83,7 @@ def run_bridge_v0(assembly, intent: ExecutionIntent) -> BridgeResult:
             saw_success = True
 
     post_git = git_status(cwd)
+    post_git_diff = git_diff(cwd)
     _enforce_total_output_budget(command_evidence, intent.limits.max_total_output_chars)
     ended = datetime.now(UTC)
     status = _map_terminal_status(saw_success, saw_failure, saw_timeout)
@@ -101,6 +103,7 @@ def run_bridge_v0(assembly, intent: ExecutionIntent) -> BridgeResult:
         pre_exec_git_status=pre_git,
         post_exec_git_status=post_git,
         mutation_detected=_compute_mutation_signal(pre_git, post_git),
+        mutation_diff=_compute_mutation_diff(pre_git_diff, post_git_diff),
     )
 
 
@@ -181,4 +184,41 @@ def _compute_mutation_signal(pre_git: str | None, post_git: str | None) -> bool 
         return False
     # Advisory-only signal: repo state snapshot changed during this run.
     return True
+
+
+def _compute_mutation_diff(
+    pre_git_diff: str | None,
+    post_git_diff: str | None,
+    *,
+    max_chars: int = MAX_DIFF_CHARS,
+) -> str | None:
+    """Return the capped post-exec git diff when it differs from pre-exec.
+
+    When Bridge policy eventually permits write-capable intents, the Hermes
+    critic should review what Droid actually changed in the workspace, not
+    the bridge metadata envelope. This helper returns the post-exec diff
+    (truncated at ``max_chars``) when it differs from the pre-exec capture;
+    otherwise returns ``None`` so the caller can fall back to the existing
+    bridge-JSON review payload.
+
+    Caveat: ``post_git_diff`` is the full post-exec unstaged+staged diff,
+    so the returned payload includes any pre-existing user changes alongside
+    Droid's mutations. This matches the surface already exposed via
+    ``ContextBuilder`` and ``pre_exec_git_status`` / ``post_exec_git_status``,
+    so the critic is not seeing new data -- only getting a richer review
+    target than the command-evidence envelope. A precise Droid-only delta
+    is a possible follow-up.
+
+    Dormancy note: Bridge v0 policy rejects ``allow_write=True`` and all
+    current ``build_runtime_intent`` callers set ``task_class="inspect"``,
+    so ``post_git_diff`` matches ``pre_git_diff`` for 100% of production
+    runs today and this returns ``None``. The field is wired through the
+    call chain so it is ready when writes are introduced.
+    """
+    if post_git_diff is None:
+        return None
+    if pre_git_diff == post_git_diff:
+        return None
+    capped = post_git_diff[:max_chars]
+    return capped if capped else None
 

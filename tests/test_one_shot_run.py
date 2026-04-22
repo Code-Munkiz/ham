@@ -25,7 +25,7 @@ class _FakeAssembly:
     droid_executor: object = object()
 
 
-def _bridge_result() -> BridgeResult:
+def _bridge_result(*, mutation_diff: str | None = None) -> BridgeResult:
     return BridgeResult(
         intent_id="intent-1",
         request_id="request-1",
@@ -55,7 +55,8 @@ def _bridge_result() -> BridgeResult:
             )
         ],
         summary="ok",
-        mutation_detected=False,
+        mutation_detected=bool(mutation_diff),
+        mutation_diff=mutation_diff,
     )
 
 
@@ -120,3 +121,54 @@ def test_one_shot_review_failure_does_not_break_envelope(_patch_deps, monkeypatc
     review = result.envelope["hermes_review"]
     assert review["ok"] is False
     assert "RuntimeError" in review["notes"][0] or "critic crashed" in review["notes"][0]
+
+
+def test_one_shot_reviewer_receives_mutation_diff_when_present(_patch_deps, monkeypatch):
+    diff_payload = "diff --git a/src/foo.py b/src/foo.py\n+added\n"
+    seen: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        one_shot_mod,
+        "run_bridge_v0",
+        lambda _assembly, _intent: _bridge_result(mutation_diff=diff_payload),
+    )
+
+    fake_reviewer = MagicMock()
+
+    def capture(code, context):
+        seen["code"] = code
+        seen["context"] = context
+        return {"ok": True, "notes": [], "code": code[:200], "context": context}
+
+    fake_reviewer.evaluate.side_effect = capture
+    monkeypatch.setattr(one_shot_mod, "HermesReviewer", lambda: fake_reviewer)
+
+    result = one_shot_mod.run_ham_one_shot(_patch_deps, "mutate thing")
+    assert result.ok is True
+    assert seen["code"] == diff_payload
+
+
+def test_one_shot_reviewer_falls_back_to_bridge_json_when_no_diff(_patch_deps, monkeypatch):
+    seen: dict[str, object] = {}
+    monkeypatch.setattr(
+        one_shot_mod,
+        "run_bridge_v0",
+        lambda _assembly, _intent: _bridge_result(mutation_diff=None),
+    )
+
+    fake_reviewer = MagicMock()
+
+    def capture(code, context):
+        seen["code"] = code
+        return {"ok": True, "notes": [], "code": code[:200], "context": context}
+
+    fake_reviewer.evaluate.side_effect = capture
+    monkeypatch.setattr(one_shot_mod, "HermesReviewer", lambda: fake_reviewer)
+
+    result = one_shot_mod.run_ham_one_shot(_patch_deps, "inspect thing")
+    assert result.ok is True
+    code = seen["code"]
+    assert isinstance(code, str)
+    # Fallback is the serialized BridgeResult JSON envelope.
+    assert '"intent_id": "intent-1"' in code or '"intent_id":"intent-1"' in code
+    assert code.lstrip().startswith("{")
