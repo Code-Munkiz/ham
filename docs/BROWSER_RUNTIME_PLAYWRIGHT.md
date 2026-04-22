@@ -19,11 +19,17 @@ This doc covers local setup and runtime caveats for the HAM-owned Browser Runtim
 pip install -r requirements.txt
 ```
 
-2) Install Chromium for Playwright:
+2) Install Chromium for Playwright (not installed by `pip` alone):
 
 ```bash
 playwright install chromium
 ```
+
+Or from the repo root: `./scripts/install_playwright_chromium.sh` — it uses your **active venv**, or **`./.venv`**, or **creates `./.venv`** (needed on **PEP 668** systems like Ubuntu/Pop!_OS where system-wide `pip install` is blocked).
+
+**Linux:** if Chromium still fails to launch (missing system libs), run `playwright install-deps chromium` in the same environment.
+
+**Docker / Cloud Run:** the root `Dockerfile` runs `python -m playwright install --with-deps chromium` so images include the browser; bump memory if the container OOMs (Chromium is not free).
 
 3) Start HAM API as usual (local dev):
 

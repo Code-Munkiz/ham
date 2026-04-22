@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
+from src.api.clerk_gate import get_ham_clerk_actor
 from src.ham.browser_runtime.service import get_browser_runtime_manager
 from src.ham.browser_runtime.sessions import (
     BrowserPolicyError,
@@ -16,7 +17,12 @@ from src.ham.browser_runtime.sessions import (
     BrowserSessionOwnerMismatchError,
 )
 
-router = APIRouter(prefix="/api/browser", tags=["browser-runtime"])
+# Same Clerk + email gate as other dashboard routes when HAM enforces session/email.
+router = APIRouter(
+    prefix="/api/browser",
+    tags=["browser-runtime"],
+    dependencies=[Depends(get_ham_clerk_actor)],
+)
 
 
 class BrowserCreateSessionBody(BaseModel):

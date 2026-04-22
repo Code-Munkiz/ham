@@ -9,7 +9,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONPATH=/app
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Browser runtime: pip installs `playwright` but browsers are a separate download.
+# --with-deps pulls Debian packages Chromium needs in slim images.
+RUN pip install --no-cache-dir -r requirements.txt \
+    && python -m playwright install --with-deps chromium
 
 COPY src/ src/
 

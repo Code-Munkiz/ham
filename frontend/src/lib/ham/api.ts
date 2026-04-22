@@ -302,8 +302,9 @@ export interface BrowserSessionCreateRequest {
   viewport_height?: number;
 }
 
+/** Use ``hamApiFetch`` (not raw ``fetch``) so production sends Clerk session JWT like other API calls. */
 async function browserRuntimeJson<T>(path: string, body?: unknown, method = "POST"): Promise<T> {
-  const res = await fetch(apiUrl(path), {
+  const res = await hamApiFetch(path, {
     method,
     headers: { "Content-Type": "application/json" },
     body: body == null ? undefined : JSON.stringify(body),
@@ -326,7 +327,7 @@ export async function getBrowserSessionState(
   ownerKey: string,
 ): Promise<BrowserRuntimeState> {
   const q = new URLSearchParams({ owner_key: ownerKey.trim() }).toString();
-  const res = await fetch(apiUrl(`/api/browser/sessions/${encodeURIComponent(sessionId)}?${q}`));
+  const res = await hamApiFetch(`/api/browser/sessions/${encodeURIComponent(sessionId)}?${q}`);
   if (!res.ok) {
     const msg = (await readFastApiDetail(res)) ?? `HTTP ${res.status}`;
     throw new Error(msg);
@@ -385,7 +386,7 @@ export async function resetBrowserSession(
 
 export async function closeBrowserSession(sessionId: string, ownerKey: string): Promise<void> {
   const q = new URLSearchParams({ owner_key: ownerKey.trim() }).toString();
-  const res = await fetch(apiUrl(`/api/browser/sessions/${encodeURIComponent(sessionId)}?${q}`), {
+  const res = await hamApiFetch(`/api/browser/sessions/${encodeURIComponent(sessionId)}?${q}`, {
     method: "DELETE",
   });
   if (!res.ok) {
@@ -398,11 +399,14 @@ export async function captureBrowserScreenshot(
   sessionId: string,
   ownerKey: string,
 ): Promise<Blob> {
-  const res = await fetch(apiUrl(`/api/browser/sessions/${encodeURIComponent(sessionId)}/screenshot`), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ owner_key: ownerKey }),
-  });
+  const res = await hamApiFetch(
+    `/api/browser/sessions/${encodeURIComponent(sessionId)}/screenshot`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ owner_key: ownerKey }),
+    },
+  );
   if (!res.ok) {
     const msg = (await readFastApiDetail(res)) ?? `HTTP ${res.status}`;
     throw new Error(msg);
@@ -466,8 +470,8 @@ export async function getBrowserLiveStreamState(
   ownerKey: string,
 ): Promise<BrowserStreamState> {
   const q = new URLSearchParams({ owner_key: ownerKey.trim() }).toString();
-  const res = await fetch(
-    apiUrl(`/api/browser/sessions/${encodeURIComponent(sessionId)}/stream/state?${q}`),
+  const res = await hamApiFetch(
+    `/api/browser/sessions/${encodeURIComponent(sessionId)}/stream/state?${q}`,
   );
   if (!res.ok) {
     const msg = (await readFastApiDetail(res)) ?? `HTTP ${res.status}`;

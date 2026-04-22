@@ -57,9 +57,7 @@ function userFacingError(message: string): string {
     return "Target URL is blocked by browser policy.";
   }
   if (/only http:\/\/ and https:\/\//i.test(message)) return "Only http(s) URLs are supported.";
-  if (/playwright runtime failed to start|playwright is not installed/i.test(message)) {
-    return "Browser runtime is unavailable on this API host.";
-  }
+  // Playwright errors: show API detail verbatim (install `playwright`, `playwright install chromium`, etc.).
   return message;
 }
 
@@ -387,6 +385,22 @@ export function BrowserTabPanel({ embedUrl, onEmbedUrlChange, autoStart = false 
             {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
             Create Browser Session
           </button>
+          {error ? (
+            <p className="text-[10px] text-amber-500/90 font-mono leading-relaxed" role="alert">
+              {error}
+            </p>
+          ) : null}
+          {streamState.last_error && !error ? (
+            <p className="text-[10px] text-amber-400/90 font-mono leading-relaxed">
+              {streamState.last_error}
+            </p>
+          ) : null}
+          <p className="text-[9px] text-white/35 leading-relaxed">
+            Requires the Ham API on the Vite proxy target (dev default{" "}
+            <span className="font-mono text-white/50">VITE_HAM_API_PROXY_TARGET → 127.0.0.1:8000</span>)
+            with Playwright installed. If this fails, check the API process and{" "}
+            <span className="font-mono text-white/50">/api/browser/sessions</span>.
+          </p>
         </div>
       ) : (
         <div className="space-y-3">

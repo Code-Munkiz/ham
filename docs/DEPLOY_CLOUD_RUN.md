@@ -173,6 +173,17 @@ curl -sS -X POST "${SERVICE_URL}/api/chat" \
 - If **`HERMES_GATEWAY_MODE=mock`**: assistant content typically contains **`Mock assistant reply`**.
 - If **`HERMES_GATEWAY_MODE=http`** or **`openrouter`** with a working upstream: assistant content should **not** be the mock phrase; use **`scripts/verify_ham_api_deploy.sh`** (fails on accidental mock unless `HAM_VERIFY_ALLOW_MOCK=1`).
 
+## In-app browser (Playwright) on Cloud Run
+
+The dashboard **Chat → Browser** / **War Room** pane calls **`/api/browser/*`**. For this to work **in production** (not just locally):
+
+0. **One command (from repo root, after `gcloud` auth and `.gcloud/ham-api-env.yaml` exists):** run **`./scripts/deploy_ham_api_cloud_run.sh`** — Cloud Build, deploy, **`--memory 2Gi`**, and **`--cpu 2`** (overridable via `MEMORY` / `CPU` env). See the script header for `PROJECT_ID`, `SET_SECRETS`, etc.
+1. **Rebuild and redeploy the API image** from the repo **`Dockerfile`**, which runs `python -m playwright install --with-deps chromium`. Older images that only `pip install playwright` have **no Chromium** — sessions will fail.
+2. If you did **not** use the script, **raise Cloud Run memory** manually: e.g. **`gcloud run services update ham-api --memory 2Gi --region=REGION --project=PROJECT_ID`** (Chromium is heavy; 512Mi is often too small).
+3. **CORS** must allow your Vercel origin (see **Wire the Vercel frontend** below) — the browser uses `fetch` to the API; wrong origins show **Failed to fetch** in DevTools, not a JSON error.
+4. **Clerk / session:** the browser API uses the same **`Authorization: Bearer` (Clerk JWT)** as other dashboard routes when `HAM_CLERK_REQUIRE_AUTH` or `HAM_CLERK_ENFORCE_EMAIL_RESTRICTIONS` is on. The dashboard attaches this automatically; ensure **`VITE_CLERK_PUBLISHABLE_KEY`** is set on Vercel and users are signed in.
+5. **Vercel:** **`VITE_HAM_API_BASE`** must point at this Cloud Run URL (rebuild after changing).
+
 ## Wire the Vercel frontend
 
 1. In Vercel project env: **`VITE_HAM_API_BASE`** = Cloud Run URL (no trailing slash).
