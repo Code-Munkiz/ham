@@ -274,12 +274,23 @@ export interface BackendRecord {
   is_default?: boolean;
 }
 
+/** Originating system / mission family for workspace activity (UI + optional API payloads). */
+export type ActivityEventSource =
+  | "cursor"
+  | "cloud_agent"
+  | "factory_ai"
+  | "droid"
+  | "ham"
+  | "unknown";
+
 export interface ActivityEvent {
   id: string;
   type: 'run_event' | 'warning' | 'persistence_warning' | 'review_outcome' | 'runtime_event';
   level: 'info' | 'warn' | 'error';
   message: string;
   timestamp: string;
+  /** When set, identifies the system that produced the event. */
+  source?: ActivityEventSource;
   metadata?: Record<string, any>;
 }
 

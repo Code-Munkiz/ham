@@ -1,13 +1,6 @@
 import { MOCK_ACTIVITY } from "@/lib/ham/mocks";
-import { 
-  Terminal, 
-  AlertCircle, 
-  Info, 
-  AlertTriangle,
-  Search,
-  ChevronRight,
-  Activity as ActivityIcon
-} from "lucide-react";
+import { activitySourceBadgeClass, activitySourceLabel } from "@/lib/ham/activityEventSource";
+import { AlertCircle, Info, AlertTriangle, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export default function Activity() {
@@ -42,8 +35,17 @@ export default function Activity() {
                 </div>
                 
                 <div className="flex-1 min-w-0 space-y-1">
-                   <div className="flex items-center gap-4">
+                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                       <span className="text-[9px] font-mono text-white/20">{new Date(event.timestamp).toLocaleTimeString([], { hour12: false })}</span>
+                      <span
+                        className={cn(
+                          "rounded border px-1.5 py-0.5 text-[7px] font-black uppercase tracking-widest",
+                          activitySourceBadgeClass(event),
+                        )}
+                        title="Event source / mission family"
+                      >
+                        {activitySourceLabel(event)}
+                      </span>
                       <span className={cn(
                         "text-[9px] font-black uppercase tracking-widest",
                         event.level === 'info' ? "text-blue-500/60" : 

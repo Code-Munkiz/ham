@@ -325,6 +325,7 @@ export const MOCK_ACTIVITY: ActivityEvent[] = [
     id: "evt_01",
     type: "run_event",
     level: "info",
+    source: "ham",
     message: "Run run_881a2b completed successfully using profile security-audit-v1.",
     timestamp: new Date(Date.now() - 3600000).toISOString()
   },
@@ -332,6 +333,7 @@ export const MOCK_ACTIVITY: ActivityEvent[] = [
     id: "evt_02",
     type: "warning",
     level: "warn",
+    source: "droid",
     message: "Malformed file skip: .DS_Store could not be parsed as UTF-8 in run_881a2b.",
     timestamp: new Date(Date.now() - 3650000).toISOString()
   },
@@ -339,6 +341,7 @@ export const MOCK_ACTIVITY: ActivityEvent[] = [
     id: "evt_03",
     type: "review_outcome",
     level: "error",
+    source: "ham",
     message: "Hermes Review FAILED for run_992c3d: THRESHOLD_EXCEEDED.",
     timestamp: new Date(Date.now() - 7200000).toISOString()
   },
@@ -346,7 +349,32 @@ export const MOCK_ACTIVITY: ActivityEvent[] = [
     id: "evt_04",
     type: "persistence_warning",
     level: "warn",
+    source: "cloud_agent",
     message: "Artifact persistence delayed for run_992c3d due to backend latency.",
     timestamp: new Date(Date.now() - 7100000).toISOString()
+  },
+  {
+    id: "evt_05",
+    type: "runtime_event",
+    level: "info",
+    source: "cursor",
+    message: "Cursor task linked to session ses_3f9a1 (repository index refreshed).",
+    timestamp: new Date(Date.now() - 1800000).toISOString()
+  },
+  {
+    id: "evt_06",
+    type: "run_event",
+    level: "info",
+    source: "factory_ai",
+    message: "Factory pipeline batch fp_12 queued; worker capacity OK.",
+    timestamp: new Date(Date.now() - 900000).toISOString()
+  },
+  {
+    id: "evt_07",
+    type: "runtime_event",
+    level: "warn",
+    message: "Legacy event shape (no source field) — should display UNKNOWN in UI until backfilled.",
+    timestamp: new Date(Date.now() - 600000).toISOString(),
+    metadata: { note: "intentional missing source" }
   }
 ];
