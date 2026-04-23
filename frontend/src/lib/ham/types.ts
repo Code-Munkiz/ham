@@ -13,6 +13,9 @@ export interface ManagedMissionSnapshot {
 /** Deterministic, operator-facing read on polled Cloud Agent data (v1: rules only, no LLM). */
 export type ManagedReviewSeverity = "info" | "success" | "warning" | "error";
 
+/** How much concrete evidence supports the current assessment (drives conservatism + optional chat gating). */
+export type ManagedReviewEvidenceLevel = "high" | "medium" | "low";
+
 export interface ManagedMissionReview {
   severity: ManagedReviewSeverity;
   headline: string;
@@ -20,6 +23,12 @@ export interface ManagedMissionReview {
   nextStep: string | null;
   /** True when the assessment is for a terminal agent state (per `isCloudAgentTerminal`). */
   hasTerminalAssessment: boolean;
+  evidenceLevel: ManagedReviewEvidenceLevel;
+  /**
+   * True when the payload is too thin for strong PR/blocker/handoff claims.
+   * Panel may still show a compact notice; optional chat is suppressed.
+   */
+  limitedSignal: boolean;
 }
 
 export interface RunRecord {

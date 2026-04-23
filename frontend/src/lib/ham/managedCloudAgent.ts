@@ -1,4 +1,8 @@
-import type { ManagedMissionReview, ManagedMissionSnapshot } from "@/lib/ham/types";
+import type {
+  ManagedMissionReview,
+  ManagedMissionSnapshot,
+  ManagedReviewEvidenceLevel,
+} from "@/lib/ham/types";
 
 export type BuildManagedCloudAgentPromptArgs = {
   userPrompt: string;
@@ -129,91 +133,215 @@ export function deriveManagedMissionSnapshot(
   };
 }
 
-function hasAgentErrorFields(agent: Record<string, unknown>): boolean {
-  if (readString(agent.error) || readString(agent.error_message)) return true;
-  if (readString(agent.failure) || agent.failure === true) return true;
-  return false;
+/** Internal: what the API-shaped payload actually exposes (facts), before HAM inference. */
+type ReviewFacts = {
+  terminal: boolean;
+  hasExplicitErrorOrBlocker: boolean;
+  hasPrOrBranch: boolean;
+  progressLen: number;
+  hasProgress: boolean;
+  statusText: string;
+  statusIsPlaceholder: boolean;
+  hasUpdatedAt: boolean;
+  /** Composite: how much we can safely say from non-fabricated fields */
+  signalStrength: ManagedReviewEvidenceLevel;
+  /** Thin payload + no explicit failure: prefer limited-signal messaging */
+  limitedSignal: boolean;
+};
+
+function isPlaceholderStatusLabel(s: string | null | undefined): boolean {
+  const t = (s ?? "").trim();
+  return !t || t === "No status details from API";
 }
 
 /**
- * Deterministic, compact assessment from the same data as the managed snapshot. No LLM, no extra HTTP.
- * Intended for v1 “HAM review / critic” and optional one chat line; extend later (Hermes, gates, etc.).
+ * Evidence from real fields only. `high` = explicit handoff/error fields or strong transcript + metadata;
+ * `medium` = some progress or metadata; `low` = sparse or ambiguous.
  */
-export function deriveManagedMissionReview(
-  agent: Record<string, unknown>,
-  conversation: unknown,
-  snap: ManagedMissionSnapshot,
-): ManagedMissionReview {
+function extractReviewFacts(agent: Record<string, unknown>, snap: ManagedMissionSnapshot): ReviewFacts {
   const terminal = isCloudAgentTerminal(agent);
-  const errField = hasAgentErrorFields(agent);
-  const hasBlockerText = Boolean(snap.blocker?.trim());
-  const hasLink = Boolean(snap.branchOrPr?.trim());
-  const hasProgress = Boolean(snap.progress?.trim());
+  const err0 = readString(agent.error) ?? readString(agent.error_message);
+  const failStr = typeof agent.failure === "string" ? readString(agent.failure) : null;
+  const failBool = agent.failure === true;
+  const snapBlocker = snap.blocker?.trim() || null;
+  const hasExplicitErrorOrBlocker = Boolean(
+    (err0 && err0.length > 0) || (failStr && failStr.length > 0) || failBool || (snapBlocker && snapBlocker.length > 0),
+  );
+  const hasPrOrBranch = Boolean(snap.branchOrPr?.trim());
+  const progress = (snap.progress ?? "").trim();
+  const progressLen = progress.length;
+  const hasProgress = progressLen > 0;
   const statusText = (snap.status ?? "").trim() || "—";
+  const statusIsPlaceholder = isPlaceholderStatusLabel(snap.status);
+  const hasUpdatedAt = Boolean(snap.updatedAt?.trim());
 
-  if (terminal) {
-    if (errField || hasBlockerText) {
-      return {
-        severity: "error",
-        headline: "Terminal state: API payload includes error, failure, or blocker fields.",
-        details: snap.blocker ?? (readString(agent.error) ?? readString(agent.error_message)),
-        nextStep: "Inspect the Cloud Agent in Cursor, transcript, and repository config before a follow-up.",
-        hasTerminalAssessment: true,
-      };
-    }
-    if (!hasLink) {
-      return {
-        severity: "warning",
-        headline: "Terminal state: no branch or PR link in the API payload (may be fine if none was required).",
-        details: hasProgress
-          ? `Last activity: ${snap.progress}`
-          : "No recent transcript/activity line was extracted (shape may differ).",
-        nextStep: "If a PR or branch was expected, confirm in Cursor or the remote repository.",
-        hasTerminalAssessment: true,
-      };
-    }
-    return {
-      severity: "success",
-      headline: "Terminal state: branch/PR or link information is present in the API payload.",
-      details: hasProgress ? `Status: ${statusText} · last activity: ${snap.progress}` : `Status: ${statusText}`,
-      nextStep: "Verify the linked change set matches what you expect before any manual merge or deploy step.",
-      hasTerminalAssessment: true,
-    };
+  let score = 0;
+  if (hasExplicitErrorOrBlocker) score += 4;
+  if (hasPrOrBranch) score += 3;
+  if (progressLen >= 40) score += 2;
+  else if (progressLen >= 12) score += 1;
+  if (hasUpdatedAt) score += 1;
+  if (!statusIsPlaceholder) score += 1;
+
+  let signalStrength: ManagedReviewEvidenceLevel;
+  if (hasExplicitErrorOrBlocker || hasPrOrBranch) {
+    signalStrength = "high";
+  } else if (score >= 3) {
+    signalStrength = "high";
+  } else if (score >= 1) {
+    signalStrength = "medium";
+  } else {
+    signalStrength = "low";
   }
 
-  if (hasBlockerText || errField) {
-    return {
-      severity: "warning",
-      headline: "Not terminal: blocker or error fields are present; mission may be stuck or failing.",
-      details: snap.blocker ?? readString(agent.error) ?? readString(agent.error_message),
-      nextStep: "Check env/config, credentials, and the live transcript in Cursor for the most recent error.",
-      hasTerminalAssessment: false,
-    };
-  }
-  if (hasProgress) {
-    return {
-      severity: "info",
-      headline: "Mission in progress: recent transcript/activity is available from the API payload.",
-      details: `Last activity: ${snap.progress}`,
-      nextStep: "Let the run continue, or nudge the Cloud Agent in Cursor if the task is blocked.",
-      hasTerminalAssessment: false,
-    };
-  }
+  const limitedSignal = !hasExplicitErrorOrBlocker && signalStrength === "low";
+
+  return {
+    terminal,
+    hasExplicitErrorOrBlocker,
+    hasPrOrBranch,
+    progressLen,
+    hasProgress,
+    statusText,
+    statusIsPlaceholder,
+    hasUpdatedAt,
+    signalStrength,
+    limitedSignal,
+  };
+}
+
+function limitedSignalReview(hasTerminal: boolean): ManagedMissionReview {
   return {
     severity: "info",
-    headline: "Mission not terminal: limited status or progress text; agent may still be working.",
-    details: `Status from payload: ${statusText}`,
-    nextStep: "Watch the managed summary and the transcript; refresh if the API shape changes.",
-    hasTerminalAssessment: false,
+    headline: "HAM review: limited signal",
+    details:
+      "The current agent response is too sparse to assess PR, branch, blocker, or final handoff confidently. This is often a shape or timing issue, not proof of failure.",
+    nextStep: "Open Tracker and Transcript in the War Room, or refresh after the next poll.",
+    hasTerminalAssessment: hasTerminal,
+    evidenceLevel: "low",
+    limitedSignal: true,
   };
 }
 
 /**
- * When to post the optional one-line review into chat (terminal only, avoids duplicating a clean “success with PR” case).
+ * Deterministic, compact assessment from the same data as the managed snapshot. No LLM, no extra HTTP.
+ * Facts are separated from wording: conservative when `limitedSignal` or low evidence.
+ */
+export function deriveManagedMissionReview(
+  agent: Record<string, unknown>,
+  _conversation: unknown,
+  snap: ManagedMissionSnapshot,
+): ManagedMissionReview {
+  const f = extractReviewFacts(agent, snap);
+
+  /** First-class path: do not overclaim on thin payloads */
+  if (f.limitedSignal) {
+    return limitedSignalReview(f.terminal);
+  }
+
+  if (f.terminal) {
+    if (f.hasExplicitErrorOrBlocker) {
+      return {
+        severity: "error",
+        headline: "Terminal: failure or error fields are present in the agent payload.",
+        details: snap.blocker ?? readString(agent.error) ?? readString(agent.error_message) ?? readString(agent.failure),
+        nextStep: "Inspect the Cloud Agent run, transcript, and repository before a follow-up.",
+        hasTerminalAssessment: true,
+        evidenceLevel: "high",
+        limitedSignal: false,
+      };
+    }
+    if (f.hasPrOrBranch) {
+      return {
+        severity: "success",
+        headline: "Terminal: a branch/PR or link field is present in the latest agent data.",
+        details: f.hasProgress
+          ? `Status: ${f.statusText} · last activity: ${snap.progress}`
+          : `Status: ${f.statusText}`,
+        nextStep: "Confirm the linked change set in Cursor or the remote before any merge or deploy step.",
+        hasTerminalAssessment: true,
+        evidenceLevel: "high",
+        limitedSignal: false,
+      };
+    }
+    if (f.signalStrength === "high") {
+      return {
+        severity: "warning",
+        headline:
+          "Terminal: no PR or branch link has surfaced in the latest agent data yet. That does not prove none exists elsewhere.",
+        details: f.hasProgress ? `Transcript/activity: ${snap.progress}` : "Limited transcript/activity in this payload shape.",
+        nextStep: "If a handoff was expected, check Cursor, Tracker, and the remote repository.",
+        hasTerminalAssessment: true,
+        evidenceLevel: "high",
+        limitedSignal: false,
+      };
+    }
+    return {
+      severity: "info",
+      headline: "Terminal: handoff in this response is incomplete or unclear; avoid assuming PR/branch or failure from this view alone.",
+      details: f.hasProgress ? `Last activity: ${snap.progress}` : `Status: ${f.statusText}`,
+      nextStep: "Use Transcript/Tracker, or wait for a richer poll, before concluding.",
+      hasTerminalAssessment: true,
+      evidenceLevel: f.signalStrength,
+      limitedSignal: false,
+    };
+  }
+
+  if (f.hasExplicitErrorOrBlocker) {
+    return {
+      severity: "warning",
+      headline: "Not terminal: error or blocker text appears in the latest agent data.",
+      details: snap.blocker ?? readString(agent.error) ?? readString(agent.error_message) ?? (agent.failure === true ? "failure" : null),
+      nextStep: "Check env/config, credentials, and the live Transcript in Cursor for the most recent error.",
+      hasTerminalAssessment: false,
+      evidenceLevel: "high",
+      limitedSignal: false,
+    };
+  }
+  if (f.hasProgress && f.signalStrength !== "low") {
+    return {
+      severity: "info",
+      headline: "In progress: recent transcript/activity is present in the API payload.",
+      details: `Last activity: ${snap.progress}`,
+      nextStep: "Let the run continue, or nudge the Cloud Agent in Cursor if the task is blocked.",
+      hasTerminalAssessment: false,
+      evidenceLevel: f.signalStrength,
+      limitedSignal: false,
+    };
+  }
+  if (f.hasProgress) {
+    return {
+      severity: "info",
+      headline: "Transcript/activity is short or thin; not enough to claim steady progress or blockage.",
+      details: `Last activity: ${snap.progress}`,
+      nextStep: "Open Transcript in the War Room, or wait for a fuller poll.",
+      hasTerminalAssessment: false,
+      evidenceLevel: "low",
+      limitedSignal: false,
+    };
+  }
+  return {
+    severity: "info",
+    headline: "Not terminal: no strong progress line yet; the agent may still be working.",
+    details: f.statusIsPlaceholder
+      ? "Status/labels from the API are limited in this view."
+      : `Status: ${f.statusText}`,
+    nextStep: "Watch the managed summary, Transcript, and Tracker; refresh as the run evolves.",
+    hasTerminalAssessment: false,
+    evidenceLevel: f.signalStrength,
+    limitedSignal: false,
+  };
+}
+
+/**
+ * Stricter than panel: optional chat only for terminal + strong evidence + error/warning (not limited-signal).
  */
 export function shouldEmitReviewChatLine(review: ManagedMissionReview): boolean {
   if (!review.hasTerminalAssessment) return false;
-  return review.severity === "error" || review.severity === "warning";
+  if (review.limitedSignal) return false;
+  if (review.severity !== "error" && review.severity !== "warning") return false;
+  if (review.evidenceLevel !== "high") return false;
+  return true;
 }
 
 const MAX_REVIEW_CHAT_LEN = 800;
