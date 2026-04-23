@@ -228,9 +228,25 @@ function workbenchLayoutTriggerLabel(mode: ChatViewMode): string {
 type TranscriptColumnProps = {
   messages: ChatRow[];
   primaryPersona: { name: string; avatarUrl: string | null } | null;
+  /** In-thread Cloud Agent mission preview (digest-locked) + confirm launch — from `operator_result.pending_cursor_agent`. */
+  pendingCursorAgent: Record<string, unknown> | null;
+  operatorCursorAgentToken: string;
+  onOperatorCursorAgentTokenChange: (v: string) => void;
+  onCursorAgentLaunch: () => void;
+  onDismissCursorPreview: () => void;
+  cursorAgentActionsDisabled: boolean;
 };
 
-function TranscriptColumn({ messages, primaryPersona }: TranscriptColumnProps) {
+function TranscriptColumn({
+  messages,
+  primaryPersona,
+  pendingCursorAgent,
+  operatorCursorAgentToken,
+  onOperatorCursorAgentTokenChange,
+  onCursorAgentLaunch,
+  onDismissCursorPreview,
+  cursorAgentActionsDisabled,
+}: TranscriptColumnProps) {
   return (
     <div className="h-full min-h-0 flex flex-col overflow-hidden">
       <div className="flex-1 overflow-y-auto p-12 space-y-16 scrollbar-hide relative">
@@ -295,6 +311,64 @@ function TranscriptColumn({ messages, primaryPersona }: TranscriptColumnProps) {
               </div>
             </div>
           ))}
+
+          {pendingCursorAgent ? (
+            <div
+              className="flex gap-10 animate-in fade-in slide-in-from-bottom-3 duration-700"
+            >
+              <div className="h-11 w-11 shrink-0 border flex items-center justify-center overflow-hidden border-cyan-500/40 bg-cyan-500/10 text-cyan-300 shadow-[0_0_30px_rgba(0,229,255,0.12)]">
+                <Radar className="h-5 w-5" />
+              </div>
+              <div className="flex flex-col gap-4 min-w-0 max-w-2xl items-start w-full">
+                <div className="flex items-center gap-4 opacity-90">
+                  <span className="text-[9px] font-black uppercase tracking-[0.4em] text-cyan-300/90 italic">
+                    Cloud Agent — preview
+                  </span>
+                  <span className="text-[8px] font-mono text-white/20">
+                    {new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                </div>
+                <div className="w-full space-y-3 rounded-2xl border border-cyan-500/30 bg-cyan-500/[0.07] p-6 shadow-lg">
+                  <p className="text-[9px] font-bold uppercase tracking-widest text-white/45">
+                    Mission preview (confirm launch below — digest locked)
+                  </p>
+                  <div className="whitespace-pre-wrap text-[12px] font-medium leading-[1.6] uppercase tracking-[0.02em] text-white/85 max-h-[min(50vh,320px)] overflow-y-auto">
+                    {String(pendingCursorAgent.summary_preview ?? "")}
+                  </div>
+                  <p className="text-[9px] text-white/40">
+                    Paste <span className="font-mono">HAM_CURSOR_AGENT_LAUNCH_TOKEN</span> to confirm launch. No
+                    auto-launch.
+                  </p>
+                  <input
+                    type="password"
+                    autoComplete="off"
+                    placeholder="HAM_CURSOR_AGENT_LAUNCH_TOKEN"
+                    value={operatorCursorAgentToken}
+                    onChange={(e) => onOperatorCursorAgentTokenChange(e.target.value)}
+                    className="w-full rounded border border-white/15 bg-black/50 px-3 py-2 font-mono text-[11px] text-white"
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={cursorAgentActionsDisabled}
+                      onClick={onCursorAgentLaunch}
+                      className="rounded bg-cyan-600 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white disabled:opacity-50"
+                    >
+                      Launch
+                    </button>
+                    <button
+                      type="button"
+                      disabled={cursorAgentActionsDisabled}
+                      onClick={onDismissCursorPreview}
+                      className="rounded border border-white/20 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white/70"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
         </div>
       </div>
     </div>
@@ -361,10 +435,11 @@ function ChatPageInner({
   const [pendingCursorAgent, setPendingCursorAgent] = React.useState<Record<string, unknown> | null>(
     null,
   );
-  const [caTask, setCaTask] = React.useState("");
+  /** Optional overrides for `cursor_agent_preview` — not the default path (use main input for the task). */
   const [caRepo, setCaRepo] = React.useState("");
   const [caRef, setCaRef] = React.useState("");
   const [caMission, setCaMission] = React.useState<"direct" | "managed">("managed");
+  const [cloudAgentOptionsOpen, setCloudAgentOptionsOpen] = React.useState(false);
   /** Primary HAM profile from Agent Builder (avatar + name in transcript). */
   const [primaryPersona, setPrimaryPersona] = React.useState<{
     name: string;
@@ -1412,6 +1487,64 @@ function ChatPageInner({
     }
   };
 
+  const handleCloudAgentPreview = () => {
+    if (!projectId) {
+      toast.error("Select a project (Projects) first.");
+      return;
+    }
+    const task = input.trim();
+    if (!task) {
+      toast.error("Type the mission in the message box, then click Preview.");
+      return;
+    }
+    void runOperatorPayloadStream({
+      messages: [{ role: "user", content: `[Cloud Agent — preview] ${task}` }],
+      operator: {
+        phase: "cursor_agent_preview",
+        project_id: projectId,
+        cursor_task_prompt: task,
+        cursor_repository: caRepo.trim() || null,
+        cursor_ref: caRef.trim() || null,
+        cursor_mission_handling: caMission,
+      },
+    });
+  };
+
+  const handleCursorAgentTokenChange = (v: string) => {
+    setOperatorCursorAgentToken(v);
+    try {
+      sessionStorage.setItem(CURSOR_AGENT_OP_KEY, v);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const handleCursorAgentLaunchFromCard = () => {
+    const p = pendingCursorAgent;
+    if (!p) return;
+    void runOperatorPayloadStream({
+      messages: [{ role: "user", content: "[cursor_agent_launch operator]" }],
+      operator: {
+        phase: "cursor_agent_launch",
+        confirmed: true,
+        project_id: String(p.project_id ?? ""),
+        cursor_task_prompt: String(p.cursor_task_prompt ?? ""),
+        cursor_proposal_digest: String(p.proposal_digest ?? ""),
+        cursor_base_revision: String(p.base_revision ?? ""),
+        cursor_repository: p.cursor_repository ? String(p.cursor_repository) : null,
+        cursor_ref: p.cursor_ref ? String(p.cursor_ref) : null,
+        cursor_model: p.cursor_model ? String(p.cursor_model) : "default",
+        cursor_auto_create_pr: Boolean(p.cursor_auto_create_pr),
+        cursor_branch_name: p.cursor_branch_name ? String(p.cursor_branch_name) : null,
+        cursor_expected_deliverable: p.cursor_expected_deliverable
+          ? String(p.cursor_expected_deliverable)
+          : null,
+        cursor_mission_handling: p.cursor_mission_handling === "direct" ? "direct" : "managed",
+      },
+      hamOperatorToken: operatorCursorAgentToken,
+    });
+  };
+
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || sending) return;
@@ -1613,7 +1746,16 @@ function ChatPageInner({
         <div className="flex flex-1 min-h-0 flex-col relative overflow-hidden">
           <LiveManagedMissionBanner when={workbenchMissionBannerActive} />
           {viewMode === "chat" ? (
-            <TranscriptColumn messages={messages} primaryPersona={primaryPersona} />
+            <TranscriptColumn
+              messages={messages}
+              primaryPersona={primaryPersona}
+              pendingCursorAgent={pendingCursorAgent}
+              operatorCursorAgentToken={operatorCursorAgentToken}
+              onOperatorCursorAgentTokenChange={handleCursorAgentTokenChange}
+              onCursorAgentLaunch={handleCursorAgentLaunchFromCard}
+              onDismissCursorPreview={() => setPendingCursorAgent(null)}
+              cursorAgentActionsDisabled={sending}
+            />
           ) : viewMode === "preview" ? (
             <WarRoomPane
               uplinkId={uplinkId}
@@ -1638,7 +1780,16 @@ function ChatPageInner({
                     workbenchMissionBannerActive && "border-t border-white/[0.03]",
                   )}
                 >
-                  <TranscriptColumn messages={messages} primaryPersona={primaryPersona} />
+                  <TranscriptColumn
+                    messages={messages}
+                    primaryPersona={primaryPersona}
+                    pendingCursorAgent={pendingCursorAgent}
+                    operatorCursorAgentToken={operatorCursorAgentToken}
+                    onOperatorCursorAgentTokenChange={handleCursorAgentTokenChange}
+                    onCursorAgentLaunch={handleCursorAgentLaunchFromCard}
+                    onDismissCursorPreview={() => setPendingCursorAgent(null)}
+                    cursorAgentActionsDisabled={sending}
+                  />
                 </div>
               }
               right={
@@ -1820,151 +1971,6 @@ function ChatPageInner({
                </div>
              )}
 
-             {projectId ? (
-               <div className="rounded-lg border border-cyan-500/25 bg-cyan-500/5 px-4 py-3 space-y-3 text-[11px] text-white/80">
-                 <div className="font-black uppercase tracking-widest text-cyan-300/90">
-                   Cursor Cloud Agent (operator)
-                 </div>
-                 <p className="text-white/50">
-                   Structured preview and launch (no free-text trigger). Active project:{" "}
-                   <span className="font-mono text-white">{projectId}</span>
-                 </p>
-                 <div className="grid gap-2 sm:grid-cols-2">
-                   <label className="space-y-1 sm:col-span-2">
-                     <span className="text-[9px] font-bold uppercase tracking-widest text-white/40">Task</span>
-                     <textarea
-                       value={caTask}
-                       onChange={(e) => setCaTask(e.target.value)}
-                       placeholder="User task for the cloud agent"
-                       rows={2}
-                       className="w-full rounded border border-white/15 bg-black/40 px-2 py-1.5 font-mono text-[11px] text-white"
-                     />
-                   </label>
-                   <label className="space-y-1">
-                     <span className="text-[9px] font-bold uppercase tracking-widest text-white/40">Repository (optional)</span>
-                     <input
-                       value={caRepo}
-                       onChange={(e) => setCaRepo(e.target.value)}
-                       className="w-full rounded border border-white/15 bg-black/40 px-2 py-1.5 font-mono text-[11px] text-white"
-                     />
-                   </label>
-                   <label className="space-y-1">
-                     <span className="text-[9px] font-bold uppercase tracking-widest text-white/40">Ref (optional)</span>
-                     <input
-                       value={caRef}
-                       onChange={(e) => setCaRef(e.target.value)}
-                       className="w-full rounded border border-white/15 bg-black/40 px-2 py-1.5 font-mono text-[11px] text-white"
-                     />
-                   </label>
-                   <label className="space-y-1 sm:col-span-2">
-                     <span className="text-[9px] font-bold uppercase tracking-widest text-white/40">Mission</span>
-                     <select
-                       value={caMission}
-                       onChange={(e) => setCaMission(e.target.value as "direct" | "managed")}
-                       className="w-full max-w-xs rounded border border-white/15 bg-black/40 px-2 py-1.5 font-mono text-[11px] text-white"
-                     >
-                       <option value="managed">Managed by HAM (registry + War Room)</option>
-                       <option value="direct">Direct (no HAM mission row)</option>
-                     </select>
-                   </label>
-                 </div>
-                 <div className="flex flex-wrap gap-2">
-                   <button
-                     type="button"
-                     disabled={sending || !caTask.trim()}
-                     onClick={() =>
-                       void runOperatorPayloadStream({
-                         messages: [{ role: "user", content: "[cursor_agent_preview operator]" }],
-                         operator: {
-                           phase: "cursor_agent_preview",
-                           project_id: projectId,
-                           cursor_task_prompt: caTask.trim(),
-                           cursor_repository: caRepo.trim() || null,
-                           cursor_ref: caRef.trim() || null,
-                           cursor_mission_handling: caMission,
-                         },
-                       })
-                     }
-                     className="rounded bg-cyan-600/90 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-white disabled:opacity-50"
-                   >
-                     Preview
-                   </button>
-                 </div>
-                 {pendingCursorAgent ? (
-                   <div className="mt-2 space-y-2 rounded border border-white/10 bg-black/30 p-3">
-                     <div className="text-[9px] font-bold uppercase tracking-widest text-white/50">
-                       Pending launch (digest locked)
-                     </div>
-                     <div className="whitespace-pre-wrap text-[10px] text-white/70 max-h-40 overflow-y-auto">
-                       {String(pendingCursorAgent.summary_preview ?? "")}
-                     </div>
-                     <p className="text-[9px] text-white/40">
-                       Paste <span className="font-mono">HAM_CURSOR_AGENT_LAUNCH_TOKEN</span> to confirm
-                       launch.
-                     </p>
-                     <input
-                       type="password"
-                       autoComplete="off"
-                       placeholder="HAM_CURSOR_AGENT_LAUNCH_TOKEN"
-                       value={operatorCursorAgentToken}
-                       onChange={(e) => {
-                         const v = e.target.value;
-                         setOperatorCursorAgentToken(v);
-                         try {
-                           sessionStorage.setItem(CURSOR_AGENT_OP_KEY, v);
-                         } catch {
-                           /* ignore */
-                         }
-                       }}
-                       className="w-full rounded border border-white/15 bg-black/40 px-2 py-1.5 font-mono text-[11px] text-white"
-                     />
-                     <div className="flex flex-wrap gap-2">
-                       <button
-                         type="button"
-                         disabled={sending}
-                         onClick={() => {
-                           const p = pendingCursorAgent;
-                           void runOperatorPayloadStream({
-                             messages: [{ role: "user", content: "[cursor_agent_launch operator]" }],
-                             operator: {
-                               phase: "cursor_agent_launch",
-                               confirmed: true,
-                               project_id: String(p.project_id ?? ""),
-                               cursor_task_prompt: String(p.cursor_task_prompt ?? ""),
-                               cursor_proposal_digest: String(p.proposal_digest ?? ""),
-                               cursor_base_revision: String(p.base_revision ?? ""),
-                               cursor_repository: p.cursor_repository ? String(p.cursor_repository) : null,
-                               cursor_ref: p.cursor_ref ? String(p.cursor_ref) : null,
-                               cursor_model: p.cursor_model ? String(p.cursor_model) : "default",
-                               cursor_auto_create_pr: Boolean(p.cursor_auto_create_pr),
-                               cursor_branch_name: p.cursor_branch_name ? String(p.cursor_branch_name) : null,
-                               cursor_expected_deliverable: p.cursor_expected_deliverable
-                                 ? String(p.cursor_expected_deliverable)
-                                 : null,
-                               cursor_mission_handling:
-                                 p.cursor_mission_handling === "direct" ? "direct" : "managed",
-                             },
-                             hamOperatorToken: operatorCursorAgentToken,
-                           });
-                         }}
-                         className="rounded bg-cyan-600 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-white disabled:opacity-50"
-                       >
-                         Launch
-                       </button>
-                       <button
-                         type="button"
-                         disabled={sending}
-                         onClick={() => setPendingCursorAgent(null)}
-                         className="rounded border border-white/20 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-white/70"
-                       >
-                         Dismiss
-                       </button>
-                     </div>
-                   </div>
-                 ) : null}
-               </div>
-             ) : null}
-
              <form onSubmit={handleSend} className="relative isolate group shadow-xl">
                 <div
                   className="pointer-events-none absolute -inset-0.5 z-0 rounded-xl bg-gradient-to-r from-[#FF6B00]/15 to-[#FF6B00]/5 opacity-15 blur-md transition duration-500 group-focus-within:opacity-50"
@@ -1985,10 +1991,62 @@ function ChatPageInner({
                         onUplinkId={setUplinkId}
                         toolsCount={selectedAgent.assignedTools?.length ?? 0}
                         onOpenCloudAgentLaunch={() => setCloudLaunchOpen(true)}
+                        onCloudAgentPreview={handleCloudAgentPreview}
+                        cloudAgentPreviewDisabled={sending || !input.trim() || !projectId}
                         catalog={catalog}
                         catalogLoading={catalogLoading}
                       />
                    </div>
+                   {projectId ? (
+                     <div className="border-t border-white/5 px-3 py-1.5 bg-black/20">
+                       <button
+                         type="button"
+                         onClick={() => setCloudAgentOptionsOpen((o) => !o)}
+                         className="text-[8px] font-black uppercase tracking-widest text-cyan-500/60 hover:text-cyan-400/90"
+                       >
+                         {cloudAgentOptionsOpen ? "Hide" : "Show"} Cloud Agent target (repo / ref / mode)
+                       </button>
+                       {cloudAgentOptionsOpen ? (
+                         <div className="mt-2 grid gap-2 sm:grid-cols-2 max-w-3xl">
+                           <label className="space-y-1">
+                             <span className="text-[8px] font-bold uppercase tracking-widest text-white/35">
+                               Repository override
+                             </span>
+                             <input
+                               value={caRepo}
+                               onChange={(e) => setCaRepo(e.target.value)}
+                               placeholder="Optional — default from project"
+                               className="w-full rounded border border-white/10 bg-black/40 px-2 py-1 font-mono text-[10px] text-white"
+                             />
+                           </label>
+                           <label className="space-y-1">
+                             <span className="text-[8px] font-bold uppercase tracking-widest text-white/35">
+                               Ref override
+                             </span>
+                             <input
+                               value={caRef}
+                               onChange={(e) => setCaRef(e.target.value)}
+                               placeholder="Optional"
+                               className="w-full rounded border border-white/10 bg-black/40 px-2 py-1 font-mono text-[10px] text-white"
+                             />
+                           </label>
+                           <label className="space-y-1 sm:col-span-2">
+                             <span className="text-[8px] font-bold uppercase tracking-widest text-white/35">
+                               Mission handling
+                             </span>
+                             <select
+                               value={caMission}
+                               onChange={(e) => setCaMission(e.target.value as "direct" | "managed")}
+                               className="w-full max-w-xs rounded border border-white/10 bg-black/40 px-2 py-1 font-mono text-[10px] text-white"
+                             >
+                               <option value="managed">Managed by HAM</option>
+                               <option value="direct">Direct</option>
+                             </select>
+                           </label>
+                         </div>
+                       ) : null}
+                     </div>
+                   ) : null}
                    <div className="flex flex-col border-t border-white/5">
                       <div className="flex items-start px-4 pt-2 pb-2 gap-2">
                          <span className="text-[#FF6B00] font-mono text-[12px] font-bold mt-1 shrink-0 select-none" aria-hidden>

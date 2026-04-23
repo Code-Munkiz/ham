@@ -102,6 +102,13 @@ export interface ChatComposerStripProps {
   toolsCount: number;
   /** When uplink is Cloud Agent, opens mission attach / launch modal. */
   onOpenCloudAgentLaunch?: () => void;
+  /**
+   * Preview-only: runs `cursor_agent_preview` with the current composer text (parent owns task + project).
+   * No NL routing — only this explicit control.
+   */
+  onCloudAgentPreview?: () => void;
+  /** True while sending on in-flight, missing project, or empty main input. */
+  cloudAgentPreviewDisabled?: boolean;
   catalog: ModelCatalogPayload | null;
   catalogLoading: boolean;
 }
@@ -124,6 +131,8 @@ export function ChatComposerStrip({
   onUplinkId,
   toolsCount,
   onOpenCloudAgentLaunch,
+  onCloudAgentPreview,
+  cloudAgentPreviewDisabled = true,
   catalog,
   catalogLoading,
 }: ChatComposerStripProps) {
@@ -497,6 +506,19 @@ export function ChatComposerStrip({
         )}
       </div>
 
+      {onCloudAgentPreview ? (
+        <button
+          type="button"
+          disabled={cloudAgentPreviewDisabled}
+          onClick={() => onCloudAgentPreview()}
+          title="Preview Cursor Cloud Agent (uses message box + active project; no launch yet)"
+          className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-cyan-500/40 bg-white/[0.04] text-cyan-300 shrink-0 hover:bg-cyan-500/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          <Radio className="h-3 w-3" />
+          <span className="text-[8px] font-black uppercase tracking-widest">Preview</span>
+        </button>
+      ) : null}
+
       {uplinkId === "cloud_agent" && onOpenCloudAgentLaunch ? (
         <button
           type="button"
@@ -506,12 +528,11 @@ export function ChatComposerStrip({
           <Rocket className="h-3 w-3" />
           <span className="text-[8px] font-black uppercase tracking-widest">Launch</span>
         </button>
-      ) : (
-        <div className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-white/10 bg-white/[0.02] text-white/35 shrink-0">
-          <Wrench className="h-3 w-3" />
-          <span className="text-[8px] font-black uppercase tracking-widest">{toolsCount} tools</span>
-        </div>
-      )}
+      ) : null}
+      <div className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-white/10 bg-white/[0.02] text-white/35 shrink-0">
+        <Wrench className="h-3 w-3" />
+        <span className="text-[8px] font-black uppercase tracking-widest">{toolsCount} tools</span>
+      </div>
     </div>
   );
 }
