@@ -174,11 +174,11 @@ If you only set `HAM_CORS_ORIGINS` to `http` origins and omit `null`, **packaged
 
 ## Windows packaging (x64, from Linux)
 
-electron-builder can produce **Windows x64** artifacts on a Linux host. This repo defaults to a **portable** `.exe` (NSIS-based self-extracting launcher) so you get a **single file** without needing **Wine**. A classic **NSIS installer** (`.exe` setup wizard) is also available but **requires Wine on Linux** (or build on Windows).
+electron-builder can produce **Windows x64** artifacts on a Linux host. This repo defaults to a **portable** `.exe` so you get a **single file** suitable for internal testing. A classic **NSIS installer** (graphical setup `.exe`) is optional via **`pack:win:nsis`** but **requires Wine on Linux** (or build on Windows).
 
-### Why not “full” NSIS by default on Linux?
+### Why portable first, NSIS setup second?
 
-electron-builder runs the NSIS compiler under **Wine** for the graphical installer target. Portable builds use the same NSIS toolchain but complete successfully on this environment **without** a system Wine install; the **Setup** target still invokes steps that error with *`wine is required`* when Wine is missing. Use **`pack:win`** (portable) for CI/Linux; use **`pack:win:nsis`** after `sudo apt install wine` (or build on Windows).
+On Linux, **`npm run pack:win`** (portable) has been verified **without** installing system Wine. **`npm run pack:win:nsis`** fails with *`wine is required`* until Wine is available (see [electron-builder multi-platform](https://www.electron.build/multi-platform-build#linux)). Use portable for Linux CI and quick handoff; add Wine or build on Windows when you need the Setup wizard.
 
 ### Cross-build note: `signAndEditExecutable: false`
 
