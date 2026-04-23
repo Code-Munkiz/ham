@@ -425,7 +425,18 @@ function ChatPageInner({
    * last committed id (avoids clobbering Managed on blur, and resets to Direct for new ids without the modal).
    */
   const activateCloudMission = React.useCallback(
-    (id: string | null, opts?: { label?: string; mission_handling?: CloudMissionHandling }) => {
+    (
+      id: string | null,
+      opts?: {
+        label?: string;
+        mission_handling?: CloudMissionHandling;
+        /**
+         * When present and the resulting state is **Cloud + Managed**, the workbench enters Split and opens the
+         * right Cloud Agent tab (Tracker vs Transcript) — not used for localStorage-only restores.
+         */
+        managedSplit?: { kind: "new_launch" } | { kind: "existing" };
+      },
+    ) => {
       const trimmed = id?.trim() || null;
       setActiveCloudAgentId(trimmed);
 
@@ -454,8 +465,19 @@ function ChatPageInner({
       } catch {
         /* ignore */
       }
+
+      if (
+        opts?.managedSplit &&
+        uplinkId === "cloud_agent" &&
+        trimmed &&
+        nextHandling === "managed"
+      ) {
+        setViewMode("split");
+        setRequestedTabId(opts.managedSplit.kind === "new_launch" ? "tracker" : "transcript");
+        setRequestedTabNonce((n) => n + 1);
+      }
     },
-    [pushRecentMission, cloudMissionHandling],
+    [pushRecentMission, cloudMissionHandling, uplinkId],
   );
 
   React.useEffect(() => {
@@ -1792,7 +1814,9 @@ function ChatPageInner({
                   onChange={(e) => setActiveCloudAgentIdLive(e.target.value.trim() || null)}
                   onBlur={(e) => {
                     const v = e.target.value.trim();
-                    if (v) activateCloudMission(v);
+                    if (v) {
+                      activateCloudMission(v, { managedSplit: { kind: "existing" } });
+                    }
                   }}
                   placeholder="Cursor agent id…"
                   className="w-full bg-black/50 border border-white/10 px-3 py-2 text-[11px] text-white/90 font-mono outline-none focus:border-[#FF6B00]/40"
@@ -1842,7 +1866,9 @@ function ChatPageInner({
                           <button
                             type="button"
                             className="shrink-0 text-[8px] font-black uppercase tracking-wider text-[#FF6B00] hover:text-white"
-                            onClick={() => activateCloudMission(m.id)}
+                            onClick={() =>
+                              activateCloudMission(m.id, { managedSplit: { kind: "existing" } })
+                            }
                           >
                             Use
                           </button>

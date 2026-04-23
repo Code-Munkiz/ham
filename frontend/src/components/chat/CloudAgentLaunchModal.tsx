@@ -20,7 +20,11 @@ export interface CloudAgentLaunchModalProps {
   /** Single activation path: set active mission id + persist + recent (parent owns SSOT). */
   onActivateMission: (
     id: string,
-    opts: { label?: string; mission_handling: CloudMissionHandling },
+    opts: {
+      label?: string;
+      mission_handling: CloudMissionHandling;
+      managedSplit?: { kind: "new_launch" } | { kind: "existing" };
+    },
   ) => void;
   recentMissions: RecentCloudMission[];
   onRemoveRecent: (id: string) => void;
@@ -98,7 +102,10 @@ export function CloudAgentLaunchModal({
       return;
     }
     setAttachErr(null);
-    onActivateMission(id.trim(), { mission_handling: missionHandling });
+    onActivateMission(id.trim(), {
+      mission_handling: missionHandling,
+      ...(missionHandling === "managed" ? { managedSplit: { kind: "existing" as const } } : {}),
+    });
     onClose();
   };
 
@@ -139,6 +146,7 @@ export function CloudAgentLaunchModal({
       onActivateMission(newId, {
         label: shortRepo || undefined,
         mission_handling: missionHandling,
+        ...(missionHandling === "managed" ? { managedSplit: { kind: "new_launch" as const } } : {}),
       });
       onClose();
     } catch (err) {
