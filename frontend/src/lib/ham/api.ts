@@ -333,6 +333,28 @@ export async function fetchManagedDeployApprovalStatus(
   return res.json() as Promise<ManagedDeployApprovalStatusPayload>;
 }
 
+/** Server-backed managed Cloud Agent missions (newest first). */
+export type ManagedMissionRow = {
+  kind?: string;
+  mission_registry_id?: string;
+  cursor_agent_id?: string;
+  mission_lifecycle?: string;
+  repo_key?: string | null;
+  repository_observed?: string | null;
+  cursor_status_last_observed?: string | null;
+  last_server_observed_at?: string;
+  updated_at?: string;
+};
+
+export async function fetchManagedMissionsList(limit = 40): Promise<ManagedMissionRow[]> {
+  const res = await hamApiFetch(`/api/cursor/managed/missions?limit=${limit}`);
+  if (!res.ok) {
+    return [];
+  }
+  const j = (await res.json()) as { missions?: ManagedMissionRow[] };
+  return Array.isArray(j.missions) ? j.missions : [];
+}
+
 export async function postManagedDeployApprovalDecision(body: {
   agent_id: string;
   state: "approved" | "denied";

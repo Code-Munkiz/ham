@@ -38,6 +38,8 @@ import {
   fetchChatSession,
   fetchManagedDeployHookStatus,
   fetchManagedDeployApprovalStatus,
+  fetchManagedMissionsList,
+  type ManagedMissionRow,
   type ManagedDeployApprovalStatusPayload,
   postManagedDeployApprovalDecision,
   type VercelHookMapping,
@@ -381,6 +383,8 @@ function ChatPageInner({
   const [historyOpen, setHistoryOpen] = React.useState(false);
   const [historySessions, setHistorySessions] = React.useState<ChatSessionSummary[]>([]);
   const [historyLoading, setHistoryLoading] = React.useState(false);
+  const [serverMissions, setServerMissions] = React.useState<ManagedMissionRow[]>([]);
+  const [serverMissionsLoading, setServerMissionsLoading] = React.useState(false);
 
   /** Dedupe recent missions: same id → newest timestamp wins (single list order: newest first after push). */
   const pushRecentMission = React.useCallback((id: string, label?: string) => {
@@ -439,8 +443,12 @@ function ChatPageInner({
         /**
          * When present and the resulting state is **Cloud + Managed**, the workbench enters Split and opens the
          * right Cloud Agent tab (Tracker vs Transcript) — not used for localStorage-only restores.
+         * `assumeCloudUplink`: set when switching uplink in the same tick (e.g. History → open mission) so Split
+         * still opens before `uplinkId` state has committed.
          */
-        managedSplit?: { kind: "new_launch" } | { kind: "existing" };
+        managedSplit?:
+          | { kind: "new_launch" }
+          | { kind: "existing"; assumeCloudUplink?: boolean; openTab?: WarRoomTabId };
       },
     ) => {
       const trimmed = id?.trim() || null;
@@ -472,19 +480,48 @@ function ChatPageInner({
         /* ignore */
       }
 
-      if (
-        opts?.managedSplit &&
-        uplinkId === "cloud_agent" &&
-        trimmed &&
-        nextHandling === "managed"
-      ) {
+      const assumeCloudUplink =
+        opts?.managedSplit?.kind === "existing" && opts.managedSplit.assumeCloudUplink === true;
+      const cloudOkForSplit = uplinkId === "cloud_agent" || assumeCloudUplink;
+      if (opts?.managedSplit && cloudOkForSplit && trimmed && nextHandling === "managed") {
         setViewMode("split");
-        setRequestedTabId(opts.managedSplit.kind === "new_launch" ? "tracker" : "transcript");
+        const ms = opts.managedSplit;
+        let nextTab: WarRoomTabId =
+          ms.kind === "new_launch" ? "tracker" : (ms.kind === "existing" && ms.openTab ? ms.openTab : "transcript");
+        setRequestedTabId(nextTab);
         setRequestedTabNonce((n) => n + 1);
       }
     },
     [pushRecentMission, cloudMissionHandling, uplinkId],
   );
+
+  const openServerManagedMission = React.useCallback(
+    (agentId: string) => {
+      const trimmed = agentId.trim();
+      if (!trimmed) return;
+      setUplinkId("cloud_agent");
+      activateCloudMission(trimmed, {
+        mission_handling: "managed",
+        managedSplit: { kind: "existing", assumeCloudUplink: true, openTab: "overview" },
+      });
+      setHistoryOpen(false);
+    },
+    [activateCloudMission],
+  );
+
+  React.useEffect(() => {
+    if (!historyOpen) return;
+    let cancelled = false;
+    setServerMissionsLoading(true);
+    void fetchManagedMissionsList(40).then((rows) => {
+      if (!cancelled) setServerMissions(rows);
+    }).finally(() => {
+      if (!cancelled) setServerMissionsLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [historyOpen]);
 
   React.useEffect(() => {
     const onDocMouseDown = (e: MouseEvent) => {
@@ -961,7 +998,7 @@ function ChatPageInner({
     if (deployHookConfigured === false) return;
     if (deployApprovalStatus?.policy === "hard" && !deployApprovalStatus.deploy_hook_would_allow) {
       setDeployUserResult("failed");
-      setDeployResultMessage("Deploy is blocked: managed deploy approval policy is hard. Approve in the War Room (Overview) first.");
+      setDeployResultMessage("Deploy is blocked: managed deploy approval policy is hard. Approve in Overview (right pane) first.");
       return;
     }
     setDeployTriggering(true);
@@ -1756,7 +1793,10 @@ function ChatPageInner({
           />
           <div className="w-full max-w-md h-full border-l border-white/10 bg-[#0a0a0a]/95 backdrop-blur-xl shadow-2xl flex flex-col text-white">
             <div className="h-12 flex items-center justify-between px-4 border-b border-white/10 shrink-0">
-              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#FF6B00]">CHAT_HISTORY</span>
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#FF6B00]">HISTORY</span>
+                <p className="text-[8px] text-white/30 mt-0.5">Chat sessions + server managed missions (HAM API)</p>
+              </div>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -1775,15 +1815,73 @@ function ChatPageInner({
                 </button>
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto p-4 space-y-2">
-              {historyLoading ? (
-                <p className="text-[10px] text-white/30">Loading…</p>
-              ) : historySessions.length === 0 ? (
-                <p className="text-[10px] text-white/25">No past chats yet. Start a conversation and it'll appear here.</p>
-              ) : (
-                historySessions.map((s) => (
+            <div className="flex-1 overflow-y-auto p-4 space-y-6">
+              <div>
+                <p className="text-[9px] font-black uppercase tracking-widest text-[#00E5FF] mb-2">Managed missions (server)</p>
+                <p className="text-[8px] text-white/25 mb-2 leading-relaxed">
+                  Authoritative list from HAM&rsquo;s mission registry &mdash; use Open to focus this agent in Cloud (managed)
+                  and land on <span className="text-white/40">Overview</span>.
+                </p>
+                {serverMissionsLoading ? (
+                  <p className="text-[10px] text-white/30">Loading missions…</p>
+                ) : serverMissions.length === 0 ? (
+                  <p className="text-[10px] text-white/25">No managed missions on this API host yet.</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {serverMissions.filter((m) => (m.cursor_agent_id || "").trim()).map((m) => {
+                      const aid = (m.cursor_agent_id || "").trim();
+                      const reg = m.mission_registry_id ? `${m.mission_registry_id.slice(0, 8)}…` : "—";
+                      const last = m.last_server_observed_at || m.updated_at;
+                      return (
+                        <li
+                          key={m.mission_registry_id || aid}
+                          className="border border-white/10 bg-white/[0.02] rounded-lg px-3 py-2.5"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-[8px] font-mono text-white/35 truncate" title={aid}>
+                                {aid}
+                              </p>
+                              <p className="text-[10px] text-white/70 mt-0.5 truncate" title={m.repository_observed || m.repo_key || ""}>
+                                {m.repo_key || m.repository_observed || "—"}
+                              </p>
+                              <p className="text-[8px] text-white/30 mt-1">
+                                <span className="text-white/45">Status: </span>
+                                {m.mission_lifecycle || "—"}
+                                {m.cursor_status_last_observed ? (
+                                  <span className="text-white/25"> · {m.cursor_status_last_observed}</span>
+                                ) : null}
+                              </p>
+                              {last ? (
+                                <p className="text-[7px] text-white/20 mt-0.5">Last seen (server): {last}</p>
+                              ) : null}
+                              <p className="text-[7px] text-white/15 mt-0.5 font-mono">registry {reg}</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => openServerManagedMission(aid)}
+                              className="shrink-0 text-[8px] font-black uppercase tracking-widest text-[#00E5FF] border border-[#00E5FF]/30 rounded px-2 py-1 hover:bg-[#00E5FF]/10"
+                            >
+                              Open
+                            </button>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+              <div>
+                <p className="text-[9px] font-black uppercase tracking-widest text-white/40 mb-2">Chat sessions</p>
+                {historyLoading ? (
+                  <p className="text-[10px] text-white/30">Loading…</p>
+                ) : historySessions.length === 0 ? (
+                  <p className="text-[10px] text-white/25">No past chats yet. Start a conversation and it'll appear here.</p>
+                ) : (
+                  <ul className="space-y-2">
+                {historySessions.map((s) => (
+                  <li key={s.session_id} className="list-none">
                   <button
-                    key={s.session_id}
                     type="button"
                     onClick={() => void loadSession(s.session_id)}
                     className={cn(
@@ -1810,8 +1908,11 @@ function ChatPageInner({
                       </span>
                     )}
                   </button>
-                ))
-              )}
+                  </li>
+                ))}
+                  </ul>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -1920,11 +2021,15 @@ function ChatPageInner({
                 )}
               </div>
               <div>
-                <span className="text-[9px] font-black uppercase tracking-widest text-white/40 block mb-2">
-                  RECENT_MISSIONS
+                <span className="text-[9px] font-black uppercase tracking-widest text-white/40 block mb-1">
+                  QUICK_SHORTCUTS
                 </span>
+                <p className="text-[8px] text-white/22 mb-2 leading-relaxed">
+                  Local browser shortcuts to recent agent ids (fast resume). Authoritative managed history lives in{" "}
+                  <span className="text-white/40">History → Managed missions (server)</span>.
+                </p>
                 {recentMissions.length === 0 ? (
-                  <p className="text-[10px] text-white/25">No stored missions yet.</p>
+                  <p className="text-[10px] text-white/25">No shortcuts stored yet.</p>
                 ) : (
                   <ul className="space-y-2">
                     {[...recentMissions]

@@ -501,8 +501,8 @@ export function CloudAgentPanel({
           <div>
             <p className="text-[11px] font-black uppercase tracking-widest text-white/50">Overview</p>
             <p className="mt-1 text-[10px] font-medium leading-snug text-white/32">
-              Mission-wide context (poll summary, rules-based review, deploy handoff). Tab-specific data lives in Tracker,
-              Transcript, and Browser.
+              Mission summary, HAM review, deploy handoff, deploy approval, then Vercel deploy truth and post-deploy
+              checks. Tab-specific payloads: Tracker, Transcript, Browser.
             </p>
           </div>
           {hasAgent ? (
@@ -515,43 +515,6 @@ export function CloudAgentPanel({
           ) : null}
           {isManaged ? (
             <div className="space-y-1.5 border-t border-white/10 pt-3">
-              {vercelDeploy?.vercel_mapping || dHookMap ? (
-                <div className="mb-1 space-y-1 rounded-md border border-white/10 bg-black/30 px-2.5 py-2">
-                  <p className="text-[9px] font-black uppercase tracking-widest text-white/40">Vercel mapping (server)</p>
-                  {vercelDeploy?.vercel_mapping ? (
-                    <p className="text-[12px] leading-[1.5] text-white/55">
-                      <span className="text-white/40">Project list: </span>
-                      {vercelDeploy.vercel_mapping.message}
-                      {vercelDeploy.vercel_mapping.project_id_used ? (
-                        <span className="ml-1 font-mono text-[11px] text-white/50">
-                          ({vercelDeploy.vercel_mapping.project_id_used}
-                          {vercelDeploy.vercel_mapping.team_id_used
-                            ? `, team: ${vercelDeploy.vercel_mapping.team_id_used}`
-                            : ""}
-                          )
-                        </span>
-                      ) : null}
-                    </p>
-                  ) : null}
-                  {vercelDeploy?.vercel_mapping?.repo_key ? (
-                    <p className="text-[10px] font-mono text-white/35">repo: {vercelDeploy.vercel_mapping.repo_key}</p>
-                  ) : null}
-                  {dHookMap ? (
-                    <p className="text-[12px] leading-[1.5] text-white/55">
-                      <span className="text-white/40">Deploy hook: </span>
-                      {dHookMap.message}
-                    </p>
-                  ) : null}
-                  {dHookMap?.used_global_hook_fallback ? (
-                    <p className="text-[10px] text-amber-400/80">Global deploy hook fallback was used (policy).</p>
-                  ) : null}
-                  {vercelDeploy?.vercel_mapping?.map_load_error || dHookMap?.map_load_error ? (
-                    <p className="text-[10px] text-rose-400/80 font-mono">
-                      Map load: {vercelDeploy?.vercel_mapping?.map_load_error || dHookMap?.map_load_error}
-                    </p>
-                  ) : null}
-                </div>
-              ) : null}
               <p className="text-[11px] font-black uppercase tracking-widest text-[#00E5FF]/85">Managed mission</p>
               <p className="text-[10px] font-medium leading-snug text-white/32">
                 Live summary from HAM&rsquo;s Cursor API poll&mdash;rules-based review and deploy notes below. Use
@@ -604,9 +567,71 @@ export function CloudAgentPanel({
                   ) : null}
                 </div>
               ) : null}
+              {deployRead ? (
+                <div className="mt-1.5 space-y-1.5 border-t border-white/10 pt-3">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-violet-400/85">
+                    Deploy handoff (Vercel hook)
+                  </p>
+                  <p className={cn("text-[13px] font-semibold leading-[1.5]", reviewSeverityClass(deployRead.severity))}>
+                    {deployRead.headline}
+                  </p>
+                  {deployRead.details?.trim() ? (
+                    <p className="text-[13px] font-medium leading-[1.6] text-white/65 whitespace-pre-wrap">
+                      {deployRead.details}
+                    </p>
+                  ) : null}
+                  {deployRead.nextStep?.trim() ? (
+                    <p className="text-[12px] leading-[1.5] text-white/55">
+                      <span className="font-bold text-white/65">Next: </span>
+                      {deployRead.nextStep}
+                    </p>
+                  ) : null}
+                  {dHook === null ? (
+                    <p className="text-[13px] font-medium text-white/45">Checking deploy hook configuration…</p>
+                  ) : dHook === false ? (
+                    <p className="text-[13px] font-medium leading-[1.5] text-amber-500/85">
+                      Deploy hook is not configured on the API (set{" "}
+                      <span className="font-mono">HAM_VERCEL_DEPLOY_HOOK_URL</span>).
+                    </p>
+                  ) : null}
+                  {dState === "hook_accepted" && dMsg ? (
+                    <p className="text-[13px] border border-white/10 bg-black/40 leading-[1.5] text-emerald-400/90 rounded px-2 py-1.5">
+                      {dMsg}
+                    </p>
+                  ) : null}
+                  {dState === "hook_failed" && dMsg ? (
+                    <p className="text-[13px] border border-amber-500/20 bg-black/40 leading-[1.5] text-amber-500/90 rounded px-2 py-1.5">
+                      {dMsg}
+                    </p>
+                  ) : null}
+                  {dState === "ready" && dTrigger && dHook === true ? (
+                    <button
+                      type="button"
+                      className="mt-0.5 w-full rounded border border-violet-500/40 bg-violet-500/10 px-2 py-2 text-left text-[12px] font-black uppercase tracking-widest text-violet-300 hover:bg-violet-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={dApol?.policy === "hard" && dApol.deploy_hook_would_allow === false}
+                      title={
+                        dApol?.policy === "hard" && dApol.deploy_hook_would_allow === false
+                          ? "Managed deploy policy is hard: record approval in Deploy approval (above) first."
+                          : undefined
+                      }
+                      onClick={() => {
+                        void dTrigger();
+                      }}
+                    >
+                      Trigger Vercel deploy hook
+                    </button>
+                  ) : null}
+                  {dState === "triggering" ? (
+                    <p className="flex items-center gap-2 text-[13px] text-white/55">
+                      <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+                      Requesting deploy hook…
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
               {isManaged && (dApolLoading || dApol) ? (
                 <div className="mt-1.5 space-y-1.5 border-t border-fuchsia-500/15 pt-3">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-fuchsia-400/85">Team deploy approval (operator)</p>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-fuchsia-400/85">Deploy approval (this mission)</p>
                   {dApolLoading ? (
                     <p className="flex items-center gap-2 text-[12px] text-white/45">
                       <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
@@ -758,68 +783,6 @@ export function CloudAgentPanel({
                   ) : null}
                 </div>
               ) : null}
-              {deployRead ? (
-                <div className="mt-1.5 space-y-1.5 border-t border-white/10 pt-3">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-violet-400/85">
-                    Deploy handoff (Vercel hook)
-                  </p>
-                  <p className={cn("text-[13px] font-semibold leading-[1.5]", reviewSeverityClass(deployRead.severity))}>
-                    {deployRead.headline}
-                  </p>
-                  {deployRead.details?.trim() ? (
-                    <p className="text-[13px] font-medium leading-[1.6] text-white/65 whitespace-pre-wrap">
-                      {deployRead.details}
-                    </p>
-                  ) : null}
-                  {deployRead.nextStep?.trim() ? (
-                    <p className="text-[12px] leading-[1.5] text-white/55">
-                      <span className="font-bold text-white/65">Next: </span>
-                      {deployRead.nextStep}
-                    </p>
-                  ) : null}
-                  {dHook === null ? (
-                    <p className="text-[13px] font-medium text-white/45">Checking deploy hook configuration…</p>
-                  ) : dHook === false ? (
-                    <p className="text-[13px] font-medium leading-[1.5] text-amber-500/85">
-                      Deploy hook is not configured on the API (set{" "}
-                      <span className="font-mono">HAM_VERCEL_DEPLOY_HOOK_URL</span>).
-                    </p>
-                  ) : null}
-                  {dState === "hook_accepted" && dMsg ? (
-                    <p className="text-[13px] border border-white/10 bg-black/40 leading-[1.5] text-emerald-400/90 rounded px-2 py-1.5">
-                      {dMsg}
-                    </p>
-                  ) : null}
-                  {dState === "hook_failed" && dMsg ? (
-                    <p className="text-[13px] border border-amber-500/20 bg-black/40 leading-[1.5] text-amber-500/90 rounded px-2 py-1.5">
-                      {dMsg}
-                    </p>
-                  ) : null}
-                  {dState === "ready" && dTrigger && dHook === true ? (
-                    <button
-                      type="button"
-                      className="mt-0.5 w-full rounded border border-violet-500/40 bg-violet-500/10 px-2 py-2 text-left text-[12px] font-black uppercase tracking-widest text-violet-300 hover:bg-violet-500/20 disabled:cursor-not-allowed disabled:opacity-50"
-                      disabled={dApol?.policy === "hard" && dApol.deploy_hook_would_allow === false}
-                      title={
-                        dApol?.policy === "hard" && dApol.deploy_hook_would_allow === false
-                          ? "Managed deploy policy is hard: approve in Team deploy approval first."
-                          : undefined
-                      }
-                      onClick={() => {
-                        void dTrigger();
-                      }}
-                    >
-                      Trigger Vercel deploy hook
-                    </button>
-                  ) : null}
-                  {dState === "triggering" ? (
-                    <p className="flex items-center gap-2 text-[13px] text-white/55">
-                      <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
-                      Requesting deploy hook…
-                    </p>
-                  ) : null}
-                </div>
-              ) : null}
               <div className="mt-1.5 space-y-1.5 border-t border-white/10 pt-3">
                 <p className="text-[10px] font-black uppercase tracking-widest text-teal-300/85">
                   Vercel deployment (server poll)
@@ -827,6 +790,43 @@ export function CloudAgentPanel({
                 <p className="text-[10px] font-medium leading-snug text-white/32">
                   Observed from the Vercel Deployments API on the HAM host — not the same as the deploy hook button above.
                 </p>
+                {vercelDeploy?.vercel_mapping || dHookMap ? (
+                  <div className="mb-1 space-y-1 rounded-md border border-white/10 bg-black/30 px-2.5 py-2">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-white/40">Vercel mapping (server)</p>
+                    {vercelDeploy?.vercel_mapping ? (
+                      <p className="text-[12px] leading-[1.5] text-white/55">
+                        <span className="text-white/40">Project list: </span>
+                        {vercelDeploy.vercel_mapping.message}
+                        {vercelDeploy.vercel_mapping.project_id_used ? (
+                          <span className="ml-1 font-mono text-[11px] text-white/50">
+                            ({vercelDeploy.vercel_mapping.project_id_used}
+                            {vercelDeploy.vercel_mapping.team_id_used
+                              ? `, team: ${vercelDeploy.vercel_mapping.team_id_used}`
+                              : ""}
+                            )
+                          </span>
+                        ) : null}
+                      </p>
+                    ) : null}
+                    {vercelDeploy?.vercel_mapping?.repo_key ? (
+                      <p className="text-[10px] font-mono text-white/35">repo: {vercelDeploy.vercel_mapping.repo_key}</p>
+                    ) : null}
+                    {dHookMap ? (
+                      <p className="text-[12px] leading-[1.5] text-white/55">
+                        <span className="text-white/40">Deploy hook: </span>
+                        {dHookMap.message}
+                      </p>
+                    ) : null}
+                    {dHookMap?.used_global_hook_fallback ? (
+                      <p className="text-[10px] text-amber-400/80">Global deploy hook fallback was used (policy).</p>
+                    ) : null}
+                    {vercelDeploy?.vercel_mapping?.map_load_error || dHookMap?.map_load_error ? (
+                      <p className="text-[10px] text-rose-400/80 font-mono">
+                        Map load: {vercelDeploy?.vercel_mapping?.map_load_error || dHookMap?.map_load_error}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
                 {vercelDeployLoading && !vercelDeploy && !vercelDeployErr ? (
                   <p className="flex items-center gap-2 text-[13px] text-white/55">
                     <Loader2 className="h-4 w-4 shrink-0 animate-spin" />

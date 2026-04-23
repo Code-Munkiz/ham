@@ -17,7 +17,7 @@ export function WarRoomTabs({ tabs, activeId, onSelect, variant = "panel" }: War
   return (
     <div
       className={cn(
-        "flex gap-1 shrink-0",
+        "flex gap-0.5 shrink-0",
         variant === "chrome"
           ? "inline-flex w-max min-w-0 max-w-full items-stretch pr-0 py-0.5"
           : "flex-wrap border-b border-white/10 bg-black/30 px-2 pt-2 pb-0",
@@ -29,7 +29,7 @@ export function WarRoomTabs({ tabs, activeId, onSelect, variant = "panel" }: War
           type="button"
           onClick={() => onSelect(t.id)}
           className={cn(
-            "shrink-0 whitespace-nowrap px-3 py-2 text-[13px] font-black uppercase tracking-widest border-b-2 transition-colors -mb-px",
+            "shrink-0 whitespace-nowrap px-2.5 py-1.5 text-[11px] font-black uppercase tracking-widest border-b-2 transition-colors -mb-px",
             activeId === t.id
               ? "border-[#FF6B00] text-[#FF6B00]"
               : "border-transparent text-white/35 hover:text-white/60",
