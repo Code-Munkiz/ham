@@ -11,6 +11,7 @@ import {
   UserCog,
   Orbit,
   Layers,
+  History,
 } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -22,7 +23,6 @@ const primaryNav = [
   { icon: Activity, label: "Activity", path: "/overview" },
   { icon: Users, label: "Droids", path: "/droids" },
   { icon: UserCog, label: "Agents", path: "/agents" },
-  { icon: Orbit, label: "Hermes", path: "/hermes" },
   { icon: Sparkles, label: "Skills", path: "/skills" },
 ];
 
@@ -32,16 +32,20 @@ export function NavRail() {
   const isDesktop = isHamDesktopShell();
   const logoSrc = publicAssetUrl("ham-logo.png");
   const homePath = isDesktop ? "/chat" : "/";
-  const [isOpsOpen, setIsOpsOpen] = useState(false);
-  const opsRef = useRef<HTMLDivElement>(null);
+  const [isDiagnosticsOpen, setIsDiagnosticsOpen] = useState(false);
+  const diagnosticsRef = useRef<HTMLDivElement>(null);
 
-  const isOpsActive =
-    location.pathname === "/analytics" || location.pathname === "/logs";
+  const isDiagnosticsActive =
+    location.pathname.startsWith("/hermes") ||
+    location.pathname.startsWith("/runs") ||
+    location.pathname === "/analytics" ||
+    location.pathname === "/logs" ||
+    location.pathname === "/control-plane";
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (opsRef.current && !opsRef.current.contains(event.target as Node)) {
-        setIsOpsOpen(false);
+      if (diagnosticsRef.current && !diagnosticsRef.current.contains(event.target as Node)) {
+        setIsDiagnosticsOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -87,41 +91,49 @@ export function NavRail() {
       </div>
 
       <div className="mt-auto flex flex-col gap-5 items-center">
-        <div className="flex flex-col gap-5 relative" ref={opsRef}>
-          {/* Ops Popover Trigger */}
+        <div className="flex flex-col gap-5 relative" ref={diagnosticsRef}>
           <button
-            onClick={() => setIsOpsOpen(!isOpsOpen)}
+            type="button"
+            onClick={() => setIsDiagnosticsOpen(!isDiagnosticsOpen)}
             className={cn(
               "group relative p-3 rounded-xl transition-all",
-              isOpsActive || isOpsOpen ? "bg-white/10 text-[#FF6B00]" : "text-white/20 hover:text-white hover:bg-white/5"
+              isDiagnosticsActive || isDiagnosticsOpen ? "bg-white/10 text-[#FF6B00]" : "text-white/20 hover:text-white hover:bg-white/5"
             )}
-            title="Ops"
+            title="Diagnostics"
+            aria-label="Open Diagnostics menu"
+            aria-expanded={isDiagnosticsOpen}
           >
             <SlidersHorizontal className="h-5 w-5" />
           </button>
 
-          {/* Ops Popover */}
-          {isOpsOpen && (
-            <div className="absolute left-full ml-3 top-[-10px] w-48 bg-[#0a0a0a] border border-white/10 rounded-xl shadow-2xl py-2 overflow-hidden z-[100] animate-in fade-in slide-in-from-left-2 duration-200">
+          {isDiagnosticsOpen && (
+            <div className="absolute left-full ml-3 top-[-10px] w-56 bg-[#0a0a0a] border border-white/10 rounded-xl shadow-2xl py-2 overflow-hidden z-[100] animate-in fade-in slide-in-from-left-2 duration-200">
               {[
-                { label: "Analytics", path: "/analytics", icon: BarChart2 },
+                { label: "Hermes / Runtime", path: "/hermes", icon: Orbit },
+                { label: "Run history", path: "/runs", icon: History },
+                { label: "Operational Analytics", path: "/analytics", icon: BarChart2 },
                 { label: "Logs", path: "/logs", icon: ScrollText },
-                { label: "Control plane", path: "/control-plane", icon: Layers },
+                { label: "Control-Plane Runs", path: "/control-plane", icon: Layers },
               ].map((item) => {
-                const isActive = location.pathname === item.path;
+                const isActive =
+                  item.path === "/runs"
+                    ? location.pathname.startsWith("/runs")
+                    : item.path === "/hermes"
+                      ? location.pathname.startsWith("/hermes")
+                      : location.pathname === item.path;
                 return (
                   <Link
                     key={item.path}
                     to={item.path}
-                    onClick={() => setIsOpsOpen(false)}
+                    onClick={() => setIsDiagnosticsOpen(false)}
                     className={cn(
                       "flex items-center gap-3 px-4 py-3 transition-all cursor-pointer group relative",
                       isActive ? "text-[#FF6B00] bg-[#FF6B00]/5" : "text-white/40 hover:bg-[#FF6B00]/5 hover:text-[#FF6B00]"
                     )}
                   >
                     {isActive && <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-[#FF6B00]" />}
-                    <item.icon className="h-4 w-4" />
-                    <span className="text-[10px] font-black uppercase tracking-widest">{item.label}</span>
+                    <item.icon className="h-4 w-4 shrink-0" />
+                    <span className="text-[10px] font-black uppercase tracking-widest leading-snug">{item.label}</span>
                   </Link>
                 );
               })}
