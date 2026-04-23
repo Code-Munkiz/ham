@@ -19,6 +19,13 @@ def test_infer_preview_and_war_room() -> None:
     assert infer_workbench_view_mode("go to war room") == "war_room"
 
 
+def test_infer_browser() -> None:
+    assert infer_workbench_view_mode("open the browser") == "browser"
+    assert infer_workbench_view_mode("switch to browser view") == "browser"
+    assert infer_workbench_view_mode("show me the browser") == "browser"
+    assert infer_workbench_view_mode("launch the browser") == "browser"
+
+
 def test_no_match_for_ui_description_only() -> None:
     """Listing toolbar labels must not imply a mode switch."""
     text = (

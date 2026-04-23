@@ -10,7 +10,7 @@ from typing import Any, Literal
 
 from src.ham.ui_actions import _MAX_ACTIONS
 
-WorkbenchViewMode = Literal["chat", "split", "preview", "war_room"]
+WorkbenchViewMode = Literal["chat", "split", "preview", "war_room", "browser"]
 
 # Imperative phrasing only — avoid matching UI labels in descriptions ("War Room button").
 _SPLIT = re.compile(
@@ -47,6 +47,15 @@ _CHAT = re.compile(
     r")\b",
     re.IGNORECASE,
 )
+_BROWSER = re.compile(
+    r"\b("
+    r"browser\s*view|browser\s*mode|browser\s*screen|"
+    r"show\s+(me\s+)?(?:the\s+)?browser\b|open\s+(?:the\s+)?browser\b|"
+    r"switch\s+to\s+(?:the\s+)?browser\b|go\s+to\s+(?:the\s+)?browser\b|"
+    r"use\s+browser\b|launch\s+(?:the\s+)?browser\b"
+    r")\b",
+    re.IGNORECASE,
+)
 
 
 def infer_workbench_view_mode(user_text: str) -> WorkbenchViewMode | None:
@@ -58,7 +67,7 @@ def infer_workbench_view_mode(user_text: str) -> WorkbenchViewMode | None:
         return None
     # Skip likely refusals / meta ("don't switch", "why is there no")
     if re.search(r"\b(don't|do\s*not|dont)\b", t, re.IGNORECASE) and re.search(
-        r"\b(split|preview|war\s*room)\b",
+        r"\b(split|preview|war\s*room|browser)\b",
         t,
         re.IGNORECASE,
     ):
@@ -68,6 +77,8 @@ def infer_workbench_view_mode(user_text: str) -> WorkbenchViewMode | None:
         return "war_room"
     if _PREVIEW.search(t):
         return "preview"
+    if _BROWSER.search(t):
+        return "browser"
     if _SPLIT.search(t):
         return "split"
     if _CHAT.search(t):

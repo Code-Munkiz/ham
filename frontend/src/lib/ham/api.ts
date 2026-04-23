@@ -834,7 +834,7 @@ export interface HamChatRequest {
 }
 
 /** Matches `/chat` workbench header: CHAT | SPLIT | PREVIEW | WAR ROOM */
-export type HamWorkbenchViewMode = "chat" | "split" | "preview" | "war_room";
+export type HamWorkbenchViewMode = "chat" | "split" | "preview" | "war_room" | "browser";
 
 /** Structured UI actions from `POST /api/chat` (server-validated). */
 export type HamUiAction =

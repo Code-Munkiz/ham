@@ -88,7 +88,7 @@ type ChatRow = {
   timestamp: string;
 };
 
-type ChatViewMode = "chat" | "split" | "preview" | "war_room";
+type ChatViewMode = "chat" | "split" | "preview" | "war_room" | "browser";
 
 function formatShortcutAge(t: number): string {
   const s = Math.floor((Date.now() - t) / 1000);
@@ -219,6 +219,7 @@ function workbenchLayoutTriggerLabel(mode: ChatViewMode): string {
   if (mode === "split") return "Split";
   if (mode === "preview") return "Preview";
   if (mode === "war_room") return "War Room";
+  if (mode === "browser") return "Browser";
   return "View";
 }
 
@@ -1237,6 +1238,13 @@ function ChatPageInner({
         setIsControlPanelOpen,
         isControlPanelOpen,
         setWorkbenchView: setViewMode,
+        setBrowserMode: (active) => {
+          setBrowserOnly(active);
+          if (active) {
+            setRequestedTabId("browser");
+            setRequestedTabNonce((n) => n + 1);
+          }
+        },
       });
     } catch (err) {
       if (err instanceof HamAccessRestrictedError) {
@@ -1338,6 +1346,13 @@ function ChatPageInner({
         setIsControlPanelOpen,
         isControlPanelOpen,
         setWorkbenchView: setViewMode,
+        setBrowserMode: (active) => {
+          setBrowserOnly(active);
+          if (active) {
+            setRequestedTabId("browser");
+            setRequestedTabNonce((n) => n + 1);
+          }
+        },
       });
     } catch (err) {
       if (err instanceof HamAccessRestrictedError) {
