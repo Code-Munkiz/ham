@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Package, ScrollText } from "lucide-react";
+import { Loader2, Package, ScrollText } from "lucide-react";
 
 import { fetchCursorAgent, fetchCursorAgentConversation } from "@/lib/ham/api";
 import { cn } from "@/lib/utils";
@@ -61,6 +61,11 @@ export function CloudAgentPanel({
   const managedPollPending = isManaged && managed.pollPending;
   const managedViewSnapshot = isManaged ? managed.lastSnapshot : null;
   const managedViewReview = isManaged ? managed.lastReview : null;
+  const deployRead = isManaged ? managed.lastDeployReadiness : null;
+  const dState = isManaged ? managed.deployHandoffState : null;
+  const dMsg = isManaged ? managed.deployHandoffMessage : null;
+  const dHook = isManaged ? managed.deployHookConfigured : null;
+  const dTrigger = isManaged ? managed.triggerManagedDeploy : null;
 
   /** Tab-scoped fetch (unchanged for Direct; also used in Managed for raw tracker/transcript JSON). */
   React.useEffect(() => {
@@ -224,6 +229,62 @@ export function CloudAgentPanel({
                 <p className="text-[9px] text-white/40 leading-snug">
                   <span className="font-bold text-white/50">Next: </span>
                   {managedViewReview.nextStep}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+          {deployRead ? (
+            <div className="mt-1.5 pt-1.5 border-t border-white/10 space-y-1.5">
+              <p className="text-[8px] font-black uppercase tracking-widest text-violet-400/80">
+                Deploy handoff (Vercel hook)
+              </p>
+              <p className={cn("text-[10px] font-semibold leading-snug", reviewSeverityClass(deployRead.severity))}>
+                {deployRead.headline}
+              </p>
+              {deployRead.details?.trim() ? (
+                <p className="text-[9px] text-white/50 leading-relaxed whitespace-pre-wrap">{deployRead.details}</p>
+              ) : null}
+              {deployRead.nextStep?.trim() ? (
+                <p className="text-[9px] text-white/40 leading-snug">
+                  <span className="font-bold text-white/50">Next: </span>
+                  {deployRead.nextStep}
+                </p>
+              ) : null}
+              {(deployRead.prUrl || deployRead.branch || deployRead.repo) && (
+                <div className="text-[8px] text-white/40 space-y-0.5 font-mono break-all">
+                  {deployRead.repo ? <p>Repo: {deployRead.repo}</p> : null}
+                  {deployRead.prUrl ? <p>PR/URL: {deployRead.prUrl}</p> : null}
+                  {deployRead.branch && !deployRead.prUrl ? <p>Branch: {deployRead.branch}</p> : null}
+                </div>
+              )}
+              {dHook === null ? (
+                <p className="text-[9px] text-white/35">Checking deploy hook configuration…</p>
+              ) : dHook === false ? (
+                <p className="text-[9px] text-amber-500/80">
+                  Deploy hook is not configured on the API (set <span className="font-mono">HAM_VERCEL_DEPLOY_HOOK_URL</span>).
+                </p>
+              ) : null}
+              {dState === "hook_accepted" && dMsg ? (
+                <p className="text-[9px] text-emerald-400/90 border border-white/10 rounded px-2 py-1 bg-black/40">{dMsg}</p>
+              ) : null}
+              {dState === "hook_failed" && dMsg ? (
+                <p className="text-[9px] text-amber-500/90 border border-amber-500/20 rounded px-2 py-1 bg-black/40">{dMsg}</p>
+              ) : null}
+              {dState === "ready" && dTrigger && dHook === true ? (
+                <button
+                  type="button"
+                  className="mt-0.5 w-full text-left text-[9px] font-black uppercase tracking-widest text-violet-300 border border-violet-500/40 bg-violet-500/10 hover:bg-violet-500/20 py-1.5 px-2 rounded"
+                  onClick={() => {
+                    void dTrigger();
+                  }}
+                >
+                  Trigger Vercel deploy hook
+                </button>
+              ) : null}
+              {dState === "triggering" ? (
+                <p className="text-[9px] text-white/50 flex items-center gap-2">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
+                  Requesting deploy hook…
                 </p>
               ) : null}
             </div>

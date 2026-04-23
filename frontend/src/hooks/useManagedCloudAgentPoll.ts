@@ -2,12 +2,17 @@ import * as React from "react";
 
 import { fetchCursorAgent, fetchCursorAgentConversation } from "@/lib/ham/api";
 import {
+  deriveManagedDeployReadiness,
   deriveManagedMissionReview,
   deriveManagedMissionSnapshot,
   MANAGED_CLOUD_AGENT_POLL_MS,
   shouldEmitReviewChatLine,
 } from "@/lib/ham/managedCloudAgent";
-import type { ManagedMissionReview, ManagedMissionSnapshot } from "@/lib/ham/types";
+import type {
+  ManagedDeployReadiness,
+  ManagedMissionReview,
+  ManagedMissionSnapshot,
+} from "@/lib/ham/types";
 
 export type UseManagedCloudAgentPollOptions = {
   enabled: boolean;
@@ -28,6 +33,7 @@ export type UseManagedCloudAgentPollOptions = {
 export function useManagedCloudAgentPoll(options: UseManagedCloudAgentPollOptions): {
   lastSnapshot: ManagedMissionSnapshot | null;
   lastReview: ManagedMissionReview | null;
+  lastDeployReadiness: ManagedDeployReadiness | null;
   lastUpdated: number | null;
   pollError: string | null;
   pollPending: boolean;
@@ -36,6 +42,7 @@ export function useManagedCloudAgentPoll(options: UseManagedCloudAgentPollOption
   const { enabled, agentId, onAfterSuccess, onTerminalReviewForChat } = options;
   const [lastSnapshot, setLastSnapshot] = React.useState<ManagedMissionSnapshot | null>(null);
   const [lastReview, setLastReview] = React.useState<ManagedMissionReview | null>(null);
+  const [lastDeployReadiness, setLastDeployReadiness] = React.useState<ManagedDeployReadiness | null>(null);
   const [lastUpdated, setLastUpdated] = React.useState<number | null>(null);
   const [pollError, setPollError] = React.useState<string | null>(null);
   const [pollPending, setPollPending] = React.useState(false);
@@ -70,8 +77,10 @@ export function useManagedCloudAgentPoll(options: UseManagedCloudAgentPollOption
       }
       const snap = deriveManagedMissionSnapshot(agent, conv);
       const review = deriveManagedMissionReview(agent, conv, snap);
+      const deploy = deriveManagedDeployReadiness(agent, conv, snap, review);
       setLastSnapshot(snap);
       setLastReview(review);
+      setLastDeployReadiness(deploy);
       setLastUpdated(Date.now());
       onAfterSuccessRef.current(agent, conv);
       const rvc = onTerminalReviewForChatRef.current;
@@ -96,6 +105,7 @@ export function useManagedCloudAgentPoll(options: UseManagedCloudAgentPollOption
       inFlightCountRef.current = 0;
       setLastSnapshot(null);
       setLastReview(null);
+      setLastDeployReadiness(null);
       setLastUpdated(null);
       setPollError(null);
       setPollPending(false);
@@ -127,6 +137,7 @@ export function useManagedCloudAgentPoll(options: UseManagedCloudAgentPollOption
   return {
     lastSnapshot,
     lastReview,
+    lastDeployReadiness,
     lastUpdated,
     pollError,
     pollPending,

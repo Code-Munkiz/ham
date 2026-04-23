@@ -36,9 +36,12 @@ import {
   fetchProjectAgents,
   fetchChatSessions,
   fetchChatSession,
+  fetchManagedDeployHookConfigured,
   listHamProjects,
   HamAccessRestrictedError,
   postChatStream,
+  postManagedDeployHook,
+  type ManagedDeployHookResult,
   type HamChatStreamAuth,
   type HamOperatorResult,
   type ChatSessionSummary,
@@ -52,7 +55,12 @@ import {
   shouldEmitReviewChatLine,
 } from "@/lib/ham/managedCloudAgent";
 import { CLIENT_MODEL_CATALOG_FALLBACK } from "@/lib/ham/modelCatalogFallback";
-import type { CloudMissionHandling, ManagedMissionReview, ModelCatalogPayload } from "@/lib/ham/types";
+import type {
+  CloudMissionHandling,
+  ManagedDeployHandoffState,
+  ManagedMissionReview,
+  ModelCatalogPayload,
+} from "@/lib/ham/types";
 import { ManagedCloudAgentProvider } from "@/contexts/ManagedCloudAgentContext";
 import { useManagedCloudAgentPoll } from "@/hooks/useManagedCloudAgentPoll";
 import { isDashboardChatGatewayReady } from "@/lib/ham/types";
@@ -79,6 +87,7 @@ const CLOUD_MISSION_HANDLING_KEY = "ham_cloud_mission_handling";
 const ACTIVE_SESSION_KEY = "ham_active_chat_session_id";
 const MANAGED_COMPLETION_STORAGE_KEY = "ham_managed_completion_v1";
 const MANAGED_REVIEW_CHAT_STORAGE_KEY = "ham_managed_review_chat_v1";
+const MANAGED_DEPLOY_CHAT_STORAGE_KEY = "ham_managed_deploy_chat_v1";
 
 function loadManagedCompletionMap(): Record<string, string> {
   try {
@@ -115,6 +124,26 @@ function loadManagedReviewChatMap(): Record<string, string> {
 function saveManagedReviewChatMap(m: Record<string, string>) {
   try {
     localStorage.setItem(MANAGED_REVIEW_CHAT_STORAGE_KEY, JSON.stringify(m));
+  } catch {
+    /* ignore */
+  }
+}
+
+function loadManagedDeployChatMap(): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(MANAGED_DEPLOY_CHAT_STORAGE_KEY);
+    if (!raw) return {};
+    const o = JSON.parse(raw) as unknown;
+    if (typeof o !== "object" || o === null || Array.isArray(o)) return {};
+    return o as Record<string, string>;
+  } catch {
+    return {};
+  }
+}
+
+function saveManagedDeployChatMap(m: Record<string, string>) {
+  try {
+    localStorage.setItem(MANAGED_DEPLOY_CHAT_STORAGE_KEY, JSON.stringify(m));
   } catch {
     /* ignore */
   }
@@ -335,6 +364,12 @@ function ChatPageInner({
     cloudMissionHandling: "direct" as CloudMissionHandling,
     activeCloudAgentId: null as string | null,
   });
+
+  const [deployHookConfigured, setDeployHookConfigured] = React.useState<boolean | null>(null);
+  const [deployUserResult, setDeployUserResult] = React.useState<"none" | "accepted" | "failed">("none");
+  const [deployTriggering, setDeployTriggering] = React.useState(false);
+  const [deployResultMessage, setDeployResultMessage] = React.useState<string | null>(null);
+  const lastDeployHandoffAgentRef = React.useRef<string | null | undefined>(undefined);
 
   /** Chat history sidebar */
   const [historyOpen, setHistoryOpen] = React.useState(false);
@@ -756,11 +791,40 @@ function ChatPageInner({
     [],
   );
 
+  const processManagedDeployForChat = React.useCallback(
+    (r: ManagedDeployHookResult, aid: string) => {
+      const g = managedCompletionGatesRef.current;
+      if (g.uplinkId !== "cloud_agent" || g.cloudMissionHandling !== "managed") return;
+      if (g.activeCloudAgentId?.trim() !== aid) return;
+      const map = loadManagedDeployChatMap();
+      if (map[aid] !== undefined) return;
+      map[aid] = "1";
+      saveManagedDeployChatMap(map);
+      const t = new Date().toLocaleTimeString([], {
+        hour12: false,
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      });
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `ham-managed-deploy-handoff-${aid}-${Date.now()}`,
+          role: "system",
+          content: `[HAM] Deploy handoff: ${r.message}`,
+          timestamp: t,
+        },
+      ]);
+    },
+    [],
+  );
+
   React.useEffect(() => {
     if (uplinkId !== "cloud_agent" || cloudMissionHandling !== "managed") {
       try {
         localStorage.removeItem(MANAGED_COMPLETION_STORAGE_KEY);
         localStorage.removeItem(MANAGED_REVIEW_CHAT_STORAGE_KEY);
+        localStorage.removeItem(MANAGED_DEPLOY_CHAT_STORAGE_KEY);
       } catch {
         /* ignore */
       }
@@ -777,26 +841,114 @@ function ChatPageInner({
     onTerminalReviewForChat: processManagedAgentReviewForChat,
   });
 
+  React.useEffect(() => {
+    const aid = activeCloudAgentId?.trim() ?? null;
+    if (lastDeployHandoffAgentRef.current === undefined) {
+      lastDeployHandoffAgentRef.current = aid;
+      return;
+    }
+    if (lastDeployHandoffAgentRef.current === aid) return;
+    lastDeployHandoffAgentRef.current = aid;
+    setDeployUserResult("none");
+    setDeployResultMessage(null);
+    setDeployTriggering(false);
+  }, [activeCloudAgentId]);
+
+  React.useEffect(() => {
+    if (uplinkId !== "cloud_agent" || cloudMissionHandling !== "managed" || !activeCloudAgentId?.trim()) {
+      setDeployHookConfigured(null);
+      return;
+    }
+    let cancelled = false;
+    void fetchManagedDeployHookConfigured().then((c) => {
+      if (!cancelled) setDeployHookConfigured(c);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [uplinkId, cloudMissionHandling, activeCloudAgentId]);
+
+  const triggerManagedDeploy = React.useCallback(async () => {
+    const aid = activeCloudAgentId?.trim();
+    if (!aid) return;
+    if (uplinkId !== "cloud_agent" || cloudMissionHandling !== "managed") return;
+    if (!managedCloudPoll.lastDeployReadiness?.ready) return;
+    if (deployHookConfigured === false) return;
+    setDeployTriggering(true);
+    setDeployResultMessage(null);
+    try {
+      const r = await postManagedDeployHook(aid);
+      setDeployResultMessage(r.message);
+      if (r.outcome === "not_configured" || !r.ok) {
+        setDeployUserResult("failed");
+      } else {
+        setDeployUserResult("accepted");
+      }
+      processManagedDeployForChat(r, aid);
+    } catch (e: unknown) {
+      setDeployUserResult("failed");
+      setDeployResultMessage(e instanceof Error ? e.message : "Request failed");
+    } finally {
+      setDeployTriggering(false);
+    }
+  }, [
+    activeCloudAgentId,
+    uplinkId,
+    cloudMissionHandling,
+    managedCloudPoll.lastDeployReadiness,
+    deployHookConfigured,
+    processManagedDeployForChat,
+  ]);
+
+  const deployHandoffState = React.useMemo((): ManagedDeployHandoffState => {
+    if (deployTriggering) return "triggering";
+    if (deployUserResult === "accepted") return "hook_accepted";
+    if (deployUserResult === "failed") return "hook_failed";
+    if (deployHookConfigured === null) return "idle";
+    if (deployHookConfigured === false) return "hook_not_configured";
+    const r = managedCloudPoll.lastDeployReadiness;
+    if (!r) return "idle";
+    if (!r.ready) return "not_ready";
+    return "ready";
+  }, [
+    deployTriggering,
+    deployUserResult,
+    deployHookConfigured,
+    managedCloudPoll.lastDeployReadiness,
+  ]);
+
   const managedCloudAgentContextValue = React.useMemo(
     () => ({
       activeCloudAgentId,
       cloudMissionHandling,
       lastSnapshot: managedCloudPoll.lastSnapshot,
       lastReview: managedCloudPoll.lastReview,
+      lastDeployReadiness: managedCloudPoll.lastDeployReadiness,
       lastUpdated: managedCloudPoll.lastUpdated,
       pollError: managedCloudPoll.pollError,
       pollPending: managedCloudPoll.pollPending,
       refresh: managedCloudPoll.refresh,
+      deployHookConfigured,
+      deployHandoffState,
+      deployHandoffMessage: deployResultMessage,
+      triggerManagedDeploy:
+        uplinkId === "cloud_agent" && cloudMissionHandling === "managed" ? triggerManagedDeploy : null,
     }),
     [
       activeCloudAgentId,
       cloudMissionHandling,
       managedCloudPoll.lastSnapshot,
       managedCloudPoll.lastReview,
+      managedCloudPoll.lastDeployReadiness,
       managedCloudPoll.lastUpdated,
       managedCloudPoll.pollError,
       managedCloudPoll.pollPending,
       managedCloudPoll.refresh,
+      deployHookConfigured,
+      deployHandoffState,
+      deployResultMessage,
+      uplinkId,
+      triggerManagedDeploy,
     ],
   );
 

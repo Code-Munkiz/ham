@@ -1,4 +1,5 @@
 import type {
+  ManagedDeployReadiness,
   ManagedMissionReview,
   ManagedMissionSnapshot,
   ManagedReviewEvidenceLevel,
@@ -330,6 +331,124 @@ export function deriveManagedMissionReview(
     hasTerminalAssessment: false,
     evidenceLevel: f.signalStrength,
     limitedSignal: false,
+  };
+}
+
+/**
+ * Classify `branchOrPr` as URL vs branch name from API text only.
+ */
+function splitBranchOrPr(raw: string | null): { prUrl: string | null; branch: string | null } {
+  const t = raw?.trim() || null;
+  if (!t) return { prUrl: null, branch: null };
+  const lower = t.toLowerCase();
+  if (lower.startsWith("http://") || lower.startsWith("https://") || lower.includes("github.com/")) {
+    return { prUrl: t, branch: null };
+  }
+  return { prUrl: null, branch: t };
+}
+
+function extractRepoForDeploy(agent: Record<string, unknown>): string | null {
+  const top = readString(agent["repository"]);
+  if (top) return top;
+  const src = asRecord(agent["source"]);
+  if (src) {
+    return readString(src["repository"] ?? src["url"]) ?? null;
+  }
+  return null;
+}
+
+/**
+ * Whether a Vercel deploy hook handoff is *appropriate* from current mission data (not whether the hook is configured).
+ * Deterministic; no LLM.
+ */
+export function deriveManagedDeployReadiness(
+  agent: Record<string, unknown>,
+  _conversation: unknown,
+  snap: ManagedMissionSnapshot,
+  review: ManagedMissionReview,
+): ManagedDeployReadiness {
+  const repo = extractRepoForDeploy(agent);
+  const { prUrl, branch } = splitBranchOrPr(snap.branchOrPr);
+  const hasHandoff = Boolean(prUrl || branch);
+  const terminal = isCloudAgentTerminal(agent);
+  const target =
+    "Vercel project linked to the HAM-configured deploy hook (build runs on the hook’s connected repo)";
+
+  if (!terminal) {
+    return {
+      ready: false,
+      severity: "info",
+      headline: "Deploy handoff: mission is not in a terminal state in the latest agent data.",
+      details: review.details ?? snap.progress ?? null,
+      nextStep: "Wait for the Cloud Agent to finish, then refresh or re-poll.",
+      prUrl,
+      branch,
+      repo,
+      deploymentTarget: null,
+    };
+  }
+  if (review.severity === "error" && review.hasTerminalAssessment) {
+    return {
+      ready: false,
+      severity: "error",
+      headline: "Deploy handoff is not ready: terminal state includes error or failure fields.",
+      details: review.details,
+      nextStep: "Resolve errors in the mission before a deploy handoff.",
+      prUrl,
+      branch,
+      repo,
+      deploymentTarget: null,
+    };
+  }
+  if (review.limitedSignal) {
+    return {
+      ready: false,
+      severity: "warning",
+      headline: "Deploy handoff: mission data is too limited to confirm a PR, branch, or repository target.",
+      details: review.details,
+      nextStep: "Open Tracker/Transcript, then re-assess when the API shows clearer fields.",
+      prUrl,
+      branch,
+      repo,
+      deploymentTarget: null,
+    };
+  }
+  if (!hasHandoff) {
+    return {
+      ready: false,
+      severity: "warning",
+      headline: "Deploy handoff is blocked: no branch or PR link in the latest agent payload.",
+      details: "Without a handoff line in the agent response, HAM will not offer a ready deploy trigger.",
+      nextStep: "Confirm branch/PR in Cursor or the remote, then re-poll this mission.",
+      prUrl: null,
+      branch: null,
+      repo,
+      deploymentTarget: null,
+    };
+  }
+  if (!repo?.trim()) {
+    return {
+      ready: true,
+      severity: "success",
+      headline: "Terminal with branch/PR text in the payload; deploy hook can be triggered when configured (repository field not in this shape).",
+      details: prUrl || branch,
+      nextStep: "Verify the Vercel hook’s Git repo matches your mission before triggering.",
+      prUrl,
+      branch,
+      repo: null,
+      deploymentTarget: target,
+    };
+  }
+  return {
+    ready: true,
+    severity: "success",
+    headline: "Mission reached a terminal handoff: branch/PR information is available for deploy hook handoff.",
+    details: [repo, prUrl || branch].filter(Boolean).join(" · "),
+    nextStep: "Trigger only when the hook’s Vercel project matches this work; the hook does not target a specific PR automatically.",
+    prUrl,
+    branch,
+    repo,
+    deploymentTarget: target,
   };
 }
 

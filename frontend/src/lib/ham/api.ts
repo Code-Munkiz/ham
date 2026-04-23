@@ -272,6 +272,45 @@ export function cloudAgentIdFromLaunchResponse(payload: Record<string, unknown>)
   return typeof id === "string" && id.trim() ? id.trim() : null;
 }
 
+/** Whether HAM has a server-side Vercel deploy hook URL (secret never returned). */
+export async function fetchManagedDeployHookConfigured(): Promise<boolean> {
+  const res = await hamApiFetch("/api/cursor/managed/deploy-hook");
+  if (!res.ok) return false;
+  const j = (await res.json()) as { configured?: boolean };
+  return Boolean(j.configured);
+}
+
+export type ManagedDeployHookResult = {
+  ok: boolean;
+  outcome: string;
+  message: string;
+  status_code?: number;
+};
+
+/** POST Vercel deploy hook via HAM (hook URL stays on server). */
+export async function postManagedDeployHook(agentId: string): Promise<ManagedDeployHookResult> {
+  const res = await hamApiFetch("/api/cursor/managed/deploy-hook", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ agent_id: agentId.trim() }),
+  });
+  if (res.status === 503) {
+    const detail = (await readFastApiDetail(res)) ?? "Deploy hook is not configured on the API host.";
+    return {
+      ok: false,
+      outcome: "not_configured",
+      message: typeof detail === "string" ? detail : "Deploy hook is not configured.",
+    };
+  }
+  const j = (await res.json()) as Record<string, unknown>;
+  return {
+    ok: Boolean(j.ok),
+    outcome: typeof j.outcome === "string" ? j.outcome : "unknown",
+    message: typeof j.message === "string" ? j.message : "Unknown response",
+    status_code: typeof j.status_code === "number" ? j.status_code : undefined,
+  };
+}
+
 export interface BrowserRuntimeState {
   session_id: string;
   status: "ready" | "busy" | "error";

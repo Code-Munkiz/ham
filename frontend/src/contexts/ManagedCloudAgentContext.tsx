@@ -1,17 +1,30 @@
 import * as React from "react";
-import type { CloudMissionHandling, ManagedMissionReview, ManagedMissionSnapshot } from "@/lib/ham/types";
+import type {
+  CloudMissionHandling,
+  ManagedDeployHandoffState,
+  ManagedDeployReadiness,
+  ManagedMissionReview,
+  ManagedMissionSnapshot,
+} from "@/lib/ham/types";
 
 export type ManagedCloudAgentContextValue = {
   activeCloudAgentId: string | null;
   cloudMissionHandling: CloudMissionHandling;
   lastSnapshot: ManagedMissionSnapshot | null;
   lastReview: ManagedMissionReview | null;
+  lastDeployReadiness: ManagedDeployReadiness | null;
   lastUpdated: number | null;
   /** Managed poll: last request error, if any */
   pollError: string | null;
   /** Managed poll: in-flight */
   pollPending: boolean;
   refresh: () => void;
+  /** Server has HAM_VERCEL_DEPLOY_HOOK_URL (or similar); null while loading */
+  deployHookConfigured: boolean | null;
+  /** User handoff result overlay; combined with readiness in the panel */
+  deployHandoffState: ManagedDeployHandoffState;
+  deployHandoffMessage: string | null;
+  triggerManagedDeploy: (() => Promise<void>) | null;
 };
 
 const ManagedCloudAgentContext = React.createContext<ManagedCloudAgentContextValue | null>(null);

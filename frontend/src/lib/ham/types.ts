@@ -31,6 +31,29 @@ export interface ManagedMissionReview {
   limitedSignal: boolean;
 }
 
+/** Deterministic deploy handoff assessment (Vercel hook is configured separately on the server). */
+export type ManagedDeployReadiness = {
+  ready: boolean;
+  severity: "info" | "warning" | "error" | "success";
+  headline: string;
+  details: string | null;
+  nextStep: string | null;
+  prUrl: string | null;
+  branch: string | null;
+  repo: string | null;
+  /** Human-readable target class; not a live deploy guarantee. */
+  deploymentTarget: string | null;
+};
+
+export type ManagedDeployHandoffState =
+  | "idle"
+  | "not_ready"
+  | "ready"
+  | "triggering"
+  | "hook_accepted"
+  | "hook_failed"
+  | "hook_not_configured";
+
 export interface RunRecord {
   run_id: string;
   created_at: string;

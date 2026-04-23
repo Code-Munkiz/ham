@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 from src.api.browser_runtime import router as browser_runtime_router
 from src.api.chat import router as chat_router
 from src.api.clerk_gate import get_ham_clerk_actor
+from src.api.cursor_managed_deploy import router as cursor_managed_deploy_router
 from src.api.cursor_settings import router as cursor_settings_router
 from src.api.cursor_skills import router as cursor_skills_router
 from src.api.cursor_subagents import router as cursor_subagents_router
@@ -61,6 +62,7 @@ app.add_middleware(
 app.include_router(chat_router)
 app.include_router(browser_runtime_router)
 app.include_router(cursor_settings_router)
+app.include_router(cursor_managed_deploy_router)
 app.include_router(cursor_skills_router)
 app.include_router(cursor_subagents_router)
 app.include_router(hermes_hub_router)
