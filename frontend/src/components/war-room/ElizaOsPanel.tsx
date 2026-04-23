@@ -1,5 +1,6 @@
 import * as React from "react";
 
+import { cn } from "@/lib/utils";
 import { STUB_ELIZA_THOUGHT_LINES } from "./stubs/elizaStub";
 import { BrowserTabPanel } from "./BrowserTabPanel";
 import type { WarRoomTabId } from "./uplinkConfig";
@@ -13,7 +14,7 @@ export interface ElizaOsPanelProps {
 export function ElizaOsPanel({ tabId, embedUrl, onEmbedUrlChange }: ElizaOsPanelProps) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="min-h-0 flex-1 overflow-y-auto p-2">
+      <div className={cn("min-h-0 flex-1 flex flex-col", tabId === "browser" ? "p-1.5" : "overflow-y-auto p-2")}>
         {tabId === "browser" ? (
           <BrowserTabPanel embedUrl={embedUrl} onEmbedUrlChange={onEmbedUrlChange} />
         ) : tabId === "thought_stream" ? (
