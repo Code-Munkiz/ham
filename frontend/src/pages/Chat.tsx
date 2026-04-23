@@ -2345,7 +2345,6 @@ function ChatPageInner({
                         onWorker={setWorker}
                         uplinkId={uplinkId}
                         onUplinkId={setUplinkId}
-                        toolsCount={selectedAgent.assignedTools?.length ?? 0}
                         onOpenCloudAgentLaunch={() => setCloudLaunchOpen(true)}
                         onCloudAgentPreview={handleCloudAgentPreview}
                         cloudAgentPreviewDisabled={sending || !input.trim() || !projectId}

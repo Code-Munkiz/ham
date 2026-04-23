@@ -12,7 +12,6 @@ import {
   Search,
   Sparkles,
   User,
-  Wrench,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -99,7 +98,6 @@ export interface ChatComposerStripProps {
   onWorker: (id: string) => void;
   uplinkId: UplinkId;
   onUplinkId: (id: UplinkId) => void;
-  toolsCount: number;
   /** When uplink is Cloud Agent, opens mission attach / launch modal. */
   onOpenCloudAgentLaunch?: () => void;
   /**
@@ -131,7 +129,6 @@ export function ChatComposerStrip({
   onWorker,
   uplinkId,
   onUplinkId,
-  toolsCount,
   onOpenCloudAgentLaunch,
   onCloudAgentPreview,
   cloudAgentPreviewDisabled = true,
@@ -536,10 +533,6 @@ export function ChatComposerStrip({
           <span className="text-[8px] font-black uppercase tracking-widest">Launch</span>
         </button>
       ) : null}
-      <div className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-white/10 bg-white/[0.02] text-white/35 shrink-0">
-        <Wrench className="h-3 w-3" />
-        <span className="text-[8px] font-black uppercase tracking-widest">{toolsCount} tools</span>
-      </div>
     </div>
   );
 }
