@@ -26,6 +26,12 @@ function readPersistedConfig() {
   }
 }
 
+function defaultLoadMode() {
+  const fromEnv = (process.env.HAM_DESKTOP_LOAD_MODE || '').trim().toLowerCase();
+  if (fromEnv) return fromEnv;
+  return app.isPackaged ? 'file' : 'devserver';
+}
+
 function buildRendererConfig() {
   const persisted = readPersistedConfig();
   const envApi = (process.env.HAM_DESKTOP_API_BASE || '').trim();
@@ -39,7 +45,7 @@ function buildRendererConfig() {
     persisted.useHashRouter === true ||
     persisted.useHashRouter === 'true';
 
-  const loadMode = (process.env.HAM_DESKTOP_LOAD_MODE || 'devserver').trim().toLowerCase();
+  const loadMode = defaultLoadMode();
   if (loadMode === 'file') {
     useHashRouter = true;
   }
@@ -54,6 +60,9 @@ function buildRendererConfig() {
 function resolveWebRoot() {
   const fromEnv = (process.env.HAM_DESKTOP_WEB_ROOT || '').trim();
   if (fromEnv) return path.resolve(fromEnv);
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, 'renderer');
+  }
   return path.resolve(__dirname, '..', 'frontend', 'dist');
 }
 

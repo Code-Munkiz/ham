@@ -24,6 +24,7 @@ ham-workspace*.zip
 # Frontend
 frontend/node_modules/
 desktop/node_modules/
+desktop/dist-pack/
 frontend/dist/
 frontend/.env
 .vercel

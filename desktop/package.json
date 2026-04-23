@@ -3,13 +3,57 @@
   "private": true,
   "version": "0.1.0",
   "description": "Thin Electron shell for HAM (Milestone 1 — no bundled API)",
+  "homepage": "https://github.com/Code-Munkiz/ham",
   "main": "main.cjs",
+  "author": "Code-Munkiz",
   "scripts": {
     "start": "electron .",
-    "start:file": "electron ."
+    "start:file": "electron .",
+    "build:frontend": "npm run build --prefix ../frontend -- --base ./",
+    "pack:linux": "npm run build:frontend && electron-builder --linux",
+    "pack:linux:dir": "npm run build:frontend && electron-builder --linux --dir"
+  },
+  "build": {
+    "appId": "io.github.codemunkiz.ham-desktop",
+    "productName": "HAM Desktop",
+    "copyright": "Copyright © Code-Munkiz",
+    "icon": "../frontend/public/ham-logo.png",
+    "directories": {
+      "output": "dist-pack"
+    },
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "package.json"
+    ],
+    "asar": true,
+    "extraResources": [
+      {
+        "from": "../frontend/dist",
+        "to": "renderer",
+        "filter": ["**/*"]
+      }
+    ],
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": ["x64"]
+        },
+        {
+          "target": "deb",
+          "arch": ["x64"]
+        }
+      ],
+      "category": "Development",
+      "maintainer": "Code-Munkiz",
+      "synopsis": "HAM operator desktop shell (Electron)",
+      "description": "Thin Electron shell for the HAM dashboard. Requires a running Ham API (local or remote); see desktop/README.md."
+    }
   },
   "devDependencies": {
-    "electron": "^34.2.0"
+    "electron": "^34.2.0",
+    "electron-builder": "^25.1.8"
   },
   "engines": {
     "node": ">=20 <25"
