@@ -7,14 +7,20 @@ import {
   launchCursorAgent,
   shortenHamApiErrorMessage,
 } from "@/lib/ham/api";
+import type { CloudMissionHandling } from "@/lib/ham/types";
 
 export type RecentCloudMission = { id: string; label?: string; t: number };
 
 export interface CloudAgentLaunchModalProps {
   open: boolean;
   onClose: () => void;
+  /** Syncs radio state when the dialog opens (parent `cloudMissionHandling`). */
+  defaultMissionHandling: CloudMissionHandling;
   /** Single activation path: set active mission id + persist + recent (parent owns SSOT). */
-  onActivateMission: (id: string, label?: string) => void;
+  onActivateMission: (
+    id: string,
+    opts: { label?: string; mission_handling: CloudMissionHandling },
+  ) => void;
   recentMissions: RecentCloudMission[];
   onRemoveRecent: (id: string) => void;
   mountDefaults?: { repository: string; ref: string };
@@ -23,11 +29,13 @@ export interface CloudAgentLaunchModalProps {
 export function CloudAgentLaunchModal({
   open,
   onClose,
+  defaultMissionHandling,
   onActivateMission,
   recentMissions,
   onRemoveRecent,
   mountDefaults,
 }: CloudAgentLaunchModalProps) {
+  const [missionHandling, setMissionHandling] = React.useState<CloudMissionHandling>("direct");
   const [manualId, setManualId] = React.useState("");
   const [promptText, setPromptText] = React.useState("");
   const [repository, setRepository] = React.useState("");
@@ -50,6 +58,7 @@ export function CloudAgentLaunchModal({
     if (!open) return;
     setLaunchErr(null);
     setAttachErr(null);
+    setMissionHandling(defaultMissionHandling);
     setManualId("");
     setPromptText("");
     setRepository(mountDefaults?.repository?.trim() ?? "");
@@ -58,7 +67,7 @@ export function CloudAgentLaunchModal({
     setBranchName("");
     setAutoCreatePr(false);
     setAdvancedOpen(false);
-  }, [open, mountDefaults?.repository, mountDefaults?.ref]);
+  }, [open, mountDefaults?.repository, mountDefaults?.ref, defaultMissionHandling]);
 
   React.useEffect(() => {
     if (!open) return;
@@ -88,7 +97,7 @@ export function CloudAgentLaunchModal({
       return;
     }
     setAttachErr(null);
-    onActivateMission(id.trim());
+    onActivateMission(id.trim(), { mission_handling: missionHandling });
     onClose();
   };
 
@@ -117,7 +126,10 @@ export function CloudAgentLaunchModal({
         return;
       }
       const shortRepo = r.replace(/^https?:\/\/github\.com\//i, "").slice(0, 48);
-      onActivateMission(newId, shortRepo || undefined);
+      onActivateMission(newId, {
+        label: shortRepo || undefined,
+        mission_handling: missionHandling,
+      });
       onClose();
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Launch failed.";
@@ -164,6 +176,52 @@ export function CloudAgentLaunchModal({
         </div>
 
         <div className="p-4 space-y-6">
+          <section className="space-y-2" aria-labelledby="mission-handling-heading">
+            <div id="mission-handling-heading" className="text-[9px] font-black text-white/30 uppercase tracking-widest">
+              Mission handling
+            </div>
+            <p className="text-[9px] text-white/30 leading-snug">
+              Direct = launch or attach only. Managed = HAM can plan, track, and summarize around this mission as those
+              features ship.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <label
+                className={cn(
+                  "flex-1 min-w-[120px] cursor-pointer rounded-lg border px-3 py-2 text-[10px] font-bold transition-colors",
+                  missionHandling === "direct"
+                    ? "border-[#00E5FF]/50 bg-[#00E5FF]/8 text-white"
+                    : "border-white/10 bg-black/40 text-white/50 hover:border-white/20",
+                )}
+              >
+                <input
+                  type="radio"
+                  className="sr-only"
+                  name="mission-handling"
+                  checked={missionHandling === "direct"}
+                  onChange={() => setMissionHandling("direct")}
+                />
+                Direct
+              </label>
+              <label
+                className={cn(
+                  "flex-1 min-w-[120px] cursor-pointer rounded-lg border px-3 py-2 text-[10px] font-bold transition-colors",
+                  missionHandling === "managed"
+                    ? "border-[#00E5FF]/50 bg-[#00E5FF]/8 text-white"
+                    : "border-white/10 bg-black/40 text-white/50 hover:border-white/20",
+                )}
+              >
+                <input
+                  type="radio"
+                  className="sr-only"
+                  name="mission-handling"
+                  checked={missionHandling === "managed"}
+                  onChange={() => setMissionHandling("managed")}
+                />
+                Managed by HAM
+              </label>
+            </div>
+          </section>
+
           <section className="space-y-2">
             <div className="text-[9px] font-black text-white/30 uppercase tracking-widest">Attach existing</div>
             <p className="text-[9px] text-white/35 leading-snug">

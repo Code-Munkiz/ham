@@ -44,7 +44,7 @@ import {
   type ChatSessionSummary,
 } from "@/lib/ham/api";
 import { CLIENT_MODEL_CATALOG_FALLBACK } from "@/lib/ham/modelCatalogFallback";
-import type { ModelCatalogPayload } from "@/lib/ham/types";
+import type { CloudMissionHandling, ModelCatalogPayload } from "@/lib/ham/types";
 import { isDashboardChatGatewayReady } from "@/lib/ham/types";
 import { useAgent } from "@/lib/ham/AgentContext";
 import { useWorkspace } from "@/lib/ham/WorkspaceContext";
@@ -65,6 +65,7 @@ type ChatViewMode = "chat" | "split" | "preview" | "war_room";
 const RECENT_MISSIONS_KEY = "ham_recent_missions_v1";
 const MOUNT_STORAGE_KEY = "ham_project_mount_v1";
 const ACTIVE_CLOUD_AGENT_KEY = "ham_active_cloud_agent_id";
+const CLOUD_MISSION_HANDLING_KEY = "ham_cloud_mission_handling";
 const ACTIVE_SESSION_KEY = "ham_active_chat_session_id";
 
 type RecentMission = { id: string; label?: string; t: number };
@@ -93,6 +94,11 @@ function saveRecentMissions(items: RecentMission[]) {
   } catch {
     /* ignore */
   }
+}
+
+function parseStoredMissionHandling(raw: string | null | undefined): CloudMissionHandling {
+  if (raw === "managed") return "managed";
+  return "direct";
 }
 
 function directivePlaceholder(mode: WorkbenchMode): string {
@@ -262,6 +268,9 @@ function ChatPageInner({
   const [browserOnly, setBrowserOnly] = React.useState(false);
   /** Cursor Cloud Agent id for War Room / Cloud Agent uplink (proxied via Ham API). */
   const [activeCloudAgentId, setActiveCloudAgentId] = React.useState<string | null>(null);
+  const [cloudMissionHandling, setCloudMissionHandling] = React.useState<CloudMissionHandling>("direct");
+  /** Id last set by `activateCloudMission` or restored on load — not live typing in Projects. */
+  const lastCommittedCloudAgentIdRef = React.useRef<string | null>(null);
   const [recentMissions, setRecentMissions] = React.useState<RecentMission[]>([]);
   const [hamProjects, setHamProjects] = React.useState<{ id: string; name: string; root: string }[]>([]);
   const [projectsLoading, setProjectsLoading] = React.useState(false);
@@ -299,6 +308,15 @@ function ChatPageInner({
   const setActiveCloudAgentIdLive = React.useCallback((id: string | null) => {
     const trimmed = id?.trim() || null;
     setActiveCloudAgentId(trimmed);
+    if (!trimmed) {
+      setCloudMissionHandling("direct");
+      lastCommittedCloudAgentIdRef.current = null;
+      try {
+        localStorage.removeItem(CLOUD_MISSION_HANDLING_KEY);
+      } catch {
+        /* ignore */
+      }
+    }
     try {
       if (trimmed) localStorage.setItem(ACTIVE_CLOUD_AGENT_KEY, trimmed);
       else localStorage.removeItem(ACTIVE_CLOUD_AGENT_KEY);
@@ -310,23 +328,41 @@ function ChatPageInner({
   /**
    * Single activation path for an established mission id: state + localStorage + recent (dedupe, newest wins).
    * Use for Launch modal, Projects “Use”, and committing the mission field (blur).
+   * `mission_handling` from the modal is always applied; if omitted, preserve mode only when the id matches the
+   * last committed id (avoids clobbering Managed on blur, and resets to Direct for new ids without the modal).
    */
   const activateCloudMission = React.useCallback(
-    (id: string | null, opts?: { label?: string }) => {
+    (id: string | null, opts?: { label?: string; mission_handling?: CloudMissionHandling }) => {
       const trimmed = id?.trim() || null;
       setActiveCloudAgentId(trimmed);
+
+      let nextHandling: CloudMissionHandling;
+      if (!trimmed) {
+        nextHandling = "direct";
+      } else if (opts?.mission_handling !== undefined) {
+        nextHandling = opts.mission_handling;
+      } else {
+        const committed = lastCommittedCloudAgentIdRef.current?.trim() || null;
+        nextHandling =
+          committed && committed === trimmed ? cloudMissionHandling : "direct";
+      }
+      setCloudMissionHandling(nextHandling);
+      lastCommittedCloudAgentIdRef.current = trimmed;
+
       try {
         if (trimmed) {
           localStorage.setItem(ACTIVE_CLOUD_AGENT_KEY, trimmed);
+          localStorage.setItem(CLOUD_MISSION_HANDLING_KEY, nextHandling);
           pushRecentMission(trimmed, opts?.label);
         } else {
           localStorage.removeItem(ACTIVE_CLOUD_AGENT_KEY);
+          localStorage.removeItem(CLOUD_MISSION_HANDLING_KEY);
         }
       } catch {
         /* ignore */
       }
     },
-    [pushRecentMission],
+    [pushRecentMission, cloudMissionHandling],
   );
 
   React.useEffect(() => {
@@ -354,6 +390,13 @@ function ChatPageInner({
     try {
       aid = localStorage.getItem(ACTIVE_CLOUD_AGENT_KEY)?.trim() || null;
       setActiveCloudAgentId(aid);
+      if (aid) {
+        setCloudMissionHandling(parseStoredMissionHandling(localStorage.getItem(CLOUD_MISSION_HANDLING_KEY)));
+        lastCommittedCloudAgentIdRef.current = aid;
+      } else {
+        setCloudMissionHandling("direct");
+        lastCommittedCloudAgentIdRef.current = null;
+      }
     } catch {
       /* ignore */
     }
@@ -906,6 +949,7 @@ function ChatPageInner({
               <WarRoomPane
                 uplinkId={uplinkId}
                 activeCloudAgentId={activeCloudAgentId}
+                cloudMissionHandling={uplinkId === "cloud_agent" ? cloudMissionHandling : undefined}
                 embedUrl={paneEmbedUrl}
                 onEmbedUrlChange={setPaneEmbedUrl}
                 requestedTabId={requestedTabId}
@@ -928,6 +972,7 @@ function ChatPageInner({
                   <WarRoomPane
                     uplinkId={uplinkId}
                     activeCloudAgentId={activeCloudAgentId}
+                    cloudMissionHandling={uplinkId === "cloud_agent" ? cloudMissionHandling : undefined}
                     embedUrl={paneEmbedUrl}
                     onEmbedUrlChange={setPaneEmbedUrl}
                     requestedTabId={requestedTabId}
@@ -1491,7 +1536,8 @@ function ChatPageInner({
       <CloudAgentLaunchModal
         open={cloudLaunchOpen}
         onClose={() => setCloudLaunchOpen(false)}
-        onActivateMission={(id, label) => activateCloudMission(id, { label })}
+        defaultMissionHandling={cloudMissionHandling}
+        onActivateMission={(id, opts) => activateCloudMission(id, opts)}
         recentMissions={recentMissions}
         onRemoveRecent={removeRecentMission}
         mountDefaults={mountDefaultsForLaunch}

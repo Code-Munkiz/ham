@@ -1,4 +1,5 @@
 import type { UplinkId } from "@/components/chat/ChatComposerStrip";
+import type { CloudMissionHandling } from "@/lib/ham/types";
 
 import { CloudAgentPanel } from "./CloudAgentPanel";
 import { ElizaOsPanel } from "./ElizaOsPanel";
@@ -9,6 +10,8 @@ import type { WarRoomTabId } from "./uplinkConfig";
 export interface WarRoomPaneProps {
   uplinkId: UplinkId;
   activeCloudAgentId: string | null;
+  /** Cloud Agent uplink only: pass from Chat (mission modal + persistence). */
+  cloudMissionHandling?: CloudMissionHandling;
   embedUrl: string;
   onEmbedUrlChange: (v: string) => void;
   requestedTabId?: WarRoomTabId;
@@ -22,6 +25,7 @@ export interface WarRoomPaneProps {
 export function WarRoomPane({
   uplinkId,
   activeCloudAgentId,
+  cloudMissionHandling,
   embedUrl,
   onEmbedUrlChange,
   requestedTabId,
@@ -37,6 +41,7 @@ export function WarRoomPane({
       ) : uplinkId === "cloud_agent" ? (
         <CloudAgentPanel
           activeCloudAgentId={activeCloudAgentId}
+          cloudMissionHandling={cloudMissionHandling}
           embedUrl={embedUrl}
           onEmbedUrlChange={onEmbedUrlChange}
           requestedTabId={requestedTabId}

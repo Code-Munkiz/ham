@@ -1,3 +1,6 @@
+/** How HAM should relate to a Cursor Cloud Agent mission (Cloud Uplink / mission modal only). */
+export type CloudMissionHandling = "direct" | "managed";
+
 export interface RunRecord {
   run_id: string;
   created_at: string;

@@ -2,6 +2,7 @@ import * as React from "react";
 import { Package, ScrollText } from "lucide-react";
 
 import { fetchCursorAgent, fetchCursorAgentConversation } from "@/lib/ham/api";
+import type { CloudMissionHandling } from "@/lib/ham/types";
 
 import { BrowserTabPanel } from "./BrowserTabPanel";
 import { CloudAgentNotConnected } from "./CloudAgentNotConnected";
@@ -10,6 +11,8 @@ import { getDefaultWarRoomTab, getWarRoomTabs, type CloudAgentTabId, type WarRoo
 
 export interface CloudAgentPanelProps {
   activeCloudAgentId: string | null;
+  /** Cloud Agent only: how this mission is handled in HAM (UI + future orchestration). */
+  cloudMissionHandling?: CloudMissionHandling;
   embedUrl: string;
   onEmbedUrlChange: (v: string) => void;
   requestedTabId?: WarRoomTabId;
@@ -18,6 +21,7 @@ export interface CloudAgentPanelProps {
 
 export function CloudAgentPanel({
   activeCloudAgentId,
+  cloudMissionHandling = "direct",
   embedUrl,
   onEmbedUrlChange,
   requestedTabId,
@@ -153,6 +157,14 @@ export function CloudAgentPanel({
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
+      {hasAgent ? (
+        <p className="shrink-0 px-2 pt-1 pb-1 text-[9px] font-bold text-white/40 uppercase tracking-wider">
+          Mission handling:{" "}
+          <span className="text-white/60">
+            {cloudMissionHandling === "managed" ? "Managed by HAM" : "Direct"}
+          </span>
+        </p>
+      ) : null}
       <WarRoomTabs
         tabs={tabs}
         activeId={tabId}
