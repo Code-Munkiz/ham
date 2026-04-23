@@ -11,7 +11,10 @@
     "start:file": "electron .",
     "build:frontend": "npm run build --prefix ../frontend -- --base ./",
     "pack:linux": "npm run build:frontend && electron-builder --linux",
-    "pack:linux:dir": "npm run build:frontend && electron-builder --linux --dir"
+    "pack:linux:dir": "npm run build:frontend && electron-builder --linux --dir",
+    "pack:win": "npm run build:frontend && electron-builder --win --x64",
+    "pack:win:dir": "npm run build:frontend && electron-builder --win --x64 --dir",
+    "pack:win:nsis": "npm run build:frontend && electron-builder --win --x64 -c.win.target=nsis"
   },
   "build": {
     "appId": "io.github.codemunkiz.ham-desktop",
@@ -49,6 +52,22 @@
       "maintainer": "Code-Munkiz",
       "synopsis": "HAM operator desktop shell (Electron)",
       "description": "Thin Electron shell for the HAM dashboard. Requires a running Ham API (local or remote); see desktop/README.md."
+    },
+    "win": {
+      "signAndEditExecutable": false,
+      "verifyUpdateCodeSignature": false,
+      "artifactName": "HAM-Desktop-${version}-Win-x64-Portable.${ext}",
+      "target": [
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "HAM-Desktop-${version}-Win-x64-Setup.${ext}"
     }
   },
   "devDependencies": {

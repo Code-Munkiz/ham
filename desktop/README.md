@@ -172,6 +172,50 @@ If you only set `HAM_CORS_ORIGINS` to `http` origins and omit `null`, **packaged
 - `desktop/dist-pack/` is gitignored; delete it between releases if needed.
 - Bump `version` in `desktop/package.json` when cutting a new artifact.
 
+## Windows packaging (x64, from Linux)
+
+electron-builder can produce **Windows x64** artifacts on a Linux host. This repo defaults to a **portable** `.exe` (NSIS-based self-extracting launcher) so you get a **single file** without needing **Wine**. A classic **NSIS installer** (`.exe` setup wizard) is also available but **requires Wine on Linux** (or build on Windows).
+
+### Why not “full” NSIS by default on Linux?
+
+electron-builder runs the NSIS compiler under **Wine** for the graphical installer target. Portable builds use the same NSIS toolchain but complete successfully on this environment **without** a system Wine install; the **Setup** target still invokes steps that error with *`wine is required`* when Wine is missing. Use **`pack:win`** (portable) for CI/Linux; use **`pack:win:nsis`** after `sudo apt install wine` (or build on Windows).
+
+### Cross-build note: `signAndEditExecutable: false`
+
+Windows builds set **`signAndEditExecutable: false`** so Linux hosts do not need Wine for **rcedit** / integrity patching on the main executable. Trade-off: metadata/icon embedding on the `.exe` may be minimal compared to a signed Windows-native build. This matches **unsigned internal/test** builds.
+
+### Prerequisites
+
+- Node **20–24**, `frontend` dependencies installed (`cd ../frontend && npm install`).
+
+### Build commands
+
+From `desktop/`:
+
+| Command | Output | Wine on Linux? |
+|---------|--------|----------------|
+| `npm run pack:win` | `dist-pack/HAM-Desktop-<version>-Win-x64-Portable.exe` | No |
+| `npm run pack:win:dir` | `dist-pack/win-unpacked/` (run `HAM Desktop.exe` inside) | No |
+| `npm run pack:win:nsis` | `dist-pack/HAM-Desktop-<version>-Win-x64-Setup.exe` | **Yes** (or use Windows) |
+
+Example (portable, recommended for first internal testing):
+
+```bash
+cd desktop
+npm install
+npm run pack:win
+```
+
+### Test on a Windows machine
+
+Copy the portable `.exe` or zip **`win-unpacked/`** to Windows. First run may trigger **Microsoft Defender SmartScreen** (“Unknown publisher”) because the build is **not code-signed** — use “More info” → “Run anyway” for internal testing only.
+
+**API base** and **`file://` / `Origin: null` / `HAM_CORS_ORIGINS`** behave like the Linux packaged app (see above). Set `HAM_DESKTOP_API_BASE` or `userData`-local `ham-desktop-config.json` so the dashboard can reach your Ham API.
+
+### CI / clean builds
+
+- Reuse the same `dist-pack/` hygiene as Linux; Windows artifacts sit alongside Linux outputs in that directory.
+
 ## Environment reference
 
 | Variable | Purpose |
