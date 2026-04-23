@@ -211,6 +211,10 @@ function extractReviewFacts(agent: Record<string, unknown>, snap: ManagedMission
   };
 }
 
+/** Shown in HAM review when the full excerpt already appears under `Progress` in the mission summary (avoids duplicating long transcript tails in the right pane). */
+const POINTER_SEE_SNAPSHOT_PROGRESS =
+  "The latest activity excerpt is in the mission summary (Progress) above. Open the Transcript tab for the full log.";
+
 function limitedSignalReview(hasTerminal: boolean): ManagedMissionReview {
   return {
     severity: "info",
@@ -257,7 +261,7 @@ export function deriveManagedMissionReview(
         severity: "success",
         headline: "Terminal: a branch/PR or link field is present in the latest agent data.",
         details: f.hasProgress
-          ? `Status: ${f.statusText} · last activity: ${snap.progress}`
+          ? `Status: ${f.statusText}. ${POINTER_SEE_SNAPSHOT_PROGRESS}`
           : `Status: ${f.statusText}`,
         nextStep: "Confirm the linked change set in Cursor or the remote before any merge or deploy step.",
         hasTerminalAssessment: true,
@@ -270,7 +274,7 @@ export function deriveManagedMissionReview(
         severity: "warning",
         headline:
           "Terminal: no PR or branch link has surfaced in the latest agent data yet. That does not prove none exists elsewhere.",
-        details: f.hasProgress ? `Transcript/activity: ${snap.progress}` : "Limited transcript/activity in this payload shape.",
+        details: f.hasProgress ? POINTER_SEE_SNAPSHOT_PROGRESS : "Limited transcript/activity in this payload shape.",
         nextStep: "If a handoff was expected, check Cursor, Tracker, and the remote repository.",
         hasTerminalAssessment: true,
         evidenceLevel: "high",
@@ -280,7 +284,7 @@ export function deriveManagedMissionReview(
     return {
       severity: "info",
       headline: "Terminal: handoff in this response is incomplete or unclear; avoid assuming PR/branch or failure from this view alone.",
-      details: f.hasProgress ? `Last activity: ${snap.progress}` : `Status: ${f.statusText}`,
+      details: f.hasProgress ? POINTER_SEE_SNAPSHOT_PROGRESS : `Status: ${f.statusText}`,
       nextStep: "Use Transcript/Tracker, or wait for a richer poll, before concluding.",
       hasTerminalAssessment: true,
       evidenceLevel: f.signalStrength,
@@ -303,7 +307,7 @@ export function deriveManagedMissionReview(
     return {
       severity: "info",
       headline: "In progress: recent transcript/activity is present in the API payload.",
-      details: `Last activity: ${snap.progress}`,
+      details: POINTER_SEE_SNAPSHOT_PROGRESS,
       nextStep: "Let the run continue, or nudge the Cloud Agent in Cursor if the task is blocked.",
       hasTerminalAssessment: false,
       evidenceLevel: f.signalStrength,
@@ -314,7 +318,7 @@ export function deriveManagedMissionReview(
     return {
       severity: "info",
       headline: "Transcript/activity is short or thin; not enough to claim steady progress or blockage.",
-      details: `Last activity: ${snap.progress}`,
+      details: POINTER_SEE_SNAPSHOT_PROGRESS,
       nextStep: "Open Transcript in the War Room, or wait for a fuller poll.",
       hasTerminalAssessment: false,
       evidenceLevel: "low",
@@ -443,7 +447,8 @@ export function deriveManagedDeployReadiness(
     ready: true,
     severity: "success",
     headline: "Mission reached a terminal handoff: branch/PR information is available for deploy hook handoff.",
-    details: [repo, prUrl || branch].filter(Boolean).join(" · "),
+    details:
+      "Handoff and repository match Branch / PR in the mission summary above; the hook is configured on the server (not per-PR).",
     nextStep: "Trigger only when the hook’s Vercel project matches this work; the hook does not target a specific PR automatically.",
     prUrl,
     branch,

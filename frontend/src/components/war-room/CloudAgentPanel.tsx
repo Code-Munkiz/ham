@@ -42,6 +42,31 @@ function snapshotLine(label: string, value: string | null | undefined): React.Re
   );
 }
 
+const SNAPSHOT_PROGRESS_MAX = 420;
+
+function SnapshotProgressField({ value }: { value: string | null | undefined }) {
+  const [open, setOpen] = React.useState(false);
+  if (!value?.trim()) return null;
+  const t = value.trim();
+  const tooLong = t.length > SNAPSHOT_PROGRESS_MAX;
+  const body = tooLong && !open ? `${t.slice(0, SNAPSHOT_PROGRESS_MAX).trimEnd()}…` : t;
+  return (
+    <div className="text-[13px] font-medium leading-[1.6] uppercase tracking-[0.02em] text-white/80">
+      <span className="text-white/45 font-bold">Progress: </span>
+      <span className="whitespace-pre-wrap [overflow-wrap:anywhere]">{body}</span>
+      {tooLong ? (
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className="ml-1.5 align-baseline text-[10px] font-black uppercase tracking-widest text-[#00E5FF] hover:text-white"
+        >
+          {open ? "Show less" : "Show more"}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 export function CloudAgentPanel({
   activeCloudAgentId,
   cloudMissionHandling = "direct",
@@ -281,6 +306,10 @@ export function CloudAgentPanel({
       {isManaged ? (
         <div className="shrink-0 border-b border-white/5 px-2 pb-2 space-y-1.5">
           <p className="text-[11px] font-black uppercase tracking-widest text-[#00E5FF]/85">Managed mission</p>
+          <p className="text-[10px] font-medium leading-snug text-white/32">
+            Live summary from HAM&rsquo;s Cursor API poll&mdash;rules-based review and deploy notes below. Use Transcript
+            and Tracker for the full payloads.
+          </p>
           {managedPollPending && !managedViewSnapshot && !managedPollError ? (
             <p className="text-[13px] font-medium text-white/50 uppercase tracking-[0.02em] leading-[1.6]">
               Loading mission status from Cursor…
@@ -292,7 +321,7 @@ export function CloudAgentPanel({
           {managedViewSnapshot ? (
             <div className="space-y-0.5">
               {snapshotLine("Status", managedViewSnapshot.status)}
-              {snapshotLine("Progress", managedViewSnapshot.progress)}
+              <SnapshotProgressField value={managedViewSnapshot.progress} />
               {snapshotLine("Blocker", managedViewSnapshot.blocker)}
               {snapshotLine("Branch / PR", managedViewSnapshot.branchOrPr)}
               {snapshotLine("Updated", managedViewSnapshot.updatedAt)}
@@ -340,13 +369,6 @@ export function CloudAgentPanel({
                   {deployRead.nextStep}
                 </p>
               ) : null}
-              {(deployRead.prUrl || deployRead.branch || deployRead.repo) && (
-                <div className="text-[12px] text-white/50 space-y-0.5 font-mono break-all leading-relaxed">
-                  {deployRead.repo ? <p>Repo: {deployRead.repo}</p> : null}
-                  {deployRead.prUrl ? <p>PR/URL: {deployRead.prUrl}</p> : null}
-                  {deployRead.branch && !deployRead.prUrl ? <p>Branch: {deployRead.branch}</p> : null}
-                </div>
-              )}
               {dHook === null ? (
                 <p className="text-[13px] font-medium text-white/45">Checking deploy hook configuration…</p>
               ) : dHook === false ? (
