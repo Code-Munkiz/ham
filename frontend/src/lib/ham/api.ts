@@ -287,6 +287,43 @@ export type ManagedDeployHookResult = {
   status_code?: number;
 };
 
+/** GET /api/cursor/managed/vercel/deploy-status — server-side Vercel poll + match confidence. */
+export type VercelManagedDeployState =
+  | "not_configured"
+  | "not_observed"
+  | "pending"
+  | "building"
+  | "ready"
+  | "error"
+  | "canceled"
+  | "unknown";
+
+export type VercelManagedDeployStatus = {
+  checked_at: string;
+  vercel: { configured: boolean };
+  state: VercelManagedDeployState;
+  match_confidence: "high" | "medium" | "low" | null;
+  match_reason: string | null;
+  message: string;
+  deployment: {
+    id: string | null;
+    url: string | null;
+    vercel_state: string | null;
+    created_at: string | null;
+  } | null;
+  api_error: string | null;
+};
+
+export async function fetchVercelManagedDeployStatus(agentId: string): Promise<VercelManagedDeployStatus> {
+  const q = new URLSearchParams({ agent_id: agentId.trim() });
+  const res = await hamApiFetch(`/api/cursor/managed/vercel/deploy-status?${q.toString()}`);
+  if (!res.ok) {
+    const detail = (await readFastApiDetail(res)) ?? `HTTP ${res.status}`;
+    throw new Error(detail);
+  }
+  return res.json() as Promise<VercelManagedDeployStatus>;
+}
+
 /** POST Vercel deploy hook via HAM (hook URL stays on server). */
 export async function postManagedDeployHook(agentId: string): Promise<ManagedDeployHookResult> {
   const res = await hamApiFetch("/api/cursor/managed/deploy-hook", {

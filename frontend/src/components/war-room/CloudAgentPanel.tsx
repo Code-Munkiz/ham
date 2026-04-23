@@ -1,7 +1,13 @@
 import * as React from "react";
 import { Loader2, Package, ScrollText } from "lucide-react";
 
-import { fetchCursorAgent, fetchCursorAgentConversation } from "@/lib/ham/api";
+import {
+  fetchCursorAgent,
+  fetchCursorAgentConversation,
+  fetchVercelManagedDeployStatus,
+  type VercelManagedDeployState,
+  type VercelManagedDeployStatus,
+} from "@/lib/ham/api";
 import {
   parseCursorConversationToLines,
   type CursorTranscriptLine,
@@ -31,6 +37,37 @@ function reviewSeverityClass(s: ManagedReviewSeverity): string {
   if (s === "warning") return "text-amber-400/90";
   if (s === "success") return "text-emerald-400/90";
   return "text-sky-300/85";
+}
+
+function vercelDeployStateLabel(s: VercelManagedDeployState): string {
+  switch (s) {
+    case "not_configured":
+      return "Vercel not configured on server";
+    case "not_observed":
+      return "Deployment not yet observed";
+    case "pending":
+      return "Deployment pending";
+    case "building":
+      return "Deployment building";
+    case "ready":
+      return "Deployment ready";
+    case "error":
+      return "Deployment failed";
+    case "canceled":
+      return "Deployment canceled";
+    case "unknown":
+    default:
+      return "Vercel status unknown";
+  }
+}
+
+function vercelStateAccentClass(s: VercelManagedDeployState): string {
+  if (s === "ready") return "text-emerald-400/90";
+  if (s === "error") return "text-rose-400/90";
+  if (s === "building" || s === "pending") return "text-amber-400/90";
+  if (s === "canceled") return "text-white/50";
+  if (s === "not_configured" || s === "not_observed" || s === "unknown") return "text-cyan-300/85";
+  return "text-white/70";
 }
 
 function snapshotLine(label: string, value: string | null | undefined): React.ReactNode {
@@ -83,6 +120,9 @@ export function CloudAgentPanel({
   const [trackerView, setTrackerView] = React.useState<"readable" | "raw">("readable");
   const [loading, setLoading] = React.useState(false);
   const [err, setErr] = React.useState<string | null>(null);
+  const [vercelDeploy, setVercelDeploy] = React.useState<VercelManagedDeployStatus | null>(null);
+  const [vercelDeployErr, setVercelDeployErr] = React.useState<string | null>(null);
+  const [vercelDeployLoading, setVercelDeployLoading] = React.useState(false);
 
   const transcriptLines: CursorTranscriptLine[] = React.useMemo(
     () => parseCursorConversationToLines(convPayload),
@@ -162,6 +202,40 @@ export function CloudAgentPanel({
       cancelled = true;
     };
   }, [hasAgent, tabId, activeCloudAgentId]);
+
+  /** Server-side Vercel deployment truth (Managed → Overview only). */
+  React.useEffect(() => {
+    if (!isManaged || !activeCloudAgentId?.trim() || tabId !== "overview") {
+      return;
+    }
+    let cancelled = false;
+    const id = activeCloudAgentId.trim();
+    setVercelDeployLoading(true);
+    const run = () => {
+      void fetchVercelManagedDeployStatus(id)
+        .then((j) => {
+          if (!cancelled) {
+            setVercelDeploy(j);
+            setVercelDeployErr(null);
+          }
+        })
+        .catch((e: unknown) => {
+          if (!cancelled) {
+            setVercelDeployErr(e instanceof Error ? e.message : "Request failed");
+            setVercelDeploy(null);
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setVercelDeployLoading(false);
+        });
+    };
+    run();
+    const t = window.setInterval(run, 30_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(t);
+    };
+  }, [isManaged, tabId, activeCloudAgentId]);
 
   const notConnected = !hasAgent;
 
@@ -449,6 +523,62 @@ export function CloudAgentPanel({
                   ) : null}
                 </div>
               ) : null}
+              <div className="mt-1.5 space-y-1.5 border-t border-white/10 pt-3">
+                <p className="text-[10px] font-black uppercase tracking-widest text-teal-300/85">
+                  Vercel deployment (server poll)
+                </p>
+                <p className="text-[10px] font-medium leading-snug text-white/32">
+                  Observed from the Vercel Deployments API on the HAM host — not the same as the deploy hook button above.
+                </p>
+                {vercelDeployLoading && !vercelDeploy && !vercelDeployErr ? (
+                  <p className="flex items-center gap-2 text-[13px] text-white/55">
+                    <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+                    Loading Vercel deployment status…
+                  </p>
+                ) : null}
+                {vercelDeployErr ? (
+                  <p className="text-[13px] text-amber-500/90 font-mono break-words leading-relaxed">{vercelDeployErr}</p>
+                ) : null}
+                {vercelDeploy ? (
+                  <div className="space-y-1.5">
+                    <p className={cn("text-[13px] font-semibold leading-[1.5]", vercelStateAccentClass(vercelDeploy.state))}>
+                      {vercelDeployStateLabel(vercelDeploy.state)}
+                    </p>
+                    {vercelDeploy.match_confidence ? (
+                      <p className="text-[12px] text-white/50">
+                        Match confidence: <span className="font-mono text-white/70">{vercelDeploy.match_confidence}</span>
+                        {vercelDeploy.match_reason ? (
+                          <span className="text-white/40"> — {vercelDeploy.match_reason}</span>
+                        ) : null}
+                      </p>
+                    ) : null}
+                    <p className="text-[13px] font-medium leading-[1.6] text-white/65 whitespace-pre-wrap">
+                      {vercelDeploy.message}
+                    </p>
+                    {vercelDeploy.deployment?.url?.trim() ? (
+                      <a
+                        href={vercelDeploy.deployment.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-block text-[12px] font-bold text-[#00E5FF] underline decoration-[#00E5FF]/40 underline-offset-2 hover:text-white break-all"
+                      >
+                        {vercelDeploy.deployment.url}
+                      </a>
+                    ) : null}
+                    <p className="text-[10px] text-white/35 font-mono">
+                      Last checked: {vercelDeploy.checked_at}
+                    </p>
+                    {vercelDeploy.state === "not_configured" ? (
+                      <p className="text-[12px] text-white/45 leading-[1.5]">
+                        Configure <span className="font-mono">HAM_VERCEL_API_TOKEN</span> (or{" "}
+                        <span className="font-mono">VERCEL_API_TOKEN</span>) and{" "}
+                        <span className="font-mono">HAM_VERCEL_PROJECT_ID</span> (or <span className="font-mono">VERCEL_PROJECT_ID</span>
+                        ) on the API. Optional: <span className="font-mono">HAM_VERCEL_TEAM_ID</span>.
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
             </div>
           ) : hasAgent ? (
             <p className="text-[13px] font-medium leading-[1.6] text-white/55">
