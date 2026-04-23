@@ -109,6 +109,8 @@ export interface ChatComposerStripProps {
   onCloudAgentPreview?: () => void;
   /** True while sending on in-flight, missing project, or empty main input. */
   cloudAgentPreviewDisabled?: boolean;
+  /** Full tooltip/title for the Preview Agent control (includes disabled reasons). */
+  cloudAgentPreviewTitle?: string;
   catalog: ModelCatalogPayload | null;
   catalogLoading: boolean;
 }
@@ -133,6 +135,7 @@ export function ChatComposerStrip({
   onOpenCloudAgentLaunch,
   onCloudAgentPreview,
   cloudAgentPreviewDisabled = true,
+  cloudAgentPreviewTitle,
   catalog,
   catalogLoading,
 }: ChatComposerStripProps) {
@@ -511,11 +514,15 @@ export function ChatComposerStrip({
           type="button"
           disabled={cloudAgentPreviewDisabled}
           onClick={() => onCloudAgentPreview()}
-          title="Preview Cursor Cloud Agent (uses message box + active project; no launch yet)"
-          className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-cyan-500/40 bg-white/[0.04] text-cyan-300 shrink-0 hover:bg-cyan-500/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          title={cloudAgentPreviewTitle ?? "Builds a Cloud Agent preview digest; does not launch."}
+          aria-label={cloudAgentPreviewTitle ?? "Preview Agent — builds digest only, does not launch"}
+          className="inline-flex flex-col items-center justify-center gap-0 min-h-8 px-2 rounded-md border border-cyan-500/40 bg-transparent text-cyan-300 shrink-0 hover:bg-cyan-500/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          <Radio className="h-3 w-3" />
-          <span className="text-[8px] font-black uppercase tracking-widest">Preview</span>
+          <Radio className="h-3 w-3 shrink-0" aria-hidden />
+          <span className="text-[7px] font-black uppercase tracking-tight leading-none text-center">
+            Preview
+            <span className="block">Agent</span>
+          </span>
         </button>
       ) : null}
 

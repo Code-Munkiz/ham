@@ -72,6 +72,11 @@ import type {
   ProjectRecord,
 } from "@/lib/ham/types";
 import { PROJECT_DEFAULT_DEPLOY_APPROVAL_KEY, type ProjectDefaultDeployPolicy } from "@/lib/ham/projectDeployPolicy";
+import {
+  getActiveProjectName,
+  getCursorCloudRepository,
+  shortDigest,
+} from "@/lib/ham/cloudAgentProjectDefaults";
 import { ProjectsRegistryPanel } from "@/components/chat/ProjectsRegistryPanel";
 import { ManagedCloudAgentProvider } from "@/contexts/ManagedCloudAgentContext";
 import { useManagedCloudAgentPoll } from "@/hooks/useManagedCloudAgentPoll";
@@ -228,6 +233,8 @@ function workbenchLayoutTriggerLabel(mode: ChatViewMode): string {
 type TranscriptColumnProps = {
   messages: ChatRow[];
   primaryPersona: { name: string; avatarUrl: string | null } | null;
+  /** Human-readable name for the active HAM project (not `project_id`). */
+  activeProjectName: string | null;
   /** In-thread Cloud Agent mission preview (digest-locked) + confirm launch — from `operator_result.pending_cursor_agent`. */
   pendingCursorAgent: Record<string, unknown> | null;
   operatorCursorAgentToken: string;
@@ -240,6 +247,7 @@ type TranscriptColumnProps = {
 function TranscriptColumn({
   messages,
   primaryPersona,
+  activeProjectName,
   pendingCursorAgent,
   operatorCursorAgentToken,
   onOperatorCursorAgentTokenChange,
@@ -322,18 +330,75 @@ function TranscriptColumn({
               <div className="flex flex-col gap-4 min-w-0 max-w-2xl items-start w-full">
                 <div className="flex items-center gap-4 opacity-90">
                   <span className="text-[9px] font-black uppercase tracking-[0.4em] text-cyan-300/90 italic">
-                    Cloud Agent — preview
+                    Cloud Agent — mission card
                   </span>
                   <span className="text-[8px] font-mono text-white/20">
                     {new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                   </span>
                 </div>
-                <div className="w-full space-y-3 rounded-2xl border border-cyan-500/30 bg-cyan-500/[0.07] p-6 shadow-lg">
-                  <p className="text-[9px] font-bold uppercase tracking-widest text-white/45">
-                    Mission preview (confirm launch below — digest locked)
-                  </p>
-                  <div className="whitespace-pre-wrap text-[12px] font-medium leading-[1.6] uppercase tracking-[0.02em] text-white/85 max-h-[min(50vh,320px)] overflow-y-auto">
-                    {String(pendingCursorAgent.summary_preview ?? "")}
+                <div className="w-full space-y-4 rounded-2xl border border-cyan-500/30 bg-cyan-500/[0.07] p-6 shadow-lg">
+                  {(() => {
+                    const p = pendingCursorAgent;
+                    const modeLine =
+                      p.cursor_mission_handling === "direct"
+                        ? "Cloud Agent · Direct"
+                        : "Cloud Agent · Managed by HAM";
+                    const task = String(p.cursor_task_prompt ?? "").trim();
+                    const resolvedRepo = String(p.repository ?? "").trim();
+                    const overrideRepo = p.cursor_repository != null ? String(p.cursor_repository).trim() : "";
+                    const refVal = p.cursor_ref != null ? String(p.cursor_ref).trim() : "";
+                    const dig = String(p.proposal_digest ?? "");
+                    return (
+                      <div className="space-y-2 border-b border-cyan-500/20 pb-4">
+                        <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-cyan-200/95">{modeLine}</h3>
+                        <dl className="space-y-1.5 text-[11px] text-white/85">
+                          <div className="flex flex-wrap gap-x-2 gap-y-0.5">
+                            <dt className="shrink-0 text-[9px] font-bold uppercase tracking-widest text-white/45">
+                              Project
+                            </dt>
+                            <dd className="min-w-0 break-words font-medium">
+                              {activeProjectName || "—"}
+                            </dd>
+                          </div>
+                          <div className="flex flex-wrap gap-x-2 gap-y-0.5">
+                            <dt className="shrink-0 text-[9px] font-bold uppercase tracking-widest text-white/45">
+                              Task
+                            </dt>
+                            <dd className="min-w-0 line-clamp-3 break-words font-medium" title={task}>
+                              {task || "—"}
+                            </dd>
+                          </div>
+                          <div className="flex flex-wrap gap-x-2 gap-y-0.5">
+                            <dt className="shrink-0 text-[9px] font-bold uppercase tracking-widest text-white/45">
+                              Repository
+                            </dt>
+                            <dd className="min-w-0 break-all font-mono text-[10px] text-white/80">
+                              {resolvedRepo || "—"}
+                              {overrideRepo && overrideRepo !== resolvedRepo ? (
+                                <span className="block text-[9px] text-amber-400/80 normal-case">
+                                  Override: {overrideRepo}
+                                </span>
+                              ) : null}
+                            </dd>
+                          </div>
+                          <div className="flex flex-wrap gap-x-2 gap-y-0.5">
+                            <dt className="shrink-0 text-[9px] font-bold uppercase tracking-widest text-white/45">Ref</dt>
+                            <dd className="min-w-0 break-words font-mono text-[10px] text-white/80">
+                              {refVal || "default branch"}
+                            </dd>
+                          </div>
+                        </dl>
+                        <p className="pt-1 text-[9px] font-mono text-white/35" title={dig || undefined}>
+                          Digest: {shortDigest(dig) || "—"}
+                        </p>
+                      </div>
+                    );
+                  })()}
+                  <div>
+                    <p className="text-[9px] font-bold uppercase tracking-widest text-white/45 mb-2">Server detail</p>
+                    <div className="whitespace-pre-wrap text-[12px] font-medium leading-[1.6] uppercase tracking-[0.02em] text-white/80 max-h-[min(50vh,320px)] overflow-y-auto">
+                      {String(pendingCursorAgent.summary_preview ?? "")}
+                    </div>
                   </div>
                   <p className="text-[9px] text-white/40">
                     Paste <span className="font-mono">HAM_CURSOR_AGENT_LAUNCH_TOKEN</span> to confirm launch. No
@@ -440,6 +505,8 @@ function ChatPageInner({
   const [caRef, setCaRef] = React.useState("");
   const [caMission, setCaMission] = React.useState<"direct" | "managed">("managed");
   const [cloudAgentOptionsOpen, setCloudAgentOptionsOpen] = React.useState(false);
+  /** Option A: once user edits repo/ref, autofill must not clobber. */
+  const cloudTargetTouchedRef = React.useRef({ repo: false, ref: false });
   /** Primary HAM profile from Agent Builder (avatar + name in transcript). */
   const [primaryPersona, setPrimaryPersona] = React.useState<{
     name: string;
@@ -777,6 +844,49 @@ function ChatPageInner({
       cancelled = true;
     };
   }, []);
+
+  /** On project change: clear target overrides so autofill can apply for the new project. */
+  React.useEffect(() => {
+    setCaRepo("");
+    setCaRef("");
+    cloudTargetTouchedRef.current = { repo: false, ref: false };
+  }, [projectId]);
+
+  /** Option A: autofill metadata repo and optional ref from mount when empty and not user-touched. */
+  React.useEffect(() => {
+    if (!projectId) return;
+    const rec = hamProjects.find((p) => p.id === projectId);
+    const metaRepo = getCursorCloudRepository(rec?.metadata) ?? "";
+    const mref = mountRef.trim();
+    setCaRepo((r) => {
+      if (cloudTargetTouchedRef.current.repo) return r;
+      if (r.trim()) return r;
+      return metaRepo || r;
+    });
+    setCaRef((r) => {
+      if (cloudTargetTouchedRef.current.ref) return r;
+      if (r.trim()) return r;
+      return mref || r;
+    });
+  }, [projectId, hamProjects, mountRef]);
+
+  const activeProjectName = React.useMemo(
+    () => getActiveProjectName(hamProjects, projectId),
+    [hamProjects, projectId],
+  );
+
+  const showCloudAgentMissingRepoHint = Boolean(
+    projectId &&
+      !getCursorCloudRepository(hamProjects.find((p) => p.id === projectId)?.metadata) &&
+      !caRepo.trim(),
+  );
+
+  const cloudAgentPreviewTitle = React.useMemo(() => {
+    if (sending) return "Wait for the current request to finish.";
+    if (!projectId) return "Select a project in Projects first.";
+    if (!input.trim()) return "Type a mission in the message box first.";
+    return "Builds a Cloud Agent preview digest; does not launch. Does not start the agent.";
+  }, [sending, projectId, input]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -1749,6 +1859,7 @@ function ChatPageInner({
             <TranscriptColumn
               messages={messages}
               primaryPersona={primaryPersona}
+              activeProjectName={activeProjectName}
               pendingCursorAgent={pendingCursorAgent}
               operatorCursorAgentToken={operatorCursorAgentToken}
               onOperatorCursorAgentTokenChange={handleCursorAgentTokenChange}
@@ -1783,6 +1894,7 @@ function ChatPageInner({
                   <TranscriptColumn
                     messages={messages}
                     primaryPersona={primaryPersona}
+                    activeProjectName={activeProjectName}
                     pendingCursorAgent={pendingCursorAgent}
                     operatorCursorAgentToken={operatorCursorAgentToken}
                     onOperatorCursorAgentTokenChange={handleCursorAgentTokenChange}
@@ -1993,12 +2105,20 @@ function ChatPageInner({
                         onOpenCloudAgentLaunch={() => setCloudLaunchOpen(true)}
                         onCloudAgentPreview={handleCloudAgentPreview}
                         cloudAgentPreviewDisabled={sending || !input.trim() || !projectId}
+                        cloudAgentPreviewTitle={cloudAgentPreviewTitle}
                         catalog={catalog}
                         catalogLoading={catalogLoading}
                       />
                    </div>
                    {projectId ? (
                      <div className="border-t border-white/5 px-3 py-1.5 bg-black/20">
+                       {showCloudAgentMissingRepoHint ? (
+                         <p className="mb-2 text-[9px] font-bold leading-snug text-amber-400/90">
+                           No Cloud Agent repository found for this project. Set{" "}
+                           <span className="font-mono">cursor_cloud_repository</span> in project metadata or open{" "}
+                           <span className="font-mono">Cloud Agent target</span> and enter a repository.
+                         </p>
+                       ) : null}
                        <button
                          type="button"
                          onClick={() => setCloudAgentOptionsOpen((o) => !o)}
@@ -2014,7 +2134,10 @@ function ChatPageInner({
                              </span>
                              <input
                                value={caRepo}
-                               onChange={(e) => setCaRepo(e.target.value)}
+                               onChange={(e) => {
+                                 cloudTargetTouchedRef.current.repo = true;
+                                 setCaRepo(e.target.value);
+                               }}
                                placeholder="Optional — default from project"
                                className="w-full rounded border border-white/10 bg-black/40 px-2 py-1 font-mono text-[10px] text-white"
                              />
@@ -2025,7 +2148,10 @@ function ChatPageInner({
                              </span>
                              <input
                                value={caRef}
-                               onChange={(e) => setCaRef(e.target.value)}
+                               onChange={(e) => {
+                                 cloudTargetTouchedRef.current.ref = true;
+                                 setCaRef(e.target.value);
+                               }}
                                placeholder="Optional"
                                className="w-full rounded border border-white/10 bg-black/40 px-2 py-1 font-mono text-[10px] text-white"
                              />
