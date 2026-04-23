@@ -5,6 +5,7 @@ Thin shell: renderer is the existing Vite/React app; FastAPI stays a separate HT
 ## Shell UX (M1)
 
 - **First screen:** the packaged app **opens Chat** (`/` redirects to `/chat`). The marketing landing (“go ham” / astrochimp) is **web-only**.
+- **Download and run:** packaged builds ship **`default-public-api.json`** next to `main.cjs` with the **project’s public Ham API origin**. Users can open the app with **no env vars**; power users override with **`HAM_DESKTOP_API_BASE`** or **`ham-desktop-config.json`**. Bump that file when the canonical public API URL changes, then cut a new desktop release.
 - **Menu bar:** on **Linux and Windows**, the default Electron **File / Edit / View** menu is **removed** so the window chrome stays dark; **macOS** keeps the normal app menu.
 - **Public assets:** the nav logo uses the same **relative `public/` URLs** as the Vite build (`base: ./`) so icons load under **`file://`** in the packaged renderer.
 
@@ -149,7 +150,7 @@ sudo apt install ./ham-desktop_*_amd64.deb
 
 (Install path is under `/opt/HAM Desktop/`; quote the path because of the space.)
 
-Packaged builds default to **`file` load mode** and load the bundled renderer from `resources/renderer/`. **Runtime API base** is unchanged: set `HAM_DESKTOP_API_BASE` when launching, or create a `ham-desktop-config.json` under Electron’s `userData` directory (on Linux often `~/.config/HAM Desktop/`) with `{"apiBase":"http://127.0.0.1:8000"}`. Without `apiBase`, the production frontend will error until configured (same as a static web build without `VITE_HAM_API_BASE`).
+Packaged builds default to **`file` load mode** and load the bundled renderer from `resources/renderer/`. **API base** resolution: **`HAM_DESKTOP_API_BASE`** (env) → **`ham-desktop-config.json`** `apiBase` → bundled **`default-public-api.json`** (public Ham API for download-and-run). Override the file or env to point at your own API (e.g. local `http://127.0.0.1:8000`).
 
 ### Packaged app and CORS (`Origin: null`)
 

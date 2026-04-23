@@ -26,6 +26,19 @@ function readPersistedConfig() {
   }
 }
 
+/** Shipped next to main.cjs in the asar — default API for download-and-run (overridable). */
+function readPackagedPublicApiDefault() {
+  if (!app.isPackaged) return '';
+  try {
+    const p = path.join(__dirname, 'default-public-api.json');
+    if (!fs.existsSync(p)) return '';
+    const j = JSON.parse(fs.readFileSync(p, 'utf8'));
+    return typeof j.apiBase === 'string' ? j.apiBase.trim() : '';
+  } catch {
+    return '';
+  }
+}
+
 function defaultLoadMode() {
   const fromEnv = (process.env.HAM_DESKTOP_LOAD_MODE || '').trim().toLowerCase();
   if (fromEnv) return fromEnv;
@@ -39,7 +52,11 @@ function buildRendererConfig() {
     process.env.HAM_DESKTOP_USE_HASH_ROUTER === '1' ||
     process.env.HAM_DESKTOP_USE_HASH_ROUTER === 'true';
 
-  let apiBase = envApi || (typeof persisted.apiBase === 'string' ? persisted.apiBase.trim() : '');
+  const packagedDefault = readPackagedPublicApiDefault();
+  let apiBase =
+    envApi ||
+    (typeof persisted.apiBase === 'string' ? persisted.apiBase.trim() : '') ||
+    packagedDefault;
   let useHashRouter =
     envHash ||
     persisted.useHashRouter === true ||
