@@ -311,136 +311,174 @@ export function CloudAgentPanel({
         </div>
       );
     }
-    if (id === "artifacts" || id === "overview") {
+    if (id === "artifacts") {
       return (
-        <div className="p-4 space-y-2">
-          <p className="text-[11px] font-black uppercase tracking-widest text-white/50">
-            {id === "artifacts" ? "Artifacts" : "Overview"}
-          </p>
-          <p className="text-[13px] font-medium text-white/70 uppercase tracking-[0.02em] leading-[1.6]">
+        <div className="space-y-2 p-4">
+          <p className="text-[11px] font-black uppercase tracking-widest text-white/50">Artifacts</p>
+          <p className="text-[13px] font-medium uppercase leading-[1.6] tracking-[0.02em] text-white/70">
             Structured artifact list and checks will map from Cloud Agent API responses. No stub rows.
           </p>
+        </div>
+      );
+    }
+    if (id === "overview") {
+      return (
+        <div className="space-y-3 p-4">
+          <div>
+            <p className="text-[11px] font-black uppercase tracking-widest text-white/50">Overview</p>
+            <p className="mt-1 text-[10px] font-medium leading-snug text-white/32">
+              Mission-wide context (poll summary, rules-based review, deploy handoff). Tab-specific data lives in Tracker,
+              Transcript, and Browser.
+            </p>
+          </div>
+          {hasAgent ? (
+            <p className="text-[12px] font-bold uppercase tracking-wider text-white/45">
+              Mission handling:{" "}
+              <span className="text-white/75">
+                {cloudMissionHandling === "managed" ? "Managed by HAM" : "Direct"}
+              </span>
+            </p>
+          ) : null}
+          {isManaged ? (
+            <div className="space-y-1.5 border-t border-white/10 pt-3">
+              <p className="text-[11px] font-black uppercase tracking-widest text-[#00E5FF]/85">Managed mission</p>
+              <p className="text-[10px] font-medium leading-snug text-white/32">
+                Live summary from HAM&rsquo;s Cursor API poll&mdash;rules-based review and deploy notes below. Use
+                Transcript and Tracker for the full payloads.
+              </p>
+              {managedPollPending && !managedViewSnapshot && !managedPollError ? (
+                <p className="text-[13px] font-medium text-white/50 uppercase tracking-[0.02em] leading-[1.6]">
+                  Loading mission status from Cursor…
+                </p>
+              ) : null}
+              {managedPollError ? (
+                <p className="text-[13px] text-amber-500/90 font-mono break-words leading-relaxed">
+                  Last poll: {managedPollError}
+                </p>
+              ) : null}
+              {managedViewSnapshot ? (
+                <div className="space-y-0.5">
+                  {snapshotLine("Status", managedViewSnapshot.status)}
+                  <SnapshotProgressField value={managedViewSnapshot.progress} />
+                  {snapshotLine("Blocker", managedViewSnapshot.blocker)}
+                  {snapshotLine("Branch / PR", managedViewSnapshot.branchOrPr)}
+                  {snapshotLine("Updated", managedViewSnapshot.updatedAt)}
+                </div>
+              ) : !managedPollPending && !managedPollError ? (
+                <p className="text-[13px] font-medium text-white/50 uppercase tracking-[0.02em] leading-[1.6]">
+                  No summary yet — waiting for data from the Cloud Agent API.
+                </p>
+              ) : null}
+              {managedViewReview ? (
+                <div className="mt-1.5 space-y-1 border-t border-white/10 pt-3">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-white/45">HAM review (rules-based)</p>
+                  <p
+                    className={cn(
+                      "text-[13px] font-semibold leading-[1.5]",
+                      reviewSeverityClass(managedViewReview.severity),
+                    )}
+                  >
+                    {managedViewReview.headline}
+                  </p>
+                  {managedViewReview.details?.trim() ? (
+                    <p className="text-[13px] font-medium leading-[1.6] text-white/65 whitespace-pre-wrap">
+                      {managedViewReview.details}
+                    </p>
+                  ) : null}
+                  {managedViewReview.nextStep?.trim() ? (
+                    <p className="text-[12px] leading-[1.5] text-white/55">
+                      <span className="font-bold text-white/65">Next: </span>
+                      {managedViewReview.nextStep}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+              {deployRead ? (
+                <div className="mt-1.5 space-y-1.5 border-t border-white/10 pt-3">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-violet-400/85">
+                    Deploy handoff (Vercel hook)
+                  </p>
+                  <p className={cn("text-[13px] font-semibold leading-[1.5]", reviewSeverityClass(deployRead.severity))}>
+                    {deployRead.headline}
+                  </p>
+                  {deployRead.details?.trim() ? (
+                    <p className="text-[13px] font-medium leading-[1.6] text-white/65 whitespace-pre-wrap">
+                      {deployRead.details}
+                    </p>
+                  ) : null}
+                  {deployRead.nextStep?.trim() ? (
+                    <p className="text-[12px] leading-[1.5] text-white/55">
+                      <span className="font-bold text-white/65">Next: </span>
+                      {deployRead.nextStep}
+                    </p>
+                  ) : null}
+                  {dHook === null ? (
+                    <p className="text-[13px] font-medium text-white/45">Checking deploy hook configuration…</p>
+                  ) : dHook === false ? (
+                    <p className="text-[13px] font-medium leading-[1.5] text-amber-500/85">
+                      Deploy hook is not configured on the API (set{" "}
+                      <span className="font-mono">HAM_VERCEL_DEPLOY_HOOK_URL</span>).
+                    </p>
+                  ) : null}
+                  {dState === "hook_accepted" && dMsg ? (
+                    <p className="text-[13px] border border-white/10 bg-black/40 leading-[1.5] text-emerald-400/90 rounded px-2 py-1.5">
+                      {dMsg}
+                    </p>
+                  ) : null}
+                  {dState === "hook_failed" && dMsg ? (
+                    <p className="text-[13px] border border-amber-500/20 bg-black/40 leading-[1.5] text-amber-500/90 rounded px-2 py-1.5">
+                      {dMsg}
+                    </p>
+                  ) : null}
+                  {dState === "ready" && dTrigger && dHook === true ? (
+                    <button
+                      type="button"
+                      className="mt-0.5 w-full rounded border border-violet-500/40 bg-violet-500/10 px-2 py-2 text-left text-[12px] font-black uppercase tracking-widest text-violet-300 hover:bg-violet-500/20"
+                      onClick={() => {
+                        void dTrigger();
+                      }}
+                    >
+                      Trigger Vercel deploy hook
+                    </button>
+                  ) : null}
+                  {dState === "triggering" ? (
+                    <p className="flex items-center gap-2 text-[13px] text-white/55">
+                      <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+                      Requesting deploy hook…
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          ) : hasAgent ? (
+            <p className="text-[13px] font-medium leading-[1.6] text-white/55">
+              Direct mode: use Tracker and Transcript for live Cursor API payloads.
+            </p>
+          ) : null}
         </div>
       );
     }
     return <CloudAgentNotConnected />;
   }
 
+  const compactManagedStatus =
+    isManaged && tabId !== "overview"
+      ? managedPollPending && !managedViewSnapshot?.status?.trim()
+        ? "…"
+        : managedViewSnapshot?.status?.trim() || "—"
+      : null;
+
   return (
-    <div className="flex flex-col flex-1 min-h-0">
-      {hasAgent ? (
-        <p className="shrink-0 px-2 pt-1 pb-1 text-[12px] font-bold text-white/45 uppercase tracking-wider">
-          Mission handling:{" "}
-          <span className="text-white/75">
-            {cloudMissionHandling === "managed" ? "Managed by HAM" : "Direct"}
-          </span>
+    <div className="flex min-h-0 flex-1 flex-col">
+      {compactManagedStatus !== null ? (
+        <p
+          className="shrink-0 border-b border-white/5 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-white/40"
+          title="Open Overview for full mission context"
+        >
+          Managed · <span className="text-white/65">{compactManagedStatus}</span>
         </p>
       ) : null}
-      {isManaged ? (
-        <div className="shrink-0 border-b border-white/5 px-2 pb-2 space-y-1.5">
-          <p className="text-[11px] font-black uppercase tracking-widest text-[#00E5FF]/85">Managed mission</p>
-          <p className="text-[10px] font-medium leading-snug text-white/32">
-            Live summary from HAM&rsquo;s Cursor API poll&mdash;rules-based review and deploy notes below. Use Transcript
-            and Tracker for the full payloads.
-          </p>
-          {managedPollPending && !managedViewSnapshot && !managedPollError ? (
-            <p className="text-[13px] font-medium text-white/50 uppercase tracking-[0.02em] leading-[1.6]">
-              Loading mission status from Cursor…
-            </p>
-          ) : null}
-          {managedPollError ? (
-            <p className="text-[13px] text-amber-500/90 font-mono break-words leading-relaxed">Last poll: {managedPollError}</p>
-          ) : null}
-          {managedViewSnapshot ? (
-            <div className="space-y-0.5">
-              {snapshotLine("Status", managedViewSnapshot.status)}
-              <SnapshotProgressField value={managedViewSnapshot.progress} />
-              {snapshotLine("Blocker", managedViewSnapshot.blocker)}
-              {snapshotLine("Branch / PR", managedViewSnapshot.branchOrPr)}
-              {snapshotLine("Updated", managedViewSnapshot.updatedAt)}
-            </div>
-          ) : !managedPollPending && !managedPollError ? (
-            <p className="text-[13px] font-medium text-white/50 uppercase tracking-[0.02em] leading-[1.6]">
-              No summary yet — waiting for data from the Cloud Agent API.
-            </p>
-          ) : null}
-          {managedViewReview ? (
-            <div className="mt-1.5 pt-1.5 border-t border-white/10 space-y-1">
-              <p className="text-[10px] font-black uppercase tracking-widest text-white/45">HAM review (rules-based)</p>
-              <p className={cn("text-[13px] font-semibold leading-[1.5]", reviewSeverityClass(managedViewReview.severity))}>
-                {managedViewReview.headline}
-              </p>
-              {managedViewReview.details?.trim() ? (
-                <p className="text-[13px] text-white/65 leading-[1.6] whitespace-pre-wrap font-medium">
-                  {managedViewReview.details}
-                </p>
-              ) : null}
-              {managedViewReview.nextStep?.trim() ? (
-                <p className="text-[12px] text-white/55 leading-[1.5]">
-                  <span className="font-bold text-white/65">Next: </span>
-                  {managedViewReview.nextStep}
-                </p>
-              ) : null}
-            </div>
-          ) : null}
-          {deployRead ? (
-            <div className="mt-1.5 pt-1.5 border-t border-white/10 space-y-1.5">
-              <p className="text-[10px] font-black uppercase tracking-widest text-violet-400/85">
-                Deploy handoff (Vercel hook)
-              </p>
-              <p className={cn("text-[13px] font-semibold leading-[1.5]", reviewSeverityClass(deployRead.severity))}>
-                {deployRead.headline}
-              </p>
-              {deployRead.details?.trim() ? (
-                <p className="text-[13px] text-white/65 leading-[1.6] whitespace-pre-wrap font-medium">
-                  {deployRead.details}
-                </p>
-              ) : null}
-              {deployRead.nextStep?.trim() ? (
-                <p className="text-[12px] text-white/55 leading-[1.5]">
-                  <span className="font-bold text-white/65">Next: </span>
-                  {deployRead.nextStep}
-                </p>
-              ) : null}
-              {dHook === null ? (
-                <p className="text-[13px] font-medium text-white/45">Checking deploy hook configuration…</p>
-              ) : dHook === false ? (
-                <p className="text-[13px] font-medium text-amber-500/85 leading-[1.5]">
-                  Deploy hook is not configured on the API (set <span className="font-mono">HAM_VERCEL_DEPLOY_HOOK_URL</span>).
-                </p>
-              ) : null}
-              {dState === "hook_accepted" && dMsg ? (
-                <p className="text-[13px] text-emerald-400/90 border border-white/10 rounded px-2 py-1.5 bg-black/40 leading-[1.5]">
-                  {dMsg}
-                </p>
-              ) : null}
-              {dState === "hook_failed" && dMsg ? (
-                <p className="text-[13px] text-amber-500/90 border border-amber-500/20 rounded px-2 py-1.5 bg-black/40 leading-[1.5]">
-                  {dMsg}
-                </p>
-              ) : null}
-              {dState === "ready" && dTrigger && dHook === true ? (
-                <button
-                  type="button"
-                  className="mt-0.5 w-full text-left text-[12px] font-black uppercase tracking-widest text-violet-300 border border-violet-500/40 bg-violet-500/10 hover:bg-violet-500/20 py-2 px-2 rounded"
-                  onClick={() => {
-                    void dTrigger();
-                  }}
-                >
-                  Trigger Vercel deploy hook
-                </button>
-              ) : null}
-              {dState === "triggering" ? (
-                <p className="text-[13px] text-white/55 flex items-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin shrink-0" />
-                  Requesting deploy hook…
-                </p>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-      <div className="flex-1 min-h-0 overflow-y-auto p-2">{renderCloudTab(tabId as CloudAgentTabId)}</div>
+      <div className="min-h-0 flex-1 overflow-y-auto p-2">{renderCloudTab(tabId as CloudAgentTabId)}</div>
     </div>
   );
 }
