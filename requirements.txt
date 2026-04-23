@@ -1,4 +1,5 @@
 litellm
+typer>=0.12.0
 python-dotenv
 pyyaml>=6.0
 pydantic
