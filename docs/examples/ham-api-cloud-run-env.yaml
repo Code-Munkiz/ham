@@ -26,7 +26,8 @@ HERMES_GATEWAY_MODE: mock
 # See docs/DEPLOY_CLOUD_RUN.md § "Private Hermes on GCE".
 
 # Exact origins (production custom domain + local dev). Add your real Vercel production URL.
-HAM_CORS_ORIGINS: "https://your-app.vercel.app,http://localhost:3000,http://127.0.0.1:3000"
+# Include the literal token `null` so packaged HAM Desktop (file://) can call the API.
+HAM_CORS_ORIGINS: "https://your-app.vercel.app,http://localhost:3000,http://127.0.0.1:3000,null"
 
 # All Vercel preview hostnames (https://*.vercel.app) without listing each deployment.
 # Omit in strict production if you only want explicit HAM_CORS_ORIGINS.

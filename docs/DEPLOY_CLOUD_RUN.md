@@ -210,6 +210,7 @@ The dashboard **Chat → Browser** / **War Room** pane calls **`/api/browser/*`*
 2. Redeploy the frontend (Vite bakes this at build time).
 3. Ensure **`HAM_CORS_ORIGINS`** on Cloud Run includes your exact Vercel origin(s).
 4. **Preview URLs:** each Vercel deployment gets a different hostname. Either add every preview origin to **`HAM_CORS_ORIGINS`**, or set **`HAM_CORS_ORIGIN_REGEX`** (e.g. `https://.*\.vercel\.app`) via the same env file and redeploy the service. Without a matching origin, the API may return **200** to `curl` but the **browser** will block the response (no `Access-Control-Allow-Origin`) → **Failed to fetch**.
+5. **Packaged HAM Desktop (Linux/Windows):** the UI loads from **`file://`**, so browsers send **`Origin: null`**. Include the literal token **`null`** in **`HAM_CORS_ORIGINS`** (comma-separated) or the desktop app cannot use chat against this API. See **`docs/examples/ham-api-cloud-run-env.yaml`**.
 
 ## Local container (optional)
 
