@@ -7,6 +7,7 @@ import {
   launchCursorAgent,
   shortenHamApiErrorMessage,
 } from "@/lib/ham/api";
+import { buildManagedCloudAgentPrompt } from "@/lib/ham/managedCloudAgent";
 import type { CloudMissionHandling } from "@/lib/ham/types";
 
 export type RecentCloudMission = { id: string; label?: string; t: number };
@@ -112,8 +113,16 @@ export function CloudAgentLaunchModal({
     }
     setLaunchBusy(true);
     try {
+      const promptToSend =
+        missionHandling === "managed"
+          ? buildManagedCloudAgentPrompt({
+              userPrompt: p,
+              repository: r,
+              ref: ref.trim() || undefined,
+            })
+          : p;
       const payload = await launchCursorAgent({
-        prompt_text: p,
+        prompt_text: promptToSend,
         repository: r,
         ref: ref.trim() || undefined,
         model: model.trim() || "default",

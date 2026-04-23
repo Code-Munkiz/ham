@@ -1,6 +1,15 @@
 /** How HAM should relate to a Cursor Cloud Agent mission (Cloud Uplink / mission modal only). */
 export type CloudMissionHandling = "direct" | "managed";
 
+/** Defensive summary of Cursor agent + conversation for managed mode (real API fields only, no invention). */
+export interface ManagedMissionSnapshot {
+  status: string | null;
+  progress: string | null;
+  blocker: string | null;
+  branchOrPr: string | null;
+  updatedAt: string | null;
+}
+
 export interface RunRecord {
   run_id: string;
   created_at: string;

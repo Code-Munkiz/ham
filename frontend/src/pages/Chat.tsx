@@ -44,7 +44,8 @@ import {
   type ChatSessionSummary,
 } from "@/lib/ham/api";
 import { CLIENT_MODEL_CATALOG_FALLBACK } from "@/lib/ham/modelCatalogFallback";
-import type { CloudMissionHandling, ModelCatalogPayload } from "@/lib/ham/types";
+import type { CloudMissionHandling, ManagedMissionSnapshot, ModelCatalogPayload } from "@/lib/ham/types";
+import { ManagedCloudAgentProvider } from "@/contexts/ManagedCloudAgentContext";
 import { isDashboardChatGatewayReady } from "@/lib/ham/types";
 import { useAgent } from "@/lib/ham/AgentContext";
 import { useWorkspace } from "@/lib/ham/WorkspaceContext";
@@ -277,6 +278,9 @@ function ChatPageInner({
   const [warBlink, setWarBlink] = React.useState(true);
   const [reduceMotion, setReduceMotion] = React.useState(false);
   const [cloudLaunchOpen, setCloudLaunchOpen] = React.useState(false);
+  const [managedLastSnapshot, setManagedLastSnapshot] = React.useState<ManagedMissionSnapshot | null>(null);
+  const [managedSnapshotAt, setManagedSnapshotAt] = React.useState<number | null>(null);
+  const [managedPollRefreshNonce, setManagedPollRefreshNonce] = React.useState(0);
 
   /** Chat history sidebar */
   const [historyOpen, setHistoryOpen] = React.useState(false);
@@ -363,6 +367,39 @@ function ChatPageInner({
       }
     },
     [pushRecentMission, cloudMissionHandling],
+  );
+
+  const onManagedSnapshotChange = React.useCallback((snapshot: ManagedMissionSnapshot | null) => {
+    setManagedLastSnapshot(snapshot);
+    setManagedSnapshotAt(snapshot ? Date.now() : null);
+  }, []);
+
+  const refreshManagedCloudMission = React.useCallback(() => {
+    setManagedPollRefreshNonce((n) => n + 1);
+  }, []);
+
+  React.useEffect(() => {
+    if (uplinkId !== "cloud_agent" || cloudMissionHandling !== "managed" || !activeCloudAgentId?.trim()) {
+      setManagedLastSnapshot(null);
+      setManagedSnapshotAt(null);
+    }
+  }, [uplinkId, cloudMissionHandling, activeCloudAgentId]);
+
+  const managedCloudAgentContextValue = React.useMemo(
+    () => ({
+      activeCloudAgentId,
+      cloudMissionHandling,
+      lastSnapshot: managedLastSnapshot,
+      lastUpdated: managedSnapshotAt,
+      refresh: refreshManagedCloudMission,
+    }),
+    [
+      activeCloudAgentId,
+      cloudMissionHandling,
+      managedLastSnapshot,
+      managedSnapshotAt,
+      refreshManagedCloudMission,
+    ],
   );
 
   React.useEffect(() => {
@@ -861,6 +898,7 @@ function ChatPageInner({
   }`;
 
   return (
+    <ManagedCloudAgentProvider value={managedCloudAgentContextValue}>
     <div className="flex h-full bg-[#000000] font-sans relative overflow-hidden">
       {/* Background Rail Grid */}
       <div className="absolute inset-0 opacity-[0.012] pointer-events-none" 
@@ -950,6 +988,8 @@ function ChatPageInner({
                 uplinkId={uplinkId}
                 activeCloudAgentId={activeCloudAgentId}
                 cloudMissionHandling={uplinkId === "cloud_agent" ? cloudMissionHandling : undefined}
+                onManagedSnapshotChange={uplinkId === "cloud_agent" ? onManagedSnapshotChange : undefined}
+                managedPollRefreshNonce={uplinkId === "cloud_agent" ? managedPollRefreshNonce : undefined}
                 embedUrl={paneEmbedUrl}
                 onEmbedUrlChange={setPaneEmbedUrl}
                 requestedTabId={requestedTabId}
@@ -973,6 +1013,8 @@ function ChatPageInner({
                     uplinkId={uplinkId}
                     activeCloudAgentId={activeCloudAgentId}
                     cloudMissionHandling={uplinkId === "cloud_agent" ? cloudMissionHandling : undefined}
+                    onManagedSnapshotChange={uplinkId === "cloud_agent" ? onManagedSnapshotChange : undefined}
+                    managedPollRefreshNonce={uplinkId === "cloud_agent" ? managedPollRefreshNonce : undefined}
                     embedUrl={paneEmbedUrl}
                     onEmbedUrlChange={setPaneEmbedUrl}
                     requestedTabId={requestedTabId}
@@ -1543,6 +1585,7 @@ function ChatPageInner({
         mountDefaults={mountDefaultsForLaunch}
       />
     </div>
+    </ManagedCloudAgentProvider>
   );
 }
 
