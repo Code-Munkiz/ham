@@ -8,7 +8,9 @@ from src.ham_cli import __version__
 from src.ham_cli.commands.api_cmd import run_api_status
 from src.ham_cli.commands.desktop import run_package_linux, run_package_win
 from src.ham_cli.commands.doctor import run_doctor
+from src.ham_cli.commands.readiness import run_readiness
 from src.ham_cli.commands.status import run_status
+from src.ham_cli.launcher import run_interactive_menu
 
 
 def _print_version(value: bool) -> None:
@@ -23,8 +25,9 @@ app = typer.Typer(
 )
 
 
-@app.callback()
+@app.callback(invoke_without_command=True)
 def _root(
+    ctx: typer.Context,
     _version: bool = typer.Option(
         False,
         "--version",
@@ -34,7 +37,9 @@ def _root(
         is_eager=True,
     ),
 ) -> None:
-    pass
+    if ctx.invoked_subcommand is not None:
+        return
+    run_interactive_menu()
 
 
 @app.command("doctor")
@@ -42,6 +47,14 @@ def doctor_cmd(
     json_out: bool = typer.Option(False, "--json", help="Emit JSON for automation."),
 ) -> None:
     """Check Python, imports, desktop tooling, optional API reachability."""
+    run_doctor(json_out=json_out)
+
+
+@app.command("check")
+def check_cmd(
+    json_out: bool = typer.Option(False, "--json", help="Emit JSON for automation."),
+) -> None:
+    """Friendly alias for `ham doctor` — same checks, human-oriented name."""
     run_doctor(json_out=json_out)
 
 
@@ -56,6 +69,22 @@ def status_cmd(
 ) -> None:
     """Local repo/run summary; remote /api/status when HAM_API_BASE (or --api-base) is set."""
     run_status(json_out=json_out, api_base=api_base)
+
+
+@app.command("readiness")
+def readiness_cmd() -> None:
+    """Checklist-style summary: Python, imports, desktop scripts, git, API (local; read-only)."""
+    run_readiness()
+
+
+release_app = typer.Typer(help="Shipping and release helpers.")
+app.add_typer(release_app, name="release")
+
+
+@release_app.command("readiness")
+def release_readiness_cmd() -> None:
+    """Same as `ham readiness` (for `ham release readiness`)."""
+    run_readiness()
 
 
 api_app = typer.Typer(help="Call Ham HTTP API (thin client; no duplicated server logic).")
@@ -90,6 +119,30 @@ def desktop_pack_linux() -> None:
 @package_app.command("win")
 def desktop_pack_win() -> None:
     """Run `npm run pack:win` in desktop/ (Windows portable from Linux)."""
+    run_package_win()
+
+
+friendly_package = typer.Typer(
+    help="Shorthand for `ham desktop package` — same behavior.",
+)
+app.add_typer(friendly_package, name="package")
+
+
+@friendly_package.command("linux")
+def friendly_pack_linux() -> None:
+    """Alias: same as `ham desktop package linux`."""
+    run_package_linux()
+
+
+@friendly_package.command("win")
+def friendly_pack_win() -> None:
+    """Alias: same as `ham desktop package win`."""
+    run_package_win()
+
+
+@friendly_package.command("windows")
+def friendly_pack_windows() -> None:
+    """Alias: same as `ham desktop package win`."""
     run_package_win()
 
 
