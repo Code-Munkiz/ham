@@ -21,6 +21,7 @@ import {
   Mic,
   MessageSquare,
   Plus,
+  Folder,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
@@ -74,6 +75,7 @@ import { useAgent } from "@/lib/ham/AgentContext";
 import { useWorkspace } from "@/lib/ham/WorkspaceContext";
 import { ResizableWorkbenchSplit } from "@/components/war-room/ResizableWorkbenchSplit";
 import { WarRoomPane } from "@/components/war-room/WarRoomPane";
+import { LiveManagedMissionBanner } from "@/components/war-room/LiveManagedMissionBanner";
 import type { WarRoomTabId } from "@/components/war-room/uplinkConfig";
 
 type ChatRow = {
@@ -84,6 +86,17 @@ type ChatRow = {
 };
 
 type ChatViewMode = "chat" | "split" | "preview" | "war_room";
+
+function formatShortcutAge(t: number): string {
+  const s = Math.floor((Date.now() - t) / 1000);
+  if (s < 0) return "now";
+  if (s < 60) return `${s}s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 48) return `${h}h ago`;
+  return new Date(t).toLocaleDateString();
+}
 
 const RECENT_MISSIONS_KEY = "ham_recent_missions_v1";
 const MOUNT_STORAGE_KEY = "ham_project_mount_v1";
@@ -1322,6 +1335,12 @@ function ChatPageInner({
     sending ? "SENDING" : isDashboardChatGatewayReady(catalog) ? "GATEWAY_READY" : "GATEWAY_OFFLINE"
   }`;
 
+  const workbenchMissionBannerActive =
+    uplinkId === "cloud_agent" &&
+    cloudMissionHandling === "managed" &&
+    Boolean(activeCloudAgentId?.trim()) &&
+    viewMode !== "chat";
+
   managedCompletionGatesRef.current = { uplinkId, cloudMissionHandling, activeCloudAgentId };
 
   return (
@@ -1401,8 +1420,9 @@ function ChatPageInner({
         
         {/* RIGHT-SIDE CONTROL PANEL OVERLAY - HANDLED BY APPLAYOUT NOW */}
 
-        {/* Dynamic Workbench Canvas: chat-only, preview full-width, or resizable split + uplink panes */}
+        {/* Dynamic Workbench Canvas: optional live mission ribbon, then chat-only, preview, or resizable split */}
         <div className="flex flex-1 min-h-0 flex-col relative overflow-hidden">
+          <LiveManagedMissionBanner when={workbenchMissionBannerActive} />
           {viewMode === "chat" ? (
             <TranscriptColumn messages={messages} primaryPersona={primaryPersona} />
           ) : viewMode === "preview" ? (
@@ -1417,10 +1437,21 @@ function ChatPageInner({
               browserOnly={browserOnly}
               executionMode="preview"
               onCloseExecution={() => setViewMode("chat")}
+              workbenchMissionBannerActive={workbenchMissionBannerActive}
+              onOpenProjectsRegistry={() => setProjectsOpen(true)}
             />
           ) : (
             <ResizableWorkbenchSplit
-              left={<TranscriptColumn messages={messages} primaryPersona={primaryPersona} />}
+              left={
+                <div
+                  className={cn(
+                    "flex h-full min-h-0 min-w-0 flex-col",
+                    workbenchMissionBannerActive && "border-t border-white/[0.03]",
+                  )}
+                >
+                  <TranscriptColumn messages={messages} primaryPersona={primaryPersona} />
+                </div>
+              }
               right={
                 <WarRoomPane
                   uplinkId={uplinkId}
@@ -1436,6 +1467,8 @@ function ChatPageInner({
                   warRoomSignal={viewMode === "war_room"}
                   reduceMotion={reduceMotion}
                   warBlink={warBlink}
+                  workbenchMissionBannerActive={workbenchMissionBannerActive}
+                  onOpenProjectsRegistry={() => setProjectsOpen(true)}
                 />
               }
             />
@@ -1936,54 +1969,60 @@ function ChatPageInner({
               setProjectsOpen(false);
             }}
           />
-          <div className="w-full max-w-md h-full border-l border-white/10 bg-[#0a0a0a]/95 backdrop-blur-xl shadow-2xl flex flex-col text-white">
-            <div className="h-12 flex items-center justify-between px-4 border-b border-white/10 shrink-0">
-              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#BC13FE]">PROJECTS_REGISTRY</span>
-              <button
-                type="button"
-                onClick={() => {
-                  try {
-                    localStorage.setItem(
-                      MOUNT_STORAGE_KEY,
-                      JSON.stringify({ repository: mountRepo.trim(), ref: mountRef.trim() }),
-                    );
-                  } catch {
-                    /* ignore */
-                  }
-                  setProjectsOpen(false);
-                }}
-                className="p-1.5 text-white/40 hover:text-white"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-4 space-y-6">
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[9px] font-black uppercase tracking-widest text-white/40">PROJECT_MOUNT</span>
-                </div>
-                <label className="text-[8px] font-black text-white/30 uppercase block mb-1">GitHub repository URL</label>
-                <input
-                  value={mountRepo}
-                  onChange={(e) => setMountRepo(e.target.value)}
-                  placeholder="https://github.com/org/repo"
-                  className="w-full bg-black/50 border border-white/10 px-3 py-2 text-[11px] text-white/90 mb-3 outline-none focus:border-[#FF6B00]/40"
-                />
-                <label className="text-[8px] font-black text-white/30 uppercase block mb-1">Ref (branch / tag)</label>
-                <input
-                  value={mountRef}
-                  onChange={(e) => setMountRef(e.target.value)}
-                  placeholder="main"
-                  className="w-full bg-black/50 border border-white/10 px-3 py-2 text-[11px] text-white/90 outline-none focus:border-[#FF6B00]/40"
-                />
-              </div>
-              <div>
-                <span className="text-[9px] font-black uppercase tracking-widest text-white/40 block mb-2">
-                  CLOUD_AGENT_ACTIVE_MISSION
+          <div className="flex h-full w-full max-w-md flex-col border-l border-white/10 bg-[#0a0a0a]/95 text-white shadow-2xl backdrop-blur-xl">
+            <div className="shrink-0 space-y-0.5 border-b border-white/10 px-4 py-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#BC13FE]">
+                  Projects registry
                 </span>
-                <p className="text-[9px] text-white/25 mb-2 leading-relaxed">
-                  Active mission id for tracker / transcript. Leave empty for not connected / no active mission. You can also
-                  use Launch in the chat bar (Cloud uplink).
+                <button
+                  type="button"
+                  onClick={() => {
+                    try {
+                      localStorage.setItem(
+                        MOUNT_STORAGE_KEY,
+                        JSON.stringify({ repository: mountRepo.trim(), ref: mountRef.trim() }),
+                      );
+                    } catch {
+                      /* ignore */
+                    }
+                    setProjectsOpen(false);
+                  }}
+                  className="p-1.5 text-white/40 hover:text-white"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <p className="pr-6 text-[9px] leading-relaxed text-white/32">
+                Defaults for chat + Cloud bind. Use <span className="text-white/45">History</span> for server mission
+                archive.
+              </p>
+            </div>
+            <div className="min-h-0 flex-1 space-y-0 overflow-y-auto [scrollbar-gutter:stable]">
+              <div className="p-4 pb-2">
+                <p className="text-[8px] font-black uppercase tracking-widest text-white/30">Connect &amp; mount</p>
+                <p className="mt-0.5 text-[9px] text-white/25">Repository context for the workspace; saved with the panel.</p>
+                <div className="mt-2 rounded-lg border border-white/8 bg-white/[0.02] p-3">
+                  <label className="text-[8px] font-bold uppercase tracking-wider text-white/30">Repository URL</label>
+                  <input
+                    value={mountRepo}
+                    onChange={(e) => setMountRepo(e.target.value)}
+                    placeholder="https://github.com/org/repo"
+                    className="mb-2 mt-1 w-full border border-white/10 bg-black/50 px-2.5 py-2 text-[11px] text-white/90 outline-none focus:border-[#FF6B00]/40"
+                  />
+                  <label className="text-[8px] font-bold uppercase tracking-wider text-white/30">Ref</label>
+                  <input
+                    value={mountRef}
+                    onChange={(e) => setMountRef(e.target.value)}
+                    placeholder="main"
+                    className="mt-1 w-full border border-white/10 bg-black/50 px-2.5 py-2 text-[11px] text-white/90 outline-none focus:border-[#FF6B00]/40"
+                  />
+                </div>
+              </div>
+              <div className="border-t border-white/[0.06] px-4 py-3">
+                <p className="text-[8px] font-black uppercase tracking-widest text-white/30">Active mission (Cloud)</p>
+                <p className="mt-0.5 text-[9px] text-white/25">
+                  Binds the right execution pane. Clear to disconnect, or use Launch in the bar.
                 </p>
                 <input
                   value={activeCloudAgentId ?? ""}
@@ -1995,65 +2034,79 @@ function ChatPageInner({
                     }
                   }}
                   placeholder="Cursor agent id…"
-                  className="w-full bg-black/50 border border-white/10 px-3 py-2 text-[11px] text-white/90 font-mono outline-none focus:border-[#FF6B00]/40"
+                  className="mt-2 w-full rounded border border-white/8 bg-black/50 px-2.5 py-2 font-mono text-[11px] text-white/90 outline-none focus:border-[#FF6B00]/40"
                 />
               </div>
-              <div>
-                <span className="text-[9px] font-black uppercase tracking-widest text-white/40 block mb-2">
-                  Registered HAM projects
-                </span>
+              <div className="border-t border-white/[0.06] px-4 py-3">
+                <div className="flex items-center gap-2 text-[#BC13FE]/90">
+                  <Folder className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  <p className="text-[8px] font-black uppercase tracking-widest">Server registry</p>
+                </div>
+                <p className="mt-0.5 text-[9px] text-white/25">From this API&rsquo;s HAM project list (read-only here).</p>
                 {projectsLoading ? (
-                  <p className="text-[10px] text-white/30">Loading…</p>
+                  <p className="mt-2 text-[10px] text-white/30">Loading…</p>
                 ) : hamProjects.length === 0 ? (
-                  <p className="text-[10px] text-white/25">No projects registered on this API.</p>
+                  <p className="mt-2 text-[10px] text-white/25">No projects on this host.</p>
                 ) : (
-                  <ul className="space-y-2">
+                  <ul className="mt-2 space-y-1.5">
                     {hamProjects.map((p) => (
                       <li
                         key={p.id}
-                        className="border border-white/10 px-3 py-2 text-[10px] font-mono text-white/60 truncate"
+                        className="rounded-md border border-white/8 bg-black/25 px-2.5 py-2"
                         title={p.root}
                       >
-                        {p.name}
+                        <p className="text-[12px] font-bold leading-tight text-white/85">{p.name}</p>
+                        <p className="mt-0.5 font-mono text-[9px] text-white/25">{p.id}</p>
                       </li>
                     ))}
                   </ul>
                 )}
               </div>
-              <div>
-                <span className="text-[9px] font-black uppercase tracking-widest text-white/40 block mb-1">
-                  QUICK_SHORTCUTS
-                </span>
-                <p className="text-[8px] text-white/22 mb-2 leading-relaxed">
-                  Local browser shortcuts to recent agent ids (fast resume). Authoritative managed history lives in{" "}
-                  <span className="text-white/40">History → Managed missions (server)</span>.
+              <div className="border-t border-white/[0.06] px-4 py-3 pb-6">
+                <p className="text-[8px] font-black uppercase tracking-widest text-white/30">This browser — shortcuts</p>
+                <p className="mt-0.5 text-[9px] text-white/22">
+                  Recent agent ids on this device only. For authoritative missions, use{" "}
+                  <span className="text-white/40">History → Managed missions</span>.
                 </p>
                 {recentMissions.length === 0 ? (
-                  <p className="text-[10px] text-white/25">No shortcuts stored yet.</p>
+                  <p className="mt-2 text-[10px] text-white/25">None yet; Launch or &ldquo;Use&rdquo; will add entries.</p>
                 ) : (
-                  <ul className="space-y-2">
+                  <ul className="mt-2 space-y-1.5">
                     {[...recentMissions]
                       .sort((a, b) => b.t - a.t)
-                      .map((m) => (
-                        <li
-                          key={m.id}
-                          className="flex items-center justify-between gap-2 border border-white/10 px-3 py-2 text-[9px] text-white/50"
-                        >
-                          <span className="min-w-0 truncate">
-                            <span className="font-mono text-[#00E5FF]">{m.id}</span>
-                            {m.label ? ` · ${m.label}` : ""}
-                          </span>
-                          <button
-                            type="button"
-                            className="shrink-0 text-[8px] font-black uppercase tracking-wider text-[#FF6B00] hover:text-white"
-                            onClick={() =>
-                              activateCloudMission(m.id, { managedSplit: { kind: "existing" } })
-                            }
+                      .map((m) => {
+                        const isActive = (activeCloudAgentId ?? "").trim() === m.id.trim();
+                        return (
+                          <li
+                            key={m.id}
+                            className="flex items-stretch justify-between gap-2 rounded-md border border-white/8 bg-white/[0.02] pl-2.5"
                           >
-                            Use
-                          </button>
-                        </li>
-                      ))}
+                            <div className="min-w-0 flex-1 py-2 pr-0">
+                              <p className="font-mono text-[10px] font-medium leading-snug text-[#00E5FF]/90">
+                                {m.id.length > 20 ? `${m.id.slice(0, 8)}…${m.id.slice(-6)}` : m.id}
+                              </p>
+                              {m.label ? (
+                                <p className="mt-0.5 truncate text-[9px] text-white/40">{m.label}</p>
+                              ) : null}
+                              <p className="mt-0.5 text-[8px] text-white/20">{formatShortcutAge(m.t)}</p>
+                            </div>
+                            <div className="flex shrink-0 flex-col items-stretch justify-center border-l border-white/8">
+                              {isActive ? (
+                                <span className="self-center px-1.5 text-[7px] font-black uppercase tracking-widest text-emerald-400/80">
+                                  Active
+                                </span>
+                              ) : null}
+                              <button
+                                type="button"
+                                className="px-2.5 py-2 text-[8px] font-black uppercase tracking-widest text-[#FF6B00] transition-colors hover:bg-white/5 hover:text-white"
+                                onClick={() => activateCloudMission(m.id, { managedSplit: { kind: "existing" } })}
+                              >
+                                Use
+                              </button>
+                            </div>
+                          </li>
+                        );
+                      })}
                   </ul>
                 )}
               </div>

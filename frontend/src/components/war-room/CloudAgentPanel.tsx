@@ -33,6 +33,8 @@ export interface CloudAgentPanelProps {
   cloudMissionHandling?: CloudMissionHandling;
   embedUrl: string;
   onEmbedUrlChange: (v: string) => void;
+  workbenchMissionBannerActive?: boolean;
+  onOpenProjectsRegistry?: () => void;
 }
 
 function reviewSeverityClass(s: ManagedReviewSeverity): string {
@@ -138,6 +140,8 @@ export function CloudAgentPanel({
   cloudMissionHandling = "direct",
   embedUrl,
   onEmbedUrlChange,
+  workbenchMissionBannerActive = false,
+  onOpenProjectsRegistry,
 }: CloudAgentPanelProps) {
   const managed = useManagedCloudAgentContext();
 
@@ -344,7 +348,7 @@ export function CloudAgentPanel({
       return <BrowserTabPanel embedUrl={embedUrl} onEmbedUrlChange={onEmbedUrlChange} />;
     }
     if (notConnected) {
-      return <CloudAgentNotConnected />;
+      return <CloudAgentNotConnected onOpenProjectsRegistry={onOpenProjectsRegistry} />;
     }
     if (id === "tracker") {
       if (loading && !agentPayload) {
@@ -948,11 +952,13 @@ export function CloudAgentPanel({
         </div>
       );
     }
-    return <CloudAgentNotConnected />;
+    return <CloudAgentNotConnected onOpenProjectsRegistry={onOpenProjectsRegistry} />;
   }
 
   const compactManagedStatus =
-    isManaged && tabId !== "overview"
+    !workbenchMissionBannerActive &&
+    isManaged &&
+    tabId !== "overview"
       ? managedPollPending && !managedViewSnapshot?.status?.trim()
         ? "…"
         : managedViewSnapshot?.status?.trim() || "—"
@@ -968,7 +974,9 @@ export function CloudAgentPanel({
           Managed · <span className="text-white/65">{compactManagedStatus}</span>
         </p>
       ) : null}
-      <div className="min-h-0 flex-1 overflow-y-auto p-2">{renderCloudTab(tabId as CloudAgentTabId)}</div>
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-2">
+        {renderCloudTab(tabId as CloudAgentTabId)}
+      </div>
     </div>
   );
 }

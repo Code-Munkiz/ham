@@ -39,6 +39,13 @@ export interface WarRoomPaneProps {
   warRoomSignal?: boolean;
   reduceMotion?: boolean;
   warBlink?: boolean;
+  /**
+   * When the workbench shows the live mission ribbon, hide the in-pane compact status strip
+   * to avoid duplicating the same message under the tab row.
+   */
+  workbenchMissionBannerActive?: boolean;
+  /** Shown in empty / not-connected Cloud Agent state. */
+  onOpenProjectsRegistry?: () => void;
 }
 
 /**
@@ -58,6 +65,8 @@ export function WarRoomPane({
   warRoomSignal,
   reduceMotion,
   warBlink,
+  workbenchMissionBannerActive = false,
+  onOpenProjectsRegistry,
 }: WarRoomPaneProps) {
   const vTabs = React.useMemo(() => visibleTabs(uplinkId, browserOnly), [uplinkId, browserOnly]);
   const [tabId, setTabId] = React.useState<WarRoomTabId>(() => pickDefaultTab(uplinkId, browserOnly));
@@ -97,6 +106,8 @@ export function WarRoomPane({
             cloudMissionHandling={cloudMissionHandling}
             embedUrl={embedUrl}
             onEmbedUrlChange={onEmbedUrlChange}
+            workbenchMissionBannerActive={workbenchMissionBannerActive}
+            onOpenProjectsRegistry={onOpenProjectsRegistry}
           />
         ) : uplinkId === "factory_ai" ? (
           <FactoryAIPanel tabId={tabId} embedUrl={embedUrl} onEmbedUrlChange={onEmbedUrlChange} />
