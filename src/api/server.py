@@ -26,7 +26,7 @@ from src.api.control_plane_runs import router as control_plane_runs_router
 from src.ham.agent_profiles import agents_config_from_merged
 from src.ham.clerk_auth import HamActor, clerk_authorization_is_clerk_session
 from src.memory_heist import context_engine_dashboard_payload, discover_config
-from src.persistence.project_store import ProjectStore
+from src.persistence.project_store import get_project_store
 from src.persistence.run_store import RunStore
 from src.registry.droids import DEFAULT_DROID_REGISTRY
 from src.registry.profiles import DEFAULT_PROFILE_REGISTRY
@@ -78,13 +78,6 @@ app.include_router(control_plane_runs_router)
 app.include_router(models_catalog_router)
 
 _store = RunStore()
-_projects = ProjectStore()
-
-
-def get_project_store() -> ProjectStore:
-    """Shared project registry (lazy consumers import from server after app load)."""
-    return _projects
-
 
 # ---------------------------------------------------------------------------
 # Root (browser opens service URL with no path)
@@ -209,7 +202,7 @@ async def get_project_context_engine(
     project_id: str,
     _ham_gate: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
 ) -> dict:
-    record = _projects.get_project(project_id)
+    record = get_project_store().get_project(project_id)
     if record is None:
         raise HTTPException(status_code=404, detail=f"Project {project_id!r} not found")
     return context_engine_dashboard_payload(Path(record.root))
@@ -221,7 +214,7 @@ async def get_project_agents(
     _ham_gate: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
 ) -> dict[str, Any]:
     """HAM Agent Builder — effective profiles from merged Ham config (`.ham/settings.json` chain)."""
-    record = _projects.get_project(project_id)
+    record = get_project_store().get_project(project_id)
     if record is None:
         raise HTTPException(
             status_code=404,
@@ -256,7 +249,7 @@ class RegisterProjectRequest(BaseModel):
 async def list_projects(
     _ham_gate: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
 ) -> dict:
-    return {"projects": [p.model_dump() for p in _projects.list_projects()]}
+    return {"projects": [p.model_dump() for p in get_project_store().list_projects()]}
 
 
 @app.post("/api/projects", status_code=201)
@@ -270,13 +263,13 @@ async def register_project(
             status_code=422,
             detail=f"Root path does not exist or is not a directory: {body.root!r}",
         )
-    record = _projects.make_record(
+    record = get_project_store().make_record(
         name=body.name,
         root=body.root,
         description=body.description,
         metadata=body.metadata,
     )
-    _projects.register(record)
+    get_project_store().register(record)
     return record.model_dump()
 
 
@@ -285,7 +278,7 @@ async def get_project(
     project_id: str,
     _ham_gate: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
 ) -> dict:
-    record = _projects.get_project(project_id)
+    record = get_project_store().get_project(project_id)
     if record is None:
         raise HTTPException(status_code=404, detail=f"Project {project_id!r} not found")
     return record.model_dump()
@@ -307,7 +300,7 @@ async def patch_project(
     body: PatchProjectRequest,
     _ham_gate: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
 ) -> dict:
-    record = _projects.get_project(project_id)
+    record = get_project_store().get_project(project_id)
     if record is None:
         raise HTTPException(status_code=404, detail=f"Project {project_id!r} not found")
     if _DEFAULT_DEPLOY_APPROVAL_MODE_KEY in body.metadata:
@@ -327,7 +320,7 @@ async def patch_project(
         else:
             merged[k] = v
     updated = record.model_copy(update={"metadata": merged})
-    _projects.register(updated)
+    get_project_store().register(updated)
     return updated.model_dump()
 
 
@@ -336,7 +329,7 @@ async def remove_project(
     project_id: str,
     _ham_gate: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
 ) -> None:
-    if not _projects.remove(project_id):
+    if not get_project_store().remove(project_id):
         raise HTTPException(status_code=404, detail=f"Project {project_id!r} not found")
 
 
@@ -345,7 +338,7 @@ async def get_project_status(
     project_id: str,
     _ham_gate: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
 ) -> dict:
-    record = _projects.get_project(project_id)
+    record = get_project_store().get_project(project_id)
     if record is None:
         raise HTTPException(status_code=404, detail=f"Project {project_id!r} not found")
     store = RunStore(root=Path(record.root))
@@ -361,7 +354,7 @@ async def list_project_runs(
     _ham_gate: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
     limit: int = 50,
 ) -> dict:
-    record = _projects.get_project(project_id)
+    record = get_project_store().get_project(project_id)
     if record is None:
         raise HTTPException(status_code=404, detail=f"Project {project_id!r} not found")
     store = RunStore(root=Path(record.root))

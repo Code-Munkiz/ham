@@ -234,6 +234,8 @@ export interface LaunchCursorAgentRequest {
   branch_name?: string | null;
   /** HAM-only audit; not forwarded to Cursor. */
   mission_handling?: "direct" | "managed";
+  /** When set, managed missions snapshot deploy approval from this registered project. */
+  project_id?: string | null;
 }
 
 /** Turn FastAPI / proxy error text into a short UI string (single line, capped). */
@@ -258,6 +260,7 @@ export async function launchCursorAgent(
       auto_create_pr: Boolean(body.auto_create_pr),
       branch_name: body.branch_name?.trim() || undefined,
       mission_handling: body.mission_handling,
+      ...(body.project_id?.trim() ? { project_id: body.project_id.trim() } : {}),
     }),
   });
   if (!res.ok) {
@@ -339,12 +342,31 @@ export type ManagedMissionRow = {
   mission_registry_id?: string;
   cursor_agent_id?: string;
   mission_lifecycle?: string;
+  /** Create-time snapshot from project default (managed missions). */
+  mission_deploy_approval_mode?: "off" | "audit" | "soft" | "hard";
   repo_key?: string | null;
   repository_observed?: string | null;
   cursor_status_last_observed?: string | null;
   last_server_observed_at?: string;
   updated_at?: string;
 };
+
+/** Single mission row for the current Cloud Agent, when the server has recorded a managed mission. */
+export async function fetchManagedMissionForAgent(
+  agentId: string,
+): Promise<ManagedMissionRow | null> {
+  const q = new URLSearchParams({
+    cursor_agent_id: agentId.trim(),
+    limit: "5",
+  });
+  const res = await hamApiFetch(`/api/cursor/managed/missions?${q.toString()}`);
+  if (!res.ok) {
+    return null;
+  }
+  const j = (await res.json()) as { missions?: ManagedMissionRow[] };
+  const rows = Array.isArray(j.missions) ? j.missions : [];
+  return rows[0] ?? null;
+}
 
 export async function fetchManagedMissionsList(limit = 40): Promise<ManagedMissionRow[]> {
   const res = await hamApiFetch(`/api/cursor/managed/missions?limit=${limit}`);

@@ -50,7 +50,7 @@ def _public_run(r: ControlPlaneRun) -> dict[str, Any]:
 
 
 def _get_project_or_404(project_id: str) -> None:
-    from src.api.server import get_project_store
+    from src.persistence.project_store import get_project_store
 
     st = get_project_store()
     if st.get_project(project_id.strip()) is None:

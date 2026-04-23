@@ -1,6 +1,7 @@
 """Managed mission store + v1 read API (file-backed, bounded fields)."""
 from __future__ import annotations
 
+import json
 import uuid
 from pathlib import Path
 
@@ -9,6 +10,10 @@ from fastapi.testclient import TestClient
 
 from src.api import cursor_managed_missions as cmm
 from src.api.server import app
+from src.ham.managed_mission_wiring import (
+    create_mission_after_managed_launch,
+    set_managed_mission_store_for_tests,
+)
 from src.persistence.control_plane_run import (
     ControlPlaneRun,
     ControlPlaneRunStore,
@@ -20,6 +25,7 @@ from src.persistence.managed_mission import (
     map_cursor_to_mission_lifecycle,
     new_mission_registry_id,
 )
+from src.persistence.project_store import ProjectStore, set_project_store_for_tests
 
 
 def _cp_run(*, eid: str) -> str:
@@ -100,6 +106,200 @@ def test_mission_store_roundtrip(tmp_path: Path) -> None:
     f = st.find_by_cursor_agent_id("a1")
     assert f is not None
     assert f.mission_registry_id == mid
+    assert f.mission_deploy_approval_mode == "off"
+
+
+@pytest.fixture
+def isolated_stores(tmp_path: Path):
+    m = ManagedMissionStore(base_dir=tmp_path / "missions")
+    p = ProjectStore(store_path=tmp_path / "projects.json")
+    set_managed_mission_store_for_tests(m)
+    set_project_store_for_tests(p)
+    yield m, p
+    set_managed_mission_store_for_tests(None)
+    set_project_store_for_tests(None)
+
+
+def _register_project(
+    pstore: ProjectStore,
+    *,
+    name: str,
+    root: Path,
+    default_mode: str | None,
+) -> str:
+    root.mkdir(parents=True, exist_ok=True)
+    meta: dict = {}
+    if default_mode is not None:
+        meta["default_deploy_approval_mode"] = default_mode
+    rec = pstore.make_record(name=name, root=str(root), metadata=meta)
+    pstore.register(rec)
+    return rec.id
+
+
+def test_managed_create_no_project_yields_off(isolated_stores) -> None:
+    m, _p = isolated_stores
+    create_mission_after_managed_launch(
+        mission_handling="managed",
+        launch_response={"id": "ag-no-proj-1"},
+        body_repository="https://github.com/o/r",
+        body_ref="main",
+        body_branch_name=None,
+        project_id=None,
+    )
+    row = m.find_by_cursor_agent_id("ag-no-proj-1")
+    assert row is not None
+    assert row.mission_deploy_approval_mode == "off"
+
+
+def test_managed_create_invalid_project_metadata_default_yields_off(
+    isolated_stores, tmp_path: Path
+) -> None:
+    m, p = isolated_stores
+    pid = _register_project(
+        p, name="pbad", root=tmp_path / "rbad", default_mode="not-a-mode"
+    )
+    create_mission_after_managed_launch(
+        mission_handling="managed",
+        launch_response={"id": "ag-bad-meta-1"},
+        body_repository="https://github.com/o/r",
+        body_ref=None,
+        body_branch_name=None,
+        project_id=pid,
+    )
+    row = m.find_by_cursor_agent_id("ag-bad-meta-1")
+    assert row is not None
+    assert row.mission_deploy_approval_mode == "off"
+
+
+def test_managed_create_unknown_project_id_yields_off(isolated_stores) -> None:
+    m, _p = isolated_stores
+    create_mission_after_managed_launch(
+        mission_handling="managed",
+        launch_response={"id": "ag-bad-pid-1"},
+        body_repository="https://github.com/o/r",
+        body_ref="main",
+        body_branch_name=None,
+        project_id="project.unknown-ffffff",
+    )
+    row = m.find_by_cursor_agent_id("ag-bad-pid-1")
+    assert row is not None
+    assert row.mission_deploy_approval_mode == "off"
+
+
+def test_managed_create_inherits_project_default_audit(isolated_stores, tmp_path: Path) -> None:
+    m, p = isolated_stores
+    pid = _register_project(
+        p, name="p1", root=tmp_path / "repo-a", default_mode="audit"
+    )
+    create_mission_after_managed_launch(
+        mission_handling="managed",
+        launch_response={"id": "ag-audit-1"},
+        body_repository="https://github.com/o/r",
+        body_ref="main",
+        body_branch_name=None,
+        project_id=pid,
+    )
+    row = m.find_by_cursor_agent_id("ag-audit-1")
+    assert row is not None
+    assert row.mission_deploy_approval_mode == "audit"
+
+
+def test_managed_create_inherits_soft_and_hard(isolated_stores, tmp_path: Path) -> None:
+    m, p = isolated_stores
+    pid_soft = _register_project(
+        p, name="p-soft", root=tmp_path / "rs", default_mode="soft"
+    )
+    create_mission_after_managed_launch(
+        mission_handling="managed",
+        launch_response={"id": "ag-soft-1"},
+        body_repository="https://github.com/o/r",
+        body_ref=None,
+        body_branch_name=None,
+        project_id=pid_soft,
+    )
+    s = m.find_by_cursor_agent_id("ag-soft-1")
+    assert s is not None
+    assert s.mission_deploy_approval_mode == "soft"
+
+    pid_hard = _register_project(
+        p, name="p-hard", root=tmp_path / "rh", default_mode="hard"
+    )
+    create_mission_after_managed_launch(
+        mission_handling="managed",
+        launch_response={"id": "ag-hard-1"},
+        body_repository="https://github.com/o/r2",
+        body_ref=None,
+        body_branch_name=None,
+        project_id=pid_hard,
+    )
+    h = m.find_by_cursor_agent_id("ag-hard-1")
+    assert h is not None
+    assert h.mission_deploy_approval_mode == "hard"
+
+
+def test_changing_project_default_after_create_does_not_mutate_mission(
+    isolated_stores, tmp_path: Path
+) -> None:
+    m, p = isolated_stores
+    rdir = tmp_path / "rmut"
+    pid = _register_project(p, name="pmut", root=rdir, default_mode="audit")
+    create_mission_after_managed_launch(
+        mission_handling="managed",
+        launch_response={"id": "ag-mut-1"},
+        body_repository="https://github.com/o/r",
+        body_ref="main",
+        body_branch_name=None,
+        project_id=pid,
+    )
+    rec = p.get_project(pid)
+    assert rec is not None
+    p.register(rec.model_copy(update={"metadata": {**rec.metadata, "default_deploy_approval_mode": "hard"}}))
+    row = m.find_by_cursor_agent_id("ag-mut-1")
+    assert row is not None
+    assert row.mission_deploy_approval_mode == "audit"
+    m2 = m.get(row.mission_registry_id)
+    assert m2 is not None
+    assert m2.mission_deploy_approval_mode == "audit"
+
+
+def test_legacy_mission_json_without_approval_mode_loads_as_off(tmp_path: Path) -> None:
+    st = ManagedMissionStore(base_dir=tmp_path)
+    mid = new_mission_registry_id()
+    n = utc_now_iso()
+    raw = {
+        "mission_registry_id": mid,
+        "cursor_agent_id": "leg-z",
+        "control_plane_ham_run_id": None,
+        "mission_handling": "managed",
+        "uplink_id": None,
+        "repo_key": "a/b",
+        "repository_observed": None,
+        "ref_observed": None,
+        "branch_name_launch": None,
+        "mission_lifecycle": "open",
+        "cursor_status_last_observed": None,
+        "status_reason_last_observed": "x",
+        "created_at": n,
+        "updated_at": n,
+        "last_server_observed_at": n,
+    }
+    (st.base_path / f"{mid}.json").write_text(json.dumps(raw), encoding="utf-8")
+    got = st.get(mid)
+    assert got is not None
+    assert got.mission_deploy_approval_mode == "off"
+
+
+def test_non_managed_launch_does_not_create_mission(isolated_stores) -> None:
+    m, _p = isolated_stores
+    create_mission_after_managed_launch(
+        mission_handling="direct",
+        launch_response={"id": "ag-dir-1"},
+        body_repository="https://github.com/o/r",
+        body_ref="main",
+        body_branch_name=None,
+        project_id="any-project",
+    )
+    assert m.find_by_cursor_agent_id("ag-dir-1") is None
 
 
 def test_missions_list_api(client: TestClient) -> None:

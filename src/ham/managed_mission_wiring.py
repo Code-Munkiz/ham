@@ -7,6 +7,10 @@ from __future__ import annotations
 from typing import Any, Literal, Mapping
 
 from src.ham.cursor_agent_workflow import summarize_cursor_agent_payload
+from src.ham.managed_deploy_approval_policy import (
+    ManagedDeployApprovalMode,
+    mission_deploy_approval_mode_from_project_metadata,
+)
 from src.persistence.control_plane_run import ControlPlaneRunStore, utc_now_iso
 from src.persistence.managed_mission import (
     ManagedMission,
@@ -14,6 +18,7 @@ from src.persistence.managed_mission import (
     map_cursor_to_mission_lifecycle,
     new_mission_registry_id,
 )
+from src.persistence.project_store import get_project_store
 
 MissionHandling = Literal["direct", "managed"] | None
 
@@ -40,6 +45,25 @@ def _repo_key_for_launch(repository: str) -> str | None:
     return s[:500]
 
 
+def resolve_mission_deploy_approval_mode_at_managed_create(
+    project_id: str | None,
+) -> ManagedDeployApprovalMode:
+    """
+    Mission-level deploy approval mode at managed create: project default if resolvable and valid, else ``off``.
+    Never raises.
+    """
+    pid = str(project_id).strip() if project_id else ""
+    if not pid:
+        return "off"
+    try:
+        rec = get_project_store().get_project(pid)
+    except (OSError, ValueError, TypeError):
+        return "off"
+    if rec is None:
+        return "off"
+    return mission_deploy_approval_mode_from_project_metadata(rec.metadata)
+
+
 def try_control_plane_ham_run_id(*, agent_id: str) -> str | None:
     if not agent_id.strip():
         return None
@@ -63,6 +87,7 @@ def create_mission_after_managed_launch(
     body_ref: str | None,
     body_branch_name: str | None,
     uplink_id: str | None = None,
+    project_id: str | None = None,
 ) -> None:
     if mission_handling != "managed":
         return
@@ -78,11 +103,13 @@ def create_mission_after_managed_launch(
     n = utc_now_iso()
     cp_link = try_control_plane_ham_run_id(agent_id=agent_id)
     ulink = str(uplink_id).strip() if uplink_id else None
+    approval_mode = resolve_mission_deploy_approval_mode_at_managed_create(project_id)
     m = ManagedMission(
         mission_registry_id=new_mission_registry_id(),
         cursor_agent_id=agent_id,
         control_plane_ham_run_id=cp_link,
         mission_handling="managed",
+        mission_deploy_approval_mode=approval_mode,
         uplink_id=ulink,
         repo_key=_repo_key_for_launch(body_repository),
         repository_observed=body_repository.strip()[:500] if body_repository else None,

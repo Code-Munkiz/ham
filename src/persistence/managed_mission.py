@@ -15,8 +15,12 @@ import uuid
 from pathlib import Path
 from typing import Any, Literal, cast
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator
 
+from src.ham.managed_deploy_approval_policy import (
+    ManagedDeployApprovalMode,
+    normalize_mission_deploy_approval_mode,
+)
 from src.persistence.control_plane_run import map_cursor_raw_status, utc_now_iso
 
 _MAX_SHORT = 512
@@ -86,6 +90,8 @@ class ManagedMission(BaseModel):
 
     # Context (observed or launch-time; may be null if unknown)
     mission_handling: Literal["managed"] = "managed"
+    # Create-time snapshot of project default deploy approval mode (managed missions only). Legacy JSON omits → ``off``.
+    mission_deploy_approval_mode: ManagedDeployApprovalMode = "off"
     uplink_id: str | None = None
     repo_key: str | None = None
     repository_observed: str | None = None
@@ -158,6 +164,11 @@ class ManagedMission(BaseModel):
         if s in ("open", "succeeded", "failed", "archived"):
             return cast(MissionLifecycle, s)
         return "open"
+
+    @field_validator("mission_deploy_approval_mode", mode="before")
+    @classmethod
+    def _v_mission_deploy_approval_mode(cls, v: object) -> ManagedDeployApprovalMode:
+        return normalize_mission_deploy_approval_mode(v)
 
 
 def _json_ready(obj: object) -> Any:

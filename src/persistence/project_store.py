@@ -106,3 +106,20 @@ class ProjectStore:
         tmp = self._path.with_suffix(".json.tmp")
         tmp.write_text(payload, encoding="utf-8")
         os.replace(tmp, self._path)
+
+
+# Process-wide registry (tests may replace via :func:`set_project_store_for_tests`).
+_store_singleton: ProjectStore | None = None
+
+
+def get_project_store() -> ProjectStore:
+    global _store_singleton
+    if _store_singleton is None:
+        _store_singleton = ProjectStore()
+    return _store_singleton
+
+
+def set_project_store_for_tests(store: ProjectStore | None) -> None:
+    """Replace the global :class:`ProjectStore` (``None`` restores lazy default)."""
+    global _store_singleton
+    _store_singleton = store

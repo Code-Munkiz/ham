@@ -2033,6 +2033,7 @@ function ChatPageInner({
         recentMissions={recentMissions}
         onRemoveRecent={removeRecentMission}
         mountDefaults={mountDefaultsForLaunch}
+        projectId={projectId}
       />
     </div>
     </ManagedCloudAgentProvider>

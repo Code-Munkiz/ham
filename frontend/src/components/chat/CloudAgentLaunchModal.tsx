@@ -29,6 +29,8 @@ export interface CloudAgentLaunchModalProps {
   recentMissions: RecentCloudMission[];
   onRemoveRecent: (id: string) => void;
   mountDefaults?: { repository: string; ref: string };
+  /** When the chat workspace is bound to a HAM project, pass for managed mission deploy policy snapshot. */
+  projectId?: string | null;
 }
 
 export function CloudAgentLaunchModal({
@@ -39,6 +41,7 @@ export function CloudAgentLaunchModal({
   recentMissions,
   onRemoveRecent,
   mountDefaults,
+  projectId = null,
 }: CloudAgentLaunchModalProps) {
   const [missionHandling, setMissionHandling] = React.useState<CloudMissionHandling>("direct");
   const [manualId, setManualId] = React.useState("");
@@ -136,6 +139,7 @@ export function CloudAgentLaunchModal({
         auto_create_pr: autoCreatePr,
         branch_name: branchName.trim() || undefined,
         mission_handling: missionHandling,
+        project_id: projectId?.trim() || undefined,
       });
       const newId = cloudAgentIdFromLaunchResponse(payload);
       if (!newId) {

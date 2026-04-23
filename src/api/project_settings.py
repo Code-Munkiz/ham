@@ -47,7 +47,7 @@ class RollbackRequest(BaseModel):
 
 
 def _get_project_root(project_id: str) -> str:
-    from src.api.server import get_project_store
+    from src.persistence.project_store import get_project_store
 
     store = get_project_store()
     record = store.get_project(project_id)

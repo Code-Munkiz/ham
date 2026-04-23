@@ -4,6 +4,7 @@ import { Loader2, Package, ScrollText } from "lucide-react";
 import {
   fetchCursorAgent,
   fetchCursorAgentConversation,
+  fetchManagedMissionForAgent,
   fetchVercelManagedDeployStatus,
   fetchVercelPostDeployValidation,
   type PostDeployValidationState,
@@ -158,6 +159,7 @@ export function CloudAgentPanel({
   const [postDeployErr, setPostDeployErr] = React.useState<string | null>(null);
   const [postDeployLoading, setPostDeployLoading] = React.useState(false);
   const [postDeployRecheckBusy, setPostDeployRecheckBusy] = React.useState(false);
+  const [missionDeployStamp, setMissionDeployStamp] = React.useState<string | null>(null);
 
   const transcriptLines: CursorTranscriptLine[] = React.useMemo(
     () => parseCursorConversationToLines(convPayload),
@@ -247,6 +249,24 @@ export function CloudAgentPanel({
       cancelled = true;
     };
   }, [hasAgent, tabId, activeCloudAgentId]);
+
+  /** Mission-stamped deploy approval mode (server registry snapshot at managed create; Overview). */
+  React.useEffect(() => {
+    if (!isManaged || !activeCloudAgentId?.trim() || tabId !== "overview") {
+      setMissionDeployStamp(null);
+      return;
+    }
+    let cancelled = false;
+    const id = activeCloudAgentId.trim();
+    void fetchManagedMissionForAgent(id).then((row) => {
+      if (cancelled) return;
+      const m = row?.mission_deploy_approval_mode;
+      setMissionDeployStamp(typeof m === "string" && m.trim() ? m.trim() : null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isManaged, tabId, activeCloudAgentId]);
 
   /** Server-side Vercel deployment truth (Managed → Overview only). */
   React.useEffect(() => {
@@ -524,6 +544,12 @@ export function CloudAgentPanel({
                 Live summary from HAM&rsquo;s Cursor API poll&mdash;rules-based review and deploy notes below. Use
                 Transcript and Tracker for the full payloads.
               </p>
+              {missionDeployStamp ? (
+                <p className="text-[11px] leading-[1.45] text-white/55">
+                  <span className="text-white/35">Deploy approval snapshot (at mission create): </span>
+                  <span className="font-mono text-cyan-200/90">{missionDeployStamp}</span>
+                </p>
+              ) : null}
               {managedPollPending && !managedViewSnapshot && !managedPollError ? (
                 <p className="text-[13px] font-medium text-white/50 uppercase tracking-[0.02em] leading-[1.6]">
                   Loading mission status from Cursor…

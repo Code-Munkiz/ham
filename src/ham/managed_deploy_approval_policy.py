@@ -8,12 +8,37 @@ Operator-first deploy **approval policy** for managed Cloud Agent missions (Verc
 from __future__ import annotations
 
 import os
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal, Mapping
 
 if TYPE_CHECKING:
     from src.persistence.managed_deploy_approval import ManagedDeployApproval
 
 ManagedDeployApprovalMode = Literal["off", "audit", "soft", "hard"]
+
+# Same key as project registry metadata (`PATCH /api/projects/{id}`) and `server.py` patch validation.
+DEFAULT_DEPLOY_APPROVAL_MODE_METADATA_KEY = "default_deploy_approval_mode"
+_VALID_MISSION_MODES = frozenset({"off", "audit", "soft", "hard"})
+
+
+def normalize_mission_deploy_approval_mode(raw: object | None) -> ManagedDeployApprovalMode:
+    """Coerce stored / legacy values to a known mode; unknown → ``off`` (never raises)."""
+    if raw is None:
+        return "off"
+    s = str(raw).strip().lower()
+    if s in _VALID_MISSION_MODES:
+        return s  # type: ignore[return-value]
+    return "off"
+
+
+def mission_deploy_approval_mode_from_project_metadata(
+    metadata: Mapping[str, Any] | None,
+) -> ManagedDeployApprovalMode:
+    """Read project default from registry metadata; missing / invalid → ``off``."""
+    if not metadata:
+        return "off"
+    return normalize_mission_deploy_approval_mode(
+        metadata.get(DEFAULT_DEPLOY_APPROVAL_MODE_METADATA_KEY),
+    )
 
 
 def managed_deploy_approval_mode() -> ManagedDeployApprovalMode:

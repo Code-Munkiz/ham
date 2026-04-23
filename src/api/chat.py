@@ -326,7 +326,7 @@ def _resolve_openrouter_model_override(body: ChatRequest) -> str | None:
 def _resolve_project_root_for_chat(project_id: str | None) -> Path | None:
     if not project_id or not str(project_id).strip():
         return None
-    from src.api.server import get_project_store
+    from src.persistence.project_store import get_project_store
 
     rec = get_project_store().get_project(project_id.strip())
     if rec is None:
@@ -460,7 +460,7 @@ async def post_chat(
     store = _chat_store
     sid, llm_messages, or_override, active_meta = _messages_for_completion(body)
     if body.enable_operator and operator_enabled() and body.messages[-1].role == "user":
-        from src.api.server import get_project_store
+        from src.persistence.project_store import get_project_store
 
         op = process_operator_turn(
             user_text=body.messages[-1].content,
@@ -533,7 +533,7 @@ def post_chat_stream(
     sid, llm_messages, or_override, stream_active_meta = _messages_for_completion(body)
 
     if body.enable_operator and operator_enabled() and body.messages[-1].role == "user":
-        from src.api.server import get_project_store
+        from src.persistence.project_store import get_project_store
 
         op = process_operator_turn(
             user_text=body.messages[-1].content,

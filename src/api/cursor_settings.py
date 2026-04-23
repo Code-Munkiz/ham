@@ -72,6 +72,14 @@ class LaunchCloudAgentBody(BaseModel):
         max_length=256,
         description="Optional Ham-side correlation id (not sent to Cursor).",
     )
+    project_id: str | None = Field(
+        default=None,
+        max_length=256,
+        description=(
+            "Optional registered HAM project id (not sent to Cursor). "
+            "When set, managed missions snapshot deploy approval default from project metadata."
+        ),
+    )
 
 
 def _require_cursor_key() -> str:
@@ -297,6 +305,7 @@ async def cursor_launch_agent(body: LaunchCloudAgentBody) -> dict[str, Any]:
             body_ref=body.ref,
             body_branch_name=body.branch_name,
             uplink_id=body.uplink_id,
+            project_id=body.project_id,
         )
     except (OSError, ValueError, TypeError) as exc:
         _LOG.warning("cursor.managed_mission.create_failed", extra={"err": str(exc)[:200]})
