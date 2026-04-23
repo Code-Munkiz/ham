@@ -1456,6 +1456,25 @@ export async function listHamProjects(): Promise<{ projects: ProjectRecord[] }> 
   return res.json() as Promise<{ projects: ProjectRecord[] }>;
 }
 
+/**
+ * Shallow-merges into `ProjectRecord.metadata` (PATCH). Send `null` for a value to remove that key.
+ */
+export async function patchHamProjectMetadata(
+  projectId: string,
+  metadata: Record<string, unknown | null>,
+): Promise<ProjectRecord> {
+  const res = await hamApiFetch(`/api/projects/${encodeURIComponent(projectId)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ metadata }),
+  });
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(`patch project (HTTP ${res.status}): ${t}`);
+  }
+  return res.json() as Promise<ProjectRecord>;
+}
+
 export async function registerHamProject(body: {
   name: string;
   root: string;

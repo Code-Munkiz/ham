@@ -291,6 +291,46 @@ async def get_project(
     return record.model_dump()
 
 
+_DEFAULT_DEPLOY_APPROVAL_MODE_KEY = "default_deploy_approval_mode"
+_DEFAULT_DEPLOY_APPROVAL_MODE_VALS = frozenset({"off", "audit", "soft", "hard"})
+
+
+class PatchProjectRequest(BaseModel):
+    """Shallow merge into ``ProjectRecord.metadata``. Use JSON ``null`` for a key to remove it."""
+
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+@app.patch("/api/projects/{project_id}")
+async def patch_project(
+    project_id: str,
+    body: PatchProjectRequest,
+    _ham_gate: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
+) -> dict:
+    record = _projects.get_project(project_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail=f"Project {project_id!r} not found")
+    if _DEFAULT_DEPLOY_APPROVAL_MODE_KEY in body.metadata:
+        v = body.metadata[_DEFAULT_DEPLOY_APPROVAL_MODE_KEY]
+        if v is not None and v not in _DEFAULT_DEPLOY_APPROVAL_MODE_VALS:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"metadata.{_DEFAULT_DEPLOY_APPROVAL_MODE_KEY} must be one of "
+                    f"{sorted(_DEFAULT_DEPLOY_APPROVAL_MODE_VALS)} or null"
+                ),
+            )
+    merged = {**record.metadata}
+    for k, v in body.metadata.items():
+        if v is None:
+            merged.pop(k, None)
+        else:
+            merged[k] = v
+    updated = record.model_copy(update={"metadata": merged})
+    _projects.register(updated)
+    return updated.model_dump()
+
+
 @app.delete("/api/projects/{project_id}", status_code=204)
 async def remove_project(
     project_id: str,

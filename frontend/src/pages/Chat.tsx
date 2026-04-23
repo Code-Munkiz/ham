@@ -21,7 +21,6 @@ import {
   Mic,
   MessageSquare,
   Plus,
-  Folder,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
@@ -45,6 +44,7 @@ import {
   postManagedDeployApprovalDecision,
   type VercelHookMapping,
   listHamProjects,
+  patchHamProjectMetadata,
   HamAccessRestrictedError,
   postChatStream,
   postManagedDeployHook,
@@ -67,7 +67,10 @@ import type {
   ManagedDeployHandoffState,
   ManagedMissionReview,
   ModelCatalogPayload,
+  ProjectRecord,
 } from "@/lib/ham/types";
+import { PROJECT_DEFAULT_DEPLOY_APPROVAL_KEY, type ProjectDefaultDeployPolicy } from "@/lib/ham/projectDeployPolicy";
+import { ProjectsRegistryPanel } from "@/components/chat/ProjectsRegistryPanel";
 import { ManagedCloudAgentProvider } from "@/contexts/ManagedCloudAgentContext";
 import { useManagedCloudAgentPoll } from "@/hooks/useManagedCloudAgentPoll";
 import { isDashboardChatGatewayReady } from "@/lib/ham/types";
@@ -371,7 +374,7 @@ function ChatPageInner({
   /** Id last set by `activateCloudMission` or restored on load — not live typing in Projects. */
   const lastCommittedCloudAgentIdRef = React.useRef<string | null>(null);
   const [recentMissions, setRecentMissions] = React.useState<RecentMission[]>([]);
-  const [hamProjects, setHamProjects] = React.useState<{ id: string; name: string; root: string }[]>([]);
+  const [hamProjects, setHamProjects] = React.useState<ProjectRecord[]>([]);
   const [projectsLoading, setProjectsLoading] = React.useState(false);
   const [warBlink, setWarBlink] = React.useState(true);
   const [reduceMotion, setReduceMotion] = React.useState(false);
@@ -605,9 +608,7 @@ function ChatPageInner({
     void listHamProjects()
       .then((r) => {
         if (!cancelled) {
-          setHamProjects(
-            r.projects.map((p) => ({ id: p.id, name: p.name ?? p.id, root: p.root })),
-          );
+          setHamProjects(r.projects);
         }
       })
       .catch(() => {
@@ -620,6 +621,39 @@ function ChatPageInner({
       cancelled = true;
     };
   }, [projectsOpen]);
+
+  const persistProjectMount = React.useCallback(() => {
+    try {
+      localStorage.setItem(
+        MOUNT_STORAGE_KEY,
+        JSON.stringify({ repository: mountRepo.trim(), ref: mountRef.trim() }),
+      );
+    } catch {
+      /* ignore */
+    }
+  }, [mountRepo, mountRef]);
+
+  const closeProjectsPanel = React.useCallback(() => {
+    persistProjectMount();
+    setProjectsOpen(false);
+  }, [persistProjectMount]);
+
+  const onUpdateProjectDefaultPolicy = React.useCallback(
+    async (projectId: string, policy: ProjectDefaultDeployPolicy) => {
+      try {
+        const updated = await patchHamProjectMetadata(projectId, {
+          [PROJECT_DEFAULT_DEPLOY_APPROVAL_KEY]: policy,
+        });
+        setHamProjects((prev) => prev.map((p) => (p.id === projectId ? updated : p)));
+        toast.success("Saved project default deploy policy");
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Update failed";
+        toast.error(msg);
+        throw e;
+      }
+    },
+    [],
+  );
 
   React.useEffect(() => {
     let cancelled = false;
@@ -1957,161 +1991,37 @@ function ChatPageInner({
             type="button"
             aria-label="Close projects"
             className="flex-1 bg-black/70 backdrop-blur-xl"
-            onClick={() => {
-              try {
-                localStorage.setItem(
-                  MOUNT_STORAGE_KEY,
-                  JSON.stringify({ repository: mountRepo.trim(), ref: mountRef.trim() }),
-                );
-              } catch {
-                /* ignore */
-              }
-              setProjectsOpen(false);
-            }}
+            onClick={closeProjectsPanel}
           />
-          <div className="flex h-full w-full max-w-md flex-col border-l border-white/10 bg-[#0a0a0a]/95 text-white shadow-2xl backdrop-blur-xl">
-            <div className="shrink-0 space-y-0.5 border-b border-white/10 px-4 py-3">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#BC13FE]">
-                  Projects registry
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    try {
-                      localStorage.setItem(
-                        MOUNT_STORAGE_KEY,
-                        JSON.stringify({ repository: mountRepo.trim(), ref: mountRef.trim() }),
-                      );
-                    } catch {
-                      /* ignore */
-                    }
-                    setProjectsOpen(false);
-                  }}
-                  className="p-1.5 text-white/40 hover:text-white"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-              <p className="pr-6 text-[9px] leading-relaxed text-white/32">
-                Defaults for chat + Cloud bind. Use <span className="text-white/45">History</span> for server mission
-                archive.
-              </p>
-            </div>
-            <div className="min-h-0 flex-1 space-y-0 overflow-y-auto [scrollbar-gutter:stable]">
-              <div className="p-4 pb-2">
-                <p className="text-[8px] font-black uppercase tracking-widest text-white/30">Connect &amp; mount</p>
-                <p className="mt-0.5 text-[9px] text-white/25">Repository context for the workspace; saved with the panel.</p>
-                <div className="mt-2 rounded-lg border border-white/8 bg-white/[0.02] p-3">
-                  <label className="text-[8px] font-bold uppercase tracking-wider text-white/30">Repository URL</label>
-                  <input
-                    value={mountRepo}
-                    onChange={(e) => setMountRepo(e.target.value)}
-                    placeholder="https://github.com/org/repo"
-                    className="mb-2 mt-1 w-full border border-white/10 bg-black/50 px-2.5 py-2 text-[11px] text-white/90 outline-none focus:border-[#FF6B00]/40"
-                  />
-                  <label className="text-[8px] font-bold uppercase tracking-wider text-white/30">Ref</label>
-                  <input
-                    value={mountRef}
-                    onChange={(e) => setMountRef(e.target.value)}
-                    placeholder="main"
-                    className="mt-1 w-full border border-white/10 bg-black/50 px-2.5 py-2 text-[11px] text-white/90 outline-none focus:border-[#FF6B00]/40"
-                  />
-                </div>
-              </div>
-              <div className="border-t border-white/[0.06] px-4 py-3">
-                <p className="text-[8px] font-black uppercase tracking-widest text-white/30">Active mission (Cloud)</p>
-                <p className="mt-0.5 text-[9px] text-white/25">
-                  Binds the right execution pane. Clear to disconnect, or use Launch in the bar.
-                </p>
-                <input
-                  value={activeCloudAgentId ?? ""}
-                  onChange={(e) => setActiveCloudAgentIdLive(e.target.value.trim() || null)}
-                  onBlur={(e) => {
-                    const v = e.target.value.trim();
-                    if (v) {
-                      activateCloudMission(v, { managedSplit: { kind: "existing" } });
-                    }
-                  }}
-                  placeholder="Cursor agent id…"
-                  className="mt-2 w-full rounded border border-white/8 bg-black/50 px-2.5 py-2 font-mono text-[11px] text-white/90 outline-none focus:border-[#FF6B00]/40"
-                />
-              </div>
-              <div className="border-t border-white/[0.06] px-4 py-3">
-                <div className="flex items-center gap-2 text-[#BC13FE]/90">
-                  <Folder className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                  <p className="text-[8px] font-black uppercase tracking-widest">Server registry</p>
-                </div>
-                <p className="mt-0.5 text-[9px] text-white/25">From this API&rsquo;s HAM project list (read-only here).</p>
-                {projectsLoading ? (
-                  <p className="mt-2 text-[10px] text-white/30">Loading…</p>
-                ) : hamProjects.length === 0 ? (
-                  <p className="mt-2 text-[10px] text-white/25">No projects on this host.</p>
-                ) : (
-                  <ul className="mt-2 space-y-1.5">
-                    {hamProjects.map((p) => (
-                      <li
-                        key={p.id}
-                        className="rounded-md border border-white/8 bg-black/25 px-2.5 py-2"
-                        title={p.root}
-                      >
-                        <p className="text-[12px] font-bold leading-tight text-white/85">{p.name}</p>
-                        <p className="mt-0.5 font-mono text-[9px] text-white/25">{p.id}</p>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-              <div className="border-t border-white/[0.06] px-4 py-3 pb-6">
-                <p className="text-[8px] font-black uppercase tracking-widest text-white/30">This browser — shortcuts</p>
-                <p className="mt-0.5 text-[9px] text-white/22">
-                  Recent agent ids on this device only. For authoritative missions, use{" "}
-                  <span className="text-white/40">History → Managed missions</span>.
-                </p>
-                {recentMissions.length === 0 ? (
-                  <p className="mt-2 text-[10px] text-white/25">None yet; Launch or &ldquo;Use&rdquo; will add entries.</p>
-                ) : (
-                  <ul className="mt-2 space-y-1.5">
-                    {[...recentMissions]
-                      .sort((a, b) => b.t - a.t)
-                      .map((m) => {
-                        const isActive = (activeCloudAgentId ?? "").trim() === m.id.trim();
-                        return (
-                          <li
-                            key={m.id}
-                            className="flex items-stretch justify-between gap-2 rounded-md border border-white/8 bg-white/[0.02] pl-2.5"
-                          >
-                            <div className="min-w-0 flex-1 py-2 pr-0">
-                              <p className="font-mono text-[10px] font-medium leading-snug text-[#00E5FF]/90">
-                                {m.id.length > 20 ? `${m.id.slice(0, 8)}…${m.id.slice(-6)}` : m.id}
-                              </p>
-                              {m.label ? (
-                                <p className="mt-0.5 truncate text-[9px] text-white/40">{m.label}</p>
-                              ) : null}
-                              <p className="mt-0.5 text-[8px] text-white/20">{formatShortcutAge(m.t)}</p>
-                            </div>
-                            <div className="flex shrink-0 flex-col items-stretch justify-center border-l border-white/8">
-                              {isActive ? (
-                                <span className="self-center px-1.5 text-[7px] font-black uppercase tracking-widest text-emerald-400/80">
-                                  Active
-                                </span>
-                              ) : null}
-                              <button
-                                type="button"
-                                className="px-2.5 py-2 text-[8px] font-black uppercase tracking-widest text-[#FF6B00] transition-colors hover:bg-white/5 hover:text-white"
-                                onClick={() => activateCloudMission(m.id, { managedSplit: { kind: "existing" } })}
-                              >
-                                Use
-                              </button>
-                            </div>
-                          </li>
-                        );
-                      })}
-                  </ul>
-                )}
-              </div>
-            </div>
-          </div>
+          <ProjectsRegistryPanel
+            mountRepo={mountRepo}
+            setMountRepo={setMountRepo}
+            mountRef={mountRef}
+            setMountRef={setMountRef}
+            activeCloudAgentId={activeCloudAgentId}
+            setActiveCloudAgentIdLive={setActiveCloudAgentIdLive}
+            onActiveMissionBlurCommit={(trimmed) => {
+              if (trimmed) {
+                activateCloudMission(trimmed, { managedSplit: { kind: "existing" } });
+              }
+            }}
+            recentMissions={recentMissions}
+            formatShortcutAge={formatShortcutAge}
+            onShortcutUse={(id) => activateCloudMission(id, { managedSplit: { kind: "existing" } })}
+            projects={hamProjects}
+            projectsLoading={projectsLoading}
+            onOpenActivity={() => {
+              closeProjectsPanel();
+              navigate("/activity");
+            }}
+            onBindProject={(pid) => {
+              setProjectId(pid);
+              closeProjectsPanel();
+            }}
+            onUpdateProjectDefaultPolicy={onUpdateProjectDefaultPolicy}
+            activeCloudAgentIdForShortcut={activeCloudAgentId}
+            onClose={closeProjectsPanel}
+          />
         </div>
       ) : null}
 
