@@ -17,14 +17,14 @@ export type DesktopDownloadCta = {
   subtext?: string;
 };
 
-/** Linux artifact: GitHub Release `desktop-v0.1.0` (AppImage x64). */
+/** Linux artifact: GitHub Release `desktop-v0.1.1` (AppImage x64). */
 export const HAM_DESKTOP_DOWNLOAD_CTAS: DesktopDownloadCta[] = [
   {
     platform: "linux",
     label: "Linux",
-    href: "https://github.com/Code-Munkiz/ham/releases/download/desktop-v0.1.0/HAM.Desktop-0.1.0.AppImage",
+    href: "https://github.com/Code-Munkiz/ham/releases/download/desktop-v0.1.1/HAM.Desktop-0.1.1.AppImage",
     available: true,
-    subtext: "AppImage · x64",
+    subtext: "AppImage · x64 · v0.1.1",
   },
   {
     platform: "windows",
