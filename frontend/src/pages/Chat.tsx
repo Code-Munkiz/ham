@@ -52,6 +52,7 @@ import {
   type ManagedDeployHookResult,
   type HamChatStreamAuth,
   type HamOperatorResult,
+  type HamChatOperatorPayload,
   type ChatSessionSummary,
 } from "@/lib/ham/api";
 import {
@@ -335,6 +336,7 @@ function ChatPageInner({
   const [activeAgentNote, setActiveAgentNote] = React.useState<string | null>(null);
   const SETTINGS_OP_KEY = "ham_operator_settings_token";
   const LAUNCH_OP_KEY = "ham_operator_launch_token";
+  const CURSOR_AGENT_OP_KEY = "ham_cursor_agent_launch_token";
   const [operatorSettingsToken, setOperatorSettingsToken] = React.useState(() =>
     typeof sessionStorage !== "undefined"
       ? sessionStorage.getItem(SETTINGS_OP_KEY) ?? ""
@@ -342,6 +344,9 @@ function ChatPageInner({
   );
   const [operatorLaunchToken, setOperatorLaunchToken] = React.useState(() =>
     typeof sessionStorage !== "undefined" ? sessionStorage.getItem(LAUNCH_OP_KEY) ?? "" : "",
+  );
+  const [operatorCursorAgentToken, setOperatorCursorAgentToken] = React.useState(() =>
+    typeof sessionStorage !== "undefined" ? sessionStorage.getItem(CURSOR_AGENT_OP_KEY) ?? "" : "",
   );
   const [pendingApply, setPendingApply] = React.useState<Record<string, unknown> | null>(
     null,
@@ -353,6 +358,13 @@ function ChatPageInner({
     string,
     unknown
   > | null>(null);
+  const [pendingCursorAgent, setPendingCursorAgent] = React.useState<Record<string, unknown> | null>(
+    null,
+  );
+  const [caTask, setCaTask] = React.useState("");
+  const [caRepo, setCaRepo] = React.useState("");
+  const [caRef, setCaRef] = React.useState("");
+  const [caMission, setCaMission] = React.useState<"direct" | "managed">("managed");
   /** Primary HAM profile from Agent Builder (avatar + name in transcript). */
   const [primaryPersona, setPrimaryPersona] = React.useState<{
     name: string;
@@ -1160,6 +1172,11 @@ function ChatPageInner({
     } else if (op.intent === "register_project" && op.ok) {
       setPendingRegister(null);
     }
+    if (op.pending_cursor_agent) {
+      setPendingCursorAgent(op.pending_cursor_agent as Record<string, unknown>);
+    } else if (op.intent === "cursor_agent_launch" && op.ok) {
+      setPendingCursorAgent(null);
+    }
   }, []);
 
   const runOperatorConfirm = async (opts: {
@@ -1259,6 +1276,128 @@ function ChatPageInner({
       ) {
         // Stream dropped mid-response — partial content is already in messages
         // state via onDelta. Don't clear it; the backend persists partial turns.
+        const msg =
+          "Response was interrupted — your partial message has been saved.";
+        setChatError(msg);
+        toast.error(msg, { duration: 8_000, id: "ham-stream-interrupted" });
+      } else {
+        const msg = err instanceof Error ? err.message : "Request failed";
+        setChatError(msg);
+        toast.error(msg, { duration: 8_000 });
+      }
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const runOperatorPayloadStream = async (opts: {
+    messages: { role: "user" | "assistant" | "system"; content: string }[];
+    operator: HamChatOperatorPayload;
+    /** Set for `cursor_agent_launch` and other operator writes that require `HAM_*` on `X-Ham-Operator-Authorization` when Clerk owns `Authorization`. */
+    hamOperatorToken?: string;
+  }) => {
+    if (opts.operator.phase === "cursor_agent_launch" && !opts.hamOperatorToken?.trim()) {
+      toast.error("Paste HAM_CURSOR_AGENT_LAUNCH_TOKEN to launch.");
+      return;
+    }
+    setChatError(null);
+    setSending(true);
+    const userRow: ChatRow = {
+      id: `pending-user-${Date.now()}`,
+      role: "user",
+      content: opts.messages[0]?.content ?? "[operator]",
+      timestamp: timeStr(),
+    };
+    const assistantPlaceId = `assist-pending-${Date.now()}`;
+    const assistantRow: ChatRow = {
+      id: assistantPlaceId,
+      role: "assistant",
+      content: "",
+      timestamp: timeStr(),
+    };
+    setMessages((prev) => [...prev, userRow, assistantRow]);
+    setViewMode("chat");
+    try {
+      let streamAuth: HamChatStreamAuth | undefined;
+      if (opts.hamOperatorToken?.trim()) {
+        const h = opts.hamOperatorToken.trim();
+        streamAuth = clerkEnabled
+          ? { sessionToken: await getClerkSessionToken(), hamOperatorToken: h }
+          : h;
+      } else {
+        streamAuth = clerkEnabled ? { sessionToken: await getClerkSessionToken() } : undefined;
+      }
+      const res = await postChatStream(
+        {
+          session_id: sessionId ?? undefined,
+          messages: opts.messages,
+          ...(modelId ? { model_id: modelId } : {}),
+          ...(projectId ? { project_id: projectId } : {}),
+          workbench_mode: workbenchMode,
+          worker,
+          max_mode: maxMode,
+          operator: opts.operator,
+        },
+        {
+          onSession: (sid) => setSessionId(sid),
+          onDelta: (delta) => {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantPlaceId ? { ...m, content: m.content + delta } : m,
+              ),
+            );
+          },
+        },
+        streamAuth,
+      );
+      setSessionId(res.session_id);
+      setMessages(
+        res.messages.map((m, i) => ({
+          id: `${res.session_id}-${i}-${m.role}`,
+          role: m.role,
+          content: m.content,
+          timestamp: timeStr(),
+        })),
+      );
+      applyOperatorResultSideEffects(res.operator_result);
+      const op = res.operator_result;
+      if (op?.intent === "cursor_agent_launch" && op.ok && op.data) {
+        const d = op.data as Record<string, unknown>;
+        if (d.mission_handling === "managed") {
+          const rawId = d.agent_id ?? d.external_id;
+          const aid = typeof rawId === "string" ? rawId.trim() : "";
+          if (aid) {
+            setUplinkId("cloud_agent");
+            activateCloudMission(aid, {
+              mission_handling: "managed",
+              managedSplit: { kind: "new_launch" },
+            });
+          }
+        }
+      }
+      applyHamUiActions(res.actions ?? [], {
+        navigate,
+        setIsControlPanelOpen,
+        isControlPanelOpen,
+        setWorkbenchView: setViewMode,
+        setBrowserMode: (active) => {
+          setBrowserOnly(active);
+          if (active) {
+            setRequestedTabId("browser");
+            setRequestedTabNonce((n) => n + 1);
+          }
+        },
+      });
+    } catch (err) {
+      if (err instanceof HamAccessRestrictedError) {
+        const msg =
+          "Access restricted: this Ham deployment only allows approved email addresses or domains. Ask an admin or check Clerk sign-up restrictions.";
+        setChatError(msg);
+        toast.error(msg, { duration: 12_000, id: "ham-access-restricted" });
+      } else if (
+        err instanceof Error &&
+        err.message === "Chat stream ended without a done event"
+      ) {
         const msg =
           "Response was interrupted — your partial message has been saved.";
         setChatError(msg);
@@ -1680,6 +1819,151 @@ function ChatPageInner({
                  )}
                </div>
              )}
+
+             {projectId ? (
+               <div className="rounded-lg border border-cyan-500/25 bg-cyan-500/5 px-4 py-3 space-y-3 text-[11px] text-white/80">
+                 <div className="font-black uppercase tracking-widest text-cyan-300/90">
+                   Cursor Cloud Agent (operator)
+                 </div>
+                 <p className="text-white/50">
+                   Structured preview and launch (no free-text trigger). Active project:{" "}
+                   <span className="font-mono text-white">{projectId}</span>
+                 </p>
+                 <div className="grid gap-2 sm:grid-cols-2">
+                   <label className="space-y-1 sm:col-span-2">
+                     <span className="text-[9px] font-bold uppercase tracking-widest text-white/40">Task</span>
+                     <textarea
+                       value={caTask}
+                       onChange={(e) => setCaTask(e.target.value)}
+                       placeholder="User task for the cloud agent"
+                       rows={2}
+                       className="w-full rounded border border-white/15 bg-black/40 px-2 py-1.5 font-mono text-[11px] text-white"
+                     />
+                   </label>
+                   <label className="space-y-1">
+                     <span className="text-[9px] font-bold uppercase tracking-widest text-white/40">Repository (optional)</span>
+                     <input
+                       value={caRepo}
+                       onChange={(e) => setCaRepo(e.target.value)}
+                       className="w-full rounded border border-white/15 bg-black/40 px-2 py-1.5 font-mono text-[11px] text-white"
+                     />
+                   </label>
+                   <label className="space-y-1">
+                     <span className="text-[9px] font-bold uppercase tracking-widest text-white/40">Ref (optional)</span>
+                     <input
+                       value={caRef}
+                       onChange={(e) => setCaRef(e.target.value)}
+                       className="w-full rounded border border-white/15 bg-black/40 px-2 py-1.5 font-mono text-[11px] text-white"
+                     />
+                   </label>
+                   <label className="space-y-1 sm:col-span-2">
+                     <span className="text-[9px] font-bold uppercase tracking-widest text-white/40">Mission</span>
+                     <select
+                       value={caMission}
+                       onChange={(e) => setCaMission(e.target.value as "direct" | "managed")}
+                       className="w-full max-w-xs rounded border border-white/15 bg-black/40 px-2 py-1.5 font-mono text-[11px] text-white"
+                     >
+                       <option value="managed">Managed by HAM (registry + War Room)</option>
+                       <option value="direct">Direct (no HAM mission row)</option>
+                     </select>
+                   </label>
+                 </div>
+                 <div className="flex flex-wrap gap-2">
+                   <button
+                     type="button"
+                     disabled={sending || !caTask.trim()}
+                     onClick={() =>
+                       void runOperatorPayloadStream({
+                         messages: [{ role: "user", content: "[cursor_agent_preview operator]" }],
+                         operator: {
+                           phase: "cursor_agent_preview",
+                           project_id: projectId,
+                           cursor_task_prompt: caTask.trim(),
+                           cursor_repository: caRepo.trim() || null,
+                           cursor_ref: caRef.trim() || null,
+                           cursor_mission_handling: caMission,
+                         },
+                       })
+                     }
+                     className="rounded bg-cyan-600/90 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-white disabled:opacity-50"
+                   >
+                     Preview
+                   </button>
+                 </div>
+                 {pendingCursorAgent ? (
+                   <div className="mt-2 space-y-2 rounded border border-white/10 bg-black/30 p-3">
+                     <div className="text-[9px] font-bold uppercase tracking-widest text-white/50">
+                       Pending launch (digest locked)
+                     </div>
+                     <div className="whitespace-pre-wrap text-[10px] text-white/70 max-h-40 overflow-y-auto">
+                       {String(pendingCursorAgent.summary_preview ?? "")}
+                     </div>
+                     <p className="text-[9px] text-white/40">
+                       Paste <span className="font-mono">HAM_CURSOR_AGENT_LAUNCH_TOKEN</span> to confirm
+                       launch.
+                     </p>
+                     <input
+                       type="password"
+                       autoComplete="off"
+                       placeholder="HAM_CURSOR_AGENT_LAUNCH_TOKEN"
+                       value={operatorCursorAgentToken}
+                       onChange={(e) => {
+                         const v = e.target.value;
+                         setOperatorCursorAgentToken(v);
+                         try {
+                           sessionStorage.setItem(CURSOR_AGENT_OP_KEY, v);
+                         } catch {
+                           /* ignore */
+                         }
+                       }}
+                       className="w-full rounded border border-white/15 bg-black/40 px-2 py-1.5 font-mono text-[11px] text-white"
+                     />
+                     <div className="flex flex-wrap gap-2">
+                       <button
+                         type="button"
+                         disabled={sending}
+                         onClick={() => {
+                           const p = pendingCursorAgent;
+                           void runOperatorPayloadStream({
+                             messages: [{ role: "user", content: "[cursor_agent_launch operator]" }],
+                             operator: {
+                               phase: "cursor_agent_launch",
+                               confirmed: true,
+                               project_id: String(p.project_id ?? ""),
+                               cursor_task_prompt: String(p.cursor_task_prompt ?? ""),
+                               cursor_proposal_digest: String(p.proposal_digest ?? ""),
+                               cursor_base_revision: String(p.base_revision ?? ""),
+                               cursor_repository: p.cursor_repository ? String(p.cursor_repository) : null,
+                               cursor_ref: p.cursor_ref ? String(p.cursor_ref) : null,
+                               cursor_model: p.cursor_model ? String(p.cursor_model) : "default",
+                               cursor_auto_create_pr: Boolean(p.cursor_auto_create_pr),
+                               cursor_branch_name: p.cursor_branch_name ? String(p.cursor_branch_name) : null,
+                               cursor_expected_deliverable: p.cursor_expected_deliverable
+                                 ? String(p.cursor_expected_deliverable)
+                                 : null,
+                               cursor_mission_handling:
+                                 p.cursor_mission_handling === "direct" ? "direct" : "managed",
+                             },
+                             hamOperatorToken: operatorCursorAgentToken,
+                           });
+                         }}
+                         className="rounded bg-cyan-600 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-white disabled:opacity-50"
+                       >
+                         Launch
+                       </button>
+                       <button
+                         type="button"
+                         disabled={sending}
+                         onClick={() => setPendingCursorAgent(null)}
+                         className="rounded border border-white/20 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-white/70"
+                       >
+                         Dismiss
+                       </button>
+                     </div>
+                   </div>
+                 ) : null}
+               </div>
+             ) : null}
 
              <form onSubmit={handleSend} className="relative isolate group shadow-xl">
                 <div

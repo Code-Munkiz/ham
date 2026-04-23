@@ -242,6 +242,7 @@ class ChatOperatorPayload(BaseModel):
     cursor_expected_deliverable: str | None = Field(default=None, max_length=10_000)
     cursor_proposal_digest: str | None = Field(default=None, max_length=80)
     cursor_base_revision: str | None = Field(default=None, max_length=64)
+    cursor_mission_handling: Literal["direct", "managed"] | None = None
     cursor_agent_id: str | None = Field(default=None, max_length=128)
 
 
@@ -714,6 +715,7 @@ def _execute_explicit_phase(
             cursor_expected_deliverable=(
                 op.cursor_expected_deliverable.strip() if op.cursor_expected_deliverable else None
             ),
+            cursor_mission_handling=op.cursor_mission_handling,
         )
         audit_cursor_preview(
             project_id=prec.id,
@@ -736,11 +738,14 @@ def _execute_explicit_phase(
             tok_note = (
                 "\n\n_Note: `HAM_CURSOR_AGENT_LAUNCH_TOKEN` is not set — launches will be rejected until it is configured._"
             )
+        mh = op.cursor_mission_handling or "direct"
         pending = {
             "project_id": prec.id,
             "proposal_digest": prev.proposal_digest,
             "base_revision": prev.base_revision,
             "repository": prev.repository,
+            "cursor_repository": (op.cursor_repository.strip() if op.cursor_repository else None),
+            "cursor_mission_handling": mh,
             "cursor_task_prompt": op.cursor_task_prompt.strip(),
             "cursor_ref": op.cursor_ref.strip() if op.cursor_ref else None,
             "cursor_model": (op.cursor_model or "default").strip(),
@@ -830,6 +835,7 @@ def _execute_explicit_phase(
             task_prompt=op.cursor_task_prompt.strip(),
             proposal_digest=op.cursor_proposal_digest.strip(),
             base_revision=op.cursor_base_revision.strip(),
+            mission_handling=op.cursor_mission_handling,
         )
         if v_err:
             return OperatorTurnResult(
@@ -861,6 +867,7 @@ def _execute_explicit_phase(
             proposal_digest=op.cursor_proposal_digest.strip(),
             project_root_for_mirror=str(prec.root),
             created_by=_control_plane_created_by(ham_actor),
+            mission_handling=op.cursor_mission_handling,
         )
         out_data: dict[str, Any] = {**payload}
         out_data.setdefault("provider", "cursor_cloud_agent")

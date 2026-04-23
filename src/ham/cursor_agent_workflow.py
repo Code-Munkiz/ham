@@ -72,6 +72,36 @@ def compose_prompt_for_cursor(*, task_prompt: str, expected_deliverable: str | N
     return f"{task}\n\n**Expected deliverable:** {deliv}"
 
 
+def build_managed_cloud_agent_prompt_py(
+    *, user_prompt: str, repository: str, ref: str | None
+) -> str:
+    """
+    Parity with ``buildManagedCloudAgentPrompt`` in ``frontend/src/lib/ham/managedCloudAgent.ts``:
+    deterministic managed brief (no LLM) for **Managed by HAM** operator/chat launches.
+    """
+    u = (user_prompt or "").strip()
+    repo = (repository or "").strip()
+    r = (ref or "").strip() or None
+    parts = [
+        "[HAM] Managed Cloud Agent mission",
+        "HAM coordinates this work; the Cloud Agent implements changes in the repository below.",
+        "",
+        f"Repository: {repo}",
+    ]
+    if r:
+        parts.append(f"Ref: {r}")
+    parts.extend(
+        [
+            "---",
+            "User request:",
+            u,
+            "---",
+            "Instructions: complete the user request in this repository, follow existing project conventions, keep changes focused, and use a clear commit/PR flow when applicable.",
+        ]
+    )
+    return "\n".join(parts)
+
+
 def compute_cursor_proposal_digest(
     *,
     project_id: str,
@@ -110,9 +140,26 @@ def verify_cursor_launch_against_preview(
     task_prompt: str,
     proposal_digest: str,
     base_revision: str,
+    mission_handling: str | None = None,
 ) -> str | None:
     if base_revision != CURSOR_AGENT_BASE_REVISION:
         return f"Stale cursor_base_revision: expected {CURSOR_AGENT_BASE_REVISION!r}, got {base_revision!r}."
+    mh = (mission_handling or "").strip().lower() or "direct"
+    is_managed = mh == "managed"
+    eff_task: str
+    if is_managed:
+        eff_task = build_managed_cloud_agent_prompt_py(
+            user_prompt=task_prompt,
+            repository=repository,
+            ref=ref,
+        )
+    else:
+        eff_task = (task_prompt or "").strip()
+    eff_deliv: str | None
+    if is_managed:
+        eff_deliv = None
+    else:
+        eff_deliv = expected_deliverable
     expected = compute_cursor_proposal_digest(
         project_id=project_id,
         repository=repository,
@@ -120,8 +167,8 @@ def verify_cursor_launch_against_preview(
         model=model,
         auto_create_pr=auto_create_pr,
         branch_name=branch_name,
-        expected_deliverable=expected_deliverable,
-        task_prompt=task_prompt,
+        expected_deliverable=eff_deliv,
+        task_prompt=eff_task,
     )
     if expected != proposal_digest.strip():
         return "cursor_proposal_digest mismatch — re-run preview before launch."
@@ -177,6 +224,7 @@ def build_cursor_agent_preview(
     cursor_auto_create_pr: bool,
     cursor_branch_name: str | None,
     cursor_expected_deliverable: str | None,
+    cursor_mission_handling: str | None = None,
 ) -> CursorAgentPreviewResult:
     repo = resolve_cursor_repository_url(
         explicit=cursor_repository,
@@ -222,6 +270,19 @@ def build_cursor_agent_preview(
             project_id=project_id,
         )
 
+    mh = (cursor_mission_handling or "").strip().lower() or "direct"
+    is_managed = mh == "managed"
+    task_for_digest = (
+        build_managed_cloud_agent_prompt_py(
+            user_prompt=focus,
+            repository=repo,
+            ref=cursor_ref.strip() if cursor_ref else None,
+        )
+        if is_managed
+        else focus
+    )
+    eff_deliv = None if is_managed else cursor_expected_deliverable
+
     digest = compute_cursor_proposal_digest(
         project_id=project_id,
         repository=repo,
@@ -229,14 +290,16 @@ def build_cursor_agent_preview(
         model=cursor_model,
         auto_create_pr=cursor_auto_create_pr,
         branch_name=cursor_branch_name,
-        expected_deliverable=cursor_expected_deliverable,
-        task_prompt=focus,
+        expected_deliverable=eff_deliv,
+        task_prompt=task_for_digest,
     )
     mutates = bool(cursor_auto_create_pr)
     preview_text = (
         f"**Cursor Cloud Agent** (preview only — no launch yet)\n\n"
         f"- **project:** `{project_id}`\n"
-        f"- **repository:** `{repo}`\n"
+        f"- **mission_handling:** `{'managed' if is_managed else 'direct'}`"
+        + (" (HAM `ManagedMission` + managed prompt)\n" if is_managed else "\n")
+        + f"- **repository:** `{repo}`\n"
         f"- **ref:** `{cursor_ref or '(default branch)'}`\n"
         f"- **model:** `{cursor_model or 'default'}`\n"
         f"- **auto_create_pr:** `{cursor_auto_create_pr}`\n"
@@ -369,6 +432,7 @@ def run_cursor_agent_launch(
     project_root_for_mirror: str | None,
     created_by: dict[str, Any] | None = None,
     control_plane_run_store: ControlPlaneRunStore | None = None,
+    mission_handling: str | None = None,
 ) -> tuple[bool, dict[str, Any], str | None, str | None]:
     """
     Call Cursor launch; return (ok, ham_summary_or_error_dict, blocking_reason, ham_run_id).
@@ -377,10 +441,19 @@ def run_cursor_agent_launch(
     when a durable run record is possible.
     """
     st_global = control_plane_run_store or ControlPlaneRunStore()
-    prompt_text = compose_prompt_for_cursor(
-        task_prompt=task_prompt,
-        expected_deliverable=expected_deliverable,
-    )
+    mh = (mission_handling or "").strip().lower() or "direct"
+    is_managed = mh == "managed"
+    if is_managed:
+        prompt_text = build_managed_cloud_agent_prompt_py(
+            user_prompt=task_prompt,
+            repository=repository,
+            ref=ref,
+        )
+    else:
+        prompt_text = compose_prompt_for_cursor(
+            task_prompt=task_prompt,
+            expected_deliverable=expected_deliverable,
+        )
     excerpt: str | None = None
     pr_root: str | None = None
     if project_root_for_mirror and str(project_root_for_mirror).strip():
@@ -454,7 +527,23 @@ def run_cursor_agent_launch(
             project_root=pr_root,
         )
         st_global.save(run, project_root_for_mirror=pr_root)
-        out = {**summary, "ham_run_id": rid, "control_plane_status": run.status}
+        out: dict[str, Any] = {**summary, "ham_run_id": rid, "control_plane_status": run.status}
+        out["mission_handling"] = mh
+        if is_managed and isinstance(raw, dict):
+            try:
+                from src.ham.managed_mission_wiring import create_mission_after_managed_launch
+
+                create_mission_after_managed_launch(
+                    mission_handling="managed",
+                    launch_response=raw,
+                    body_repository=repository,
+                    body_ref=ref,
+                    body_branch_name=branch_name,
+                    uplink_id=None,
+                    project_id=project_id,
+                )
+            except (OSError, ValueError, TypeError) as exc:
+                out["mission_registry_warning"] = f"{type(exc).__name__}: {exc!s}"[:200]
         return True, out, None, rid
     except CursorCloudApiError as exc:
         excerpt = exc.body_excerpt
