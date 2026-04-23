@@ -2,7 +2,8 @@ import * as React from "react";
 import { Package, ScrollText } from "lucide-react";
 
 import { fetchCursorAgent, fetchCursorAgentConversation } from "@/lib/ham/api";
-import type { CloudMissionHandling } from "@/lib/ham/types";
+import { cn } from "@/lib/utils";
+import type { CloudMissionHandling, ManagedReviewSeverity } from "@/lib/ham/types";
 import { useManagedCloudAgentContext } from "@/contexts/ManagedCloudAgentContext";
 
 import { BrowserTabPanel } from "./BrowserTabPanel";
@@ -18,6 +19,13 @@ export interface CloudAgentPanelProps {
   onEmbedUrlChange: (v: string) => void;
   requestedTabId?: WarRoomTabId;
   requestedTabNonce?: number;
+}
+
+function reviewSeverityClass(s: ManagedReviewSeverity): string {
+  if (s === "error") return "text-rose-400/95";
+  if (s === "warning") return "text-amber-400/90";
+  if (s === "success") return "text-emerald-400/90";
+  return "text-sky-300/85";
 }
 
 function snapshotLine(label: string, value: string | null | undefined): React.ReactNode {
@@ -52,6 +60,7 @@ export function CloudAgentPanel({
   const managedPollError = isManaged ? managed.pollError : null;
   const managedPollPending = isManaged && managed.pollPending;
   const managedViewSnapshot = isManaged ? managed.lastSnapshot : null;
+  const managedViewReview = isManaged ? managed.lastReview : null;
 
   /** Tab-scoped fetch (unchanged for Direct; also used in Managed for raw tracker/transcript JSON). */
   React.useEffect(() => {
@@ -201,6 +210,23 @@ export function CloudAgentPanel({
             </div>
           ) : !managedPollPending && !managedPollError ? (
             <p className="text-[10px] text-white/35">No summary yet — waiting for data from the Cloud Agent API.</p>
+          ) : null}
+          {managedViewReview ? (
+            <div className="mt-1.5 pt-1.5 border-t border-white/10 space-y-1">
+              <p className="text-[8px] font-black uppercase tracking-widest text-white/40">HAM review (rules-based)</p>
+              <p className={cn("text-[10px] font-semibold leading-snug", reviewSeverityClass(managedViewReview.severity))}>
+                {managedViewReview.headline}
+              </p>
+              {managedViewReview.details?.trim() ? (
+                <p className="text-[9px] text-white/50 leading-relaxed whitespace-pre-wrap">{managedViewReview.details}</p>
+              ) : null}
+              {managedViewReview.nextStep?.trim() ? (
+                <p className="text-[9px] text-white/40 leading-snug">
+                  <span className="font-bold text-white/50">Next: </span>
+                  {managedViewReview.nextStep}
+                </p>
+              ) : null}
+            </div>
           ) : null}
         </div>
       ) : null}

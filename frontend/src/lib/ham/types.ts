@@ -10,6 +10,18 @@ export interface ManagedMissionSnapshot {
   updatedAt: string | null;
 }
 
+/** Deterministic, operator-facing read on polled Cloud Agent data (v1: rules only, no LLM). */
+export type ManagedReviewSeverity = "info" | "success" | "warning" | "error";
+
+export interface ManagedMissionReview {
+  severity: ManagedReviewSeverity;
+  headline: string;
+  details: string | null;
+  nextStep: string | null;
+  /** True when the assessment is for a terminal agent state (per `isCloudAgentTerminal`). */
+  hasTerminalAssessment: boolean;
+}
+
 export interface RunRecord {
   run_id: string;
   created_at: string;

@@ -45,11 +45,14 @@ import {
 } from "@/lib/ham/api";
 import {
   buildManagedCompletionMessage,
+  buildManagedReviewChatMessage,
   completionInjectionSignature,
   isCloudAgentTerminal,
+  reviewChatInjectionSignature,
+  shouldEmitReviewChatLine,
 } from "@/lib/ham/managedCloudAgent";
 import { CLIENT_MODEL_CATALOG_FALLBACK } from "@/lib/ham/modelCatalogFallback";
-import type { CloudMissionHandling, ModelCatalogPayload } from "@/lib/ham/types";
+import type { CloudMissionHandling, ManagedMissionReview, ModelCatalogPayload } from "@/lib/ham/types";
 import { ManagedCloudAgentProvider } from "@/contexts/ManagedCloudAgentContext";
 import { useManagedCloudAgentPoll } from "@/hooks/useManagedCloudAgentPoll";
 import { isDashboardChatGatewayReady } from "@/lib/ham/types";
@@ -75,6 +78,7 @@ const ACTIVE_CLOUD_AGENT_KEY = "ham_active_cloud_agent_id";
 const CLOUD_MISSION_HANDLING_KEY = "ham_cloud_mission_handling";
 const ACTIVE_SESSION_KEY = "ham_active_chat_session_id";
 const MANAGED_COMPLETION_STORAGE_KEY = "ham_managed_completion_v1";
+const MANAGED_REVIEW_CHAT_STORAGE_KEY = "ham_managed_review_chat_v1";
 
 function loadManagedCompletionMap(): Record<string, string> {
   try {
@@ -91,6 +95,26 @@ function loadManagedCompletionMap(): Record<string, string> {
 function saveManagedCompletionMap(m: Record<string, string>) {
   try {
     localStorage.setItem(MANAGED_COMPLETION_STORAGE_KEY, JSON.stringify(m));
+  } catch {
+    /* ignore */
+  }
+}
+
+function loadManagedReviewChatMap(): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(MANAGED_REVIEW_CHAT_STORAGE_KEY);
+    if (!raw) return {};
+    const o = JSON.parse(raw) as unknown;
+    if (typeof o !== "object" || o === null || Array.isArray(o)) return {};
+    return o as Record<string, string>;
+  } catch {
+    return {};
+  }
+}
+
+function saveManagedReviewChatMap(m: Record<string, string>) {
+  try {
+    localStorage.setItem(MANAGED_REVIEW_CHAT_STORAGE_KEY, JSON.stringify(m));
   } catch {
     /* ignore */
   }
@@ -698,10 +722,45 @@ function ChatPageInner({
     [],
   );
 
+  const processManagedAgentReviewForChat = React.useCallback(
+    (agent: Record<string, unknown>, _conversation: unknown, review: ManagedMissionReview) => {
+      const g = managedCompletionGatesRef.current;
+      if (g.uplinkId !== "cloud_agent" || g.cloudMissionHandling !== "managed") return;
+      const aid = g.activeCloudAgentId?.trim();
+      if (!aid) return;
+      if (!isCloudAgentTerminal(agent) || !shouldEmitReviewChatLine(review)) return;
+      const done = buildManagedCompletionMessage(agent, _conversation);
+      const rline = buildManagedReviewChatMessage(review);
+      if (rline.trim() === done.trim()) return;
+      const map = loadManagedReviewChatMap();
+      if (map[aid] !== undefined) return;
+      const sig = reviewChatInjectionSignature(aid, review, agent);
+      map[aid] = sig;
+      saveManagedReviewChatMap(map);
+      const t = new Date().toLocaleTimeString([], {
+        hour12: false,
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      });
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `ham-managed-cloud-review-${aid}-${Date.now()}`,
+          role: "system",
+          content: rline,
+          timestamp: t,
+        },
+      ]);
+    },
+    [],
+  );
+
   React.useEffect(() => {
     if (uplinkId !== "cloud_agent" || cloudMissionHandling !== "managed") {
       try {
         localStorage.removeItem(MANAGED_COMPLETION_STORAGE_KEY);
+        localStorage.removeItem(MANAGED_REVIEW_CHAT_STORAGE_KEY);
       } catch {
         /* ignore */
       }
@@ -715,6 +774,7 @@ function ChatPageInner({
     enabled: managedPollEnabled,
     agentId: activeCloudAgentId?.trim() ?? "",
     onAfterSuccess: processManagedAgentPollForCompletion,
+    onTerminalReviewForChat: processManagedAgentReviewForChat,
   });
 
   const managedCloudAgentContextValue = React.useMemo(
@@ -722,6 +782,7 @@ function ChatPageInner({
       activeCloudAgentId,
       cloudMissionHandling,
       lastSnapshot: managedCloudPoll.lastSnapshot,
+      lastReview: managedCloudPoll.lastReview,
       lastUpdated: managedCloudPoll.lastUpdated,
       pollError: managedCloudPoll.pollError,
       pollPending: managedCloudPoll.pollPending,
@@ -731,6 +792,7 @@ function ChatPageInner({
       activeCloudAgentId,
       cloudMissionHandling,
       managedCloudPoll.lastSnapshot,
+      managedCloudPoll.lastReview,
       managedCloudPoll.lastUpdated,
       managedCloudPoll.pollError,
       managedCloudPoll.pollPending,

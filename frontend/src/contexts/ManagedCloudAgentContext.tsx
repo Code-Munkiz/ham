@@ -1,10 +1,11 @@
 import * as React from "react";
-import type { CloudMissionHandling, ManagedMissionSnapshot } from "@/lib/ham/types";
+import type { CloudMissionHandling, ManagedMissionReview, ManagedMissionSnapshot } from "@/lib/ham/types";
 
 export type ManagedCloudAgentContextValue = {
   activeCloudAgentId: string | null;
   cloudMissionHandling: CloudMissionHandling;
   lastSnapshot: ManagedMissionSnapshot | null;
+  lastReview: ManagedMissionReview | null;
   lastUpdated: number | null;
   /** Managed poll: last request error, if any */
   pollError: string | null;
