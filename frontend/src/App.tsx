@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, HashRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ClerkProvider } from "@clerk/clerk-react";
 import { ThemeProvider } from "next-themes";
 import { AppLayout } from "./components/layout/AppLayout";
@@ -29,12 +29,15 @@ import Landing from "./pages/Landing";
 import { AgentProvider } from "./lib/ham/AgentContext";
 import { WorkspaceProvider } from "./lib/ham/WorkspaceContext";
 import { ClerkAccessBridge } from "./lib/ham/ClerkAccessBridge";
+import { getHamDesktopConfig } from "./lib/ham/desktopConfig";
 
 const clerkPublishableKey = (import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined)?.trim();
 
 function AppRoutes() {
+  const useHash = getHamDesktopConfig()?.useHashRouter === true;
+  const Router = useHash ? HashRouter : BrowserRouter;
   return (
-    <BrowserRouter>
+    <Router>
       <AppLayout>
         <Routes>
           <Route path="/" element={<Landing />} />
@@ -57,7 +60,7 @@ function AppRoutes() {
           <Route path="/hermes-skills" element={<Navigate to="/skills" replace />} />
         </Routes>
       </AppLayout>
-    </BrowserRouter>
+    </Router>
   );
 }
 

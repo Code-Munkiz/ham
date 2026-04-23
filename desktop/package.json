@@ -1,0 +1,17 @@
+{
+  "name": "ham-desktop",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Thin Electron shell for HAM (Milestone 1 — no bundled API)",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "start:file": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^34.2.0"
+  },
+  "engines": {
+    "node": ">=20 <25"
+  }
+}

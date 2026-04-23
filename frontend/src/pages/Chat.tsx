@@ -43,6 +43,7 @@ import {
   type ManagedDeployApprovalStatusPayload,
   postManagedDeployApprovalDecision,
   type VercelHookMapping,
+  getApiBase,
   listHamProjects,
   patchHamProjectMetadata,
   HamAccessRestrictedError,
@@ -717,14 +718,14 @@ function ChatPageInner({
   }, [projectId]);
 
   React.useEffect(() => {
-    if (!import.meta.env.DEV) {
-      const raw = import.meta.env.VITE_HAM_API_BASE as string | undefined;
-      if (!raw?.trim()) {
-        toast.error(
-          "Chat needs a Ham API URL. Set VITE_HAM_API_BASE in Vercel (or your host) and redeploy — otherwise the app calls localhost and replies never arrive.",
-          { duration: 12_000, id: "ham-api-base-missing" },
-        );
-      }
+    if (import.meta.env.DEV) return;
+    try {
+      getApiBase();
+    } catch {
+      toast.error(
+        "Chat needs a Ham API URL. For the web build, set VITE_HAM_API_BASE on your host. For the desktop app, set HAM_DESKTOP_API_BASE (or ham-desktop-config.json) — see desktop/README.md.",
+        { duration: 12_000, id: "ham-api-base-missing" },
+      );
     }
   }, []);
 
