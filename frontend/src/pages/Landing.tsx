@@ -120,7 +120,7 @@ export default function Landing() {
             Download HAM Desktop
           </h1>
           <p className="text-[11px] sm:text-xs font-mono text-white/40 leading-relaxed max-w-md mx-auto">
-            Linux AppImage is available below. Windows and macOS desktop builds are coming soon.
+            Linux and Windows builds are below (test / internal; unsigned). macOS desktop is coming soon.
           </p>
         </div>
 

@@ -29,9 +29,9 @@ export const HAM_DESKTOP_DOWNLOAD_CTAS: DesktopDownloadCta[] = [
   {
     platform: "windows",
     label: "Windows",
-    href: "",
-    available: false,
-    subtext: "x64",
+    href: "https://github.com/Code-Munkiz/ham/releases/download/desktop-v0.1.2/HAM-Desktop-0.1.2-Win-x64-Portable.exe",
+    available: true,
+    subtext: "Portable · x64 · v0.1.2",
   },
   {
     platform: "macos",
