@@ -19,6 +19,10 @@ from src.ham.vercel_project_mapping import (
 from src.integrations.cursor_cloud_client import CursorCloudApiError, cursor_api_get_agent
 from src.integrations.vercel_deployments_client import list_recent_deployments
 from src.persistence.cursor_credentials import get_effective_cursor_api_key
+from src.ham.managed_mission_wiring import (
+    maybe_patch_mission_from_post_deploy_response,
+    maybe_patch_mission_from_vercel_managed_response,
+)
 
 _LOG = logging.getLogger(__name__)
 
@@ -27,6 +31,24 @@ router = APIRouter(
     tags=["cursor-managed"],
     dependencies=[Depends(get_ham_clerk_actor)],
 )
+
+
+def _registry_patch_deploy(aid: str, vmap: dict[str, Any], p: dict[str, Any] | None) -> None:
+    try:
+        maybe_patch_mission_from_vercel_managed_response(
+            agent_id=aid,
+            vercel_mapping=vmap,
+            deploy_status=p,
+        )
+    except (OSError, ValueError, TypeError):
+        pass
+
+
+def _registry_patch_post(aid: str, post: dict[str, Any] | None) -> None:
+    try:
+        maybe_patch_mission_from_post_deploy_response(agent_id=aid, post_deploy=post)
+    except (OSError, ValueError, TypeError):
+        pass
 
 
 @router.get("/vercel/deploy-status")
@@ -56,7 +78,9 @@ async def get_vercel_managed_deploy_status(
         ) from exc
     if not isinstance(agent, dict):
         p = build_deploy_status_payload(agent=None, deployments_list_json=None, not_configured=False)
-        return {**p, "vercel_mapping": vercel_list_resolution_to_dict(resolve_vercel_list_for_agent(None))}
+        vmap = vercel_list_resolution_to_dict(resolve_vercel_list_for_agent(None))
+        _registry_patch_deploy(aid, vmap, p)
+        return {**p, "vercel_mapping": vmap}
 
     lres = resolve_vercel_list_for_agent(agent)
     vmap = vercel_list_resolution_to_dict(lres)
@@ -66,6 +90,7 @@ async def get_vercel_managed_deploy_status(
             agent=agent,
             deployments_list_json=None,
         )
+        _registry_patch_deploy(aid, vmap, p)
         return {**p, "vercel_mapping": vmap}
 
     try:
@@ -80,6 +105,7 @@ async def get_vercel_managed_deploy_status(
             deployments_list_json=None,
             api_error=str(exc),
         )
+        _registry_patch_deploy(aid, vmap, p)
         return {**p, "vercel_mapping": vmap}
 
     if deployments_json is None:
@@ -88,12 +114,14 @@ async def get_vercel_managed_deploy_status(
             agent=agent,
             deployments_list_json=None,
         )
+        _registry_patch_deploy(aid, vmap, p)
         return {**p, "vercel_mapping": vmap}
 
     p = build_deploy_status_payload(
         agent=agent,
         deployments_list_json=deployments_json,
     )
+    _registry_patch_deploy(aid, vmap, p)
     return {**p, "vercel_mapping": vmap}
 
 
@@ -121,35 +149,39 @@ async def get_vercel_post_deploy_validation(
         raise HTTPException(status_code=502, detail=str(exc) or "Cursor agent error") from exc
     if not isinstance(agent, dict):
         l0 = resolve_vercel_list_for_agent(None)
+        p0 = {
+            "state": "not_attempted",
+            "checked_at": datetime.now(timezone.utc).isoformat(),
+            "url_probed": None,
+            "http_status": None,
+            "match_confidence": None,
+            "reason_code": "no_agent",
+            "message": "No agent payload from Cursor.",
+        }
+        _registry_patch_post(aid, p0)
         return {
             "vercel_mapping": vercel_list_resolution_to_dict(l0),
             "deploy_ref": None,
-            "post_deploy_validation": {
-                "state": "not_attempted",
-                "checked_at": datetime.now(timezone.utc).isoformat(),
-                "url_probed": None,
-                "http_status": None,
-                "match_confidence": None,
-                "reason_code": "no_agent",
-                "message": "No agent payload from Cursor.",
-            },
+            "post_deploy_validation": p0,
         }
 
     lres = resolve_vercel_list_for_agent(agent)
     vmap = vercel_list_resolution_to_dict(lres)
     if not vercel_token_configured() or lres.project_id is None:
+        p0 = {
+            "state": "not_attempted",
+            "checked_at": datetime.now(timezone.utc).isoformat(),
+            "url_probed": None,
+            "http_status": None,
+            "match_confidence": None,
+            "reason_code": "vercel_not_configured",
+            "message": "Vercel API token or resolved project id is not available; cannot list deployments to probe.",
+        }
+        _registry_patch_post(aid, p0)
         return {
             "vercel_mapping": vmap,
             "deploy_ref": None,
-            "post_deploy_validation": {
-                "state": "not_attempted",
-                "checked_at": datetime.now(timezone.utc).isoformat(),
-                "url_probed": None,
-                "http_status": None,
-                "match_confidence": None,
-                "reason_code": "vercel_not_configured",
-                "message": "Vercel API token or resolved project id is not available; cannot list deployments to probe.",
-            },
+            "post_deploy_validation": p0,
         }
 
     try:
@@ -159,65 +191,73 @@ async def get_vercel_post_deploy_validation(
             limit=30,
         )
     except RuntimeError as exc:
+        p0 = {
+            "state": "not_attempted",
+            "checked_at": datetime.now(timezone.utc).isoformat(),
+            "url_probed": None,
+            "http_status": None,
+            "match_confidence": None,
+            "reason_code": "vercel_list_error",
+            "message": f"Could not list deployments: {exc}",
+        }
+        _registry_patch_post(aid, p0)
         return {
             "vercel_mapping": vmap,
             "deploy_ref": None,
-            "post_deploy_validation": {
-                "state": "not_attempted",
-                "checked_at": datetime.now(timezone.utc).isoformat(),
-                "url_probed": None,
-                "http_status": None,
-                "match_confidence": None,
-                "reason_code": "vercel_list_error",
-                "message": f"Could not list deployments: {exc}",
-            },
+            "post_deploy_validation": p0,
         }
 
     if deployments_json is None:
+        p0 = {
+            "state": "not_attempted",
+            "checked_at": datetime.now(timezone.utc).isoformat(),
+            "url_probed": None,
+            "http_status": None,
+            "match_confidence": None,
+            "reason_code": "vercel_not_configured",
+            "message": "Vercel list returned no data for the resolved project.",
+        }
+        _registry_patch_post(aid, p0)
         return {
             "vercel_mapping": vmap,
             "deploy_ref": None,
-            "post_deploy_validation": {
-                "state": "not_attempted",
-                "checked_at": datetime.now(timezone.utc).isoformat(),
-                "url_probed": None,
-                "http_status": None,
-                "match_confidence": None,
-                "reason_code": "vercel_not_configured",
-                "message": "Vercel list returned no data for the resolved project.",
-            },
+            "post_deploy_validation": p0,
         }
 
     view = compute_matched_deployment_view(agent=agent, deployments_list_json=deployments_json)
     if not view:
+        p0 = {
+            "state": "not_attempted",
+            "checked_at": datetime.now(timezone.utc).isoformat(),
+            "url_probed": None,
+            "http_status": None,
+            "match_confidence": None,
+            "reason_code": "no_matched_deployment",
+            "message": "No Vercel deployment could be matched to this mission; nothing to validate.",
+        }
+        _registry_patch_post(aid, p0)
         return {
             "vercel_mapping": vmap,
             "deploy_ref": None,
-            "post_deploy_validation": {
-                "state": "not_attempted",
-                "checked_at": datetime.now(timezone.utc).isoformat(),
-                "url_probed": None,
-                "http_status": None,
-                "match_confidence": None,
-                "reason_code": "no_matched_deployment",
-                "message": "No Vercel deployment could be matched to this mission; nothing to validate.",
-            },
+            "post_deploy_validation": p0,
         }
 
     dep = view.get("dep")
     if not isinstance(dep, dict):
+        p0 = {
+            "state": "not_attempted",
+            "checked_at": datetime.now(timezone.utc).isoformat(),
+            "url_probed": None,
+            "http_status": None,
+            "match_confidence": None,
+            "reason_code": "internal",
+            "message": "Invalid deployment object.",
+        }
+        _registry_patch_post(aid, p0)
         return {
             "vercel_mapping": vmap,
             "deploy_ref": None,
-            "post_deploy_validation": {
-                "state": "not_attempted",
-                "checked_at": datetime.now(timezone.utc).isoformat(),
-                "url_probed": None,
-                "http_status": None,
-                "match_confidence": None,
-                "reason_code": "internal",
-                "message": "Invalid deployment object.",
-            },
+            "post_deploy_validation": p0,
         }
 
     match_conf = view.get("match_confidence")
@@ -239,4 +279,5 @@ async def get_vercel_post_deploy_validation(
         match_confidence=mc,
         force_attempt=force_bool,
     )
+    _registry_patch_post(aid, out if isinstance(out, dict) else None)
     return {"vercel_mapping": vmap, "deploy_ref": deploy_ref, "post_deploy_validation": out}

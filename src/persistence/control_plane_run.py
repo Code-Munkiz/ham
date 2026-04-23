@@ -261,6 +261,35 @@ class ControlPlaneRunStore:
             return None
         return None
 
+    def find_by_provider_and_external(
+        self,
+        *,
+        provider: str,
+        external_id: str,
+    ) -> ControlPlaneRun | None:
+        """
+        Find a run by provider + external id (no project filter).
+
+        Used to attach optional ``control_plane_ham_run_id`` for managed mission rows.
+        O(n) over run files; acceptable for v1/volume.
+        """
+        eid = external_id.strip()
+        prov = provider.strip()
+        if not eid or not prov:
+            return None
+        try:
+            for p in self._base.glob("*.json"):
+                if not p.is_file():
+                    continue
+                data = json.loads(p.read_text(encoding="utf-8"))
+                if str(data.get("provider") or "") != prov:
+                    continue
+                if (data.get("external_id") or "") == eid:
+                    return ControlPlaneRun.model_validate(data)
+        except (OSError, json.JSONDecodeError, ValueError):
+            return None
+        return None
+
     def list_for_project(
         self,
         project_id: str,

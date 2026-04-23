@@ -575,6 +575,13 @@ def run_cursor_agent_status(
                 upd["finished_at"] = n
             merged = existing.model_copy(update=upd)
             st_global.save(merged, project_root_for_mirror=pr_root)
+        if isinstance(raw, dict):
+            from src.ham.managed_mission_wiring import observe_mission_from_cursor_payload
+
+            try:
+                observe_mission_from_cursor_payload(raw=raw)
+            except (OSError, ValueError, TypeError):
+                pass
         out = {**summary}
         if hst_out is not None:
             out["control_plane_status"] = hst_out

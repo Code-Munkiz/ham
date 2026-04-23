@@ -18,6 +18,10 @@ from pydantic import BaseModel, Field
 
 _LOG = logging.getLogger(__name__)
 
+from src.ham.managed_mission_wiring import (
+    create_mission_after_managed_launch,
+    observe_mission_from_cursor_payload,
+)
 from src.persistence.cursor_credentials import (
     clear_saved_cursor_api_key,
     credentials_path_for_display,
@@ -62,6 +66,11 @@ class LaunchCloudAgentBody(BaseModel):
     mission_handling: Literal["direct", "managed"] | None = Field(
         default=None,
         description="How the mission was initiated in HAM (not sent to Cursor). Omitted = legacy/unspecified.",
+    )
+    uplink_id: str | None = Field(
+        default=None,
+        max_length=256,
+        description="Optional Ham-side correlation id (not sent to Cursor).",
     )
 
 
@@ -280,6 +289,17 @@ async def cursor_launch_agent(body: LaunchCloudAgentBody) -> dict[str, Any]:
             "agent_id": agent_id,
         },
     )
+    try:
+        create_mission_after_managed_launch(
+            mission_handling=body.mission_handling,
+            launch_response=out,
+            body_repository=body.repository,
+            body_ref=body.ref,
+            body_branch_name=body.branch_name,
+            uplink_id=body.uplink_id,
+        )
+    except (OSError, ValueError, TypeError) as exc:
+        _LOG.warning("cursor.managed_mission.create_failed", extra={"err": str(exc)[:200]})
     # HAM-only audit echo; never forward to api.cursor.com.
     return {**out, "ham_mission_handling": body.mission_handling}
 
@@ -302,9 +322,15 @@ async def cursor_get_agent(agent_id: str) -> dict[str, Any]:
     if resp.status_code >= 400:
         raise _cursor_proxy_error(resp, "Cursor agent error")
     try:
-        return resp.json()
+        out = resp.json()
     except ValueError as exc:
         raise HTTPException(status_code=502, detail="Cursor returned non-JSON") from exc
+    if isinstance(out, dict):
+        try:
+            observe_mission_from_cursor_payload(raw=out)
+        except (OSError, ValueError, TypeError) as exc:
+            _LOG.warning("cursor.managed_mission.observe_failed", extra={"err": str(exc)[:200]})
+    return out
 
 
 @router.get("/agents/{agent_id}/conversation")
