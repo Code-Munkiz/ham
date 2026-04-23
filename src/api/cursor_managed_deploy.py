@@ -15,10 +15,17 @@ from src.ham.vercel_project_mapping import (
     resolve_vercel_hook_for_agent,
     vercel_hook_resolution_to_dict,
 )
+from src.ham.managed_deploy_approval_policy import (
+    deploy_hook_allowed_in_policy_mode,
+    managed_deploy_approval_mode,
+)
 from src.integrations.cursor_cloud_client import CursorCloudApiError, cursor_api_get_agent
 from src.persistence.cursor_credentials import get_effective_cursor_api_key
+from src.persistence.managed_deploy_approval import ManagedDeployApprovalStore
 
 _LOG = logging.getLogger(__name__)
+
+_approval_store = ManagedDeployApprovalStore()
 
 router = APIRouter(
     prefix="/api/cursor/managed",
@@ -110,6 +117,17 @@ async def trigger_vercel_deploy_hook(body: TriggerDeployHookBody) -> dict[str, A
             "message": hres.message,
             "vercel_mapping": vercel_hook_resolution_to_dict(hres),
         }
+    pol = managed_deploy_approval_mode()
+    if pol == "hard":
+        latest = _approval_store.latest_for_cursor_agent_id(body.agent_id.strip())
+        if not deploy_hook_allowed_in_policy_mode("hard", latest):
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    "Deploy hook is blocked: managed deploy approval policy is hard, and the latest decision "
+                    "is not approved. Approve in HAM (POST /api/cursor/managed/deploy-approval) or record a new approval."
+                ),
+            )
     _LOG.info(
         "cursor.managed.deploy_hook.request",
         extra={

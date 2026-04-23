@@ -1,5 +1,5 @@
 import * as React from "react";
-import type { VercelHookMapping } from "@/lib/ham/api";
+import type { ManagedDeployApprovalStatusPayload, VercelHookMapping } from "@/lib/ham/api";
 import type {
   CloudMissionHandling,
   ManagedDeployHandoffState,
@@ -28,6 +28,16 @@ export type ManagedCloudAgentContextValue = {
   deployHandoffState: ManagedDeployHandoffState;
   deployHandoffMessage: string | null;
   triggerManagedDeploy: (() => Promise<void>) | null;
+  /** `HAM_MANAGED_DEPLOY_APPROVAL_MODE` (default off) + latest decision; only set for managed + agent. */
+  deployApprovalStatus: ManagedDeployApprovalStatusPayload | null;
+  deployApprovalLoading: boolean;
+  refreshDeployApproval: () => Promise<void>;
+  postDeployApproval: (args: {
+    state: "approved" | "denied";
+    note?: string;
+    override?: boolean;
+    override_justification?: string | null;
+  }) => Promise<void>;
 };
 
 const ManagedCloudAgentContext = React.createContext<ManagedCloudAgentContextValue | null>(null);

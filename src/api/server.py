@@ -12,6 +12,7 @@ from src.api.browser_runtime import router as browser_runtime_router
 from src.api.chat import router as chat_router
 from src.api.clerk_gate import get_ham_clerk_actor
 from src.api.cursor_managed_deploy import router as cursor_managed_deploy_router
+from src.api.cursor_managed_deploy_approval import router as cursor_managed_deploy_approval_router
 from src.api.cursor_managed_missions import router as cursor_managed_missions_router
 from src.api.cursor_managed_vercel import router as cursor_managed_vercel_router
 from src.api.cursor_settings import router as cursor_settings_router
@@ -65,6 +66,7 @@ app.include_router(chat_router)
 app.include_router(browser_runtime_router)
 app.include_router(cursor_settings_router)
 app.include_router(cursor_managed_deploy_router)
+app.include_router(cursor_managed_deploy_approval_router)
 app.include_router(cursor_managed_vercel_router)
 app.include_router(cursor_managed_missions_router)
 app.include_router(cursor_skills_router)

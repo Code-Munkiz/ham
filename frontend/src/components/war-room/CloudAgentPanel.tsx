@@ -177,6 +177,15 @@ export function CloudAgentPanel({
   const dHook = isManaged ? managed.deployHookConfigured : null;
   const dHookMap = isManaged ? managed.deployHookVercelMapping : null;
   const dTrigger = isManaged ? managed.triggerManagedDeploy : null;
+  const dApol = isManaged ? managed.deployApprovalStatus : null;
+  const dApolLoading = isManaged && managed.deployApprovalLoading;
+  const postDepAp = isManaged ? managed.postDeployApproval : null;
+  const refreshDepAp = isManaged ? managed.refreshDeployApproval : null;
+
+  const [apNote, setApNote] = React.useState("");
+  const [apOverride, setApOverride] = React.useState(false);
+  const [apJust, setApJust] = React.useState("");
+  const [apBusy, setApBusy] = React.useState(false);
 
   /** Tab-scoped fetch (unchanged for Direct; also used in Managed for raw tracker/transcript JSON). */
   React.useEffect(() => {
@@ -595,6 +604,160 @@ export function CloudAgentPanel({
                   ) : null}
                 </div>
               ) : null}
+              {isManaged && (dApolLoading || dApol) ? (
+                <div className="mt-1.5 space-y-1.5 border-t border-fuchsia-500/15 pt-3">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-fuchsia-400/85">Team deploy approval (operator)</p>
+                  {dApolLoading ? (
+                    <p className="flex items-center gap-2 text-[12px] text-white/45">
+                      <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                      Loading…
+                    </p>
+                  ) : dApol ? (
+                    <>
+                      <p className="text-[12px] leading-[1.5] text-white/70">
+                        <span className="text-white/40">Policy: </span>
+                        <span className="font-mono text-fuchsia-200/90">{dApol.policy}</span>
+                        {dApol.policy === "off" ? " — HAM does not block deploys (default)." : null}
+                        {dApol.policy === "audit"
+                          ? " — you can log approve/deny for audit; deploy is not blocked by this policy."
+                          : null}
+                        {dApol.policy === "soft"
+                          ? " — HAM may warn; deploy is still allowed unless the server is set to hard."
+                          : null}
+                        {dApol.policy === "hard"
+                          ? " — the server blocks the deploy hook until the latest decision is approved."
+                          : null}
+                      </p>
+                      {dApol.latest_approval ? (
+                        <p className="text-[12px] text-white/60">
+                          Latest:{" "}
+                          <span className="font-mono text-white/80">
+                            {String((dApol.latest_approval as { state?: string }).state ?? "?")}
+                          </span>
+                          {typeof (dApol.latest_approval as { decision_at?: string }).decision_at === "string" ? (
+                            <span className="text-white/40">
+                              {" "}
+                              @ {(dApol.latest_approval as { decision_at: string }).decision_at}
+                            </span>
+                          ) : null}
+                        </p>
+                      ) : (
+                        <p className="text-[12px] text-white/45">No decision on record for this agent yet.</p>
+                      )}
+                      {dApol.policy === "soft" && !dApol.deploy_hook_would_allow ? (
+                        <p className="text-[12px] text-amber-400/90">
+                          Optional: log an approval for your team. Soft mode does not block deploy.
+                        </p>
+                      ) : null}
+                      {dApol.policy === "hard" && !dApol.deploy_hook_would_allow ? (
+                        <p className="text-[12px] text-rose-400/90">
+                          Deploy trigger is off until the latest decision is <span className="font-mono">approved</span>
+                          (server enforcement).
+                        </p>
+                      ) : null}
+                      {dApol.policy !== "off" && postDepAp ? (
+                        <div className="space-y-1.5">
+                          <label className="block text-[10px] text-white/40" htmlFor="ham-ap-note">
+                            Note (optional)
+                          </label>
+                          <input
+                            id="ham-ap-note"
+                            value={apNote}
+                            onChange={(e) => setApNote(e.target.value)}
+                            className="w-full rounded border border-white/10 bg-black/30 px-2 py-1.5 text-[12px] text-white/85"
+                            placeholder="Short context for teammates"
+                            maxLength={2000}
+                          />
+                          <label className="flex cursor-pointer items-center gap-2 text-[11px] text-white/55">
+                            <input
+                              type="checkbox"
+                              className="accent-fuchsia-500"
+                              checked={apOverride}
+                              onChange={(e) => setApOverride(e.target.checked)}
+                            />
+                            Record with override (requires justification)
+                          </label>
+                          {apOverride ? (
+                            <textarea
+                              value={apJust}
+                              onChange={(e) => setApJust(e.target.value)}
+                              className="w-full rounded border border-amber-500/20 bg-black/30 px-2 py-1.5 text-[12px] text-white/85"
+                              placeholder="Why override"
+                              rows={2}
+                              maxLength={1200}
+                            />
+                          ) : null}
+                          <div className="flex flex-wrap items-center gap-2">
+                            <button
+                              type="button"
+                              disabled={apBusy}
+                              onClick={async () => {
+                                if (!postDepAp) return;
+                                if (apOverride && !apJust.trim()) return;
+                                setApBusy(true);
+                                try {
+                                  await postDepAp({
+                                    state: "approved",
+                                    note: apNote.trim() || undefined,
+                                    override: apOverride,
+                                    override_justification: apOverride ? apJust.trim() : null,
+                                  });
+                                  setApNote("");
+                                  setApOverride(false);
+                                  setApJust("");
+                                } catch (e) {
+                                  window.alert(e instanceof Error ? e.message : "Failed to record");
+                                } finally {
+                                  setApBusy(false);
+                                }
+                              }}
+                              className="rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-1.5 text-[11px] font-bold uppercase tracking-widest text-emerald-300/90 hover:bg-emerald-500/20 disabled:opacity-50"
+                            >
+                              {apBusy ? "…" : "Record approve"}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={apBusy}
+                              onClick={async () => {
+                                if (!postDepAp) return;
+                                if (apOverride && !apJust.trim()) return;
+                                setApBusy(true);
+                                try {
+                                  await postDepAp({
+                                    state: "denied",
+                                    note: apNote.trim() || undefined,
+                                    override: apOverride,
+                                    override_justification: apOverride ? apJust.trim() : null,
+                                  });
+                                  setApNote("");
+                                  setApOverride(false);
+                                  setApJust("");
+                                } catch (e) {
+                                  window.alert(e instanceof Error ? e.message : "Failed to record");
+                                } finally {
+                                  setApBusy(false);
+                                }
+                              }}
+                              className="rounded border border-rose-500/30 bg-rose-500/10 px-2 py-1.5 text-[11px] font-bold uppercase tracking-widest text-rose-300/90 hover:bg-rose-500/20 disabled:opacity-50"
+                            >
+                              {apBusy ? "…" : "Record deny"}
+                            </button>
+                            {refreshDepAp ? (
+                              <button
+                                type="button"
+                                onClick={() => void refreshDepAp()}
+                                className="text-[10px] text-[#00E5FF] underline underline-offset-2"
+                              >
+                                Refresh
+                              </button>
+                            ) : null}
+                          </div>
+                        </div>
+                      ) : null}
+                    </>
+                  ) : null}
+                </div>
+              ) : null}
               {deployRead ? (
                 <div className="mt-1.5 space-y-1.5 border-t border-white/10 pt-3">
                   <p className="text-[10px] font-black uppercase tracking-widest text-violet-400/85">
@@ -635,7 +798,13 @@ export function CloudAgentPanel({
                   {dState === "ready" && dTrigger && dHook === true ? (
                     <button
                       type="button"
-                      className="mt-0.5 w-full rounded border border-violet-500/40 bg-violet-500/10 px-2 py-2 text-left text-[12px] font-black uppercase tracking-widest text-violet-300 hover:bg-violet-500/20"
+                      className="mt-0.5 w-full rounded border border-violet-500/40 bg-violet-500/10 px-2 py-2 text-left text-[12px] font-black uppercase tracking-widest text-violet-300 hover:bg-violet-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={dApol?.policy === "hard" && dApol.deploy_hook_would_allow === false}
+                      title={
+                        dApol?.policy === "hard" && dApol.deploy_hook_would_allow === false
+                          ? "Managed deploy policy is hard: approve in Team deploy approval first."
+                          : undefined
+                      }
                       onClick={() => {
                         void dTrigger();
                       }}

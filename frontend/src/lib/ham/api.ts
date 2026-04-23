@@ -312,6 +312,56 @@ export type ManagedDeployHookResult = {
   vercel_mapping?: VercelHookMapping;
 };
 
+export type ManagedDeployApprovalPolicy = "off" | "audit" | "soft" | "hard";
+
+export type ManagedDeployApprovalStatusPayload = {
+  kind: "managed_deploy_approval_status";
+  policy: ManagedDeployApprovalPolicy;
+  mission_registry_id: string | null;
+  latest_approval: Record<string, unknown> | null;
+  deploy_hook_would_allow: boolean;
+};
+
+export async function fetchManagedDeployApprovalStatus(
+  agentId: string,
+): Promise<ManagedDeployApprovalStatusPayload | null> {
+  const q = new URLSearchParams({ agent_id: agentId.trim() });
+  const res = await hamApiFetch(`/api/cursor/managed/deploy-approval?${q.toString()}`);
+  if (!res.ok) {
+    return null;
+  }
+  return res.json() as Promise<ManagedDeployApprovalStatusPayload>;
+}
+
+export async function postManagedDeployApprovalDecision(body: {
+  agent_id: string;
+  state: "approved" | "denied";
+  mission_registry_id?: string | null;
+  note?: string | null;
+  override?: boolean;
+  override_justification?: string | null;
+  source?: "operator_ui" | "api" | "script";
+}): Promise<{ kind: string; approval: Record<string, unknown> }> {
+  const res = await hamApiFetch("/api/cursor/managed/deploy-approval", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      agent_id: body.agent_id.trim(),
+      state: body.state,
+      mission_registry_id: body.mission_registry_id ?? null,
+      note: body.note ?? null,
+      override: Boolean(body.override),
+      override_justification: body.override_justification ?? null,
+      source: body.source ?? "operator_ui",
+    }),
+  });
+  if (!res.ok) {
+    const detail = (await readFastApiDetail(res)) ?? `HTTP ${res.status}`;
+    throw new Error(detail);
+  }
+  return res.json() as Promise<{ kind: string; approval: Record<string, unknown> }>;
+}
+
 /** GET /api/cursor/managed/vercel/deploy-status — server-side Vercel poll + match confidence. */
 export type VercelManagedDeployState =
   | "not_configured"
@@ -412,6 +462,17 @@ export async function postManagedDeployHook(agentId: string): Promise<ManagedDep
       ok: false,
       outcome: "not_configured",
       message: typeof detail === "string" ? detail : "Deploy hook is not configured.",
+    };
+  }
+  if (res.status === 403) {
+    const detail =
+      (await readFastApiDetail(res)) ??
+      "Deploy blocked: managed deploy approval policy is hard and the latest decision is not approved.";
+    return {
+      ok: false,
+      outcome: "approval_required",
+      message: detail,
+      status_code: 403,
     };
   }
   const j = (await res.json()) as Record<string, unknown> & { vercel_mapping?: VercelHookMapping };

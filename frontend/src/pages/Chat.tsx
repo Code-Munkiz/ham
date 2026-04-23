@@ -37,6 +37,9 @@ import {
   fetchChatSessions,
   fetchChatSession,
   fetchManagedDeployHookStatus,
+  fetchManagedDeployApprovalStatus,
+  type ManagedDeployApprovalStatusPayload,
+  postManagedDeployApprovalDecision,
   type VercelHookMapping,
   listHamProjects,
   HamAccessRestrictedError,
@@ -370,6 +373,8 @@ function ChatPageInner({
   const [deployUserResult, setDeployUserResult] = React.useState<"none" | "accepted" | "failed">("none");
   const [deployTriggering, setDeployTriggering] = React.useState(false);
   const [deployResultMessage, setDeployResultMessage] = React.useState<string | null>(null);
+  const [deployApprovalStatus, setDeployApprovalStatus] = React.useState<ManagedDeployApprovalStatusPayload | null>(null);
+  const [deployApprovalLoading, setDeployApprovalLoading] = React.useState(false);
   const lastDeployHandoffAgentRef = React.useRef<string | null | undefined>(undefined);
 
   /** Chat history sidebar */
@@ -875,6 +880,7 @@ function ChatPageInner({
     setDeployUserResult("none");
     setDeployResultMessage(null);
     setDeployTriggering(false);
+    setDeployApprovalStatus(null);
   }, [activeCloudAgentId]);
 
   React.useEffect(() => {
@@ -896,21 +902,80 @@ function ChatPageInner({
     };
   }, [uplinkId, cloudMissionHandling, activeCloudAgentId]);
 
+  const refreshDeployApproval = React.useCallback(async () => {
+    if (uplinkId !== "cloud_agent" || cloudMissionHandling !== "managed") {
+      setDeployApprovalStatus(null);
+      return;
+    }
+    const aid = activeCloudAgentId?.trim();
+    if (!aid) {
+      setDeployApprovalStatus(null);
+      return;
+    }
+    setDeployApprovalLoading(true);
+    try {
+      const s = await fetchManagedDeployApprovalStatus(aid);
+      setDeployApprovalStatus(s);
+    } catch {
+      setDeployApprovalStatus(null);
+    } finally {
+      setDeployApprovalLoading(false);
+    }
+  }, [uplinkId, cloudMissionHandling, activeCloudAgentId]);
+
+  const postDeployApproval = React.useCallback(
+    async (args: {
+      state: "approved" | "denied";
+      note?: string;
+      override?: boolean;
+      override_justification?: string | null;
+    }) => {
+      const aid = activeCloudAgentId?.trim();
+      if (!aid || uplinkId !== "cloud_agent" || cloudMissionHandling !== "managed") return;
+      await postManagedDeployApprovalDecision({
+        agent_id: aid,
+        source: "operator_ui",
+        state: args.state,
+        note: args.note,
+        override: args.override,
+        override_justification: args.override_justification,
+      });
+      await refreshDeployApproval();
+    },
+    [activeCloudAgentId, uplinkId, cloudMissionHandling, refreshDeployApproval],
+  );
+
+  React.useEffect(() => {
+    if (uplinkId !== "cloud_agent" || cloudMissionHandling !== "managed" || !activeCloudAgentId?.trim()) {
+      setDeployApprovalStatus(null);
+      return;
+    }
+    void refreshDeployApproval();
+  }, [uplinkId, cloudMissionHandling, activeCloudAgentId, refreshDeployApproval]);
+
   const triggerManagedDeploy = React.useCallback(async () => {
     const aid = activeCloudAgentId?.trim();
     if (!aid) return;
     if (uplinkId !== "cloud_agent" || cloudMissionHandling !== "managed") return;
     if (!managedCloudPoll.lastDeployReadiness?.ready) return;
     if (deployHookConfigured === false) return;
+    if (deployApprovalStatus?.policy === "hard" && !deployApprovalStatus.deploy_hook_would_allow) {
+      setDeployUserResult("failed");
+      setDeployResultMessage("Deploy is blocked: managed deploy approval policy is hard. Approve in the War Room (Overview) first.");
+      return;
+    }
     setDeployTriggering(true);
     setDeployResultMessage(null);
     try {
       const r = await postManagedDeployHook(aid);
       setDeployResultMessage(r.message);
-      if (r.outcome === "not_configured" || !r.ok) {
+      if (r.outcome === "not_configured" || r.outcome === "approval_required" || !r.ok) {
         setDeployUserResult("failed");
       } else {
         setDeployUserResult("accepted");
+      }
+      if (r.ok) {
+        void refreshDeployApproval();
       }
       processManagedDeployForChat(r, aid);
     } catch (e: unknown) {
@@ -925,7 +990,9 @@ function ChatPageInner({
     cloudMissionHandling,
     managedCloudPoll.lastDeployReadiness,
     deployHookConfigured,
+    deployApprovalStatus,
     processManagedDeployForChat,
+    refreshDeployApproval,
   ]);
 
   const deployHandoffState = React.useMemo((): ManagedDeployHandoffState => {
@@ -962,6 +1029,10 @@ function ChatPageInner({
       deployHandoffMessage: deployResultMessage,
       triggerManagedDeploy:
         uplinkId === "cloud_agent" && cloudMissionHandling === "managed" ? triggerManagedDeploy : null,
+      deployApprovalStatus,
+      deployApprovalLoading,
+      refreshDeployApproval,
+      postDeployApproval,
     }),
     [
       activeCloudAgentId,
@@ -979,6 +1050,10 @@ function ChatPageInner({
       deployResultMessage,
       uplinkId,
       triggerManagedDeploy,
+      deployApprovalStatus,
+      deployApprovalLoading,
+      refreshDeployApproval,
+      postDeployApproval,
     ],
   );
 
