@@ -6,6 +6,10 @@ export type ManagedCloudAgentContextValue = {
   cloudMissionHandling: CloudMissionHandling;
   lastSnapshot: ManagedMissionSnapshot | null;
   lastUpdated: number | null;
+  /** Managed poll: last request error, if any */
+  pollError: string | null;
+  /** Managed poll: in-flight */
+  pollPending: boolean;
   refresh: () => void;
 };
 

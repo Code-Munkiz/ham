@@ -2,11 +2,8 @@ import * as React from "react";
 import { Package, ScrollText } from "lucide-react";
 
 import { fetchCursorAgent, fetchCursorAgentConversation } from "@/lib/ham/api";
-import {
-  deriveManagedMissionSnapshot,
-  MANAGED_CLOUD_AGENT_POLL_MS,
-} from "@/lib/ham/managedCloudAgent";
-import type { CloudMissionHandling, ManagedMissionSnapshot } from "@/lib/ham/types";
+import type { CloudMissionHandling } from "@/lib/ham/types";
+import { useManagedCloudAgentContext } from "@/contexts/ManagedCloudAgentContext";
 
 import { BrowserTabPanel } from "./BrowserTabPanel";
 import { CloudAgentNotConnected } from "./CloudAgentNotConnected";
@@ -17,12 +14,6 @@ export interface CloudAgentPanelProps {
   activeCloudAgentId: string | null;
   /** Cloud Agent only: how this mission is handled in HAM (UI + future orchestration). */
   cloudMissionHandling?: CloudMissionHandling;
-  /** Managed mode: push latest snapshot to Chat for `ManagedCloudAgentContext`. */
-  onManagedSnapshotChange?: (snapshot: ManagedMissionSnapshot | null) => void;
-  /** Increment from parent `refresh()` to force an immediate poll. */
-  managedPollRefreshNonce?: number;
-  /** Called after a successful managed poll (terminal dedupe in Chat). */
-  onManagedPollForCompletion?: (agent: Record<string, unknown>, conversation: unknown) => void;
   embedUrl: string;
   onEmbedUrlChange: (v: string) => void;
   requestedTabId?: WarRoomTabId;
@@ -42,9 +33,6 @@ function snapshotLine(label: string, value: string | null | undefined): React.Re
 export function CloudAgentPanel({
   activeCloudAgentId,
   cloudMissionHandling = "direct",
-  onManagedSnapshotChange,
-  managedPollRefreshNonce = 0,
-  onManagedPollForCompletion,
   embedUrl,
   onEmbedUrlChange,
   requestedTabId,
@@ -52,18 +40,18 @@ export function CloudAgentPanel({
 }: CloudAgentPanelProps) {
   const [tabId, setTabId] = React.useState<WarRoomTabId>(() => getDefaultWarRoomTab("cloud_agent"));
   const tabs = getWarRoomTabs("cloud_agent");
+  const managed = useManagedCloudAgentContext();
 
   const [agentPayload, setAgentPayload] = React.useState<Record<string, unknown> | null>(null);
   const [convPayload, setConvPayload] = React.useState<unknown | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [err, setErr] = React.useState<string | null>(null);
 
-  const [managedViewSnapshot, setManagedViewSnapshot] = React.useState<ManagedMissionSnapshot | null>(null);
-  const [managedPollError, setManagedPollError] = React.useState<string | null>(null);
-  const [managedPollPending, setManagedPollPending] = React.useState(false);
-
   const hasAgent = Boolean(activeCloudAgentId?.trim());
   const isManaged = cloudMissionHandling === "managed" && hasAgent;
+  const managedPollError = isManaged ? managed.pollError : null;
+  const managedPollPending = isManaged && managed.pollPending;
+  const managedViewSnapshot = isManaged ? managed.lastSnapshot : null;
 
   /** Tab-scoped fetch (unchanged for Direct; also used in Managed for raw tracker/transcript JSON). */
   React.useEffect(() => {
@@ -118,50 +106,6 @@ export function CloudAgentPanel({
       cancelled = true;
     };
   }, [hasAgent, tabId, activeCloudAgentId]);
-
-  const pollManaged = React.useCallback(async () => {
-    const id = activeCloudAgentId?.trim();
-    if (!id || cloudMissionHandling !== "managed") return;
-    setManagedPollPending(true);
-    setManagedPollError(null);
-    try {
-      const [agent, conv] = await Promise.all([
-        fetchCursorAgent(id),
-        fetchCursorAgentConversation(id),
-      ]);
-      const snap = deriveManagedMissionSnapshot(agent, conv);
-      setManagedViewSnapshot(snap);
-      onManagedSnapshotChange?.(snap);
-      onManagedPollForCompletion?.(agent, conv);
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Request failed";
-      setManagedPollError(msg);
-    } finally {
-      setManagedPollPending(false);
-    }
-  }, [activeCloudAgentId, cloudMissionHandling, onManagedSnapshotChange, onManagedPollForCompletion]);
-
-  /** Managed only: background polling; Direct has no extra polling. */
-  React.useEffect(() => {
-    if (cloudMissionHandling !== "managed" || !activeCloudAgentId?.trim()) {
-      setManagedViewSnapshot(null);
-      setManagedPollError(null);
-      setManagedPollPending(false);
-      return;
-    }
-    let dead = false;
-    void (async () => {
-      if (dead) return;
-      await pollManaged();
-    })();
-    const t = window.setInterval(() => {
-      if (!dead) void pollManaged();
-    }, MANAGED_CLOUD_AGENT_POLL_MS);
-    return () => {
-      dead = true;
-      window.clearInterval(t);
-    };
-  }, [activeCloudAgentId, cloudMissionHandling, managedPollRefreshNonce, pollManaged]);
 
   const notConnected = !hasAgent;
 

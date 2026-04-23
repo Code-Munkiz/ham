@@ -1,5 +1,5 @@
 import type { UplinkId } from "@/components/chat/ChatComposerStrip";
-import type { CloudMissionHandling, ManagedMissionSnapshot } from "@/lib/ham/types";
+import type { CloudMissionHandling } from "@/lib/ham/types";
 
 import { CloudAgentPanel } from "./CloudAgentPanel";
 import { ElizaOsPanel } from "./ElizaOsPanel";
@@ -12,9 +12,6 @@ export interface WarRoomPaneProps {
   activeCloudAgentId: string | null;
   /** Cloud Agent uplink only: pass from Chat (mission modal + persistence). */
   cloudMissionHandling?: CloudMissionHandling;
-  onManagedSnapshotChange?: (snapshot: ManagedMissionSnapshot | null) => void;
-  managedPollRefreshNonce?: number;
-  onManagedPollForCompletion?: (agent: Record<string, unknown>, conversation: unknown) => void;
   embedUrl: string;
   onEmbedUrlChange: (v: string) => void;
   requestedTabId?: WarRoomTabId;
@@ -29,9 +26,6 @@ export function WarRoomPane({
   uplinkId,
   activeCloudAgentId,
   cloudMissionHandling,
-  onManagedSnapshotChange,
-  managedPollRefreshNonce,
-  onManagedPollForCompletion,
   embedUrl,
   onEmbedUrlChange,
   requestedTabId,
@@ -48,9 +42,6 @@ export function WarRoomPane({
         <CloudAgentPanel
           activeCloudAgentId={activeCloudAgentId}
           cloudMissionHandling={cloudMissionHandling}
-          onManagedSnapshotChange={onManagedSnapshotChange}
-          managedPollRefreshNonce={managedPollRefreshNonce}
-          onManagedPollForCompletion={onManagedPollForCompletion}
           embedUrl={embedUrl}
           onEmbedUrlChange={onEmbedUrlChange}
           requestedTabId={requestedTabId}

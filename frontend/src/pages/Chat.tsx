@@ -32,8 +32,6 @@ import { applyHamUiActions } from "@/lib/ham/applyUiActions";
 import {
   ensureProjectIdForWorkspaceRoot,
   fetchContextEngine,
-  fetchCursorAgent,
-  fetchCursorAgentConversation,
   fetchModelsCatalog,
   fetchProjectAgents,
   fetchChatSessions,
@@ -49,11 +47,11 @@ import {
   buildManagedCompletionMessage,
   completionInjectionSignature,
   isCloudAgentTerminal,
-  MANAGED_CLOUD_AGENT_POLL_MS,
 } from "@/lib/ham/managedCloudAgent";
 import { CLIENT_MODEL_CATALOG_FALLBACK } from "@/lib/ham/modelCatalogFallback";
-import type { CloudMissionHandling, ManagedMissionSnapshot, ModelCatalogPayload } from "@/lib/ham/types";
+import type { CloudMissionHandling, ModelCatalogPayload } from "@/lib/ham/types";
 import { ManagedCloudAgentProvider } from "@/contexts/ManagedCloudAgentContext";
+import { useManagedCloudAgentPoll } from "@/hooks/useManagedCloudAgentPoll";
 import { isDashboardChatGatewayReady } from "@/lib/ham/types";
 import { useAgent } from "@/lib/ham/AgentContext";
 import { useWorkspace } from "@/lib/ham/WorkspaceContext";
@@ -307,9 +305,6 @@ function ChatPageInner({
   const [warBlink, setWarBlink] = React.useState(true);
   const [reduceMotion, setReduceMotion] = React.useState(false);
   const [cloudLaunchOpen, setCloudLaunchOpen] = React.useState(false);
-  const [managedLastSnapshot, setManagedLastSnapshot] = React.useState<ManagedMissionSnapshot | null>(null);
-  const [managedSnapshotAt, setManagedSnapshotAt] = React.useState<number | null>(null);
-  const [managedPollRefreshNonce, setManagedPollRefreshNonce] = React.useState(0);
   /** Latest gates for `processManagedAgentPollForCompletion` (read each call, no stale closure). */
   const managedCompletionGatesRef = React.useRef({
     uplinkId: "factory_ai" as UplinkId,
@@ -402,39 +397,6 @@ function ChatPageInner({
       }
     },
     [pushRecentMission, cloudMissionHandling],
-  );
-
-  const onManagedSnapshotChange = React.useCallback((snapshot: ManagedMissionSnapshot | null) => {
-    setManagedLastSnapshot(snapshot);
-    setManagedSnapshotAt(snapshot ? Date.now() : null);
-  }, []);
-
-  const refreshManagedCloudMission = React.useCallback(() => {
-    setManagedPollRefreshNonce((n) => n + 1);
-  }, []);
-
-  React.useEffect(() => {
-    if (uplinkId !== "cloud_agent" || cloudMissionHandling !== "managed" || !activeCloudAgentId?.trim()) {
-      setManagedLastSnapshot(null);
-      setManagedSnapshotAt(null);
-    }
-  }, [uplinkId, cloudMissionHandling, activeCloudAgentId]);
-
-  const managedCloudAgentContextValue = React.useMemo(
-    () => ({
-      activeCloudAgentId,
-      cloudMissionHandling,
-      lastSnapshot: managedLastSnapshot,
-      lastUpdated: managedSnapshotAt,
-      refresh: refreshManagedCloudMission,
-    }),
-    [
-      activeCloudAgentId,
-      cloudMissionHandling,
-      managedLastSnapshot,
-      managedSnapshotAt,
-      refreshManagedCloudMission,
-    ],
   );
 
   React.useEffect(() => {
@@ -746,45 +708,35 @@ function ChatPageInner({
     }
   }, [uplinkId, cloudMissionHandling]);
 
-  React.useEffect(() => {
-    if (
-      viewMode !== "chat" ||
-      uplinkId !== "cloud_agent" ||
-      cloudMissionHandling !== "managed" ||
-      !activeCloudAgentId?.trim()
-    ) {
-      return;
-    }
-    let dead = false;
-    const id = activeCloudAgentId.trim();
-    const run = async () => {
-      if (dead) return;
-      try {
-        const [agent, conv] = await Promise.all([
-          fetchCursorAgent(id),
-          fetchCursorAgentConversation(id),
-        ]);
-        if (dead) return;
-        processManagedAgentPollForCompletion(agent, conv);
-      } catch {
-        /* fetch errors: no completion injection */
-      }
-    };
-    void run();
-    const t = window.setInterval(() => {
-      if (!dead) void run();
-    }, MANAGED_CLOUD_AGENT_POLL_MS);
-    return () => {
-      dead = true;
-      window.clearInterval(t);
-    };
-  }, [
-    viewMode,
-    uplinkId,
-    cloudMissionHandling,
-    activeCloudAgentId,
-    processManagedAgentPollForCompletion,
-  ]);
+  const managedPollEnabled =
+    uplinkId === "cloud_agent" && cloudMissionHandling === "managed" && Boolean(activeCloudAgentId?.trim());
+
+  const managedCloudPoll = useManagedCloudAgentPoll({
+    enabled: managedPollEnabled,
+    agentId: activeCloudAgentId?.trim() ?? "",
+    onAfterSuccess: processManagedAgentPollForCompletion,
+  });
+
+  const managedCloudAgentContextValue = React.useMemo(
+    () => ({
+      activeCloudAgentId,
+      cloudMissionHandling,
+      lastSnapshot: managedCloudPoll.lastSnapshot,
+      lastUpdated: managedCloudPoll.lastUpdated,
+      pollError: managedCloudPoll.pollError,
+      pollPending: managedCloudPoll.pollPending,
+      refresh: managedCloudPoll.refresh,
+    }),
+    [
+      activeCloudAgentId,
+      cloudMissionHandling,
+      managedCloudPoll.lastSnapshot,
+      managedCloudPoll.lastUpdated,
+      managedCloudPoll.pollError,
+      managedCloudPoll.pollPending,
+      managedCloudPoll.refresh,
+    ],
+  );
 
   const applyOperatorResultSideEffects = React.useCallback((op: HamOperatorResult | null | undefined) => {
     if (!op?.handled) return;
@@ -1107,9 +1059,6 @@ function ChatPageInner({
                 uplinkId={uplinkId}
                 activeCloudAgentId={activeCloudAgentId}
                 cloudMissionHandling={uplinkId === "cloud_agent" ? cloudMissionHandling : undefined}
-                onManagedSnapshotChange={uplinkId === "cloud_agent" ? onManagedSnapshotChange : undefined}
-                managedPollRefreshNonce={uplinkId === "cloud_agent" ? managedPollRefreshNonce : undefined}
-                onManagedPollForCompletion={uplinkId === "cloud_agent" ? processManagedAgentPollForCompletion : undefined}
                 embedUrl={paneEmbedUrl}
                 onEmbedUrlChange={setPaneEmbedUrl}
                 requestedTabId={requestedTabId}
@@ -1133,9 +1082,6 @@ function ChatPageInner({
                     uplinkId={uplinkId}
                     activeCloudAgentId={activeCloudAgentId}
                     cloudMissionHandling={uplinkId === "cloud_agent" ? cloudMissionHandling : undefined}
-                    onManagedSnapshotChange={uplinkId === "cloud_agent" ? onManagedSnapshotChange : undefined}
-                    managedPollRefreshNonce={uplinkId === "cloud_agent" ? managedPollRefreshNonce : undefined}
-                    onManagedPollForCompletion={uplinkId === "cloud_agent" ? processManagedAgentPollForCompletion : undefined}
                     embedUrl={paneEmbedUrl}
                     onEmbedUrlChange={setPaneEmbedUrl}
                     requestedTabId={requestedTabId}
