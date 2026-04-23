@@ -20,9 +20,11 @@ import {
   fetchBrowserRuntimePolicy,
   fetchHermesHubSnapshot,
   fetchHermesRuntimeInventory,
+  fetchHermesSkillsInstalled,
   type BrowserRuntimePolicySnapshot,
   type HermesHubSnapshot,
   type HermesRuntimeInventory,
+  type HermesSkillsInstalledResponse,
 } from "@/lib/ham/api";
 
 export default function HermesHub() {
@@ -35,6 +37,7 @@ export default function HermesHub() {
   const [inv, setInv] = React.useState<HermesRuntimeInventory | null>(null);
   const [invErr, setInvErr] = React.useState<string | null>(null);
   const [invLoading, setInvLoading] = React.useState(true);
+  const [skillsLive, setSkillsLive] = React.useState<HermesSkillsInstalledResponse | null>(null);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -97,6 +100,21 @@ export default function HermesHub() {
         }
       } finally {
         if (!cancelled) setInvLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await fetchHermesSkillsInstalled();
+        if (!cancelled) setSkillsLive(data);
+      } catch {
+        if (!cancelled) setSkillsLive(null);
       }
     })();
     return () => {
@@ -569,6 +587,22 @@ export default function HermesHub() {
                   )}
                 </>
               )}
+              {skillsLive ? (
+                <p className="text-[11px] text-white/50 leading-relaxed">
+                  <span className="text-white/40 font-black uppercase tracking-wider text-[10px]">
+                    Live skills overlay
+                  </span>
+                  : status <span className="font-mono text-white/65">{skillsLive.status}</span> · live{" "}
+                  {skillsLive.live_count} · linked {skillsLive.linked_count} · catalog-only{" "}
+                  {skillsLive.catalog_only_count}
+                  {skillsLive.live_only_count > 0 ? (
+                    <>
+                      {" "}
+                      · <span className="text-amber-200/90">{skillsLive.live_only_count} live-only</span>
+                    </>
+                  ) : null}
+                </p>
+              ) : null}
               <Link
                 to="/skills"
                 className="inline-flex items-center gap-2 text-sm font-bold text-[#FF6B00] hover:underline"

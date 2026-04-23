@@ -100,6 +100,7 @@ async def root() -> dict[str, Any]:
         "cursor_skills": "/api/cursor-skills",
         "cursor_subagents": "/api/cursor-subagents",
         "hermes_skills_catalog": "/api/hermes-skills/catalog",
+        "hermes_skills_installed": "/api/hermes-skills/installed",
         "hermes_runtime_inventory": "/api/hermes-runtime/inventory",
         "hermes_skills_capabilities": "/api/hermes-skills/capabilities",
         "hermes_skills_install_preview": "/api/hermes-skills/install/preview",

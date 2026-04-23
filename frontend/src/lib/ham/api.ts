@@ -1322,6 +1322,39 @@ export interface HermesSkillsTargetsResponse {
   warnings: string[];
 }
 
+/** GET /api/hermes-skills/installed — live CLI observation joined to vendored catalog (read-only). */
+export type HermesSkillsInstalledStatus =
+  | "ok"
+  | "remote_only"
+  | "unavailable"
+  | "error"
+  | "parse_degraded";
+
+export type HermesSkillLiveResolution = "linked" | "live_only" | "unknown";
+
+export interface HermesSkillLiveInstallation {
+  name: string;
+  category: string;
+  hermes_source: string;
+  hermes_trust: string;
+  catalog_id: string | null;
+  resolution: HermesSkillLiveResolution;
+}
+
+export interface HermesSkillsInstalledResponse {
+  kind: "hermes_skills_live_overlay";
+  status: HermesSkillsInstalledStatus;
+  cli_source: string;
+  live_count: number;
+  linked_count: number;
+  live_only_count: number;
+  unknown_count: number;
+  catalog_only_count: number;
+  installations: HermesSkillLiveInstallation[];
+  warnings: string[];
+  raw_redacted: string;
+}
+
 export async function fetchHermesSkillsCatalog(): Promise<HermesSkillsCatalogResponse> {
   const res = await hamApiFetch("/api/hermes-skills/catalog");
   if (!res.ok) {
@@ -1354,6 +1387,14 @@ export async function fetchHermesSkillsTargets(): Promise<HermesSkillsTargetsRes
     throw new Error(`hermes-skills/targets: HTTP ${res.status}`);
   }
   return res.json() as Promise<HermesSkillsTargetsResponse>;
+}
+
+export async function fetchHermesSkillsInstalled(): Promise<HermesSkillsInstalledResponse> {
+  const res = await hamApiFetch("/api/hermes-skills/installed");
+  if (!res.ok) {
+    throw new Error(`hermes-skills/installed: HTTP ${res.status}`);
+  }
+  return res.json() as Promise<HermesSkillsInstalledResponse>;
 }
 
 /** Phase 2a — Hermes runtime skill install (shared target only; not Cursor operator skills). */

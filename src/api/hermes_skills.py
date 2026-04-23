@@ -28,6 +28,7 @@ from src.ham.hermes_skills_install import (
     preview_shared_install,
     skills_apply_writes_enabled,
 )
+from src.ham.hermes_skills_live import build_skills_installed_overlay
 from src.ham.hermes_skills_probe import list_hermes_targets, probe_capabilities
 
 router = APIRouter(tags=["hermes-skills"], dependencies=[Depends(get_ham_clerk_actor)])
@@ -71,6 +72,12 @@ async def get_hermes_skill_catalog_entry(catalog_id: str) -> dict[str, Any]:
     if detail is None:
         raise _not_found(catalog_id)
     return {"kind": "hermes_runtime_skill_detail", "entry": detail}
+
+
+@router.get("/api/hermes-skills/installed")
+async def get_hermes_skills_installed() -> dict[str, Any]:
+    """Live Hermes-installed skills from allowlisted CLI, joined to vendored catalog (read-only)."""
+    return build_skills_installed_overlay()
 
 
 @router.get("/api/hermes-skills/capabilities")

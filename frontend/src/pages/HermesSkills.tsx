@@ -23,6 +23,7 @@ import {
   fetchHermesSkillDetail,
   fetchHermesSkillsCapabilities,
   fetchHermesSkillsCatalog,
+  fetchHermesSkillsInstalled,
   fetchHermesSkillsTargets,
   postHermesSkillsInstallApply,
   postHermesSkillsInstallPreview,
@@ -30,10 +31,50 @@ import {
   type HermesSkillCatalogEntryDetail,
   type HermesSkillsCapabilities,
   type HermesSkillsCatalogResponse,
+  type HermesSkillsInstalledResponse,
   type HermesSkillsInstallApplyResponse,
   type HermesSkillsInstallPreviewResponse,
   type HermesSkillsTargetsResponse,
 } from "@/lib/ham/api";
+
+function LiveOverlayBadge({
+  catalogId,
+  liveOverlay,
+  linkedCatalogIds,
+}: {
+  catalogId: string;
+  liveOverlay: HermesSkillsInstalledResponse | null;
+  linkedCatalogIds: Set<string>;
+}) {
+  if (!liveOverlay) return null;
+  const st = liveOverlay.status;
+  if (st === "remote_only" || st === "unavailable") {
+    return (
+      <span className="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded border border-white/20 text-white/45">
+        Remote / live unavailable
+      </span>
+    );
+  }
+  if (st === "error") {
+    return (
+      <span className="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded border border-amber-500/35 text-amber-200/80">
+        Live overlay error
+      </span>
+    );
+  }
+  if (linkedCatalogIds.has(catalogId)) {
+    return (
+      <span className="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded border border-emerald-500/40 text-emerald-300/85 bg-emerald-500/5">
+        Installed locally
+      </span>
+    );
+  }
+  return (
+    <span className="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded border border-white/15 text-white/40">
+      Catalog only
+    </span>
+  );
+}
 
 function TrustBadge({ level }: { level: string }) {
   const muted =
@@ -132,15 +173,20 @@ export default function HermesSkills() {
     React.useState<HermesSkillsInstallApplyResponse | null>(null);
   const [installToken, setInstallToken] = React.useState("");
   const [installBusy, setInstallBusy] = React.useState(false);
+  const [liveOverlay, setLiveOverlay] = React.useState<HermesSkillsInstalledResponse | null>(null);
+  const [liveOverlayErr, setLiveOverlayErr] = React.useState<string | null>(null);
+  const [installedOnly, setInstalledOnly] = React.useState(false);
 
   React.useEffect(() => {
     let cancelled = false;
     (async () => {
       setLoadErr(null);
+      setLiveOverlayErr(null);
       const results = await Promise.allSettled([
         fetchHermesSkillsCatalog(),
         fetchHermesSkillsCapabilities(),
         fetchHermesSkillsTargets(),
+        fetchHermesSkillsInstalled(),
       ]);
       if (cancelled) return;
 
@@ -172,6 +218,13 @@ export default function HermesSkills() {
         failures.push(`hermes-skills/targets: ${errMsg(results[2].reason)}`);
       }
 
+      if (results[3].status === "fulfilled") {
+        setLiveOverlay(results[3].value);
+      } else {
+        setLiveOverlay(null);
+        setLiveOverlayErr(errMsg(results[3].reason));
+      }
+
       if (failures.length === 3) {
         setLoadErr(
           failures.join(" · ") +
@@ -190,17 +243,41 @@ export default function HermesSkills() {
     };
   }, []);
 
+  const linkedCatalogIds = React.useMemo(() => {
+    const s = new Set<string>();
+    if (!liveOverlay?.installations) return s;
+    for (const row of liveOverlay.installations) {
+      if (row.resolution === "linked" && row.catalog_id) s.add(row.catalog_id);
+    }
+    return s;
+  }, [liveOverlay]);
+
   const filteredCatalog = React.useMemo(() => {
     const q = filter.trim().toLowerCase();
-    if (!q) return catalog;
-    return catalog.filter(
-      (e) =>
-        e.catalog_id.toLowerCase().includes(q) ||
-        e.display_name.toLowerCase().includes(q) ||
-        e.summary.toLowerCase().includes(q) ||
-        e.trust_level.toLowerCase().includes(q),
-    );
-  }, [catalog, filter]);
+    let rows = catalog;
+    if (q) {
+      rows = rows.filter(
+        (e) =>
+          e.catalog_id.toLowerCase().includes(q) ||
+          e.display_name.toLowerCase().includes(q) ||
+          e.summary.toLowerCase().includes(q) ||
+          e.trust_level.toLowerCase().includes(q),
+      );
+    }
+    if (
+      installedOnly &&
+      liveOverlay &&
+      (liveOverlay.status === "ok" || liveOverlay.status === "parse_degraded")
+    ) {
+      rows = rows.filter((e) => linkedCatalogIds.has(e.catalog_id));
+    }
+    return rows;
+  }, [catalog, filter, installedOnly, liveOverlay, linkedCatalogIds]);
+
+  const liveOnlyRows = React.useMemo(
+    () => liveOverlay?.installations?.filter((r) => r.resolution === "live_only") ?? [],
+    [liveOverlay],
+  );
 
   const openDetail = async (entry: HermesSkillCatalogEntry) => {
     setPanelOpen(true);
@@ -290,6 +367,43 @@ export default function HermesSkills() {
 
           <CapabilityBanner caps={caps} />
 
+          {liveOverlay && (
+            <div className="rounded-lg border border-white/10 bg-white/[0.02] px-4 py-3 text-[10px] text-white/55 space-y-2">
+              <div className="text-[9px] font-black uppercase tracking-widest text-[#FF6B00]/80">
+                Live overlay (Hermes CLI)
+              </div>
+              <p className="leading-relaxed">
+                <span className="text-white/35">Status:</span>{" "}
+                <span className="text-white/80 font-mono">{liveOverlay.status}</span>
+                <span className="text-white/25 mx-2">·</span>
+                <span className="text-white/35">Live:</span> {liveOverlay.live_count}
+                <span className="text-white/25 mx-2">·</span>
+                <span className="text-white/35">Linked:</span> {liveOverlay.linked_count}
+                <span className="text-white/25 mx-2">·</span>
+                <span className="text-white/35">Live-only:</span> {liveOverlay.live_only_count}
+                <span className="text-white/25 mx-2">·</span>
+                <span className="text-white/35">Catalog-only:</span> {liveOverlay.catalog_only_count}
+              </p>
+              {liveOverlay.status === "parse_degraded" ? (
+                <p className="text-amber-200/80 text-[10px]">
+                  Live list output did not match the expected table shape; counts may be incomplete.
+                </p>
+              ) : null}
+              {(liveOverlay.warnings?.length ?? 0) > 0 && (
+                <ul className="list-disc pl-4 text-amber-100/85 text-[10px] space-y-0.5">
+                  {liveOverlay.warnings.map((w) => (
+                    <li key={w}>{w}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+          {liveOverlayErr ? (
+            <p className="text-[10px] text-amber-200/80">
+              Live overlay could not load: {liveOverlayErr}
+            </p>
+          ) : null}
+
           {catalogMeta?.upstream && (
             <div className="rounded-lg border border-white/10 bg-white/[0.02] px-4 py-3 text-[10px] font-mono text-white/45 space-y-1">
               <div className="text-[9px] font-black uppercase tracking-widest text-[#FF6B00]/80">
@@ -304,14 +418,29 @@ export default function HermesSkills() {
             </div>
           )}
 
-          <div className="relative max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/20" />
-            <Input
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              placeholder="Filter by name, id, summary…"
-              className="pl-10 bg-black/40 border-white/10 text-white text-xs h-10"
-            />
+          <div className="flex flex-col sm:flex-row gap-4 sm:items-end max-w-3xl">
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/20" />
+              <Input
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                placeholder="Filter by name, id, summary…"
+                className="pl-10 bg-black/40 border-white/10 text-white text-xs h-10"
+              />
+            </div>
+            <label className="flex items-center gap-2 text-[10px] font-bold text-white/45 cursor-pointer select-none pb-2 sm:pb-0.5 shrink-0">
+              <input
+                type="checkbox"
+                checked={installedOnly}
+                onChange={(e) => setInstalledOnly(e.target.checked)}
+                className="rounded border-white/20 bg-black/50 accent-[#FF6B00]"
+                disabled={
+                  !liveOverlay ||
+                  (liveOverlay.status !== "ok" && liveOverlay.status !== "parse_degraded")
+                }
+              />
+              Installed locally only
+            </label>
           </div>
 
           {loadErr && (
@@ -378,6 +507,11 @@ export default function HermesSkills() {
                     <ChevronRight className="h-4 w-4 text-white/20 group-hover:text-[#FF6B00] shrink-0" />
                   </div>
                   <div className="flex flex-wrap gap-2">
+                    <LiveOverlayBadge
+                      catalogId={entry.catalog_id}
+                      liveOverlay={liveOverlay}
+                      linkedCatalogIds={linkedCatalogIds}
+                    />
                     <TrustBadge level={entry.trust_level} />
                     {entry.has_scripts && (
                       <span className="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded border border-violet-500/40 text-violet-300/80 bg-violet-500/5 flex items-center gap-1">
@@ -413,6 +547,34 @@ export default function HermesSkills() {
               ))}
             </div>
           </section>
+
+          {liveOnlyRows.length > 0 && (
+            <section className="space-y-3 pb-8">
+              <h2 className="text-[10px] font-black uppercase tracking-[0.3em] text-white/40">
+                Live only (not in vendored catalog)
+              </h2>
+              <p className="text-[10px] text-white/30 uppercase tracking-widest max-w-2xl leading-relaxed">
+                These names appear in <span className="font-mono text-white/45">hermes skills list</span>{" "}
+                but did not match a catalog id. They are not available in Agent Builder attachment.
+              </p>
+              <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-white/55 font-mono">
+                {liveOnlyRows.slice(0, 48).map((r) => (
+                  <li
+                    key={r.name}
+                    className="rounded border border-white/10 bg-white/[0.02] px-3 py-2 flex flex-wrap gap-x-2 gap-y-1"
+                  >
+                    <span className="text-white/75">{r.name}</span>
+                    <span className="text-white/35 text-[10px]">
+                      {r.hermes_source}/{r.hermes_trust}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              {liveOnlyRows.length > 48 ? (
+                <p className="text-[10px] text-white/35">+{liveOnlyRows.length - 48} more…</p>
+              ) : null}
+            </section>
+          )}
         </div>
 
         {/* Detail panel */}
