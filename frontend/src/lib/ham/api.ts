@@ -232,6 +232,8 @@ export interface LaunchCursorAgentRequest {
   model?: string;
   auto_create_pr?: boolean;
   branch_name?: string | null;
+  /** HAM-only audit; not forwarded to Cursor. */
+  mission_handling?: "direct" | "managed";
 }
 
 /** Turn FastAPI / proxy error text into a short UI string (single line, capped). */
@@ -255,6 +257,7 @@ export async function launchCursorAgent(
       model: (body.model ?? "default").trim() || "default",
       auto_create_pr: Boolean(body.auto_create_pr),
       branch_name: body.branch_name?.trim() || undefined,
+      mission_handling: body.mission_handling,
     }),
   });
   if (!res.ok) {

@@ -6,14 +6,17 @@ existing httpx auth style for backward compatibility.
 """
 from __future__ import annotations
 
+import logging
 import os
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
 
 from src.api.clerk_gate import get_ham_clerk_actor
 from pydantic import BaseModel, Field
+
+_LOG = logging.getLogger(__name__)
 
 from src.persistence.cursor_credentials import (
     clear_saved_cursor_api_key,
@@ -56,6 +59,10 @@ class LaunchCloudAgentBody(BaseModel):
     )
     auto_create_pr: bool = False
     branch_name: str | None = None
+    mission_handling: Literal["direct", "managed"] | None = Field(
+        default=None,
+        description="How the mission was initiated in HAM (not sent to Cursor). Omitted = legacy/unspecified.",
+    )
 
 
 def _require_cursor_key() -> str:
@@ -255,9 +262,26 @@ async def cursor_launch_agent(body: LaunchCloudAgentBody) -> dict[str, Any]:
         detail = resp.text[:2000] if resp.text else f"HTTP {resp.status_code}"
         raise HTTPException(status_code=502, detail=f"Cursor launch error: {detail}")
     try:
-        return resp.json()
+        out = resp.json()
     except ValueError as exc:
         raise HTTPException(status_code=502, detail="Cursor returned non-JSON") from exc
+    if not isinstance(out, dict):
+        return out
+    agent_id: str | None
+    raw_id = out.get("id")
+    if isinstance(raw_id, str) and raw_id.strip():
+        agent_id = raw_id.strip()
+    else:
+        agent_id = None
+    _LOG.info(
+        "cursor.cloud_agent.launch",
+        extra={
+            "mission_handling": body.mission_handling,
+            "agent_id": agent_id,
+        },
+    )
+    # HAM-only audit echo; never forward to api.cursor.com.
+    return {**out, "ham_mission_handling": body.mission_handling}
 
 
 def _cursor_proxy_error(resp: httpx.Response, prefix: str) -> HTTPException:

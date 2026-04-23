@@ -128,6 +128,7 @@ export function CloudAgentLaunchModal({
         model: model.trim() || "default",
         auto_create_pr: autoCreatePr,
         branch_name: branchName.trim() || undefined,
+        mission_handling: missionHandling,
       });
       const newId = cloudAgentIdFromLaunchResponse(payload);
       if (!newId) {

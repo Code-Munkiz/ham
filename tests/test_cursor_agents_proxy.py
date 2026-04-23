@@ -95,3 +95,76 @@ def test_post_followup_proxies(client: TestClient, monkeypatch: pytest.MonkeyPat
     assert r.status_code == 200
     assert captured["path"] == "/v0/agents/bc_z/followup"
     assert captured["body"] == {"prompt": {"text": "Continue with tests"}}
+
+
+def test_launch_accepts_mission_handling_merged_response(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    import src.api.cursor_settings as cs
+
+    posted: list[dict] = []
+
+    def fake_post(path: str, *, api_key: str, json_body: dict):
+        assert path == "/v0/agents"
+        assert "mission_handling" not in json_body
+        assert "ham_mission_handling" not in json_body
+        posted.append(json_body)
+        m = MagicMock()
+        m.status_code = 200
+        m.json = lambda: {"id": "cm_test_agent", "status": "CREATING"}
+        return m
+
+    monkeypatch.setattr(cs, "_cursor_post", fake_post)
+    r = client.post(
+        "/api/cursor/agents/launch",
+        json={
+            "prompt_text": "do the thing",
+            "repository": "https://github.com/foo/bar",
+            "mission_handling": "managed",
+        },
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["id"] == "cm_test_agent"
+    assert data["ham_mission_handling"] == "managed"
+    assert posted[0] == {
+        "prompt": {"text": "do the thing"},
+        "source": {"repository": "https://github.com/foo/bar"},
+        "model": "default",
+    }
+
+
+def test_launch_omits_mission_handling_compatible(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    import src.api.cursor_settings as cs
+
+    posted: list[dict] = []
+
+    def fake_post(path: str, *, api_key: str, json_body: dict):
+        posted.append(json_body)
+        m = MagicMock()
+        m.status_code = 200
+        m.json = lambda: {"id": "cm_legacy"}
+        return m
+
+    monkeypatch.setattr(cs, "_cursor_post", fake_post)
+    r = client.post(
+        "/api/cursor/agents/launch",
+        json={
+            "prompt_text": "x",
+            "repository": "https://github.com/foo/bar",
+        },
+    )
+    assert r.status_code == 200
+    assert r.json()["id"] == "cm_legacy"
+    assert r.json()["ham_mission_handling"] is None
+    assert "mission_handling" not in posted[0]
+
+
+def test_launch_rejects_invalid_mission_handling(client: TestClient) -> None:
+    r = client.post(
+        "/api/cursor/agents/launch",
+        json={
+            "prompt_text": "x",
+            "repository": "https://github.com/foo/bar",
+            "mission_handling": "bogus",
+        },
+    )
+    assert r.status_code == 422
