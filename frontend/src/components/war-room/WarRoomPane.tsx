@@ -14,6 +14,7 @@ export interface WarRoomPaneProps {
   cloudMissionHandling?: CloudMissionHandling;
   onManagedSnapshotChange?: (snapshot: ManagedMissionSnapshot | null) => void;
   managedPollRefreshNonce?: number;
+  onManagedPollForCompletion?: (agent: Record<string, unknown>, conversation: unknown) => void;
   embedUrl: string;
   onEmbedUrlChange: (v: string) => void;
   requestedTabId?: WarRoomTabId;
@@ -30,6 +31,7 @@ export function WarRoomPane({
   cloudMissionHandling,
   onManagedSnapshotChange,
   managedPollRefreshNonce,
+  onManagedPollForCompletion,
   embedUrl,
   onEmbedUrlChange,
   requestedTabId,
@@ -48,6 +50,7 @@ export function WarRoomPane({
           cloudMissionHandling={cloudMissionHandling}
           onManagedSnapshotChange={onManagedSnapshotChange}
           managedPollRefreshNonce={managedPollRefreshNonce}
+          onManagedPollForCompletion={onManagedPollForCompletion}
           embedUrl={embedUrl}
           onEmbedUrlChange={onEmbedUrlChange}
           requestedTabId={requestedTabId}

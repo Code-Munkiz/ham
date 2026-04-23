@@ -21,6 +21,8 @@ export interface CloudAgentPanelProps {
   onManagedSnapshotChange?: (snapshot: ManagedMissionSnapshot | null) => void;
   /** Increment from parent `refresh()` to force an immediate poll. */
   managedPollRefreshNonce?: number;
+  /** Called after a successful managed poll (terminal dedupe in Chat). */
+  onManagedPollForCompletion?: (agent: Record<string, unknown>, conversation: unknown) => void;
   embedUrl: string;
   onEmbedUrlChange: (v: string) => void;
   requestedTabId?: WarRoomTabId;
@@ -42,6 +44,7 @@ export function CloudAgentPanel({
   cloudMissionHandling = "direct",
   onManagedSnapshotChange,
   managedPollRefreshNonce = 0,
+  onManagedPollForCompletion,
   embedUrl,
   onEmbedUrlChange,
   requestedTabId,
@@ -129,13 +132,14 @@ export function CloudAgentPanel({
       const snap = deriveManagedMissionSnapshot(agent, conv);
       setManagedViewSnapshot(snap);
       onManagedSnapshotChange?.(snap);
+      onManagedPollForCompletion?.(agent, conv);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Request failed";
       setManagedPollError(msg);
     } finally {
       setManagedPollPending(false);
     }
-  }, [activeCloudAgentId, cloudMissionHandling, onManagedSnapshotChange]);
+  }, [activeCloudAgentId, cloudMissionHandling, onManagedSnapshotChange, onManagedPollForCompletion]);
 
   /** Managed only: background polling; Direct has no extra polling. */
   React.useEffect(() => {

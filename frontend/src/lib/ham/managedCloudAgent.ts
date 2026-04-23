@@ -131,3 +131,78 @@ export function deriveManagedMissionSnapshot(
 
 /** Fixed interval for managed-mode Cloud Agent status refresh (ms). */
 export const MANAGED_CLOUD_AGENT_POLL_MS = 15_000;
+
+/**
+ * Full-string terminal labels (lowercase) from status/state after `normalize` — no substring matching.
+ * Cursor returns opaque JSON; add literals here only if repo or confirmed samples reference them.
+ */
+export const MANAGED_COMPLETION_STATUS_ALLOWLIST: ReadonlySet<string> = new Set([
+  "finished",
+  "completed",
+  "complete",
+  "failed",
+  "error",
+  "stopped",
+  "expired",
+  "cancelled",
+  "canceled",
+  "succeeded",
+  "success",
+  "done",
+  "closed",
+]);
+
+function normalizeStatusField(raw: string): string {
+  return raw.trim().toLowerCase();
+}
+
+/**
+ * True if the proxied agent JSON clearly indicates a terminal run (defensive, real fields only).
+ */
+export function isCloudAgentTerminal(agent: Record<string, unknown>): boolean {
+  if (readString(agent.error) || readString(agent.error_message)) {
+    return true;
+  }
+  if (readString(agent.failure) || agent.failure === true) {
+    return true;
+  }
+  const s = readString(agent.status) ?? readString(agent.state) ?? null;
+  if (s) {
+    const n = normalizeStatusField(s);
+    if (MANAGED_COMPLETION_STATUS_ALLOWLIST.has(n)) return true;
+  }
+  return false;
+}
+
+/**
+ * Stable signature to dedupe in localStorage: mission id + normalized status + small error tail.
+ */
+export function completionInjectionSignature(
+  agent: Record<string, unknown>,
+  activeAgentId: string,
+): string {
+  const st =
+    (readString(agent.status) ?? readString(agent.state) ?? "").toLowerCase().trim() || "—";
+  const err = (readString(agent.error) ?? readString(agent.error_message) ?? "").trim().slice(0, 64);
+  return `${activeAgentId.trim()}::${st}::${err}`;
+}
+
+const MAX_COMPLETION_LEN = 1200;
+
+/**
+ * One compact, factual completion notice for the chat thread (no fake streaming, no full JSON).
+ */
+export function buildManagedCompletionMessage(
+  agent: Record<string, unknown>,
+  conversation: unknown,
+): string {
+  const snap = deriveManagedMissionSnapshot(agent, conversation);
+  const parts: string[] = ["[HAM] Managed Cloud Agent mission reached a terminal state (from Cursor)."];
+  if (snap.status) parts.push(`Status: ${snap.status}`);
+  if (snap.progress) parts.push(`Last activity: ${snap.progress}`);
+  if (snap.branchOrPr) parts.push(`Branch / PR: ${snap.branchOrPr}`);
+  if (snap.blocker) parts.push(`Blocker / error: ${snap.blocker}`);
+  if (snap.updatedAt) parts.push(`Updated: ${snap.updatedAt}`);
+  const body = parts.join("\n");
+  return body.length > MAX_COMPLETION_LEN ? `${body.slice(0, MAX_COMPLETION_LEN - 1)}…` : body;
+}

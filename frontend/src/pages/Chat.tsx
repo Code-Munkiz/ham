@@ -32,6 +32,8 @@ import { applyHamUiActions } from "@/lib/ham/applyUiActions";
 import {
   ensureProjectIdForWorkspaceRoot,
   fetchContextEngine,
+  fetchCursorAgent,
+  fetchCursorAgentConversation,
   fetchModelsCatalog,
   fetchProjectAgents,
   fetchChatSessions,
@@ -43,6 +45,12 @@ import {
   type HamOperatorResult,
   type ChatSessionSummary,
 } from "@/lib/ham/api";
+import {
+  buildManagedCompletionMessage,
+  completionInjectionSignature,
+  isCloudAgentTerminal,
+  MANAGED_CLOUD_AGENT_POLL_MS,
+} from "@/lib/ham/managedCloudAgent";
 import { CLIENT_MODEL_CATALOG_FALLBACK } from "@/lib/ham/modelCatalogFallback";
 import type { CloudMissionHandling, ManagedMissionSnapshot, ModelCatalogPayload } from "@/lib/ham/types";
 import { ManagedCloudAgentProvider } from "@/contexts/ManagedCloudAgentContext";
@@ -68,6 +76,27 @@ const MOUNT_STORAGE_KEY = "ham_project_mount_v1";
 const ACTIVE_CLOUD_AGENT_KEY = "ham_active_cloud_agent_id";
 const CLOUD_MISSION_HANDLING_KEY = "ham_cloud_mission_handling";
 const ACTIVE_SESSION_KEY = "ham_active_chat_session_id";
+const MANAGED_COMPLETION_STORAGE_KEY = "ham_managed_completion_v1";
+
+function loadManagedCompletionMap(): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(MANAGED_COMPLETION_STORAGE_KEY);
+    if (!raw) return {};
+    const o = JSON.parse(raw) as unknown;
+    if (typeof o !== "object" || o === null || Array.isArray(o)) return {};
+    return o as Record<string, string>;
+  } catch {
+    return {};
+  }
+}
+
+function saveManagedCompletionMap(m: Record<string, string>) {
+  try {
+    localStorage.setItem(MANAGED_COMPLETION_STORAGE_KEY, JSON.stringify(m));
+  } catch {
+    /* ignore */
+  }
+}
 
 type RecentMission = { id: string; label?: string; t: number };
 
@@ -281,6 +310,12 @@ function ChatPageInner({
   const [managedLastSnapshot, setManagedLastSnapshot] = React.useState<ManagedMissionSnapshot | null>(null);
   const [managedSnapshotAt, setManagedSnapshotAt] = React.useState<number | null>(null);
   const [managedPollRefreshNonce, setManagedPollRefreshNonce] = React.useState(0);
+  /** Latest gates for `processManagedAgentPollForCompletion` (read each call, no stale closure). */
+  const managedCompletionGatesRef = React.useRef({
+    uplinkId: "factory_ai" as UplinkId,
+    cloudMissionHandling: "direct" as CloudMissionHandling,
+    activeCloudAgentId: null as string | null,
+  });
 
   /** Chat history sidebar */
   const [historyOpen, setHistoryOpen] = React.useState(false);
@@ -669,6 +704,88 @@ function ChatPageInner({
       second: "2-digit",
     });
 
+  const processManagedAgentPollForCompletion = React.useCallback(
+    (agent: Record<string, unknown>, conversation: unknown) => {
+      const g = managedCompletionGatesRef.current;
+      if (g.uplinkId !== "cloud_agent" || g.cloudMissionHandling !== "managed") return;
+      const aid = g.activeCloudAgentId?.trim();
+      if (!aid) return;
+      if (!isCloudAgentTerminal(agent)) return;
+      const map = loadManagedCompletionMap();
+      if (map[aid] !== undefined) return;
+      const sig = completionInjectionSignature(agent, aid);
+      map[aid] = sig;
+      saveManagedCompletionMap(map);
+      const content = buildManagedCompletionMessage(agent, conversation);
+      const t = new Date().toLocaleTimeString([], {
+        hour12: false,
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      });
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `ham-managed-cloud-completion-${aid}-${Date.now()}`,
+          role: "system",
+          content,
+          timestamp: t,
+        },
+      ]);
+    },
+    [],
+  );
+
+  React.useEffect(() => {
+    if (uplinkId !== "cloud_agent" || cloudMissionHandling !== "managed") {
+      try {
+        localStorage.removeItem(MANAGED_COMPLETION_STORAGE_KEY);
+      } catch {
+        /* ignore */
+      }
+    }
+  }, [uplinkId, cloudMissionHandling]);
+
+  React.useEffect(() => {
+    if (
+      viewMode !== "chat" ||
+      uplinkId !== "cloud_agent" ||
+      cloudMissionHandling !== "managed" ||
+      !activeCloudAgentId?.trim()
+    ) {
+      return;
+    }
+    let dead = false;
+    const id = activeCloudAgentId.trim();
+    const run = async () => {
+      if (dead) return;
+      try {
+        const [agent, conv] = await Promise.all([
+          fetchCursorAgent(id),
+          fetchCursorAgentConversation(id),
+        ]);
+        if (dead) return;
+        processManagedAgentPollForCompletion(agent, conv);
+      } catch {
+        /* fetch errors: no completion injection */
+      }
+    };
+    void run();
+    const t = window.setInterval(() => {
+      if (!dead) void run();
+    }, MANAGED_CLOUD_AGENT_POLL_MS);
+    return () => {
+      dead = true;
+      window.clearInterval(t);
+    };
+  }, [
+    viewMode,
+    uplinkId,
+    cloudMissionHandling,
+    activeCloudAgentId,
+    processManagedAgentPollForCompletion,
+  ]);
+
   const applyOperatorResultSideEffects = React.useCallback((op: HamOperatorResult | null | undefined) => {
     if (!op?.handled) return;
     if (op.pending_apply) {
@@ -897,6 +1014,8 @@ function ChatPageInner({
     sending ? "SENDING" : isDashboardChatGatewayReady(catalog) ? "GATEWAY_READY" : "GATEWAY_OFFLINE"
   }`;
 
+  managedCompletionGatesRef.current = { uplinkId, cloudMissionHandling, activeCloudAgentId };
+
   return (
     <ManagedCloudAgentProvider value={managedCloudAgentContextValue}>
     <div className="flex h-full bg-[#000000] font-sans relative overflow-hidden">
@@ -990,6 +1109,7 @@ function ChatPageInner({
                 cloudMissionHandling={uplinkId === "cloud_agent" ? cloudMissionHandling : undefined}
                 onManagedSnapshotChange={uplinkId === "cloud_agent" ? onManagedSnapshotChange : undefined}
                 managedPollRefreshNonce={uplinkId === "cloud_agent" ? managedPollRefreshNonce : undefined}
+                onManagedPollForCompletion={uplinkId === "cloud_agent" ? processManagedAgentPollForCompletion : undefined}
                 embedUrl={paneEmbedUrl}
                 onEmbedUrlChange={setPaneEmbedUrl}
                 requestedTabId={requestedTabId}
@@ -1015,6 +1135,7 @@ function ChatPageInner({
                     cloudMissionHandling={uplinkId === "cloud_agent" ? cloudMissionHandling : undefined}
                     onManagedSnapshotChange={uplinkId === "cloud_agent" ? onManagedSnapshotChange : undefined}
                     managedPollRefreshNonce={uplinkId === "cloud_agent" ? managedPollRefreshNonce : undefined}
+                    onManagedPollForCompletion={uplinkId === "cloud_agent" ? processManagedAgentPollForCompletion : undefined}
                     embedUrl={paneEmbedUrl}
                     onEmbedUrlChange={setPaneEmbedUrl}
                     requestedTabId={requestedTabId}
