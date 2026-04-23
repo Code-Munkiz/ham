@@ -324,6 +324,44 @@ export async function fetchVercelManagedDeployStatus(agentId: string): Promise<V
   return res.json() as Promise<VercelManagedDeployStatus>;
 }
 
+/** GET /api/cursor/managed/vercel/post-deploy-validation — server-side HTTP probe (deployment URL from Vercel match only). */
+export type PostDeployValidationState = "not_attempted" | "pending" | "passed" | "failed" | "inconclusive";
+
+export type VercelPostDeployValidationPayload = {
+  state: PostDeployValidationState;
+  checked_at: string;
+  url_probed: string | null;
+  final_url?: string | null | undefined;
+  http_status: string | null;
+  match_confidence: "high" | "medium" | "low" | null;
+  reason_code: string | null;
+  message: string;
+};
+
+export type VercelPostDeployValidationResponse = {
+  deploy_ref: {
+    state: string;
+    match_confidence: "high" | "medium" | "low" | null;
+    match_reason: string | null;
+    deployment: { url: string | null; vercel_state: string | null };
+  } | null;
+  post_deploy_validation: VercelPostDeployValidationPayload;
+};
+
+export async function fetchVercelPostDeployValidation(
+  agentId: string,
+  options?: { force?: boolean },
+): Promise<VercelPostDeployValidationResponse> {
+  const q = new URLSearchParams({ agent_id: agentId.trim() });
+  if (options?.force) q.set("force", "true");
+  const res = await hamApiFetch(`/api/cursor/managed/vercel/post-deploy-validation?${q.toString()}`);
+  if (!res.ok) {
+    const detail = (await readFastApiDetail(res)) ?? `HTTP ${res.status}`;
+    throw new Error(detail);
+  }
+  return res.json() as Promise<VercelPostDeployValidationResponse>;
+}
+
 /** POST Vercel deploy hook via HAM (hook URL stays on server). */
 export async function postManagedDeployHook(agentId: string): Promise<ManagedDeployHookResult> {
   const res = await hamApiFetch("/api/cursor/managed/deploy-hook", {

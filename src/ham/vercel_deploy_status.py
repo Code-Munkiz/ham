@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 from datetime import datetime, timezone
 from typing import Any, Literal
+from urllib.parse import urlparse
 
 MatchConfidence = Literal["high", "medium", "low"]
 DeployUiState = Literal[
@@ -167,6 +168,89 @@ def _best_deployment(
     return None, None, None
 
 
+def _resolve_deployment_url(dep: dict[str, Any], ui: DeployUiState) -> str | None:
+    m = _meta(dep)
+    durl = _as_str(dep.get("url")) or _as_str(m.get("githubCommitUrl")) or _as_str(dep.get("alias")) or None
+    if ui == "ready" and not durl:
+        alias = dep.get("alias")
+        if isinstance(alias, list) and alias and isinstance(alias[0], str):
+            a0 = alias[0]
+            durl = a0 if a0.startswith("http") else f"https://{a0}"
+    return durl
+
+
+def compute_matched_deployment_view(
+    *, agent: dict[str, Any], deployments_list_json: dict[str, Any]
+) -> dict[str, Any] | None:
+    """
+    Internal view for a matched Vercel deployment (same match + URL rules as build_deploy_status_payload).
+    Returns None if no usable deployment list or no match.
+    """
+    if not isinstance(deployments_list_json, dict):
+        return None
+    raw_list = deployments_list_json.get("deployments")
+    deployments = [d for d in raw_list if isinstance(d, dict)] if isinstance(raw_list, list) else []
+
+    def _dep_created_key(dep: dict[str, Any]) -> float:
+        ca = _as_str(dep.get("createdAt") or dep.get("created")) or ""
+        d = _parse_iso(ca) if ca else None
+        return d.timestamp() if d else 0.0
+
+    deployments.sort(key=_dep_created_key, reverse=True)
+    if not deployments:
+        return None
+    dep, conf, reason = _best_deployment(agent=agent, deployments=deployments)
+    if dep is None:
+        return None
+    ui, raw = _deployment_state_fields(dep)
+    durl = _resolve_deployment_url(dep, ui)
+    return {
+        "dep": dep,
+        "match_confidence": conf,
+        "match_reason": reason,
+        "state": ui,
+        "vercel_state": raw,
+        "url": durl,
+    }
+
+
+def allowed_hosts_for_deployment(dep: dict[str, Any], primary_url: str) -> frozenset[str]:
+    """
+    Hostnames (lowercase) allowed as redirect targets when probing primary_url, derived from the
+    same Vercel deployment object only. Used for post-deploy validation SSRF protection.
+    """
+    hosts: set[str] = set()
+    p0 = urlparse(primary_url) if primary_url else None
+    if p0 and p0.netloc:
+        hosts.add(p0.netloc.split(":")[0].lower())
+    m = _meta(dep)
+    u = _as_str(dep.get("url"))
+    if u and (u.startswith("http://") or u.startswith("https://")):
+        p = urlparse(u)
+        if p.netloc:
+            hosts.add(p.netloc.split(":")[0].lower())
+    u = _as_str(m.get("githubCommitUrl"))
+    if u and (u.startswith("http://") or u.startswith("https://")):
+        p = urlparse(u)
+        if p.netloc:
+            hosts.add(p.netloc.split(":")[0].lower())
+    al = dep.get("alias")
+    if isinstance(al, list):
+        for a in al:
+            if not isinstance(a, str) or not a.strip():
+                continue
+            a = a.strip()
+            if a.startswith("http://") or a.startswith("https://"):
+                p = urlparse(a)
+                if p.netloc:
+                    hosts.add(p.netloc.split(":")[0].lower())
+            else:
+                hosts.add(a.split("/")[0].lower().split(":")[0])
+    if not hosts and p0 and p0.netloc:
+        hosts.add(p0.netloc.split(":")[0].lower())
+    return frozenset(hosts)
+
+
 def build_deploy_status_payload(
     *,
     agent: dict[str, Any] | None,
@@ -251,13 +335,7 @@ def build_deploy_status_payload(
         }
 
     ui, raw = _deployment_state_fields(dep)
-    m = _meta(dep)
-    durl = _as_str(dep.get("url")) or _as_str(m.get("githubCommitUrl")) or _as_str(dep.get("alias")) or None
-    if ui == "ready" and not durl:
-        # alias array sometimes
-        alias = dep.get("alias")
-        if isinstance(alias, list) and alias and isinstance(alias[0], str):
-            durl = alias[0] if alias[0].startswith("http") else f"https://{alias[0]}"
+    durl = _resolve_deployment_url(dep, ui)
 
     msg: str
     if conf == "high":

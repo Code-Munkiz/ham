@@ -5,8 +5,11 @@ import {
   fetchCursorAgent,
   fetchCursorAgentConversation,
   fetchVercelManagedDeployStatus,
+  fetchVercelPostDeployValidation,
+  type PostDeployValidationState,
   type VercelManagedDeployState,
   type VercelManagedDeployStatus,
+  type VercelPostDeployValidationResponse,
 } from "@/lib/ham/api";
 import {
   parseCursorConversationToLines,
@@ -70,6 +73,30 @@ function vercelStateAccentClass(s: VercelManagedDeployState): string {
   return "text-white/70";
 }
 
+function postDeployValidationLabel(s: PostDeployValidationState): string {
+  switch (s) {
+    case "passed":
+      return "Server-side check passed";
+    case "failed":
+      return "Server-side check failed";
+    case "inconclusive":
+      return "Server-side check inconclusive";
+    case "pending":
+      return "Checking…";
+    case "not_attempted":
+    default:
+      return "Validation not attempted";
+  }
+}
+
+function postDeployValidationAccentClass(s: PostDeployValidationState): string {
+  if (s === "passed") return "text-lime-400/90";
+  if (s === "failed") return "text-rose-400/90";
+  if (s === "inconclusive") return "text-amber-400/90";
+  if (s === "pending") return "text-white/60";
+  return "text-amber-200/80";
+}
+
 function snapshotLine(label: string, value: string | null | undefined): React.ReactNode {
   if (!value?.trim()) return null;
   return (
@@ -123,6 +150,10 @@ export function CloudAgentPanel({
   const [vercelDeploy, setVercelDeploy] = React.useState<VercelManagedDeployStatus | null>(null);
   const [vercelDeployErr, setVercelDeployErr] = React.useState<string | null>(null);
   const [vercelDeployLoading, setVercelDeployLoading] = React.useState(false);
+  const [postDeploy, setPostDeploy] = React.useState<VercelPostDeployValidationResponse | null>(null);
+  const [postDeployErr, setPostDeployErr] = React.useState<string | null>(null);
+  const [postDeployLoading, setPostDeployLoading] = React.useState(false);
+  const [postDeployRecheckBusy, setPostDeployRecheckBusy] = React.useState(false);
 
   const transcriptLines: CursorTranscriptLine[] = React.useMemo(
     () => parseCursorConversationToLines(convPayload),
@@ -237,7 +268,66 @@ export function CloudAgentPanel({
     };
   }, [isManaged, tabId, activeCloudAgentId]);
 
+  /** Post-deploy HTTP validation (Managed → Overview only; separate from Vercel deploy poll). */
+  React.useEffect(() => {
+    if (!isManaged || !activeCloudAgentId?.trim() || tabId !== "overview") {
+      return;
+    }
+    let cancelled = false;
+    const id = activeCloudAgentId.trim();
+    let first = true;
+    const doFetch = (force: boolean) => {
+      if (force) setPostDeployRecheckBusy(true);
+      if (first) setPostDeployLoading(true);
+      void fetchVercelPostDeployValidation(id, { force })
+        .then((j) => {
+          if (!cancelled) {
+            setPostDeploy(j);
+            setPostDeployErr(null);
+          }
+        })
+        .catch((e: unknown) => {
+          if (!cancelled) {
+            setPostDeployErr(e instanceof Error ? e.message : "Request failed");
+            setPostDeploy(null);
+          }
+        })
+        .finally(() => {
+          if (!cancelled) {
+            first = false;
+            setPostDeployLoading(false);
+            setPostDeployRecheckBusy(false);
+          }
+        });
+    };
+    doFetch(false);
+    const t = window.setInterval(() => doFetch(false), 60_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(t);
+    };
+  }, [isManaged, tabId, activeCloudAgentId]);
+
   const notConnected = !hasAgent;
+
+  const onPostDeployRecheck = () => {
+    if (!isManaged || !activeCloudAgentId?.trim()) return;
+    setPostDeployRecheckBusy(true);
+    if (!postDeploy) setPostDeployLoading(true);
+    void fetchVercelPostDeployValidation(activeCloudAgentId.trim(), { force: true })
+      .then((j) => {
+        setPostDeploy(j);
+        setPostDeployErr(null);
+      })
+      .catch((e: unknown) => {
+        setPostDeployErr(e instanceof Error ? e.message : "Request failed");
+        setPostDeploy(null);
+      })
+      .finally(() => {
+        setPostDeployRecheckBusy(false);
+        setPostDeployLoading(false);
+      });
+  };
 
   function renderCloudTab(id: CloudAgentTabId) {
     if (id === "browser") {
@@ -576,6 +666,69 @@ export function CloudAgentPanel({
                         ) on the API. Optional: <span className="font-mono">HAM_VERCEL_TEAM_ID</span>.
                       </p>
                     ) : null}
+                  </div>
+                ) : null}
+              </div>
+              <div className="mt-1.5 space-y-1.5 border-t border-amber-500/20 pt-3">
+                <p className="text-[10px] font-black uppercase tracking-widest text-amber-400/90">
+                  Post-deploy validation (server check)
+                </p>
+                <p className="text-[10px] font-medium leading-snug text-white/32">
+                  Bounded HTTP check against the <span className="text-white/50">same deployment URL</span> as Vercel
+                  match above &mdash; not a browser, not E2E, and not the deploy hook.
+                </p>
+                {postDeployLoading && !postDeploy && !postDeployErr ? (
+                  <p className="flex items-center gap-2 text-[13px] text-white/55">
+                    <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+                    Loading post-deploy validation…
+                  </p>
+                ) : null}
+                {postDeployErr ? (
+                  <p className="text-[13px] text-amber-500/90 font-mono break-words leading-relaxed">{postDeployErr}</p>
+                ) : null}
+                {postDeploy ? (
+                  <div className="space-y-1.5">
+                    <p
+                      className={cn(
+                        "text-[13px] font-semibold leading-[1.5]",
+                        postDeployValidationAccentClass(postDeploy.post_deploy_validation.state),
+                      )}
+                    >
+                      {postDeployValidationLabel(postDeploy.post_deploy_validation.state)}
+                    </p>
+                    <p className="text-[12px] text-white/50">
+                      Reason:{" "}
+                      <span className="font-mono text-white/70">
+                        {postDeploy.post_deploy_validation.reason_code ?? "—"}
+                      </span>
+                    </p>
+                    <p className="text-[13px] font-medium leading-[1.6] text-white/65 whitespace-pre-wrap">
+                      {postDeploy.post_deploy_validation.message}
+                    </p>
+                    {postDeploy.post_deploy_validation.url_probed?.trim() ? (
+                      <p className="text-[10px] text-white/50 break-all font-mono">
+                        <span className="text-white/35">Probed: </span>
+                        {postDeploy.post_deploy_validation.url_probed}
+                      </p>
+                    ) : null}
+                    {postDeploy.post_deploy_validation.http_status ? (
+                      <p className="text-[10px] text-white/40 font-mono">
+                        HTTP {postDeploy.post_deploy_validation.http_status}
+                        {postDeploy.post_deploy_validation.final_url &&
+                        postDeploy.post_deploy_validation.final_url !== postDeploy.post_deploy_validation.url_probed
+                          ? ` — final: ${postDeploy.post_deploy_validation.final_url}`
+                          : null}
+                      </p>
+                    ) : null}
+                    <p className="text-[10px] text-white/35 font-mono">Checked: {postDeploy.post_deploy_validation.checked_at}</p>
+                    <button
+                      type="button"
+                      onClick={onPostDeployRecheck}
+                      disabled={postDeployRecheckBusy}
+                      className="mt-0.5 w-full rounded border border-amber-500/30 bg-amber-500/5 px-2 py-2 text-left text-[11px] font-black uppercase tracking-widest text-amber-200/90 hover:bg-amber-500/15 disabled:opacity-50"
+                    >
+                      {postDeployRecheckBusy ? "Re-checking (force)…" : "Re-check with force (any match confidence)"}
+                    </button>
                   </div>
                 ) : null}
               </div>
