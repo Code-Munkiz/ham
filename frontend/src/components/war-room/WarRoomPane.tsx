@@ -1,11 +1,28 @@
+import * as React from "react";
+
 import type { UplinkId } from "@/components/chat/ChatComposerStrip";
 import type { CloudMissionHandling } from "@/lib/ham/types";
 
 import { CloudAgentPanel } from "./CloudAgentPanel";
 import { ElizaOsPanel } from "./ElizaOsPanel";
 import { FactoryAIPanel } from "./FactoryAIPanel";
-import { BrowserTabPanel } from "./BrowserTabPanel";
-import type { WarRoomTabId } from "./uplinkConfig";
+import { ExecutionSurfaceChrome, type ExecutionChromeMode } from "./ExecutionSurfaceChrome";
+import { WarRoomTabs } from "./WarRoomTabs";
+import { getDefaultWarRoomTab, getWarRoomTabs, type WarRoomTabId } from "./uplinkConfig";
+
+function visibleTabs(uplink: UplinkId, browserOnly: boolean) {
+  const all = getWarRoomTabs(uplink);
+  if (browserOnly) return all.filter((t) => t.id === "browser");
+  return all;
+}
+
+function pickDefaultTab(uplink: UplinkId, browserOnly: boolean): WarRoomTabId {
+  const v = visibleTabs(uplink, browserOnly);
+  if (v.length === 0) return "browser";
+  const d = getDefaultWarRoomTab(uplink);
+  if (v.some((t) => t.id === d)) return d;
+  return v[0].id;
+}
 
 export interface WarRoomPaneProps {
   uplinkId: UplinkId;
@@ -17,10 +34,15 @@ export interface WarRoomPaneProps {
   requestedTabId?: WarRoomTabId;
   requestedTabNonce?: number;
   browserOnly?: boolean;
+  executionMode: ExecutionChromeMode;
+  onCloseExecution: () => void;
+  warRoomSignal?: boolean;
+  reduceMotion?: boolean;
+  warBlink?: boolean;
 }
 
 /**
- * Uplink-specific execution surface (tabs + panels). Used for War Room and Split right pane.
+ * Uplink execution surface: **ExecutionSurfaceChrome** (Option B) + tab strip in the top bar + content below.
  */
 export function WarRoomPane({
   uplinkId,
@@ -30,38 +52,58 @@ export function WarRoomPane({
   onEmbedUrlChange,
   requestedTabId,
   requestedTabNonce,
-  browserOnly,
+  browserOnly = false,
+  executionMode,
+  onCloseExecution,
+  warRoomSignal,
+  reduceMotion,
+  warBlink,
 }: WarRoomPaneProps) {
+  const vTabs = React.useMemo(() => visibleTabs(uplinkId, browserOnly), [uplinkId, browserOnly]);
+  const [tabId, setTabId] = React.useState<WarRoomTabId>(() => pickDefaultTab(uplinkId, browserOnly));
+
+  React.useEffect(() => {
+    setTabId(pickDefaultTab(uplinkId, browserOnly));
+  }, [uplinkId, browserOnly]);
+
+  React.useEffect(() => {
+    if (!requestedTabId || !vTabs.some((t) => t.id === requestedTabId)) return;
+    setTabId(requestedTabId);
+  }, [requestedTabId, requestedTabNonce, vTabs]);
+
+  React.useEffect(() => {
+    if (vTabs.length > 0 && !vTabs.some((t) => t.id === tabId)) {
+      setTabId(pickDefaultTab(uplinkId, browserOnly));
+    }
+  }, [vTabs, tabId, uplinkId, browserOnly]);
+
+  const tabBar = <WarRoomTabs tabs={vTabs} activeId={tabId} onSelect={setTabId} variant="chrome" />;
+
   return (
-    <div className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col">
-      {browserOnly ? (
-        <div className="flex flex-1 min-h-0 p-2">
-          <BrowserTabPanel embedUrl={embedUrl} onEmbedUrlChange={onEmbedUrlChange} autoStart />
-        </div>
-      ) : uplinkId === "cloud_agent" ? (
-        <CloudAgentPanel
-          activeCloudAgentId={activeCloudAgentId}
-          cloudMissionHandling={cloudMissionHandling}
-          embedUrl={embedUrl}
-          onEmbedUrlChange={onEmbedUrlChange}
-          requestedTabId={requestedTabId}
-          requestedTabNonce={requestedTabNonce}
-        />
-      ) : uplinkId === "factory_ai" ? (
-        <FactoryAIPanel
-          embedUrl={embedUrl}
-          onEmbedUrlChange={onEmbedUrlChange}
-          requestedTabId={requestedTabId}
-          requestedTabNonce={requestedTabNonce}
-        />
-      ) : (
-        <ElizaOsPanel
-          embedUrl={embedUrl}
-          onEmbedUrlChange={onEmbedUrlChange}
-          requestedTabId={requestedTabId}
-          requestedTabNonce={requestedTabNonce}
-        />
-      )}
-    </div>
+    <ExecutionSurfaceChrome
+      mode={executionMode}
+      onClose={onCloseExecution}
+      tabBar={tabBar}
+      warRoomSignal={warRoomSignal}
+      reduceMotion={reduceMotion}
+      warBlink={warBlink}
+      browserOnly={browserOnly}
+    >
+      <div className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden">
+        {uplinkId === "cloud_agent" ? (
+          <CloudAgentPanel
+            tabId={tabId}
+            activeCloudAgentId={activeCloudAgentId}
+            cloudMissionHandling={cloudMissionHandling}
+            embedUrl={embedUrl}
+            onEmbedUrlChange={onEmbedUrlChange}
+          />
+        ) : uplinkId === "factory_ai" ? (
+          <FactoryAIPanel tabId={tabId} embedUrl={embedUrl} onEmbedUrlChange={onEmbedUrlChange} />
+        ) : (
+          <ElizaOsPanel tabId={tabId} embedUrl={embedUrl} onEmbedUrlChange={onEmbedUrlChange} />
+        )}
+      </div>
+    </ExecutionSurfaceChrome>
   );
 }

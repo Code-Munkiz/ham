@@ -2,34 +2,18 @@ import * as React from "react";
 
 import { STUB_SWARM_WORKERS } from "./stubs/factoryAiStub";
 import { BrowserTabPanel } from "./BrowserTabPanel";
-import { WarRoomTabs } from "./WarRoomTabs";
-import { getDefaultWarRoomTab, getWarRoomTabs, type FactoryAiTabId, type WarRoomTabId } from "./uplinkConfig";
+import type { WarRoomTabId } from "./uplinkConfig";
 
 export interface FactoryAIPanelProps {
+  tabId: WarRoomTabId;
   embedUrl: string;
   onEmbedUrlChange: (v: string) => void;
-  requestedTabId?: WarRoomTabId;
-  requestedTabNonce?: number;
 }
 
-export function FactoryAIPanel({
-  embedUrl,
-  onEmbedUrlChange,
-  requestedTabId,
-  requestedTabNonce,
-}: FactoryAIPanelProps) {
-  const [tabId, setTabId] = React.useState<WarRoomTabId>(() => getDefaultWarRoomTab("factory_ai"));
-  const tabs = getWarRoomTabs("factory_ai");
-
-  React.useEffect(() => {
-    if (!requestedTabId || !tabs.some((t) => t.id === requestedTabId)) return;
-    setTabId(requestedTabId);
-  }, [requestedTabId, requestedTabNonce, tabs]);
-
+export function FactoryAIPanel({ tabId, embedUrl, onEmbedUrlChange }: FactoryAIPanelProps) {
   return (
-    <div className="flex flex-col flex-1 min-h-0">
-      <WarRoomTabs tabs={tabs} activeId={tabId} onSelect={setTabId} />
-      <div className="flex-1 overflow-y-auto min-h-0 p-2">
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="min-h-0 flex-1 overflow-y-auto p-2">
         {tabId === "browser" ? (
           <BrowserTabPanel embedUrl={embedUrl} onEmbedUrlChange={onEmbedUrlChange} />
         ) : tabId === "swarm" ? (

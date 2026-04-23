@@ -10,19 +10,20 @@ import { cn } from "@/lib/utils";
 import type { CloudMissionHandling, ManagedReviewSeverity } from "@/lib/ham/types";
 import { useManagedCloudAgentContext } from "@/contexts/ManagedCloudAgentContext";
 
+import { buildReadableAgentFields } from "@/lib/ham/cursorAgentTrackerView";
+
 import { BrowserTabPanel } from "./BrowserTabPanel";
 import { CloudAgentNotConnected } from "./CloudAgentNotConnected";
-import { WarRoomTabs } from "./WarRoomTabs";
-import { getDefaultWarRoomTab, getWarRoomTabs, type CloudAgentTabId, type WarRoomTabId } from "./uplinkConfig";
+import type { CloudAgentTabId, WarRoomTabId } from "./uplinkConfig";
 
 export interface CloudAgentPanelProps {
+  /** Active tab (owned by `WarRoomPane` — tab strip is in the execution chrome). */
+  tabId: WarRoomTabId;
   activeCloudAgentId: string | null;
   /** Cloud Agent only: how this mission is handled in HAM (UI + future orchestration). */
   cloudMissionHandling?: CloudMissionHandling;
   embedUrl: string;
   onEmbedUrlChange: (v: string) => void;
-  requestedTabId?: WarRoomTabId;
-  requestedTabNonce?: number;
 }
 
 function reviewSeverityClass(s: ManagedReviewSeverity): string {
@@ -68,26 +69,29 @@ function SnapshotProgressField({ value }: { value: string | null | undefined }) 
 }
 
 export function CloudAgentPanel({
+  tabId,
   activeCloudAgentId,
   cloudMissionHandling = "direct",
   embedUrl,
   onEmbedUrlChange,
-  requestedTabId,
-  requestedTabNonce,
 }: CloudAgentPanelProps) {
-  const [tabId, setTabId] = React.useState<WarRoomTabId>(() => getDefaultWarRoomTab("cloud_agent"));
-  const tabs = getWarRoomTabs("cloud_agent");
   const managed = useManagedCloudAgentContext();
 
   const [agentPayload, setAgentPayload] = React.useState<Record<string, unknown> | null>(null);
   const [convPayload, setConvPayload] = React.useState<unknown | null>(null);
   const [transcriptView, setTranscriptView] = React.useState<"readable" | "raw">("readable");
+  const [trackerView, setTrackerView] = React.useState<"readable" | "raw">("readable");
   const [loading, setLoading] = React.useState(false);
   const [err, setErr] = React.useState<string | null>(null);
 
   const transcriptLines: CursorTranscriptLine[] = React.useMemo(
     () => parseCursorConversationToLines(convPayload),
     [convPayload],
+  );
+
+  const trackerReadable = React.useMemo(
+    () => buildReadableAgentFields(agentPayload),
+    [agentPayload],
   );
 
   const hasAgent = Boolean(activeCloudAgentId?.trim());
@@ -108,12 +112,11 @@ export function CloudAgentPanel({
   }, [tabId, activeCloudAgentId]);
 
   React.useEffect(() => {
-    if (!requestedTabId || !tabs.some((t) => t.id === requestedTabId)) return;
-    setTabId(requestedTabId);
-  }, [requestedTabId, requestedTabNonce, tabs]);
+    setTranscriptView("readable");
+  }, [activeCloudAgentId]);
 
   React.useEffect(() => {
-    setTranscriptView("readable");
+    setTrackerView("readable");
   }, [activeCloudAgentId]);
 
   React.useEffect(() => {
@@ -178,18 +181,48 @@ export function CloudAgentPanel({
       if (err) {
         return <p className="text-[13px] text-amber-500/80 p-4 font-mono leading-relaxed">{err}</p>;
       }
+      const rawJson = JSON.stringify(agentPayload, null, 2);
       return (
         <div className="space-y-3 p-4">
-          <div className="flex items-center gap-2 text-[#00E5FF]">
-            <Package className="h-5 w-5 shrink-0" />
-            <span className="text-[11px] font-black uppercase tracking-widest">Artifact &amp; PR tracker</span>
+          <div className="flex flex-wrap items-center justify-between gap-2 text-[#00E5FF]">
+            <div className="flex min-w-0 items-center gap-2">
+              <Package className="h-5 w-5 shrink-0" />
+              <span className="text-[11px] font-black uppercase tracking-widest">Artifact &amp; PR tracker</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setTrackerView((v) => (v === "readable" ? "raw" : "readable"))}
+              className="shrink-0 rounded-md border border-white/15 bg-black/50 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-widest text-white/80 hover:border-[#FF6B00]/50 hover:text-[#FF6B00]"
+            >
+              {trackerView === "readable" ? "Show raw JSON" : "Readable view"}
+            </button>
           </div>
-          <p className="text-[13px] font-medium text-white/70 uppercase tracking-[0.02em] leading-[1.6]">
-            Live agent payload (status / source / target). PR and file rows wire here when mapped from API.
-          </p>
-          <pre className="text-[12px] font-mono text-white/70 overflow-auto max-h-[240px] p-3 border border-white/10 bg-black/60 rounded leading-relaxed">
-            {JSON.stringify(agentPayload, null, 2)}
-          </pre>
+          {trackerView === "raw" ? (
+            <p className="text-[10px] font-bold text-white/35">
+              Raw agent payload from Cursor (via HAM) — for debugging; API shape may change.
+            </p>
+          ) : (
+            <p className="text-[13px] font-medium text-white/70 uppercase tracking-[0.02em] leading-[1.6]">
+              Status, repository, and handoff from the live agent object. Structured PR/artifact rows will map here when
+              available.
+            </p>
+          )}
+          {trackerView === "raw" ? (
+            <pre className="overflow-x-auto rounded border border-white/10 bg-black/60 p-3 text-[12px] font-mono text-white/75 leading-relaxed">
+              {rawJson}
+            </pre>
+          ) : (
+            <ul className="space-y-2.5 rounded-xl border border-white/10 bg-black/40 p-3">
+              {trackerReadable.map((row, i) => (
+                <li key={`${i}-${row.label}`} className="border-b border-white/5 pb-2.5 last:border-0 last:pb-0">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-white/40">{row.label}</p>
+                  <p className="mt-1 text-[13px] font-medium leading-[1.5] text-white/88 [overflow-wrap:anywhere]">
+                    {row.value}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       );
     }
@@ -407,12 +440,7 @@ export function CloudAgentPanel({
           ) : null}
         </div>
       ) : null}
-      <WarRoomTabs
-        tabs={tabs}
-        activeId={tabId}
-        onSelect={(id) => setTabId(id)}
-      />
-      <div className="flex-1 overflow-y-auto min-h-0 p-2">{renderCloudTab(tabId as CloudAgentTabId)}</div>
+      <div className="flex-1 min-h-0 overflow-y-auto p-2">{renderCloudTab(tabId as CloudAgentTabId)}</div>
     </div>
   );
 }

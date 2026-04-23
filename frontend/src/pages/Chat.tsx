@@ -66,7 +66,6 @@ import { useManagedCloudAgentPoll } from "@/hooks/useManagedCloudAgentPoll";
 import { isDashboardChatGatewayReady } from "@/lib/ham/types";
 import { useAgent } from "@/lib/ham/AgentContext";
 import { useWorkspace } from "@/lib/ham/WorkspaceContext";
-import { ExecutionSurfaceChrome } from "@/components/war-room/ExecutionSurfaceChrome";
 import { ResizableWorkbenchSplit } from "@/components/war-room/ResizableWorkbenchSplit";
 import { WarRoomPane } from "@/components/war-room/WarRoomPane";
 import type { WarRoomTabId } from "@/components/war-room/uplinkConfig";
@@ -1286,45 +1285,37 @@ function ChatPageInner({
           {viewMode === "chat" ? (
             <TranscriptColumn messages={messages} primaryPersona={primaryPersona} />
           ) : viewMode === "preview" ? (
-            <ExecutionSurfaceChrome
-              mode="preview"
-              onClose={() => setViewMode("chat")}
+            <WarRoomPane
+              uplinkId={uplinkId}
+              activeCloudAgentId={activeCloudAgentId}
+              cloudMissionHandling={uplinkId === "cloud_agent" ? cloudMissionHandling : undefined}
+              embedUrl={paneEmbedUrl}
+              onEmbedUrlChange={setPaneEmbedUrl}
+              requestedTabId={requestedTabId}
+              requestedTabNonce={requestedTabNonce}
               browserOnly={browserOnly}
-            >
-              <WarRoomPane
-                uplinkId={uplinkId}
-                activeCloudAgentId={activeCloudAgentId}
-                cloudMissionHandling={uplinkId === "cloud_agent" ? cloudMissionHandling : undefined}
-                embedUrl={paneEmbedUrl}
-                onEmbedUrlChange={setPaneEmbedUrl}
-                requestedTabId={requestedTabId}
-                requestedTabNonce={requestedTabNonce}
-                browserOnly={browserOnly}
-              />
-            </ExecutionSurfaceChrome>
+              executionMode="preview"
+              onCloseExecution={() => setViewMode("chat")}
+            />
           ) : (
             <ResizableWorkbenchSplit
               left={<TranscriptColumn messages={messages} primaryPersona={primaryPersona} />}
               right={
-                <ExecutionSurfaceChrome
-                  mode={viewMode === "war_room" ? "war_room" : "split"}
-                  onClose={() => setViewMode("chat")}
+                <WarRoomPane
+                  uplinkId={uplinkId}
+                  activeCloudAgentId={activeCloudAgentId}
+                  cloudMissionHandling={uplinkId === "cloud_agent" ? cloudMissionHandling : undefined}
+                  embedUrl={paneEmbedUrl}
+                  onEmbedUrlChange={setPaneEmbedUrl}
+                  requestedTabId={requestedTabId}
+                  requestedTabNonce={requestedTabNonce}
+                  browserOnly={browserOnly}
+                  executionMode={viewMode === "war_room" ? "war_room" : "split"}
+                  onCloseExecution={() => setViewMode("chat")}
                   warRoomSignal={viewMode === "war_room"}
                   reduceMotion={reduceMotion}
                   warBlink={warBlink}
-                  browserOnly={browserOnly}
-                >
-                  <WarRoomPane
-                    uplinkId={uplinkId}
-                    activeCloudAgentId={activeCloudAgentId}
-                    cloudMissionHandling={uplinkId === "cloud_agent" ? cloudMissionHandling : undefined}
-                    embedUrl={paneEmbedUrl}
-                    onEmbedUrlChange={setPaneEmbedUrl}
-                    requestedTabId={requestedTabId}
-                    requestedTabNonce={requestedTabNonce}
-                    browserOnly={browserOnly}
-                  />
-                </ExecutionSurfaceChrome>
+                />
               }
             />
           )}

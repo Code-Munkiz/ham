@@ -2,34 +2,18 @@ import * as React from "react";
 
 import { STUB_ELIZA_THOUGHT_LINES } from "./stubs/elizaStub";
 import { BrowserTabPanel } from "./BrowserTabPanel";
-import { WarRoomTabs } from "./WarRoomTabs";
-import { getDefaultWarRoomTab, getWarRoomTabs, type WarRoomTabId } from "./uplinkConfig";
+import type { WarRoomTabId } from "./uplinkConfig";
 
 export interface ElizaOsPanelProps {
+  tabId: WarRoomTabId;
   embedUrl: string;
   onEmbedUrlChange: (v: string) => void;
-  requestedTabId?: WarRoomTabId;
-  requestedTabNonce?: number;
 }
 
-export function ElizaOsPanel({
-  embedUrl,
-  onEmbedUrlChange,
-  requestedTabId,
-  requestedTabNonce,
-}: ElizaOsPanelProps) {
-  const [tabId, setTabId] = React.useState<WarRoomTabId>(() => getDefaultWarRoomTab("eliza_os"));
-  const tabs = getWarRoomTabs("eliza_os");
-
-  React.useEffect(() => {
-    if (!requestedTabId || !tabs.some((t) => t.id === requestedTabId)) return;
-    setTabId(requestedTabId);
-  }, [requestedTabId, requestedTabNonce, tabs]);
-
+export function ElizaOsPanel({ tabId, embedUrl, onEmbedUrlChange }: ElizaOsPanelProps) {
   return (
-    <div className="flex flex-col flex-1 min-h-0">
-      <WarRoomTabs tabs={tabs} activeId={tabId} onSelect={setTabId} />
-      <div className="flex-1 overflow-y-auto min-h-0 p-2">
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="min-h-0 flex-1 overflow-y-auto p-2">
         {tabId === "browser" ? (
           <BrowserTabPanel embedUrl={embedUrl} onEmbedUrlChange={onEmbedUrlChange} />
         ) : tabId === "thought_stream" ? (
