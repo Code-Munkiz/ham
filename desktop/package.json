@@ -1,7 +1,7 @@
 {
   "name": "ham-desktop",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Thin Electron shell for HAM (Milestone 1 — no bundled API)",
   "homepage": "https://github.com/Code-Munkiz/ham",
   "main": "main.cjs",

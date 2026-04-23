@@ -29,9 +29,17 @@ import Landing from "./pages/Landing";
 import { AgentProvider } from "./lib/ham/AgentContext";
 import { WorkspaceProvider } from "./lib/ham/WorkspaceContext";
 import { ClerkAccessBridge } from "./lib/ham/ClerkAccessBridge";
-import { getHamDesktopConfig } from "./lib/ham/desktopConfig";
+import { getHamDesktopConfig, isHamDesktopShell } from "./lib/ham/desktopConfig";
 
 const clerkPublishableKey = (import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined)?.trim();
+
+/** Web: marketing landing. Desktop shell: go straight to chat (no landing hero). */
+function HomeRoute() {
+  if (isHamDesktopShell()) {
+    return <Navigate to="/chat" replace />;
+  }
+  return <Landing />;
+}
 
 function AppRoutes() {
   const useHash = getHamDesktopConfig()?.useHashRouter === true;
@@ -40,7 +48,7 @@ function AppRoutes() {
     <Router>
       <AppLayout>
         <Routes>
-          <Route path="/" element={<Landing />} />
+          <Route path="/" element={<HomeRoute />} />
           <Route path="/overview" element={<Overview />} />
           <Route path="/chat" element={<Chat />} />
           <Route path="/droids" element={<Droids />} />

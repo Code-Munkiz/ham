@@ -41,20 +41,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, [isSettingsPage, isChatPage]);
 
-  if (isBareLanding) {
-    // Packaged desktop: hero stays minimal (no download CTAs); rail is required to reach /chat et al.
-    if (isHamDesktopShell()) {
-      return (
-        <div className="flex h-screen overflow-hidden bg-black text-foreground font-sans">
-          <NavRail />
-          <div className="flex-1 overflow-hidden flex flex-col min-w-0">
-            <HamDeploymentRestrictedBanner show={hamDeploymentRestricted} />
-            {children}
-          </div>
-          <Toaster theme="dark" position="bottom-right" closeButton richColors />
-        </div>
-      );
-    }
+  // Web marketing landing only — desktop shell redirects `/` → `/chat` and never shows this layout.
+  if (isBareLanding && !isHamDesktopShell()) {
     return (
       <>
         <HamDeploymentRestrictedBanner show={hamDeploymentRestricted} />

@@ -14,6 +14,8 @@ import {
 } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { isHamDesktopShell } from "@/lib/ham/desktopConfig";
+import { publicAssetUrl } from "@/lib/ham/publicAssets";
 
 const primaryNav = [
   { icon: MessageSquare, label: "Chat", path: "/chat" },
@@ -27,6 +29,9 @@ const primaryNav = [
 export function NavRail() {
   const location = useLocation();
   const navigate = useNavigate();
+  const isDesktop = isHamDesktopShell();
+  const logoSrc = publicAssetUrl("ham-logo.png");
+  const homePath = isDesktop ? "/chat" : "/";
   const [isOpsOpen, setIsOpsOpen] = useState(false);
   const opsRef = useRef<HTMLDivElement>(null);
 
@@ -46,13 +51,13 @@ export function NavRail() {
   return (
     <div className="w-[64px] h-full flex flex-col items-center py-6 bg-[#000000] border-r border-white/5 z-50 transition-colors shrink-0">
       <Link
-        to="/"
+        to={homePath}
         className="mb-10 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg hover:bg-white/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF6B00]/55 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
-        title="Ham — home"
-        aria-label="Return to landing page"
+        title={isDesktop ? "Ham — chat" : "Ham — home"}
+        aria-label={isDesktop ? "Open chat" : "Return to landing page"}
       >
         <img
-          src="/ham-logo.png"
+          src={logoSrc}
           alt=""
           className="h-7 w-7 object-contain brightness-0 invert opacity-90 pointer-events-none"
         />

@@ -2,6 +2,12 @@
 
 Thin shell: renderer is the existing Vite/React app; FastAPI stays a separate HTTP service.
 
+## Shell UX (M1)
+
+- **First screen:** the packaged app **opens Chat** (`/` redirects to `/chat`). The marketing landing (“go ham” / astrochimp) is **web-only**.
+- **Menu bar:** on **Linux and Windows**, the default Electron **File / Edit / View** menu is **removed** so the window chrome stays dark; **macOS** keeps the normal app menu.
+- **Public assets:** the nav logo uses the same **relative `public/` URLs** as the Vite build (`base: ./`) so icons load under **`file://`** in the packaged renderer.
+
 ## Security (M1)
 
 - Main: window lifecycle, reads optional `userData/ham-desktop-config.json`, merges env.

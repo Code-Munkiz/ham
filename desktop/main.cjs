@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 
@@ -72,6 +72,8 @@ function createWindow() {
   const win = new BrowserWindow({
     width: 1280,
     height: 800,
+    backgroundColor: '#000000',
+    autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -97,6 +99,12 @@ ipcMain.on('ham-desktop:get-config-sync', (event) => {
 });
 
 app.whenReady().then(() => {
+  // Native File/Edit/View menu uses the OS theme (often light on Linux) — drop it for a darker shell.
+  // macOS keeps the default menu so app/window semantics stay familiar.
+  if (process.platform !== 'darwin') {
+    Menu.setApplicationMenu(null);
+  }
+
   createWindow();
 
   app.on('activate', () => {

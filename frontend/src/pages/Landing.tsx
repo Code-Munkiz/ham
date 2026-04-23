@@ -7,6 +7,7 @@ import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import { HAM_DESKTOP_DOWNLOAD_CTAS } from "@/lib/ham/desktopDownloadCtas";
 import { isHamDesktopShell } from "@/lib/ham/desktopConfig";
+import { publicAssetUrl } from "@/lib/ham/publicAssets";
 
 const LINE = "go ham";
 const TYPE_MS = 95;
@@ -52,7 +53,7 @@ export default function Landing() {
 
   const hamImg = (
     <img
-      src="/ham-landing.png"
+      src={publicAssetUrl("ham-landing.png")}
       alt="Ham — terminal-style astrochimp portrait"
       className="w-full h-auto object-contain pointer-events-none select-none"
       draggable={false}
