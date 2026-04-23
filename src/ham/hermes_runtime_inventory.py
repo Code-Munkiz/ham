@@ -21,13 +21,13 @@ _KIND = "ham_hermes_runtime_inventory"
 _RAW_CAP = 12_000
 _CMD_TIMEOUT_S = 25.0
 
-# argv after the hermes binary name (allowlist only)
+# argv after the hermes binary name (allowlist only). No ``hermes dump`` — not a valid subcommand
+# in current Hermes CLI builds.
 _ALLOWED_CLI_INVOCATIONS: tuple[tuple[str, ...], ...] = (
     ("tools", "--summary"),
     ("plugins", "list"),
     ("mcp", "list"),
     ("status", "--all"),
-    ("dump",),
 )
 
 _SECRET_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
@@ -36,9 +36,18 @@ _SECRET_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
         r"\1[REDACTED]",
     ),
     (re.compile(r"(?i)(api[_-]?key|secret|token|password)\s*[:=]\s*\S+"), r"\1: [REDACTED]"),
+    # OpenRouter / similar: ``sk-or-v1-...`` (hyphens; not covered by ``sk-[a-zA-Z0-9]+`` alone).
+    (re.compile(r"(?i)\bsk-or-v1-[a-z0-9_-]{20,}\b"), "[REDACTED]"),
     (re.compile(r"(?i)(sk-[a-zA-Z0-9]{10,})"), "[REDACTED]"),
     (re.compile(r"(?i)(Bearer\s+)\S+"), r"\1[REDACTED]"),
     (re.compile(r"(?i)(x-api-key:\s*)\S+", re.MULTILINE), r"\1[REDACTED]"),
+    # Provider lines like ``FAL           ✓ uuid:secret-token``
+    (
+        re.compile(
+            r"(?i)(\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[0-9a-f]{16,}\b)"
+        ),
+        "[REDACTED]",
+    ),
 )
 
 
@@ -73,6 +82,16 @@ def cap_raw(text: str) -> str:
     if len(text) <= _RAW_CAP:
         return text
     return text[: _RAW_CAP - 20] + "\n… [truncated]"
+
+
+def _tools_requires_interactive_terminal(combined_output: str) -> bool:
+    low = combined_output.lower()
+    return (
+        "interactive terminal" in low
+        or "non-interactive" in low
+        or ("tty" in low and "pipe" in low)
+        or "requires an interactive" in low
+    )
 
 
 def _run_hermes_cli(
@@ -306,7 +325,9 @@ def build_runtime_inventory() -> dict[str, Any]:
         "status": "unavailable",
         "summary_text": "",
         "toolsets": [],
+        "config_toolsets": [],
         "raw_redacted": "",
+        "warning": "",
     }
     empty_plugins: dict[str, Any] = {
         "status": "unavailable",
@@ -320,7 +341,6 @@ def build_runtime_inventory() -> dict[str, Any]:
     }
     status_block: dict[str, Any] = {
         "status_all": {"status": "unavailable", "raw_redacted": ""},
-        "dump": {"status": "unavailable", "raw_redacted": ""},
     }
 
     if mode == "remote_only":
@@ -387,16 +407,44 @@ def build_runtime_inventory() -> dict[str, Any]:
         env["HERMES_HOME"] = str(Path(home_hint).expanduser().resolve())
         env.setdefault("HAM_HERMES_HOME", env["HERMES_HOME"])
 
+    cfg = load_sanitized_config(hermes_home_path) if hermes_home_path.is_dir() else {
+        "status": "missing",
+        "toolsets": [],
+        "plugins_enabled": [],
+        "plugins_disabled": [],
+        "mcp_servers": [],
+        "memory_provider": "",
+        "context_engine": "",
+        "external_skill_dirs_count": 0,
+    }
+
     tools_out = _cli_section(binary, ("tools", "--summary"), env, home_hint)
+    tools_out.setdefault("config_toolsets", [])
+    tools_out.setdefault("warning", "")
     if "exit_code" in tools_out:
-        tools_out["status"] = "ok" if tools_out["exit_code"] == 0 else "error"
-        del tools_out["exit_code"]
+        ec = tools_out.pop("exit_code")
+        raw_for_tty = tools_out.get("raw_redacted", "")
+        if ec == 0:
+            tools_out["status"] = "ok"
+        elif _tools_requires_interactive_terminal(raw_for_tty):
+            tools_out["status"] = "requires_tty"
+            tools_out["warning"] = (
+                "Hermes tools summary requires an interactive terminal in this CLI version."
+            )
+            warnings.append(tools_out["warning"])
+        else:
+            tools_out["status"] = "error"
     for line in tools_out.get("raw_redacted", "").splitlines():
         stripped = line.strip()
         if stripped.startswith(("-", "*")) or re.match(r"^\d+[\).\s]", stripped):
             tools_out.setdefault("toolsets", []).append(stripped[:500])
     if not tools_out["toolsets"] and tools_out.get("summary_text"):
         tools_out["toolsets"] = [tools_out["summary_text"][:500]]
+
+    if cfg.get("toolsets") and tools_out["status"] in ("requires_tty", "error"):
+        tools_out["config_toolsets"] = list(cfg["toolsets"])
+        if not tools_out["toolsets"]:
+            tools_out["toolsets"] = [f"config:{t}" for t in cfg["toolsets"][:48]]
 
     plugins_out = _cli_section(binary, ("plugins", "list"), env, home_hint)
     if "exit_code" in plugins_out:
@@ -418,27 +466,10 @@ def build_runtime_inventory() -> dict[str, Any]:
     if "exit_code" in st_out:
         st_out["status"] = "ok" if st_out["exit_code"] == 0 else "error"
         st_out.pop("exit_code", None)
-    dump_out = _cli_section(binary, ("dump",), env, home_hint)
-    if "exit_code" in dump_out:
-        dump_out["status"] = "ok" if dump_out["exit_code"] == 0 else "error"
-        dump_out.pop("exit_code", None)
-    for blk in (st_out, dump_out):
-        for k in ("summary_text", "toolsets", "items", "servers"):
-            blk.pop(k, None)
+    for k in ("summary_text", "toolsets", "items", "servers"):
+        st_out.pop(k, None)
     status_block = {
         "status_all": {"status": st_out["status"], "raw_redacted": st_out.get("raw_redacted", "")},
-        "dump": {"status": dump_out["status"], "raw_redacted": dump_out.get("raw_redacted", "")},
-    }
-
-    cfg = load_sanitized_config(hermes_home_path) if hermes_home_path.is_dir() else {
-        "status": "missing",
-        "toolsets": [],
-        "plugins_enabled": [],
-        "plugins_disabled": [],
-        "mcp_servers": [],
-        "memory_provider": "",
-        "context_engine": "",
-        "external_skill_dirs_count": 0,
     }
 
     if cfg.get("external_skill_dirs_count"):
@@ -450,9 +481,11 @@ def build_runtime_inventory() -> dict[str, Any]:
         if mcp_out["status"] != "ok" or not mcp_out.get("servers"):
             mcp_out["servers"] = [{"text": f"config:{s['name']} ({s['transport']})"} for s in cfg["mcp_servers"][:50]]
 
-    partial_note = any(
-        x.get("status") == "error"
-        for x in (tools_out, plugins_out, mcp_out, status_block["status_all"], status_block["dump"])
+    partial_note = (
+        tools_out["status"] == "error"
+        or plugins_out["status"] == "error"
+        or mcp_out["status"] == "error"
+        or status_block["status_all"]["status"] == "error"
     )
     if partial_note:
         warnings.append("One or more Hermes CLI subcommands failed; see per-section status and raw_redacted.")

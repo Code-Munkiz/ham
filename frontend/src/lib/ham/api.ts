@@ -145,6 +145,8 @@ export interface HermesRuntimeInventory {
     status: string;
     summary_text?: string;
     toolsets: string[];
+    config_toolsets?: string[];
+    warning?: string;
     raw_redacted: string;
   };
   plugins: {
@@ -166,7 +168,6 @@ export interface HermesRuntimeInventory {
   };
   status: {
     status_all: { status: string; raw_redacted: string };
-    dump: { status: string; raw_redacted: string };
   };
   warnings: string[];
 }

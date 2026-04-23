@@ -109,6 +109,7 @@ export default function HermesHub() {
   function cliTruth(invIn: HermesRuntimeInventory, st: string): string {
     if (!invIn.available) return "Unavailable";
     if (st === "ok") return "Live local";
+    if (st === "requires_tty") return "Requires TTY";
     if (st === "error") return "Error";
     return "Unavailable";
   }
@@ -267,6 +268,18 @@ export default function HermesHub() {
                       Tools &amp; toolsets —{" "}
                       <span className="text-white/55">{cliTruth(inv, inv.tools.status)}</span>
                     </div>
+                    {inv.tools.warning ? (
+                      <p className="text-[11px] text-amber-100/85">{inv.tools.warning}</p>
+                    ) : null}
+                    {(inv.tools.config_toolsets?.length ?? 0) > 0 ? (
+                      <p className="text-[10px] text-white/45">
+                        Config-backed toolsets (names only):{" "}
+                        {inv.tools.config_toolsets!.slice(0, 12).join(", ")}
+                        {inv.tools.config_toolsets!.length > 12
+                          ? ` +${inv.tools.config_toolsets!.length - 12} more`
+                          : ""}
+                      </p>
+                    ) : null}
                     {inv.tools.toolsets.length > 0 ? (
                       <ul className="list-disc pl-5 font-mono text-[10px] text-white/55">
                         {inv.tools.toolsets.slice(0, 12).map((t) => (
@@ -369,26 +382,22 @@ export default function HermesHub() {
                       <span className="text-white/55">
                         {!inv.available
                           ? "Unavailable"
-                          : inv.status.status_all.status === "ok" &&
-                              inv.status.dump.status === "ok"
+                          : inv.status.status_all.status === "ok"
                             ? "Live local"
                             : "Error"}
                       </span>
                     </div>
                     <p className="text-white/45">
-                      <span className="font-mono">hermes status --all</span>: {inv.status.status_all.status}{" "}
-                      · <span className="font-mono">hermes dump</span>: {inv.status.dump.status}
+                      <span className="font-mono">hermes status --all</span>: {inv.status.status_all.status}
                     </p>
-                    {(inv.status.status_all.raw_redacted || inv.status.dump.raw_redacted) && (
+                    {inv.status.status_all.raw_redacted ? (
                       <details className="text-[10px] text-white/40">
                         <summary className="cursor-pointer text-[#FF6B00]/80">Raw (redacted)</summary>
                         <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-all text-white/45">
-                          {(inv.status.status_all.raw_redacted || "").slice(0, 2000)}
-                          {"\n---\n"}
-                          {(inv.status.dump.raw_redacted || "").slice(0, 2000)}
+                          {(inv.status.status_all.raw_redacted || "").slice(0, 4000)}
                         </pre>
                       </details>
-                    )}
+                    ) : null}
                   </div>
                 </div>
               )}

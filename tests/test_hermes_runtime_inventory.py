@@ -16,10 +16,17 @@ client = TestClient(app)
 
 
 def test_redact_secrets_strips_bearer_and_api_key() -> None:
-    raw = "Authorization: Bearer supersecret\ntoken: abc123\nAPI_KEY=sk-test-123456789012"
+    raw = (
+        "Authorization: Bearer supersecret\ntoken: abc123\nAPI_KEY=sk-test-123456789012\n"
+        "OpenRouter sk-or-v1-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
+        "fal 8f0e2f3a-1111-2222-3333-444444444444:0123456789abcdef0123456789abcdef01234567\n"
+    )
     out = inv.redact_secrets(raw)
     assert "supersecret" not in out
     assert "sk-test" not in out
+    assert "sk-or-v1" not in out
+    assert "aaaaaaaaaaaaaaaa" not in out
+    assert "0123456789abcdef0123456789abcdef01234567" not in out
 
 
 def test_sanitize_mcp_server_entry_redacts_env_presence_only() -> None:
@@ -144,9 +151,13 @@ def test_inventory_mock_subprocess_partial_error(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setenv("HAM_HERMES_CLI_PATH", str(fake_bin))
     hermes = tmp_path / ".hermes"
     hermes.mkdir()
+    (hermes / "config.yaml").write_text("skills:\n  toolsets: [from-yaml]\n", encoding="utf-8")
     monkeypatch.setenv("HERMES_HOME", str(hermes))
 
+    cmds: list[tuple[str, ...]] = []
+
     def fake_run(cmd, **_kwargs):
+        cmds.append(tuple(cmd))
         m = MagicMock()
         m.returncode = 0
         m.stdout = "line1\n"
@@ -160,8 +171,6 @@ def test_inventory_mock_subprocess_partial_error(monkeypatch: pytest.MonkeyPatch
             m.stdout = "mcp-a\n"
         elif "status" in cmd:
             m.stdout = "status ok"
-        elif "dump" in cmd and cmd[-1] == "dump":
-            m.stdout = "dump: ok"
         return m
 
     monkeypatch.setattr("src.ham.hermes_runtime_inventory.subprocess.run", fake_run)
@@ -171,6 +180,84 @@ def test_inventory_mock_subprocess_partial_error(monkeypatch: pytest.MonkeyPatch
     assert body["plugins"]["status"] == "error"
     assert body["mcp"]["status"] == "ok"
     assert any("failed" in w.lower() or "subcommands" in w.lower() for w in body["warnings"])
+    assert not any(c[-1] == "dump" for c in cmds)
+    assert sum(1 for c in cmds if len(c) >= 2 and c[1] == "dump") == 0
+
+
+def test_tools_tty_degrades_and_config_toolsets(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.delenv("HAM_HERMES_SKILLS_MODE", raising=False)
+    fake_bin = tmp_path / "hermes"
+    fake_bin.write_text("#!/bin/sh\necho ok\n", encoding="utf-8")
+    fake_bin.chmod(0o755)
+    monkeypatch.setenv("HAM_HERMES_CLI_PATH", str(fake_bin))
+    hermes = tmp_path / ".hermes"
+    hermes.mkdir()
+    (hermes / "config.yaml").write_text(
+        "skills:\n  toolsets: [core, extra]\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("HERMES_HOME", str(hermes))
+
+    def fake_run(cmd, **_kwargs):
+        m = MagicMock()
+        m.returncode = 0
+        m.stdout = ""
+        m.stderr = ""
+        if "tools" in cmd:
+            m.returncode = 1
+            m.stderr = "Error: requires an interactive terminal."
+        elif "plugins" in cmd:
+            m.stdout = "plugin-line\n"
+        elif "mcp" in cmd:
+            m.stdout = "mcp-line\n"
+        elif "status" in cmd:
+            m.stdout = "ok"
+        return m
+
+    monkeypatch.setattr("src.ham.hermes_runtime_inventory.subprocess.run", fake_run)
+    body = inv.build_runtime_inventory()
+    assert body["tools"]["status"] == "requires_tty"
+    assert "interactive" in body["tools"].get("warning", "").lower()
+    assert body["tools"]["config_toolsets"] == ["core", "extra"]
+    assert any(x.startswith("config:core") for x in body["tools"]["toolsets"])
+    assert body["plugins"]["status"] == "ok"
+    assert body["mcp"]["status"] == "ok"
+    assert body["status"]["status_all"]["status"] == "ok"
+    assert "dump" not in body["status"]
+    assert not any("subcommands failed" in w for w in body["warnings"])
+
+
+def test_tools_tty_redacts_secrets_in_raw(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.delenv("HAM_HERMES_SKILLS_MODE", raising=False)
+    fake_bin = tmp_path / "hermes"
+    fake_bin.write_text("#!/bin/sh\necho ok\n", encoding="utf-8")
+    fake_bin.chmod(0o755)
+    monkeypatch.setenv("HAM_HERMES_CLI_PATH", str(fake_bin))
+    hermes = tmp_path / ".hermes"
+    hermes.mkdir()
+    monkeypatch.setenv("HERMES_HOME", str(hermes))
+
+    def fake_run(cmd, **_kwargs):
+        m = MagicMock()
+        m.returncode = 0
+        m.stdout = ""
+        m.stderr = ""
+        if "tools" in cmd:
+            m.returncode = 1
+            m.stderr = "requires an interactive terminal; token: sk-abcdefghijklmnop\n"
+        elif "plugins" in cmd:
+            m.stdout = "p\n"
+        elif "mcp" in cmd:
+            m.stdout = "m\n"
+        elif "status" in cmd:
+            m.stdout = "s\n"
+        return m
+
+    monkeypatch.setattr("src.ham.hermes_runtime_inventory.subprocess.run", fake_run)
+    body = inv.build_runtime_inventory()
+    assert body["tools"]["status"] == "requires_tty"
+    raw = body["tools"]["raw_redacted"]
+    assert "sk-abc" not in raw
 
 
 def test_get_api_inventory_remote_only(monkeypatch: pytest.MonkeyPatch) -> None:
