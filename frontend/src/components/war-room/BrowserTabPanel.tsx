@@ -538,48 +538,11 @@ export function BrowserTabPanel({ embedUrl, onEmbedUrlChange, autoStart = false 
   const isExpanded = viewMode === "expanded";
 
   return (
-    <div className={cn(
-      "flex flex-col min-h-0 flex-1",
-      isExpanded ? "gap-0" : "gap-1",
-    )}>
-      {/* ── Header row: title + view-mode controls (compact single line) ── */}
-      <div className="flex items-center justify-between shrink-0 px-0.5">
-        {!isExpanded ? (
-          <p className="text-[8px] font-bold text-white/25 uppercase tracking-widest truncate">
-            Browser
-          </p>
-        ) : (
-          <div className="flex items-center gap-2 min-w-0">
-            <span className={cn(
-              "h-1.5 w-1.5 rounded-full shrink-0",
-              streamState.status === "live" ? "bg-emerald-400" : streamState.status === "connecting" ? "bg-amber-400 animate-pulse" : "bg-white/20",
-            )} />
-            <span className="text-[8px] font-mono text-white/30 truncate">
-              {session?.current_url || "—"}
-            </span>
-          </div>
-        )}
-        {hasSession ? (
-          <div className="flex items-center gap-0.5 shrink-0">
-            <ToolbarBtn
-              onClick={() => setViewMode(isExpanded ? "normal" : "expanded")}
-              title={isExpanded ? "Normal view" : "Expand browser"}
-              accent={isExpanded}
-            >
-              {isExpanded ? <Shrink className="h-3 w-3" /> : <Maximize2 className="h-3 w-3" />}
-            </ToolbarBtn>
-            <ToolbarBtn onClick={() => setViewMode("minimized")} title="Minimize browser">
-              <Minimize2 className="h-3 w-3" />
-            </ToolbarBtn>
-            <ToolbarBtn onClick={() => setPopoutOpen(true)} title="Pop out browser">
-              <PictureInPicture2 className="h-3 w-3" />
-            </ToolbarBtn>
-          </div>
-        ) : null}
-      </div>
-
+    <div className="flex flex-col min-h-0 flex-1 gap-0">
       {!hasSession ? (
+        /* ── No session: start prompt (compact) ── */
         <div className="flex-1 min-h-0 flex flex-col items-center justify-center border border-dashed border-white/10 rounded bg-black/20 p-4 gap-3">
+          {/* View-mode controls (top-right) */}
           <p className="text-[10px] text-white/40 leading-relaxed text-center">
             Start a browser session to open a live viewport.
           </p>
@@ -611,73 +574,139 @@ export function BrowserTabPanel({ embedUrl, onEmbedUrlChange, autoStart = false 
           </p>
         </div>
       ) : (
-        <>
-          {/* ── URL bar + navigate/capture (single compact row) ── */}
-          <div className="grid grid-cols-[1fr_auto_auto] gap-1 shrink-0">
-            <input
-              value={embedUrl}
-              onChange={(e) => onEmbedUrlChange(e.target.value)}
-              placeholder="https://example.com"
-              className="w-full bg-black/50 border border-white/10 font-mono text-white/80 placeholder:text-white/20 outline-none focus:border-[#00E5FF]/40 px-2 py-1 text-[9px] rounded-sm"
-            />
-            <button
-              type="button"
-              disabled={busy || !embedUrl.trim()}
-              onClick={() =>
-                run(() =>
-                  navigateBrowserSession(
-                    session.session_id,
-                    ownerKeyRef.current,
-                    normalizeBrowserUrl(embedUrl),
-                  ),
-                )
-              }
-              className={cn(
-                "text-[8px] font-black uppercase tracking-widest border border-white/15 px-2 py-1 rounded-sm",
-                busy ? "text-white/20" : "text-white/70 hover:bg-white/5",
-              )}
-            >
-              Go
-            </button>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={refreshStateAndScreenshot}
-              className={cn(
-                "text-[8px] font-black uppercase tracking-widest border border-white/15 px-2 py-1 rounded-sm",
-                busy ? "text-white/20" : "text-white/70 hover:bg-white/5",
-              )}
-            >
-              ⟳
-            </button>
-          </div>
+        <div className={cn("flex flex-col min-h-0 flex-1 gap-0", isExpanded && "relative")}>
+          {/* ── Compact URL bar + view controls (single tight row) ── */}
+          {!isExpanded ? (
+            <div className="flex items-center gap-0.5 shrink-0">
+              <input
+                value={embedUrl}
+                onChange={(e) => onEmbedUrlChange(e.target.value)}
+                placeholder="https://…"
+                className="flex-1 min-w-0 bg-black/50 border border-white/10 font-mono text-white/80 placeholder:text-white/20 outline-none focus:border-[#00E5FF]/40 px-1.5 py-0.5 text-[9px] rounded-sm"
+              />
+              <button
+                type="button"
+                disabled={busy || !embedUrl.trim()}
+                onClick={() =>
+                  run(() =>
+                    navigateBrowserSession(
+                      session.session_id,
+                      ownerKeyRef.current,
+                      normalizeBrowserUrl(embedUrl),
+                    ),
+                  )
+                }
+                className={cn(
+                  "text-[8px] font-black uppercase tracking-widest border border-white/15 px-1.5 py-0.5 rounded-sm shrink-0",
+                  busy ? "text-white/20" : "text-white/70 hover:bg-white/5",
+                )}
+              >
+                Go
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={refreshStateAndScreenshot}
+                className={cn(
+                  "text-[8px] font-black uppercase tracking-widest border border-white/15 px-1.5 py-0.5 rounded-sm shrink-0",
+                  busy ? "text-white/20" : "text-white/70 hover:bg-white/5",
+                )}
+              >
+                ⟳
+              </button>
+              <span className="w-px h-4 bg-white/10 shrink-0 mx-0.5" />
+              <ToolbarBtn
+                onClick={() => setViewMode("expanded")}
+                title="Expand browser"
+              >
+                <Maximize2 className="h-3 w-3" />
+              </ToolbarBtn>
+              <ToolbarBtn onClick={() => setViewMode("minimized")} title="Minimize browser">
+                <Minimize2 className="h-3 w-3" />
+              </ToolbarBtn>
+              <ToolbarBtn onClick={() => setPopoutOpen(true)} title="Pop out browser">
+                <PictureInPicture2 className="h-3 w-3" />
+              </ToolbarBtn>
+            </div>
+          ) : null}
 
           {/* ── Errors (compact, only when needed) ── */}
           {error ? <p className="text-[9px] text-amber-500/90 font-mono shrink-0 truncate px-0.5">{error}</p> : null}
 
           {/* ── Viewport: fills ALL remaining space ── */}
           {screenshotUrl ? (
-            <div
-              ref={viewportFrameRef}
-              tabIndex={0}
-              onKeyDown={(e) => {
-                void handleViewportKeyDown(e);
-              }}
-              className="flex-1 min-h-0 outline-none focus:ring-1 focus:ring-[#00E5FF]/30 rounded-sm flex items-center justify-center bg-black/40"
-            >
-              <img
-                ref={imageRef}
-                src={screenshotUrl}
-                alt="Live in-pane browser viewport"
-                onClick={(e) => {
-                  viewportFrameRef.current?.focus();
-                  void handleViewportClick(e);
+            <div className="relative flex-1 min-h-0 flex flex-col">
+              <div
+                ref={viewportFrameRef}
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  void handleViewportKeyDown(e);
                 }}
-                onWheel={(e) => {
-                  void handleViewportWheel(e);
-                }}
-                className="w-full h-full border border-[#00E5FF]/15 bg-black object-contain cursor-crosshair select-none"
-              />
+                className="flex-1 min-h-0 outline-none focus:ring-1 focus:ring-[#00E5FF]/30 rounded-sm flex items-center justify-center bg-black/40"
+              >
+                <img
+                  ref={imageRef}
+                  src={screenshotUrl}
+                  alt="Live in-pane browser viewport"
+                  onClick={(e) => {
+                    viewportFrameRef.current?.focus();
+                    void handleViewportClick(e);
+                  }}
+                  onWheel={(e) => {
+                    void handleViewportWheel(e);
+                  }}
+                  className="w-full h-full border border-[#00E5FF]/15 bg-black object-contain cursor-crosshair select-none"
+                />
+              </div>
+
+              {/* ── Expanded mode: floating overlay toolbar ── */}
+              {isExpanded ? (
+                <div className="absolute top-1 left-1 right-1 z-10 flex items-center gap-0.5 bg-black/70 backdrop-blur-sm border border-white/10 rounded px-1 py-0.5 opacity-40 hover:opacity-100 transition-opacity">
+                  <span className={cn(
+                    "h-1.5 w-1.5 rounded-full shrink-0",
+                    streamState.status === "live" ? "bg-emerald-400" : streamState.status === "connecting" ? "bg-amber-400 animate-pulse" : "bg-white/20",
+                  )} />
+                  <input
+                    value={embedUrl}
+                    onChange={(e) => onEmbedUrlChange(e.target.value)}
+                    placeholder="https://…"
+                    className="flex-1 min-w-0 bg-transparent font-mono text-white/70 placeholder:text-white/20 outline-none px-1 py-0 text-[9px]"
+                  />
+                  <button
+                    type="button"
+                    disabled={busy || !embedUrl.trim()}
+                    onClick={() =>
+                      run(() =>
+                        navigateBrowserSession(
+                          session.session_id,
+                          ownerKeyRef.current,
+                          normalizeBrowserUrl(embedUrl),
+                        ),
+                      )
+                    }
+                    className={cn(
+                      "text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-sm shrink-0",
+                      busy ? "text-white/20" : "text-white/60 hover:text-white/90",
+                    )}
+                  >
+                    Go
+                  </button>
+                  <span className="w-px h-3 bg-white/10 shrink-0" />
+                  <ToolbarBtn
+                    onClick={() => setViewMode("normal")}
+                    title="Normal view"
+                    accent
+                  >
+                    <Shrink className="h-3 w-3" />
+                  </ToolbarBtn>
+                  <ToolbarBtn onClick={() => setViewMode("minimized")} title="Minimize browser">
+                    <Minimize2 className="h-3 w-3" />
+                  </ToolbarBtn>
+                  <ToolbarBtn onClick={() => setPopoutOpen(true)} title="Pop out browser">
+                    <PictureInPicture2 className="h-3 w-3" />
+                  </ToolbarBtn>
+                </div>
+              ) : null}
             </div>
           ) : (
             <div className="flex-1 min-h-0 border border-dashed border-white/10 rounded-sm flex items-center justify-center bg-black/20">
@@ -688,7 +717,10 @@ export function BrowserTabPanel({ embedUrl, onEmbedUrlChange, autoStart = false 
           )}
 
           {/* ── Session controls: single compact row ── */}
-          <div className="flex items-center gap-1 shrink-0">
+          <div className={cn(
+            "flex items-center gap-1 shrink-0",
+            isExpanded ? "absolute bottom-1 left-1 right-1 z-10 bg-black/70 backdrop-blur-sm border border-white/10 rounded px-1 py-0.5 opacity-30 hover:opacity-100 transition-opacity" : "",
+          )}>
             <button
               type="button"
               disabled={busy}
@@ -726,14 +758,12 @@ export function BrowserTabPanel({ embedUrl, onEmbedUrlChange, autoStart = false 
               Close
             </button>
             <div className="flex-1" />
-            {!isExpanded ? (
-              <span className={cn(
-                "text-[7px] font-mono px-1 py-0.5 rounded",
-                streamState.status === "live" ? "text-emerald-400/70" : "text-white/25",
-              )}>
-                {streamState.status}
-              </span>
-            ) : null}
+            <span className={cn(
+              "text-[7px] font-mono px-1 py-0.5 rounded",
+              streamState.status === "live" ? "text-emerald-400/70" : "text-white/25",
+            )}>
+              {streamState.status}
+            </span>
             <a
               href={canOpen ? normalizedUrl : "#"}
               target="_blank"
@@ -748,7 +778,7 @@ export function BrowserTabPanel({ embedUrl, onEmbedUrlChange, autoStart = false 
               <span className="hidden sm:inline">External</span>
             </a>
           </div>
-        </>
+        </div>
       )}
 
       {/* ── Pop-out overlay ── */}
