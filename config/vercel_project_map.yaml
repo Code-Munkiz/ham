@@ -1,0 +1,4 @@
+# Per-repo Vercel project / deploy hook env (see vercel_project_map.example.yaml).
+# Prefer editing this file on the server; optional HAM_VERCEL_PROJECT_MAP_JSON overrides when set.
+
+mappings: []

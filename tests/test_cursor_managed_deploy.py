@@ -1,4 +1,4 @@
-"""POST /api/cursor/managed/deploy-hook — Vercel hook proxy (env-gated)."""
+"""POST /api/cursor/managed/deploy-hook — Vercel hook proxy (per-repo + global)."""
 from __future__ import annotations
 
 from unittest.mock import MagicMock
@@ -7,17 +7,41 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.api.server import app
+from src.ham.vercel_project_mapping import VercelHookResolution
 
 
-@pytest.fixture
-def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
+def _patch_resolved(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    url: str | None,
+    configured: bool = True,
+) -> None:
     from src.api import cursor_managed_deploy as m
 
-    monkeypatch.setattr(m, "_vercel_deploy_hook_url", lambda: "https://api.vercel.com/v1/integrations/test/hook")
-    return TestClient(app)
+    monkeypatch.setattr(m, "get_effective_cursor_api_key", lambda: "k")
+    monkeypatch.setattr(
+        m,
+        "cursor_api_get_agent",
+        lambda **kw: {"source": {"repository": "https://github.com/x/y"}},
+    )
+    monkeypatch.setattr(
+        m,
+        "resolve_vercel_hook_for_agent",
+        lambda _a: VercelHookResolution(
+            hook_url=url,
+            hook_configured=configured and url is not None,
+            deploy_hook_env_name="ENV" if url else "ENV",
+            repo_key="x/y",
+            mapping_tier="mapped" if url else "unavailable",
+            used_global_hook_fallback=False,
+            fail_closed=url is None,
+            message="ok" if url else "no",
+            map_load_error=None,
+        ),
+    )
 
 
-def test_deploy_hook_status_never_exposes_url(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_deploy_hook_status_no_agent_never_exposes_url(monkeypatch: pytest.MonkeyPatch) -> None:
     from src.api import cursor_managed_deploy as m
 
     monkeypatch.setattr(m, "_vercel_deploy_hook_url", lambda: "https://secret.example/hook")
@@ -26,10 +50,11 @@ def test_deploy_hook_status_never_exposes_url(monkeypatch: pytest.MonkeyPatch) -
     assert r.status_code == 200
     j = r.json()
     assert j.get("configured") is True
-    assert "http" not in str(j).lower() or "configured" in j
+    assert "secret.example" not in str(j)
 
 
-def test_trigger_posts_to_hook_2xx(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_trigger_posts_to_hook_2xx(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_resolved(monkeypatch, url="https://api.vercel.com/v1/integrations/test/hook")
     import src.api.cursor_managed_deploy as m
 
     calls: list[str] = []
@@ -52,20 +77,22 @@ def test_trigger_posts_to_hook_2xx(client: TestClient, monkeypatch: pytest.Monke
         return FakeClient()
 
     monkeypatch.setattr(m.httpx, "Client", fake_client_class)
-    r = client.post("/api/cursor/managed/deploy-hook", json={"agent_id": "cm_agent_1"})
+    c = TestClient(app)
+    r = c.post("/api/cursor/managed/deploy-hook", json={"agent_id": "cm_agent_1"})
     assert r.status_code == 200
     j = r.json()
     assert j.get("ok") is True
     assert j.get("outcome") == "hook_request_accepted"
     assert len(calls) == 1
-    assert "http" in calls[0].lower()
+    assert j.get("vercel_mapping", {}).get("hook_configured") is True
 
 
-def test_trigger_not_configured_503(monkeypatch: pytest.MonkeyPatch) -> None:
-    from src.api import cursor_managed_deploy as m
-
-    monkeypatch.setattr(m, "_vercel_deploy_hook_url", lambda: None)
+def test_trigger_returns_unavailable_when_unresolved(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_resolved(monkeypatch, url=None, configured=False)
     c = TestClient(app)
-    r = c.post("/api/cursor/managed/deploy-hook", json={"agent_id": "a"})
-    assert r.status_code == 503
-    assert "not configured" in (r.json().get("detail") or "").lower()
+    r = c.post("/api/cursor/managed/deploy-hook", json={"agent_id": "a1"})
+    assert r.status_code == 200
+    j = r.json()
+    assert j.get("ok") is False
+    assert j.get("outcome") == "hook_unavailable"
+    assert "vercel_mapping" in j

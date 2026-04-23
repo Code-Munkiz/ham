@@ -1,4 +1,5 @@
 import * as React from "react";
+import type { VercelHookMapping } from "@/lib/ham/api";
 import type {
   CloudMissionHandling,
   ManagedDeployHandoffState,
@@ -19,8 +20,10 @@ export type ManagedCloudAgentContextValue = {
   /** Managed poll: in-flight */
   pollPending: boolean;
   refresh: () => void;
-  /** Server has HAM_VERCEL_DEPLOY_HOOK_URL (or similar); null while loading */
+  /** Server has a resolvable deploy hook for this agent (or global); null while loading */
   deployHookConfigured: boolean | null;
+  /** Per-repo / global deploy hook mapping (no secrets) */
+  deployHookVercelMapping: VercelHookMapping | null;
   /** User handoff result overlay; combined with readiness in the panel */
   deployHandoffState: ManagedDeployHandoffState;
   deployHandoffMessage: string | null;

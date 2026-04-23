@@ -29,29 +29,39 @@ def _vercel_team_id() -> str | None:
     return (os.environ.get("HAM_VERCEL_TEAM_ID") or os.environ.get("VERCEL_TEAM_ID") or "").strip() or None
 
 
+def vercel_token_configured() -> bool:
+    return bool(_vercel_token())
+
+
 def vercel_api_configured() -> bool:
-    """True when HAM can call Vercel (token + project id; team optional)."""
+    """True when HAM can call Vercel with the global project id (legacy; prefer per-repo resolution + token)."""
     return bool(_vercel_token() and _vercel_project_id())
 
 
-def list_recent_deployments(*, limit: int = 20) -> dict[str, Any] | None:
+def list_recent_deployments(
+    *,
+    project_id: str,
+    team_id: str | None = None,
+    limit: int = 20,
+) -> dict[str, Any] | None:
     """
-    GET /v6/deployments for the configured project (and team if set).
+    GET /v6/deployments for the given Vercel project (and team if set).
 
     Returns parsed JSON (expects `deployments` key) or None if not configured.
-    Raises on HTTP !2xx (caller maps to API error state).
+    Returns None if token is missing. Raises on HTTP !2xx (caller maps to API error state).
     """
-    if not vercel_api_configured():
-        return None
     token = _vercel_token()
-    project_id = _vercel_project_id()
-    assert token and project_id
+    if not token or not (project_id or "").strip():
+        return None
+    pid = project_id.strip()
+    team = (team_id or "").strip() or None
+    if team is None:
+        team = _vercel_team_id()
 
     params: dict[str, str] = {
-        "projectId": project_id,
+        "projectId": pid,
         "limit": str(max(1, min(limit, 50))),
     }
-    team = _vercel_team_id()
     if team:
         params["teamId"] = team
 

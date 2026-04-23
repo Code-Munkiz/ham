@@ -272,12 +272,36 @@ export function cloudAgentIdFromLaunchResponse(payload: Record<string, unknown>)
   return typeof id === "string" && id.trim() ? id.trim() : null;
 }
 
-/** Whether HAM has a server-side Vercel deploy hook URL (secret never returned). */
+export type VercelHookMapping = {
+  repo_key: string | null;
+  mapping_tier: "mapped" | "global" | "unavailable";
+  hook_configured: boolean;
+  deploy_hook_env_name: string | null;
+  used_global_hook_fallback: boolean;
+  fail_closed: boolean;
+  message: string;
+  map_load_error: string | null;
+};
+
+export type ManagedDeployHookStatusPayload = {
+  configured: boolean;
+  vercel_mapping?: VercelHookMapping;
+};
+
+/** Without agent_id, reports global deploy hook only. With agent_id, per-repo map resolution (no secrets). */
+export async function fetchManagedDeployHookStatus(
+  agentId?: string | null,
+): Promise<ManagedDeployHookStatusPayload> {
+  const q = agentId?.trim() ? new URLSearchParams({ agent_id: agentId.trim() }) : null;
+  const res = await hamApiFetch(q ? `/api/cursor/managed/deploy-hook?${q.toString()}` : "/api/cursor/managed/deploy-hook");
+  if (!res.ok) return { configured: false };
+  return res.json() as Promise<ManagedDeployHookStatusPayload>;
+}
+
+/** Whether HAM has a server-side Vercel deploy hook URL (legacy: global only). */
 export async function fetchManagedDeployHookConfigured(): Promise<boolean> {
-  const res = await hamApiFetch("/api/cursor/managed/deploy-hook");
-  if (!res.ok) return false;
-  const j = (await res.json()) as { configured?: boolean };
-  return Boolean(j.configured);
+  const p = await fetchManagedDeployHookStatus();
+  return Boolean(p.configured);
 }
 
 export type ManagedDeployHookResult = {
@@ -285,6 +309,7 @@ export type ManagedDeployHookResult = {
   outcome: string;
   message: string;
   status_code?: number;
+  vercel_mapping?: VercelHookMapping;
 };
 
 /** GET /api/cursor/managed/vercel/deploy-status — server-side Vercel poll + match confidence. */
@@ -297,6 +322,16 @@ export type VercelManagedDeployState =
   | "error"
   | "canceled"
   | "unknown";
+
+export type VercelListMapping = {
+  repo_key: string | null;
+  mapping_tier: "mapped" | "global" | "unavailable";
+  project_id_used: string | null;
+  team_id_used: string | null;
+  use_global_project_fallback: boolean;
+  message: string;
+  map_load_error: string | null;
+};
 
 export type VercelManagedDeployStatus = {
   checked_at: string;
@@ -312,6 +347,7 @@ export type VercelManagedDeployStatus = {
     created_at: string | null;
   } | null;
   api_error: string | null;
+  vercel_mapping?: VercelListMapping;
 };
 
 export async function fetchVercelManagedDeployStatus(agentId: string): Promise<VercelManagedDeployStatus> {
@@ -339,6 +375,7 @@ export type VercelPostDeployValidationPayload = {
 };
 
 export type VercelPostDeployValidationResponse = {
+  vercel_mapping?: VercelListMapping;
   deploy_ref: {
     state: string;
     match_confidence: "high" | "medium" | "low" | null;
@@ -377,12 +414,13 @@ export async function postManagedDeployHook(agentId: string): Promise<ManagedDep
       message: typeof detail === "string" ? detail : "Deploy hook is not configured.",
     };
   }
-  const j = (await res.json()) as Record<string, unknown>;
+  const j = (await res.json()) as Record<string, unknown> & { vercel_mapping?: VercelHookMapping };
   return {
     ok: Boolean(j.ok),
     outcome: typeof j.outcome === "string" ? j.outcome : "unknown",
     message: typeof j.message === "string" ? j.message : "Unknown response",
     status_code: typeof j.status_code === "number" ? j.status_code : undefined,
+    vercel_mapping: j.vercel_mapping,
   };
 }
 

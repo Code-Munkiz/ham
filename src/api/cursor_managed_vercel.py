@@ -11,8 +11,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from src.api.clerk_gate import get_ham_clerk_actor
 from src.ham.post_deploy_validation import run_post_deploy_probe
 from src.ham.vercel_deploy_status import build_deploy_status_payload, compute_matched_deployment_view
+from src.ham.vercel_project_mapping import (
+    resolve_vercel_list_for_agent,
+    vercel_list_resolution_to_dict,
+    vercel_token_configured,
+)
 from src.integrations.cursor_cloud_client import CursorCloudApiError, cursor_api_get_agent
-from src.integrations.vercel_deployments_client import list_recent_deployments, vercel_api_configured
+from src.integrations.vercel_deployments_client import list_recent_deployments
 from src.persistence.cursor_credentials import get_effective_cursor_api_key
 
 _LOG = logging.getLogger(__name__)
@@ -50,35 +55,46 @@ async def get_vercel_managed_deploy_status(
             detail=str(exc) or "Cursor agent error",
         ) from exc
     if not isinstance(agent, dict):
-        return build_deploy_status_payload(agent=None, deployments_list_json=None, not_configured=False)
+        p = build_deploy_status_payload(agent=None, deployments_list_json=None, not_configured=False)
+        return {**p, "vercel_mapping": vercel_list_resolution_to_dict(resolve_vercel_list_for_agent(None))}
 
-    if not vercel_api_configured():
-        return build_deploy_status_payload(
+    lres = resolve_vercel_list_for_agent(agent)
+    vmap = vercel_list_resolution_to_dict(lres)
+    if not vercel_token_configured() or lres.project_id is None:
+        p = build_deploy_status_payload(
             not_configured=True,
             agent=agent,
             deployments_list_json=None,
         )
+        return {**p, "vercel_mapping": vmap}
 
     try:
-        deployments_json = list_recent_deployments(limit=30)
+        deployments_json = list_recent_deployments(
+            project_id=lres.project_id,
+            team_id=lres.team_id,
+            limit=30,
+        )
     except RuntimeError as exc:
-        return build_deploy_status_payload(
+        p = build_deploy_status_payload(
             agent=agent,
             deployments_list_json=None,
             api_error=str(exc),
         )
+        return {**p, "vercel_mapping": vmap}
 
     if deployments_json is None:
-        return build_deploy_status_payload(
+        p = build_deploy_status_payload(
             not_configured=True,
             agent=agent,
             deployments_list_json=None,
         )
+        return {**p, "vercel_mapping": vmap}
 
-    return build_deploy_status_payload(
+    p = build_deploy_status_payload(
         agent=agent,
         deployments_list_json=deployments_json,
     )
+    return {**p, "vercel_mapping": vmap}
 
 
 @router.get("/vercel/post-deploy-validation")
@@ -104,7 +120,9 @@ async def get_vercel_post_deploy_validation(
             raise HTTPException(status_code=401, detail=str(exc) or "Cursor API rejected this API key.") from exc
         raise HTTPException(status_code=502, detail=str(exc) or "Cursor agent error") from exc
     if not isinstance(agent, dict):
+        l0 = resolve_vercel_list_for_agent(None)
         return {
+            "vercel_mapping": vercel_list_resolution_to_dict(l0),
             "deploy_ref": None,
             "post_deploy_validation": {
                 "state": "not_attempted",
@@ -117,8 +135,11 @@ async def get_vercel_post_deploy_validation(
             },
         }
 
-    if not vercel_api_configured():
+    lres = resolve_vercel_list_for_agent(agent)
+    vmap = vercel_list_resolution_to_dict(lres)
+    if not vercel_token_configured() or lres.project_id is None:
         return {
+            "vercel_mapping": vmap,
             "deploy_ref": None,
             "post_deploy_validation": {
                 "state": "not_attempted",
@@ -127,14 +148,19 @@ async def get_vercel_post_deploy_validation(
                 "http_status": None,
                 "match_confidence": None,
                 "reason_code": "vercel_not_configured",
-                "message": "Vercel API token and project id are not both configured; cannot match a deployment to probe.",
+                "message": "Vercel API token or resolved project id is not available; cannot list deployments to probe.",
             },
         }
 
     try:
-        deployments_json = list_recent_deployments(limit=30)
+        deployments_json = list_recent_deployments(
+            project_id=lres.project_id,
+            team_id=lres.team_id,
+            limit=30,
+        )
     except RuntimeError as exc:
         return {
+            "vercel_mapping": vmap,
             "deploy_ref": None,
             "post_deploy_validation": {
                 "state": "not_attempted",
@@ -149,6 +175,7 @@ async def get_vercel_post_deploy_validation(
 
     if deployments_json is None:
         return {
+            "vercel_mapping": vmap,
             "deploy_ref": None,
             "post_deploy_validation": {
                 "state": "not_attempted",
@@ -157,13 +184,14 @@ async def get_vercel_post_deploy_validation(
                 "http_status": None,
                 "match_confidence": None,
                 "reason_code": "vercel_not_configured",
-                "message": "Vercel is not configured for deployment matching.",
+                "message": "Vercel list returned no data for the resolved project.",
             },
         }
 
     view = compute_matched_deployment_view(agent=agent, deployments_list_json=deployments_json)
     if not view:
         return {
+            "vercel_mapping": vmap,
             "deploy_ref": None,
             "post_deploy_validation": {
                 "state": "not_attempted",
@@ -179,6 +207,7 @@ async def get_vercel_post_deploy_validation(
     dep = view.get("dep")
     if not isinstance(dep, dict):
         return {
+            "vercel_mapping": vmap,
             "deploy_ref": None,
             "post_deploy_validation": {
                 "state": "not_attempted",
@@ -210,4 +239,4 @@ async def get_vercel_post_deploy_validation(
         match_confidence=mc,
         force_attempt=force_bool,
     )
-    return {"deploy_ref": deploy_ref, "post_deploy_validation": out}
+    return {"vercel_mapping": vmap, "deploy_ref": deploy_ref, "post_deploy_validation": out}

@@ -1,0 +1,12 @@
+# Copy to `vercel_project_map.yaml` (or set HAM_VERCEL_PROJECT_MAP_PATH) and adjust.
+# Do not put deploy hook URL secrets in this file — use deploy_hook_env to name an env var
+# that holds the hook URL (set on the HAM server / secret manager).
+#
+# schema:
+#   mappings:
+#     - repo: "owner/repo"        # normalized GitHub org/repo (lowercase, no host)
+#       project_id: "prj_…"        # Vercel project id for deploy-truth list API
+#       team_id: "team_…"          # optional; overrides global HAM_VERCEL_TEAM_ID
+#       deploy_hook_env: "VAR"     # optional; name of env var containing deploy hook URL
+
+mappings: []

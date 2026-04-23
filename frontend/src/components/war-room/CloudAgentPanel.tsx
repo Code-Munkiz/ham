@@ -175,6 +175,7 @@ export function CloudAgentPanel({
   const dState = isManaged ? managed.deployHandoffState : null;
   const dMsg = isManaged ? managed.deployHandoffMessage : null;
   const dHook = isManaged ? managed.deployHookConfigured : null;
+  const dHookMap = isManaged ? managed.deployHookVercelMapping : null;
   const dTrigger = isManaged ? managed.triggerManagedDeploy : null;
 
   /** Tab-scoped fetch (unchanged for Direct; also used in Managed for raw tracker/transcript JSON). */
@@ -505,6 +506,43 @@ export function CloudAgentPanel({
           ) : null}
           {isManaged ? (
             <div className="space-y-1.5 border-t border-white/10 pt-3">
+              {vercelDeploy?.vercel_mapping || dHookMap ? (
+                <div className="mb-1 space-y-1 rounded-md border border-white/10 bg-black/30 px-2.5 py-2">
+                  <p className="text-[9px] font-black uppercase tracking-widest text-white/40">Vercel mapping (server)</p>
+                  {vercelDeploy?.vercel_mapping ? (
+                    <p className="text-[12px] leading-[1.5] text-white/55">
+                      <span className="text-white/40">Project list: </span>
+                      {vercelDeploy.vercel_mapping.message}
+                      {vercelDeploy.vercel_mapping.project_id_used ? (
+                        <span className="ml-1 font-mono text-[11px] text-white/50">
+                          ({vercelDeploy.vercel_mapping.project_id_used}
+                          {vercelDeploy.vercel_mapping.team_id_used
+                            ? `, team: ${vercelDeploy.vercel_mapping.team_id_used}`
+                            : ""}
+                          )
+                        </span>
+                      ) : null}
+                    </p>
+                  ) : null}
+                  {vercelDeploy?.vercel_mapping?.repo_key ? (
+                    <p className="text-[10px] font-mono text-white/35">repo: {vercelDeploy.vercel_mapping.repo_key}</p>
+                  ) : null}
+                  {dHookMap ? (
+                    <p className="text-[12px] leading-[1.5] text-white/55">
+                      <span className="text-white/40">Deploy hook: </span>
+                      {dHookMap.message}
+                    </p>
+                  ) : null}
+                  {dHookMap?.used_global_hook_fallback ? (
+                    <p className="text-[10px] text-amber-400/80">Global deploy hook fallback was used (policy).</p>
+                  ) : null}
+                  {vercelDeploy?.vercel_mapping?.map_load_error || dHookMap?.map_load_error ? (
+                    <p className="text-[10px] text-rose-400/80 font-mono">
+                      Map load: {vercelDeploy?.vercel_mapping?.map_load_error || dHookMap?.map_load_error}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
               <p className="text-[11px] font-black uppercase tracking-widest text-[#00E5FF]/85">Managed mission</p>
               <p className="text-[10px] font-medium leading-snug text-white/32">
                 Live summary from HAM&rsquo;s Cursor API poll&mdash;rules-based review and deploy notes below. Use

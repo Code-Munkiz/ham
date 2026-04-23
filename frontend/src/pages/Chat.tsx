@@ -36,7 +36,8 @@ import {
   fetchProjectAgents,
   fetchChatSessions,
   fetchChatSession,
-  fetchManagedDeployHookConfigured,
+  fetchManagedDeployHookStatus,
+  type VercelHookMapping,
   listHamProjects,
   HamAccessRestrictedError,
   postChatStream,
@@ -365,6 +366,7 @@ function ChatPageInner({
   });
 
   const [deployHookConfigured, setDeployHookConfigured] = React.useState<boolean | null>(null);
+  const [deployHookVercelMapping, setDeployHookVercelMapping] = React.useState<VercelHookMapping | null>(null);
   const [deployUserResult, setDeployUserResult] = React.useState<"none" | "accepted" | "failed">("none");
   const [deployTriggering, setDeployTriggering] = React.useState(false);
   const [deployResultMessage, setDeployResultMessage] = React.useState<string | null>(null);
@@ -878,11 +880,16 @@ function ChatPageInner({
   React.useEffect(() => {
     if (uplinkId !== "cloud_agent" || cloudMissionHandling !== "managed" || !activeCloudAgentId?.trim()) {
       setDeployHookConfigured(null);
+      setDeployHookVercelMapping(null);
       return;
     }
     let cancelled = false;
-    void fetchManagedDeployHookConfigured().then((c) => {
-      if (!cancelled) setDeployHookConfigured(c);
+    const aid = activeCloudAgentId.trim();
+    void fetchManagedDeployHookStatus(aid).then((p) => {
+      if (!cancelled) {
+        setDeployHookConfigured(p.configured);
+        setDeployHookVercelMapping(p.vercel_mapping ?? null);
+      }
     });
     return () => {
       cancelled = true;
@@ -950,6 +957,7 @@ function ChatPageInner({
       pollPending: managedCloudPoll.pollPending,
       refresh: managedCloudPoll.refresh,
       deployHookConfigured,
+      deployHookVercelMapping,
       deployHandoffState,
       deployHandoffMessage: deployResultMessage,
       triggerManagedDeploy:
@@ -966,6 +974,7 @@ function ChatPageInner({
       managedCloudPoll.pollPending,
       managedCloudPoll.refresh,
       deployHookConfigured,
+      deployHookVercelMapping,
       deployHandoffState,
       deployResultMessage,
       uplinkId,
