@@ -19,6 +19,7 @@ from src.api.cursor_settings import router as cursor_settings_router
 from src.api.cursor_skills import router as cursor_skills_router
 from src.api.cursor_subagents import router as cursor_subagents_router
 from src.api.hermes_hub import router as hermes_hub_router
+from src.api.hermes_runtime_inventory import router as hermes_runtime_inventory_router
 from src.api.hermes_skills import router as hermes_skills_router
 from src.api.models_catalog import router as models_catalog_router
 from src.api.project_settings import router as project_settings_router
@@ -74,6 +75,7 @@ app.include_router(cursor_managed_missions_router)
 app.include_router(cursor_skills_router)
 app.include_router(cursor_subagents_router)
 app.include_router(hermes_hub_router)
+app.include_router(hermes_runtime_inventory_router)
 app.include_router(hermes_skills_router)
 app.include_router(project_settings_router)
 app.include_router(control_plane_runs_router)
@@ -98,6 +100,7 @@ async def root() -> dict[str, Any]:
         "cursor_skills": "/api/cursor-skills",
         "cursor_subagents": "/api/cursor-subagents",
         "hermes_skills_catalog": "/api/hermes-skills/catalog",
+        "hermes_runtime_inventory": "/api/hermes-runtime/inventory",
         "hermes_skills_capabilities": "/api/hermes-skills/capabilities",
         "hermes_skills_install_preview": "/api/hermes-skills/install/preview",
         "hermes_skills_install_apply": "/api/hermes-skills/install/apply",

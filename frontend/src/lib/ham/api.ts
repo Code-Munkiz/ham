@@ -131,6 +131,54 @@ export async function fetchHermesHubSnapshot(): Promise<HermesHubSnapshot> {
   return res.json() as Promise<HermesHubSnapshot>;
 }
 
+/** GET /api/hermes-runtime/inventory — read-only Hermes CLI + sanitized config (local/co-located). */
+export interface HermesRuntimeInventory {
+  kind: "ham_hermes_runtime_inventory";
+  mode: string;
+  available: boolean;
+  source: {
+    hermes_binary: string;
+    hermes_home: string;
+    colocated: boolean;
+  };
+  tools: {
+    status: string;
+    summary_text?: string;
+    toolsets: string[];
+    raw_redacted: string;
+  };
+  plugins: {
+    status: string;
+    items: Array<{ text: string }>;
+    raw_redacted: string;
+  };
+  mcp: {
+    status: string;
+    servers: Array<{ text?: string; name?: string; transport?: string }>;
+    raw_redacted: string;
+  };
+  config: Record<string, unknown>;
+  skills: {
+    status: string;
+    catalog_count: number;
+    static_catalog: boolean;
+    installed_note?: string;
+  };
+  status: {
+    status_all: { status: string; raw_redacted: string };
+    dump: { status: string; raw_redacted: string };
+  };
+  warnings: string[];
+}
+
+export async function fetchHermesRuntimeInventory(): Promise<HermesRuntimeInventory> {
+  const res = await hamApiFetch("/api/hermes-runtime/inventory");
+  if (!res.ok) {
+    throw new Error(`hermes-runtime/inventory: HTTP ${res.status}`);
+  }
+  return res.json() as Promise<HermesRuntimeInventory>;
+}
+
 /** GET /api/browser/policy — HAM Playwright policy snapshot (not a remote Hermes service). */
 export interface BrowserRuntimePolicySnapshot {
   runtime_host: string;

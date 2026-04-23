@@ -1,7 +1,7 @@
 """Read-only Hermes-forward control plane snapshot for the dashboard hub.
 
 Aggregates gateway truth from the model catalog builder and Hermes skills host probe.
-No Hermes CLI, no fake inventory — only repo-backed signals.
+For allowlisted read-only Hermes CLI inventory, see ``GET /api/hermes-runtime/inventory``.
 """
 from __future__ import annotations
 
