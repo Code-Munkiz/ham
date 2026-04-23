@@ -6,7 +6,9 @@
 #   ./scripts/deploy_ham_api_cloud_run.sh
 #
 # Optional: SKIP_BUILD=1  IMAGE_TAG=staging  REGION=us-central1  SERVICE=ham-api
-# Optional: SET_SECRETS='CURSOR_API_KEY=ham-cursor-api-key:latest,OPENROUTER_API_KEY=ham-or-key:latest'
+# Optional: SET_SECRETS (comma-separated). Defaults include Hermes gateway key for http mode.
+#   HERMES_GATEWAY_API_KEY must exist in Secret Manager (see scripts/seed_hermes_gateway_api_key.sh).
+#   Example override: SET_SECRETS='CURSOR_API_KEY=ham-cursor-api-key:latest,OPENROUTER_API_KEY=...'
 #
 # Requires .gcloud/ham-api-env.yaml — copy from docs/examples/ham-api-cloud-run-env.yaml
 set -euo pipefail
@@ -21,7 +23,8 @@ IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/ham/ham-api:${IMAGE_TAG}"
 ENV_FILE="${ENV_FILE:-${ROOT}/.gcloud/ham-api-env.yaml}"
 MEMORY="${MEMORY:-2Gi}"
 CPU="${CPU:-2}"
-SECRETS="${SET_SECRETS:-CURSOR_API_KEY=ham-cursor-api-key:latest}"
+# CURSOR + Hermes (http gateway). Create ham-hermes-gateway-api-key first or deploy will fail on missing secret.
+SECRETS="${SET_SECRETS:-CURSOR_API_KEY=ham-cursor-api-key:latest,HERMES_GATEWAY_API_KEY=ham-hermes-gateway-api-key:latest}"
 
 if [[ ! -f "$ENV_FILE" ]]; then
   echo "Missing ${ENV_FILE} — copy docs/examples/ham-api-cloud-run-env.yaml and edit. See docs/DEPLOY_CLOUD_RUN.md"

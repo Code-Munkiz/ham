@@ -103,10 +103,30 @@ gcloud run deploy "${SERVICE}" \
   --allow-unauthenticated \
   --project "${PROJECT_ID}" \
   --env-vars-file .gcloud/ham-api-env.yaml \
-  --set-secrets=CURSOR_API_KEY=ham-cursor-api-key:latest
+  --set-secrets=CURSOR_API_KEY=ham-cursor-api-key:latest,HERMES_GATEWAY_API_KEY=ham-hermes-gateway-api-key:latest
 ```
 
 Add more env vars as needed, e.g. **`HERMES_GATEWAY_MODE=http`**, **`HERMES_GATEWAY_BASE_URL`**, **`HERMES_GATEWAY_API_KEY`**, **`OPENROUTER_API_KEY`** (use **Secret Manager** for secrets in real deployments).
+
+### Hermes gateway key (`HERMES_GATEWAY_API_KEY` — fix “Gateway HTTP 401” in chat)
+
+In **http** mode Ham sends **`Authorization: Bearer <key>`** to Hermes. If **`HERMES_GATEWAY_API_KEY`** is missing on Cloud Run, the upstream often returns **401** (and streaming chat may return **200** with an **NDJSON** `error` line, so do not rely on log filters for `httpRequest.status=401` only).
+
+1. **Create the secret** (same token Hermes expects for Bearer auth) — one-time, from a machine with `gcloud` and project access:
+
+   ```bash
+   export PROJECT_ID=your-gcp-project
+   # Pipe the raw key, or: ./scripts/seed_hermes_gateway_api_key.sh ./key.txt
+   printf '%s' 'YOUR_HERMES_BEARER_TOKEN' | ./scripts/seed_hermes_gateway_api_key.sh
+   ```
+
+2. **Deploy** with the secret mounted as **`HERMES_GATEWAY_API_KEY`**. The default in **`scripts/deploy_ham_api_cloud_run.sh`** is:
+
+   `CURSOR_API_KEY=ham-cursor-api-key:latest,HERMES_GATEWAY_API_KEY=ham-hermes-gateway-api-key:latest`
+
+   If the Hermes secret is not created yet, either run **`scripts/seed_hermes_gateway_api_key.sh`** first, or set **`SET_SECRETS`** to only the secrets that exist, then add the Hermes pair after the secret exists.
+
+3. Re-test **`POST /api/chat`** or the in-app chat: NDJSON and UI should no longer show **`Gateway HTTP 401`** when the key matches Hermes.
 
 After deploy, Cloud Run prints the **service URL**.
 
