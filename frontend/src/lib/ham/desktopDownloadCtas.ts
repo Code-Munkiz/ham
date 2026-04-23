@@ -17,17 +17,14 @@ export type DesktopDownloadCta = {
   subtext?: string;
 };
 
-/**
- * M1 ships the Electron shell in-repo; packaged installers are not published yet.
- * Flip `available` + set `href` when GitHub Releases (or similar) hosts real artifacts.
- */
+/** Linux artifact: GitHub Release `desktop-v0.1.0` (AppImage x64). */
 export const HAM_DESKTOP_DOWNLOAD_CTAS: DesktopDownloadCta[] = [
   {
     platform: "linux",
     label: "Linux",
-    href: "",
-    available: false,
-    subtext: "Pop!_OS · Ubuntu-class",
+    href: "https://github.com/Code-Munkiz/ham/releases/download/desktop-v0.1.0/HAM.Desktop-0.1.0.AppImage",
+    available: true,
+    subtext: "AppImage · x64",
   },
   {
     platform: "windows",

@@ -119,8 +119,7 @@ export default function Landing() {
             Download HAM Desktop
           </h1>
           <p className="text-[11px] sm:text-xs font-mono text-white/40 leading-relaxed max-w-md mx-auto">
-            Packaged installers are not published yet. Windows and macOS builds will ship with the
-            release pipeline; Linux remains the first packaging target.
+            Linux AppImage is available below. Windows and macOS desktop builds are coming soon.
           </p>
         </div>
 
