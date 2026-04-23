@@ -7,7 +7,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from src.api.clerk_gate import get_ham_clerk_actor
-from src.ham.browser_runtime.service import get_browser_runtime_manager
+from src.ham.browser_runtime.service import get_browser_runtime_manager, run_browser_io
 from src.ham.browser_runtime.sessions import (
     BrowserPolicyError,
     BrowserScreenshotTooLargeError,
@@ -100,12 +100,13 @@ def browser_runtime_policy() -> dict[str, Any]:
 
 @router.post("/sessions")
 def create_browser_session(body: BrowserCreateSessionBody) -> dict[str, Any]:
-    manager = get_browser_runtime_manager()
     try:
-        return manager.create_session(
-            owner_key=body.owner_key.strip(),
-            viewport_width=body.viewport_width,
-            viewport_height=body.viewport_height,
+        return run_browser_io(
+            lambda: get_browser_runtime_manager().create_session(
+                owner_key=body.owner_key.strip(),
+                viewport_width=body.viewport_width,
+                viewport_height=body.viewport_height,
+            )
         )
     except Exception as exc:
         raise _to_http_error(exc) from exc
@@ -113,49 +114,48 @@ def create_browser_session(body: BrowserCreateSessionBody) -> dict[str, Any]:
 
 @router.get("/sessions/{session_id}")
 def get_browser_session_state(session_id: str, owner_key: str) -> dict[str, Any]:
-    manager = get_browser_runtime_manager()
+    ok = owner_key.strip()
     try:
-        return manager.get_state(session_id=session_id, owner_key=owner_key.strip())
+        return run_browser_io(lambda: get_browser_runtime_manager().get_state(session_id=session_id, owner_key=ok))
     except Exception as exc:
         raise _to_http_error(exc) from exc
 
 
 @router.post("/sessions/{session_id}/navigate")
 def navigate_browser_session(session_id: str, body: BrowserNavigateBody) -> dict[str, Any]:
-    manager = get_browser_runtime_manager()
+    m = get_browser_runtime_manager()
+    u = body.url.strip()
+    ok = body.owner_key.strip()
     try:
-        return manager.navigate(
-            session_id=session_id,
-            owner_key=body.owner_key.strip(),
-            url=body.url.strip(),
-        )
+        return run_browser_io(lambda: m.navigate(session_id=session_id, owner_key=ok, url=u))
     except Exception as exc:
         raise _to_http_error(exc) from exc
 
 
 @router.post("/sessions/{session_id}/actions/click")
 def click_browser_session(session_id: str, body: BrowserClickBody) -> dict[str, Any]:
-    manager = get_browser_runtime_manager()
+    m = get_browser_runtime_manager()
+    ok = body.owner_key.strip()
+    sel = body.selector
     try:
-        return manager.click(
-            session_id=session_id,
-            owner_key=body.owner_key.strip(),
-            selector=body.selector,
-        )
+        return run_browser_io(lambda: m.click(session_id=session_id, owner_key=ok, selector=sel))
     except Exception as exc:
         raise _to_http_error(exc) from exc
 
 
 @router.post("/sessions/{session_id}/actions/type")
 def type_browser_session(session_id: str, body: BrowserTypeBody) -> dict[str, Any]:
-    manager = get_browser_runtime_manager()
+    m = get_browser_runtime_manager()
+    ok = body.owner_key.strip()
     try:
-        return manager.type_text(
-            session_id=session_id,
-            owner_key=body.owner_key.strip(),
-            selector=body.selector,
-            text=body.text,
-            clear_first=body.clear_first,
+        return run_browser_io(
+            lambda: m.type_text(
+                session_id=session_id,
+                owner_key=ok,
+                selector=body.selector,
+                text=body.text,
+                clear_first=body.clear_first,
+            )
         )
     except Exception as exc:
         raise _to_http_error(exc) from exc
@@ -163,14 +163,13 @@ def type_browser_session(session_id: str, body: BrowserTypeBody) -> dict[str, An
 
 @router.post("/sessions/{session_id}/actions/click-xy")
 def click_xy_browser_session(session_id: str, body: BrowserClickXYBody) -> dict[str, Any]:
-    manager = get_browser_runtime_manager()
+    m = get_browser_runtime_manager()
+    ok = body.owner_key.strip()
     try:
-        return manager.click_xy(
-            session_id=session_id,
-            owner_key=body.owner_key.strip(),
-            x=body.x,
-            y=body.y,
-            button=body.button,
+        return run_browser_io(
+            lambda: m.click_xy(
+                session_id=session_id, owner_key=ok, x=body.x, y=body.y, button=body.button
+            )
         )
     except Exception as exc:
         raise _to_http_error(exc) from exc
@@ -178,13 +177,13 @@ def click_xy_browser_session(session_id: str, body: BrowserClickXYBody) -> dict[
 
 @router.post("/sessions/{session_id}/actions/scroll")
 def scroll_browser_session(session_id: str, body: BrowserScrollBody) -> dict[str, Any]:
-    manager = get_browser_runtime_manager()
+    m = get_browser_runtime_manager()
+    ok = body.owner_key.strip()
     try:
-        return manager.scroll(
-            session_id=session_id,
-            owner_key=body.owner_key.strip(),
-            delta_x=body.delta_x,
-            delta_y=body.delta_y,
+        return run_browser_io(
+            lambda: m.scroll(
+                session_id=session_id, owner_key=ok, delta_x=body.delta_x, delta_y=body.delta_y
+            )
         )
     except Exception as exc:
         raise _to_http_error(exc) from exc
@@ -192,22 +191,21 @@ def scroll_browser_session(session_id: str, body: BrowserScrollBody) -> dict[str
 
 @router.post("/sessions/{session_id}/actions/key")
 def key_browser_session(session_id: str, body: BrowserKeyBody) -> dict[str, Any]:
-    manager = get_browser_runtime_manager()
+    m = get_browser_runtime_manager()
+    ok = body.owner_key.strip()
+    k = body.key.strip()
     try:
-        return manager.key_press(
-            session_id=session_id,
-            owner_key=body.owner_key.strip(),
-            key=body.key.strip(),
-        )
+        return run_browser_io(lambda: m.key_press(session_id=session_id, owner_key=ok, key=k))
     except Exception as exc:
         raise _to_http_error(exc) from exc
 
 
 @router.post("/sessions/{session_id}/screenshot")
 def screenshot_browser_session(session_id: str, body: BrowserOwnerBody) -> Response:
-    manager = get_browser_runtime_manager()
+    m = get_browser_runtime_manager()
+    ok = body.owner_key.strip()
     try:
-        image = manager.screenshot_png(session_id=session_id, owner_key=body.owner_key.strip())
+        image = run_browser_io(lambda: m.screenshot_png(session_id=session_id, owner_key=ok))
         return Response(content=image, media_type="image/png")
     except Exception as exc:
         raise _to_http_error(exc) from exc
@@ -215,21 +213,22 @@ def screenshot_browser_session(session_id: str, body: BrowserOwnerBody) -> Respo
 
 @router.post("/sessions/{session_id}/reset")
 def reset_browser_session(session_id: str, body: BrowserOwnerBody) -> dict[str, Any]:
-    manager = get_browser_runtime_manager()
+    m = get_browser_runtime_manager()
+    ok = body.owner_key.strip()
     try:
-        return manager.reset(session_id=session_id, owner_key=body.owner_key.strip())
+        return run_browser_io(lambda: m.reset(session_id=session_id, owner_key=ok))
     except Exception as exc:
         raise _to_http_error(exc) from exc
 
 
 @router.post("/sessions/{session_id}/stream/start")
 def start_browser_stream(session_id: str, body: BrowserStreamStartBody) -> dict[str, Any]:
-    manager = get_browser_runtime_manager()
+    m = get_browser_runtime_manager()
+    ok = body.owner_key.strip()
+    rt = body.requested_transport.strip()
     try:
-        return manager.start_stream(
-            session_id=session_id,
-            owner_key=body.owner_key.strip(),
-            requested_transport=body.requested_transport.strip(),
+        return run_browser_io(
+            lambda: m.start_stream(session_id=session_id, owner_key=ok, requested_transport=rt)
         )
     except Exception as exc:
         raise _to_http_error(exc) from exc
@@ -237,11 +236,10 @@ def start_browser_stream(session_id: str, body: BrowserStreamStartBody) -> dict[
 
 @router.get("/sessions/{session_id}/stream/state")
 def browser_stream_state(session_id: str, owner_key: str) -> dict[str, Any]:
-    manager = get_browser_runtime_manager()
+    ok = owner_key.strip()
     try:
-        return manager.get_stream_state(
-            session_id=session_id,
-            owner_key=owner_key.strip(),
+        return run_browser_io(
+            lambda: get_browser_runtime_manager().get_stream_state(session_id=session_id, owner_key=ok)
         )
     except Exception as exc:
         raise _to_http_error(exc) from exc
@@ -249,13 +247,13 @@ def browser_stream_state(session_id: str, owner_key: str) -> dict[str, Any]:
 
 @router.post("/sessions/{session_id}/stream/offer")
 def browser_stream_offer(session_id: str, body: BrowserStreamOfferBody) -> dict[str, Any]:
-    manager = get_browser_runtime_manager()
+    m = get_browser_runtime_manager()
+    ok = body.owner_key.strip()
     try:
-        return manager.handle_webrtc_offer(
-            session_id=session_id,
-            owner_key=body.owner_key.strip(),
-            sdp=body.sdp,
-            offer_type=body.type,
+        return run_browser_io(
+            lambda: m.handle_webrtc_offer(
+                session_id=session_id, owner_key=ok, sdp=body.sdp, offer_type=body.type
+            )
         )
     except Exception as exc:
         raise _to_http_error(exc) from exc
@@ -263,12 +261,12 @@ def browser_stream_offer(session_id: str, body: BrowserStreamOfferBody) -> dict[
 
 @router.post("/sessions/{session_id}/stream/candidate")
 def browser_stream_candidate(session_id: str, body: BrowserStreamCandidateBody) -> dict[str, Any]:
-    manager = get_browser_runtime_manager()
+    m = get_browser_runtime_manager()
+    ok = body.owner_key.strip()
+    c = body.candidate
     try:
-        return manager.handle_webrtc_candidate(
-            session_id=session_id,
-            owner_key=body.owner_key.strip(),
-            candidate=body.candidate,
+        return run_browser_io(
+            lambda: m.handle_webrtc_candidate(session_id=session_id, owner_key=ok, candidate=c)
         )
     except Exception as exc:
         raise _to_http_error(exc) from exc
@@ -276,22 +274,24 @@ def browser_stream_candidate(session_id: str, body: BrowserStreamCandidateBody) 
 
 @router.post("/sessions/{session_id}/stream/stop")
 def stop_browser_stream(session_id: str, body: BrowserOwnerBody) -> dict[str, Any]:
-    manager = get_browser_runtime_manager()
+    m = get_browser_runtime_manager()
+    ok = body.owner_key.strip()
     try:
-        return manager.stop_stream(
-            session_id=session_id,
-            owner_key=body.owner_key.strip(),
-        )
+        return run_browser_io(lambda: m.stop_stream(session_id=session_id, owner_key=ok))
     except Exception as exc:
         raise _to_http_error(exc) from exc
 
 
 @router.delete("/sessions/{session_id}")
 def close_browser_session(session_id: str, owner_key: str) -> dict[str, Any]:
-    manager = get_browser_runtime_manager()
-    try:
-        manager.close_session(session_id=session_id, owner_key=owner_key.strip())
+    ok = owner_key.strip()
+
+    def _close() -> dict[str, Any]:
+        get_browser_runtime_manager().close_session(session_id=session_id, owner_key=ok)
         return {"ok": True, "session_id": session_id}
+
+    try:
+        return run_browser_io(_close)
     except Exception as exc:
         raise _to_http_error(exc) from exc
 

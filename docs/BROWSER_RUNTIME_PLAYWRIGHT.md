@@ -78,6 +78,7 @@ Optional env controls:
 ## Host/runtime caveats
 
 - Browser Runtime requires Playwright + Chromium installed on the API host.
+- **Threading:** Playwright’s sync API must run on a **single** thread. FastAPI would otherwise run each `def` route on a **pool** thread, which can surface greenlet errors such as *“cannot switch to a different thread (which happens to have exited)”* and flaky screenshots. All session/Playwright work is queued through ``run_browser_io`` in ``src/ham/browser_runtime/service.py`` (a dedicated ``ThreadPoolExecutor(1)``). ``GET /api/browser/policy`` stays fast-path (no browser handle).
 - Some hardened/container hosts may require extra Chromium runtime libs.
 - If Chromium sandbox constraints exist in a given host, launch config adjustments may be required in deployment-specific environments.
 
