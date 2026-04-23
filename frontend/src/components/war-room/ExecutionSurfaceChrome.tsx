@@ -52,8 +52,8 @@ export function ExecutionSurfaceChrome({
             <Layout className="h-3.5 w-3.5 text-[#FF6B00]" />
           )}
           <div className="flex flex-col">
-            <span className="text-[10px] font-black uppercase tracking-widest text-white/80 italic">{title}</span>
-            <span className="text-[8px] font-bold text-white/20 uppercase tracking-widest">{sub}</span>
+            <span className="text-[13px] font-black uppercase tracking-widest text-white/80 italic">{title}</span>
+            <span className="text-[10px] font-bold text-white/25 uppercase tracking-widest">{sub}</span>
           </div>
         </div>
         <button
@@ -68,7 +68,7 @@ export function ExecutionSurfaceChrome({
       {warRoomSignal && mode === "war_room" && !browserOnly ? (
         <div className="h-10 flex items-center px-4 gap-2 bg-black/50 border-b border-white/5 shrink-0">
           <Activity className="h-3 w-3 text-[#FF6B00]" />
-          <span className="text-[9px] font-black uppercase tracking-widest text-[#FF6B00]/90">WAR_ROOM_SIGNAL</span>
+          <span className="text-[12px] font-black uppercase tracking-widest text-[#FF6B00]/90">WAR_ROOM_SIGNAL</span>
           <span
             className={cn(
               "ml-auto h-2 w-2 rounded-full bg-[#00E5FF]",

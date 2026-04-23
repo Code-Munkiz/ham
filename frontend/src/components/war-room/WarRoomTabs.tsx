@@ -17,7 +17,7 @@ export function WarRoomTabs({ tabs, activeId, onSelect }: WarRoomTabsProps) {
           type="button"
           onClick={() => onSelect(t.id)}
           className={cn(
-            "px-3 py-2 text-[9px] font-black uppercase tracking-widest border-b-2 transition-colors -mb-px",
+            "px-3 py-2.5 text-[13px] font-black uppercase tracking-widest border-b-2 transition-colors -mb-px",
             activeId === t.id
               ? "border-[#FF6B00] text-[#FF6B00]"
               : "border-transparent text-white/35 hover:text-white/60",

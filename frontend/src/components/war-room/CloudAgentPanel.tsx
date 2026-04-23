@@ -31,9 +31,9 @@ function reviewSeverityClass(s: ManagedReviewSeverity): string {
 function snapshotLine(label: string, value: string | null | undefined): React.ReactNode {
   if (!value?.trim()) return null;
   return (
-    <p className="text-[10px] text-white/55 leading-snug">
-      <span className="font-bold text-white/45 uppercase tracking-wider">{label}: </span>
-      <span className="text-white/75">{value}</span>
+    <p className="text-[13px] font-medium leading-[1.6] uppercase tracking-[0.02em] text-white/80">
+      <span className="text-white/45 font-bold">{label}: </span>
+      {value}
     </p>
   );
 }
@@ -132,21 +132,23 @@ export function CloudAgentPanel({
     }
     if (id === "tracker") {
       if (loading && !agentPayload) {
-        return <p className="text-[10px] text-white/40 uppercase tracking-widest p-4">Loading agent status…</p>;
+        return (
+          <p className="text-[13px] font-medium text-white/60 uppercase tracking-[0.02em] p-4">Loading agent status…</p>
+        );
       }
       if (err) {
-        return <p className="text-[10px] text-amber-500/80 p-4 font-mono">{err}</p>;
+        return <p className="text-[13px] text-amber-500/80 p-4 font-mono leading-relaxed">{err}</p>;
       }
       return (
         <div className="space-y-3 p-4">
           <div className="flex items-center gap-2 text-[#00E5FF]">
-            <Package className="h-4 w-4" />
-            <span className="text-[9px] font-black uppercase tracking-widest">Artifact &amp; PR tracker</span>
+            <Package className="h-5 w-5 shrink-0" />
+            <span className="text-[11px] font-black uppercase tracking-widest">Artifact &amp; PR tracker</span>
           </div>
-          <p className="text-[9px] font-bold text-white/35 uppercase tracking-wider">
+          <p className="text-[13px] font-medium text-white/70 uppercase tracking-[0.02em] leading-[1.6]">
             Live agent payload (status / source / target). PR and file rows wire here when mapped from API.
           </p>
-          <pre className="text-[9px] font-mono text-white/50 overflow-auto max-h-[240px] p-3 border border-white/10 bg-black/60 rounded">
+          <pre className="text-[12px] font-mono text-white/70 overflow-auto max-h-[240px] p-3 border border-white/10 bg-black/60 rounded leading-relaxed">
             {JSON.stringify(agentPayload, null, 2)}
           </pre>
         </div>
@@ -154,18 +156,20 @@ export function CloudAgentPanel({
     }
     if (id === "transcript") {
       if (loading && convPayload === null) {
-        return <p className="text-[10px] text-white/40 uppercase tracking-widest p-4">Loading conversation…</p>;
+        return (
+          <p className="text-[13px] font-medium text-white/60 uppercase tracking-[0.02em] p-4">Loading conversation…</p>
+        );
       }
       if (err) {
-        return <p className="text-[10px] text-amber-500/80 p-4 font-mono">{err}</p>;
+        return <p className="text-[13px] text-amber-500/80 p-4 font-mono leading-relaxed">{err}</p>;
       }
       return (
         <div className="space-y-3 p-4">
           <div className="flex items-center gap-2 text-[#00E5FF]">
-            <ScrollText className="h-4 w-4" />
-            <span className="text-[9px] font-black uppercase tracking-widest">Transcript</span>
+            <ScrollText className="h-5 w-5 shrink-0" />
+            <span className="text-[11px] font-black uppercase tracking-widest">Transcript</span>
           </div>
-          <pre className="text-[9px] font-mono text-white/50 overflow-auto max-h-[280px] p-3 border border-white/10 bg-black/60 rounded">
+          <pre className="text-[12px] font-mono text-white/70 overflow-auto max-h-[280px] p-3 border border-white/10 bg-black/60 rounded leading-relaxed">
             {JSON.stringify(convPayload, null, 2)}
           </pre>
         </div>
@@ -174,10 +178,10 @@ export function CloudAgentPanel({
     if (id === "artifacts" || id === "overview") {
       return (
         <div className="p-4 space-y-2">
-          <p className="text-[9px] font-black uppercase tracking-widest text-white/40">
+          <p className="text-[11px] font-black uppercase tracking-widest text-white/50">
             {id === "artifacts" ? "Artifacts" : "Overview"}
           </p>
-          <p className="text-[10px] text-white/35 leading-relaxed">
+          <p className="text-[13px] font-medium text-white/70 uppercase tracking-[0.02em] leading-[1.6]">
             Structured artifact list and checks will map from Cloud Agent API responses. No stub rows.
           </p>
         </div>
@@ -189,21 +193,23 @@ export function CloudAgentPanel({
   return (
     <div className="flex flex-col flex-1 min-h-0">
       {hasAgent ? (
-        <p className="shrink-0 px-2 pt-1 pb-1 text-[9px] font-bold text-white/40 uppercase tracking-wider">
+        <p className="shrink-0 px-2 pt-1 pb-1 text-[12px] font-bold text-white/45 uppercase tracking-wider">
           Mission handling:{" "}
-          <span className="text-white/60">
+          <span className="text-white/75">
             {cloudMissionHandling === "managed" ? "Managed by HAM" : "Direct"}
           </span>
         </p>
       ) : null}
       {isManaged ? (
         <div className="shrink-0 border-b border-white/5 px-2 pb-2 space-y-1.5">
-          <p className="text-[9px] font-black uppercase tracking-widest text-[#00E5FF]/80">Managed mission</p>
+          <p className="text-[11px] font-black uppercase tracking-widest text-[#00E5FF]/85">Managed mission</p>
           {managedPollPending && !managedViewSnapshot && !managedPollError ? (
-            <p className="text-[10px] text-white/40">Loading mission status from Cursor…</p>
+            <p className="text-[13px] font-medium text-white/50 uppercase tracking-[0.02em] leading-[1.6]">
+              Loading mission status from Cursor…
+            </p>
           ) : null}
           {managedPollError ? (
-            <p className="text-[10px] text-amber-500/90 font-mono break-words">Last poll: {managedPollError}</p>
+            <p className="text-[13px] text-amber-500/90 font-mono break-words leading-relaxed">Last poll: {managedPollError}</p>
           ) : null}
           {managedViewSnapshot ? (
             <div className="space-y-0.5">
@@ -214,20 +220,24 @@ export function CloudAgentPanel({
               {snapshotLine("Updated", managedViewSnapshot.updatedAt)}
             </div>
           ) : !managedPollPending && !managedPollError ? (
-            <p className="text-[10px] text-white/35">No summary yet — waiting for data from the Cloud Agent API.</p>
+            <p className="text-[13px] font-medium text-white/50 uppercase tracking-[0.02em] leading-[1.6]">
+              No summary yet — waiting for data from the Cloud Agent API.
+            </p>
           ) : null}
           {managedViewReview ? (
             <div className="mt-1.5 pt-1.5 border-t border-white/10 space-y-1">
-              <p className="text-[8px] font-black uppercase tracking-widest text-white/40">HAM review (rules-based)</p>
-              <p className={cn("text-[10px] font-semibold leading-snug", reviewSeverityClass(managedViewReview.severity))}>
+              <p className="text-[10px] font-black uppercase tracking-widest text-white/45">HAM review (rules-based)</p>
+              <p className={cn("text-[13px] font-semibold leading-[1.5]", reviewSeverityClass(managedViewReview.severity))}>
                 {managedViewReview.headline}
               </p>
               {managedViewReview.details?.trim() ? (
-                <p className="text-[9px] text-white/50 leading-relaxed whitespace-pre-wrap">{managedViewReview.details}</p>
+                <p className="text-[13px] text-white/65 leading-[1.6] whitespace-pre-wrap font-medium">
+                  {managedViewReview.details}
+                </p>
               ) : null}
               {managedViewReview.nextStep?.trim() ? (
-                <p className="text-[9px] text-white/40 leading-snug">
-                  <span className="font-bold text-white/50">Next: </span>
+                <p className="text-[12px] text-white/55 leading-[1.5]">
+                  <span className="font-bold text-white/65">Next: </span>
                   {managedViewReview.nextStep}
                 </p>
               ) : null}
@@ -235,45 +245,51 @@ export function CloudAgentPanel({
           ) : null}
           {deployRead ? (
             <div className="mt-1.5 pt-1.5 border-t border-white/10 space-y-1.5">
-              <p className="text-[8px] font-black uppercase tracking-widest text-violet-400/80">
+              <p className="text-[10px] font-black uppercase tracking-widest text-violet-400/85">
                 Deploy handoff (Vercel hook)
               </p>
-              <p className={cn("text-[10px] font-semibold leading-snug", reviewSeverityClass(deployRead.severity))}>
+              <p className={cn("text-[13px] font-semibold leading-[1.5]", reviewSeverityClass(deployRead.severity))}>
                 {deployRead.headline}
               </p>
               {deployRead.details?.trim() ? (
-                <p className="text-[9px] text-white/50 leading-relaxed whitespace-pre-wrap">{deployRead.details}</p>
+                <p className="text-[13px] text-white/65 leading-[1.6] whitespace-pre-wrap font-medium">
+                  {deployRead.details}
+                </p>
               ) : null}
               {deployRead.nextStep?.trim() ? (
-                <p className="text-[9px] text-white/40 leading-snug">
-                  <span className="font-bold text-white/50">Next: </span>
+                <p className="text-[12px] text-white/55 leading-[1.5]">
+                  <span className="font-bold text-white/65">Next: </span>
                   {deployRead.nextStep}
                 </p>
               ) : null}
               {(deployRead.prUrl || deployRead.branch || deployRead.repo) && (
-                <div className="text-[8px] text-white/40 space-y-0.5 font-mono break-all">
+                <div className="text-[12px] text-white/50 space-y-0.5 font-mono break-all leading-relaxed">
                   {deployRead.repo ? <p>Repo: {deployRead.repo}</p> : null}
                   {deployRead.prUrl ? <p>PR/URL: {deployRead.prUrl}</p> : null}
                   {deployRead.branch && !deployRead.prUrl ? <p>Branch: {deployRead.branch}</p> : null}
                 </div>
               )}
               {dHook === null ? (
-                <p className="text-[9px] text-white/35">Checking deploy hook configuration…</p>
+                <p className="text-[13px] font-medium text-white/45">Checking deploy hook configuration…</p>
               ) : dHook === false ? (
-                <p className="text-[9px] text-amber-500/80">
+                <p className="text-[13px] font-medium text-amber-500/85 leading-[1.5]">
                   Deploy hook is not configured on the API (set <span className="font-mono">HAM_VERCEL_DEPLOY_HOOK_URL</span>).
                 </p>
               ) : null}
               {dState === "hook_accepted" && dMsg ? (
-                <p className="text-[9px] text-emerald-400/90 border border-white/10 rounded px-2 py-1 bg-black/40">{dMsg}</p>
+                <p className="text-[13px] text-emerald-400/90 border border-white/10 rounded px-2 py-1.5 bg-black/40 leading-[1.5]">
+                  {dMsg}
+                </p>
               ) : null}
               {dState === "hook_failed" && dMsg ? (
-                <p className="text-[9px] text-amber-500/90 border border-amber-500/20 rounded px-2 py-1 bg-black/40">{dMsg}</p>
+                <p className="text-[13px] text-amber-500/90 border border-amber-500/20 rounded px-2 py-1.5 bg-black/40 leading-[1.5]">
+                  {dMsg}
+                </p>
               ) : null}
               {dState === "ready" && dTrigger && dHook === true ? (
                 <button
                   type="button"
-                  className="mt-0.5 w-full text-left text-[9px] font-black uppercase tracking-widest text-violet-300 border border-violet-500/40 bg-violet-500/10 hover:bg-violet-500/20 py-1.5 px-2 rounded"
+                  className="mt-0.5 w-full text-left text-[12px] font-black uppercase tracking-widest text-violet-300 border border-violet-500/40 bg-violet-500/10 hover:bg-violet-500/20 py-2 px-2 rounded"
                   onClick={() => {
                     void dTrigger();
                   }}
@@ -282,8 +298,8 @@ export function CloudAgentPanel({
                 </button>
               ) : null}
               {dState === "triggering" ? (
-                <p className="text-[9px] text-white/50 flex items-center gap-2">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
+                <p className="text-[13px] text-white/55 flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin shrink-0" />
                   Requesting deploy hook…
                 </p>
               ) : null}
