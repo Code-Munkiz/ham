@@ -77,6 +77,10 @@ import {
   getCursorCloudRepository,
   shortDigest,
 } from "@/lib/ham/cloudAgentProjectDefaults";
+import {
+  buildPreviousWorkSummaryLine,
+  stitchCloudAgentFollowUpTask,
+} from "@/lib/ham/cloudAgentFollowUp";
 import { ProjectsRegistryPanel } from "@/components/chat/ProjectsRegistryPanel";
 import { ManagedCloudAgentProvider } from "@/contexts/ManagedCloudAgentContext";
 import { useManagedCloudAgentPoll } from "@/hooks/useManagedCloudAgentPoll";
@@ -504,6 +508,8 @@ function ChatPageInner({
   const [caRepo, setCaRepo] = React.useState("");
   const [caRef, setCaRef] = React.useState("");
   const [caMission, setCaMission] = React.useState<"direct" | "managed">("managed");
+  /** When a prior managed mission exists, stitch summary + new instruction into the next preview (new launch only). */
+  const [cloudFollowUpMode, setCloudFollowUpMode] = React.useState<"continue" | "fresh">("continue");
   const [cloudAgentOptionsOpen, setCloudAgentOptionsOpen] = React.useState(false);
   /** Option A: once user edits repo/ref, autofill must not clobber. */
   const cloudTargetTouchedRef = React.useRef({ repo: false, ref: false });
@@ -880,13 +886,6 @@ function ChatPageInner({
       !getCursorCloudRepository(hamProjects.find((p) => p.id === projectId)?.metadata) &&
       !caRepo.trim(),
   );
-
-  const cloudAgentPreviewTitle = React.useMemo(() => {
-    if (sending) return "Wait for the current request to finish.";
-    if (!projectId) return "Select a project in Projects first.";
-    if (!input.trim()) return "Type a mission in the message box first.";
-    return "Builds a Cloud Agent preview digest; does not launch. Does not start the agent.";
-  }, [sending, projectId, input]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -1340,6 +1339,34 @@ function ChatPageInner({
     ],
   );
 
+  const hasCloudFollowUpContext = React.useMemo(
+    () =>
+      uplinkId === "cloud_agent" &&
+      caMission === "managed" &&
+      (Boolean(activeCloudAgentId?.trim()) || recentMissions.length > 0),
+    [uplinkId, caMission, activeCloudAgentId, recentMissions],
+  );
+
+  const previousWorkSummaryForStitch = React.useMemo(
+    () =>
+      buildPreviousWorkSummaryLine({
+        lastSnapshot: managedCloudPoll.lastSnapshot,
+        activeAgentId: activeCloudAgentId,
+        firstRecent: recentMissions[0] ?? null,
+      }),
+    [managedCloudPoll.lastSnapshot, activeCloudAgentId, recentMissions],
+  );
+
+  const cloudAgentPreviewTitle = React.useMemo(() => {
+    if (sending) return "Wait for the current request to finish.";
+    if (!projectId) return "Select a project in Projects first.";
+    if (!input.trim()) return "Type a mission in the message box first.";
+    if (hasCloudFollowUpContext && cloudFollowUpMode === "continue") {
+      return "Preview uses prior mission summary + your new instruction (new Cloud Agent launch). Does not message the previous agent.";
+    }
+    return "Builds a Cloud Agent preview digest; does not launch. Does not start the agent.";
+  }, [sending, projectId, input, hasCloudFollowUpContext, cloudFollowUpMode]);
+
   const applyOperatorResultSideEffects = React.useCallback((op: HamOperatorResult | null | undefined) => {
     if (!op?.handled) return;
     if (op.pending_apply) {
@@ -1602,17 +1629,25 @@ function ChatPageInner({
       toast.error("Select a project (Projects) first.");
       return;
     }
-    const task = input.trim();
-    if (!task) {
+    const rawTask = input.trim();
+    if (!rawTask) {
       toast.error("Type the mission in the message box, then click Preview.");
       return;
     }
+    const useStitch =
+      hasCloudFollowUpContext && cloudFollowUpMode === "continue";
+    const taskForOperator = useStitch
+      ? stitchCloudAgentFollowUpTask(previousWorkSummaryForStitch, rawTask)
+      : rawTask;
+    const userLine = useStitch
+      ? `[Cloud Agent — preview — follow-up context] ${rawTask}`
+      : `[Cloud Agent — preview] ${rawTask}`;
     void runOperatorPayloadStream({
-      messages: [{ role: "user", content: `[Cloud Agent — preview] ${task}` }],
+      messages: [{ role: "user", content: userLine }],
       operator: {
         phase: "cursor_agent_preview",
         project_id: projectId,
-        cursor_task_prompt: task,
+        cursor_task_prompt: taskForOperator,
         cursor_repository: caRepo.trim() || null,
         cursor_ref: caRef.trim() || null,
         cursor_mission_handling: caMission,
@@ -2118,6 +2153,42 @@ function ChatPageInner({
                            <span className="font-mono">cursor_cloud_repository</span> in project metadata or open{" "}
                            <span className="font-mono">Cloud Agent target</span> and enter a repository.
                          </p>
+                       ) : null}
+                       {uplinkId === "cloud_agent" && hasCloudFollowUpContext ? (
+                         <div
+                           className="mb-2 rounded border border-cyan-500/25 bg-cyan-950/30 px-2.5 py-2"
+                           role="region"
+                           aria-label="Cloud Agent follow-up mode"
+                         >
+                           <p className="text-[9px] font-bold uppercase tracking-wider text-cyan-200/90">
+                             Continue previous Cloud Agent work?
+                           </p>
+                           <p className="mt-0.5 text-[8px] text-white/45">
+                             Uses a new launch with stitched context. Does not send messages to the existing agent.
+                           </p>
+                           <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1.5">
+                             <label className="flex cursor-pointer items-center gap-1.5 text-[9px] text-white/85">
+                               <input
+                                 type="radio"
+                                 name="ham-cloud-followup-mode"
+                                 className="accent-cyan-500"
+                                 checked={cloudFollowUpMode === "continue"}
+                                 onChange={() => setCloudFollowUpMode("continue")}
+                               />
+                               Continue with context (default)
+                             </label>
+                             <label className="flex cursor-pointer items-center gap-1.5 text-[9px] text-white/85">
+                               <input
+                                 type="radio"
+                                 name="ham-cloud-followup-mode"
+                                 className="accent-cyan-500"
+                                 checked={cloudFollowUpMode === "fresh"}
+                                 onChange={() => setCloudFollowUpMode("fresh")}
+                               />
+                               Start fresh
+                             </label>
+                           </div>
+                         </div>
                        ) : null}
                        <button
                          type="button"
