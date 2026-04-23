@@ -102,6 +102,54 @@ def test_preview_blocked_without_cursor_key(
     assert "Cursor API key" in (out.blocking_reason or "")
 
 
+def test_preview_managed_mission_uses_different_digest_than_direct(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Managed missions digest the full managed prompt; direct digests the raw user task + deliverable."""
+    monkeypatch.setenv("CURSOR_API_KEY", "k")
+    store, rec = _make_store(
+        tmp_path,
+        root=str(tmp_path / "repo"),
+        metadata={"cursor_cloud_repository": "https://github.com/o/r"},
+    )
+    (tmp_path / "repo").mkdir()
+    op_direct = ChatOperatorPayload(
+        phase="cursor_agent_preview",
+        project_id=rec.id,
+        cursor_task_prompt="fix bug",
+        cursor_mission_handling="direct",
+    )
+    out_d = process_operator_turn(
+        user_text="",
+        project_store=store,
+        default_project_id=None,
+        operator_payload=op_direct,
+        ham_operator_authorization=None,
+    )
+    op_managed = ChatOperatorPayload(
+        phase="cursor_agent_preview",
+        project_id=rec.id,
+        cursor_task_prompt="fix bug",
+        cursor_mission_handling="managed",
+    )
+    out_m = process_operator_turn(
+        user_text="",
+        project_store=store,
+        default_project_id=None,
+        operator_payload=op_managed,
+        ham_operator_authorization=None,
+    )
+    assert out_d and out_d.ok
+    assert out_m and out_m.ok
+    d_d = (out_d.data or {}).get("proposal_digest")
+    d_m = (out_m.data or {}).get("proposal_digest")
+    assert isinstance(d_d, str) and isinstance(d_m, str)
+    assert d_d != d_m
+    pd = out_m.pending_cursor_agent or {}
+    assert pd.get("cursor_mission_handling") == "managed"
+
+
 def test_digest_mismatch_blocks_launch(
     central_audit: Path,
     tmp_path: Path,
@@ -218,6 +266,67 @@ def test_successful_launch_writes_central_audit_and_normalizes_summary(
     assert row["action"] == "launch"
     assert row["ok"] is True
     assert row["agent_id"] == "bc_xyz"
+
+
+def test_managed_launch_calls_mission_registry(
+    central_audit: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    launch_token: None,
+) -> None:
+    monkeypatch.setenv("CURSOR_API_KEY", "k")
+    store, rec = _make_store(
+        tmp_path,
+        root=str(tmp_path / "repo"),
+        metadata={"cursor_cloud_repository": "https://github.com/o/r"},
+    )
+    (tmp_path / "repo").mkdir()
+    from src.ham import cursor_agent_workflow as caw
+
+    managed_prompt = caw.build_managed_cloud_agent_prompt_py(
+        user_prompt="fix tests",
+        repository="https://github.com/o/r",
+        ref=None,
+    )
+    digest = caw.compute_cursor_proposal_digest(
+        project_id=rec.id,
+        repository="https://github.com/o/r",
+        ref=None,
+        model="default",
+        auto_create_pr=False,
+        branch_name=None,
+        expected_deliverable=None,
+        task_prompt=managed_prompt,
+    )
+    fake = {"id": "bc_managed", "status": "CREATING", "summary": "started"}
+    with (
+        patch.object(caw, "cursor_api_launch_agent", return_value=fake),
+        patch("src.ham.managed_mission_wiring.create_mission_after_managed_launch") as m_mission,
+    ):
+        op = ChatOperatorPayload(
+            phase="cursor_agent_launch",
+            confirmed=True,
+            project_id=rec.id,
+            cursor_task_prompt="fix tests",
+            cursor_proposal_digest=digest,
+            cursor_base_revision="cursor-agent-v1",
+            cursor_auto_create_pr=False,
+            cursor_mission_handling="managed",
+        )
+        out = process_operator_turn(
+            user_text="",
+            project_store=store,
+            default_project_id=None,
+            operator_payload=op,
+            ham_operator_authorization="Bearer launch-secret",
+        )
+    assert out is not None and out.ok
+    m_mission.assert_called_once()
+    kw = m_mission.call_args.kwargs
+    assert kw["mission_handling"] == "managed"
+    assert kw["launch_response"] == fake
+    assert kw["project_id"] == rec.id
+    assert (out.data or {}).get("mission_handling") == "managed"
 
 
 def test_status_returns_normalized_summary(

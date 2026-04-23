@@ -52,6 +52,7 @@ import {
   type ManagedDeployHookResult,
   type HamChatStreamAuth,
   type HamOperatorResult,
+  type HamChatOperatorPayload,
   type ChatSessionSummary,
 } from "@/lib/ham/api";
 import {
@@ -71,6 +72,11 @@ import type {
   ProjectRecord,
 } from "@/lib/ham/types";
 import { PROJECT_DEFAULT_DEPLOY_APPROVAL_KEY, type ProjectDefaultDeployPolicy } from "@/lib/ham/projectDeployPolicy";
+import {
+  getActiveProjectName,
+  getCursorCloudRepository,
+  shortDigest,
+} from "@/lib/ham/cloudAgentProjectDefaults";
 import { ProjectsRegistryPanel } from "@/components/chat/ProjectsRegistryPanel";
 import { ManagedCloudAgentProvider } from "@/contexts/ManagedCloudAgentContext";
 import { useManagedCloudAgentPoll } from "@/hooks/useManagedCloudAgentPoll";
@@ -227,9 +233,28 @@ function workbenchLayoutTriggerLabel(mode: ChatViewMode): string {
 type TranscriptColumnProps = {
   messages: ChatRow[];
   primaryPersona: { name: string; avatarUrl: string | null } | null;
+  /** Human-readable name for the active HAM project (not `project_id`). */
+  activeProjectName: string | null;
+  /** In-thread Cloud Agent mission preview (digest-locked) + confirm launch — from `operator_result.pending_cursor_agent`. */
+  pendingCursorAgent: Record<string, unknown> | null;
+  operatorCursorAgentToken: string;
+  onOperatorCursorAgentTokenChange: (v: string) => void;
+  onCursorAgentLaunch: () => void;
+  onDismissCursorPreview: () => void;
+  cursorAgentActionsDisabled: boolean;
 };
 
-function TranscriptColumn({ messages, primaryPersona }: TranscriptColumnProps) {
+function TranscriptColumn({
+  messages,
+  primaryPersona,
+  activeProjectName,
+  pendingCursorAgent,
+  operatorCursorAgentToken,
+  onOperatorCursorAgentTokenChange,
+  onCursorAgentLaunch,
+  onDismissCursorPreview,
+  cursorAgentActionsDisabled,
+}: TranscriptColumnProps) {
   return (
     <div className="h-full min-h-0 flex flex-col overflow-hidden">
       <div className="flex-1 overflow-y-auto p-12 space-y-16 scrollbar-hide relative">
@@ -294,6 +319,121 @@ function TranscriptColumn({ messages, primaryPersona }: TranscriptColumnProps) {
               </div>
             </div>
           ))}
+
+          {pendingCursorAgent ? (
+            <div
+              className="flex gap-10 animate-in fade-in slide-in-from-bottom-3 duration-700"
+            >
+              <div className="h-11 w-11 shrink-0 border flex items-center justify-center overflow-hidden border-cyan-500/40 bg-cyan-500/10 text-cyan-300 shadow-[0_0_30px_rgba(0,229,255,0.12)]">
+                <Radar className="h-5 w-5" />
+              </div>
+              <div className="flex flex-col gap-4 min-w-0 max-w-2xl items-start w-full">
+                <div className="flex items-center gap-4 opacity-90">
+                  <span className="text-[9px] font-black uppercase tracking-[0.4em] text-cyan-300/90 italic">
+                    Cloud Agent — mission card
+                  </span>
+                  <span className="text-[8px] font-mono text-white/20">
+                    {new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                </div>
+                <div className="w-full space-y-4 rounded-2xl border border-cyan-500/30 bg-cyan-500/[0.07] p-6 shadow-lg">
+                  {(() => {
+                    const p = pendingCursorAgent;
+                    const modeLine =
+                      p.cursor_mission_handling === "direct"
+                        ? "Cloud Agent · Direct"
+                        : "Cloud Agent · Managed by HAM";
+                    const task = String(p.cursor_task_prompt ?? "").trim();
+                    const resolvedRepo = String(p.repository ?? "").trim();
+                    const overrideRepo = p.cursor_repository != null ? String(p.cursor_repository).trim() : "";
+                    const refVal = p.cursor_ref != null ? String(p.cursor_ref).trim() : "";
+                    const dig = String(p.proposal_digest ?? "");
+                    return (
+                      <div className="space-y-2 border-b border-cyan-500/20 pb-4">
+                        <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-cyan-200/95">{modeLine}</h3>
+                        <dl className="space-y-1.5 text-[11px] text-white/85">
+                          <div className="flex flex-wrap gap-x-2 gap-y-0.5">
+                            <dt className="shrink-0 text-[9px] font-bold uppercase tracking-widest text-white/45">
+                              Project
+                            </dt>
+                            <dd className="min-w-0 break-words font-medium">
+                              {activeProjectName || "—"}
+                            </dd>
+                          </div>
+                          <div className="flex flex-wrap gap-x-2 gap-y-0.5">
+                            <dt className="shrink-0 text-[9px] font-bold uppercase tracking-widest text-white/45">
+                              Task
+                            </dt>
+                            <dd className="min-w-0 line-clamp-3 break-words font-medium" title={task}>
+                              {task || "—"}
+                            </dd>
+                          </div>
+                          <div className="flex flex-wrap gap-x-2 gap-y-0.5">
+                            <dt className="shrink-0 text-[9px] font-bold uppercase tracking-widest text-white/45">
+                              Repository
+                            </dt>
+                            <dd className="min-w-0 break-all font-mono text-[10px] text-white/80">
+                              {resolvedRepo || "—"}
+                              {overrideRepo && overrideRepo !== resolvedRepo ? (
+                                <span className="block text-[9px] text-amber-400/80 normal-case">
+                                  Override: {overrideRepo}
+                                </span>
+                              ) : null}
+                            </dd>
+                          </div>
+                          <div className="flex flex-wrap gap-x-2 gap-y-0.5">
+                            <dt className="shrink-0 text-[9px] font-bold uppercase tracking-widest text-white/45">Ref</dt>
+                            <dd className="min-w-0 break-words font-mono text-[10px] text-white/80">
+                              {refVal || "default branch"}
+                            </dd>
+                          </div>
+                        </dl>
+                        <p className="pt-1 text-[9px] font-mono text-white/35" title={dig || undefined}>
+                          Digest: {shortDigest(dig) || "—"}
+                        </p>
+                      </div>
+                    );
+                  })()}
+                  <div>
+                    <p className="text-[9px] font-bold uppercase tracking-widest text-white/45 mb-2">Server detail</p>
+                    <div className="whitespace-pre-wrap text-[12px] font-medium leading-[1.6] uppercase tracking-[0.02em] text-white/80 max-h-[min(50vh,320px)] overflow-y-auto">
+                      {String(pendingCursorAgent.summary_preview ?? "")}
+                    </div>
+                  </div>
+                  <p className="text-[9px] text-white/40">
+                    Paste <span className="font-mono">HAM_CURSOR_AGENT_LAUNCH_TOKEN</span> to confirm launch. No
+                    auto-launch.
+                  </p>
+                  <input
+                    type="password"
+                    autoComplete="off"
+                    placeholder="HAM_CURSOR_AGENT_LAUNCH_TOKEN"
+                    value={operatorCursorAgentToken}
+                    onChange={(e) => onOperatorCursorAgentTokenChange(e.target.value)}
+                    className="w-full rounded border border-white/15 bg-black/50 px-3 py-2 font-mono text-[11px] text-white"
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={cursorAgentActionsDisabled}
+                      onClick={onCursorAgentLaunch}
+                      className="rounded bg-cyan-600 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white disabled:opacity-50"
+                    >
+                      Launch
+                    </button>
+                    <button
+                      type="button"
+                      disabled={cursorAgentActionsDisabled}
+                      onClick={onDismissCursorPreview}
+                      className="rounded border border-white/20 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white/70"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
         </div>
       </div>
     </div>
@@ -335,6 +475,7 @@ function ChatPageInner({
   const [activeAgentNote, setActiveAgentNote] = React.useState<string | null>(null);
   const SETTINGS_OP_KEY = "ham_operator_settings_token";
   const LAUNCH_OP_KEY = "ham_operator_launch_token";
+  const CURSOR_AGENT_OP_KEY = "ham_cursor_agent_launch_token";
   const [operatorSettingsToken, setOperatorSettingsToken] = React.useState(() =>
     typeof sessionStorage !== "undefined"
       ? sessionStorage.getItem(SETTINGS_OP_KEY) ?? ""
@@ -342,6 +483,9 @@ function ChatPageInner({
   );
   const [operatorLaunchToken, setOperatorLaunchToken] = React.useState(() =>
     typeof sessionStorage !== "undefined" ? sessionStorage.getItem(LAUNCH_OP_KEY) ?? "" : "",
+  );
+  const [operatorCursorAgentToken, setOperatorCursorAgentToken] = React.useState(() =>
+    typeof sessionStorage !== "undefined" ? sessionStorage.getItem(CURSOR_AGENT_OP_KEY) ?? "" : "",
   );
   const [pendingApply, setPendingApply] = React.useState<Record<string, unknown> | null>(
     null,
@@ -353,6 +497,16 @@ function ChatPageInner({
     string,
     unknown
   > | null>(null);
+  const [pendingCursorAgent, setPendingCursorAgent] = React.useState<Record<string, unknown> | null>(
+    null,
+  );
+  /** Optional overrides for `cursor_agent_preview` — not the default path (use main input for the task). */
+  const [caRepo, setCaRepo] = React.useState("");
+  const [caRef, setCaRef] = React.useState("");
+  const [caMission, setCaMission] = React.useState<"direct" | "managed">("managed");
+  const [cloudAgentOptionsOpen, setCloudAgentOptionsOpen] = React.useState(false);
+  /** Option A: once user edits repo/ref, autofill must not clobber. */
+  const cloudTargetTouchedRef = React.useRef({ repo: false, ref: false });
   /** Primary HAM profile from Agent Builder (avatar + name in transcript). */
   const [primaryPersona, setPrimaryPersona] = React.useState<{
     name: string;
@@ -690,6 +844,49 @@ function ChatPageInner({
       cancelled = true;
     };
   }, []);
+
+  /** On project change: clear target overrides so autofill can apply for the new project. */
+  React.useEffect(() => {
+    setCaRepo("");
+    setCaRef("");
+    cloudTargetTouchedRef.current = { repo: false, ref: false };
+  }, [projectId]);
+
+  /** Option A: autofill metadata repo and optional ref from mount when empty and not user-touched. */
+  React.useEffect(() => {
+    if (!projectId) return;
+    const rec = hamProjects.find((p) => p.id === projectId);
+    const metaRepo = getCursorCloudRepository(rec?.metadata) ?? "";
+    const mref = mountRef.trim();
+    setCaRepo((r) => {
+      if (cloudTargetTouchedRef.current.repo) return r;
+      if (r.trim()) return r;
+      return metaRepo || r;
+    });
+    setCaRef((r) => {
+      if (cloudTargetTouchedRef.current.ref) return r;
+      if (r.trim()) return r;
+      return mref || r;
+    });
+  }, [projectId, hamProjects, mountRef]);
+
+  const activeProjectName = React.useMemo(
+    () => getActiveProjectName(hamProjects, projectId),
+    [hamProjects, projectId],
+  );
+
+  const showCloudAgentMissingRepoHint = Boolean(
+    projectId &&
+      !getCursorCloudRepository(hamProjects.find((p) => p.id === projectId)?.metadata) &&
+      !caRepo.trim(),
+  );
+
+  const cloudAgentPreviewTitle = React.useMemo(() => {
+    if (sending) return "Wait for the current request to finish.";
+    if (!projectId) return "Select a project in Projects first.";
+    if (!input.trim()) return "Type a mission in the message box first.";
+    return "Builds a Cloud Agent preview digest; does not launch. Does not start the agent.";
+  }, [sending, projectId, input]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -1160,6 +1357,11 @@ function ChatPageInner({
     } else if (op.intent === "register_project" && op.ok) {
       setPendingRegister(null);
     }
+    if (op.pending_cursor_agent) {
+      setPendingCursorAgent(op.pending_cursor_agent as Record<string, unknown>);
+    } else if (op.intent === "cursor_agent_launch" && op.ok) {
+      setPendingCursorAgent(null);
+    }
   }, []);
 
   const runOperatorConfirm = async (opts: {
@@ -1271,6 +1473,186 @@ function ChatPageInner({
     } finally {
       setSending(false);
     }
+  };
+
+  const runOperatorPayloadStream = async (opts: {
+    messages: { role: "user" | "assistant" | "system"; content: string }[];
+    operator: HamChatOperatorPayload;
+    /** Set for `cursor_agent_launch` and other operator writes that require `HAM_*` on `X-Ham-Operator-Authorization` when Clerk owns `Authorization`. */
+    hamOperatorToken?: string;
+  }) => {
+    if (opts.operator.phase === "cursor_agent_launch" && !opts.hamOperatorToken?.trim()) {
+      toast.error("Paste HAM_CURSOR_AGENT_LAUNCH_TOKEN to launch.");
+      return;
+    }
+    setChatError(null);
+    setSending(true);
+    const userRow: ChatRow = {
+      id: `pending-user-${Date.now()}`,
+      role: "user",
+      content: opts.messages[0]?.content ?? "[operator]",
+      timestamp: timeStr(),
+    };
+    const assistantPlaceId = `assist-pending-${Date.now()}`;
+    const assistantRow: ChatRow = {
+      id: assistantPlaceId,
+      role: "assistant",
+      content: "",
+      timestamp: timeStr(),
+    };
+    setMessages((prev) => [...prev, userRow, assistantRow]);
+    setViewMode("chat");
+    try {
+      let streamAuth: HamChatStreamAuth | undefined;
+      if (opts.hamOperatorToken?.trim()) {
+        const h = opts.hamOperatorToken.trim();
+        streamAuth = clerkEnabled
+          ? { sessionToken: await getClerkSessionToken(), hamOperatorToken: h }
+          : h;
+      } else {
+        streamAuth = clerkEnabled ? { sessionToken: await getClerkSessionToken() } : undefined;
+      }
+      const res = await postChatStream(
+        {
+          session_id: sessionId ?? undefined,
+          messages: opts.messages,
+          ...(modelId ? { model_id: modelId } : {}),
+          ...(projectId ? { project_id: projectId } : {}),
+          workbench_mode: workbenchMode,
+          worker,
+          max_mode: maxMode,
+          operator: opts.operator,
+        },
+        {
+          onSession: (sid) => setSessionId(sid),
+          onDelta: (delta) => {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantPlaceId ? { ...m, content: m.content + delta } : m,
+              ),
+            );
+          },
+        },
+        streamAuth,
+      );
+      setSessionId(res.session_id);
+      setMessages(
+        res.messages.map((m, i) => ({
+          id: `${res.session_id}-${i}-${m.role}`,
+          role: m.role,
+          content: m.content,
+          timestamp: timeStr(),
+        })),
+      );
+      applyOperatorResultSideEffects(res.operator_result);
+      const op = res.operator_result;
+      if (op?.intent === "cursor_agent_launch" && op.ok && op.data) {
+        const d = op.data as Record<string, unknown>;
+        if (d.mission_handling === "managed") {
+          const rawId = d.agent_id ?? d.external_id;
+          const aid = typeof rawId === "string" ? rawId.trim() : "";
+          if (aid) {
+            setUplinkId("cloud_agent");
+            activateCloudMission(aid, {
+              mission_handling: "managed",
+              managedSplit: { kind: "new_launch" },
+            });
+          }
+        }
+      }
+      applyHamUiActions(res.actions ?? [], {
+        navigate,
+        setIsControlPanelOpen,
+        isControlPanelOpen,
+        setWorkbenchView: setViewMode,
+        setBrowserMode: (active) => {
+          setBrowserOnly(active);
+          if (active) {
+            setRequestedTabId("browser");
+            setRequestedTabNonce((n) => n + 1);
+          }
+        },
+      });
+    } catch (err) {
+      if (err instanceof HamAccessRestrictedError) {
+        const msg =
+          "Access restricted: this Ham deployment only allows approved email addresses or domains. Ask an admin or check Clerk sign-up restrictions.";
+        setChatError(msg);
+        toast.error(msg, { duration: 12_000, id: "ham-access-restricted" });
+      } else if (
+        err instanceof Error &&
+        err.message === "Chat stream ended without a done event"
+      ) {
+        const msg =
+          "Response was interrupted — your partial message has been saved.";
+        setChatError(msg);
+        toast.error(msg, { duration: 8_000, id: "ham-stream-interrupted" });
+      } else {
+        const msg = err instanceof Error ? err.message : "Request failed";
+        setChatError(msg);
+        toast.error(msg, { duration: 8_000 });
+      }
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleCloudAgentPreview = () => {
+    if (!projectId) {
+      toast.error("Select a project (Projects) first.");
+      return;
+    }
+    const task = input.trim();
+    if (!task) {
+      toast.error("Type the mission in the message box, then click Preview.");
+      return;
+    }
+    void runOperatorPayloadStream({
+      messages: [{ role: "user", content: `[Cloud Agent — preview] ${task}` }],
+      operator: {
+        phase: "cursor_agent_preview",
+        project_id: projectId,
+        cursor_task_prompt: task,
+        cursor_repository: caRepo.trim() || null,
+        cursor_ref: caRef.trim() || null,
+        cursor_mission_handling: caMission,
+      },
+    });
+  };
+
+  const handleCursorAgentTokenChange = (v: string) => {
+    setOperatorCursorAgentToken(v);
+    try {
+      sessionStorage.setItem(CURSOR_AGENT_OP_KEY, v);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const handleCursorAgentLaunchFromCard = () => {
+    const p = pendingCursorAgent;
+    if (!p) return;
+    void runOperatorPayloadStream({
+      messages: [{ role: "user", content: "[cursor_agent_launch operator]" }],
+      operator: {
+        phase: "cursor_agent_launch",
+        confirmed: true,
+        project_id: String(p.project_id ?? ""),
+        cursor_task_prompt: String(p.cursor_task_prompt ?? ""),
+        cursor_proposal_digest: String(p.proposal_digest ?? ""),
+        cursor_base_revision: String(p.base_revision ?? ""),
+        cursor_repository: p.cursor_repository ? String(p.cursor_repository) : null,
+        cursor_ref: p.cursor_ref ? String(p.cursor_ref) : null,
+        cursor_model: p.cursor_model ? String(p.cursor_model) : "default",
+        cursor_auto_create_pr: Boolean(p.cursor_auto_create_pr),
+        cursor_branch_name: p.cursor_branch_name ? String(p.cursor_branch_name) : null,
+        cursor_expected_deliverable: p.cursor_expected_deliverable
+          ? String(p.cursor_expected_deliverable)
+          : null,
+        cursor_mission_handling: p.cursor_mission_handling === "direct" ? "direct" : "managed",
+      },
+      hamOperatorToken: operatorCursorAgentToken,
+    });
   };
 
   const handleSend = async (e: React.FormEvent) => {
@@ -1474,7 +1856,17 @@ function ChatPageInner({
         <div className="flex flex-1 min-h-0 flex-col relative overflow-hidden">
           <LiveManagedMissionBanner when={workbenchMissionBannerActive} />
           {viewMode === "chat" ? (
-            <TranscriptColumn messages={messages} primaryPersona={primaryPersona} />
+            <TranscriptColumn
+              messages={messages}
+              primaryPersona={primaryPersona}
+              activeProjectName={activeProjectName}
+              pendingCursorAgent={pendingCursorAgent}
+              operatorCursorAgentToken={operatorCursorAgentToken}
+              onOperatorCursorAgentTokenChange={handleCursorAgentTokenChange}
+              onCursorAgentLaunch={handleCursorAgentLaunchFromCard}
+              onDismissCursorPreview={() => setPendingCursorAgent(null)}
+              cursorAgentActionsDisabled={sending}
+            />
           ) : viewMode === "preview" ? (
             <WarRoomPane
               uplinkId={uplinkId}
@@ -1499,7 +1891,17 @@ function ChatPageInner({
                     workbenchMissionBannerActive && "border-t border-white/[0.03]",
                   )}
                 >
-                  <TranscriptColumn messages={messages} primaryPersona={primaryPersona} />
+                  <TranscriptColumn
+                    messages={messages}
+                    primaryPersona={primaryPersona}
+                    activeProjectName={activeProjectName}
+                    pendingCursorAgent={pendingCursorAgent}
+                    operatorCursorAgentToken={operatorCursorAgentToken}
+                    onOperatorCursorAgentTokenChange={handleCursorAgentTokenChange}
+                    onCursorAgentLaunch={handleCursorAgentLaunchFromCard}
+                    onDismissCursorPreview={() => setPendingCursorAgent(null)}
+                    cursorAgentActionsDisabled={sending}
+                  />
                 </div>
               }
               right={
@@ -1701,10 +2103,76 @@ function ChatPageInner({
                         onUplinkId={setUplinkId}
                         toolsCount={selectedAgent.assignedTools?.length ?? 0}
                         onOpenCloudAgentLaunch={() => setCloudLaunchOpen(true)}
+                        onCloudAgentPreview={handleCloudAgentPreview}
+                        cloudAgentPreviewDisabled={sending || !input.trim() || !projectId}
+                        cloudAgentPreviewTitle={cloudAgentPreviewTitle}
                         catalog={catalog}
                         catalogLoading={catalogLoading}
                       />
                    </div>
+                   {projectId ? (
+                     <div className="border-t border-white/5 px-3 py-1.5 bg-black/20">
+                       {showCloudAgentMissingRepoHint ? (
+                         <p className="mb-2 text-[9px] font-bold leading-snug text-amber-400/90">
+                           No Cloud Agent repository found for this project. Set{" "}
+                           <span className="font-mono">cursor_cloud_repository</span> in project metadata or open{" "}
+                           <span className="font-mono">Cloud Agent target</span> and enter a repository.
+                         </p>
+                       ) : null}
+                       <button
+                         type="button"
+                         onClick={() => setCloudAgentOptionsOpen((o) => !o)}
+                         className="text-[8px] font-black uppercase tracking-widest text-cyan-500/60 hover:text-cyan-400/90"
+                       >
+                         {cloudAgentOptionsOpen ? "Hide" : "Show"} Cloud Agent target (repo / ref / mode)
+                       </button>
+                       {cloudAgentOptionsOpen ? (
+                         <div className="mt-2 grid gap-2 sm:grid-cols-2 max-w-3xl">
+                           <label className="space-y-1">
+                             <span className="text-[8px] font-bold uppercase tracking-widest text-white/35">
+                               Repository override
+                             </span>
+                             <input
+                               value={caRepo}
+                               onChange={(e) => {
+                                 cloudTargetTouchedRef.current.repo = true;
+                                 setCaRepo(e.target.value);
+                               }}
+                               placeholder="Optional — default from project"
+                               className="w-full rounded border border-white/10 bg-black/40 px-2 py-1 font-mono text-[10px] text-white"
+                             />
+                           </label>
+                           <label className="space-y-1">
+                             <span className="text-[8px] font-bold uppercase tracking-widest text-white/35">
+                               Ref override
+                             </span>
+                             <input
+                               value={caRef}
+                               onChange={(e) => {
+                                 cloudTargetTouchedRef.current.ref = true;
+                                 setCaRef(e.target.value);
+                               }}
+                               placeholder="Optional"
+                               className="w-full rounded border border-white/10 bg-black/40 px-2 py-1 font-mono text-[10px] text-white"
+                             />
+                           </label>
+                           <label className="space-y-1 sm:col-span-2">
+                             <span className="text-[8px] font-bold uppercase tracking-widest text-white/35">
+                               Mission handling
+                             </span>
+                             <select
+                               value={caMission}
+                               onChange={(e) => setCaMission(e.target.value as "direct" | "managed")}
+                               className="w-full max-w-xs rounded border border-white/10 bg-black/40 px-2 py-1 font-mono text-[10px] text-white"
+                             >
+                               <option value="managed">Managed by HAM</option>
+                               <option value="direct">Direct</option>
+                             </select>
+                           </label>
+                         </div>
+                       ) : null}
+                     </div>
+                   ) : null}
                    <div className="flex flex-col border-t border-white/5">
                       <div className="flex items-start px-4 pt-2 pb-2 gap-2">
                          <span className="text-[#FF6B00] font-mono text-[12px] font-bold mt-1 shrink-0 select-none" aria-hidden>

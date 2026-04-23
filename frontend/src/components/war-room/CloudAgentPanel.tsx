@@ -1000,7 +1000,12 @@ export function CloudAgentPanel({
           Managed · <span className="text-white/65">{compactManagedStatus}</span>
         </p>
       ) : null}
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-2">
+      <div
+        className={cn(
+          "flex min-h-0 flex-1 flex-col",
+          tabId === "browser" ? "p-1" : "overflow-y-auto p-2",
+        )}
+      >
         {renderCloudTab(tabId as CloudAgentTabId)}
       </div>
     </div>

@@ -828,19 +828,47 @@ export interface HamChatRequest {
   max_mode?: boolean;
   /** Server-side operator (projects, agents, runs). */
   enable_operator?: boolean;
-  /** Structured confirm/apply/register/launch (see API `ChatOperatorPayload`). */
-  operator?: {
-    phase?: "apply_settings" | "register_project" | "launch_run" | null;
-    confirmed?: boolean;
-    project_id?: string | null;
-    changes?: Record<string, unknown> | null;
-    base_revision?: string | null;
-    name?: string | null;
-    root?: string | null;
-    description?: string | null;
-    prompt?: string | null;
-    profile_id?: string | null;
-  } | null;
+  /** Structured confirm/apply/register/launch (see API `ChatOperatorPayload` / `src/ham/chat_operator.py`). */
+  operator?: HamChatOperatorPayload | null;
+}
+
+/** Matches server `ChatOperatorPayload` (subset used by the dashboard; extra fields are ignored if unset). */
+export type HamChatOperatorPhase =
+  | "apply_settings"
+  | "register_project"
+  | "launch_run"
+  | "droid_preview"
+  | "droid_launch"
+  | "cursor_agent_preview"
+  | "cursor_agent_launch"
+  | "cursor_agent_status";
+
+export interface HamChatOperatorPayload {
+  phase?: HamChatOperatorPhase | null;
+  confirmed?: boolean;
+  project_id?: string | null;
+  changes?: Record<string, unknown> | null;
+  base_revision?: string | null;
+  name?: string | null;
+  root?: string | null;
+  description?: string | null;
+  prompt?: string | null;
+  profile_id?: string | null;
+  droid_workflow_id?: string | null;
+  droid_user_prompt?: string | null;
+  droid_proposal_digest?: string | null;
+  droid_base_revision?: string | null;
+  cursor_task_prompt?: string | null;
+  cursor_repository?: string | null;
+  cursor_ref?: string | null;
+  cursor_model?: string;
+  cursor_auto_create_pr?: boolean;
+  cursor_branch_name?: string | null;
+  cursor_expected_deliverable?: string | null;
+  cursor_proposal_digest?: string | null;
+  cursor_base_revision?: string | null;
+  cursor_mission_handling?: "direct" | "managed" | null;
+  cursor_agent_id?: string | null;
 }
 
 /** Matches `/chat` workbench header: CHAT | SPLIT | PREVIEW | WAR ROOM */
@@ -866,6 +894,9 @@ export interface HamOperatorResult {
   pending_apply?: Record<string, unknown> | null;
   pending_launch?: Record<string, unknown> | null;
   pending_register?: Record<string, unknown> | null;
+  pending_droid?: Record<string, unknown> | null;
+  pending_cursor_agent?: Record<string, unknown> | null;
+  harness_advisory?: Record<string, unknown> | null;
   data?: Record<string, unknown>;
 }
 
