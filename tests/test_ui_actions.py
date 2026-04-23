@@ -49,6 +49,15 @@ def test_split_accepts_set_workbench_view() -> None:
     assert actions == [{"type": "set_workbench_view", "mode": "war_room"}]
 
 
+def test_split_accepts_browser_workbench_view() -> None:
+    raw = (
+        'Opening browser.\nHAM_UI_ACTIONS_JSON: {"actions":[{"type":"set_workbench_view","mode":"browser"}]}'
+    )
+    visible, actions = split_assistant_ui_actions(raw)
+    assert visible == "Opening browser."
+    assert actions == [{"type": "set_workbench_view", "mode": "browser"}]
+
+
 def test_split_rejects_invalid_workbench_mode() -> None:
     raw = 'HAM_UI_ACTIONS_JSON: {"actions":[{"type":"set_workbench_view","mode":"fullscreen"}]}'
     _, actions = split_assistant_ui_actions(raw)
