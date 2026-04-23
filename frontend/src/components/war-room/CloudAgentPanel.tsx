@@ -2,6 +2,10 @@ import * as React from "react";
 import { Loader2, Package, ScrollText } from "lucide-react";
 
 import { fetchCursorAgent, fetchCursorAgentConversation } from "@/lib/ham/api";
+import {
+  parseCursorConversationToLines,
+  type CursorTranscriptLine,
+} from "@/lib/ham/cursorConversationTranscript";
 import { cn } from "@/lib/utils";
 import type { CloudMissionHandling, ManagedReviewSeverity } from "@/lib/ham/types";
 import { useManagedCloudAgentContext } from "@/contexts/ManagedCloudAgentContext";
@@ -52,8 +56,14 @@ export function CloudAgentPanel({
 
   const [agentPayload, setAgentPayload] = React.useState<Record<string, unknown> | null>(null);
   const [convPayload, setConvPayload] = React.useState<unknown | null>(null);
+  const [transcriptView, setTranscriptView] = React.useState<"readable" | "raw">("readable");
   const [loading, setLoading] = React.useState(false);
   const [err, setErr] = React.useState<string | null>(null);
+
+  const transcriptLines: CursorTranscriptLine[] = React.useMemo(
+    () => parseCursorConversationToLines(convPayload),
+    [convPayload],
+  );
 
   const hasAgent = Boolean(activeCloudAgentId?.trim());
   const isManaged = cloudMissionHandling === "managed" && hasAgent;
@@ -76,6 +86,10 @@ export function CloudAgentPanel({
     if (!requestedTabId || !tabs.some((t) => t.id === requestedTabId)) return;
     setTabId(requestedTabId);
   }, [requestedTabId, requestedTabNonce, tabs]);
+
+  React.useEffect(() => {
+    setTranscriptView("readable");
+  }, [activeCloudAgentId]);
 
   React.useEffect(() => {
     if (!hasAgent || tabId !== "transcript") {
@@ -163,15 +177,79 @@ export function CloudAgentPanel({
       if (err) {
         return <p className="text-[13px] text-amber-500/80 p-4 font-mono leading-relaxed">{err}</p>;
       }
+      const rawJson = JSON.stringify(convPayload, null, 2);
       return (
         <div className="space-y-3 p-4">
-          <div className="flex items-center gap-2 text-[#00E5FF]">
-            <ScrollText className="h-5 w-5 shrink-0" />
-            <span className="text-[11px] font-black uppercase tracking-widest">Transcript</span>
+          <div className="flex flex-wrap items-center justify-between gap-2 text-[#00E5FF]">
+            <div className="flex min-w-0 items-center gap-2">
+              <ScrollText className="h-5 w-5 shrink-0" />
+              <span className="text-[11px] font-black uppercase tracking-widest">Transcript</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setTranscriptView((v) => (v === "readable" ? "raw" : "readable"))}
+              className="shrink-0 rounded-md border border-white/15 bg-black/50 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-widest text-white/80 hover:border-[#FF6B00]/50 hover:text-[#FF6B00]"
+            >
+              {transcriptView === "readable" ? "Show raw JSON" : "Readable view"}
+            </button>
           </div>
-          <pre className="text-[12px] font-mono text-white/70 overflow-auto max-h-[280px] p-3 border border-white/10 bg-black/60 rounded leading-relaxed">
-            {JSON.stringify(convPayload, null, 2)}
-          </pre>
+          {transcriptView === "raw" ? (
+            <p className="shrink-0 text-[10px] font-bold text-white/35">
+              Raw payload from Cursor (via HAM) — for debugging; API shape may change.
+            </p>
+          ) : null}
+          {transcriptView === "raw" ? (
+            <pre className="overflow-x-auto rounded border border-white/10 bg-black/60 p-3 text-[12px] font-mono text-white/75 leading-relaxed">
+              {rawJson}
+            </pre>
+          ) : transcriptLines.length > 0 ? (
+            <ul className="space-y-3 pr-0.5">
+              {transcriptLines.map((l) => {
+                const label =
+                  l.role === "user"
+                    ? "You"
+                    : l.role === "assistant"
+                      ? "Cloud agent"
+                      : l.role === "system"
+                        ? "Tool / system"
+                        : "Message";
+                return (
+                  <li
+                    key={l.id}
+                    className={cn(
+                      "rounded-xl border p-3",
+                      l.role === "user"
+                        ? "border-white/10 bg-white/[0.04]"
+                        : l.role === "assistant"
+                          ? "border-[#FF6B00]/30 bg-[#FF6B00]/[0.05]"
+                          : l.role === "system"
+                            ? "border-amber-500/20 bg-amber-500/5"
+                            : "border-white/10 bg-white/[0.02]",
+                    )}
+                  >
+                    <p className="text-[10px] font-black uppercase tracking-widest text-white/40">{label}</p>
+                    <p className="mt-2 text-[13px] font-medium leading-[1.6] text-white/90 whitespace-pre-wrap [overflow-wrap:anywhere]">
+                      {l.body}
+                    </p>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <div className="min-h-0 flex-1 space-y-2 rounded-xl border border-dashed border-white/15 bg-black/30 p-4">
+              <p className="text-[13px] font-medium leading-[1.5] text-white/60">
+                No chat lines were parsed from this response (Cursor may use a new JSON shape). Open{" "}
+                <button
+                  type="button"
+                  onClick={() => setTranscriptView("raw")}
+                  className="font-bold text-[#00E5FF] underline decoration-[#00E5FF]/40 underline-offset-2 hover:text-white"
+                >
+                  raw JSON
+                </button>{" "}
+                to inspect the payload.
+              </p>
+            </div>
+          )}
         </div>
       );
     }
