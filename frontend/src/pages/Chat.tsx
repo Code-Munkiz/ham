@@ -81,6 +81,7 @@ import {
   buildPreviousWorkSummaryLine,
   stitchCloudAgentFollowUpTask,
 } from "@/lib/ham/cloudAgentFollowUp";
+import { inferMissionTitleForCard, isCloudAgentHandoffRequest } from "@/lib/ham/cloudAgentChatHandoff";
 import { ProjectsRegistryPanel } from "@/components/chat/ProjectsRegistryPanel";
 import { ManagedCloudAgentProvider } from "@/contexts/ManagedCloudAgentContext";
 import { useManagedCloudAgentPoll } from "@/hooks/useManagedCloudAgentPoll";
@@ -246,6 +247,12 @@ type TranscriptColumnProps = {
   onCursorAgentLaunch: () => void;
   onDismissCursorPreview: () => void;
   cursorAgentActionsDisabled: boolean;
+  /** Chat handoff: save `cursor_cloud_repository` then preview. */
+  cloudHandoffRepoSetup: { missionText: string; repoInput: string } | null;
+  onHandoffRepoInputChange: (v: string) => void;
+  onHandoffSaveRepoAndPreview: () => void;
+  onDismissHandoffRepoSetup: () => void;
+  handoffRepoSaving: boolean;
 };
 
 function TranscriptColumn({
@@ -258,6 +265,11 @@ function TranscriptColumn({
   onCursorAgentLaunch,
   onDismissCursorPreview,
   cursorAgentActionsDisabled,
+  cloudHandoffRepoSetup,
+  onHandoffRepoInputChange,
+  onHandoffSaveRepoAndPreview,
+  onDismissHandoffRepoSetup,
+  handoffRepoSaving,
 }: TranscriptColumnProps) {
   return (
     <div className="h-full min-h-0 flex flex-col overflow-hidden">
@@ -324,6 +336,60 @@ function TranscriptColumn({
             </div>
           ))}
 
+          {cloudHandoffRepoSetup ? (
+            <div className="flex gap-10 animate-in fade-in slide-in-from-bottom-3 duration-700">
+              <div className="h-11 w-11 shrink-0 border flex items-center justify-center overflow-hidden border-amber-500/40 bg-amber-500/10 text-amber-200">
+                <AlertCircle className="h-5 w-5" />
+              </div>
+              <div className="flex min-w-0 max-w-2xl flex-1 flex-col items-start gap-3">
+                <div className="space-y-1">
+                  <span className="text-[9px] font-black uppercase tracking-[0.4em] text-amber-200/90">
+                    Cloud Agent — repository required
+                  </span>
+                  <p className="text-[12px] font-medium leading-snug text-white/80">
+                    No Cloud Agent repository is configured for this project. Enter the GitHub repository URL, then
+                    save to update project metadata and run a mission preview. Launch still needs your token.
+                  </p>
+                </div>
+                <div className="w-full space-y-2 rounded-2xl border border-amber-500/25 bg-amber-950/20 p-4">
+                  <p className="text-[9px] font-bold uppercase tracking-widest text-white/45">Repository URL</p>
+                  <input
+                    type="url"
+                    autoComplete="off"
+                    value={cloudHandoffRepoSetup.repoInput}
+                    onChange={(e) => onHandoffRepoInputChange(e.target.value)}
+                    placeholder="https://github.com/org/repo"
+                    className="w-full rounded border border-white/15 bg-black/50 px-3 py-2 font-mono text-[11px] text-white"
+                  />
+                  <p className="text-[9px] text-white/40">
+                    Mission (from your message):{" "}
+                    <span className="text-white/70">{cloudHandoffRepoSetup.missionText.slice(0, 200)}
+                      {cloudHandoffRepoSetup.missionText.length > 200 ? "…" : ""}
+                    </span>
+                  </p>
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <button
+                      type="button"
+                      disabled={handoffRepoSaving}
+                      onClick={onHandoffSaveRepoAndPreview}
+                      className="rounded bg-amber-600 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-black disabled:opacity-50"
+                    >
+                      {handoffRepoSaving ? "Saving…" : "Save repo and preview mission"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={handoffRepoSaving}
+                      onClick={onDismissHandoffRepoSetup}
+                      className="rounded border border-white/20 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white/70"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
           {pendingCursorAgent ? (
             <div
               className="flex gap-10 animate-in fade-in slide-in-from-bottom-3 duration-700"
@@ -348,6 +414,8 @@ function TranscriptColumn({
                         ? "Cloud Agent · Direct"
                         : "Cloud Agent · Managed by HAM";
                     const task = String(p.cursor_task_prompt ?? "").trim();
+                    const titleHint = inferMissionTitleForCard(task);
+                    const isStitchedFollowUp = task.includes("Previous work:\n") && task.includes("New instruction:\n");
                     const resolvedRepo = String(p.repository ?? "").trim();
                     const overrideRepo = p.cursor_repository != null ? String(p.cursor_repository).trim() : "";
                     const refVal = p.cursor_ref != null ? String(p.cursor_ref).trim() : "";
@@ -355,6 +423,17 @@ function TranscriptColumn({
                     return (
                       <div className="space-y-2 border-b border-cyan-500/20 pb-4">
                         <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-cyan-200/95">{modeLine}</h3>
+                        {titleHint ? (
+                          <p className="text-[10px] font-bold uppercase tracking-wide text-white/50">
+                            Mission title: {titleHint}
+                          </p>
+                        ) : null}
+                        {isStitchedFollowUp ? (
+                          <p className="rounded border border-cyan-500/20 bg-black/30 px-2 py-1.5 text-[9px] leading-snug text-cyan-200/80">
+                            Follow-up: <span className="text-white/70">this preview starts a new Cloud Agent launch with prior
+                            context stitched in. It does not message the previous agent.</span>
+                          </p>
+                        ) : null}
                         <dl className="space-y-1.5 text-[11px] text-white/85">
                           <div className="flex flex-wrap gap-x-2 gap-y-0.5">
                             <dt className="shrink-0 text-[9px] font-bold uppercase tracking-widest text-white/45">
@@ -504,6 +583,12 @@ function ChatPageInner({
   const [pendingCursorAgent, setPendingCursorAgent] = React.useState<Record<string, unknown> | null>(
     null,
   );
+  /** Chat-native handoff: need repo before preview (PATCH metadata + preview). */
+  const [cloudHandoffRepoSetup, setCloudHandoffRepoSetup] = React.useState<{
+    missionText: string;
+    repoInput: string;
+  } | null>(null);
+  const [handoffRepoSaving, setHandoffRepoSaving] = React.useState(false);
   /** Optional overrides for `cursor_agent_preview` — not the default path (use main input for the task). */
   const [caRepo, setCaRepo] = React.useState("");
   const [caRef, setCaRef] = React.useState("");
@@ -1507,6 +1592,11 @@ function ChatPageInner({
     operator: HamChatOperatorPayload;
     /** Set for `cursor_agent_launch` and other operator writes that require `HAM_*` on `X-Ham-Operator-Authorization` when Clerk owns `Authorization`. */
     hamOperatorToken?: string;
+    /**
+     * When true, the last user line is already in `messages` state (e.g. chat handoff). Only append
+     * the assistant placeholder; `messages[0]` is still the payload sent to the API.
+     */
+    transcriptUserAlreadyInTranscript?: boolean;
   }) => {
     if (opts.operator.phase === "cursor_agent_launch" && !opts.hamOperatorToken?.trim()) {
       toast.error("Paste HAM_CURSOR_AGENT_LAUNCH_TOKEN to launch.");
@@ -1527,7 +1617,11 @@ function ChatPageInner({
       content: "",
       timestamp: timeStr(),
     };
-    setMessages((prev) => [...prev, userRow, assistantRow]);
+    if (opts.transcriptUserAlreadyInTranscript) {
+      setMessages((prev) => [...prev, assistantRow]);
+    } else {
+      setMessages((prev) => [...prev, userRow, assistantRow]);
+    }
     setViewMode("chat");
     try {
       let streamAuth: HamChatStreamAuth | undefined;
@@ -1624,6 +1718,82 @@ function ChatPageInner({
     }
   };
 
+  const runCursorAgentPreviewCore = async (opts: {
+    rawTask: string;
+    /** Last message sent to the chat API (operator turn context). */
+    apiUserMessageLine: string;
+    transcriptUserAlreadyInTranscript: boolean;
+  }) => {
+    if (!projectId) {
+      toast.error("Select a project (Projects) first.");
+      return;
+    }
+    const rawTask = opts.rawTask.trim();
+    if (!rawTask) {
+      toast.error("Add a task text.");
+      return;
+    }
+    const useStitch = hasCloudFollowUpContext && cloudFollowUpMode === "continue";
+    const taskForOperator = useStitch
+      ? stitchCloudAgentFollowUpTask(previousWorkSummaryForStitch, rawTask)
+      : rawTask;
+    await runOperatorPayloadStream({
+      messages: [{ role: "user", content: opts.apiUserMessageLine }],
+      transcriptUserAlreadyInTranscript: opts.transcriptUserAlreadyInTranscript,
+      operator: {
+        phase: "cursor_agent_preview",
+        project_id: projectId,
+        cursor_task_prompt: taskForOperator,
+        cursor_repository: caRepo.trim() || null,
+        cursor_ref: caRef.trim() || null,
+        cursor_mission_handling: caMission,
+      },
+    });
+  };
+
+  const runChatNativeHandoffPreview = async (utterance: string) => {
+    const raw = utterance.trim();
+    const useStitch = hasCloudFollowUpContext && cloudFollowUpMode === "continue";
+    const apiLine = useStitch
+      ? `[Cloud Agent handoff — follow-up] ${raw}`
+      : `[Cloud Agent handoff] ${raw}`;
+    await runCursorAgentPreviewCore({
+      rawTask: raw,
+      apiUserMessageLine: apiLine,
+      transcriptUserAlreadyInTranscript: true,
+    });
+  };
+
+  const onHandoffSaveRepoAndPreview = async () => {
+    if (!projectId || !cloudHandoffRepoSetup) return;
+    const url = cloudHandoffRepoSetup.repoInput.trim();
+    if (!url) {
+      toast.error("Enter a repository URL.");
+      return;
+    }
+    setHandoffRepoSaving(true);
+    setChatError(null);
+    try {
+      const updated = await patchHamProjectMetadata(projectId, { cursor_cloud_repository: url });
+      setHamProjects((prev) => prev.map((p) => (p.id === projectId ? { ...p, ...updated } : p)));
+      if (!cloudTargetTouchedRef.current.repo) {
+        setCaRepo(url);
+      }
+      const mission = cloudHandoffRepoSetup.missionText;
+      setCloudHandoffRepoSetup(null);
+      setUplinkId("cloud_agent");
+      setCaMission("managed");
+      setCloudMissionHandling("managed");
+      await runChatNativeHandoffPreview(mission);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Failed to save repository";
+      setChatError(msg);
+      toast.error(msg, { duration: 10_000 });
+    } finally {
+      setHandoffRepoSaving(false);
+    }
+  };
+
   const handleCloudAgentPreview = () => {
     if (!projectId) {
       toast.error("Select a project (Projects) first.");
@@ -1634,24 +1804,14 @@ function ChatPageInner({
       toast.error("Type the mission in the message box, then click Preview.");
       return;
     }
-    const useStitch =
-      hasCloudFollowUpContext && cloudFollowUpMode === "continue";
-    const taskForOperator = useStitch
-      ? stitchCloudAgentFollowUpTask(previousWorkSummaryForStitch, rawTask)
-      : rawTask;
+    const useStitch = hasCloudFollowUpContext && cloudFollowUpMode === "continue";
     const userLine = useStitch
       ? `[Cloud Agent — preview — follow-up context] ${rawTask}`
       : `[Cloud Agent — preview] ${rawTask}`;
-    void runOperatorPayloadStream({
-      messages: [{ role: "user", content: userLine }],
-      operator: {
-        phase: "cursor_agent_preview",
-        project_id: projectId,
-        cursor_task_prompt: taskForOperator,
-        cursor_repository: caRepo.trim() || null,
-        cursor_ref: caRef.trim() || null,
-        cursor_mission_handling: caMission,
-      },
+    void runCursorAgentPreviewCore({
+      rawTask,
+      apiUserMessageLine: userLine,
+      transcriptUserAlreadyInTranscript: false,
     });
   };
 
@@ -1697,8 +1857,12 @@ function ChatPageInner({
     if (viewMode === "preview") {
       setViewMode("chat");
     }
-    setInput("");
-    setChatError(null);
+
+    const isHandoff = isCloudAgentHandoffRequest(text);
+    if (isHandoff && !projectId) {
+      toast.error("Select a project (Projects) first to use a Cloud Agent handoff from chat.");
+      return;
+    }
 
     const userRow: ChatRow = {
       id: `pending-user-${Date.now()}`,
@@ -1706,6 +1870,37 @@ function ChatPageInner({
       content: text,
       timestamp: timeStr(),
     };
+
+    if (isHandoff && projectId) {
+      setInput("");
+      setChatError(null);
+      setCloudHandoffRepoSetup(null);
+      setMessages((prev) => [...prev, userRow]);
+      setUplinkId("cloud_agent");
+      setCaMission("managed");
+      setCloudMissionHandling("managed");
+      const rec = hamProjects.find((p) => p.id === projectId);
+      const metaRepo = getCursorCloudRepository(rec?.metadata) ?? "";
+      const effectiveRepo = (metaRepo || caRepo.trim()).trim();
+      if (!effectiveRepo) {
+        setCloudHandoffRepoSetup({
+          missionText: text,
+          repoInput: mountRepo.trim() || "https://github.com/Code-Munkiz/ham",
+        });
+        return;
+      }
+      setSending(true);
+      try {
+        await runChatNativeHandoffPreview(text);
+      } finally {
+        setSending(false);
+      }
+      return;
+    }
+
+    setInput("");
+    setChatError(null);
+
     const assistantPlaceId = `assist-pending-${Date.now()}`;
     const assistantRow: ChatRow = {
       id: assistantPlaceId,
@@ -1901,6 +2096,13 @@ function ChatPageInner({
               onCursorAgentLaunch={handleCursorAgentLaunchFromCard}
               onDismissCursorPreview={() => setPendingCursorAgent(null)}
               cursorAgentActionsDisabled={sending}
+              cloudHandoffRepoSetup={cloudHandoffRepoSetup}
+              onHandoffRepoInputChange={(v) =>
+                setCloudHandoffRepoSetup((s) => (s ? { ...s, repoInput: v } : s))
+              }
+              onHandoffSaveRepoAndPreview={onHandoffSaveRepoAndPreview}
+              onDismissHandoffRepoSetup={() => setCloudHandoffRepoSetup(null)}
+              handoffRepoSaving={handoffRepoSaving}
             />
           ) : viewMode === "preview" ? (
             <WarRoomPane
@@ -1936,6 +2138,13 @@ function ChatPageInner({
                     onCursorAgentLaunch={handleCursorAgentLaunchFromCard}
                     onDismissCursorPreview={() => setPendingCursorAgent(null)}
                     cursorAgentActionsDisabled={sending}
+                    cloudHandoffRepoSetup={cloudHandoffRepoSetup}
+                    onHandoffRepoInputChange={(v) =>
+                      setCloudHandoffRepoSetup((s) => (s ? { ...s, repoInput: v } : s))
+                    }
+                    onHandoffSaveRepoAndPreview={onHandoffSaveRepoAndPreview}
+                    onDismissHandoffRepoSetup={() => setCloudHandoffRepoSetup(null)}
+                    handoffRepoSaving={handoffRepoSaving}
                   />
                 </div>
               }
