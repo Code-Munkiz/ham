@@ -109,9 +109,9 @@ export default function Activity() {
           <div className="space-y-1">
             <h1 className="text-xl font-black uppercase tracking-[0.2em] text-white">Activity</h1>
             <p className="text-[10px] text-white/35 font-bold uppercase tracking-[0.25em] leading-relaxed max-w-xl">
-              Gateway-backed feed from the HAM API (Hermes gateway snapshot and control-plane hints). When the API is
-              unreachable, rows below are <span className="text-amber-400/90">demo fallback</span> — not live runtime
-              truth.
+              API-side, read-only lines derived from <span className="font-mono">GET /api/hermes-gateway/snapshot</span>{" "}
+              (and control-plane hints). When the API is unreachable, rows below are{" "}
+              <span className="text-amber-400/90">demo fallback</span> — not a full system log.
             </p>
           </div>
           <div className="flex flex-col items-end gap-2">

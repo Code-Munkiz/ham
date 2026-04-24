@@ -9,6 +9,7 @@ working on this repo should read these before proposing changes.
 2. This file — where implementation lives
 3. `SWARM.md` — repo coding instructions (loaded by `memory_heist`)
 4. `PRODUCT_DIRECTION.md` — product lens: HAM-native model vs reference ecosystems
+5. `docs/TEAM_HERMES_STATUS.md` (when changing Command Center, Activity, Capabilities, or desktop Hermes copy) — **API-side** vs **desktop-side** operator story, boundaries, troubleshooting
 
 ## Ham bet: memory, Hermes, and CLI-native muscle
 

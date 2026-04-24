@@ -181,11 +181,12 @@ export function DesktopBundlePanel() {
         <div className="rounded-xl border border-white/10 bg-[#0c0c0c] p-5 space-y-3">
           <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-white/35">
             <Terminal className="h-4 w-4 text-[#FF6B00]" />
-            Allowlisted CLI presets
+            Allowlisted checks (desktop-side)
           </div>
           <p className="text-[9px] text-white/30 leading-relaxed">
-            Fixed commands only (no free-form argv). Binary: <span className="font-mono">hermes</span> on PATH or{" "}
-            <span className="font-mono">HAM_HERMES_CLI_PATH</span>. Output is capped; exit code shown when the process ran.
+            Verification only — not arbitrary command execution. Fixed argv in the Electron main process (no free-form
+            input). Binary: <span className="font-mono">hermes</span> on PATH or <span className="font-mono">HAM_HERMES_CLI_PATH</span>.
+            Capped output; future PTY / full TUI control is roadmap-only.
           </p>
           <div className="flex flex-wrap gap-2">
             {HERMES_DESKTOP_PRESET_IDS.map((id) => {

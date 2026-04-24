@@ -1,5 +1,5 @@
 /**
- * Hermes Gateway / Command Center — backend snapshot (Path B). No live JSON-RPC / WS claims.
+ * Command Center — API-side, read-only Hermes + HAM broker snapshot (Path B). No live JSON-RPC / WS claims.
  */
 import * as React from "react";
 import { Link, useSearchParams } from "react-router-dom";
@@ -221,7 +221,7 @@ function EffectiveModelStrip({
             className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-[#FF6B00] hover:underline"
           >
             <MessageSquare className="h-3.5 w-3.5" />
-            Open Chat (model selector in composer)
+            Open Chat
           </Link>
         </div>
       </div>
@@ -377,11 +377,12 @@ export default function CommandCenter() {
               <Orbit className="h-5 w-5" />
               <span className="text-[10px] font-black uppercase tracking-[0.35em]">Command Center</span>
             </div>
-            <h1 className="text-2xl font-black tracking-tight">Hermes Gateway</h1>
+            <h1 className="text-2xl font-black tracking-tight">Hermes + HAM</h1>
             <p className="text-xs text-white/45 max-w-xl leading-relaxed">
-              Backend-mediated snapshot (Path B): allowlisted CLI/config discovery, optional Hermes HTTP health,
-              HAM control-plane summaries. No live Hermes TUI menu API on v0.8.0 — labels below state CLI-only or
-              degraded honestly.
+              <span className="text-white/55">API-side, read-only snapshot</span> (Path B): what the Ham API can see
+              on its host—allowlisted CLI/config, optional upstream HTTP health, control-plane hints. This is not a
+              desktop view; TTY / full Hermes menus are not exposed by the current HTTP surface—labels mark CLI-only
+              or degraded.
             </p>
             {projectId ? (
               <p className="text-[10px] font-mono text-white/35">project_id={projectId}</p>

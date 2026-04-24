@@ -1,5 +1,7 @@
 # Hermes gateway broker (HAM Path B)
 
+**Operator story (team):** see [TEAM_HERMES_STATUS.md](TEAM_HERMES_STATUS.md) for how **API-side** read-only snapshot, **desktop-side** checks, and **HTTP gateway** chat routing relate and differ.
+
 Backend-mediated **command center** data: one normalized snapshot plus optional SSE ticks. Built for **Hermes Agent v0.8.0** facts captured in [HERMES_UPSTREAM_CONTRACT_AUDIT.md](HERMES_UPSTREAM_CONTRACT_AUDIT.md).
 
 ## What the broker does

@@ -1015,7 +1015,9 @@ export function UnifiedSettings({
                 </>
               ) : activeSubSegment === "desktop-bundle" ? (
                 <>
-                  Curated Hermes defaults shipped with the desktop app, plus a local <span className="font-mono text-white/35">hermes</span> CLI check. No silent installs.
+                  Desktop-side: curated defaults, a local <span className="font-mono text-white/35">hermes</span> check,
+                  allowlisted preset runs, and (when the app reaches the API) a read-only API strip. This is not the
+                  same host as the Ham API by default. No silent installs.
                 </>
               ) : (
                 <>Industrial grade {activeSubSegment.replace("-", " ")} configuration for secure HAM operations.</>

@@ -140,8 +140,7 @@ export default function HamShop() {
             Capabilities
           </h1>
           <p className="text-sm font-bold text-white/30 max-w-3xl uppercase tracking-widest leading-relaxed">
-            Read-only discovery across Hermes runtime skills, CLI inventory, and the static capability
-            directory.{" "}
+            API-side, read-only discovery: Hermes runtime skills, CLI inventory, and the static capability directory.{" "}
             <Link to="/hermes" className="text-[#FF6B00]/80 hover:underline">
               View diagnostics
             </Link>{" "}

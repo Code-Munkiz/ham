@@ -27,9 +27,15 @@ export function HermesOperatorConnectionStrip({ snapshot, className }: Props) {
       )}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.25em] text-white/35">
-          <Link2 className="h-3.5 w-3.5 text-[#FF6B00]" />
-          Operator connection
+        <div className="space-y-0.5">
+          <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.25em] text-white/35">
+            <Link2 className="h-3.5 w-3.5 text-[#FF6B00]" />
+            API-side operator connection
+          </div>
+          <p className="text-[8px] text-white/25 leading-snug pl-5">
+            Read-only: Ham API host CLI + <span className="font-mono">HERMES_GATEWAY_*</span> probe. Desktop Hermes
+            checks live under Settings.
+          </p>
         </div>
         <div className="flex flex-wrap gap-2 text-[9px] font-black uppercase tracking-widest">
           <Link to="/command-center" className="text-[#FF6B00] hover:underline">
