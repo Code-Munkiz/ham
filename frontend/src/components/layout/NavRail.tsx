@@ -7,7 +7,7 @@ import {
   ScrollText,
   BarChart2,
   SlidersHorizontal,
-  Sparkles,
+  ShoppingBag,
   UserCog,
   Orbit,
   Layers,
@@ -23,7 +23,7 @@ const primaryNav = [
   { icon: Activity, label: "Activity", path: "/overview" },
   { icon: Users, label: "Droids", path: "/droids" },
   { icon: UserCog, label: "Agents", path: "/agents" },
-  { icon: Sparkles, label: "Skills", path: "/skills" },
+  { icon: ShoppingBag, label: "Shop", path: "/shop" },
 ];
 
 export function NavRail() {

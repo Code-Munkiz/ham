@@ -5,6 +5,7 @@ import type { CapabilityDirectoryRecord } from "@/lib/ham/api";
 
 /** Routes we allow as "open related surface" from directory (in-app only). */
 const SAFE_ROUTE_PREFIXES = [
+  "/shop",
   "/skills",
   "/hermes",
   "/chat",
