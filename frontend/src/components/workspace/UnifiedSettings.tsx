@@ -32,6 +32,7 @@ import {
   BookOpen,
   ListFilter,
   ArrowUpRight,
+  Orbit,
 } from "lucide-react";
 
 import { toast } from "sonner";
@@ -51,6 +52,7 @@ import {
   type HamSettingsPreviewResponse,
 } from "@/lib/ham/api";
 import type { ContextEnginePayload, CursorCredentialsStatus } from "@/lib/ham/types";
+import { DesktopBundlePanel } from "@/components/settings/DesktopBundlePanel";
 
 function ApiKeysPanel() {
   const [status, setStatus] = React.useState<CursorCredentialsStatus | null>(null);
@@ -882,6 +884,7 @@ export type SettingsSubSectionId =
   | "environment"
   | "tools-extensions"
   | "context-memory"
+  | "desktop-bundle"
   | "execution-history"
   | "system-logs"
   | "diagnostics"
@@ -905,6 +908,10 @@ const settingsStructure = [
       { id: "environment", label: "Environment", icon: Terminal },
       { id: "tools-extensions", label: "Tools and Extensions", icon: ToyBrick },
     ],
+  },
+  {
+    group: "Desktop (HAM Desktop app)",
+    items: [{ id: "desktop-bundle", label: "HAM + Hermes setup", icon: Orbit }],
   },
   {
     group: "Workspace Preferences",
@@ -1006,6 +1013,10 @@ export function UnifiedSettings({
                 <>
                   Read-only reference for local <span className="font-mono text-white/35">.env</span> variables. Edit the file on disk; values are never shown here (alpha).
                 </>
+              ) : activeSubSegment === "desktop-bundle" ? (
+                <>
+                  Curated Hermes defaults shipped with the desktop app, plus a local <span className="font-mono text-white/35">hermes</span> CLI check. No silent installs.
+                </>
               ) : (
                 <>Industrial grade {activeSubSegment.replace("-", " ")} configuration for secure HAM operations.</>
               )}
@@ -1014,7 +1025,9 @@ export function UnifiedSettings({
 
           <div className="space-y-10">
             {/* --- CONFIGURATION PAGES --- */}
-            {["api-keys", "environment", "tools-extensions", "context-memory"].includes(activeSubSegment) && (
+            {["api-keys", "environment", "tools-extensions", "context-memory", "desktop-bundle"].includes(
+              activeSubSegment,
+            ) && (
               <div className="space-y-6">
                 {activeSubSegment === "api-keys" && <ApiKeysPanel />}
 
@@ -1232,6 +1245,8 @@ export function UnifiedSettings({
                 )}
 
                 {activeSubSegment === "context-memory" && <ContextAndMemoryPanel />}
+
+                {activeSubSegment === "desktop-bundle" && <DesktopBundlePanel />}
               </div>
             )}
 
@@ -1335,7 +1350,7 @@ export function UnifiedSettings({
             )}
 
             {/* General Placeholder for everything else */}
-            {!["api-keys", "environment", "tools-extensions", "context-memory", "kernel-health", "diagnostics", "execution-history", "system-logs", "context-audit", "bridge-dump", "jobs"].includes(activeSubSegment) && (
+            {!["api-keys", "environment", "tools-extensions", "context-memory", "desktop-bundle", "kernel-health", "diagnostics", "execution-history", "system-logs", "context-audit", "bridge-dump", "jobs"].includes(activeSubSegment) && (
               <div className="space-y-10">
                 <div className="p-16 bg-black/20 border border-white/5 border-dashed rounded-2xl flex flex-col items-center justify-center text-center space-y-8 group transition-all hover:bg-black/40">
                   <div className="h-16 w-16 rounded-2xl bg-white/[0.02] border border-white/5 flex items-center justify-center transition-transform group-hover:scale-110">

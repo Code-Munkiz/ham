@@ -16,10 +16,16 @@ Linux and Windows artifacts **do not duplicate** the chat interface. `electron-b
 - **Dev:** `npm start` from `desktop/` loads the Vite dev server by default, so you see the same React app as the browser.
 - **Release:** run `npm run pack:linux` / `npm run pack:win` (they run `build:frontend` first). Bump `version` in `desktop/package.json` when shipping so users can tell builds apart.
 
+## HAM + Hermes curated bundle (desktop)
+
+- Shipped under `desktop/curated/`: README, `default-curated-skills.json` (suggested `catalog_id` pins), and `ham-api-env.snippet`. These are included in the packaged app (`package.json` → `files`).
+- **Settings → HAM + Hermes setup** (desktop only): probes `hermes --version` on the **system PATH** and shows the curated list. HAM does **not** download or install Hermes binaries in this phase; install upstream, then use **Re-check CLI**.
+- Additional IPC: `window.__HAM_DESKTOP_BUNDLE__` (`hermesCliProbe`, `readCuratedFile`, `openHermesUpstreamDocs`) — see `preload.cjs` / `main.cjs`.
+
 ## Security (M1)
 
 - Main: window lifecycle, reads optional `userData/ham-desktop-config.json`, merges env.
-- Preload: `contextBridge.exposeInMainWorld('__HAM_DESKTOP_CONFIG__', …)` only — no Node in the renderer (`nodeIntegration: false`, `contextIsolation: true`, `sandbox: true`).
+- Preload: `contextBridge.exposeInMainWorld('__HAM_DESKTOP_CONFIG__', …)` and `__HAM_DESKTOP_BUNDLE__` — no Node in the renderer (`nodeIntegration: false`, `contextIsolation: true`, `sandbox: true`).
 - Phase 2 (local capability host) extends this seam — do not add filesystem/process IPC without review.
 
 ## Runtime API base

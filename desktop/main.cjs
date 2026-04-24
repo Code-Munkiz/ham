@@ -1,6 +1,7 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, shell } = require('electron');
+const { execFile } = require('node:child_process');
 const path = require('node:path');
 const fs = require('node:fs');
 
@@ -83,6 +84,46 @@ function resolveWebRoot() {
   return path.resolve(__dirname, '..', 'frontend', 'dist');
 }
 
+/** Bundled docs + default skill pins (shipped in app asar). */
+function resolveCuratedDir() {
+  return path.join(__dirname, 'curated');
+}
+
+const CURATED_FILE_ALLOWLIST = new Set([
+  'README.md',
+  'default-curated-skills.json',
+  'ham-api-env.snippet',
+]);
+
+/**
+ * @returns {Promise<{ ok: true, versionLine: string } | { ok: false, error: string, code?: string }>}
+ */
+function probeHermesCli() {
+  return new Promise((resolve) => {
+    execFile(
+      'hermes',
+      ['--version'],
+      { timeout: 12_000, env: process.env, windowsHide: true },
+      (err, stdout) => {
+        if (err) {
+          const code = err && typeof err === 'object' && 'code' in err ? String(/** @type {NodeJS.ErrnoException} */ (err).code) : '';
+          resolve({
+            ok: false,
+            error: err.message || String(err),
+            code: code || undefined,
+          });
+          return;
+        }
+        const line = String(stdout || '')
+          .trim()
+          .split(/\r?\n/)[0]
+          .trim();
+        resolve({ ok: true, versionLine: line || 'hermes' });
+      }
+    );
+  });
+}
+
 function createWindow() {
   rendererConfigPayload = buildRendererConfig();
 
@@ -113,6 +154,30 @@ function createWindow() {
 
 ipcMain.on('ham-desktop:get-config-sync', (event) => {
   event.returnValue = rendererConfigPayload;
+});
+
+ipcMain.handle('ham-desktop:hermes-cli-probe', () => probeHermesCli());
+
+ipcMain.handle('ham-desktop:read-curated-file', (event, name) => {
+  const base = String(name || '').replace(/[/\\]/g, '');
+  if (!CURATED_FILE_ALLOWLIST.has(base)) {
+    return { ok: false, error: 'file not allowed' };
+  }
+  const p = path.join(resolveCuratedDir(), base);
+  if (!p.startsWith(resolveCuratedDir())) {
+    return { ok: false, error: 'path rejected' };
+  }
+  try {
+    const text = fs.readFileSync(p, 'utf8');
+    return { ok: true, name: base, text };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+});
+
+ipcMain.handle('ham-desktop:open-hermes-upstream-docs', () => {
+  const u = (process.env.HAM_HERMES_UPSTREAM_URL || 'https://github.com/NousResearch/hermes-agent').trim();
+  return shell.openExternal(u || 'https://github.com/NousResearch/hermes-agent').then(() => ({ ok: true }));
 });
 
 app.whenReady().then(() => {

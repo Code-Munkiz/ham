@@ -1,8 +1,8 @@
 {
   "name": "ham-desktop",
   "private": true,
-  "version": "0.1.4",
-  "description": "Thin Electron shell for HAM (Milestone 1 — no bundled API)",
+  "version": "0.1.5",
+  "description": "HAM Desktop — Electron shell with bundled curated Hermes setup docs and CLI probe",
   "homepage": "https://github.com/Code-Munkiz/ham",
   "main": "main.cjs",
   "author": "Code-Munkiz",
@@ -28,7 +28,8 @@
       "main.cjs",
       "preload.cjs",
       "package.json",
-      "default-public-api.json"
+      "default-public-api.json",
+      "curated/**"
     ],
     "asar": true,
     "extraResources": [

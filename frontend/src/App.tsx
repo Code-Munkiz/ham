@@ -48,6 +48,7 @@ function AppRoutes() {
       <AppLayout>
         <Routes>
           <Route path="/" element={<HomeRoute />} />
+          {/* Legacy path: product stream lives on Activity, not a separate Overview page. */}
           <Route path="/overview" element={<Navigate to="/activity" replace />} />
           <Route path="/chat" element={<Chat />} />
           <Route path="/droids" element={<Navigate to="/command-center" replace />} />

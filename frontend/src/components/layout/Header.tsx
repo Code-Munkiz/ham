@@ -24,11 +24,17 @@ export function Header() {
         'activity': 'ACTIVITY',
         'shop': 'CAPABILITIES',
         'hermes': 'HERMES DETAILS',
+        'skills': 'SKILLS CATALOG',
+        'agents': 'AGENTS',
+        'storage': 'STORAGE',
+        'control-plane': 'CONTROL PLANE',
         'overview': 'ACTIVITY',
         'runs': 'HISTORY',
         'extensions': 'TOOLS',
         'settings': 'SETTINGS',
         'advanced': 'SYSTEM',
+        'logs': 'LOGS',
+        'analytics': 'ANALYTICS',
       };
       return mapping[s] || s.toUpperCase().replace(/-/g, " ");
     })];

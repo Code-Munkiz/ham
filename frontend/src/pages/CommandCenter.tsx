@@ -507,6 +507,12 @@ export default function CommandCenter() {
                     <Link to="/shop" className="text-[#FF6B00] hover:underline">
                       Browse Capabilities
                     </Link>
+                    <span className="text-white/15" aria-hidden>
+                      ·
+                    </span>
+                    <Link to="/skills" className="text-[#FF6B00] hover:underline">
+                      Skills catalog
+                    </Link>
                   </div>
                   {catalog ? (
                     <div className="rounded-xl border border-white/[0.08] bg-[#0c0c0c] p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">

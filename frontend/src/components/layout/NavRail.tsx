@@ -12,6 +12,7 @@ import {
   Layers,
   History,
   Cpu,
+  Sparkles,
 } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -44,6 +45,7 @@ export function NavRail() {
   const isDiagnosticsActive =
     location.pathname.startsWith("/hermes") ||
     location.pathname.startsWith("/runs") ||
+    location.pathname.startsWith("/skills") ||
     location.pathname === "/analytics" ||
     location.pathname === "/logs" ||
     location.pathname === "/control-plane";
@@ -116,6 +118,7 @@ export function NavRail() {
             <div className="absolute left-full ml-3 top-[-10px] w-56 bg-[#0a0a0a] border border-white/10 rounded-xl shadow-2xl py-2 overflow-hidden z-[100] animate-in fade-in slide-in-from-left-2 duration-200">
               {[
                 { label: "Hermes details", path: "/hermes", icon: Orbit },
+                { label: "Skills catalog", path: "/skills", icon: Sparkles },
                 { label: "Run history", path: "/runs", icon: History },
                 { label: "Control-plane", path: "/control-plane", icon: Layers },
                 { label: "Analytics", path: "/analytics", icon: BarChart2 },
@@ -126,7 +129,9 @@ export function NavRail() {
                     ? location.pathname.startsWith("/runs")
                     : item.path === "/hermes"
                       ? location.pathname.startsWith("/hermes")
-                      : location.pathname === item.path;
+                      : item.path === "/skills"
+                        ? location.pathname.startsWith("/skills")
+                        : location.pathname === item.path;
                 return (
                   <Link
                     key={item.path}
@@ -150,7 +155,7 @@ export function NavRail() {
             type="button"
             onClick={() => {
               if (location.pathname.startsWith("/settings")) {
-                navigate("/chat");
+                navigate("/command-center");
               } else {
                 navigate("/settings");
               }
@@ -163,8 +168,13 @@ export function NavRail() {
             )}
             title={
               location.pathname.startsWith("/settings")
-                ? "Back to chat"
+                ? "Back to Command Center"
                 : "Settings"
+            }
+            aria-label={
+              location.pathname.startsWith("/settings")
+                ? "Back to Command Center"
+                : "Open settings"
             }
           >
             <Settings className="h-5 w-5" />

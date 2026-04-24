@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "description": "Suggested Hermes runtime skill catalog_id values for a default HAM-oriented setup. Cross-platform (linux/macos/windows) where noted in the vendored HAM catalog. Install via Hermes; HAM does not auto-install in Phase 1.",
+  "catalog_ids": [
+    "bundled.autonomous-ai-agents.hermes-agent",
+    "bundled.autonomous-ai-agents.claude-code",
+    "bundled.autonomous-ai-agents.codex",
+    "bundled.autonomous-ai-agents.opencode"
+  ]
+}
