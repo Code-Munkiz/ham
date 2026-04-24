@@ -9,7 +9,6 @@ import {
   Sparkles,
   Shield,
   Activity,
-  Zap,
   Monitor,
   Globe,
   Layout,
@@ -2487,17 +2486,6 @@ function ChatPageInner({
                             >
                                <Mic className="h-3 w-3" />
                                Mic
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setMaxMode((m) => !m)}
-                              className={cn(
-                                "flex items-center gap-1.5 text-[8px] font-black uppercase tracking-widest transition-colors px-1.5 py-1 rounded",
-                                maxMode ? "text-[#FF6B00]" : "text-white/25 hover:text-[#FF6B00]",
-                              )}
-                            >
-                               <Zap className="h-3 w-3" />
-                               Fast
                             </button>
                          </div>
 

@@ -61,7 +61,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_allow_origins(),
     allow_origin_regex=_cors_allow_origin_regex(),
-    allow_methods=["GET", "POST", "DELETE"],
+    # PATCH required for /api/projects/{id} metadata updates (chat handoff repo save); browser preflight fails without it.
+    allow_methods=["GET", "POST", "PATCH", "DELETE"],
     allow_headers=["*"],
 )
 
