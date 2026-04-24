@@ -198,6 +198,10 @@ export interface ModelCatalogPayload {
   http_chat_ready?: boolean;
   /** True when dashboard chat can run (OpenRouter path ready, or HTTP gateway configured, or mock). */
   dashboard_chat_ready?: boolean;
+  /** When `gateway_mode` is `http`: `HERMES_GATEWAY_MODEL` sent to Hermes (informational). */
+  http_chat_model_primary?: string | null;
+  /** When set on API: `HAM_CHAT_FALLBACK_MODEL` for HTTP retry (informational). */
+  http_chat_model_fallback?: string | null;
 }
 
 /** Uses `dashboard_chat_ready` from API when present; otherwise infers from legacy fields. */

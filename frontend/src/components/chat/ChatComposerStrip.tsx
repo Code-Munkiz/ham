@@ -259,10 +259,23 @@ export function ChatComposerStrip({
             modelOpen && "border-[#FF6B00]/50",
           )}
         >
-          <span className="flex items-center gap-2 min-w-0">
+            <span className="flex items-center gap-2 min-w-0">
             <Box className="h-3.5 w-3.5 text-[#FF6B00] shrink-0" />
             {!selected ? (
-              <span className="text-[10px] font-black uppercase tracking-widest text-white/35">MODEL</span>
+              catalog?.gateway_mode === "http" ? (
+                <span className="flex min-w-0 flex-col leading-tight">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-white/80">
+                    Hermes chat
+                  </span>
+                  <span className="truncate text-[8px] font-bold uppercase tracking-wider text-white/35">
+                    {catalog.http_chat_model_primary
+                      ? catalog.http_chat_model_primary
+                      : "Server default"}
+                  </span>
+                </span>
+              ) : (
+                <span className="text-[10px] font-black uppercase tracking-widest text-white/35">MODEL</span>
+              )
             ) : (
               <>
                 <span className="text-[10px] font-black uppercase tracking-widest text-white truncate">{selected.label}</span>
@@ -278,6 +291,24 @@ export function ChatComposerStrip({
         </button>
         {modelOpen && (
           <div className="absolute left-0 bottom-full mb-1 z-[200] flex w-[min(100vw-2rem,22rem)] max-h-[min(85vh,520px)] flex-col rounded-lg border border-white/10 bg-[#0a0a0a] shadow-2xl overflow-hidden">
+            {catalog?.gateway_mode === "http" ? (
+              <div className="shrink-0 border-b border-white/10 bg-black/40 px-3 py-2 text-[8px] font-bold uppercase leading-snug tracking-wide text-white/50">
+                Dashboard chat uses{" "}
+                <span className="font-mono text-[9px] normal-case text-emerald-400/90">
+                  {catalog.http_chat_model_primary ?? "Hermes"}
+                </span>
+                {catalog.http_chat_model_fallback ? (
+                  <>
+                    {" "}
+                    · fallback{" "}
+                    <span className="font-mono text-[9px] normal-case text-emerald-400/90">
+                      {catalog.http_chat_model_fallback}
+                    </span>
+                  </>
+                ) : null}
+                . <span className="text-amber-500/80">Cursor / Opus rows = Cloud Agents only.</span>
+              </div>
+            ) : null}
             <div className="shrink-0 space-y-2 border-b border-white/5 p-2">
               <div className="flex items-center gap-2 rounded-md border border-white/10 bg-black/50 px-2 py-1.5">
                 <Search className="h-3.5 w-3.5 shrink-0 text-white/25" />

@@ -250,6 +250,8 @@ def build_catalog_payload() -> dict[str, Any]:
     ]
 
     items = openrouter_items + cursor_items
+    http_primary = (os.environ.get("HERMES_GATEWAY_MODEL") or "").strip() or None
+    http_fallback = (os.environ.get("HAM_CHAT_FALLBACK_MODEL") or "").strip() or None
     return {
         "items": items,
         "source": source,
@@ -257,6 +259,8 @@ def build_catalog_payload() -> dict[str, Any]:
         "openrouter_chat_ready": or_ready,
         "http_chat_ready": http_ready,
         "dashboard_chat_ready": dashboard_chat_ready,
+        "http_chat_model_primary": http_primary,
+        "http_chat_model_fallback": http_fallback,
     }
 
 
