@@ -261,6 +261,24 @@ export async function clearSavedCursorApiKey(): Promise<void> {
   }
 }
 
+/**
+ * `POST /api/cursor/agents/{id}/sync` — Cursor GET + observe mission; returns `ManagedMission` JSON only.
+ * @throws Error on HTTP error; message includes server detail when available.
+ */
+export async function postCursorAgentSync(agentId: string): Promise<ManagedMissionRow> {
+  const res = await hamApiFetch(`/api/cursor/agents/${encodeURIComponent(agentId)}/sync`, {
+    method: "POST",
+  });
+  if (res.status === 404) {
+    throw new Error("No managed mission for this Cloud Agent. Try after a managed launch is recorded.");
+  }
+  if (!res.ok) {
+    const msg = (await readFastApiDetail(res)) ?? `HTTP ${res.status}`;
+    throw new Error(shortenHamApiErrorMessage(msg));
+  }
+  return res.json() as Promise<ManagedMissionRow>;
+}
+
 /** Proxy `GET /v0/agents/{id}` — Cloud Agent status and metadata. */
 export async function fetchCursorAgent(agentId: string): Promise<Record<string, unknown>> {
   const res = await hamApiFetch(`/api/cursor/agents/${encodeURIComponent(agentId)}`);
@@ -406,6 +424,7 @@ export type ManagedMissionRow = {
   repo_key?: string | null;
   repository_observed?: string | null;
   cursor_status_last_observed?: string | null;
+  status_reason_last_observed?: string | null;
   last_server_observed_at?: string;
   updated_at?: string;
 };

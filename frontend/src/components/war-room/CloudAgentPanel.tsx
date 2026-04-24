@@ -5,6 +5,7 @@ import {
   fetchCursorAgent,
   fetchCursorAgentConversation,
   fetchManagedMissionForAgent,
+  postCursorAgentSync,
   fetchVercelManagedDeployStatus,
   fetchVercelPostDeployValidation,
   type PostDeployValidationState,
@@ -160,6 +161,9 @@ export function CloudAgentPanel({
   const [postDeployLoading, setPostDeployLoading] = React.useState(false);
   const [postDeployRecheckBusy, setPostDeployRecheckBusy] = React.useState(false);
   const [missionDeployStamp, setMissionDeployStamp] = React.useState<string | null>(null);
+  const [managedMissionLifecycle, setManagedMissionLifecycle] = React.useState<string | null>(null);
+  const [syncStatusBusy, setSyncStatusBusy] = React.useState(false);
+  const [syncStatusErr, setSyncStatusErr] = React.useState<string | null>(null);
 
   const transcriptLines: CursorTranscriptLine[] = React.useMemo(
     () => parseCursorConversationToLines(convPayload),
@@ -262,11 +266,16 @@ export function CloudAgentPanel({
       if (cancelled) return;
       const m = row?.mission_deploy_approval_mode;
       setMissionDeployStamp(typeof m === "string" && m.trim() ? m.trim() : null);
+      setManagedMissionLifecycle(
+        typeof row?.mission_lifecycle === "string" && row.mission_lifecycle.trim()
+          ? row.mission_lifecycle.trim().toLowerCase()
+          : null,
+      );
     });
     return () => {
       cancelled = true;
     };
-  }, [isManaged, tabId, activeCloudAgentId]);
+  }, [isManaged, tabId, activeCloudAgentId, managed.lastUpdated]);
 
   /** Server-side Vercel deployment truth (Managed → Overview only). */
   React.useEffect(() => {
@@ -343,6 +352,28 @@ export function CloudAgentPanel({
   }, [isManaged, tabId, activeCloudAgentId]);
 
   const notConnected = !hasAgent;
+
+  const onRefreshManagedStatus = () => {
+    if (!isManaged || !activeCloudAgentId?.trim()) return;
+    const id = activeCloudAgentId.trim();
+    setSyncStatusBusy(true);
+    setSyncStatusErr(null);
+    void postCursorAgentSync(id)
+      .then((row) => {
+        setManagedMissionLifecycle(
+          typeof row.mission_lifecycle === "string" && row.mission_lifecycle.trim()
+            ? row.mission_lifecycle.trim().toLowerCase()
+            : null,
+        );
+        managed.refresh();
+      })
+      .catch((e: unknown) => {
+        setSyncStatusErr(e instanceof Error ? e.message : "Sync failed");
+      })
+      .finally(() => {
+        setSyncStatusBusy(false);
+      });
+  };
 
   const onPostDeployRecheck = () => {
     if (!isManaged || !activeCloudAgentId?.trim()) return;
@@ -539,11 +570,30 @@ export function CloudAgentPanel({
           ) : null}
           {isManaged ? (
             <div className="space-y-1.5 border-t border-white/10 pt-3">
-              <p className="text-[11px] font-black uppercase tracking-widest text-[#00E5FF]/85">Managed mission</p>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-[11px] font-black uppercase tracking-widest text-[#00E5FF]/85">Managed mission</p>
+                <button
+                  type="button"
+                  disabled={syncStatusBusy || !hasAgent}
+                  onClick={onRefreshManagedStatus}
+                  className="shrink-0 rounded-md border border-cyan-500/40 bg-cyan-500/10 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-widest text-cyan-200 hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {syncStatusBusy ? "Syncing…" : "Refresh status"}
+                </button>
+              </div>
               <p className="text-[10px] font-medium leading-snug text-white/32">
                 Live summary from HAM&rsquo;s Cursor API poll&mdash;rules-based review and deploy notes below. Use
                 Transcript and Tracker for the full payloads.
               </p>
+              {managedMissionLifecycle ? (
+                <p className="text-[11px] leading-[1.45] text-white/55">
+                  <span className="text-white/35">HAM mission lifecycle: </span>
+                  <span className="font-mono text-cyan-200/90">{managedMissionLifecycle}</span>
+                </p>
+              ) : null}
+              {syncStatusErr ? (
+                <p className="text-[12px] text-amber-500/90 font-mono break-words leading-relaxed">{syncStatusErr}</p>
+              ) : null}
               {missionDeployStamp ? (
                 <p className="text-[11px] leading-[1.45] text-white/55">
                   <span className="text-white/35">Deploy approval snapshot (at mission create): </span>

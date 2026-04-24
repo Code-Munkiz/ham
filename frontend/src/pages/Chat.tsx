@@ -49,6 +49,7 @@ import {
   patchHamProjectMetadata,
   HamAccessRestrictedError,
   postChatStream,
+  postCursorAgentSync,
   postManagedDeployHook,
   type ManagedDeployHookResult,
   type HamChatStreamAuth,
@@ -83,6 +84,10 @@ import {
   stitchCloudAgentFollowUpTask,
 } from "@/lib/ham/cloudAgentFollowUp";
 import { inferMissionTitleForCard, isCloudAgentHandoffRequest } from "@/lib/ham/cloudAgentChatHandoff";
+import {
+  formatManagedMissionStatusChatLine,
+  isCloudAgentStatusChatQuestion,
+} from "@/lib/ham/cloudAgentStatusChat";
 import {
   loadPendingCursorAgentSessionSnapshot,
   savePendingCursorAgentSessionSnapshot,
@@ -1907,6 +1912,43 @@ function ChatPageInner({
     const text = input.trim();
     if (viewMode === "preview") {
       setViewMode("chat");
+    }
+
+    const aidStatus = activeCloudAgentId?.trim() ?? "";
+    if (aidStatus && isCloudAgentStatusChatQuestion(text)) {
+      setInput("");
+      setChatError(null);
+      const userRowStatus: ChatRow = {
+        id: `pending-user-${Date.now()}`,
+        role: "user",
+        content: text,
+        timestamp: timeStr(),
+      };
+      const assistantStatusId = `assist-status-${Date.now()}`;
+      const assistantStatusRow: ChatRow = {
+        id: assistantStatusId,
+        role: "assistant",
+        content: "Checking managed mission status…",
+        timestamp: timeStr(),
+      };
+      setMessages((prev) => [...prev, userRowStatus, assistantStatusRow]);
+      setViewMode("chat");
+      setSending(true);
+      try {
+        const row = await postCursorAgentSync(aidStatus);
+        const line = formatManagedMissionStatusChatLine(row);
+        setMessages((prev) =>
+          prev.map((m) => (m.id === assistantStatusId ? { ...m, content: line } : m)),
+        );
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Could not sync mission status.";
+        setMessages((prev) =>
+          prev.map((m) => (m.id === assistantStatusId ? { ...m, content: msg } : m)),
+        );
+      } finally {
+        setSending(false);
+      }
+      return;
     }
 
     const isHandoff = isCloudAgentHandoffRequest(text);
