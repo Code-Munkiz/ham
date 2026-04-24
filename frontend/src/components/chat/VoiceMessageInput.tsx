@@ -11,18 +11,21 @@
  * - Audio preview after recording
  */
 
-import React, { useState, useRef } from 'react';
-import { useVoiceRecorder } from '../hooks/useVoiceRecorder';
+import React, { useState } from 'react';
+import { cn } from '@/lib/utils';
+import { useVoiceRecorder } from '../../hooks/useVoiceRecorder';
 import './VoiceMessageInput.css';
 
 interface VoiceMessageInputProps {
   onVoiceMessage?: (audioBlob: Blob, duration: number) => void;
   onVoiceError?: (error: string) => void;
+  /** Smaller, borderless treatment for the chat composer strip (no standalone card). */
+  compact?: boolean;
   placeholder?: string;
 }
 
 export function VoiceMessageInput(props: VoiceMessageInputProps) {
-  const { onVoiceMessage, onVoiceError, placeholder = "Type a message..." } = props;
+  const { onVoiceMessage, onVoiceError, compact = false } = props;
   
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   
@@ -61,7 +64,12 @@ export function VoiceMessageInput(props: VoiceMessageInputProps) {
   };
 
   return (
-    <div className="voice-message-input-container">
+    <div
+      className={cn(
+        'voice-message-input-container',
+        compact && 'voice-message-input-container--compact',
+      )}
+    >
       {error && (
         <div className="recording-error">
           {error}
