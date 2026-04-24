@@ -1,8 +1,13 @@
 import * as React from "react";
-import { Orbit, RefreshCw, ExternalLink, Package, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Orbit, RefreshCw, ExternalLink, Package, AlertCircle, CheckCircle2, Terminal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { isHamDesktopShell } from "@/lib/ham/desktopConfig";
-import { getDesktopBundleApi } from "@/lib/ham/desktopBundleBridge";
+import { getDesktopBundleApi, type HermesPresetRunResult } from "@/lib/ham/desktopBundleBridge";
+import {
+  HERMES_DESKTOP_PRESET_IDS,
+  HERMES_DESKTOP_PRESET_META,
+  type HermesDesktopPresetId,
+} from "@/lib/ham/hermesDesktopPresets";
 import { fetchHermesGatewaySnapshot, type HermesGatewaySnapshot } from "@/lib/ham/api";
 import { HermesOperatorConnectionStrip } from "@/components/hermes/HermesOperatorConnectionStrip";
 
@@ -21,6 +26,24 @@ export function DesktopBundlePanel() {
   const [apiSnapErr, setApiSnapErr] = React.useState<string | null>(null);
   const [err, setErr] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(false);
+  const [presetOut, setPresetOut] = React.useState<HermesPresetRunResult | null>(null);
+  const [presetLoading, setPresetLoading] = React.useState<HermesDesktopPresetId | null>(null);
+
+  const runPreset = React.useCallback(
+    async (id: HermesDesktopPresetId) => {
+      const b = getDesktopBundleApi();
+      if (!b?.runHermesPreset) return;
+      setPresetLoading(id);
+      setPresetOut(null);
+      try {
+        const r = await b.runHermesPreset(id);
+        setPresetOut(r);
+      } finally {
+        setPresetLoading(null);
+      }
+    },
+    [],
+  );
 
   const load = React.useCallback(async () => {
     if (!bundle) return;
@@ -153,6 +176,66 @@ export function DesktopBundlePanel() {
           Open upstream Hermes docs <ExternalLink className="h-3 w-3" />
         </button>
       </div>
+
+      {typeof bundle.runHermesPreset === "function" ? (
+        <div className="rounded-xl border border-white/10 bg-[#0c0c0c] p-5 space-y-3">
+          <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-white/35">
+            <Terminal className="h-4 w-4 text-[#FF6B00]" />
+            Allowlisted CLI presets
+          </div>
+          <p className="text-[9px] text-white/30 leading-relaxed">
+            Fixed commands only (no free-form argv). Binary: <span className="font-mono">hermes</span> on PATH or{" "}
+            <span className="font-mono">HAM_HERMES_CLI_PATH</span>. Output is capped; exit code shown when the process ran.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {HERMES_DESKTOP_PRESET_IDS.map((id) => {
+              const meta = HERMES_DESKTOP_PRESET_META[id];
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  title={meta.notes ? `${meta.commandLine} — ${meta.notes}` : meta.commandLine}
+                  disabled={presetLoading !== null}
+                  onClick={() => void runPreset(id)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-2 text-[9px] font-black uppercase tracking-widest text-white/55 hover:border-[#FF6B00]/40 hover:text-[#FF6B00] disabled:opacity-50"
+                >
+                  {presetLoading === id ? (
+                    <RefreshCw className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Terminal className="h-3 w-3 opacity-60" />
+                  )}
+                  {meta.label}
+                </button>
+              );
+            })}
+          </div>
+          {presetOut ? (
+            <div className="space-y-2">
+              {presetOut.ok === true ? (
+                <>
+                  <p className="text-[9px] font-mono text-white/35">
+                    exit {presetOut.exitCode}
+                    {presetOut.truncated ? " · truncated" : ""} · {presetOut.argv.join(" ")}
+                  </p>
+                  {presetOut.stderr ? (
+                    <pre className="text-[9px] font-mono text-amber-200/70 whitespace-pre-wrap overflow-x-auto p-2 rounded bg-black/40 border border-amber-500/15 max-h-40 overflow-y-auto">
+                      {presetOut.stderr}
+                    </pre>
+                  ) : null}
+                  <pre className="text-[9px] font-mono text-white/55 whitespace-pre-wrap overflow-x-auto p-2 rounded bg-black/50 border border-white/5 max-h-56 overflow-y-auto">
+                    {presetOut.stdout || "—"}
+                  </pre>
+                </>
+              ) : (
+                <p className="text-[10px] text-amber-200/85 font-mono">
+                  {presetOut.error}
+                  {presetOut.code ? <span className="text-white/30"> · {presetOut.code}</span> : null}
+                </p>
+              )}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="rounded-xl border border-white/10 bg-[#0c0c0c] p-5 space-y-3">
         <h4 className="text-[10px] font-black uppercase tracking-widest text-white/35">Default curated skill IDs</h4>

@@ -95,6 +95,105 @@ const CURATED_FILE_ALLOWLIST = new Set([
   'ham-api-env.snippet',
 ]);
 
+/** Preset id -> argv (after binary). No free-form user argv (security). */
+const HERMES_PRESET_ARGV = {
+  version: ['--version'],
+  plugins_list: ['plugins', 'list'],
+  mcp_list: ['mcp', 'list'],
+};
+
+const HERMES_PRESET_TIMEOUT_MS = 25_000;
+const HERMES_PRESET_MAX_CHARS = 32_000;
+
+function resolveHermesBinary() {
+  const p = (process.env.HAM_HERMES_CLI_PATH || '').trim();
+  if (p) return p;
+  return 'hermes';
+}
+
+/**
+ * @returns {Promise<
+ *   | { ok: true, preset: string, argv: string[], stdout: string, stderr: string, exitCode: number, truncated: boolean }
+ *   | { ok: false, error: string, code?: string, preset?: string }
+ * >}
+ */
+function runHermesPreset(preset) {
+  const key = String(preset || '').trim();
+  if (!Object.prototype.hasOwnProperty.call(HERMES_PRESET_ARGV, key)) {
+    return Promise.resolve({ ok: false, error: 'unknown preset', preset: key });
+  }
+  const extra = HERMES_PRESET_ARGV[key];
+  const bin = resolveHermesBinary();
+  const argv = Array.isArray(extra) ? extra : [];
+  return new Promise((resolve) => {
+    execFile(
+      bin,
+      argv,
+      {
+        timeout: HERMES_PRESET_TIMEOUT_MS,
+        maxBuffer: 512 * 1024,
+        env: process.env,
+        windowsHide: true,
+      },
+      (err, stdout, stderr) => {
+        if (err) {
+          const e = err;
+          if (e.killed && e.signal === 'SIGTERM') {
+            resolve({ ok: false, error: 'timeout', preset: key, code: 'ETIMEDOUT' });
+            return;
+          }
+          if (e.code === 'ETIMEDOUT' || e.code === 'ESRCH') {
+            resolve({ ok: false, error: err.message || 'timeout', preset: key, code: String(e.code) });
+            return;
+          }
+          if (e.code === 'ENOENT') {
+            resolve({
+              ok: false,
+              error: 'Hermes binary not found (PATH or HAM_HERMES_CLI_PATH).',
+              preset: key,
+              code: 'ENOENT',
+            });
+            return;
+          }
+          if (e.code === 'ENOBUFS') {
+            resolve({ ok: false, error: 'output too large', preset: key, code: 'ENOBUFS' });
+            return;
+          }
+        }
+        let out = String(stdout || '');
+        let serr = String(stderr || '');
+        let truncated = false;
+        if (out.length + serr.length > HERMES_PRESET_MAX_CHARS * 2) {
+          truncated = true;
+          if (out.length > HERMES_PRESET_MAX_CHARS) {
+            out = out.slice(0, HERMES_PRESET_MAX_CHARS) + '\n… [stdout truncated]';
+          }
+          if (serr.length > HERMES_PRESET_MAX_CHARS) {
+            serr = serr.slice(0, HERMES_PRESET_MAX_CHARS) + '\n… [stderr truncated]';
+          }
+        }
+        let exitCode = 0;
+        if (err) {
+          if (typeof err.code === 'number' && !Number.isNaN(err.code)) {
+            exitCode = err.code;
+          } else {
+            exitCode = 1;
+          }
+        }
+        resolve({
+          ok: true,
+          preset: key,
+          argv: [bin, ...argv],
+          stdout: out,
+          stderr: serr,
+          exitCode,
+          truncated,
+        });
+      }
+    );
+  });
+}
+
 /**
  * @returns {Promise<{ ok: true, versionLine: string } | { ok: false, error: string, code?: string }>}
  */
@@ -157,6 +256,8 @@ ipcMain.on('ham-desktop:get-config-sync', (event) => {
 });
 
 ipcMain.handle('ham-desktop:hermes-cli-probe', () => probeHermesCli());
+
+ipcMain.handle('ham-desktop:hermes-preset', (event, preset) => runHermesPreset(preset));
 
 ipcMain.handle('ham-desktop:read-curated-file', (event, name) => {
   const base = String(name || '').replace(/[/\\]/g, '');

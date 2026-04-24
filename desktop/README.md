@@ -20,7 +20,8 @@ Linux and Windows artifacts **do not duplicate** the chat interface. `electron-b
 
 - Shipped under `desktop/curated/`: README, `default-curated-skills.json` (suggested `catalog_id` pins), and `ham-api-env.snippet`. These are included in the packaged app (`package.json` → `files`).
 - **Settings → HAM + Hermes setup** (desktop only): probes `hermes --version` on the **system PATH** and shows the curated list. HAM does **not** download or install Hermes binaries in this phase; install upstream, then use **Re-check CLI**.
-- Additional IPC: `window.__HAM_DESKTOP_BUNDLE__` (`hermesCliProbe`, `readCuratedFile`, `openHermesUpstreamDocs`) — see `preload.cjs` / `main.cjs`.
+- **Allowlisted CLI presets (Phase B):** buttons that run a **fixed** argv list in the main process (`hermes --version`, `hermes plugins list`, `hermes mcp list`, …) and show stdout/stderr in the settings panel — not free-form TUI control; 25s timeout, capped output. Presets are defined in `main.cjs` only; add new ones there after review.
+- Additional IPC: `window.__HAM_DESKTOP_BUNDLE__` (`hermesCliProbe`, `runHermesPreset`, `readCuratedFile`, `openHermesUpstreamDocs`) — see `preload.cjs` / `main.cjs`.
 
 ## Security (M1)
 
