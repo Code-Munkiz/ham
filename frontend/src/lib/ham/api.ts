@@ -1508,6 +1508,133 @@ export async function postHermesSkillsInstallApply(
   return res.json() as Promise<HermesSkillsInstallApplyResponse>;
 }
 
+// --- Capability Directory (Phase 1 — read-only; no apply from UI) ---
+
+export interface CapabilityDirectoryProvenance {
+  source_kind: string;
+  registry_revision?: string;
+  note?: string;
+  [key: string]: unknown;
+}
+
+export interface CapabilityDirectorySurface {
+  route: string;
+  label: string;
+  api?: string;
+}
+
+export interface CapabilityDirectoryRecord {
+  id: string;
+  schema_version: string;
+  kind: "atomic_capability" | "bundle" | "profile_template";
+  display_name: string;
+  summary: string;
+  description: string;
+  trust_tier: string;
+  provenance: CapabilityDirectoryProvenance;
+  version: string;
+  required_backends: string[];
+  capabilities: string[];
+  skills: string[];
+  tools_policy: Record<string, unknown>;
+  mcp_policy: Record<string, unknown>;
+  model_policy: Record<string, unknown>;
+  memory_policy: Record<string, unknown>;
+  surfaces: CapabilityDirectorySurface[];
+  mutability: string;
+  preview_available: boolean;
+  apply_available: boolean;
+  risks: string[];
+  evidence_expectations: string[];
+  tags: string[];
+}
+
+export interface CapabilityDirectoryIndexResponse {
+  kind: "capability_directory_index";
+  schema_version: string;
+  registry_id: string;
+  mutation_policy: string;
+  apply_available_globally: boolean;
+  no_execution_notice?: string;
+  counts: {
+    capabilities: number;
+    bundles: number;
+    profile_templates: number;
+  };
+  trust_tier_counts: Record<string, number>;
+  endpoints: Record<string, string>;
+  registry_note?: string | null;
+}
+
+export interface CapabilityDirectoryCapabilitiesResponse {
+  kind: "capability_directory_capabilities";
+  schema_version: string;
+  registry_id: string;
+  mutation_policy: string;
+  apply_available_globally: boolean;
+  count: number;
+  capabilities: CapabilityDirectoryRecord[];
+}
+
+export interface CapabilityDirectoryBundlesResponse {
+  kind: "capability_directory_bundles";
+  schema_version: string;
+  registry_id: string;
+  mutation_policy: string;
+  apply_available_globally: boolean;
+  count: number;
+  bundles: CapabilityDirectoryRecord[];
+}
+
+export interface CapabilityDirectoryBundleResponse {
+  kind: "capability_directory_bundle";
+  schema_version: string;
+  registry_id: string;
+  mutation_policy: string;
+  apply_available_globally: boolean;
+  no_execution_notice?: string;
+  bundle: CapabilityDirectoryRecord;
+}
+
+export async function fetchCapabilityDirectoryIndex(): Promise<CapabilityDirectoryIndexResponse> {
+  const res = await hamApiFetch("/api/capability-directory");
+  if (!res.ok) {
+    throw new Error(`capability-directory: HTTP ${res.status}`);
+  }
+  return res.json() as Promise<CapabilityDirectoryIndexResponse>;
+}
+
+export async function fetchCapabilityDirectoryCapabilities(): Promise<CapabilityDirectoryCapabilitiesResponse> {
+  const res = await hamApiFetch("/api/capability-directory/capabilities");
+  if (!res.ok) {
+    throw new Error(`capability-directory/capabilities: HTTP ${res.status}`);
+  }
+  return res.json() as Promise<CapabilityDirectoryCapabilitiesResponse>;
+}
+
+export async function fetchCapabilityDirectoryBundles(): Promise<CapabilityDirectoryBundlesResponse> {
+  const res = await hamApiFetch("/api/capability-directory/bundles");
+  if (!res.ok) {
+    throw new Error(`capability-directory/bundles: HTTP ${res.status}`);
+  }
+  return res.json() as Promise<CapabilityDirectoryBundlesResponse>;
+}
+
+export async function fetchCapabilityDirectoryBundle(
+  bundleId: string,
+): Promise<CapabilityDirectoryBundleResponse> {
+  const res = await hamApiFetch(
+    `/api/capability-directory/bundles/${encodeURIComponent(bundleId)}`,
+  );
+  if (!res.ok) {
+    const msg = await detailMessageFromResponse(res);
+    throw new Error(
+      msg || `capability-directory/bundles/${bundleId}: HTTP ${res.status}`,
+    );
+  }
+  return res.json() as Promise<CapabilityDirectoryBundleResponse>;
+}
+
 // --- Allowlisted project settings (v1 control plane) ---
 
 export interface HamSettingsMemoryHeistPatch {

@@ -36,6 +36,7 @@ import {
   type HermesSkillsInstallPreviewResponse,
   type HermesSkillsTargetsResponse,
 } from "@/lib/ham/api";
+import { CapabilityDirectoryPanel } from "@/components/skills/CapabilityDirectoryPanel";
 
 function LiveOverlayBadge({
   catalogId,
@@ -176,6 +177,9 @@ export default function HermesSkills() {
   const [liveOverlay, setLiveOverlay] = React.useState<HermesSkillsInstalledResponse | null>(null);
   const [liveOverlayErr, setLiveOverlayErr] = React.useState<string | null>(null);
   const [installedOnly, setInstalledOnly] = React.useState(false);
+  const [workspaceTab, setWorkspaceTab] = React.useState<"hermes" | "live" | "directory">(
+    "hermes",
+  );
 
   React.useEffect(() => {
     let cancelled = false;
@@ -365,6 +369,39 @@ export default function HermesSkills() {
             </p>
           </header>
 
+          <div className="flex flex-wrap gap-2 border-b border-white/5 pb-6">
+            {(
+              [
+                { id: "hermes" as const, label: "Hermes skills" },
+                { id: "live" as const, label: "Live overlay" },
+                { id: "directory" as const, label: "Capability directory" },
+              ] as const
+            ).map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => {
+                  setWorkspaceTab(t.id);
+                  if (t.id !== "hermes") setPanelOpen(false);
+                }}
+                className={cn(
+                  "text-[9px] font-black uppercase tracking-[0.2em] px-4 py-2.5 rounded-lg border transition-colors",
+                  workspaceTab === t.id
+                    ? "border-[#FF6B00]/50 bg-[#FF6B00]/15 text-[#FF6B00]"
+                    : "border-white/10 text-white/40 hover:text-white/60 hover:border-white/20",
+                )}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          {workspaceTab === "directory" ? (
+            <CapabilityDirectoryPanel />
+          ) : null}
+
+          {workspaceTab === "hermes" ? (
+            <>
           <CapabilityBanner caps={caps} />
 
           {liveOverlay && (
@@ -575,13 +612,88 @@ export default function HermesSkills() {
               ) : null}
             </section>
           )}
+            </>
+          ) : null}
+
+          {workspaceTab === "live" ? (
+            <>
+              <CapabilityBanner caps={caps} />
+              {liveOverlay && (
+                <div className="rounded-lg border border-white/10 bg-white/[0.02] px-4 py-3 text-[10px] text-white/55 space-y-2">
+                  <div className="text-[9px] font-black uppercase tracking-widest text-[#FF6B00]/80">
+                    Live overlay (Hermes CLI)
+                  </div>
+                  <p className="leading-relaxed">
+                    <span className="text-white/35">Status:</span>{" "}
+                    <span className="text-white/80 font-mono">{liveOverlay.status}</span>
+                    <span className="text-white/25 mx-2">·</span>
+                    <span className="text-white/35">Live:</span> {liveOverlay.live_count}
+                    <span className="text-white/25 mx-2">·</span>
+                    <span className="text-white/35">Linked:</span> {liveOverlay.linked_count}
+                    <span className="text-white/25 mx-2">·</span>
+                    <span className="text-white/35">Live-only:</span> {liveOverlay.live_only_count}
+                  </p>
+                  {(liveOverlay.warnings?.length ?? 0) > 0 && (
+                    <ul className="list-disc pl-4 text-amber-100/85 text-[10px] space-y-0.5">
+                      {liveOverlay.warnings.map((w) => (
+                        <li key={w}>{w}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+              {liveOverlayErr ? (
+                <p className="text-[10px] text-amber-200/80">
+                  Live overlay could not load: {liveOverlayErr}
+                </p>
+              ) : null}
+              <p className="text-[10px] text-white/35 uppercase tracking-widest max-w-2xl">
+                For the full catalog grid, filters, and install targets, open the{" "}
+                <button
+                  type="button"
+                  onClick={() => setWorkspaceTab("hermes")}
+                  className="text-[#FF6B00]/90 font-black hover:underline"
+                >
+                  Hermes skills
+                </button>{" "}
+                tab.
+              </p>
+              {liveOnlyRows.length > 0 && (
+                <section className="space-y-3 pb-8">
+                  <h2 className="text-[10px] font-black uppercase tracking-[0.3em] text-white/40">
+                    Live only (not in vendored catalog)
+                  </h2>
+                  <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-white/55 font-mono">
+                    {liveOnlyRows.slice(0, 48).map((r) => (
+                      <li
+                        key={r.name}
+                        className="rounded border border-white/10 bg-white/[0.02] px-3 py-2 flex flex-wrap gap-x-2 gap-y-1"
+                      >
+                        <span className="text-white/75">{r.name}</span>
+                        <span className="text-white/35 text-[10px]">
+                          {r.hermes_source}/{r.hermes_trust}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  {liveOnlyRows.length > 48 ? (
+                    <p className="text-[10px] text-white/35">+{liveOnlyRows.length - 48} more…</p>
+                  ) : null}
+                </section>
+              )}
+            </>
+          ) : null}
         </div>
 
         {/* Detail panel */}
         <div
           className={cn(
             "border-l border-white/5 bg-[#080808] flex flex-col transition-all duration-300 overflow-hidden",
-            panelOpen ? "w-full max-w-md opacity-100" : "w-0 max-w-0 opacity-0 border-l-0",
+            workspaceTab === "directory"
+              ? "w-0 max-w-0 opacity-0 border-l-0"
+              : panelOpen
+                ? "w-full max-w-md opacity-100"
+                : "w-0 max-w-0 opacity-0 border-l-0",
           )}
         >
           {panelOpen && (
