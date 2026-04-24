@@ -1054,7 +1054,7 @@ export function UnifiedSettings({
                             {
                               name: "DEFAULT_MODEL",
                               kind: "Config",
-                              role: "Default model id when not set elsewhere (e.g. openai/gpt-4o-mini).",
+                              role: "Default model id when not set elsewhere (e.g. minimax/minimax-m2.5:free).",
                             },
                             {
                               name: "OPENROUTER_HTTP_REFERER",
