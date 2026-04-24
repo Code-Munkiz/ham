@@ -1,0 +1,161 @@
+/**
+ * VoiceMessageInput.css
+
+ * CSS styles for voice message input component.
+ * 
+ * Uses CSS animations only (no canvas required).
+ * Safe for Vercel deployment.
+ */
+
+.voice-message-input-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: #1a1a2e;
+  border-radius: 12px;
+  border: 1px solid #2d2d44;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.mic-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  border-radius: 50%;
+  color: white;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 8px rgba(102, 126, 234, 0.4);
+}
+
+.mic-button:hover {
+  transform: scale(1.1);
+  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.6);
+}
+
+.mic-button:active {
+  transform: scale(0.95);
+}
+
+.mic-button svg {
+  width: 24px;
+  height: 24px;
+}
+
+.recording-active {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.recording-idle {
+  display: flex;
+  align-items: center;
+}
+
+.recording-indicator {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.pulse-animation {
+  width: 12px;
+  height: 12px;
+  background: #ff4757;
+  border-radius: 50%;
+  animation: pulse 0.8s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(0.8);
+    opacity: 0.7;
+    box-shadow: 0 0 0 0 rgba(255, 71, 87, 0.7);
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 1;
+    box-shadow: 0 0 0 8px rgba(255, 71, 87, 0);
+  }
+  100% {
+    transform: scale(0.8);
+    opacity: 0.7;
+    box-shadow: 0 0 0 0 rgba(255, 71, 87, 0);
+  }
+}
+
+.duration-text {
+  font-family: 'Courier New', monospace;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.stop-recording {
+  background: #ff4757;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.stop-recording:hover {
+  background: #ff3366;
+  transform: translateY(-1px);
+}
+
+.audio-preview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+
+.audio-preview audio {
+  flex: 1;
+  height: 36px;
+}
+
+.audio-retake-button {
+  background: #1e90ff;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.audio-retake-button:hover {
+  background: #3399ff;
+  transform: translateY(-1px);
+}
+
+.recording-error {
+  position: absolute;
+  top: -30px;
+  left: 0;
+  right: 0;
+  background: rgba(255, 71, 87, 0.1);
+  border: 1px solid #ff4757;
+  color: #ff4757;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  text-align: center;
+}
