@@ -23,13 +23,16 @@ IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/ham/ham-api:${IMAGE_TAG}"
 ENV_FILE="${ENV_FILE:-${ROOT}/.gcloud/ham-api-env.yaml}"
 MEMORY="${MEMORY:-2Gi}"
 CPU="${CPU:-2}"
-# CURSOR + Hermes (http gateway). Create ham-hermes-gateway-api-key first or deploy will fail on missing secret.
-SECRETS="${SET_SECRETS:-CURSOR_API_KEY=ham-cursor-api-key:latest,HERMES_GATEWAY_API_KEY=ham-hermes-gateway-api-key:latest}"
+# CURSOR + Hermes (http gateway) + Cloud Agent launch gate. Create secrets first or deploy will fail on missing ids.
+# ham-cursor-agent-launch-token → HAM_CURSOR_AGENT_LAUNCH_TOKEN (see docs/DEPLOY_CLOUD_RUN.md).
+SECRETS="${SET_SECRETS:-CURSOR_API_KEY=ham-cursor-api-key:latest,HERMES_GATEWAY_API_KEY=ham-hermes-gateway-api-key:latest,HAM_CURSOR_AGENT_LAUNCH_TOKEN=ham-cursor-agent-launch-token:latest}"
 
 if [[ ! -f "$ENV_FILE" ]]; then
   echo "Missing ${ENV_FILE} — copy docs/examples/ham-api-cloud-run-env.yaml and edit. See docs/DEPLOY_CLOUD_RUN.md"
   exit 1
 fi
+# Reminder: --env-vars-file replaces the revision's plain env vars entirely; do not deploy a mock-only
+# YAML to staging if the service must use HERMES_GATEWAY_MODE=http or openrouter (see DEPLOY_CLOUD_RUN.md).
 
 if [[ "${SKIP_BUILD:-0}" != "1" ]]; then
   echo "Building and pushing ${IMAGE} ..."

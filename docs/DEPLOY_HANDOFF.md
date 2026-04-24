@@ -13,7 +13,7 @@ The repo already includes CORS support (`HAM_CORS_ORIGINS`, `HAM_CORS_ORIGIN_REG
    - Keep **`HAM_CORS_ORIGIN_REGEX`** if you use **Vercel preview** deployments (`*.vercel.app`); remove it only if you want a strict allow-list.
    - **Real chat (OpenRouter):** set **`HERMES_GATEWAY_MODE=openrouter`** and **`OPENROUTER_API_KEY`** (Secret Manager recommended on Cloud Run). Optional: **`DEFAULT_MODEL`** / **`HERMES_GATEWAY_MODEL`** (OpenRouter slug, e.g. `minimax/minimax-m2.5:free`). See **`docs/HERMES_GATEWAY_CONTRACT.md`**.
    - **Hermes HTTP gateway (e.g. private GCE VM):** **`HERMES_GATEWAY_MODE=http`**, **`HERMES_GATEWAY_BASE_URL`** (internal IP/DNS + port, no `/v1`), **`HERMES_GATEWAY_MODEL`**, and **`HERMES_GATEWAY_API_KEY`** via **Secret Manager**. Networking: **Direct VPC egress** preferred; **Serverless VPC Access connector** as fallback — see **`docs/DEPLOY_CLOUD_RUN.md`** (“Private Hermes on GCE”).
-3. Deploy with **`--env-vars-file`** (not `--set-env-vars` for comma-separated lists). For **Cursor Cloud Agents**, also pass **`--set-secrets=CURSOR_API_KEY=ham-cursor-api-key:latest`** after creating the secret in **Secret Manager** (see **`docs/DEPLOY_CLOUD_RUN.md`** § “Cursor Cloud API key”).
+3. Deploy with **`--env-vars-file`** (not `--set-env-vars` for comma-separated lists). For **Cursor Cloud Agents**, pass **`--set-secrets`** for **`CURSOR_API_KEY`**, **`HERMES_GATEWAY_API_KEY`** (if used), and **`HAM_CURSOR_AGENT_LAUNCH_TOKEN=ham-cursor-agent-launch-token:latest`** after creating those secrets in **Secret Manager** (see **`docs/DEPLOY_CLOUD_RUN.md`** § “Cursor Cloud API key” and § “Cloud Agent launch token”).
    - **Secrets from `.env` (recommended):** merge local `.env` into your template without committing keys:
      ```bash
      ENV_FILE=$(python scripts/render_cloud_run_env.py)
@@ -21,7 +21,7 @@ The repo already includes CORS support (`HAM_CORS_ORIGINS`, `HAM_CORS_ORIGIN_REG
        --image us-central1-docker.pkg.dev/clarity-staging-488201/ham/ham-api:staging \
        --region us-central1 --platform managed --allow-unauthenticated \
        --env-vars-file "$ENV_FILE" --project clarity-staging-488201 \
-       --set-secrets=CURSOR_API_KEY=ham-cursor-api-key:latest
+       --set-secrets=CURSOR_API_KEY=ham-cursor-api-key:latest,HERMES_GATEWAY_API_KEY=ham-hermes-gateway-api-key:latest,HAM_CURSOR_AGENT_LAUNCH_TOKEN=ham-cursor-agent-launch-token:latest
      rm -f "$ENV_FILE"
      ```
    - Or edit **`.gcloud/ham-api-env.yaml`** directly (gitignored) and use that path — do **not** put `OPENROUTER_API_KEY` or `CURSOR_API_KEY` in tracked files.
