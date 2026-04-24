@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from src.api.browser_runtime import router as browser_runtime_router
 from src.api.chat import router as chat_router
+from src.api.capability_directory import router as capability_directory_router
 from src.api.clerk_gate import get_ham_clerk_actor
 from src.api.cursor_managed_deploy import router as cursor_managed_deploy_router
 from src.api.cursor_managed_deploy_approval import router as cursor_managed_deploy_approval_router
@@ -67,6 +68,7 @@ app.add_middleware(
 )
 
 app.include_router(chat_router)
+app.include_router(capability_directory_router)
 app.include_router(browser_runtime_router)
 app.include_router(cursor_settings_router)
 app.include_router(cursor_managed_deploy_router)
@@ -110,6 +112,8 @@ async def root() -> dict[str, Any]:
         "settings_write_status": "/api/settings/write-status",
         "project_agents": "/api/projects/{project_id}/agents",
         "control_plane_runs": "/api/control-plane-runs?project_id=<id>",
+        "capability_directory": "/api/capability-directory",
+        "capability_directory_bundles": "/api/capability-directory/bundles",
     }
 
 

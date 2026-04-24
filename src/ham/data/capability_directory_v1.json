@@ -1,0 +1,372 @@
+{
+  "schema_version": "capability.directory.v1",
+  "registry_id": "ham.first_party.v1",
+  "registry_note": "Static first-party capability directory. Records are documentation and policy metadata only; no execution.",
+  "capabilities": [
+    {
+      "id": "atomic.hermes-runtime-inventory",
+      "schema_version": "capability.directory.v1",
+      "kind": "atomic_capability",
+      "display_name": "Hermes runtime inventory probe",
+      "summary": "Read-only Hermes CLI and sanitized config snapshot for operator diagnostics.",
+      "description": "Maps to GET /api/hermes-runtime/inventory. Does not install skills or mutate Hermes home.",
+      "trust_tier": "first_party",
+      "provenance": {
+        "source_kind": "ham_repo",
+        "registry_revision": "1",
+        "note": "Vendored registry entry; no external download."
+      },
+      "version": "1.0.0",
+      "required_backends": ["hermes_runtime"],
+      "capabilities": ["api.hermes_runtime.inventory"],
+      "skills": [],
+      "tools_policy": {
+        "mode": "allowlisted_cli_read_only",
+        "notes": [
+          "Execution is limited to Hermes inventory builder; not invoked from directory rows."
+        ]
+      },
+      "mcp_policy": {
+        "mode": "none",
+        "notes": []
+      },
+      "model_policy": {
+        "mode": "not_applicable",
+        "notes": ["Inventory is non-LLM."]
+      },
+      "memory_policy": {
+        "mode": "not_applicable",
+        "notes": []
+      },
+      "surfaces": [
+        { "route": "/hermes", "label": "Hermes Hub", "api": "/api/hermes-runtime/inventory" }
+      ],
+      "mutability": "read_only",
+      "preview_available": false,
+      "apply_available": false,
+      "risks": [
+        "Remote-only deployments may return degraded inventory; see HAM_HERMES_SKILLS_MODE."
+      ],
+      "evidence_expectations": [
+        "Operators compare inventory JSON to expected Hermes home layout."
+      ],
+      "tags": ["hermes", "diagnostics", "read_only"]
+    },
+    {
+      "id": "atomic.hermes-skills-overlay",
+      "schema_version": "capability.directory.v1",
+      "kind": "atomic_capability",
+      "display_name": "Hermes skills live overlay",
+      "summary": "Join vendored catalog with live hermes skills list output.",
+      "description": "Maps to GET /api/hermes-skills/installed. Read-only observation; install remains separate token-gated flow.",
+      "trust_tier": "first_party",
+      "provenance": {
+        "source_kind": "ham_repo",
+        "registry_revision": "1",
+        "note": "Vendored registry entry; no external download."
+      },
+      "version": "1.0.0",
+      "required_backends": ["hermes_cli"],
+      "capabilities": ["api.hermes_skills.installed_overlay"],
+      "skills": [],
+      "tools_policy": {
+        "mode": "allowlisted_cli_read_only",
+        "notes": ["Uses fixed hermes subcommand suffix for list; see hermes_skills_live."]
+      },
+      "mcp_policy": {
+        "mode": "none",
+        "notes": []
+      },
+      "model_policy": {
+        "mode": "not_applicable",
+        "notes": []
+      },
+      "memory_policy": {
+        "mode": "not_applicable",
+        "notes": []
+      },
+      "surfaces": [
+        { "route": "/skills", "label": "Skills", "api": "/api/hermes-skills/installed" }
+      ],
+      "mutability": "read_only",
+      "preview_available": false,
+      "apply_available": false,
+      "risks": [
+        "CLI absent or remote_only mode yields empty or partial overlay."
+      ],
+      "evidence_expectations": [
+        "Overlay rows should align with catalog ids where installed."
+      ],
+      "tags": ["hermes", "skills", "read_only"]
+    }
+  ],
+  "bundles": [
+    {
+      "id": "hermes-runtime-inspector",
+      "schema_version": "capability.directory.v1",
+      "kind": "bundle",
+      "display_name": "Hermes Runtime Inspector",
+      "summary": "Operator bundle for Hermes runtime visibility (inventory + hub entry).",
+      "description": "Documents the read-only path for Hermes local/runtime inspection via HAM API and Hermes Hub UI. No mutations from this bundle.",
+      "trust_tier": "first_party",
+      "provenance": {
+        "source_kind": "ham_repo",
+        "registry_revision": "1",
+        "note": "Sample bundle for Phase 1 directory."
+      },
+      "version": "1.0.0",
+      "required_backends": ["hermes_runtime"],
+      "capabilities": [
+        "atomic.hermes-runtime-inventory",
+        "api.hermes_runtime.inventory"
+      ],
+      "skills": [],
+      "tools_policy": {
+        "mode": "read_only_observation",
+        "notes": [
+          "Does not invoke packaging or shell beyond existing inventory module boundaries."
+        ]
+      },
+      "mcp_policy": {
+        "mode": "none",
+        "notes": []
+      },
+      "model_policy": {
+        "mode": "inherit_ham_gateway",
+        "notes": ["Unrelated to chat model selection; inventory is non-LLM."]
+      },
+      "memory_policy": {
+        "mode": "not_applicable",
+        "notes": []
+      },
+      "surfaces": [
+        { "route": "/hermes", "label": "Hermes Hub" },
+        { "route": "/skills", "label": "Skills (related)" }
+      ],
+      "mutability": "read_only",
+      "preview_available": false,
+      "apply_available": false,
+      "risks": [
+        "Confusing inventory absence with skills catalog absence."
+      ],
+      "evidence_expectations": [
+        "Successful GET /api/hermes-runtime/inventory with expected kind ham_hermes_runtime_inventory."
+      ],
+      "tags": ["hermes", "inspector", "diagnostics"]
+    },
+    {
+      "id": "hermes-skills-live-overlay",
+      "schema_version": "capability.directory.v1",
+      "kind": "bundle",
+      "display_name": "Hermes Skills Live Overlay",
+      "summary": "Catalog plus live installed skills observation for Hermes runtime.",
+      "description": "Covers GET /api/hermes-skills/catalog and GET /api/hermes-skills/installed. Install preview/apply exist elsewhere and are not part of this bundle.",
+      "trust_tier": "first_party",
+      "provenance": {
+        "source_kind": "ham_repo",
+        "registry_revision": "1",
+        "note": "Sample bundle for Phase 1 directory."
+      },
+      "version": "1.0.0",
+      "required_backends": ["hermes_cli"],
+      "capabilities": [
+        "atomic.hermes-skills-overlay",
+        "api.hermes_skills.catalog",
+        "api.hermes_skills.installed_overlay"
+      ],
+      "skills": [],
+      "tools_policy": {
+        "mode": "read_only_observation",
+        "notes": [
+          "Mutating installs use HAM_SKILLS_WRITE_TOKEN; never triggered by directory APIs in Phase 1."
+        ]
+      },
+      "mcp_policy": {
+        "mode": "none",
+        "notes": []
+      },
+      "model_policy": {
+        "mode": "not_applicable",
+        "notes": []
+      },
+      "memory_policy": {
+        "mode": "not_applicable",
+        "notes": []
+      },
+      "surfaces": [
+        { "route": "/skills", "label": "Skills" }
+      ],
+      "mutability": "read_only",
+      "preview_available": false,
+      "apply_available": false,
+      "risks": [
+        "Operators may assume overlay implies install; document separation clearly."
+      ],
+      "evidence_expectations": [
+        "Catalog count stable; overlay reflects CLI when local mode enabled."
+      ],
+      "tags": ["hermes", "skills", "overlay"]
+    },
+    {
+      "id": "cursor-cloud-agent-handoff",
+      "schema_version": "capability.directory.v1",
+      "kind": "bundle",
+      "display_name": "Cursor Cloud Agent Handoff",
+      "summary": "Managed cloud agent launch, status sync, preview card, and chat handoff flows.",
+      "description": "Documents Cursor Cloud Agent integration via existing HAM APIs (cursor settings, managed missions, chat). Launch and mutating actions use Cursor API and existing tokens only; this directory row does not execute launches.",
+      "trust_tier": "first_party",
+      "provenance": {
+        "source_kind": "ham_repo",
+        "registry_revision": "1",
+        "note": "Sample bundle for Phase 1 directory."
+      },
+      "version": "1.0.0",
+      "required_backends": ["cursor_cloud_agent"],
+      "capabilities": [
+        "api.cursor.agents_launch",
+        "api.chat.cloud_agent_handoff",
+        "frontend.chat.managed_mission"
+      ],
+      "skills": [],
+      "tools_policy": {
+        "mode": "launch_via_existing_apis_only",
+        "notes": [
+          "Mutability is limited to user-driven flows in UI/API that already enforce Cursor API key and mission handling.",
+          "Directory is descriptive only."
+        ]
+      },
+      "mcp_policy": {
+        "mode": "none",
+        "notes": []
+      },
+      "model_policy": {
+        "mode": "cursor_default_or_explicit",
+        "notes": [
+          "Cloud agent model selection follows Cursor API; not HAM DEFAULT_MODEL."
+        ]
+      },
+      "memory_policy": {
+        "mode": "session_local",
+        "notes": [
+          "Chat and handoff state follow existing frontend persistence patterns."
+        ]
+      },
+      "surfaces": [
+        { "route": "/chat", "label": "Chat" }
+      ],
+      "mutability": "launch_via_existing_apis_only",
+      "preview_available": false,
+      "apply_available": false,
+      "risks": [
+        "Billing and model tier are Cursor-side; operators should verify Cursor usage.",
+        "Confusion between HAM chat gateway model and Cursor cloud agent model."
+      ],
+      "evidence_expectations": [
+        "Control plane runs or activity logs reflect cloud agent launches where instrumented."
+      ],
+      "tags": ["cursor", "cloud_agent", "chat"]
+    },
+    {
+      "id": "desktop-release-readiness",
+      "schema_version": "capability.directory.v1",
+      "kind": "bundle",
+      "display_name": "Desktop Release Readiness",
+      "summary": "HAM CLI doctor/status and desktop packaging workflow documentation.",
+      "description": "Checklist-oriented bundle for operators: HAM CLI packaging helpers and Electron shell; does not run pack from this API. Read-only verification via existing CLI and docs.",
+      "trust_tier": "first_party",
+      "provenance": {
+        "source_kind": "ham_repo",
+        "registry_revision": "1",
+        "note": "Sample bundle for Phase 1 directory."
+      },
+      "version": "1.0.0",
+      "required_backends": ["local_cli"],
+      "capabilities": [
+        "cli.ham.doctor",
+        "cli.ham.desktop_package",
+        "docs.desktop.readme"
+      ],
+      "skills": [],
+      "tools_policy": {
+        "mode": "operator_cli_only",
+        "notes": [
+          "Packaging runs on developer machine via npm/electron-builder; not invoked by directory."
+        ]
+      },
+      "mcp_policy": {
+        "mode": "none",
+        "notes": []
+      },
+      "model_policy": {
+        "mode": "not_applicable",
+        "notes": []
+      },
+      "memory_policy": {
+        "mode": "not_applicable",
+        "notes": []
+      },
+      "surfaces": [
+        { "route": "/settings", "label": "Settings / diagnostics context" }
+      ],
+      "mutability": "read_only",
+      "preview_available": false,
+      "apply_available": false,
+      "risks": [
+        "Operators may expect one-click release from API; clarify manual pack workflow."
+      ],
+      "evidence_expectations": [
+        "Successful local CLI runs and published desktop artifacts per desktop/README."
+      ],
+      "tags": ["desktop", "cli", "packaging"]
+    }
+  ],
+  "profile_templates": [
+    {
+      "id": "profile-template.default-primary",
+      "schema_version": "capability.directory.v1",
+      "kind": "profile_template",
+      "display_name": "Default primary HAM agent (reference)",
+      "summary": "Reference mapping for Agent Builder primary profile without persisting changes.",
+      "description": "Illustrates how future bundles could map to HamAgentProfile fields. Phase 1 does not apply templates to .ham/settings.json.",
+      "trust_tier": "first_party",
+      "provenance": {
+        "source_kind": "ham_repo",
+        "registry_revision": "1",
+        "note": "Documentation-only profile template stub."
+      },
+      "version": "1.0.0",
+      "required_backends": ["ham_api"],
+      "capabilities": ["api.projects.agents"],
+      "skills": [],
+      "tools_policy": {
+        "mode": "none_via_directory",
+        "notes": ["Profile edits use separate settings preview/apply with HAM_SETTINGS_WRITE_TOKEN."]
+      },
+      "mcp_policy": {
+        "mode": "none",
+        "notes": []
+      },
+      "model_policy": {
+        "mode": "inherit_ham_gateway",
+        "notes": ["Model tier follows models catalog and env."]
+      },
+      "memory_policy": {
+        "mode": "inherit_context_engine",
+        "notes": ["memory_heist assembles repo truth for chat."]
+      },
+      "surfaces": [
+        { "route": "/agents", "label": "Agent Builder" }
+      ],
+      "mutability": "read_only",
+      "preview_available": false,
+      "apply_available": false,
+      "risks": [
+        "Future phases must not break HamAgentProfile validation when mapping templates."
+      ],
+      "evidence_expectations": [
+        "Agent profile changes remain auditable via settings write backups when applied outside directory."
+      ],
+      "tags": ["agents", "template", "reference"]
+    }
+  ]
+}
