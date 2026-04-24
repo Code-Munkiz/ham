@@ -83,6 +83,10 @@ import {
   stitchCloudAgentFollowUpTask,
 } from "@/lib/ham/cloudAgentFollowUp";
 import { inferMissionTitleForCard, isCloudAgentHandoffRequest } from "@/lib/ham/cloudAgentChatHandoff";
+import {
+  loadPendingCursorAgentSessionSnapshot,
+  savePendingCursorAgentSessionSnapshot,
+} from "@/lib/ham/pendingCursorAgentSession";
 import { ProjectsRegistryPanel } from "@/components/chat/ProjectsRegistryPanel";
 import { ManagedCloudAgentProvider } from "@/contexts/ManagedCloudAgentContext";
 import { useManagedCloudAgentPoll } from "@/hooks/useManagedCloudAgentPoll";
@@ -122,6 +126,14 @@ const ACTIVE_SESSION_KEY = "ham_active_chat_session_id";
 const MANAGED_COMPLETION_STORAGE_KEY = "ham_managed_completion_v1";
 const MANAGED_REVIEW_CHAT_STORAGE_KEY = "ham_managed_review_chat_v1";
 const MANAGED_DEPLOY_CHAT_STORAGE_KEY = "ham_managed_deploy_chat_v1";
+
+/** Matches `format_operator_assistant_message` for a successful Cursor Cloud Agent preview (server). */
+const OPERATOR_CURSOR_ASSISTANT_HEAD = "**Operator — Cursor Cloud Agent preview**";
+
+function condensedCursorOperatorBubbleText(content: string): string | null {
+  if (!content.startsWith(OPERATOR_CURSOR_ASSISTANT_HEAD)) return null;
+  return "Cloud Agent preview ready — use the mission card below.";
+}
 
 function loadManagedCompletionMap(): Record<string, string> {
   try {
@@ -272,11 +284,24 @@ function TranscriptColumn({
   onDismissHandoffRepoSetup,
   handoffRepoSaving,
 }: TranscriptColumnProps) {
+  const lastAssistantIndex = React.useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i]?.role === "assistant") return i;
+    }
+    return -1;
+  }, [messages]);
+
   return (
     <div className="h-full min-h-0 flex flex-col overflow-hidden">
       <div className="flex-1 overflow-y-auto p-12 space-y-16 scrollbar-hide relative">
         <div className="max-w-3xl mx-auto space-y-16 pb-32">
-          {messages.map((msg) => (
+          {messages.map((msg, i) => {
+            const condensed =
+              pendingCursorAgent && msg.role === "assistant" && i === lastAssistantIndex
+                ? condensedCursorOperatorBubbleText(msg.content)
+                : null;
+            const displayContent = condensed ?? msg.content;
+            return (
             <div
               key={msg.id}
               className={cn(
@@ -330,12 +355,13 @@ function TranscriptColumn({
                     </div>
                   ) : null}
                   <span className="text-[13px] font-medium leading-[1.6] uppercase tracking-[0.02em] whitespace-pre-wrap">
-                    {msg.content}
+                    {displayContent}
                   </span>
                 </div>
               </div>
             </div>
-          ))}
+            );
+          })}
 
           {cloudHandoffRepoSetup ? (
             <div className="flex gap-10 animate-in fade-in slide-in-from-bottom-3 duration-700">
@@ -1049,6 +1075,7 @@ function ChatPageInner({
             timestamp: ts(),
           })),
         );
+        setPendingCursorAgent(loadPendingCursorAgentSessionSnapshot(sessionId));
       } catch {
         // Session not found on backend — stale localStorage. Clear and start fresh.
         setSessionId(null);
@@ -1080,13 +1107,20 @@ function ChatPageInner({
     };
   }, [historyOpen]);
 
+  const dismissCursorPreview = React.useCallback(() => {
+    if (sessionId) savePendingCursorAgentSessionSnapshot(sessionId, null);
+    setPendingCursorAgent(null);
+  }, [sessionId]);
+
   /** Start a brand-new chat session. */
   const startNewChat = React.useCallback(() => {
+    if (sessionId) savePendingCursorAgentSessionSnapshot(sessionId, null);
     setSessionId(null);
     setMessages([]);
+    setPendingCursorAgent(null);
     setChatError(null);
     setHistoryOpen(false);
-  }, []);
+  }, [sessionId]);
 
   /** Load a past session into the transcript. */
   const loadSession = React.useCallback(async (sid: string) => {
@@ -1108,6 +1142,7 @@ function ChatPageInner({
           timestamp: ts(),
         })),
       );
+      setPendingCursorAgent(loadPendingCursorAgentSessionSnapshot(sid));
       setChatError(null);
       setHistoryOpen(false);
     } catch {
@@ -1455,29 +1490,42 @@ function ChatPageInner({
     return "Builds a Cloud Agent preview digest; does not launch. Does not start the agent.";
   }, [sending, projectId, input, hasCloudFollowUpContext, cloudFollowUpMode]);
 
-  const applyOperatorResultSideEffects = React.useCallback((op: HamOperatorResult | null | undefined) => {
-    if (!op?.handled) return;
-    if (op.pending_apply) {
-      setPendingApply(op.pending_apply as Record<string, unknown>);
-    } else if (op.intent === "apply_settings" && op.ok) {
-      setPendingApply(null);
-    }
-    if (op.pending_launch) {
-      setPendingLaunch(op.pending_launch as Record<string, unknown>);
-    } else if (op.intent === "launch_run" && op.ok) {
-      setPendingLaunch(null);
-    }
-    if (op.pending_register) {
-      setPendingRegister(op.pending_register as Record<string, unknown>);
-    } else if (op.intent === "register_project" && op.ok) {
-      setPendingRegister(null);
-    }
-    if (op.pending_cursor_agent) {
-      setPendingCursorAgent(op.pending_cursor_agent as Record<string, unknown>);
-    } else if (op.intent === "cursor_agent_launch" && op.ok) {
-      setPendingCursorAgent(null);
-    }
-  }, []);
+  const applyOperatorResultSideEffects = React.useCallback(
+    (op: HamOperatorResult | null | undefined, streamSessionId?: string | null) => {
+      if (op == null) return;
+      // Server omits `handled` in some proxies; only skip when explicitly false.
+      if (op.handled === false) return;
+
+      const sid = streamSessionId?.trim() || null;
+      const persistCursorSnapshot = (payload: Record<string, unknown> | null) => {
+        if (sid) savePendingCursorAgentSessionSnapshot(sid, payload);
+      };
+
+      if (op.pending_apply) {
+        setPendingApply(op.pending_apply as Record<string, unknown>);
+      } else if (op.intent === "apply_settings" && op.ok) {
+        setPendingApply(null);
+      }
+      if (op.pending_launch) {
+        setPendingLaunch(op.pending_launch as Record<string, unknown>);
+      } else if (op.intent === "launch_run" && op.ok) {
+        setPendingLaunch(null);
+      }
+      if (op.pending_register) {
+        setPendingRegister(op.pending_register as Record<string, unknown>);
+      } else if (op.intent === "register_project" && op.ok) {
+        setPendingRegister(null);
+      }
+      if (op.pending_cursor_agent) {
+        setPendingCursorAgent(op.pending_cursor_agent as Record<string, unknown>);
+        persistCursorSnapshot(op.pending_cursor_agent as Record<string, unknown>);
+      } else if (op.intent === "cursor_agent_launch" && op.ok) {
+        setPendingCursorAgent(null);
+        persistCursorSnapshot(null);
+      }
+    },
+    [],
+  );
 
   const runOperatorConfirm = async (opts: {
     messages: { role: "user" | "assistant" | "system"; content: string }[];
@@ -1550,7 +1598,7 @@ function ChatPageInner({
           timestamp: timeStr(),
         })),
       );
-      applyOperatorResultSideEffects(res.operator_result);
+      applyOperatorResultSideEffects(res.operator_result, res.session_id);
       applyHamUiActions(res.actions ?? [], {
         navigate,
         setIsControlPanelOpen,
@@ -1660,6 +1708,7 @@ function ChatPageInner({
         streamAuth,
       );
       setSessionId(res.session_id);
+      applyOperatorResultSideEffects(res.operator_result, res.session_id);
       setMessages(
         res.messages.map((m, i) => ({
           id: `${res.session_id}-${i}-${m.role}`,
@@ -1668,7 +1717,6 @@ function ChatPageInner({
           timestamp: timeStr(),
         })),
       );
-      applyOperatorResultSideEffects(res.operator_result);
       const op = res.operator_result;
       if (op?.intent === "cursor_agent_launch" && op.ok && op.data) {
         const d = op.data as Record<string, unknown>;
@@ -1943,7 +1991,7 @@ function ChatPageInner({
         streamAuth,
       );
       setSessionId(res.session_id);
-      applyOperatorResultSideEffects(res.operator_result);
+      applyOperatorResultSideEffects(res.operator_result, res.session_id);
       setMessages(
         res.messages.map((m, i) => ({
           id: `${res.session_id}-${i}-${m.role}`,
@@ -2097,7 +2145,7 @@ function ChatPageInner({
               operatorCursorAgentToken={operatorCursorAgentToken}
               onOperatorCursorAgentTokenChange={handleCursorAgentTokenChange}
               onCursorAgentLaunch={handleCursorAgentLaunchFromCard}
-              onDismissCursorPreview={() => setPendingCursorAgent(null)}
+              onDismissCursorPreview={dismissCursorPreview}
               cursorAgentActionsDisabled={sending}
               cloudHandoffRepoSetup={cloudHandoffRepoSetup}
               onHandoffRepoInputChange={(v) =>
@@ -2139,7 +2187,7 @@ function ChatPageInner({
                     operatorCursorAgentToken={operatorCursorAgentToken}
                     onOperatorCursorAgentTokenChange={handleCursorAgentTokenChange}
                     onCursorAgentLaunch={handleCursorAgentLaunchFromCard}
-                    onDismissCursorPreview={() => setPendingCursorAgent(null)}
+                    onDismissCursorPreview={dismissCursorPreview}
                     cursorAgentActionsDisabled={sending}
                     cloudHandoffRepoSetup={cloudHandoffRepoSetup}
                     onHandoffRepoInputChange={(v) =>
