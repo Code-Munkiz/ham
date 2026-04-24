@@ -7,6 +7,7 @@ import { useAuth } from "@clerk/clerk-react";
 import {
   Paperclip,
   Sparkles,
+  Zap,
   Shield,
   Activity,
   Monitor,
@@ -19,7 +20,6 @@ import {
   AlertCircle,
   Radar,
   History,
-  Mic,
   MessageSquare,
   Plus,
 } from "lucide-react";
@@ -29,6 +29,7 @@ import { cn } from "@/lib/utils";
 import { ChatComposerStrip } from "@/components/chat/ChatComposerStrip";
 import type { WorkbenchMode, UplinkId } from "@/components/chat/ChatComposerStrip";
 import { CloudAgentLaunchModal } from "@/components/chat/CloudAgentLaunchModal";
+import { VoiceMessageInput } from "@/components/chat/VoiceMessageInput";
 import { applyHamUiActions } from "@/lib/ham/applyUiActions";
 import {
   ensureProjectIdForWorkspaceRoot,
@@ -2795,13 +2796,32 @@ function ChatPageInner({
                                <Paperclip className="h-3 w-3" />
                                Attach
                             </button>
+                            <div
+                              title="Dictation (browser-dependent)"
+                              className="flex items-center gap-1.5 text-[8px] text-white/25 font-black uppercase tracking-widest px-1.5 py-1 rounded min-w-0"
+                            >
+                              <span className="shrink-0 text-white/25 hidden sm:inline">Voice</span>
+                              <VoiceMessageInput
+                                compact
+                                onVoiceMessage={(_blob, duration) => {
+                                  void _blob;
+                                  toast.message("Voice note recorded", {
+                                    description: `${Math.max(0, Math.round(duration))}s (transcription not wired in chat yet)`,
+                                  });
+                                }}
+                                onVoiceError={(msg) => toast.error(msg)}
+                              />
+                            </div>
                             <button
                               type="button"
-                              title="Dictation (browser-dependent)"
-                              className="flex items-center gap-1.5 text-[8px] text-white/25 hover:text-[#FF6B00] font-black uppercase tracking-widest transition-colors px-1.5 py-1 rounded"
+                              onClick={() => setMaxMode((m) => !m)}
+                              className={cn(
+                                "flex items-center gap-1.5 text-[8px] font-black uppercase tracking-widest transition-colors px-1.5 py-1 rounded",
+                                maxMode ? "text-[#FF6B00]" : "text-white/25 hover:text-[#FF6B00]",
+                              )}
                             >
-                               <Mic className="h-3 w-3" />
-                               Mic
+                              <Zap className="h-3 w-3" />
+                              Fast
                             </button>
                          </div>
 
