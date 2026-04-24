@@ -214,6 +214,8 @@ Set at least:
 
 See commented template in [`docs/examples/ham-api-cloud-run-env.yaml`](examples/ham-api-cloud-run-env.yaml) and [`docs/HERMES_GATEWAY_CONTRACT.md`](HERMES_GATEWAY_CONTRACT.md) (streaming **`stream: true`** behavior).
 
+**Incident recovery:** if dashboard chat hangs or shows blank replies after model or gateway changes, align Cloud Run env with Hermes `config.yaml` using [`docs/RUNBOOK_HAM_MODEL_RECOVERY.md`](RUNBOOK_HAM_MODEL_RECOVERY.md).
+
 ## Smoke tests
 
 ```bash
