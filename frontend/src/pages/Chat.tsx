@@ -112,6 +112,108 @@ type ChatRow = {
 
 type ChatViewMode = "chat" | "split" | "preview" | "war_room" | "browser";
 
+/** Local-only composer attachment (inlined into outbound message text; no API change). */
+type ComposerAttachmentKind = "image" | "text" | "binary";
+
+type ComposerAttachment = {
+  id: string;
+  name: string;
+  size: number;
+  kind: ComposerAttachmentKind;
+  /** Image: data URL. Text: file body. Binary: omitted at send (placeholder only). */
+  payload: string;
+};
+
+const MAX_CHAT_ATTACHMENT_BYTES = 500 * 1024;
+const CHAT_ATTACHMENT_ACCEPT =
+  "image/*,.txt,.csv,.json,.pdf,.xlsx,text/plain,text/csv,application/json,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+const TEXT_FILE_EXTENSIONS = new Set([".txt", ".csv", ".json"]);
+const IMAGE_FILE_EXTENSIONS = new Set([
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".gif",
+  ".webp",
+  ".svg",
+  ".bmp",
+  ".ico",
+]);
+
+function fileExtensionLower(name: string): string {
+  const i = name.lastIndexOf(".");
+  return i >= 0 ? name.slice(i).toLowerCase() : "";
+}
+
+function formatAttachmentByteSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${kb >= 10 ? kb.toFixed(0) : kb.toFixed(1)} KB`;
+  return `${(kb / 1024).toFixed(1)} MB`;
+}
+
+function classifyComposerAttachment(file: File): ComposerAttachmentKind {
+  const ext = fileExtensionLower(file.name);
+  if (file.type.startsWith("image/") || IMAGE_FILE_EXTENSIONS.has(ext)) return "image";
+  if (
+    TEXT_FILE_EXTENSIONS.has(ext) ||
+    file.type.startsWith("text/") ||
+    file.type === "application/json" ||
+    file.type === "text/csv"
+  ) {
+    return "text";
+  }
+  return "binary";
+}
+
+function readFileAsDataURL(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => {
+      const res = r.result;
+      if (typeof res === "string") resolve(res);
+      else reject(new Error("Could not read file as data URL"));
+    };
+    r.onerror = () => reject(r.error ?? new Error("File read failed"));
+    r.readAsDataURL(file);
+  });
+}
+
+function readFileAsText(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => {
+      const res = r.result;
+      if (typeof res === "string") resolve(res);
+      else reject(new Error("Could not read file as text"));
+    };
+    r.onerror = () => reject(r.error ?? new Error("File read failed"));
+    r.readAsText(file);
+  });
+}
+
+function binaryAttachmentPlaceholder(name: string, size: number): string {
+  return `[Attached: ${name} (${formatAttachmentByteSize(size)}) — contents not inlined for this file type.]`;
+}
+
+function buildOutboundMessageWithAttachment(
+  trimmedText: string,
+  attachment: ComposerAttachment | null,
+): string {
+  if (!attachment) return trimmedText;
+  if (attachment.kind === "binary") {
+    const block = binaryAttachmentPlaceholder(attachment.name, attachment.size);
+    return trimmedText ? `${block}\n\n${trimmedText}` : block;
+  }
+  const header =
+    attachment.kind === "image"
+      ? `[Attached image: ${attachment.name} (${formatAttachmentByteSize(attachment.size)})]`
+      : `[Attached file: ${attachment.name} (${formatAttachmentByteSize(attachment.size)})]`;
+  const body = attachment.payload.trimEnd();
+  const combined = `${header}\n${body}`;
+  return trimmedText ? `${combined}\n\n${trimmedText}` : combined;
+}
+
 function formatShortcutAge(t: number): string {
   const s = Math.floor((Date.now() - t) / 1000);
   if (s < 0) return "now";
@@ -630,6 +732,8 @@ function ChatPageInner({
   const [cloudAgentOptionsOpen, setCloudAgentOptionsOpen] = React.useState(false);
   /** Collapses AGENT/MODEL/BUILDER/CLOUD strip + Cloud Agent options (session-only). */
   const [showAgentControls, setShowAgentControls] = React.useState(false);
+  const [composerAttachment, setComposerAttachment] = React.useState<ComposerAttachment | null>(null);
+  const composerFileInputRef = React.useRef<HTMLInputElement>(null);
   /** Option A: once user edits repo/ref, autofill must not clobber. */
   const cloudTargetTouchedRef = React.useRef({ repo: false, ref: false });
   /** Primary HAM profile from Agent Builder (avatar + name in transcript). */
@@ -1906,22 +2010,58 @@ function ChatPageInner({
     });
   };
 
+  const processComposerSelectedFile = React.useCallback(async (file: File) => {
+    if (file.size > MAX_CHAT_ATTACHMENT_BYTES) {
+      toast.error(`File is too large (max ${formatAttachmentByteSize(MAX_CHAT_ATTACHMENT_BYTES)}).`);
+      return;
+    }
+    const id = `att-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    const name = file.name || "attachment";
+    const size = file.size;
+    const kind = classifyComposerAttachment(file);
+    try {
+      if (kind === "image") {
+        const dataUrl = await readFileAsDataURL(file);
+        setComposerAttachment({ id, name, size, kind: "image", payload: dataUrl });
+      } else if (kind === "text") {
+        const t = await readFileAsText(file);
+        setComposerAttachment({ id, name, size, kind: "text", payload: t });
+      } else {
+        setComposerAttachment({ id, name, size, kind: "binary", payload: "" });
+      }
+    } catch {
+      toast.error("Could not read the selected file.");
+    }
+  }, []);
+
+  const handleComposerFileInputChange = React.useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const list = e.target.files;
+      e.target.value = "";
+      const file = list?.[0];
+      if (file) void processComposerSelectedFile(file);
+    },
+    [processComposerSelectedFile],
+  );
+
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || sending) return;
-    const text = input.trim();
+    if ((!input.trim() && !composerAttachment) || sending) return;
+    const trimmedInput = input.trim();
+    const textForOutbound = buildOutboundMessageWithAttachment(trimmedInput, composerAttachment);
     if (viewMode === "preview") {
       setViewMode("chat");
     }
 
     const aidStatus = activeCloudAgentId?.trim() ?? "";
-    if (aidStatus && isCloudAgentStatusChatQuestion(text)) {
+    if (aidStatus && isCloudAgentStatusChatQuestion(trimmedInput)) {
       setInput("");
+      setComposerAttachment(null);
       setChatError(null);
       const userRowStatus: ChatRow = {
         id: `pending-user-${Date.now()}`,
         role: "user",
-        content: text,
+        content: textForOutbound,
         timestamp: timeStr(),
       };
       const assistantStatusId = `assist-status-${Date.now()}`;
@@ -1951,7 +2091,7 @@ function ChatPageInner({
       return;
     }
 
-    const isHandoff = isCloudAgentHandoffRequest(text);
+    const isHandoff = isCloudAgentHandoffRequest(trimmedInput);
     if (isHandoff && !projectId) {
       toast.error("Select a project (Projects) first to use a Cloud Agent handoff from chat.");
       return;
@@ -1960,12 +2100,13 @@ function ChatPageInner({
     const userRow: ChatRow = {
       id: `pending-user-${Date.now()}`,
       role: "user",
-      content: text,
+      content: textForOutbound,
       timestamp: timeStr(),
     };
 
     if (isHandoff && projectId) {
       setInput("");
+      setComposerAttachment(null);
       setChatError(null);
       setCloudHandoffRepoSetup(null);
       setMessages((prev) => [...prev, userRow]);
@@ -1977,14 +2118,14 @@ function ChatPageInner({
       const effectiveRepo = (metaRepo || caRepo.trim()).trim();
       if (!effectiveRepo) {
         setCloudHandoffRepoSetup({
-          missionText: text,
+          missionText: textForOutbound,
           repoInput: mountRepo.trim() || "https://github.com/Code-Munkiz/ham",
         });
         return;
       }
       setSending(true);
       try {
-        await runChatNativeHandoffPreview(text);
+        await runChatNativeHandoffPreview(textForOutbound);
       } finally {
         setSending(false);
       }
@@ -1992,6 +2133,7 @@ function ChatPageInner({
     }
 
     setInput("");
+    setComposerAttachment(null);
     setChatError(null);
 
     const assistantPlaceId = `assist-pending-${Date.now()}`;
@@ -2011,7 +2153,7 @@ function ChatPageInner({
       const res = await postChatStream(
         {
           session_id: sessionId ?? undefined,
-          messages: [{ role: "user", content: text }],
+          messages: [{ role: "user", content: textForOutbound }],
           ...(modelId ? { model_id: modelId } : {}),
           ...(projectId ? { project_id: projectId } : {}),
           workbench_mode: workbenchMode,
@@ -2421,6 +2563,15 @@ function ChatPageInner({
              )}
 
              <form onSubmit={handleSend} className="relative isolate group shadow-xl">
+                <input
+                  ref={composerFileInputRef}
+                  type="file"
+                  className="sr-only"
+                  tabIndex={-1}
+                  accept={CHAT_ATTACHMENT_ACCEPT}
+                  onChange={handleComposerFileInputChange}
+                  aria-hidden
+                />
                 <div
                   className="pointer-events-none absolute -inset-0.5 z-0 rounded-xl bg-gradient-to-r from-[#FF6B00]/15 to-[#FF6B00]/5 opacity-15 blur-md transition duration-500 group-focus-within:opacity-50"
                   aria-hidden
@@ -2583,7 +2734,31 @@ function ChatPageInner({
                      </div>
                    </div>
                    <div className="flex flex-col border-t border-white/5">
-                      <div className="flex items-start px-4 pt-2 pb-2 gap-2">
+                      <div
+                        className="min-h-[34px] shrink-0 px-4 pt-2 flex items-center"
+                        aria-live="polite"
+                      >
+                        {composerAttachment ? (
+                          <div className="flex max-w-full items-center gap-2 rounded-md border border-white/10 bg-white/[0.04] py-1 pl-2.5 pr-1 text-[9px] text-white/80">
+                            <Paperclip className="h-3 w-3 shrink-0 text-[#FF6B00]/70" aria-hidden />
+                            <span className="min-w-0 truncate font-mono font-bold" title={composerAttachment.name}>
+                              {composerAttachment.name}
+                            </span>
+                            <span className="shrink-0 text-white/35">
+                              {formatAttachmentByteSize(composerAttachment.size)}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setComposerAttachment(null)}
+                              className="ml-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded text-white/40 transition-colors hover:bg-white/10 hover:text-white"
+                              aria-label="Remove attachment"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
+                      <div className="flex items-start px-4 pt-0 pb-2 gap-2">
                          <span className="text-[#FF6B00] font-mono text-[12px] font-bold mt-1 shrink-0 select-none" aria-hidden>
                            &gt;_
                          </span>
@@ -2605,7 +2780,9 @@ function ChatPageInner({
                          <div className="flex items-center gap-1 sm:gap-2">
                             <button
                               type="button"
-                              className="flex items-center gap-1.5 text-[8px] text-white/25 hover:text-[#FF6B00] font-black uppercase tracking-widest transition-colors px-1.5 py-1 rounded"
+                              disabled={sending}
+                              onClick={() => composerFileInputRef.current?.click()}
+                              className="flex items-center gap-1.5 text-[8px] text-white/25 hover:text-[#FF6B00] font-black uppercase tracking-widest transition-colors px-1.5 py-1 rounded disabled:opacity-40"
                             >
                                <Paperclip className="h-3 w-3" />
                                Attach
