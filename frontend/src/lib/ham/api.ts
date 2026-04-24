@@ -4,6 +4,7 @@ import type {
   ModelCatalogPayload,
   ProjectRecord,
 } from "./types";
+import type { HermesGatewaySnapshot } from "./hermesGateway";
 import { getRegisteredClerkSessionToken } from "./clerkSession";
 import { getHamDesktopConfig } from "./desktopConfig";
 
@@ -129,6 +130,33 @@ export async function fetchHermesHubSnapshot(): Promise<HermesHubSnapshot> {
     throw new Error(`hermes-hub: HTTP ${res.status}`);
   }
   return res.json() as Promise<HermesHubSnapshot>;
+}
+
+export type { HermesGatewaySnapshot } from "./hermesGateway";
+
+/** GET /api/hermes-gateway/snapshot — broker-backed command center (Path B). */
+export async function fetchHermesGatewaySnapshot(opts?: {
+  projectId?: string;
+  refresh?: boolean;
+}): Promise<HermesGatewaySnapshot> {
+  const q = new URLSearchParams();
+  if (opts?.projectId?.trim()) q.set("project_id", opts.projectId.trim());
+  if (opts?.refresh) q.set("refresh", "true");
+  const suffix = q.toString() ? `?${q}` : "";
+  const res = await hamApiFetch(`/api/hermes-gateway/snapshot${suffix}`);
+  if (!res.ok) {
+    throw new Error(`hermes-gateway/snapshot: HTTP ${res.status}`);
+  }
+  return res.json() as Promise<HermesGatewaySnapshot>;
+}
+
+/** GET /api/hermes-gateway/capabilities — static capability manifest. */
+export async function fetchHermesGatewayCapabilities(): Promise<Record<string, unknown>> {
+  const res = await hamApiFetch("/api/hermes-gateway/capabilities");
+  if (!res.ok) {
+    throw new Error(`hermes-gateway/capabilities: HTTP ${res.status}`);
+  }
+  return res.json() as Promise<Record<string, unknown>>;
 }
 
 /** GET /api/hermes-runtime/inventory — read-only Hermes CLI + sanitized config (local/co-located). */

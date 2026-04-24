@@ -20,6 +20,7 @@ import Settings from "./pages/Settings";
 import Logs from "./pages/Logs";
 import Analytics from "./pages/Analytics";
 import HermesHub from "./pages/HermesHub";
+import CommandCenter from "./pages/CommandCenter";
 import HermesSkills from "./pages/HermesSkills";
 import HamShop from "./pages/HamShop";
 import AgentBuilder from "./pages/AgentBuilder";
@@ -62,6 +63,7 @@ function AppRoutes() {
           <Route path="/logs" element={<Logs />} />
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/hermes" element={<HermesHub />} />
+          <Route path="/command-center" element={<CommandCenter />} />
           <Route path="/shop" element={<HamShop />} />
           <Route path="/skills" element={<HermesSkills />} />
           <Route path="/agents" element={<AgentBuilder />} />

@@ -11,6 +11,7 @@ import {
   Orbit,
   Layers,
   History,
+  Cpu,
 } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -35,6 +36,7 @@ export function NavRail() {
 
   const isDiagnosticsActive =
     location.pathname.startsWith("/hermes") ||
+    location.pathname.startsWith("/command-center") ||
     location.pathname.startsWith("/runs") ||
     location.pathname === "/analytics" ||
     location.pathname === "/logs" ||
@@ -107,6 +109,7 @@ export function NavRail() {
           {isDiagnosticsOpen && (
             <div className="absolute left-full ml-3 top-[-10px] w-56 bg-[#0a0a0a] border border-white/10 rounded-xl shadow-2xl py-2 overflow-hidden z-[100] animate-in fade-in slide-in-from-left-2 duration-200">
               {[
+                { label: "Command Center", path: "/command-center", icon: Cpu },
                 { label: "Hermes / Runtime", path: "/hermes", icon: Orbit },
                 { label: "Run history", path: "/runs", icon: History },
                 { label: "Operational Analytics", path: "/analytics", icon: BarChart2 },
@@ -118,7 +121,9 @@ export function NavRail() {
                     ? location.pathname.startsWith("/runs")
                     : item.path === "/hermes"
                       ? location.pathname.startsWith("/hermes")
-                      : location.pathname === item.path;
+                      : item.path === "/command-center"
+                        ? location.pathname.startsWith("/command-center")
+                        : location.pathname === item.path;
                 return (
                   <Link
                     key={item.path}

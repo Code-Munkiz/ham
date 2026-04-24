@@ -72,9 +72,8 @@ def _dashboard_chat_summary(
     }
 
 
-@router.get("/api/hermes-hub")
-async def get_hermes_hub_snapshot() -> dict[str, Any]:
-    """HAM-native snapshot: Hermes-related dashboard chat gateway + runtime skills probe only."""
+def build_hermes_hub_payload() -> dict[str, Any]:
+    """Sync Hermes hub snapshot (shared by ``GET /api/hermes-hub`` and gateway broker)."""
     catalog = build_catalog_payload()
     gw = str(catalog["gateway_mode"])
     or_ready = bool(catalog["openrouter_chat_ready"])
@@ -105,3 +104,9 @@ async def get_hermes_hub_snapshot() -> dict[str, Any]:
             ],
         },
     }
+
+
+@router.get("/api/hermes-hub")
+async def get_hermes_hub_snapshot() -> dict[str, Any]:
+    """HAM-native snapshot: Hermes-related dashboard chat gateway + runtime skills probe only."""
+    return build_hermes_hub_payload()
