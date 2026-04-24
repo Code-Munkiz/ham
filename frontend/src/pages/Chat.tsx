@@ -13,6 +13,8 @@ import {
   Globe,
   Layout,
   ChevronDown,
+  ChevronUp,
+  Radio,
   X,
   AlertCircle,
   Radar,
@@ -595,6 +597,8 @@ function ChatPageInner({
   /** When a prior managed mission exists, stitch summary + new instruction into the next preview (new launch only). */
   const [cloudFollowUpMode, setCloudFollowUpMode] = React.useState<"continue" | "fresh">("continue");
   const [cloudAgentOptionsOpen, setCloudAgentOptionsOpen] = React.useState(false);
+  /** Collapses AGENT/MODEL/BUILDER/CLOUD strip + Cloud Agent options (session-only). */
+  const [showAgentControls, setShowAgentControls] = React.useState(false);
   /** Option A: once user edits repo/ref, autofill must not clobber. */
   const cloudTargetTouchedRef = React.useRef({ repo: false, ref: false });
   /** Primary HAM profile from Agent Builder (avatar + name in transcript). */
@@ -2332,125 +2336,162 @@ function ChatPageInner({
                   aria-hidden
                 />
                 <div className="relative z-10 flex flex-col overflow-visible rounded-lg border border-white/10 bg-[#0d0d0d] shadow-xl">
-                   <div className="relative z-20 rounded-t-lg bg-black/35">
-                      <ChatComposerStrip
-                        workbenchMode={workbenchMode}
-                        onWorkbenchMode={setWorkbenchMode}
-                        modelId={modelId}
-                        onModelId={setModelId}
-                        maxMode={maxMode}
-                        onMaxMode={setMaxMode}
-                        worker={worker}
-                        onWorker={setWorker}
-                        uplinkId={uplinkId}
-                        onUplinkId={setUplinkId}
-                        onOpenCloudAgentLaunch={() => setCloudLaunchOpen(true)}
-                        onCloudAgentPreview={handleCloudAgentPreview}
-                        cloudAgentPreviewDisabled={sending || !input.trim() || !projectId}
-                        cloudAgentPreviewTitle={cloudAgentPreviewTitle}
-                        catalog={catalog}
-                        catalogLoading={catalogLoading}
-                      />
+                   <div className="flex items-center justify-between gap-2 border-b border-white/5 bg-black/25 px-3 py-1.5 rounded-t-lg">
+                     <button
+                       type="button"
+                       onClick={() => setShowAgentControls((v) => !v)}
+                       aria-expanded={showAgentControls}
+                       aria-controls="ham-chat-agent-controls-panel"
+                       className={cn(
+                         "inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[8px] font-black uppercase tracking-widest transition-colors",
+                         showAgentControls
+                           ? "bg-white/[0.08] text-[#FF6B00]"
+                           : "text-white/45 hover:bg-white/[0.06] hover:text-white/70",
+                       )}
+                     >
+                       <Radio className="h-3 w-3 shrink-0 opacity-80" aria-hidden />
+                       Agent controls
+                       {showAgentControls ? (
+                         <ChevronUp className="h-3 w-3 shrink-0 opacity-60" aria-hidden />
+                       ) : (
+                         <ChevronDown className="h-3 w-3 shrink-0 opacity-60" aria-hidden />
+                       )}
+                     </button>
                    </div>
-                   {projectId ? (
-                     <div className="border-t border-white/5 px-3 py-1.5 bg-black/20">
-                       {showCloudAgentMissingRepoHint ? (
-                         <p className="mb-2 text-[9px] font-bold leading-snug text-amber-400/90">
-                           No Cloud Agent repository found for this project. Set{" "}
-                           <span className="font-mono">cursor_cloud_repository</span> in project metadata or open{" "}
-                           <span className="font-mono">Cloud Agent target</span> and enter a repository.
-                         </p>
-                       ) : null}
-                       {uplinkId === "cloud_agent" && hasCloudFollowUpContext ? (
-                         <div
-                           className="mb-2 rounded border border-cyan-500/25 bg-cyan-950/30 px-2.5 py-2"
-                           role="region"
-                           aria-label="Cloud Agent follow-up mode"
-                         >
-                           <p className="text-[9px] font-bold uppercase tracking-wider text-cyan-200/90">
-                             Continue previous Cloud Agent work?
-                           </p>
-                           <p className="mt-0.5 text-[8px] text-white/45">
-                             Uses a new launch with stitched context. Does not send messages to the existing agent.
-                           </p>
-                           <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1.5">
-                             <label className="flex cursor-pointer items-center gap-1.5 text-[9px] text-white/85">
-                               <input
-                                 type="radio"
-                                 name="ham-cloud-followup-mode"
-                                 className="accent-cyan-500"
-                                 checked={cloudFollowUpMode === "continue"}
-                                 onChange={() => setCloudFollowUpMode("continue")}
-                               />
-                               Continue with context (default)
-                             </label>
-                             <label className="flex cursor-pointer items-center gap-1.5 text-[9px] text-white/85">
-                               <input
-                                 type="radio"
-                                 name="ham-cloud-followup-mode"
-                                 className="accent-cyan-500"
-                                 checked={cloudFollowUpMode === "fresh"}
-                                 onChange={() => setCloudFollowUpMode("fresh")}
-                               />
-                               Start fresh
-                             </label>
-                           </div>
-                         </div>
-                       ) : null}
-                       <button
-                         type="button"
-                         onClick={() => setCloudAgentOptionsOpen((o) => !o)}
-                         className="text-[8px] font-black uppercase tracking-widest text-cyan-500/60 hover:text-cyan-400/90"
-                       >
-                         {cloudAgentOptionsOpen ? "Hide" : "Show"} Cloud Agent target (repo / ref / mode)
-                       </button>
-                       {cloudAgentOptionsOpen ? (
-                         <div className="mt-2 grid gap-2 sm:grid-cols-2 max-w-3xl">
-                           <label className="space-y-1">
-                             <span className="text-[8px] font-bold uppercase tracking-widest text-white/35">
-                               Repository override
-                             </span>
-                             <input
-                               value={caRepo}
-                               onChange={(e) => {
-                                 cloudTargetTouchedRef.current.repo = true;
-                                 setCaRepo(e.target.value);
-                               }}
-                               placeholder="Optional — default from project"
-                               className="w-full rounded border border-white/10 bg-black/40 px-2 py-1 font-mono text-[10px] text-white"
-                             />
-                           </label>
-                           <label className="space-y-1">
-                             <span className="text-[8px] font-bold uppercase tracking-widest text-white/35">
-                               Ref override
-                             </span>
-                             <input
-                               value={caRef}
-                               onChange={(e) => {
-                                 cloudTargetTouchedRef.current.ref = true;
-                                 setCaRef(e.target.value);
-                               }}
-                               placeholder="Optional"
-                               className="w-full rounded border border-white/10 bg-black/40 px-2 py-1 font-mono text-[10px] text-white"
-                             />
-                           </label>
-                           <label className="space-y-1 sm:col-span-2">
-                             <span className="text-[8px] font-bold uppercase tracking-widest text-white/35">
-                               Mission handling
-                             </span>
-                             <select
-                               value={caMission}
-                               onChange={(e) => setCaMission(e.target.value as "direct" | "managed")}
-                               className="w-full max-w-xs rounded border border-white/10 bg-black/40 px-2 py-1 font-mono text-[10px] text-white"
+                   <div
+                     className={cn(
+                       "grid transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none",
+                       showAgentControls ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+                     )}
+                   >
+                     <div
+                       id="ham-chat-agent-controls-panel"
+                       className={cn(
+                         "min-h-0 transition-opacity duration-300 ease-out motion-reduce:transition-none",
+                         showAgentControls ? "overflow-visible opacity-100" : "overflow-hidden opacity-0",
+                       )}
+                     >
+                       <div className="relative z-20 bg-black/35">
+                         <ChatComposerStrip
+                           workbenchMode={workbenchMode}
+                           onWorkbenchMode={setWorkbenchMode}
+                           modelId={modelId}
+                           onModelId={setModelId}
+                           maxMode={maxMode}
+                           onMaxMode={setMaxMode}
+                           worker={worker}
+                           onWorker={setWorker}
+                           uplinkId={uplinkId}
+                           onUplinkId={setUplinkId}
+                           onOpenCloudAgentLaunch={() => setCloudLaunchOpen(true)}
+                           onCloudAgentPreview={handleCloudAgentPreview}
+                           cloudAgentPreviewDisabled={sending || !input.trim() || !projectId}
+                           cloudAgentPreviewTitle={cloudAgentPreviewTitle}
+                           catalog={catalog}
+                           catalogLoading={catalogLoading}
+                         />
+                       </div>
+                       {projectId ? (
+                         <div className="border-t border-white/5 px-3 py-1.5 bg-black/20">
+                           {showCloudAgentMissingRepoHint ? (
+                             <p className="mb-2 text-[9px] font-bold leading-snug text-amber-400/90">
+                               No Cloud Agent repository found for this project. Set{" "}
+                               <span className="font-mono">cursor_cloud_repository</span> in project metadata or open{" "}
+                               <span className="font-mono">Cloud Agent target</span> and enter a repository.
+                             </p>
+                           ) : null}
+                           {uplinkId === "cloud_agent" && hasCloudFollowUpContext ? (
+                             <div
+                               className="mb-2 rounded border border-cyan-500/25 bg-cyan-950/30 px-2.5 py-2"
+                               role="region"
+                               aria-label="Cloud Agent follow-up mode"
                              >
-                               <option value="managed">Managed by HAM</option>
-                               <option value="direct">Direct</option>
-                             </select>
-                           </label>
+                               <p className="text-[9px] font-bold uppercase tracking-wider text-cyan-200/90">
+                                 Continue previous Cloud Agent work?
+                               </p>
+                               <p className="mt-0.5 text-[8px] text-white/45">
+                                 Uses a new launch with stitched context. Does not send messages to the existing agent.
+                               </p>
+                               <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1.5">
+                                 <label className="flex cursor-pointer items-center gap-1.5 text-[9px] text-white/85">
+                                   <input
+                                     type="radio"
+                                     name="ham-cloud-followup-mode"
+                                     className="accent-cyan-500"
+                                     checked={cloudFollowUpMode === "continue"}
+                                     onChange={() => setCloudFollowUpMode("continue")}
+                                   />
+                                   Continue with context (default)
+                                 </label>
+                                 <label className="flex cursor-pointer items-center gap-1.5 text-[9px] text-white/85">
+                                   <input
+                                     type="radio"
+                                     name="ham-cloud-followup-mode"
+                                     className="accent-cyan-500"
+                                     checked={cloudFollowUpMode === "fresh"}
+                                     onChange={() => setCloudFollowUpMode("fresh")}
+                                   />
+                                   Start fresh
+                                 </label>
+                               </div>
+                             </div>
+                           ) : null}
+                           <button
+                             type="button"
+                             onClick={() => setCloudAgentOptionsOpen((o) => !o)}
+                             className="text-[8px] font-black uppercase tracking-widest text-cyan-500/60 hover:text-cyan-400/90"
+                           >
+                             {cloudAgentOptionsOpen ? "Hide" : "Show"} Cloud Agent target (repo / ref / mode)
+                           </button>
+                           {cloudAgentOptionsOpen ? (
+                             <div className="mt-2 grid gap-2 sm:grid-cols-2 max-w-3xl">
+                               <label className="space-y-1">
+                                 <span className="text-[8px] font-bold uppercase tracking-widest text-white/35">
+                                   Repository override
+                                 </span>
+                                 <input
+                                   value={caRepo}
+                                   onChange={(e) => {
+                                     cloudTargetTouchedRef.current.repo = true;
+                                     setCaRepo(e.target.value);
+                                   }}
+                                   placeholder="Optional — default from project"
+                                   className="w-full rounded border border-white/10 bg-black/40 px-2 py-1 font-mono text-[10px] text-white"
+                                 />
+                               </label>
+                               <label className="space-y-1">
+                                 <span className="text-[8px] font-bold uppercase tracking-widest text-white/35">
+                                   Ref override
+                                 </span>
+                                 <input
+                                   value={caRef}
+                                   onChange={(e) => {
+                                     cloudTargetTouchedRef.current.ref = true;
+                                     setCaRef(e.target.value);
+                                   }}
+                                   placeholder="Optional"
+                                   className="w-full rounded border border-white/10 bg-black/40 px-2 py-1 font-mono text-[10px] text-white"
+                                 />
+                               </label>
+                               <label className="space-y-1 sm:col-span-2">
+                                 <span className="text-[8px] font-bold uppercase tracking-widest text-white/35">
+                                   Mission handling
+                                 </span>
+                                 <select
+                                   value={caMission}
+                                   onChange={(e) => setCaMission(e.target.value as "direct" | "managed")}
+                                   className="w-full max-w-xs rounded border border-white/10 bg-black/40 px-2 py-1 font-mono text-[10px] text-white"
+                                 >
+                                   <option value="managed">Managed by HAM</option>
+                                   <option value="direct">Direct</option>
+                                 </select>
+                               </label>
+                             </div>
+                           ) : null}
                          </div>
                        ) : null}
                      </div>
-                   ) : null}
+                   </div>
                    <div className="flex flex-col border-t border-white/5">
                       <div className="flex items-start px-4 pt-2 pb-2 gap-2">
                          <span className="text-[#FF6B00] font-mono text-[12px] font-bold mt-1 shrink-0 select-none" aria-hidden>
