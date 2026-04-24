@@ -686,6 +686,8 @@ function ChatPageInner({
   const [catalogLoading, setCatalogLoading] = React.useState(true);
   const [workbenchMode, setWorkbenchMode] = React.useState<WorkbenchMode>("agent");
   const [modelId, setModelId] = React.useState<string | null>(null);
+  /** Per-request model_id is OpenRouter-only; http/mock would 422 if we forwarded a tier id. */
+  const chatModelIdForApi = catalog.gateway_mode === "openrouter" ? modelId : null;
   const [maxMode, setMaxMode] = React.useState(false);
   const [worker, setWorker] = React.useState("builder");
   const [projectId, setProjectId] = React.useState<string | null>(null);
@@ -1057,6 +1059,12 @@ function ChatPageInner({
       cancelled = true;
     };
   }, []);
+
+  /** HTTP Hermes chat ignores `cursor:*` picks; clear stale selection so the strip does not show Opus. */
+  React.useEffect(() => {
+    if (catalog.gateway_mode !== "http") return;
+    setModelId((mid) => (mid?.startsWith("cursor:") ? null : mid));
+  }, [catalog.gateway_mode]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -1679,7 +1687,7 @@ function ChatPageInner({
         {
           session_id: sessionId ?? undefined,
           messages: opts.messages,
-          ...(modelId ? { model_id: modelId } : {}),
+          ...(chatModelIdForApi ? { model_id: chatModelIdForApi } : {}),
           ...(projectId ? { project_id: projectId } : {}),
           workbench_mode: workbenchMode,
           worker,
@@ -1797,7 +1805,7 @@ function ChatPageInner({
         {
           session_id: sessionId ?? undefined,
           messages: opts.messages,
-          ...(modelId ? { model_id: modelId } : {}),
+          ...(chatModelIdForApi ? { model_id: chatModelIdForApi } : {}),
           ...(projectId ? { project_id: projectId } : {}),
           workbench_mode: workbenchMode,
           worker,
@@ -2154,7 +2162,7 @@ function ChatPageInner({
         {
           session_id: sessionId ?? undefined,
           messages: [{ role: "user", content: textForOutbound }],
-          ...(modelId ? { model_id: modelId } : {}),
+          ...(chatModelIdForApi ? { model_id: chatModelIdForApi } : {}),
           ...(projectId ? { project_id: projectId } : {}),
           workbench_mode: workbenchMode,
           worker,
