@@ -7,7 +7,6 @@ import { BrowserRouter, HashRouter, Routes, Route, Navigate } from "react-router
 import { ClerkProvider } from "@clerk/clerk-react";
 import { ThemeProvider } from "next-themes";
 import { AppLayout } from "./components/layout/AppLayout";
-import Overview from "./pages/Overview";
 import Chat from "./pages/Chat";
 import Extensions from "./pages/Extensions";
 import Runs from "./pages/Runs";
@@ -49,14 +48,14 @@ function AppRoutes() {
       <AppLayout>
         <Routes>
           <Route path="/" element={<HomeRoute />} />
-          <Route path="/overview" element={<Overview />} />
+          <Route path="/overview" element={<Navigate to="/activity" replace />} />
           <Route path="/chat" element={<Chat />} />
-          <Route path="/droids" element={<Navigate to="/overview" replace />} />
+          <Route path="/droids" element={<Navigate to="/command-center" replace />} />
           <Route path="/extensions" element={<Extensions />} />
           <Route path="/runs" element={<Runs />} />
           <Route path="/runs/:runId" element={<RunDetail />} />
           <Route path="/control-plane" element={<ControlPlaneRuns />} />
-          <Route path="/profiles" element={<Navigate to="/overview" replace />} />
+          <Route path="/profiles" element={<Navigate to="/agents" replace />} />
           <Route path="/storage" element={<Storage />} />
           <Route path="/activity" element={<Activity />} />
           <Route path="/settings" element={<Settings />} />

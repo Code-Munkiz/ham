@@ -18,11 +18,18 @@ import { cn } from "@/lib/utils";
 import { isHamDesktopShell } from "@/lib/ham/desktopConfig";
 import { publicAssetUrl } from "@/lib/ham/publicAssets";
 
+/** Match exact path or a child sub-route, without treating unrelated prefixes as active. */
+function isPrimaryPathActive(path: string, pathname: string): boolean {
+  if (path === "/") return pathname === "/";
+  return pathname === path || pathname.startsWith(`${path}/`);
+}
+
 const primaryNav = [
   { icon: MessageSquare, label: "Chat", path: "/chat" },
-  { icon: Activity, label: "Activity", path: "/overview" },
+  { icon: Cpu, label: "Command Center", path: "/command-center" },
+  { icon: Activity, label: "Activity", path: "/activity" },
+  { icon: ShoppingBag, label: "Capabilities", path: "/shop" },
   { icon: UserCog, label: "Agents", path: "/agents" },
-  { icon: ShoppingBag, label: "Shop", path: "/shop" },
 ];
 
 export function NavRail() {
@@ -36,7 +43,6 @@ export function NavRail() {
 
   const isDiagnosticsActive =
     location.pathname.startsWith("/hermes") ||
-    location.pathname.startsWith("/command-center") ||
     location.pathname.startsWith("/runs") ||
     location.pathname === "/analytics" ||
     location.pathname === "/logs" ||
@@ -69,7 +75,7 @@ export function NavRail() {
 
       <div className="flex-1 flex flex-col gap-5">
         {primaryNav.map((item) => {
-          const isActive = location.pathname.startsWith(item.path);
+          const isActive = isPrimaryPathActive(item.path, location.pathname);
           
           return (
             <Link
@@ -109,21 +115,18 @@ export function NavRail() {
           {isDiagnosticsOpen && (
             <div className="absolute left-full ml-3 top-[-10px] w-56 bg-[#0a0a0a] border border-white/10 rounded-xl shadow-2xl py-2 overflow-hidden z-[100] animate-in fade-in slide-in-from-left-2 duration-200">
               {[
-                { label: "Command Center", path: "/command-center", icon: Cpu },
-                { label: "Hermes / Runtime", path: "/hermes", icon: Orbit },
+                { label: "Hermes details", path: "/hermes", icon: Orbit },
                 { label: "Run history", path: "/runs", icon: History },
-                { label: "Operational Analytics", path: "/analytics", icon: BarChart2 },
+                { label: "Control-plane", path: "/control-plane", icon: Layers },
+                { label: "Analytics", path: "/analytics", icon: BarChart2 },
                 { label: "Logs", path: "/logs", icon: ScrollText },
-                { label: "Control-Plane Runs", path: "/control-plane", icon: Layers },
               ].map((item) => {
                 const isActive =
                   item.path === "/runs"
                     ? location.pathname.startsWith("/runs")
                     : item.path === "/hermes"
                       ? location.pathname.startsWith("/hermes")
-                      : item.path === "/command-center"
-                        ? location.pathname.startsWith("/command-center")
-                        : location.pathname === item.path;
+                      : location.pathname === item.path;
                 return (
                   <Link
                     key={item.path}
@@ -147,7 +150,7 @@ export function NavRail() {
             type="button"
             onClick={() => {
               if (location.pathname.startsWith("/settings")) {
-                navigate("/overview");
+                navigate("/chat");
               } else {
                 navigate("/settings");
               }
@@ -160,7 +163,7 @@ export function NavRail() {
             )}
             title={
               location.pathname.startsWith("/settings")
-                ? "Back to Activity"
+                ? "Back to chat"
                 : "Settings"
             }
           >

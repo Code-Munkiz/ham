@@ -491,6 +491,23 @@ export default function CommandCenter() {
               {tab === "overview" && (
                 <div className="space-y-4">
                   <p className="text-sm text-white/60 leading-relaxed">{dashChat?.summary}</p>
+                  <div className="flex flex-wrap gap-x-4 gap-y-2 rounded-xl border border-white/[0.08] bg-[#0a0a0a] px-4 py-3 text-[10px] font-black uppercase tracking-widest">
+                    <Link to="/activity" className="text-[#FF6B00] hover:underline">
+                      Open Activity stream
+                    </Link>
+                    <span className="text-white/15" aria-hidden>
+                      ·
+                    </span>
+                    <Link to="/hermes" className="text-[#FF6B00] hover:underline">
+                      Open Hermes details
+                    </Link>
+                    <span className="text-white/15" aria-hidden>
+                      ·
+                    </span>
+                    <Link to="/shop" className="text-[#FF6B00] hover:underline">
+                      Browse Capabilities
+                    </Link>
+                  </div>
                   {catalog ? (
                     <div className="rounded-xl border border-white/[0.08] bg-[#0c0c0c] p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                       <div className="text-[10px] text-white/50">
@@ -564,7 +581,7 @@ export default function CommandCenter() {
                     {String(inv?.mode ?? "—")}
                   </p>
                   <Link className="text-[#FF6B00] text-xs font-bold inline-flex items-center gap-1" to="/hermes">
-                    Open legacy hub for deep links <ArrowRight className="h-3 w-3" />
+                    Open Hermes details <ArrowRight className="h-3 w-3" />
                   </Link>
                 </div>
               )}
@@ -761,7 +778,7 @@ export default function CommandCenter() {
                       HAM runs <Server className="h-3 w-3" />
                     </Link>
                     <Link to="/activity" className="text-[#FF6B00] font-bold inline-flex items-center gap-1">
-                      Activity feed <Cpu className="h-3 w-3" />
+                      Open Activity stream <Cpu className="h-3 w-3" />
                     </Link>
                   </div>
                   <ul className="space-y-2">

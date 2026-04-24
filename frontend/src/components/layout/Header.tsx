@@ -20,14 +20,17 @@ export function Header() {
     if (segments.length === 0) return ["HAM", "ACTIVITY"];
     return ["HAM", ...segments.map(s => {
       const mapping: Record<string, string> = {
-        'overview': 'LIVE ACTIVITY',
+        'command-center': 'COMMAND CENTER',
+        'activity': 'ACTIVITY',
+        'shop': 'CAPABILITIES',
+        'hermes': 'HERMES DETAILS',
+        'overview': 'ACTIVITY',
         'runs': 'HISTORY',
-        'activity': 'ACTIVITY STREAM',
         'extensions': 'TOOLS',
         'settings': 'SETTINGS',
-        'advanced': 'SYSTEM'
+        'advanced': 'SYSTEM',
       };
-      return mapping[s] || s.toUpperCase();
+      return mapping[s] || s.toUpperCase().replace(/-/g, " ");
     })];
   };
 

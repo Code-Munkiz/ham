@@ -107,9 +107,11 @@ export default function Activity() {
       <div className="p-8 space-y-8 max-w-5xl mx-auto w-full">
         <div className="flex items-center justify-between border-b border-white/5 pb-6">
           <div className="space-y-1">
-            <h1 className="text-xl font-black uppercase tracking-[0.2em] text-white">Workspace_Logs</h1>
-            <p className="text-[10px] text-white/20 font-bold uppercase tracking-[0.3em] italic">
-              Activity — Hermes gateway feed + demo fallback
+            <h1 className="text-xl font-black uppercase tracking-[0.2em] text-white">Activity</h1>
+            <p className="text-[10px] text-white/35 font-bold uppercase tracking-[0.25em] leading-relaxed max-w-xl">
+              Gateway-backed feed from the HAM API (Hermes gateway snapshot and control-plane hints). When the API is
+              unreachable, rows below are <span className="text-amber-400/90">demo fallback</span> — not live runtime
+              truth.
             </p>
           </div>
           <div className="flex flex-col items-end gap-2">

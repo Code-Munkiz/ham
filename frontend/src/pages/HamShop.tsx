@@ -133,11 +133,11 @@ export default function HamShop() {
               <ShoppingBag className="h-5 w-5 text-[#FF6B00]" />
             </div>
             <span className="text-[10px] font-black text-white/40 uppercase tracking-[0.4em]">
-              Workspace / Shop
+              Workspace / Capabilities
             </span>
           </div>
           <h1 className="text-4xl font-black text-[#FF6B00] italic tracking-tighter uppercase leading-none">
-            Shop
+            Capabilities
           </h1>
           <p className="text-sm font-bold text-white/30 max-w-3xl uppercase tracking-widest leading-relaxed">
             Read-only discovery across Hermes runtime skills, CLI inventory, and the static capability
