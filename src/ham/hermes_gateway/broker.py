@@ -91,6 +91,44 @@ def _commands_menu_surface() -> dict[str, Any]:
     }
 
 
+def _operator_connection(
+    *,
+    captured_at: str,
+    ttl: float,
+    degraded: list[str],
+    ver: dict[str, Any],
+    http: dict[str, Any],
+    hub: dict[str, Any],
+) -> dict[str, Any]:
+    """
+    Single place for the dashboard to show CLI probe + HTTP probe + HAM chat mode + snapshot age.
+
+    Additive only; no new ``hermes`` argv (still only allowlisted calls elsewhere).
+    """
+    cli_st = str(ver.get("status") or "unknown")
+    vline = str(ver.get("version_line") or "")[:500]
+    http_st = str(http.get("status") or "unknown")
+    gw_mode = hub.get("gateway_mode") if isinstance(hub, dict) else None
+    return {
+        "summary": {
+            "cli_probe": cli_st,
+            "cli_version_line": vline,
+            "http_gateway_status": http_st,
+            "ham_chat_gateway_mode": str(gw_mode) if gw_mode is not None else None,
+        },
+        "snapshot_meta": {
+            "captured_at": captured_at,
+            "ttl_seconds": float(ttl),
+            "degraded_capabilities_count": len(degraded),
+            "has_degraded": bool(degraded),
+        },
+        "guidance": (
+            "Local Hermes CLI (on the host that runs the Ham API) is separate from HERMES_GATEWAY_*: "
+            "the CLI covers tools, skills, and TTY; the HTTP base URL is for /api/chat when HERMES_GATEWAY_MODE=http."
+        ),
+    }
+
+
 def _future_placeholders() -> list[dict[str, Any]]:
     return [
         {
@@ -224,11 +262,21 @@ class HermesGatewayBroker:
         elapsed_ms = round((time.perf_counter() - t0) * 1000.0, 2)
         captured_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
+        operator_connection = _operator_connection(
+            captured_at=captured_at,
+            ttl=ttl,
+            degraded=degraded,
+            ver=ver,
+            http=http,
+            hub=hub,
+        )
+
         return {
             "kind": "ham_hermes_gateway_snapshot",
             "schema_version": GATEWAY_SNAPSHOT_SCHEMA_VERSION,
             "captured_at": captured_at,
             "ttl_seconds": ttl,
+            "operator_connection": operator_connection,
             "freshness": {
                 "inventory_cached": inv_hit,
                 "skills_installed_cached": sk_hit,

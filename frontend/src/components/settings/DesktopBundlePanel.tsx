@@ -3,6 +3,8 @@ import { Orbit, RefreshCw, ExternalLink, Package, AlertCircle, CheckCircle2 } fr
 import { cn } from "@/lib/utils";
 import { isHamDesktopShell } from "@/lib/ham/desktopConfig";
 import { getDesktopBundleApi } from "@/lib/ham/desktopBundleBridge";
+import { fetchHermesGatewaySnapshot, type HermesGatewaySnapshot } from "@/lib/ham/api";
+import { HermesOperatorConnectionStrip } from "@/components/hermes/HermesOperatorConnectionStrip";
 
 type CuratedList = { schema_version?: number; description?: string; catalog_ids?: string[] };
 
@@ -15,6 +17,8 @@ export function DesktopBundlePanel() {
   >(null);
   const [curated, setCurated] = React.useState<CuratedList | null>(null);
   const [snippet, setSnippet] = React.useState<string | null>(null);
+  const [apiSnapshot, setApiSnapshot] = React.useState<HermesGatewaySnapshot | null>(null);
+  const [apiSnapErr, setApiSnapErr] = React.useState<string | null>(null);
   const [err, setErr] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(false);
 
@@ -22,6 +26,7 @@ export function DesktopBundlePanel() {
     if (!bundle) return;
     setLoading(true);
     setErr(null);
+    setApiSnapErr(null);
     try {
       const p = await bundle.hermesCliProbe();
       setProbe(p);
@@ -35,6 +40,13 @@ export function DesktopBundlePanel() {
       }
       const s = await bundle.readCuratedFile("ham-api-env.snippet");
       if (s.ok) setSnippet(s.text);
+      try {
+        const shot = await fetchHermesGatewaySnapshot();
+        setApiSnapshot(shot);
+      } catch (e) {
+        setApiSnapshot(null);
+        setApiSnapErr(e instanceof Error ? e.message : "Gateway snapshot failed");
+      }
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Load failed");
     } finally {
@@ -74,8 +86,9 @@ export function DesktopBundlePanel() {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <p className="text-[11px] text-white/45 leading-relaxed">
           Shipped <span className="text-white/60">curated</span> docs and default skill <span className="font-mono">catalog_id</span>{" "}
-          pins. Hermes must be installed on the system <span className="text-amber-200/80">PATH</span> (HAM does not download
-          binaries in this phase).
+          pins. The <span className="text-white/50">local</span> <span className="font-mono">hermes</span> binary (below) is separate from
+          Ham API <span className="font-mono">HERMES_GATEWAY_*</span> (used for <span className="font-mono">/api/chat</span> when
+          <span className="font-mono"> http</span> mode). TTY menus stay in a real terminal; see Command Center for Path B limits.
         </p>
         <button
           type="button"
@@ -94,6 +107,17 @@ export function DesktopBundlePanel() {
           {err}
         </div>
       ) : null}
+
+      {apiSnapErr ? (
+        <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-[11px] text-amber-200/80 flex items-start gap-2">
+          <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+          <span>
+            Ham API snapshot unavailable ({apiSnapErr}). Is the API running and <span className="font-mono">VITE_HAM_API</span>{" "}
+            correct?
+          </span>
+        </div>
+      ) : null}
+      {apiSnapshot?.operator_connection ? <HermesOperatorConnectionStrip snapshot={apiSnapshot} /> : null}
 
       <div className="rounded-xl border border-white/10 bg-[#0c0c0c] p-5 space-y-3">
         <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-white/35">

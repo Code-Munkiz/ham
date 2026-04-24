@@ -34,11 +34,30 @@ export interface HermesGatewayPlaceholder {
   note?: string;
 }
 
+/** Derived single pane: Ham API snapshot of CLI probe + HTTP probe + chat gateway mode (see broker). */
+export interface HermesGatewayOperatorConnection {
+  summary: {
+    cli_probe: string;
+    cli_version_line: string;
+    http_gateway_status: string;
+    ham_chat_gateway_mode: string | null;
+  };
+  snapshot_meta: {
+    captured_at: string;
+    ttl_seconds: number;
+    degraded_capabilities_count: number;
+    has_degraded: boolean;
+  };
+  guidance: string;
+}
+
 export interface HermesGatewaySnapshot {
   kind: "ham_hermes_gateway_snapshot";
   schema_version: string;
   captured_at: string;
   ttl_seconds: number;
+  /** Present on API >= this feature; older servers omit. */
+  operator_connection?: HermesGatewayOperatorConnection;
   freshness: HermesGatewayFreshness;
   hermes_version: { cli_report: Record<string, unknown> };
   hermes_hub: Record<string, unknown>;

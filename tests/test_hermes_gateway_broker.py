@@ -50,6 +50,11 @@ def test_gateway_snapshot_schema_and_placeholders(monkeypatch: pytest.MonkeyPatc
     assert snap["schema_version"] == GATEWAY_SNAPSHOT_SCHEMA_VERSION
     assert "captured_at" in snap
     assert "hermes_hub" in snap
+    oc = snap["operator_connection"]
+    assert oc["summary"]["cli_probe"] in ("ok", "unavailable", "error")
+    assert "http_gateway_status" in oc["summary"]
+    assert oc["summary"]["ham_chat_gateway_mode"] == "mock"
+    assert "guidance" in oc
     assert snap["hermes_hub"]["gateway_mode"] == "mock"
     ph = snap["future_adapter_placeholders"]
     assert any(p.get("id") == "hermes_json_rpc" for p in ph)

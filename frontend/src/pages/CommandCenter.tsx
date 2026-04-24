@@ -19,6 +19,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { HermesOperatorConnectionStrip } from "@/components/hermes/HermesOperatorConnectionStrip";
 import { fetchModelsCatalog, fetchHermesGatewaySnapshot, type HermesGatewaySnapshot } from "@/lib/ham/api";
 import type { HermesGatewayExternalRunner } from "@/lib/ham/hermesGateway";
 import type { ModelCatalogItem, ModelCatalogPayload } from "@/lib/ham/types";
@@ -422,6 +423,7 @@ export default function CommandCenter() {
 
         {snap ? (
           <>
+            {snap.operator_connection ? <HermesOperatorConnectionStrip snapshot={snap} /> : null}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <StatCard
                 label="Gateway mode"

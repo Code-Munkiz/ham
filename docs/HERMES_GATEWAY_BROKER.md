@@ -37,6 +37,7 @@ Top-level keys (see `src/ham/hermes_gateway/broker.py`):
 
 - `kind`: `ham_hermes_gateway_snapshot`
 - `schema_version`, `captured_at`, `ttl_seconds`, `freshness` (per-fragment cache hits + build latency)
+- **`operator_connection`** (additive): derived **single pane** for the dashboard — summarizes `hermes_version.cli_report` (allowlisted `hermes --version`), `http_gateway` probe, `hermes_hub.gateway_mode` (HAM chat path), plus `captured_at` / TTL / degraded count and a short **guidance** string (CLI vs `HERMES_GATEWAY_*`). No new Hermes argv.
 - `hermes_version.cli_report`, `hermes_hub`, `runtime_inventory` (sanitized), `skills_installed` (sanitized), `http_gateway`
 - `counts`, `commands_and_menus`, `activity`, `external_runners`, `degraded_capabilities`, `warnings`, `future_adapter_placeholders`
 
