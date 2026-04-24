@@ -21,7 +21,7 @@ const MOCK_LOGS: LogEntry[] = [
   { id: '6', timestamp: '2026-04-19T14:24:00Z', level: 'INFO', source: 'hermes', run_id: 'run-uvw789xyz012', message: 'Hermes review complete — ok: true' },
   { id: '7', timestamp: '2026-04-19T14:24:05Z', level: 'DEBUG', source: 'system', run_id: 'run-uvw789xyz012', message: 'Run persisted: .ham/runs/20260419T142301Z-run-abc123.json' },
   { id: '8', timestamp: '2026-04-19T14:25:01Z', level: 'INFO', source: 'hermes', run_id: 'run-ghj456klm789', message: 'Intent profile selected: review_diff_v1' },
-  { id: '9', timestamp: '2026-04-19T14:25:10Z', level: 'INFO', source: 'bridge', run_id: 'run-ghj456klm789', message: 'Mapping workforce profile: Alpha Team' },
+  { id: '9', timestamp: '2026-04-19T14:25:10Z', level: 'INFO', source: 'bridge', run_id: 'run-ghj456klm789', message: 'Mapping project profile: Alpha Team' },
   { id: '10', timestamp: '2026-04-19T14:25:15Z', level: 'INFO', source: 'droid', run_id: 'run-ghj456klm789', message: 'Unit 04 active: beginning scan' },
   { id: '11', timestamp: '2026-04-19T14:26:01Z', level: 'DEBUG', source: 'system', run_id: 'run-uvw789xyz012', message: 'Kernel garbage collection initiated' },
   { id: '12', timestamp: '2026-04-19T14:26:10Z', level: 'INFO', source: 'bridge', run_id: 'run-abc123def456', message: 'Resource reclaimed: bridge_session_88' },

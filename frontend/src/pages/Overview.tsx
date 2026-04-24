@@ -1,5 +1,4 @@
 import { 
-  Users, 
   MessageSquare, 
   ToyBrick, 
   Zap,
@@ -21,8 +20,7 @@ import { apiUrl } from "@/lib/ham/api";
 interface Mission {
   id: string;
   title: string;
-  droid: string;
-  status: 'In Progress' | 'Completed' | 'Failed' | 'Paused';
+  status: "In Progress" | "Completed" | "Failed" | "Paused";
   progress: number;
   timeElapsed: string;
   teamMember: string;
@@ -30,14 +28,14 @@ interface Mission {
 }
 
 const MOCK_MISSIONS: Mission[] = [
-  { id: "m1", title: "Refactor Authentication Middleware", droid: "Builder", status: "In Progress", progress: 65, timeElapsed: "21m", teamMember: "Aaron", category: "Core Development" },
-  { id: "m2", title: "Security Audit: bridge-rpc service", droid: "Reviewer", status: "In Progress", progress: 12, timeElapsed: "8m", teamMember: "System", category: "Security" },
-  { id: "m3", title: "Find alternative to ESM module loading issue", droid: "Researcher", status: "Completed", progress: 100, timeElapsed: "45m", teamMember: "Aaron", category: "Research" },
-  { id: "m4", title: "Generate end-to-end tests for Profile flow", droid: "QA", status: "In Progress", progress: 42, timeElapsed: "1h 12m", teamMember: "QA Team", category: "Quality Assurance" },
-  { id: "m5", title: "Decompose user request #882 into tasks", droid: "Coordinator", status: "Completed", progress: 100, timeElapsed: "5m", teamMember: "Manager", category: "Planning" },
-  { id: "m6", title: "Audit dependency tree for CVE-2024-X", droid: "Reviewer", status: "Paused", progress: 5, timeElapsed: "2m", teamMember: "Aaron", category: "Security" },
-  { id: "m7", title: "Performance Benchmarking: US-East-1 vs US-West-2", droid: "Researcher", status: "In Progress", progress: 88, timeElapsed: "3h 10m", teamMember: "DevOps", category: "Performance" },
-  { id: "m8", title: "Implement dark mode theme synchronization", droid: "Builder", status: "Completed", progress: 100, timeElapsed: "2h 15m", teamMember: "Design Team", category: "UI/UX" },
+  { id: "m1", title: "Refactor Authentication Middleware", status: "In Progress", progress: 65, timeElapsed: "21m", teamMember: "Aaron", category: "Core Development" },
+  { id: "m2", title: "Security Audit: bridge-rpc service", status: "In Progress", progress: 12, timeElapsed: "8m", teamMember: "System", category: "Security" },
+  { id: "m3", title: "Find alternative to ESM module loading issue", status: "Completed", progress: 100, timeElapsed: "45m", teamMember: "Aaron", category: "Research" },
+  { id: "m4", title: "Generate end-to-end tests for Profile flow", status: "In Progress", progress: 42, timeElapsed: "1h 12m", teamMember: "QA Team", category: "Quality Assurance" },
+  { id: "m5", title: "Decompose user request #882 into tasks", status: "Completed", progress: 100, timeElapsed: "5m", teamMember: "Manager", category: "Planning" },
+  { id: "m6", title: "Audit dependency tree for CVE-2024-X", status: "Paused", progress: 5, timeElapsed: "2m", teamMember: "Aaron", category: "Security" },
+  { id: "m7", title: "Performance Benchmarking: US-East-1 vs US-West-2", status: "In Progress", progress: 88, timeElapsed: "3h 10m", teamMember: "DevOps", category: "Performance" },
+  { id: "m8", title: "Implement dark mode theme synchronization", status: "Completed", progress: 100, timeElapsed: "2h 15m", teamMember: "Design Team", category: "UI/UX" },
 ];
 
 export default function Overview() {
@@ -116,7 +114,7 @@ export default function Overview() {
                  </div>
               </div>
            </div>
-           <p className="hidden md:block text-[10px] font-medium text-white/20 uppercase tracking-widest italic">Monitoring real-time droid workforce segments</p>
+           <p className="hidden md:block text-[10px] font-medium text-white/20 uppercase tracking-widest italic">Monitoring workspace activity</p>
         </div>
 
         {/* Missions / Jobs Surface */}
@@ -206,10 +204,6 @@ export default function Overview() {
                             </div>
                             <div className="flex items-center justify-between text-[8px] font-black uppercase tracking-widest text-white/20">
                                <div className="flex items-center gap-3">
-                                  <div className="flex items-center gap-1.5 hover:text-white transition-colors cursor-default">
-                                     <Users className="h-3 w-3" />
-                                     <span>{mission.droid}</span>
-                                  </div>
                                   <div className="flex items-center gap-1.5 hover:text-white transition-colors cursor-default">
                                      <MessageSquare className="h-3 w-3" />
                                      <span>{mission.teamMember}</span>

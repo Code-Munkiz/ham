@@ -8,13 +8,11 @@ import { ClerkProvider } from "@clerk/clerk-react";
 import { ThemeProvider } from "next-themes";
 import { AppLayout } from "./components/layout/AppLayout";
 import Overview from "./pages/Overview";
-import Droids from "./pages/Droids";
 import Chat from "./pages/Chat";
 import Extensions from "./pages/Extensions";
 import Runs from "./pages/Runs";
 import RunDetail from "./pages/RunDetail";
 import ControlPlaneRuns from "./pages/ControlPlaneRuns";
-import Profiles from "./pages/Profiles";
 import Storage from "./pages/Storage";
 import Activity from "./pages/Activity";
 import Settings from "./pages/Settings";
@@ -52,12 +50,12 @@ function AppRoutes() {
           <Route path="/" element={<HomeRoute />} />
           <Route path="/overview" element={<Overview />} />
           <Route path="/chat" element={<Chat />} />
-          <Route path="/droids" element={<Droids />} />
+          <Route path="/droids" element={<Navigate to="/overview" replace />} />
           <Route path="/extensions" element={<Extensions />} />
           <Route path="/runs" element={<Runs />} />
           <Route path="/runs/:runId" element={<RunDetail />} />
           <Route path="/control-plane" element={<ControlPlaneRuns />} />
-          <Route path="/profiles" element={<Profiles />} />
+          <Route path="/profiles" element={<Navigate to="/overview" replace />} />
           <Route path="/storage" element={<Storage />} />
           <Route path="/activity" element={<Activity />} />
           <Route path="/settings" element={<Settings />} />

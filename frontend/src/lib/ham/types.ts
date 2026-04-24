@@ -142,17 +142,6 @@ export interface HermesReview {
   context?: string;
 }
 
-/** Matches `src/registry/profiles.py` IntentProfile (+ optional UI fields). */
-export interface ProfileRecord {
-  id: string;
-  version: string;
-  argv: string[];
-  metadata: Record<string, any>;
-  display_name?: string;
-  description?: string;
-  sample_command?: string;
-}
-
 /** Matches `src/registry/projects.py` ProjectRecord (JSON from /api/projects, /api/projects/{id}). */
 export interface ProjectRecord {
   id: string;

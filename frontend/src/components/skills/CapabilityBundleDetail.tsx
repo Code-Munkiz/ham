@@ -12,7 +12,6 @@ const SAFE_ROUTE_PREFIXES = [
   "/agents",
   "/settings",
   "/control-plane",
-  "/droids",
 ] as const;
 
 function isSafeSurfaceRoute(route: string): boolean {

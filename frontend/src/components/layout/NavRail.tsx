@@ -2,7 +2,6 @@ import { useState, useRef, useEffect } from "react";
 import { 
   MessageSquare, 
   Activity, 
-  Users, 
   Settings, 
   ScrollText,
   BarChart2,
@@ -21,7 +20,6 @@ import { publicAssetUrl } from "@/lib/ham/publicAssets";
 const primaryNav = [
   { icon: MessageSquare, label: "Chat", path: "/chat" },
   { icon: Activity, label: "Activity", path: "/overview" },
-  { icon: Users, label: "Droids", path: "/droids" },
   { icon: UserCog, label: "Agents", path: "/agents" },
   { icon: ShoppingBag, label: "Shop", path: "/shop" },
 ];

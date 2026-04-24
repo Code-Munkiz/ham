@@ -429,7 +429,7 @@ export function ChatComposerStrip({
         </button>
         {workerOpen && (
           <div className="absolute left-0 bottom-full mb-1 z-50 w-72 rounded-lg border border-white/10 bg-[#0a0a0a] shadow-2xl py-1 max-h-64 overflow-y-auto">
-            <div className="px-3 py-1.5 text-[8px] font-black text-white/25 uppercase tracking-[0.25em]">Active worker workforce</div>
+            <div className="px-3 py-1.5 text-[8px] font-black text-white/25 uppercase tracking-[0.25em]">Chat mode</div>
             {WORKERS.map((w) => (
               <button
                 key={w.id}

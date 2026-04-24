@@ -21,7 +21,7 @@ export function FactoryAIPanel({ tabId, embedUrl, onEmbedUrlChange }: FactoryAIP
           <div className="p-4 space-y-4">
             <p className="text-[9px] font-black uppercase tracking-widest text-[#BC13FE]">Swarm status grid</p>
             <p className="text-[9px] font-bold text-white/30 uppercase">
-              Stub view model — replace with live workforce API when available.
+              Stub view model — replace with live status API when available.
             </p>
             <div className="grid grid-cols-2 gap-2">
               {STUB_SWARM_WORKERS.map((w) => (

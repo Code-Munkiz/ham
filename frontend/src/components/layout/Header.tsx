@@ -24,7 +24,6 @@ export function Header() {
         'runs': 'HISTORY',
         'activity': 'ACTIVITY STREAM',
         'extensions': 'TOOLS',
-        'droids': 'TEAM_SETUP',
         'settings': 'SETTINGS',
         'advanced': 'SYSTEM'
       };
