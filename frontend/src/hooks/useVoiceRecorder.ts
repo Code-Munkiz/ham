@@ -13,6 +13,29 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 
+/**
+ * `MediaRecorder.abort()` exists in modern browsers but is missing from some `lib.dom` typings,
+ * which breaks `tsc --noEmit` in CI. Prefer abort when present; otherwise stop without surfacing a blob.
+ */
+function safeAbortMediaRecorder(rec: MediaRecorder | null): void {
+  if (!rec) return;
+  const extended = rec as MediaRecorder & { abort?: () => void };
+  if (typeof extended.abort === 'function') {
+    extended.abort();
+    return;
+  }
+  const stream = rec.stream;
+  rec.ondataavailable = null;
+  rec.onstop = () => {
+    stream.getTracks().forEach((track) => track.stop());
+  };
+  try {
+    rec.stop();
+  } catch {
+    stream.getTracks().forEach((track) => track.stop());
+  }
+}
+
 interface RecordingState {
   isRecording: boolean;
   isPaused: boolean;
@@ -135,7 +158,7 @@ export function useVoiceRecorder(props: UseVoiceRecorderProps = {}) {
   // Cancel recording (discard)
   const cancelRecording = useCallback(() => {
     if (mediaRecorderRef.current && state.isRecording) {
-      mediaRecorderRef.current.abort();
+      safeAbortMediaRecorder(mediaRecorderRef.current);
       mediaRecorderRef.current = null;
     }
 
@@ -168,8 +191,7 @@ export function useVoiceRecorder(props: UseVoiceRecorderProps = {}) {
   useEffect(() => {
     return () => {
       if (mediaRecorderRef.current) {
-        mediaRecorderRef.current.onstop = null;
-        mediaRecorderRef.current.abort();
+        safeAbortMediaRecorder(mediaRecorderRef.current);
         mediaRecorderRef.current = null;
       }
 
