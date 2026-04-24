@@ -168,3 +168,72 @@ def test_launch_rejects_invalid_mission_handling(client: TestClient) -> None:
         },
     )
     assert r.status_code == 422
+
+
+def test_post_sync_404_when_no_managed_mission(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    import src.api.cursor_settings as cs
+
+    monkeypatch.setenv("HAM_MANAGED_MISSIONS_DIR", str(tmp_path))
+
+    def fake_get(path: str, *, api_key: str):
+        m = MagicMock()
+        m.status_code = 200
+        m.json = lambda: {"id": "bc_orphan", "status": "RUNNING"}
+        return m
+
+    monkeypatch.setattr(cs, "_cursor_get", fake_get)
+    r = client.post("/api/cursor/agents/bc_orphan/sync")
+    assert r.status_code == 404
+    body = r.json()
+    assert body["detail"]["error"]["code"] == "MANAGED_MISSION_NOT_FOUND"
+
+
+def test_post_sync_returns_managed_mission_json(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    from src.persistence.control_plane_run import utc_now_iso
+    from src.persistence.managed_mission import ManagedMission, ManagedMissionStore, new_mission_registry_id
+
+    import src.api.cursor_settings as cs
+
+    monkeypatch.setenv("HAM_MANAGED_MISSIONS_DIR", str(tmp_path))
+
+    n = utc_now_iso()
+    st = ManagedMissionStore()
+    mid = new_mission_registry_id()
+    m = ManagedMission(
+        mission_registry_id=mid,
+        cursor_agent_id="bc_sync_ok",
+        control_plane_ham_run_id=None,
+        mission_handling="managed",
+        uplink_id=None,
+        repo_key="o/r",
+        mission_lifecycle="open",
+        cursor_status_last_observed="CREATING",
+        status_reason_last_observed="init",
+        created_at=n,
+        updated_at=n,
+        last_server_observed_at=n,
+    )
+    st.save(m)
+
+    def fake_get(path: str, *, api_key: str):
+        assert "/bc_sync_ok" in path
+        mock = MagicMock()
+        mock.status_code = 200
+        mock.json = lambda: {"id": "bc_sync_ok", "status": "FINISHED"}
+        return mock
+
+    monkeypatch.setattr(cs, "_cursor_get", fake_get)
+    r = client.post("/api/cursor/agents/bc_sync_ok/sync")
+    assert r.status_code == 200
+    j = r.json()
+    assert j["kind"] == "managed_mission"
+    assert j["cursor_agent_id"] == "bc_sync_ok"
+    assert j["mission_lifecycle"] in ("succeeded", "open", "failed", "archived")
