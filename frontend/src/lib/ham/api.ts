@@ -131,6 +131,55 @@ export async function fetchHermesHubSnapshot(): Promise<HermesHubSnapshot> {
   return res.json() as Promise<HermesHubSnapshot>;
 }
 
+/** GET /api/hermes-runtime/inventory — read-only Hermes CLI + sanitized config (local/co-located). */
+export interface HermesRuntimeInventory {
+  kind: "ham_hermes_runtime_inventory";
+  mode: string;
+  available: boolean;
+  source: {
+    hermes_binary: string;
+    hermes_home: string;
+    colocated: boolean;
+  };
+  tools: {
+    status: string;
+    summary_text?: string;
+    toolsets: string[];
+    config_toolsets?: string[];
+    warning?: string;
+    raw_redacted: string;
+  };
+  plugins: {
+    status: string;
+    items: Array<{ text: string }>;
+    raw_redacted: string;
+  };
+  mcp: {
+    status: string;
+    servers: Array<{ text?: string; name?: string; transport?: string }>;
+    raw_redacted: string;
+  };
+  config: Record<string, unknown>;
+  skills: {
+    status: string;
+    catalog_count: number;
+    static_catalog: boolean;
+    installed_note?: string;
+  };
+  status: {
+    status_all: { status: string; raw_redacted: string };
+  };
+  warnings: string[];
+}
+
+export async function fetchHermesRuntimeInventory(): Promise<HermesRuntimeInventory> {
+  const res = await hamApiFetch("/api/hermes-runtime/inventory");
+  if (!res.ok) {
+    throw new Error(`hermes-runtime/inventory: HTTP ${res.status}`);
+  }
+  return res.json() as Promise<HermesRuntimeInventory>;
+}
+
 /** GET /api/browser/policy — HAM Playwright policy snapshot (not a remote Hermes service). */
 export interface BrowserRuntimePolicySnapshot {
   runtime_host: string;
@@ -210,6 +259,24 @@ export async function clearSavedCursorApiKey(): Promise<void> {
     const msg = (await readFastApiDetail(res)) ?? `HTTP ${res.status}`;
     throw new Error(msg);
   }
+}
+
+/**
+ * `POST /api/cursor/agents/{id}/sync` — Cursor GET + observe mission; returns `ManagedMission` JSON only.
+ * @throws Error on HTTP error; message includes server detail when available.
+ */
+export async function postCursorAgentSync(agentId: string): Promise<ManagedMissionRow> {
+  const res = await hamApiFetch(`/api/cursor/agents/${encodeURIComponent(agentId)}/sync`, {
+    method: "POST",
+  });
+  if (res.status === 404) {
+    throw new Error("No managed mission for this Cloud Agent. Try after a managed launch is recorded.");
+  }
+  if (!res.ok) {
+    const msg = (await readFastApiDetail(res)) ?? `HTTP ${res.status}`;
+    throw new Error(shortenHamApiErrorMessage(msg));
+  }
+  return res.json() as Promise<ManagedMissionRow>;
 }
 
 /** Proxy `GET /v0/agents/{id}` — Cloud Agent status and metadata. */
@@ -357,6 +424,7 @@ export type ManagedMissionRow = {
   repo_key?: string | null;
   repository_observed?: string | null;
   cursor_status_last_observed?: string | null;
+  status_reason_last_observed?: string | null;
   last_server_observed_at?: string;
   updated_at?: string;
 };
@@ -828,19 +896,47 @@ export interface HamChatRequest {
   max_mode?: boolean;
   /** Server-side operator (projects, agents, runs). */
   enable_operator?: boolean;
-  /** Structured confirm/apply/register/launch (see API `ChatOperatorPayload`). */
-  operator?: {
-    phase?: "apply_settings" | "register_project" | "launch_run" | null;
-    confirmed?: boolean;
-    project_id?: string | null;
-    changes?: Record<string, unknown> | null;
-    base_revision?: string | null;
-    name?: string | null;
-    root?: string | null;
-    description?: string | null;
-    prompt?: string | null;
-    profile_id?: string | null;
-  } | null;
+  /** Structured confirm/apply/register/launch (see API `ChatOperatorPayload` / `src/ham/chat_operator.py`). */
+  operator?: HamChatOperatorPayload | null;
+}
+
+/** Matches server `ChatOperatorPayload` (subset used by the dashboard; extra fields are ignored if unset). */
+export type HamChatOperatorPhase =
+  | "apply_settings"
+  | "register_project"
+  | "launch_run"
+  | "droid_preview"
+  | "droid_launch"
+  | "cursor_agent_preview"
+  | "cursor_agent_launch"
+  | "cursor_agent_status";
+
+export interface HamChatOperatorPayload {
+  phase?: HamChatOperatorPhase | null;
+  confirmed?: boolean;
+  project_id?: string | null;
+  changes?: Record<string, unknown> | null;
+  base_revision?: string | null;
+  name?: string | null;
+  root?: string | null;
+  description?: string | null;
+  prompt?: string | null;
+  profile_id?: string | null;
+  droid_workflow_id?: string | null;
+  droid_user_prompt?: string | null;
+  droid_proposal_digest?: string | null;
+  droid_base_revision?: string | null;
+  cursor_task_prompt?: string | null;
+  cursor_repository?: string | null;
+  cursor_ref?: string | null;
+  cursor_model?: string;
+  cursor_auto_create_pr?: boolean;
+  cursor_branch_name?: string | null;
+  cursor_expected_deliverable?: string | null;
+  cursor_proposal_digest?: string | null;
+  cursor_base_revision?: string | null;
+  cursor_mission_handling?: "direct" | "managed" | null;
+  cursor_agent_id?: string | null;
 }
 
 /** Matches `/chat` workbench header: CHAT | SPLIT | PREVIEW | WAR ROOM */
@@ -866,6 +962,9 @@ export interface HamOperatorResult {
   pending_apply?: Record<string, unknown> | null;
   pending_launch?: Record<string, unknown> | null;
   pending_register?: Record<string, unknown> | null;
+  pending_droid?: Record<string, unknown> | null;
+  pending_cursor_agent?: Record<string, unknown> | null;
+  harness_advisory?: Record<string, unknown> | null;
   data?: Record<string, unknown>;
 }
 
@@ -1242,6 +1341,39 @@ export interface HermesSkillsTargetsResponse {
   warnings: string[];
 }
 
+/** GET /api/hermes-skills/installed — live CLI observation joined to vendored catalog (read-only). */
+export type HermesSkillsInstalledStatus =
+  | "ok"
+  | "remote_only"
+  | "unavailable"
+  | "error"
+  | "parse_degraded";
+
+export type HermesSkillLiveResolution = "linked" | "live_only" | "unknown";
+
+export interface HermesSkillLiveInstallation {
+  name: string;
+  category: string;
+  hermes_source: string;
+  hermes_trust: string;
+  catalog_id: string | null;
+  resolution: HermesSkillLiveResolution;
+}
+
+export interface HermesSkillsInstalledResponse {
+  kind: "hermes_skills_live_overlay";
+  status: HermesSkillsInstalledStatus;
+  cli_source: string;
+  live_count: number;
+  linked_count: number;
+  live_only_count: number;
+  unknown_count: number;
+  catalog_only_count: number;
+  installations: HermesSkillLiveInstallation[];
+  warnings: string[];
+  raw_redacted: string;
+}
+
 export async function fetchHermesSkillsCatalog(): Promise<HermesSkillsCatalogResponse> {
   const res = await hamApiFetch("/api/hermes-skills/catalog");
   if (!res.ok) {
@@ -1274,6 +1406,14 @@ export async function fetchHermesSkillsTargets(): Promise<HermesSkillsTargetsRes
     throw new Error(`hermes-skills/targets: HTTP ${res.status}`);
   }
   return res.json() as Promise<HermesSkillsTargetsResponse>;
+}
+
+export async function fetchHermesSkillsInstalled(): Promise<HermesSkillsInstalledResponse> {
+  const res = await hamApiFetch("/api/hermes-skills/installed");
+  if (!res.ok) {
+    throw new Error(`hermes-skills/installed: HTTP ${res.status}`);
+  }
+  return res.json() as Promise<HermesSkillsInstalledResponse>;
 }
 
 /** Phase 2a — Hermes runtime skill install (shared target only; not Cursor operator skills). */
@@ -1366,6 +1506,133 @@ export async function postHermesSkillsInstallApply(
     throw new Error(msg || `hermes-skills install apply failed (HTTP ${res.status})`);
   }
   return res.json() as Promise<HermesSkillsInstallApplyResponse>;
+}
+
+// --- Capability Directory (Phase 1 — read-only; no apply from UI) ---
+
+export interface CapabilityDirectoryProvenance {
+  source_kind: string;
+  registry_revision?: string;
+  note?: string;
+  [key: string]: unknown;
+}
+
+export interface CapabilityDirectorySurface {
+  route: string;
+  label: string;
+  api?: string;
+}
+
+export interface CapabilityDirectoryRecord {
+  id: string;
+  schema_version: string;
+  kind: "atomic_capability" | "bundle" | "profile_template";
+  display_name: string;
+  summary: string;
+  description: string;
+  trust_tier: string;
+  provenance: CapabilityDirectoryProvenance;
+  version: string;
+  required_backends: string[];
+  capabilities: string[];
+  skills: string[];
+  tools_policy: Record<string, unknown>;
+  mcp_policy: Record<string, unknown>;
+  model_policy: Record<string, unknown>;
+  memory_policy: Record<string, unknown>;
+  surfaces: CapabilityDirectorySurface[];
+  mutability: string;
+  preview_available: boolean;
+  apply_available: boolean;
+  risks: string[];
+  evidence_expectations: string[];
+  tags: string[];
+}
+
+export interface CapabilityDirectoryIndexResponse {
+  kind: "capability_directory_index";
+  schema_version: string;
+  registry_id: string;
+  mutation_policy: string;
+  apply_available_globally: boolean;
+  no_execution_notice?: string;
+  counts: {
+    capabilities: number;
+    bundles: number;
+    profile_templates: number;
+  };
+  trust_tier_counts: Record<string, number>;
+  endpoints: Record<string, string>;
+  registry_note?: string | null;
+}
+
+export interface CapabilityDirectoryCapabilitiesResponse {
+  kind: "capability_directory_capabilities";
+  schema_version: string;
+  registry_id: string;
+  mutation_policy: string;
+  apply_available_globally: boolean;
+  count: number;
+  capabilities: CapabilityDirectoryRecord[];
+}
+
+export interface CapabilityDirectoryBundlesResponse {
+  kind: "capability_directory_bundles";
+  schema_version: string;
+  registry_id: string;
+  mutation_policy: string;
+  apply_available_globally: boolean;
+  count: number;
+  bundles: CapabilityDirectoryRecord[];
+}
+
+export interface CapabilityDirectoryBundleResponse {
+  kind: "capability_directory_bundle";
+  schema_version: string;
+  registry_id: string;
+  mutation_policy: string;
+  apply_available_globally: boolean;
+  no_execution_notice?: string;
+  bundle: CapabilityDirectoryRecord;
+}
+
+export async function fetchCapabilityDirectoryIndex(): Promise<CapabilityDirectoryIndexResponse> {
+  const res = await hamApiFetch("/api/capability-directory");
+  if (!res.ok) {
+    throw new Error(`capability-directory: HTTP ${res.status}`);
+  }
+  return res.json() as Promise<CapabilityDirectoryIndexResponse>;
+}
+
+export async function fetchCapabilityDirectoryCapabilities(): Promise<CapabilityDirectoryCapabilitiesResponse> {
+  const res = await hamApiFetch("/api/capability-directory/capabilities");
+  if (!res.ok) {
+    throw new Error(`capability-directory/capabilities: HTTP ${res.status}`);
+  }
+  return res.json() as Promise<CapabilityDirectoryCapabilitiesResponse>;
+}
+
+export async function fetchCapabilityDirectoryBundles(): Promise<CapabilityDirectoryBundlesResponse> {
+  const res = await hamApiFetch("/api/capability-directory/bundles");
+  if (!res.ok) {
+    throw new Error(`capability-directory/bundles: HTTP ${res.status}`);
+  }
+  return res.json() as Promise<CapabilityDirectoryBundlesResponse>;
+}
+
+export async function fetchCapabilityDirectoryBundle(
+  bundleId: string,
+): Promise<CapabilityDirectoryBundleResponse> {
+  const res = await hamApiFetch(
+    `/api/capability-directory/bundles/${encodeURIComponent(bundleId)}`,
+  );
+  if (!res.ok) {
+    const msg = await detailMessageFromResponse(res);
+    throw new Error(
+      msg || `capability-directory/bundles/${bundleId}: HTTP ${res.status}`,
+    );
+  }
+  return res.json() as Promise<CapabilityDirectoryBundleResponse>;
 }
 
 // --- Allowlisted project settings (v1 control plane) ---

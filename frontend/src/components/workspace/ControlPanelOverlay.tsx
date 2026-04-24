@@ -57,9 +57,6 @@ import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { Agent } from "@/lib/ham/types";
 import { useWorkspace } from "@/lib/ham/WorkspaceContext";
-import { useAgent } from "@/lib/ham/AgentContext";
-
-import { DroidConfigPanel } from "./DroidConfigPanel";
 
 interface ControlPanelOverlayProps {
   isOpen: boolean;
@@ -69,7 +66,7 @@ interface ControlPanelOverlayProps {
   selectedAgent: Agent;
 }
 
-type SectionId = "general" | "droids" | "activity";
+type SectionId = "general" | "activity";
 
 export function ControlPanelOverlay({
   isOpen,
@@ -80,7 +77,6 @@ export function ControlPanelOverlay({
 }: ControlPanelOverlayProps) {
   const navigate = useNavigate();
   const { workspaceName, branch } = useWorkspace();
-  const { agents, selectedAgentId, setSelectedAgentId } = useAgent();
   const [activeSegment, setActiveSegment] =
     React.useState<SectionId>("general");
   const [searchQuery, setSearchQuery] = React.useState("");
@@ -93,7 +89,6 @@ export function ControlPanelOverlay({
       items: [
         { id: "general", label: "Chat", icon: MessageSquare },
         { id: "activity", label: "Activity", icon: History },
-        { id: "droids", label: "Droids", icon: Cpu },
       ],
     },
   ];
@@ -326,15 +321,10 @@ export function ControlPanelOverlay({
                   <div className="space-y-1">
                     {[
                       {
-                        label: "Active Worker",
-                        sub: "Primary agent interface assigned to this session",
+                        label: "Chat context",
+                        sub: "Workbench selection for this session",
                         value: selectedAgent.name,
                         status: "Connected",
-                      },
-                      {
-                        label: "Active Team",
-                        sub: "Current collaborative squad mapping",
-                        value: "Alpha Squad",
                       },
                       {
                         label: "Quality Review",
@@ -524,205 +514,6 @@ export function ControlPanelOverlay({
               </div>
             )}
 
-            {/* 2. DROIDS */}
-            {activeSegment === "droids" && (
-              <div className="flex gap-8 h-full min-h-[600px] animate-in fade-in slide-in-from-bottom-2 duration-500 overflow-hidden">
-                <div className="flex-1 space-y-10 overflow-y-auto pr-2 scrollbar-hide pb-20">
-                  <div className="flex items-center justify-between sticky top-0 bg-[#080808]/80 backdrop-blur-md z-10 py-4 -mt-4">
-                    <div className="space-y-1">
-                      <h2 className="text-2xl font-black text-white uppercase tracking-tight italic">
-                        Workforce configuration
-                      </h2>
-                      <p className="text-[11px] font-bold text-white/20 uppercase tracking-widest italic leading-relaxed">
-                        Manage your active droids, roles, and capability mappings.
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <button className="flex items-center gap-2 px-5 py-2.5 bg-white/5 border border-white/10 hover:border-white/20 text-[10px] font-black text-white/60 hover:text-white uppercase tracking-widest transition-all rounded-lg">
-                        <CloudDownload className="h-4 w-4" /> Import Template
-                      </button>
-                      <button className="flex items-center gap-2 px-6 py-3 bg-[#FF6B00] text-black text-[11px] font-black uppercase tracking-widest hover:shadow-[0_0_25px_rgba(255,107,0,0.3)] rounded-lg transition-all group">
-                        <Plus className="h-4 w-4 group-hover:rotate-90 transition-transform" />{" "}
-                        Add Droid
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="bg-[#0c0c0c] border border-white/5 rounded-2xl overflow-hidden shadow-2xl">
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left border-collapse">
-                        <thead>
-                          <tr className="border-b border-white/5 bg-black/40">
-                            <th className="px-6 py-4 text-[9px] font-black text-white/20 uppercase tracking-[0.3em]">
-                              Identity_Kernel
-                            </th>
-                            <th className="px-6 py-4 text-[9px] font-black text-white/20 uppercase tracking-[0.3em]">
-                              Runtime_Mapping
-                            </th>
-                            <th className="px-6 py-4 text-[9px] font-black text-white/20 uppercase tracking-[0.3em]">
-                              State
-                            </th>
-                            <th className="px-6 py-4 text-right text-[9px] font-black text-white/20 uppercase tracking-[0.3em]">
-                              Controls
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-white/5">
-                          {agents.map((agent) => (
-                            <tr
-                              key={agent.id}
-                              onClick={() => setSelectedAgentId(agent.id)}
-                              className={cn(
-                                "group hover:bg-white/[0.015] transition-colors cursor-pointer",
-                                agent.id === selectedAgentId
-                                  ? "bg-[#FF6B00]/[0.05] border-l-2 border-l-[#FF6B00]"
-                                  : "border-l-2 border-l-transparent",
-                              )}
-                            >
-                              <td className="px-6 py-6">
-                                <div className="flex items-center gap-4">
-                                  <div className="h-10 w-10 border border-white/10 rounded-xl overflow-hidden shrink-0 group-hover:border-[#FF6B00]/40 transition-colors bg-black">
-                                    <img
-                                      src={`https://picsum.photos/seed/${agent.name}/100/100`}
-                                      className="w-full h-full object-cover opacity-60 group-hover:opacity-90 transition-opacity"
-                                      referrerPolicy="no-referrer"
-                                      alt=""
-                                    />
-                                  </div>
-                                  <div className="flex flex-col">
-                                    <span className="text-[12px] font-black text-white uppercase italic tracking-widest flex items-center gap-2">
-                                      {agent.name}
-                                      {agent.id === selectedAgentId && (
-                                        <div className="h-1 w-1 rounded-full bg-[#FF6B00]" />
-                                      )}
-                                    </span>
-                                    <span className="text-[9px] font-bold text-white/20 uppercase tracking-widest italic mt-0.5">
-                                      {agent.role}
-                                    </span>
-                                  </div>
-                                </div>
-                              </td>
-                              <td className="px-6 py-6">
-                                <div className="space-y-3">
-                                  <div className="flex items-center gap-3">
-                                    <Brain className="h-3 w-3 text-[#FF6B00]" />
-                                    <span className="text-[10px] font-bold text-white/60 uppercase tracking-widest">
-                                      {agent.model}
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center gap-3">
-                                    <ToyBrick className="h-3 w-3 text-white/20" />
-                                    <span className="text-[10px] font-bold text-white/30 uppercase tracking-widest italic">
-                                      {agent.assignedTools?.length || 0}{" "}
-                                      Integrated Chips
-                                    </span>
-                                  </div>
-                                </div>
-                              </td>
-                              <td className="px-6 py-6">
-                                <div className="flex items-center gap-2.5">
-                                  <div
-                                    className={cn(
-                                      "h-1.5 w-1.5 rounded-full",
-                                      agent.keyConnected
-                                        ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]"
-                                        : "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.4)]",
-                                    )}
-                                  />
-                                  <div className="flex flex-col">
-                                    <span
-                                      className={cn(
-                                        "text-[9px] font-black uppercase tracking-widest leading-none",
-                                        agent.keyConnected
-                                          ? "text-green-500/80"
-                                          : "text-red-500/80",
-                                      )}
-                                    >
-                                      {agent.keyConnected ? "Ready" : "Key Error"}
-                                    </span>
-                                    <span className="text-[8px] font-bold text-white/10 uppercase tracking-widest mt-1">
-                                      Provider_Node_A
-                                    </span>
-                                  </div>
-                                </div>
-                              </td>
-                              <td className="px-6 py-6">
-                                <div className="flex items-center justify-end gap-1 opacity-20 group-hover:opacity-100 transition-opacity">
-                                  <button
-                                    title="Set Active"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setSelectedAgentId(agent.id);
-                                    }}
-                                    className={cn(
-                                      "p-2 rounded-lg transition-all",
-                                      agent.id === selectedAgentId
-                                        ? "text-[#FF6B00] bg-[#FF6B00]/10"
-                                        : "text-white/40 hover:text-[#FF6B00] hover:bg-white/5",
-                                    )}
-                                  >
-                                    <Check className="h-4 w-4" />
-                                  </button>
-                                  <button
-                                    title="Edit Details"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setSelectedAgentId(agent.id);
-                                    }}
-                                    className="p-2 text-white/40 hover:text-white hover:bg-white/5 rounded-lg transition-all"
-                                  >
-                                    <Edit2 className="h-4 w-4" />
-                                  </button>
-                                  <button
-                                    title="Duplicate"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      // Logic handled in row selection or separate handler if available
-                                    }}
-                                    className="p-2 text-white/40 hover:text-white hover:bg-white/5 rounded-lg transition-all"
-                                  >
-                                    <Copy className="h-4 w-4" />
-                                  </button>
-                                  <div className="w-px h-4 bg-white/5 mx-1" />
-                                  <button
-                                    title="Remove"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                    }}
-                                    className="p-2 text-white/40 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between px-4">
-                    <div className="flex items-center gap-6">
-                      <button className="text-[10px] font-black text-[#FF6B00] uppercase tracking-widest hover:underline underline-offset-4 transition-all">
-                        Save Team Preset
-                      </button>
-                      <button className="text-[10px] font-black text-white/20 uppercase tracking-widest hover:text-white transition-all">
-                        Bulk Actions
-                      </button>
-                    </div>
-                    <span className="text-[9px] font-bold text-white/10 uppercase tracking-widest italic">
-                      Syncing with remote workforce register...
-                    </span>
-                  </div>
-                </div>
-
-                {/* Droid Details Right Panel */}
-                <div className="w-[400px] shrink-0 bg-[#0c0c0c] border border-white/5 rounded-3xl overflow-hidden flex flex-col shadow-2xl animate-in fade-in slide-in-from-right-4 duration-500">
-                  <DroidConfigPanel />
-                </div>
-              </div>
-            )}
-
             {/* REMAINING PLACEHOLDERS */}
             {["activity"].includes(activeSegment) && (
               <div className="space-y-12 animate-in fade-in slide-in-from-bottom-2 duration-500 max-w-4xl">
@@ -780,10 +571,9 @@ export function ControlPanelOverlay({
                       Operational Honesty Protocol
                     </h4>
                     <p className="text-[13px] font-bold text-white/30 uppercase tracking-widest leading-relaxed">
-                      HAM preserves the workbench layout above all else.
-                      Sections like **Storage**, **Persona**, and **Activity
-                      history** are being migrated to the new industrial
-                      backend.
+                      HAM preserves the workbench layout above all else. Some
+                      operational surfaces here are placeholders until they are
+                      wired to live APIs.
                     </p>
                   </div>
                   <div className="absolute top-0 right-0 h-full w-48 bg-gradient-to-l from-[#FF6B00]/10 to-transparent pointer-events-none" />

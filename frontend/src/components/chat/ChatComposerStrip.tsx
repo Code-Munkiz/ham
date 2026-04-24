@@ -12,7 +12,6 @@ import {
   Search,
   Sparkles,
   User,
-  Wrench,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -99,9 +98,17 @@ export interface ChatComposerStripProps {
   onWorker: (id: string) => void;
   uplinkId: UplinkId;
   onUplinkId: (id: UplinkId) => void;
-  toolsCount: number;
   /** When uplink is Cloud Agent, opens mission attach / launch modal. */
   onOpenCloudAgentLaunch?: () => void;
+  /**
+   * Preview-only: runs `cursor_agent_preview` with the current composer text (parent owns task + project).
+   * No NL routing — only this explicit control.
+   */
+  onCloudAgentPreview?: () => void;
+  /** True while sending on in-flight, missing project, or empty main input. */
+  cloudAgentPreviewDisabled?: boolean;
+  /** Full tooltip/title for the Preview Agent control (includes disabled reasons). */
+  cloudAgentPreviewTitle?: string;
   catalog: ModelCatalogPayload | null;
   catalogLoading: boolean;
 }
@@ -122,8 +129,10 @@ export function ChatComposerStrip({
   onWorker,
   uplinkId,
   onUplinkId,
-  toolsCount,
   onOpenCloudAgentLaunch,
+  onCloudAgentPreview,
+  cloudAgentPreviewDisabled = true,
+  cloudAgentPreviewTitle,
   catalog,
   catalogLoading,
 }: ChatComposerStripProps) {
@@ -250,10 +259,23 @@ export function ChatComposerStrip({
             modelOpen && "border-[#FF6B00]/50",
           )}
         >
-          <span className="flex items-center gap-2 min-w-0">
+            <span className="flex items-center gap-2 min-w-0">
             <Box className="h-3.5 w-3.5 text-[#FF6B00] shrink-0" />
             {!selected ? (
-              <span className="text-[10px] font-black uppercase tracking-widest text-white/35">MODEL</span>
+              catalog?.gateway_mode === "http" ? (
+                <span className="flex min-w-0 flex-col leading-tight">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-white/80">
+                    Hermes chat
+                  </span>
+                  <span className="truncate text-[8px] font-bold uppercase tracking-wider text-white/35">
+                    {catalog.http_chat_model_primary
+                      ? catalog.http_chat_model_primary
+                      : "Server default"}
+                  </span>
+                </span>
+              ) : (
+                <span className="text-[10px] font-black uppercase tracking-widest text-white/35">MODEL</span>
+              )
             ) : (
               <>
                 <span className="text-[10px] font-black uppercase tracking-widest text-white truncate">{selected.label}</span>
@@ -269,6 +291,24 @@ export function ChatComposerStrip({
         </button>
         {modelOpen && (
           <div className="absolute left-0 bottom-full mb-1 z-[200] flex w-[min(100vw-2rem,22rem)] max-h-[min(85vh,520px)] flex-col rounded-lg border border-white/10 bg-[#0a0a0a] shadow-2xl overflow-hidden">
+            {catalog?.gateway_mode === "http" ? (
+              <div className="shrink-0 border-b border-white/10 bg-black/40 px-3 py-2 text-[8px] font-bold uppercase leading-snug tracking-wide text-white/50">
+                Dashboard chat uses{" "}
+                <span className="font-mono text-[9px] normal-case text-emerald-400/90">
+                  {catalog.http_chat_model_primary ?? "Hermes"}
+                </span>
+                {catalog.http_chat_model_fallback ? (
+                  <>
+                    {" "}
+                    · fallback{" "}
+                    <span className="font-mono text-[9px] normal-case text-emerald-400/90">
+                      {catalog.http_chat_model_fallback}
+                    </span>
+                  </>
+                ) : null}
+                . <span className="text-amber-500/80">Cursor / Opus rows = Cloud Agents only.</span>
+              </div>
+            ) : null}
             <div className="shrink-0 space-y-2 border-b border-white/5 p-2">
               <div className="flex items-center gap-2 rounded-md border border-white/10 bg-black/50 px-2 py-1.5">
                 <Search className="h-3.5 w-3.5 shrink-0 text-white/25" />
@@ -420,7 +460,7 @@ export function ChatComposerStrip({
         </button>
         {workerOpen && (
           <div className="absolute left-0 bottom-full mb-1 z-50 w-72 rounded-lg border border-white/10 bg-[#0a0a0a] shadow-2xl py-1 max-h-64 overflow-y-auto">
-            <div className="px-3 py-1.5 text-[8px] font-black text-white/25 uppercase tracking-[0.25em]">Active worker workforce</div>
+            <div className="px-3 py-1.5 text-[8px] font-black text-white/25 uppercase tracking-[0.25em]">Chat mode</div>
             {WORKERS.map((w) => (
               <button
                 key={w.id}
@@ -497,6 +537,23 @@ export function ChatComposerStrip({
         )}
       </div>
 
+      {onCloudAgentPreview ? (
+        <button
+          type="button"
+          disabled={cloudAgentPreviewDisabled}
+          onClick={() => onCloudAgentPreview()}
+          title={cloudAgentPreviewTitle ?? "Builds a Cloud Agent preview digest; does not launch."}
+          aria-label={cloudAgentPreviewTitle ?? "Preview Agent — builds digest only, does not launch"}
+          className="inline-flex flex-col items-center justify-center gap-0 min-h-8 px-2 rounded-md border border-cyan-500/40 bg-transparent text-cyan-300 shrink-0 hover:bg-cyan-500/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          <Radio className="h-3 w-3 shrink-0" aria-hidden />
+          <span className="text-[7px] font-black uppercase tracking-tight leading-none text-center">
+            Preview
+            <span className="block">Agent</span>
+          </span>
+        </button>
+      ) : null}
+
       {uplinkId === "cloud_agent" && onOpenCloudAgentLaunch ? (
         <button
           type="button"
@@ -506,12 +563,7 @@ export function ChatComposerStrip({
           <Rocket className="h-3 w-3" />
           <span className="text-[8px] font-black uppercase tracking-widest">Launch</span>
         </button>
-      ) : (
-        <div className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-white/10 bg-white/[0.02] text-white/35 shrink-0">
-          <Wrench className="h-3 w-3" />
-          <span className="text-[8px] font-black uppercase tracking-widest">{toolsCount} tools</span>
-        </div>
-      )}
+      ) : null}
     </div>
   );
 }

@@ -319,8 +319,8 @@ export default function AgentBuilder() {
               Agent <span className="text-[#FF6B00] not-italic">profiles</span>
             </h1>
             <p className="text-[10px] font-bold text-white/35 uppercase tracking-widest max-w-2xl leading-relaxed">
-              Full-width setup (like the droid panel, without the narrow sidebar). The primary profile’s
-              avatar appears in Chat. Skills stay catalog ids; chat uses them as context-only guidance.
+              Full-width editor for HAM agent profiles. The primary profile’s avatar appears in Chat.
+              Skills stay catalog ids; chat uses them as context-only guidance.
             </p>
           </div>
           <div className="flex flex-wrap gap-2 shrink-0">

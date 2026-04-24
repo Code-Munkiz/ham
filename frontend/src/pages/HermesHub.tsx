@@ -10,6 +10,7 @@ import {
   ArrowRight,
   BookOpen,
   Info,
+  Layers,
   Orbit,
   Radio,
   Shield,
@@ -18,8 +19,12 @@ import { cn } from "@/lib/utils";
 import {
   fetchBrowserRuntimePolicy,
   fetchHermesHubSnapshot,
+  fetchHermesRuntimeInventory,
+  fetchHermesSkillsInstalled,
   type BrowserRuntimePolicySnapshot,
   type HermesHubSnapshot,
+  type HermesRuntimeInventory,
+  type HermesSkillsInstalledResponse,
 } from "@/lib/ham/api";
 
 export default function HermesHub() {
@@ -29,6 +34,10 @@ export default function HermesHub() {
   const [browserPolicy, setBrowserPolicy] = React.useState<BrowserRuntimePolicySnapshot | null>(null);
   const [browserPolicyErr, setBrowserPolicyErr] = React.useState<string | null>(null);
   const [browserPolicyLoading, setBrowserPolicyLoading] = React.useState(true);
+  const [inv, setInv] = React.useState<HermesRuntimeInventory | null>(null);
+  const [invErr, setInvErr] = React.useState<string | null>(null);
+  const [invLoading, setInvLoading] = React.useState(true);
+  const [skillsLive, setSkillsLive] = React.useState<HermesSkillsInstalledResponse | null>(null);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -76,7 +85,58 @@ export default function HermesHub() {
     };
   }, []);
 
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setInvLoading(true);
+      setInvErr(null);
+      try {
+        const data = await fetchHermesRuntimeInventory();
+        if (!cancelled) setInv(data);
+      } catch (e) {
+        if (!cancelled) {
+          setInvErr(e instanceof Error ? e.message : "Failed to load Hermes inventory");
+          setInv(null);
+        }
+      } finally {
+        if (!cancelled) setInvLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await fetchHermesSkillsInstalled();
+        if (!cancelled) setSkillsLive(data);
+      } catch {
+        if (!cancelled) setSkillsLive(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const caps = snap?.skills_capabilities;
+
+  function cliTruth(invIn: HermesRuntimeInventory, st: string): string {
+    if (!invIn.available) return "Unavailable";
+    if (st === "ok") return "Live local";
+    if (st === "requires_tty") return "Requires TTY";
+    if (st === "error") return "Error";
+    return "Unavailable";
+  }
+
+  function configTruth(st: string): string {
+    if (st === "ok") return "Config-backed";
+    if (st === "missing") return "Unavailable";
+    return "Error";
+  }
 
   return (
     <div className="h-full overflow-auto bg-[#000000] text-white/90">
@@ -167,6 +227,198 @@ export default function HermesHub() {
                 </Link>{" "}
                 uses the API; raw catalog: <span className="font-mono">GET /api/models</span>.
               </p>
+            </section>
+
+            <section className="rounded-xl border border-white/10 bg-white/[0.03] p-6 space-y-4">
+              <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-white/45">
+                <Layers className="h-4 w-4 text-[#FF6B00]" />
+                Hermes Runtime Inventory
+              </div>
+              <p className="text-[11px] text-white/50 leading-relaxed">
+                Read-only snapshot from the Hermes CLI (allowlisted commands) and sanitized{" "}
+                <span className="font-mono text-white/60">config.yaml</span> fields. Hermes owns
+                capability truth; HAM does not enable tools, plugins, or MCP from here.
+              </p>
+              {invLoading && (
+                <p className="text-xs font-bold uppercase tracking-widest text-white/40">Loading…</p>
+              )}
+              {invErr && (
+                <div
+                  role="alert"
+                  className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-100"
+                >
+                  {invErr}
+                </div>
+              )}
+              {inv && !invLoading && (
+                <div className="space-y-5 text-[11px] text-white/65">
+                  <div className="flex flex-wrap gap-2 items-center">
+                    <span
+                      className={cn(
+                        "text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded border",
+                        inv.available
+                          ? "border-emerald-500/40 text-emerald-200/90"
+                          : "border-white/20 text-white/50",
+                      )}
+                    >
+                      {inv.available ? "Inventory available" : "Degraded / remote"}
+                    </span>
+                    {inv.source.hermes_binary ? (
+                      <span className="text-[10px] font-mono text-white/45 truncate max-w-[220px]">
+                        CLI: {inv.source.hermes_binary}
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-black uppercase tracking-widest text-white/40">
+                        Hermes CLI not found
+                      </span>
+                    )}
+                  </div>
+                  {(inv.warnings?.length ?? 0) > 0 && (
+                    <ul className="list-disc pl-5 space-y-1 text-amber-100/90">
+                      {inv.warnings.map((w) => (
+                        <li key={w}>{w}</li>
+                      ))}
+                    </ul>
+                  )}
+
+                  <div className="space-y-1">
+                    <div className="text-[10px] font-black uppercase tracking-widest text-white/40">
+                      Tools &amp; toolsets —{" "}
+                      <span className="text-white/55">{cliTruth(inv, inv.tools.status)}</span>
+                    </div>
+                    {inv.tools.warning ? (
+                      <p className="text-[11px] text-amber-100/85">{inv.tools.warning}</p>
+                    ) : null}
+                    {(inv.tools.config_toolsets?.length ?? 0) > 0 ? (
+                      <p className="text-[10px] text-white/45">
+                        Config-backed toolsets (names only):{" "}
+                        {inv.tools.config_toolsets!.slice(0, 12).join(", ")}
+                        {inv.tools.config_toolsets!.length > 12
+                          ? ` +${inv.tools.config_toolsets!.length - 12} more`
+                          : ""}
+                      </p>
+                    ) : null}
+                    {inv.tools.toolsets.length > 0 ? (
+                      <ul className="list-disc pl-5 font-mono text-[10px] text-white/55">
+                        {inv.tools.toolsets.slice(0, 12).map((t) => (
+                          <li key={t}>{t}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-white/45 italic">
+                        {inv.tools.summary_text || "(no toolsets parsed; see raw output)"}
+                      </p>
+                    )}
+                    {inv.tools.raw_redacted ? (
+                      <details className="text-[10px] text-white/40">
+                        <summary className="cursor-pointer text-[#FF6B00]/80">Raw (redacted)</summary>
+                        <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-all text-white/45">
+                          {inv.tools.raw_redacted.slice(0, 4000)}
+                        </pre>
+                      </details>
+                    ) : null}
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="text-[10px] font-black uppercase tracking-widest text-white/40">
+                      Plugins — <span className="text-white/55">{cliTruth(inv, inv.plugins.status)}</span>
+                    </div>
+                    {inv.plugins.items.length > 0 ? (
+                      <ul className="list-disc pl-5 space-y-0.5">
+                        {inv.plugins.items.slice(0, 20).map((p, idx) => (
+                          <li key={`${idx}-${p.text.slice(0, 48)}`} className="font-mono text-[10px]">
+                            {p.text}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-white/45 italic">(empty)</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="text-[10px] font-black uppercase tracking-widest text-white/40">
+                      MCP servers — <span className="text-white/55">{cliTruth(inv, inv.mcp.status)}</span>
+                    </div>
+                    {inv.mcp.servers.length > 0 ? (
+                      <ul className="list-disc pl-5 space-y-0.5">
+                        {inv.mcp.servers.slice(0, 20).map((s, i) => (
+                          <li key={i} className="font-mono text-[10px]">
+                            {s.text ??
+                              `${s.name ?? "?"} (${s.transport ?? "unknown"})`}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-white/45 italic">(empty)</p>
+                    )}
+                    {Array.isArray(inv.config.mcp_servers) && inv.config.mcp_servers.length > 0 ? (
+                      <p className="text-[10px] text-white/45">
+                        Config-backed MCP entries: {inv.config.mcp_servers.length} (names / transport
+                        only; env and headers not shown).
+                      </p>
+                    ) : null}
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="text-[10px] font-black uppercase tracking-widest text-white/40">
+                      Skills — <span className="text-white/55">Static catalog</span>
+                    </div>
+                    <p>
+                      Vendored catalog entries:{" "}
+                      <span className="text-white/80 font-semibold">{inv.skills.catalog_count}</span>
+                    </p>
+                    {inv.skills.installed_note ? (
+                      <p className="text-white/55">{inv.skills.installed_note}</p>
+                    ) : null}
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="text-[10px] font-black uppercase tracking-widest text-white/40">
+                      Memory / context —{" "}
+                      <span className="text-white/55">
+                        {configTruth(String(inv.config.status ?? "missing"))}
+                      </span>
+                    </div>
+                    <p>
+                      Memory provider:{" "}
+                      <span className="font-mono text-white/55">
+                        {(inv.config.memory_provider as string) || "—"}
+                      </span>
+                    </p>
+                    <p>
+                      Context engine:{" "}
+                      <span className="font-mono text-white/55">
+                        {(inv.config.context_engine as string) || "—"}
+                      </span>
+                    </p>
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="text-[10px] font-black uppercase tracking-widest text-white/40">
+                      Status —{" "}
+                      <span className="text-white/55">
+                        {!inv.available
+                          ? "Unavailable"
+                          : inv.status.status_all.status === "ok"
+                            ? "Live local"
+                            : "Error"}
+                      </span>
+                    </div>
+                    <p className="text-white/45">
+                      <span className="font-mono">hermes status --all</span>: {inv.status.status_all.status}
+                    </p>
+                    {inv.status.status_all.raw_redacted ? (
+                      <details className="text-[10px] text-white/40">
+                        <summary className="cursor-pointer text-[#FF6B00]/80">Raw (redacted)</summary>
+                        <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-all text-white/45">
+                          {(inv.status.status_all.raw_redacted || "").slice(0, 4000)}
+                        </pre>
+                      </details>
+                    ) : null}
+                  </div>
+                </div>
+              )}
             </section>
 
             <section className="rounded-xl border border-white/10 bg-white/[0.03] p-6 space-y-4">
@@ -335,6 +587,22 @@ export default function HermesHub() {
                   )}
                 </>
               )}
+              {skillsLive ? (
+                <p className="text-[11px] text-white/50 leading-relaxed">
+                  <span className="text-white/40 font-black uppercase tracking-wider text-[10px]">
+                    Live skills overlay
+                  </span>
+                  : status <span className="font-mono text-white/65">{skillsLive.status}</span> · live{" "}
+                  {skillsLive.live_count} · linked {skillsLive.linked_count} · catalog-only{" "}
+                  {skillsLive.catalog_only_count}
+                  {skillsLive.live_only_count > 0 ? (
+                    <>
+                      {" "}
+                      · <span className="text-amber-200/90">{skillsLive.live_only_count} live-only</span>
+                    </>
+                  ) : null}
+                </p>
+              ) : null}
               <Link
                 to="/skills"
                 className="inline-flex items-center gap-2 text-sm font-bold text-[#FF6B00] hover:underline"

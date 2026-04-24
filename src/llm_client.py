@@ -21,10 +21,10 @@ def get_openrouter_base_url() -> str:
 
 
 def get_default_model() -> str:
-    """Raw model id from env (OpenRouter slug, e.g. openai/gpt-4o-mini)."""
+    """Raw model id from env (OpenRouter slug, e.g. minimax/minimax-m2.5:free)."""
     # Default must be a model that stays routable on OpenRouter; older Claude
     # slugs often 404 when renamed/retired.
-    return os.getenv("DEFAULT_MODEL", "openai/gpt-4o-mini")
+    return os.getenv("DEFAULT_MODEL", "minimax/minimax-m2.5:free")
 
 
 def resolve_openrouter_model_name() -> str:
@@ -70,7 +70,7 @@ def resolve_openrouter_model_name_for_chat() -> str:
     """
     Model for dashboard/API chat when using OpenRouter.
 
-    Uses `HERMES_GATEWAY_MODEL` if set (OpenRouter slug, e.g. openai/gpt-4o-mini),
+    Uses `HERMES_GATEWAY_MODEL` if set (OpenRouter slug, e.g. minimax/minimax-m2.5:free),
     otherwise `DEFAULT_MODEL` via `resolve_openrouter_model_name()`.
     """
     override = (os.environ.get("HERMES_GATEWAY_MODEL") or "").strip()
@@ -92,7 +92,7 @@ def complete_chat_messages_openrouter(
     Requires ``OPENROUTER_API_KEY``. Uses ``OPENROUTER_API_URL`` (default OpenRouter v1),
     optional ``OPENROUTER_HTTP_REFERER`` / ``OPENROUTER_APP_TITLE`` headers.
 
-    ``model_override`` must be a LiteLLM-ready id (e.g. ``openrouter/openai/gpt-4o-mini``).
+    ``model_override`` must be a LiteLLM-ready id (e.g. ``openrouter/minimax/minimax-m2.5:free``).
     """
     return "".join(
         stream_chat_messages_openrouter(messages, model_override=model_override),

@@ -4,6 +4,7 @@ from __future__ import annotations
 import pytest
 
 from src.api import models_catalog as mc
+from src.llm_client import get_default_model, resolve_openrouter_model_name_for_chat
 
 
 def test_resolve_none_uses_default() -> None:
@@ -90,3 +91,30 @@ def test_build_catalog_http_mode_missing_base_url_not_ready(monkeypatch) -> None
     assert payload["gateway_mode"] == "http"
     assert payload.get("http_chat_ready") is False
     assert payload.get("dashboard_chat_ready") is False
+
+
+def test_get_default_model_fallback_when_unset(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("DEFAULT_MODEL", raising=False)
+    assert get_default_model() == "minimax/minimax-m2.5:free"
+
+
+def test_auto_tier_tracks_get_default_model_not_gateway_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    """tier:auto uses get_default_model() only; HERMES_GATEWAY_MODEL must not change Auto row."""
+    monkeypatch.setenv("HERMES_GATEWAY_MODE", "openrouter")
+    monkeypatch.setenv("OPENROUTER_API_KEY", _FAKE_OR_KEY)
+    monkeypatch.delenv("HAM_CURSOR_CREDENTIALS_FILE", raising=False)
+    monkeypatch.delenv("CURSOR_API_KEY", raising=False)
+    monkeypatch.delenv("DEFAULT_MODEL", raising=False)
+    monkeypatch.setenv("HERMES_GATEWAY_MODEL", "anthropic/claude-3-haiku")
+    payload = mc.build_catalog_payload()
+    auto = next(x for x in payload["items"] if x["id"] == "tier:auto")
+    default_row = next(x for x in payload["items"] if x["id"] == "openrouter:default")
+    assert auto["openrouter_model"] == f"openrouter/{get_default_model()}"
+    assert auto["openrouter_model"] == "openrouter/minimax/minimax-m2.5:free"
+    assert default_row["openrouter_model"] == "openrouter/anthropic/claude-3-haiku"
+
+
+def test_hermes_gateway_model_overrides_default_for_chat_resolution(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DEFAULT_MODEL", "minimax/minimax-m2.5:free")
+    monkeypatch.setenv("HERMES_GATEWAY_MODEL", "openai/gpt-4o-mini")
+    assert resolve_openrouter_model_name_for_chat() == "openrouter/openai/gpt-4o-mini"

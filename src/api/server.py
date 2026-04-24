@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from src.api.browser_runtime import router as browser_runtime_router
 from src.api.chat import router as chat_router
+from src.api.capability_directory import router as capability_directory_router
 from src.api.clerk_gate import get_ham_clerk_actor
 from src.api.cursor_managed_deploy import router as cursor_managed_deploy_router
 from src.api.cursor_managed_deploy_approval import router as cursor_managed_deploy_approval_router
@@ -19,6 +20,7 @@ from src.api.cursor_settings import router as cursor_settings_router
 from src.api.cursor_skills import router as cursor_skills_router
 from src.api.cursor_subagents import router as cursor_subagents_router
 from src.api.hermes_hub import router as hermes_hub_router
+from src.api.hermes_runtime_inventory import router as hermes_runtime_inventory_router
 from src.api.hermes_skills import router as hermes_skills_router
 from src.api.models_catalog import router as models_catalog_router
 from src.api.project_settings import router as project_settings_router
@@ -60,11 +62,13 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_allow_origins(),
     allow_origin_regex=_cors_allow_origin_regex(),
-    allow_methods=["GET", "POST", "DELETE"],
+    # PATCH required for /api/projects/{id} metadata updates (chat handoff repo save); browser preflight fails without it.
+    allow_methods=["GET", "POST", "PATCH", "DELETE"],
     allow_headers=["*"],
 )
 
 app.include_router(chat_router)
+app.include_router(capability_directory_router)
 app.include_router(browser_runtime_router)
 app.include_router(cursor_settings_router)
 app.include_router(cursor_managed_deploy_router)
@@ -74,6 +78,7 @@ app.include_router(cursor_managed_missions_router)
 app.include_router(cursor_skills_router)
 app.include_router(cursor_subagents_router)
 app.include_router(hermes_hub_router)
+app.include_router(hermes_runtime_inventory_router)
 app.include_router(hermes_skills_router)
 app.include_router(project_settings_router)
 app.include_router(control_plane_runs_router)
@@ -98,6 +103,8 @@ async def root() -> dict[str, Any]:
         "cursor_skills": "/api/cursor-skills",
         "cursor_subagents": "/api/cursor-subagents",
         "hermes_skills_catalog": "/api/hermes-skills/catalog",
+        "hermes_skills_installed": "/api/hermes-skills/installed",
+        "hermes_runtime_inventory": "/api/hermes-runtime/inventory",
         "hermes_skills_capabilities": "/api/hermes-skills/capabilities",
         "hermes_skills_install_preview": "/api/hermes-skills/install/preview",
         "hermes_skills_install_apply": "/api/hermes-skills/install/apply",
@@ -105,6 +112,8 @@ async def root() -> dict[str, Any]:
         "settings_write_status": "/api/settings/write-status",
         "project_agents": "/api/projects/{project_id}/agents",
         "control_plane_runs": "/api/control-plane-runs?project_id=<id>",
+        "capability_directory": "/api/capability-directory",
+        "capability_directory_bundles": "/api/capability-directory/bundles",
     }
 
 

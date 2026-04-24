@@ -20,10 +20,10 @@ export function Header() {
     if (segments.length === 0) return ["HAM", "ACTIVITY"];
     return ["HAM", ...segments.map(s => {
       const mapping: Record<string, string> = {
+        'overview': 'LIVE ACTIVITY',
         'runs': 'HISTORY',
-        'activity': 'LOGS',
+        'activity': 'ACTIVITY STREAM',
         'extensions': 'TOOLS',
-        'droids': 'TEAM_SETUP',
         'settings': 'SETTINGS',
         'advanced': 'SYSTEM'
       };

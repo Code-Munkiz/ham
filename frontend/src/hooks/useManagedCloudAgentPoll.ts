@@ -1,6 +1,10 @@
 import * as React from "react";
 
-import { fetchCursorAgent, fetchCursorAgentConversation } from "@/lib/ham/api";
+import {
+  fetchCursorAgent,
+  fetchCursorAgentConversation,
+  fetchManagedMissionForAgent,
+} from "@/lib/ham/api";
 import {
   deriveManagedDeployReadiness,
   deriveManagedMissionReview,
@@ -52,6 +56,8 @@ export function useManagedCloudAgentPoll(options: UseManagedCloudAgentPollOption
   const onAfterSuccessRef = React.useRef(onAfterSuccess);
   const onTerminalReviewForChatRef = React.useRef(onTerminalReviewForChat);
   const inFlightCountRef = React.useRef(0);
+  /** Latest `mission_lifecycle` from ManagedMission store (null = unknown / no row). */
+  const missionLifecycleRef = React.useRef<string | null>(null);
   enabledRef.current = enabled;
   agentIdRef.current = agentId;
   onAfterSuccessRef.current = onAfterSuccess;
@@ -75,6 +81,15 @@ export function useManagedCloudAgentPoll(options: UseManagedCloudAgentPollOption
       if (!enabledRef.current || agentIdRef.current.trim() !== requestId) {
         return;
       }
+      let missionLc: string | null = null;
+      try {
+        const mission = await fetchManagedMissionForAgent(requestId);
+        missionLc = mission?.mission_lifecycle?.trim().toLowerCase() ?? null;
+      } catch {
+        missionLc = null;
+      }
+      missionLifecycleRef.current = missionLc;
+
       const snap = deriveManagedMissionSnapshot(agent, conv);
       const review = deriveManagedMissionReview(agent, conv, snap);
       const deploy = deriveManagedDeployReadiness(agent, conv, snap, review);
@@ -103,6 +118,7 @@ export function useManagedCloudAgentPoll(options: UseManagedCloudAgentPollOption
   React.useEffect(() => {
     if (!enabled) {
       inFlightCountRef.current = 0;
+      missionLifecycleRef.current = null;
       setLastSnapshot(null);
       setLastReview(null);
       setLastDeployReadiness(null);
@@ -112,21 +128,30 @@ export function useManagedCloudAgentPoll(options: UseManagedCloudAgentPollOption
     }
   }, [enabled]);
 
+  /** Single polling loop: run immediately, then every MANAGED_CLOUD_AGENT_POLL_MS while lifecycle is non-terminal. */
   React.useEffect(() => {
     if (!enabled || !agentId.trim()) {
       return;
     }
     let dead = false;
-    void (async () => {
-      if (dead) return;
+    let tid: number | undefined;
+
+    const tick = async () => {
+      if (dead || !enabledRef.current) return;
       await runPoll();
-    })();
-    const t = window.setInterval(() => {
-      if (!dead) void runPoll();
-    }, MANAGED_CLOUD_AGENT_POLL_MS);
+      if (dead || !enabledRef.current) return;
+      const lc = missionLifecycleRef.current;
+      const terminal = lc === "succeeded" || lc === "failed" || lc === "archived";
+      if (!terminal) {
+        tid = window.setTimeout(() => void tick(), MANAGED_CLOUD_AGENT_POLL_MS);
+      }
+    };
+
+    void tick();
+
     return () => {
       dead = true;
-      window.clearInterval(t);
+      if (tid !== undefined) window.clearTimeout(tid);
     };
   }, [enabled, agentId, runPoll]);
 

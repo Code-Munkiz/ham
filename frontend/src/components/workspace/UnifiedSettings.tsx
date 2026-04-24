@@ -14,7 +14,6 @@ import {
   Layout,
   Brain,
   Layers,
-  Users,
   Box,
   Plus,
   RefreshCw,
@@ -889,7 +888,6 @@ export type SettingsSubSectionId =
   | "kernel-health"
   | "context-audit"
   | "bridge-dump"
-  | "workforce-profiles"
   | "resource-storage"
   | "jobs";
 
@@ -921,7 +919,6 @@ const settingsStructure = [
       { id: "kernel-health", label: "Kernel Health", icon: Zap },
       { id: "context-audit", label: "Context Audit", icon: FileSearch },
       { id: "bridge-dump", label: "Bridge Dump", icon: HardDrive },
-      { id: "workforce-profiles", label: "Workforce Profiles", icon: Users },
       { id: "resource-storage", label: "Resource Storage", icon: Box },
       { id: "jobs", label: "Jobs", icon: Calendar },
     ],
@@ -935,6 +932,9 @@ export function normalizeSettingsTabParam(
   let t = tab;
   if (t === "mission-history") {
     t = "execution-history";
+  }
+  if (t === "workforce-profiles") {
+    t = "api-keys";
   }
   const ok = settingsStructure
     .flatMap((g) => g.items)
@@ -1054,7 +1054,7 @@ export function UnifiedSettings({
                             {
                               name: "DEFAULT_MODEL",
                               kind: "Config",
-                              role: "Default model id when not set elsewhere (e.g. openai/gpt-4o-mini).",
+                              role: "Default model id when not set elsewhere (e.g. minimax/minimax-m2.5:free).",
                             },
                             {
                               name: "OPENROUTER_HTTP_REFERER",
@@ -1114,13 +1114,13 @@ export function UnifiedSettings({
                         </div>
                         <div className="space-y-2">
                           {[
-                            { name: "Code Interpreter", desc: "Execute sandboxed code in Python and JS environments.", status: "active", scope: "all droids", icon: Terminal, load: "High" },
-                            { name: "Web Intelligence", desc: "Live web traversal and semantic extraction.", status: "active", scope: "selected droids", icon: Globe, load: "Nominal" },
+                            { name: "Code Interpreter", desc: "Execute sandboxed code in Python and JS environments.", status: "active", scope: "workspace", icon: Terminal, load: "High" },
+                            { name: "Web Intelligence", desc: "Live web traversal and semantic extraction.", status: "active", scope: "workspace", icon: Globe, load: "Nominal" },
                             { name: "Image Extraction", desc: "Multi-modal vision analysis for visual datasets.", status: "setup required", scope: "team only", icon: Zap, load: "Standby" },
-                            { name: "Browser", desc: "Autonomous browser orchestration for task completion.", status: "active", scope: "all droids", icon: Monitor, load: "Idle" },
-                            { name: "Preview", desc: "Real-time rendering of generated artifacts and code.", status: "active", scope: "all droids", icon: Eye, load: "Idle" },
+                            { name: "Browser", desc: "Autonomous browser orchestration for task completion.", status: "active", scope: "workspace", icon: Monitor, load: "Idle" },
+                            { name: "Preview", desc: "Real-time rendering of generated artifacts and code.", status: "active", scope: "workspace", icon: Eye, load: "Idle" },
                             { name: "Search", desc: "Industrial-grade index searching across global networks.", status: "inactive", scope: "team only", icon: Search, load: "Locked" },
-                            { name: "Workspace Context", desc: "High-density local knowledge indexing.", status: "active", scope: "all droids", icon: Brain, load: "Syncing" },
+                            { name: "Workspace Context", desc: "High-density local knowledge indexing.", status: "active", scope: "workspace", icon: Brain, load: "Syncing" },
                           ].map((tool, i) => (
                             <div key={i} className="group flex items-center gap-6 p-4 bg-black/40 border border-white/5 rounded-xl hover:border-[#FF6B00]/20 transition-all shadow-lg relative overflow-hidden">
                               <div className="absolute top-0 left-0 w-1 h-full bg-[#FF6B00] opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -1269,7 +1269,7 @@ export function UnifiedSettings({
                       <div className="h-1 w-1 bg-[#FF6B00] mx-auto rounded-full" />
                       <div className="space-y-2">
                          <h4 className="text-[12px] font-black text-white uppercase italic tracking-[0.4em]">Run Deep Sector Scan</h4>
-                         <p className="text-[10px] font-bold text-white/20 uppercase tracking-[0.2em] italic max-w-sm mx-auto leading-relaxed">Initiate a full-system audit of all workforce bridge connections and memory registers.</p>
+                         <p className="text-[10px] font-bold text-white/20 uppercase tracking-[0.2em] italic max-w-sm mx-auto leading-relaxed">Initiate a full-system audit of bridge connections and memory registers.</p>
                       </div>
                       <button className="px-10 py-3 bg-[#FF6B00]/10 border border-[#FF6B00]/40 text-[10px] font-black text-[#FF6B00] uppercase tracking-[0.3em] italic hover:bg-[#FF6B00] hover:text-black transition-all rounded shadow-xl">Start System Diagnostics</button>
                    </div>

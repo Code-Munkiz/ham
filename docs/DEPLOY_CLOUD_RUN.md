@@ -85,6 +85,34 @@ gcloud builds submit --tag "${IMAGE}" . --project="${PROJECT_ID}"
 
 3. **Deploy** with **`--set-secrets=CURSOR_API_KEY=ham-cursor-api-key:latest`** (see below) in addition to **`--env-vars-file`**.
 
+## Cloud Agent launch token (`HAM_CURSOR_AGENT_LAUNCH_TOKEN`)
+
+Chat **`cursor_agent_launch`** requires a Ham **operator bearer** separate from **`CURSOR_API_KEY`**. On Cloud Run, store it in **Secret Manager** (not `.gcloud/ham-api-env.yaml`) so it is never committed.
+
+1. **Create** the secret (skip if it already exists):
+
+   ```bash
+   export PROJECT_ID=clarity-staging-488201
+   gcloud secrets create ham-cursor-agent-launch-token \
+     --project="${PROJECT_ID}" \
+     --replication-policy=automatic
+   ```
+
+2. **Add** a version without putting the token on the command line (pick one):
+
+   ```bash
+   # From an env var already set in your shell (not echoed):
+   printf '%s' "$HAM_CURSOR_AGENT_LAUNCH_TOKEN" | gcloud secrets versions add ham-cursor-agent-launch-token \
+     --project="${PROJECT_ID}" \
+     --data-file=-
+   ```
+
+3. **Grant** the Cloud Run runtime service account **`roles/secretmanager.secretAccessor`** on **`ham-cursor-agent-launch-token`** (use the same member as for **`ham-cursor-api-key`** — see above).
+
+4. **Deploy** with **`HAM_CURSOR_AGENT_LAUNCH_TOKEN=ham-cursor-agent-launch-token:latest`** in **`--set-secrets`** alongside Cursor and Hermes keys. The default in **`scripts/deploy_ham_api_cloud_run.sh`** includes this mapping.
+
+5. **Browser:** paste the **same** secret value in the Cloud Agent launch field (or retrieve the current version locally with `gcloud secrets versions access latest --secret=ham-cursor-agent-launch-token --project="${PROJECT_ID}"`).
+
 ## Deploy to Cloud Run
 
 ```bash
@@ -95,6 +123,11 @@ export IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/ham/ham-api:staging"
 
 # Prefer an env YAML file: commas in HAM_CORS_ORIGINS break `--set-env-vars` parsing.
 # Copy `docs/examples/ham-api-cloud-run-env.yaml` to `.gcloud/ham-api-env.yaml` (gitignored) and edit.
+#
+# Important: each `gcloud run deploy --env-vars-file …` supplies the **full** set of plain env vars for
+# the new revision. A file that sets `HERMES_GATEWAY_MODE: mock` (the doc example default) will force
+# mock chat and **drop** any Hermes HTTP/OpenRouter vars that existed only on the previous revision.
+# Before redeploying staging, diff against a known-good revision: `gcloud run revisions describe REV --format=yaml(spec.containers[0].env)`.
 
 gcloud run deploy "${SERVICE}" \
   --image "${IMAGE}" \
@@ -103,7 +136,7 @@ gcloud run deploy "${SERVICE}" \
   --allow-unauthenticated \
   --project "${PROJECT_ID}" \
   --env-vars-file .gcloud/ham-api-env.yaml \
-  --set-secrets=CURSOR_API_KEY=ham-cursor-api-key:latest,HERMES_GATEWAY_API_KEY=ham-hermes-gateway-api-key:latest
+  --set-secrets=CURSOR_API_KEY=ham-cursor-api-key:latest,HERMES_GATEWAY_API_KEY=ham-hermes-gateway-api-key:latest,HAM_CURSOR_AGENT_LAUNCH_TOKEN=ham-cursor-agent-launch-token:latest
 ```
 
 Add more env vars as needed, e.g. **`HERMES_GATEWAY_MODE=http`**, **`HERMES_GATEWAY_BASE_URL`**, **`HERMES_GATEWAY_API_KEY`**, **`OPENROUTER_API_KEY`** (use **Secret Manager** for secrets in real deployments).
@@ -180,6 +213,8 @@ Set at least:
 - `HERMES_GATEWAY_MODEL` — e.g. `hermes-agent` (must match Hermes server)
 
 See commented template in [`docs/examples/ham-api-cloud-run-env.yaml`](examples/ham-api-cloud-run-env.yaml) and [`docs/HERMES_GATEWAY_CONTRACT.md`](HERMES_GATEWAY_CONTRACT.md) (streaming **`stream: true`** behavior).
+
+**Incident recovery:** if dashboard chat hangs or shows blank replies after model or gateway changes, align Cloud Run env with Hermes `config.yaml` using [`docs/RUNBOOK_HAM_MODEL_RECOVERY.md`](RUNBOOK_HAM_MODEL_RECOVERY.md).
 
 ## Smoke tests
 

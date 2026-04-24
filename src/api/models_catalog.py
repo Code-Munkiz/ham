@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends
 from src.api.clerk_gate import get_ham_clerk_actor
 
 from src.llm_client import (
+    get_default_model,
     openrouter_api_key_is_plausible,
     resolve_openrouter_model_name_for_chat,
 )
@@ -226,7 +227,7 @@ def build_catalog_payload() -> dict[str, Any]:
             "supports_chat": or_row_chat,
             "disabled_reason": or_row_reason,
             "openrouter_model": _normalize_openrouter_litellm_model(
-                (os.environ.get("DEFAULT_MODEL") or "openai/gpt-4o-mini").strip(),
+                get_default_model().strip(),
             ),
         },
         {
@@ -249,6 +250,8 @@ def build_catalog_payload() -> dict[str, Any]:
     ]
 
     items = openrouter_items + cursor_items
+    http_primary = (os.environ.get("HERMES_GATEWAY_MODEL") or "").strip() or None
+    http_fallback = (os.environ.get("HAM_CHAT_FALLBACK_MODEL") or "").strip() or None
     return {
         "items": items,
         "source": source,
@@ -256,6 +259,8 @@ def build_catalog_payload() -> dict[str, Any]:
         "openrouter_chat_ready": or_ready,
         "http_chat_ready": http_ready,
         "dashboard_chat_ready": dashboard_chat_ready,
+        "http_chat_model_primary": http_primary,
+        "http_chat_model_fallback": http_fallback,
     }
 
 

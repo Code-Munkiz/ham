@@ -10,14 +10,12 @@ import { useAgent } from "@/lib/ham/AgentContext";
 import { useWorkspace } from "@/lib/ham/WorkspaceContext";
 import { useHamDeploymentAccess } from "@/lib/ham/ClerkAccessBridge";
 
-import { DroidConfigPanel } from "../workspace/DroidConfigPanel";
 import { ControlPanelOverlay } from "../workspace/ControlPanelOverlay";
 import { HamDeploymentRestrictedBanner } from "./HamDeploymentRestrictedBanner";
 import { isHamDesktopShell } from "@/lib/ham/desktopConfig";
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
-  const [isInspectorVisible, setIsInspectorVisible] = React.useState(true);
   const { agents, selectedAgentId } = useAgent();
   const { activeTask, setActiveTask, isControlPanelOpen, setIsControlPanelOpen } = useWorkspace();
   const { restricted: hamDeploymentRestricted } = useHamDeploymentAccess();
@@ -26,8 +24,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const isBareLanding = location.pathname === "/";
   const isChatPage = location.pathname.startsWith("/chat");
   const isSettingsPage = location.pathname.startsWith("/settings");
-  const showDroidDetails = location.pathname.startsWith("/droids");
-
   // Control state for the global workbench console
   const [isConsoleOpen, setIsConsoleOpen] = React.useState(false);
 
@@ -106,7 +102,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                           </div>
                           <div>
                             <p className="text-[10px] font-black text-white/20 uppercase tracking-[0.3em]">No Active Deployment</p>
-                            <p className="text-[9px] font-bold text-white/5 uppercase tracking-widest mt-1 italic">Droids are standing by for next tasking...</p>
+                            <p className="text-[9px] font-bold text-white/5 uppercase tracking-widest mt-1 italic">No active preview session.</p>
                           </div>
                         </div>
                       </div>
@@ -116,13 +112,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               </div>
             </div>
           </main>
-
-          {/* Right Panel: Contextual to Route (Hidden for Chat as it has its own overlay) */}
-          {isInspectorVisible && showDroidDetails && selectedAgentId && (
-            <div className="w-[280px] border-l border-white/5 bg-[#0b0b0b] hidden xl:flex flex-col animate-in slide-in-from-right duration-300 shrink-0 overflow-hidden">
-               <DroidConfigPanel />
-            </div>
-          )}
         </div>
         
         {/* Global Console Drawer (Overlaying the bottom strip) */}
@@ -139,7 +128,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             </div>
             <div className="flex-1 p-4 overflow-y-auto space-y-1 text-[10px] text-white/30 lowercase tracking-tight">
                <p className="text-[#FF6B00]/40">[OK] industrial_tunnel_link_established: 127.0.0.1:9092</p>
-               <p>[INFO] sync_pulse: all droids reported ready (05/05)</p>
+               <p>[INFO] sync_pulse: workspace idle (05/05)</p>
                <p>[INFO] cache_flush: successful in 12ms</p>
                <p className="text-white/10 font-bold uppercase tracking-widest pt-2">» waiting for mission directive...</p>
             </div>
@@ -164,7 +153,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 <div className="h-1.5 w-1.5 rounded-full bg-[#FF6B00] animate-pulse" />
                 <span className="text-[9px] font-black uppercase tracking-[0.2em] text-white/40">Workspace Ready</span>
              </div>
-             <span className="text-[9px] font-mono text-white/10 uppercase italic hidden sm:inline">All agents synchronized</span>
+             <span className="text-[9px] font-mono text-white/10 uppercase italic hidden sm:inline">Workspace synchronized</span>
           </div>
           <div className="flex items-center gap-4">
              <span className="text-[9px] font-mono text-white/10 uppercase tracking-widest group cursor-default">v2.5.0 STABLE</span>
