@@ -9,6 +9,13 @@ Thin shell: renderer is the existing Vite/React app; FastAPI stays a separate HT
 - **Menu bar:** on **Linux and Windows**, the default Electron **File / Edit / View** menu is **removed** so the window chrome stays dark; **macOS** keeps the normal app menu.
 - **Public assets:** the nav logo uses the same **relative `public/` URLs** as the Vite build (`base: ./`) so icons load under **`file://`** in the packaged renderer.
 
+### Web vs packaged chat UI (single source)
+
+Linux and Windows artifacts **do not duplicate** the chat interface. `electron-builder` copies **`../frontend/dist`** into `resources/renderer/` (`desktop/package.json` → `extraResources`). Any change under **`frontend/src`** (including `/chat`) applies to desktop automatically **after** you rebuild the web app and repackage:
+
+- **Dev:** `npm start` from `desktop/` loads the Vite dev server by default, so you see the same React app as the browser.
+- **Release:** run `npm run pack:linux` / `npm run pack:win` (they run `build:frontend` first). Bump `version` in `desktop/package.json` when shipping so users can tell builds apart.
+
 ## Security (M1)
 
 - Main: window lifecycle, reads optional `userData/ham-desktop-config.json`, merges env.
