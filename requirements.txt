@@ -5,6 +5,7 @@ python-dotenv
 pyyaml>=6.0
 pydantic
 fastapi
+python-multipart
 uvicorn[standard]
 httpx
 playwright

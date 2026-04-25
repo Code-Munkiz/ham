@@ -6,7 +6,8 @@ import os
 from pathlib import Path
 from typing import Any, Literal
 
-from fastapi import APIRouter, Header, HTTPException
+import httpx
+from fastapi import APIRouter, File, Header, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -649,3 +650,141 @@ def post_chat_stream(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+_MAX_TRANSCRIBE_BYTES = 15 * 1024 * 1024
+_TRANSCRIBE_READ_CHUNK = 1024 * 1024
+_OPENAI_TRANSCRIPTIONS_URL = "https://api.openai.com/v1/audio/transcriptions"
+
+
+async def _transcribe_with_openai(
+    *,
+    api_key: str,
+    audio: bytes,
+    filename: str,
+    content_type: str,
+    model: str,
+) -> str:
+    """POST multipart to OpenAI transcriptions; returns transcript text."""
+    safe_name = filename.strip() or "recording.webm"
+    ct = content_type.strip() or "application/octet-stream"
+    data: dict[str, Any] = {"model": model, "response_format": "json"}
+    files = {"file": (safe_name, audio, ct)}
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        resp = await client.post(
+            _OPENAI_TRANSCRIPTIONS_URL,
+            headers={"Authorization": f"Bearer {api_key}"},
+            data=data,
+            files=files,
+        )
+    resp.raise_for_status()
+    payload = resp.json()
+    text = payload.get("text") if isinstance(payload, dict) else None
+    if not isinstance(text, str):
+        return ""
+    return text.strip()
+
+
+class TranscribeResponse(BaseModel):
+    text: str
+
+
+@router.post("/api/chat/transcribe", response_model=TranscribeResponse)
+async def post_chat_transcribe(
+    request: Request,
+    authorization: str | None = Header(None, alias="Authorization"),
+    x_ham_operator_authorization: str | None = Header(None, alias="X-Ham-Operator-Authorization"),
+    file: UploadFile = File(...),
+) -> TranscribeResponse:
+    """Multipart audio → OpenAI transcription; same Clerk gate as chat when enabled."""
+    _resolve_chat_clerk_context(
+        authorization,
+        x_ham_operator_authorization,
+        route="post_chat_transcribe",
+    )
+    provider = (os.environ.get("HAM_TRANSCRIPTION_PROVIDER") or "").strip().lower()
+    api_key = (os.environ.get("HAM_TRANSCRIPTION_API_KEY") or "").strip()
+    if provider != "openai" or not api_key:
+        raise HTTPException(
+            status_code=501,
+            detail={
+                "error": {
+                    "code": "TRANSCRIPTION_NOT_CONFIGURED",
+                    "message": "Voice transcription provider not configured.",
+                },
+            },
+        )
+
+    cl = request.headers.get("content-length")
+    if cl and cl.isdigit() and int(cl) > _MAX_TRANSCRIBE_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail={
+                "error": {
+                    "code": "TRANSCRIPTION_UPLOAD_TOO_LARGE",
+                    "message": f"Audio exceeds maximum size ({_MAX_TRANSCRIBE_BYTES // (1024 * 1024)} MiB).",
+                },
+            },
+        )
+
+    body = bytearray()
+    while True:
+        chunk = await file.read(_TRANSCRIBE_READ_CHUNK)
+        if not chunk:
+            break
+        if len(body) + len(chunk) > _MAX_TRANSCRIBE_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail={
+                    "error": {
+                        "code": "TRANSCRIPTION_UPLOAD_TOO_LARGE",
+                        "message": f"Audio exceeds maximum size ({_MAX_TRANSCRIBE_BYTES // (1024 * 1024)} MiB).",
+                    },
+                },
+            )
+        body.extend(chunk)
+
+    audio = bytes(body)
+    if not audio:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": {"code": "TRANSCRIPTION_EMPTY", "message": "No audio data received."},
+            },
+        )
+
+    model = (os.environ.get("HAM_TRANSCRIPTION_MODEL") or "gpt-4o-mini-transcribe").strip()
+    try:
+        text = await _transcribe_with_openai(
+            api_key=api_key,
+            audio=audio,
+            filename=file.filename or "dictation.webm",
+            content_type=file.content_type or "audio/webm",
+            model=model,
+        )
+    except httpx.HTTPStatusError as exc:
+        msg = "Transcription service returned an error."
+        try:
+            err_json = exc.response.json()
+            if isinstance(err_json, dict) and "error" in err_json:
+                em = err_json.get("error")
+                if isinstance(em, dict) and em.get("message"):
+                    msg = str(em["message"])
+        except Exception:
+            pass
+        raise HTTPException(
+            status_code=502,
+            detail={"error": {"code": "TRANSCRIPTION_UPSTREAM_FAILED", "message": msg}},
+        ) from exc
+    except httpx.RequestError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "error": {
+                    "code": "TRANSCRIPTION_UPSTREAM_FAILED",
+                    "message": f"Transcription request failed: {exc}",
+                },
+            },
+        ) from exc
+
+    return TranscribeResponse(text=text)

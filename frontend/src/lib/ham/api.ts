@@ -1294,6 +1294,41 @@ export async function postChatStream(
   return final;
 }
 
+/**
+ * Multipart voice clip → server-side OpenAI transcription; appends returned text in the UI.
+ */
+export async function postChatTranscribe(audio: Blob, filename: string = "dictation.webm"): Promise<string> {
+  const fd = new FormData();
+  fd.append("file", audio, filename);
+  const headers = new Headers();
+  await mergeClerkAuthBearerIfNeeded(headers);
+  const res = await fetch(apiUrl("/api/chat/transcribe"), { method: "POST", body: fd, headers });
+  if (!res.ok) {
+    let detail: unknown;
+    try {
+      detail = (await res.json()) as { detail?: unknown };
+    } catch {
+      detail = undefined;
+    }
+    const d = typeof detail === "object" && detail !== null ? (detail as { detail?: unknown }).detail : undefined;
+    if (fastApiStructuredErrorCode(d) === "HAM_EMAIL_RESTRICTION") {
+      throw new HamAccessRestrictedError(
+        messageFromFastApiDetail(d) ?? "Access restricted for this Ham deployment.",
+      );
+    }
+    if (res.status === 501 && fastApiStructuredErrorCode(d) === "TRANSCRIPTION_NOT_CONFIGURED") {
+      throw new Error(
+        messageFromFastApiDetail(d) ?? "Voice transcription is not configured on this server.",
+      );
+    }
+    const msg =
+      messageFromFastApiDetail(d) ?? `Transcription failed (HTTP ${res.status}).`;
+    throw new Error(msg);
+  }
+  const data = (await res.json()) as { text?: string };
+  return typeof data.text === "string" ? data.text : "";
+}
+
 // --- Hermes runtime skills (Phase 1: read-only catalog + probe; not Cursor operator skills) ---
 
 export type HermesSkillsMode = "local" | "remote_only" | "unsupported";
