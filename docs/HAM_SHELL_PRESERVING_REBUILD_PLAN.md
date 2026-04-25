@@ -135,8 +135,12 @@ These files/modules are preservation-critical because they anchor shell, theme, 
 
 ### Contract docs to preserve during rebuild
 
+These planning and runtime contract documents should stay current and should not be dropped or silently contradicted by UI work. If the same content ever appears under a different path or casing, treat it as the same contract (today the repo has root-level `SWARM.md`; a lowercase `swarm.md` would be equivalent in intent).
+
 - `docs/HERMES_GATEWAY_CONTRACT.md`
 - `docs/HERMES_WORKSPACE_FEATURE_MATRIX.md`
+- `docs/HAM_SHELL_PRESERVING_REBUILD_PLAN.md` (this plan)
+- `SWARM.md` (repo root) — multi-agent / swarm planning and operator runtime contract; also reference as `swarm.md` if that casing is introduced elsewhere.
 
 ## 2) Replace candidates
 
