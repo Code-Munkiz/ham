@@ -123,7 +123,7 @@ export default function Activity() {
                 )}
               />
               <span className="text-[10px] font-bold text-white/50 uppercase tracking-widest">
-                {source === "live" ? "Gateway_Poll" : "Demo_Fallback"}
+                {source === "live" ? "API_Snapshot" : "Demo_Fallback"}
               </span>
             </div>
             <Link
