@@ -50,6 +50,15 @@ If a given Hermes build does not support **`stream: true`** on this path, the ad
 | `openrouter` | `HERMES_GATEWAY_MODE=openrouter` | LiteLLM streaming to [OpenRouter](https://openrouter.ai/) (`OPENROUTER_API_KEY`, `DEFAULT_MODEL` or `HERMES_GATEWAY_MODEL` as OpenRouter slug). Browser still only talks to Ham; keys stay server-side. |
 | `http` | `HERMES_GATEWAY_MODE=http` (or unset with `HERMES_GATEWAY_BASE_URL` set) | `httpx` streaming POST to `/v1/chat/completions` as above. |
 
+### HTTP mode: model id and fallback (HAM)
+
+| Env | Role |
+|-----|------|
+| `HERMES_GATEWAY_MODEL` | `model` field on `POST /v1/chat/completions`. OpenRouter-style slugs (e.g. `minimax/minimax-m2.5:free`) are valid **only if** your Hermes (or its LiteLLM layer) accepts them. The placeholder `hermes-agent` usually means **routing is defined inside Hermes** (profile / agent config on the Hermes host — not in this repo). |
+| `HAM_CHAT_FALLBACK_MODEL` | Optional. On **429**, **502**, **503**, or **504** from the first request, HAM retries the same messages **once** with this model id (see [`src/integrations/nous_gateway_client.py`](../src/integrations/nous_gateway_client.py)). |
+
+Validate model strings against your Hermes deployment before rolling out on Cloud Run.
+
 **Note:** If `HERMES_GATEWAY_MODE` is unset, the adapter uses **`http`** when `HERMES_GATEWAY_BASE_URL` is non-empty, otherwise **`mock`**. Set `HERMES_GATEWAY_MODE=mock` explicitly to force mock even when a base URL is present.
 
 ## Out of scope for this contract revision

@@ -78,6 +78,7 @@ def main() -> None:
     for env_name, yaml_key in (
         ("DEFAULT_MODEL", "DEFAULT_MODEL"),
         ("HERMES_GATEWAY_MODEL", "HERMES_GATEWAY_MODEL"),
+        ("HAM_CHAT_FALLBACK_MODEL", "HAM_CHAT_FALLBACK_MODEL"),
     ):
         v = (os.environ.get(env_name) or "").strip()
         if v:
