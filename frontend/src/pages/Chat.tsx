@@ -2849,7 +2849,6 @@ function ChatPageInner({
                                 onVoiceMessage={(blob) => {
                                   void handleVoiceDictationComplete(blob);
                                 }}
-                                onVoiceError={(msg) => toast.error(msg)}
                               />
                             </div>
                             <button

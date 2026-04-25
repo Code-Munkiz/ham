@@ -10,6 +10,7 @@
 .voice-message-input-container {
   position: relative;
   display: flex;
+  flex-direction: column;
   align-items: center;
   gap: 12px;
   padding: 16px;
@@ -26,7 +27,9 @@
   border: none;
   box-shadow: none;
   border-radius: 0;
-  gap: 6px;
+  gap: 4px;
+  align-items: flex-start;
+  max-width: min(320px, 85vw);
 }
 
 .voice-message-input-container--compact .mic-button {
@@ -71,6 +74,16 @@
 
 .mic-button:active {
   transform: scale(0.95);
+}
+
+.mic-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.mic-button--had-error:not(:disabled) {
+  box-shadow: 0 0 0 2px rgba(248, 113, 113, 0.45);
 }
 
 .mic-button svg {
@@ -177,16 +190,33 @@
   transform: translateY(-1px);
 }
 
-.recording-error {
-  position: absolute;
-  top: -30px;
-  left: 0;
-  right: 0;
-  background: rgba(255, 71, 87, 0.1);
-  border: 1px solid #ff4757;
-  color: #ff4757;
+/* Non-compact card: error stacks above controls (no absolute positioning). */
+.recording-error--stacked {
+  position: static;
+  width: 100%;
+  box-sizing: border-box;
+  background: rgba(127, 29, 29, 0.35);
+  border: 1px solid rgba(248, 113, 113, 0.45);
+  color: #fecaca;
   padding: 8px 12px;
   border-radius: 6px;
   font-size: 12px;
-  text-align: center;
+  line-height: 1.35;
+  text-align: left;
+}
+
+/* Composer strip: small line below mic — does not overlap Attach/Fast. */
+.recording-error-compact {
+  margin: 0;
+  padding: 4px 6px;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: 0.02em;
+  color: #fecaca;
+  background: rgba(127, 29, 29, 0.35);
+  border: 1px solid rgba(248, 113, 113, 0.4);
+  width: 100%;
+  box-sizing: border-box;
 }

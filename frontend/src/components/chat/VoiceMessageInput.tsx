@@ -71,6 +71,14 @@ export function VoiceMessageInput(props: VoiceMessageInputProps) {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const micTitle = disabled
+    ? "Voice input unavailable while sending or transcribing."
+    : error
+      ? error
+      : isRecording
+        ? "Stop recording"
+        : "Record voice — requires a microphone";
+
   return (
     <div
       className={cn(
@@ -78,16 +86,12 @@ export function VoiceMessageInput(props: VoiceMessageInputProps) {
         compact && 'voice-message-input-container--compact',
       )}
     >
-      {error && (
-        <div className="recording-error">
-          {error}
-        </div>
-      )}
+      {!compact && error ? <div className="recording-error recording-error--stacked">{error}</div> : null}
 
       {audioBlob && !hidePreview ? (
         <div className="audio-preview">
           <audio controls src={URL.createObjectURL(audioBlob)} />
-          <button onClick={handleCancelRecording} className="audio-retake-button">
+          <button type="button" onClick={handleCancelRecording} className="audio-retake-button">
             Retake
           </button>
         </div>
@@ -96,8 +100,9 @@ export function VoiceMessageInput(props: VoiceMessageInputProps) {
           <button
             type="button"
             disabled={disabled}
+            title={micTitle}
             onClick={isRecording ? stopRecording : startRecording}
-            className="mic-button"
+            className={cn('mic-button', error && !isRecording && 'mic-button--had-error')}
             aria-label={isRecording ? "Stop recording" : "Start voice recording"}
           >
             {isRecording ? (
@@ -129,6 +134,12 @@ export function VoiceMessageInput(props: VoiceMessageInputProps) {
           )}
         </div>
       )}
+
+      {compact && error ? (
+        <p className="recording-error-compact" role="status">
+          {error}
+        </p>
+      ) : null}
     </div>
   );
 }

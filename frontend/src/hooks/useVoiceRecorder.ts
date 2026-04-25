@@ -13,6 +13,18 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 
+import { mapMediaStreamErrorToUserMessage } from '@/lib/ham/voiceRecordingErrors';
+
+function pickRecorderMimeType(): string {
+  const candidates = ['audio/webm;codecs=opus', 'audio/webm'];
+  for (const c of candidates) {
+    if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(c)) {
+      return c;
+    }
+  }
+  return '';
+}
+
 /**
  * `MediaRecorder.abort()` exists in modern browsers but is missing from some `lib.dom` typings,
  * which breaks `tsc --noEmit` in CI. Prefer abort when present; otherwise stop without surfacing a blob.
@@ -75,12 +87,38 @@ export function useVoiceRecorder(props: UseVoiceRecorderProps = {}) {
 
   // Start recording
   const startRecording = useCallback(async () => {
+    setState((prev) => ({ ...prev, error: null }));
+
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+      const msg =
+        'Voice input is not available in this browser. Try a current Chrome or Edge version, or use HTTPS.';
+      setState((prev) => ({ ...prev, error: msg }));
+      onRecordingError?.(msg);
+      return;
+    }
+
     try {
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const inputs = devices.filter((d) => d.kind === 'audioinput');
+        if (inputs.length === 0) {
+          const msg = mapMediaStreamErrorToUserMessage(
+            Object.assign(new Error('No audio input devices'), { name: 'NotFoundError' }),
+          );
+          setState((prev) => ({ ...prev, error: msg }));
+          onRecordingError?.(msg);
+          return;
+        }
+      } catch {
+        /* enumerate can fail pre-permission; fall through to getUserMedia */
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: 'audio/webm;codecs=opus',
-      });
+
+      const mime = pickRecorderMimeType();
+      const mediaRecorder = mime
+        ? new MediaRecorder(stream, { mimeType: mime })
+        : new MediaRecorder(stream);
 
       const chunks: BlobPart[] = [];
 
@@ -91,7 +129,7 @@ export function useVoiceRecorder(props: UseVoiceRecorderProps = {}) {
       };
 
       mediaRecorder.onstop = () => {
-        const blob = new Blob(chunks, { type: 'audio/webm' });
+        const blob = new Blob(chunks, { type: mediaRecorder.mimeType || mime || 'audio/webm' });
         const blobUrl = URL.createObjectURL(blob);
         const started = recordingStartedAtRef.current ?? Date.now();
         recordingStartedAtRef.current = null;
@@ -117,9 +155,10 @@ export function useVoiceRecorder(props: UseVoiceRecorderProps = {}) {
       };
 
       mediaRecorder.onerror = (event) => {
-        const error = (event.error as Error)?.message || 'Unknown media recorder error';
-        setState((prev) => ({ ...prev, error }));
-        onRecordingError?.(error);
+        const raw = event.error ?? new Error('Unknown media recorder error');
+        const msg = mapMediaStreamErrorToUserMessage(raw);
+        setState((prev) => ({ ...prev, error: msg }));
+        onRecordingError?.(msg);
       };
 
       mediaRecorder.start(1000); // Data interval in ms
@@ -148,9 +187,9 @@ export function useVoiceRecorder(props: UseVoiceRecorderProps = {}) {
       }, 1000);
 
     } catch (err) {
-      const error = (err as Error)?.message || 'Failed to access microphone';
-      setState((prev) => ({ ...prev, error }));
-      onRecordingError?.(error);
+      const msg = mapMediaStreamErrorToUserMessage(err);
+      setState((prev) => ({ ...prev, error: msg }));
+      onRecordingError?.(msg);
     }
   }, [onRecordingComplete, onRecordingError]);
 
