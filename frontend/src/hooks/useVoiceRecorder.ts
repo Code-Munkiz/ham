@@ -70,6 +70,8 @@ export function useVoiceRecorder(props: UseVoiceRecorderProps = {}) {
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  /** Wall-clock start for accurate duration in `onRecordingComplete` (avoids stale React state in `onstop`). */
+  const recordingStartedAtRef = useRef<number | null>(null);
 
   // Start recording
   const startRecording = useCallback(async () => {
@@ -91,13 +93,17 @@ export function useVoiceRecorder(props: UseVoiceRecorderProps = {}) {
       mediaRecorder.onstop = () => {
         const blob = new Blob(chunks, { type: 'audio/webm' });
         const blobUrl = URL.createObjectURL(blob);
-        
+        const started = recordingStartedAtRef.current ?? Date.now();
+        recordingStartedAtRef.current = null;
+        const durationSecs = Math.max(0, Math.floor((Date.now() - started) / 1000));
+
         setState((prev) => ({
           ...prev,
           isRecording: false,
           isPaused: false,
           blobUrl,
           audioChunks: [blob],
+          duration: durationSecs,
         }));
 
         // Stop all tracks
@@ -107,7 +113,7 @@ export function useVoiceRecorder(props: UseVoiceRecorderProps = {}) {
           clearInterval(timerIntervalRef.current);
         }
 
-        onRecordingComplete?.(blob, state.duration);
+        onRecordingComplete?.(blob, durationSecs);
       };
 
       mediaRecorder.onerror = (event) => {
@@ -119,6 +125,7 @@ export function useVoiceRecorder(props: UseVoiceRecorderProps = {}) {
       mediaRecorder.start(1000); // Data interval in ms
 
       mediaRecorderRef.current = mediaRecorder;
+      recordingStartedAtRef.current = Date.now();
 
       setState((prev) => ({
         ...prev,
@@ -145,7 +152,7 @@ export function useVoiceRecorder(props: UseVoiceRecorderProps = {}) {
       setState((prev) => ({ ...prev, error }));
       onRecordingError?.(error);
     }
-  }, [onRecordingComplete, onRecordingError, state.duration, state.startTimestamp]);
+  }, [onRecordingComplete, onRecordingError]);
 
   // Stop recording
   const stopRecording = useCallback(() => {
@@ -185,6 +192,7 @@ export function useVoiceRecorder(props: UseVoiceRecorderProps = {}) {
     }));
 
     timerIntervalRef.current = null;
+    recordingStartedAtRef.current = null;
   }, [state.isRecording, state.mediaRecorder]);
 
   // Cleanup on unmount

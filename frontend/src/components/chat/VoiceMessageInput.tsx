@@ -22,10 +22,14 @@ interface VoiceMessageInputProps {
   /** Smaller, borderless treatment for the chat composer strip (no standalone card). */
   compact?: boolean;
   placeholder?: string;
+  /** When true, do not show post-record preview; use for dictation that uploads immediately. */
+  hidePreview?: boolean;
+  /** Disable mic controls (e.g. while transcribing or sending). */
+  disabled?: boolean;
 }
 
 export function VoiceMessageInput(props: VoiceMessageInputProps) {
-  const { onVoiceMessage, onVoiceError, compact = false } = props;
+  const { onVoiceMessage, onVoiceError, compact = false, hidePreview = false, disabled = false } = props;
   
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   
@@ -40,7 +44,9 @@ export function VoiceMessageInput(props: VoiceMessageInputProps) {
     cancelRecording,
   } = useVoiceRecorder({
     onRecordingComplete: (blob, duration) => {
-      setAudioBlob(blob);
+      if (!hidePreview) {
+        setAudioBlob(blob);
+      }
       onVoiceMessage?.(blob, duration);
     },
     onRecordingError: onVoiceError,
@@ -48,7 +54,9 @@ export function VoiceMessageInput(props: VoiceMessageInputProps) {
 
   const handleStopRecording = () => {
     stopRecording();
-    setAudioBlob(null);
+    if (!hidePreview) {
+      setAudioBlob(null);
+    }
   };
 
   const handleCancelRecording = () => {
@@ -76,7 +84,7 @@ export function VoiceMessageInput(props: VoiceMessageInputProps) {
         </div>
       )}
 
-      {audioBlob ? (
+      {audioBlob && !hidePreview ? (
         <div className="audio-preview">
           <audio controls src={URL.createObjectURL(audioBlob)} />
           <button onClick={handleCancelRecording} className="audio-retake-button">
@@ -86,6 +94,8 @@ export function VoiceMessageInput(props: VoiceMessageInputProps) {
       ) : (
         <div className={isRecording ? "recording-active" : "recording-idle"}>
           <button
+            type="button"
+            disabled={disabled}
             onClick={isRecording ? stopRecording : startRecording}
             className="mic-button"
             aria-label={isRecording ? "Stop recording" : "Start voice recording"}
@@ -106,7 +116,13 @@ export function VoiceMessageInput(props: VoiceMessageInputProps) {
             <div className="recording-indicator">
               <div className="pulse-animation" />
               <span className="duration-text">{formatDuration(duration)}</span>
-              <button onClick={stopRecording} className="stop-recording" aria-label="Stop recording">
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={stopRecording}
+                className="stop-recording"
+                aria-label="Stop recording"
+              >
                 Stop
               </button>
             </div>

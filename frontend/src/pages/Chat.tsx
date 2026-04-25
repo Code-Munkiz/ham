@@ -50,6 +50,7 @@ import {
   patchHamProjectMetadata,
   HamAccessRestrictedError,
   postChatStream,
+  postChatTranscribe,
   postCursorAgentSync,
   postManagedDeployHook,
   type ManagedDeployHookResult,
@@ -737,6 +738,8 @@ function ChatPageInner({
   const [showAgentControls, setShowAgentControls] = React.useState(false);
   const [composerAttachment, setComposerAttachment] = React.useState<ComposerAttachment | null>(null);
   const composerFileInputRef = React.useRef<HTMLInputElement>(null);
+  /** OpenAI transcription in flight after VoiceMessageInput stop. */
+  const [voiceTranscribing, setVoiceTranscribing] = React.useState(false);
   /** Option A: once user edits repo/ref, autofill must not clobber. */
   const cloudTargetTouchedRef = React.useRef({ repo: false, ref: false });
   /** Primary HAM profile from Agent Builder (avatar + name in transcript). */
@@ -2053,9 +2056,41 @@ function ChatPageInner({
     [processComposerSelectedFile],
   );
 
+  const handleVoiceDictationComplete = React.useCallback(async (blob: Blob) => {
+    if (!blob.size) {
+      toast.error("No audio captured.");
+      return;
+    }
+    const filename = blob.type.includes("webm")
+      ? "dictation.webm"
+      : blob.type.includes("mp4") || blob.type.includes("mpeg")
+        ? "dictation.m4a"
+        : "dictation.webm";
+    setVoiceTranscribing(true);
+    try {
+      const text = (await postChatTranscribe(blob, filename)).trim();
+      if (!text) {
+        toast.message("No text returned from transcription.");
+        return;
+      }
+      setInput((prev) => (prev.trim() ? `${prev.trim()}\n${text}` : text));
+    } catch (err) {
+      if (err instanceof HamAccessRestrictedError) {
+        toast.error(
+          "Access restricted: this Ham deployment only allows approved email addresses or domains.",
+          { duration: 12_000, id: "ham-access-restricted" },
+        );
+      } else {
+        toast.error(err instanceof Error ? err.message : "Transcription failed.");
+      }
+    } finally {
+      setVoiceTranscribing(false);
+    }
+  }, []);
+
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if ((!input.trim() && !composerAttachment) || sending) return;
+    if ((!input.trim() && !composerAttachment) || sending || voiceTranscribing) return;
     const trimmedInput = input.trim();
     const textForOutbound = buildOutboundMessageWithAttachment(trimmedInput, composerAttachment);
     if (viewMode === "preview") {
@@ -2797,17 +2832,22 @@ function ChatPageInner({
                                Attach
                             </button>
                             <div
-                              title="Dictation (browser-dependent)"
+                              title={
+                                voiceTranscribing
+                                  ? "Transcribing…"
+                                  : "Voice dictation — stop recording to add text to the message"
+                              }
                               className="flex items-center gap-1.5 text-[8px] text-white/25 font-black uppercase tracking-widest px-1.5 py-1 rounded min-w-0"
                             >
-                              <span className="shrink-0 text-white/25 hidden sm:inline">Voice</span>
+                              <span className="shrink-0 text-white/25 hidden sm:inline">
+                                {voiceTranscribing ? "…" : "Voice"}
+                              </span>
                               <VoiceMessageInput
                                 compact
-                                onVoiceMessage={(_blob, duration) => {
-                                  void _blob;
-                                  toast.message("Voice note recorded", {
-                                    description: `${Math.max(0, Math.round(duration))}s (transcription not wired in chat yet)`,
-                                  });
+                                hidePreview
+                                disabled={sending || voiceTranscribing}
+                                onVoiceMessage={(blob) => {
+                                  void handleVoiceDictationComplete(blob);
                                 }}
                                 onVoiceError={(msg) => toast.error(msg)}
                               />
