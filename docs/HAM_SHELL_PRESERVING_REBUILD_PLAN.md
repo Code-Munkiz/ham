@@ -9,6 +9,52 @@ Voice correction in this revision:
 - Current HAM voice frontend implementation is classified as replaceable (not sacred).
 - Backend transcription seam remains temporarily preserved until replacement voice is adapted, tested, and approved.
 
+## Runtime strategy
+
+This section names the product path for the shell-preserving rebuild. It is planning language only: no second product mode, no runtime switch in the UI, and no governed-runtime implementation in this plan.
+
+### Default Workspace Runtime
+
+This is the **only active runtime** for the current build and the **default product path**.
+
+It should deliver a **Hermes Workspace–style operator experience** while staying inside HAM’s shell: workspace-oriented layout, responsive composer, voice/dictation UX, attachment UX, sessions/sidebar/panels, and settings/config surfaces, with a mobile, web, and desktop–friendly presentation. Surfaces that resemble terminal, files, or process control may be considered **only when explicitly approved** in a later scope decision; they are not part of this plan’s deliverables by default.
+
+The current HAM `/chat` internals, current voice frontend, and current composer/attachment **presentation** are replaceable. The **Default Workspace Runtime** must still preserve HAM’s operational foundation:
+
+- HAM shell, layout, theme, and color system.
+- `frontend/src/lib/ham/api.ts` as the **only** browser → HAM API seam.
+- Clerk, auth, and session behavior.
+- Cloud Agent launch, status, and managed mission flows.
+- Cloud Run, FastAPI, and GCP/Secret Manager boundaries.
+- No browser-side secrets; no direct browser calls from client code to Hermes VM, Cursor, OpenAI, transcription providers, or other upstream APIs.
+
+In short: **build the default Workspace experience in presentation and operator UX; do not break HAM’s security and integration boundary.**
+
+### Future Governed Runtime Extension Point
+
+The **governed / policy-heavy alternative** to the default path is **not** active today, **not** implemented today, and **not** visible in the UI today.
+
+A future user- or org-specific governed runtime may add stricter policy around terminal, files, and process behavior; scoped filesystem; audited command execution; org/user-specific restrictions; stronger RBAC; and alternate provider/runtime behavior. **Do not build that now.**
+
+The architecture should still leave a **clean extension point** so a future governed runtime can be added **without throwing away the Operator Workspace UI**. Prefer introducing that later through a small **runtime / capability / transport seam** (see Design guidance) rather than scattering `if governed` checks through presentation components.
+
+**Do not build a dual-runtime product today**—only one product path ships; the “extension point” is a seam for later, not a second shipped mode.
+
+### Design guidance for Phase 1A
+
+- **Avoid** baking provider- or environment-specific assumptions (which gateway, which transport shape, which “mode”) directly into presentational components. Keep them in hooks, adapters, or a thin context that can swap implementation later without rewriting the whole chat shell.
+- Where it helps, future-facing abstractions can use **neutral** names, for example: `workspaceRuntime`, `operatorRuntime`, `workspaceCapabilities`, `workspaceTransport`, `runtimeCapabilities`. **Do not overbuild** a framework; a few well-placed types or a single context is enough for the seam—no parallel abstraction layer for its own sake.
+- **Build the Default Workspace Runtime now.** **Leave a clean seam** for a future governed runtime later. **Do not** implement two runtimes, two transports, or admin toggles in this phase unless explicitly re-scoped.
+
+### Excluded from current scope (planning guardrails; do not implement in this plan)
+
+The following are **out of scope** for this plan update and for the rebuild phases it describes, unless a separate, explicit decision adds them later:
+
+- Runtime toggle UI, admin policy UI, or “governed vs default” product chrome.
+- Governed terminal, governed filesystem, generic upstream proxy, or new browser-side PWA/service-worker stacks.
+- New backend endpoints, new secrets, or xterm/PTY/terminal implementation.
+- Any pattern that **duplicates** upstream Hermes Workspace server routes (for example ad hoc `/api/send-stream`–style BFFs in the **browser** contract) instead of HAM’s existing FastAPI and `api.ts` patterns.
+
 ## 1) Preserved core
 
 These files/modules are preservation-critical because they anchor shell, theme, auth, API boundaries, Cloud Agent behavior, chat stream behavior, and deploy/secrets handling.
@@ -33,10 +79,8 @@ These files/modules are preservation-critical because they anchor shell, theme, 
 
 ### Chat stream + Cloud Agent behavior seam (must remain behavior-compatible)
 
-- `frontend/src/pages/Chat.tsx` — single owner of `/chat` workbench behavior, stream handling, Cloud Agent orchestration UI states.
-- `frontend/src/components/chat/CloudAgentLaunchModal.tsx` — managed/direct mission launch + attach semantics.
-- `frontend/src/hooks/useManagedCloudAgentPoll.ts` — Cloud Agent status/review/readiness polling loop.
-- `frontend/src/contexts/ManagedCloudAgentContext.tsx` — managed mission state contract for right-pane/UI.
+- `/chat` route contract — preserve typed chat send, stream handling, and Cloud Agent orchestration behavior even if the current `frontend/src/pages/Chat.tsx` internals are replaced.
+- Cloud Agent UX contract — preserve managed/direct mission launch + attach semantics, managed mission polling, and deploy approval/deploy hook reachability even if UI components are replaced.
 ### Voice backend seam (preserve temporarily)
 
 - `POST /api/chat/transcribe` in backend routes — preserve until replacement voice path is proven.
@@ -48,6 +92,7 @@ These files/modules are preservation-critical because they anchor shell, theme, 
 ### Voice frontend classification note
 
 - Current HAM voice frontend implementation is replaceable and should not block the rebuild.
+- This includes current voice-related wiring inside `frontend/src/pages/Chat.tsx`.
 
 ### Env/config handling (frontend)
 
@@ -114,15 +159,26 @@ Use adapters to decouple new UI from existing backend contracts:
 - Prefer reusing `POST /api/chat/transcribe` unless a better HAM-owned backend route is explicitly designed and approved.
 - Only delete backend transcription route/secrets after replacement voice is proven and an explicit migration decision is made.
 
-## 5) Route-by-route contract
+## 5) Attachment replacement strategy
+
+- Workspace-inspired attachment UI is allowed and expected.
+- Browser attachment actions must still route to HAM-owned APIs only.
+- Do not send browser uploads directly to OpenAI, transcription vendors, Cursor Cloud, Hermes gateway hosts, or any upstream provider.
+- For attachment transport, choose one explicit path per feature before implementation:
+  - UI-only preview with send disabled until backend support exists.
+  - Reuse an existing HAM backend endpoint when contract-compatible.
+  - Defer to a later phase that introduces a new HAM-owned backend route.
+- Do not introduce new backend endpoints or new secrets in Phase 1A unless explicitly approved in a separate scope decision.
+
+## 6) Route-by-route contract
 
 ### `/chat`
 
 - **Current component:** `frontend/src/pages/Chat.tsx`
 - **Current API dependencies:** `postChatStream`, `postChatTranscribe`, `fetchModelsCatalog`, `fetchChatSessions`, `fetchChatSession`, managed Cloud Agent APIs (`launchCursorAgent`, `postCursorAgentSync`, deploy hook/approval/status calls), project metadata APIs.
 - **Must-preserve behavior:** preserve `/chat` route, stream completion UX, typed chat send behavior, Cloud Agent launch/attach/status loop, auth-gated API calls via HAM.
-- **Safe rebuild approach:** replace composer/message/workspace UI and replace current HAM voice implementation with Workspace-inspired voice while preserving stream and Cloud Agent adapter seams.
-- **Manual smoke test:** send prompt and verify stream completes; no-mic voice path shows clean inline error; mic-enabled dictation inserts text without auto-send; send-state gating holds during transcription; managed Cloud Agent launch/status still updates.
+- **Safe rebuild approach:** replace composer/message/workspace UI, voice UI, and attachment UI with Workspace-inspired patterns while preserving stream and Cloud Agent adapter seams.
+- **Manual smoke test:** send prompt and verify stream completes; no-mic voice path shows clean inline error; mic-enabled dictation inserts text without auto-send; attachment UI never bypasses HAM API; managed Cloud Agent launch/status still updates.
 
 ### `/command-center`
 
@@ -172,7 +228,7 @@ Use adapters to decouple new UI from existing backend contracts:
 - **Safe rebuild approach:** rebuild section IA and visuals while preserving endpoint actions and access constraints.
 - **Manual smoke test:** API keys panel loads, context panel loads, preview/apply flows still enforce write-token behavior.
 
-## 6) Cloud Agent preservation checklist
+## 7) Cloud Agent preservation checklist
 
 The following must continue working throughout migration:
 
@@ -185,7 +241,7 @@ The following must continue working throughout migration:
 - [ ] No browser-side secrets for Cursor, Vercel, or gateway keys.
 - [ ] Browser only calls HAM FastAPI endpoints; no direct upstream gateway calls.
 
-## 7) Theme/shell preservation checklist
+## 8) Theme/shell preservation checklist
 
 Preserve these files/tokens/chrome contracts to maintain HAM visual identity:
 
@@ -197,21 +253,35 @@ Preserve these files/tokens/chrome contracts to maintain HAM visual identity:
 - [ ] `frontend/src/main.tsx` + global CSS import pipeline.
 - [ ] Chat composer visual baseline in `/chat` (industrial/dark composition language) even as internals are refreshed.
 
-## 8) Proposed rebuild phases
+## 9) Proposed rebuild phases
 
 ### Phase 0 — Safety net
 
 - Create rollback tag before any implementation migration commit.
 - Lock preserved-core file list in PR description/checklist.
 - Classify current HAM voice frontend implementation as replaceable.
+- Classify current HAM attachment/composer presentation internals as replaceable.
 - No implementation changes; docs/inventory/tests only.
 
 ### Phase 1 — New Chat/Operator Workspace inside existing shell
 
+This phase implements the **Default Workspace Runtime** (see [Runtime strategy](#runtime-strategy)). It does not add a governed runtime, runtime toggles, or dual product paths.
+
+#### Phase 1A.1 — Scaffold and parity
+
+- Introduce `operator-workspace` feature module and mount it on `/chat`.
+- Preserve typed send and streaming parity through `postChatStream`.
+- Keep Cloud Agent launch/attach/status affordances reachable via existing adapters (direct reuse or compatibility bridge).
+- Prefer thin hooks/adapters over embedding transport or policy assumptions in raw UI components (see [Design guidance for Phase 1A](#design-guidance-for-phase-1a)).
+- Keep old chat path as a rollback-compatible fallback until parity checks pass.
+
+#### Phase 1A.2 — Voice and attachment adaptation
+
 - Keep `/chat` route and stream transport contract unchanged (`POST /api/chat/stream`).
-- Rebuild message/workbench/operator presentation components.
 - Replace current HAM voice frontend with Workspace-inspired voice UI/flows.
-- Adapt replacement voice to HAM backend transcription seam.
+- Adapt replacement voice to HAM backend transcription seam (`POST /api/chat/transcribe`).
+- Replace current attachment/composer UI with Workspace-inspired attachment affordances that remain HAM API mediated.
+- Attachment sending must follow the explicit transport decision selected in this plan (UI-only disabled send, existing endpoint reuse, or deferred backend route).
 - No browser-side secrets.
 - Keep Cloud Agent launch/status wiring behaviorally identical.
 
@@ -232,8 +302,9 @@ Preserve these files/tokens/chrome contracts to maintain HAM visual identity:
 - Only after replacement routes pass smoke tests and parity checks.
 - Remove dead components in dedicated cleanup commits (no mixed feature changes).
 - Delete backend transcription route only if replacement no longer needs it and secret migration is explicitly approved.
+- Delete old attachment/voice frontend modules only after replacement flow passes smoke tests and no regressions are observed.
 
-## 9) Stop conditions
+## 10) Stop conditions
 
 Stop immediately and require explicit review if a proposed change would:
 
@@ -241,15 +312,19 @@ Stop immediately and require explicit review if a proposed change would:
 - Expose API keys/secrets to browser code.
 - Expose transcription API keys to browser code.
 - Introduce direct browser calls to transcription providers.
+- Introduce direct browser uploads/calls to third-party attachment providers.
+- Introduce direct browser calls to Cursor Cloud APIs.
 - Introduce direct browser calls to Hermes gateway/upstream hosts.
 - Remove or disable Cloud Agent launch/status behavior.
+- Remove managed mission polling or deploy approval/deploy-hook reachability from `/chat`.
 - Delete backend transcription route before replacement voice is proven.
 - Delete Secret Manager wiring before replacement voice is proven.
 - Break `/chat` route or stream behavior.
 - Replace global shell/theme foundations (`App.tsx`, layout shell, `index.css` tokens) without approval.
 - Add terminal/process/file-system/hermes-proxy capabilities.
+- Add runtime toggle UI, governed-runtime product surface, or dual-runtime operator modes without an explicit re-scope (see [Runtime strategy](#runtime-strategy)).
 
-## 10) Acceptance test matrix (must remain green during migration)
+## 11) Acceptance test matrix (must remain green during migration)
 
 ### Required command checks
 
@@ -262,10 +337,20 @@ Stop immediately and require explicit review if a proposed change would:
 - **Chat stream:** `/chat` send prompt, confirm stream completes.
 - **Voice no-mic:** mic blocked/unavailable shows clean inline error; no overlay regression.
 - **Voice with mic:** record->stop inserts transcript in composer; no auto-send; send disabled during transcribe.
+- **Attachments:** UI never calls upstream providers directly; send path is either HAM-backed or explicitly disabled pending backend support.
 - **Cloud Agent:** launch/attach mission, status updates, managed polling, deploy approval/deploy hook checks.
 - **Route availability:** `/chat`, `/command-center`, `/activity`, `/skills`, `/agents`, `/runs`, `/settings` all load.
 
-## 11) Temporary backend voice/transcription seams to preserve
+## 12) Deletion candidates (post-parity only)
+
+- `frontend/src/components/chat/VoiceMessageInput.tsx`
+- `frontend/src/components/chat/VoiceMessageInput.css`
+- `frontend/src/hooks/useVoiceRecorder.ts`
+- `frontend/src/lib/ham/voiceRecordingErrors.ts`
+- Legacy voice/attachment wiring blocks inside `frontend/src/pages/Chat.tsx`
+- Any superseded legacy composer/message presentation modules after replacement parity.
+
+## 13) Temporary backend voice/transcription seams to preserve
 
 Until replacement voice is fully adapted and proven:
 
