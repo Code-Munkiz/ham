@@ -55,6 +55,27 @@ The following are **out of scope** for this plan update and for the rebuild phas
 - New backend endpoints, new secrets, or xterm/PTY/terminal implementation.
 - Any pattern that **duplicates** upstream Hermes Workspace server routes (for example ad hoc `/api/send-stream`–style BFFs in the **browser** contract) instead of HAM’s existing FastAPI and `api.ts` patterns.
 
+## Memory Heist / Context Engine placement
+
+**Memory Heist** (Context Engine) is the **Operator Workspace memory and context** capability. It is not a separate sidecar app, and it should **not** be implemented by copy-pasting Hermes Workspace memory UI or calling upstream memory routes from the browser.
+
+It should sit **behind HAM-owned adapters** and feed:
+
+- chat context preview
+- Cloud Agent mission context bundles
+- skills/capability context
+- settings/config context review
+- future file/terminal/process policy context (only when that scope is approved)
+
+**Phase 1A.1 (initial) scope:** reserve **UI space and seams** for this capability (placeholders, layout hooks, or non-functional affordances) only. **Full Memory Heist wiring** is a **later phase** after `/chat` stream parity and Cloud Agent reachability are proven.
+
+**Required boundary:**
+
+- Browser calls **HAM only** (through `api.ts` and HAM FastAPI; no new browser→upstream memory endpoints).
+- **No** raw upstream memory routes or provider memory APIs from the client.
+- **No** unaudited or silent browser-side context injection into prompts, missions, or settings.
+- Memory **writes/updates** go through HAM’s existing **preview/apply**, explicit user confirmation, or other audited server-mediated flows where applicable—not ad hoc client-only mutation.
+
 ## 1) Preserved core
 
 These files/modules are preservation-critical because they anchor shell, theme, auth, API boundaries, Cloud Agent behavior, chat stream behavior, and deploy/secrets handling.
@@ -273,6 +294,7 @@ This phase implements the **Default Workspace Runtime** (see [Runtime strategy](
 - Preserve typed send and streaming parity through `postChatStream`.
 - Keep Cloud Agent launch/attach/status affordances reachable via existing adapters (direct reuse or compatibility bridge).
 - Prefer thin hooks/adapters over embedding transport or policy assumptions in raw UI components (see [Design guidance for Phase 1A](#design-guidance-for-phase-1a)).
+- Reserve **UI space / seams** for Memory Heist and context (see [Memory Heist / Context Engine placement](#memory-heist--context-engine-placement)); **do not** ship full context-engine wiring in 1A.1.
 - Keep old chat path as a rollback-compatible fallback until parity checks pass.
 
 #### Phase 1A.2 — Voice and attachment adaptation
@@ -323,6 +345,7 @@ Stop immediately and require explicit review if a proposed change would:
 - Replace global shell/theme foundations (`App.tsx`, layout shell, `index.css` tokens) without approval.
 - Add terminal/process/file-system/hermes-proxy capabilities.
 - Add runtime toggle UI, governed-runtime product surface, or dual-runtime operator modes without an explicit re-scope (see [Runtime strategy](#runtime-strategy)).
+- Wire Memory Heist or context to **raw upstream memory routes** from the browser, or add **unaudited browser-side context injection** into chat, Cloud Agent, or settings flows (see [Memory Heist / Context Engine placement](#memory-heist--context-engine-placement)).
 
 ## 11) Acceptance test matrix (must remain green during migration)
 
