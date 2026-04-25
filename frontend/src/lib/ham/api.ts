@@ -1002,6 +1002,8 @@ export interface HamChatResponse {
   actions: HamUiAction[];
   active_agent?: HamChatActiveAgentMeta | null;
   operator_result?: HamOperatorResult | null;
+  /** Present on terminal `done` when the model gateway failed after retries; safe text is in `messages`. */
+  gateway_error?: { code: string };
 }
 
 /**
@@ -1141,6 +1143,8 @@ export type HamChatStreamEvent =
       actions?: HamUiAction[];
       active_agent?: HamChatActiveAgentMeta | null;
       operator_result?: HamOperatorResult | null;
+      /** Structured signal when the assistant turn ended in a gateway failure (safe copy in `messages`). */
+      gateway_error?: { code: string };
     }
   | { type: "error"; code: string; message: string };
 
@@ -1263,6 +1267,7 @@ export async function postChatStream(
         actions: Array.isArray(ev.actions) ? ev.actions : [],
         active_agent: ev.active_agent ?? undefined,
         operator_result: ev.operator_result ?? undefined,
+        ...(ev.gateway_error ? { gateway_error: ev.gateway_error } : {}),
       };
       return;
     }

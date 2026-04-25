@@ -73,6 +73,17 @@ Validate model strings against your Hermes deployment before rolling out on Clou
 
 **Note:** If `HERMES_GATEWAY_MODE` is unset, the adapter uses **`http`** when `HERMES_GATEWAY_BASE_URL` is non-empty, otherwise **`mock`**. Set `HERMES_GATEWAY_MODE=mock` explicitly to force mock even when a base URL is present.
 
+### HAM dashboard chat stream (`POST /api/chat/stream`, NDJSON)
+
+The browser calls **Ham** only; Ham may proxy to the gateway modes above. NDJSON lines use `type`: `session`, optional `delta`, then a terminal `done` (or `error` for non-gateway/session failures).
+
+When the **model gateway** raises after fallback is exhausted (or in modes without retry), Ham **does not** end the stream with a terminal `error` line for that case. It appends a **safe, user-facing** assistant `content` to the session, then emits **`done`** with:
+
+- `messages` — includes the new assistant turn (no raw upstream text).
+- `gateway_error` — optional object `{ "code": "<GatewayCallError code>" }` so clients can detect failure without scraping copy.
+
+Other failures (e.g. missing session during streaming) may still use a terminal **`error`** line. See [`src/api/chat.py`](../src/api/chat.py).
+
 ## Out of scope for this contract revision
 
 - `POST /v1/responses` and `previous_response_id`
