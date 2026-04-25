@@ -55,7 +55,19 @@ If a given Hermes build does not support **`stream: true`** on this path, the ad
 | Env | Role |
 |-----|------|
 | `HERMES_GATEWAY_MODEL` | `model` field on `POST /v1/chat/completions`. OpenRouter-style slugs (e.g. `minimax/minimax-m2.5:free`) are valid **only if** your Hermes (or its LiteLLM layer) accepts them. The placeholder `hermes-agent` usually means **routing is defined inside Hermes** (profile / agent config on the Hermes host — not in this repo). |
-| `HAM_CHAT_FALLBACK_MODEL` | Optional. On **429**, **502**, **503**, or **504** from the first request, HAM retries the same messages **once** with this model id (see [`src/integrations/nous_gateway_client.py`](../src/integrations/nous_gateway_client.py)). |
+| `HAM_CHAT_FALLBACK_MODEL` | Optional alternate `model` for **one retry** of the same request. Retry runs only if **no assistant token has been yielded yet** (HAM does not switch models mid-stream). See [`src/integrations/nous_gateway_client.py`](../src/integrations/nous_gateway_client.py). |
+
+**When fallback retry is eligible** (primary failed before any streamed content):
+
+- **HTTP status** on the gateway response: **429**, **502**, **503**, or **504** (mapped to `UPSTREAM_REJECTED` with `http_status` set).
+- **Adapter abort codes** (no successful HTTP body, or stream ended early): **`UPSTREAM_TIMEOUT`**, **`UPSTREAM_UNAVAILABLE`**, **`STREAM_STALLED`**, **`STREAM_MAX_DURATION`**.
+
+**Stream guard tunables** (optional; HTTP streaming path only):
+
+| Env | Role |
+|-----|------|
+| `HAM_CHAT_HTTP_STALL_SEC` | Seconds without **SSE progress** (new `data:` lines / content deltas) before raising **`STREAM_STALLED`**. Default **45** if unset or invalid. |
+| `HAM_CHAT_HTTP_STREAM_MAX_SEC` | Wall-clock cap on a single streaming read. If set and valid, used as a **minimum of 30** seconds; if unset, HAM derives a default from the request timeout (at least **300** seconds in typical configs). Breach raises **`STREAM_MAX_DURATION`**. |
 
 Validate model strings against your Hermes deployment before rolling out on Cloud Run.
 
