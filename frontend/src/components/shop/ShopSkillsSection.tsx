@@ -1,6 +1,7 @@
 import * as React from "react";
 import {
   BookOpen,
+  Bookmark,
   ChevronRight,
   Cpu,
   KeyRound,
@@ -12,7 +13,9 @@ import {
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import {
+  fetchCapabilityLibrary,
   fetchHermesSkillDetail,
+  postCapabilityLibrarySave,
   type HermesSkillCatalogEntry,
   type HermesSkillCatalogEntryDetail,
   type HermesSkillsCatalogResponse,
@@ -91,13 +94,30 @@ export interface ShopSkillsSectionProps {
   catalogErr: string | null;
   live: HermesSkillsInstalledResponse | null;
   liveErr: string | null;
+  /** Registered project for saving refs to the capability library. */
+  projectId?: string | null;
+  libraryWriteToken?: string;
+  /** Current library revision (from GET /capability-library/library); updated after save. */
+  libraryRevisionRef?: React.MutableRefObject<string | null>;
+  onAfterLibrarySave?: (newRevision: string) => void;
 }
 
-export function ShopSkillsSection({ catalog, catalogErr, live, liveErr }: ShopSkillsSectionProps) {
+export function ShopSkillsSection({
+  catalog,
+  catalogErr,
+  live,
+  liveErr,
+  projectId = null,
+  libraryWriteToken = "",
+  libraryRevisionRef,
+  onAfterLibrarySave,
+}: ShopSkillsSectionProps) {
   const [filter, setFilter] = React.useState("");
   const [detail, setDetail] = React.useState<HermesSkillCatalogEntryDetail | null>(null);
   const [panelOpen, setPanelOpen] = React.useState(false);
   const [detailErr, setDetailErr] = React.useState<string | null>(null);
+  const [libSaveErr, setLibSaveErr] = React.useState<string | null>(null);
+  const [libSaveBusy, setLibSaveBusy] = React.useState<string | null>(null);
 
   const entries = catalog?.entries ?? [];
 
@@ -139,6 +159,33 @@ export function ShopSkillsSection({ catalog, catalogErr, live, liveErr }: ShopSk
       setDetail(res.entry);
     } catch (e) {
       setDetailErr(e instanceof Error ? e.message : "Detail request failed");
+    }
+  };
+
+  const saveToLibrary = async (entry: HermesSkillCatalogEntry) => {
+    if (!projectId || !libraryWriteToken.trim()) {
+      setLibSaveErr("Set a project in the URL (?project_id=…) and paste the write token (My library tab).");
+      return;
+    }
+    setLibSaveErr(null);
+    setLibSaveBusy(entry.catalog_id);
+    try {
+      const lib = await fetchCapabilityLibrary(projectId);
+      const out = await postCapabilityLibrarySave(
+        projectId,
+        {
+          ref: `hermes:${entry.catalog_id}`,
+          notes: "",
+          base_revision: lib.revision,
+        },
+        libraryWriteToken.trim(),
+      );
+      if (libraryRevisionRef) libraryRevisionRef.current = out.new_revision;
+      onAfterLibrarySave?.(out.new_revision);
+    } catch (e) {
+      setLibSaveErr(e instanceof Error ? e.message : "Save to library failed");
+    } finally {
+      setLibSaveBusy(null);
     }
   };
 
@@ -189,6 +236,11 @@ export function ShopSkillsSection({ catalog, catalogErr, live, liveErr }: ShopSk
         {liveErr ? (
           <p className="text-[10px] text-amber-200/80">Live overlay could not load: {liveErr}</p>
         ) : null}
+        {libSaveErr ? (
+          <p className="text-[10px] text-red-300/80 max-w-2xl" role="alert">
+            {libSaveErr}
+          </p>
+        ) : null}
 
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/20" />
@@ -212,11 +264,18 @@ export function ShopSkillsSection({ catalog, catalogErr, live, liveErr }: ShopSk
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {filtered.map((entry) => (
-                <button
+                <div
                   key={entry.catalog_id}
-                  type="button"
+                  role="button"
+                  tabIndex={0}
                   onClick={() => void openDetail(entry)}
-                  className="text-left group flex flex-col p-6 bg-[#0a0a0a] border border-white/5 hover:border-[#FF6B00]/40 transition-all rounded-xl"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      void openDetail(entry);
+                    }
+                  }}
+                  className="text-left group flex flex-col p-6 bg-[#0a0a0a] border border-white/5 hover:border-[#FF6B00]/40 transition-all rounded-xl cursor-pointer"
                 >
                   <div className="flex justify-between items-start gap-4 mb-4">
                     <div className="space-y-2 flex-1 min-w-0">
@@ -254,12 +313,26 @@ export function ShopSkillsSection({ catalog, catalogErr, live, liveErr }: ShopSk
                         Config keys
                       </span>
                     ) : null}
+                    {projectId ? (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void saveToLibrary(entry);
+                        }}
+                        disabled={!libraryWriteToken.trim() || libSaveBusy === entry.catalog_id}
+                        className="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded border border-[#FF6B00]/40 text-[#FF6B00]/90 bg-[#FF6B00]/5 flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed hover:border-[#FF6B00]/60"
+                      >
+                        <Bookmark className="h-3 w-3" />
+                        {libSaveBusy === entry.catalog_id ? "Saving…" : "Save to My Library"}
+                      </button>
+                    ) : null}
                   </div>
                   <p className="mt-4 text-[9px] font-mono text-white/15 truncate">{entry.catalog_id}</p>
                   <span className="mt-2 text-[9px] font-black uppercase tracking-widest text-[#FF6B00]/80">
                     View details
                   </span>
-                </button>
+                </div>
               ))}
             </div>
           )}

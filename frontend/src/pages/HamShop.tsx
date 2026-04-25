@@ -2,7 +2,7 @@
  * HAM Shop — read-only discovery for skills, runtime inventory, capability directory.
  */
 import * as React from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { Orbit, ShoppingBag } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -10,6 +10,7 @@ import {
   fetchCapabilityDirectoryIndex,
   fetchHermesRuntimeInventory,
   fetchHermesSkillsCapabilities,
+  fetchCapabilityLibrary,
   fetchHermesSkillsCatalog,
   fetchHermesSkillsInstalled,
   type CapabilityDirectoryCapabilitiesResponse,
@@ -24,9 +25,11 @@ import { ShopOverviewSection } from "@/components/shop/ShopOverviewSection";
 import { ShopSkillsSection } from "@/components/shop/ShopSkillsSection";
 import { ShopRuntimeSection } from "@/components/shop/ShopRuntimeSections";
 import { ShopTemplatesSection } from "@/components/shop/ShopTemplatesSection";
+import { ShopMyLibraryPanel } from "@/components/shop/ShopMyLibraryPanel";
 
 const TABS = [
   { id: "overview", label: "Overview" },
+  { id: "my-library", label: "My library" },
   { id: "skills", label: "Skills" },
   { id: "tools", label: "Tools" },
   { id: "mcp", label: "MCP" },
@@ -38,6 +41,11 @@ const TABS = [
 type TabId = (typeof TABS)[number]["id"];
 
 export default function HamShop() {
+  const [searchParams] = useSearchParams();
+  const projectId = searchParams.get("project_id")?.trim() || null;
+  const [libWriteTok, setLibWriteTok] = React.useState("");
+  const libRevRef = React.useRef<string | null>(null);
+
   const [tab, setTab] = React.useState<TabId>("overview");
 
   const [catalog, setCatalog] = React.useState<HermesSkillsCatalogResponse | null>(null);
@@ -54,6 +62,24 @@ export default function HamShop() {
   const [skillsCaps, setSkillsCaps] = React.useState<HermesSkillsCapabilities | null>(null);
   const [skillsCapsErr, setSkillsCapsErr] = React.useState<string | null>(null);
   const [bootLoading, setBootLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    if (!projectId) {
+      libRevRef.current = null;
+      return;
+    }
+    let cancelled = false;
+    void fetchCapabilityLibrary(projectId)
+      .then((r) => {
+        if (!cancelled) libRevRef.current = r.revision;
+      })
+      .catch(() => {
+        if (!cancelled) libRevRef.current = null;
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -149,7 +175,9 @@ export default function HamShop() {
           <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 px-4 py-3 text-[11px] text-cyan-100/85 leading-relaxed max-w-3xl">
             <span className="font-black uppercase tracking-wider text-[10px]">No execution</span> — this
             surface does not install, apply, or run anything. It only reflects API-visible catalog and
-            inventory data.
+            inventory data. <span className="text-white/50">My library</span> saves{" "}
+            <span className="font-mono">hermes:…</span> / <span className="font-mono">capdir:…</span> refs only (API +
+            write token). Still no auto-install.
           </div>
         </div>
 
@@ -191,8 +219,28 @@ export default function HamShop() {
             />
           ) : null}
 
+          {!bootLoading && tab === "my-library" ? (
+            <ShopMyLibraryPanel
+              projectId={projectId}
+              writeToken={libWriteTok}
+              onWriteTokenChange={setLibWriteTok}
+              onRevisionRef={libRevRef}
+            />
+          ) : null}
+
           {!bootLoading && tab === "skills" ? (
-            <ShopSkillsSection catalog={catalog} catalogErr={catalogErr} live={live} liveErr={liveErr} />
+            <ShopSkillsSection
+              catalog={catalog}
+              catalogErr={catalogErr}
+              live={live}
+              liveErr={liveErr}
+              projectId={projectId}
+              libraryWriteToken={libWriteTok}
+              libraryRevisionRef={libRevRef}
+              onAfterLibrarySave={(r) => {
+                libRevRef.current = r;
+              }}
+            />
           ) : null}
 
           {!bootLoading && tab === "tools" ? (

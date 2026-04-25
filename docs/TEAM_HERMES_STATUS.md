@@ -47,6 +47,7 @@ It does **not** add new `hermes` subcommands to the allowlist; see broker securi
 
 - Show a **unified, honest** **API-side** status (Command Center + `operator_connection` when present).
 - **Read-only** discovery (Capabilities shop, skills catalog, inventory where API allows).
+- **My library (Capability library):** the Ham API can **persist project-scoped bookmark-style refs** to the Hermes skills catalog and the first-party capability directory (`/api/capability-library/*`, on-disk under the project&rsquo;s `.ham/`, with a separate write token). This is **saving references only** — it does **not** install to Hermes or run shell from the browser; **installed** and **active** state still come from real inventory and Hermes config (see [AGENTS.md](../AGENTS.md) and `docs/capabilities/`).
 - **Desktop**: **verify** local `hermes` and run **fixed** preset **checks** with capped output and timeout.
 - Route **chat** per **`HERMES_GATEWAY_MODE`** (OpenRouter vs HTTP upstream vs mock) **server-side** — browser never holds provider secrets for gateway.
 

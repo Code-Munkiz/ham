@@ -1663,6 +1663,133 @@ export async function fetchCapabilityDirectoryBundle(
   return res.json() as Promise<CapabilityDirectoryBundleResponse>;
 }
 
+// --- Capability library (saved catalog refs; token-gated writes) ---
+
+export interface CapabilityLibraryWriteStatus {
+  kind: "ham_capability_library_write_status";
+  writes_enabled: boolean;
+}
+
+export interface CapabilityLibraryEntryRow {
+  ref: string;
+  notes: string;
+  user_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CapabilityLibraryResponse {
+  kind: "ham_capability_library";
+  schema_version: string;
+  project_root: string;
+  revision: string;
+  entries: CapabilityLibraryEntryRow[];
+}
+
+export interface CapabilityLibraryAggregateItem {
+  ref: string;
+  source: string;
+  in_library: boolean;
+  library: {
+    notes: string;
+    user_order: number;
+    created_at: string;
+    updated_at: string;
+  };
+  in_catalog?: boolean;
+  in_directory?: boolean;
+  hermes?: {
+    catalog_id?: string;
+    display_name?: string;
+    summary?: string;
+    trust_level?: string;
+    installed_summary?: { status?: string; linked?: boolean };
+  };
+  capability_directory?: {
+    kind?: string;
+    id?: string;
+    display_name?: string;
+    trust_tier?: string;
+  };
+}
+
+export interface CapabilityLibraryAggregateResponse {
+  kind: "ham_capability_library_aggregate";
+  schema_version: string;
+  project_root: string;
+  revision: string;
+  entry_count: number;
+  items: CapabilityLibraryAggregateItem[];
+}
+
+export async function fetchCapabilityLibraryWriteStatus(): Promise<CapabilityLibraryWriteStatus> {
+  const res = await hamApiFetch("/api/capability-library/write-status");
+  if (!res.ok) {
+    throw new Error(`capability-library write-status: HTTP ${res.status}`);
+  }
+  return res.json() as Promise<CapabilityLibraryWriteStatus>;
+}
+
+export async function fetchCapabilityLibrary(projectId: string): Promise<CapabilityLibraryResponse> {
+  const res = await hamApiFetch(
+    `/api/capability-library/library?project_id=${encodeURIComponent(projectId)}`,
+  );
+  if (!res.ok) {
+    const msg = await detailMessageFromResponse(res);
+    throw new Error(msg || `capability-library: HTTP ${res.status}`);
+  }
+  return res.json() as Promise<CapabilityLibraryResponse>;
+}
+
+export async function fetchCapabilityLibraryAggregate(
+  projectId: string,
+): Promise<CapabilityLibraryAggregateResponse> {
+  const res = await hamApiFetch(
+    `/api/capability-library/aggregate?project_id=${encodeURIComponent(projectId)}`,
+  );
+  if (!res.ok) {
+    const msg = await detailMessageFromResponse(res);
+    throw new Error(msg || `capability-library aggregate: HTTP ${res.status}`);
+  }
+  return res.json() as Promise<CapabilityLibraryAggregateResponse>;
+}
+
+export async function postCapabilityLibrarySave(
+  projectId: string,
+  body: { ref: string; notes: string; base_revision: string },
+  writeToken: string,
+): Promise<{ new_revision: string; audit_id: string }> {
+  const headers = new Headers({ "Content-Type": "application/json" });
+  await applyHamOperatorSecretHeaders(headers, writeToken);
+  const res = await fetch(
+    apiUrl(`/api/capability-library/save?project_id=${encodeURIComponent(projectId)}`),
+    { method: "POST", headers, body: JSON.stringify(body) },
+  );
+  if (!res.ok) {
+    const msg = await detailMessageFromResponse(res);
+    throw new Error(msg || `capability-library save: HTTP ${res.status}`);
+  }
+  return res.json() as Promise<{ new_revision: string; audit_id: string }>;
+}
+
+export async function postCapabilityLibraryRemove(
+  projectId: string,
+  body: { ref: string; base_revision: string },
+  writeToken: string,
+): Promise<{ new_revision: string; audit_id: string }> {
+  const headers = new Headers({ "Content-Type": "application/json" });
+  await applyHamOperatorSecretHeaders(headers, writeToken);
+  const res = await fetch(
+    apiUrl(`/api/capability-library/remove?project_id=${encodeURIComponent(projectId)}`),
+    { method: "POST", headers, body: JSON.stringify(body) },
+  );
+  if (!res.ok) {
+    const msg = await detailMessageFromResponse(res);
+    throw new Error(msg || `capability-library remove: HTTP ${res.status}`);
+  }
+  return res.json() as Promise<{ new_revision: string; audit_id: string }>;
+}
+
 // --- Allowlisted project settings (v1 control plane) ---
 
 export interface HamSettingsMemoryHeistPatch {
