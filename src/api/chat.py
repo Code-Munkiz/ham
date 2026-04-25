@@ -39,6 +39,7 @@ from src.ham.workbench_view_intent import augment_workbench_view_actions
 from src.integrations.nous_gateway_client import (
     GatewayCallError,
     complete_chat_turn,
+    format_gateway_error_user_message,
     stream_chat_turn,
 )
 from src.persistence.chat_session_store import ChatTurn, InMemoryChatSessionStore
@@ -586,9 +587,28 @@ def post_chat_stream(
                     pieces.append(part)
                     yield json.dumps({"type": "delta", "text": part}) + "\n"
             except GatewayCallError as exc:
-                yield json.dumps(
-                    {"type": "error", "code": exc.code, "message": exc.message},
-                ) + "\n"
+                assistant_visible = format_gateway_error_user_message(exc)
+                try:
+                    store.append_turns(sid, [ChatTurn(role="assistant", content=assistant_visible)])
+                    payload_err: dict[str, Any] = {
+                        "type": "done",
+                        "session_id": sid,
+                        "messages": store.list_messages(sid),
+                        "actions": [],
+                        "operator_result": None,
+                        "gateway_error": {"code": exc.code},
+                    }
+                    if stream_active_meta:
+                        payload_err["active_agent"] = stream_active_meta
+                    yield json.dumps(payload_err) + "\n"
+                except KeyError:
+                    yield json.dumps(
+                        {
+                            "type": "error",
+                            "code": exc.code,
+                            "message": assistant_visible,
+                        },
+                    ) + "\n"
                 return
             stream_completed = True
             assistant_raw = "".join(pieces)

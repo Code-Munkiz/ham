@@ -56,9 +56,15 @@ def test_chat_stream_mock_yields_session_delta_done(mock_mode: None) -> None:
     assert "Mock assistant reply" in msgs[-1]["content"]
 
 
-def test_chat_stream_gateway_error_emits_error_line(mock_mode: None, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_chat_stream_gateway_failure_done_with_safe_assistant_and_signal(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
     def failing_stream(*_a, **_k):
-        raise GatewayCallError("UPSTREAM_REJECTED", "nope")
+        raise GatewayCallError(
+            "UPSTREAM_REJECTED",
+            "secret-upstream-body-do-not-show-users",
+            http_status=503,
+        )
 
     monkeypatch.setattr("src.api.chat.stream_chat_turn", failing_stream)
 
@@ -68,8 +74,15 @@ def test_chat_stream_gateway_error_emits_error_line(mock_mode: None, monkeypatch
     )
     assert res.status_code == 200
     events = _parse_ndjson(res.text)
-    assert events[-1]["type"] == "error"
-    assert events[-1]["code"] == "UPSTREAM_REJECTED"
+    assert events[0]["type"] == "session"
+    assert events[-1]["type"] == "done"
+    done = events[-1]
+    assert done.get("gateway_error") == {"code": "UPSTREAM_REJECTED"}
+    msgs = done["messages"]
+    assert msgs[-1]["role"] == "assistant"
+    body = msgs[-1]["content"]
+    assert "secret-upstream" not in body.lower()
+    assert "rejected" in body.lower() or "gateway" in body.lower()
 
 
 def test_chat_stream_done_includes_active_agent_meta(
