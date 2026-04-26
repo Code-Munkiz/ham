@@ -1,10 +1,11 @@
 import * as React from "react";
 import { Link } from "react-router-dom";
-import { ArrowUp, Pencil, PanelLeft, SquareArrowOutUpRight, X } from "lucide-react";
+import { Pencil, PanelLeft, SquareArrowOutUpRight, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { workspaceTerminalAdapter } from "../../adapters/terminalAdapter";
 import { MobileTerminalInputBar } from "./MobileTerminalInputBar";
+import { type XtermControl, WorkspaceXtermHost } from "./WorkspaceXtermHost";
 
 const BG = "#0d0d0d";
 
@@ -12,14 +13,12 @@ export type TabModel = {
   id: string;
   title: string;
   sessionId: string | null;
-  outputLines: string[];
 };
 
 type WorkspaceTerminalViewProps = {
   mode: "page" | "panel";
   onMinimize?: () => void;
   onClosePanel?: () => void;
-  /** when panel opens, optional initial session hint */
   className?: string;
 };
 
@@ -34,53 +33,83 @@ function short(s: string, n: number) {
 }
 
 export function WorkspaceTerminalView({ mode, onMinimize, onClosePanel, className }: WorkspaceTerminalViewProps) {
-  const [tabs, setTabs] = React.useState<TabModel[]>([
-    { id: newTabId(), title: "Shell", sessionId: null, outputLines: [] },
-  ]);
+  const [tabs, setTabs] = React.useState<TabModel[]>([{ id: newTabId(), title: "Shell", sessionId: null }]);
   const [activeId, setActiveId] = React.useState(() => tabs[0]!.id);
   const [contextMenu, setContextMenu] = React.useState<{ x: number; y: number; tabId: string } | null>(null);
-  const [lineInput, setLineInput] = React.useState("");
   const [bridgeLine, setBridgeLine] = React.useState<string | null>(null);
   const [isMobile, setIsMobile] = React.useState(false);
-  const outRef = React.useRef<HTMLPreElement | null>(null);
-  /** Viewport for output (used to approximate TTY cols/rows for the resize endpoint). */
   const terminalAreaRef = React.useRef<HTMLDivElement | null>(null);
+  const termCtlByTabIdRef = React.useRef<Record<string, XtermControl | null>>({});
   const activeSessionIdRef = React.useRef<string | null>(null);
-  const lastResizeRef = React.useRef<{
-    sid: string;
-    cols: number;
-    rows: number;
-  } | null>(null);
-  const resizeDebounce = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-  const sessionAttempted = React.useRef<Set<string>>(new Set());
-  /** Byte offset per session for /output?after= */
-  const pollCursor = React.useRef<Record<string, number>>({});
-  /** When the WebSocket stream is open, skip HTTP polling to avoid duplicate output. */
+  const outputCursorBySessionRef = React.useRef<Record<string, number>>({});
+  const lastResizeBySessionRef = React.useRef<Record<string, { cols: number; rows: number }>>({});
+  const activeWsRef = React.useRef<WebSocket | null>(null);
   const wsStopsPollRef = React.useRef(false);
+  const sessionAttempted = React.useRef<Set<string>>(new Set());
+  const resizeDebounce = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const tabsRef = React.useRef(tabs);
+  tabsRef.current = tabs;
+
   const active = tabs.find((t) => t.id === activeId) ?? tabs[0]!;
 
-  /**
-   * Approximate grid from panel size (PTY resize on Windows ConPTY; pipe mode records dimensions only).
-   * Uses 12px mono text: ~7.2px char width, ~16px line height, minus p-2 (8px) padding.
-   */
-  const measureAndResize = React.useCallback(() => {
-    const el = terminalAreaRef.current;
-    const sid = activeSessionIdRef.current;
-    if (!el || !sid) return;
-    if (typeof window === "undefined" || typeof window.ResizeObserver === "undefined") return;
-    const { width, height } = el.getBoundingClientRect();
-    const pad = 16;
-    const w = Math.max(0, width - pad);
-    const h = Math.max(0, height - pad);
-    const charPx = 7.2;
-    const linePx = 16;
-    const cols = Math.max(20, Math.min(200, Math.floor(w / charPx)));
-    const rows = Math.max(4, Math.min(200, Math.floor(h / linePx)));
-    const prev = lastResizeRef.current;
-    if (prev && prev.sid === sid && prev.cols === cols && prev.rows === rows) return;
-    lastResizeRef.current = { sid, cols, rows };
-    void workspaceTerminalAdapter.resize(sid, cols, rows);
+  const sendToPty = React.useCallback((sessionId: string, data: string) => {
+    if (!sessionId) return;
+    const w = activeWsRef.current;
+    if (w && w.readyState === WebSocket.OPEN) {
+      try {
+        w.send(JSON.stringify({ type: "in", data }));
+        return;
+      } catch {
+        /* fall back */
+      }
+    }
+    void workspaceTerminalAdapter.sendInput(sessionId, data);
   }, []);
+
+  const onPtyData = React.useCallback(
+    (tabId: string, data: string) => {
+      const t = tabsRef.current.find((x) => x.id === tabId);
+      if (t?.sessionId) {
+        sendToPty(t.sessionId, data);
+      }
+    },
+    [sendToPty],
+  );
+
+  const onTermReady = React.useCallback(
+    (tabId: string, ctrl: XtermControl | null) => {
+      termCtlByTabIdRef.current[tabId] = ctrl;
+      if (ctrl && tabId === activeId) {
+        requestAnimationFrame(() => {
+          ctrl.focus();
+        });
+      }
+    },
+    [activeId],
+  );
+
+  const measureAndPushResize = React.useCallback(() => {
+    const sid = activeSessionIdRef.current;
+    const id = activeId;
+    if (!sid || !id) return;
+    const ctl = termCtlByTabIdRef.current[id];
+    if (!ctl) return;
+    ctl.fit();
+    const { cols, rows } = ctl.getDimensions();
+    const prev = lastResizeBySessionRef.current[sid];
+    if (prev && prev.cols === cols && prev.rows === rows) return;
+    lastResizeBySessionRef.current[sid] = { cols, rows };
+    const w = activeWsRef.current;
+    if (w && w.readyState === WebSocket.OPEN) {
+      try {
+        w.send(JSON.stringify({ type: "resize", cols, rows }));
+      } catch {
+        void workspaceTerminalAdapter.resize(sid, cols, rows);
+      }
+    } else {
+      void workspaceTerminalAdapter.resize(sid, cols, rows);
+    }
+  }, [activeId]);
 
   activeSessionIdRef.current = active.sessionId;
 
@@ -90,9 +119,9 @@ export function WorkspaceTerminalView({ mode, onMinimize, onClosePanel, classNam
     const schedule = () => {
       if (resizeDebounce.current) clearTimeout(resizeDebounce.current);
       resizeDebounce.current = setTimeout(() => {
-        measureAndResize();
+        measureAndPushResize();
         resizeDebounce.current = null;
-      }, 120);
+      }, 100);
     };
     const ro = new ResizeObserver(() => {
       schedule();
@@ -103,29 +132,22 @@ export function WorkspaceTerminalView({ mode, onMinimize, onClosePanel, classNam
       ro.disconnect();
       if (resizeDebounce.current) clearTimeout(resizeDebounce.current);
     };
-  }, [measureAndResize]);
+  }, [measureAndPushResize]);
 
   React.useLayoutEffect(() => {
+    const ctl = termCtlByTabIdRef.current[activeId];
     if (!active.sessionId) return;
     const t = setTimeout(() => {
-      lastResizeRef.current = null;
-      measureAndResize();
+      lastResizeBySessionRef.current[active.sessionId!] = { cols: 0, rows: 0 };
+      measureAndPushResize();
     }, 0);
+    if (ctl) {
+      requestAnimationFrame(() => {
+        ctl.focus();
+      });
+    }
     return () => clearTimeout(t);
-  }, [active.sessionId, activeId, measureAndResize]);
-
-  const append = React.useCallback((tabId: string, line: string) => {
-    setTabs((prev) =>
-      prev.map((t) => (t.id === tabId ? { ...t, outputLines: [...t.outputLines, line] } : t)),
-    );
-  }, []);
-
-  const appendStream = React.useCallback((tabId: string, chunk: string) => {
-    if (!chunk) return;
-    setTabs((prev) =>
-      prev.map((t) => (t.id === tabId ? { ...t, outputLines: [...t.outputLines, chunk] } : t)),
-    );
-  }, []);
+  }, [active.sessionId, activeId, measureAndPushResize]);
 
   React.useEffect(() => {
     const m = window.matchMedia("(max-width: 767px)");
@@ -136,11 +158,6 @@ export function WorkspaceTerminalView({ mode, onMinimize, onClosePanel, classNam
   }, []);
 
   React.useEffect(() => {
-    if (!outRef.current) return;
-    outRef.current.scrollTop = outRef.current.scrollHeight;
-  }, [active.outputLines, activeId]);
-
-  React.useEffect(() => {
     if (!contextMenu) return;
     const close = () => setContextMenu(null);
     window.addEventListener("click", close);
@@ -149,7 +166,7 @@ export function WorkspaceTerminalView({ mode, onMinimize, onClosePanel, classNam
 
   const activeSessionId = active.sessionId;
 
-  // Bootstrap session for active tab (best-effort; bridge pending is ok).
+  // Bootstrap session for active tab
   React.useEffect(() => {
     if (activeSessionId) return;
     if (sessionAttempted.current.has(activeId)) return;
@@ -163,56 +180,107 @@ export function WorkspaceTerminalView({ mode, onMinimize, onClosePanel, classNam
       if (bridge.status === "pending" || !sessionId) {
         setBridgeLine("Runtime bridge pending");
         setTabs((prev) => prev.map((t) => (t.id === tabId ? { ...t, sessionId: null } : t)));
-        append(
-          tabId,
-          "No terminal session active — when the server bridge is available, output will stream here.",
-        );
         return;
       }
       setBridgeLine(null);
+      outputCursorBySessionRef.current[sessionId] = 0;
       setTabs((prev) => prev.map((t) => (t.id === tabId ? { ...t, sessionId } : t)));
     })();
     return () => {
       cancelled = true;
     };
-  }, [activeId, activeSessionId, append]);
+  }, [activeId, activeSessionId]);
 
-  // WebSocket: primary output when available; HTTP poll below is a fallback.
+  // When switching to a tab or session, catch up on PTY output that arrived while the tab was hidden.
+  React.useEffect(() => {
+    const sid = activeSessionId;
+    if (!sid) return;
+    const tabId = activeId;
+    let cancelled = false;
+    const run = (attempt: number) => {
+      if (cancelled) return;
+      const ctl = termCtlByTabIdRef.current[tabId];
+      if (!ctl) {
+        if (attempt < 8) {
+          requestAnimationFrame(() => run(attempt + 1));
+        }
+        return;
+      }
+      void (async () => {
+        if (cancelled) return;
+        const after = outputCursorBySessionRef.current[sid] ?? 0;
+        const { text, next, bridge } = await workspaceTerminalAdapter.pollOutput(sid, after);
+        if (cancelled) return;
+        if (bridge.status === "ready" && text) {
+          ctl.write(text);
+        }
+        if (typeof next === "number") {
+          outputCursorBySessionRef.current[sid] = next;
+        }
+      })();
+    };
+    run(0);
+    return () => {
+      cancelled = true;
+    };
+  }, [activeId, activeSessionId]);
+
+  // WebSocket: output + in-band resize/recv; primary path when open.
   React.useEffect(() => {
     wsStopsPollRef.current = false;
     const sid = active.sessionId;
-    if (!sid) return;
+    if (!sid) {
+      return;
+    }
     const url = workspaceTerminalAdapter.webSocketStreamUrl(sid);
-    if (!url) return;
+    if (!url) {
+      return;
+    }
     let ws: WebSocket;
     try {
       ws = new WebSocket(url);
     } catch {
       return;
     }
+    const tabId = activeId;
     const onMessage = (ev: MessageEvent<string>) => {
       try {
         const j = JSON.parse(ev.data) as { type?: string; text?: string };
         if (j.type === "out" && typeof j.text === "string" && j.text) {
-          appendStream(activeId, j.text);
+          const ctl = termCtlByTabIdRef.current[tabId];
+          if (ctl) {
+            ctl.write(j.text);
+          }
+          outputCursorBySessionRef.current[sid] =
+            (outputCursorBySessionRef.current[sid] ?? 0) + j.text.length;
         }
       } catch {
         /* ignore */
       }
     };
+    activeWsRef.current = ws;
     ws.addEventListener("message", onMessage);
     ws.onopen = () => {
       wsStopsPollRef.current = true;
+      requestAnimationFrame(() => {
+        measureAndPushResize();
+      });
     };
     ws.onerror = () => {
       wsStopsPollRef.current = false;
     };
     ws.onclose = () => {
+      if (activeWsRef.current === ws) {
+        activeWsRef.current = null;
+      }
       wsStopsPollRef.current = false;
     };
     return () => {
       ws.onclose = null;
       ws.removeEventListener("message", onMessage);
+      if (activeWsRef.current === ws) {
+        activeWsRef.current = null;
+      }
       try {
         ws.close();
       } catch {
@@ -220,33 +288,41 @@ export function WorkspaceTerminalView({ mode, onMinimize, onClosePanel, classNam
       }
       wsStopsPollRef.current = false;
     };
-  }, [active.sessionId, activeId, appendStream]);
+  }, [active.sessionId, activeId, measureAndPushResize]);
 
-  // Poll server process output (fallback when WebSocket is unavailable)
+  // HTTP poll fallback
   React.useEffect(() => {
     const sid = active.sessionId;
-    if (!sid) return;
+    if (!sid) {
+      return;
+    }
+    const tabId = activeId;
     const tid = setInterval(() => {
       void (async () => {
         if (wsStopsPollRef.current) {
           return;
         }
-        const after = pollCursor.current[sid] ?? 0;
+        const after = outputCursorBySessionRef.current[sid] ?? 0;
         const { text, next, bridge } = await workspaceTerminalAdapter.pollOutput(sid, after);
         if (bridge.status === "ready" && text) {
-          appendStream(activeId, text);
+          const ctl = termCtlByTabIdRef.current[tabId];
+          if (ctl) {
+            ctl.write(text);
+          }
         }
-        pollCursor.current[sid] = next;
+        if (typeof next === "number") {
+          outputCursorBySessionRef.current[sid] = next;
+        }
       })();
     }, 500);
     return () => {
       clearInterval(tid);
     };
-  }, [active.sessionId, activeId, appendStream]);
+  }, [active.sessionId, activeId]);
 
   const createTab = () => {
     const id = newTabId();
-    setTabs((p) => [...p, { id, title: `Shell ${p.length + 1}`, sessionId: null, outputLines: [] }]);
+    setTabs((p) => [...p, { id, title: `Shell ${p.length + 1}`, sessionId: null }]);
     setActiveId(id);
   };
 
@@ -254,12 +330,16 @@ export function WorkspaceTerminalView({ mode, onMinimize, onClosePanel, classNam
     const target = tabs.find((t) => t.id === tabId);
     if (target?.sessionId) {
       void workspaceTerminalAdapter.closeSession(target.sessionId);
-      delete pollCursor.current[target.sessionId];
+      delete outputCursorBySessionRef.current[target.sessionId];
+    }
+    delete termCtlByTabIdRef.current[tabId];
+    if (tabs.length <= 1) {
+      const nid = newTabId();
+      setActiveId(nid);
+      setTabs([{ id: nid, title: "Shell", sessionId: null }]);
+      return;
     }
     setTabs((prev) => {
-      if (prev.length <= 1) {
-        return [{ ...prev[0]!, outputLines: [], sessionId: null, title: "Shell" }];
-      }
       const next = prev.filter((t) => t.id !== tabId);
       if (tabId === activeId) {
         setActiveId(next[0]!.id);
@@ -268,19 +348,12 @@ export function WorkspaceTerminalView({ mode, onMinimize, onClosePanel, classNam
     });
   };
 
-  const sendLine = (raw: string) => {
+  const sendMobileLine = (line: string) => {
     const tab = active;
-    const line = raw.endsWith("\n") || raw.length === 0 ? raw : raw + "\n";
-    append(tab.id, `\n> ${raw}\n`);
     if (!tab.sessionId) {
       return;
     }
-    void (async () => {
-      const { ok, bridge } = await workspaceTerminalAdapter.sendInput(tab.sessionId, line);
-      if (!ok && bridge.status === "pending") {
-        setBridgeLine("Runtime bridge pending");
-      }
-    })();
+    sendToPty(tab.sessionId, line);
   };
 
   return (
@@ -291,7 +364,7 @@ export function WorkspaceTerminalView({ mode, onMinimize, onClosePanel, classNam
       >
         <div className="flex min-w-0 flex-1 items-end gap-0 overflow-x-auto">
           {tabs.map((t) => {
-            const isActive = t.id === activeId;
+            const isAct = t.id === activeId;
             return (
               <div key={t.id} className="group relative flex shrink-0">
                 <button
@@ -303,9 +376,7 @@ export function WorkspaceTerminalView({ mode, onMinimize, onClosePanel, classNam
                   }}
                   className={cn(
                     "relative border border-transparent px-2.5 py-1.5 text-left text-[11px] text-white/70",
-                    isActive
-                      ? "border-b-0 border-white/10 bg-[#0d0d0d] text-white/95"
-                      : "hover:bg-white/[0.04]",
+                    isAct ? "border-b-0 border-white/10 bg-[#0d0d0d] text-white/95" : "hover:bg-white/[0.04]",
                   )}
                 >
                   {short(t.title, 20)}
@@ -323,7 +394,7 @@ export function WorkspaceTerminalView({ mode, onMinimize, onClosePanel, classNam
                     <X className="h-3 w-3" />
                   </button>
                 ) : null}
-                {isActive ? (
+                {isAct ? (
                   <span className="pointer-events-none absolute inset-x-1 bottom-0 h-0.5 rounded-full bg-[#ea580c]/90" />
                 ) : null}
               </div>
@@ -405,81 +476,39 @@ export function WorkspaceTerminalView({ mode, onMinimize, onClosePanel, classNam
         </div>
       </div>
 
-      <div
-        ref={terminalAreaRef}
-        className="relative min-h-0 flex-1 overflow-hidden"
-        data-ham-term-viewport
-      >
-        <pre
-          ref={outRef}
-          className="h-full min-h-0 w-full overflow-auto p-2 font-mono text-[12px] leading-relaxed whitespace-pre-wrap"
-          style={{ color: "#e6e6e6" }}
-        >
-          {active.outputLines.join("")}
-        </pre>
+      <div ref={terminalAreaRef} className="relative min-h-0 flex-1 overflow-hidden" data-ham-term-viewport>
+        {tabs.map((t) => {
+          const isThisActive = t.id === activeId;
+          return (
+            <div
+              key={t.id}
+              className={cn(
+                "absolute inset-0 min-h-0 min-w-0 p-0",
+                isThisActive ? "z-10" : "z-0 opacity-0 pointer-events-none",
+              )}
+            >
+              <WorkspaceXtermHost
+                tabId={t.id}
+                isActive={isThisActive}
+                isMobile={isMobile}
+                onReady={onTermReady}
+                onPtyData={onPtyData}
+              />
+            </div>
+          );
+        })}
       </div>
 
       {isMobile ? (
         <MobileTerminalInputBar
-          onSend={(data) => sendLine(data.replace(/\r$/, ""))}
+          onSend={(data) => sendMobileLine(data.replace(/\r$/, ""))}
           onCtrlC={() => {
             if (active.sessionId) {
-              void workspaceTerminalAdapter.sendInput(active.sessionId, "\x03");
+              sendToPty(active.sessionId, "\x03");
             }
           }}
         />
-      ) : (
-        <div
-          className="flex items-center gap-1 border-t border-white/10 px-2 py-1.5"
-          style={{ background: "#1a1a1a" }}
-        >
-          <input
-            value={lineInput}
-            onChange={(e) => setLineInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                sendLine(lineInput);
-                setLineInput("");
-              }
-            }}
-            placeholder="Type command…"
-            className="min-w-0 flex-1 rounded-md border border-white/10 bg-[#2a2a2a] px-2 py-1 font-mono text-[12px] text-[#e6e6e6] outline-none"
-            spellCheck={false}
-            autoComplete="off"
-            autoCorrect="off"
-            autoCapitalize="off"
-          />
-          <Button
-            type="button"
-            size="icon"
-            variant="secondary"
-            className="h-7 w-7 shrink-0"
-            onClick={() => {
-              if (active.sessionId) {
-                void workspaceTerminalAdapter.sendInput(active.sessionId, "\x03");
-              }
-            }}
-            title="Send Ctrl+C"
-            aria-label="Send Ctrl+C"
-          >
-            <span className="text-[9px] font-mono">^C</span>
-          </Button>
-          <Button
-            type="button"
-            size="icon"
-            className="h-7 w-7 shrink-0 bg-[#ea580c] text-white hover:bg-[#f97316]"
-            onClick={() => {
-              sendLine(lineInput);
-              setLineInput("");
-            }}
-            title="Send"
-            aria-label="Send"
-          >
-            <ArrowUp className="h-4 w-4" />
-          </Button>
-        </div>
-      )}
+      ) : null}
 
       {contextMenu ? (
         <div
