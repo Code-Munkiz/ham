@@ -25,7 +25,7 @@ import {
   Search,
 } from "lucide-react";
 import { toast } from "sonner";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { ChatComposerStrip } from "@/components/chat/ChatComposerStrip";
 import type { WorkbenchMode, UplinkId } from "@/components/chat/ChatComposerStrip";
@@ -676,6 +676,8 @@ function ChatPageInner({
     (import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined)?.trim(),
   );
   const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
   const { agents, selectedAgentId } = useAgent();
   const { isControlPanelOpen, setIsControlPanelOpen } = useWorkspace();
   const selectedAgent = agents.find(a => a.id === selectedAgentId) || agents[0];
@@ -683,6 +685,15 @@ function ChatPageInner({
   const [messages, setMessages] = React.useState<ChatRow[]>([]);
   const [input, setInput] = React.useState("");
   const [sessionId, setSessionId] = React.useState<string | null>(() => {
+    try {
+      if (typeof window !== "undefined") {
+        const p = new URLSearchParams(window.location.search);
+        const fromUrl = p.get("session");
+        if (fromUrl) return fromUrl;
+      }
+    } catch {
+      /* ignore */
+    }
     try {
       return localStorage.getItem(ACTIVE_SESSION_KEY) || null;
     } catch {
@@ -1250,7 +1261,10 @@ function ChatPageInner({
     setPendingCursorAgent(null);
     setChatError(null);
     setHistoryOpen(false);
-  }, [sessionId]);
+    if (location.search.includes("session=")) {
+      navigate({ pathname: location.pathname, search: "" }, { replace: true });
+    }
+  }, [sessionId, location.pathname, location.search, navigate]);
 
   /** Load a past session into the transcript. */
   const loadSession = React.useCallback(async (sid: string) => {
@@ -1279,6 +1293,14 @@ function ChatPageInner({
       toast.error("Failed to load chat session.");
     }
   }, []);
+
+  /** Hermes workspace `/workspace/chat?session=…` and `/chat?session=…` deep links — keep in sync on SPA navigations. */
+  React.useEffect(() => {
+    const s = searchParams.get("session");
+    if (!s) return;
+    if (s === sessionId) return;
+    void loadSession(s);
+  }, [searchParams, sessionId, loadSession]);
 
   const timeStr = () =>
     new Date().toLocaleTimeString([], {

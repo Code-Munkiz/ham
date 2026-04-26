@@ -1,6 +1,6 @@
 import * as React from "react";
 import { Link, NavLink, useLocation, useSearchParams } from "react-router-dom";
-import { Menu, Plus, Search, Sparkles, X } from "lucide-react";
+import { Menu, Plus, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { publicAssetUrl } from "@/lib/ham/publicAssets";
 import { Button } from "@/components/ui/button";
@@ -223,20 +223,6 @@ function WorkspaceSideNav({
           })}
         </ul>
       )}
-      <p className="mb-3 px-0.5 text-[9px] text-white/25">List from <span className="font-mono">/api/chat/sessions</span></p>
-
-      <div className="hww-side-section mt-1">Ham</div>
-      <p className="mb-2 px-0.5 text-[10px] leading-relaxed text-white/32">
-        Main product routes stay until this lift is promoted. Runtime unchanged: same HAM API and backend.
-      </p>
-      <Link
-        to="/chat"
-        onClick={onNavigate}
-        className="mb-1 flex items-center gap-2 rounded-lg border border-white/10 bg-black/20 px-2.5 py-2.5 text-[11px] text-[#ffb27a]/90 transition-colors hover:border-white/15 hover:bg-white/[0.04]"
-      >
-        <Sparkles className="h-3.5 w-3.5" strokeWidth={1.5} />
-        Open /chat
-      </Link>
     </>
   );
 }

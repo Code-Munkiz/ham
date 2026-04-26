@@ -3,7 +3,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { isHermesWorkspaceEnabled } from "./workspaceFlags";
 import { WorkspaceShell } from "./WorkspaceShell";
 import { WorkspaceHome } from "./WorkspaceHome";
-import { WorkspaceChat } from "./WorkspaceChat";
+import Chat from "@/pages/Chat";
 import { WorkspacePlaceholderPage } from "./WorkspacePlaceholder";
 import { WorkspaceFilesScreen } from "./screens/files/WorkspaceFilesScreen";
 import { WorkspaceTerminalScreen } from "./screens/terminal/WorkspaceTerminalScreen";
@@ -28,7 +28,7 @@ export function WorkspaceApp() {
       <WorkspaceShell>
         <Routes>
           <Route index element={<WorkspaceHome />} />
-          <Route path="chat" element={<WorkspaceChat />} />
+          <Route path="chat" element={<Chat />} />
           <Route path="files" element={<WorkspaceFilesScreen />} />
           <Route path="terminal" element={<WorkspaceTerminalScreen />} />
           <Route path="settings" element={<WorkspaceSettingsScreen />} />
