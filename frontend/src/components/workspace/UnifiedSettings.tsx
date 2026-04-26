@@ -489,34 +489,20 @@ export function EnvironmentReadonlyPanel({ variant = "default" }: { variant?: Se
   const w = variant === "workspace";
   return (
     <div className="space-y-5">
-      <div
-        className={cn(
-          "space-y-2 rounded-xl border p-4 md:p-5",
-          w ? "border-white/[0.08] bg-white/[0.02]" : "space-y-3 border border-white/10 bg-black/40 p-5",
-        )}
-      >
-        <h4 className={cn(w ? "text-sm font-medium text-white/85" : "text-[11px] font-bold text-white/50")}>
-          {w ? "Environment variables" : (
-            <>
-              <span className="text-[#FF6B00] text-[10px] font-black uppercase tracking-widest">Secrets</span> — use{" "}
-              <span className="font-mono text-white/60">API Keys</span> in Model &amp; provider for provider tokens. This
-              page lists <span className="italic text-white/40">names</span> only so you know what Ham reads from the
-              process environment (mostly model routing).
-            </>
-          )}
-        </h4>
-        {w && (
-          <p className="text-[13px] leading-relaxed text-white/45">
-            Provider tokens are managed under Model &amp; provider. Below are read-only <strong className="font-medium text-white/60">names</strong> the API may read (values never shown here). Copy <span className="font-mono text-white/50">.env.example</span> to <span className="font-mono text-white/50">.env</span> at the repo root, then restart the API if you change it.
-          </p>
-        )}
-        {!w && (
+      {!w && (
+        <div className="space-y-3 rounded-xl border border-white/10 bg-black/40 p-5">
+          <h4 className="text-[11px] font-bold text-white/50">
+            <span className="text-[#FF6B00] text-[10px] font-black uppercase tracking-widest">Secrets</span> — use{" "}
+            <span className="font-mono text-white/60">API Keys</span> in Model &amp; provider for provider tokens. This
+            page lists <span className="italic text-white/40">names</span> only so you know what Ham reads from the
+            process environment (mostly model routing).
+          </h4>
           <p className="text-[10px] font-bold uppercase tracking-widest text-white/25">
             Copy <span className="font-mono">.env.example</span> → <span className="font-mono">.env</span> at the repo root;
             restart CLI / API after edits.
           </p>
-        )}
-      </div>
+        </div>
+      )}
       <div
         className={cn(
           "overflow-hidden rounded-xl border",

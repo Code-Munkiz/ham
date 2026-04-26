@@ -82,16 +82,6 @@ export function WorkspaceSettingsScreen() {
         />
         <div className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4 md:p-6">
           {main}
-          <div className="mt-10 border-t border-white/[0.06] pt-4 text-[12px] text-white/32">
-            Diagnostics, jobs, and logs:{" "}
-            <a
-              className="text-[#7dd3fc] underline decoration-white/10 underline-offset-2 hover:decoration-[#7dd3fc]/50"
-              href="/settings?tab=diagnostics"
-            >
-              full HAM settings
-            </a>{" "}
-            (main app).
-          </div>
         </div>
       </div>
     </div>
