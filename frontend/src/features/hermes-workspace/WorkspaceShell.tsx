@@ -1,6 +1,6 @@
 import * as React from "react";
 import { Link, NavLink, useLocation, useSearchParams } from "react-router-dom";
-import { Menu, MessageSquare, Moon, PanelLeft, PanelLeftClose, Plus, Search, X } from "lucide-react";
+import { Menu, MessageSquare, PanelLeft, PanelLeftClose, Plus, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { publicAssetUrl } from "@/lib/ham/publicAssets";
 import { Button } from "@/components/ui/button";
@@ -64,6 +64,7 @@ function WorkspaceSideNav({
   activeSessionId,
 }: SideNavOptions) {
   const logoSrc = publicAssetUrl("ham-logo.png");
+  const hamAppMoonSrc = publicAssetUrl("ham-app-moon.png");
   const c = layoutCollapsed;
   const expand = onExpandFromCollapsed ?? (() => undefined);
 
@@ -99,7 +100,6 @@ function WorkspaceSideNav({
             <p className="truncate text-[10px] font-semibold uppercase tracking-[0.12em] text-white/80">
               Hermes workspace
             </p>
-            <p className="hww-pill mt-0.5 w-fit">Lift preview</p>
           </div>
         </div>
         <div className={cn("flex shrink-0 items-center gap-0.5", c && "w-full justify-center")}>
@@ -138,6 +138,7 @@ function WorkspaceSideNav({
               <Search
                 className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/30"
                 strokeWidth={1.5}
+                aria-hidden
               />
               <input
                 id="hww-workspace-search"
@@ -145,7 +146,7 @@ function WorkspaceSideNav({
                 value={sessionFilter}
                 onChange={(e) => onSessionFilterChange(e.target.value)}
                 placeholder="Filter by preview, id, date…"
-                className="hww-input w-full rounded-lg pl-8"
+                className="hww-input w-full rounded-lg"
                 autoComplete="off"
                 title="Client-side filter over the HAM session list"
               />
@@ -189,9 +190,6 @@ function WorkspaceSideNav({
               <Plus className="h-3.5 w-3.5" strokeWidth={2} />
               New session
             </Link>
-            <p className="mt-1 px-0.5 text-[9px] leading-snug text-white/28">
-              Opens a fresh chat; session id is set after the first HAM turn.
-            </p>
           </>
         )}
       </div>
@@ -343,7 +341,14 @@ function WorkspaceSideNav({
           title="Open HAM app"
           aria-label="Open HAM app"
         >
-          <Moon className="h-4 w-4 shrink-0" strokeWidth={1.5} />
+          <img
+            src={hamAppMoonSrc}
+            alt=""
+            className="h-5 w-5 shrink-0 object-contain"
+            width={20}
+            height={20}
+            aria-hidden
+          />
           <span
             className={cn("text-[11px] font-medium text-white/40", c && "sr-only")}
           >
