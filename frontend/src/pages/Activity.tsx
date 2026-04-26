@@ -103,77 +103,77 @@ export default function Activity() {
   const events = source === "live" && live.length > 0 ? live : MOCK_ACTIVITY;
 
   return (
-    <div className="h-full flex flex-col bg-[#050505] font-sans">
-      <div className="p-8 space-y-8 max-w-5xl mx-auto w-full">
-        <div className="flex items-center justify-between border-b border-white/5 pb-6">
-          <div className="space-y-1">
-            <h1 className="text-xl font-black uppercase tracking-[0.2em] text-white">Activity</h1>
-            <p className="text-[10px] text-white/35 font-bold uppercase tracking-[0.25em] leading-relaxed max-w-xl">
-              API-side, read-only lines derived from <span className="font-mono">GET /api/hermes-gateway/snapshot</span>{" "}
-              (and control-plane hints). When the API is unreachable, rows below are{" "}
-              <span className="text-amber-400/90">demo fallback</span> — not a full system log.
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[#02080c] font-sans text-[#e8eef8]">
+      <div className="mx-auto flex w-full max-w-5xl min-h-0 flex-1 flex-col space-y-6 overflow-y-auto p-6 sm:p-8">
+        <div className="flex flex-col gap-4 border-b border-[color:var(--ham-workspace-line)] pb-5 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0 space-y-1.5">
+            <h1 className="text-lg font-semibold tracking-tight text-white/95">Activity</h1>
+            <p className="max-w-xl text-[11px] font-normal leading-relaxed text-white/40">
+              Read-only stream from <span className="font-mono text-white/50">GET /api/hermes-gateway/snapshot</span>{" "}
+              and control-plane hints. If the API is unreachable, rows show{" "}
+              <span className="text-amber-300/90">demo fallback</span> — not a full system log.
             </p>
           </div>
-          <div className="flex flex-col items-end gap-2">
+          <div className="flex shrink-0 flex-col items-start gap-2 sm:items-end">
             <div className="flex items-center gap-2">
               <div
                 className={cn(
                   "h-1.5 w-1.5 rounded-full",
-                  source === "live" ? "bg-emerald-500 animate-pulse" : "bg-amber-500",
+                  source === "live" ? "animate-pulse bg-emerald-400" : "bg-amber-400/90",
                 )}
               />
-              <span className="text-[10px] font-bold text-white/50 uppercase tracking-widest">
-                {source === "live" ? "API_Snapshot" : "Demo_Fallback"}
+              <span className="text-[10px] font-medium uppercase tracking-[0.1em] text-white/50">
+                {source === "live" ? "Live snapshot" : "Demo fallback"}
               </span>
             </div>
             <Link
               to="/command-center"
-              className="text-[9px] font-black uppercase tracking-widest text-[#FF6B00] hover:underline"
+              className="text-[10px] font-medium text-[#ffb27a]/90 transition-colors hover:text-[#ffc896]"
             >
-              Command Center →
+              Open Command Center →
             </Link>
           </div>
         </div>
 
         {liveErr ? (
-          <p className="text-[11px] text-amber-400/90 font-mono border border-amber-500/20 rounded-lg p-3">
+          <p className="rounded-lg border border-amber-500/25 bg-amber-500/10 p-3 text-[11px] font-mono text-amber-200/90">
             {liveErr}
           </p>
         ) : null}
 
-        <div className="space-y-1">
+        <div className="flex flex-col gap-2">
           {events.map((event) => (
             <div
               key={event.id}
-              className="group flex items-start gap-6 p-4 bg-[#080808] border border-white/[0.02] hover:border-white/10 transition-all"
+              className="group flex items-start gap-4 rounded-xl border border-[color:var(--ham-workspace-line)] bg-[#040d14]/50 p-4 transition-colors hover:border-white/[0.12] hover:bg-[#040d14]/75"
             >
               <div
                 className={cn(
-                  "h-8 w-8 flex items-center justify-center shrink-0 border mt-0.5",
+                  "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border",
                   event.level === "info"
-                    ? "bg-blue-500/10 text-blue-500 border-blue-500/20"
+                    ? "border-sky-500/25 bg-sky-500/10 text-sky-300/90"
                     : event.level === "warn"
-                      ? "bg-amber-500/10 text-amber-500 border-amber-500/20"
-                      : "bg-red-500/10 text-red-500 border-red-500/20",
+                      ? "border-amber-500/30 bg-amber-500/10 text-amber-200/90"
+                      : "border-red-500/30 bg-red-500/10 text-red-300/90",
                 )}
               >
                 {event.level === "info" ? (
-                  <Info className="h-4 w-4" />
+                  <Info className="h-4 w-4" strokeWidth={1.5} />
                 ) : event.level === "warn" ? (
-                  <AlertTriangle className="h-4 w-4" />
+                  <AlertTriangle className="h-4 w-4" strokeWidth={1.5} />
                 ) : (
-                  <AlertCircle className="h-4 w-4" />
+                  <AlertCircle className="h-4 w-4" strokeWidth={1.5} />
                 )}
               </div>
 
-              <div className="flex-1 min-w-0 space-y-1">
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                  <span className="text-[9px] font-mono text-white/20">
+              <div className="min-w-0 flex-1 space-y-1">
+                <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                  <span className="text-[9px] font-mono text-white/35">
                     {new Date(event.timestamp).toLocaleTimeString([], { hour12: false })}
                   </span>
                   <span
                     className={cn(
-                      "rounded border px-1.5 py-0.5 text-[7px] font-black uppercase tracking-widest",
+                      "rounded-md border px-1.5 py-0.5 text-[7px] font-semibold uppercase tracking-[0.14em]",
                       activitySourceBadgeClass(event),
                     )}
                     title="Event source / mission family"
@@ -182,27 +182,27 @@ export default function Activity() {
                   </span>
                   <span
                     className={cn(
-                      "text-[9px] font-black uppercase tracking-widest",
+                      "text-[9px] font-medium uppercase tracking-[0.08em]",
                       event.level === "info"
-                        ? "text-blue-500/60"
+                        ? "text-sky-400/70"
                         : event.level === "warn"
-                          ? "text-amber-500/60"
-                          : "text-red-500/60",
+                          ? "text-amber-400/70"
+                          : "text-red-400/70",
                     )}
                   >
                     {event.type}
                   </span>
-                  <span className="ml-auto text-[8px] font-mono text-white/10 opacity-0 group-hover:opacity-100 transition-opacity">
-                    UUID: {event.id}
+                  <span className="ml-auto text-[8px] font-mono text-white/15 opacity-0 transition-opacity group-hover:opacity-100">
+                    {event.id}
                   </span>
                 </div>
-                <p className="text-[11px] font-bold text-white/60 group-hover:text-white transition-colors uppercase tracking-wider leading-relaxed">
+                <p className="text-[12px] font-normal leading-relaxed text-white/70 transition-colors group-hover:text-white/88">
                   {event.message}
                 </p>
               </div>
 
-              <div className="shrink-0 flex items-center opacity-0 group-hover:opacity-100 transition-all">
-                <ChevronRight className="h-4 w-4 text-[#FF6B00]" />
+              <div className="flex shrink-0 items-center opacity-0 transition-opacity group-hover:opacity-100">
+                <ChevronRight className="h-4 w-4 text-white/30" strokeWidth={1.5} />
               </div>
             </div>
           ))}
