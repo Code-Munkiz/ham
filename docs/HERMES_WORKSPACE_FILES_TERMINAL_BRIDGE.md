@@ -23,6 +23,35 @@ origin and **restart Vite**; otherwise `GET /api/workspace/files?action=list` ma
 UI shows “Runtime bridge pending” even when the correct API on the other port works in isolation.
 **Do not commit** `.env.local` (it is gitignored); copy from `.env.example` as needed.
 
+**Vercel (or any public HTTPS) + local `uvicorn` (two requirements):** the browser is on
+`https://…` and calls `http://127.0.0.1:8001` — a **cross-origin** request to a **private
+network** address. You need **both**:
+
+1. **CORS allowlist** — set `HAM_CORS_ORIGINS` to include the exact page origin, e.g.
+   `https://ham-nine-mu.vercel.app,http://localhost:3000` (comma-separated). Without this, the
+   preflight gets `400 Disallowed CORS` and the UI shows `Failed to fetch`. Default server origins
+   only list localhost dev ports, not Vercel.
+2. **Private Network Access (Chrome)** — the OPTIONS preflight may include
+   `Access-Control-Request-Private-Network: true`. The response must include
+   `Access-Control-Allow-Private-Network: true` or Chrome blocks the request (same `Failed to fetch`
+   symptom). The HAM server adds this via `src/api/pna_middleware.py` (outermost ASGI). Firefox /
+   Safari behavior may differ; always keep (1) correct.
+
+**Operator smoke (Vercel UI → this machine, broad root example):** from the repo root on Windows
+(PowerShell):
+
+```powershell
+cd C:\Projects\GoHam\ham
+$env:HAM_WORKSPACE_ROOT = "C:\"
+$env:HAM_CORS_ORIGINS = "https://ham-nine-mu.vercel.app,http://localhost:3000,http://127.0.0.1:3000"
+python -m uvicorn src.api.server:app --host 127.0.0.1 --port 8001
+```
+
+In the browser: open `https://ham-nine-mu.vercel.app/workspace/settings` and set the Connection
+**Local runtime URL** to `http://127.0.0.1:8001`, then `https://ham-nine-mu.vercel.app/workspace/files`.
+Expect Files/Terminal to use the local API only (no Cloud Run disk), no CORS/PNA `Failed to fetch`,
+and the broad-root warning when the configured root is the drive (e.g. `C:\`).
+
 Bridge table (UI remains on `workspaceFileAdapter` / `workspaceTerminalAdapter`):
 
 | Surface | Adapter call | HAM endpoint | Implementation | Data shape | Risk / follow-up |

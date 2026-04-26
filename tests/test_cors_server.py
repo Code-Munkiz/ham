@@ -50,3 +50,30 @@ def test_options_preflight_patch_allowed(
     assert res.status_code == 200, res.text
     assert res.headers.get("access-control-allow-origin") == origin
     assert res.headers.get("access-control-allow-methods", "").find("PATCH") != -1
+
+
+def test_options_preflight_private_network_access_header(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    Browsers (Chrome) send this preflight for https://* → http://127.0.0.1.
+    Without Access-Control-Allow-Private-Network, fetch() fails with 'Failed to fetch'.
+    """
+    monkeypatch.setenv("HAM_CORS_ORIGIN_REGEX", r"https://.*\.vercel\.app")
+    monkeypatch.delenv("HAM_CORS_ORIGINS", raising=False)
+    import src.api.server as srv
+
+    importlib.reload(srv)
+    client = TestClient(srv.app)
+    origin = "https://ham-nine-mu.vercel.app"
+    res = client.options(
+        "/api/workspace/health",
+        headers={
+            "Origin": origin,
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Private-Network": "true",
+        },
+    )
+    assert res.status_code == 200, res.text
+    assert res.headers.get("access-control-allow-origin") == origin
+    assert res.headers.get("access-control-allow-private-network", "").lower() == "true"

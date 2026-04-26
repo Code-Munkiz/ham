@@ -35,6 +35,7 @@ from src.api.workspace_terminal import router as workspace_terminal_router
 from src.api.workspace_conductor import router as workspace_conductor_router
 from src.api.workspace_memory import router as workspace_memory_router
 from src.api.workspace_operations import router as workspace_operations_router
+from src.api.pna_middleware import private_network_access_middleware
 from src.api.workspace_profiles import router as workspace_profiles_router
 from src.api.workspace_skills import router as workspace_skills_router
 from src.api.control_plane_runs import router as control_plane_runs_router
@@ -404,3 +405,8 @@ async def list_project_runs(
     store = RunStore(root=Path(record.root))
     runs = store.list_runs(limit=max(1, min(limit, 200)))
     return {"runs": [r.model_dump() for r in runs]}
+
+
+# Outermost ASGI: Chrome "Private Network Access" — public HTTPS (e.g. Vercel) → http://127.0.0.1
+# needs Access-Control-Allow-Private-Network on the OPTIONS preflight. Still set HAM_CORS_ORIGINS.
+app = private_network_access_middleware(app)

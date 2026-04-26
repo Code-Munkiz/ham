@@ -56,7 +56,7 @@ function bridgeFromError(e: unknown): FileBridgeState {
   }
   return {
     status: "pending",
-    detail: `Not reachable — ${msg}. CORS: allow this page's origin in HAM_CORS_ORIGINS on the local API.`,
+    detail: `Not reachable — ${msg}. Add this page's exact origin to HAM_CORS_ORIGINS (e.g. https://ham-nine-mu.vercel.app). For https → http://127.0.0.1, Chrome also needs a Private-Network preflight; the HAM local API appends Access-Control-Allow-Private-Network. See docs/HERMES_WORKSPACE_FILES_TERMINAL_BRIDGE.md.`,
     localCode: "unreachable",
   };
 }
