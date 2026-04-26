@@ -350,8 +350,8 @@ export function WorkspaceOperationsScreen() {
           </section>
         ) : null}
         {error ? (
-          <section className="rounded-3xl border border-[var(--theme-danger-border)] bg-[var(--theme-danger-soft)] px-6 py-8 text-center text-sm text-[var(--theme-text)] shadow-[0_24px_80px_var(--theme-shadow)]">
-            {error}
+          <section className="rounded-3xl border border-amber-500/30 bg-amber-500/10 px-6 py-8 text-left text-sm text-amber-100/90 shadow-[0_24px_80px_var(--theme-shadow)]">
+            <p className="whitespace-pre-wrap break-words leading-relaxed">{error}</p>
           </section>
         ) : null}
 

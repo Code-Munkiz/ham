@@ -599,8 +599,8 @@ export function WorkspaceConductorScreen() {
       <>
         <main className="mx-auto flex min-h-0 w-full max-w-[760px] flex-1 flex-col items-stretch justify-center px-4 py-4 md:px-6 md:py-6">
           {error && (
-            <div className="mb-4 rounded-2xl border border-[var(--theme-danger-border)] bg-[var(--theme-danger-soft)] px-3 py-2 text-sm text-[var(--theme-text)]">
-              {error}
+            <div className="mb-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-left text-sm text-amber-100/90">
+              <p className="whitespace-pre-wrap break-words leading-relaxed">{error}</p>
             </div>
           )}
           <div className="w-full space-y-6">

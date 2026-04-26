@@ -78,13 +78,17 @@ function StateBox({ label, error }: { label: string; error?: boolean }) {
   return (
     <div
       className={cn(
-        "flex min-h-32 items-center justify-center rounded-xl border px-4 text-sm",
+        "flex min-h-32 items-center justify-center rounded-xl border px-4 py-3 text-sm",
         error
-          ? "border-red-500/40 bg-red-950/30 text-red-200"
+          ? "border-amber-500/35 bg-amber-500/10 text-amber-100/90"
           : "border-white/10 bg-black/20 text-[var(--theme-muted,theme(colors.neutral.400))]",
       )}
     >
-      {label}
+      {error ? (
+        <span className="max-w-full whitespace-pre-wrap break-words text-left leading-relaxed">{label}</span>
+      ) : (
+        label
+      )}
     </div>
   );
 }

@@ -83,7 +83,7 @@ export function WorkspaceFilesScreen() {
   const [collapsed, setCollapsed] = React.useState(false);
   const [isMobile, setIsMobile] = React.useState(false);
   const [entries, setEntries] = React.useState<WorkspaceFileEntry[]>([]);
-  const [bridge, setBridge] = React.useState<FileBridgeState>({ status: "pending", detail: "Runtime bridge pending" });
+  const [bridge, setBridge] = React.useState<FileBridgeState>({ status: "pending", detail: "Loading file tree…" });
   const [loading, setLoading] = React.useState(true);
   const [search, setSearch] = React.useState("");
   const [expanded, setExpanded] = React.useState<Set<string>>(() => new Set());
@@ -93,7 +93,7 @@ export function WorkspaceFilesScreen() {
   const [previewPath, setPreviewPath] = React.useState<string | null>(null);
   const [editorValue, setEditorValue] = React.useState(
     `// Files workspace
-// Use the file tree to browse. Runtime bridge may be pending for server-backed storage.
+// Use the file tree to browse. The tree loads from your connected workspace.
 
 function ready() {
   return true;

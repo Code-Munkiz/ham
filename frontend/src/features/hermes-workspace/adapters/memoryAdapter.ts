@@ -4,6 +4,8 @@
 
 import { hamApiFetch } from "@/lib/ham/api";
 
+import { workspaceApiPending } from "../lib/workspaceHamApiState";
+
 const BASE = "/api/workspace/memory";
 
 export type MemoryKind = "note" | "preference";
@@ -20,8 +22,6 @@ export type WorkspaceMemoryItem = {
 };
 
 export type MemoryBridge = { status: "ready" } | { status: "pending"; detail: string };
-
-const PENDING: MemoryBridge = { status: "pending", detail: "Runtime bridge pending" };
 
 async function readJson<T>(res: Response): Promise<T> {
   return (await res.json()) as T;
@@ -49,11 +49,11 @@ export const workspaceMemoryAdapter = {
         `${BASE}/items${qs({ q: q?.trim() || undefined, archived })}`,
         { credentials: "include" },
       );
-      if (!res.ok) return { items: [], bridge: PENDING };
+      if (!res.ok) return { items: [], bridge: workspaceApiPending("memory", res) };
       const data = await readJson<{ items?: WorkspaceMemoryItem[] }>(res);
       return { items: Array.isArray(data.items) ? data.items : [], bridge: { status: "ready" } };
-    } catch {
-      return { items: [], bridge: PENDING };
+    } catch (e) {
+      return { items: [], bridge: workspaceApiPending("memory", null, e) };
     }
   },
 
@@ -70,10 +70,15 @@ export const workspaceMemoryAdapter = {
         credentials: "include",
         body: JSON.stringify(body),
       });
-      if (!res.ok) return { item: null, bridge: PENDING, error: `HTTP ${res.status}` };
+      if (!res.ok)
+        return { item: null, bridge: workspaceApiPending("memory", res), error: `HTTP ${res.status}` };
       return { item: (await res.json()) as WorkspaceMemoryItem, bridge: { status: "ready" } };
     } catch (e) {
-      return { item: null, bridge: PENDING, error: e instanceof Error ? e.message : String(e) };
+      return {
+        item: null,
+        bridge: workspaceApiPending("memory", null, e),
+        error: e instanceof Error ? e.message : String(e),
+      };
     }
   },
 
@@ -94,10 +99,15 @@ export const workspaceMemoryAdapter = {
         credentials: "include",
         body: JSON.stringify(body),
       });
-      if (!res.ok) return { item: null, bridge: PENDING, error: `HTTP ${res.status}` };
+      if (!res.ok)
+        return { item: null, bridge: workspaceApiPending("memory", res), error: `HTTP ${res.status}` };
       return { item: (await res.json()) as WorkspaceMemoryItem, bridge: { status: "ready" } };
     } catch (e) {
-      return { item: null, bridge: PENDING, error: e instanceof Error ? e.message : String(e) };
+      return {
+        item: null,
+        bridge: workspaceApiPending("memory", null, e),
+        error: e instanceof Error ? e.message : String(e),
+      };
     }
   },
 
@@ -107,10 +117,10 @@ export const workspaceMemoryAdapter = {
         method: "DELETE",
         credentials: "include",
       });
-      if (res.status !== 204) return { ok: false, bridge: PENDING, error: `HTTP ${res.status}` };
+      if (res.status !== 204) return { ok: false, bridge: workspaceApiPending("memory", res), error: `HTTP ${res.status}` };
       return { ok: true, bridge: { status: "ready" } };
     } catch (e) {
-      return { ok: false, bridge: PENDING, error: e instanceof Error ? e.message : String(e) };
+      return { ok: false, bridge: workspaceApiPending("memory", null, e), error: e instanceof Error ? e.message : String(e) };
     }
   },
 } as const;

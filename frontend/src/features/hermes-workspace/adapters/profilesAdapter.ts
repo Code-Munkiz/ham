@@ -4,6 +4,8 @@
 
 import { hamApiFetch } from "@/lib/ham/api";
 
+import { workspaceApiPending } from "../lib/workspaceHamApiState";
+
 const BASE = "/api/workspace/profiles";
 
 export type WorkspaceProfile = {
@@ -19,8 +21,6 @@ export type WorkspaceProfile = {
 
 export type ProfilesBridge = { status: "ready" } | { status: "pending"; detail: string };
 
-const PENDING: ProfilesBridge = { status: "pending", detail: "Runtime bridge pending" };
-
 export const workspaceProfilesAdapter = {
   description: "HAM /api/workspace/profiles — list/create/patch/default/delete",
 
@@ -32,7 +32,7 @@ export const workspaceProfilesAdapter = {
     try {
       const url = q?.trim() ? `${BASE}?q=${encodeURIComponent(q.trim())}` : BASE;
       const res = await hamApiFetch(url, { credentials: "include" });
-      if (!res.ok) return { profiles: [], defaultProfileId: null, bridge: PENDING };
+      if (!res.ok) return { profiles: [], defaultProfileId: null, bridge: workspaceApiPending("profiles", res) };
       const data = (await res.json()) as {
         profiles?: WorkspaceProfile[];
         defaultProfileId?: string | null;
@@ -42,8 +42,8 @@ export const workspaceProfilesAdapter = {
         defaultProfileId: data.defaultProfileId ?? null,
         bridge: { status: "ready" },
       };
-    } catch {
-      return { profiles: [], defaultProfileId: null, bridge: PENDING };
+    } catch (e) {
+      return { profiles: [], defaultProfileId: null, bridge: workspaceApiPending("profiles", null, e) };
     }
   },
 
@@ -60,10 +60,10 @@ export const workspaceProfilesAdapter = {
         credentials: "include",
         body: JSON.stringify(body),
       });
-      if (!res.ok) return { profile: null, bridge: PENDING, error: `HTTP ${res.status}` };
+      if (!res.ok) return { profile: null, bridge: workspaceApiPending("profiles", res), error: `HTTP ${res.status}` };
       return { profile: (await res.json()) as WorkspaceProfile, bridge: { status: "ready" } };
     } catch (e) {
-      return { profile: null, bridge: PENDING, error: e instanceof Error ? e.message : String(e) };
+      return { profile: null, bridge: workspaceApiPending("profiles", null, e), error: e instanceof Error ? e.message : String(e) };
     }
   },
 
@@ -83,10 +83,10 @@ export const workspaceProfilesAdapter = {
         credentials: "include",
         body: JSON.stringify(body),
       });
-      if (!res.ok) return { profile: null, bridge: PENDING, error: `HTTP ${res.status}` };
+      if (!res.ok) return { profile: null, bridge: workspaceApiPending("profiles", res), error: `HTTP ${res.status}` };
       return { profile: (await res.json()) as WorkspaceProfile, bridge: { status: "ready" } };
     } catch (e) {
-      return { profile: null, bridge: PENDING, error: e instanceof Error ? e.message : String(e) };
+      return { profile: null, bridge: workspaceApiPending("profiles", null, e), error: e instanceof Error ? e.message : String(e) };
     }
   },
 
@@ -98,7 +98,7 @@ export const workspaceProfilesAdapter = {
         method: "POST",
         credentials: "include",
       });
-      if (!res.ok) return { ok: false, defaultProfileId: null, bridge: PENDING, error: `HTTP ${res.status}` };
+      if (!res.ok) return { ok: false, defaultProfileId: null, bridge: workspaceApiPending("profiles", res), error: `HTTP ${res.status}` };
       const j = (await res.json()) as { ok?: boolean; defaultProfileId?: string };
       return {
         ok: Boolean(j.ok),
@@ -109,7 +109,7 @@ export const workspaceProfilesAdapter = {
       return {
         ok: false,
         defaultProfileId: null,
-        bridge: PENDING,
+        bridge: workspaceApiPending("profiles", null, e),
         error: e instanceof Error ? e.message : String(e),
       };
     }
@@ -118,10 +118,10 @@ export const workspaceProfilesAdapter = {
   async remove(id: string): Promise<{ ok: boolean; bridge: ProfilesBridge; error?: string }> {
     try {
       const res = await hamApiFetch(`${BASE}/${encodeURIComponent(id)}`, { method: "DELETE", credentials: "include" });
-      if (res.status !== 204) return { ok: false, bridge: PENDING, error: `HTTP ${res.status}` };
+      if (res.status !== 204) return { ok: false, bridge: workspaceApiPending("profiles", res), error: `HTTP ${res.status}` };
       return { ok: true, bridge: { status: "ready" } };
     } catch (e) {
-      return { ok: false, bridge: PENDING, error: e instanceof Error ? e.message : String(e) };
+      return { ok: false, bridge: workspaceApiPending("profiles", null, e), error: e instanceof Error ? e.message : String(e) };
     }
   },
 } as const;
