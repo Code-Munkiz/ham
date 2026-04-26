@@ -12,6 +12,7 @@ import {
   workspaceMemoryAdapter,
   type WorkspaceMemoryItem,
 } from "../../adapters/memoryAdapter";
+import { WorkspaceSurfaceStateCard } from "../../components/workspaceSurfaceChrome";
 
 type FileMeta = { path: string; name: string; size: number; modified: string };
 type SearchHit = { path: string; line: number; text: string };
@@ -207,8 +208,10 @@ function MemoryEditorPanel({
       <div className={cn("h-full p-2 md:p-3", isEditing ? "overflow-hidden" : "overflow-auto")}>
         {listLoading && <StateBox label="Loading memory…" />}
         {err && <StateBox label={err} error />}
-        {!listLoading && !err && !selectedPath && <StateBox label="No memory files found" />}
-        {!listLoading && !err && selectedPath && !item && <StateBox label="Item not found" />}
+        {!listLoading && !err && !selectedPath && (
+          <StateBox label="No memory entries yet. Memory storage is connected, but no file is selected." />
+        )}
+        {!listLoading && !err && selectedPath && !item && <StateBox label="Item not found" error />}
         {item && !listLoading && !err && isEditing && (
           <div
             className="h-full min-h-[200px] rounded-xl p-2"
@@ -375,11 +378,18 @@ export function WorkspaceMemoryScreen() {
 
   if (bridgeError && !loading && items.length === 0) {
     return (
-      <div className="hws-root flex h-full min-h-0 flex-col p-4">
-        <StateBox label={bridgeError} error />
-        <Button type="button" className="mt-2" variant="secondary" onClick={() => void load()}>
-          Retry
-        </Button>
+      <div className="hws-root flex h-full min-h-0 flex-col p-4" style={{ backgroundColor: "var(--theme-bg)" }}>
+        <WorkspaceSurfaceStateCard
+          title="Memory API is not available in this HAM deployment."
+          description="Other workspace features may still work. Memory is served from the HAM API at /api/workspace/memory — not the local Files/Terminal connection."
+          tone="amber"
+          technicalDetail={bridgeError}
+          primaryAction={
+            <Button type="button" variant="secondary" onClick={() => void load()}>
+              Retry
+            </Button>
+          }
+        />
       </div>
     );
   }
@@ -424,6 +434,16 @@ export function WorkspaceMemoryScreen() {
 
         <TabsContent value="memory" className="m-0 min-h-0 flex-1 focus-visible:outline-none">
           <div className="flex h-full min-h-0 flex-col" style={{ backgroundColor: "var(--theme-bg)" }}>
+            <div
+              className="shrink-0 px-3 py-2 md:px-4"
+              style={{ borderBottom: "1px solid var(--theme-border)" }}
+            >
+              <h2 className="text-sm font-semibold text-[var(--theme-text)]">Memory browser</h2>
+              <p className="mt-0.5 text-xs text-[var(--theme-muted)]">
+                Search and edit entries stored by the HAM Memory API. This is not Memory Heist sync — JSON v0 on the API
+                host only.
+              </p>
+            </div>
             <div className="shrink-0 px-3 py-3 md:px-4" style={{ borderBottom: "1px solid var(--theme-border)" }}>
               <div className="flex items-center gap-3">
                 <div
@@ -547,8 +567,9 @@ export function WorkspaceMemoryScreen() {
                         </div>
                       )}
                       {!loading && fileItems.length === 0 && (
-                        <div className="rounded-lg border border-dashed border-white/15 px-3 py-2 text-xs text-[var(--theme-muted)]">
-                          No files in memory/ or memories/
+                        <div className="space-y-1.5 rounded-lg border border-dashed border-white/15 px-3 py-3 text-xs text-[var(--theme-muted)]">
+                          <p className="font-medium text-[var(--theme-text)]">No memory entries yet</p>
+                          <p>Memory storage is connected, but no entries are available. Use New to create a note.</p>
                         </div>
                       )}
                       {!loading &&

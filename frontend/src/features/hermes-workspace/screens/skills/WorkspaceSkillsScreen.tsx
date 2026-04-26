@@ -4,6 +4,7 @@
  * Marketplace hub calls are not available in HAM — show the same empty/fallback pattern.
  */
 import * as React from "react";
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -230,7 +231,8 @@ export function WorkspaceSkillsScreen() {
           </p>
           <h1 className="text-balance text-2xl font-medium sm:text-3xl">Skills Browser</h1>
           <p className="mt-1 max-w-2xl text-pretty text-sm text-[var(--theme-muted)] sm:text-base">
-            Discover, install, and manage skills across your local workspace and Skills Hub.
+            Install and manage skills stored by the HAM Skills API. Marketplace catalog search is shown for layout parity;
+            inventory comes from your deployment only — no upstream hub calls from the browser.
           </p>
         </header>
 
@@ -269,9 +271,10 @@ export function WorkspaceSkillsScreen() {
             </div>
 
             {err ? (
-              <p className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
-                {err}
-              </p>
+              <div className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100/90">
+                <p className="font-medium">Skills API unavailable</p>
+                <p className="mt-1 whitespace-pre-wrap break-words leading-relaxed opacity-95">{err}</p>
+              </div>
             ) : null}
 
             <TabsContent value="installed" className="mt-3 outline-none">
@@ -298,8 +301,8 @@ export function WorkspaceSkillsScreen() {
                 loading={loading}
                 tab="installed"
                 actionId={actionId}
-                emptyTitle="No skills found"
-                emptyDescription="Add a custom skill or enable catalog items via the HAM bridge."
+                emptyTitle="No skills installed yet"
+                emptyDescription="Add a custom skill or connect a skills catalog when your HAM API exposes one. Built-in entries appear when the API returns them."
                 onOpen={setSelected}
                 onInstall={(id) => void runAction("install", id)}
                 onUninstall={(id) => void runAction("uninstall", id)}
@@ -308,9 +311,12 @@ export function WorkspaceSkillsScreen() {
             </TabsContent>
 
             <TabsContent value="marketplace" className="mt-3 space-y-3 outline-none">
-              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
-                Skills Hub search unavailable in HAM — no browser calls to upstream Hermes/Cursor. Use Installed
-                for the local <code className="text-xs">.ham/workspace_state/skills.json</code> catalog.
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100/90">
+                <p className="font-medium">Skills catalog is not available from this HAM API yet.</p>
+                <p className="mt-1 text-xs leading-relaxed opacity-95">
+                  There are no browser calls to an external Skills Hub. Use <strong>Installed</strong> for the catalog
+                  returned by <code className="text-xs">/api/workspace/skills</code> on your deployment.
+                </p>
               </div>
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <input
@@ -338,9 +344,18 @@ export function WorkspaceSkillsScreen() {
         </section>
 
         {tab === "installed" ? (
-          <footer className="flex items-center justify-between rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm text-[var(--theme-muted)] tabular-nums">
+          <footer className="flex flex-col gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm text-[var(--theme-muted)] tabular-nums sm:flex-row sm:items-center sm:justify-between">
             <span>{installedViews.length.toLocaleString()} total skills</span>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+              <Link to="/workspace/chat" className="text-emerald-400/90 underline-offset-2 hover:underline">
+                Open workspace chat
+              </Link>
+              <span className="text-white/20">·</span>
+              <Link to="/workspace/settings" className="text-emerald-400/90 underline-offset-2 hover:underline">
+                Settings
+              </Link>
+            </div>
+            <div className="flex items-center gap-2 sm:ml-0">
               <Button
                 variant="outline"
                 size="sm"

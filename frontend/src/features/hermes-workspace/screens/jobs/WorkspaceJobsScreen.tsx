@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { workspaceJobsAdapter, type WorkspaceJob } from "../../adapters/jobsAdapter";
+import { WorkspaceSurfaceHeader, WorkspaceSurfaceStateCard } from "../../components/workspaceSurfaceChrome";
 
 function fmt(ts: number) {
   return new Date(ts * 1000).toLocaleString();
@@ -142,32 +143,34 @@ export function WorkspaceJobsScreen() {
   ) : null;
 
   return (
-    <div className="flex h-full min-h-0 min-w-0 flex-col p-3 md:p-4">
-      <div className="shrink-0">
-        <p className="hww-pill mb-1">Workspace</p>
-        <h1 className="text-base font-semibold text-white/95">Jobs</h1>
-        <p className="mt-0.5 max-w-xl text-[11px] text-white/45">
-          JOBS-001…006 — HAM-backed job cards with run history (local JSON under{" "}
-          <code className="text-white/50">.ham/workspace_state/jobs.json</code>).
-        </p>
-      </div>
+    <div className="flex h-full min-h-0 min-w-0 flex-col gap-3 p-3 md:p-4">
+      <WorkspaceSurfaceHeader
+        variant="dark"
+        eyebrow="Workspace"
+        title="Jobs"
+        subtitle="Scheduled and on-demand jobs from the HAM Jobs API (/api/workspace/jobs). Run history is stored as JSON on the API host — not the local Files runtime."
+        actions={
+          <>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              className="h-7 gap-1.5 border-white/15 bg-white/5 text-white/90"
+              onClick={() => void load()}
+              disabled={loading}
+            >
+              <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
+              Refresh
+            </Button>
+            <Button type="button" size="sm" className="h-7 gap-1" onClick={() => setNewOpen((v) => !v)}>
+              <Plus className="h-3.5 w-3.5" />
+              New job
+            </Button>
+          </>
+        }
+      />
 
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <Button
-          type="button"
-          size="sm"
-          variant="secondary"
-          className="h-7 gap-1.5"
-          onClick={() => void load()}
-          disabled={loading}
-        >
-          <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
-          Refresh
-        </Button>
-        <Button type="button" size="sm" className="h-7 gap-1" onClick={() => setNewOpen((v) => !v)}>
-          <Plus className="h-3.5 w-3.5" />
-          New job
-        </Button>
+      <div className="flex flex-wrap items-center gap-2">
         <div className="flex min-w-0 max-w-sm flex-1 items-center gap-1 rounded border border-white/10 bg-black/20 px-2">
           <Search className="h-3.5 w-3.5 shrink-0 text-white/30" />
           <input
@@ -212,9 +215,24 @@ export function WorkspaceJobsScreen() {
       )}
 
       {error && (
-        <div className="mt-2 rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-100/90">
-          {error}
-        </div>
+        <WorkspaceSurfaceStateCard
+          className="border-white/10 bg-amber-500/10 text-amber-100/90"
+          title="Jobs API is not available"
+          description="Job definitions require the HAM jobs routes on your deployment."
+          tone="amber"
+          technicalDetail={error}
+          primaryAction={
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              className="border-white/20 bg-white/10 text-white"
+              onClick={() => void load()}
+            >
+              Retry
+            </Button>
+          }
+        />
       )}
 
       <div className="mt-3 min-h-0 flex-1 overflow-y-auto pr-0.5">
@@ -222,7 +240,24 @@ export function WorkspaceJobsScreen() {
           <p className="text-[11px] text-white/40">Loading…</p>
         )}
         {!loading && jobs.length === 0 && !error && (
-          <p className="text-[11px] text-white/40">No jobs yet. Create one with New job.</p>
+          <div className="rounded-xl border border-dashed border-white/15 bg-black/20 px-4 py-8 text-center text-sm text-white/50">
+            {searchApplied ? (
+              <>
+                <p className="font-medium text-white/85">No jobs match</p>
+                <p className="mt-2 text-xs leading-relaxed">Clear search or create a new job.</p>
+              </>
+            ) : (
+              <>
+                <p className="font-medium text-white/85">No jobs scheduled yet</p>
+                <p className="mt-2 text-xs leading-relaxed">
+                  Create a job to automate a recurring workflow. Data is stored by the HAM API when the route is available.
+                </p>
+                <Button type="button" size="sm" className="mt-4" onClick={() => setNewOpen(true)}>
+                  New job
+                </Button>
+              </>
+            )}
+          </div>
         )}
         <ul className="space-y-2">
           {jobs.map((j) => {
