@@ -14,9 +14,9 @@ import {
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { LocalMachineConnectCta } from "../../components/LocalMachineConnectCta";
 import {
   fetchLocalWorkspaceHealth,
-  getLocalRuntimeBase,
   isLocalRuntimeConfigured,
   type LocalRuntimeHealthPayload,
 } from "../../adapters/localRuntime";
@@ -165,7 +165,6 @@ function ready() {
 
   const filtered = React.useMemo(() => filterTree(entries, search), [entries, search]);
   const searchActive = search.trim().length > 0;
-  const localUrlDisplay = getLocalRuntimeBase() ?? "";
   const disconnected =
     bridge.status === "pending" && bridge.localCode === "unconfigured" && !loading;
   const localError =
@@ -446,30 +445,37 @@ function ready() {
             {loading ? (
               <p className="px-2 py-1 text-[11px] text-white/45">Loading…</p>
             ) : disconnected ? (
-              <div className="px-2.5 py-3 text-[12px] leading-relaxed text-white/55">
-                <p className="text-[13px] font-medium text-amber-200/90">Local runtime URL is not configured</p>
-                <p className="mt-2">
-                  Start the local HAM API and save <span className="font-mono text-[11px] text-white/70">http://127.0.0.1:8001</span> in{" "}
-                  <Link
-                    to="/workspace/settings?section=connection"
-                    className="text-[#7dd3fc] underline decoration-white/10 underline-offset-2"
-                  >
-                    Settings → Connection
-                  </Link>
-                  . The cloud API cannot read your local disk; Files and Terminal use this machine only.
+              <div className="px-1.5 py-2">
+                <p className="px-1 text-[12px] font-medium text-white/80">Connect to browse local files</p>
+                <p className="mt-1 px-1 text-[11px] leading-relaxed text-white/45">
+                  Files and Terminal use the HAM process on this computer, not Cloud Run.
                 </p>
-                <p className="mt-2 font-mono text-[10px] text-white/40">
-                  {localUrlDisplay || "No value in localStorage (hww.localRuntimeBase) yet."}
-                </p>
-                <Link
-                  className="mt-2 inline-block text-[#7dd3fc] underline decoration-white/10 underline-offset-2"
-                  to="/workspace/settings?section=connection"
-                >
-                  Workspace settings → Connection
-                </Link>
+                <div className="mt-2">
+                  <LocalMachineConnectCta
+                    variant="compact"
+                    onSuccess={() => void refresh()}
+                    className="!p-3"
+                    showOpenSettings
+                    showOpenFiles={false}
+                  />
+                </div>
               </div>
             ) : localError ? (
-              <div className="px-2.5 py-3 text-[11px] leading-relaxed text-amber-200/80">{bridge.detail}</div>
+              <div className="px-1.5 py-2">
+                <p className="px-1 text-[12px] text-amber-200/85">Could not use the saved local URL. Try again below.</p>
+                <p className="mt-1 px-1 break-words text-[10px] text-amber-200/60" title={bridge.detail}>
+                  {bridge.detail}
+                </p>
+                <div className="mt-2">
+                  <LocalMachineConnectCta
+                    variant="compact"
+                    onSuccess={() => void refresh()}
+                    className="!p-3"
+                    showOpenSettings
+                    showOpenFiles={false}
+                  />
+                </div>
+              </div>
             ) : !entries.length && bridge.status === "pending" ? (
               <p className="px-2 py-2 text-[11px] leading-relaxed text-white/45">No file tree yet. Check the local API.</p>
             ) : !entries.length && bridge.status === "ready" ? (
@@ -590,11 +596,27 @@ function ready() {
               </p>
             ) : null}
             {disconnected ? (
-              <div className="mb-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2.5 text-[12px] text-amber-100/90">
-                <p className="font-medium">Local runtime URL is not configured</p>
-                <p className="mt-1 text-[11px] text-amber-100/70">
-                  Save your local HAM API origin in <Link to="/workspace/settings?section=connection" className="text-[#7dd3fc] underline">Settings → Connection</Link>. File operations use that process on this computer — not Cloud Run.
-                </p>
+              <div className="mb-2 space-y-2 rounded-lg border border-amber-500/25 bg-amber-500/10 p-2 text-[12px] text-amber-100/90">
+                <p className="px-1 font-medium">Connect this machine to open the editor and browse files.</p>
+                <LocalMachineConnectCta
+                  variant="compact"
+                  onSuccess={() => void refresh()}
+                  className="!border-0 !bg-transparent !p-2"
+                  showOpenSettings
+                  showOpenFiles={false}
+                />
+              </div>
+            ) : null}
+            {localError && !disconnected ? (
+              <div className="mb-2 space-y-2 rounded-lg border border-amber-500/20 bg-amber-500/5 p-2">
+                <p className="px-1 text-[11px] text-amber-200/80">{bridge.detail}</p>
+                <LocalMachineConnectCta
+                  variant="compact"
+                  onSuccess={() => void refresh()}
+                  className="!border-0 !bg-transparent !p-2"
+                  showOpenSettings
+                  showOpenFiles={false}
+                />
               </div>
             ) : null}
             {noEnvRoot && !disconnected ? (
