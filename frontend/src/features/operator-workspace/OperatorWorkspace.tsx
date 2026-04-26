@@ -70,7 +70,18 @@ export function OperatorWorkspace({
   onSelectSession,
 }: OperatorWorkspaceProps) {
   const [mobileSidebarOpen, setMobileSidebarOpen] = React.useState(false);
+  const [sessionQuery, setSessionQuery] = React.useState("");
   const emptyState = messages.length === 0;
+
+  const visibleSessions = React.useMemo(() => {
+    const q = sessionQuery.trim().toLowerCase();
+    if (!q) return sessions;
+    return sessions.filter(
+      (s) =>
+        (s.preview || "").toLowerCase().includes(q) ||
+        s.sessionId.toLowerCase().includes(q),
+    );
+  }, [sessions, sessionQuery]);
 
   return (
     <div className="ow-root">
@@ -121,21 +132,28 @@ export function OperatorWorkspace({
                 <X className="h-3.5 w-3.5" />
               </button>
             </div>
-            <button
-              type="button"
-              className="ow-search"
-              onClick={onOpenHistory}
-            >
-              <Search className="h-3.5 w-3.5" />
-              Search
-            </button>
+            <label className="ow-search-field" htmlFor="ow-session-search">
+              <span className="ow-search-field-inner">
+                <Search className="h-3.5 w-3.5 shrink-0 text-white/35" aria-hidden />
+                <input
+                  id="ow-session-search"
+                  type="search"
+                  value={sessionQuery}
+                  onChange={(e) => setSessionQuery(e.target.value)}
+                  placeholder="Filter sessions"
+                  className="ow-search-input"
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+              </span>
+            </label>
             <button
               type="button"
               onClick={onStartNewChat}
               className="ow-new-session"
             >
               <Plus className="h-3.5 w-3.5" />
-              New Session
+              New session
             </button>
           </div>
           <div className="ow-sidebar-list">
@@ -143,8 +161,10 @@ export function OperatorWorkspace({
               <p className="text-[11px] text-white/40">
                 No sessions yet. Start a conversation.
               </p>
+            ) : visibleSessions.length === 0 ? (
+              <p className="text-[11px] text-white/38">No sessions match that filter.</p>
             ) : (
-              sessions.map((session) => {
+              visibleSessions.map((session) => {
                 const dateLabel = formatSessionMeta(session.createdAt);
                 return (
                 <button
@@ -174,6 +194,15 @@ export function OperatorWorkspace({
                 );
               })
             )}
+            {sessions.length > 0 ? (
+              <button
+                type="button"
+                onClick={onOpenHistory}
+                className="ow-sidebar-more"
+              >
+                View all in panel
+              </button>
+            ) : null}
           </div>
         </aside>
 

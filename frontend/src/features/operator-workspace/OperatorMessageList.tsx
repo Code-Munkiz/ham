@@ -1,3 +1,4 @@
+import { WorkspaceMessageContent } from "./WorkspaceMessageContent";
 import type { OperatorMessage } from "./types";
 
 type OperatorMessageListProps = {
@@ -22,11 +23,11 @@ function messageShell(role: OperatorMessage["role"]): string {
 
 export function OperatorMessageList({ messages }: OperatorMessageListProps) {
   return (
-    <div className="ow-message-scroll flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto overflow-x-hidden pr-1">
+    <div className="ow-message-scroll flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overflow-x-hidden pr-1">
       {messages.map((message) => (
         <article
           key={message.id}
-          className={`max-w-[min(94%,40rem)] rounded-[1.1rem] border px-3.5 py-3 ${messageShell(
+          className={`max-w-[min(92%,38rem)] rounded-[1.1rem] border px-3.5 py-2.5 sm:px-4 sm:py-3 ${messageShell(
             message.role,
           )}`}
         >
@@ -38,9 +39,10 @@ export function OperatorMessageList({ messages }: OperatorMessageListProps) {
               {message.timestamp}
             </span>
           </div>
-          <pre className="whitespace-pre-wrap break-words font-sans text-[0.8125rem] leading-relaxed text-white/92">
-            {message.content}
-          </pre>
+          <WorkspaceMessageContent
+            className="ow-msg-content break-words font-sans text-[0.8125rem] leading-[1.55] text-white/90"
+            content={message.content}
+          />
         </article>
       ))}
     </div>

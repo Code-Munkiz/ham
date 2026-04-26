@@ -22,6 +22,7 @@ import {
   History,
   MessageSquare,
   Plus,
+  Search,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
@@ -797,6 +798,7 @@ function ChatPageInner({
   const [historyOpen, setHistoryOpen] = React.useState(false);
   const [historySessions, setHistorySessions] = React.useState<ChatSessionSummary[]>([]);
   const [historyLoading, setHistoryLoading] = React.useState(false);
+  const [historySearchQuery, setHistorySearchQuery] = React.useState("");
   const [serverMissions, setServerMissions] = React.useState<ManagedMissionRow[]>([]);
   const [serverMissionsLoading, setServerMissionsLoading] = React.useState(false);
 
@@ -2319,6 +2321,16 @@ function ChatPageInner({
     setInput((prev) => (prev.trim() ? `${prev.trim()}\n${next}` : next));
   };
 
+  const filteredHistorySessions = React.useMemo(() => {
+    const q = historySearchQuery.trim().toLowerCase();
+    if (!q) return historySessions;
+    return historySessions.filter(
+      (s) =>
+        (s.preview || "").toLowerCase().includes(q) ||
+        s.session_id.toLowerCase().includes(q),
+    );
+  }, [historySessions, historySearchQuery]);
+
   if (USE_OPERATOR_WORKSPACE) {
     return (
       <ManagedCloudAgentProvider value={managedCloudAgentContextValue}>
@@ -2352,37 +2364,55 @@ function ChatPageInner({
               <button
                 type="button"
                 aria-label="Close chat history"
-                className="flex-1 bg-black/70 backdrop-blur-xl"
-                onClick={() => setHistoryOpen(false)}
+                className="flex-1 bg-black/60 backdrop-blur-md"
+                onClick={() => {
+                  setHistorySearchQuery("");
+                  setHistoryOpen(false);
+                }}
               />
-              <div className="w-full max-w-md h-full border-l border-white/10 bg-[#0a0a0a]/95 backdrop-blur-xl shadow-2xl flex flex-col text-white">
-                <div className="h-12 flex items-center justify-between px-4 border-b border-white/10 shrink-0">
-                  <div>
-                    <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#FF6B00]">
-                      {USE_OPERATOR_WORKSPACE ? "Search sessions" : "HISTORY"}
-                    </span>
-                    <p className="text-[8px] text-white/30 mt-0.5">
-                      {USE_OPERATOR_WORKSPACE
-                        ? "Browse and open past conversations."
-                        : "Chat sessions + server managed missions (HAM API)"}
-                    </p>
+              <div className="w-full max-w-md h-full border-l border-white/[0.08] bg-[#060d14]/97 backdrop-blur-xl shadow-2xl flex flex-col text-white">
+                <div className="shrink-0 border-b border-white/[0.08] px-4 py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/55">
+                        Sessions
+                      </span>
+                      <p className="text-[11px] text-white/35 mt-0.5">
+                        Open a past conversation or start fresh.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={startNewChat}
+                        className="flex items-center gap-1 rounded-lg border border-white/12 bg-white/[0.03] px-2.5 py-1.5 text-[11px] font-medium text-white/75 hover:border-white/18 hover:bg-white/[0.06]"
+                      >
+                        <Plus className="h-3.5 w-3.5 opacity-80" />
+                        New
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setHistorySearchQuery("");
+                          setHistoryOpen(false);
+                        }}
+                        className="p-2 rounded-lg text-white/45 hover:text-white/90 hover:bg-white/[0.06]"
+                        aria-label="Close"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={startNewChat}
-                      className="flex items-center gap-1.5 px-3 py-1 text-[8px] font-black uppercase tracking-widest text-[#FF6B00] border border-[#FF6B00]/30 rounded hover:bg-[#FF6B00]/10 transition-colors"
-                    >
-                      <Plus className="h-3 w-3" />
-                      New
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setHistoryOpen(false)}
-                      className="p-1.5 text-white/40 hover:text-white"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
+                  <div className="relative mt-3">
+                    <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/35" />
+                    <input
+                      type="search"
+                      value={historySearchQuery}
+                      onChange={(e) => setHistorySearchQuery(e.target.value)}
+                      placeholder="Filter sessions"
+                      className="w-full rounded-lg border border-white/10 bg-black/30 py-2 pl-8 pr-3 text-sm text-white/88 placeholder:text-white/35 outline-none focus-visible:border-white/20 focus-visible:ring-1 focus-visible:ring-white/10"
+                      autoComplete="off"
+                    />
                   </div>
                 </div>
                 <div className="flex-1 overflow-y-auto p-4 space-y-6">
@@ -2444,41 +2474,49 @@ function ChatPageInner({
                   </div>
                   )}
                   <div>
-                    <p className="text-[9px] font-black uppercase tracking-widest text-white/40 mb-2">Chat sessions</p>
+                    <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-white/38 mb-2">
+                      {historySearchQuery.trim() ? "Matching" : "Recent"}
+                    </p>
                     {historyLoading ? (
                       <p className="text-[10px] text-white/30">Loading…</p>
                     ) : historySessions.length === 0 ? (
                       <p className="text-[10px] text-white/25">No past chats yet. Start a conversation and it'll appear here.</p>
+                    ) : filteredHistorySessions.length === 0 ? (
+                      <p className="text-[10px] text-white/30">No sessions match that filter.</p>
                     ) : (
                       <ul className="space-y-2">
-                        {historySessions.map((s) => (
+                        {filteredHistorySessions.map((s) => (
                           <li key={s.session_id} className="list-none">
                             <button
                               type="button"
-                              onClick={() => void loadSession(s.session_id)}
+                              onClick={() => {
+                                void loadSession(s.session_id);
+                                setHistorySearchQuery("");
+                                setHistoryOpen(false);
+                              }}
                               className={cn(
-                                "w-full text-left border rounded-lg px-4 py-3 transition-colors group",
+                                "w-full text-left border rounded-[0.7rem] px-3.5 py-2.5 transition-colors group",
                                 s.session_id === sessionId
-                                  ? "border-[#FF6B00]/40 bg-[#FF6B00]/10"
-                                  : "border-white/10 bg-white/[0.02] hover:border-white/20 hover:bg-white/5",
+                                  ? "border-[#c45c12]/40 bg-gradient-to-b from-[#1a120a]/50 to-[#0f0c09]/40"
+                                  : "border-white/[0.1] bg-white/[0.02] hover:border-white/16 hover:bg-white/[0.05]",
                               )}
                             >
-                              <div className="flex items-center justify-between gap-2 mb-1">
-                                <span className="text-[8px] font-mono text-white/30 truncate">
-                                  {s.session_id.slice(0, 8)}…
+                              <div className="flex items-center justify-between gap-2 mb-0.5">
+                                <span className="text-[9px] tabular-nums text-white/32">
+                                  {s.turn_count} turn{s.turn_count !== 1 ? "s" : ""}
                                 </span>
-                                <span className="text-[8px] font-mono text-white/20 shrink-0">
-                                  {s.turn_count} msg{s.turn_count !== 1 ? "s" : ""}
-                                </span>
+                                {s.created_at && (
+                                  <span className="text-[9px] text-white/25 shrink-0">
+                                    {new Date(s.created_at).toLocaleDateString(undefined, {
+                                      month: "short",
+                                      day: "numeric",
+                                    })}
+                                  </span>
+                                )}
                               </div>
-                              <p className="text-[11px] font-bold text-white/70 group-hover:text-white/90 truncate leading-snug">
-                                {s.preview || "Empty session"}
+                              <p className="text-[12px] font-medium text-white/78 group-hover:text-white/95 truncate leading-snug">
+                                {s.preview || "Untitled session"}
                               </p>
-                              {s.created_at && (
-                                <span className="text-[8px] text-white/20 mt-1 block">
-                                  {new Date(s.created_at).toLocaleString()}
-                                </span>
-                              )}
                             </button>
                           </li>
                         ))}
