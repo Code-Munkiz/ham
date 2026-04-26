@@ -202,6 +202,36 @@ export function isDashboardChatGatewayReady(c: ModelCatalogPayload | null | unde
   );
 }
 
+/**
+ * Single-line status token for /chat: distinguishes Hermes HTTP vs mock dev vs other paths.
+ * Uses fields from `GET /api/models` (same payload as the composer catalog).
+ */
+export function getChatGatewayReadinessToken(
+  catalog: ModelCatalogPayload | null | undefined,
+  options: { sending: boolean; catalogLoading: boolean },
+): string {
+  if (options.sending) return "SENDING";
+  if (options.catalogLoading) return "GATEWAY_READY";
+  if (!catalog) return "GATEWAY_OFFLINE";
+  if (!isDashboardChatGatewayReady(catalog)) return "GATEWAY_OFFLINE";
+
+  const mode = (catalog.gateway_mode || "").trim().toLowerCase();
+
+  if (mode === "http") {
+    return catalog.http_chat_ready === true ? "HTTP_READY" : "GATEWAY_OFFLINE";
+  }
+  if (mode === "mock") {
+    return "MOCK_READY";
+  }
+  if (mode === "openrouter") {
+    return catalog.openrouter_chat_ready ? "OPENROUTER_READY" : "GATEWAY_OFFLINE";
+  }
+  if (!mode || mode === "unknown") {
+    return "GATEWAY_READY";
+  }
+  return "GATEWAY_READY";
+}
+
 /** From `GET /api/cursor/credentials-status` — never includes the full secret. */
 export interface CursorCredentialsStatus {
   configured: boolean;

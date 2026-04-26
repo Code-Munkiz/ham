@@ -97,7 +97,7 @@ import {
 import { ProjectsRegistryPanel } from "@/components/chat/ProjectsRegistryPanel";
 import { ManagedCloudAgentProvider } from "@/contexts/ManagedCloudAgentContext";
 import { useManagedCloudAgentPoll } from "@/hooks/useManagedCloudAgentPoll";
-import { isDashboardChatGatewayReady } from "@/lib/ham/types";
+import { getChatGatewayReadinessToken } from "@/lib/ham/types";
 import { useAgent } from "@/lib/ham/AgentContext";
 import { useWorkspace } from "@/lib/ham/WorkspaceContext";
 import { ResizableWorkbenchSplit } from "@/components/war-room/ResizableWorkbenchSplit";
@@ -2279,9 +2279,10 @@ function ChatPageInner({
     }
   };
 
-  const pipelineStatus = `${uplinkPipelineLabel(uplinkId)} · ${workbenchMode.toUpperCase()} — ${
-    sending ? "SENDING" : isDashboardChatGatewayReady(catalog) ? "GATEWAY_READY" : "GATEWAY_OFFLINE"
-  }`;
+  const pipelineStatus = `${uplinkPipelineLabel(uplinkId)} · ${workbenchMode.toUpperCase()} — ${getChatGatewayReadinessToken(catalog, {
+    sending,
+    catalogLoading,
+  })}`;
 
   const workbenchMissionBannerActive =
     uplinkId === "cloud_agent" &&
