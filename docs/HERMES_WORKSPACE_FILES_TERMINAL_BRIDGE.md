@@ -2,9 +2,15 @@
 
 **Local Files mode:** the Files API reads/writes a directory on the **same machine** as the FastAPI
 process. Set `HAM_WORKSPACE_ROOT` to your local folder; legacy `HAM_WORKSPACE_FILES_ROOT` is still
-honored. For real local project trees, run the Vite app with its dev proxy to a **local** API (e.g.
-`VITE_HAM_API_PROXY_TARGET=http://127.0.0.1:8000`); a browser pointed only at a remote deploy will not
-see your laptop’s files.
+honored. For real local project trees, run the Vite app with its dev proxy to a **local** API; a
+browser pointed only at a remote deploy will not see your laptop’s files.
+
+**Dev proxy (common pitfall):** Vite proxies `/api/*` to `VITE_HAM_API_PROXY_TARGET` (default
+`http://127.0.0.1:8000` — see `frontend/vite.config.ts` and `frontend/.env.example`). If your HAM
+`uvicorn` runs on another port (e.g. 8001), set the variable in **`frontend/.env.local`** to that
+origin and **restart Vite**; otherwise `GET /api/workspace/files?action=list` may 404 and the Files
+UI shows “Runtime bridge pending” even when the correct API on the other port works in isolation.
+**Do not commit** `.env.local` (it is gitignored); copy from `.env.example` as needed.
 
 Bridge table (UI remains on `workspaceFileAdapter` / `workspaceTerminalAdapter`):
 
