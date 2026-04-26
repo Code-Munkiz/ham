@@ -1,5 +1,5 @@
 /**
- * `/chat` workbench: **single owner** for layout, split state, and right execution pane.
+ * Legacy HAM workbench: **Route `/legacy-chat`**. (Product chat is `WorkspaceChatScreen` at `/workspace/chat`; `/chat` redirects.)
  * `AppLayout` does not manage competing split logic for this route (see AppLayout comment).
  */
 import * as React from "react";

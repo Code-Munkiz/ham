@@ -1,6 +1,5 @@
 import * as React from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
-import { isHermesWorkspaceEnabled } from "./workspaceFlags";
 import { WorkspaceShell } from "./WorkspaceShell";
 import { WorkspaceHome } from "./WorkspaceHome";
 import { WorkspaceChatScreen } from "./screens/chat";
@@ -18,14 +17,11 @@ import { WorkspaceSkillsScreen } from "./screens/skills/WorkspaceSkillsScreen";
 import "./hermesWorkspace.css";
 
 /**
- * Feature-flagged namespaced app for the Hermes Workspace UI lift.
+ * Hermes Workspace surface (`/workspace/*`). Not gated on `VITE_ENABLE_HERMES_WORKSPACE` (routing);
+ * that flag is only for non-route toggles. Legacy full workbench: `/legacy-chat`.
  * @see docs/WHOLE_HERMES_WORKSPACE_LIFT_PLAN.md
  */
 export function WorkspaceApp() {
-  if (!isHermesWorkspaceEnabled()) {
-    return <Navigate to="/chat" replace />;
-  }
-
   return (
     <div className="hww-outer h-full min-h-0 w-full min-w-0">
       <WorkspaceShell>

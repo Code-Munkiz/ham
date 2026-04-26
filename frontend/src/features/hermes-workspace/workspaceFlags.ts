@@ -1,11 +1,6 @@
 /**
- * Feature flag: namespaced Hermes Workspace lift (`/workspace/*`).
- *
- * **Workspace is off unless explicitly enabled** (any environment). Set
- * `VITE_ENABLE_HERMES_WORKSPACE=true` in `.env.local` (dev) or your host env (Vercel) and rebuild.
- *
- * When disabled, `/chat` stays the legacy `Chat` workbench; `/workspace/*` redirects to `/chat`.
- * When enabled, `App` routes `/chat` and `/chat?session=…` → `/workspace/chat` (same search); `primaryChatPath()` is `/workspace/chat`.
+ * `VITE_ENABLE_HERMES_WORKSPACE` — optional; reserved for non-routing toggles (nav defaults, experiments).
+ * **Product chat route is always `/workspace/chat`.** `/chat` redirects there; legacy full workbench: `/legacy-chat`.
  */
 export function isHermesWorkspaceEnabled(): boolean {
   const v = import.meta.env.VITE_ENABLE_HERMES_WORKSPACE;
@@ -13,7 +8,7 @@ export function isHermesWorkspaceEnabled(): boolean {
   return s === "1" || s === "true" || s === "yes" || s === "on";
 }
 
-/** In-app “open chat” target: Workspace chat when the lift is on, else legacy `/chat`. */
+/** In-app “open chat” — always the Workspace chat surface. */
 export function primaryChatPath(): string {
-  return isHermesWorkspaceEnabled() ? "/workspace/chat" : "/chat";
+  return "/workspace/chat";
 }

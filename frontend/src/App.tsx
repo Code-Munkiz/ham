@@ -30,7 +30,7 @@ import { WorkspaceProvider } from "./lib/ham/WorkspaceContext";
 import { ClerkAccessBridge } from "./lib/ham/ClerkAccessBridge";
 import { getHamDesktopConfig, isHamDesktopShell } from "./lib/ham/desktopConfig";
 import { WorkspaceApp } from "./features/hermes-workspace";
-import { isHermesWorkspaceEnabled, primaryChatPath } from "./features/hermes-workspace/workspaceFlags";
+import { primaryChatPath } from "./features/hermes-workspace/workspaceFlags";
 
 const clerkPublishableKey = (import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined)?.trim();
 
@@ -42,16 +42,10 @@ function HomeRoute() {
   return <Landing />;
 }
 
-/**
- * When Hermes workspace is enabled, `/chat` is an alias for Workspace chat (not the dashboard).
- * Preserves the full search string (e.g. `?session=`).
- */
+/** `/chat` is not a product page — always send users to Workspace chat (preserve `?session=`). */
 function ChatEntryRoute() {
   const { search } = useLocation();
-  if (isHermesWorkspaceEnabled()) {
-    return <Navigate to={`/workspace/chat${search}`} replace />;
-  }
-  return <Chat />;
+  return <Navigate to={`/workspace/chat${search}`} replace />;
 }
 
 function AppRoutes() {
@@ -65,6 +59,7 @@ function AppRoutes() {
           {/* Legacy path: product stream lives on Activity, not a separate Overview page. */}
           <Route path="/overview" element={<Navigate to="/activity" replace />} />
           <Route path="/chat" element={<ChatEntryRoute />} />
+          <Route path="/legacy-chat" element={<Chat />} />
           <Route path="/workspace/*" element={<WorkspaceApp />} />
           <Route path="/droids" element={<Navigate to="/command-center" replace />} />
           <Route path="/extensions" element={<Extensions />} />

@@ -40,7 +40,7 @@ export function Header() {
     })];
   };
 
-  if (location.pathname.startsWith("/chat")) return null;
+  if (location.pathname.startsWith("/chat") || location.pathname.startsWith("/legacy-chat")) return null;
 
   return (
     <header className="sticky top-0 z-40 flex h-11 shrink-0 items-center justify-between border-b border-[color:var(--ham-workspace-line)] bg-[#040d14]/80 px-5 backdrop-blur-sm transition-colors">

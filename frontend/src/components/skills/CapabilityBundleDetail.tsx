@@ -9,6 +9,7 @@ const SAFE_ROUTE_PREFIXES = [
   "/skills",
   "/hermes",
   "/chat",
+  "/legacy-chat",
   "/workspace",
   "/agents",
   "/settings",

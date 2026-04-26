@@ -47,7 +47,7 @@ export function WorkspaceChatEmptyState({ onSuggestionClick }: WorkspaceChatEmpt
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, ease: "easeOut" }}
-      className="hww-chat-empty flex h-full flex-col items-center justify-center px-4 py-8"
+      className="hww-chat-empty flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center px-4 py-8"
     >
       <div className="flex max-w-xl flex-col items-center text-center">
         <div className="relative mb-6">

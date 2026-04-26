@@ -4,7 +4,7 @@
  */
 
 import * as React from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -243,7 +243,7 @@ export function WorkspaceChatScreen() {
   const crumbTitle = !sessionId ? "New" : shortId(sessionId, 10);
 
   return (
-    <div className="flex h-full min-h-0 w-full min-w-0 flex-col">
+    <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col">
       <div className="hww-chat-breadcrumb shrink-0 border-b border-white/[0.06] bg-[#040d14]/50 px-3 py-2.5 md:px-4">
         <div className="mx-auto flex max-w-3xl items-center gap-1 text-[12px] text-white/50">
           <span className="text-white/35">Hermes Workspace</span>
@@ -262,10 +262,7 @@ export function WorkspaceChatScreen() {
       </div>
       <div
         ref={listWrapRef}
-        className={cn(
-          "hww-scroll min-h-0 flex-1 overflow-y-auto",
-          !hasTranscript && "flex flex-col",
-        )}
+        className="hww-scroll flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto"
       >
         {loadingSession ? (
           <div className="flex flex-1 items-center justify-center py-12 text-sm text-white/40">Loading…</div>
