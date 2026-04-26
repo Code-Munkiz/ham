@@ -42,11 +42,18 @@ function HomeRoute() {
   return <Landing />;
 }
 
-/** When Hermes workspace is enabled, primary chat lives under `/workspace/chat`; keep `/chat` as entry alias. */
+/**
+ * When Hermes workspace is enabled, `/chat` is an alias for the workspace app: land on `/workspace`
+ * (dashboard). Preserve `?session=` deep links on `/workspace/chat`.
+ */
 function ChatEntryRoute() {
   const { search } = useLocation();
   if (isHermesWorkspaceEnabled()) {
-    return <Navigate to={`/workspace/chat${search}`} replace />;
+    const params = new URLSearchParams(search);
+    if (params.has("session")) {
+      return <Navigate to={`/workspace/chat${search}`} replace />;
+    }
+    return <Navigate to="/workspace" replace />;
   }
   return <Chat />;
 }
