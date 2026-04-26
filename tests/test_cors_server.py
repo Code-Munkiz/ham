@@ -27,6 +27,7 @@ def test_options_preflight_vercel_preview_matches_origin_regex(
     )
     assert res.status_code == 200, res.text
     assert res.headers.get("access-control-allow-origin") == origin
+    assert res.headers.get("access-control-allow-credentials") == "true"
 
 
 def test_options_preflight_patch_allowed(
@@ -49,6 +50,7 @@ def test_options_preflight_patch_allowed(
     )
     assert res.status_code == 200, res.text
     assert res.headers.get("access-control-allow-origin") == origin
+    assert res.headers.get("access-control-allow-credentials") == "true"
     assert res.headers.get("access-control-allow-methods", "").find("PATCH") != -1
 
 
@@ -76,6 +78,7 @@ def test_options_preflight_private_network_access_header(
     )
     assert res.status_code == 200, res.text
     assert res.headers.get("access-control-allow-origin") == origin
+    assert res.headers.get("access-control-allow-credentials") == "true"
     assert res.headers.get("access-control-allow-private-network", "").lower() == "true"
 
 
@@ -99,3 +102,4 @@ def test_options_preflight_production_vercel_in_default_cors(
     )
     assert res.status_code == 200, res.text
     assert res.headers.get("access-control-allow-origin") == origin
+    assert res.headers.get("access-control-allow-credentials") == "true"

@@ -83,6 +83,9 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_allow_origins(),
     allow_origin_regex=_cors_allow_origin_regex(),
+    # Workspace adapters use hamApiFetch(..., credentials="include") for cross-origin Vercel → Cloud Run. Without this,
+    # browsers omit Access-Control-Allow-Credentials and the response is treated as a CORS failure → "Failed to fetch".
+    allow_credentials=True,
     # PATCH required for /api/projects/{id} metadata updates (chat handoff repo save); browser preflight fails without it.
     allow_methods=["GET", "POST", "PATCH", "DELETE"],
     allow_headers=["*"],
