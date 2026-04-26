@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from src.api.server import app
+from src.api.server import app, fastapi_app
 
 client = TestClient(app)
 
@@ -41,6 +41,6 @@ def test_hermes_gateway_capabilities(mock_gateway: None) -> None:
 
 def test_hermes_gateway_stream_route_in_openapi(mock_gateway: None) -> None:
     """Route is registered (OpenAPI may not list text/event-stream for StreamingResponse)."""
-    spec = app.openapi()
+    spec = fastapi_app.openapi()
     assert "/api/hermes-gateway/stream" in spec["paths"]
     assert spec["paths"]["/api/hermes-gateway/stream"]["get"]["operationId"]

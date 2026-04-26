@@ -419,4 +419,6 @@ async def list_project_runs(
 
 # Outermost ASGI: Chrome "Private Network Access" — public HTTPS (e.g. Vercel) → http://127.0.0.1
 # needs Access-Control-Allow-Private-Network. Default CORS includes production Vercel; merge via HAM_CORS_ORIGINS.
-app = private_network_access_middleware(app)
+# Keep the FastAPI instance for OpenAPI and introspection; uvicorn entrypoint is the wrapped ASGI `app`.
+fastapi_app = app
+app = private_network_access_middleware(fastapi_app)
