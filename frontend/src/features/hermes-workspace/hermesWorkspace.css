@@ -1,6 +1,7 @@
 /* Namespaced Hermes Workspace lift — scope under .hww-root to limit global collision */
 
 .hww-root {
+  --hww-tabbar-h: 3.5rem;
   min-height: 0;
   height: 100%;
   width: 100%;

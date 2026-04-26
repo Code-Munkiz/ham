@@ -63,3 +63,6 @@ export const workspaceSessionAdapter = {
   list: (limit = 50, offset = 0) => fetchChatSessions(limit, offset),
   get: (sessionId: string) => fetchChatSession(sessionId),
 } as const;
+
+export { workspaceFileAdapter } from "./adapters/filesAdapter";
+export { workspaceTerminalAdapter } from "./adapters/terminalAdapter";

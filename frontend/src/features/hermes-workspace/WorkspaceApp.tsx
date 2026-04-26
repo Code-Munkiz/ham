@@ -5,6 +5,8 @@ import { WorkspaceShell } from "./WorkspaceShell";
 import { WorkspaceHome } from "./WorkspaceHome";
 import { WorkspaceChat } from "./WorkspaceChat";
 import { WorkspacePlaceholderPage } from "./WorkspacePlaceholder";
+import { WorkspaceFilesScreen } from "./screens/files/WorkspaceFilesScreen";
+import { WorkspaceTerminalScreen } from "./screens/terminal/WorkspaceTerminalScreen";
 import "./hermesWorkspace.css";
 
 /**
@@ -22,24 +24,8 @@ export function WorkspaceApp() {
         <Routes>
           <Route index element={<WorkspaceHome />} />
           <Route path="chat" element={<WorkspaceChat />} />
-          <Route
-            path="files"
-            element={
-              <WorkspacePlaceholderPage
-                title="Files"
-                description="Browser-side filesystem and arbitrary paths are out of scope. A future HAM-sandboxed or adapter-driven files surface can land here without PTY in the client."
-              />
-            }
-          />
-          <Route
-            path="terminal"
-            element={
-              <WorkspacePlaceholderPage
-                title="Terminal"
-                description="No raw PTY in the browser. Any terminal experience will be mediated by HAM/server contracts when scoped."
-              />
-            }
-          />
+          <Route path="files" element={<WorkspaceFilesScreen />} />
+          <Route path="terminal" element={<WorkspaceTerminalScreen />} />
           <Route
             path="jobs"
             element={

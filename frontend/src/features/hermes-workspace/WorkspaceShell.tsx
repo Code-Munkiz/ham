@@ -3,9 +3,12 @@ import { Link, NavLink, useLocation, useSearchParams } from "react-router-dom";
 import { Menu, Plus, Search, Sparkles, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { publicAssetUrl } from "@/lib/ham/publicAssets";
+import { Button } from "@/components/ui/button";
 import { knowledgeNavItems, mainNavItems, workspacePathTitle } from "./workspaceNavConfig";
 import { workspaceSessionAdapter } from "./workspaceAdapters";
 import type { ChatSessionSummary } from "./workspaceTypes";
+import { WorkspaceMobileTabBar } from "./WorkspaceMobileTabBar";
+import { WorkspaceTerminalView } from "./screens/terminal/WorkspaceTerminalView";
 
 type WorkspaceShellProps = {
   children: React.ReactNode;
@@ -242,6 +245,8 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const [drawerOpen, setDrawerOpen] = React.useState(false);
+  /** SHELL-015 — docked terminal strip on chat route */
+  const [chatTerminalDockOpen, setChatTerminalDockOpen] = React.useState(false);
   const [sessions, setSessions] = React.useState<ChatSessionSummary[]>([]);
   const [sessionsLoading, setSessionsLoading] = React.useState(true);
   const [sessionsError, setSessionsError] = React.useState<string | null>(null);
@@ -271,6 +276,8 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
   }, [loadSessions, location.pathname, location.search]);
 
   const pageTitle = workspacePathTitle(location.pathname);
+  const isWorkspaceChat =
+    location.pathname === "/workspace/chat" || location.pathname.startsWith("/workspace/chat/");
 
   React.useEffect(() => {
     setDrawerOpen(false);
@@ -336,9 +343,48 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
         </>
       ) : null}
 
-      <div className="hww-main min-h-0 min-w-0 flex-1 border-[color:var(--ham-workspace-line)] bg-[#030a10]/40 md:border-l">
-        {children}
+      <div
+        className={cn(
+          "hww-main flex min-h-0 min-w-0 flex-1 flex-col border-[color:var(--ham-workspace-line)] bg-[#030a10]/40 md:border-l",
+          !isWorkspaceChat && "max-md:pb-[var(--hww-tabbar-h,3.5rem)]",
+        )}
+      >
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          {children}
+          {isWorkspaceChat ? (
+            <div className="shrink-0 border-t border-white/[0.06] bg-[#030a0f]/90">
+              {chatTerminalDockOpen ? (
+                <div className="h-[min(14rem,38vh)] min-h-0 w-full">
+                  <WorkspaceTerminalView
+                    mode="panel"
+                    onMinimize={() => {
+                      setChatTerminalDockOpen(false);
+                    }}
+                    onClosePanel={() => {
+                      setChatTerminalDockOpen(false);
+                    }}
+                  />
+                </div>
+              ) : (
+                <div className="flex items-center justify-end gap-2 px-2 py-1">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    className="h-7 text-[11px] text-white/85"
+                    onClick={() => {
+                      setChatTerminalDockOpen(true);
+                    }}
+                  >
+                    Open terminal dock
+                  </Button>
+                </div>
+              )}
+            </div>
+          ) : null}
+        </div>
       </div>
+      <WorkspaceMobileTabBar />
     </div>
   );
 }
