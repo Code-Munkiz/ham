@@ -1,5 +1,16 @@
 import * as React from "react";
-import { ChevronRight, File, FilePlus, Folder, FolderPlus, Pencil, RefreshCw, Search, Upload } from "lucide-react";
+import {
+  ChevronRight,
+  File,
+  FilePlus,
+  Folder,
+  FolderPlus,
+  Pencil,
+  RefreshCw,
+  Save,
+  Search,
+  Upload,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { workspaceFileAdapter, type FileBridgeState, type WorkspaceFileEntry } from "../../adapters/filesAdapter";
@@ -39,6 +50,8 @@ type PromptState =
 
 type Ctx = { x: number; y: number; entry: WorkspaceFileEntry } | null;
 
+type SaveUiState = "idle" | "saving" | "saved" | "error";
+
 export function WorkspaceFilesScreen() {
   const [collapsed, setCollapsed] = React.useState(false);
   const [isMobile, setIsMobile] = React.useState(false);
@@ -62,8 +75,11 @@ function ready() {
   );
   const [readPath, setReadPath] = React.useState<string | null>(null);
   const [readBridge, setReadBridge] = React.useState<FileBridgeState | null>(null);
+  const [saveState, setSaveState] = React.useState<SaveUiState>("idle");
+  const [saveError, setSaveError] = React.useState<string | null>(null);
   const uploadInputRef = React.useRef<HTMLInputElement | null>(null);
   const uploadTargetRef = React.useRef("");
+  const saveFlashTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const refresh = React.useCallback(async () => {
     setLoading(true);
@@ -76,6 +92,13 @@ function ready() {
   React.useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  React.useEffect(
+    () => () => {
+      if (saveFlashTimer.current) clearTimeout(saveFlashTimer.current);
+    },
+    [],
+  );
 
   React.useEffect(() => {
     const m = window.matchMedia("(max-width: 767px)");
@@ -198,11 +221,40 @@ function ready() {
   const loadFile = async (path: string) => {
     setReadPath(path);
     setReadBridge(null);
+    setSaveState("idle");
+    setSaveError(null);
     const { text, bridge: b } = await workspaceFileAdapter.readText(path);
     setReadBridge(b);
     if (text != null) {
       setEditorValue(text);
     }
+  };
+
+  const handleSave = async () => {
+    if (!readPath) return;
+    if (saveFlashTimer.current) {
+      clearTimeout(saveFlashTimer.current);
+      saveFlashTimer.current = null;
+    }
+    setSaveState("saving");
+    setSaveError(null);
+    const r = await workspaceFileAdapter.postJson({
+      action: "write",
+      path: readPath,
+      content: editorValue,
+    });
+    if (!r.ok) {
+      setSaveState("error");
+      setSaveError(r.error || "Save failed");
+      if (r.bridge) setBridge(r.bridge);
+      return;
+    }
+    setSaveState("saved");
+    saveFlashTimer.current = setTimeout(() => {
+      setSaveState("idle");
+      saveFlashTimer.current = null;
+    }, 2200);
+    await refresh();
   };
 
   const handleFileClick = async (entry: WorkspaceFileEntry) => {
@@ -371,9 +423,42 @@ function ready() {
                 Explore your workspace and edit in the buffer.
               </p>
             </div>
-            {bridge.status === "pending" ? (
-              <span className="ml-auto shrink-0 text-[10px] text-amber-200/80">Runtime bridge pending</span>
-            ) : null}
+            <div className="ml-auto flex shrink-0 items-center gap-1.5">
+              {readPath ? (
+                <>
+                  {saveState === "error" && saveError ? (
+                    <span className="max-w-[min(12rem,40vw)] truncate text-[10px] text-red-300/90" title={saveError}>
+                      {saveError}
+                    </span>
+                  ) : null}
+                  {saveState === "saved" ? (
+                    <span className="text-[10px] text-emerald-300/90">Saved</span>
+                  ) : null}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    className="h-8 gap-1 border border-white/10 bg-white/[0.06] text-[12px] text-white/90 hover:bg-white/10"
+                    disabled={saveState === "saving"}
+                    onClick={() => void handleSave()}
+                    title="Save file (Ctrl+S)"
+                    aria-label="Save file"
+                  >
+                    {saveState === "saving" ? (
+                      "Saving…"
+                    ) : (
+                      <>
+                        <Save className="h-3.5 w-3.5" />
+                        <span className="hidden sm:inline">Save</span>
+                      </>
+                    )}
+                  </Button>
+                </>
+              ) : null}
+              {bridge.status === "pending" ? (
+                <span className="text-[10px] text-amber-200/80">Runtime bridge pending</span>
+              ) : null}
+            </div>
           </header>
 
           {breadcrumb.length > 0 ? (
@@ -393,7 +478,20 @@ function ready() {
             ) : null}
             <textarea
               value={editorValue}
-              onChange={(e) => setEditorValue(e.target.value)}
+              onChange={(e) => {
+                setEditorValue(e.target.value);
+                if (saveState === "saved" || saveState === "error") {
+                  setSaveState("idle");
+                  setSaveError(null);
+                }
+              }}
+              onKeyDown={(e) => {
+                if (!readPath) return;
+                if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+                  e.preventDefault();
+                  void handleSave();
+                }
+              }}
               spellCheck={false}
               className="h-full min-h-[200px] w-full resize-none rounded-lg border border-white/[0.08] bg-[#040a0f] px-2 py-2 font-mono text-[12px] leading-relaxed text-[#dbe7f0] outline-none ring-0"
             />
@@ -492,6 +590,8 @@ function ready() {
             onClick={() => {
               setPreviewPath(null);
               setReadPath(null);
+              setSaveState("idle");
+              setSaveError(null);
             }}
           >
             Close preview
