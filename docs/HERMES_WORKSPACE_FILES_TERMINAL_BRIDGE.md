@@ -20,7 +20,8 @@ configured workspace root is rejected (HTTP 400). See `workspace_files.py` modul
 `http://127.0.0.1:8000` — see `frontend/vite.config.ts` and `frontend/.env.example`). If your HAM
 `uvicorn` runs on another port (e.g. 8001), set the variable in **`frontend/.env.local`** to that
 origin and **restart Vite**; otherwise `GET /api/workspace/files?action=list` may 404 and the Files
-UI shows “Runtime bridge pending” even when the correct API on the other port works in isolation.
+UI can sit in a loading or connection-error state even when the correct API on the other port works
+in isolation (fix the proxy target, then reload).
 **Do not commit** `.env.local` (it is gitignored); copy from `.env.example` as needed.
 
 **Vercel (or any public HTTPS) + local `uvicorn` (two requirements):** the browser is on
