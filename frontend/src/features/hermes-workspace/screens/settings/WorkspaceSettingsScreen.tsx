@@ -57,12 +57,15 @@ export function WorkspaceSettingsScreen() {
         return <WorkspaceSettingsBridgePanel section={s} />;
       case "mcp":
         return (
-          <p className="text-[13px] text-white/45">
-            Use the dedicated{" "}
-            <Link className="text-[#ffb27a] underline-offset-2 hover:underline" to="/workspace/settings/mcp">
+          <p className="text-[13px] leading-relaxed text-white/45">
+            Open{" "}
+            <Link
+              className="text-[#7dd3fc] underline decoration-white/10 underline-offset-2 hover:decoration-[#7dd3fc]/50"
+              to="/workspace/settings/mcp"
+            >
               MCP servers
             </Link>{" "}
-            route to match upstream.
+            for the same layout as upstream.
           </p>
         );
       default:
@@ -79,12 +82,15 @@ export function WorkspaceSettingsScreen() {
         />
         <div className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4 md:p-6">
           {main}
-          <div className="mt-10 border-t border-white/[0.06] pt-4 text-[12px] text-white/30">
-            Need diagnostics, jobs, or logs? Open{" "}
-            <a className="text-[#ffb27a] underline-offset-2 hover:underline" href="/settings?tab=diagnostics">
+          <div className="mt-10 border-t border-white/[0.06] pt-4 text-[12px] text-white/32">
+            Diagnostics, jobs, and logs:{" "}
+            <a
+              className="text-[#7dd3fc] underline decoration-white/10 underline-offset-2 hover:decoration-[#7dd3fc]/50"
+              href="/settings?tab=diagnostics"
+            >
               full HAM settings
             </a>{" "}
-            (non-workspace).
+            (main app).
           </div>
         </div>
       </div>

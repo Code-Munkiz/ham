@@ -1,6 +1,6 @@
 import * as React from "react";
 import { Link, NavLink, useLocation, useSearchParams } from "react-router-dom";
-import { Menu, MessageSquare, PanelLeft, PanelLeftClose, Plus, Search, X } from "lucide-react";
+import { Menu, MessageSquare, Moon, PanelLeft, PanelLeftClose, Plus, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { publicAssetUrl } from "@/lib/ham/publicAssets";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,9 @@ import { WorkspaceMobileTabBar } from "./WorkspaceMobileTabBar";
 import { WorkspaceTerminalView } from "./screens/terminal/WorkspaceTerminalView";
 
 const HWW_SIDEBAR_COLLAPSE_KEY = "hww.sidebar.collapsed";
+
+/** Full HAM app (Vercel) — not local `/chat`; keeps workspace as lift preview. */
+const HAM_APP_EXTERNAL_URL = "https://ham-c9yitglhu-team-clarity.vercel.app/";
 
 type WorkspaceShellProps = {
   children: React.ReactNode;
@@ -328,13 +331,25 @@ function WorkspaceSideNav({
       ) : null}
 
       <div className="mt-auto border-t border-white/[0.06] pt-3">
-        <Link
-          to="/chat"
+        <a
+          href={HAM_APP_EXTERNAL_URL}
+          target="_blank"
+          rel="noopener noreferrer"
           onClick={onNavigate}
-          className="block rounded-lg px-2 py-1.5 text-center text-[11px] font-medium text-white/45 transition-colors hover:bg-white/[0.05] hover:text-[#ffb27a] md:text-left"
+          className={cn(
+            "flex items-center gap-2 rounded-lg px-2 py-2 text-white/50 transition-colors hover:bg-white/[0.05] hover:text-[#a5f3fc]/95",
+            c ? "justify-center" : "md:justify-start",
+          )}
+          title="Open HAM app"
+          aria-label="Open HAM app"
         >
-          {c ? "Open /chat" : "Open HAM /chat (full app)"}
-        </Link>
+          <Moon className="h-4 w-4 shrink-0" strokeWidth={1.5} />
+          <span
+            className={cn("text-[11px] font-medium text-white/40", c && "sr-only")}
+          >
+            HAM app
+          </span>
+        </a>
       </div>
     </div>
   );

@@ -54,7 +54,10 @@ import {
 import type { ContextEnginePayload, CursorCredentialsStatus } from "@/lib/ham/types";
 import { DesktopBundlePanel } from "@/components/settings/DesktopBundlePanel";
 
-export function ApiKeysPanel() {
+export type SettingsPanelVisualVariant = "default" | "workspace";
+
+export function ApiKeysPanel({ variant = "default" }: { variant?: SettingsPanelVisualVariant }) {
+  const w = variant === "workspace";
   const [status, setStatus] = React.useState<CursorCredentialsStatus | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -135,29 +138,56 @@ export function ApiKeysPanel() {
         : "Not configured";
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-xl border border-[#FF6B00]/20 bg-black/50 p-6 space-y-4 shadow-xl">
+    <div className={cn("space-y-6", w && "hww-settings-panels")}>
+      <div
+        className={cn(
+          "space-y-4",
+          w
+            ? "hww-set-card rounded-2xl border border-white/[0.08] bg-white/[0.03] p-5 shadow-none md:p-6"
+            : "rounded-xl border border-[#FF6B00]/20 bg-black/50 p-6 shadow-xl",
+        )}
+      >
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="space-y-1">
+          <div className="space-y-2">
             <div className="flex items-center gap-2">
-              <Key className="h-4 w-4 text-[#FF6B00]" />
-              <h3 className="text-[13px] font-black text-white uppercase tracking-[0.2em] italic">
-                Cursor Cloud API key
+              <Key className={cn("h-4 w-4", w ? "text-[#5eead4]/90" : "text-[#FF6B00]")} />
+              <h3
+                className={cn(
+                  w ? "text-sm font-semibold text-[#e8eef8]" : "text-[13px] font-black uppercase italic tracking-[0.2em] text-white",
+                )}
+              >
+                Cursor API key
               </h3>
             </div>
-            <p className="text-[10px] font-bold text-white/35 uppercase tracking-widest max-w-2xl leading-relaxed">
-              Ham proxies Cursor Cloud Agents (<span className="font-mono text-white/50">GET/POST /v0/*</span>) with
-              this key. Stored only on the API host filesystem (see path below). Set{" "}
-              <span className="font-mono text-white/45">HAM_CURSOR_CREDENTIALS_FILE</span> on Cloud Run/Docker with a
-              mounted volume so the key survives restarts. Anyone with access to this Settings page can rotate the team
-              key.
+            <p
+              className={cn(
+                "max-w-2xl leading-relaxed",
+                w ? "text-[13px] text-white/45" : "text-[10px] font-bold uppercase tracking-widest text-white/35",
+              )}
+            >
+              {w
+                ? "Used for cloud agents and model calls through the Ham API. The key is stored on the server; team members with access can rotate it from here."
+                : (
+                    <>
+                      Ham proxies Cursor Cloud Agents (<span className="font-mono text-white/50">GET/POST /v0/*</span>) with
+                      this key. Stored only on the API host filesystem (see path below). Set{" "}
+                      <span className="font-mono text-white/45">HAM_CURSOR_CREDENTIALS_FILE</span> on Cloud Run/Docker with a
+                      mounted volume so the key survives restarts. Anyone with access to this Settings page can rotate the
+                      team key.
+                    </>
+                  )}
             </p>
           </div>
           <button
             type="button"
             onClick={() => void load()}
             disabled={loading || busy}
-            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-white/10 text-[9px] font-black uppercase tracking-widest text-white/50 hover:text-[#FF6B00] hover:border-[#FF6B00]/30 transition-colors disabled:opacity-40"
+            className={cn(
+              "inline-flex items-center gap-2 rounded-lg border px-3 py-2 transition-colors disabled:opacity-40",
+              w
+                ? "border-white/[0.1] text-[12px] font-medium text-white/60 hover:border-white/20 hover:bg-white/[0.04] hover:text-white/90"
+                : "border-white/10 text-[9px] font-black uppercase tracking-widest text-white/50 hover:border-[#FF6B00]/30 hover:text-[#FF6B00]",
+            )}
           >
             <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
             Refresh
@@ -171,35 +201,67 @@ export function ApiKeysPanel() {
         )}
 
         {loading && !status && (
-          <p className="text-[10px] font-bold text-white/25 uppercase tracking-widest">Loading key status…</p>
+          <p className={cn(w ? "text-[13px] text-white/40" : "text-[10px] font-bold uppercase tracking-widest text-white/25")}>
+            Loading key status…
+          </p>
         )}
 
         {status && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="p-4 rounded-lg border border-white/5 bg-black/40 space-y-2">
-              <div className="text-[9px] font-black text-white/25 uppercase tracking-widest">Active key source</div>
-              <div className="text-[12px] font-black text-[#FF6B00] uppercase tracking-tight">{sourceLabel}</div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div
+              className={cn(
+                "space-y-2 rounded-xl border p-4",
+                w ? "border-white/[0.06] bg-white/[0.02]" : "border-white/5 bg-black/40",
+              )}
+            >
+              <div className={cn(w ? "text-xs font-medium text-white/50" : "text-[9px] font-black uppercase tracking-widest text-white/25")}>
+                Key source
+              </div>
+              <div
+                className={cn(
+                  w ? "text-sm font-medium text-[#99f6e4]/95" : "text-[12px] font-black uppercase tracking-tight text-[#FF6B00]",
+                )}
+              >
+                {sourceLabel}
+              </div>
               {status.configured && status.masked_preview && (
-                <div className="text-[10px] font-mono text-white/45">Preview: {status.masked_preview}</div>
+                <div className={cn("text-white/45", w ? "text-xs" : "text-[10px] font-mono")}>
+                  Preview: {status.masked_preview}
+                </div>
               )}
             </div>
-            <div className="p-4 rounded-lg border border-white/5 bg-black/40 space-y-2">
-              <div className="text-[9px] font-black text-white/25 uppercase tracking-widest">Who is paying / labeled</div>
+            <div
+              className={cn(
+                "space-y-2 rounded-xl border p-4",
+                w ? "border-white/[0.06] bg-white/[0.02]" : "border-white/5 bg-black/40",
+              )}
+            >
+              <div className={cn(w ? "text-xs font-medium text-white/50" : "text-[9px] font-black uppercase tracking-widest text-white/25")}>
+                Account
+              </div>
               {status.error && !status.user_email ? (
-                <div className="text-[11px] font-bold text-amber-500/80">{status.error}</div>
+                <div className="text-[13px] font-medium text-amber-400/90">{status.error}</div>
               ) : (
                 <>
-                  <div className="text-[12px] font-black text-white">
+                  <div className={cn("text-white", w ? "text-sm font-medium" : "text-[12px] font-black")}>
                     {status.api_key_name ?? "—"}{" "}
-                    <span className="text-white/30 font-bold text-[10px] uppercase tracking-widest">(key name)</span>
+                    <span
+                      className={cn(
+                        w ? "text-white/40" : "text-[10px] font-bold uppercase tracking-widest text-white/30",
+                      )}
+                    >
+                      {w ? "" : "(key name)"}
+                    </span>
                   </div>
-                  <div className="text-[11px] font-mono text-white/55 break-all">
+                  <div className={cn("break-all text-white/60", w ? "text-sm" : "text-[11px] font-mono")}>
                     {status.user_email ?? "—"}{" "}
-                    <span className="text-white/25 text-[9px] font-bold uppercase tracking-widest">(account)</span>
+                    {!w && (
+                      <span className="text-[9px] font-bold uppercase tracking-widest text-white/25">(account)</span>
+                    )}
                   </div>
                   {status.key_created_at && (
-                    <div className="text-[9px] font-bold text-white/25 uppercase tracking-wider">
-                      Key issued: {status.key_created_at}
+                    <div className={cn("text-white/40", w ? "text-xs" : "text-[9px] font-bold uppercase tracking-wider")}>
+                      Issued: {status.key_created_at}
                     </div>
                   )}
                 </>
@@ -209,23 +271,41 @@ export function ApiKeysPanel() {
         )}
 
         {status?.storage_path && (
-          <div className="p-4 rounded-lg border border-white/5 bg-black/30 space-y-1">
-            <div className="text-[9px] font-black text-white/25 uppercase tracking-widest">Key file on API host</div>
-            <div className="text-[10px] font-mono text-white/55 break-all">{status.storage_path}</div>
+          <div
+            className={cn(
+              "space-y-1 rounded-xl border p-4",
+              w ? "border-white/[0.06] bg-white/[0.02]" : "border-white/5 bg-black/30",
+            )}
+          >
+            <div className={cn(w ? "text-xs font-medium text-white/50" : "text-[9px] font-black uppercase tracking-widest text-white/25")}>
+              File on server
+            </div>
+            <div className={cn("break-all text-white/55", w ? "text-xs font-mono" : "text-[10px] font-mono")}>
+              {status.storage_path}
+            </div>
             {status.storage_override_env ? (
-              <div className="text-[9px] font-bold text-emerald-500/70 uppercase tracking-wider">
-                Override: HAM_CURSOR_CREDENTIALS_FILE is set
-              </div>
+              <div className="text-xs text-emerald-400/80">Override: HAM_CURSOR_CREDENTIALS_FILE is set</div>
             ) : null}
           </div>
         )}
 
         {status?.wired_for && (
-          <div className="p-4 rounded-lg border border-[#FF6B00]/15 bg-black/40 space-y-3">
-            <div className="text-[9px] font-black text-white/25 uppercase tracking-widest">
-              What uses this key (backend, this deployment)
+          <div
+            className={cn(
+              "space-y-3 rounded-xl border p-4",
+              w ? "border-white/[0.08] bg-white/[0.02]" : "border-[#FF6B00]/15 bg-black/40",
+            )}
+          >
+            <div
+              className={cn(
+                w ? "text-xs font-medium text-white/50" : "text-[9px] font-black uppercase tracking-widest text-white/25",
+              )}
+            >
+              {w ? "What this key is used for" : "What uses this key (backend, this deployment)"}
             </div>
-            <ul className="space-y-2 text-[10px] font-bold text-white/45 uppercase tracking-wider">
+            <ul
+              className={cn("space-y-2 text-white/55", w ? "text-[13px] font-normal normal-case" : "text-[10px] font-bold uppercase tracking-wider text-white/45")}
+            >
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500/90 shrink-0 mt-0.5" />
                 <span>
@@ -274,45 +354,72 @@ export function ApiKeysPanel() {
                 type="button"
                 disabled={modelsBusy || !status.configured}
                 onClick={() => void onTestModels()}
-                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-[#FF6B00]/35 text-[9px] font-black uppercase tracking-widest text-[#FF6B00] hover:bg-[#FF6B00]/10 transition-colors disabled:opacity-30"
+                className={cn(
+                  "inline-flex items-center gap-2 rounded-lg border px-3 py-2 transition-colors disabled:opacity-30",
+                  w
+                    ? "border-white/[0.1] text-[12px] font-medium text-white/70 hover:border-[#5eead4]/30 hover:bg-white/[0.04] hover:text-white"
+                    : "border-[#FF6B00]/35 text-[9px] font-black uppercase tracking-widest text-[#FF6B00] hover:bg-[#FF6B00]/10",
+                )}
               >
                 <Zap className={cn("h-3.5 w-3.5", modelsBusy && "animate-pulse")} />
-                Test Cursor API (models)
+                Test models
               </button>
               {!status.configured && (
-                <span className="text-[9px] font-bold text-white/25 uppercase tracking-widest">
-                  Configure a key first
+                <span className={cn("text-white/40", w ? "text-xs" : "text-[9px] font-bold uppercase tracking-widest")}>
+                  Add a key first
                 </span>
               )}
             </div>
             {modelsProbe && (
-              <pre className="text-[9px] font-mono text-white/45 whitespace-pre-wrap break-all max-h-32 overflow-y-auto p-2 rounded bg-black/50 border border-white/5">
+              <pre
+                className={cn(
+                  "whitespace-pre-wrap break-all font-mono text-white/50",
+                  w
+                    ? "max-h-32 overflow-y-auto rounded-lg border border-white/[0.06] bg-black/30 p-3 text-xs"
+                    : "max-h-32 overflow-y-auto rounded border border-white/5 bg-black/50 p-2 text-[9px]",
+                )}
+              >
                 {modelsProbe}
               </pre>
             )}
           </div>
         )}
 
-        <div className="space-y-2 pt-2 border-t border-white/5">
-          <label className="text-[9px] font-black text-white/30 uppercase tracking-widest block">
-            Paste new Cursor API key (replaces saved key)
+        <div className={cn("space-y-2 border-t border-white/5 pt-2", w && "border-white/[0.06]")}>
+          <label
+            className={cn(
+              "block",
+              w ? "text-xs font-medium text-white/50" : "text-[9px] font-black uppercase tracking-widest text-white/30",
+            )}
+          >
+            New key (replaces saved)
           </label>
-          <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row">
             <input
               type="password"
               autoComplete="off"
               value={draftKey}
               onChange={(e) => setDraftKey(e.target.value)}
               placeholder="crsr_…"
-              className="flex-1 h-11 px-4 rounded-lg bg-black/60 border border-white/10 font-mono text-[11px] text-white/80 placeholder:text-white/15 focus:outline-none focus:border-[#FF6B00]/40"
+              className={cn(
+                "h-11 flex-1 rounded-lg border px-4 font-mono text-[13px] text-white/80 placeholder:text-white/20 focus:outline-none",
+                w
+                  ? "border-white/[0.1] bg-black/20 focus:border-[#5eead4]/30 focus:ring-1 focus:ring-[#5eead4]/20"
+                  : "border-white/10 bg-black/60 text-[11px] focus:border-[#FF6B00]/40",
+              )}
             />
             <button
               type="button"
               disabled={busy || !draftKey.trim()}
               onClick={() => void onSave()}
-              className="h-11 px-6 rounded-lg bg-[#FF6B00] text-[10px] font-black text-black uppercase tracking-widest hover:bg-[#ff8534] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              className={cn(
+                "h-11 rounded-lg px-6 text-[12px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-30",
+                w
+                  ? "bg-[#0f766e] text-white hover:bg-[#0d9488] dark:bg-[#14b8a6]/90"
+                  : "bg-[#FF6B00] text-[10px] font-black uppercase tracking-widest text-black hover:bg-[#ff8534]",
+              )}
             >
-              Save & verify
+              Save
             </button>
           </div>
           {status?.source === "ui" && (
@@ -320,63 +427,123 @@ export function ApiKeysPanel() {
               type="button"
               disabled={busy}
               onClick={() => void onClearSaved()}
-              className="text-[9px] font-black text-white/35 uppercase tracking-widest hover:text-red-400/90 transition-colors"
+              className={cn(
+                "text-white/40 transition-colors hover:text-red-300/90",
+                w ? "text-xs" : "text-[9px] font-black uppercase tracking-widest",
+              )}
             >
-              Remove saved key (fall back to CURSOR_API_KEY env if set)
+              Remove saved key
             </button>
           )}
         </div>
       </div>
 
-      <div className="rounded-lg border border-white/5 bg-white/[0.02] p-5 space-y-3">
+      <div
+        className={cn(
+          "space-y-3 rounded-xl border p-5",
+          w ? "border-white/[0.08] bg-white/[0.02]" : "border-white/5 bg-white/[0.02]",
+        )}
+      >
         <div className="flex items-center gap-2">
-          <Globe className="h-4 w-4 text-white/25" />
-          <h4 className="text-[11px] font-black text-white/60 uppercase tracking-widest">OpenRouter (chat gateway)</h4>
+          <Globe className={cn("h-4 w-4", w ? "text-white/40" : "text-white/25")} />
+          <h4 className={cn(w ? "text-sm font-medium text-white/80" : "text-[11px] font-black uppercase tracking-widest text-white/60")}>
+            OpenRouter (chat)
+          </h4>
         </div>
-        <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest leading-relaxed">
-          Dashboard chat still uses <span className="font-mono text-white/45">HERMES_GATEWAY_MODE=openrouter</span> and{" "}
-          <span className="font-mono text-white/45">OPENROUTER_API_KEY</span> unless you change the gateway on the API
-          host. Cursor and OpenRouter can both be configured; wiring chat to Composer is a separate gateway mode.
+        <p
+          className={cn(
+            "leading-relaxed",
+            w ? "text-[13px] text-white/45" : "text-[10px] font-bold uppercase tracking-widest text-white/30",
+          )}
+        >
+          {w ? (
+            <>
+              When the API uses the OpenRouter gateway, set keys in the environment; see the Connection page for
+              variable names. Cursor and OpenRouter can both be configured.
+            </>
+          ) : (
+            <>
+              Dashboard chat still uses <span className="font-mono text-white/45">HERMES_GATEWAY_MODE=openrouter</span> and{" "}
+              <span className="font-mono text-white/45">OPENROUTER_API_KEY</span> unless you change the gateway on the API
+              host. Cursor and OpenRouter can both be configured; wiring chat to Composer is a separate gateway mode.
+            </>
+          )}
         </p>
       </div>
 
-      <div className="rounded-lg border border-white/5 border-dashed bg-black/20 p-5 space-y-2">
-        <div className="text-[10px] font-black text-white/25 uppercase tracking-widest">Roadmap</div>
-        <p className="text-[10px] font-bold text-white/35 uppercase tracking-wider">
-          <span className="text-white/50">Local Composer</span> — Node SDK / sidecar for repo-on-disk workflows (separate
-          from Cloud Agents REST above).
-        </p>
-      </div>
+      {!w && (
+        <div className="space-y-2 rounded-lg border border-dashed border-white/5 bg-black/20 p-5">
+          <div className="text-[10px] font-black uppercase tracking-widest text-white/25">Roadmap</div>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-white/35">
+            <span className="text-white/50">Local Composer</span> — Node SDK / sidecar for repo-on-disk workflows (separate
+            from Cloud Agents REST above).
+          </p>
+        </div>
+      )}
     </div>
   );
 }
 
 /** Read-only .env name table; used in full Settings and in Workspace "Connection" (repomix Connection tips reference env on disk). */
-export function EnvironmentReadonlyPanel() {
+export function EnvironmentReadonlyPanel({ variant = "default" }: { variant?: SettingsPanelVisualVariant }) {
+  const w = variant === "workspace";
   return (
-    <div className="space-y-6">
-      <div className="rounded-lg border border-white/10 bg-black/40 p-5 space-y-3">
-        <p className="text-[11px] font-bold text-white/50 leading-relaxed">
-          <span className="text-[#FF6B00] uppercase tracking-widest text-[10px] font-black">Secrets</span> — use{" "}
-          <span className="font-mono text-white/60">API Keys</span> in Model &amp; provider for provider tokens. This page
-          lists <span className="italic text-white/40">names</span> only so you know what Ham reads from the process
-          environment (mostly model routing).
-        </p>
-        <p className="text-[10px] font-bold text-white/25 uppercase tracking-widest">
-          Copy <span className="font-mono">.env.example</span> → <span className="font-mono">.env</span> at the repo root;
-          restart CLI / API after edits.
-        </p>
+    <div className="space-y-5">
+      <div
+        className={cn(
+          "space-y-2 rounded-xl border p-4 md:p-5",
+          w ? "border-white/[0.08] bg-white/[0.02]" : "space-y-3 border border-white/10 bg-black/40 p-5",
+        )}
+      >
+        <h4 className={cn(w ? "text-sm font-medium text-white/85" : "text-[11px] font-bold text-white/50")}>
+          {w ? "Environment variables" : (
+            <>
+              <span className="text-[#FF6B00] text-[10px] font-black uppercase tracking-widest">Secrets</span> — use{" "}
+              <span className="font-mono text-white/60">API Keys</span> in Model &amp; provider for provider tokens. This
+              page lists <span className="italic text-white/40">names</span> only so you know what Ham reads from the
+              process environment (mostly model routing).
+            </>
+          )}
+        </h4>
+        {w && (
+          <p className="text-[13px] leading-relaxed text-white/45">
+            Provider tokens are managed under Model &amp; provider. Below are read-only <strong className="font-medium text-white/60">names</strong> the API may read (values never shown here). Copy <span className="font-mono text-white/50">.env.example</span> to <span className="font-mono text-white/50">.env</span> at the repo root, then restart the API if you change it.
+          </p>
+        )}
+        {!w && (
+          <p className="text-[10px] font-bold uppercase tracking-widest text-white/25">
+            Copy <span className="font-mono">.env.example</span> → <span className="font-mono">.env</span> at the repo root;
+            restart CLI / API after edits.
+          </p>
+        )}
       </div>
-      <div className="overflow-hidden rounded-lg border border-white/5 bg-white/[0.02]">
-        <table className="w-full text-left text-[11px]">
-          <thead className="border-b border-white/10 bg-black/50 text-[9px] font-black uppercase tracking-widest text-white/35">
+      <div
+        className={cn(
+          "overflow-hidden rounded-xl border",
+          w ? "border-white/[0.08] bg-white/[0.02]" : "border-white/5 bg-white/[0.02]",
+        )}
+      >
+        <table className="w-full text-left">
+          <thead
+            className={cn(
+              "border-b text-left",
+              w
+                ? "border-white/[0.08] bg-white/[0.02] text-xs font-medium text-white/45"
+                : "border-white/10 bg-black/50 text-[9px] font-black uppercase tracking-widest text-white/35",
+            )}
+          >
             <tr>
-              <th className="px-4 py-3">Variable</th>
-              <th className="px-4 py-3">Kind</th>
-              <th className="px-4 py-3">Role</th>
+              <th className="px-4 py-2.5 font-medium">Name</th>
+              <th className="px-4 py-2.5 font-medium">Kind</th>
+              <th className="px-4 py-2.5 font-medium">Role</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-white/5 text-white/55">
+          <tbody
+            className={cn(
+              "divide-y text-white/60",
+              w ? "divide-white/[0.06] text-[13px]" : "divide-white/5 text-[11px] text-white/55",
+            )}
+          >
             {[
               {
                 name: "OPENROUTER_API_KEY",
@@ -415,17 +582,45 @@ export function EnvironmentReadonlyPanel() {
               },
             ].map((row) => (
               <tr key={row.name} className="hover:bg-white/[0.02]">
-                <td className="px-4 py-3 font-mono text-[10px] text-[#FF6B00]/90">{row.name}</td>
-                <td className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-white/35">{row.kind}</td>
-                <td className="px-4 py-3 text-[10px] leading-snug text-white/40">{row.role}</td>
+                <td
+                  className={cn(
+                    "px-4 py-2.5 font-mono",
+                    w ? "text-xs text-[#5eead4]/90" : "text-[10px] text-[#FF6B00]/90",
+                  )}
+                >
+                  {row.name}
+                </td>
+                <td
+                  className={cn(
+                    "px-4 py-2.5",
+                    w ? "text-xs text-white/50" : "text-[10px] font-bold uppercase tracking-widest text-white/35",
+                  )}
+                >
+                  {row.kind}
+                </td>
+                <td
+                  className={cn("px-4 py-2.5 leading-snug", w ? "text-[13px] text-white/45" : "text-[10px] text-white/40")}
+                >
+                  {row.role}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      <p className="text-[9px] font-bold text-white/20 uppercase tracking-widest">
-        Alpha: no live env inspection — add server-backed <span className="font-mono">GET /api/env/names</span> later if
-        needed.
+      <p
+        className={cn(
+          w ? "text-xs text-white/30" : "text-[9px] font-bold uppercase tracking-widest text-white/20",
+        )}
+      >
+        {w
+          ? "Server-backed env inspection (GET /api/env/names) is not wired yet; names are documented only."
+          : (
+              <>
+                Alpha: no live env inspection — add server-backed <span className="font-mono">GET /api/env/names</span> later if
+                needed.
+              </>
+            )}
       </p>
     </div>
   );
@@ -751,10 +946,13 @@ function buildHamSettingsChanges(fields: {
 function AllowlistedWorkspaceSettings({
   data,
   onApplied,
+  visualVariant = "default",
 }: {
   data: ContextEnginePayload;
   onApplied: () => void;
+  visualVariant?: SettingsPanelVisualVariant;
 }) {
+  const w = visualVariant === "workspace";
   const cwd = data.cwd;
   const [projectId, setProjectId] = React.useState<string | null>(null);
   const [projectErr, setProjectErr] = React.useState<string | null>(null);
@@ -876,61 +1074,100 @@ function AllowlistedWorkspaceSettings({
     }
   };
 
-  const inputCls =
-    "w-full mt-1 px-3 py-2 rounded-lg bg-black/50 border border-white/10 text-[11px] font-mono text-white/80 placeholder:text-white/25 focus:outline-none focus:ring-1 focus:ring-[#FF6B00]/50";
+  const inputCls = cn(
+    "mt-1 w-full rounded-lg border px-3 py-2 text-white/80 placeholder:text-white/25 focus:outline-none focus:ring-1",
+    w
+      ? "border-white/[0.1] bg-white/[0.04] text-sm focus:ring-[#5eead4]/40"
+      : "border-white/10 bg-black/50 text-[11px] font-mono focus:ring-[#FF6B00]/50",
+  );
+
+  const fieldLbl = w ? "text-xs font-medium text-white/50" : "text-[9px] font-black text-white/35 uppercase tracking-widest";
 
   return (
-    <div className="p-6 bg-black/40 border border-[#FF6B00]/20 rounded-xl space-y-5">
+    <div
+      className={cn(
+        "space-y-5 rounded-xl border p-6",
+        w ? "border-white/[0.08] bg-white/[0.02]" : "border-[#FF6B00]/20 bg-black/40",
+      )}
+    >
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h4 className="text-[11px] font-black text-[#FF6B00] uppercase tracking-widest italic">
-            Allowlisted config writes
+          <h4
+            className={cn(
+              w ? "text-sm font-medium text-white/85" : "text-[11px] font-black uppercase italic tracking-widest text-[#FF6B00]",
+            )}
+          >
+            Project settings writes
           </h4>
-          <p className="text-[9px] font-bold text-white/30 uppercase tracking-widest mt-2 max-w-2xl leading-relaxed">
-            Writes only <span className="font-mono">.ham/settings.json</span> on the server (merge with validation,
-            backup, audit). Matches <span className="font-mono">POST .../settings/preview|apply</span>. Preview is
-            unauthenticated; apply uses your token for this browser session only (not stored in the app bundle).
+          <p
+            className={cn(
+              "mt-2 max-w-2xl leading-relaxed",
+              w ? "text-[13px] text-white/40" : "text-[9px] font-bold uppercase tracking-widest text-white/30",
+            )}
+          >
+            {w ? (
+              <>
+                Writes <span className="font-mono text-sm text-white/50">.ham/settings.json</span> on the server with
+                validation, backup, and audit. Preview is open; apply needs a one-time write token in this session (not
+                stored in the bundle).
+              </>
+            ) : (
+              <>
+                Writes only <span className="font-mono">.ham/settings.json</span> on the server (merge with validation,
+                backup, audit). Matches <span className="font-mono">POST .../settings/preview|apply</span>. Preview is
+                unauthenticated; apply uses your token for this browser session only (not stored in the app bundle).
+              </>
+            )}
           </p>
         </div>
         {writesEnabled === false && (
-          <span className="text-[9px] font-bold text-amber-500/90 uppercase tracking-widest px-2 py-1 rounded border border-amber-500/30 bg-amber-500/5">
+          <span
+            className={cn(
+              "rounded-md px-2 py-1",
+              w
+                ? "border border-amber-500/20 bg-amber-500/5 text-xs text-amber-200/90"
+                : "border border-amber-500/30 bg-amber-500/5 text-[9px] font-bold uppercase tracking-widest text-amber-500/90",
+            )}
+          >
             Apply disabled — set HAM_SETTINGS_WRITE_TOKEN on the API
           </span>
         )}
       </div>
 
       {projectErr && (
-        <div className="p-3 rounded-lg border border-red-500/30 bg-red-500/5 text-[10px] text-red-400/90">
+        <div className="rounded-lg border border-red-500/30 bg-red-500/5 p-3 text-[13px] text-red-400/90">
           {projectErr}
         </div>
       )}
       {!projectId && !projectErr && (
-        <div className="text-[10px] font-bold text-white/35 uppercase tracking-widest">Resolving project…</div>
+        <div className={cn(w ? "text-sm text-white/40" : "text-[10px] font-bold uppercase tracking-widest text-white/35")}>
+          Resolving project…
+        </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <div>
-          <label className="text-[9px] font-black text-white/35 uppercase tracking-widest">session_compaction_max_tokens</label>
+          <label className={fieldLbl}>session_compaction_max_tokens</label>
           <input className={inputCls} value={sessionMax} onChange={(e) => setSessionMax(e.target.value)} inputMode="numeric" />
         </div>
         <div>
-          <label className="text-[9px] font-black text-white/35 uppercase tracking-widest">session_compaction_preserve</label>
+          <label className={fieldLbl}>session_compaction_preserve</label>
           <input className={inputCls} value={sessionPreserve} onChange={(e) => setSessionPreserve(e.target.value)} inputMode="numeric" />
         </div>
         <div>
-          <label className="text-[9px] font-black text-white/35 uppercase tracking-widest">session_tool_prune_chars</label>
+          <label className={fieldLbl}>session_tool_prune_chars</label>
           <input className={inputCls} value={toolPrune} onChange={(e) => setToolPrune(e.target.value)} inputMode="numeric" />
         </div>
         <div>
-          <label className="text-[9px] font-black text-white/35 uppercase tracking-widest">architect_instruction_chars</label>
+          <label className={fieldLbl}>architect_instruction_chars</label>
           <input className={inputCls} value={archChars} onChange={(e) => setArchChars(e.target.value)} inputMode="numeric" />
         </div>
         <div>
-          <label className="text-[9px] font-black text-white/35 uppercase tracking-widest">commander_instruction_chars</label>
+          <label className={fieldLbl}>commander_instruction_chars</label>
           <input className={inputCls} value={cmdChars} onChange={(e) => setCmdChars(e.target.value)} inputMode="numeric" />
         </div>
         <div>
-          <label className="text-[9px] font-black text-white/35 uppercase tracking-widest">critic_instruction_chars</label>
+          <label className={fieldLbl}>critic_instruction_chars</label>
           <input className={inputCls} value={criticChars} onChange={(e) => setCriticChars(e.target.value)} inputMode="numeric" />
         </div>
       </div>
@@ -940,7 +1177,12 @@ function AllowlistedWorkspaceSettings({
           type="button"
           disabled={!projectId || busy !== null}
           onClick={() => void runPreview()}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#FF6B00]/20 border border-[#FF6B00]/40 text-[9px] font-black uppercase tracking-widest text-[#FF6B00] hover:bg-[#FF6B00]/30 disabled:opacity-40"
+          className={cn(
+            "inline-flex items-center gap-2 rounded-lg px-4 py-2 disabled:opacity-40",
+            w
+              ? "border border-white/[0.1] text-[12px] font-medium text-white/80 hover:border-[#5eead4]/35 hover:bg-white/[0.04]"
+              : "border border-[#FF6B00]/40 bg-[#FF6B00]/20 text-[9px] font-black uppercase tracking-widest text-[#FF6B00] hover:bg-[#FF6B00]/30",
+          )}
         >
           {busy === "preview" ? "Preview…" : "Preview"}
         </button>
@@ -955,16 +1197,19 @@ function AllowlistedWorkspaceSettings({
             busy !== null
           }
           onClick={() => void runApply()}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white/5 border border-white/15 text-[9px] font-black uppercase tracking-widest text-white/70 hover:border-[#FF6B00]/40 hover:text-[#FF6B00] disabled:opacity-40"
+          className={cn(
+            "inline-flex items-center gap-2 rounded-lg border px-4 py-2 disabled:opacity-40",
+            w
+              ? "border-white/[0.08] text-[12px] font-medium text-white/60 hover:border-white/20 hover:text-white/90"
+              : "border border-white/15 bg-white/5 text-[9px] font-black uppercase tracking-widest text-white/70 hover:border-[#FF6B00]/40 hover:text-[#FF6B00]",
+          )}
         >
           {busy === "apply" ? "Apply…" : "Apply"}
         </button>
       </div>
 
       <div>
-        <label className="text-[9px] font-black text-white/35 uppercase tracking-widest">
-          HAM_SETTINGS_WRITE_TOKEN (session only)
-        </label>
+        <label className={fieldLbl}>HAM_SETTINGS_WRITE_TOKEN (session only)</label>
         <input
           className={inputCls}
           type="password"
@@ -976,22 +1221,33 @@ function AllowlistedWorkspaceSettings({
       </div>
 
       {preview && (
-        <div className="space-y-3 border border-white/10 rounded-lg p-4 bg-black/30">
-          <div className="text-[9px] font-mono text-white/40 break-all">
+        <div
+          className={cn(
+            "space-y-3 rounded-lg border p-4",
+            w ? "border-white/[0.08] bg-white/[0.02]" : "border border-white/10 bg-black/30",
+          )}
+        >
+          <div className={cn("break-all font-mono text-white/40", w ? "text-xs" : "text-[9px]")}>
             base_revision: {preview.base_revision.slice(0, 16)}… → {preview.write_target}
           </div>
           {preview.warnings.length > 0 && (
-            <ul className="list-disc pl-4 space-y-1 text-[10px] text-amber-400/90">
-              {preview.warnings.map((w) => (
-                <li key={w}>{w}</li>
+            <ul className={cn("list-disc space-y-1 pl-4 text-amber-400/90", w ? "text-sm" : "text-[10px]")}>
+              {preview.warnings.map((war) => (
+                <li key={war}>{war}</li>
               ))}
             </ul>
           )}
           {preview.diff.length > 0 && (
             <div className="overflow-x-auto">
-              <table className="w-full text-[9px] font-mono text-left">
+              <table
+                className={cn("w-full text-left font-mono", w ? "text-xs" : "text-[9px]")}
+              >
                 <thead>
-                  <tr className="text-white/35 uppercase tracking-tighter">
+                  <tr
+                    className={cn(
+                      w ? "text-white/40" : "text-white/35 uppercase tracking-tighter",
+                    )}
+                  >
                     <th className="py-1 pr-2">path</th>
                     <th className="py-1 pr-2">old</th>
                     <th className="py-1">new</th>
@@ -1015,7 +1271,8 @@ function AllowlistedWorkspaceSettings({
   );
 }
 
-export function ContextAndMemoryPanel() {
+export function ContextAndMemoryPanel({ variant = "default" }: { variant?: SettingsPanelVisualVariant }) {
+  const w = variant === "workspace";
   const [data, setData] = React.useState<ContextEnginePayload | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -1045,18 +1302,38 @@ export function ContextAndMemoryPanel() {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className={cn("space-y-6", w && "hww-settings-panels")}>
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest max-w-xl leading-relaxed">
-          Live snapshot from <span className="font-mono text-[#FF6B00]/80">GET /api/context-engine</span>
-          {" "}(Vite dev proxies <span className="font-mono">/api</span> to FastAPI; production set{" "}
-          <span className="font-mono">VITE_HAM_API_BASE</span>). Snapshot uses the API process working directory unless you use a project-scoped route.
+        <p
+          className={cn(
+            "max-w-xl leading-relaxed",
+            w ? "text-[13px] text-white/45" : "text-[10px] font-bold uppercase tracking-widest text-white/30",
+          )}
+        >
+          {w ? (
+            <>
+              Live snapshot from the context engine. In development, the UI proxies <span className="font-mono text-white/50">/api</span> to
+              your Ham API. Values reflect the API working directory.
+            </>
+          ) : (
+            <>
+              Live snapshot from <span className="font-mono text-[#FF6B00]/80">GET /api/context-engine</span>
+              {" "}(Vite dev proxies <span className="font-mono">/api</span> to FastAPI; production set{" "}
+              <span className="font-mono">VITE_HAM_API_BASE</span>). Snapshot uses the API process working directory unless
+              you use a project-scoped route.
+            </>
+          )}
         </p>
         <button
           type="button"
           onClick={() => void load()}
           disabled={loading}
-          className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-white/10 text-[9px] font-black uppercase tracking-widest text-white/50 hover:text-[#FF6B00] hover:border-[#FF6B00]/30 transition-colors disabled:opacity-40"
+          className={cn(
+            "inline-flex items-center gap-2 rounded-lg border px-3 py-2 transition-colors disabled:opacity-40",
+            w
+              ? "border-white/[0.1] text-[12px] font-medium text-white/60 hover:border-white/20 hover:bg-white/[0.04] hover:text-white/90"
+              : "border-white/10 text-[9px] font-black uppercase tracking-widest text-white/50 hover:border-[#FF6B00]/30 hover:text-[#FF6B00]",
+          )}
         >
           <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
           Refresh
@@ -1064,23 +1341,44 @@ export function ContextAndMemoryPanel() {
       </div>
 
       {error && (
-        <div className="p-4 rounded-xl border border-red-500/30 bg-red-500/5 text-[11px] font-bold text-red-400/90">
+        <div className="rounded-xl border border-red-500/30 bg-red-500/5 p-4 text-[13px] text-red-300/90">
           {error}
         </div>
       )}
 
       {loading && !data && !error && (
-        <div className="p-12 rounded-xl border border-white/5 bg-black/30 text-center text-[10px] font-bold text-white/25 uppercase tracking-widest">
-          Loading context engine…
+        <div
+          className={cn(
+            "rounded-xl border border-white/5 bg-black/30 p-12 text-center text-white/40",
+            w ? "text-sm" : "text-[10px] font-bold uppercase tracking-widest",
+          )}
+        >
+          Loading context…
         </div>
       )}
 
       {data && (
         <>
-          <div className="p-6 bg-black/40 border border-white/5 rounded-xl space-y-3">
-            <div className="text-[9px] font-black text-white/25 uppercase tracking-widest">Working directory</div>
-            <div className="text-[11px] font-mono text-white/70 break-all leading-relaxed">{data.cwd}</div>
-            <div className="flex flex-wrap gap-4 text-[9px] font-bold text-white/35 uppercase tracking-wider">
+          <div
+            className={cn(
+              "space-y-3 rounded-xl border p-5",
+              w ? "border-white/[0.08] bg-white/[0.02]" : "border border-white/5 bg-black/40 p-6",
+            )}
+          >
+            <div
+              className={cn(w ? "text-xs font-medium text-white/50" : "text-[9px] font-black uppercase tracking-widest text-white/25")}
+            >
+              Working directory
+            </div>
+            <div className={cn("break-all font-mono leading-relaxed text-white/75", w ? "text-sm" : "text-[11px]")}>
+              {data.cwd}
+            </div>
+            <div
+              className={cn(
+                "flex flex-wrap gap-3 text-white/50",
+                w ? "text-xs" : "text-[9px] font-bold uppercase tracking-wider text-white/35",
+              )}
+            >
               <span>{data.current_date}</span>
               <span>{data.platform_info}</span>
               <span>{data.file_count} indexed files</span>
@@ -1091,7 +1389,7 @@ export function ContextAndMemoryPanel() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             {roleOrder.map(({ key, label }) => {
               const r = data.roles[key];
               const pct = Math.min(
@@ -1101,26 +1399,48 @@ export function ContextAndMemoryPanel() {
               return (
                 <div
                   key={key}
-                  className="p-6 bg-black/40 border border-white/5 rounded-xl space-y-4 shadow-xl"
+                  className={cn(
+                    "space-y-3 rounded-xl border p-5",
+                    w ? "border-white/[0.08] bg-white/[0.02]" : "space-y-4 border border-white/5 bg-black/40 p-6 shadow-xl",
+                  )}
                 >
-                  <div className="text-[10px] font-black text-[#FF6B00] uppercase tracking-widest italic">
+                  <div
+                    className={cn(
+                      w ? "text-sm font-medium text-white/90" : "text-[10px] font-black uppercase italic tracking-widest text-[#FF6B00]",
+                    )}
+                  >
                     {label}
                   </div>
                   <div className="space-y-2">
-                    <div className="flex justify-between text-[10px] font-bold text-white/35 uppercase tracking-wider">
-                      <span>Assembled context</span>
-                      <span className="font-mono text-white/60">{r.rendered_chars.toLocaleString()} chars</span>
+                    <div
+                      className={cn(
+                        "flex justify-between",
+                        w ? "text-xs text-white/50" : "text-[10px] font-bold uppercase tracking-wider text-white/35",
+                      )}
+                    >
+                      <span>Context assembled</span>
+                      <span className="font-mono text-white/65">{r.rendered_chars.toLocaleString()} chars</span>
                     </div>
-                    <div className="h-2 bg-white/5 rounded-full overflow-hidden border border-white/10">
+                    <div className="h-2 overflow-hidden rounded-full border border-white/10 bg-white/5">
                       <div
-                        className="h-full bg-[#FF6B00]/80 shadow-[0_0_12px_rgba(255,107,0,0.35)]"
+                        className={cn("h-full", w ? "bg-[#5eead4]/70" : "bg-[#FF6B00]/80 shadow-[0_0_12px_rgba(255,107,0,0.35)]")}
                         style={{ width: `${pct}%` }}
                       />
                     </div>
-                    <p className="text-[9px] font-bold text-white/25 uppercase tracking-wide leading-relaxed">
-                      Instruction budget {r.instruction_budget_chars.toLocaleString()} chars · Diff cap{" "}
-                      {r.max_diff_chars.toLocaleString()} chars (matches <span className="font-mono">swarm_agency</span>{" "}
-                      per-role render)
+                    <p
+                      className={cn(
+                        "leading-relaxed",
+                        w
+                          ? "text-xs text-white/35"
+                          : "text-[9px] font-bold uppercase tracking-wide text-white/25",
+                      )}
+                    >
+                      Budget {r.instruction_budget_chars.toLocaleString()} chars · cap {r.max_diff_chars.toLocaleString()}{" "}
+                      {w ? "" : (
+                        <>
+                          (matches <span className="font-mono">swarm_agency</span> per-role)
+                        </>
+                      )}
                     </p>
                   </div>
                 </div>
@@ -1128,78 +1448,134 @@ export function ContextAndMemoryPanel() {
             })}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="p-6 bg-black/40 border border-white/5 rounded-xl space-y-4">
-              <h4 className="text-[11px] font-black text-white uppercase tracking-widest italic">
-                Session memory (compaction)
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div
+              className={cn(
+                "space-y-3 rounded-xl border p-5",
+                w ? "border-white/[0.08] bg-white/[0.02]" : "space-y-4 border border-white/5 bg-black/40 p-6",
+              )}
+            >
+              <h4
+                className={cn(
+                  w ? "text-sm font-medium text-white/85" : "text-[11px] font-black uppercase italic tracking-widest text-white",
+                )}
+              >
+                Session memory
               </h4>
-              <dl className="space-y-2 text-[10px] font-mono text-white/55">
+              <dl className={cn("space-y-2 font-mono text-white/60", w ? "text-sm" : "text-[10px]")}>
                 <div className="flex justify-between gap-4">
-                  <dt className="text-white/30 uppercase tracking-tighter">compact_max_tokens</dt>
+                  <dt className={w ? "text-white/40" : "text-white/30 uppercase tracking-tighter"}>compact_max_tokens</dt>
                   <dd>{data.session_memory.compact_max_tokens}</dd>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <dt className="text-white/30 uppercase tracking-tighter">compact_preserve</dt>
+                  <dt className={w ? "text-white/40" : "text-white/30 uppercase tracking-tighter"}>compact_preserve</dt>
                   <dd>{data.session_memory.compact_preserve}</dd>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <dt className="text-white/30 uppercase tracking-tighter">tool_prune_chars</dt>
+                  <dt className={w ? "text-white/40" : "text-white/30 uppercase tracking-tighter"}>tool_prune_chars</dt>
                   <dd>{data.session_memory.tool_prune_chars}</dd>
                 </div>
               </dl>
-              <p className="text-[9px] font-bold text-white/25 uppercase tracking-widest leading-relaxed">
-                From merged config via <span className="font-mono">memory_heist</span> section (see JSON below).
+              <p
+                className={cn(
+                  w ? "text-xs text-white/35" : "text-[9px] font-bold uppercase tracking-widest leading-relaxed text-white/25",
+                )}
+              >
+                {w ? "From merged project config (memory_heist)." : (
+                  <>
+                    From merged config via <span className="font-mono">memory_heist</span> section (see JSON below).
+                  </>
+                )}
               </p>
             </div>
-            <div className="p-6 bg-black/40 border border-white/5 rounded-xl space-y-4">
-              <h4 className="text-[11px] font-black text-white uppercase tracking-widest italic">
-                Module defaults (ContextBuilder)
+            <div
+              className={cn(
+                "space-y-3 rounded-xl border p-5",
+                w ? "border-white/[0.08] bg-white/[0.02]" : "space-y-4 border border-white/5 bg-black/40 p-6",
+              )}
+            >
+              <h4
+                className={cn(
+                  w ? "text-sm font-medium text-white/85" : "text-[11px] font-black uppercase italic tracking-widest text-white",
+                )}
+              >
+                Module defaults
               </h4>
-              <dl className="space-y-2 text-[10px] font-mono text-white/55">
+              <dl className={cn("space-y-2 font-mono text-white/60", w ? "text-sm" : "text-[10px]")}>
                 <div className="flex justify-between gap-4">
-                  <dt className="text-white/30 uppercase tracking-tighter">max_instruction_file_chars</dt>
+                  <dt className={w ? "text-white/40" : "text-white/30 uppercase tracking-tighter"}>max_instruction_file_chars</dt>
                   <dd>{data.module_defaults.max_instruction_file_chars}</dd>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <dt className="text-white/30 uppercase tracking-tighter">max_total_instruction_chars</dt>
+                  <dt className={w ? "text-white/40" : "text-white/30 uppercase tracking-tighter"}>max_total_instruction_chars</dt>
                   <dd>{data.module_defaults.max_total_instruction_chars}</dd>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <dt className="text-white/30 uppercase tracking-tighter">max_diff_chars</dt>
+                  <dt className={w ? "text-white/40" : "text-white/30 uppercase tracking-tighter"}>max_diff_chars</dt>
                   <dd>{data.module_defaults.max_diff_chars}</dd>
                 </div>
               </dl>
             </div>
           </div>
 
-          <div className="p-6 bg-black/40 border border-white/5 rounded-xl space-y-3">
-            <h4 className="text-[11px] font-black text-white uppercase tracking-widest italic">Git snapshot sizes</h4>
-            <p className="text-[9px] font-bold text-white/25 uppercase tracking-widest">
-              Character counts only — raw diff/log not exposed over the API.
+          <div
+            className={cn(
+              "space-y-2 rounded-xl border p-5",
+              w ? "border-white/[0.08] bg-white/[0.02]" : "space-y-3 border border-white/5 bg-black/40 p-6",
+            )}
+          >
+            <h4
+              className={cn(
+                w ? "text-sm font-medium text-white/85" : "text-[11px] font-black uppercase italic tracking-widest text-white",
+              )}
+            >
+              Git snapshot sizes
+            </h4>
+            <p
+              className={cn(
+                w ? "text-xs text-white/40" : "text-[9px] font-bold uppercase tracking-widest text-white/25",
+              )}
+            >
+              Character counts only; raw diff and log are not returned by the API.
             </p>
-            <dl className="grid grid-cols-3 gap-4 text-[10px] font-mono text-white/55">
+            <dl
+              className={cn("grid grid-cols-3 gap-4 font-mono text-white/60", w ? "text-sm" : "text-[10px]")}
+            >
               <div>
-                <dt className="text-white/30 uppercase text-[9px]">status</dt>
+                <dt className={w ? "text-white/40" : "text-[9px] uppercase text-white/30"}>status</dt>
                 <dd>{data.git.status_chars}</dd>
               </div>
               <div>
-                <dt className="text-white/30 uppercase text-[9px]">diff</dt>
+                <dt className={w ? "text-white/40" : "text-[9px] uppercase text-white/30"}>diff</dt>
                 <dd>{data.git.diff_chars}</dd>
               </div>
               <div>
-                <dt className="text-white/30 uppercase text-[9px]">log</dt>
+                <dt className={w ? "text-white/40" : "text-[9px] uppercase text-white/30"}>log</dt>
                 <dd>{data.git.log_chars}</dd>
               </div>
             </dl>
           </div>
 
           {data.config_sources.length > 0 && (
-            <div className="p-6 bg-black/40 border border-white/5 rounded-xl space-y-3">
-              <h4 className="text-[11px] font-black text-white uppercase tracking-widest italic">Loaded config files</h4>
-              <ul className="space-y-2 text-[10px] font-mono text-white/50 break-all">
+            <div
+              className={cn(
+                "space-y-2 rounded-xl border p-5",
+                w ? "border-white/[0.08] bg-white/[0.02]" : "space-y-3 border border-white/5 bg-black/40 p-6",
+              )}
+            >
+              <h4
+                className={cn(
+                  w ? "text-sm font-medium text-white/85" : "text-[11px] font-black uppercase italic tracking-widest text-white",
+                )}
+              >
+                Loaded config files
+              </h4>
+              <ul
+                className={cn("space-y-2 break-all font-mono text-white/50", w ? "text-xs" : "text-[10px]")}
+              >
                 {data.config_sources.map((s) => (
                   <li key={s.path}>
-                    <span className="text-[#FF6B00]/60">[{s.source}]</span> {s.path}
+                    <span className={w ? "text-[#5eead4]/80" : "text-[#FF6B00]/60"}>[{s.source}]</span> {s.path}
                   </li>
                 ))}
               </ul>
@@ -1207,9 +1583,20 @@ export function ContextAndMemoryPanel() {
           )}
 
           {data.instruction_files.length > 0 && (
-            <div className="p-6 bg-black/40 border border-white/5 rounded-xl space-y-3">
-              <h4 className="text-[11px] font-black text-white uppercase tracking-widest italic">Instruction files</h4>
-              <ul className="space-y-1.5 text-[10px] font-mono text-white/50">
+            <div
+              className={cn(
+                "space-y-2 rounded-xl border p-5",
+                w ? "border-white/[0.08] bg-white/[0.02]" : "space-y-3 border border-white/5 bg-black/40 p-6",
+              )}
+            >
+              <h4
+                className={cn(
+                  w ? "text-sm font-medium text-white/85" : "text-[11px] font-black uppercase italic tracking-widest text-white",
+                )}
+              >
+                Instruction files
+              </h4>
+              <ul className={cn("space-y-1.5 font-mono text-white/50", w ? "text-xs" : "text-[10px]")}>
                 {data.instruction_files.map((f) => (
                   <li key={`${f.scope}:${f.relative_path}`}>
                     {f.relative_path}{" "}
@@ -1220,22 +1607,48 @@ export function ContextAndMemoryPanel() {
             </div>
           )}
 
-          <div className="p-6 bg-black/40 border border-white/5 rounded-xl space-y-2">
-            <h4 className="text-[11px] font-black text-white uppercase tracking-widest italic">
+          <div
+            className={cn(
+              "space-y-2 rounded-xl border p-5",
+              w ? "border-white/[0.08] bg-white/[0.02]" : "space-y-2 border border-white/5 bg-black/40 p-6",
+            )}
+          >
+            <h4
+              className={cn(
+                w ? "text-sm font-medium text-white/85" : "text-[11px] font-black uppercase italic tracking-widest text-white",
+              )}
+            >
               Merged <span className="font-mono">memory_heist</span> keys
             </h4>
             {Object.keys(data.memory_heist_section).length === 0 ? (
-              <p className="text-[10px] font-bold text-white/25 uppercase tracking-widest">
-                No keys under <span className="font-mono">memory_heist</span> in merged JSON (defaults apply).
+              <p
+                className={cn(
+                  w ? "text-sm text-white/40" : "text-[10px] font-bold uppercase tracking-widest text-white/25",
+                )}
+              >
+                {w ? "No custom keys; defaults apply." : (
+                  <>
+                    No keys under <span className="font-mono">memory_heist</span> in merged JSON (defaults apply).
+                  </>
+                )}
               </p>
             ) : (
-              <pre className="text-[9px] font-mono text-white/45 overflow-x-auto max-h-40 overflow-y-auto p-3 bg-black/50 rounded-lg border border-white/5">
+              <pre
+                className={cn(
+                  "max-h-40 overflow-y-auto overflow-x-auto rounded-lg border font-mono text-white/45",
+                  w ? "border-white/[0.08] bg-black/20 p-3 text-xs" : "border border-white/5 bg-black/50 p-3 text-[9px]",
+                )}
+              >
                 {JSON.stringify(data.memory_heist_section, null, 2)}
               </pre>
             )}
           </div>
 
-          <AllowlistedWorkspaceSettings data={data} onApplied={() => void load()} />
+          <AllowlistedWorkspaceSettings
+            data={data}
+            onApplied={() => void load()}
+            visualVariant={w ? "workspace" : "default"}
+          />
         </>
       )}
     </div>

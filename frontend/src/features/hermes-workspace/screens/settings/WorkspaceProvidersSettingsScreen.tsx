@@ -16,20 +16,22 @@ export function WorkspaceProvidersSettingsScreen() {
         />
         <div className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4 md:p-6">
           <h1 className="text-lg font-semibold text-[#e8eef8]">Provider setup</h1>
-          <p className="mt-1 max-w-2xl text-[13px] text-white/45">
-            Upstream <span className="font-mono">/settings/providers</span> (
-            <span className="font-mono">ProvidersScreen</span>). HAM uses the API keys / Cursor panel as the credential
-            surface; discoverable provider lists are API-driven.
+          <p className="mt-1.5 max-w-2xl text-[13px] leading-relaxed text-white/45">
+            Add and rotate API keys the same way as upstream “providers”: credentials are stored and validated on the Ham
+            API; the list of models and options comes from the server.
           </p>
-          <p className="mt-2 text-[12px] text-white/35">
-            Also see{" "}
-            <Link className="text-[#ffb27a] underline-offset-2 hover:underline" to="/workspace/settings?section=hermes">
+          <p className="mt-2 text-[13px] text-white/40">
+            Related:{" "}
+            <Link
+              className="text-[#7dd3fc] underline decoration-white/10 underline-offset-2 hover:decoration-[#7dd3fc]/50"
+              to="/workspace/settings?section=hermes"
+            >
               Model &amp; provider
-            </Link>
-            .
+            </Link>{" "}
+            for the full key + context layout.
           </p>
-          <div className="mt-6 max-w-4xl rounded-2xl border border-white/[0.08] bg-black/25 p-5 md:p-6">
-            <ApiKeysPanel />
+          <div className="mt-6 max-w-4xl">
+            <ApiKeysPanel variant="workspace" />
           </div>
         </div>
       </div>
