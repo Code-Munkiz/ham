@@ -54,8 +54,8 @@ export function OperatorComposer({
       onDragOver={attachments.onDragOver}
       onDrop={attachments.onDrop}
     >
-      <div className="mb-2 text-[10px] font-medium uppercase tracking-[0.12em] text-white/45">
-        {pipelineStatus}
+      <div className="ow-pipeline-line mb-2" title="Chat gateway status">
+        <span className="ow-pipeline-pill">{pipelineStatus}</span>
       </div>
       {chatError ? (
         <div className="mb-2 rounded-xl border border-destructive/45 bg-destructive/12 px-3 py-2 text-xs text-destructive">
@@ -96,7 +96,7 @@ export function OperatorComposer({
         <textarea
           value={input}
           onChange={(event) => onInputChange(event.target.value)}
-          placeholder="Ask HAM operator workspace..."
+          placeholder="Message the workspace…"
           className="min-h-[88px] w-full resize-y rounded-2xl border border-white/10 bg-[#0a141f]/80 px-3 py-2 text-sm text-white outline-none placeholder:text-white/30 focus-visible:ring-2 focus-visible:ring-[#ff6b00]/45"
           disabled={sending || voiceTranscribing}
         />

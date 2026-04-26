@@ -30,13 +30,24 @@ type OperatorWorkspaceProps = {
 };
 
 const QUICK_CHIPS = [
-  "Analyze workspace",
-  "Save a preference",
-  "Create a file",
+  "What can you help with?",
+  "Summarize this project",
+  "Draft a short plan",
 ];
 
+function formatSessionMeta(createdAt: string | null): string | null {
+  if (!createdAt) return null;
+  try {
+    const d = new Date(createdAt);
+    if (Number.isNaN(d.getTime())) return null;
+    return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  } catch {
+    return null;
+  }
+}
+
 export function OperatorWorkspace({
-  activeAgentNote,
+  activeAgentNote: _activeAgentNote,
   activeProjectName,
   messages,
   sessions,
@@ -80,12 +91,8 @@ export function OperatorWorkspace({
           </p>
         </div>
         <div className="flex items-center gap-3">
-          {activeAgentNote ? (
-            <span className="hidden max-w-[32ch] truncate text-[11px] text-emerald-300 md:inline">
-              {activeAgentNote}
-            </span>
-          ) : null}
-          <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.8)]" />
+          {/* Active agent / builder notes deferred from visible Workspace frame — state still lives in Chat.tsx. */}
+          <span className="h-2 w-2 rounded-full bg-emerald-400/90 shadow-[0_0_10px_rgba(16,185,129,0.55)]" title="Session active" />
         </div>
       </header>
 
@@ -137,7 +144,9 @@ export function OperatorWorkspace({
                 No sessions yet. Start a conversation.
               </p>
             ) : (
-              sessions.map((session) => (
+              sessions.map((session) => {
+                const dateLabel = formatSessionMeta(session.createdAt);
+                return (
                 <button
                   key={session.sessionId}
                   type="button"
@@ -148,14 +157,22 @@ export function OperatorWorkspace({
                   className={`ow-session-btn ${session.isActive ? "is-active" : ""}`}
                   title={session.preview || session.sessionId}
                 >
-                  <span className="truncate text-left text-[11px] font-medium">
-                    {session.preview || "Untitled session"}
-                  </span>
-                  <span className="text-[10px] text-white/45">
-                    {session.turnCount} msg
+                  <span className="ow-session-text">
+                    <span className="ow-session-title truncate text-left text-[11px] font-medium">
+                      {session.preview || "Untitled session"}
+                    </span>
+                    <span className="ow-session-meta">
+                      {dateLabel ? (
+                        <span className="text-[10px] text-white/35">{dateLabel}</span>
+                      ) : null}
+                      <span className="text-[10px] text-white/45">
+                        {session.turnCount} msg
+                      </span>
+                    </span>
                   </span>
                 </button>
-              ))
+                );
+              })
             )}
           </div>
         </aside>
@@ -163,11 +180,13 @@ export function OperatorWorkspace({
         <section className="ow-main">
           {emptyState ? (
             <div className="ow-empty-state">
-              <div className="ow-empty-avatar">H</div>
-              <p className="ow-empty-overline">Hermes Workspace</p>
+              <div className="ow-empty-avatar" aria-hidden>
+                <span className="ow-empty-avatar-mark" />
+              </div>
+              <p className="ow-empty-overline">Workspace</p>
               <h2 className="ow-empty-title">Begin a session</h2>
               <p className="ow-empty-subtitle">
-                Agent chat, live tools, memory, and observability.
+                Type below to start. Your project context is applied on the server.
               </p>
               <div className="ow-empty-chips">
                 {QUICK_CHIPS.map((chip) => (

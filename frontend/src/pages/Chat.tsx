@@ -2279,10 +2279,14 @@ function ChatPageInner({
     }
   };
 
-  const pipelineStatus = `${uplinkPipelineLabel(uplinkId)} · ${workbenchMode.toUpperCase()} — ${getChatGatewayReadinessToken(catalog, {
+  const gatewayReadiness = getChatGatewayReadinessToken(catalog, {
     sending,
     catalogLoading,
-  })}`;
+  });
+  /** War-room / legacy chat: full uplink + workbench + gateway token. */
+  const pipelineStatus = `${uplinkPipelineLabel(uplinkId)} · ${workbenchMode.toUpperCase()} — ${gatewayReadiness}`;
+  /** Operator Workspace: Hermes-style — show gateway honesty only (no FACTORY_AI / workbench rail). */
+  const operatorWorkspaceStatus = gatewayReadiness;
 
   const workbenchMissionBannerActive =
     uplinkId === "cloud_agent" &&
@@ -2327,7 +2331,7 @@ function ChatPageInner({
             input={input}
             sending={sending}
             voiceTranscribing={voiceTranscribing}
-            pipelineStatus={pipelineStatus}
+            pipelineStatus={operatorWorkspaceStatus}
             chatError={chatError}
             attachment={operatorAttachment}
             attachmentAccept={CHAT_ATTACHMENT_ACCEPT}
@@ -2354,8 +2358,14 @@ function ChatPageInner({
               <div className="w-full max-w-md h-full border-l border-white/10 bg-[#0a0a0a]/95 backdrop-blur-xl shadow-2xl flex flex-col text-white">
                 <div className="h-12 flex items-center justify-between px-4 border-b border-white/10 shrink-0">
                   <div>
-                    <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#FF6B00]">HISTORY</span>
-                    <p className="text-[8px] text-white/30 mt-0.5">Chat sessions + server managed missions (HAM API)</p>
+                    <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#FF6B00]">
+                      {USE_OPERATOR_WORKSPACE ? "Search sessions" : "HISTORY"}
+                    </span>
+                    <p className="text-[8px] text-white/30 mt-0.5">
+                      {USE_OPERATOR_WORKSPACE
+                        ? "Browse and open past conversations."
+                        : "Chat sessions + server managed missions (HAM API)"}
+                    </p>
                   </div>
                   <div className="flex items-center gap-2">
                     <button
@@ -2376,6 +2386,7 @@ function ChatPageInner({
                   </div>
                 </div>
                 <div className="flex-1 overflow-y-auto p-4 space-y-6">
+                  {USE_OPERATOR_WORKSPACE ? null : (
                   <div>
                     <p className="text-[9px] font-black uppercase tracking-widest text-[#00E5FF] mb-2">Managed missions (server)</p>
                     <p className="text-[8px] text-white/25 mb-2 leading-relaxed">
@@ -2431,6 +2442,7 @@ function ChatPageInner({
                       </ul>
                     )}
                   </div>
+                  )}
                   <div>
                     <p className="text-[9px] font-black uppercase tracking-widest text-white/40 mb-2">Chat sessions</p>
                     {historyLoading ? (
