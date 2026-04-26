@@ -8,6 +8,8 @@ import { WorkspacePlaceholderPage } from "./WorkspacePlaceholder";
 import { WorkspaceFilesScreen } from "./screens/files/WorkspaceFilesScreen";
 import { WorkspaceTerminalScreen } from "./screens/terminal/WorkspaceTerminalScreen";
 import { WorkspaceSettingsScreen } from "./screens/settings/WorkspaceSettingsScreen";
+import { WorkspaceJobsScreen } from "./screens/jobs/WorkspaceJobsScreen";
+import { WorkspaceTasksScreen } from "./screens/tasks/WorkspaceTasksScreen";
 import "./hermesWorkspace.css";
 
 /**
@@ -28,24 +30,8 @@ export function WorkspaceApp() {
           <Route path="files" element={<WorkspaceFilesScreen />} />
           <Route path="terminal" element={<WorkspaceTerminalScreen />} />
           <Route path="settings" element={<WorkspaceSettingsScreen />} />
-          <Route
-            path="jobs"
-            element={
-              <WorkspacePlaceholderPage
-                title="Jobs"
-                description="Placeholder for job-style workloads. Can align with HAM runs or Cloud Agent missions via adapters in a later slice."
-              />
-            }
-          />
-          <Route
-            path="tasks"
-            element={
-              <WorkspacePlaceholderPage
-                title="Tasks"
-                description="Task lists and Conductor-style flows — UI shell only; wiring deferred."
-              />
-            }
-          />
+          <Route path="jobs" element={<WorkspaceJobsScreen />} />
+          <Route path="tasks" element={<WorkspaceTasksScreen />} />
           <Route
             path="conductor"
             element={

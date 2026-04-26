@@ -65,4 +65,6 @@ export const workspaceSessionAdapter = {
 } as const;
 
 export { workspaceFileAdapter } from "./adapters/filesAdapter";
+export { workspaceJobsAdapter } from "./adapters/jobsAdapter";
+export { workspaceTasksAdapter } from "./adapters/tasksAdapter";
 export { workspaceTerminalAdapter } from "./adapters/terminalAdapter";
