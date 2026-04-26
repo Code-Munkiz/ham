@@ -11,8 +11,10 @@ import {
   Search,
   Upload,
 } from "lucide-react";
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { getLocalRuntimeBase } from "../../adapters/localRuntime";
 import { workspaceFileAdapter, type FileBridgeState, type WorkspaceFileEntry } from "../../adapters/filesAdapter";
 
 const ROOT_LABEL = "Workspace";
@@ -93,6 +95,12 @@ function ready() {
     void refresh();
   }, [refresh]);
 
+  React.useEffect(() => {
+    const onChanged = () => void refresh();
+    window.addEventListener("hww-local-runtime-changed", onChanged);
+    return () => window.removeEventListener("hww-local-runtime-changed", onChanged);
+  }, [refresh]);
+
   React.useEffect(
     () => () => {
       if (saveFlashTimer.current) clearTimeout(saveFlashTimer.current);
@@ -125,6 +133,13 @@ function ready() {
 
   const filtered = React.useMemo(() => filterTree(entries, search), [entries, search]);
   const searchActive = search.trim().length > 0;
+  const localUrlDisplay = getLocalRuntimeBase() ?? "";
+  const disconnected =
+    bridge.status === "pending" && bridge.localCode === "unconfigured" && !loading;
+  const localError =
+    bridge.status === "pending" &&
+    (bridge.localCode === "unreachable" || bridge.localCode === "wrong_api") &&
+    !loading;
 
   const openPrompt = (state: NonNullable<PromptState>) => {
     setPromptState(state);
@@ -179,6 +194,10 @@ function ready() {
 
   const handleDownload = (entry: WorkspaceFileEntry) => {
     const url = workspaceFileAdapter.buildDownloadUrl(entry.path);
+    if (!url) {
+      window.alert("Local runtime is not connected. Set the URL in Workspace → Settings → Connection.");
+      return;
+    }
     const a = document.createElement("a");
     a.href = url;
     a.download = entry.name;
@@ -375,9 +394,28 @@ function ready() {
           <div className="hww-scroll min-h-0 flex-1 overflow-y-auto px-1 pb-3">
             {loading ? (
               <p className="px-2 py-1 text-[11px] text-white/45">Loading…</p>
+            ) : disconnected ? (
+              <div className="px-2.5 py-3 text-[12px] leading-relaxed text-white/55">
+                <p className="text-[13px] font-medium text-amber-200/90">Local runtime not connected</p>
+                <p className="mt-2">
+                  Start the local HAM API and set <span className="font-mono text-[11px] text-white/60">HAM_WORKSPACE_ROOT</span>{" "}
+                  to a folder on this computer. The cloud API cannot read your laptop disk.
+                </p>
+                <p className="mt-2 font-mono text-[10px] text-white/40">
+                  {localUrlDisplay || "No URL saved — set Connection in settings."}
+                </p>
+                <Link
+                  className="mt-2 inline-block text-[#7dd3fc] underline decoration-white/10 underline-offset-2"
+                  to="/workspace/settings?section=connection"
+                >
+                  Workspace settings → Connection
+                </Link>
+              </div>
+            ) : localError ? (
+              <div className="px-2.5 py-3 text-[11px] leading-relaxed text-amber-200/80">{bridge.detail}</div>
             ) : !entries.length && bridge.status === "pending" ? (
-              <p className="px-2 py-2 text-[11px] leading-relaxed text-white/45">No file tree yet. Runtime bridge pending.</p>
-            ) : !entries.length ? (
+              <p className="px-2 py-2 text-[11px] leading-relaxed text-white/45">No file tree yet. Check the local API.</p>
+            ) : !entries.length && bridge.status === "ready" ? (
               <div className="px-2 py-4 text-center text-[12px] text-white/50">
                 <p className="mb-2">Workspace is empty</p>
                 <div className="flex justify-center gap-2">
@@ -443,7 +481,7 @@ function ready() {
                     size="sm"
                     variant="secondary"
                     className="h-8 gap-1 border border-white/10 bg-white/[0.06] text-[12px] text-white/90 hover:bg-white/10"
-                    disabled={saveState === "saving"}
+                    disabled={saveState === "saving" || disconnected}
                     onClick={() => void handleSave()}
                     title="Save file (Ctrl+S)"
                     aria-label="Save file"
@@ -459,8 +497,12 @@ function ready() {
                   </Button>
                 </>
               ) : null}
-              {bridge.status === "pending" ? (
-                <span className="text-[10px] text-amber-200/80">Runtime bridge pending</span>
+              {bridge.status === "pending" && bridge.localCode ? (
+                <span className="max-w-[min(10rem,35vw)] truncate text-[10px] text-amber-200/80" title={bridge.detail}>
+                  {bridge.localCode === "unconfigured" ? "Local runtime" : "Local error"}
+                </span>
+              ) : bridge.status === "pending" ? (
+                <span className="text-[10px] text-amber-200/80">Local API…</span>
               ) : null}
             </div>
           </header>
@@ -478,7 +520,18 @@ function ready() {
 
           <div className="hww-files-editor relative min-h-0 flex-1 p-1 md:p-2">
             {readBridge?.status === "pending" && readPath ? (
-              <p className="mb-1 text-[10px] text-amber-200/75">File read: runtime bridge pending (buffer below may be from insert-as-reference or default).</p>
+              <p className="mb-1 text-[10px] text-amber-200/75" title={readBridge.detail}>
+                {readBridge.detail}
+              </p>
+            ) : null}
+            {disconnected ? (
+              <div className="mb-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2.5 text-[12px] text-amber-100/90">
+                <p className="font-medium">Files use your local HAM API only</p>
+                <p className="mt-1 text-[11px] text-amber-100/70">
+                  Connect the runtime in <Link to="/workspace/settings?section=connection" className="text-[#7dd3fc] underline">Settings → Connection</Link>. Files are served from <span className="font-mono">HAM_WORKSPACE_ROOT</span> on the machine
+                  where that API runs — not from Cloud Run.
+                </p>
+              </div>
             ) : null}
             <textarea
               value={editorValue}

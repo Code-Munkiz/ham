@@ -164,6 +164,23 @@ export function WorkspaceTerminalView({ mode, onMinimize, onClosePanel, classNam
     return () => window.removeEventListener("click", close);
   }, [contextMenu]);
 
+  React.useEffect(() => {
+    const onBase = () => {
+      sessionAttempted.current.clear();
+      setBridgeLine(null);
+      setTabs((prev) =>
+        prev.map((t) => {
+          if (t.sessionId) {
+            void workspaceTerminalAdapter.closeSession(t.sessionId);
+          }
+          return { ...t, sessionId: null };
+        }),
+      );
+    };
+    window.addEventListener("hww-local-runtime-changed", onBase);
+    return () => window.removeEventListener("hww-local-runtime-changed", onBase);
+  }, []);
+
   const activeSessionId = active.sessionId;
 
   // Bootstrap session for active tab
@@ -178,7 +195,7 @@ export function WorkspaceTerminalView({ mode, onMinimize, onClosePanel, classNam
       const { sessionId, bridge } = await workspaceTerminalAdapter.createSession(tabId);
       if (cancelled) return;
       if (bridge.status === "pending" || !sessionId) {
-        setBridgeLine("Runtime bridge pending");
+        setBridgeLine(bridge.status === "pending" ? bridge.detail : "Local runtime not connected");
         setTabs((prev) => prev.map((t) => (t.id === tabId ? { ...t, sessionId: null } : t)));
         return;
       }

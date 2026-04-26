@@ -1,22 +1,69 @@
 import * as React from "react";
 import { Link } from "react-router-dom";
+import { Button } from "@/components/ui/button";
 import { EnvironmentReadonlyPanel } from "@/components/workspace/UnifiedSettings";
+import {
+  getLocalRuntimeBase,
+  LOCAL_RUNTIME_SUGGESTIONS,
+  setLocalRuntimeBase,
+  testLocalRuntime,
+  type LocalRuntimeTestResult,
+} from "../../adapters/localRuntime";
 
 /**
- * Repomix `ConnectionSection` in `src/routes/settings/index.tsx`: gateway + dashboard URLs.
- * HAM uses the Vite proxy to the Ham API only; we do not expose upstream-style gateway fields in the browser.
- * Process env **names** live here next to connection (upstream tips reference agent-side `.env`).
+ * Connection: cloud vs local. Files + Terminal use the **local** Ham API on the user’s machine only;
+ * no `VITE_HAM_API_BASE` for those — see Local runtime card.
  */
 export function WorkspaceConnectionSection() {
+  const [localUrl, setLocalUrl] = React.useState(() => getLocalRuntimeBase() ?? "");
+  const [testing, setTesting] = React.useState(false);
+  const [lastTest, setLastTest] = React.useState<LocalRuntimeTestResult | null>(null);
+
+  React.useEffect(() => {
+    setLocalUrl(getLocalRuntimeBase() ?? "");
+  }, []);
+
+  React.useEffect(() => {
+    const sync = () => setLocalUrl(getLocalRuntimeBase() ?? "");
+    window.addEventListener("hww-local-runtime-changed", sync);
+    return () => window.removeEventListener("hww-local-runtime-changed", sync);
+  }, []);
+
+  const handleSave = () => {
+    setLocalRuntimeBase(localUrl.trim() || null);
+    setLocalUrl(getLocalRuntimeBase() ?? "");
+    setLastTest(null);
+  };
+
+  const handleTest = async () => {
+    setTesting(true);
+    setLastTest(null);
+    try {
+      const r = await testLocalRuntime(localUrl);
+      setLastTest(r);
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const statusLabel = lastTest
+    ? lastTest.ok
+      ? "Connected"
+      : lastTest.message.includes("Missing") || lastTest.message.includes("Wrong API")
+        ? "Wrong API"
+        : "Not reachable"
+    : null;
+
   return (
     <div className="space-y-8">
       <section className="hww-set-card rounded-2xl border border-white/[0.08] bg-white/[0.03] p-5 shadow-none md:p-6">
         <h2 className="text-base font-semibold leading-tight text-[#e8eef8]">Connection</h2>
         <p className="mt-1.5 text-[13px] leading-relaxed text-white/45">
-          The workspace UI calls your Ham API. In local dev, the Vite proxy points at the API (see{" "}
-          <span className="font-mono text-[12px] text-white/50">VITE_HAM_API_PROXY_TARGET</span>). There is no separate
-          gateway or dashboard URL field in this build — that behavior matches upstream Hermes, not a second config layer
-          in the browser.
+          The dashboard uses <span className="font-mono text-[12px] text-white/50">VITE_HAM_API_BASE</span> for chat,
+          jobs, memory, and most APIs. <span className="text-white/55">Files</span> and{" "}
+          <span className="text-white/55">Terminal</span> are different: they must call a Ham FastAPI running on{" "}
+          <em>this computer</em> so the server can read <span className="font-mono text-[12px]">HAM_WORKSPACE_ROOT</span>{" "}
+          on your machine. The cloud API cannot see your laptop filesystem.
         </p>
         <p className="mt-3 text-[13px] leading-relaxed text-white/40">
           Keys and providers:{" "}
@@ -28,6 +75,87 @@ export function WorkspaceConnectionSection() {
           </Link>
           .
         </p>
+      </section>
+
+      <section className="hww-set-card rounded-2xl border border-white/[0.08] bg-white/[0.04] p-5 shadow-none md:p-6">
+        <h3 className="text-sm font-semibold text-white/90">Local runtime</h3>
+        <p className="mt-1 max-w-2xl text-[13px] leading-relaxed text-white/42">
+          Browser → your local API (e.g. <span className="font-mono text-[11px]">http://127.0.0.1:8001</span>) →{" "}
+          <span className="font-mono text-[11px]">HAM_WORKSPACE_ROOT</span>. Stored in this browser only (
+          <span className="font-mono text-[11px] text-white/45">localStorage</span>
+          <span className="font-mono text-[11px]"> hww.localRuntimeBase</span>). Not build-time.
+        </p>
+
+        <div className="mt-4 space-y-3">
+          <label className="block text-[12px] font-medium text-white/70" htmlFor="hww-local-runtime-url">
+            Local runtime URL
+          </label>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <input
+              id="hww-local-runtime-url"
+              value={localUrl}
+              onChange={(e) => setLocalUrl(e.target.value)}
+              placeholder={LOCAL_RUNTIME_SUGGESTIONS[0]}
+              className="hww-input min-w-0 flex-1 rounded-lg font-mono text-[12px]"
+              autoComplete="off"
+              spellCheck={false}
+            />
+            <div className="flex shrink-0 gap-2">
+              <Button type="button" size="sm" variant="secondary" className="border border-white/10" onClick={handleSave}>
+                Save
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => void handleTest()}
+                disabled={testing || !localUrl.trim()}
+                title={!localUrl.trim() ? "Enter a URL (e.g. http://127.0.0.1:8001)" : undefined}
+              >
+                {testing ? "Testing…" : "Test connection"}
+              </Button>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-white/[0.06] bg-black/20 px-3 py-2.5 text-[12px] text-white/55">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-white/35">Expected on the API process</p>
+            <p className="mt-1 font-mono text-[11px] text-emerald-200/80">HAM_WORKSPACE_ROOT=&lt;absolute path to your project&gt;</p>
+            <p className="mt-2 text-[11px] text-white/40">
+              On the local machine, run e.g.{" "}
+              <span className="font-mono text-[10px] text-white/50">uvicorn src.api.server:app --host 127.0.0.1 --port 8001</span>{" "}
+              with that env set. Allow CORS from this page’s origin on the API (
+              <span className="font-mono text-[10px]">HAM_CORS_ORIGINS</span> or{" "}
+              <span className="font-mono text-[10px]">HAM_CORS_ORIGIN_REGEX</span> in the server <span className="font-mono text-[10px]">.env</span>).
+            </p>
+          </div>
+
+          {lastTest ? (
+            <div
+              className={`rounded-lg border px-3 py-2.5 text-[12px] ${
+                lastTest.ok
+                  ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-100/90"
+                  : "border-amber-500/30 bg-amber-500/10 text-amber-100/90"
+              }`}
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-medium">{statusLabel}</span>
+                <span className="text-[11px] opacity-90">{lastTest.message}</span>
+              </div>
+              {lastTest.testedUrl ? (
+                <p className="mt-1.5 break-all font-mono text-[10px] text-white/50">{lastTest.testedUrl}</p>
+              ) : null}
+              {lastTest.health ? (
+                <p className="mt-1 text-[10px] text-white/45">
+                  workspace root:{" "}
+                  {lastTest.health.workspaceRootConfigured ? "configured" : "not set in env"} · features:{" "}
+                  {(lastTest.health.features || []).join(", ") || "—"}
+                </p>
+              ) : null}
+            </div>
+          ) : (
+            <p className="text-[11px] text-white/35">Use Test connection to verify reachability and /api/workspace/health.</p>
+          )}
+        </div>
       </section>
 
       <section className="hww-set-card rounded-2xl border border-white/[0.08] bg-white/[0.02] p-5 shadow-none md:p-6">

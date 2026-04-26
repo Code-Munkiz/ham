@@ -151,3 +151,12 @@ def test_path_traversal_read_rejected(
     assert r.status_code == 400
     detail = str(r.json().get("detail", ""))
     assert "escape" in detail.lower() or "workspace" in detail.lower()
+
+
+def test_workspace_health(client: TestClient) -> None:
+    r = client.get("/api/workspace/health")
+    assert r.status_code == 200
+    body = r.json()
+    assert body.get("ok") is True
+    assert "workspaceRootConfigured" in body
+    assert isinstance(body.get("features"), list) and "files" in body["features"]
