@@ -19,6 +19,8 @@ import './VoiceMessageInput.css';
 interface VoiceMessageInputProps {
   onVoiceMessage?: (audioBlob: Blob, duration: number) => void;
   onVoiceError?: (error: string) => void;
+  /** Fires when the built-in MediaRecorder is actively recording (for send-block + inline status in composer). */
+  onRecordingChange?: (isRecording: boolean) => void;
   /** Smaller, borderless treatment for the chat composer strip (no standalone card). */
   compact?: boolean;
   placeholder?: string;
@@ -29,7 +31,7 @@ interface VoiceMessageInputProps {
 }
 
 export function VoiceMessageInput(props: VoiceMessageInputProps) {
-  const { onVoiceMessage, onVoiceError, compact = false, hidePreview = false, disabled = false } = props;
+  const { onVoiceMessage, onVoiceError, onRecordingChange, compact = false, hidePreview = false, disabled = false } = props;
   
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   
@@ -51,6 +53,10 @@ export function VoiceMessageInput(props: VoiceMessageInputProps) {
     },
     onRecordingError: onVoiceError,
   });
+
+  React.useEffect(() => {
+    onRecordingChange?.(isRecording);
+  }, [isRecording, onRecordingChange]);
 
   const handleStopRecording = () => {
     stopRecording();
