@@ -1,49 +1,69 @@
 import * as React from "react";
 import { Construction } from "lucide-react";
+import type { UpstreamSettingsNavId } from "./workspaceSettingsNavData";
 
-const COPY: Record<string, { title: string; body: string }> = {
-  language: {
-    title: "Language",
-    body: "Upstream locale and copy preferences are not wired in this HAM build. Your system browser language still applies.",
+/** repomix `src/routes/settings/index.tsx` switches on `section` for Hermes sub-views and appearance; HAM bridges where not wired. */
+
+const COPY: Record<UpstreamSettingsNavId, { title: string; body: string }> = {
+  connection: {
+    title: "Connection",
+    body: "Handled in the Connection section.",
   },
-  appearance: {
-    title: "Appearance",
-    body: "Theme and density are controlled from the main HAM app and this shell; a full upstream theme switcher will land with the next bridge pass.",
+  hermes: { title: "Model & Provider", body: "Use the Model & provider section." },
+  agent: {
+    title: "Agent Behavior",
+    body:
+      "Upstream Hermes Agent behavior lives in `HermesConfigSection` with `activeView=\"agent\"`. In HAM, agent instruction budgets are edited via context / Memory Heist settings on the API host — not yet exposed in this workspace UI.",
   },
-  chat: {
-    title: "Chat",
-    body: "Composer and inline behavior use the main HAM chat stack. Advanced upstream chat toggles are not exposed here yet.",
-  },
-  notifications: {
-    title: "Notifications",
-    body: "Push and desktop notifications are not connected in the browser workspace shell for this preview.",
+  routing: {
+    title: "Smart Routing",
+    body:
+      "Upstream maps to `HermesConfigSection` (`activeView=\"routing\"`) and smart model routing. HAM uses server-side gateway and Memory Heist routing; this surface is a bridge until parity is wired.",
   },
   voice: {
     title: "Voice",
-    body: "Voice input and read-back are not enabled in the local HAM workspace bridge.",
+    body:
+      "Upstream `HermesConfigSection` (`activeView=\"voice\"`) configures TTS/STT. HAM does not expose voice pipelines in the browser workspace shell yet.",
   },
-  hermes: {
-    title: "Hermes",
-    body: "Hermes-specific upstream options are represented in HAM via API keys, context, and desktop bundle; there is no separate remote Hermes host in the browser.",
+  display: {
+    title: "Display",
+    body: "Use the Display section for the local desktop bundle panel.",
   },
-  providers: {
-    title: "Providers",
-    body: "Provider routing is configured through API keys, environment, and model settings. A dedicated provider matrix will map here when the adapter is ready.",
+  appearance: {
+    title: "Appearance",
+    body:
+      "Upstream `WorkspaceThemePicker` and accent live here. HAM theme follows the main app; full workspace theme parity is limited in this bridge build.",
+  },
+  chat: {
+    title: "Chat",
+    body:
+      "Upstream `ChatDisplaySection` controls tool messages, reasoning blocks, enter key, width, etc. Those map to chat store / main HAM chat, not yet split in this workspace-only screen.",
+  },
+  notifications: {
+    title: "Notifications",
+    body:
+      "Upstream toggles alerts, usage threshold, and smart suggestions. HAM uses different server-side notifications; bridge only until mapped.",
+  },
+  mcp: {
+    title: "MCP Servers",
+    body: "Use the dedicated MCP route to match upstream file `src/routes/settings/mcp.tsx`.",
+  },
+  language: {
+    title: "Language",
+    body:
+      "Upstream `LOCALE_LABELS` / `setLocale` UI. HAM dashboard language is not switched from this workspace settings page yet.",
   },
 };
 
 type WorkspaceSettingsBridgePanelProps = {
-  bridgeKey: string;
+  section: UpstreamSettingsNavId;
 };
 
-export function WorkspaceSettingsBridgePanel({ bridgeKey }: WorkspaceSettingsBridgePanelProps) {
-  const text = COPY[bridgeKey] ?? {
-    title: "Not available",
-    body: "This section is reserved for upstream parity. HAM does not expose this control in the workspace bridge yet.",
-  };
+export function WorkspaceSettingsBridgePanel({ section }: WorkspaceSettingsBridgePanelProps) {
+  const text = COPY[section];
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col items-center justify-center p-8 text-center">
+    <div className="flex min-h-0 flex-1 flex-col items-center justify-center p-6 text-center md:min-h-[16rem]">
       <div className="max-w-md space-y-4 rounded-2xl border border-white/[0.08] bg-black/35 p-8">
         <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.04]">
           <Construction className="h-6 w-6 text-white/35" strokeWidth={1.5} />
@@ -52,7 +72,9 @@ export function WorkspaceSettingsBridgePanel({ bridgeKey }: WorkspaceSettingsBri
           <h2 className="text-lg font-semibold tracking-tight text-white/90">{text.title}</h2>
           <p className="text-[13px] leading-relaxed text-white/45">{text.body}</p>
         </div>
-        <p className="font-mono text-[10px] uppercase tracking-widest text-white/25">bridge · {bridgeKey}</p>
+        <p className="font-mono text-[10px] uppercase tracking-widest text-white/25">
+          bridge · upstream section={section}
+        </p>
       </div>
     </div>
   );

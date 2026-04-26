@@ -54,7 +54,7 @@ import {
 import type { ContextEnginePayload, CursorCredentialsStatus } from "@/lib/ham/types";
 import { DesktopBundlePanel } from "@/components/settings/DesktopBundlePanel";
 
-function ApiKeysPanel() {
+export function ApiKeysPanel() {
   const [status, setStatus] = React.useState<CursorCredentialsStatus | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -346,6 +346,369 @@ function ApiKeysPanel() {
           <span className="text-white/50">Local Composer</span> — Node SDK / sidecar for repo-on-disk workflows (separate
           from Cloud Agents REST above).
         </p>
+      </div>
+    </div>
+  );
+}
+
+/** Read-only .env name table; used in full Settings and in Workspace "Connection" (repomix Connection tips reference env on disk). */
+export function EnvironmentReadonlyPanel() {
+  return (
+    <div className="space-y-6">
+      <div className="rounded-lg border border-white/10 bg-black/40 p-5 space-y-3">
+        <p className="text-[11px] font-bold text-white/50 leading-relaxed">
+          <span className="text-[#FF6B00] uppercase tracking-widest text-[10px] font-black">Secrets</span> — use{" "}
+          <span className="font-mono text-white/60">API Keys</span> in Model &amp; provider for provider tokens. This page
+          lists <span className="italic text-white/40">names</span> only so you know what Ham reads from the process
+          environment (mostly model routing).
+        </p>
+        <p className="text-[10px] font-bold text-white/25 uppercase tracking-widest">
+          Copy <span className="font-mono">.env.example</span> → <span className="font-mono">.env</span> at the repo root;
+          restart CLI / API after edits.
+        </p>
+      </div>
+      <div className="overflow-hidden rounded-lg border border-white/5 bg-white/[0.02]">
+        <table className="w-full text-left text-[11px]">
+          <thead className="border-b border-white/10 bg-black/50 text-[9px] font-black uppercase tracking-widest text-white/35">
+            <tr>
+              <th className="px-4 py-3">Variable</th>
+              <th className="px-4 py-3">Kind</th>
+              <th className="px-4 py-3">Role</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-white/5 text-white/55">
+            {[
+              {
+                name: "OPENROUTER_API_KEY",
+                kind: "Secret",
+                role: "LLM calls via LiteLLM / OpenRouter (same key as API Keys conceptually).",
+              },
+              {
+                name: "OPENROUTER_API_URL",
+                kind: "Config",
+                role: "Optional override; default https://openrouter.ai/api/v1",
+              },
+              {
+                name: "DEFAULT_MODEL",
+                kind: "Config",
+                role: "Default model id when not set elsewhere (e.g. minimax/minimax-m2.5:free).",
+              },
+              {
+                name: "OPENROUTER_HTTP_REFERER",
+                kind: "Optional",
+                role: "OpenRouter attribution / site URL.",
+              },
+              {
+                name: "OPENROUTER_APP_TITLE",
+                kind: "Optional",
+                role: "OpenRouter app name string.",
+              },
+              {
+                name: "CURSOR_API_KEY",
+                kind: "Secret",
+                role: "Cursor API key when not set via Settings (falls back after UI-saved key is cleared).",
+              },
+              {
+                name: "HAM_AUTHOR",
+                kind: "Optional",
+                role: "Attributed author on persisted run records; falls back to USER / USERNAME.",
+              },
+            ].map((row) => (
+              <tr key={row.name} className="hover:bg-white/[0.02]">
+                <td className="px-4 py-3 font-mono text-[10px] text-[#FF6B00]/90">{row.name}</td>
+                <td className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-white/35">{row.kind}</td>
+                <td className="px-4 py-3 text-[10px] leading-snug text-white/40">{row.role}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-[9px] font-bold text-white/20 uppercase tracking-widest">
+        Alpha: no live env inspection — add server-backed <span className="font-mono">GET /api/env/names</span> later if
+        needed.
+      </p>
+    </div>
+  );
+}
+
+/** Tools & extensions surface; also used for Workspace MCP route (repomix `/settings/mcp`). */
+export function ToolsAndExtensionsPanel() {
+  return (
+    <div className="space-y-16 animate-in fade-in slide-in-from-bottom-2 duration-500">
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="space-y-1">
+            <div className="flex items-center gap-3">
+              <ToyBrick className="h-4 w-4 text-[#FF6B00]" />
+              <h3 className="text-[14px] font-black text-white uppercase tracking-[0.2em] italic leading-none">
+                Built-in Tools
+              </h3>
+            </div>
+            <p className="text-[9px] font-bold text-white/20 uppercase tracking-widest leading-none pl-7">
+              Core HAM operational capabilities
+            </p>
+          </div>
+          <div className="h-px mx-8 flex-1 bg-white/5" />
+          <div className="flex items-center gap-3">
+            <span className="text-[8px] font-black uppercase tracking-widest text-white/10">Active Pool: 6/7</span>
+            <div className="h-1 w-12 overflow-hidden rounded-full bg-white/5">
+              <div className="h-full w-[85%] bg-[#FF6B00]" />
+            </div>
+          </div>
+        </div>
+        <div className="space-y-2">
+          {[
+            {
+              name: "Code Interpreter",
+              desc: "Execute sandboxed code in Python and JS environments.",
+              status: "active",
+              scope: "workspace",
+              icon: Terminal,
+              load: "High",
+            },
+            {
+              name: "Web Intelligence",
+              desc: "Live web traversal and semantic extraction.",
+              status: "active",
+              scope: "workspace",
+              icon: Globe,
+              load: "Nominal",
+            },
+            {
+              name: "Image Extraction",
+              desc: "Multi-modal vision analysis for visual datasets.",
+              status: "setup required",
+              scope: "team only",
+              icon: Zap,
+              load: "Standby",
+            },
+            {
+              name: "Browser",
+              desc: "Autonomous browser orchestration for task completion.",
+              status: "active",
+              scope: "workspace",
+              icon: Monitor,
+              load: "Idle",
+            },
+            {
+              name: "Preview",
+              desc: "Real-time rendering of generated artifacts and code.",
+              status: "active",
+              scope: "workspace",
+              icon: Eye,
+              load: "Idle",
+            },
+            {
+              name: "Search",
+              desc: "Industrial-grade index searching across global networks.",
+              status: "inactive",
+              scope: "team only",
+              icon: Search,
+              load: "Locked",
+            },
+            {
+              name: "Workspace Context",
+              desc: "High-density local knowledge indexing.",
+              status: "active",
+              scope: "workspace",
+              icon: Brain,
+              load: "Syncing",
+            },
+          ].map((tool, i) => (
+            <div
+              key={i}
+              className="group relative flex items-center gap-6 overflow-hidden rounded-xl border border-white/5 bg-black/40 p-4 shadow-lg transition-all hover:border-[#FF6B00]/20"
+            >
+              <div className="absolute left-0 top-0 h-full w-1 bg-[#FF6B00] opacity-0 transition-opacity group-hover:opacity-100" />
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded border border-white/5 bg-white/[0.03] transition-colors group-hover:bg-[#FF6B00]/10">
+                <tool.icon className="h-4 w-4 text-[#FF6B00]" />
+              </div>
+              <div className="min-w-0 flex-1 space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="truncate text-[11px] font-black uppercase tracking-widest text-white">{tool.name}</span>
+                  <div
+                    className={cn(
+                      "rounded-[2px] px-1.5 py-0.5 text-[7px] font-black uppercase tracking-tighter",
+                      tool.status === "active"
+                        ? "border border-green-500/20 bg-green-500/10 text-green-500"
+                        : tool.status === "setup required"
+                          ? "border border-amber-500/20 bg-amber-500/10 text-amber-500"
+                          : "border border-white/10 bg-white/5 text-white/20",
+                    )}
+                  >
+                    {tool.status}
+                  </div>
+                </div>
+                <p className="truncate text-[9px] font-bold uppercase tracking-widest italic leading-none text-white/40">
+                  {tool.desc}
+                </p>
+              </div>
+              <div className="hidden min-w-[100px] flex-col items-center gap-1 border-l border-white/5 px-4 md:flex">
+                <span className="text-[7px] font-black uppercase tracking-widest text-white/10">Load State</span>
+                <span className="text-[9px] font-mono font-bold uppercase tracking-tighter italic text-[#FF6B00]/60">
+                  {tool.load}
+                </span>
+              </div>
+              <div className="hidden min-w-[120px] flex-col items-end gap-1 border-l border-white/5 px-4 md:flex">
+                <span className="text-[7px] font-black uppercase tracking-widest text-white/10">Assignment</span>
+                <span className="whitespace-nowrap text-[9px] font-black uppercase tracking-tighter italic text-white/40">
+                  {tool.scope}
+                </span>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  type="button"
+                  className="h-8 rounded border border-white/5 bg-white/[0.03] px-3 text-[9px] font-black uppercase tracking-widest text-white/40 transition-all hover:bg-white/10 hover:text-white"
+                >
+                  Assign
+                </button>
+                <button
+                  type="button"
+                  className="h-8 rounded border border-white/5 bg-white/[0.03] px-3 text-[9px] font-black uppercase tracking-widest text-white/40 transition-all hover:bg-white/10 hover:text-white"
+                >
+                  Configure
+                </button>
+                <button
+                  type="button"
+                  className="h-8 rounded border border-[#FF6B00]/20 bg-[#FF6B00]/10 px-3 text-[9px] font-black uppercase tracking-widest text-[#FF6B00] transition-all hover:bg-[#FF6B00]/20"
+                >
+                  {tool.status === "active" ? "Disable" : "Enable"}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="space-y-1">
+            <div className="flex items-center gap-3">
+              <Package className="h-4 w-4 text-[#FF6B00]" />
+              <h3 className="text-[14px] font-black text-white uppercase tracking-[0.2em] italic leading-none">
+                Extensions & Plugins
+              </h3>
+            </div>
+            <p className="pl-7 text-[10px] font-bold uppercase tracking-widest leading-none text-white/20">
+              3rd party integrations and modular enhancements
+            </p>
+          </div>
+          <div className="ml-8 flex items-center gap-3">
+            <div className="h-px w-24 bg-white/5" />
+            <button
+              type="button"
+              className="group flex items-center gap-2 rounded border border-[#FF6B00]/20 bg-[#FF6B00]/5 px-3 py-1.5 text-[#FF6B00] hover:bg-[#FF6B00]/10"
+            >
+              <Plus className="h-3 w-3" />
+              <span className="text-[9px] font-black uppercase tracking-widest italic leading-none">Add Extension</span>
+            </button>
+            <div className="h-px flex-1 bg-white/5" />
+          </div>
+        </div>
+        <div className="space-y-2">
+          {[
+            {
+              name: "Mercury UI Tab",
+              type: "UI Interface",
+              installed: true,
+              enabled: true,
+              desc: "Custom operational surface for high-frequency trading data.",
+              icon: Layout,
+              version: "v1.2.4",
+            },
+            {
+              name: "Azure Bridge",
+              type: "Provider Integration",
+              installed: true,
+              enabled: false,
+              desc: "Connects HAM units to Azure Cloud Service endpoints.",
+              icon: Database,
+              version: "v0.9.8",
+            },
+            {
+              name: "Slack Bridge",
+              type: "Social Hub",
+              installed: false,
+              enabled: false,
+              desc: "Bidirectional workspace communication pipeline.",
+              icon: RefreshCw,
+              version: "v2.1.0",
+            },
+            {
+              name: "Auth Bundle",
+              type: "Security Extension",
+              installed: true,
+              enabled: true,
+              desc: "Advanced OAuth and JWT validation logic.",
+              icon: Lock,
+              version: "v4.0.1",
+            },
+          ].map((ext, i) => (
+            <div
+              key={i}
+              className="group relative flex items-center gap-6 overflow-hidden rounded-xl border border-white/5 bg-black/40 p-4 transition-all hover:bg-white/[0.02]"
+            >
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded border border-white/5 bg-white/[0.02] opacity-40 transition-opacity group-hover:opacity-100">
+                <ext.icon className="h-4 w-4 text-white" />
+              </div>
+              <div className="min-w-0 flex-1 space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-black uppercase tracking-widest text-white">{ext.name}</span>
+                  <span className="rounded-[2px] border border-[#FF6B00]/10 bg-[#FF6B00]/5 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-widest italic text-[#FF6B00]/60">
+                    {ext.type}
+                  </span>
+                </div>
+                <p className="truncate text-[9px] font-bold uppercase tracking-widest italic leading-none text-white/20">
+                  {ext.desc}
+                </p>
+              </div>
+              <div className="hidden min-w-[80px] flex-col items-center gap-1 border-l border-white/5 px-4 md:flex">
+                <span className="text-[7px] font-black uppercase tracking-widest text-white/10">Version</span>
+                <span className="text-[9px] font-mono font-bold uppercase tracking-tighter italic text-white/20">
+                  {ext.version}
+                </span>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                {!ext.installed ? (
+                  <button
+                    type="button"
+                    className="flex h-8 items-center gap-2 rounded bg-[#FF6B00] px-4 text-[9px] font-black uppercase tracking-widest text-black transition-all hover:bg-[#FF8533]"
+                  >
+                    <Download className="h-3 w-3" />
+                    <span>Install</span>
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      className="flex h-8 items-center gap-2 rounded border border-white/5 bg-white/[0.03] px-3 text-[9px] font-black uppercase tracking-widest text-white/40 transition-all hover:bg-white/10 hover:text-white"
+                    >
+                      <ArrowUpRight className="h-3 w-3" />
+                      <span>Open</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="h-8 rounded border border-white/5 bg-white/[0.03] px-3 text-[9px] font-black uppercase tracking-widest text-white/40 transition-all hover:bg-white/10 hover:text-white"
+                    >
+                      Configure
+                    </button>
+                    <button
+                      type="button"
+                      className={cn(
+                        "h-8 rounded px-4 text-[9px] font-black uppercase tracking-widest transition-all",
+                        ext.enabled
+                          ? "border border-[#FF6B00]/20 bg-[#FF6B00]/10 text-[#FF6B00]"
+                          : "border border-white/10 bg-white/5 text-white/20",
+                      )}
+                    >
+                      {ext.enabled ? "Disable" : "Enable"}
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -652,7 +1015,7 @@ function AllowlistedWorkspaceSettings({
   );
 }
 
-function ContextAndMemoryPanel() {
+export function ContextAndMemoryPanel() {
   const [data, setData] = React.useState<ContextEnginePayload | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -1043,218 +1406,9 @@ export function UnifiedSettings({
               <div className="space-y-6">
                 {activeSubSegment === "api-keys" && <ApiKeysPanel />}
 
-                {activeSubSegment === "environment" && (
-                  <div className="space-y-6">
-                    <div className="rounded-lg border border-white/10 bg-black/40 p-5 space-y-3">
-                      <p className="text-[11px] font-bold text-white/50 leading-relaxed">
-                        <span className="text-[#FF6B00] uppercase tracking-widest text-[10px] font-black">Secrets</span> — use{" "}
-                        <span className="font-mono text-white/60">API Keys</span> above for provider tokens. This page lists{" "}
-                        <span className="italic text-white/40">names</span> only so you know what Ham reads from the process environment (mostly model routing).
-                      </p>
-                      <p className="text-[10px] font-bold text-white/25 uppercase tracking-widest">
-                        Copy <span className="font-mono">.env.example</span> → <span className="font-mono">.env</span> at the repo root; restart CLI / API after edits.
-                      </p>
-                    </div>
-                    <div className="overflow-hidden rounded-lg border border-white/5 bg-white/[0.02]">
-                      <table className="w-full text-left text-[11px]">
-                        <thead className="border-b border-white/10 bg-black/50 text-[9px] font-black uppercase tracking-widest text-white/35">
-                          <tr>
-                            <th className="px-4 py-3">Variable</th>
-                            <th className="px-4 py-3">Kind</th>
-                            <th className="px-4 py-3">Role</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-white/5 text-white/55">
-                          {[
-                            {
-                              name: "OPENROUTER_API_KEY",
-                              kind: "Secret",
-                              role: "LLM calls via LiteLLM / OpenRouter (same key as API Keys conceptually).",
-                            },
-                            {
-                              name: "OPENROUTER_API_URL",
-                              kind: "Config",
-                              role: "Optional override; default https://openrouter.ai/api/v1",
-                            },
-                            {
-                              name: "DEFAULT_MODEL",
-                              kind: "Config",
-                              role: "Default model id when not set elsewhere (e.g. minimax/minimax-m2.5:free).",
-                            },
-                            {
-                              name: "OPENROUTER_HTTP_REFERER",
-                              kind: "Optional",
-                              role: "OpenRouter attribution / site URL.",
-                            },
-                            {
-                              name: "OPENROUTER_APP_TITLE",
-                              kind: "Optional",
-                              role: "OpenRouter app name string.",
-                            },
-                            {
-                              name: "CURSOR_API_KEY",
-                              kind: "Secret",
-                              role: "Cursor API key when not set via Settings (falls back after UI-saved key is cleared).",
-                            },
-                            {
-                              name: "HAM_AUTHOR",
-                              kind: "Optional",
-                              role: "Attributed author on persisted run records; falls back to USER / USERNAME.",
-                            },
-                          ].map((row) => (
-                            <tr key={row.name} className="hover:bg-white/[0.02]">
-                              <td className="px-4 py-3 font-mono text-[10px] text-[#FF6B00]/90">{row.name}</td>
-                              <td className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-white/35">{row.kind}</td>
-                              <td className="px-4 py-3 text-[10px] leading-snug text-white/40">{row.role}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                    <p className="text-[9px] font-bold text-white/20 uppercase tracking-widest">
-                      Alpha: no live env inspection — add server-backed <span className="font-mono">GET /api/env/names</span> later if needed.
-                    </p>
-                  </div>
-                )}
+                {activeSubSegment === "environment" && <EnvironmentReadonlyPanel />}
 
-                {activeSubSegment === "tools-extensions" && (
-                   <div className="space-y-16 animate-in fade-in slide-in-from-bottom-2 duration-500">
-                      {/* Section 1: Built-in Tools */}
-                      <div className="space-y-6">
-                        <div className="flex items-center justify-between">
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-3">
-                              <ToyBrick className="h-4 w-4 text-[#FF6B00]" />
-                              <h3 className="text-[14px] font-black text-white uppercase tracking-[0.2em] italic leading-none">Built-in Tools</h3>
-                            </div>
-                            <p className="text-[9px] font-bold text-white/20 uppercase tracking-widest leading-none pl-7">Core HAM operational capabilities</p>
-                          </div>
-                          <div className="h-px flex-1 mx-8 bg-white/5" />
-                          <div className="flex items-center gap-3">
-                             <span className="text-[8px] font-black text-white/10 uppercase tracking-widest">Active Pool: 6/7</span>
-                             <div className="h-1 w-12 bg-white/5 rounded-full overflow-hidden">
-                                <div className="h-full bg-[#FF6B00] w-[85%]" />
-                             </div>
-                          </div>
-                        </div>
-                        <div className="space-y-2">
-                          {[
-                            { name: "Code Interpreter", desc: "Execute sandboxed code in Python and JS environments.", status: "active", scope: "workspace", icon: Terminal, load: "High" },
-                            { name: "Web Intelligence", desc: "Live web traversal and semantic extraction.", status: "active", scope: "workspace", icon: Globe, load: "Nominal" },
-                            { name: "Image Extraction", desc: "Multi-modal vision analysis for visual datasets.", status: "setup required", scope: "team only", icon: Zap, load: "Standby" },
-                            { name: "Browser", desc: "Autonomous browser orchestration for task completion.", status: "active", scope: "workspace", icon: Monitor, load: "Idle" },
-                            { name: "Preview", desc: "Real-time rendering of generated artifacts and code.", status: "active", scope: "workspace", icon: Eye, load: "Idle" },
-                            { name: "Search", desc: "Industrial-grade index searching across global networks.", status: "inactive", scope: "team only", icon: Search, load: "Locked" },
-                            { name: "Workspace Context", desc: "High-density local knowledge indexing.", status: "active", scope: "workspace", icon: Brain, load: "Syncing" },
-                          ].map((tool, i) => (
-                            <div key={i} className="group flex items-center gap-6 p-4 bg-black/40 border border-white/5 rounded-xl hover:border-[#FF6B00]/20 transition-all shadow-lg relative overflow-hidden">
-                              <div className="absolute top-0 left-0 w-1 h-full bg-[#FF6B00] opacity-0 group-hover:opacity-100 transition-opacity" />
-                              <div className="h-10 w-10 shrink-0 bg-white/[0.03] rounded border border-white/5 flex items-center justify-center group-hover:bg-[#FF6B00]/10 transition-colors">
-                                <tool.icon className="h-4 w-4 text-[#FF6B00]" />
-                              </div>
-                              <div className="flex-1 min-w-0 space-y-1">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-[11px] font-black text-white uppercase tracking-widest truncate">{tool.name}</span>
-                                  <div className={cn(
-                                    "px-1.5 py-0.5 rounded-[2px] text-[7px] font-black uppercase tracking-tighter",
-                                    tool.status === 'active' ? "bg-green-500/10 text-green-500 border border-green-500/20" : 
-                                    tool.status === 'setup required' ? "bg-amber-500/10 text-amber-500 border border-amber-500/20" : 
-                                    "bg-white/5 text-white/20 border border-white/10"
-                                  )}>
-                                    {tool.status}
-                                  </div>
-                                </div>
-                                <p className="text-[9px] font-bold text-white/40 uppercase tracking-widest truncate italic leading-none">{tool.desc}</p>
-                              </div>
-                              <div className="hidden md:flex flex-col items-center gap-1 px-4 border-l border-white/5 min-w-[100px]">
-                                <span className="text-[7px] font-black text-white/10 uppercase tracking-widest">Load State</span>
-                                <span className="text-[9px] font-mono font-bold text-[#FF6B00]/60 uppercase tracking-tighter italic">{tool.load}</span>
-                              </div>
-                              <div className="hidden md:flex flex-col items-end gap-1 px-4 border-l border-white/5 min-w-[120px]">
-                                <span className="text-[7px] font-black text-white/10 uppercase tracking-widest">Assignment</span>
-                                <span className="text-[9px] font-black text-white/40 uppercase tracking-tighter italic whitespace-nowrap">{tool.scope}</span>
-                              </div>
-                              <div className="flex items-center gap-2 shrink-0">
-                                <button className="h-8 px-3 rounded bg-white/[0.03] border border-white/5 text-[9px] font-black text-white/40 uppercase tracking-widest hover:bg-white/10 hover:text-white transition-all">Assign</button>
-                                <button className="h-8 px-3 rounded bg-white/[0.03] border border-white/5 text-[9px] font-black text-white/40 uppercase tracking-widest hover:bg-white/10 hover:text-white transition-all">Configure</button>
-                                <button className="h-8 px-3 rounded bg-[#FF6B00]/10 border border-[#FF6B00]/20 text-[9px] font-black text-[#FF6B00] uppercase tracking-widest hover:bg-[#FF6B00]/20 transition-all">
-                                  {tool.status === 'active' ? "Disable" : "Enable"}
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Section 2: Extensions & Plugins */}
-                      <div className="space-y-6">
-                        <div className="flex items-center justify-between">
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-3">
-                              <Package className="h-4 w-4 text-[#FF6B00]" />
-                              <h3 className="text-[14px] font-black text-white uppercase tracking-[0.2em] italic leading-none">Extensions & Plugins</h3>
-                            </div>
-                            <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest leading-none pl-7">3rd party integrations and modular enhancements</p>
-                          </div>
-                          <div className="flex items-center gap-3 ml-8">
-                             <div className="h-px w-24 bg-white/5" />
-                             <button className="flex items-center gap-2 px-3 py-1.5 rounded border border-[#FF6B00]/20 bg-[#FF6B00]/5 text-[#FF6B00] hover:bg-[#FF6B00]/10 transition-all group">
-                                <Plus className="h-3 w-3" />
-                                <span className="text-[9px] font-black uppercase tracking-widest italic leading-none">Add Extension</span>
-                             </button>
-                             <div className="h-px flex-1 bg-white/5" />
-                          </div>
-                        </div>
-                        <div className="space-y-2">
-                          {[
-                            { name: "Mercury UI Tab", type: "UI Interface", installed: true, enabled: true, desc: "Custom operational surface for high-frequency trading data.", icon: Layout, version: "v1.2.4" },
-                            { name: "Azure Bridge", type: "Provider Integration", installed: true, enabled: false, desc: "Connects HAM units to Azure Cloud Service endpoints.", icon: Database, version: "v0.9.8" },
-                            { name: "Slack Bridge", type: "Social Hub", installed: false, enabled: false, desc: "Bidirectional workspace communication pipeline.", icon: RefreshCw, version: "v2.1.0" },
-                            { name: "Auth Bundle", type: "Security Extension", installed: true, enabled: true, desc: "Advanced OAuth and JWT validation logic.", icon: Lock, version: "v4.0.1" },
-                          ].map((ext, i) => (
-                            <div key={i} className="group flex items-center gap-6 p-4 bg-black/40 border border-white/5 rounded-xl hover:bg-white/[0.02] transition-all relative overflow-hidden">
-                              <div className="h-10 w-10 shrink-0 border border-white/5 rounded bg-white/[0.02] flex items-center justify-center opacity-40 group-hover:opacity-100 transition-opacity">
-                                <ext.icon className="h-4 w-4 text-white" />
-                              </div>
-                              <div className="flex-1 min-w-0 space-y-1">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-[11px] font-black text-white uppercase tracking-widest">{ext.name}</span>
-                                  <span className="text-[8px] font-bold text-[#FF6B00]/60 uppercase tracking-widest italic px-1.5 py-0.5 rounded-[2px] bg-[#FF6B00]/5 border border-[#FF6B00]/10">{ext.type}</span>
-                                </div>
-                                <p className="text-[9px] font-bold text-white/20 uppercase tracking-widest truncate italic leading-none">{ext.desc}</p>
-                              </div>
-                              <div className="hidden md:flex flex-col items-center gap-1 px-4 border-l border-white/5 min-w-[80px]">
-                                <span className="text-[7px] font-black text-white/10 uppercase tracking-widest">Version</span>
-                                <span className="text-[9px] font-mono font-bold text-white/20 uppercase tracking-tighter italic">{ext.version}</span>
-                              </div>
-                              <div className="flex items-center gap-2 shrink-0">
-                                {!ext.installed ? (
-                                  <button className="h-8 px-4 rounded bg-[#FF6B00] text-[9px] font-black text-black uppercase tracking-widest hover:bg-[#FF8533] transition-all flex items-center gap-2">
-                                    <Download className="h-3 w-3" />
-                                    <span>Install</span>
-                                  </button>
-                                ) : (
-                                  <>
-                                    <button className="h-8 px-3 rounded bg-white/[0.03] border border-white/5 text-[9px] font-black text-white/40 uppercase tracking-widest hover:bg-white/10 hover:text-white transition-all flex items-center gap-2">
-                                       <ArrowUpRight className="h-3 w-3" />
-                                       <span>Open</span>
-                                    </button>
-                                    <button className="h-8 px-3 rounded bg-white/[0.03] border border-white/5 text-[9px] font-black text-white/40 uppercase tracking-widest hover:bg-white/10 hover:text-white transition-all">Configure</button>
-                                    <button className={cn(
-                                      "h-8 px-4 rounded text-[9px] font-black uppercase tracking-widest transition-all",
-                                      ext.enabled ? "bg-[#FF6B00]/10 border border-[#FF6B00]/20 text-[#FF6B00]" : "bg-white/5 border border-white/10 text-white/20"
-                                    )}>
-                                      {ext.enabled ? "Disable" : "Enable"}
-                                    </button>
-                                  </>
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                   </div>
-                )}
+                {activeSubSegment === "tools-extensions" && <ToolsAndExtensionsPanel />}
 
                 {activeSubSegment === "context-memory" && <ContextAndMemoryPanel />}
 
