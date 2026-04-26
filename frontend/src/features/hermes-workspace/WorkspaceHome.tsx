@@ -11,11 +11,14 @@ export function WorkspaceHome() {
             <Orbit className="h-8 w-8 text-[#ffb27a]/90" strokeWidth={1.2} />
           </div>
           <h1 className="text-2xl font-semibold tracking-tight text-white/95 sm:text-3xl">
-            Hermes workspace
+            Dashboard
           </h1>
+          <p className="mt-1 text-[12px] font-medium uppercase tracking-[0.14em] text-white/32">
+            Hermes workspace
+          </p>
           <p className="mt-2 max-w-lg text-sm leading-relaxed text-white/45">
-            HAM providers and API unchanged — this is the lifted shell for side-by-side comparison with
-            the main <span className="font-mono text-white/55">/chat</span> route.
+            HAM API and runtime unchanged — the sidebar reflects the full Hermes Workspace map; most
+            sections are still staging placeholders on top of the same backend seams.
           </p>
         </div>
 
@@ -43,9 +46,10 @@ export function WorkspaceHome() {
           </Link>
           <div className="rounded-xl border border-[color:var(--ham-workspace-line)] bg-[#040d14]/60 p-4 text-left">
             <Layers className="mb-2 h-4 w-4 text-white/40" strokeWidth={1.5} />
-            <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-white/50">Tools</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-white/50">Surface map</p>
             <p className="mt-1 text-[12px] text-white/38">
-              No Cloud Agent, Memory, or terminal panels in this phase.
+              Main + Knowledge nav items in the rail are present; most routes are UI placeholders until
+              their adapters are shipped.
             </p>
           </div>
         </div>
