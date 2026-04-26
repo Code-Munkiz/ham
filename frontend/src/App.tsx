@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { BrowserRouter, HashRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, HashRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { ClerkProvider } from "@clerk/clerk-react";
 import { ThemeProvider } from "next-themes";
 import { AppLayout } from "./components/layout/AppLayout";
@@ -30,6 +30,7 @@ import { WorkspaceProvider } from "./lib/ham/WorkspaceContext";
 import { ClerkAccessBridge } from "./lib/ham/ClerkAccessBridge";
 import { getHamDesktopConfig, isHamDesktopShell } from "./lib/ham/desktopConfig";
 import { WorkspaceApp } from "./features/hermes-workspace";
+import { isHermesWorkspaceEnabled } from "./features/hermes-workspace/workspaceFlags";
 
 const clerkPublishableKey = (import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined)?.trim();
 
@@ -39,6 +40,15 @@ function HomeRoute() {
     return <Navigate to="/chat" replace />;
   }
   return <Landing />;
+}
+
+/** When Hermes workspace is enabled, primary chat lives under `/workspace/chat`; keep `/chat` as entry alias. */
+function ChatEntryRoute() {
+  const { search } = useLocation();
+  if (isHermesWorkspaceEnabled()) {
+    return <Navigate to={`/workspace/chat${search}`} replace />;
+  }
+  return <Chat />;
 }
 
 function AppRoutes() {
@@ -51,7 +61,7 @@ function AppRoutes() {
           <Route path="/" element={<HomeRoute />} />
           {/* Legacy path: product stream lives on Activity, not a separate Overview page. */}
           <Route path="/overview" element={<Navigate to="/activity" replace />} />
-          <Route path="/chat" element={<Chat />} />
+          <Route path="/chat" element={<ChatEntryRoute />} />
           <Route path="/workspace/*" element={<WorkspaceApp />} />
           <Route path="/droids" element={<Navigate to="/command-center" replace />} />
           <Route path="/extensions" element={<Extensions />} />
