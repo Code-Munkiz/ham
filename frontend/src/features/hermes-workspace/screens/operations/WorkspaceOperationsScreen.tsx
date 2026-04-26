@@ -1,12 +1,14 @@
 import * as React from "react";
-import { motion } from "motion/react";
+import { Link } from "react-router-dom";
+import { AnimatePresence, motion } from "motion/react";
 import {
   Activity,
+  ArrowRight,
   Bot,
+  Brain,
   Clock,
   LayoutGrid,
   Loader2,
-  MessageSquare,
   Pause,
   Play,
   Plus,
@@ -15,11 +17,11 @@ import {
   Sparkles,
   Terminal,
   Trash2,
-  Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { HwwText } from "../../hwwText";
+import { HWS_PARITY_THEME } from "../../workspaceParityTheme";
 import {
   workspaceOperationsAdapter,
   type OperationsSettings,
@@ -31,19 +33,21 @@ function fmt(ts: number) {
   return new Date(ts * 1000).toLocaleString();
 }
 
-function statusBadge(s: WorkspaceAgent["status"]) {
-  switch (s) {
-    case "active":
-      return "bg-emerald-500/25 text-emerald-100 ring-1 ring-emerald-500/30";
-    case "idle":
-      return "bg-white/10 text-white/80";
-    case "paused":
-      return "bg-amber-500/20 text-amber-100";
-    case "error":
-      return "bg-red-500/25 text-red-100";
-    default:
-      return "bg-white/10 text-white/80";
-  }
+function fmtRelative(ts: number) {
+  const s = Math.max(0, Math.floor(Date.now() / 1000 - ts));
+  if (s < 45) return "just now";
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  if (s < 604800) return `${Math.floor(s / 86400)}d ago`;
+  return fmt(ts);
+}
+
+function statusDotClass(s: WorkspaceAgent["status"]) {
+  const base = "h-2 w-2 shrink-0 rounded-full";
+  if (s === "error") return cn(base, "bg-red-500");
+  if (s === "active") return cn(base, "animate-pulse bg-emerald-500");
+  if (s === "paused") return cn(base, "bg-amber-400");
+  return cn(base, "bg-slate-400");
 }
 
 /** Static catalog — labels only; routing stays on HAM `/api/workspace/operations`. */
@@ -59,6 +63,11 @@ const CRON_PRESETS: { label: string; expr: string }[] = [
   { label: "Daily 09:00", expr: "0 9 * * *" },
   { label: "Weekdays", expr: "0 9 * * 1-5" },
 ];
+
+function stripEmojiPrefix(name: string) {
+  const t = name.replace(/^\p{Extended_Pictographic}[\uFE0F\u200D\p{Extended_Pictographic}]*/u, "").trim();
+  return t || name;
+}
 
 export function WorkspaceOperationsScreen() {
   const [view, setView] = React.useState<"overview" | "outputs">("overview");
@@ -87,6 +96,7 @@ export function WorkspaceOperationsScreen() {
   const [jobCron, setJobCron] = React.useState("0 * * * *");
   const [focusId, setFocusId] = React.useState<string | null>(null);
   const [chatDraft, setChatDraft] = React.useState("");
+  const [cronPanelFor, setCronPanelFor] = React.useState<string | null>(null);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -244,199 +254,552 @@ export function WorkspaceOperationsScreen() {
   };
 
   const activeCount = agents.filter((a) => a.status === "active").length;
+  const activePct = Math.min(100, (activeCount / Math.max(1, agents.length)) * 100);
 
   return (
-    <div className="flex h-full min-h-0 min-w-0 flex-col bg-gradient-to-b from-[#0a1014] to-[#080c10] p-2 md:p-3">
-      <header className="shrink-0 border-b border-white/5 pb-2">
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <div>
-            <div className="mb-0.5 flex items-center gap-1.5">
-              <p className="hww-pill">Agent team</p>
-              <span className="text-[9px] text-white/35">Operations · HAM v0</span>
+    <main
+      className="flex h-full min-h-0 min-w-0 flex-col overflow-auto bg-[var(--theme-bg)] px-3 pb-20 pt-5 text-[var(--theme-text)] md:px-5 md:pt-7"
+      style={HWS_PARITY_THEME}
+    >
+      <section className="mx-auto w-full max-w-[1320px] space-y-4">
+        <header className="flex flex-col gap-4 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] px-5 py-4 shadow-[0_20px_60px_var(--theme-shadow)] md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-accent)] shadow-sm">
+              <Brain className="h-5 w-5" strokeWidth={1.8} />
             </div>
-            <h1 className="flex items-center gap-1.5 text-base font-semibold text-white/95">
-              <Users className="h-4 w-4 text-cyan-400/80" />
-              Agent Operations
-            </h1>
-            <p className="mt-0.5 max-w-2xl text-[11px] text-white/45">
-              Gateway-style shell for persistent agents, cron, and outputs. Backed by{" "}
-              <code className="text-white/50">/api/workspace/operations</code> — no browser secrets, no upstream fetches.
-            </p>
+            <div>
+              <h1 className="text-base font-semibold text-[var(--theme-text)]">Operations</h1>
+              <p className="mt-1 text-sm text-[var(--theme-muted)]">Your persistent agent team · HAM v0</p>
+            </div>
           </div>
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap items-center gap-2 md:gap-3">
             <Button
               type="button"
               size="sm"
               variant="secondary"
-              className="h-7 gap-1"
+              className="border border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-text)] hover:bg-[var(--theme-card2)]"
               onClick={() => void load()}
               disabled={loading}
             >
               <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
               Sync
             </Button>
-            <Button type="button" size="sm" className="h-7 gap-1" onClick={() => setNewOpen(true)}>
-              <Plus className="h-3.5 w-3.5" />
-              New agent
-            </Button>
-            <Button type="button" size="sm" variant="secondary" className="h-7 gap-1" onClick={() => setAddJobOpen((v) => !v)}>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              className="border border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-text)] hover:bg-[var(--theme-card2)]"
+              onClick={() => setAddJobOpen((v) => !v)}
+            >
               <Clock className="h-3.5 w-3.5" />
               Schedule
+            </Button>
+            <div className="inline-flex rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] p-1 shadow-sm">
+              <button
+                type="button"
+                onClick={() => setView("overview")}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-all",
+                  view === "overview"
+                    ? "bg-[var(--theme-accent)] text-[color-mix(in_srgb,var(--theme-text)_5%,#041208)]"
+                    : "text-[var(--theme-muted)] hover:bg-[var(--theme-card2)]",
+                )}
+              >
+                <LayoutGrid className="h-3.5 w-3.5" />
+                Overview
+              </button>
+              <button
+                type="button"
+                onClick={() => setView("outputs")}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-all",
+                  view === "outputs"
+                    ? "bg-[var(--theme-accent)] text-[color-mix(in_srgb,var(--theme-text)_5%,#041208)]"
+                    : "text-[var(--theme-muted)] hover:bg-[var(--theme-card2)]",
+                )}
+              >
+                <Terminal className="h-3.5 w-3.5" />
+                Outputs
+              </button>
+            </div>
+            <Button
+              className="bg-[var(--theme-accent)] text-[color-mix(in_srgb,var(--theme-text)_8%,#041208)] hover:bg-[var(--theme-accent-strong)]"
+              type="button"
+              size="sm"
+              onClick={() => setNewOpen(true)}
+            >
+              <Plus className="h-3.5 w-3.5" />
+              New Agent
             </Button>
             <Button
               type="button"
               size="sm"
-              variant="outline"
-              className="h-7 border-white/10 bg-black/30 text-amber-200/90 hover:bg-white/5"
+              variant="secondary"
+              className="border border-[var(--theme-border)] bg-[var(--theme-card)] text-[var(--theme-text)] hover:bg-[var(--theme-card2)]"
               onClick={() => setSettingsOpen(true)}
             >
               <Settings2 className="h-3.5 w-3.5" />
-              Team settings
+              Settings
             </Button>
-            <div className="ml-auto flex rounded border border-white/10 bg-black/30 p-0.5">
-              <Button
-                type="button"
-                size="sm"
-                variant={view === "overview" ? "secondary" : "ghost"}
-                className="h-7 gap-1"
-                onClick={() => setView("overview")}
-              >
-                <LayoutGrid className="h-3.5 w-3.5" />
-                Overview
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant={view === "outputs" ? "secondary" : "ghost"}
-                className="h-7 gap-1"
-                onClick={() => setView("outputs")}
-              >
-                <Terminal className="h-3.5 w-3.5" />
-                Outputs
+          </div>
+        </header>
+
+        {loading && agents.length === 0 ? (
+          <section className="rounded-3xl border border-[var(--theme-border)] bg-[var(--theme-card)] px-6 py-12 text-center text-sm text-[var(--theme-muted)] shadow-[0_24px_80px_var(--theme-shadow)]">
+            Loading Operations roster…
+          </section>
+        ) : null}
+        {error ? (
+          <section className="rounded-3xl border border-[var(--theme-danger-border)] bg-[var(--theme-danger-soft)] px-6 py-8 text-center text-sm text-[var(--theme-text)] shadow-[0_24px_80px_var(--theme-shadow)]">
+            {error}
+          </section>
+        ) : null}
+
+        {addJobOpen && (
+          <div className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-4 shadow-[0_20px_50px_var(--theme-shadow)]">
+            <p className="text-xs font-semibold uppercase tracking-wider text-[var(--theme-muted)]">New scheduled job</p>
+            <div className="mt-2 flex flex-wrap items-end gap-2">
+              <input
+                className="hww-input h-8 max-w-xs rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 text-xs text-[var(--theme-text)]"
+                placeholder="Job name"
+                value={jobName}
+                onChange={(e) => setJobName(e.target.value)}
+              />
+              <input
+                className="hww-input h-8 max-w-xs rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 font-mono text-xs text-[var(--theme-text)]"
+                placeholder="0 * * * *"
+                value={jobCron}
+                onChange={(e) => setJobCron(e.target.value)}
+              />
+              <div className="flex flex-wrap gap-1">
+                {CRON_PRESETS.map((p) => (
+                  <Button key={p.expr} type="button" size="sm" variant="secondary" className="h-7 text-[10px]" onClick={() => setJobCron(p.expr)}>
+                    {p.label}
+                  </Button>
+                ))}
+              </div>
+              <Button type="button" size="sm" className="h-8" onClick={() => void onAddScheduled()} disabled={!!busy}>
+                Save
               </Button>
             </div>
           </div>
-        </div>
-      </header>
+        )}
 
-      {error && (
-        <div className="mt-2 rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[11px] text-amber-100/90">
-          {error}
-        </div>
-      )}
+        {view === "outputs" && !loading && (
+          <div className="hww-scroll min-h-[40vh] overflow-auto rounded-3xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-5 shadow-[0_20px_60px_var(--theme-shadow)]">
+            <p className="text-xs font-semibold uppercase tracking-wider text-[var(--theme-muted)]">Full outputs (newest first)</p>
+            <div className="mt-3 space-y-2">
+              {allOutputLines.length === 0 ? (
+                <p className="text-sm text-[var(--theme-muted)]">—</p>
+              ) : (
+                allOutputLines.map((l) => (
+                  <div key={`${l.id}-${l.at}-${l.line.slice(0, 20)}`} className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] p-3">
+                    <p className="text-[10px] text-[var(--theme-accent)]">
+                      {l.agent} · {fmt(l.at)}
+                    </p>
+                    <HwwText text={l.line} className="mt-1 text-sm" />
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
 
-      {view === "overview" && (
-        <motion.div initial={{ opacity: 0.96 }} animate={{ opacity: 1 }} className="mt-2 shrink-0">
-          <div className="grid gap-2 lg:grid-cols-[1fr,320px]">
-            <div className="overflow-hidden rounded-xl border border-cyan-500/20 bg-gradient-to-br from-cyan-500/10 via-black/30 to-violet-500/5 p-3">
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div>
-                  <p className="text-[9px] font-semibold uppercase tracking-wider text-cyan-200/50">Orchestrator</p>
-                  <p className="mt-0.5 text-sm font-semibold text-white/95">Persistent agent team</p>
-                  <p className="text-[10px] text-white/50">
-                    Default model: <span className="text-white/80">{settings?.defaultModel ?? "—"}</span>
+        {view === "overview" && !loading && (
+          <>
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22 }}>
+              <article className="flex min-h-[220px] flex-col rounded-[1.75rem] border border-[var(--theme-border)] border-l-4 border-l-[var(--theme-accent)] bg-[var(--theme-card)] p-5 shadow-[0_24px_80px_var(--theme-shadow)]">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <h2 className="text-base font-semibold text-[var(--theme-text)]">Orchestrator</h2>
+                    <p className="mt-1 text-sm text-[var(--theme-muted)]">
+                      {agents.length} agents · {activeCount} active · {jobs.length} scheduled
+                    </p>
+                    <p className="mt-2 text-xs text-[var(--theme-muted-2)]">
+                      Default model: <span className="font-medium text-[var(--theme-text)]">{settings?.defaultModel ?? "—"}</span>
+                    </p>
+                  </div>
+                  <div className="flex w-full min-w-[200px] max-w-sm flex-col items-stretch gap-2 md:w-72">
+                    <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--theme-bg)]">
+                      <div className="h-full rounded-full bg-[var(--theme-accent)]" style={{ width: `${activePct}%` }} />
+                    </div>
+                    <p className="text-right text-[10px] text-[var(--theme-muted)]">Active share of roster</p>
+                  </div>
+                </div>
+                <div className="mt-4 flex min-h-0 flex-1 flex-col justify-center rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-5 text-center">
+                  <p className="text-sm text-[var(--theme-muted)]">Gateway chat session — open the workspace chat route for the full composer.</p>
+                  <Button type="button" className="mt-3 self-center bg-[var(--theme-accent)] text-[color-mix(in_srgb,var(--theme-text)_8%,#041208)]" size="sm" asChild>
+                    <Link to="/workspace/chat" className="inline-flex items-center gap-1.5">
+                      Open workspace chat
+                      <ArrowRight className="h-3.5 w-3.5" />
+                    </Link>
+                  </Button>
+                  <p className="mt-3 text-xs text-[var(--theme-muted-2)]">
+                    Roster and outputs use <code className="rounded bg-[var(--theme-card)] px-1">/api/workspace/operations</code> (HAM v0, no upstream proxy).
                   </p>
                 </div>
-                <div className="grid grid-cols-3 gap-1.5 text-center text-[10px]">
-                  <div className="min-w-[4.5rem] rounded-lg border border-white/10 bg-black/30 py-1.5">
-                    <div className="text-white/40">Agents</div>
-                    <div className="text-lg font-semibold text-white/95">{agents.length}</div>
+              </article>
+            </motion.div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {agents.length === 0 && !loading && (
+                <div className="col-span-full rounded-2xl border border-dashed border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-8 text-center sm:col-span-2 xl:col-span-3">
+                  <Sparkles className="mx-auto mb-2 h-6 w-6 text-[var(--theme-warning)]" />
+                  <p className="text-sm text-[var(--theme-muted)]">No agents yet. Use Add Agent or New Agent to create one.</p>
+                </div>
+              )}
+              {agents.map((ag, index) => {
+                const em = ag.emoji || "🤖";
+                const displayName = stripEmojiPrefix(ag.name);
+                const isActive = ag.status === "active";
+                const lastLines = ag.outputs
+                  .slice()
+                  .sort((a, b) => b.at - a.at)
+                  .slice(0, 2);
+                const cronN = ag.cronEnabled ? 1 : 0;
+                return (
+                  <motion.div
+                    key={ag.id}
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.04, duration: 0.2 }}
+                  >
+                    <article
+                      className={cn(
+                        "flex min-h-[19rem] flex-col rounded-[1.5rem] border border-[var(--theme-border)] bg-[var(--theme-card)] p-3 shadow-[0_20px_60px_color-mix(in_srgb,var(--theme-shadow)_14%,transparent)]",
+                        focusId === ag.id && "ring-1 ring-[var(--theme-accent)]",
+                      )}
+                      onClick={() => setFocusId(ag.id)}
+                    >
+                      <div className="relative flex min-h-8 items-center">
+                        <div className="absolute left-0 flex items-center">
+                          <button
+                            type="button"
+                            aria-label={cronN > 0 ? `Cron: ${ag.cronExpr || "on"}` : "No agent cron"}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setCronPanelFor((c) => (c === ag.id ? null : ag.id));
+                            }}
+                            className={cn(
+                              "inline-flex h-8 shrink-0 items-center gap-1 rounded-lg px-1.5 text-[var(--theme-muted)] transition-colors hover:bg-[var(--theme-bg)] hover:text-[var(--theme-text)]",
+                              cronPanelFor === ag.id && "bg-[var(--theme-bg)] text-[var(--theme-text)]",
+                            )}
+                          >
+                            <Clock className="h-3.5 w-3.5" strokeWidth={2} />
+                            {cronN > 0 ? (
+                              <span className="inline-flex min-w-4 items-center justify-center rounded-full bg-[var(--theme-bg)] px-1.5 text-[10px] font-medium text-[var(--theme-text)]">
+                                {cronN}
+                              </span>
+                            ) : null}
+                          </button>
+                        </div>
+                        <div className="flex w-full justify-center px-16">
+                          <h3 className="min-w-0 text-center text-sm font-semibold text-[var(--theme-text)]">
+                            <span className="inline-flex max-w-full items-center justify-center gap-2">
+                              <span className="truncate">{displayName}</span>
+                              <span
+                                className={statusDotClass(ag.status)}
+                                aria-label={ag.status}
+                                title={ag.status}
+                              />
+                            </span>
+                          </h3>
+                        </div>
+                        <div className="absolute right-0 flex items-center gap-0.5">
+                          <button
+                            type="button"
+                            aria-label={isActive ? `Pause ${displayName}` : `Run ${displayName}`}
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              setBusy(ag.id);
+                              const { error: err } = isActive
+                                ? await workspaceOperationsAdapter.pause(ag.id)
+                                : await workspaceOperationsAdapter.play(ag.id);
+                              setBusy(null);
+                              if (err) setError(err);
+                              else void load();
+                            }}
+                            disabled={!!busy}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--theme-muted)] transition-colors hover:bg-[var(--theme-bg)] hover:text-[var(--theme-text)] disabled:opacity-50"
+                          >
+                            {busy === ag.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : isActive ? (
+                              <Pause className="h-4 w-4" />
+                            ) : (
+                              <Play className="h-4 w-4" />
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            aria-label={`Open settings for ${displayName}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openDetail(ag);
+                            }}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--theme-muted)] transition-colors hover:bg-[var(--theme-bg)] hover:text-[var(--theme-text)]"
+                          >
+                            <Settings2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col items-center gap-1 px-2 py-2 text-center">
+                        <div className="flex size-12 shrink-0 items-center justify-center text-3xl leading-none" aria-hidden>
+                          {em}
+                        </div>
+                        <p className="w-full truncate text-[11px] text-[var(--theme-muted)]">
+                          {ag.systemPrompt ? ag.systemPrompt : "No system prompt (HAM v0)."}
+                        </p>
+                        <p className="w-full truncate text-[10px] text-[var(--theme-muted)]/85">
+                          {ag.cronEnabled ? `Cron · ${ag.cronExpr || "expr"}` : "Manual & messages only"}
+                        </p>
+                      </div>
+
+                      <AnimatePresence initial={false}>
+                        {cronPanelFor === ag.id ? (
+                          <motion.section
+                            key="cron-panel"
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: "auto", opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            transition={{ duration: 0.18, ease: "easeOut" }}
+                            className="overflow-hidden"
+                          >
+                            <div
+                              className="mb-2 rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <label className="flex cursor-pointer items-center gap-2 text-xs text-[var(--theme-text)]">
+                                <input
+                                  type="checkbox"
+                                  checked={ag.cronEnabled}
+                                  onChange={async (e) => {
+                                    setBusy(ag.id);
+                                    const { error: err } = await workspaceOperationsAdapter.patchAgent(ag.id, {
+                                      cronEnabled: e.target.checked,
+                                      cronExpr: ag.cronExpr,
+                                    });
+                                    setBusy(null);
+                                    if (err) setError(err);
+                                    else void load();
+                                  }}
+                                />
+                                Enable cron for this agent
+                              </label>
+                              <p className="mt-1 font-mono text-[10px] text-[var(--theme-muted)]">{ag.cronExpr || "—"}</p>
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                className="mt-2 h-7 w-full text-[10px]"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openDetail(ag);
+                                }}
+                              >
+                                Edit in agent settings
+                              </Button>
+                            </div>
+                          </motion.section>
+                        ) : null}
+                      </AnimatePresence>
+
+                      <div className="mt-auto min-h-0 flex-1 border-t border-[var(--theme-border)] pt-2">
+                        <p className="mb-1 text-[9px] font-semibold uppercase text-[var(--theme-muted)]">Recent output</p>
+                        <div className="hww-scroll max-h-[100px] space-y-1 overflow-y-auto text-left text-[10px] text-[var(--theme-text)]">
+                          {lastLines.length === 0 ? (
+                            <p className="text-[var(--theme-muted)]">—</p>
+                          ) : (
+                            lastLines.map((o) => (
+                              <div key={`${o.at}`} className="line-clamp-2 rounded-lg border border-[var(--theme-border)]/60 bg-[var(--theme-bg)] p-1.5">
+                                <HwwText text={o.line} />
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    </article>
+                  </motion.div>
+                );
+              })}
+
+              <motion.button
+                type="button"
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: agents.length * 0.04, duration: 0.2 }}
+                onClick={() => setNewOpen(true)}
+                className="flex min-h-[19rem] flex-col items-center justify-center rounded-[1.5rem] border border-dashed border-[var(--theme-border)] bg-[var(--theme-card)] p-4 text-center shadow-[0_20px_60px_color-mix(in_srgb,var(--theme-shadow)_10%,transparent)] transition-colors hover:border-[var(--theme-accent)] hover:bg-[var(--theme-accent-soft)]"
+              >
+                <Plus className="h-8 w-8 text-[var(--theme-muted)]" strokeWidth={1.5} />
+                <span className="mt-3 text-sm text-[var(--theme-muted)]">Add Agent</span>
+              </motion.button>
+            </div>
+
+            <section className="rounded-3xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-5 shadow-[0_24px_80px_var(--theme-shadow)]">
+              <h2 className="text-lg font-semibold text-[var(--theme-text)]">Recent Activity</h2>
+              <p className="mt-1 text-sm text-[var(--theme-muted-2)]">Latest outputs across the team</p>
+              <div className="mt-4 space-y-2">
+                {recentActivity.length > 0 ? (
+                  recentActivity.map((l) => {
+                    const agMeta = agents.find((a) => a.id === l.id);
+                    return (
+                      <div
+                        key={`${l.id}-${l.at}-${l.line.slice(0, 8)}`}
+                        className="flex flex-col gap-1 rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 md:flex-row md:items-center md:justify-between"
+                      >
+                        <p className="text-sm text-[var(--theme-text)]">
+                          <span className="mr-1">{agMeta?.emoji ?? "🤖"}</span>
+                          <span className="font-medium">{agMeta ? stripEmojiPrefix(agMeta.name) : l.agent}:</span>{" "}
+                          <span className="line-clamp-2 text-[var(--theme-muted-2)]">{l.line}</span>
+                        </p>
+                        <span className="shrink-0 text-sm text-[var(--theme-muted)]">{fmtRelative(l.at)}</span>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-6 text-sm text-[var(--theme-muted)]">
+                    No recent activity yet.
                   </div>
-                  <div className="min-w-[4.5rem] rounded-lg border border-white/10 bg-black/30 py-1.5">
-                    <div className="text-white/40">Active</div>
-                    <div className="text-lg font-semibold text-emerald-200/90">{activeCount}</div>
-                  </div>
-                  <div className="min-w-[4.5rem] rounded-lg border border-white/10 bg-black/30 py-1.5">
-                    <div className="text-white/40">Cron</div>
-                    <div className="text-lg font-semibold text-amber-200/90">{jobs.length}</div>
+                )}
+              </div>
+            </section>
+
+            <section className="rounded-3xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-4 shadow-[0_20px_60px_var(--theme-shadow)]">
+              <div className="border-b border-[var(--theme-border)] pb-2">
+                <h2 className="text-sm font-semibold text-[var(--theme-text)]">Team bridge</h2>
+                <p className="text-xs text-[var(--theme-muted-2)]">
+                  HAM v0: messages go through <code className="text-[var(--theme-muted)]">/message</code> (synthetic echo)
+                </p>
+              </div>
+              <div className="mt-2 flex min-h-0 flex-col gap-2 md:grid md:grid-cols-[1fr,18rem] md:items-stretch">
+                <div className="hww-scroll min-h-[140px] max-h-48 space-y-1.5 overflow-auto rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] p-2">
+                    {focusAgent ? (
+                    focusAgent.outputs
+                      .slice()
+                      .sort((a, b) => a.at - b.at)
+                      .map((o) => (
+                        <div key={`${o.at}-${o.line.slice(0, 16)}`} className="rounded-lg border border-[var(--theme-border)]/50 p-1.5 text-[10px] text-[var(--theme-text)]">
+                          <HwwText text={o.line} />
+                        </div>
+                      ))
+                  ) : (
+                    <p className="p-2 text-sm text-[var(--theme-muted)]">Click an agent card to focus, or open settings for full edits.</p>
+                  )}
+                </div>
+                <div className="flex flex-col justify-end gap-1 rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] p-2">
+                  <input
+                    className="h-9 w-full rounded-lg border border-[var(--theme-border)] bg-[var(--theme-card)] px-2 text-xs text-[var(--theme-text)] placeholder:text-[var(--theme-muted)]"
+                    placeholder={focusId ? "Message the focused agent…" : "Click a card above to focus an agent"}
+                    value={chatDraft}
+                    onChange={(e) => setChatDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        void sendChat();
+                      }
+                    }}
+                    disabled={!focusId}
+                  />
+                  <div className="flex justify-end">
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="bg-[var(--theme-accent)] text-[color-mix(in_srgb,var(--theme-text)_8%,#041208)]"
+                      disabled={!focusId || !chatDraft.trim() || !!busy}
+                      onClick={() => void sendChat()}
+                    >
+                      <Activity className="mr-1 h-3.5 w-3.5" />
+                      Send
+                    </Button>
                   </div>
                 </div>
               </div>
-              <div className="mt-2 flex h-1.5 overflow-hidden rounded-full bg-black/50">
-                <div
-                  className="h-full bg-gradient-to-r from-cyan-500/60 to-violet-500/50"
-                  style={{ width: `${Math.min(100, (activeCount / Math.max(1, agents.length)) * 100)}%` }}
-                />
+            </section>
+
+            {jobs.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-[var(--theme-muted)]">Schedules &amp; cron registry</p>
+                <ul className="mt-2 flex flex-wrap gap-2">
+                  {jobs.map((j) => (
+                    <li
+                      key={j.id}
+                      className="flex min-w-0 max-w-sm items-center gap-2 rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-card)] px-3 py-1.5 text-[11px] text-[var(--theme-text)]"
+                    >
+                      <Clock className="h-3.5 w-3.5 shrink-0 text-[var(--theme-warning)]" />
+                      <span className="min-w-0 truncate font-medium">{j.name}</span>
+                      <code className="shrink-0 text-[10px] text-[var(--theme-accent)]">{j.cronExpr}</code>
+                      <label className="ml-auto flex items-center gap-1 text-[10px] text-[var(--theme-muted)]">
+                        <input
+                          type="checkbox"
+                          checked={j.enabled}
+                          onChange={async (e) => {
+                            setBusy(j.id);
+                            const { error: err } = await workspaceOperationsAdapter.patchScheduled(j.id, { enabled: e.target.checked });
+                            setBusy(null);
+                            if (err) setError(err);
+                            else void load();
+                          }}
+                        />
+                        on
+                      </label>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 w-7 shrink-0 p-0 text-red-300"
+                        onClick={async () => {
+                          if (!window.confirm("Delete scheduled job?")) return;
+                          setBusy(j.id);
+                          const { error: err } = await workspaceOperationsAdapter.deleteScheduled(j.id);
+                          setBusy(null);
+                          if (err) setError(err);
+                          else void load();
+                        }}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
               </div>
-            </div>
-
-            <div className="rounded-xl border border-white/10 bg-black/25 p-2">
-              <p className="text-[9px] font-semibold uppercase text-white/45">Recent activity</p>
-              <ul className="hww-scroll mt-1 max-h-28 space-y-0.5 overflow-auto text-[10px] text-white/65">
-                {recentActivity.length === 0 && <li className="text-white/35">No lines yet — play an agent or send chat.</li>}
-                {recentActivity.map((l) => (
-                  <li key={`${l.id}-${l.at}-${l.line.slice(0, 8)}`} className="line-clamp-1 font-mono">
-                    <span className="text-white/40">{fmt(l.at)}</span>{" "}
-                    <span className="text-amber-200/80">{l.agent}</span> · {l.line}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        </motion.div>
-      )}
-
-      {addJobOpen && (
-        <div className="mt-2 rounded-xl border border-white/10 bg-black/30 p-2">
-          <p className="text-[9px] font-semibold uppercase text-white/45">New scheduled job</p>
-          <div className="mt-1 flex flex-wrap items-end gap-2">
-            <input
-              className="hww-input h-7 max-w-xs rounded px-2 text-xs"
-              placeholder="Job name"
-              value={jobName}
-              onChange={(e) => setJobName(e.target.value)}
-            />
-            <input
-              className="hww-input h-7 max-w-xs rounded px-2 font-mono text-xs"
-              placeholder="0 * * * *"
-              value={jobCron}
-              onChange={(e) => setJobCron(e.target.value)}
-            />
-            <div className="flex flex-wrap gap-1">
-              {CRON_PRESETS.map((p) => (
-                <Button key={p.expr} type="button" size="sm" variant="secondary" className="h-6 text-[9px]" onClick={() => setJobCron(p.expr)}>
-                  {p.label}
-                </Button>
-              ))}
-            </div>
-            <Button type="button" size="sm" className="h-7" onClick={() => void onAddScheduled()} disabled={!!busy}>
-              Save
-            </Button>
-          </div>
-        </div>
-      )}
+            )}
+          </>
+        )}
+      </section>
 
       {newOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3" role="dialog">
-          <div className="w-full max-w-md rounded border border-white/10 bg-[#0a1218] p-3 shadow-xl">
-            <h2 className="flex items-center gap-1.5 text-sm font-semibold text-white/95">
-              <Bot className="h-4 w-4 text-cyan-300/80" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3" role="dialog" style={HWS_PARITY_THEME}>
+          <div className="w-full max-w-md rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-4 shadow-xl">
+            <h2 className="flex items-center gap-1.5 text-sm font-semibold text-[var(--theme-text)]">
+              <Bot className="h-4 w-4 text-[var(--theme-accent)]" />
               New agent
             </h2>
             <div className="mt-2 grid gap-2 text-xs">
               <div className="grid grid-cols-[4rem,1fr] items-end gap-2">
-                <label className="text-white/60">
+                <label className="text-[var(--theme-muted)]">
                   Emoji
                   <input
-                    className="hww-input mt-0.5 w-full text-center"
+                    className="mt-0.5 w-full rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] px-1 text-center text-[var(--theme-text)]"
                     value={newEmoji}
                     onChange={(e) => setNewEmoji(e.target.value)}
                     maxLength={8}
                   />
                 </label>
-                <label className="text-white/60">
+                <label className="text-[var(--theme-muted)]">
                   Name
                   <input
-                    className="hww-input mt-0.5 w-full"
+                    className="mt-0.5 w-full rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 text-[var(--theme-text)]"
                     value={newName}
                     onChange={(e) => setNewName(e.target.value)}
                   />
                 </label>
               </div>
-              <label className="text-white/60">
+              <label className="text-[var(--theme-muted)]">
                 Model
                 <select
-                  className="hww-input mt-0.5 w-full"
+                  className="mt-0.5 w-full rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-text)]"
                   value={newModel}
                   onChange={(e) => setNewModel(e.target.value)}
                 >
@@ -447,10 +810,10 @@ export function WorkspaceOperationsScreen() {
                   ))}
                 </select>
               </label>
-              <label className="text-white/60">
+              <label className="text-[var(--theme-muted)]">
                 System prompt
                 <textarea
-                  className="hww-input mt-0.5 min-h-[72px] w-full"
+                  className="mt-0.5 min-h-[72px] w-full rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-text)]"
                   value={newPrompt}
                   onChange={(e) => setNewPrompt(e.target.value)}
                   placeholder="You are a helpful agent operating in HAM v0 (local synthetic outputs)."
@@ -469,167 +832,10 @@ export function WorkspaceOperationsScreen() {
         </div>
       )}
 
-      {loading && agents.length === 0 && <p className="mt-2 text-[11px] text-white/40">Loading team…</p>}
-
-      {view === "overview" && (
-        <div className="mt-2 grid min-h-0 flex-1 gap-2 lg:grid-cols-[1fr,320px]">
-          <ul className="hww-scroll grid min-h-0 content-start grid-cols-1 gap-2 overflow-auto sm:grid-cols-2 xl:grid-cols-3">
-            {agents.length === 0 && !loading && (
-              <li className="col-span-full rounded border border-dashed border-white/15 p-4 text-center text-[11px] text-white/40">
-                <Sparkles className="mx-auto mb-1 h-5 w-5 text-amber-400/50" />
-                No agents. Create a card or wire gateway runtime later.
-              </li>
-            )}
-            {agents.map((ag) => {
-              const em = ag.emoji || "🤖";
-              return (
-                <li
-                  key={ag.id}
-                  className={cn(
-                    "flex min-h-[9rem] flex-col rounded-xl border p-2 transition-colors",
-                    focusId === ag.id
-                      ? "border-cyan-500/50 bg-cyan-500/5"
-                      : "border-white/10 bg-black/30 hover:border-white/20",
-                  )}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <button type="button" className="min-w-0 text-left" onClick={() => openDetail(ag)}>
-                      <span className="text-lg leading-none" aria-hidden>
-                        {em}
-                      </span>{" "}
-                      <span className="text-sm font-semibold text-amber-100/90 hover:underline">{ag.name}</span>
-                    </button>
-                    <span className={cn("shrink-0 rounded-full px-1.5 py-0.5 text-[8px] font-semibold uppercase", statusBadge(ag.status))}>
-                      {ag.status}
-                    </span>
-                  </div>
-                  <p className="mt-0.5 line-clamp-1 font-mono text-[10px] text-cyan-200/80">{ag.model}</p>
-                  <p className="line-clamp-2 text-[10px] text-white/40">{ag.systemPrompt || "No system prompt (HAM local)."}</p>
-                  <div className="mt-auto flex flex-wrap gap-1 pt-1.5">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="secondary"
-                      className="h-7 flex-1"
-                      disabled={!!busy}
-                      onClick={async (e) => {
-                        e.stopPropagation();
-                        setFocusId(ag.id);
-                        setBusy(ag.id);
-                        const { error: err } = await workspaceOperationsAdapter.play(ag.id);
-                        setBusy(null);
-                        if (err) setError(err);
-                        else void load();
-                      }}
-                    >
-                      {busy === ag.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
-                      Run
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="h-7 flex-1"
-                      disabled={!!busy}
-                      onClick={async (e) => {
-                        e.stopPropagation();
-                        setBusy(ag.id);
-                        const { error: err } = await workspaceOperationsAdapter.pause(ag.id);
-                        setBusy(null);
-                        if (err) setError(err);
-                        else void load();
-                      }}
-                    >
-                      <Pause className="h-3.5 w-3.5" />
-                      Pause
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 px-2"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setFocusId(ag.id);
-                      }}
-                    >
-                      <MessageSquare className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-
-          <div className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-white/10 bg-[#0b1018]">
-            <div className="border-b border-white/10 px-2 py-1.5">
-              <p className="text-[9px] font-semibold uppercase text-white/45">Inline team chat</p>
-              <p className="text-[9px] text-white/40">Posts through HAM <code className="text-white/50">/message</code> (synthetic echo).</p>
-            </div>
-            <div className="hww-scroll min-h-0 flex-1 space-y-1 overflow-auto p-2">
-              {focusAgent ? (
-                focusAgent.outputs
-                  .slice()
-                  .sort((a, b) => a.at - b.at)
-                  .map((o) => (
-                    <div
-                      key={`${o.at}-${o.line.slice(0, 24)}`}
-                      className="rounded border border-white/5 bg-black/30 p-1.5 text-[10px] text-white/80"
-                    >
-                      <HwwText text={o.line} />
-                    </div>
-                  ))
-              ) : (
-                <p className="text-[11px] text-white/40">Select an agent or tap the chat icon to focus.</p>
-              )}
-            </div>
-            <div className="border-t border-white/10 p-2">
-              <div className="flex gap-1">
-                <input
-                  className="hww-input h-8 min-w-0 flex-1 text-[11px]"
-                  placeholder={focusId ? "Message the focused agent…" : "Focus an agent first"}
-                  value={chatDraft}
-                  onChange={(e) => setChatDraft(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      void sendChat();
-                    }
-                  }}
-                  disabled={!focusId}
-                />
-                <Button type="button" size="sm" className="h-8 shrink-0" disabled={!focusId || !chatDraft.trim() || !!busy} onClick={() => void sendChat()}>
-                  <Activity className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {view === "outputs" && (
-        <div className="hww-scroll mt-2 min-h-0 flex-1 overflow-auto rounded-xl border border-white/10 bg-black/20 p-3">
-          <p className="text-[9px] font-semibold uppercase text-white/45">Full outputs (newest first)</p>
-          <div className="mt-2 space-y-1.5">
-            {allOutputLines.length === 0 ? (
-              <p className="text-[11px] text-white/40">—</p>
-            ) : (
-              allOutputLines.map((l) => (
-                <div key={`${l.id}-${l.at}-${l.line.slice(0, 20)}`} className="rounded border border-white/5 bg-black/40 p-2">
-                  <p className="text-[9px] text-amber-200/80">
-                    {l.agent} · {fmt(l.at)}
-                  </p>
-                  <HwwText text={l.line} className="mt-0.5" />
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      )}
-
       {detail && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3" role="dialog">
-          <div className="hww-scroll max-h-[min(90vh,640px)] w-full max-w-lg overflow-auto rounded border border-white/10 bg-[#0a1218] p-3 shadow-xl">
-            <h2 className="flex items-center gap-1.5 text-sm font-semibold text-white/95">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3" role="dialog" style={HWS_PARITY_THEME}>
+          <div className="hww-scroll max-h-[min(90vh,640px)] w-full max-w-lg overflow-auto rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-4 shadow-xl">
+            <h2 className="flex items-center gap-1.5 text-sm font-semibold text-[var(--theme-text)]">
               <span className="text-xl" aria-hidden>
                 {formEmoji || "🤖"}
               </span>
@@ -637,24 +843,28 @@ export function WorkspaceOperationsScreen() {
             </h2>
             <div className="mt-2 grid gap-2 text-xs">
               <div className="grid grid-cols-2 gap-2">
-                <label className="text-white/60">
+                <label className="text-[var(--theme-muted)]">
                   Emoji
                   <input
-                    className="hww-input mt-0.5 w-full text-center"
+                    className="mt-0.5 w-full rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] text-center text-[var(--theme-text)]"
                     value={formEmoji}
                     onChange={(e) => setFormEmoji(e.target.value)}
                     maxLength={8}
                   />
                 </label>
-                <label className="text-white/60">
+                <label className="text-[var(--theme-muted)]">
                   Name
-                  <input className="hww-input mt-0.5 w-full" value={formName} onChange={(e) => setFormName(e.target.value)} />
+                  <input
+                    className="mt-0.5 w-full rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-text)]"
+                    value={formName}
+                    onChange={(e) => setFormName(e.target.value)}
+                  />
                 </label>
               </div>
-              <label className="text-white/60">
+              <label className="text-[var(--theme-muted)]">
                 Model
                 <select
-                  className="hww-input mt-0.5 w-full"
+                  className="mt-0.5 w-full rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-text)]"
                   value={formModel}
                   onChange={(e) => setFormModel(e.target.value)}
                 >
@@ -665,22 +875,22 @@ export function WorkspaceOperationsScreen() {
                   ))}
                 </select>
               </label>
-              <label className="text-white/60">
+              <label className="text-[var(--theme-muted)]">
                 System prompt
                 <textarea
-                  className="hww-input mt-0.5 min-h-[96px] w-full"
+                  className="mt-0.5 min-h-[96px] w-full rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-text)]"
                   value={formPrompt}
                   onChange={(e) => setFormPrompt(e.target.value)}
                 />
               </label>
-              <label className="flex items-center gap-2 text-white/60">
+              <label className="flex items-center gap-2 text-[var(--theme-muted)]">
                 <input type="checkbox" checked={formCronOn} onChange={(e) => setFormCronOn(e.target.checked)} />
                 Cron
               </label>
-              <label className="text-white/60">
+              <label className="text-[var(--theme-muted)]">
                 Cron expression
                 <input
-                  className="hww-input mt-0.5 w-full font-mono"
+                  className="mt-0.5 w-full rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] font-mono text-[var(--theme-text)]"
                   value={formCron}
                   onChange={(e) => setFormCron(e.target.value)}
                 />
@@ -693,8 +903,8 @@ export function WorkspaceOperationsScreen() {
                 ))}
               </div>
             </div>
-            <p className="mt-2 text-[10px] text-white/40">Output buffer ({detail.outputs.length} lines)</p>
-            <div className="mt-1 max-h-32 overflow-auto rounded border border-white/10 bg-black/40 p-2">
+            <p className="mt-2 text-[10px] text-[var(--theme-muted)]">Output buffer ({detail.outputs.length} lines)</p>
+            <div className="mt-1 max-h-32 overflow-auto rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] p-2">
               {detail.outputs.length === 0 ? (
                 "—"
               ) : (
@@ -734,14 +944,14 @@ export function WorkspaceOperationsScreen() {
       )}
 
       {settingsOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3" role="dialog">
-          <div className="w-full max-w-md rounded border border-white/10 bg-[#0a1218] p-3 shadow-xl">
-            <h2 className="text-sm font-semibold text-white/95">Team settings</h2>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3" role="dialog" style={HWS_PARITY_THEME}>
+          <div className="w-full max-w-md rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-4 shadow-xl">
+            <h2 className="text-sm font-semibold text-[var(--theme-text)]">Team settings</h2>
             <div className="mt-2 grid gap-2 text-xs">
-              <label className="text-white/60">
+              <label className="text-[var(--theme-muted)]">
                 Default model
                 <select
-                  className="hww-input mt-0.5 w-full"
+                  className="mt-0.5 w-full rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-text)]"
                   value={sDraft.defaultModel}
                   onChange={(e) => setSDraft((s) => ({ ...s, defaultModel: e.target.value }))}
                 >
@@ -752,19 +962,19 @@ export function WorkspaceOperationsScreen() {
                   ))}
                 </select>
               </label>
-              <label className="text-white/60">
+              <label className="text-[var(--theme-muted)]">
                 Output retention (lines)
                 <input
                   type="number"
-                  className="hww-input mt-0.5 w-full"
+                  className="mt-0.5 w-full rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-text)]"
                   value={sDraft.outputsRetention}
                   onChange={(e) => setSDraft((s) => ({ ...s, outputsRetention: Number(e.target.value) }))}
                 />
               </label>
-              <label className="text-white/60">
+              <label className="text-[var(--theme-muted)]">
                 Notes
                 <textarea
-                  className="hww-input mt-0.5 min-h-[64px] w-full"
+                  className="mt-0.5 min-h-[64px] w-full rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-text)]"
                   value={sDraft.notes}
                   onChange={(e) => setSDraft((s) => ({ ...s, notes: e.target.value }))}
                 />
@@ -782,53 +992,6 @@ export function WorkspaceOperationsScreen() {
         </div>
       )}
 
-      {view === "overview" && jobs.length > 0 && (
-        <div className="mt-2 shrink-0">
-          <p className="text-[9px] font-semibold uppercase text-white/45">Schedules &amp; cron registry</p>
-          <ul className="mt-1 flex flex-wrap gap-1.5">
-            {jobs.map((j) => (
-              <li
-                key={j.id}
-                className="flex min-w-0 max-w-sm items-center gap-2 rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-[10px] text-white/80"
-              >
-                <Clock className="h-3 w-3 shrink-0 text-amber-300/80" />
-                <span className="min-w-0 truncate font-medium">{j.name}</span>
-                <code className="shrink-0 text-[9px] text-cyan-200/80">{j.cronExpr}</code>
-                <label className="ml-auto flex items-center gap-0.5 text-[8px] text-white/50">
-                  <input
-                    type="checkbox"
-                    checked={j.enabled}
-                    onChange={async (e) => {
-                      setBusy(j.id);
-                      const { error: err } = await workspaceOperationsAdapter.patchScheduled(j.id, { enabled: e.target.checked });
-                      setBusy(null);
-                      if (err) setError(err);
-                      else void load();
-                    }}
-                  />
-                  on
-                </label>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  className="h-6 w-6 shrink-0 p-0 text-red-300"
-                  onClick={async () => {
-                    if (!window.confirm("Delete scheduled job?")) return;
-                    setBusy(j.id);
-                    const { error: err } = await workspaceOperationsAdapter.deleteScheduled(j.id);
-                    setBusy(null);
-                    if (err) setError(err);
-                    else void load();
-                  }}
-                >
-                  <Trash2 className="h-3 w-3" />
-                </Button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </div>
+    </main>
   );
 }
