@@ -43,10 +43,74 @@ export function WorkspaceTerminalView({ mode, onMinimize, onClosePanel, classNam
   const [bridgeLine, setBridgeLine] = React.useState<string | null>(null);
   const [isMobile, setIsMobile] = React.useState(false);
   const outRef = React.useRef<HTMLPreElement | null>(null);
+  /** Viewport for output (used to approximate TTY cols/rows for the resize endpoint). */
+  const terminalAreaRef = React.useRef<HTMLDivElement | null>(null);
+  const activeSessionIdRef = React.useRef<string | null>(null);
+  const lastResizeRef = React.useRef<{
+    sid: string;
+    cols: number;
+    rows: number;
+  } | null>(null);
+  const resizeDebounce = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const sessionAttempted = React.useRef<Set<string>>(new Set());
   /** Byte offset per session for /output?after= */
   const pollCursor = React.useRef<Record<string, number>>({});
   const active = tabs.find((t) => t.id === activeId) ?? tabs[0]!;
+
+  /**
+   * Approximate grid from panel size. Backend has no true PTY yet; values are a hint for future TTY
+   * wiring. Uses 12px mono text: ~7.2px char width, ~16px line height, minus p-2 (8px) padding.
+   */
+  const measureAndResize = React.useCallback(() => {
+    const el = terminalAreaRef.current;
+    const sid = activeSessionIdRef.current;
+    if (!el || !sid) return;
+    if (typeof window === "undefined" || typeof window.ResizeObserver === "undefined") return;
+    const { width, height } = el.getBoundingClientRect();
+    const pad = 16;
+    const w = Math.max(0, width - pad);
+    const h = Math.max(0, height - pad);
+    const charPx = 7.2;
+    const linePx = 16;
+    const cols = Math.max(20, Math.min(200, Math.floor(w / charPx)));
+    const rows = Math.max(4, Math.min(200, Math.floor(h / linePx)));
+    const prev = lastResizeRef.current;
+    if (prev && prev.sid === sid && prev.cols === cols && prev.rows === rows) return;
+    lastResizeRef.current = { sid, cols, rows };
+    void workspaceTerminalAdapter.resize(sid, cols, rows);
+  }, []);
+
+  activeSessionIdRef.current = active.sessionId;
+
+  React.useLayoutEffect(() => {
+    const el = terminalAreaRef.current;
+    if (typeof window === "undefined" || !el || typeof ResizeObserver === "undefined") return;
+    const schedule = () => {
+      if (resizeDebounce.current) clearTimeout(resizeDebounce.current);
+      resizeDebounce.current = setTimeout(() => {
+        measureAndResize();
+        resizeDebounce.current = null;
+      }, 120);
+    };
+    const ro = new ResizeObserver(() => {
+      schedule();
+    });
+    ro.observe(el);
+    schedule();
+    return () => {
+      ro.disconnect();
+      if (resizeDebounce.current) clearTimeout(resizeDebounce.current);
+    };
+  }, [measureAndResize]);
+
+  React.useLayoutEffect(() => {
+    if (!active.sessionId) return;
+    const t = setTimeout(() => {
+      lastResizeRef.current = null;
+      measureAndResize();
+    }, 0);
+    return () => clearTimeout(t);
+  }, [active.sessionId, activeId, measureAndResize]);
 
   const append = React.useCallback((tabId: string, line: string) => {
     setTabs((prev) =>
@@ -291,7 +355,11 @@ export function WorkspaceTerminalView({ mode, onMinimize, onClosePanel, classNam
         </div>
       </div>
 
-      <div className="relative min-h-0 flex-1 overflow-hidden">
+      <div
+        ref={terminalAreaRef}
+        className="relative min-h-0 flex-1 overflow-hidden"
+        data-ham-term-viewport
+      >
         <pre
           ref={outRef}
           className="h-full min-h-0 w-full overflow-auto p-2 font-mono text-[12px] leading-relaxed whitespace-pre-wrap"
