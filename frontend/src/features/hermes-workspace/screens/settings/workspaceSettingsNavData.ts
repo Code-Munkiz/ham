@@ -3,8 +3,8 @@
  * Route: `/settings?section=<id>` for most items; `/settings/mcp` is a separate file route
  * (see `src/routes/settings/mcp.tsx` / `index.tsx` lines using `to="/settings/mcp"` / `search={{ section }}`).
  *
- * HAM: `/workspace/settings?section=…` and `/workspace/settings/mcp`, `/workspace/settings/providers`
- * (providers route is `src/routes/settings/providers.tsx` — not in the 11 nav ids; linked separately).
+ * HAM: `/workspace/settings?section=…` and `/workspace/settings/mcp`. Legacy `/workspace/settings/providers`
+ * redirects to `?section=hermes` (same content as Model & provider).
  */
 export type UpstreamSettingsNavId =
   | "connection"
@@ -64,7 +64,7 @@ const LEGACY_TAB_TO_SECTION: Record<string, UpstreamSettingsNavId> = {
   chat: "chat",
   notifications: "notifications",
   voice: "voice",
-  /** Old nav used a `providers` slug; dedicated route is `/workspace/settings/providers`. */
+  /** Old nav / bookmark may use `providers`; same as Model & provider. */
   providers: "hermes",
 };
 

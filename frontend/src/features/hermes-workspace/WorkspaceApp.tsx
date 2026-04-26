@@ -8,7 +8,6 @@ import { WorkspaceFilesScreen } from "./screens/files/WorkspaceFilesScreen";
 import { WorkspaceTerminalScreen } from "./screens/terminal/WorkspaceTerminalScreen";
 import { WorkspaceSettingsScreen } from "./screens/settings/WorkspaceSettingsScreen";
 import { WorkspaceMcpSettingsScreen } from "./screens/settings/WorkspaceMcpSettingsScreen";
-import { WorkspaceProvidersSettingsScreen } from "./screens/settings/WorkspaceProvidersSettingsScreen";
 import { WorkspaceJobsScreen } from "./screens/jobs/WorkspaceJobsScreen";
 import { WorkspaceTasksScreen } from "./screens/tasks/WorkspaceTasksScreen";
 import { WorkspaceConductorScreen } from "./screens/conductor/WorkspaceConductorScreen";
@@ -36,7 +35,10 @@ export function WorkspaceApp() {
           <Route path="files" element={<WorkspaceFilesScreen />} />
           <Route path="terminal" element={<WorkspaceTerminalScreen />} />
           <Route path="settings/mcp" element={<WorkspaceMcpSettingsScreen />} />
-          <Route path="settings/providers" element={<WorkspaceProvidersSettingsScreen />} />
+          <Route
+            path="settings/providers"
+            element={<Navigate to="/workspace/settings?section=hermes" replace />}
+          />
           <Route path="settings" element={<WorkspaceSettingsScreen />} />
           <Route path="jobs" element={<WorkspaceJobsScreen />} />
           <Route path="tasks" element={<WorkspaceTasksScreen />} />

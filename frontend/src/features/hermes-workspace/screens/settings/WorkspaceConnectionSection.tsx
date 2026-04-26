@@ -26,13 +26,6 @@ export function WorkspaceConnectionSection() {
           >
             Model &amp; provider
           </Link>
-          . Provider-focused layout:{" "}
-          <Link
-            className="text-[#7dd3fc] underline decoration-white/10 underline-offset-2 hover:decoration-[#7dd3fc]/50"
-            to="/workspace/settings/providers"
-          >
-            Provider setup
-          </Link>
           .
         </p>
       </section>

@@ -12,7 +12,6 @@ type WorkspaceSettingsSideNavProps = {
 export function WorkspaceSettingsSideNav({ activeSection, className }: WorkspaceSettingsSideNavProps) {
   const { pathname } = useLocation();
   const onMcp = pathname === "/workspace/settings/mcp" || pathname.endsWith("/workspace/settings/mcp");
-  const onProviders = pathname === "/workspace/settings/providers" || pathname.endsWith("/workspace/settings/providers");
 
   return (
     <div className={cn("flex min-h-0 min-w-0 flex-col gap-4", className)}>
@@ -44,7 +43,7 @@ export function WorkspaceSettingsSideNav({ activeSection, className }: Workspace
               </Link>
             );
           }
-          const active = !onMcp && !onProviders && activeSection === item.id;
+          const active = !onMcp && activeSection === item.id;
           return (
             <Link
               key={item.id}
@@ -61,18 +60,6 @@ export function WorkspaceSettingsSideNav({ activeSection, className }: Workspace
             </Link>
           );
         })}
-        <Link
-          to="/workspace/settings/providers"
-          replace
-          className={cn(
-            "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-semibold transition-colors",
-            onProviders
-              ? "border-white/20 bg-white/[0.08] text-[#e8eef8]"
-              : "border-white/[0.08] bg-black/20 text-white/45 hover:border-white/15 hover:text-white/75",
-          )}
-        >
-          Provider setup
-        </Link>
       </nav>
 
       <nav
@@ -104,7 +91,7 @@ export function WorkspaceSettingsSideNav({ activeSection, className }: Workspace
               </Link>
             );
           }
-          const active = !onMcp && !onProviders && activeSection === item.id;
+          const active = !onMcp && activeSection === item.id;
           return (
             <Link
               key={item.id}
@@ -127,19 +114,6 @@ export function WorkspaceSettingsSideNav({ activeSection, className }: Workspace
             </Link>
           );
         })}
-        <Link
-          to="/workspace/settings/providers"
-          replace
-          className={cn(
-            "relative mt-2 rounded-lg border border-white/[0.06] px-3 py-2 text-left text-sm transition-colors",
-            onProviders
-              ? "border-[#34d399]/40 bg-[color-mix(in_srgb,#10b981_10%,transparent)] font-semibold text-[#a7f3d0]"
-              : "text-white/45 hover:border-white/12 hover:bg-white/[0.04] hover:text-white/80",
-          )}
-        >
-          Provider setup
-          <span className="mt-0.5 block text-[10px] font-normal text-white/30">Dedicated route (upstream /settings/providers)</span>
-        </Link>
       </nav>
     </div>
   );

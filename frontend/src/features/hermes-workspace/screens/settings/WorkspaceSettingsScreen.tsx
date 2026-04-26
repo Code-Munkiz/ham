@@ -14,7 +14,7 @@ import { WorkspaceModelProviderSection } from "./WorkspaceModelProviderSection";
 
 /**
  * `src/routes/settings/index.tsx`: `?section=<SettingsNavId>`, default `hermes` (not connection).
- * MCP is not section-only upstream — use `/workspace/settings/mcp` (and `/workspace/settings/providers` for providers).
+ * MCP is not section-only upstream — use `/workspace/settings/mcp`.
  */
 export function WorkspaceSettingsScreen() {
   const [searchParams, setSearchParams] = useSearchParams();
