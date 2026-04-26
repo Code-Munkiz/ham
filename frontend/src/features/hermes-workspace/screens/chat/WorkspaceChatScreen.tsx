@@ -24,10 +24,11 @@ import { WorkspaceChatMessageList, type HwwMsgRow } from "./WorkspaceChatMessage
 import { WorkspaceChatComposer } from "./WorkspaceChatComposer";
 import { WorkspaceChatInspectorPanel } from "./WorkspaceChatInspectorPanel";
 import {
-  buildOutboundMessageWithAttachment,
+  buildOutboundMessageWithAttachments,
   fileToWorkspaceAttachment,
   formatAttachmentByteSize,
   MAX_WORKSPACE_ATTACHMENT_BYTES,
+  MAX_WORKSPACE_ATTACHMENT_COUNT,
   type WorkspaceComposerAttachment,
 } from "./composerAttachmentHelpers";
 import { cn } from "@/lib/utils";
@@ -58,7 +59,7 @@ export function WorkspaceChatScreen() {
   const [catalogLoading, setCatalogLoading] = React.useState(true);
   const [modelId, setModelId] = React.useState<string | null>(null);
   const [projectId, setProjectId] = React.useState<string | null>(null);
-  const [attachment, setAttachment] = React.useState<WorkspaceComposerAttachment | null>(null);
+  const [attachments, setAttachments] = React.useState<WorkspaceComposerAttachment[]>([]);
   const [voiceTranscribing, setVoiceTranscribing] = React.useState(false);
   const [inspectorOpen, setInspectorOpen] = React.useState(false);
   const endRef = React.useRef<HTMLDivElement | null>(null);
@@ -149,7 +150,7 @@ export function WorkspaceChatScreen() {
     setSessionId(null);
     setMessages([]);
     setInput("");
-    setAttachment(null);
+    setAttachments([]);
     setLoadErr(null);
     navigate({ pathname: "/workspace/chat", search: "" }, { replace: true });
   }, [navigate]);
@@ -158,17 +159,32 @@ export function WorkspaceChatScreen() {
     endRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
   }, [messages, sending]);
 
-  const handleAttachmentFile = React.useCallback(async (file: File) => {
-    try {
-      const a = await fileToWorkspaceAttachment(file);
-      if (a == null) {
-        toast.error(`File is too large (max ${formatAttachmentByteSize(MAX_WORKSPACE_ATTACHMENT_BYTES)}).`);
-        return;
+  const handleAddAttachments = React.useCallback(async (files: File[]) => {
+    if (files.length === 0) return;
+    const next: WorkspaceComposerAttachment[] = [];
+    for (const f of files) {
+      try {
+        const a = await fileToWorkspaceAttachment(f);
+        if (a == null) {
+          toast.error(
+            `“${f.name || "file"}” is too large (max ${formatAttachmentByteSize(MAX_WORKSPACE_ATTACHMENT_BYTES)} per file, after compression for images).`,
+          );
+        } else {
+          next.push(a);
+        }
+      } catch {
+        toast.error(`Could not read “${f.name || "file"}”.`);
       }
-      setAttachment(a);
-    } catch {
-      toast.error("Could not read the selected file.");
     }
+    if (next.length === 0) return;
+    setAttachments((prev) => {
+      const room = Math.max(0, MAX_WORKSPACE_ATTACHMENT_COUNT - prev.length);
+      const add = next.slice(0, room);
+      if (next.length > room) {
+        toast.error(`Up to ${MAX_WORKSPACE_ATTACHMENT_COUNT} attachments.`);
+      }
+      return [...prev, ...add];
+    });
   }, []);
 
   const handleVoiceBlob = React.useCallback(async (blob: Blob) => {
@@ -208,7 +224,7 @@ export function WorkspaceChatScreen() {
       const trimmed = outboundUserMessage.trim();
       if (!trimmed || sending || voiceTranscribing) return;
       setInput("");
-      setAttachment(null);
+      setAttachments([]);
       setLoadErr(null);
       setSending(true);
       const userRow: HwwMsgRow = {
@@ -294,7 +310,7 @@ export function WorkspaceChatScreen() {
 
   const onFormSubmit = () => {
     const trimmed = input.trim();
-    const outbound = buildOutboundMessageWithAttachment(trimmed, attachment);
+    const outbound = buildOutboundMessageWithAttachments(trimmed, attachments);
     if (!outbound.trim() || voiceTranscribing) return;
     void send(outbound);
   };
@@ -324,19 +340,20 @@ export function WorkspaceChatScreen() {
                 setInspectorOpen((o) => !o);
               }}
               className={cn(
-                "inline-flex h-9 items-center gap-1.5 rounded-lg border px-2.5 text-[11px] font-medium transition",
+                "inline-flex h-9 items-center gap-1 rounded-lg border px-2.5 text-[11px] font-medium transition",
                 inspectorOpen
                   ? "border-[#c45c12]/50 bg-white/[0.08] text-[#ffb27a]"
                   : "border-white/[0.1] bg-white/[0.06] text-white/80 hover:bg-white/[0.09] hover:text-white",
               )}
               aria-pressed={inspectorOpen}
-              title="Toggle Inspector"
+              title={inspectorOpen ? "Close inspector" : "Open inspector"}
             >
               {inspectorOpen ? (
                 <PanelRightClose className="h-3.5 w-3.5" strokeWidth={1.5} />
               ) : (
                 <PanelRight className="h-3.5 w-3.5" strokeWidth={1.5} />
               )}
+              <span className="font-mono text-[10px] text-white/60">{"{ }"}</span>
               <span className="hidden sm:inline">Inspector</span>
             </button>
             <button
@@ -382,11 +399,11 @@ export function WorkspaceChatScreen() {
           sending={sending}
           voiceTranscribing={voiceTranscribing}
           onVoiceBlob={handleVoiceBlob}
-          attachment={attachment}
-          onAttachmentClear={() => {
-            setAttachment(null);
+          attachments={attachments}
+          onAddAttachments={handleAddAttachments}
+          onRemoveAttachment={(id) => {
+            setAttachments((p) => p.filter((a) => a.id !== id));
           }}
-          onAttachmentFile={handleAttachmentFile}
           catalog={catalog}
           modelId={modelId}
           onModelIdChange={setModelId}
