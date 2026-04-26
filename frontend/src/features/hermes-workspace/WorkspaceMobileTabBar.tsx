@@ -3,11 +3,11 @@ import { NavLink, matchPath, useLocation } from "react-router-dom";
 import {
   Brain,
   Briefcase,
-  Command,
   FolderOpen,
   Home,
   MessageSquare,
   Settings,
+  Terminal,
   UserCircle,
   Wrench,
 } from "lucide-react";
@@ -17,7 +17,7 @@ const MOBILE_TABS: { to: string; label: string; end?: boolean; icon: React.Eleme
   { to: "/workspace", label: "Home", end: true, icon: Home },
   { to: "/workspace/chat", label: "Chat", icon: MessageSquare },
   { to: "/workspace/files", label: "Files", icon: FolderOpen },
-  { to: "/workspace/terminal", label: "Term", icon: Command },
+  { to: "/workspace/terminal", label: "Term", icon: Terminal },
   { to: "/workspace/jobs", label: "Jobs", icon: Briefcase },
   { to: "/workspace/memory", label: "Mem", icon: Brain },
   { to: "/workspace/skills", label: "Skills", icon: Wrench },
