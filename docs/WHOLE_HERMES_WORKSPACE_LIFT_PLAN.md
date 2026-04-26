@@ -145,7 +145,7 @@ All browser I/O goes through HAM’s existing client. **No** new transport in th
 | `/runs` / `/runs/:id` | Run list/detail screens; no transport change. |
 | `/settings` | Workspace settings pattern; `UnifiedSettings` data via `workspaceSettingsAdapter`. |
 | `/hermes`, `/control-plane`, `/logs`, `/analytics` | **Diagnostics** — secondary nav in Workspace; may stay “HAM” pages behind adapter until lift. |
-| `/extensions`, `/storage` | **Defer** or embed as Workspace panels. |
+| `/storage` | **Defer** or embed as Workspace panels. *(Mock `/extensions` page removed — use `/shop` / Capability Directory.)* |
 
 **Conflicts with [HERMES_WORKSPACE_FEATURE_MATRIX.md](HERMES_WORKSPACE_FEATURE_MATRIX.md):** the matrix allows experimental UI under e.g. `/hermes-lab/*`. A **decision** is required: either update that doc to the new `prefix` (e.g. `/workspace/*`) or keep `/hermes-lab/*` for **non-production** and use `/workspace/*` for production validation.
 

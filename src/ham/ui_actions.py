@@ -26,7 +26,6 @@ _ALLOWED_NAV_PREFIXES = (
     "/activity",
     "/analytics",
     "/profiles",
-    "/extensions",
     "/storage",
 )
 

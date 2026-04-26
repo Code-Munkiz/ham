@@ -4,6 +4,8 @@
 **Scope:** Evidence-based inventory only. **No deletions, moves, edits, or commits** were performed as part of this document.  
 **Product assumption:** Hermes Workspace (`/workspace/*`) is primary; War Room / legacy workbench surfaces are **candidates** for removal after human sign-off.
 
+**Cleanup Batch 1 (post-audit):** Mock `/extensions` route, `Extensions.tsx`, and `MOCK_EXTENSIONS` were **removed** from the repo; use `/shop` and Capability Directory for real capability discovery.
+
 ---
 
 ## 1. Executive summary
@@ -11,7 +13,7 @@
 - **Primary chat path:** `/chat` → redirect → `/workspace/chat` (`App.tsx` `ChatEntryRoute`). Nav primary “Chat” uses `primaryChatPath()` → workspace chat (`NavRail.tsx`).
 - **Legacy full workbench:** `/legacy-chat` still mounts `frontend/src/pages/Chat.tsx`, which owns the **War Room** stack (`WarRoomPane`, `CloudAgentPanel`, `BrowserTabPanel`, resizable split, workbench modes). This is **reachable only by direct URL** (not in `NavRail` primary or diagnostics lists).
 - **Browser / Browser Operator (frontend):** All runtime calls to `/api/browser/*` and `/api/browser-operator/*` from the frontend are confined to **`BrowserTabPanel.tsx`** and helpers in **`api.ts`**. **`HermesHub.tsx`** only documents `/api/browser/policy` textually and uses `fetchBrowserRuntimePolicy()` — it does not drive Playwright sessions. **Hermes Workspace screens** do not import `BrowserTabPanel` or browser session helpers (grep verified under `frontend/src/features/hermes-workspace`).
-- **Extensions:** `/extensions` is registered in `App.tsx` but **not linked from `NavRail`**. It uses **`MOCK_EXTENSIONS`** (`frontend/src/pages/Extensions.tsx` → `@/lib/ham/mocks`) — explicit mock product surface.
+- **Extensions:** *(removed Batch 1.)* Previously a mock page at `/extensions` with `MOCK_EXTENSIONS`; discovery is **`/shop`** / Capability Directory / My Library.
 - **Backend:** `/api/browser` and `/api/browser-operator` are **fully wired** in `src/api/server.py` with dedicated tests (`test_browser_runtime_api.py`, `test_browser_operator_api.py`, `test_browser_proposal_store.py`, `test_browser_runtime_sessions.py`). Removing them is **not** a frontend-only cleanup; it requires API + persistence + test + doc alignment.
 - **Control panel:** `ControlPanelOverlay` is mounted for immersive routes (`/chat`, `/workspace/*`, `/legacy-chat`) in `AppLayout.tsx`. It is a **large UI shell** (settings-style overlay); overlap with Workspace settings routes needs **human decision** before removal.
 - **Risks:** `VISION.md`, `README.md`, `src/api/chat.py` system prompt, `managedCloudAgent.ts`, UI actions, and workbench intent tests **still describe War Room / browser workbench** behavior tied to legacy chat. Removing War Room without updating these will **break narrative, operator hints, and tests**.
@@ -34,7 +36,6 @@
 | `/activity` | `Activity` | **Primary nav** |
 | `/shop` | `HamShop` | **Primary nav** (“Capabilities”) |
 | `/agents` | `AgentBuilder` | **Primary nav** |
-| `/extensions` | `Extensions` | **Hidden** |
 | `/runs`, `/runs/:runId` | Runs | Diagnostics menu |
 | `/control-plane` | `ControlPlaneRuns` | Diagnostics menu |
 | `/storage` | `Storage` | Standard shell (no primary icon — still routed) |
@@ -57,7 +58,7 @@ From `WorkspaceApp.tsx`: `chat`, `files`, `terminal`, `settings` (+ `settings/mc
 |------|----------------------------------|-------|
 | `/workspace/*` | **keep** | Product core |
 | `/legacy-chat` + `Chat.tsx` + `components/war-room/*` | **remove** (after migration) | War Room / browser / CloudAgentPanel; only consumer is legacy route |
-| `/extensions` + `MOCK_EXTENSIONS` | **remove** or **human decision** | Mock marketplace; not in nav |
+| ~~`/extensions` + `MOCK_EXTENSIONS`~~ | **removed** (Batch 1) | Mock surface deleted |
 | `/shop`, capability library/directory | **keep** (per product) | Align copy with “discovery” not execution |
 | `/skills` vs `/shop` | **human decision** | Both exist; diagnostics links Skills |
 | `/hermes` | **keep** (diagnostics) | Copy references browser policy / War Room in places — **stale terminology** |
@@ -78,8 +79,8 @@ From `WorkspaceApp.tsx`: `chat`, `files`, `terminal`, `settings` (+ `settings/mc
 | `BrowserProposalTray.tsx`, `BrowserProposeForm.tsx` | `BrowserTabPanel` | Legacy | Browser operator | **remove** with panel | None beyond panel |
 | `components/chat/*` used by `Chat.tsx` | `Chat.tsx` | Legacy | Mixed | **migrate first** / trim | Some may be shared — prove per file |
 | `WorkspaceApp.tsx` + `WorkspaceShell.tsx` + screens | `App.tsx` | Primary | Core | **keep** | — |
-| `pages/Extensions.tsx` | `App.tsx` | Hidden | Mock | **remove** | Low if unused |
-| `lib/ham/mocks.ts` (`MOCK_EXTENSIONS`) | `Extensions.tsx` | Hidden | Mock | **remove** with Extensions | — |
+| ~~`pages/Extensions.tsx`~~ | — | — | — | **removed** (Batch 1) | — |
+| ~~`MOCK_EXTENSIONS` in `mocks.ts`~~ | — | — | — | **removed** (Batch 1) | — |
 | `pages/HamShop.tsx` | `App.tsx` | Primary | Discovery | **keep** | — |
 | `pages/HermesSkills.tsx` | `App.tsx` | Diagnostics | Catalog | **keep** / align with Shop | — |
 | `pages/HermesHub.tsx` | `App.tsx` | Diagnostics | Diagnostics | **keep** | Stale “War Room” copy |
@@ -162,7 +163,7 @@ From `WorkspaceApp.tsx`: `chat`, `files`, `terminal`, `settings` (+ `settings/mc
 | Browser Operator | `war-room/*`, `api.ts`, `browser_operator.py`, `computer_control_pack_v1.md` | Coupled to War Room UI in FE | Repoint spec to **future** surface or drop |
 | Computer Control | `docs/capabilities/*`, `capability_directory_v1.json` | Correct as **future/local**; doc ties to `/api/browser` | Clarify **not** War Room |
 | goHAM | `computer_control_pack_v1.md`, `capability_directory_v1.json`, `readiness.py` | Future phrase; fine if labeled future | **keep** with clear “not shipped” |
-| MOCK_EXTENSIONS | `mocks.ts`, `Extensions.tsx` | Mock as product | Remove or label demo-only |
+| ~~MOCK_EXTENSIONS~~ | *(removed)* | Mock as product | **Removed** Batch 1 |
 | Hermes Workspace | `WorkspaceApp.tsx`, flags | Primary — good | Standardize capitalization in docs |
 | legacy-chat | `App.tsx`, `AppLayout.tsx` | Explicit escape hatch | Remove when workbench deleted |
 | archive | `ControlPanelOverlay` imports `Archive` icon | Cosmetic | N/A |
@@ -177,7 +178,7 @@ From `WorkspaceApp.tsx`: `chat`, `files`, `terminal`, `settings` (+ `settings/mc
 
 - `frontend/src/pages/Chat.tsx` — only routed from `/legacy-chat`.
 - `frontend/src/components/war-room/**` — only imported from `Chat.tsx` (re-verify `CapabilityBundleDetail` link to `/legacy-chat`).
-- `frontend/src/pages/Extensions.tsx` + `MOCK_EXTENSIONS` usage — if no external bookmarks requirement.
+- ~~`frontend/src/pages/Extensions.tsx` + `MOCK_EXTENSIONS`~~ — **done (Batch 1).**
 - **Partial:** Browser-only exports in `frontend/src/lib/ham/api.ts` — **only after** no remaining imports.
 
 **Not automatically safe:** Shared `components/chat/*` — must prove each file’s importers.
@@ -202,8 +203,8 @@ From `WorkspaceApp.tsx`: `chat`, `files`, `terminal`, `settings` (+ `settings/mc
 
 Each batch: small commit; run validation; **no** `git add .`.
 
-### Batch 1 — Mock Extensions
-- Remove: `Extensions.tsx` route, `mocks.ts` MOCK_EXTENSIONS (if unused elsewhere), any nav deep links.
+### Batch 1 — Mock Extensions (**done**)
+- Removed: `Extensions.tsx`, `/extensions` route in `App.tsx`, `MOCK_EXTENSIONS` from `mocks.ts`, `/extensions` from `ui_actions.py` allowlist; docs updated.
 - Tests: FE `npm run lint && npm run build`.
 - Risk: Low.
 
@@ -238,16 +239,16 @@ Each batch: small commit; run validation; **no** `git add .`.
 
 ## 11. Risks
 
-- **Undiscovered dynamic imports** or string-based routes (search `navigate(\"` for `legacy-chat`, `extensions`).
+- **Undiscovered dynamic imports** or string-based routes (search `navigate(\"` for `legacy-chat`).
 - **Desktop shell** may assume old paths — inspect `desktop/` and `desktopConfig` (not fully audited in this pass).
-- **External docs / bookmarks** to `/extensions`, `/legacy-chat`.
+- **External docs / bookmarks** to `/legacy-chat`. *( `/extensions` route removed.)*
 - **Cursor / managed cloud** flows may still depend on legacy composer behaviors in `Chat.tsx`.
 
 ---
 
 ## 12. Files and artifacts inspected (exact)
 
-**Frontend:** `App.tsx`, `NavRail.tsx`, `AppLayout.tsx` (partial), `Header.tsx` (grep), `WorkspaceApp.tsx`, `WorkspaceChatScreen.tsx` (header), `Extensions.tsx`, `CommandCenter.tsx` (header), `Chat.tsx` (header + imports), `HermesHub.tsx` (grep), `ControlPanelOverlay.tsx` (partial), all files under `frontend/src/components/war-room/`, grep under `frontend/src/features/hermes-workspace`, `CapabilityBundleDetail.tsx` (grep), `api.ts` (browser sections + grep consumers).
+**Frontend:** `App.tsx`, `NavRail.tsx`, `AppLayout.tsx` (partial), `Header.tsx` (grep), `WorkspaceApp.tsx`, `WorkspaceChatScreen.tsx` (header), ~~`Extensions.tsx`~~ (removed Batch 1), `CommandCenter.tsx` (header), `Chat.tsx` (header + imports), `HermesHub.tsx` (grep), `ControlPanelOverlay.tsx` (partial), all files under `frontend/src/components/war-room/`, grep under `frontend/src/features/hermes-workspace`, `CapabilityBundleDetail.tsx` (grep), `api.ts` (browser sections + grep consumers).
 
 **Backend:** `src/api/server.py`, grep `prefix=` across `src/api/*.py`, `src/api/chat.py` (workbench comment grep), `src/api/browser_runtime.py` / `browser_operator.py` (referenced via tests and grep).
 
@@ -263,7 +264,7 @@ Each batch: small commit; run validation; **no** `git add .`.
 
 1. Decide **product fate** of: in-app Playwright (`/api/browser`), Browser Operator, Cloud Agent panels currently in legacy `Chat.tsx`.  
 2. If **Workspace-only**: approve Batch 2+4 in principle; schedule backend batch only if API truly unused.  
-3. Review this document; **do not commit** the audit until stakeholders sign off.
+3. Review further batches (War Room, browser API, etc.) before execution; Batch 1 landed in-repo.
 
 ---
 

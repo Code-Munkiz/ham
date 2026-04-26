@@ -252,45 +252,6 @@ export const MOCK_KEYS: ApiKey[] = [
   }
 ];
 
-export const MOCK_EXTENSIONS = [
-  {
-    id: "ext_git_bridge",
-    name: "Git Inspector",
-    description: "Deep repository history analysis and change-set verification.",
-    category: "Connectivity",
-    author: "HAM Core",
-    installed: true,
-    powers: ["Context Extraction", "Diff Analysis"]
-  },
-  {
-    id: "ext_cloud_vision",
-    name: "Infrastructure Vision",
-    description: "Real-time visual monitoring of cloud topology and resource flow.",
-    category: "Monitoring",
-    author: "Hermes Labs",
-    installed: true,
-    powers: ["Drift Detection", "Visual Mapping"]
-  },
-  {
-    id: "ext_data_vault",
-    name: "Data Vault",
-    description: "Hardened AES-256 storage adapter for sensitive run artifacts.",
-    category: "Security",
-    author: "Shield Team",
-    installed: false,
-    powers: ["Encryption", "Persistence"]
-  },
-  {
-    id: "ext_neural_audit",
-    name: "Neural Auditor",
-    description: "Enforce advanced architectural consistency using LLM-driven consensus.",
-    category: "Intelli",
-    author: "HAM AI",
-    installed: true,
-    powers: ["Consensus", "Compliance"]
-  }
-];
-
 export const MOCK_ACTIVITY: ActivityEvent[] = [
   {
     id: "evt_01",

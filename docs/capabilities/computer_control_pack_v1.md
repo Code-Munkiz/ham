@@ -27,7 +27,7 @@ Computer Control in HAM is a **local runtime / tool capability layer**: it descr
 | **Not cloud-first** | Design assumes **local-only** runtime boundary for high-trust modes; any remote broker is **documentation-only** future work, not v1. |
 | **Not arbitrary Shop execution** | HAM Shop and Capability Directory remain **read-only discovery** for Phase 1; directory rows are **data**, not behavior ([`capability_bundle_directory_v1.md`](capability_bundle_directory_v1.md)). No “run this bundle” from Shop for computer control. |
 | **No credential exfiltration surface (v1)** | No secrets, raw config, env values, tokens, auth headers, or full local paths in operator-facing copy or APIs introduced by this pack in early phases. Phantom Token (see §3) is a **future** architectural pattern, not a shipped feature in v1. |
-| **No mock data as truth** | UI mocks (e.g. `MOCK_EXTENSIONS` in `frontend/src/lib/ham/mocks.ts`) must **never** back diagnostics or permission state for Computer Control. |
+| **No mock data as truth** | Demo or placeholder UI data must **never** back diagnostics or permission state for Computer Control. |
 | **Hermes = supervision / runtime inventory / skills** | Hermes CLI, vendored skills catalog, live overlay, and install preview/apply are **distinct** concerns; see §2. |
 
 ### Layer diagram (conceptual)
@@ -445,7 +445,7 @@ When Phase 1 is approved, expect touches **only** along these paths (subject to 
 - **No arbitrary shell execution** triggered from HAM Shop or directory rows.
 - **No cloud-hosted control** of the local computer; **no public remote control endpoint**.
 - **No bypassing OS permissions** or elevation stories in v1.
-- **No using Extensions mock data** (`MOCK_EXTENSIONS` etc.) as operational truth.
+- **No using mock marketplace or extension-grid demo data** as operational truth.
 - **No install / apply / run / launch / execute CTAs** for Computer Control in Phase 0–1.
 
 ---

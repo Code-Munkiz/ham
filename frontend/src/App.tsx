@@ -8,7 +8,6 @@ import { ClerkProvider } from "@clerk/clerk-react";
 import { ThemeProvider } from "next-themes";
 import { AppLayout } from "./components/layout/AppLayout";
 import Chat from "./pages/Chat";
-import Extensions from "./pages/Extensions";
 import Runs from "./pages/Runs";
 import RunDetail from "./pages/RunDetail";
 import ControlPlaneRuns from "./pages/ControlPlaneRuns";
@@ -62,7 +61,6 @@ function AppRoutes() {
           <Route path="/legacy-chat" element={<Chat />} />
           <Route path="/workspace/*" element={<WorkspaceApp />} />
           <Route path="/droids" element={<Navigate to="/command-center" replace />} />
-          <Route path="/extensions" element={<Extensions />} />
           <Route path="/runs" element={<Runs />} />
           <Route path="/runs/:runId" element={<RunDetail />} />
           <Route path="/control-plane" element={<ControlPlaneRuns />} />
