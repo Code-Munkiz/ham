@@ -1,8 +1,15 @@
 """
-HAM-owned workspace file tree + mutations for the Hermes Workspace Files UI.
+Local workspace file tree + mutations for the Hermes Files UI (the browser never touches the OS).
 
-Serves paths under HAM_WORKSPACE_FILES_ROOT (default: <repo>/.ham_workspace_sandbox).
-Hardening (RBAC, audit, stricter policy) is follow-up; paths are kept under root via resolve check.
+**Root directory (precedence):**
+
+1. ``HAM_WORKSPACE_ROOT`` — preferred: end-user’s local project/folder.
+2. ``HAM_WORKSPACE_FILES_ROOT`` — legacy alias if (1) is unset.
+3. ``<ham_repo>/.ham_workspace_sandbox`` — default when neither env is set (local dev).
+
+The API process must run on the same machine as this tree (Vite dev proxy to local ``uvicorn`` is
+the normal setup). A remote/Cloud API sees its own disk, not the user’s. Hardening (RBAC, audit) is
+follow-up; path escape is blocked via ``Path.resolve`` + ``relative_to`` the workspace root.
 """
 
 from __future__ import annotations
@@ -27,7 +34,10 @@ def _repo_root() -> Path:
 
 
 def _workspace_root() -> Path:
-    raw = (os.environ.get("HAM_WORKSPACE_FILES_ROOT") or "").strip()
+    raw = (
+        (os.environ.get("HAM_WORKSPACE_ROOT") or "").strip()
+        or (os.environ.get("HAM_WORKSPACE_FILES_ROOT") or "").strip()
+    )
     if raw:
         p = Path(raw).expanduser().resolve()
         p.mkdir(parents=True, exist_ok=True)

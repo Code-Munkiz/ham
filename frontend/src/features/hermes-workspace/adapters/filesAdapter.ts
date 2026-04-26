@@ -23,7 +23,8 @@ async function readJson<T>(res: Response): Promise<T> {
 }
 
 export const workspaceFileAdapter = {
-  description: "HAM /api/workspace/files — list/read/write and upload; root from HAM_WORKSPACE_FILES_ROOT.",
+  description:
+    "HAM /api/workspace/files — list/read/write and upload; server root is HAM_WORKSPACE_ROOT (or legacy HAM_WORKSPACE_FILES_ROOT) on the machine where FastAPI runs.",
 
   async list(): Promise<{ entries: WorkspaceFileEntry[]; bridge: FileBridgeState }> {
     try {

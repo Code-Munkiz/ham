@@ -1,5 +1,11 @@
 # Hermes Workspace — Files and Terminal HAM bridge
 
+**Local Files mode:** the Files API reads/writes a directory on the **same machine** as the FastAPI
+process. Set `HAM_WORKSPACE_ROOT` to your local folder; legacy `HAM_WORKSPACE_FILES_ROOT` is still
+honored. For real local project trees, run the Vite app with its dev proxy to a **local** API (e.g.
+`VITE_HAM_API_PROXY_TARGET=http://127.0.0.1:8000`); a browser pointed only at a remote deploy will not
+see your laptop’s files.
+
 Bridge table (UI remains on `workspaceFileAdapter` / `workspaceTerminalAdapter`):
 
 | Surface | Adapter call | HAM endpoint | Implementation | Data shape | Risk / follow-up |
