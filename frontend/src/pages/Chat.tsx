@@ -104,6 +104,8 @@ import { ResizableWorkbenchSplit } from "@/components/war-room/ResizableWorkbenc
 import { WarRoomPane } from "@/components/war-room/WarRoomPane";
 import { LiveManagedMissionBanner } from "@/components/war-room/LiveManagedMissionBanner";
 import type { WarRoomTabId } from "@/components/war-room/uplinkConfig";
+import { OperatorWorkspace } from "@/features/operator-workspace";
+import type { OperatorMessage, OperatorSessionItem } from "@/features/operator-workspace";
 
 type ChatRow = {
   id: string;
@@ -129,6 +131,7 @@ type ComposerAttachment = {
 const MAX_CHAT_ATTACHMENT_BYTES = 500 * 1024;
 const CHAT_ATTACHMENT_ACCEPT =
   "image/*,.txt,.csv,.json,.pdf,.xlsx,text/plain,text/csv,application/json,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+const USE_OPERATOR_WORKSPACE = true;
 
 const TEXT_FILE_EXTENSIONS = new Set([".txt", ".csv", ".json"]);
 const IMAGE_FILE_EXTENSIONS = new Set([
@@ -2283,6 +2286,224 @@ function ChatPageInner({
     viewMode !== "chat";
 
   managedCompletionGatesRef.current = { uplinkId, cloudMissionHandling, activeCloudAgentId };
+
+  const operatorMessages: OperatorMessage[] = messages;
+  const operatorSessions: OperatorSessionItem[] = historySessions.map((session) => ({
+    sessionId: session.session_id,
+    preview: session.preview || "",
+    turnCount: session.turn_count,
+    createdAt: session.created_at ?? null,
+    isActive: session.session_id === sessionId,
+  }));
+  if (USE_OPERATOR_WORKSPACE) {
+    return (
+      <ManagedCloudAgentProvider value={managedCloudAgentContextValue}>
+        <div className="flex h-full w-full flex-1 bg-[#030b11] font-sans relative overflow-hidden">
+          <OperatorWorkspace
+            activeAgentNote={activeAgentNote}
+            activeProjectName={activeProjectName}
+            messages={operatorMessages}
+            sessions={operatorSessions}
+            input={input}
+            sending={sending}
+            pipelineStatus={pipelineStatus}
+            chatError={chatError}
+            onInputChange={setInput}
+            onSend={(event) => void handleSend(event)}
+            onOpenHistory={() => setHistoryOpen(true)}
+            onStartNewChat={startNewChat}
+            onSelectSession={(sid) => void loadSession(sid)}
+          />
+
+          {historyOpen ? (
+            <div className="fixed inset-0 z-[100] flex">
+              <button
+                type="button"
+                aria-label="Close chat history"
+                className="flex-1 bg-black/70 backdrop-blur-xl"
+                onClick={() => setHistoryOpen(false)}
+              />
+              <div className="w-full max-w-md h-full border-l border-white/10 bg-[#0a0a0a]/95 backdrop-blur-xl shadow-2xl flex flex-col text-white">
+                <div className="h-12 flex items-center justify-between px-4 border-b border-white/10 shrink-0">
+                  <div>
+                    <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#FF6B00]">HISTORY</span>
+                    <p className="text-[8px] text-white/30 mt-0.5">Chat sessions + server managed missions (HAM API)</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={startNewChat}
+                      className="flex items-center gap-1.5 px-3 py-1 text-[8px] font-black uppercase tracking-widest text-[#FF6B00] border border-[#FF6B00]/30 rounded hover:bg-[#FF6B00]/10 transition-colors"
+                    >
+                      <Plus className="h-3 w-3" />
+                      New
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setHistoryOpen(false)}
+                      className="p-1.5 text-white/40 hover:text-white"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+                <div className="flex-1 overflow-y-auto p-4 space-y-6">
+                  <div>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-[#00E5FF] mb-2">Managed missions (server)</p>
+                    <p className="text-[8px] text-white/25 mb-2 leading-relaxed">
+                      Authoritative list from HAM&rsquo;s mission registry &mdash; use Open to focus this agent in Cloud (managed)
+                      and land on <span className="text-white/40">Overview</span>.
+                    </p>
+                    {serverMissionsLoading ? (
+                      <p className="text-[10px] text-white/30">Loading missions…</p>
+                    ) : serverMissions.length === 0 ? (
+                      <p className="text-[10px] text-white/25">No managed missions on this API host yet.</p>
+                    ) : (
+                      <ul className="space-y-2">
+                        {serverMissions.filter((m) => (m.cursor_agent_id || "").trim()).map((m) => {
+                          const aid = (m.cursor_agent_id || "").trim();
+                          const reg = m.mission_registry_id ? `${m.mission_registry_id.slice(0, 8)}…` : "—";
+                          const last = m.last_server_observed_at || m.updated_at;
+                          return (
+                            <li
+                              key={m.mission_registry_id || aid}
+                              className="border border-white/10 bg-white/[0.02] rounded-lg px-3 py-2.5"
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-[8px] font-mono text-white/35 truncate" title={aid}>
+                                    {aid}
+                                  </p>
+                                  <p className="text-[10px] text-white/70 mt-0.5 truncate" title={m.repository_observed || m.repo_key || ""}>
+                                    {m.repo_key || m.repository_observed || "—"}
+                                  </p>
+                                  <p className="text-[8px] text-white/30 mt-1">
+                                    <span className="text-white/45">Status: </span>
+                                    {m.mission_lifecycle || "—"}
+                                    {m.cursor_status_last_observed ? (
+                                      <span className="text-white/25"> · {m.cursor_status_last_observed}</span>
+                                    ) : null}
+                                  </p>
+                                  {last ? (
+                                    <p className="text-[7px] text-white/20 mt-0.5">Last seen (server): {last}</p>
+                                  ) : null}
+                                  <p className="text-[7px] text-white/15 mt-0.5 font-mono">registry {reg}</p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => openServerManagedMission(aid)}
+                                  className="shrink-0 text-[8px] font-black uppercase tracking-widest text-[#00E5FF] border border-[#00E5FF]/30 rounded px-2 py-1 hover:bg-[#00E5FF]/10"
+                                >
+                                  Open
+                                </button>
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-white/40 mb-2">Chat sessions</p>
+                    {historyLoading ? (
+                      <p className="text-[10px] text-white/30">Loading…</p>
+                    ) : historySessions.length === 0 ? (
+                      <p className="text-[10px] text-white/25">No past chats yet. Start a conversation and it'll appear here.</p>
+                    ) : (
+                      <ul className="space-y-2">
+                        {historySessions.map((s) => (
+                          <li key={s.session_id} className="list-none">
+                            <button
+                              type="button"
+                              onClick={() => void loadSession(s.session_id)}
+                              className={cn(
+                                "w-full text-left border rounded-lg px-4 py-3 transition-colors group",
+                                s.session_id === sessionId
+                                  ? "border-[#FF6B00]/40 bg-[#FF6B00]/10"
+                                  : "border-white/10 bg-white/[0.02] hover:border-white/20 hover:bg-white/5",
+                              )}
+                            >
+                              <div className="flex items-center justify-between gap-2 mb-1">
+                                <span className="text-[8px] font-mono text-white/30 truncate">
+                                  {s.session_id.slice(0, 8)}…
+                                </span>
+                                <span className="text-[8px] font-mono text-white/20 shrink-0">
+                                  {s.turn_count} msg{s.turn_count !== 1 ? "s" : ""}
+                                </span>
+                              </div>
+                              <p className="text-[11px] font-bold text-white/70 group-hover:text-white/90 truncate leading-snug">
+                                {s.preview || "Empty session"}
+                              </p>
+                              {s.created_at && (
+                                <span className="text-[8px] text-white/20 mt-1 block">
+                                  {new Date(s.created_at).toLocaleString()}
+                                </span>
+                              )}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {projectsOpen ? (
+            <div className="fixed inset-0 z-[100] flex">
+              <button
+                type="button"
+                aria-label="Close projects"
+                className="flex-1 bg-black/70 backdrop-blur-xl"
+                onClick={closeProjectsPanel}
+              />
+              <ProjectsRegistryPanel
+                mountRepo={mountRepo}
+                setMountRepo={setMountRepo}
+                mountRef={mountRef}
+                setMountRef={setMountRef}
+                activeCloudAgentId={activeCloudAgentId}
+                setActiveCloudAgentIdLive={setActiveCloudAgentIdLive}
+                onActiveMissionBlurCommit={(trimmed) => {
+                  if (trimmed) {
+                    activateCloudMission(trimmed, { managedSplit: { kind: "existing" } });
+                  }
+                }}
+                recentMissions={recentMissions}
+                formatShortcutAge={formatShortcutAge}
+                onShortcutUse={(id) => activateCloudMission(id, { managedSplit: { kind: "existing" } })}
+                projects={hamProjects}
+                projectsLoading={projectsLoading}
+                onOpenActivity={() => {
+                  closeProjectsPanel();
+                  navigate("/activity");
+                }}
+                onBindProject={(pid) => {
+                  setProjectId(pid);
+                  closeProjectsPanel();
+                }}
+                onUpdateProjectDefaultPolicy={onUpdateProjectDefaultPolicy}
+                activeCloudAgentIdForShortcut={activeCloudAgentId}
+                onClose={closeProjectsPanel}
+              />
+            </div>
+          ) : null}
+
+          <CloudAgentLaunchModal
+            open={cloudLaunchOpen}
+            onClose={() => setCloudLaunchOpen(false)}
+            defaultMissionHandling={cloudMissionHandling}
+            onActivateMission={(id, opts) => activateCloudMission(id, opts)}
+            recentMissions={recentMissions}
+            onRemoveRecent={removeRecentMission}
+            mountDefaults={mountDefaultsForLaunch}
+            projectId={projectId}
+          />
+        </div>
+      </ManagedCloudAgentProvider>
+    );
+  }
 
   return (
     <ManagedCloudAgentProvider value={managedCloudAgentContextValue}>

@@ -48,6 +48,27 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
+  // Route-scoped immersive layout: `/chat` owns the full workspace canvas.
+  // Keep providers/auth/runtime seams; hide old HAM shell chrome only on chat.
+  if (isChatPage) {
+    return (
+      <div className="h-screen w-screen overflow-hidden bg-[#030b11] text-foreground transition-colors duration-300 relative font-sans">
+        <HamDeploymentRestrictedBanner show={hamDeploymentRestricted} />
+        <div className="h-full w-full overflow-hidden">
+          {children}
+        </div>
+        <Toaster theme="dark" position="bottom-right" closeButton richColors />
+        <ControlPanelOverlay
+          isOpen={isControlPanelOpen}
+          onClose={() => setIsControlPanelOpen(false)}
+          activeTask={activeTask}
+          onTaskChange={setActiveTask}
+          selectedAgent={selectedAgent}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-screen overflow-hidden bg-white dark:bg-[#080808] text-foreground transition-colors duration-300 selection:bg-primary/30 relative font-sans">
       {/* Primary Navigation Rail */}
