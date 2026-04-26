@@ -172,7 +172,6 @@ function ready() {
     if (!fileList?.length) return;
     for (const file of Array.from(fileList)) {
       const form = new FormData();
-      form.append("action", "upload");
       form.append("path", uploadTargetRef.current || "");
       form.append("file", file);
       const r = await workspaceFileAdapter.postFormData(form);

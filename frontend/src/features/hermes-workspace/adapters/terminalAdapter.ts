@@ -1,8 +1,9 @@
 /**
- * `workspaceTerminalAdapter` — single surface for Terminal IA. PTY/session bridge gaps
- * stay here. Upstream reference: `src/components/terminal/terminal-workspace.tsx`
- * (`/api/terminal-input`, `/api/terminal-resize`, session bootstrap in-file).
+ * HAM-owned terminal bridge: `/api/workspace/terminal/*`.
+ * Upstream: `/api/terminal-input`, `/api/terminal-resize` (mapped to namespaced sessions).
  */
+
+const TBASE = "/api/workspace/terminal";
 
 export type TerminalBridgeState =
   | { status: "ready" }
@@ -11,15 +12,11 @@ export type TerminalBridgeState =
 const PENDING: TerminalBridgeState = { status: "pending", detail: "Runtime bridge pending" };
 
 export const workspaceTerminalAdapter = {
-  description:
-    "Browser terminal; Hermes used terminal-input/resize and session id per tab — HAM may wire without changing call sites here.",
+  description: "HAM /api/workspace/terminal/sessions — subprocess bridge; output polled via /output.",
 
-  /**
-   * Best-effort session creation. If no backend session endpoint responds, returns null id + pending.
-   */
   async createSession(_tabId: string): Promise<{ sessionId: string | null; bridge: TerminalBridgeState }> {
     try {
-      const res = await fetch("/api/terminal-session", {
+      const res = await fetch(`${TBASE}/sessions`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         credentials: "include",
@@ -43,11 +40,11 @@ export const workspaceTerminalAdapter = {
       return { ok: false, bridge: PENDING };
     }
     try {
-      const res = await fetch("/api/terminal-input", {
+      const res = await fetch(`${TBASE}/sessions/${encodeURIComponent(sessionId)}/input`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ sessionId, data }),
+        body: JSON.stringify({ data }),
       });
       if (!res.ok) {
         return { ok: false, bridge: PENDING };
@@ -67,11 +64,11 @@ export const workspaceTerminalAdapter = {
       return { ok: false, bridge: PENDING };
     }
     try {
-      const res = await fetch("/api/terminal-resize", {
+      const res = await fetch(`${TBASE}/sessions/${encodeURIComponent(sessionId)}/resize`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ sessionId, cols, rows }),
+        body: JSON.stringify({ cols, rows }),
       });
       if (!res.ok) {
         return { ok: false, bridge: PENDING };
@@ -79,6 +76,45 @@ export const workspaceTerminalAdapter = {
       return { ok: true, bridge: { status: "ready" } };
     } catch {
       return { ok: false, bridge: PENDING };
+    }
+  },
+
+  async pollOutput(
+    sessionId: string,
+    after: number,
+  ): Promise<{
+    text: string;
+    next: number;
+    bridge: TerminalBridgeState;
+  }> {
+    if (!sessionId) {
+      return { text: "", next: after, bridge: PENDING };
+    }
+    try {
+      const res = await fetch(
+        `${TBASE}/sessions/${encodeURIComponent(sessionId)}/output?after=${after}`,
+        { credentials: "include" },
+      );
+      if (!res.ok) {
+        return { text: "", next: after, bridge: PENDING };
+      }
+      const data = (await res.json()) as { text?: string; next?: number; len?: number };
+      const text = typeof data.text === "string" ? data.text : "";
+      const next = typeof data.next === "number" ? data.next : after + text.length;
+      return { text, next, bridge: { status: "ready" } };
+    } catch {
+      return { text: "", next: after, bridge: PENDING };
+    }
+  },
+
+  async closeSession(sessionId: string): Promise<void> {
+    try {
+      await fetch(`${TBASE}/sessions/${encodeURIComponent(sessionId)}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+    } catch {
+      /* ignore */
     }
   },
 } as const;

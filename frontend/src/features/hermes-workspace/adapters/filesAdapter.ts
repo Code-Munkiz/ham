@@ -1,8 +1,9 @@
 /**
- * `workspaceFileAdapter` — single surface for Files IA. Runtime bridge gaps stay here
- * (no scattered "blocked" copy in feature UI).
- * Upstream reference: `src/components/file-explorer/file-explorer-sidebar.tsx` (`/api/files`).
+ * `workspaceFileAdapter` — HAM-owned bridge: `/api/workspace/files*`.
+ * Upstream reference: `file-explorer-sidebar.tsx` (Hermes `/api/files` contract — mapped here).
  */
+
+const BASE = "/api/workspace/files";
 
 export type WorkspaceFileEntry = {
   name: string;
@@ -22,16 +23,11 @@ async function readJson<T>(res: Response): Promise<T> {
 }
 
 export const workspaceFileAdapter = {
-  description:
-    "Workspace files; Hermes used GET/POST /api/files — HAM may wire later without changing call sites here.",
+  description: "HAM /api/workspace/files — list/read/write and upload; root from HAM_WORKSPACE_FILES_ROOT.",
 
-  /**
-   * Lists workspace file tree. On missing endpoint or error, returns empty entries
-   * and `bridge: pending` so the UI can keep the full control surface.
-   */
   async list(): Promise<{ entries: WorkspaceFileEntry[]; bridge: FileBridgeState }> {
     try {
-      const res = await fetch("/api/files?action=list", { credentials: "include" });
+      const res = await fetch(`${BASE}?action=list`, { credentials: "include" });
       if (!res.ok) {
         return { entries: [], bridge: BRIDGE_PENDING };
       }
@@ -45,7 +41,7 @@ export const workspaceFileAdapter = {
 
   async postJson(body: unknown): Promise<{ ok: boolean; bridge: FileBridgeState; error?: string }> {
     try {
-      const res = await fetch("/api/files", {
+      const res = await fetch(BASE, {
         method: "POST",
         headers: { "content-type": "application/json" },
         credentials: "include",
@@ -64,9 +60,13 @@ export const workspaceFileAdapter = {
     }
   },
 
+  /**
+   * Multipart upload: FormData with `file` and optional `path` (target folder, relative to workspace root).
+   * Do not include legacy `action=upload` — server route is `POST /api/workspace/files/upload`.
+   */
   async postFormData(form: FormData): Promise<{ ok: boolean; bridge: FileBridgeState; error?: string }> {
     try {
-      const res = await fetch("/api/files", {
+      const res = await fetch(`${BASE}/upload`, {
         method: "POST",
         credentials: "include",
         body: form,
@@ -85,18 +85,16 @@ export const workspaceFileAdapter = {
   },
 
   buildDownloadUrl(path: string): string {
-    return `/api/files?action=download&path=${encodeURIComponent(path)}`;
+    return `${BASE}?action=download&path=${encodeURIComponent(path)}`;
   },
 
-  /** Optional text read for editor/preview. */
   async readText(
     path: string,
   ): Promise<{ text: string | null; bridge: FileBridgeState; error?: string }> {
     try {
-      const res = await fetch(
-        `/api/files?action=read&path=${encodeURIComponent(path)}`,
-        { credentials: "include" },
-      );
+      const res = await fetch(`${BASE}?action=read&path=${encodeURIComponent(path)}`, {
+        credentials: "include",
+      });
       if (!res.ok) {
         return { text: null, bridge: BRIDGE_PENDING };
       }

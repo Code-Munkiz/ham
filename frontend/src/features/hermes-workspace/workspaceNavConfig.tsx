@@ -48,6 +48,7 @@ const MOBILE_TITLE_RULES: { test: (p: string) => boolean; title: string }[] = [
   { test: (p) => p === "/workspace/memory" || p.startsWith("/workspace/memory/"), title: "Memory" },
   { test: (p) => p === "/workspace/skills" || p.startsWith("/workspace/skills/"), title: "Skills" },
   { test: (p) => p === "/workspace/profiles" || p.startsWith("/workspace/profiles/"), title: "Profiles" },
+  { test: (p) => p === "/workspace/settings" || p.startsWith("/workspace/settings/"), title: "Settings" },
 ];
 
 /**

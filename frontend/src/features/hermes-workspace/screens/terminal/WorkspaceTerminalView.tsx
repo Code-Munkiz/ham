@@ -44,11 +44,20 @@ export function WorkspaceTerminalView({ mode, onMinimize, onClosePanel, classNam
   const [isMobile, setIsMobile] = React.useState(false);
   const outRef = React.useRef<HTMLPreElement | null>(null);
   const sessionAttempted = React.useRef<Set<string>>(new Set());
+  /** Byte offset per session for /output?after= */
+  const pollCursor = React.useRef<Record<string, number>>({});
   const active = tabs.find((t) => t.id === activeId) ?? tabs[0]!;
 
   const append = React.useCallback((tabId: string, line: string) => {
     setTabs((prev) =>
       prev.map((t) => (t.id === tabId ? { ...t, outputLines: [...t.outputLines, line] } : t)),
+    );
+  }, []);
+
+  const appendStream = React.useCallback((tabId: string, chunk: string) => {
+    if (!chunk) return;
+    setTabs((prev) =>
+      prev.map((t) => (t.id === tabId ? { ...t, outputLines: [...t.outputLines, chunk] } : t)),
     );
   }, []);
 
@@ -102,6 +111,25 @@ export function WorkspaceTerminalView({ mode, onMinimize, onClosePanel, classNam
     };
   }, [activeId, activeSessionId, append]);
 
+  // Poll server process output
+  React.useEffect(() => {
+    const sid = active.sessionId;
+    if (!sid) return;
+    const tid = setInterval(() => {
+      void (async () => {
+        const after = pollCursor.current[sid] ?? 0;
+        const { text, next, bridge } = await workspaceTerminalAdapter.pollOutput(sid, after);
+        if (bridge.status === "ready" && text) {
+          appendStream(activeId, text);
+        }
+        pollCursor.current[sid] = next;
+      })();
+    }, 500);
+    return () => {
+      clearInterval(tid);
+    };
+  }, [active.sessionId, activeId, appendStream]);
+
   const createTab = () => {
     const id = newTabId();
     setTabs((p) => [...p, { id, title: `Shell ${p.length + 1}`, sessionId: null, outputLines: [] }]);
@@ -109,6 +137,11 @@ export function WorkspaceTerminalView({ mode, onMinimize, onClosePanel, classNam
   };
 
   const closeTab = (tabId: string) => {
+    const target = tabs.find((t) => t.id === tabId);
+    if (target?.sessionId) {
+      void workspaceTerminalAdapter.closeSession(target.sessionId);
+      delete pollCursor.current[target.sessionId];
+    }
     setTabs((prev) => {
       if (prev.length <= 1) {
         return [{ ...prev[0]!, outputLines: [], sessionId: null, title: "Shell" }];
@@ -124,7 +157,7 @@ export function WorkspaceTerminalView({ mode, onMinimize, onClosePanel, classNam
   const sendLine = (raw: string) => {
     const tab = active;
     const line = raw.endsWith("\n") || raw.length === 0 ? raw : raw + "\n";
-    append(tab.id, `> ${raw}`);
+    append(tab.id, `\n> ${raw}\n`);
     if (!tab.sessionId) {
       return;
     }
@@ -261,10 +294,10 @@ export function WorkspaceTerminalView({ mode, onMinimize, onClosePanel, classNam
       <div className="relative min-h-0 flex-1 overflow-hidden">
         <pre
           ref={outRef}
-          className="h-full min-h-0 w-full overflow-auto p-2 font-mono text-[12px] leading-relaxed"
+          className="h-full min-h-0 w-full overflow-auto p-2 font-mono text-[12px] leading-relaxed whitespace-pre-wrap"
           style={{ color: "#e6e6e6" }}
         >
-          {active.outputLines.join("\n")}
+          {active.outputLines.join("")}
         </pre>
       </div>
 

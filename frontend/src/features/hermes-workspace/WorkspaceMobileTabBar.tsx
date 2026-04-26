@@ -22,7 +22,7 @@ const MOBILE_TABS: { to: string; label: string; end?: boolean; icon: React.Eleme
   { to: "/workspace/memory", label: "Mem", icon: Brain },
   { to: "/workspace/skills", label: "Skills", icon: Wrench },
   { to: "/workspace/profiles", label: "Prof", icon: UserCircle },
-  { to: "/settings", label: "Set", icon: Settings },
+  { to: "/workspace/settings", label: "Set", icon: Settings },
 ];
 
 /** SHELL-009 — pattern from upstream `mobile-tab-bar.tsx` (hidden on chat routes). */

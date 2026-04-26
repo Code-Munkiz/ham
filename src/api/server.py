@@ -26,6 +26,8 @@ from src.api.hermes_runtime_inventory import router as hermes_runtime_inventory_
 from src.api.hermes_skills import router as hermes_skills_router
 from src.api.models_catalog import router as models_catalog_router
 from src.api.project_settings import router as project_settings_router
+from src.api.workspace_files import router as workspace_files_router
+from src.api.workspace_terminal import router as workspace_terminal_router
 from src.api.control_plane_runs import router as control_plane_runs_router
 from src.ham.agent_profiles import agents_config_from_merged
 from src.ham.clerk_auth import HamActor, clerk_authorization_is_clerk_session
@@ -87,6 +89,8 @@ app.include_router(hermes_skills_router)
 app.include_router(project_settings_router)
 app.include_router(control_plane_runs_router)
 app.include_router(models_catalog_router)
+app.include_router(workspace_files_router)
+app.include_router(workspace_terminal_router)
 
 _store = RunStore()
 

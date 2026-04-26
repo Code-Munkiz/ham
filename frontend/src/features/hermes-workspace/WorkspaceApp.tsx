@@ -7,6 +7,7 @@ import { WorkspaceChat } from "./WorkspaceChat";
 import { WorkspacePlaceholderPage } from "./WorkspacePlaceholder";
 import { WorkspaceFilesScreen } from "./screens/files/WorkspaceFilesScreen";
 import { WorkspaceTerminalScreen } from "./screens/terminal/WorkspaceTerminalScreen";
+import { WorkspaceSettingsScreen } from "./screens/settings/WorkspaceSettingsScreen";
 import "./hermesWorkspace.css";
 
 /**
@@ -26,6 +27,7 @@ export function WorkspaceApp() {
           <Route path="chat" element={<WorkspaceChat />} />
           <Route path="files" element={<WorkspaceFilesScreen />} />
           <Route path="terminal" element={<WorkspaceTerminalScreen />} />
+          <Route path="settings" element={<WorkspaceSettingsScreen />} />
           <Route
             path="jobs"
             element={
