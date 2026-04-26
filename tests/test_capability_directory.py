@@ -51,8 +51,8 @@ def test_directory_index() -> None:
     assert data["apply_available_globally"] is False
     assert "no_execution_notice" in data
     c = data["counts"]
-    assert c["capabilities"] >= 2
-    assert c["bundles"] == 4
+    assert c["capabilities"] >= 5
+    assert c["bundles"] == 5
     assert c["profile_templates"] >= 1
     assert data["trust_tier_counts"]["first_party"] == c["capabilities"] + c["bundles"] + c["profile_templates"]
     assert "endpoints" in data
@@ -76,13 +76,14 @@ def test_list_bundles() -> None:
     data = res.json()
     assert data["kind"] == "capability_directory_bundles"
     assert data["apply_available_globally"] is False
-    assert data["count"] == 4
+    assert data["count"] == 5
     ids = {b["id"] for b in data["bundles"]}
     assert ids == {
         "hermes-runtime-inspector",
         "hermes-skills-live-overlay",
         "cursor-cloud-agent-handoff",
         "desktop-release-readiness",
+        "computer-control-local-operator",
     }
 
 
@@ -105,6 +106,46 @@ def test_unknown_bundle_404() -> None:
     assert res.status_code == 404
     body = res.json()
     assert body["detail"]["error"]["code"] == "CAPABILITY_BUNDLE_UNKNOWN"
+
+
+def test_computer_control_pack_phase1_bundle() -> None:
+    """Computer Control Pack: read-only directory presence; no Phase 1 execution metadata."""
+    res = client.get("/api/capability-directory/bundles/computer-control-local-operator")
+    assert res.status_code == 200
+    data = res.json()
+    b = data["bundle"]
+    assert b["id"] == "computer-control-local-operator"
+    assert b["display_name"] == "Computer Control / Local Operator"
+    assert b["trust_tier"] == "first_party"
+    assert b["apply_available"] is False
+    assert b["preview_available"] is False
+    assert b["mutability"] == "read_only"
+    backends = set(b["required_backends"])
+    assert {
+        "desktop_shell",
+        "local_runtime",
+        "playwright_browser_service",
+        "hermes_runtime",
+        "future_mcp_host",
+    }.issubset(backends)
+    tiers = b.get("permission_tiers") or {}
+    assert tiers.get("goham_session") == "future"
+    assert tiers.get("observe_only") == "planned"
+    assert "computer-control" in b["tags"]
+    assert "goham-future" in b["tags"]
+    mode = (b.get("tools_policy") or {}).get("mode")
+    assert mode == "documentation_only_phase1"
+    # No forbidden CTA vocabulary in serialized bundle strings (Phase 1 is non-executing).
+    blob = json.dumps(b, ensure_ascii=False).lower()
+    for forbidden in (
+        '"install"',
+        '"apply"',
+        "run cta",
+        "launch cta",
+        "execute cta",
+        "connect cta",
+    ):
+        assert forbidden not in blob
 
 
 def test_all_records_non_mutating_apply() -> None:

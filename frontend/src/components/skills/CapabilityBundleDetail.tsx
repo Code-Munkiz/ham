@@ -133,6 +133,21 @@ export function CapabilityBundleDetail({
           ))}
         </ul>
       </div>
+      {bundle.permission_tiers && Object.keys(bundle.permission_tiers).length > 0 ? (
+        <div>
+          <p className="text-[9px] font-black uppercase text-white/35 mb-1">
+            Permission tiers (planning metadata)
+          </p>
+          <ul className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-[10px] text-white/55">
+            {Object.entries(bundle.permission_tiers).map(([k, v]) => (
+              <li key={k} className="flex justify-between gap-2 border border-white/5 rounded px-2 py-1">
+                <span className="font-mono text-white/45">{k}</span>
+                <span className="text-cyan-200/70">{v}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       {bundle.tags.length > 0 && (
         <div>
           <p className="text-[9px] font-black uppercase text-white/35 mb-1">Tags</p>

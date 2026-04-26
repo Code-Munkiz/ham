@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -99,6 +100,14 @@ def collect_readiness() -> dict[str, Any]:
             api_reachable = False
             api_error = str(exc)
 
+    browser_runtime_router_ok = False
+    hermes_cli_on_path: bool | None = None
+    playwright_importable: bool | None = None
+    if repo:
+        browser_runtime_router_ok = (repo / "src" / "api" / "browser_runtime.py").is_file()
+        hermes_cli_on_path = shutil.which("hermes") is not None
+        playwright_importable = importlib.util.find_spec("playwright") is not None
+
     return {
         "python_ok": py_ok,
         "python": sys.version.split()[0],
@@ -117,6 +126,9 @@ def collect_readiness() -> dict[str, Any]:
         "ham_api_base": api_base,
         "api_reachable": api_reachable,
         "api_error": api_error,
+        "browser_runtime_router_present": browser_runtime_router_ok,
+        "hermes_cli_on_path": hermes_cli_on_path,
+        "playwright_importable": playwright_importable,
     }
 
 
@@ -187,6 +199,37 @@ def run_readiness() -> None:
     else:
         err = data["api_error"] or "request failed"
         row("API /api/status", False, f"{base} — {err}")
+
+    if data["repo_root"]:
+        row(
+            "Browser runtime module (repo)",
+            data["browser_runtime_router_present"],
+            "src/api/browser_runtime.py present"
+            if data["browser_runtime_router_present"]
+            else "expected router file missing",
+        )
+        hc = data["hermes_cli_on_path"]
+        row(
+            "Hermes CLI on PATH",
+            hc,
+            "hermes found" if hc else "not found (optional for inventory)",
+        )
+        pw = data["playwright_importable"]
+        row(
+            "Playwright Python package",
+            pw,
+            "importable (optional for API browser routes)"
+            if pw
+            else "not detected in this Python env",
+        )
+    else:
+        row("Computer control readiness", None, "repo root not detected; skipped")
+
+    row(
+        "Computer Control Pack (Phase 1)",
+        True,
+        "directory-only; no execution; goHAM and MCP host future",
+    )
 
     console.print(table)
     console.print(

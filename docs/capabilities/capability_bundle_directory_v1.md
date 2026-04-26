@@ -10,6 +10,8 @@ Define a **HAM-native, versioned registry** of **atomic capabilities** and **com
 
 This document is the **contract sketch** for a future **Capability Bundle Directory**. It does **not** prescribe mutations to `.ham/settings.json`, Hermes config, MCP config, or profile files in v1.
 
+**Related:** local computer-control roadmap and Phase 1 directory bundle — [`computer_control_pack_v1.md`](computer_control_pack_v1.md).
+
 ---
 
 ## 2. Architecture alignment (non-negotiables)

@@ -1615,6 +1615,8 @@ export interface CapabilityDirectoryRecord {
   risks: string[];
   evidence_expectations: string[];
   tags: string[];
+  /** Optional autonomy tier labels (e.g. Computer Control Pack). */
+  permission_tiers?: Record<string, string>;
 }
 
 export interface CapabilityDirectoryIndexResponse {

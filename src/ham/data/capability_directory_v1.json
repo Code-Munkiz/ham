@@ -98,6 +98,148 @@
         "Overlay rows should align with catalog ids where installed."
       ],
       "tags": ["hermes", "skills", "read_only"]
+    },
+    {
+      "id": "atomic.browser-operator",
+      "schema_version": "capability.directory.v1",
+      "kind": "atomic_capability",
+      "display_name": "Browser operator (documentation)",
+      "summary": "Future approval-gated browser automation aligned with existing server browser runtime.",
+      "description": "Phase 1 metadata only. Maps to gated /api/browser routes when implemented in later phases. Does not enable automation from the directory row.",
+      "trust_tier": "first_party",
+      "provenance": {
+        "source_kind": "ham_repo",
+        "registry_revision": "1",
+        "note": "Computer Control Pack Phase 1; see docs/capabilities/computer_control_pack_v1.md"
+      },
+      "version": "1.0.0",
+      "required_backends": ["playwright_browser_service", "ham_api"],
+      "capabilities": ["api.browser_runtime.documentation"],
+      "skills": [],
+      "tools_policy": {
+        "mode": "documentation_only_phase1",
+        "notes": ["No browser actions triggered from Capability Directory in Phase 1."]
+      },
+      "mcp_policy": {
+        "mode": "none",
+        "notes": []
+      },
+      "model_policy": {
+        "mode": "not_applicable",
+        "notes": []
+      },
+      "memory_policy": {
+        "mode": "not_applicable",
+        "notes": []
+      },
+      "surfaces": [
+        { "route": "/shop", "label": "HAM Shop" },
+        { "route": "/chat", "label": "Chat" }
+      ],
+      "mutability": "read_only",
+      "preview_available": false,
+      "apply_available": false,
+      "risks": [
+        "Prompt injection via untrusted page content if browser automation is misconfigured in future phases."
+      ],
+      "evidence_expectations": [
+        "Future: session logs, URL history, optional screenshots for approved actions."
+      ],
+      "tags": ["browser-operator", "computer-control", "read_only"]
+    },
+    {
+      "id": "atomic.local-desktop-observe",
+      "schema_version": "capability.directory.v1",
+      "kind": "atomic_capability",
+      "display_name": "Local desktop observe (planned)",
+      "summary": "Planned passive desktop observation behind operator controls.",
+      "description": "Phase 3+ placeholder in Computer Control Pack. Phase 1 does not ship observation or capture.",
+      "trust_tier": "first_party",
+      "provenance": {
+        "source_kind": "ham_repo",
+        "registry_revision": "1",
+        "note": "Computer Control Pack Phase 1; see docs/capabilities/computer_control_pack_v1.md"
+      },
+      "version": "1.0.0",
+      "required_backends": ["desktop_shell", "local_runtime"],
+      "capabilities": ["desktop.observe.planned"],
+      "skills": [],
+      "tools_policy": {
+        "mode": "documentation_only_phase1",
+        "notes": ["No desktop IPC or capture in Phase 1."]
+      },
+      "mcp_policy": {
+        "mode": "future_local_host",
+        "notes": ["Optional future MCP attachment; not configured from HAM in Phase 1."]
+      },
+      "model_policy": {
+        "mode": "not_applicable",
+        "notes": []
+      },
+      "memory_policy": {
+        "mode": "not_applicable",
+        "notes": []
+      },
+      "surfaces": [
+        { "route": "/shop", "label": "HAM Shop" }
+      ],
+      "mutability": "read_only",
+      "preview_available": false,
+      "apply_available": false,
+      "risks": [
+        "Privacy sensitivity if screen or window metadata is collected without strict scope."
+      ],
+      "evidence_expectations": [
+        "Future: operator-visible observation timeline only within declared scope."
+      ],
+      "tags": ["local-runtime", "computer-control", "planned"]
+    },
+    {
+      "id": "atomic.goham-session-policy",
+      "schema_version": "capability.directory.v1",
+      "kind": "atomic_capability",
+      "display_name": "goHAM session policy (future)",
+      "summary": "Future high-trust local session policy metadata only.",
+      "description": "Phase 5 target per computer_control_pack_v1.md. Phase 1 documents tiers only; no goHAM runtime, activation UI, or session objects.",
+      "trust_tier": "first_party",
+      "provenance": {
+        "source_kind": "ham_repo",
+        "registry_revision": "1",
+        "note": "Computer Control Pack Phase 1; see docs/capabilities/computer_control_pack_v1.md"
+      },
+      "version": "1.0.0",
+      "required_backends": ["local_runtime", "future_mcp_host"],
+      "capabilities": ["policy.goham.future"],
+      "skills": [],
+      "tools_policy": {
+        "mode": "documentation_only_phase1",
+        "notes": ["goHAM is not available in Phase 1; no YOLO or full-control mode."]
+      },
+      "mcp_policy": {
+        "mode": "future_local_host",
+        "notes": ["MCP host and kill-switch placement TBD; not configured here."]
+      },
+      "model_policy": {
+        "mode": "not_applicable",
+        "notes": []
+      },
+      "memory_policy": {
+        "mode": "not_applicable",
+        "notes": []
+      },
+      "surfaces": [
+        { "route": "/shop", "label": "HAM Shop" }
+      ],
+      "mutability": "read_only",
+      "preview_available": false,
+      "apply_available": false,
+      "risks": [
+        "Misinterpretation as an active high-trust mode without explicit future implementation."
+      ],
+      "evidence_expectations": [
+        "Future: structured session log, emergency stop events, and demotion audit trail."
+      ],
+      "tags": ["goham-future", "computer-control", "policy"]
     }
   ],
   "bundles": [
@@ -318,6 +460,92 @@
         "Successful local CLI runs and published desktop artifacts per desktop/README."
       ],
       "tags": ["desktop", "cli", "packaging"]
+    },
+    {
+      "id": "computer-control-local-operator",
+      "schema_version": "capability.directory.v1",
+      "kind": "bundle",
+      "display_name": "Computer Control / Local Operator",
+      "summary": "Read-only pack: local computer-control roadmap, safety metadata, and prerequisites (Phase 1).",
+      "description": "First-party documentation bundle for Computer Control Pack v1. Phase 1 is observe-only at the product level: directory and Shop visibility only. No execution, no MCP activation, no Hermes or settings mutation, no goHAM session. Future phases may align gated /api/browser, desktop observation, bounded autopilot, and goHAM per docs/capabilities/computer_control_pack_v1.md.",
+      "trust_tier": "first_party",
+      "provenance": {
+        "source_kind": "ham_repo",
+        "registry_revision": "1",
+        "note": "Computer Control Pack Phase 1; spec docs/capabilities/computer_control_pack_v1.md"
+      },
+      "version": "1.0.0",
+      "required_backends": [
+        "desktop_shell",
+        "local_runtime",
+        "playwright_browser_service",
+        "hermes_runtime",
+        "future_mcp_host"
+      ],
+      "capabilities": [
+        "atomic.browser-operator",
+        "atomic.local-desktop-observe",
+        "atomic.goham-session-policy",
+        "api.browser_runtime.documentation"
+      ],
+      "skills": [],
+      "tools_policy": {
+        "mode": "documentation_only_phase1",
+        "notes": [
+          "No computer control execution from this directory row.",
+          "Does not invoke shell, MCP, or browser automation.",
+          "Cursor/Droid execution lanes remain separate; not a harness for this pack."
+        ]
+      },
+      "mcp_policy": {
+        "mode": "future_local_host",
+        "notes": [
+          "Phase 1: no MCP host configuration from HAM.",
+          "future_mcp_host is a planning placeholder (e.g. Desktop Commander class tools) only."
+        ]
+      },
+      "model_policy": {
+        "mode": "not_applicable",
+        "notes": ["Directory metadata; model selection unchanged."]
+      },
+      "memory_policy": {
+        "mode": "not_applicable",
+        "notes": []
+      },
+      "surfaces": [
+        { "route": "/shop", "label": "HAM Shop" },
+        { "route": "/hermes", "label": "Hermes Hub" },
+        { "route": "/chat", "label": "Chat" }
+      ],
+      "mutability": "read_only",
+      "preview_available": false,
+      "apply_available": false,
+      "permission_tiers": {
+        "observe_only": "planned",
+        "assistive": "planned",
+        "operator_approved": "future",
+        "bounded_autopilot": "future",
+        "goham_session": "future"
+      },
+      "risks": [
+        "Local filesystem access if future phases enable broad path scope without sandboxing.",
+        "Terminal execution and command injection if terminal tools are misconfigured in future phases.",
+        "Prompt injection via browser or untrusted content.",
+        "Credential exposure if secrets ever enter agent-visible context without Phantom Token-style controls.",
+        "Destructive or external actions (payments, bulk delete, unsolicited messages) without default-deny policy."
+      ],
+      "evidence_expectations": [
+        "Future: session logs and action traces for approved automation.",
+        "Future: screenshots or browser state snapshots where policy allows.",
+        "Future: pre/post file diffs for scoped edits where applicable."
+      ],
+      "tags": [
+        "computer-control",
+        "local-runtime",
+        "browser-operator",
+        "mcp",
+        "goham-future"
+      ]
     }
   ],
   "profile_templates": [
