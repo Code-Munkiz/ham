@@ -63,27 +63,35 @@ def test_workspace_terminal_resize_ok(client: TestClient) -> None:
 
 
 def test_workspace_terminal_input_then_poll_captures_text(client: TestClient) -> None:
-    """Best-effort: subprocess output is async; we only assert the buffer eventually grows or contains hint."""
+    """Reader uses read1() so Windows pipe output is not stuck behind BufferedReader.read(n) fill behavior."""
     r = client.post("/api/workspace/terminal/sessions")
     sid = r.json()["sessionId"]
-    o0 = client.get(f"/api/workspace/terminal/sessions/{sid}/output?after=0").json()
-    n0 = int(o0.get("len") or 0)
+    n0 = 0
+    if os.name == "nt":
+        for _ in range(50):
+            o0 = client.get(f"/api/workspace/terminal/sessions/{sid}/output?after=0").json()
+            n0 = int(o0.get("len") or 0)
+            if n0 > 0:
+                break
+            time.sleep(0.05)
+        assert n0 > 0, "Expected cmd startup banner in buffer (read1 path)"
+    else:
+        o0 = client.get(f"/api/workspace/terminal/sessions/{sid}/output?after=0").json()
+        n0 = int(o0.get("len") or 0)
     assert client.post(
         f"/api/workspace/terminal/sessions/{sid}/input",
         json={"data": _input_line()},
     ).status_code == 200
-    time.sleep(0.15)
-    saw_growth = False
-    for _ in range(30):
+    saw = False
+    for _ in range(40):
         out = client.get(f"/api/workspace/terminal/sessions/{sid}/output?after=0").json()
         t = (out.get("text") or "") if isinstance(out.get("text"), str) else ""
         n = int(out.get("len") or 0)
-        if n > n0 or "WSTPING" in t:
-            saw_growth = True
+        if "WSTPING" in t or n > n0 + 2:
+            saw = True
             break
         time.sleep(0.05)
-    if not saw_growth:
-        pytest.skip("No captured output in time (shell timing); bridge still accepted I/O 200s")
+    assert saw, "Expected command output (WSTPING) in polled buffer"
     out_end = client.get(f"/api/workspace/terminal/sessions/{sid}/output?after=0").json()
     assert out_end.get("len") is not None
     client.delete(f"/api/workspace/terminal/sessions/{sid}")

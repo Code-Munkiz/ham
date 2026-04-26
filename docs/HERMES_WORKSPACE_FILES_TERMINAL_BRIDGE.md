@@ -32,4 +32,6 @@ Bridge table (UI remains on `workspaceFileAdapter` / `workspaceTerminalAdapter`)
 
 **Hardening (not blocking bridge):** RBAC, audit logging, workspace root and path policy, process isolation, org/user policy, kill switch.
 
+**Terminal reader (Windows):** The background thread must call `BufferedIOBase.read1()` (or an unbuffered raw read), not `read(n)`: on Windows, `read(n)` on the subprocess `stdout` stream tries to **fill** *n* bytes, while `cmd.exe` only writes a short startup banner first, so the reader blocked indefinitely and the output buffer stayed empty. The shell’s `cwd` follows `HAM_WORKSPACE_ROOT` / `HAM_WORKSPACE_FILES_ROOT` when set and valid, so the prompt matches the Files tree.
+
 **Browser:** No API keys or privileged credentials in client bundles; use HAM FastAPI only; no `/api/hermes-proxy`.

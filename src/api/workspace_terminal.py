@@ -25,14 +25,24 @@ _sessions_lock = threading.Lock()
 _sessions: dict[str, dict[str, Any]] = {}
 
 
+def _terminal_cwd() -> str | None:
+    """Prefer project workspace so shell matches Files bridge when HAM is configured."""
+    for key in ("HAM_WORKSPACE_ROOT", "HAM_WORKSPACE_FILES_ROOT"):
+        raw = (os.environ.get(key) or "").strip()
+        if raw and os.path.isdir(raw):
+            return raw
+    return None
+
+
 def _spawn() -> subprocess.Popen[bytes]:
+    cwd = _terminal_cwd() or os.getcwd()
     if os.name == "nt":
         return subprocess.Popen(  # noqa: S603
             [os.environ.get("COMSPEC", "cmd.exe")],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            cwd=os.getcwd(),
+            cwd=cwd,
         )
     shell = os.environ.get("SHELL", "/bin/bash")
     return subprocess.Popen(  # noqa: S603
@@ -40,7 +50,7 @@ def _spawn() -> subprocess.Popen[bytes]:
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
-        cwd=os.getcwd(),
+        cwd=cwd,
     )
 
 
@@ -49,7 +59,9 @@ def _reader_thread(sid: str, proc: subprocess.Popen[bytes], done: threading.Even
         return
     while not done.is_set():
         try:
-            chunk = proc.stdout.read(1024)
+            # Do not use BufferedReader.read(n) here: on Windows it tries to *fill* n bytes
+            # and blocks while cmd only emitted a short prompt/banner, so the buffer never grew.
+            chunk = proc.stdout.read1(4096)
         except (ValueError, OSError):
             break
         if not chunk:
