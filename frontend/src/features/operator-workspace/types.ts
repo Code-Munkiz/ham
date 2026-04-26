@@ -24,3 +24,13 @@ export interface OperatorSessionItem {
   isActive: boolean;
 }
 
+export type OperatorAttachmentKind = "image" | "text" | "binary";
+
+export interface OperatorAttachment {
+  id: string;
+  name: string;
+  size: number;
+  kind: OperatorAttachmentKind;
+  payload: string;
+}
+

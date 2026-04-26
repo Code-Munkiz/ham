@@ -2,7 +2,7 @@ import * as React from "react";
 import { ChevronRight, Menu, Plus, Search, X } from "lucide-react";
 import { OperatorComposer } from "./OperatorComposer";
 import { OperatorMessageList } from "./OperatorMessageList";
-import type { OperatorMessage, OperatorSessionItem } from "./types";
+import type { OperatorAttachment, OperatorMessage, OperatorSessionItem } from "./types";
 import "./operatorWorkspace.css";
 
 type OperatorWorkspaceProps = {
@@ -12,9 +12,17 @@ type OperatorWorkspaceProps = {
   sessions: OperatorSessionItem[];
   input: string;
   sending: boolean;
+  voiceTranscribing: boolean;
   pipelineStatus: string;
   chatError: string | null;
+  attachment: OperatorAttachment | null;
+  attachmentAccept: string;
   onInputChange: (value: string) => void;
+  onAttachmentSelect: (file: File) => void;
+  onAttachmentClear: () => void;
+  onDictationText: (text: string) => void;
+  onVoiceBlob: (blob: Blob) => void;
+  onVoiceError: (message: string) => void;
   onSend: (event: React.FormEvent<HTMLFormElement>) => void;
   onOpenHistory: () => void;
   onStartNewChat: () => void;
@@ -34,9 +42,17 @@ export function OperatorWorkspace({
   sessions,
   input,
   sending,
+  voiceTranscribing,
   pipelineStatus,
   chatError,
+  attachment,
+  attachmentAccept,
   onInputChange,
+  onAttachmentSelect,
+  onAttachmentClear,
+  onDictationText,
+  onVoiceBlob,
+  onVoiceError,
   onSend,
   onOpenHistory,
   onStartNewChat,
@@ -172,9 +188,17 @@ export function OperatorWorkspace({
           <OperatorComposer
             input={input}
             sending={sending}
+            voiceTranscribing={voiceTranscribing}
             pipelineStatus={pipelineStatus}
             chatError={chatError}
+            attachment={attachment}
+            attachmentAccept={attachmentAccept}
             onInputChange={onInputChange}
+            onAttachmentSelect={onAttachmentSelect}
+            onAttachmentClear={onAttachmentClear}
+            onDictationText={onDictationText}
+            onVoiceBlob={onVoiceBlob}
+            onVoiceError={onVoiceError}
             onSend={onSend}
           />
         </section>

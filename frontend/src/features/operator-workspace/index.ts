@@ -1,3 +1,8 @@
 export { OperatorWorkspace } from "./OperatorWorkspace";
-export type { OperatorMessage, OperatorWorkspaceCapabilities } from "./types";
+export type {
+  OperatorAttachment,
+  OperatorMessage,
+  OperatorSessionItem,
+  OperatorWorkspaceCapabilities,
+} from "./types";
 

@@ -105,7 +105,11 @@ import { WarRoomPane } from "@/components/war-room/WarRoomPane";
 import { LiveManagedMissionBanner } from "@/components/war-room/LiveManagedMissionBanner";
 import type { WarRoomTabId } from "@/components/war-room/uplinkConfig";
 import { OperatorWorkspace } from "@/features/operator-workspace";
-import type { OperatorMessage, OperatorSessionItem } from "@/features/operator-workspace";
+import type {
+  OperatorAttachment,
+  OperatorMessage,
+  OperatorSessionItem,
+} from "@/features/operator-workspace";
 
 type ChatRow = {
   id: string;
@@ -2295,6 +2299,21 @@ function ChatPageInner({
     createdAt: session.created_at ?? null,
     isActive: session.session_id === sessionId,
   }));
+  const operatorAttachment: OperatorAttachment | null = composerAttachment
+    ? {
+        id: composerAttachment.id,
+        name: composerAttachment.name,
+        size: composerAttachment.size,
+        kind: composerAttachment.kind,
+        payload: composerAttachment.payload,
+      }
+    : null;
+  const handleWorkspaceDictationText = (text: string) => {
+    const next = text.trim();
+    if (!next) return;
+    setInput((prev) => (prev.trim() ? `${prev.trim()}\n${next}` : next));
+  };
+
   if (USE_OPERATOR_WORKSPACE) {
     return (
       <ManagedCloudAgentProvider value={managedCloudAgentContextValue}>
@@ -2306,9 +2325,17 @@ function ChatPageInner({
             sessions={operatorSessions}
             input={input}
             sending={sending}
+            voiceTranscribing={voiceTranscribing}
             pipelineStatus={pipelineStatus}
             chatError={chatError}
+            attachment={operatorAttachment}
+            attachmentAccept={CHAT_ATTACHMENT_ACCEPT}
             onInputChange={setInput}
+            onAttachmentSelect={(file) => void processComposerSelectedFile(file)}
+            onAttachmentClear={() => setComposerAttachment(null)}
+            onDictationText={handleWorkspaceDictationText}
+            onVoiceBlob={(blob) => void handleVoiceDictationComplete(blob)}
+            onVoiceError={(message) => toast.error(message)}
             onSend={(event) => void handleSend(event)}
             onOpenHistory={() => setHistoryOpen(true)}
             onStartNewChat={startNewChat}

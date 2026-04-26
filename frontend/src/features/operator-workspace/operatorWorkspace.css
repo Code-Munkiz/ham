@@ -224,6 +224,7 @@
 .ow-composer-wrap {
   width: min(840px, 100%);
   margin-inline: auto;
+  padding-bottom: max(0.45rem, env(safe-area-inset-bottom));
 }
 
 .ow-composer-shell {
@@ -232,6 +233,13 @@
   border-radius: 1.1rem;
   padding: 0.6rem;
   box-shadow: 0 18px 44px rgba(0, 0, 0, 0.35);
+}
+
+.ow-main .ow-composer-wrap {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  background: linear-gradient(180deg, rgba(3, 11, 17, 0), rgba(3, 11, 17, 0.85) 28%);
 }
 
 @media (max-width: 1099px) {
