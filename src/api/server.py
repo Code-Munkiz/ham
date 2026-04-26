@@ -86,6 +86,8 @@ app.add_middleware(
     # Workspace adapters use hamApiFetch(..., credentials="include") for cross-origin Vercel → Cloud Run. Without this,
     # browsers omit Access-Control-Allow-Credentials and the response is treated as a CORS failure → "Failed to fetch".
     allow_credentials=True,
+    # Starlette: preflight with Access-Control-Request-Private-Network must be allowed or Chrome gets 400 (PNA).
+    allow_private_network=True,
     # PATCH required for /api/projects/{id} metadata updates (chat handoff repo save); browser preflight fails without it.
     allow_methods=["GET", "POST", "PATCH", "DELETE"],
     allow_headers=["*"],
