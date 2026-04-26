@@ -69,4 +69,7 @@ export { workspaceJobsAdapter } from "./adapters/jobsAdapter";
 export { workspaceTasksAdapter } from "./adapters/tasksAdapter";
 export { workspaceTerminalAdapter } from "./adapters/terminalAdapter";
 export { workspaceConductorAdapter } from "./adapters/conductorAdapter";
+export { workspaceMemoryAdapter } from "./adapters/memoryAdapter";
 export { workspaceOperationsAdapter } from "./adapters/operationsAdapter";
+export { workspaceProfilesAdapter } from "./adapters/profilesAdapter";
+export { workspaceSkillsAdapter } from "./adapters/skillsAdapter";

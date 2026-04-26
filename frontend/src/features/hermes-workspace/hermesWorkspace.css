@@ -97,3 +97,19 @@
 .hww-mobile-header {
   position: relative;
 }
+
+/**
+ * Source-backed Hermes Workspace parity (repomix @ /memory, /skills, /profiles):
+ * theme tokens used by memory-browser-screen / skills-screen / profiles route layouts.
+ * Scoped so main app + /chat are unaffected.
+ */
+.hww-outer .hws-root {
+  --theme-bg: #0b1016;
+  --theme-text: #e5e7eb;
+  --theme-muted: #9ca3af;
+  --theme-border: rgba(255, 255, 255, 0.12);
+  --theme-card: rgba(0, 0, 0, 0.35);
+  --theme-hover: rgba(255, 255, 255, 0.06);
+  --theme-accent: #10b981;
+  color: var(--theme-text);
+}

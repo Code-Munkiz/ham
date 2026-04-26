@@ -4,14 +4,16 @@ import { isHermesWorkspaceEnabled } from "./workspaceFlags";
 import { WorkspaceShell } from "./WorkspaceShell";
 import { WorkspaceHome } from "./WorkspaceHome";
 import Chat from "@/pages/Chat";
-import { WorkspacePlaceholderPage } from "./WorkspacePlaceholder";
 import { WorkspaceFilesScreen } from "./screens/files/WorkspaceFilesScreen";
 import { WorkspaceTerminalScreen } from "./screens/terminal/WorkspaceTerminalScreen";
 import { WorkspaceSettingsScreen } from "./screens/settings/WorkspaceSettingsScreen";
 import { WorkspaceJobsScreen } from "./screens/jobs/WorkspaceJobsScreen";
 import { WorkspaceTasksScreen } from "./screens/tasks/WorkspaceTasksScreen";
 import { WorkspaceConductorScreen } from "./screens/conductor/WorkspaceConductorScreen";
+import { WorkspaceMemoryScreen } from "./screens/memory/WorkspaceMemoryScreen";
 import { WorkspaceOperationsScreen } from "./screens/operations/WorkspaceOperationsScreen";
+import { WorkspaceProfilesScreen } from "./screens/profiles/WorkspaceProfilesScreen";
+import { WorkspaceSkillsScreen } from "./screens/skills/WorkspaceSkillsScreen";
 import "./hermesWorkspace.css";
 
 /**
@@ -36,33 +38,9 @@ export function WorkspaceApp() {
           <Route path="tasks" element={<WorkspaceTasksScreen />} />
           <Route path="conductor" element={<WorkspaceConductorScreen />} />
           <Route path="operations" element={<WorkspaceOperationsScreen />} />
-          <Route
-            path="memory"
-            element={
-              <WorkspacePlaceholderPage
-                title="Memory"
-                description="Memory Heist and long-lived recall stay on HAM server contracts. This page is a shell until the memory adapter is wired."
-              />
-            }
-          />
-          <Route
-            path="skills"
-            element={
-              <WorkspacePlaceholderPage
-                title="Skills"
-                description="Hermes/HAM skills catalogs can surface here through existing API seams — not wired in this slice."
-              />
-            }
-          />
-          <Route
-            path="profiles"
-            element={
-              <WorkspacePlaceholderPage
-                title="Profiles"
-                description="Agent profiles and Agent Builder data can bind here later — display-only shell for now."
-              />
-            }
-          />
+          <Route path="memory" element={<WorkspaceMemoryScreen />} />
+          <Route path="skills" element={<WorkspaceSkillsScreen />} />
+          <Route path="profiles" element={<WorkspaceProfilesScreen />} />
         </Routes>
       </WorkspaceShell>
     </div>
