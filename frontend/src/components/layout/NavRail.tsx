@@ -18,6 +18,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { isHamDesktopShell } from "@/lib/ham/desktopConfig";
 import { publicAssetUrl } from "@/lib/ham/publicAssets";
+import { primaryChatPath } from "@/features/hermes-workspace/workspaceFlags";
 
 /** Match exact path or a child sub-route, without treating unrelated prefixes as active. */
 function isPrimaryPathActive(path: string, pathname: string): boolean {
@@ -25,20 +26,20 @@ function isPrimaryPathActive(path: string, pathname: string): boolean {
   return pathname === path || pathname.startsWith(`${path}/`);
 }
 
-const primaryNav = [
-  { icon: MessageSquare, label: "Chat", path: "/chat" },
-  { icon: Cpu, label: "Command Center", path: "/command-center" },
-  { icon: Activity, label: "Activity", path: "/activity" },
-  { icon: ShoppingBag, label: "Capabilities", path: "/shop" },
-  { icon: UserCog, label: "Agents", path: "/agents" },
-];
-
 export function NavRail() {
   const location = useLocation();
   const navigate = useNavigate();
   const isDesktop = isHamDesktopShell();
   const logoSrc = publicAssetUrl("ham-logo.png");
-  const homePath = isDesktop ? "/chat" : "/";
+  const chatPath = primaryChatPath();
+  const homePath = isDesktop ? chatPath : "/";
+  const primaryNav = [
+    { icon: MessageSquare, label: "Chat", path: chatPath },
+    { icon: Cpu, label: "Command Center", path: "/command-center" },
+    { icon: Activity, label: "Activity", path: "/activity" },
+    { icon: ShoppingBag, label: "Capabilities", path: "/shop" },
+    { icon: UserCog, label: "Agents", path: "/agents" },
+  ];
   const [isDiagnosticsOpen, setIsDiagnosticsOpen] = useState(false);
   const diagnosticsRef = useRef<HTMLDivElement>(null);
 

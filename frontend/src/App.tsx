@@ -30,30 +30,26 @@ import { WorkspaceProvider } from "./lib/ham/WorkspaceContext";
 import { ClerkAccessBridge } from "./lib/ham/ClerkAccessBridge";
 import { getHamDesktopConfig, isHamDesktopShell } from "./lib/ham/desktopConfig";
 import { WorkspaceApp } from "./features/hermes-workspace";
-import { isHermesWorkspaceEnabled } from "./features/hermes-workspace/workspaceFlags";
+import { isHermesWorkspaceEnabled, primaryChatPath } from "./features/hermes-workspace/workspaceFlags";
 
 const clerkPublishableKey = (import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined)?.trim();
 
 /** Web: marketing landing. Desktop shell: go straight to chat (no landing hero). */
 function HomeRoute() {
   if (isHamDesktopShell()) {
-    return <Navigate to="/chat" replace />;
+    return <Navigate to={primaryChatPath()} replace />;
   }
   return <Landing />;
 }
 
 /**
- * When Hermes workspace is enabled, `/chat` is an alias for the workspace app: land on `/workspace`
- * (dashboard). Preserve `?session=` deep links on `/workspace/chat`.
+ * When Hermes workspace is enabled, `/chat` is an alias for Workspace chat (not the dashboard).
+ * Preserves the full search string (e.g. `?session=`).
  */
 function ChatEntryRoute() {
   const { search } = useLocation();
   if (isHermesWorkspaceEnabled()) {
-    const params = new URLSearchParams(search);
-    if (params.has("session")) {
-      return <Navigate to={`/workspace/chat${search}`} replace />;
-    }
-    return <Navigate to="/workspace" replace />;
+    return <Navigate to={`/workspace/chat${search}`} replace />;
   }
   return <Chat />;
 }

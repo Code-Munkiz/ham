@@ -1,2 +1,2 @@
 export { WorkspaceApp } from "./WorkspaceApp";
-export { isHermesWorkspaceEnabled } from "./workspaceFlags";
+export { isHermesWorkspaceEnabled, primaryChatPath } from "./workspaceFlags";

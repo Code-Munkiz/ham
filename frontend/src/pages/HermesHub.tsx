@@ -26,6 +26,7 @@ import {
   type HermesRuntimeInventory,
   type HermesSkillsInstalledResponse,
 } from "@/lib/ham/api";
+import { primaryChatPath } from "@/features/hermes-workspace/workspaceFlags";
 
 export default function HermesHub() {
   const [snap, setSnap] = React.useState<HermesHubSnapshot | null>(null);
@@ -220,7 +221,7 @@ export default function HermesHub() {
                 </span>{" "}
                 Composer detail and model rows:{" "}
                 <Link
-                  to="/chat"
+                  to={primaryChatPath()}
                   className="text-[#FF6B00] hover:underline font-semibold"
                 >
                   Chat
@@ -431,7 +432,7 @@ export default function HermesHub() {
                 <span className="text-white/85 font-semibold">browser policy</span> — not a
                 separate Hermes-managed browser product. The same policy applies when you use the
                 browser pane from{" "}
-                <Link to="/chat" className="text-[#FF6B00] font-semibold hover:underline">
+                <Link to={primaryChatPath()} className="text-[#FF6B00] font-semibold hover:underline">
                   Chat
                 </Link>{" "}
                 in <span className="text-white/85">War Room</span> mode.

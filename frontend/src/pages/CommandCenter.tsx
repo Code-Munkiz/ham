@@ -24,6 +24,7 @@ import { fetchModelsCatalog, fetchHermesGatewaySnapshot, type HermesGatewaySnaps
 import type { HermesGatewayExternalRunner } from "@/lib/ham/hermesGateway";
 import type { ModelCatalogItem, ModelCatalogPayload } from "@/lib/ham/types";
 import { isDashboardChatGatewayReady } from "@/lib/ham/types";
+import { primaryChatPath } from "@/features/hermes-workspace/workspaceFlags";
 
 type TabId =
   | "overview"
@@ -217,7 +218,7 @@ function EffectiveModelStrip({
         </p>
         <div className="pt-2">
           <Link
-            to="/chat"
+            to={primaryChatPath()}
             className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-[#FF6B00] hover:underline"
           >
             <MessageSquare className="h-3.5 w-3.5" />
@@ -543,7 +544,7 @@ export default function CommandCenter() {
                           Models & Providers →
                         </button>
                         <Link
-                          to="/chat"
+                          to={primaryChatPath()}
                           className="text-[9px] font-black uppercase tracking-widest text-white/40 hover:text-[#FF6B00]"
                         >
                           Open Chat

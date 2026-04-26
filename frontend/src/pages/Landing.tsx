@@ -8,6 +8,7 @@ import { useNavigate } from "react-router-dom";
 import { HAM_DESKTOP_DOWNLOAD_CTAS } from "@/lib/ham/desktopDownloadCtas";
 import { isHamDesktopShell } from "@/lib/ham/desktopConfig";
 import { publicAssetUrl } from "@/lib/ham/publicAssets";
+import { primaryChatPath } from "@/features/hermes-workspace/workspaceFlags";
 
 const LINE = "go ham";
 const TYPE_MS = 95;
@@ -38,7 +39,7 @@ export default function Landing() {
   }, [typingDone]);
 
   const goChat = React.useCallback(() => {
-    navigate("/chat");
+    navigate(primaryChatPath());
   }, [navigate]);
 
   const onKeyDown = (e: React.KeyboardEvent) => {
