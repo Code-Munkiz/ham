@@ -20,6 +20,16 @@
   border-right: 1px solid var(--ham-workspace-line, rgba(255, 255, 255, 0.08));
   background: rgba(8, 17, 24, 0.78);
   backdrop-filter: blur(8px);
+  transition: width 0.2s ease, padding 0.2s ease;
+}
+
+.hww-sidebar--collapsed {
+  width: 3.5rem;
+  min-width: 3.5rem;
+  max-width: 3.5rem;
+  padding-left: 0.35rem;
+  padding-right: 0.35rem;
+  align-items: center;
 }
 
 .hww-main {

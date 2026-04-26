@@ -7,6 +7,7 @@ import {
   MessageSquare,
   Network,
   FolderOpen,
+  Settings,
   Waypoints,
   Terminal,
   UserCircle,
@@ -29,6 +30,7 @@ export const mainNavItems: MainNavItem[] = [
   { to: "/workspace/tasks", label: "Tasks", icon: CheckSquare },
   { to: "/workspace/conductor", label: "Conductor", icon: Waypoints },
   { to: "/workspace/operations", label: "Operations", icon: Network },
+  { to: "/workspace/settings", label: "Settings", icon: Settings },
 ];
 
 export const knowledgeNavItems: KnowledgeNavItem[] = [

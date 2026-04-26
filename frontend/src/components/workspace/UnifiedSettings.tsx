@@ -898,6 +898,8 @@ interface UnifiedSettingsProps {
   activeSubSegment: SettingsSubSectionId;
   onSubSegmentChange: (id: SettingsSubSectionId) => void;
   variant?: "overlay" | "page";
+  /** When true, only the right-hand content is rendered (parent supplies nav). */
+  hideInternalNav?: boolean;
 }
 
 const settingsStructure = [
@@ -953,14 +955,16 @@ export function UnifiedSettings({
   activeSubSegment,
   onSubSegmentChange,
   variant = "overlay",
+  hideInternalNav = false,
 }: UnifiedSettingsProps) {
   const activeLabel = settingsStructure
     .flatMap((g) => g.items)
     .find((i) => i.id === activeSubSegment)?.label;
 
   return (
-    <div className="flex h-full bg-[#050505] font-sans">
+    <div className="flex h-full w-full min-w-0 bg-[#050505] font-sans">
       {/* Internal Settings Sub-Nav */}
+      {!hideInternalNav ? (
       <div className={cn(
         "w-64 border-r border-white/5 p-8 flex flex-col gap-10 overflow-y-auto shrink-0",
         variant === "page" ? "bg-transparent" : "bg-[#0c0c0c]"
@@ -999,9 +1003,15 @@ export function UnifiedSettings({
           </div>
         ))}
       </div>
+      ) : null}
 
       {/* Sub-Settings Content Area */}
-      <div className="flex-1 overflow-y-auto p-12 pb-32 scrollbar-hide">
+      <div
+        className={cn(
+          "min-w-0 flex-1 overflow-y-auto p-12 pb-32 scrollbar-hide",
+          hideInternalNav && "p-6 md:p-10",
+        )}
+      >
         <div className="space-y-12 animate-in fade-in slide-in-from-right-4 duration-500 max-w-4xl">
           {/* Section Header */}
           <div className="space-y-3 pb-8 border-b border-white/5">
