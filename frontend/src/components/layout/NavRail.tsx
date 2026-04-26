@@ -61,10 +61,10 @@ export function NavRail() {
   }, []);
 
   return (
-    <div className="w-[64px] h-full flex flex-col items-center py-6 bg-[#000000] border-r border-white/5 z-50 transition-colors shrink-0">
+    <div className="flex h-full w-[64px] shrink-0 flex-col items-center border-r border-[color:var(--ham-workspace-line)] bg-[#030a10]/85 py-5 backdrop-blur-md transition-colors z-50">
       <Link
         to={homePath}
-        className="mb-10 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg hover:bg-white/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF6B00]/55 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
+        className="mb-8 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c45c12]/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#030a10]"
         title={isDesktop ? "Ham — chat" : "Ham — home"}
         aria-label={isDesktop ? "Open chat" : "Return to landing page"}
       >
@@ -75,7 +75,7 @@ export function NavRail() {
         />
       </Link>
 
-      <div className="flex-1 flex flex-col gap-5">
+      <div className="flex flex-1 flex-col gap-3.5">
         {primaryNav.map((item) => {
           const isActive = isPrimaryPathActive(item.path, location.pathname);
           
@@ -84,38 +84,42 @@ export function NavRail() {
               key={item.path}
               to={item.path}
               className={cn(
-                "group relative p-3 rounded-xl transition-all",
-                isActive ? "bg-white/10 text-[#FF6B00]" : "text-white/20 hover:text-white hover:bg-white/5"
+                "group relative rounded-lg p-2.5 transition-colors",
+                isActive
+                  ? "bg-white/[0.07] text-[#e8eef8]"
+                  : "text-white/32 hover:bg-white/[0.05] hover:text-white/85"
               )}
               title={item.label}
             >
-              <item.icon className="h-5 w-5" />
+              <item.icon className="h-5 w-5" strokeWidth={isActive ? 1.75 : 1.5} />
               {isActive && (
-                <div className="absolute left-[-12px] top-1/2 -translate-y-1/2 w-1 h-6 bg-[#FF6B00] rounded-r-full shadow-[0_0_8px_#FF6B00]" />
+                <div className="absolute left-[-1px] top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-[#c45c12]/90" />
               )}
             </Link>
           );
         })}
       </div>
 
-      <div className="mt-auto flex flex-col gap-5 items-center">
-        <div className="flex flex-col gap-5 relative" ref={diagnosticsRef}>
+      <div className="mt-auto flex flex-col items-center gap-4">
+        <div className="relative flex flex-col gap-3.5" ref={diagnosticsRef}>
           <button
             type="button"
             onClick={() => setIsDiagnosticsOpen(!isDiagnosticsOpen)}
             className={cn(
-              "group relative p-3 rounded-xl transition-all",
-              isDiagnosticsActive || isDiagnosticsOpen ? "bg-white/10 text-[#FF6B00]" : "text-white/20 hover:text-white hover:bg-white/5"
+              "group relative rounded-lg p-2.5 transition-colors",
+              isDiagnosticsActive || isDiagnosticsOpen
+                ? "bg-white/[0.08] text-[#e8eef8]"
+                : "text-white/32 hover:bg-white/[0.05] hover:text-white/85"
             )}
             title="Diagnostics"
             aria-label="Open Diagnostics menu"
             aria-expanded={isDiagnosticsOpen}
           >
-            <SlidersHorizontal className="h-5 w-5" />
+            <SlidersHorizontal className="h-5 w-5" strokeWidth={1.5} />
           </button>
 
           {isDiagnosticsOpen && (
-            <div className="absolute left-full ml-3 top-[-10px] w-56 bg-[#0a0a0a] border border-white/10 rounded-xl shadow-2xl py-2 overflow-hidden z-[100] animate-in fade-in slide-in-from-left-2 duration-200">
+            <div className="absolute left-full top-[-6px] z-[100] ml-2.5 w-56 overflow-hidden rounded-xl border border-[color:var(--ham-workspace-line)] bg-[#040d14]/95 py-1.5 shadow-[0_12px_40px_rgba(0,0,0,0.45)] backdrop-blur-md animate-in fade-in slide-in-from-left-2 duration-200">
               {[
                 { label: "Hermes details", path: "/hermes", icon: Orbit },
                 { label: "Skills catalog", path: "/skills", icon: Sparkles },
@@ -138,13 +142,17 @@ export function NavRail() {
                     to={item.path}
                     onClick={() => setIsDiagnosticsOpen(false)}
                     className={cn(
-                      "flex items-center gap-3 px-4 py-3 transition-all cursor-pointer group relative",
-                      isActive ? "text-[#FF6B00] bg-[#FF6B00]/5" : "text-white/40 hover:bg-[#FF6B00]/5 hover:text-[#FF6B00]"
+                      "group relative flex cursor-pointer items-center gap-2.5 px-3 py-2.5 transition-colors",
+                      isActive
+                        ? "bg-white/[0.05] text-[#ffb27a]"
+                        : "text-white/45 hover:bg-white/[0.04] hover:text-[#e8eef8]"
                     )}
                   >
-                    {isActive && <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-[#FF6B00]" />}
-                    <item.icon className="h-4 w-4 shrink-0" />
-                    <span className="text-[10px] font-black uppercase tracking-widest leading-snug">{item.label}</span>
+                    {isActive && <div className="absolute bottom-0.5 left-0 top-0.5 w-px bg-[#c45c12]/80" />}
+                    <item.icon className="h-4 w-4 shrink-0" strokeWidth={1.5} />
+                    <span className="text-[10px] font-semibold uppercase leading-snug tracking-[0.12em]">
+                      {item.label}
+                    </span>
                   </Link>
                 );
               })}
@@ -161,10 +169,10 @@ export function NavRail() {
               }
             }}
             className={cn(
-              "group relative p-3 rounded-xl transition-all",
+              "group relative rounded-lg p-2.5 transition-colors",
               location.pathname.startsWith("/settings")
-                ? "bg-white/10 text-[#FF6B00]"
-                : "text-white/20 hover:text-white hover:bg-white/5",
+                ? "bg-white/[0.08] text-[#e8eef8]"
+                : "text-white/32 hover:bg-white/[0.05] hover:text-white/85",
             )}
             title={
               location.pathname.startsWith("/settings")
@@ -177,18 +185,18 @@ export function NavRail() {
                 : "Open settings"
             }
           >
-            <Settings className="h-5 w-5" />
+            <Settings className="h-5 w-5" strokeWidth={1.5} />
             {location.pathname.startsWith("/settings") && (
-              <div className="absolute left-[-12px] top-1/2 -translate-y-1/2 w-1 h-6 bg-[#FF6B00] rounded-r-full shadow-[0_0_8px_#FF6B00]" />
+              <div className="absolute left-[-1px] top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-[#c45c12]/90" />
             )}
           </button>
         </div>
         
-        <div className="p-3 grayscale contrast-125 opacity-30 hover:opacity-100 transition-opacity cursor-pointer">
+        <div className="cursor-pointer p-2.5 opacity-40 grayscale transition-opacity contrast-125 hover:opacity-100">
           <img 
             src="https://picsum.photos/seed/aaron/100/100" 
             alt="User" 
-            className="h-6 w-6 rounded-full border border-white/20" 
+            className="h-6 w-6 rounded-full border border-[color:var(--ham-workspace-line)]" 
             referrerPolicy="no-referrer"
           />
         </div>
