@@ -5,19 +5,24 @@ import {
   captureBrowserScreenshot,
   clickBrowserSessionXY,
   closeBrowserSession,
+  createBrowserProposal,
   createBrowserSession,
   getBrowserLiveStreamState,
   getBrowserSessionState,
+  isBrowserOperatorApprovalRequiredError,
   navigateBrowserSession,
   resetBrowserSession,
   scrollBrowserSession,
   sendBrowserSessionKey,
   startBrowserLiveStream,
   stopBrowserLiveStream,
+  type BrowserProposalActionPayload,
   type BrowserStreamState,
   type BrowserRuntimeState,
 } from "@/lib/ham/api";
 import { cn } from "@/lib/utils";
+import { BrowserProposalTray } from "./BrowserProposalTray";
+import { BrowserProposeForm } from "./BrowserProposeForm";
 
 export type BrowserViewMode = "normal" | "expanded" | "minimized";
 
@@ -55,6 +60,9 @@ function isOwnerMismatchError(message: string): boolean {
 function userFacingError(message: string): string {
   if (isSessionMissingError(message)) return "Session ended. Start a new browser session.";
   if (isOwnerMismatchError(message)) return "Session ownership changed. Open a new browser session.";
+  if (isBrowserOperatorApprovalRequiredError(message)) {
+    return "Operator Mode is on. Create or approve a proposal to perform this action.";
+  }
   if (/blocked|allow_private_network|allowed_domains|422/i.test(message)) {
     return "Target URL is blocked by browser policy.";
   }
@@ -232,6 +240,7 @@ export function BrowserTabPanel({ embedUrl, onEmbedUrlChange, autoStart = false 
   });
   const [error, setError] = React.useState<string | null>(null);
   const [screenshotUrl, setScreenshotUrl] = React.useState<string | null>(null);
+  const [operatorModePref, setOperatorModePref] = React.useState(false);
 
   /* ---- view mode state ---- */
   const [viewMode, setViewMode] = React.useState<BrowserViewMode>("normal");
@@ -240,6 +249,7 @@ export function BrowserTabPanel({ embedUrl, onEmbedUrlChange, autoStart = false 
   const normalizedUrl = normalizeBrowserUrl(embedUrl);
   const canOpen = normalizedUrl.startsWith("http");
   const hasSession = session !== null;
+  const isOperatorSession = session?.operator_mode_required === true;
 
   function replaceScreenshot(next: Blob) {
     setScreenshotUrl((prev) => {
@@ -253,6 +263,24 @@ export function BrowserTabPanel({ embedUrl, onEmbedUrlChange, autoStart = false 
     replaceScreenshot(png);
   }
 
+  async function proposeBrowserAction(action: BrowserProposalActionPayload) {
+    if (!session) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await createBrowserProposal({
+        session_id: session.session_id,
+        owner_key: ownerKeyRef.current,
+        action,
+        proposer: { kind: "operator", label: "war-room" },
+      });
+      await capture(session.session_id);
+    } catch (e: unknown) {
+      setError(userFacingError(readErrorMessage(e)));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   React.useEffect(() => {
     return () => {
@@ -336,17 +364,28 @@ export function BrowserTabPanel({ embedUrl, onEmbedUrlChange, autoStart = false 
     setBusy(true);
     setError(null);
     try {
+      const useOp = operatorModePref;
       const created = await createBrowserSession({
         owner_key: ownerKeyRef.current,
         viewport_width: 1280,
         viewport_height: 720,
+        ...(useOp ? { operator_mode: true } : {}),
       });
-      const bootUrl = normalizedUrl || "https://www.google.com";
-      const next = await navigateBrowserSession(created.session_id, ownerKeyRef.current, bootUrl);
-      setSession(next);
-      onEmbedUrlChange(bootUrl);
-      await startLiveStream(created.session_id);
-      await capture(created.session_id);
+      if (useOp) {
+        setSession(created);
+        setStreamState(created.stream_state);
+        onEmbedUrlChange(normalizedUrl || "about:blank");
+        await startLiveStream(created.session_id);
+        await capture(created.session_id);
+      } else {
+        const bootUrl = normalizedUrl || "https://www.google.com";
+        const next = await navigateBrowserSession(created.session_id, ownerKeyRef.current, bootUrl);
+        setSession(next);
+        setStreamState(next.stream_state);
+        onEmbedUrlChange(bootUrl);
+        await startLiveStream(created.session_id);
+        await capture(created.session_id);
+      }
     } catch (e: unknown) {
       const message = readErrorMessage(e);
       setError(userFacingError(message));
@@ -465,6 +504,10 @@ export function BrowserTabPanel({ embedUrl, onEmbedUrlChange, autoStart = false 
     if (!activeImg) return;
     const mapped = mapViewportClick(event, activeImg, session.viewport);
     if (!mapped) return;
+    if (session.operator_mode_required) {
+      await proposeBrowserAction({ action_type: "browser.click_xy", x: mapped.x, y: mapped.y });
+      return;
+    }
     await run(() =>
       clickBrowserSessionXY(session.session_id, ownerKeyRef.current, mapped.x, mapped.y),
     );
@@ -474,14 +517,13 @@ export function BrowserTabPanel({ embedUrl, onEmbedUrlChange, autoStart = false 
   async function handleViewportWheel(event: React.WheelEvent<HTMLImageElement>) {
     if (!session) return;
     event.preventDefault();
-    await run(() =>
-      scrollBrowserSession(
-        session.session_id,
-        ownerKeyRef.current,
-        Math.max(-2000, Math.min(2000, event.deltaX)),
-        Math.max(-2000, Math.min(2000, event.deltaY)),
-      ),
-    );
+    const dx = Math.max(-2000, Math.min(2000, event.deltaX));
+    const dy = Math.max(-2000, Math.min(2000, event.deltaY));
+    if (session.operator_mode_required) {
+      await proposeBrowserAction({ action_type: "browser.scroll", delta_x: dx, delta_y: dy });
+      return;
+    }
+    await run(() => scrollBrowserSession(session.session_id, ownerKeyRef.current, dx, dy));
   }
 
   async function handleViewportKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
@@ -494,7 +536,34 @@ export function BrowserTabPanel({ embedUrl, onEmbedUrlChange, autoStart = false 
     }
     event.preventDefault();
     viewportFrameRef.current?.focus();
+    if (session.operator_mode_required) {
+      await proposeBrowserAction({ action_type: "browser.key", key });
+      return;
+    }
     await run(() => sendBrowserSessionKey(session.session_id, ownerKeyRef.current, key));
+  }
+
+  async function handleToolbarGo() {
+    if (!session) return;
+    const url = normalizeBrowserUrl(embedUrl);
+    if (!url.startsWith("http")) {
+      setError(userFacingError("only http:// and https:// URLs are supported."));
+      return;
+    }
+    if (session.operator_mode_required) {
+      await proposeBrowserAction({ action_type: "browser.navigate", url });
+      return;
+    }
+    await run(() => navigateBrowserSession(session.session_id, ownerKeyRef.current, url));
+  }
+
+  async function handleSessionReset() {
+    if (!session) return;
+    if (session.operator_mode_required) {
+      await proposeBrowserAction({ action_type: "browser.reset" });
+      return;
+    }
+    await run(() => resetBrowserSession(session.session_id, ownerKeyRef.current));
   }
 
   /* ---- Minimized state: collapsed strip ---- */
@@ -505,6 +574,15 @@ export function BrowserTabPanel({ embedUrl, onEmbedUrlChange, autoStart = false 
           <span className="text-[9px] font-black uppercase tracking-widest text-[#00E5FF]/70 truncate flex-1">
             Browser — {session!.current_url || "session active"}
           </span>
+          {session!.operator_mode_required ? (
+            <span className="text-[7px] font-black uppercase px-1 py-0.5 rounded bg-amber-500/15 text-amber-200/90 border border-amber-500/30 shrink-0">
+              Operator mode
+            </span>
+          ) : (
+            <span className="text-[7px] font-mono uppercase px-1 py-0.5 rounded text-white/35 bg-white/5 shrink-0">
+              Direct mode
+            </span>
+          )}
           <span className={cn(
             "text-[8px] font-mono uppercase px-1.5 py-0.5 rounded",
             streamState.status === "live" ? "text-emerald-400/90 bg-emerald-400/10" : "text-white/40 bg-white/5",
@@ -546,6 +624,21 @@ export function BrowserTabPanel({ embedUrl, onEmbedUrlChange, autoStart = false 
           <p className="text-[10px] text-white/40 leading-relaxed text-center">
             Start a browser session to open a live viewport.
           </p>
+          <label className="flex items-start gap-2 text-[9px] text-white/55 max-w-sm cursor-pointer select-none">
+            <input
+              type="checkbox"
+              className="mt-0.5 rounded border-white/25"
+              checked={operatorModePref}
+              onChange={(e) => setOperatorModePref(e.target.checked)}
+            />
+            <span>
+              <span className="font-semibold text-white/70">Operator mode: approvals required</span>
+              <span className="block text-[8px] text-white/40 mt-0.5 leading-snug">
+                Off = Direct mode (default). On = HAM-controlled browser session — mutating actions use Propose, then
+                Approve or Deny (browser pane only).
+              </span>
+            </span>
+          </label>
           <button
             type="button"
             onClick={handleCreateSession}
@@ -575,6 +668,24 @@ export function BrowserTabPanel({ embedUrl, onEmbedUrlChange, autoStart = false 
         </div>
       ) : (
         <div className={cn("flex flex-col min-h-0 flex-1 gap-0", isExpanded && "relative")}>
+          {isOperatorSession ? (
+            <div
+              className={cn(
+                "shrink-0 rounded-sm border border-amber-500/40 bg-amber-500/10 px-1.5 py-1 flex flex-wrap items-center gap-2 mb-0.5",
+                isExpanded && "mx-1 mt-1",
+              )}
+            >
+              <span className="text-[8px] font-black uppercase tracking-wide text-amber-200/95">Operator mode</span>
+              <span className="text-[7px] text-white/50 leading-snug">
+                HAM-controlled browser session — Propose, then Approve or Deny. View / Refresh / screenshot observation
+                stay available.
+              </span>
+            </div>
+          ) : (
+            <div className={cn("shrink-0 text-[7px] text-white/35 px-0.5 mb-0.5", isExpanded && "mx-1 mt-1")}>
+              Direct mode — immediate control
+            </div>
+          )}
           {/* ── Compact URL bar + view controls (single tight row) ── */}
           {!isExpanded ? (
             <div className="flex items-center gap-0.5 shrink-0">
@@ -587,15 +698,7 @@ export function BrowserTabPanel({ embedUrl, onEmbedUrlChange, autoStart = false 
               <button
                 type="button"
                 disabled={busy || !embedUrl.trim()}
-                onClick={() =>
-                  run(() =>
-                    navigateBrowserSession(
-                      session.session_id,
-                      ownerKeyRef.current,
-                      normalizeBrowserUrl(embedUrl),
-                    ),
-                  )
-                }
+                onClick={() => void handleToolbarGo()}
                 className={cn(
                   "text-[8px] font-black uppercase tracking-widest border border-white/15 px-1.5 py-0.5 rounded-sm shrink-0",
                   busy ? "text-white/20" : "text-white/70 hover:bg-white/5",
@@ -675,15 +778,7 @@ export function BrowserTabPanel({ embedUrl, onEmbedUrlChange, autoStart = false 
                   <button
                     type="button"
                     disabled={busy || !embedUrl.trim()}
-                    onClick={() =>
-                      run(() =>
-                        navigateBrowserSession(
-                          session.session_id,
-                          ownerKeyRef.current,
-                          normalizeBrowserUrl(embedUrl),
-                        ),
-                      )
-                    }
+                    onClick={() => void handleToolbarGo()}
                     className={cn(
                       "text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-sm shrink-0",
                       busy ? "text-white/20" : "text-white/60 hover:text-white/90",
@@ -724,7 +819,7 @@ export function BrowserTabPanel({ embedUrl, onEmbedUrlChange, autoStart = false 
             <button
               type="button"
               disabled={busy}
-              onClick={() => run(() => resetBrowserSession(session.session_id, ownerKeyRef.current))}
+              onClick={() => void handleSessionReset()}
               className={cn(
                 "text-[8px] font-black uppercase tracking-widest border border-white/10 px-2 py-0.5 rounded-sm",
                 busy ? "text-white/20" : "text-white/50 hover:bg-white/5 hover:text-white/70",
@@ -772,12 +867,31 @@ export function BrowserTabPanel({ embedUrl, onEmbedUrlChange, autoStart = false 
                 "inline-flex items-center gap-1 text-[8px] font-black uppercase tracking-widest",
                 canOpen ? "text-[#00E5FF]/70 hover:text-[#00E5FF]" : "text-white/15 pointer-events-none",
               )}
-              title="Open in new tab"
+              title="View in new tab"
             >
               <ExternalLink className="h-2.5 w-2.5" />
-              <span className="hidden sm:inline">External</span>
+              <span className="hidden sm:inline">View</span>
             </a>
           </div>
+
+          {isOperatorSession ? (
+            <div className="shrink-0 mt-1 pt-1 border-t border-[#00E5FF]/20">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <BrowserProposalTray
+                  sessionId={session.session_id}
+                  ownerKey={ownerKeyRef.current}
+                  enabled
+                  onAfterDecision={() => void refreshStateAndScreenshot()}
+                />
+                <BrowserProposeForm
+                  sessionId={session.session_id}
+                  ownerKey={ownerKeyRef.current}
+                  disabled={busy}
+                  onProposed={() => void refreshStateAndScreenshot()}
+                />
+              </div>
+            </div>
+          ) : null}
         </div>
       )}
 

@@ -653,6 +653,8 @@ export interface BrowserRuntimeState {
   streaming_supported: boolean;
   cursor_embedding_supported: boolean;
   stream_state: BrowserStreamState;
+  /** When true, direct mutating /api/browser/* actions return 409; use Browser Operator proposals. */
+  operator_mode_required?: boolean;
 }
 
 export interface BrowserStreamState {
@@ -666,6 +668,182 @@ export interface BrowserSessionCreateRequest {
   owner_key: string;
   viewport_width?: number;
   viewport_height?: number;
+  /** When true, session requires proposal + approve for mutating browser actions. */
+  operator_mode?: boolean;
+}
+
+/** FastAPI detail when a direct browser action is blocked in operator mode. */
+export const BROWSER_OPERATOR_APPROVAL_REQUIRED_DETAIL = "OPERATOR_MODE_REQUIRES_APPROVAL";
+
+export type BrowserProposalState =
+  | "proposed"
+  | "approved"
+  | "denied"
+  | "executed"
+  | "failed"
+  | "expired";
+
+export type BrowserProposalActionType =
+  | "browser.navigate"
+  | "browser.click_xy"
+  | "browser.scroll"
+  | "browser.key"
+  | "browser.type"
+  | "browser.reset";
+
+export interface BrowserProposalActionPayload {
+  action_type: BrowserProposalActionType;
+  url?: string | null;
+  selector?: string | null;
+  text?: string | null;
+  clear_first?: boolean | null;
+  x?: number | null;
+  y?: number | null;
+  delta_x?: number | null;
+  delta_y?: number | null;
+  key?: string | null;
+}
+
+export interface BrowserProposerActor {
+  kind?: "operator" | "agent" | "chat" | "unknown";
+  label?: string | null;
+}
+
+export interface BrowserActionProposal {
+  kind?: "browser_action_proposal";
+  proposal_id: string;
+  session_id: string;
+  owner_key: string;
+  state: BrowserProposalState;
+  action: BrowserProposalActionPayload;
+  proposer: BrowserProposerActor;
+  created_at: string;
+  expires_at: string;
+  decided_at?: string | null;
+  decision_note?: string | null;
+  executed_at?: string | null;
+  result_status?: "ok" | "error" | null;
+  result_last_error?: string | null;
+}
+
+export interface BrowserOperatorPolicy {
+  kind: "browser_operator_policy";
+  approval_only: boolean;
+  allowed_action_types: string[];
+  ttl_seconds: number;
+  max_pending_per_session: number;
+  dispatch_mode: string;
+  header_unlock_supported: boolean;
+}
+
+export async function fetchBrowserOperatorPolicy(): Promise<BrowserOperatorPolicy | null> {
+  const res = await hamApiFetch("/api/browser-operator/policy");
+  if (!res.ok) {
+    return null;
+  }
+  return res.json() as Promise<BrowserOperatorPolicy>;
+}
+
+export async function createBrowserProposal(body: {
+  session_id: string;
+  owner_key: string;
+  action: BrowserProposalActionPayload;
+  proposer?: BrowserProposerActor | null;
+}): Promise<BrowserActionProposal> {
+  const res = await hamApiFetch("/api/browser-operator/proposals", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      session_id: body.session_id.trim(),
+      owner_key: body.owner_key.trim(),
+      action: body.action,
+      proposer: body.proposer ?? undefined,
+    }),
+  });
+  if (!res.ok) {
+    const msg = (await readFastApiDetail(res)) ?? `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+  return res.json() as Promise<BrowserActionProposal>;
+}
+
+export async function listBrowserProposals(
+  sessionId: string,
+  ownerKey: string,
+  limit = 64,
+): Promise<BrowserActionProposal[]> {
+  const q = new URLSearchParams({
+    session_id: sessionId.trim(),
+    owner_key: ownerKey.trim(),
+    limit: String(limit),
+  });
+  const res = await hamApiFetch(`/api/browser-operator/proposals?${q.toString()}`);
+  if (!res.ok) {
+    const msg = (await readFastApiDetail(res)) ?? `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+  const j = (await res.json()) as { items?: BrowserActionProposal[] };
+  return Array.isArray(j.items) ? j.items : [];
+}
+
+export async function fetchBrowserProposal(
+  proposalId: string,
+  ownerKey: string,
+): Promise<BrowserActionProposal> {
+  const q = new URLSearchParams({ owner_key: ownerKey.trim() }).toString();
+  const res = await hamApiFetch(
+    `/api/browser-operator/proposals/${encodeURIComponent(proposalId)}?${q}`,
+  );
+  if (!res.ok) {
+    const msg = (await readFastApiDetail(res)) ?? `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+  return res.json() as Promise<BrowserActionProposal>;
+}
+
+export async function approveBrowserProposal(
+  proposalId: string,
+  ownerKey: string,
+  note?: string | null,
+): Promise<BrowserActionProposal> {
+  const res = await hamApiFetch(
+    `/api/browser-operator/proposals/${encodeURIComponent(proposalId)}/approve`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ owner_key: ownerKey.trim(), note: note?.trim() || undefined }),
+    },
+  );
+  if (!res.ok) {
+    const msg = (await readFastApiDetail(res)) ?? `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+  return res.json() as Promise<BrowserActionProposal>;
+}
+
+export async function denyBrowserProposal(
+  proposalId: string,
+  ownerKey: string,
+  note?: string | null,
+): Promise<BrowserActionProposal> {
+  const res = await hamApiFetch(
+    `/api/browser-operator/proposals/${encodeURIComponent(proposalId)}/deny`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ owner_key: ownerKey.trim(), note: note?.trim() || undefined }),
+    },
+  );
+  if (!res.ok) {
+    const msg = (await readFastApiDetail(res)) ?? `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+  return res.json() as Promise<BrowserActionProposal>;
+}
+
+/** True if error message indicates direct action was blocked (operator mode). */
+export function isBrowserOperatorApprovalRequiredError(message: string): boolean {
+  return message.includes(BROWSER_OPERATOR_APPROVAL_REQUIRED_DETAIL);
 }
 
 /** Use ``hamApiFetch`` (not raw ``fetch``) so production sends Clerk session JWT like other API calls. */
