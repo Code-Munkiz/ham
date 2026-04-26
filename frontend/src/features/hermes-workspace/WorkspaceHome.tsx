@@ -1,34 +1,64 @@
 import * as React from "react";
 import { Link } from "react-router-dom";
-import { ArrowRight, Orbit } from "lucide-react";
+import { ArrowRight, Layers, MessageSquare, Orbit, PanelLeft } from "lucide-react";
 
 export function WorkspaceHome() {
   return (
-    <div className="flex h-full min-h-0 flex-col items-center justify-center overflow-y-auto p-6 sm:p-10">
-      <div className="w-full max-w-md space-y-5 text-center">
-        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-[#0a1218]/80 shadow-[0_12px_40px_rgba(0,0,0,0.35)]">
-          <Orbit className="h-7 w-7 text-[#ffb27a]/90" strokeWidth={1.25} />
-        </div>
-        <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight text-white/95">Workspace (lift)</h1>
-          <p className="text-sm leading-relaxed text-white/45">
-            This namespaced area will host the adapted Hermes Workspace experience. HAM providers,
-            API, and auth stay the same; only the UI is lifted here.
+    <div className="hww-home flex h-full min-h-0 flex-col overflow-y-auto p-4 sm:p-6 md:p-8">
+      <div className="mx-auto w-full max-w-3xl">
+        <div className="mb-8 flex flex-col items-center text-center sm:mb-10">
+          <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-white/10 bg-[#0a1218]/85 shadow-[0_16px_48px_rgba(0,0,0,0.4)]">
+            <Orbit className="h-8 w-8 text-[#ffb27a]/90" strokeWidth={1.2} />
+          </div>
+          <h1 className="text-2xl font-semibold tracking-tight text-white/95 sm:text-3xl">
+            Hermes workspace
+          </h1>
+          <p className="mt-2 max-w-lg text-sm leading-relaxed text-white/45">
+            HAM providers and API unchanged — this is the lifted shell for side-by-side comparison with
+            the main <span className="font-mono text-white/55">/chat</span> route.
           </p>
         </div>
-        <Link
-          to="/workspace/chat"
-          className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#c45c12]/40 bg-gradient-to-b from-[#1a120a]/60 to-[#0f0c09]/50 px-5 py-3 text-sm font-medium text-white/90 transition-colors hover:border-[#c45c12]/55 hover:from-[#1a120a]/80"
-        >
-          Go to workspace chat
-          <ArrowRight className="h-4 w-4" strokeWidth={1.5} />
-        </Link>
-        <p className="text-[11px] text-white/32">
-          Set <code className="rounded bg-black/30 px-1.5 py-0.5 font-mono text-white/50">
-            VITE_ENABLE_HERMES_WORKSPACE=true
-          </code>{" "}
-          in <code className="font-mono">frontend/.env.local</code> to use this area.
-        </p>
+
+        <div className="mb-6 grid gap-3 sm:grid-cols-3">
+          <div className="rounded-xl border border-[color:var(--ham-workspace-line)] bg-[#040d14]/60 p-4 text-left">
+            <PanelLeft className="mb-2 h-4 w-4 text-white/40" strokeWidth={1.5} />
+            <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-white/50">
+              Sessions
+            </p>
+            <p className="mt-1 text-[12px] text-white/38">
+              Search and list will bind to the HAM session adapter.
+            </p>
+          </div>
+          <Link
+            to="/workspace/chat"
+            className="group rounded-xl border border-[#c45c12]/35 bg-gradient-to-b from-[#1a120a]/50 to-[#0f0c09]/40 p-4 text-left transition-colors hover:border-[#c45c12]/5 hover:from-[#1a120a]/70"
+          >
+            <MessageSquare className="mb-2 h-4 w-4 text-[#ffb27a]/80" strokeWidth={1.5} />
+            <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-white/60 group-hover:text-white/80">
+              Chat
+            </p>
+            <p className="mt-1 text-[12px] text-white/40 group-hover:text-white/55">
+              Open the workspace chat surface (stream wiring next).
+            </p>
+          </Link>
+          <div className="rounded-xl border border-[color:var(--ham-workspace-line)] bg-[#040d14]/60 p-4 text-left">
+            <Layers className="mb-2 h-4 w-4 text-white/40" strokeWidth={1.5} />
+            <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-white/50">Tools</p>
+            <p className="mt-1 text-[12px] text-white/38">
+              No Cloud Agent, Memory, or terminal panels in this phase.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex justify-center">
+          <Link
+            to="/workspace/chat"
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/12 bg-white/[0.04] px-5 py-2.5 text-sm font-medium text-white/88 transition-colors hover:border-white/18 hover:bg-white/[0.07]"
+          >
+            Continue to workspace chat
+            <ArrowRight className="h-4 w-4" strokeWidth={1.5} />
+          </Link>
+        </div>
       </div>
     </div>
   );
