@@ -23,6 +23,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const selectedAgent = agents.find(a => a.id === selectedAgentId) || agents[0];
   const isBareLanding = location.pathname === "/";
   const isChatPage = location.pathname.startsWith("/chat");
+  const isWorkspacePath = location.pathname.startsWith("/workspace");
   const isSettingsPage = location.pathname.startsWith("/settings");
   // Control state for the global workbench console
   const [isConsoleOpen, setIsConsoleOpen] = React.useState(false);
@@ -32,10 +33,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   // Preview/split collapses the main route to w-0; reset when leaving workbench routes that use that layout.
   React.useEffect(() => {
-    if (isSettingsPage || isChatPage) {
+    if (isSettingsPage || isChatPage || isWorkspacePath) {
       setViewMode('chat');
     }
-  }, [isSettingsPage, isChatPage]);
+  }, [isSettingsPage, isChatPage, isWorkspacePath]);
 
   // Web marketing landing only — desktop shell redirects `/` → `/chat` and never shows this layout.
   if (isBareLanding && !isHamDesktopShell()) {
@@ -48,9 +49,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // Route-scoped immersive layout: `/chat` owns the full workspace canvas.
-  // Keep providers/auth/runtime seams; hide old HAM shell chrome only on chat.
-  if (isChatPage) {
+  // Route-scoped immersive layout: `/chat` and namespaced `/workspace/*` (Hermes lift) get full canvas.
+  // Keep providers/auth/runtime seams; hide old HAM shell chrome.
+  if (isChatPage || isWorkspacePath) {
     return (
       <div className="h-screen w-screen overflow-hidden bg-[#030b11] text-foreground transition-colors duration-300 relative font-sans">
         <HamDeploymentRestrictedBanner show={hamDeploymentRestricted} />

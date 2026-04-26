@@ -1,0 +1,54 @@
+/* Namespaced Hermes Workspace lift — scope under .hww-root to limit global collision */
+
+.hww-root {
+  min-height: 0;
+  height: 100%;
+  width: 100%;
+  color: #e8eef8;
+  background:
+    radial-gradient(1200px 700px at 70% -20%, rgba(6, 92, 84, 0.28), transparent 60%),
+    radial-gradient(800px 500px at -10% 20%, rgba(255, 107, 0, 0.08), transparent 60%),
+    linear-gradient(180deg, #06141a 0%, #041017 55%, #030b11 100%);
+}
+
+.hww-sidebar {
+  display: flex;
+  min-height: 0;
+  width: 260px;
+  flex-direction: column;
+  border-right: 1px solid var(--ham-workspace-line, rgba(255, 255, 255, 0.08));
+  background: rgba(8, 17, 24, 0.78);
+  backdrop-filter: blur(8px);
+}
+
+.hww-main {
+  min-height: 0;
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.hww-pill {
+  display: inline-flex;
+  max-width: 100%;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.28);
+  padding: 0.2rem 0.55rem;
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255, 200, 150, 0.9);
+}
+
+@media (max-width: 899px) {
+  .hww-sidebar {
+    width: 100%;
+    max-height: 40vh;
+    border-right: 0;
+    border-bottom: 1px solid var(--ham-workspace-line, rgba(255, 255, 255, 0.08));
+  }
+}
