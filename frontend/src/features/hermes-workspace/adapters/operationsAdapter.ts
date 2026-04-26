@@ -12,6 +12,8 @@ export type WorkspaceAgent = {
   id: string;
   name: string;
   model: string;
+  emoji: string;
+  systemPrompt: string;
   status: AgentStatus;
   cronEnabled: boolean;
   cronExpr: string;
@@ -60,13 +62,19 @@ export const workspaceOperationsAdapter = {
   async createAgent(
     name: string,
     model: string,
+    opts?: { emoji?: string; systemPrompt?: string },
   ): Promise<{ agent: WorkspaceAgent | null; bridge: OperationsBridge; error?: string }> {
     try {
       const res = await fetch(`${BASE}/agents`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ name, model: model || "ham-local" }),
+        body: JSON.stringify({
+          name,
+          model: model || "ham-local",
+          emoji: opts?.emoji,
+          systemPrompt: opts?.systemPrompt,
+        }),
       });
       if (!res.ok) return { agent: null, bridge: PENDING, error: `HTTP ${res.status}` };
       return { agent: (await res.json()) as WorkspaceAgent, bridge: { status: "ready" } };
@@ -77,7 +85,14 @@ export const workspaceOperationsAdapter = {
 
   async patchAgent(
     id: string,
-    body: Partial<{ name: string; model: string; cronEnabled: boolean; cronExpr: string }>,
+    body: Partial<{
+      name: string;
+      model: string;
+      emoji: string;
+      systemPrompt: string;
+      cronEnabled: boolean;
+      cronExpr: string;
+    }>,
   ): Promise<{ agent: WorkspaceAgent | null; bridge: OperationsBridge; error?: string }> {
     try {
       const res = await fetch(`${BASE}/agents/${encodeURIComponent(id)}`, {
@@ -123,6 +138,24 @@ export const workspaceOperationsAdapter = {
     }
   },
 
+  async appendMessage(
+    id: string,
+    message: string,
+  ): Promise<{ agent: WorkspaceAgent | null; bridge: OperationsBridge; error?: string }> {
+    try {
+      const res = await fetch(`${BASE}/agents/${encodeURIComponent(id)}/message`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ message }),
+      });
+      if (!res.ok) return { agent: null, bridge: PENDING, error: (await res.text()) || `HTTP ${res.status}` };
+      return { agent: (await res.json()) as WorkspaceAgent, bridge: { status: "ready" } };
+    } catch (e) {
+      return { agent: null, bridge: PENDING, error: e instanceof Error ? e.message : String(e) };
+    }
+  },
+
   async listScheduled(): Promise<{ jobs: ScheduledJob[]; bridge: OperationsBridge }> {
     try {
       const res = await fetch(`${BASE}/scheduled-jobs`, { credentials: "include" });
@@ -159,6 +192,24 @@ export const workspaceOperationsAdapter = {
       return { ok: true, bridge: { status: "ready" } };
     } catch (e) {
       return { ok: false, bridge: PENDING, error: e instanceof Error ? e.message : String(e) };
+    }
+  },
+
+  async patchScheduled(
+    id: string,
+    body: Partial<Pick<ScheduledJob, "name" | "cronExpr" | "enabled">>,
+  ): Promise<{ job: ScheduledJob | null; bridge: OperationsBridge; error?: string }> {
+    try {
+      const res = await fetch(`${BASE}/scheduled-jobs/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) return { job: null, bridge: PENDING, error: `HTTP ${res.status}` };
+      return { job: (await res.json()) as ScheduledJob, bridge: { status: "ready" } };
+    } catch (e) {
+      return { job: null, bridge: PENDING, error: e instanceof Error ? e.message : String(e) };
     }
   },
 

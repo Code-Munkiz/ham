@@ -82,6 +82,30 @@ def test_agents_play_pause_delete_scheduled_settings(
     assert ps.status_code == 200
     assert ps.json()["settings"]["outputsRetention"] == 10
 
+    c_emoji = client.post(
+        "/api/workspace/operations/agents",
+        content=json.dumps(
+            {"name": "Emoji", "model": "m2", "emoji": "🦾", "systemPrompt": "Hello world"}
+        ),
+        headers={"content-type": "application/json"},
+    )
+    assert c_emoji.status_code == 201
+    assert c_emoji.json()["emoji"] == "🦾"
+    assert "Hello" in c_emoji.json()["systemPrompt"]
+    aid2 = c_emoji.json()["id"]
+
+    msg = client.post(
+        f"/api/workspace/operations/agents/{aid2}/message",
+        content=json.dumps({"message": "ping"}),
+        headers={"content-type": "application/json"},
+    )
+    assert msg.status_code == 200
+    lines = [o["line"] for o in msg.json()["outputs"]]
+    assert any("You: ping" in ln for ln in lines)
+
+    d2 = client.delete(f"/api/workspace/operations/agents/{aid2}")
+    assert d2.status_code == 204
+
     d = client.delete(f"/api/workspace/operations/agents/{aid}")
     assert d.status_code == 204
 

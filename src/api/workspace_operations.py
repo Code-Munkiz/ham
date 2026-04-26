@@ -101,6 +101,8 @@ class AgentOut(BaseModel):
     id: str
     name: str
     model: str = "ham-local"
+    emoji: str = "🤖"
+    systemPrompt: str = ""
     status: AgentStatus
     cronEnabled: bool = False
     cronExpr: str = ""
@@ -118,6 +120,8 @@ def _to_agent(data: dict[str, Any]) -> AgentOut:
         id=data["id"],
         name=data.get("name", "Agent"),
         model=data.get("model", "ham-local") or "ham-local",
+        emoji=(str(data.get("emoji", "🤖") or "🤖")[:8] or "🤖"),
+        systemPrompt=str(data.get("systemPrompt", "") or "")[:16_000],
         status=data.get("status", "idle"),
         cronEnabled=bool(data.get("cronEnabled", False)),
         cronExpr=str(data.get("cronExpr", "") or ""),
@@ -141,13 +145,21 @@ def _agent_dict(aid: str) -> dict[str, Any]:
 class CreateAgentBody(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     model: str = Field(default="ham-local", max_length=200)
+    emoji: str | None = Field(default=None, max_length=8)
+    systemPrompt: str | None = Field(default=None, max_length=16_000)
 
 
 class PatchAgentBody(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     model: str | None = Field(default=None, max_length=200)
+    emoji: str | None = Field(default=None, max_length=8)
+    systemPrompt: str | None = Field(default=None, max_length=16_000)
     cronEnabled: bool | None = None
     cronExpr: str | None = Field(default=None, max_length=200)
+
+
+class AgentMessageBody(BaseModel):
+    message: str = Field(min_length=1, max_length=8000)
 
 
 class CreateScheduledJobBody(BaseModel):
@@ -220,10 +232,14 @@ def create_agent(
 ) -> dict[str, Any]:
     now = time.time()
     aid = str(uuid.uuid4())
+    em = (body.emoji or "🤖").strip() or "🤖"
+    sp = (body.systemPrompt or "").strip()[:16_000]
     rec = {
         "id": aid,
         "name": body.name.strip(),
         "model": (body.model or "ham-local").strip() or "ham-local",
+        "emoji": em[:8] if em else "🤖",
+        "systemPrompt": sp,
         "status": "idle",
         "cronEnabled": False,
         "cronExpr": "",
@@ -262,6 +278,11 @@ def patch_agent(
             a["name"] = body.name.strip()
         if body.model is not None:
             a["model"] = body.model.strip() or "ham-local"
+        if body.emoji is not None:
+            em2 = body.emoji.strip() or "🤖"
+            a["emoji"] = em2[:8]
+        if body.systemPrompt is not None:
+            a["systemPrompt"] = body.systemPrompt.strip()[:16_000]
         if body.cronEnabled is not None:
             a["cronEnabled"] = body.cronEnabled
         if body.cronExpr is not None:
@@ -305,6 +326,40 @@ def play_agent(
             }
         )
         _trim_outputs(a, raw)
+        a["updatedAt"] = time.time()
+        _save(raw)
+    return _agent_dict(agent_id)
+
+
+@router.post("/agents/{agent_id}/message")
+def append_agent_message(
+    agent_id: str,
+    body: AgentMessageBody,
+    _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
+) -> dict[str, Any]:
+    """User chat line + synthetic agent reply; same storage as `outputs` (HAM-local v0)."""
+    t0 = time.time()
+    msg = body.message.strip()
+    with _lock:
+        raw = _load()
+        agents = raw.setdefault("agents", {})
+        a = agents.get(agent_id)
+        if not a or not isinstance(a, dict):
+            raise HTTPException(status_code=404, detail="Agent not found")
+        a.setdefault("outputs", []).append(
+            {
+                "at": t0,
+                "line": f"You: {msg}",
+            }
+        )
+        a.setdefault("outputs", []).append(
+            {
+                "at": t0 + 0.01,
+                "line": "Agent: (HAM local) Noted. Connect gateway runtime for real replies.",
+            }
+        )
+        _trim_outputs(a, raw)
+        a["status"] = "active"
         a["updatedAt"] = time.time()
         _save(raw)
     return _agent_dict(agent_id)

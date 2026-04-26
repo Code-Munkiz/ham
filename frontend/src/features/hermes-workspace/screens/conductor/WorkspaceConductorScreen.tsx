@@ -1,17 +1,29 @@
 import * as React from "react";
+import { motion } from "motion/react";
 import {
   BookOpen,
+  Briefcase,
+  CheckCircle2,
+  CircleDot,
+  Clock,
+  Crown,
   Hammer,
+  Home,
+  Layers3,
   Plus,
   RefreshCw,
   Rocket,
   Search,
+  Send,
   Settings2,
   ShieldCheck,
+  Sparkles,
+  Terminal,
   Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { HwwText, hwwCentsToEstTokens, hwwCentsToUsd } from "../../hwwText";
 import {
   workspaceConductorAdapter,
   type ConductorSettings,
@@ -20,30 +32,67 @@ import {
   type WorkspaceMission,
 } from "../../adapters/conductorAdapter";
 
-const QUICK: { id: QuickAction; label: string; icon: React.ElementType }[] = [
-  { id: "research", label: "Research", icon: BookOpen },
-  { id: "build", label: "Build", icon: Hammer },
-  { id: "review", label: "Review", icon: ShieldCheck },
-  { id: "deploy", label: "Deploy", icon: Rocket },
+const QUICK: { id: QuickAction; label: string; icon: React.ElementType; hint: string }[] = [
+  { id: "research", label: "Research", icon: BookOpen, hint: "Scout + summarize context" },
+  { id: "build", label: "Build", icon: Hammer, hint: "Plan implementation surface" },
+  { id: "review", label: "Review", icon: ShieldCheck, hint: "Diff & risk scan" },
+  { id: "deploy", label: "Deploy", icon: Rocket, hint: "Release checklist shell" },
 ];
+
+const WORKER_PERSONAS = [
+  { id: "alpha", name: "Scout", role: "Recon" },
+  { id: "beta", name: "Builder", role: "Ship" },
+  { id: "gamma", name: "Critic", role: "Review" },
+  { id: "delta", name: "Ops", role: "Stabilize" },
+] as const;
+
+type UiPhase = "home" | "preview" | "active" | "complete";
 
 function fmt(ts: number) {
   return new Date(ts * 1000).toLocaleString();
 }
 
-function phaseClass(p: MissionPhase) {
-  switch (p) {
-    case "draft":
-      return "bg-white/10 text-white/80";
-    case "running":
-      return "bg-amber-500/25 text-amber-100";
-    case "completed":
-      return "bg-emerald-500/20 text-emerald-100";
-    case "failed":
-      return "bg-red-500/20 text-red-100";
-    default:
-      return "bg-white/10 text-white/80";
-  }
+function deriveUiPhase(m: WorkspaceMission | null): UiPhase {
+  if (!m) return "home";
+  if (m.phase === "draft") return "preview";
+  if (m.phase === "running") return "active";
+  if (m.phase === "completed" || m.phase === "failed") return "complete";
+  return "home";
+}
+
+function splitOutputs(
+  lines: { at: number; line: string }[],
+): { name: string; role: string; id: string; lines: { at: number; line: string }[] }[] {
+  const sorted = [...lines].sort((a, b) => a.at - b.at);
+  const buckets: { at: number; line: string }[][] = WORKER_PERSONAS.map(() => []);
+  sorted.forEach((ln, i) => {
+    buckets[i % WORKER_PERSONAS.length]!.push(ln);
+  });
+  return WORKER_PERSONAS.map((w, i) => ({ ...w, lines: buckets[i]! }));
+}
+
+const PHASE_STEPS: { id: UiPhase; label: string; icon: React.ElementType }[] = [
+  { id: "home", label: "Home", icon: Home },
+  { id: "preview", label: "Preview", icon: CircleDot },
+  { id: "active", label: "Active", icon: Send },
+  { id: "complete", label: "Complete", icon: CheckCircle2 },
+];
+
+function missionPhaseToUiStepId(p: MissionPhase | null, hasSelection: boolean): UiPhase {
+  if (!hasSelection) return "home";
+  if (p === "draft") return "preview";
+  if (p === "running") return "active";
+  return "complete";
+}
+
+function phasePill(phase: MissionPhase) {
+  const map: Record<MissionPhase, string> = {
+    draft: "bg-sky-500/20 text-sky-100",
+    running: "bg-amber-500/25 text-amber-100",
+    completed: "bg-emerald-500/20 text-emerald-100",
+    failed: "bg-red-500/20 text-red-100",
+  };
+  return map[phase] ?? "bg-white/10 text-white/80";
 }
 
 export function WorkspaceConductorScreen() {
@@ -52,7 +101,6 @@ export function WorkspaceConductorScreen() {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState<string | null>(null);
-  const [phaseFilter, setPhaseFilter] = React.useState<"all" | MissionPhase | "active" | "history">("active");
   const [q, setQ] = React.useState("");
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [newOpen, setNewOpen] = React.useState(false);
@@ -61,6 +109,7 @@ export function WorkspaceConductorScreen() {
   const [composer, setComposer] = React.useState({ title: "", body: "" });
   const [settingsOpen, setSettingsOpen] = React.useState(false);
   const [sDraft, setSDraft] = React.useState({ budgetCents: 10_000, defaultModel: "ham-local", notes: "" });
+  const [listTab, setListTab] = React.useState<"active" | "history">("active");
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -90,20 +139,26 @@ export function WorkspaceConductorScreen() {
   }, [load]);
 
   const selected = missions.find((m) => m.id === selectedId) ?? null;
+  const uiPhase = deriveUiPhase(selected);
+  const stepHighlight = missionPhaseToUiStepId(selected?.phase ?? null, !!selected);
 
-  const visible = React.useMemo(() => {
+  const filteredMissions = React.useMemo(() => {
     let rows = missions;
     if (q.trim()) {
       const l = q.toLowerCase();
       rows = rows.filter((m) => `${m.title} ${m.body}`.toLowerCase().includes(l));
     }
-    if (phaseFilter === "active")
+    if (listTab === "active")
       return rows.filter((m) => m.phase === "draft" || m.phase === "running");
-    if (phaseFilter === "history")
-      return rows.filter((m) => m.phase === "completed" || m.phase === "failed");
-    if (phaseFilter !== "all") return rows.filter((m) => m.phase === phaseFilter);
-    return rows;
-  }, [missions, q, phaseFilter]);
+    return rows.filter((m) => m.phase === "completed" || m.phase === "failed");
+  }, [missions, q, listTab]);
+
+  const totalCostCents = React.useMemo(
+    () => missions.reduce((a, m) => a + (m.costCents || 0), 0),
+    [missions],
+  );
+  const budgetCents = settings?.budgetCents ?? 0;
+  const spendRatio = budgetCents > 0 ? Math.min(1, totalCostCents / budgetCents) : 0;
 
   const onQuick = async (quick: QuickAction) => {
     setBusy(`q-${quick}`);
@@ -112,6 +167,7 @@ export function WorkspaceConductorScreen() {
     if (err) setError(err);
     else if (mission) {
       setSelectedId(mission.id);
+      setListTab("active");
       void load();
     }
   };
@@ -119,18 +175,17 @@ export function WorkspaceConductorScreen() {
   const onCreate = async () => {
     if (!nt.trim()) return;
     setBusy("new");
-    const { mission, error: err } = await workspaceConductorAdapter.create(
-      nt.trim(),
-      nb,
-      null,
-    );
+    const { mission, error: err } = await workspaceConductorAdapter.create(nt.trim(), nb, null);
     setBusy(null);
     if (err) setError(err);
     else {
       setNewOpen(false);
       setNt("");
       setNb("");
-      if (mission) setSelectedId(mission.id);
+      if (mission) {
+        setSelectedId(mission.id);
+        setListTab("active");
+      }
       void load();
     }
   };
@@ -144,7 +199,7 @@ export function WorkspaceConductorScreen() {
   };
 
   const onDelete = async (id: string) => {
-    if (!window.confirm("Delete this mission?")) return;
+    if (!window.confirm("Archive / delete this mission?")) return;
     setBusy(id);
     const { error: err } = await workspaceConductorAdapter.delete(id);
     setBusy(null);
@@ -164,7 +219,10 @@ export function WorkspaceConductorScreen() {
     if (err) setError(err);
     else {
       setComposer({ title: "", body: "" });
-      if (mission) setSelectedId(mission.id);
+      if (mission) {
+        setSelectedId(mission.id);
+        setListTab("active");
+      }
       void load();
     }
   };
@@ -184,266 +242,422 @@ export function WorkspaceConductorScreen() {
     }
   };
 
+  const outputText = selected
+    ? selected.outputs
+        .slice()
+        .sort((a, b) => a.at - b.at)
+        .map((o) => o.line)
+        .join("\n\n")
+    : "";
+  const workers = selected ? splitOutputs(selected.outputs) : [];
+
   return (
-    <div className="flex h-full min-h-0 min-w-0 flex-col p-3 md:p-4">
-      <div className="shrink-0">
-        <p className="hww-pill mb-1">Workspace</p>
-        <h1 className="text-base font-semibold text-white/95">Conductor</h1>
-        <p className="mt-0.5 max-w-2xl text-[11px] text-white/45">
-          COND-001…004 — Mission composer, quick actions, active/history, worker outputs, and settings. Storage{" "}
-          <code className="text-white/50">.ham/workspace_state/conductor.json</code> (HAM-only; no upstream Hermes
-          calls).
-        </p>
-      </div>
-
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <Button
-          type="button"
-          size="sm"
-          variant="secondary"
-          className="h-7 gap-1"
-          onClick={() => void load()}
-          disabled={loading}
-        >
-          <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
-          Refresh
-        </Button>
-        <Button type="button" size="sm" className="h-7 gap-1" onClick={() => setNewOpen((v) => !v)}>
-          <Plus className="h-3.5 w-3.5" />
-          New Mission
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className="h-7 border-white/10 bg-black/30 text-amber-200/90 hover:bg-white/5"
-          onClick={() => setSettingsOpen(true)}
-        >
-          <Settings2 className="h-3.5 w-3.5" />
-          Conductor settings
-        </Button>
-        <div className="flex min-w-0 max-w-xs flex-1 items-center gap-1 rounded border border-white/10 bg-black/20 px-2">
-          <Search className="h-3.5 w-3.5 text-white/30" />
-          <input
-            className="hww-input h-7 min-w-0 flex-1 border-0"
-            placeholder="Filter activity"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-          />
-        </div>
-        <label className="flex items-center gap-1 text-[10px] text-white/50">
-          View
-          <select
-            className="hww-input h-7 rounded border border-white/10 bg-black/40 text-[11px] text-white/90"
-            value={phaseFilter}
-            onChange={(e) => setPhaseFilter(e.target.value as typeof phaseFilter)}
-          >
-            <option value="active">Active (draft + running)</option>
-            <option value="history">Completed + failed</option>
-            <option value="all">All phases</option>
-            <option value="draft">Draft</option>
-            <option value="running">Running</option>
-            <option value="completed">Completed</option>
-            <option value="failed">Failed</option>
-          </select>
-        </label>
-      </div>
-
-      <div className="mt-2 flex flex-wrap gap-1.5">
-        {QUICK.map(({ id, label, icon: Icon }) => (
-          <Button
-            key={id}
-            type="button"
-            size="sm"
-            variant="secondary"
-            className="h-7 gap-1"
-            disabled={!!busy}
-            onClick={() => void onQuick(id)}
-          >
-            <Icon className="h-3.5 w-3.5" />
-            {label}
-          </Button>
-        ))}
-      </div>
-
-      {error && (
-        <div className="mt-2 rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[11px] text-amber-100/90">
-          {error}
-        </div>
-      )}
-
-      {settings && (
-        <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-4">
-          {[
-            ["Budget (¢)", String(settings.budgetCents)],
-            ["Default model", settings.defaultModel],
-            ["Missions", String(missions.length)],
-            [
-              "Est. cost (sum ¢)",
-              String(missions.reduce((a, m) => a + (m.costCents || 0), 0)),
-            ],
-          ].map(([k, v]) => (
-            <div key={k} className="rounded border border-white/10 bg-black/30 px-2 py-1.5 text-center">
-              <div className="text-[9px] font-semibold uppercase tracking-wide text-white/40">{k}</div>
-              <div className="text-xs font-semibold text-white/90">{v}</div>
+    <div className="flex h-full min-h-0 min-w-0 flex-col bg-gradient-to-b from-[#0a1018] via-[#0b0f16] to-[#0a0e14] p-2 md:p-3">
+      <div className="shrink-0 border-b border-white/5 pb-2">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <div className="mb-0.5 flex items-center gap-1.5">
+              <p className="hww-pill">Mission room</p>
+              <span className="text-[9px] text-white/35">HAM bridge · v0</span>
             </div>
-          ))}
-        </div>
-      )}
-
-      {newOpen && (
-        <div className="mt-2 rounded border border-white/10 bg-black/30 p-2">
-          <div className="grid gap-2 sm:grid-cols-2">
-            <input
-              className="hww-input rounded px-2 py-1.5 text-xs"
-              placeholder="Title *"
-              value={nt}
-              onChange={(e) => setNt(e.target.value)}
-            />
-            <input
-              className="hww-input rounded px-2 py-1.5 text-xs"
-              placeholder="Description / mission body"
-              value={nb}
-              onChange={(e) => setNb(e.target.value)}
-            />
+            <h1 className="flex items-center gap-1.5 text-base font-semibold tracking-tight text-white/95">
+              <Crown className="h-4 w-4 text-amber-400/80" />
+              Conductor
+            </h1>
+            <p className="mt-0.5 max-w-2xl text-[11px] text-white/45">
+              Gateway-grade layout over HAM <code className="text-white/50">/api/workspace/conductor</code> — no upstream
+              proxy; state in <code className="text-white/50">.ham/workspace_state/conductor.json</code>.
+            </p>
           </div>
-          <div className="mt-2 flex gap-2">
-            <Button type="button" size="sm" onClick={onCreate} disabled={!nt.trim() || !!busy}>
-              Create
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              className="h-7 gap-1"
+              onClick={() => void load()}
+              disabled={loading}
+            >
+              <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
+              Sync
             </Button>
-            <Button type="button" size="sm" variant="ghost" onClick={() => setNewOpen(false)}>
-              Cancel
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 border-white/10 bg-black/20 text-amber-200/90 hover:bg-white/5"
+              onClick={() => setSettingsOpen(true)}
+            >
+              <Settings2 className="h-3.5 w-3.5" />
+              Budget
             </Button>
           </div>
         </div>
-      )}
 
-      <div className="mt-2 rounded border border-white/10 bg-black/20 p-2">
-        <p className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Mission composer</p>
-        <div className="mt-1 grid gap-1.5 md:grid-cols-2">
-          <input
-            className="hww-input rounded px-2 py-1.5 text-xs"
-            placeholder="Title"
-            value={composer.title}
-            onChange={(e) => setComposer((c) => ({ ...c, title: e.target.value }))}
-          />
-          <Button type="button" size="sm" className="h-7 w-fit" onClick={applyComposer} disabled={!!busy}>
-            Create from composer
-          </Button>
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap gap-1">
+            {PHASE_STEPS.map((s) => {
+              const active = s.id === stepHighlight;
+              const Icon = s.icon;
+              return (
+                <div
+                  key={s.id}
+                  className={cn(
+                    "flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors",
+                    active
+                      ? "border-amber-500/50 bg-amber-500/10 text-amber-100"
+                      : "border-white/5 bg-black/20 text-white/40",
+                  )}
+                >
+                  <Icon className="h-3 w-3" />
+                  {s.label}
+                </div>
+              );
+            })}
+          </div>
+          {settings && (
+            <div className="flex items-center gap-2 text-[10px] text-white/45">
+              <Sparkles className="h-3 w-3 text-amber-400/60" />
+              <span>Model: {settings.defaultModel}</span>
+            </div>
+          )}
         </div>
-        <textarea
-          className="hww-input mt-1 min-h-[72px] w-full rounded px-2 py-1.5 text-xs"
-          placeholder="Mission body — quick actions also seed templates via API."
-          value={composer.body}
-          onChange={(e) => setComposer((c) => ({ ...c, body: e.target.value }))}
-        />
       </div>
 
-      {loading && missions.length === 0 && <p className="mt-2 text-[11px] text-white/40">Loading…</p>}
-
-      <div className="mt-3 grid min-h-0 flex-1 grid-cols-1 gap-2 lg:grid-cols-2">
-        <div className="flex min-h-0 min-w-0 flex-col rounded border border-white/10 bg-black/20">
-          <div className="border-b border-white/10 px-2 py-1.5 text-[10px] font-semibold uppercase text-white/50">
-            Missions &amp; activity
+      <div className="mt-2 flex min-h-0 flex-1 flex-col gap-2 lg:grid lg:grid-cols-[16rem,1fr,15.5rem] lg:items-stretch">
+        <motion.aside
+          initial={false}
+          className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-white/10 bg-black/30 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.03)]"
+        >
+          <div className="flex items-center justify-between border-b border-white/10 px-2 py-1.5">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-white/50">Board</p>
+            <Button type="button" size="sm" variant="secondary" className="h-6 gap-0.5 px-1.5 text-[10px]" onClick={() => setNewOpen((v) => !v)}>
+              <Plus className="h-3 w-3" />
+            </Button>
           </div>
-          <ul className="hww-scroll min-h-0 flex-1 overflow-auto p-1.5">
-            {visible.length === 0 && <li className="px-1 py-2 text-[11px] text-white/40">No missions in this view.</li>}
-            {visible.map((m) => (
-              <li key={m.id} className="mb-1">
+          <div className="grid grid-cols-2 gap-0.5 border-b border-white/10 p-1">
+            <button
+              type="button"
+              onClick={() => setListTab("active")}
+              className={cn(
+                "rounded-md px-2 py-1 text-[10px] font-medium",
+                listTab === "active" ? "bg-amber-500/15 text-amber-100" : "text-white/45 hover:bg-white/5",
+              )}
+            >
+              In flight
+            </button>
+            <button
+              type="button"
+              onClick={() => setListTab("history")}
+              className={cn(
+                "rounded-md px-2 py-1 text-[10px] font-medium",
+                listTab === "history" ? "bg-emerald-500/15 text-emerald-100" : "text-white/45 hover:bg-white/5",
+              )}
+            >
+              History
+            </button>
+          </div>
+          <div className="border-b border-white/10 p-1.5">
+            <div className="flex items-center gap-1 rounded border border-white/10 bg-black/20 px-1.5">
+              <Search className="h-3 w-3 text-white/30" />
+              <input
+                className="hww-input h-7 min-w-0 flex-1 border-0 p-0 text-[11px]"
+                placeholder="Filter missions"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+              />
+            </div>
+          </div>
+          {newOpen && (
+            <div className="border-b border-white/10 p-2">
+              <p className="text-[9px] font-semibold text-white/40">Quick insert</p>
+              <div className="mt-1 grid gap-1">
+                <input
+                  className="hww-input rounded px-2 py-1 text-[11px]"
+                  placeholder="Title *"
+                  value={nt}
+                  onChange={(e) => setNt(e.target.value)}
+                />
+                <input
+                  className="hww-input rounded px-2 py-1 text-[11px]"
+                  placeholder="Body"
+                  value={nb}
+                  onChange={(e) => setNb(e.target.value)}
+                />
+                <div className="flex gap-1">
+                  <Button type="button" size="sm" className="h-6 text-[10px]" onClick={() => void onCreate()} disabled={!nt.trim() || !!busy}>
+                    Add
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+          <ul className="hww-scroll min-h-0 flex-1 space-y-1 overflow-auto p-1.5">
+            {loading && missions.length === 0 && <li className="px-1 py-2 text-[11px] text-white/40">Loading…</li>}
+            {filteredMissions.length === 0 && <li className="px-1 py-2 text-[11px] text-white/40">No missions in this column.</li>}
+            {filteredMissions.map((m) => (
+              <li key={m.id}>
                 <button
                   type="button"
                   onClick={() => setSelectedId(m.id)}
                   className={cn(
-                    "w-full rounded border px-2 py-1.5 text-left text-xs transition-colors",
+                    "w-full rounded-lg border px-2 py-1.5 text-left text-[11px] transition-colors",
                     selectedId === m.id
-                      ? "border-amber-500/50 bg-amber-500/10"
-                      : "border-white/10 bg-black/20 hover:border-white/20",
+                      ? "border-amber-500/40 bg-gradient-to-r from-amber-500/10 to-transparent"
+                      : "border-white/5 bg-black/20 hover:border-white/15",
                   )}
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-medium text-white/90">{m.title}</span>
-                    <span className={cn("shrink-0 rounded px-1.5 py-0.5 text-[9px] uppercase", phaseClass(m.phase))}>
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="line-clamp-1 font-medium text-white/90">{m.title}</span>
+                    <span className={cn("shrink-0 rounded px-1 py-0.5 text-[8px] uppercase", phasePill(m.phase))}>
                       {m.phase}
                     </span>
                   </div>
-                  {m.body ? (
-                    <p className="mt-0.5 line-clamp-2 text-[10px] text-white/45">{m.body}</p>
-                  ) : null}
                 </button>
               </li>
             ))}
           </ul>
-        </div>
+        </motion.aside>
 
-        <div className="flex min-h-0 min-w-0 flex-col rounded border border-white/10 bg-black/20">
-          <div className="border-b border-white/10 px-2 py-1.5 text-[10px] font-semibold uppercase text-white/50">
-            Active mission / worker output
+        <main className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-amber-500/15 bg-gradient-to-b from-amber-500/[0.04] to-black/40 p-2 shadow-lg">
+          <div className="shrink-0 border-b border-white/10 pb-2">
+            <p className="text-[9px] font-semibold uppercase tracking-[0.2em] text-amber-200/50">Office · mission room</p>
+            <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-white/95">
+                {selected ? selected.title : "Compose a mission to enter preview"}
+              </p>
+              {selected && (
+                <div className="flex flex-wrap gap-1">
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase",
+                      selected.phase === "failed" ? "bg-red-500/20 text-red-100" : phasePill(selected.phase),
+                    )}
+                  >
+                    <Terminal className="h-3 w-3" />
+                    {uiPhase}
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
-          {!selected && (
-            <p className="p-2 text-[11px] text-white/40">Select a mission to view outputs, run, or remove.</p>
-          )}
-          {selected && (
-            <div className="hww-scroll flex min-h-0 flex-1 flex-col overflow-auto p-2">
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className={cn("rounded px-1.5 py-0.5 text-[9px] uppercase", phaseClass(selected.phase))}>
-                  {selected.phase}
-                </span>
-                <span className="text-[10px] text-white/45">Cost {selected.costCents} ¢</span>
-                <span className="text-[10px] text-white/45">Updated {fmt(selected.updatedAt)}</span>
-              </div>
-              <p className="mt-1 text-sm font-medium text-white/95">{selected.title}</p>
-              <p className="mt-0.5 whitespace-pre-wrap text-[11px] text-white/60">{selected.body}</p>
-              <div className="mt-2 flex flex-wrap gap-1">
-                <Button
-                  type="button"
-                  size="sm"
-                  className="h-7"
-                  disabled={!!busy || selected.phase === "completed" || selected.phase === "failed" || selected.phase === "running"}
-                  onClick={() => void onRun(selected.id)}
-                >
-                  Run mission
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="secondary"
-                  className="h-7"
-                  disabled={!!busy}
-                  onClick={async () => {
-                    setBusy("fail");
-                    const { error: err } = await workspaceConductorAdapter.fail(selected.id);
-                    setBusy(null);
-                    if (err) setError(err);
-                    else void load();
-                  }}
-                >
-                  Mark failed
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 text-red-300"
-                  disabled={!!busy}
-                  onClick={() => void onDelete(selected.id)}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  Delete
-                </Button>
-              </div>
-              <p className="mt-2 text-[10px] font-semibold uppercase text-white/40">Worker / mission output</p>
-              <pre className="mt-1 max-h-48 overflow-auto rounded border border-white/10 bg-black/40 p-2 font-mono text-[10px] text-emerald-100/90">
-                {selected.outputs.length === 0
-                  ? "—"
-                  : selected.outputs
-                      .slice()
-                      .sort((a, b) => a.at - b.at)
-                      .map((o) => `${fmt(o.at)}  ${o.line}`)
-                      .join("\n")}
-              </pre>
+
+          {error && (
+            <div className="mb-2 rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[11px] text-amber-100/90">
+              {error}
             </div>
           )}
-        </div>
+
+          {!selected && (
+            <div className="flex min-h-0 flex-1 flex-col justify-center">
+              <div className="mx-auto max-w-lg text-center">
+                <div className="mb-1 inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5">
+                  <Layers3 className="h-5 w-5 text-amber-300/80" />
+                </div>
+                <h2 className="text-sm font-semibold text-white/95">Home — mission command</h2>
+                <p className="mt-1 text-[11px] text-white/45">Define a mission, preview with Markdown-style formatting, then run against the HAM v0 worker strip.</p>
+                <div className="mt-3 grid gap-2 text-left">
+                  <input
+                    className="hww-input rounded-md px-2 py-1.5 text-xs"
+                    placeholder="Mission title"
+                    value={composer.title}
+                    onChange={(e) => setComposer((c) => ({ ...c, title: e.target.value }))}
+                  />
+                  <textarea
+                    className="hww-input min-h-[100px] rounded-md px-2 py-1.5 text-xs"
+                    placeholder={"## Objective\n\n- Step one\n- Step two"}
+                    value={composer.body}
+                    onChange={(e) => setComposer((c) => ({ ...c, body: e.target.value }))}
+                  />
+                  <div className="flex flex-wrap gap-1.5">
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-8 gap-1"
+                      onClick={() => void applyComposer()}
+                      disabled={!!busy}
+                    >
+                      <Briefcase className="h-3.5 w-3.5" />
+                      Open preview
+                    </Button>
+                    {QUICK.map(({ id, label, icon: Icon }) => (
+                      <Button
+                        key={id}
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        className="h-8 gap-1 text-[10px]"
+                        disabled={!!busy}
+                        onClick={() => void onQuick(id)}
+                      >
+                        <Icon className="h-3.5 w-3.5" />
+                        {label}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {selected && (
+            <div className="hww-scroll min-h-0 flex-1 space-y-2 overflow-auto pt-1">
+              {uiPhase === "preview" && (
+                <div className="rounded-lg border border-sky-500/20 bg-sky-500/5 p-2">
+                  <p className="text-[9px] font-semibold uppercase text-sky-200/50">Preview</p>
+                  <HwwText text={selected.body} className="mt-1" />
+                </div>
+              )}
+              {(uiPhase === "active" || uiPhase === "complete") && (
+                <div
+                  className={cn(
+                    "rounded-lg border p-2",
+                    selected.phase === "failed" ? "border-red-500/30 bg-red-500/5" : "border-emerald-500/20 bg-emerald-500/5",
+                  )}
+                >
+                  <p className="text-[9px] font-semibold uppercase text-white/40">
+                    {selected.phase === "failed" ? "Run ended · failed" : "Run log · Markdown view"}
+                  </p>
+                  <div className="mt-1 max-h-[40vh] overflow-auto rounded border border-white/5 bg-black/30 p-2">
+                    {outputText ? <HwwText text={outputText} /> : <p className="text-[11px] text-white/40">—</p>}
+                  </div>
+                </div>
+              )}
+
+              {selected && uiPhase === "active" && selected.phase === "running" && (
+                <p className="text-[10px] text-amber-200/70">
+                  <Clock className="mr-0.5 inline h-3 w-3" />
+                  Synthetic run in HAM; upstream gateway would stream here.
+                </p>
+              )}
+
+              {selected && (
+                <div className="flex flex-wrap gap-1.5">
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="h-8"
+                    disabled={
+                      !!busy || selected.phase === "completed" || selected.phase === "failed" || selected.phase === "running"
+                    }
+                    onClick={() => void onRun(selected.id)}
+                  >
+                    <Rocket className="mr-1 h-3.5 w-3.5" />
+                    Launch
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    className="h-8"
+                    disabled={!!busy}
+                    onClick={async () => {
+                      setBusy("fail");
+                      const { error: err } = await workspaceConductorAdapter.fail(selected.id);
+                      setBusy(null);
+                      if (err) setError(err);
+                      else {
+                        setListTab("history");
+                        void load();
+                      }
+                    }}
+                  >
+                    Mark failed
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 text-red-300"
+                    disabled={!!busy}
+                    onClick={() => void onDelete(selected.id)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Remove
+                  </Button>
+                </div>
+              )}
+
+              {selected && (
+                <div>
+                  <p className="text-[9px] font-semibold uppercase text-white/40">Worker wall</p>
+                  <ul className="mt-1 grid grid-cols-1 gap-1 sm:grid-cols-2">
+                    {workers.map((w) => (
+                      <li key={w.id} className="rounded-lg border border-white/10 bg-black/40 p-2">
+                        <p className="text-[10px] font-medium text-amber-100/90">
+                          {w.name}
+                          <span className="text-white/40"> · {w.role}</span>
+                        </p>
+                        <pre className="mt-1 max-h-24 overflow-auto font-mono text-[9px] text-emerald-100/80">
+                          {w.lines.length === 0
+                            ? "—"
+                            : w.lines
+                                .map((o) => `${fmt(o.at)}  ${o.line}`)
+                                .join("\n")}
+                        </pre>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+        </main>
+
+        <aside className="flex min-h-0 min-w-0 flex-col gap-2 overflow-hidden">
+          <div className="rounded-xl border border-white/10 bg-black/30 p-2">
+            <p className="text-[9px] font-semibold uppercase text-white/45">Run economics</p>
+            {settings && (
+              <div className="mt-1 space-y-1.5 text-[11px] text-white/70">
+                <div className="flex justify-between">
+                  <span className="text-white/50">Budget</span>
+                  <span className="font-mono text-amber-100/90">{hwwCentsToUsd(budgetCents)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-white/50">Recorded spend</span>
+                  <span className="font-mono">{hwwCentsToUsd(totalCostCents)}</span>
+                </div>
+                <div className="flex justify-between text-[10px]">
+                  <span className="text-white/45">Est. tokens (cosmetic)</span>
+                  <span className="font-mono text-white/80">{hwwCentsToEstTokens(totalCostCents).toLocaleString()}</span>
+                </div>
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-amber-500/60 to-amber-300/80"
+                    style={{ width: `${spendRatio * 100}%` }}
+                  />
+                </div>
+                {selected && (
+                  <div className="border-t border-white/5 pt-1 text-[10px] text-white/50">
+                    This mission: {hwwCentsToUsd(selected.costCents)} · {hwwCentsToEstTokens(selected.costCents)} tok (est.)
+                  </div>
+                )}
+              </div>
+            )}
+            {!settings && <p className="mt-1 text-[10px] text-white/40">Load settings to show budget.</p>}
+          </div>
+
+          <div className="hww-scroll flex-1 space-y-1.5 overflow-auto rounded-xl border border-white/10 bg-black/25 p-2">
+            <p className="text-[9px] font-semibold uppercase text-white/45">Quick actions</p>
+            {QUICK.map(({ id, label, icon: Icon, hint }) => (
+              <Button
+                key={id}
+                type="button"
+                size="sm"
+                variant="secondary"
+                className="h-auto w-full flex-col items-stretch justify-start gap-0.5 py-1.5 text-left"
+                disabled={!!busy}
+                onClick={() => void onQuick(id)}
+              >
+                <span className="flex items-center gap-1.5 text-[11px]">
+                  <Icon className="h-3.5 w-3.5 shrink-0" />
+                  {label}
+                </span>
+                <span className="pl-5 text-[9px] font-normal text-white/40">{hint}</span>
+              </Button>
+            ))}
+          </div>
+        </aside>
       </div>
 
       {settingsOpen && (
