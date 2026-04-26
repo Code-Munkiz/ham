@@ -5,7 +5,6 @@
 
 import * as React from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import {
   ensureProjectIdForWorkspaceRoot,
@@ -240,26 +239,28 @@ export function WorkspaceChatScreen() {
   const hasTranscript = messages.length > 0;
   const showEmpty = !loadingSession && !hasTranscript && !loadErr;
   const sessionLoadFailed = Boolean(loadErr && !hasTranscript && !loadingSession);
-  const crumbTitle = !sessionId ? "New" : shortId(sessionId, 10);
+  const headerTitle = !sessionId ? "New session" : "Chat";
+  const last = messages[messages.length - 1];
+  const isStreaming =
+    sending && last?.role === "assistant" && !(last?.content || "").trim();
 
   return (
     <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col">
-      <div className="hww-chat-breadcrumb shrink-0 border-b border-white/[0.06] bg-[#040d14]/50 px-3 py-2.5 md:px-4">
-        <div className="mx-auto flex max-w-3xl items-center gap-1 text-[12px] text-white/50">
-          <span className="text-white/35">Hermes Workspace</span>
-          <ChevronRight className="h-3.5 w-3.5 shrink-0 opacity-50" aria-hidden />
-          <span className="font-medium text-white/75">{crumbTitle}</span>
-          {sessionId ? (
-            <button
-              type="button"
-              onClick={startNew}
-              className="ml-2 text-[11px] text-[#7dd3fc] underline decoration-white/10 underline-offset-2 hover:decoration-[#7dd3fc]/50"
-            >
-              New session
-            </button>
-          ) : null}
+      <header className="hww-chat-header flex shrink-0 items-start justify-between gap-3 border-b border-white/[0.06] bg-[#040d14]/80 px-4 py-3 backdrop-blur-sm md:px-8">
+        <div className="min-w-0">
+          <h1 className="text-[15px] font-semibold tracking-tight text-white/[0.95]">{headerTitle}</h1>
+          <p className="mt-0.5 truncate font-mono text-[11px] text-white/40" title={sessionId ?? undefined}>
+            {sessionId ? shortId(sessionId, 12) : "No session selected · messages stay on-device via HAM"}
+          </p>
         </div>
-      </div>
+        <button
+          type="button"
+          onClick={startNew}
+          className="shrink-0 rounded-lg border border-white/[0.1] bg-white/[0.06] px-2.5 py-1.5 text-[11px] font-medium text-[#7dd3fc] transition hover:bg-white/[0.09] hover:text-[#a5e9ff]"
+        >
+          New
+        </button>
+      </header>
       <div
         ref={listWrapRef}
         className="hww-scroll flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto"
@@ -281,7 +282,7 @@ export function WorkspaceChatScreen() {
           <WorkspaceChatEmptyState onSuggestionClick={(prompt) => void send(prompt)} />
         ) : (
           <>
-            <WorkspaceChatMessageList messages={messages} />
+            <WorkspaceChatMessageList messages={messages} isStreaming={isStreaming} />
             <div ref={endRef} className="h-2 shrink-0" />
           </>
         )}

@@ -1,6 +1,16 @@
 import * as React from "react";
 import { Link, NavLink, useLocation, useSearchParams } from "react-router-dom";
-import { Menu, MessageSquare, PanelLeft, PanelLeftClose, Plus, Search, X } from "lucide-react";
+import {
+  ChevronsUp,
+  Menu,
+  MessageSquare,
+  PanelLeft,
+  PanelLeftClose,
+  Plus,
+  Search,
+  Terminal,
+  X,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { publicAssetUrl } from "@/lib/ham/publicAssets";
 import { Button } from "@/components/ui/button";
@@ -34,6 +44,8 @@ type SideNavOptions = {
   sessionFilter: string;
   onSessionFilterChange: (q: string) => void;
   activeSessionId: string | null;
+  /** When on `/workspace/chat`, sessions lead the rail (upstream ChatSidebar pattern). */
+  isChatRoute: boolean;
 };
 
 function sideNavClass(isActive: boolean, iconOnly: boolean) {
@@ -62,6 +74,7 @@ function WorkspaceSideNav({
   sessionFilter,
   onSessionFilterChange,
   activeSessionId,
+  isChatRoute,
 }: SideNavOptions) {
   const logoSrc = publicAssetUrl("ham-logo.png");
   const hamAppMoonSrc = publicAssetUrl("ham-app-moon.png");
@@ -81,6 +94,120 @@ function WorkspaceSideNav({
     });
   }, [sessions, q]);
 
+  const mainNav = (
+    <nav
+      className={cn("mb-4 flex flex-col", c ? "items-center gap-1" : "gap-0.5")}
+      aria-label="Main"
+    >
+      {mainNavItems.map((item) => (
+        <NavLink
+          key={item.to}
+          to={item.to}
+          end={item.end ?? false}
+          onClick={onNavigate}
+          className={({ isActive }) => sideNavClass(isActive, c)}
+          title={item.label}
+        >
+          <item.icon className="h-4 w-4 shrink-0 opacity-90" strokeWidth={1.5} />
+          {c ? <span className="sr-only">{item.label}</span> : item.label}
+        </NavLink>
+      ))}
+    </nav>
+  );
+
+  const knowledgeNav = (
+    <nav
+      className={cn("mb-3 flex flex-col", c ? "items-center gap-1" : "gap-0.5")}
+      aria-label="Knowledge"
+    >
+      {knowledgeNavItems.map((item) => (
+        <NavLink
+          key={item.to}
+          to={item.to}
+          onClick={onNavigate}
+          className={({ isActive }) => sideNavClass(isActive, c)}
+          title={item.label}
+        >
+          <item.icon className="h-4 w-4 shrink-0 opacity-90" strokeWidth={1.5} />
+          {c ? <span className="sr-only">{item.label}</span> : item.label}
+        </NavLink>
+      ))}
+    </nav>
+  );
+
+  const expandedSessionsContent = (ulClass: string) => {
+    if (sessionsError) {
+      return (
+        <div className="mb-2 rounded-lg border border-amber-500/30 bg-amber-950/40 px-2 py-1.5 text-[10px] text-amber-100/90">
+          <p className="break-words">{sessionsError}</p>
+          <button
+            type="button"
+            onClick={() => {
+              onSessionsRetry();
+            }}
+            className="mt-1.5 text-[10px] font-medium text-[#ffb27a]/90 underline"
+          >
+            Retry
+          </button>
+        </div>
+      );
+    }
+    if (sessionsLoading) {
+      return <p className="mb-2 px-0.5 text-[11px] text-white/40">Loading sessions…</p>;
+    }
+    if (!sessions.length) {
+      return (
+        <p className="mb-1 px-0.5 text-[11px] leading-relaxed text-white/40">
+          No sessions yet.{" "}
+          <Link
+            to="/workspace/chat"
+            onClick={onNavigate}
+            className="text-[#ffb27a]/90 underline-offset-2 hover:underline"
+          >
+            Start a conversation →
+          </Link>
+        </p>
+      );
+    }
+    if (!filteredSessions.length) {
+      return <p className="mb-1 px-0.5 text-[11px] text-white/40">No matches for this filter.</p>;
+    }
+    return (
+      <ul className={ulClass} aria-label="Chat sessions">
+        {filteredSessions.map((s) => {
+          const active = activeSessionId === s.session_id;
+          return (
+            <li key={s.session_id}>
+              <Link
+                to={`/workspace/chat?session=${encodeURIComponent(s.session_id)}`}
+                onClick={onNavigate}
+                className={cn(
+                  "block w-full min-w-0 rounded-lg border px-2 py-1.5 text-left transition",
+                  active
+                    ? "border-white/20 bg-white/[0.1] text-white/92"
+                    : "border-white/[0.04] bg-black/20 text-white/70 hover:border-white/10 hover:bg-white/[0.04]",
+                )}
+              >
+                <p className="line-clamp-2 text-[11px] leading-snug text-white/85">
+                  {s.preview?.trim() || "Untitled turn"}
+                </p>
+                <p className="mt-0.5 truncate font-mono text-[9px] text-white/35" title={s.session_id}>
+                  {s.session_id}
+                </p>
+                {s.created_at || s.turn_count > 0 ? (
+                  <p className="mt-0.5 text-[9px] text-white/30">
+                    {s.turn_count > 0 ? `${s.turn_count} turns` : ""}
+                    {s.created_at ? `${s.turn_count > 0 ? " · " : ""}${s.created_at}` : null}
+                  </p>
+                ) : null}
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    );
+  };
+
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <div
@@ -98,7 +225,7 @@ function WorkspaceSideNav({
             className={cn("min-w-0", c && "hidden")}
           >
             <p className="truncate text-[10px] font-semibold uppercase tracking-[0.12em] text-white/80">
-              Hermes workspace
+              {isChatRoute ? "Chat" : "Hermes workspace"}
             </p>
           </div>
         </div>
@@ -129,7 +256,7 @@ function WorkspaceSideNav({
 
       {c ? null : (
         <>
-          <div className="hww-side-section">Find session</div>
+          <div className="hww-side-section">{isChatRoute ? "Search" : "Find session"}</div>
           <div className="mb-2">
             <label className="sr-only" htmlFor="hww-workspace-search">
               Filter sessions
@@ -194,110 +321,35 @@ function WorkspaceSideNav({
         )}
       </div>
 
-      {!c ? <div className="hww-side-section">Main</div> : null}
-      <nav
-        className={cn("mb-4 flex flex-col", c ? "items-center gap-1" : "gap-0.5")}
-        aria-label="Main"
-      >
-        {mainNavItems.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.end ?? false}
-            onClick={onNavigate}
-            className={({ isActive }) => sideNavClass(isActive, c)}
-            title={item.label}
-          >
-            <item.icon className="h-4 w-4 shrink-0 opacity-90" strokeWidth={1.5} />
-            {c ? <span className="sr-only">{item.label}</span> : item.label}
-          </NavLink>
-        ))}
-      </nav>
-
-      {!c ? <div className="hww-side-section">Knowledge</div> : null}
-      <nav
-        className={cn("mb-3 flex flex-col", c ? "items-center gap-1" : "gap-0.5")}
-        aria-label="Knowledge"
-      >
-        {knowledgeNavItems.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            onClick={onNavigate}
-            className={({ isActive }) => sideNavClass(isActive, c)}
-            title={item.label}
-          >
-            <item.icon className="h-4 w-4 shrink-0 opacity-90" strokeWidth={1.5} />
-            {c ? <span className="sr-only">{item.label}</span> : item.label}
-          </NavLink>
-        ))}
-      </nav>
-
-      {!c ? <div className="hww-side-section">Sessions</div> : null}
-      {c ? null : sessionsError ? (
-        <div className="mb-2 rounded-lg border border-amber-500/30 bg-amber-950/40 px-2 py-1.5 text-[10px] text-amber-100/90">
-          <p className="break-words">{sessionsError}</p>
-          <button
-            type="button"
-            onClick={() => {
-              onSessionsRetry();
-            }}
-            className="mt-1.5 text-[10px] font-medium text-[#ffb27a]/90 underline"
-          >
-            Retry
-          </button>
-        </div>
-      ) : null}
-      {c ? null : sessionsLoading ? (
-        <p className="mb-2 px-0.5 text-[11px] text-white/40">Loading sessions…</p>
-      ) : !sessions.length ? (
-        <p className="mb-1 px-0.5 text-[11px] leading-relaxed text-white/40">
-          No sessions yet.{" "}
-          <Link
-            to="/workspace/chat"
-            onClick={onNavigate}
-            className="text-[#ffb27a]/90 underline-offset-2 hover:underline"
-          >
-            Start a conversation →
-          </Link>
-        </p>
-      ) : !filteredSessions.length ? (
-        <p className="mb-1 px-0.5 text-[11px] text-white/40">No matches for this filter.</p>
+      {c ? (
+        <>
+          {mainNav}
+          {knowledgeNav}
+        </>
+      ) : isChatRoute ? (
+        <>
+          <div className="hww-side-section">Sessions</div>
+          <div className="mb-1 flex min-h-0 min-w-0 flex-1 flex-col">
+            {expandedSessionsContent(
+              "min-h-0 flex-1 space-y-1 overflow-y-auto pr-0.5 [scrollbar-gutter:stable]",
+            )}
+          </div>
+          <div className="hww-side-section shrink-0">Workspace</div>
+          {mainNav}
+          <div className="hww-side-section shrink-0">Knowledge</div>
+          {knowledgeNav}
+        </>
       ) : (
-        <ul className="mb-2 max-h-44 min-h-0 space-y-1 overflow-y-auto pr-0.5" aria-label="Chat sessions">
-          {filteredSessions.map((s) => {
-            const active = activeSessionId === s.session_id;
-            return (
-              <li key={s.session_id}>
-                <Link
-                  to={`/workspace/chat?session=${encodeURIComponent(s.session_id)}`}
-                  onClick={onNavigate}
-                  className={cn(
-                    "block w-full min-w-0 rounded-lg border px-2 py-1.5 text-left transition",
-                    active
-                      ? "border-white/20 bg-white/[0.1] text-white/92"
-                      : "border-white/[0.04] bg-black/20 text-white/70 hover:border-white/10 hover:bg-white/[0.04]",
-                  )}
-                >
-                  <p className="line-clamp-2 text-[11px] leading-snug text-white/85">
-                    {s.preview?.trim() || "Untitled turn"}
-                  </p>
-                  <p className="mt-0.5 truncate font-mono text-[9px] text-white/35" title={s.session_id}>
-                    {s.session_id}
-                  </p>
-                  {s.created_at || s.turn_count > 0 ? (
-                    <p className="mt-0.5 text-[9px] text-white/30">
-                      {s.turn_count > 0 ? `${s.turn_count} turns` : ""}
-                      {s.created_at
-                        ? `${s.turn_count > 0 ? " · " : ""}${s.created_at}`
-                        : null}
-                    </p>
-                  ) : null}
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
+        <>
+          <div className="hww-side-section">Main</div>
+          {mainNav}
+          <div className="hww-side-section">Knowledge</div>
+          {knowledgeNav}
+          <div className="hww-side-section">Sessions</div>
+          {expandedSessionsContent(
+            "mb-2 max-h-44 min-h-0 space-y-1 overflow-y-auto pr-0.5",
+          )}
+        </>
       )}
 
       {c && !sessionsError ? (
@@ -419,6 +471,7 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
     sessionFilter,
     onSessionFilterChange: setSessionFilter,
     activeSessionId,
+    isChatRoute: isWorkspaceChat,
   };
 
   const setSidebarPersist = React.useCallback((next: boolean) => {
@@ -518,17 +571,22 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
                   />
                 </div>
               ) : (
-                <div className="flex items-center justify-end gap-2 px-2 py-1">
+                <div className="flex items-center justify-between gap-2 px-3 py-1.5">
+                  <div className="flex min-w-0 items-center gap-2 text-[11px] text-white/45">
+                    <Terminal className="h-3.5 w-3.5 shrink-0 opacity-80" strokeWidth={1.5} />
+                    <span className="truncate">Local terminal</span>
+                  </div>
                   <Button
                     type="button"
                     size="sm"
                     variant="secondary"
-                    className="h-7 text-[11px] text-white/85"
+                    className="h-7 gap-1.5 px-2.5 text-[11px] text-white/88"
                     onClick={() => {
                       setChatTerminalDockOpen(true);
                     }}
                   >
-                    Open terminal dock
+                    <ChevronsUp className="h-3.5 w-3.5 opacity-80" strokeWidth={2} />
+                    Open
                   </Button>
                 </div>
               )}
