@@ -27,10 +27,12 @@ UI shows “Runtime bridge pending” even when the correct API on the other por
 `https://…` and calls `http://127.0.0.1:8001` — a **cross-origin** request to a **private
 network** address. You need **both**:
 
-1. **CORS allowlist** — set `HAM_CORS_ORIGINS` to include the exact page origin, e.g.
-   `https://ham-nine-mu.vercel.app,http://localhost:3000` (comma-separated). Without this, the
-   preflight gets `400 Disallowed CORS` and the UI shows `Failed to fetch`. Default server origins
-   only list localhost dev ports, not Vercel.
+1. **CORS allowlist** — the API **defaults** include `https://ham-nine-mu.vercel.app` and common
+   localhost dev ports. If you set `HAM_CORS_ORIGINS`, it is **merged** with those defaults (not a
+   full replace) so you can add a preview or extra origin without erasing the rest. Vercel **preview**
+   hostnames still need a match: add them to `HAM_CORS_ORIGINS` or set `HAM_CORS_ORIGIN_REGEX`
+   (e.g. `https://.*\.vercel\.app`) on the local API process. Without a matching origin, the
+   preflight gets `400 Disallowed CORS` and the UI shows `Failed to fetch`.
 2. **Private Network Access (Chrome)** — the OPTIONS preflight may include
    `Access-Control-Request-Private-Network: true`. The response must include
    `Access-Control-Allow-Private-Network: true` or Chrome blocks the request (same `Failed to fetch`

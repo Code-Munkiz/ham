@@ -8,10 +8,15 @@ Public pages that call a loopback API send an OPTIONS preflight with
 real request and ``fetch`` throws ``TypeError: Failed to fetch`` — the same
 symptom as a bad CORS allowlist.
 
-Starlette 0.50 ``CORSMiddleware`` does not set this header; this ASGI layer
-adds it when the preflight request asks for PNA. Still require the origin in
-``HAM_CORS_ORIGINS`` (or ``HAM_CORS_ORIGIN_REGEX``) so the inner CORS layer
-can allow the Vercel origin.
+Starlette 0.50 ``CORSMiddleware`` does not set this header. We append it to
+**every** ``http.response.start`` (not only the preflight that carries
+``Access-Control-Request-Private-Network: true``): Chrome is strict about
+public HTTPS → ``http://127.0.0.1``; some builds expect the follow-up response
+as well, and a bare ``send`` for non-preflight requests would otherwise never
+get the flag.
+
+CORS (allowed origins) is still enforced only by ``CORSMiddleware`` and
+``HAM_CORS_ORIGINS`` / ``HAM_CORS_ORIGIN_REGEX``.
 """
 
 from __future__ import annotations
@@ -25,20 +30,13 @@ def private_network_access_middleware(app: ASGIApp) -> ASGIApp:
         if scope["type"] != "http":
             await app(scope, receive, send)
             return
-        needs_pna = any(
-            k == b"access-control-request-private-network" and v.decode("latin-1").lower() == "true"
-            for k, v in scope.get("headers", [])
-        )
-        if not needs_pna:
-            await app(scope, receive, send)
-            return
 
-        async def send_with_pna(message: Message) -> None:
+        async def send_add_pna(message: Message) -> None:
             if message.get("type") == "http.response.start":
                 headers = MutableHeaders(scope=message)
                 headers["Access-Control-Allow-Private-Network"] = "true"
             await send(message)
 
-        await app(scope, receive, send_with_pna)
+        await app(scope, receive, send_add_pna)
 
     return middleware

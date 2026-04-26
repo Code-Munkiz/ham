@@ -56,7 +56,7 @@ function bridgeFromError(e: unknown): FileBridgeState {
   }
   return {
     status: "pending",
-    detail: `Not reachable — ${msg}. Add this page's exact origin to HAM_CORS_ORIGINS (e.g. https://ham-nine-mu.vercel.app). For https → http://127.0.0.1, Chrome also needs a Private-Network preflight; the HAM local API appends Access-Control-Allow-Private-Network. See docs/HERMES_WORKSPACE_FILES_TERMINAL_BRIDGE.md.`,
+    detail: `Not reachable — ${msg}. Is uvicorn running on this machine, and is it the current Ham API? Production Vercel is allowed in default CORS; preview deploys need HAM_CORS_ORIGIN_REGEX or the preview origin. Chrome https→127.0.0.1 needs Access-Control-Allow-Private-Network (local API). See docs/HERMES_WORKSPACE_FILES_TERMINAL_BRIDGE.md.`,
     localCode: "unreachable",
   };
 }

@@ -56,16 +56,21 @@ _DEFAULT_CORS = [
     "http://127.0.0.1:3003",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    # HAM Vercel production — local runtime (Files/Terminal) from this origin needs CORS on uvicorn.
+    "https://ham-nine-mu.vercel.app",
     # Packaged Electron loads the UI from file:// — fetch sends Origin: null (literal).
     "null",
 ]
 
 
 def _cors_allow_origins() -> list[str]:
+    """Merge env list with defaults so one forgotten origin (e.g. Vercel) does not break others."""
+    base = list(_DEFAULT_CORS)
     raw = (os.environ.get("HAM_CORS_ORIGINS") or "").strip()
     if not raw:
-        return list(_DEFAULT_CORS)
-    return [o.strip() for o in raw.split(",") if o.strip()]
+        return base
+    extra = [o.strip() for o in raw.split(",") if o.strip()]
+    return list(dict.fromkeys([*base, *extra]))
 
 
 def _cors_allow_origin_regex() -> str | None:
@@ -408,5 +413,5 @@ async def list_project_runs(
 
 
 # Outermost ASGI: Chrome "Private Network Access" — public HTTPS (e.g. Vercel) → http://127.0.0.1
-# needs Access-Control-Allow-Private-Network on the OPTIONS preflight. Still set HAM_CORS_ORIGINS.
+# needs Access-Control-Allow-Private-Network. Default CORS includes production Vercel; merge via HAM_CORS_ORIGINS.
 app = private_network_access_middleware(app)
