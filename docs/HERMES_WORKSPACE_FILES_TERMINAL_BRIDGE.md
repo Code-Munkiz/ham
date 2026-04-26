@@ -1,9 +1,20 @@
 # Hermes Workspace — Files and Terminal HAM bridge
 
 **Local Files mode:** the Files API reads/writes a directory on the **same machine** as the FastAPI
-process. Set `HAM_WORKSPACE_ROOT` to your local folder; legacy `HAM_WORKSPACE_FILES_ROOT` is still
-honored. For real local project trees, run the Vite app with its dev proxy to a **local** API; a
-browser pointed only at a remote deploy will not see your laptop’s files.
+process. Set `HAM_WORKSPACE_ROOT` to any absolute folder (project tree, user home, or a drive root
+such as `C:\` in operator mode); legacy `HAM_WORKSPACE_FILES_ROOT` is still honored. For real local
+trees, run the Vite app with its dev proxy to a **local** API; a browser pointed only at a remote
+deploy will not see your laptop’s files.
+
+**Listing:** `GET .../files?action=list` returns **one directory level** only. Use
+`?action=list&path=<relative>` to load a subfolder (lazy tree in the UI). This avoids a single
+request recursively walking an entire drive.
+
+**Symlinks:** paths are resolved with `Path.resolve()`; anything that resolves **outside** the
+configured workspace root is rejected (HTTP 400). See `workspace_files.py` module docstring.
+
+**Health:** `GET /api/workspace/health` includes `workspaceRootPath`, `workspaceRootConfigured`, and
+`broadFilesystemAccess` (heuristic for drive root / `/` / user home) for UI warnings.
 
 **Dev proxy (common pitfall):** Vite proxies `/api/*` to `VITE_HAM_API_PROXY_TARGET` (default
 `http://127.0.0.1:8000` — see `frontend/vite.config.ts` and `frontend/.env.example`). If your HAM

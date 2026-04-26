@@ -13,7 +13,8 @@ export type WorkspaceFileEntry = {
   name: string;
   path: string;
   type: "file" | "folder";
-  children?: WorkspaceFileEntry[];
+  /** `null` = not loaded yet; expand via `listPath` */
+  children?: WorkspaceFileEntry[] | null;
 };
 
 export type FileBridgeLocalCode = "unconfigured" | "unreachable" | "wrong_api";
@@ -23,7 +24,7 @@ export type FileBridgeState =
   | { status: "pending"; detail: string; localCode?: FileBridgeLocalCode };
 
 const DISCONNECT_HINT =
-  "Start the local HAM API (e.g. uvicorn) and set HAM_WORKSPACE_ROOT to a folder on this computer.";
+  "Start the local HAM API (e.g. uvicorn) and set HAM_WORKSPACE_ROOT to a project folder (or a broad path such as a drive) on this computer.";
 
 function bridgeUnconfigured(): FileBridgeState {
   return {
@@ -69,11 +70,22 @@ export const workspaceFileAdapter = {
     "HAM /api/workspace/files on the **local** runtime — list/read/write; server root is HAM_WORKSPACE_ROOT on the machine where uvicorn runs.",
 
   async list(): Promise<{ entries: WorkspaceFileEntry[]; bridge: FileBridgeState }> {
+    return workspaceFileAdapter.listPath("");
+  },
+
+  /**
+   * List one directory level under the workspace root. Use `path` relative to root (e.g. `src/components`).
+   */
+  async listPath(
+    relPath: string,
+  ): Promise<{ entries: WorkspaceFileEntry[]; bridge: FileBridgeState }> {
     if (!isLocalRuntimeConfigured()) {
       return { entries: [], bridge: bridgeUnconfigured() };
     }
+    const p = (relPath || "").replace(/\\/g, "/").replace(/^\/+/, "");
+    const q = p ? `${BASE}?action=list&path=${encodeURIComponent(p)}` : `${BASE}?action=list`;
     try {
-      const res = await localRuntimeFetch(`${BASE}?action=list`, { method: "GET" });
+      const res = await localRuntimeFetch(q, { method: "GET" });
       if (!res.ok) {
         return { entries: [], bridge: bridgeFromHttp(res) };
       }

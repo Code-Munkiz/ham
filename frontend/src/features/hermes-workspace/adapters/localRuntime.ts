@@ -97,17 +97,33 @@ export function localRuntimeWsUrl(path: string): string {
   return u.toString();
 }
 
+export type LocalRuntimeHealthPayload = {
+  ok?: boolean;
+  workspaceRootConfigured?: boolean;
+  workspaceRootPath?: string;
+  broadFilesystemAccess?: boolean;
+  features?: string[];
+};
+
 export type LocalRuntimeTestResult = {
   ok: boolean;
   message: string;
   /** Full URL of the test request. */
   testedUrl: string;
-  health?: {
-    ok?: boolean;
-    workspaceRootConfigured?: boolean;
-    features?: string[];
-  };
+  health?: LocalRuntimeHealthPayload;
 };
+
+/** GET `/api/workspace/health` on the saved local runtime (Files/Terminal probe). */
+export async function fetchLocalWorkspaceHealth(): Promise<LocalRuntimeHealthPayload | null> {
+  if (!isLocalRuntimeConfigured()) return null;
+  try {
+    const res = await localRuntimeFetch("/api/workspace/health", { method: "GET" });
+    if (!res.ok) return null;
+    return (await res.json()) as LocalRuntimeHealthPayload;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * GET `/api/workspace/health` when available, else `GET /api/workspace/files?action=list` as a compatibility probe.
@@ -143,11 +159,7 @@ export async function testLocalRuntime(inputUrl?: string | null): Promise<LocalR
   try {
     const res = await fetchWithRuntimeBase(base, healthPath, { method: "GET" });
     if (res.ok) {
-      const j = (await res.json().catch(() => ({}))) as {
-        ok?: boolean;
-        workspaceRootConfigured?: boolean;
-        features?: string[];
-      };
+      const j = (await res.json().catch(() => ({}))) as LocalRuntimeHealthPayload;
       const ok = j?.ok === true;
       return {
         ok,
@@ -156,6 +168,8 @@ export async function testLocalRuntime(inputUrl?: string | null): Promise<LocalR
         health: {
           ok: j?.ok,
           workspaceRootConfigured: j?.workspaceRootConfigured,
+          workspaceRootPath: j?.workspaceRootPath,
+          broadFilesystemAccess: j?.broadFilesystemAccess,
           features: j?.features,
         },
       };

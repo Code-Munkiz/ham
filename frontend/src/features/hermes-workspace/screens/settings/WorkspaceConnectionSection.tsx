@@ -61,9 +61,10 @@ export function WorkspaceConnectionSection() {
         <p className="mt-1.5 text-[13px] leading-relaxed text-white/45">
           The dashboard uses <span className="font-mono text-[12px] text-white/50">VITE_HAM_API_BASE</span> for chat,
           jobs, memory, and most APIs. <span className="text-white/55">Files</span> and{" "}
-          <span className="text-white/55">Terminal</span> are different: they must call a Ham FastAPI running on{" "}
-          <em>this computer</em> so the server can read <span className="font-mono text-[12px]">HAM_WORKSPACE_ROOT</span>{" "}
-          on your machine. The cloud API cannot see your laptop filesystem.
+          <span className="text-white/55">Terminal</span> are different: they only call a Ham FastAPI on{" "}
+          <em>this computer</em> (the URL you save below). The server exposes files from{" "}
+          <span className="font-mono text-[12px]">HAM_WORKSPACE_ROOT</span> (or the repo sandbox if unset) — not from Cloud
+          Run. Set a drive or folder path on the local process for full workstation use.
         </p>
         <p className="mt-3 text-[13px] leading-relaxed text-white/40">
           Keys and providers:{" "}
@@ -118,10 +119,11 @@ export function WorkspaceConnectionSection() {
           </div>
 
           <div className="rounded-lg border border-white/[0.06] bg-black/20 px-3 py-2.5 text-[12px] text-white/55">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-white/35">Expected on the API process</p>
-            <p className="mt-1 font-mono text-[11px] text-emerald-200/80">HAM_WORKSPACE_ROOT=&lt;absolute path to your project&gt;</p>
+            <p className="text-[11px] font-medium uppercase tracking-wide text-white/35">Filesystem root (API process env)</p>
+            <p className="mt-1 font-mono text-[11px] text-emerald-200/80">HAM_WORKSPACE_ROOT=&lt;absolute path: project, drive, or home&gt;</p>
             <p className="mt-2 text-[11px] text-white/40">
-              On the local machine, run e.g.{" "}
+              This is <strong>not</strong> the URL field above — it is a path the local Python process can read. On the
+              local machine, run e.g.{" "}
               <span className="font-mono text-[10px] text-white/50">uvicorn src.api.server:app --host 127.0.0.1 --port 8001</span>{" "}
               with that env set. Allow CORS from this page’s origin on the API (
               <span className="font-mono text-[10px]">HAM_CORS_ORIGINS</span> or{" "}
@@ -146,8 +148,11 @@ export function WorkspaceConnectionSection() {
               ) : null}
               {lastTest.health ? (
                 <p className="mt-1 text-[10px] text-white/45">
-                  workspace root:{" "}
-                  {lastTest.health.workspaceRootConfigured ? "configured" : "not set in env"} · features:{" "}
+                  HAM_WORKSPACE_ROOT:{" "}
+                  {lastTest.health.workspaceRootConfigured
+                    ? lastTest.health.workspaceRootPath || "set"
+                    : "not set (sandbox fallback may apply)"}
+                  {lastTest.health.broadFilesystemAccess ? " · broad path" : ""} · features:{" "}
                   {(lastTest.health.features || []).join(", ") || "—"}
                 </p>
               ) : null}

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -139,6 +140,26 @@ def test_mkdir_rename_delete(
     assert not (root / "d1" / "renamed.txt").exists()
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="posix symlink test")
+def test_path_traversal_symlink_resolving_outside_rejected(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Symlink *inside* root that points outside must not be readable as in-root."""
+    root = tmp_path / "ws2"
+    root.mkdir()
+    outside = tmp_path / "secret.txt"
+    outside.write_text("nope", encoding="utf-8")
+    link = root / "leak"
+    try:
+        link.symlink_to(outside, target_is_directory=False)
+    except OSError:
+        pytest.skip("symlink not supported")
+    monkeypatch.setenv("HAM_WORKSPACE_ROOT", str(root))
+    r = client.get("/api/workspace/files?action=read&path=leak")
+    assert r.status_code == 400
+    assert "scape" in str(r.json().get("detail", "")).lower() or "escape" in str(r.json()).lower()
+
+
 def test_path_traversal_read_rejected(
     client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -160,3 +181,28 @@ def test_workspace_health(client: TestClient) -> None:
     assert body.get("ok") is True
     assert "workspaceRootConfigured" in body
     assert isinstance(body.get("features"), list) and "files" in body["features"]
+    assert "workspaceRootPath" in body and isinstance(body["workspaceRootPath"], str)
+    assert "broadFilesystemAccess" in body and isinstance(body["broadFilesystemAccess"], bool)
+
+
+def test_list_shallow_subdirectory(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """List with path= lists one level; expand a subfolder with path=sub."""
+    root = tmp_path / "wroot2"
+    root.mkdir()
+    (root / "a.txt").write_text("a", encoding="utf-8")
+    sub = root / "d1"
+    sub.mkdir()
+    (sub / "b.txt").write_text("b", encoding="utf-8")
+    monkeypatch.setenv("HAM_WORKSPACE_ROOT", str(root))
+    monkeypatch.delenv("HAM_WORKSPACE_FILES_ROOT", raising=False)
+    r0 = client.get("/api/workspace/files?action=list")
+    assert r0.status_code == 200
+    top = {e["name"]: e for e in r0.json()["entries"]}
+    assert "a.txt" in top and "d1" in top
+    assert top["d1"].get("type") == "folder" and top["d1"].get("children") is None
+    r1 = client.get("/api/workspace/files?action=list&path=d1")
+    assert r1.status_code == 200
+    names = {e["name"] for e in r1.json()["entries"]}
+    assert "b.txt" in names
