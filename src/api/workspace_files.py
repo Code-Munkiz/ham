@@ -3,9 +3,16 @@ Local workspace file tree + mutations for the Hermes Files UI (the browser never
 
 **Root directory (precedence):**
 
-1. ``HAM_WORKSPACE_ROOT`` — preferred: end-user’s local project/folder.
+1. ``HAM_WORKSPACE_ROOT`` — preferred: any absolute folder, including a drive (e.g. Windows ``C:\\``) in operator mode.
 2. ``HAM_WORKSPACE_FILES_ROOT`` — legacy alias if (1) is unset.
 3. ``<ham_repo>/.ham_workspace_sandbox`` — default when neither env is set (local dev).
+
+**Symlinks:** ``Path.resolve()`` is used; if a path resolves outside the configured root, requests fail
+(``relative_to``). Symlinks *inside* the root that point outside may resolve to paths that cannot be
+expressed under the root — those operations return 400, not a silent escape.
+
+**Listing:** One directory level per ``list`` call; expand in the UI with ``path=`` for subfolders
+(no recursive full-tree response — avoids full-drive walk).
 
 The API process must run on the same machine as this tree (Vite dev proxy to local ``uvicorn`` is
 the normal setup). A remote/Cloud API sees its own disk, not the user’s. Hardening (RBAC, audit) is
@@ -33,6 +40,14 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parent.parent.parent
 
 
+def _using_env_workspace_root() -> bool:
+    """True when HAM_WORKSPACE_ROOT or HAM_WORKSPACE_FILES_ROOT is set (not the repo sandbox)."""
+    return bool(
+        (os.environ.get("HAM_WORKSPACE_ROOT") or "").strip()
+        or (os.environ.get("HAM_WORKSPACE_FILES_ROOT") or "").strip()
+    )
+
+
 def _workspace_root() -> Path:
     raw = (
         (os.environ.get("HAM_WORKSPACE_ROOT") or "").strip()
@@ -45,6 +60,45 @@ def _workspace_root() -> Path:
     d = _repo_root() / ".ham_workspace_sandbox"
     d.mkdir(parents=True, exist_ok=True)
     return d.resolve()
+
+
+def workspace_root_info() -> dict[str, Any]:
+    """Exposed to ``/api/workspace/health`` — resolved path, env mode, and broad-root hint."""
+    p = _workspace_root()
+    try:
+        resolved = p.resolve()
+    except OSError:
+        resolved = p
+    return {
+        "path": str(resolved),
+        "usingEnvWorkspace": _using_env_workspace_root(),
+        "broadFilesystemAccess": is_broad_filesystem_root(resolved),
+    }
+
+
+def is_broad_filesystem_root(p: Path) -> bool:
+    """
+    Heuristic for operator warnings: full drive, POSIX root, or user home as configured root.
+    Intentional “workstation” mode — not a hard block.
+    """
+    try:
+        r = p.resolve()
+    except OSError:
+        return False
+    s = str(r)
+    if os.name == "nt":
+        s2 = s.rstrip("/\\")
+        if len(s2) == 2 and s2[0].isalpha() and s2[1] == ":":
+            return True
+    elif s in ("/",):
+        return True
+    try:
+        home = Path.home().resolve()
+        if r == home:
+            return True
+    except OSError:
+        pass
+    return False
 
 
 def _resolve_safe(rel: str) -> Path:
@@ -75,39 +129,45 @@ def _to_rel(path: Path) -> str:
         raise HTTPException(status_code=400, detail="Invalid path") from None
 
 
-def _build_tree(p: Path) -> FileEntry:
-    rel = _to_rel(p)
-    if p.is_file():
-        return FileEntry(name=p.name, path=rel, type="file", children=None)
-    children: list[FileEntry] = []
+def _list_shallow_relative(rel: str) -> list[dict[str, Any]]:
+    """
+    List direct children of ``rel`` (relative to workspace root). Folders are returned with
+    ``children: null`` — the client loads a subtree with another ``list`` + ``path``.
+    """
+    rel = (rel or "").replace("\\", "/").strip()
+    d = _resolve_safe(rel) if rel else _workspace_root()
+    if not d.is_dir():
+        raise HTTPException(status_code=400, detail="list path must be a directory")
+    if not rel and not _using_env_workspace_root():
+        try:
+            names = {p.name for p in d.iterdir()}
+        except OSError:
+            names = set()
+        if not names or names == {".gitkeep"}:
+            try:
+                (d / ".gitkeep").write_text("", encoding="utf-8")
+            except OSError:
+                pass
+    out: list[dict[str, Any]] = []
     try:
-        subs = sorted(p.iterdir(), key=lambda x: (not x.is_dir(), x.name.lower()))
+        subs = sorted(d.iterdir(), key=lambda x: (not x.is_dir(), x.name.lower()))
     except OSError as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
     for c in subs:
         if c.name.startswith("."):
             continue
-        if c.is_dir():
-            children.append(_build_tree(c))
+        c_rel = _to_rel(c)
+        if c.is_file():
+            out.append(FileEntry(name=c.name, path=c_rel, type="file", children=None).model_dump())
         else:
-            children.append(FileEntry(name=c.name, path=_to_rel(c), type="file", children=None))
-    return FileEntry(name=p.name, path=rel, type="folder", children=children)
-
-
-def _list_entry_payloads() -> list[dict[str, Any]]:
-    root = _workspace_root()
-    if not any(p for p in root.iterdir() if not (p.name == ".gitkeep" and p.is_file())):
-        (root / ".gitkeep").write_text("", encoding="utf-8")
-    out: list[dict[str, Any]] = []
-    try:
-        subs = sorted(root.iterdir(), key=lambda x: (not x.is_dir(), x.name.lower()))
-    except OSError as e:
-        raise HTTPException(status_code=500, detail=str(e)) from e
-    for c in subs:
-        if c.name.startswith(".") and c.name != ".gitkeep":
-            continue
-        if c.is_dir() or c.is_file():
-            out.append(_build_tree(c).model_dump())
+            out.append(
+                FileEntry(
+                    name=c.name,
+                    path=c_rel,
+                    type="folder",
+                    children=None,
+                ).model_dump()
+            )
     return out
 
 
@@ -122,7 +182,7 @@ def workspace_files_get(
     _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)] = None,
 ) -> dict[str, Any] | FileResponse:
     if action is None or action == "list":
-        return {"entries": _list_entry_payloads()}
+        return {"entries": _list_shallow_relative(path or "")}
 
     if action == "read":
         if not path:

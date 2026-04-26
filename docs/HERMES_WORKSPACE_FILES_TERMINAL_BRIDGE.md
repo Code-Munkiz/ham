@@ -1,16 +1,59 @@
 # Hermes Workspace — Files and Terminal HAM bridge
 
 **Local Files mode:** the Files API reads/writes a directory on the **same machine** as the FastAPI
-process. Set `HAM_WORKSPACE_ROOT` to your local folder; legacy `HAM_WORKSPACE_FILES_ROOT` is still
-honored. For real local project trees, run the Vite app with its dev proxy to a **local** API; a
-browser pointed only at a remote deploy will not see your laptop’s files.
+process. Set `HAM_WORKSPACE_ROOT` to any absolute folder (project tree, user home, or a drive root
+such as `C:\` in operator mode); legacy `HAM_WORKSPACE_FILES_ROOT` is still honored. For real local
+trees, run the Vite app with its dev proxy to a **local** API; a browser pointed only at a remote
+deploy will not see your laptop’s files.
+
+**Listing:** `GET .../files?action=list` returns **one directory level** only. Use
+`?action=list&path=<relative>` to load a subfolder (lazy tree in the UI). This avoids a single
+request recursively walking an entire drive.
+
+**Symlinks:** paths are resolved with `Path.resolve()`; anything that resolves **outside** the
+configured workspace root is rejected (HTTP 400). See `workspace_files.py` module docstring.
+
+**Health:** `GET /api/workspace/health` includes `workspaceRootPath`, `workspaceRootConfigured`, and
+`broadFilesystemAccess` (heuristic for drive root / `/` / user home) for UI warnings.
 
 **Dev proxy (common pitfall):** Vite proxies `/api/*` to `VITE_HAM_API_PROXY_TARGET` (default
 `http://127.0.0.1:8000` — see `frontend/vite.config.ts` and `frontend/.env.example`). If your HAM
 `uvicorn` runs on another port (e.g. 8001), set the variable in **`frontend/.env.local`** to that
 origin and **restart Vite**; otherwise `GET /api/workspace/files?action=list` may 404 and the Files
-UI shows “Runtime bridge pending” even when the correct API on the other port works in isolation.
+UI can sit in a loading or connection-error state even when the correct API on the other port works
+in isolation (fix the proxy target, then reload).
 **Do not commit** `.env.local` (it is gitignored); copy from `.env.example` as needed.
+
+**Vercel (or any public HTTPS) + local `uvicorn` (two requirements):** the browser is on
+`https://…` and calls `http://127.0.0.1:8001` — a **cross-origin** request to a **private
+network** address. You need **both**:
+
+1. **CORS allowlist** — the API **defaults** include `https://ham-nine-mu.vercel.app` and common
+   localhost dev ports. If you set `HAM_CORS_ORIGINS`, it is **merged** with those defaults (not a
+   full replace) so you can add a preview or extra origin without erasing the rest. Vercel **preview**
+   hostnames still need a match: add them to `HAM_CORS_ORIGINS` or set `HAM_CORS_ORIGIN_REGEX`
+   (e.g. `https://.*\.vercel\.app`) on the local API process. Without a matching origin, the
+   preflight gets `400 Disallowed CORS` and the UI shows `Failed to fetch`.
+2. **Private Network Access (Chrome)** — the OPTIONS preflight may include
+   `Access-Control-Request-Private-Network: true`. The response must include
+   `Access-Control-Allow-Private-Network: true` or Chrome blocks the request (same `Failed to fetch`
+   symptom). The HAM server adds this via `src/api/pna_middleware.py` (outermost ASGI). Firefox /
+   Safari behavior may differ; always keep (1) correct.
+
+**Operator smoke (Vercel UI → this machine, broad root example):** from the repo root on Windows
+(PowerShell):
+
+```powershell
+cd C:\Projects\GoHam\ham
+$env:HAM_WORKSPACE_ROOT = "C:\"
+$env:HAM_CORS_ORIGINS = "https://ham-nine-mu.vercel.app,http://localhost:3000,http://127.0.0.1:3000"
+python -m uvicorn src.api.server:app --host 127.0.0.1 --port 8001
+```
+
+In the browser: open `https://ham-nine-mu.vercel.app/workspace/settings` and set the Connection
+**Local runtime URL** to `http://127.0.0.1:8001`, then `https://ham-nine-mu.vercel.app/workspace/files`.
+Expect Files/Terminal to use the local API only (no Cloud Run disk), no CORS/PNA `Failed to fetch`,
+and the broad-root warning when the configured root is the drive (e.g. `C:\`).
 
 Bridge table (UI remains on `workspaceFileAdapter` / `workspaceTerminalAdapter`):
 

@@ -21,6 +21,7 @@ import {
   type QuickAction,
   type WorkspaceMission,
 } from "../../adapters/conductorAdapter";
+import { WorkspaceSurfaceStateCard } from "../../components/workspaceSurfaceChrome";
 
 /**
  * Upstream shape: `src/screens/gateway/conductor.tsx` — quick presets + optional goal title.
@@ -599,8 +600,24 @@ export function WorkspaceConductorScreen() {
       <>
         <main className="mx-auto flex min-h-0 w-full max-w-[760px] flex-1 flex-col items-stretch justify-center px-4 py-4 md:px-6 md:py-6">
           {error && (
-            <div className="mb-4 rounded-2xl border border-[var(--theme-danger-border)] bg-[var(--theme-danger-soft)] px-3 py-2 text-sm text-[var(--theme-text)]">
-              {error}
+            <div className="mb-4">
+              <WorkspaceSurfaceStateCard
+                title="Conductor API is not available from this HAM runtime."
+                description="Missions and outputs are served from /api/workspace/conductor on the API host — not the local machine bridge."
+                tone="amber"
+                technicalDetail={error}
+                primaryAction={
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="bg-[var(--theme-accent)] text-white hover:bg-[var(--theme-accent-strong)]"
+                    onClick={() => void load()}
+                    disabled={!!busy}
+                  >
+                    Retry
+                  </Button>
+                }
+              />
             </div>
           )}
           <div className="w-full space-y-6">
@@ -726,8 +743,13 @@ export function WorkspaceConductorScreen() {
                     ))}
                   </div>
                 ) : (
-                  <div className="rounded-xl border border-dashed border-[var(--theme-border)] px-4 py-6 text-center text-sm text-[var(--theme-muted)]">
-                    No {activityFilter === "all" ? "" : `${activityFilter} `}missions found
+                  <div className="rounded-xl border border-dashed border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-8 text-center text-sm">
+                    <p className="font-medium text-[var(--theme-text)]">No active mission</p>
+                    <p className="mt-2 text-[var(--theme-muted)]">
+                      {activityFilter === "all"
+                        ? "No missions yet. Launch a mission to watch your agent team build live."
+                        : `No ${activityFilter} missions. Try another filter or create a mission.`}
+                    </p>
                   </div>
                 )}
               </section>
@@ -888,7 +910,17 @@ export function WorkspaceConductorScreen() {
     return root(
       <main className="mx-auto flex min-h-0 w-full max-w-[720px] flex-1 flex-col items-stretch justify-center px-4 py-4 md:px-6 md:py-8">
         {error && (
-          <div className="mb-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100/90">{error}</div>
+          <WorkspaceSurfaceStateCard
+            className="mb-4"
+            title="Action could not complete"
+            tone="amber"
+            technicalDetail={error}
+            primaryAction={
+              <Button type="button" size="sm" variant="secondary" onClick={() => void load()} disabled={!!busy}>
+                Retry
+              </Button>
+            }
+          />
         )}
         <div className="space-y-4">
           <button
@@ -955,7 +987,17 @@ export function WorkspaceConductorScreen() {
     return root(
       <main className="mx-auto flex min-h-0 w-full max-w-[720px] flex-1 flex-col justify-center px-4 py-4 md:px-6 md:py-8">
         {error && (
-          <div className="mb-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100/90">{error}</div>
+          <WorkspaceSurfaceStateCard
+            className="mb-4"
+            title="Action could not complete"
+            tone="amber"
+            technicalDetail={error}
+            primaryAction={
+              <Button type="button" size="sm" variant="secondary" onClick={() => void load()} disabled={!!busy}>
+                Retry
+              </Button>
+            }
+          />
         )}
         <div className="flex w-full flex-col gap-6">
           <div className="text-center">
@@ -1024,7 +1066,17 @@ export function WorkspaceConductorScreen() {
     return root(
       <main className="mx-auto flex min-h-0 w-full max-w-[720px] flex-1 flex-col px-4 py-4 md:px-6 md:py-8">
         {error && (
-          <div className="mb-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100/90">{error}</div>
+          <WorkspaceSurfaceStateCard
+            className="mb-4"
+            title="Action could not complete"
+            tone="amber"
+            technicalDetail={error}
+            primaryAction={
+              <Button type="button" size="sm" variant="secondary" onClick={() => void load()} disabled={!!busy}>
+                Retry
+              </Button>
+            }
+          />
         )}
         <div className="space-y-6">
           <div className="text-center">

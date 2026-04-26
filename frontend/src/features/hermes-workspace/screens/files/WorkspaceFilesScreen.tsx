@@ -14,7 +14,12 @@ import {
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { getLocalRuntimeBase } from "../../adapters/localRuntime";
+import { LocalMachineConnectCta } from "../../components/LocalMachineConnectCta";
+import {
+  fetchLocalWorkspaceHealth,
+  isLocalRuntimeConfigured,
+  type LocalRuntimeHealthPayload,
+} from "../../adapters/localRuntime";
 import { workspaceFileAdapter, type FileBridgeState, type WorkspaceFileEntry } from "../../adapters/filesAdapter";
 
 const ROOT_LABEL = "Workspace";
@@ -37,13 +42,33 @@ function filterTree(entries: WorkspaceFileEntry[], term: string): WorkspaceFileE
     if (e.type === "file") {
       return e.name.toLowerCase().includes(lower) ? e : null;
     }
-    const children = (e.children || []).map(walk).filter((c): c is WorkspaceFileEntry => c !== null);
+    const ch = e.children;
+    if (ch == null) {
+      return e.name.toLowerCase().includes(lower) ? e : null;
+    }
+    const children = ch.map(walk).filter((c): c is WorkspaceFileEntry => c !== null);
     if (e.name.toLowerCase().includes(lower) || children.length > 0) {
       return { ...e, children };
     }
     return null;
   };
   return entries.map(walk).filter((e): e is WorkspaceFileEntry => e !== null);
+}
+
+function mergeAtPath(
+  list: WorkspaceFileEntry[],
+  targetPath: string,
+  newChildren: WorkspaceFileEntry[],
+): WorkspaceFileEntry[] {
+  return list.map((e) => {
+    if (e.path === targetPath && e.type === "folder") {
+      return { ...e, children: newChildren };
+    }
+    if (Array.isArray(e.children)) {
+      return { ...e, children: mergeAtPath(e.children, targetPath, newChildren) };
+    }
+    return e;
+  });
 }
 
 type PromptState =
@@ -58,7 +83,7 @@ export function WorkspaceFilesScreen() {
   const [collapsed, setCollapsed] = React.useState(false);
   const [isMobile, setIsMobile] = React.useState(false);
   const [entries, setEntries] = React.useState<WorkspaceFileEntry[]>([]);
-  const [bridge, setBridge] = React.useState<FileBridgeState>({ status: "pending", detail: "Runtime bridge pending" });
+  const [bridge, setBridge] = React.useState<FileBridgeState>({ status: "pending", detail: "Loading file tree…" });
   const [loading, setLoading] = React.useState(true);
   const [search, setSearch] = React.useState("");
   const [expanded, setExpanded] = React.useState<Set<string>>(() => new Set());
@@ -68,7 +93,7 @@ export function WorkspaceFilesScreen() {
   const [previewPath, setPreviewPath] = React.useState<string | null>(null);
   const [editorValue, setEditorValue] = React.useState(
     `// Files workspace
-// Use the file tree to browse. Runtime bridge may be pending for server-backed storage.
+// Use the file tree to browse. The tree loads from your connected workspace.
 
 function ready() {
   return true;
@@ -79,6 +104,8 @@ function ready() {
   const [readBridge, setReadBridge] = React.useState<FileBridgeState | null>(null);
   const [saveState, setSaveState] = React.useState<SaveUiState>("idle");
   const [saveError, setSaveError] = React.useState<string | null>(null);
+  const [fsHealth, setFsHealth] = React.useState<LocalRuntimeHealthPayload | null>(null);
+  const [loadingFolder, setLoadingFolder] = React.useState<string | null>(null);
   const uploadInputRef = React.useRef<HTMLInputElement | null>(null);
   const uploadTargetRef = React.useRef("");
   const saveFlashTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -88,6 +115,11 @@ function ready() {
     const { entries: next, bridge: b } = await workspaceFileAdapter.list();
     setEntries(next);
     setBridge(b);
+    if (b.status === "ready" && isLocalRuntimeConfigured()) {
+      setFsHealth(await fetchLocalWorkspaceHealth());
+    } else {
+      setFsHealth(null);
+    }
     setLoading(false);
   }, []);
 
@@ -133,13 +165,14 @@ function ready() {
 
   const filtered = React.useMemo(() => filterTree(entries, search), [entries, search]);
   const searchActive = search.trim().length > 0;
-  const localUrlDisplay = getLocalRuntimeBase() ?? "";
   const disconnected =
     bridge.status === "pending" && bridge.localCode === "unconfigured" && !loading;
   const localError =
     bridge.status === "pending" &&
     (bridge.localCode === "unreachable" || bridge.localCode === "wrong_api") &&
     !loading;
+  const noEnvRoot =
+    !loading && bridge.status === "ready" && Boolean(fsHealth) && fsHealth?.workspaceRootConfigured === false;
 
   const openPrompt = (state: NonNullable<PromptState>) => {
     setPromptState(state);
@@ -225,16 +258,30 @@ function ready() {
     await refresh();
   };
 
-  const toggleFolder = (path: string) => {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(path)) {
-        next.delete(path);
-      } else {
-        next.add(path);
+  const handleFolderClick = async (entry: WorkspaceFileEntry) => {
+    if (entry.type !== "folder") return;
+    if (searchActive) return;
+    if (expanded.has(entry.path)) {
+      setExpanded((prev) => {
+        const next = new Set(prev);
+        next.delete(entry.path);
+        return next;
+      });
+      return;
+    }
+    if (entry.children == null) {
+      setLoadingFolder(entry.path);
+      const { entries: sub, bridge: b } = await workspaceFileAdapter.listPath(entry.path);
+      setLoadingFolder(null);
+      setBridge(b);
+      if (b.status === "ready") {
+        setEntries((prev) => mergeAtPath(prev, entry.path, sub));
+        setFsHealth(await fetchLocalWorkspaceHealth());
+        setExpanded((prev) => new Set(prev).add(entry.path));
       }
-      return next;
-    });
+      return;
+    }
+    setExpanded((prev) => new Set(prev).add(entry.path));
   };
 
   const loadFile = async (path: string) => {
@@ -278,9 +325,7 @@ function ready() {
 
   const handleFileClick = async (entry: WorkspaceFileEntry) => {
     if (entry.type === "folder") {
-      if (!searchActive) {
-        toggleFolder(entry.path);
-      }
+      await handleFolderClick(entry);
       return;
     }
     const ref = `See file: workspace/${normalizePath(entry.path)}`;
@@ -317,7 +362,12 @@ function ready() {
           {entry.type === "file" ? <File className="h-4 w-4 shrink-0 text-white/55" /> : null}
           <span className="truncate">{entry.name}</span>
         </button>
-        {entry.type === "folder" && isEx && entry.children?.length
+        {entry.type === "folder" && isEx && loadingFolder === entry.path ? (
+          <p className="pl-[1.5rem] text-[11px] text-white/40" style={{ paddingLeft: 10 + (depth + 1) * 12 }}>
+            Loading…
+          </p>
+        ) : null}
+        {entry.type === "folder" && isEx && Array.isArray(entry.children)
           ? entry.children.map((c) => renderEntry(c, depth + 1))
           : null}
       </div>
@@ -395,24 +445,37 @@ function ready() {
             {loading ? (
               <p className="px-2 py-1 text-[11px] text-white/45">Loading…</p>
             ) : disconnected ? (
-              <div className="px-2.5 py-3 text-[12px] leading-relaxed text-white/55">
-                <p className="text-[13px] font-medium text-amber-200/90">Local runtime not connected</p>
-                <p className="mt-2">
-                  Start the local HAM API and set <span className="font-mono text-[11px] text-white/60">HAM_WORKSPACE_ROOT</span>{" "}
-                  to a folder on this computer. The cloud API cannot read your laptop disk.
+              <div className="px-1.5 py-2">
+                <p className="px-1 text-[12px] font-medium text-white/80">Connect to browse local files</p>
+                <p className="mt-1 px-1 text-[11px] leading-relaxed text-white/45">
+                  Files and Terminal use the HAM process on this computer, not Cloud Run.
                 </p>
-                <p className="mt-2 font-mono text-[10px] text-white/40">
-                  {localUrlDisplay || "No URL saved — set Connection in settings."}
-                </p>
-                <Link
-                  className="mt-2 inline-block text-[#7dd3fc] underline decoration-white/10 underline-offset-2"
-                  to="/workspace/settings?section=connection"
-                >
-                  Workspace settings → Connection
-                </Link>
+                <div className="mt-2">
+                  <LocalMachineConnectCta
+                    variant="compact"
+                    onSuccess={() => void refresh()}
+                    className="!p-3"
+                    showOpenSettings
+                    showOpenFiles={false}
+                  />
+                </div>
               </div>
             ) : localError ? (
-              <div className="px-2.5 py-3 text-[11px] leading-relaxed text-amber-200/80">{bridge.detail}</div>
+              <div className="px-1.5 py-2">
+                <p className="px-1 text-[12px] text-amber-200/85">Could not use the saved local URL. Try again below.</p>
+                <p className="mt-1 px-1 break-words text-[10px] text-amber-200/60" title={bridge.detail}>
+                  {bridge.detail}
+                </p>
+                <div className="mt-2">
+                  <LocalMachineConnectCta
+                    variant="compact"
+                    onSuccess={() => void refresh()}
+                    className="!p-3"
+                    showOpenSettings
+                    showOpenFiles={false}
+                  />
+                </div>
+              </div>
             ) : !entries.length && bridge.status === "pending" ? (
               <p className="px-2 py-2 text-[11px] leading-relaxed text-white/45">No file tree yet. Check the local API.</p>
             ) : !entries.length && bridge.status === "ready" ? (
@@ -462,9 +525,17 @@ function ready() {
             <div className="min-w-0">
               <h1 className="truncate text-sm font-medium text-white/90 md:text-base">Files</h1>
               <p className="hidden text-[12px] text-white/40 sm:line-clamp-1 sm:text-[13px]">
-                Explore your workspace and edit in the buffer.
+                Files are served by the local HAM API from the configured filesystem root on this machine.
               </p>
             </div>
+            {fsHealth?.broadFilesystemAccess && fsHealth.workspaceRootPath ? (
+              <span
+                className="hidden max-w-[min(20rem,45vw)] truncate rounded border border-amber-500/35 bg-amber-500/15 px-2 py-0.5 text-[10px] text-amber-100/90 md:inline"
+                title="Intentional operator / workstation mode"
+              >
+                Broad filesystem access: {fsHealth.workspaceRootPath}
+              </span>
+            ) : null}
             <div className="ml-auto flex shrink-0 items-center gap-1.5">
               {readPath ? (
                 <>
@@ -525,11 +596,36 @@ function ready() {
               </p>
             ) : null}
             {disconnected ? (
-              <div className="mb-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2.5 text-[12px] text-amber-100/90">
-                <p className="font-medium">Files use your local HAM API only</p>
-                <p className="mt-1 text-[11px] text-amber-100/70">
-                  Connect the runtime in <Link to="/workspace/settings?section=connection" className="text-[#7dd3fc] underline">Settings → Connection</Link>. Files are served from <span className="font-mono">HAM_WORKSPACE_ROOT</span> on the machine
-                  where that API runs — not from Cloud Run.
+              <div className="mb-2 space-y-2 rounded-lg border border-amber-500/25 bg-amber-500/10 p-2 text-[12px] text-amber-100/90">
+                <p className="px-1 font-medium">Connect this machine to open the editor and browse files.</p>
+                <LocalMachineConnectCta
+                  variant="compact"
+                  onSuccess={() => void refresh()}
+                  className="!border-0 !bg-transparent !p-2"
+                  showOpenSettings
+                  showOpenFiles={false}
+                />
+              </div>
+            ) : null}
+            {localError && !disconnected ? (
+              <div className="mb-2 space-y-2 rounded-lg border border-amber-500/20 bg-amber-500/5 p-2">
+                <p className="px-1 text-[11px] text-amber-200/80">{bridge.detail}</p>
+                <LocalMachineConnectCta
+                  variant="compact"
+                  onSuccess={() => void refresh()}
+                  className="!border-0 !bg-transparent !p-2"
+                  showOpenSettings
+                  showOpenFiles={false}
+                />
+              </div>
+            ) : null}
+            {noEnvRoot && !disconnected ? (
+              <div className="mb-2 rounded-lg border border-sky-500/25 bg-sky-500/10 px-3 py-2.5 text-[12px] text-sky-100/90">
+                <p className="font-medium">Local runtime reachable — optional filesystem root</p>
+                <p className="mt-1 text-[11px] text-sky-100/80">
+                  Local runtime connected, but <span className="font-mono">HAM_WORKSPACE_ROOT</span> is not set on the API. Set it to
+                  a project path or a broad path (e.g. <span className="font-mono">C:\</span> for operator mode). The API is using
+                  the repo sandbox until then.
                 </p>
               </div>
             ) : null}

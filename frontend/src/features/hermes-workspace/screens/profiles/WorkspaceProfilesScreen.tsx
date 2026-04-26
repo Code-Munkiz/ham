@@ -8,6 +8,7 @@ import { Check, Clock, Folder, Pencil, Sparkles, Trash2, UserRound } from "lucid
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { workspaceProfilesAdapter, type WorkspaceProfile } from "../../adapters/profilesAdapter";
+import { WorkspaceSurfaceStateCard } from "../../components/workspaceSurfaceChrome";
 
 function fmtDate(ts: number): string {
   return new Intl.DateTimeFormat(undefined, {
@@ -182,8 +183,8 @@ export function WorkspaceProfilesScreen() {
                   <h1 className="text-lg font-semibold">Profiles</h1>
                 </div>
                 <p className="mt-1 text-sm text-[var(--theme-muted)]">
-                  Browse and manage agent profiles. Upstream stores under{" "}
-                  <span className="font-mono">~/.hermes/profiles</span> — HAM uses{" "}
+                  Profiles are served from the HAM Profiles API at <span className="font-mono text-xs">/api/workspace/profiles</span>{" "}
+                  (JSON on the API host). Upstream stores under <span className="font-mono">~/.hermes/profiles</span> — HAM uses{" "}
                   <span className="font-mono">.ham/workspace_state/profiles.json</span>.
                 </p>
               </div>
@@ -202,9 +203,19 @@ export function WorkspaceProfilesScreen() {
             </div>
 
             {err && (
-              <p className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
-                {err}
-              </p>
+              <div className="mb-3">
+                <WorkspaceSurfaceStateCard
+                  title="Profiles API unavailable"
+                  description="Profiles could not be loaded. Other routes may still work."
+                  tone="amber"
+                  technicalDetail={err}
+                  primaryAction={
+                    <Button type="button" size="sm" variant="secondary" onClick={() => void load()}>
+                      Retry
+                    </Button>
+                  }
+                />
+              </div>
             )}
 
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -320,8 +331,15 @@ export function WorkspaceProfilesScreen() {
             </div>
 
             {!loading && profiles.length === 0 && !err && (
-              <div className="mt-4 rounded-2xl border border-dashed border-white/15 bg-black/20 p-8 text-center text-sm text-[var(--theme-muted)]">
-                No named profiles in local state. Active default is <span className="font-semibold">{activeName}</span>.
+              <div className="mt-4 rounded-2xl border border-dashed border-white/15 bg-black/20 p-8 text-center">
+                <p className="text-sm font-medium text-[var(--theme-text)]">No profiles yet</p>
+                <p className="mt-2 text-sm text-[var(--theme-muted)]">
+                  Create a profile to save model and system prompt defaults. Storage is empty but the API is connected;
+                  active label: <span className="font-semibold">{activeName}</span>.
+                </p>
+                <Button type="button" className="mt-4" onClick={() => setCreateOpen(true)}>
+                  Create profile
+                </Button>
               </div>
             )}
           </>

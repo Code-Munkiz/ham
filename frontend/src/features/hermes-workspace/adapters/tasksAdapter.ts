@@ -4,6 +4,8 @@
 
 import { hamApiFetch } from "@/lib/ham/api";
 
+import { workspaceApiPending } from "../lib/workspaceHamApiState";
+
 const BASE = "/api/workspace/tasks";
 
 export type TaskStatus = "todo" | "in_progress" | "done";
@@ -28,8 +30,6 @@ export type TaskSummary = {
 
 export type TasksBridge = { status: "ready" } | { status: "pending"; detail: string };
 
-const PENDING: TasksBridge = { status: "pending", detail: "Runtime bridge pending" };
-
 async function readJson<T>(res: Response): Promise<T> {
   return (await res.json()) as T;
 }
@@ -50,10 +50,10 @@ export const workspaceTasksAdapter = {
   async summary(): Promise<{ summary: TaskSummary | null; bridge: TasksBridge }> {
     try {
       const res = await hamApiFetch(`${BASE}/summary`, { credentials: "include" });
-      if (!res.ok) return { summary: null, bridge: PENDING };
+      if (!res.ok) return { summary: null, bridge: workspaceApiPending("tasks", res) };
       return { summary: (await res.json()) as TaskSummary, bridge: { status: "ready" } };
-    } catch {
-      return { summary: null, bridge: PENDING };
+    } catch (e) {
+      return { summary: null, bridge: workspaceApiPending("tasks", null, e) };
     }
   },
 
@@ -71,11 +71,11 @@ export const workspaceTasksAdapter = {
         })}`,
         { credentials: "include" },
       );
-      if (!res.ok) return { tasks: [], bridge: PENDING };
+      if (!res.ok) return { tasks: [], bridge: workspaceApiPending("tasks", res) };
       const data = await readJson<{ tasks?: WorkspaceTask[] }>(res);
       return { tasks: Array.isArray(data.tasks) ? data.tasks : [], bridge: { status: "ready" } };
-    } catch {
-      return { tasks: [], bridge: PENDING };
+    } catch (e) {
+      return { tasks: [], bridge: workspaceApiPending("tasks", null, e) };
     }
   },
 
@@ -97,10 +97,10 @@ export const workspaceTasksAdapter = {
           dueAt: dueAt || null,
         }),
       });
-      if (!res.ok) return { task: null, bridge: PENDING, error: `HTTP ${res.status}` };
+      if (!res.ok) return { task: null, bridge: workspaceApiPending("tasks", res), error: `HTTP ${res.status}` };
       return { task: (await res.json()) as WorkspaceTask, bridge: { status: "ready" } };
     } catch (e) {
-      return { task: null, bridge: PENDING, error: e instanceof Error ? e.message : String(e) };
+      return { task: null, bridge: workspaceApiPending("tasks", null, e), error: e instanceof Error ? e.message : String(e) };
     }
   },
 
@@ -115,20 +115,20 @@ export const workspaceTasksAdapter = {
         credentials: "include",
         body: JSON.stringify(body),
       });
-      if (!res.ok) return { task: null, bridge: PENDING, error: `HTTP ${res.status}` };
+      if (!res.ok) return { task: null, bridge: workspaceApiPending("tasks", res), error: `HTTP ${res.status}` };
       return { task: (await res.json()) as WorkspaceTask, bridge: { status: "ready" } };
     } catch (e) {
-      return { task: null, bridge: PENDING, error: e instanceof Error ? e.message : String(e) };
+      return { task: null, bridge: workspaceApiPending("tasks", null, e), error: e instanceof Error ? e.message : String(e) };
     }
   },
 
   async delete(id: string): Promise<{ ok: boolean; bridge: TasksBridge; error?: string }> {
     try {
       const res = await hamApiFetch(`${BASE}/${encodeURIComponent(id)}`, { method: "DELETE", credentials: "include" });
-      if (res.status !== 204) return { ok: false, bridge: PENDING, error: `HTTP ${res.status}` };
+      if (res.status !== 204) return { ok: false, bridge: workspaceApiPending("tasks", res), error: `HTTP ${res.status}` };
       return { ok: true, bridge: { status: "ready" } };
     } catch (e) {
-      return { ok: false, bridge: PENDING, error: e instanceof Error ? e.message : String(e) };
+      return { ok: false, bridge: workspaceApiPending("tasks", null, e), error: e instanceof Error ? e.message : String(e) };
     }
   },
 } as const;

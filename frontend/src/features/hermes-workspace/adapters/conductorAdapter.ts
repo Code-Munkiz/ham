@@ -4,6 +4,8 @@
 
 import { hamApiFetch } from "@/lib/ham/api";
 
+import { workspaceApiPending } from "../lib/workspaceHamApiState";
+
 const BASE = "/api/workspace/conductor";
 
 export type MissionPhase = "draft" | "running" | "completed" | "failed";
@@ -31,8 +33,6 @@ export type ConductorSettings = {
 
 export type ConductorBridge = { status: "ready" } | { status: "pending"; detail: string };
 
-const PENDING: ConductorBridge = { status: "pending", detail: "Runtime bridge pending" };
-
 async function readJson<T>(res: Response): Promise<T> {
   return (await res.json()) as T;
 }
@@ -52,11 +52,11 @@ export const workspaceConductorAdapter = {
       if (params?.historyOnly) sp.set("historyOnly", "true");
       const q = sp.toString();
       const res = await hamApiFetch(q ? `${BASE}/missions?${q}` : `${BASE}/missions`, { credentials: "include" });
-      if (!res.ok) return { missions: [], bridge: PENDING };
+      if (!res.ok) return { missions: [], bridge: workspaceApiPending("conductor", res) };
       const data = await readJson<{ missions?: WorkspaceMission[] }>(res);
       return { missions: Array.isArray(data.missions) ? data.missions : [], bridge: { status: "ready" } };
-    } catch {
-      return { missions: [], bridge: PENDING };
+    } catch (e) {
+      return { missions: [], bridge: workspaceApiPending("conductor", null, e) };
     }
   },
 
@@ -72,10 +72,10 @@ export const workspaceConductorAdapter = {
         credentials: "include",
         body: JSON.stringify({ title, body: body || "", quickAction: quickAction ?? null }),
       });
-      if (!res.ok) return { mission: null, bridge: PENDING, error: `HTTP ${res.status}` };
+      if (!res.ok) return { mission: null, bridge: workspaceApiPending("conductor", res), error: `HTTP ${res.status}` };
       return { mission: (await res.json()) as WorkspaceMission, bridge: { status: "ready" } };
     } catch (e) {
-      return { mission: null, bridge: PENDING, error: e instanceof Error ? e.message : String(e) };
+      return { mission: null, bridge: workspaceApiPending("conductor", null, e), error: e instanceof Error ? e.message : String(e) };
     }
   },
 
@@ -90,10 +90,10 @@ export const workspaceConductorAdapter = {
         credentials: "include",
         body: JSON.stringify({ quick, title: title || null }),
       });
-      if (!res.ok) return { mission: null, bridge: PENDING, error: `HTTP ${res.status}` };
+      if (!res.ok) return { mission: null, bridge: workspaceApiPending("conductor", res), error: `HTTP ${res.status}` };
       return { mission: (await res.json()) as WorkspaceMission, bridge: { status: "ready" } };
     } catch (e) {
-      return { mission: null, bridge: PENDING, error: e instanceof Error ? e.message : String(e) };
+      return { mission: null, bridge: workspaceApiPending("conductor", null, e), error: e instanceof Error ? e.message : String(e) };
     }
   },
 
@@ -108,10 +108,10 @@ export const workspaceConductorAdapter = {
         credentials: "include",
         body: JSON.stringify(body),
       });
-      if (!res.ok) return { mission: null, bridge: PENDING, error: `HTTP ${res.status}` };
+      if (!res.ok) return { mission: null, bridge: workspaceApiPending("conductor", res), error: `HTTP ${res.status}` };
       return { mission: (await res.json()) as WorkspaceMission, bridge: { status: "ready" } };
     } catch (e) {
-      return { mission: null, bridge: PENDING, error: e instanceof Error ? e.message : String(e) };
+      return { mission: null, bridge: workspaceApiPending("conductor", null, e), error: e instanceof Error ? e.message : String(e) };
     }
   },
 
@@ -121,10 +121,10 @@ export const workspaceConductorAdapter = {
         method: "POST",
         credentials: "include",
       });
-      if (!res.ok) return { mission: null, bridge: PENDING, error: (await res.text()) || `HTTP ${res.status}` };
+      if (!res.ok) return { mission: null, bridge: workspaceApiPending("conductor", res), error: (await res.text()) || `HTTP ${res.status}` };
       return { mission: (await res.json()) as WorkspaceMission, bridge: { status: "ready" } };
     } catch (e) {
-      return { mission: null, bridge: PENDING, error: e instanceof Error ? e.message : String(e) };
+      return { mission: null, bridge: workspaceApiPending("conductor", null, e), error: e instanceof Error ? e.message : String(e) };
     }
   },
 
@@ -134,10 +134,10 @@ export const workspaceConductorAdapter = {
         method: "POST",
         credentials: "include",
       });
-      if (!res.ok) return { mission: null, bridge: PENDING, error: `HTTP ${res.status}` };
+      if (!res.ok) return { mission: null, bridge: workspaceApiPending("conductor", res), error: `HTTP ${res.status}` };
       return { mission: (await res.json()) as WorkspaceMission, bridge: { status: "ready" } };
     } catch (e) {
-      return { mission: null, bridge: PENDING, error: e instanceof Error ? e.message : String(e) };
+      return { mission: null, bridge: workspaceApiPending("conductor", null, e), error: e instanceof Error ? e.message : String(e) };
     }
   },
 
@@ -152,31 +152,31 @@ export const workspaceConductorAdapter = {
         credentials: "include",
         body: JSON.stringify({ line }),
       });
-      if (!res.ok) return { mission: null, bridge: PENDING, error: `HTTP ${res.status}` };
+      if (!res.ok) return { mission: null, bridge: workspaceApiPending("conductor", res), error: `HTTP ${res.status}` };
       return { mission: (await res.json()) as WorkspaceMission, bridge: { status: "ready" } };
     } catch (e) {
-      return { mission: null, bridge: PENDING, error: e instanceof Error ? e.message : String(e) };
+      return { mission: null, bridge: workspaceApiPending("conductor", null, e), error: e instanceof Error ? e.message : String(e) };
     }
   },
 
   async delete(id: string): Promise<{ ok: boolean; bridge: ConductorBridge; error?: string }> {
     try {
       const res = await hamApiFetch(`${BASE}/missions/${encodeURIComponent(id)}`, { method: "DELETE", credentials: "include" });
-      if (res.status !== 204) return { ok: false, bridge: PENDING, error: `HTTP ${res.status}` };
+      if (res.status !== 204) return { ok: false, bridge: workspaceApiPending("conductor", res), error: `HTTP ${res.status}` };
       return { ok: true, bridge: { status: "ready" } };
     } catch (e) {
-      return { ok: false, bridge: PENDING, error: e instanceof Error ? e.message : String(e) };
+      return { ok: false, bridge: workspaceApiPending("conductor", null, e), error: e instanceof Error ? e.message : String(e) };
     }
   },
 
   async getSettings(): Promise<{ settings: ConductorSettings | null; bridge: ConductorBridge }> {
     try {
       const res = await hamApiFetch(`${BASE}/settings`, { credentials: "include" });
-      if (!res.ok) return { settings: null, bridge: PENDING };
+      if (!res.ok) return { settings: null, bridge: workspaceApiPending("conductor", res) };
       const data = await readJson<{ settings?: ConductorSettings }>(res);
       return { settings: data.settings ?? null, bridge: { status: "ready" } };
-    } catch {
-      return { settings: null, bridge: PENDING };
+    } catch (e) {
+      return { settings: null, bridge: workspaceApiPending("conductor", null, e) };
     }
   },
 
@@ -190,11 +190,11 @@ export const workspaceConductorAdapter = {
         credentials: "include",
         body: JSON.stringify(body),
       });
-      if (!res.ok) return { settings: null, bridge: PENDING, error: `HTTP ${res.status}` };
+      if (!res.ok) return { settings: null, bridge: workspaceApiPending("conductor", res), error: `HTTP ${res.status}` };
       const data = await readJson<{ settings?: ConductorSettings }>(res);
       return { settings: data.settings ?? null, bridge: { status: "ready" } };
     } catch (e) {
-      return { settings: null, bridge: PENDING, error: e instanceof Error ? e.message : String(e) };
+      return { settings: null, bridge: workspaceApiPending("conductor", null, e), error: e instanceof Error ? e.message : String(e) };
     }
   },
 } as const;

@@ -35,6 +35,7 @@ from src.api.workspace_terminal import router as workspace_terminal_router
 from src.api.workspace_conductor import router as workspace_conductor_router
 from src.api.workspace_memory import router as workspace_memory_router
 from src.api.workspace_operations import router as workspace_operations_router
+from src.api.pna_middleware import private_network_access_middleware
 from src.api.workspace_profiles import router as workspace_profiles_router
 from src.api.workspace_skills import router as workspace_skills_router
 from src.api.control_plane_runs import router as control_plane_runs_router
@@ -55,16 +56,21 @@ _DEFAULT_CORS = [
     "http://127.0.0.1:3003",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    # HAM Vercel production — local runtime (Files/Terminal) from this origin needs CORS on uvicorn.
+    "https://ham-nine-mu.vercel.app",
     # Packaged Electron loads the UI from file:// — fetch sends Origin: null (literal).
     "null",
 ]
 
 
 def _cors_allow_origins() -> list[str]:
+    """Merge env list with defaults so one forgotten origin (e.g. Vercel) does not break others."""
+    base = list(_DEFAULT_CORS)
     raw = (os.environ.get("HAM_CORS_ORIGINS") or "").strip()
     if not raw:
-        return list(_DEFAULT_CORS)
-    return [o.strip() for o in raw.split(",") if o.strip()]
+        return base
+    extra = [o.strip() for o in raw.split(",") if o.strip()]
+    return list(dict.fromkeys([*base, *extra]))
 
 
 def _cors_allow_origin_regex() -> str | None:
@@ -77,6 +83,9 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_allow_origins(),
     allow_origin_regex=_cors_allow_origin_regex(),
+    # Workspace adapters use hamApiFetch(..., credentials="include") for cross-origin Vercel → Cloud Run. Without this,
+    # browsers omit Access-Control-Allow-Credentials and the response is treated as a CORS failure → "Failed to fetch".
+    allow_credentials=True,
     # PATCH required for /api/projects/{id} metadata updates (chat handoff repo save); browser preflight fails without it.
     allow_methods=["GET", "POST", "PATCH", "DELETE"],
     allow_headers=["*"],
@@ -404,3 +413,8 @@ async def list_project_runs(
     store = RunStore(root=Path(record.root))
     runs = store.list_runs(limit=max(1, min(limit, 200)))
     return {"runs": [r.model_dump() for r in runs]}
+
+
+# Outermost ASGI: Chrome "Private Network Access" — public HTTPS (e.g. Vercel) → http://127.0.0.1
+# needs Access-Control-Allow-Private-Network. Default CORS includes production Vercel; merge via HAM_CORS_ORIGINS.
+app = private_network_access_middleware(app)

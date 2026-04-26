@@ -8,6 +8,7 @@ import {
   type TaskSummary,
   type WorkspaceTask,
 } from "../../adapters/tasksAdapter";
+import { WorkspaceSurfaceHeader, WorkspaceSurfaceStateCard } from "../../components/workspaceSurfaceChrome";
 
 const COLUMNS: { id: TaskStatus; label: string }[] = [
   { id: "todo", label: "To do" },
@@ -144,15 +145,37 @@ export function WorkspaceTasksScreen() {
   ) : null;
 
   return (
-    <div className="flex h-full min-h-0 min-w-0 flex-col p-3 md:p-4">
-      <div className="shrink-0">
-        <p className="hww-pill mb-1">Workspace</p>
-        <h1 className="text-base font-semibold text-white/95">Tasks</h1>
-        <p className="mt-0.5 max-w-xl text-[11px] text-white/45">
-          TASKS-001…008 — HAM task board with summary stats; storage{" "}
-          <code className="text-white/50">.ham/workspace_state/tasks.json</code>.
-        </p>
-      </div>
+    <div className="flex h-full min-h-0 min-w-0 flex-col gap-3 p-3 md:p-4">
+      <WorkspaceSurfaceHeader
+        variant="dark"
+        eyebrow="Workspace"
+        title="Tasks"
+        subtitle="Task board and summary from the HAM Tasks API (/api/workspace/tasks + /summary). Kanban columns map to server-backed status — not local Files."
+        actions={
+          <>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              className="h-7 gap-1 border-white/15 bg-white/5 text-white/90"
+              onClick={() => void load()}
+              disabled={loading}
+            >
+              <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
+              Refresh
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 border-white/10 bg-black/30 text-amber-200/90 shadow-sm hover:border-white/15 hover:bg-white/5 hover:text-amber-100"
+              onClick={() => setShowDone((s) => !s)}
+            >
+              {showDone ? "Hide done" : "Show done"}
+            </Button>
+          </>
+        }
+      />
 
       {summary && (
         <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-4">
@@ -173,27 +196,7 @@ export function WorkspaceTasksScreen() {
         </div>
       )}
 
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <Button
-          type="button"
-          size="sm"
-          variant="secondary"
-          className="h-7 gap-1"
-          onClick={() => void load()}
-          disabled={loading}
-        >
-          <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
-          Refresh
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className="h-7 border-white/10 bg-black/30 text-amber-200/90 shadow-sm hover:border-white/15 hover:bg-white/5 hover:text-amber-100"
-          onClick={() => setShowDone((s) => !s)}
-        >
-          {showDone ? "Hide done" : "Show done"}
-        </Button>
+      <div className="flex flex-wrap items-center gap-2">
         <div className="flex min-w-0 max-w-sm flex-1 items-center gap-1 rounded border border-white/10 bg-black/20 px-2">
           <Search className="h-3.5 w-3.5 text-white/30" />
           <input
@@ -211,14 +214,43 @@ export function WorkspaceTasksScreen() {
       </div>
 
       {error && (
-        <div className="mt-2 rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[11px] text-amber-100/90">
-          {error}
-        </div>
+        <WorkspaceSurfaceStateCard
+          className="border-white/10 bg-amber-500/10 text-amber-100/90"
+          title="Tasks API is not available"
+          description="The task board needs /api/workspace/tasks on your HAM API."
+          tone="amber"
+          technicalDetail={error}
+          primaryAction={
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              className="border-white/20 bg-white/10 text-white"
+              onClick={() => void load()}
+            >
+              Retry
+            </Button>
+          }
+        />
       )}
 
-      {loading && tasks.length === 0 && <p className="mt-2 text-[11px] text-white/40">Loading…</p>}
+      {loading && tasks.length === 0 && <p className="text-[11px] text-white/40">Loading tasks…</p>}
       {!loading && tasks.length === 0 && !error && (
-        <p className="mt-2 text-[11px] text-white/40">No tasks match. Add a card from a column.</p>
+        <div className="rounded-xl border border-dashed border-white/15 bg-black/20 px-4 py-8 text-center text-sm text-white/50">
+          {searchApplied ? (
+            <>
+              <p className="font-medium text-white/90">No tasks match</p>
+              <p className="mt-2 text-xs leading-relaxed">Clear the filter or add a task in a column.</p>
+            </>
+          ) : (
+            <>
+              <p className="font-medium text-white/90">No tasks yet</p>
+              <p className="mt-2 text-xs leading-relaxed">
+                Create a task from a column, or launch a mission when your deployment writes tasks to the board.
+              </p>
+            </>
+          )}
+        </div>
       )}
 
       <div className="mt-3 grid min-h-0 flex-1 grid-cols-1 gap-2 md:grid-cols-3">

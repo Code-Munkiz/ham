@@ -28,6 +28,7 @@ import {
   type ScheduledJob,
   type WorkspaceAgent,
 } from "../../adapters/operationsAdapter";
+import { WorkspaceSurfaceStateCard } from "../../components/workspaceSurfaceChrome";
 
 function fmt(ts: number) {
   return new Date(ts * 1000).toLocaleString();
@@ -269,7 +270,10 @@ export function WorkspaceOperationsScreen() {
             </div>
             <div>
               <h1 className="text-base font-semibold text-[var(--theme-text)]">Operations</h1>
-              <p className="mt-1 text-sm text-[var(--theme-muted)]">Your persistent agent team · HAM v0</p>
+              <p className="mt-1 text-sm text-[var(--theme-muted)]">
+                Agent roster and outputs from <span className="font-mono text-xs">/api/workspace/operations</span> — HAM
+                v0, not the local Files bridge.
+              </p>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2 md:gap-3">
@@ -350,9 +354,29 @@ export function WorkspaceOperationsScreen() {
           </section>
         ) : null}
         {error ? (
-          <section className="rounded-3xl border border-[var(--theme-danger-border)] bg-[var(--theme-danger-soft)] px-6 py-8 text-center text-sm text-[var(--theme-text)] shadow-[0_24px_80px_var(--theme-shadow)]">
-            {error}
-          </section>
+          <WorkspaceSurfaceStateCard
+            className="shadow-[0_24px_80px_var(--theme-shadow)]"
+            title="Operations API is not available"
+            description="Chat may still work, but agent operations require the HAM operations routes on your API deployment."
+            tone="amber"
+            technicalDetail={error}
+            primaryAction={
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                className="border border-[var(--theme-border)] bg-[var(--theme-bg)]"
+                onClick={() => void load()}
+              >
+                Retry
+              </Button>
+            }
+            secondaryAction={
+              <Button type="button" size="sm" variant="ghost" className="text-[var(--theme-muted)]" asChild>
+                <Link to="/workspace/chat">Open workspace chat</Link>
+              </Button>
+            }
+          />
         ) : null}
 
         {addJobOpen && (
@@ -445,7 +469,10 @@ export function WorkspaceOperationsScreen() {
               {agents.length === 0 && !loading && (
                 <div className="col-span-full rounded-2xl border border-dashed border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-8 text-center sm:col-span-2 xl:col-span-3">
                   <Sparkles className="mx-auto mb-2 h-6 w-6 text-[var(--theme-warning)]" />
-                  <p className="text-sm text-[var(--theme-muted)]">No agents yet. Use Add Agent or New Agent to create one.</p>
+                  <p className="text-sm font-medium text-[var(--theme-text)]">No agents yet</p>
+                  <p className="mt-2 text-sm text-[var(--theme-muted)]">
+                    Create an agent with <strong>New Agent</strong>, or launch a mission from Conductor to populate the roster when your workflow creates agents.
+                  </p>
                 </div>
               )}
               {agents.map((ag, index) => {
