@@ -140,3 +140,19 @@
   --theme-accent: #10b981;
   color: var(--theme-text);
 }
+
+/* Workspace chat — upstream `chat-screen` / `chat-empty-state` token alignment */
+.hww-outer {
+  --hww-chat-border: rgba(255, 255, 255, 0.12);
+  --hww-chat-card: rgba(255, 255, 255, 0.04);
+}
+
+.hww-outer .hww-chat-chip {
+  background: var(--hww-chat-card);
+  border: 1px solid var(--hww-chat-border);
+}
+
+.hww-outer .hww-chat-chip:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(196, 92, 18, 0.35);
+}

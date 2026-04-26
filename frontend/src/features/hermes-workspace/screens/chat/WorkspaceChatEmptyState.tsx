@@ -1,0 +1,89 @@
+/**
+ * Upstream-matched empty state: `src/screens/chat/components/chat-empty-state.tsx` (repomix).
+ * Copy, chip labels, and structure align with Hermes Workspace; HAM public asset for avatar frame.
+ */
+
+import * as React from "react";
+import { motion } from "motion/react";
+import { Brain, Code, Puzzle } from "lucide-react";
+import { publicAssetUrl } from "@/lib/ham/publicAssets";
+
+export type SuggestionChip = {
+  label: string;
+  prompt: string;
+  icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
+};
+
+/** Exact upstream `SUGGESTIONS` (repomix `chat-empty-state.tsx`). */
+export const WORKSPACE_CHAT_SUGGESTIONS: SuggestionChip[] = [
+  {
+    label: "Analyze workspace",
+    prompt:
+      "Analyze this workspace structure and give me 3 engineering risks. Use tools and keep it concise.",
+    icon: Code,
+  },
+  {
+    label: "Save a preference",
+    prompt:
+      'Save this to memory exactly: "For demos, respond in 3 bullets max and put risk first." Then confirm saved.',
+    icon: Brain,
+  },
+  {
+    label: "Create a file",
+    prompt: "Create demo-checklist.md with 5 launch checks for this app.",
+    icon: Puzzle,
+  },
+];
+
+type WorkspaceChatEmptyStateProps = {
+  onSuggestionClick?: (prompt: string) => void;
+};
+
+export function WorkspaceChatEmptyState({ onSuggestionClick }: WorkspaceChatEmptyStateProps) {
+  const avatarSrc = publicAssetUrl("ham-app-moon.png");
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, ease: "easeOut" }}
+      className="hww-chat-empty flex h-full flex-col items-center justify-center px-4 py-8"
+    >
+      <div className="flex max-w-xl flex-col items-center text-center">
+        <div className="relative mb-6">
+          <img
+            src={avatarSrc}
+            alt="Hermes"
+            className="relative size-20 rounded-md object-contain"
+            style={{
+              border: "1px solid var(--hww-chat-border, rgba(255,255,255,0.12))",
+              padding: "4px",
+              background: "var(--hww-chat-card, rgba(255,255,255,0.04))",
+            }}
+          />
+        </div>
+        <p className="hww-chat-micro-label mb-2 text-[11px] font-medium uppercase tracking-[0.12em] text-white/50">
+          Hermes Workspace
+        </p>
+        <h2 className="text-2xl font-semibold tracking-tight text-[#e8eef8] md:text-3xl">Begin a session</h2>
+        <p className="mt-3 text-sm text-white/40">Agent chat · live tools · memory · full observability</p>
+        <div className="mt-6 flex flex-wrap justify-center gap-2">
+          {WORKSPACE_CHAT_SUGGESTIONS.map((suggestion) => {
+            const Icon = suggestion.icon;
+            return (
+              <button
+                key={suggestion.label}
+                type="button"
+                onClick={() => onSuggestionClick?.(suggestion.prompt)}
+                className="hww-chat-chip flex cursor-pointer items-center gap-2 rounded-md px-3.5 py-2 text-xs font-medium text-[#e2eaf3] transition-all"
+              >
+                <Icon className="h-3.5 w-3.5 text-[#c45c12]/90" strokeWidth={1.5} />
+                {suggestion.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </motion.div>
+  );
+}
