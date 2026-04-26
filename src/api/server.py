@@ -30,6 +30,8 @@ from src.api.workspace_files import router as workspace_files_router
 from src.api.workspace_jobs import router as workspace_jobs_router
 from src.api.workspace_tasks import router as workspace_tasks_router
 from src.api.workspace_terminal import router as workspace_terminal_router
+from src.api.workspace_conductor import router as workspace_conductor_router
+from src.api.workspace_operations import router as workspace_operations_router
 from src.api.control_plane_runs import router as control_plane_runs_router
 from src.ham.agent_profiles import agents_config_from_merged
 from src.ham.clerk_auth import HamActor, clerk_authorization_is_clerk_session
@@ -97,6 +99,8 @@ app.include_router(workspace_files_router)
 app.include_router(workspace_jobs_router)
 app.include_router(workspace_tasks_router)
 app.include_router(workspace_terminal_router)
+app.include_router(workspace_conductor_router)
+app.include_router(workspace_operations_router)
 
 _store = RunStore()
 

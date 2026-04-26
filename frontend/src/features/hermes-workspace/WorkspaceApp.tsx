@@ -10,6 +10,8 @@ import { WorkspaceTerminalScreen } from "./screens/terminal/WorkspaceTerminalScr
 import { WorkspaceSettingsScreen } from "./screens/settings/WorkspaceSettingsScreen";
 import { WorkspaceJobsScreen } from "./screens/jobs/WorkspaceJobsScreen";
 import { WorkspaceTasksScreen } from "./screens/tasks/WorkspaceTasksScreen";
+import { WorkspaceConductorScreen } from "./screens/conductor/WorkspaceConductorScreen";
+import { WorkspaceOperationsScreen } from "./screens/operations/WorkspaceOperationsScreen";
 import "./hermesWorkspace.css";
 
 /**
@@ -32,24 +34,8 @@ export function WorkspaceApp() {
           <Route path="settings" element={<WorkspaceSettingsScreen />} />
           <Route path="jobs" element={<WorkspaceJobsScreen />} />
           <Route path="tasks" element={<WorkspaceTasksScreen />} />
-          <Route
-            path="conductor"
-            element={
-              <WorkspacePlaceholderPage
-                title="Conductor"
-                description="Orchestration UI placeholder — no direct upstream Hermes or OpenAI calls from the client."
-              />
-            }
-          />
-          <Route
-            path="operations"
-            element={
-              <WorkspacePlaceholderPage
-                title="Operations"
-                description="Operations / health-style views — can consume existing HAM APIs when modeled."
-              />
-            }
-          />
+          <Route path="conductor" element={<WorkspaceConductorScreen />} />
+          <Route path="operations" element={<WorkspaceOperationsScreen />} />
           <Route
             path="memory"
             element={

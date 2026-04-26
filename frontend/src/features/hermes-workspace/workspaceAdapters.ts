@@ -68,3 +68,5 @@ export { workspaceFileAdapter } from "./adapters/filesAdapter";
 export { workspaceJobsAdapter } from "./adapters/jobsAdapter";
 export { workspaceTasksAdapter } from "./adapters/tasksAdapter";
 export { workspaceTerminalAdapter } from "./adapters/terminalAdapter";
+export { workspaceConductorAdapter } from "./adapters/conductorAdapter";
+export { workspaceOperationsAdapter } from "./adapters/operationsAdapter";

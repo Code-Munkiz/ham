@@ -189,7 +189,7 @@ export function WorkspaceTasksScreen() {
           type="button"
           size="sm"
           variant="outline"
-          className="h-7"
+          className="h-7 border-white/10 bg-black/30 text-amber-200/90 shadow-sm hover:border-white/15 hover:bg-white/5 hover:text-amber-100"
           onClick={() => setShowDone((s) => !s)}
         >
           {showDone ? "Hide done" : "Show done"}
