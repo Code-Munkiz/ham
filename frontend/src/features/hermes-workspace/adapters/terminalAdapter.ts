@@ -3,6 +3,8 @@
  * Upstream: `/api/terminal-input`, `/api/terminal-resize` (mapped to namespaced sessions).
  */
 
+import { apiUrl, hamApiFetch } from "@/lib/ham/api";
+
 const TBASE = "/api/workspace/terminal";
 
 export type TerminalBridgeState =
@@ -15,15 +17,16 @@ export const workspaceTerminalAdapter = {
   description:
     "HAM /api/workspace/terminal/sessions — ConPTY (Windows) or pipe; output via WebSocket /stream and/or HTTP /output.",
 
-  /** Same-origin WebSocket URL for terminal output (Vite must proxy with ws: true). */
+  /** WebSocket URL for terminal output: same host in dev; `VITE_HAM_API_BASE` host in production. */
   webSocketStreamUrl(sessionId: string): string {
     if (typeof window === "undefined") {
       return "";
     }
-    const path = `${TBASE}/sessions/${encodeURIComponent(sessionId)}/stream`;
-    const { protocol, host } = window.location;
-    const proto = protocol === "https:" ? "wss:" : "ws:";
-    return `${proto}//${host}${path}`;
+    const rel = `${TBASE}/sessions/${encodeURIComponent(sessionId)}/stream`;
+    const href = apiUrl(rel);
+    const u = new URL(href, window.location.href);
+    u.protocol = u.protocol === "https:" ? "wss:" : "ws:";
+    return u.toString();
   },
 
   async createSession(
@@ -35,7 +38,7 @@ export const workspaceTerminalAdapter = {
     bridge: TerminalBridgeState;
   }> {
     try {
-      const res = await fetch(`${TBASE}/sessions`, {
+      const res = await hamApiFetch(`${TBASE}/sessions`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         credentials: "include",
@@ -68,7 +71,7 @@ export const workspaceTerminalAdapter = {
       return { ok: false, bridge: PENDING };
     }
     try {
-      const res = await fetch(`${TBASE}/sessions/${encodeURIComponent(sessionId)}/input`, {
+      const res = await hamApiFetch(`${TBASE}/sessions/${encodeURIComponent(sessionId)}/input`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -92,7 +95,7 @@ export const workspaceTerminalAdapter = {
       return { ok: false, bridge: PENDING };
     }
     try {
-      const res = await fetch(`${TBASE}/sessions/${encodeURIComponent(sessionId)}/resize`, {
+      const res = await hamApiFetch(`${TBASE}/sessions/${encodeURIComponent(sessionId)}/resize`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -119,7 +122,7 @@ export const workspaceTerminalAdapter = {
       return { text: "", next: after, bridge: PENDING };
     }
     try {
-      const res = await fetch(
+      const res = await hamApiFetch(
         `${TBASE}/sessions/${encodeURIComponent(sessionId)}/output?after=${after}`,
         { credentials: "include" },
       );
@@ -137,7 +140,7 @@ export const workspaceTerminalAdapter = {
 
   async closeSession(sessionId: string): Promise<void> {
     try {
-      await fetch(`${TBASE}/sessions/${encodeURIComponent(sessionId)}`, {
+      await hamApiFetch(`${TBASE}/sessions/${encodeURIComponent(sessionId)}`, {
         method: "DELETE",
         credentials: "include",
       });

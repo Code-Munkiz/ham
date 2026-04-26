@@ -2,6 +2,8 @@
  * HAM /api/workspace/memory — JSON-backed memory items (local v0; not full Memory Heist).
  */
 
+import { hamApiFetch } from "@/lib/ham/api";
+
 const BASE = "/api/workspace/memory";
 
 export type MemoryKind = "note" | "preference";
@@ -43,7 +45,7 @@ export const workspaceMemoryAdapter = {
     archived = false,
   ): Promise<{ items: WorkspaceMemoryItem[]; bridge: MemoryBridge }> {
     try {
-      const res = await fetch(
+      const res = await hamApiFetch(
         `${BASE}/items${qs({ q: q?.trim() || undefined, archived })}`,
         { credentials: "include" },
       );
@@ -62,7 +64,7 @@ export const workspaceMemoryAdapter = {
     kind: MemoryKind;
   }): Promise<{ item: WorkspaceMemoryItem | null; bridge: MemoryBridge; error?: string }> {
     try {
-      const res = await fetch(`${BASE}/items`, {
+      const res = await hamApiFetch(`${BASE}/items`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -86,7 +88,7 @@ export const workspaceMemoryAdapter = {
     }>,
   ): Promise<{ item: WorkspaceMemoryItem | null; bridge: MemoryBridge; error?: string }> {
     try {
-      const res = await fetch(`${BASE}/items/${encodeURIComponent(id)}`, {
+      const res = await hamApiFetch(`${BASE}/items/${encodeURIComponent(id)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -101,7 +103,7 @@ export const workspaceMemoryAdapter = {
 
   async remove(id: string): Promise<{ ok: boolean; bridge: MemoryBridge; error?: string }> {
     try {
-      const res = await fetch(`${BASE}/items/${encodeURIComponent(id)}`, {
+      const res = await hamApiFetch(`${BASE}/items/${encodeURIComponent(id)}`, {
         method: "DELETE",
         credentials: "include",
       });

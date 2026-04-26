@@ -2,6 +2,8 @@
  * HAM /api/workspace/profiles — JSON-backed agent profile cards (local v0).
  */
 
+import { hamApiFetch } from "@/lib/ham/api";
+
 const BASE = "/api/workspace/profiles";
 
 export type WorkspaceProfile = {
@@ -29,7 +31,7 @@ export const workspaceProfilesAdapter = {
   }> {
     try {
       const url = q?.trim() ? `${BASE}?q=${encodeURIComponent(q.trim())}` : BASE;
-      const res = await fetch(url, { credentials: "include" });
+      const res = await hamApiFetch(url, { credentials: "include" });
       if (!res.ok) return { profiles: [], defaultProfileId: null, bridge: PENDING };
       const data = (await res.json()) as {
         profiles?: WorkspaceProfile[];
@@ -52,7 +54,7 @@ export const workspaceProfilesAdapter = {
     systemPrompt: string;
   }): Promise<{ profile: WorkspaceProfile | null; bridge: ProfilesBridge; error?: string }> {
     try {
-      const res = await fetch(BASE, {
+      const res = await hamApiFetch(BASE, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -75,7 +77,7 @@ export const workspaceProfilesAdapter = {
     }>,
   ): Promise<{ profile: WorkspaceProfile | null; bridge: ProfilesBridge; error?: string }> {
     try {
-      const res = await fetch(`${BASE}/${encodeURIComponent(id)}`, {
+      const res = await hamApiFetch(`${BASE}/${encodeURIComponent(id)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -92,7 +94,7 @@ export const workspaceProfilesAdapter = {
     id: string,
   ): Promise<{ ok: boolean; defaultProfileId: string | null; bridge: ProfilesBridge; error?: string }> {
     try {
-      const res = await fetch(`${BASE}/${encodeURIComponent(id)}/set-default`, {
+      const res = await hamApiFetch(`${BASE}/${encodeURIComponent(id)}/set-default`, {
         method: "POST",
         credentials: "include",
       });
@@ -115,7 +117,7 @@ export const workspaceProfilesAdapter = {
 
   async remove(id: string): Promise<{ ok: boolean; bridge: ProfilesBridge; error?: string }> {
     try {
-      const res = await fetch(`${BASE}/${encodeURIComponent(id)}`, { method: "DELETE", credentials: "include" });
+      const res = await hamApiFetch(`${BASE}/${encodeURIComponent(id)}`, { method: "DELETE", credentials: "include" });
       if (res.status !== 204) return { ok: false, bridge: PENDING, error: `HTTP ${res.status}` };
       return { ok: true, bridge: { status: "ready" } };
     } catch (e) {

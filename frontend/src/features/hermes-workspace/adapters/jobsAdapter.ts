@@ -2,6 +2,8 @@
  * HAM /api/workspace/jobs — JSON-backed job list with run history (no upstream Hermes calls).
  */
 
+import { hamApiFetch } from "@/lib/ham/api";
+
 const BASE = "/api/workspace/jobs";
 
 export type JobRun = {
@@ -36,7 +38,7 @@ export const workspaceJobsAdapter = {
   async list(q?: string): Promise<{ jobs: WorkspaceJob[]; bridge: JobsBridge }> {
     try {
       const url = q?.trim() ? `${BASE}?q=${encodeURIComponent(q.trim())}` : BASE;
-      const res = await fetch(url, { credentials: "include" });
+      const res = await hamApiFetch(url, { credentials: "include" });
       if (!res.ok) return { jobs: [], bridge: PENDING };
       const data = await readJson<{ jobs?: WorkspaceJob[] }>(res);
       return { jobs: Array.isArray(data.jobs) ? data.jobs : [], bridge: { status: "ready" } };
@@ -47,7 +49,7 @@ export const workspaceJobsAdapter = {
 
   async create(name: string, description: string): Promise<{ job: WorkspaceJob | null; bridge: JobsBridge; error?: string }> {
     try {
-      const res = await fetch(BASE, {
+      const res = await hamApiFetch(BASE, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -66,7 +68,7 @@ export const workspaceJobsAdapter = {
     body: { name?: string; description?: string },
   ): Promise<{ job: WorkspaceJob | null; bridge: JobsBridge; error?: string }> {
     try {
-      const res = await fetch(`${BASE}/${encodeURIComponent(id)}`, {
+      const res = await hamApiFetch(`${BASE}/${encodeURIComponent(id)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -81,7 +83,7 @@ export const workspaceJobsAdapter = {
 
   async run(id: string): Promise<{ job: WorkspaceJob | null; bridge: JobsBridge; error?: string }> {
     try {
-      const res = await fetch(`${BASE}/${encodeURIComponent(id)}/run`, {
+      const res = await hamApiFetch(`${BASE}/${encodeURIComponent(id)}/run`, {
         method: "POST",
         credentials: "include",
       });
@@ -94,7 +96,7 @@ export const workspaceJobsAdapter = {
 
   async pause(id: string): Promise<{ job: WorkspaceJob | null; bridge: JobsBridge; error?: string }> {
     try {
-      const res = await fetch(`${BASE}/${encodeURIComponent(id)}/pause`, { method: "POST", credentials: "include" });
+      const res = await hamApiFetch(`${BASE}/${encodeURIComponent(id)}/pause`, { method: "POST", credentials: "include" });
       if (!res.ok) return { job: null, bridge: PENDING, error: (await res.text()) || `HTTP ${res.status}` };
       return { job: (await res.json()) as WorkspaceJob, bridge: { status: "ready" } };
     } catch (e) {
@@ -104,7 +106,7 @@ export const workspaceJobsAdapter = {
 
   async resume(id: string): Promise<{ job: WorkspaceJob | null; bridge: JobsBridge; error?: string }> {
     try {
-      const res = await fetch(`${BASE}/${encodeURIComponent(id)}/resume`, { method: "POST", credentials: "include" });
+      const res = await hamApiFetch(`${BASE}/${encodeURIComponent(id)}/resume`, { method: "POST", credentials: "include" });
       if (!res.ok) return { job: null, bridge: PENDING, error: (await res.text()) || `HTTP ${res.status}` };
       return { job: (await res.json()) as WorkspaceJob, bridge: { status: "ready" } };
     } catch (e) {
@@ -114,7 +116,7 @@ export const workspaceJobsAdapter = {
 
   async delete(id: string): Promise<{ ok: boolean; bridge: JobsBridge; error?: string }> {
     try {
-      const res = await fetch(`${BASE}/${encodeURIComponent(id)}`, { method: "DELETE", credentials: "include" });
+      const res = await hamApiFetch(`${BASE}/${encodeURIComponent(id)}`, { method: "DELETE", credentials: "include" });
       if (res.status !== 204) return { ok: false, bridge: PENDING, error: `HTTP ${res.status}` };
       return { ok: true, bridge: { status: "ready" } };
     } catch (e) {

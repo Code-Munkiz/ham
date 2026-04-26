@@ -2,6 +2,8 @@
  * HAM /api/workspace/conductor — JSON-backed missions (no upstream Hermes calls).
  */
 
+import { hamApiFetch } from "@/lib/ham/api";
+
 const BASE = "/api/workspace/conductor";
 
 export type MissionPhase = "draft" | "running" | "completed" | "failed";
@@ -49,7 +51,7 @@ export const workspaceConductorAdapter = {
       if (params?.phase) sp.set("phase", params.phase);
       if (params?.historyOnly) sp.set("historyOnly", "true");
       const q = sp.toString();
-      const res = await fetch(q ? `${BASE}/missions?${q}` : `${BASE}/missions`, { credentials: "include" });
+      const res = await hamApiFetch(q ? `${BASE}/missions?${q}` : `${BASE}/missions`, { credentials: "include" });
       if (!res.ok) return { missions: [], bridge: PENDING };
       const data = await readJson<{ missions?: WorkspaceMission[] }>(res);
       return { missions: Array.isArray(data.missions) ? data.missions : [], bridge: { status: "ready" } };
@@ -64,7 +66,7 @@ export const workspaceConductorAdapter = {
     quickAction?: QuickAction | null,
   ): Promise<{ mission: WorkspaceMission | null; bridge: ConductorBridge; error?: string }> {
     try {
-      const res = await fetch(`${BASE}/missions`, {
+      const res = await hamApiFetch(`${BASE}/missions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -82,7 +84,7 @@ export const workspaceConductorAdapter = {
     title?: string,
   ): Promise<{ mission: WorkspaceMission | null; bridge: ConductorBridge; error?: string }> {
     try {
-      const res = await fetch(`${BASE}/missions/quick`, {
+      const res = await hamApiFetch(`${BASE}/missions/quick`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -100,7 +102,7 @@ export const workspaceConductorAdapter = {
     body: Partial<{ title: string; body: string; phase: MissionPhase; quickAction: QuickAction | null }>,
   ): Promise<{ mission: WorkspaceMission | null; bridge: ConductorBridge; error?: string }> {
     try {
-      const res = await fetch(`${BASE}/missions/${encodeURIComponent(id)}`, {
+      const res = await hamApiFetch(`${BASE}/missions/${encodeURIComponent(id)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -115,7 +117,7 @@ export const workspaceConductorAdapter = {
 
   async run(id: string): Promise<{ mission: WorkspaceMission | null; bridge: ConductorBridge; error?: string }> {
     try {
-      const res = await fetch(`${BASE}/missions/${encodeURIComponent(id)}/run`, {
+      const res = await hamApiFetch(`${BASE}/missions/${encodeURIComponent(id)}/run`, {
         method: "POST",
         credentials: "include",
       });
@@ -128,7 +130,7 @@ export const workspaceConductorAdapter = {
 
   async fail(id: string): Promise<{ mission: WorkspaceMission | null; bridge: ConductorBridge; error?: string }> {
     try {
-      const res = await fetch(`${BASE}/missions/${encodeURIComponent(id)}/fail`, {
+      const res = await hamApiFetch(`${BASE}/missions/${encodeURIComponent(id)}/fail`, {
         method: "POST",
         credentials: "include",
       });
@@ -144,7 +146,7 @@ export const workspaceConductorAdapter = {
     line: string,
   ): Promise<{ mission: WorkspaceMission | null; bridge: ConductorBridge; error?: string }> {
     try {
-      const res = await fetch(`${BASE}/missions/${encodeURIComponent(id)}/output`, {
+      const res = await hamApiFetch(`${BASE}/missions/${encodeURIComponent(id)}/output`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -159,7 +161,7 @@ export const workspaceConductorAdapter = {
 
   async delete(id: string): Promise<{ ok: boolean; bridge: ConductorBridge; error?: string }> {
     try {
-      const res = await fetch(`${BASE}/missions/${encodeURIComponent(id)}`, { method: "DELETE", credentials: "include" });
+      const res = await hamApiFetch(`${BASE}/missions/${encodeURIComponent(id)}`, { method: "DELETE", credentials: "include" });
       if (res.status !== 204) return { ok: false, bridge: PENDING, error: `HTTP ${res.status}` };
       return { ok: true, bridge: { status: "ready" } };
     } catch (e) {
@@ -169,7 +171,7 @@ export const workspaceConductorAdapter = {
 
   async getSettings(): Promise<{ settings: ConductorSettings | null; bridge: ConductorBridge }> {
     try {
-      const res = await fetch(`${BASE}/settings`, { credentials: "include" });
+      const res = await hamApiFetch(`${BASE}/settings`, { credentials: "include" });
       if (!res.ok) return { settings: null, bridge: PENDING };
       const data = await readJson<{ settings?: ConductorSettings }>(res);
       return { settings: data.settings ?? null, bridge: { status: "ready" } };
@@ -182,7 +184,7 @@ export const workspaceConductorAdapter = {
     body: Partial<Pick<ConductorSettings, "budgetCents" | "defaultModel" | "notes">>,
   ): Promise<{ settings: ConductorSettings | null; bridge: ConductorBridge; error?: string }> {
     try {
-      const res = await fetch(`${BASE}/settings`, {
+      const res = await hamApiFetch(`${BASE}/settings`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         credentials: "include",

@@ -2,6 +2,8 @@
  * HAM /api/workspace/tasks + /summary — Kanban-friendly task store (no upstream Hermes calls).
  */
 
+import { hamApiFetch } from "@/lib/ham/api";
+
 const BASE = "/api/workspace/tasks";
 
 export type TaskStatus = "todo" | "in_progress" | "done";
@@ -47,7 +49,7 @@ export const workspaceTasksAdapter = {
 
   async summary(): Promise<{ summary: TaskSummary | null; bridge: TasksBridge }> {
     try {
-      const res = await fetch(`${BASE}/summary`, { credentials: "include" });
+      const res = await hamApiFetch(`${BASE}/summary`, { credentials: "include" });
       if (!res.ok) return { summary: null, bridge: PENDING };
       return { summary: (await res.json()) as TaskSummary, bridge: { status: "ready" } };
     } catch {
@@ -61,7 +63,7 @@ export const workspaceTasksAdapter = {
     includeDone?: boolean;
   } = {}): Promise<{ tasks: WorkspaceTask[]; bridge: TasksBridge }> {
     try {
-      const res = await fetch(
+      const res = await hamApiFetch(
         `${BASE}${qs({
           q: options.q,
           status: options.status,
@@ -84,7 +86,7 @@ export const workspaceTasksAdapter = {
     dueAt?: string | null,
   ): Promise<{ task: WorkspaceTask | null; bridge: TasksBridge; error?: string }> {
     try {
-      const res = await fetch(BASE, {
+      const res = await hamApiFetch(BASE, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -107,7 +109,7 @@ export const workspaceTasksAdapter = {
     body: { title?: string; body?: string; status?: TaskStatus; dueAt?: string | null },
   ): Promise<{ task: WorkspaceTask | null; bridge: TasksBridge; error?: string }> {
     try {
-      const res = await fetch(`${BASE}/${encodeURIComponent(id)}`, {
+      const res = await hamApiFetch(`${BASE}/${encodeURIComponent(id)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -122,7 +124,7 @@ export const workspaceTasksAdapter = {
 
   async delete(id: string): Promise<{ ok: boolean; bridge: TasksBridge; error?: string }> {
     try {
-      const res = await fetch(`${BASE}/${encodeURIComponent(id)}`, { method: "DELETE", credentials: "include" });
+      const res = await hamApiFetch(`${BASE}/${encodeURIComponent(id)}`, { method: "DELETE", credentials: "include" });
       if (res.status !== 204) return { ok: false, bridge: PENDING, error: `HTTP ${res.status}` };
       return { ok: true, bridge: { status: "ready" } };
     } catch (e) {

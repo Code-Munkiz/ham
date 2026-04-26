@@ -1,5 +1,7 @@
 import * as React from "react";
-import { ChevronRight, Menu, Plus, Search, X } from "lucide-react";
+import { motion } from "motion/react";
+import { Brain, ChevronRight, Code, Menu, Plus, Puzzle, Search, X, type LucideIcon } from "lucide-react";
+import { publicAssetUrl } from "@/lib/ham/publicAssets";
 import { OperatorComposer } from "./OperatorComposer";
 import { OperatorMessageList } from "./OperatorMessageList";
 import type { OperatorAttachment, OperatorMessage, OperatorSessionItem } from "./types";
@@ -29,10 +31,25 @@ type OperatorWorkspaceProps = {
   onSelectSession: (sessionId: string) => void;
 };
 
-const QUICK_CHIPS = [
-  "What can you help with?",
-  "Summarize this project",
-  "Draft a short plan",
+/** Repomix `chat-empty-state.tsx` SUGGESTIONS — labels + full prompts. */
+const HERMES_EMPTY_SUGGESTIONS: { label: string; prompt: string; Icon: LucideIcon }[] = [
+  {
+    label: "Analyze workspace",
+    prompt:
+      "Analyze this workspace structure and give me 3 engineering risks. Use tools and keep it concise.",
+    Icon: Code,
+  },
+  {
+    label: "Save a preference",
+    prompt:
+      'Save this to memory exactly: "For demos, respond in 3 bullets max and put risk first." Then confirm saved.',
+    Icon: Brain,
+  },
+  {
+    label: "Create a file",
+    prompt: "Create demo-checklist.md with 5 launch checks for this app.",
+    Icon: Puzzle,
+  },
 ];
 
 function formatSessionMeta(createdAt: string | null): string | null {
@@ -208,28 +225,40 @@ export function OperatorWorkspace({
 
         <section className="ow-main">
           {emptyState ? (
-            <div className="ow-empty-state">
-              <div className="ow-empty-avatar" aria-hidden>
-                <span className="ow-empty-avatar-mark" />
+            <motion.div
+              className="ow-empty-state"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, ease: "easeOut" }}
+            >
+              <div className="ow-empty-hermes-avatar">
+                <img
+                  src={publicAssetUrl("ham-logo.png")}
+                  alt=""
+                  className="ow-empty-hermes-img"
+                />
               </div>
-              <p className="ow-empty-overline">Workspace</p>
+              <p className="ow-empty-overline">Hermes Workspace</p>
               <h2 className="ow-empty-title">Begin a session</h2>
+              <p className="ow-empty-subline">Agent chat · live tools · memory · full observability</p>
               <p className="ow-empty-subtitle">
                 Type below to start. Your project context is applied on the server.
               </p>
               <div className="ow-empty-chips">
-                {QUICK_CHIPS.map((chip) => (
+                {HERMES_EMPTY_SUGGESTIONS.map(({ label, prompt, Icon }) => (
                   <button
-                    key={chip}
+                    key={label}
                     type="button"
-                    className="ow-chip"
-                    onClick={() => onInputChange(chip)}
+                    className="ow-chip ow-chip-hermes"
+                    onClick={() => onInputChange(prompt)}
+                    title={label}
                   >
-                    {chip}
+                    <Icon className="h-3.5 w-3.5 shrink-0 text-[#5eead4]/90" strokeWidth={1.5} />
+                    <span className="truncate">{label}</span>
                   </button>
                 ))}
               </div>
-            </div>
+            </motion.div>
           ) : (
             <OperatorMessageList messages={messages} />
           )}

@@ -2,6 +2,8 @@
  * HAM /api/workspace/skills — local catalog + install/enable (no upstream Hermes).
  */
 
+import { hamApiFetch } from "@/lib/ham/api";
+
 const BASE = "/api/workspace/skills";
 
 export type WorkspaceSkill = {
@@ -25,7 +27,7 @@ export const workspaceSkillsAdapter = {
   async list(q?: string): Promise<{ skills: WorkspaceSkill[]; bridge: SkillsBridge }> {
     try {
       const url = q?.trim() ? `${BASE}/items?q=${encodeURIComponent(q.trim())}` : `${BASE}/items`;
-      const res = await fetch(url, { credentials: "include" });
+      const res = await hamApiFetch(url, { credentials: "include" });
       if (!res.ok) return { skills: [], bridge: PENDING };
       const data = (await res.json()) as { skills?: WorkspaceSkill[] };
       return { skills: Array.isArray(data.skills) ? data.skills : [], bridge: { status: "ready" } };
@@ -39,7 +41,7 @@ export const workspaceSkillsAdapter = {
     description: string,
   ): Promise<{ skill: WorkspaceSkill | null; bridge: SkillsBridge; error?: string }> {
     try {
-      const res = await fetch(`${BASE}/items`, {
+      const res = await hamApiFetch(`${BASE}/items`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -63,7 +65,7 @@ export const workspaceSkillsAdapter = {
     }>,
   ): Promise<{ skill: WorkspaceSkill | null; bridge: SkillsBridge; error?: string }> {
     try {
-      const res = await fetch(`${BASE}/items/${encodeURIComponent(id)}`, {
+      const res = await hamApiFetch(`${BASE}/items/${encodeURIComponent(id)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -78,7 +80,7 @@ export const workspaceSkillsAdapter = {
 
   async remove(id: string): Promise<{ ok: boolean; bridge: SkillsBridge; error?: string }> {
     try {
-      const res = await fetch(`${BASE}/items/${encodeURIComponent(id)}`, {
+      const res = await hamApiFetch(`${BASE}/items/${encodeURIComponent(id)}`, {
         method: "DELETE",
         credentials: "include",
       });

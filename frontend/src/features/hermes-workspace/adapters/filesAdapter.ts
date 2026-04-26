@@ -1,7 +1,10 @@
 /**
  * `workspaceFileAdapter` — HAM-owned bridge: `/api/workspace/files*`.
  * Upstream reference: `file-explorer-sidebar.tsx` (Hermes `/api/files` contract — mapped here).
+ * Uses `hamApiFetch` so Vercel (and any static host) targets `VITE_HAM_API_BASE` instead of same-origin 404s.
  */
+
+import { hamApiFetch } from "@/lib/ham/api";
 
 const BASE = "/api/workspace/files";
 
@@ -28,7 +31,7 @@ export const workspaceFileAdapter = {
 
   async list(): Promise<{ entries: WorkspaceFileEntry[]; bridge: FileBridgeState }> {
     try {
-      const res = await fetch(`${BASE}?action=list`, { credentials: "include" });
+      const res = await hamApiFetch(`${BASE}?action=list`, { credentials: "include" });
       if (!res.ok) {
         return { entries: [], bridge: BRIDGE_PENDING };
       }
@@ -42,7 +45,7 @@ export const workspaceFileAdapter = {
 
   async postJson(body: unknown): Promise<{ ok: boolean; bridge: FileBridgeState; error?: string }> {
     try {
-      const res = await fetch(BASE, {
+      const res = await hamApiFetch(BASE, {
         method: "POST",
         headers: { "content-type": "application/json" },
         credentials: "include",
@@ -67,7 +70,7 @@ export const workspaceFileAdapter = {
    */
   async postFormData(form: FormData): Promise<{ ok: boolean; bridge: FileBridgeState; error?: string }> {
     try {
-      const res = await fetch(`${BASE}/upload`, {
+      const res = await hamApiFetch(`${BASE}/upload`, {
         method: "POST",
         credentials: "include",
         body: form,
@@ -93,7 +96,7 @@ export const workspaceFileAdapter = {
     path: string,
   ): Promise<{ text: string | null; bridge: FileBridgeState; error?: string }> {
     try {
-      const res = await fetch(`${BASE}?action=read&path=${encodeURIComponent(path)}`, {
+      const res = await hamApiFetch(`${BASE}?action=read&path=${encodeURIComponent(path)}`, {
         credentials: "include",
       });
       if (!res.ok) {
