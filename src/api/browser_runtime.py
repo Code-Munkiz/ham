@@ -17,6 +17,9 @@ from src.ham.browser_runtime.sessions import (
     BrowserSessionOwnerMismatchError,
 )
 
+# Single source of truth for the operator-mode 409 error code shared with operator router/tests.
+OPERATOR_MODE_REQUIRED_DETAIL = "OPERATOR_MODE_REQUIRES_APPROVAL"
+
 # Same Clerk + email gate as other dashboard routes when HAM enforces session/email.
 router = APIRouter(
     prefix="/api/browser",
@@ -29,6 +32,14 @@ class BrowserCreateSessionBody(BaseModel):
     owner_key: str = Field(min_length=1, max_length=128)
     viewport_width: int = Field(default=1280, ge=320, le=3840)
     viewport_height: int = Field(default=720, ge=240, le=2160)
+    operator_mode: bool = Field(
+        default=False,
+        description=(
+            "If True, direct browser action endpoints return 409 "
+            "OPERATOR_MODE_REQUIRES_APPROVAL; actions must be dispatched via "
+            "/api/browser-operator approval flow."
+        ),
+    )
 
 
 class BrowserOwnerBody(BaseModel):
@@ -93,6 +104,25 @@ def _to_http_error(exc: Exception) -> HTTPException:
     return HTTPException(status_code=500, detail="Browser runtime internal error.")
 
 
+def _enforce_operator_mode_gate(session_id: str, owner_key: str) -> None:
+    """
+    Raise 409 ``OPERATOR_MODE_REQUIRES_APPROVAL`` when the caller is hitting a
+    direct browser action endpoint on a session created with ``operator_mode=True``.
+    The Browser Operator dispatch helper (:mod:`src.ham.browser_operator.dispatch`)
+    bypasses this by calling the manager directly, never via HTTP.
+    """
+    try:
+        required = run_browser_io(
+            lambda: get_browser_runtime_manager().is_operator_mode_required(
+                session_id=session_id, owner_key=owner_key
+            )
+        )
+    except Exception as exc:
+        raise _to_http_error(exc) from exc
+    if required:
+        raise HTTPException(status_code=409, detail=OPERATOR_MODE_REQUIRED_DETAIL)
+
+
 @router.get("/policy")
 def browser_runtime_policy() -> dict[str, Any]:
     return get_browser_runtime_manager().policy_snapshot()
@@ -106,6 +136,7 @@ def create_browser_session(body: BrowserCreateSessionBody) -> dict[str, Any]:
                 owner_key=body.owner_key.strip(),
                 viewport_width=body.viewport_width,
                 viewport_height=body.viewport_height,
+                operator_mode=body.operator_mode,
             )
         )
     except Exception as exc:
@@ -123,9 +154,10 @@ def get_browser_session_state(session_id: str, owner_key: str) -> dict[str, Any]
 
 @router.post("/sessions/{session_id}/navigate")
 def navigate_browser_session(session_id: str, body: BrowserNavigateBody) -> dict[str, Any]:
+    ok = body.owner_key.strip()
+    _enforce_operator_mode_gate(session_id, ok)
     m = get_browser_runtime_manager()
     u = body.url.strip()
-    ok = body.owner_key.strip()
     try:
         return run_browser_io(lambda: m.navigate(session_id=session_id, owner_key=ok, url=u))
     except Exception as exc:
@@ -134,8 +166,9 @@ def navigate_browser_session(session_id: str, body: BrowserNavigateBody) -> dict
 
 @router.post("/sessions/{session_id}/actions/click")
 def click_browser_session(session_id: str, body: BrowserClickBody) -> dict[str, Any]:
-    m = get_browser_runtime_manager()
     ok = body.owner_key.strip()
+    _enforce_operator_mode_gate(session_id, ok)
+    m = get_browser_runtime_manager()
     sel = body.selector
     try:
         return run_browser_io(lambda: m.click(session_id=session_id, owner_key=ok, selector=sel))
@@ -145,8 +178,9 @@ def click_browser_session(session_id: str, body: BrowserClickBody) -> dict[str, 
 
 @router.post("/sessions/{session_id}/actions/type")
 def type_browser_session(session_id: str, body: BrowserTypeBody) -> dict[str, Any]:
-    m = get_browser_runtime_manager()
     ok = body.owner_key.strip()
+    _enforce_operator_mode_gate(session_id, ok)
+    m = get_browser_runtime_manager()
     try:
         return run_browser_io(
             lambda: m.type_text(
@@ -163,8 +197,9 @@ def type_browser_session(session_id: str, body: BrowserTypeBody) -> dict[str, An
 
 @router.post("/sessions/{session_id}/actions/click-xy")
 def click_xy_browser_session(session_id: str, body: BrowserClickXYBody) -> dict[str, Any]:
-    m = get_browser_runtime_manager()
     ok = body.owner_key.strip()
+    _enforce_operator_mode_gate(session_id, ok)
+    m = get_browser_runtime_manager()
     try:
         return run_browser_io(
             lambda: m.click_xy(
@@ -177,8 +212,9 @@ def click_xy_browser_session(session_id: str, body: BrowserClickXYBody) -> dict[
 
 @router.post("/sessions/{session_id}/actions/scroll")
 def scroll_browser_session(session_id: str, body: BrowserScrollBody) -> dict[str, Any]:
-    m = get_browser_runtime_manager()
     ok = body.owner_key.strip()
+    _enforce_operator_mode_gate(session_id, ok)
+    m = get_browser_runtime_manager()
     try:
         return run_browser_io(
             lambda: m.scroll(
@@ -191,8 +227,9 @@ def scroll_browser_session(session_id: str, body: BrowserScrollBody) -> dict[str
 
 @router.post("/sessions/{session_id}/actions/key")
 def key_browser_session(session_id: str, body: BrowserKeyBody) -> dict[str, Any]:
-    m = get_browser_runtime_manager()
     ok = body.owner_key.strip()
+    _enforce_operator_mode_gate(session_id, ok)
+    m = get_browser_runtime_manager()
     k = body.key.strip()
     try:
         return run_browser_io(lambda: m.key_press(session_id=session_id, owner_key=ok, key=k))
@@ -213,8 +250,9 @@ def screenshot_browser_session(session_id: str, body: BrowserOwnerBody) -> Respo
 
 @router.post("/sessions/{session_id}/reset")
 def reset_browser_session(session_id: str, body: BrowserOwnerBody) -> dict[str, Any]:
-    m = get_browser_runtime_manager()
     ok = body.owner_key.strip()
+    _enforce_operator_mode_gate(session_id, ok)
+    m = get_browser_runtime_manager()
     try:
         return run_browser_io(lambda: m.reset(session_id=session_id, owner_key=ok))
     except Exception as exc:

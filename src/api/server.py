@@ -8,6 +8,7 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
+from src.api.browser_operator import router as browser_operator_router
 from src.api.browser_runtime import router as browser_runtime_router
 from src.api.chat import router as chat_router
 from src.api.capability_directory import router as capability_directory_router
@@ -85,6 +86,7 @@ app.include_router(chat_router)
 app.include_router(capability_directory_router)
 app.include_router(capability_library_router)
 app.include_router(browser_runtime_router)
+app.include_router(browser_operator_router)
 app.include_router(cursor_settings_router)
 app.include_router(cursor_managed_deploy_router)
 app.include_router(cursor_managed_deploy_approval_router)
