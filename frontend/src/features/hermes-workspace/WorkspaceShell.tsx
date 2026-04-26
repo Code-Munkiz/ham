@@ -344,9 +344,9 @@ function WorkspaceSideNav({
           <img
             src={hamAppMoonSrc}
             alt=""
-            className="h-5 w-5 shrink-0 object-contain"
-            width={20}
-            height={20}
+            className="h-8 w-8 shrink-0 object-contain"
+            width={32}
+            height={32}
             aria-hidden
           />
           <span

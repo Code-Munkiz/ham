@@ -359,12 +359,16 @@ function ready() {
           </div>
           <div className="p-2">
             <div className="relative">
-              <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/35" />
+              <Search
+                className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/35"
+                aria-hidden
+              />
               <input
+                id="hww-files-search"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search files"
-                className="hww-input w-full rounded-md py-1.5 pl-8 pr-2 text-[12px]"
+                className="hww-input w-full rounded-md text-[12px]"
               />
             </div>
           </div>
