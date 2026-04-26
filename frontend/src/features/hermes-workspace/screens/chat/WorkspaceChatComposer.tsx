@@ -1,13 +1,19 @@
 /**
- * Upstream-floating composer pattern (repomix `chat-composer` docked area) — HAM stream only, no send-stream.
+ * Upstream-style composer: attach | mic | input | send — HAM stream only; attachments inlined per `composerAttachmentHelpers`.
  */
 
 import * as React from "react";
-import { ArrowUp } from "lucide-react";
+import { ArrowUp, Paperclip } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { ModelCatalogItem, ModelCatalogPayload } from "@/lib/ham/types";
 import { isDashboardChatGatewayReady } from "@/lib/ham/types";
+import { VoiceMessageInput } from "@/components/chat/VoiceMessageInput";
+import {
+  type WorkspaceComposerAttachment,
+  formatAttachmentByteSize,
+  WORKSPACE_ATTACHMENT_ACCEPT,
+} from "./composerAttachmentHelpers";
 
 type WorkspaceChatComposerProps = {
   value: string;
@@ -15,6 +21,11 @@ type WorkspaceChatComposerProps = {
   onSubmit: () => void;
   disabled: boolean;
   sending: boolean;
+  voiceTranscribing: boolean;
+  onVoiceBlob: (blob: Blob) => void;
+  attachment: WorkspaceComposerAttachment | null;
+  onAttachmentClear: () => void;
+  onAttachmentFile: (file: File) => void;
   catalog: ModelCatalogPayload | null;
   modelId: string | null;
   onModelIdChange: (id: string | null) => void;
@@ -31,13 +42,20 @@ export function WorkspaceChatComposer({
   onSubmit,
   disabled,
   sending,
+  voiceTranscribing,
+  onVoiceBlob,
+  attachment,
+  onAttachmentClear,
+  onAttachmentFile,
   catalog,
   modelId,
   onModelIdChange,
 }: WorkspaceChatComposerProps) {
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
   const formRef = React.useRef<HTMLFormElement>(null);
   const showModel = catalog && catalog.gateway_mode === "openrouter" && chatModelCandidates(catalog).length > 0;
   const gatewayOk = isDashboardChatGatewayReady(catalog);
+  const canSend = gatewayOk && (value.trim() || attachment) && !sending && !voiceTranscribing;
 
   return (
     <div
@@ -63,6 +81,22 @@ export function WorkspaceChatComposer({
           </select>
         </div>
       ) : null}
+      {attachment ? (
+        <div className="mb-2 flex w-full max-w-[56rem] items-center justify-between gap-2 rounded-lg border border-white/[0.08] bg-white/[0.04] px-2.5 py-2 md:pl-1">
+          <p className="min-w-0 truncate text-[11px] text-white/80">
+            <span className="text-white/45">Attached: </span>
+            {attachment.name}{" "}
+            <span className="text-white/35">({formatAttachmentByteSize(attachment.size)})</span>
+          </p>
+          <button
+            type="button"
+            onClick={onAttachmentClear}
+            className="shrink-0 text-[11px] text-[#7dd3fc] underline decoration-white/10 underline-offset-2 hover:decoration-[#7dd3fc]/50"
+          >
+            Remove
+          </button>
+        </div>
+      ) : null}
       <form
         ref={formRef}
         onSubmit={(e) => {
@@ -71,12 +105,54 @@ export function WorkspaceChatComposer({
         }}
         className="w-full max-w-[56rem] md:pl-1"
       >
+        <input
+          ref={fileInputRef}
+          type="file"
+          className="sr-only"
+          accept={WORKSPACE_ATTACHMENT_ACCEPT}
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            e.target.value = "";
+            if (f) onAttachmentFile(f);
+          }}
+        />
         <div
           className={cn(
-            "flex items-end gap-2 rounded-2xl border border-white/[0.1] bg-[#050c14]/95 p-2 shadow-lg",
+            "flex items-end gap-1.5 rounded-2xl border border-white/[0.1] bg-[#050c14]/95 p-1.5 shadow-lg md:gap-2",
             "ring-0 focus-within:border-[#c45c12]/40 focus-within:shadow-[0_0_0_1px_rgba(196,92,18,0.2)]",
           )}
         >
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-10 w-9 shrink-0 text-white/45 hover:bg-white/[0.06] hover:text-white/85"
+            disabled={sending || voiceTranscribing}
+            onClick={() => fileInputRef.current?.click()}
+            aria-label="Attach file"
+            title="Attach a file — text and images are inlined into your message (max 500 KB)."
+          >
+            <Paperclip className="h-4 w-4" strokeWidth={1.5} />
+          </Button>
+
+          <div
+            className="flex shrink-0 items-center"
+            title={
+              voiceTranscribing
+                ? "Transcribing…"
+                : "Voice — record and transcribe into the message (HAM /api/chat/transcribe)"
+            }
+          >
+            <VoiceMessageInput
+              compact
+              hidePreview
+              disabled={sending || voiceTranscribing || disabled}
+              onVoiceMessage={(blob) => {
+                onVoiceBlob(blob);
+              }}
+            />
+          </div>
+
           <label htmlFor="hww-chat-composer" className="sr-only">
             Message
           </label>
@@ -87,22 +163,24 @@ export function WorkspaceChatComposer({
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
-                onSubmit();
+                if (canSend) onSubmit();
               }
             }}
             rows={1}
-            disabled={disabled || sending}
+            disabled={disabled || sending || voiceTranscribing}
             placeholder={
-              !gatewayOk && catalog && !sending
-                ? "Chat gateway not ready — check /api/models"
-                : "Message Hermes…"
+              voiceTranscribing
+                ? "Transcribing…"
+                : !gatewayOk && catalog && !sending
+                  ? "Chat gateway not ready — check /api/models"
+                  : "Message Hermes…"
             }
-            className="hww-input max-h-40 min-h-[44px] flex-1 resize-none border-0 bg-transparent px-2 py-2.5 text-[13px] text-[#e8eef3] placeholder:text-white/30 focus:ring-0"
+            className="hww-input max-h-40 min-h-[44px] min-w-0 flex-1 resize-none border-0 bg-transparent px-1 py-2.5 text-[13px] text-[#e8eef3] placeholder:text-white/30 focus:ring-0"
           />
           <Button
             type="submit"
             size="icon"
-            disabled={disabled || sending || !value.trim() || !gatewayOk}
+            disabled={!canSend}
             className="h-10 w-10 shrink-0 rounded-xl bg-gradient-to-b from-[#c45c12] to-[#8f3d0a] text-white hover:from-[#d66a18] hover:to-[#a44a0c] disabled:opacity-40"
             aria-label="Send"
           >

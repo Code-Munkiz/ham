@@ -5,12 +5,14 @@
 
 import * as React from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { PanelRight, PanelRightClose } from "lucide-react";
 import { toast } from "sonner";
 import {
   ensureProjectIdForWorkspaceRoot,
   fetchContextEngine,
   fetchModelsCatalog,
   HamAccessRestrictedError,
+  postChatTranscribe,
 } from "@/lib/ham/api";
 import { CLIENT_MODEL_CATALOG_FALLBACK } from "@/lib/ham/modelCatalogFallback";
 import type { ModelCatalogPayload } from "@/lib/ham/types";
@@ -20,6 +22,14 @@ import { workspaceChatAdapter, workspaceSessionAdapter } from "../../workspaceAd
 import { WorkspaceChatEmptyState } from "./WorkspaceChatEmptyState";
 import { WorkspaceChatMessageList, type HwwMsgRow } from "./WorkspaceChatMessageList";
 import { WorkspaceChatComposer } from "./WorkspaceChatComposer";
+import { WorkspaceChatInspectorPanel } from "./WorkspaceChatInspectorPanel";
+import {
+  buildOutboundMessageWithAttachment,
+  fileToWorkspaceAttachment,
+  formatAttachmentByteSize,
+  MAX_WORKSPACE_ATTACHMENT_BYTES,
+  type WorkspaceComposerAttachment,
+} from "./composerAttachmentHelpers";
 import { cn } from "@/lib/utils";
 
 function timeStr() {
@@ -48,6 +58,9 @@ export function WorkspaceChatScreen() {
   const [catalogLoading, setCatalogLoading] = React.useState(true);
   const [modelId, setModelId] = React.useState<string | null>(null);
   const [projectId, setProjectId] = React.useState<string | null>(null);
+  const [attachment, setAttachment] = React.useState<WorkspaceComposerAttachment | null>(null);
+  const [voiceTranscribing, setVoiceTranscribing] = React.useState(false);
+  const [inspectorOpen, setInspectorOpen] = React.useState(false);
   const endRef = React.useRef<HTMLDivElement | null>(null);
   const listWrapRef = React.useRef<HTMLDivElement | null>(null);
 
@@ -136,6 +149,7 @@ export function WorkspaceChatScreen() {
     setSessionId(null);
     setMessages([]);
     setInput("");
+    setAttachment(null);
     setLoadErr(null);
     navigate({ pathname: "/workspace/chat", search: "" }, { replace: true });
   }, [navigate]);
@@ -144,11 +158,57 @@ export function WorkspaceChatScreen() {
     endRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
   }, [messages, sending]);
 
+  const handleAttachmentFile = React.useCallback(async (file: File) => {
+    try {
+      const a = await fileToWorkspaceAttachment(file);
+      if (a == null) {
+        toast.error(`File is too large (max ${formatAttachmentByteSize(MAX_WORKSPACE_ATTACHMENT_BYTES)}).`);
+        return;
+      }
+      setAttachment(a);
+    } catch {
+      toast.error("Could not read the selected file.");
+    }
+  }, []);
+
+  const handleVoiceBlob = React.useCallback(async (blob: Blob) => {
+    if (!blob.size) {
+      toast.error("No audio captured.");
+      return;
+    }
+    const filename = blob.type.includes("webm")
+      ? "dictation.webm"
+      : blob.type.includes("mp4") || blob.type.includes("mpeg")
+        ? "dictation.m4a"
+        : "dictation.webm";
+    setVoiceTranscribing(true);
+    try {
+      const text = (await postChatTranscribe(blob, filename)).trim();
+      if (!text) {
+        toast.message("No text returned from transcription.");
+        return;
+      }
+      setInput((prev) => (prev.trim() ? `${prev.trim()}\n${text}` : text));
+    } catch (err) {
+      if (err instanceof HamAccessRestrictedError) {
+        toast.error(
+          "Access restricted: this Ham deployment only allows approved sign-ins. Check Clerk or admin.",
+          { duration: 12_000 },
+        );
+      } else {
+        toast.error(err instanceof Error ? err.message : "Transcription failed.");
+      }
+    } finally {
+      setVoiceTranscribing(false);
+    }
+  }, []);
+
   const send = React.useCallback(
-    async (text: string) => {
-      const trimmed = text.trim();
-      if (!trimmed || sending) return;
+    async (outboundUserMessage: string) => {
+      const trimmed = outboundUserMessage.trim();
+      if (!trimmed || sending || voiceTranscribing) return;
       setInput("");
+      setAttachment(null);
       setLoadErr(null);
       setSending(true);
       const userRow: HwwMsgRow = {
@@ -229,11 +289,14 @@ export function WorkspaceChatScreen() {
         setSending(false);
       }
     },
-    [sending, sessionId, chatModelIdForApi, projectId, navigate],
+    [sending, voiceTranscribing, sessionId, chatModelIdForApi, projectId, navigate],
   );
 
   const onFormSubmit = () => {
-    void send(input);
+    const trimmed = input.trim();
+    const outbound = buildOutboundMessageWithAttachment(trimmed, attachment);
+    if (!outbound.trim() || voiceTranscribing) return;
+    void send(outbound);
   };
 
   const hasTranscript = messages.length > 0;
@@ -245,58 +308,110 @@ export function WorkspaceChatScreen() {
     sending && last?.role === "assistant" && !(last?.content || "").trim();
 
   return (
-    <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col">
-      <header className="hww-chat-header flex shrink-0 items-start justify-between gap-3 border-b border-white/[0.06] bg-[#040d14]/80 px-4 py-3 backdrop-blur-sm md:px-8">
-        <div className="min-w-0">
-          <h1 className="text-[15px] font-semibold tracking-tight text-white/[0.95]">{headerTitle}</h1>
-          <p className="mt-0.5 truncate font-mono text-[11px] text-white/40" title={sessionId ?? undefined}>
-            {sessionId ? shortId(sessionId, 12) : "No session selected · messages stay on-device via HAM"}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={startNew}
-          className="shrink-0 rounded-lg border border-white/[0.1] bg-white/[0.06] px-2.5 py-1.5 text-[11px] font-medium text-[#7dd3fc] transition hover:bg-white/[0.09] hover:text-[#a5e9ff]"
-        >
-          New
-        </button>
-      </header>
-      <div
-        ref={listWrapRef}
-        className="hww-scroll flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto"
-      >
-        {loadingSession ? (
-          <div className="flex flex-1 items-center justify-center py-12 text-sm text-white/40">Loading…</div>
-        ) : sessionLoadFailed ? (
-          <div className="flex flex-1 flex-col items-center justify-center gap-3 px-4 py-12 text-center">
-            <p className="max-w-sm text-sm text-amber-200/90">{loadErr}</p>
+    <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col md:flex-row">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <header className="hww-chat-header flex shrink-0 items-start justify-between gap-3 border-b border-white/[0.06] bg-[#040d14]/80 px-4 py-3 backdrop-blur-sm md:px-8">
+          <div className="min-w-0">
+            <h1 className="text-[15px] font-semibold tracking-tight text-white/[0.95]">{headerTitle}</h1>
+            <p className="mt-0.5 truncate font-mono text-[11px] text-white/40" title={sessionId ?? undefined}>
+              {sessionId ? shortId(sessionId, 12) : "No session selected · messages stay on-device via HAM"}
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => {
+                setInspectorOpen((o) => !o);
+              }}
+              className={cn(
+                "inline-flex h-9 items-center gap-1.5 rounded-lg border px-2.5 text-[11px] font-medium transition",
+                inspectorOpen
+                  ? "border-[#c45c12]/50 bg-white/[0.08] text-[#ffb27a]"
+                  : "border-white/[0.1] bg-white/[0.06] text-white/80 hover:bg-white/[0.09] hover:text-white",
+              )}
+              aria-pressed={inspectorOpen}
+              title="Toggle Inspector"
+            >
+              {inspectorOpen ? (
+                <PanelRightClose className="h-3.5 w-3.5" strokeWidth={1.5} />
+              ) : (
+                <PanelRight className="h-3.5 w-3.5" strokeWidth={1.5} />
+              )}
+              <span className="hidden sm:inline">Inspector</span>
+            </button>
             <button
               type="button"
               onClick={startNew}
-              className="text-[13px] text-[#7dd3fc] underline decoration-white/10 underline-offset-2"
+              className="shrink-0 rounded-lg border border-white/[0.1] bg-white/[0.06] px-2.5 py-1.5 text-[11px] font-medium text-[#7dd3fc] transition hover:bg-white/[0.09] hover:text-[#a5e9ff]"
             >
-              Start new session
+              New
             </button>
           </div>
-        ) : showEmpty ? (
-          <WorkspaceChatEmptyState onSuggestionClick={(prompt) => void send(prompt)} />
-        ) : (
-          <>
-            <WorkspaceChatMessageList messages={messages} isStreaming={isStreaming} />
-            <div ref={endRef} className="h-2 shrink-0" />
-          </>
-        )}
+        </header>
+        <div
+          ref={listWrapRef}
+          className="hww-scroll flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto"
+        >
+          {loadingSession ? (
+            <div className="flex flex-1 items-center justify-center py-12 text-sm text-white/40">Loading…</div>
+          ) : sessionLoadFailed ? (
+            <div className="flex flex-1 flex-col items-center justify-center gap-3 px-4 py-12 text-center">
+              <p className="max-w-sm text-sm text-amber-200/90">{loadErr}</p>
+              <button
+                type="button"
+                onClick={startNew}
+                className="text-[13px] text-[#7dd3fc] underline decoration-white/10 underline-offset-2"
+              >
+                Start new session
+              </button>
+            </div>
+          ) : showEmpty ? (
+            <WorkspaceChatEmptyState onSuggestionClick={(prompt) => void send(prompt)} />
+          ) : (
+            <>
+              <WorkspaceChatMessageList messages={messages} isStreaming={isStreaming} />
+              <div ref={endRef} className="h-2 shrink-0" />
+            </>
+          )}
+        </div>
+        <WorkspaceChatComposer
+          value={input}
+          onChange={setInput}
+          onSubmit={onFormSubmit}
+          disabled={catalogLoading}
+          sending={sending}
+          voiceTranscribing={voiceTranscribing}
+          onVoiceBlob={handleVoiceBlob}
+          attachment={attachment}
+          onAttachmentClear={() => {
+            setAttachment(null);
+          }}
+          onAttachmentFile={handleAttachmentFile}
+          catalog={catalog}
+          modelId={modelId}
+          onModelIdChange={setModelId}
+        />
       </div>
-      <WorkspaceChatComposer
-        value={input}
-        onChange={setInput}
-        onSubmit={onFormSubmit}
-        disabled={catalogLoading}
-        sending={sending}
-        catalog={catalog}
-        modelId={modelId}
-        onModelIdChange={setModelId}
-      />
+      {inspectorOpen ? (
+        <>
+          <button
+            type="button"
+            className="fixed inset-0 z-20 bg-black/50 md:hidden"
+            onClick={() => {
+              setInspectorOpen(false);
+            }}
+            aria-label="Close inspector"
+          />
+          <div className="fixed right-0 top-0 z-30 flex h-full max-h-full overflow-hidden shadow-2xl md:static md:z-auto md:shadow-none">
+            <WorkspaceChatInspectorPanel
+              sessionId={sessionId}
+              onClose={() => {
+                setInspectorOpen(false);
+              }}
+            />
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }
