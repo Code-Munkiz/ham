@@ -18,7 +18,7 @@ export type KnowledgeNavItem = { to: string; label: string; icon: LucideIcon };
 
 /**
  * Hermes Workspace IA: MAIN + KNOWLEDGE routes (all under `/workspace/*`).
- * Wires to HAM via adapters in later slices; only `/workspace` and `/workspace/chat` are non-placeholder today.
+ * Session list in the shell is HAM-backed; other routes are placeholders or chat until further adapters.
  */
 export const mainNavItems: MainNavItem[] = [
   { to: "/workspace", label: "Dashboard", icon: LayoutDashboard, end: true },

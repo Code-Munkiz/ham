@@ -1,9 +1,11 @@
 import * as React from "react";
-import { Link, NavLink, useLocation } from "react-router-dom";
+import { Link, NavLink, useLocation, useSearchParams } from "react-router-dom";
 import { Menu, Plus, Search, Sparkles, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { publicAssetUrl } from "@/lib/ham/publicAssets";
 import { knowledgeNavItems, mainNavItems, workspacePathTitle } from "./workspaceNavConfig";
+import { workspaceSessionAdapter } from "./workspaceAdapters";
+import type { ChatSessionSummary } from "./workspaceTypes";
 
 type WorkspaceShellProps = {
   children: React.ReactNode;
@@ -13,6 +15,13 @@ type SideNavOptions = {
   onNavigate?: () => void;
   showClose?: boolean;
   onClose?: () => void;
+  sessions: ChatSessionSummary[];
+  sessionsLoading: boolean;
+  sessionsError: string | null;
+  onSessionsRetry: () => void;
+  sessionFilter: string;
+  onSessionFilterChange: (q: string) => void;
+  activeSessionId: string | null;
 };
 
 function sideNavClass(isActive: boolean) {
@@ -24,8 +33,32 @@ function sideNavClass(isActive: boolean) {
   );
 }
 
-function WorkspaceSideNav({ onNavigate, showClose, onClose }: SideNavOptions) {
+function WorkspaceSideNav({
+  onNavigate,
+  showClose,
+  onClose,
+  sessions,
+  sessionsLoading,
+  sessionsError,
+  onSessionsRetry,
+  sessionFilter,
+  onSessionFilterChange,
+  activeSessionId,
+}: SideNavOptions) {
   const logoSrc = publicAssetUrl("ham-logo.png");
+
+  const q = sessionFilter.trim().toLowerCase();
+  const filteredSessions = React.useMemo(() => {
+    if (!q) return sessions;
+    return sessions.filter((s) => {
+      const id = s.session_id.toLowerCase();
+      const preview = (s.preview || "").toLowerCase();
+      const date = (s.created_at || "").toLowerCase();
+      return (
+        id.includes(q) || preview.includes(q) || date.includes(q) || String(s.turn_count).includes(q)
+      );
+    });
+  }, [sessions, q]);
 
   return (
     <>
@@ -55,9 +88,10 @@ function WorkspaceSideNav({ onNavigate, showClose, onClose }: SideNavOptions) {
         ) : null}
       </div>
 
+      <div className="hww-side-section">Find session</div>
       <div className="mb-2">
         <label className="sr-only" htmlFor="hww-workspace-search">
-          Search
+          Filter sessions
         </label>
         <div className="relative">
           <Search
@@ -67,10 +101,12 @@ function WorkspaceSideNav({ onNavigate, showClose, onClose }: SideNavOptions) {
           <input
             id="hww-workspace-search"
             type="search"
-            readOnly
-            placeholder="Search…"
-            className="hww-input w-full cursor-default rounded-lg pl-8"
-            title="Global workspace search — wires with a later HAM/adapter slice"
+            value={sessionFilter}
+            onChange={(e) => onSessionFilterChange(e.target.value)}
+            placeholder="Filter by preview, id, date…"
+            className="hww-input w-full rounded-lg pl-8"
+            autoComplete="off"
+            title="Client-side filter over the HAM session list"
           />
         </div>
       </div>
@@ -84,7 +120,7 @@ function WorkspaceSideNav({ onNavigate, showClose, onClose }: SideNavOptions) {
           <Plus className="h-3.5 w-3.5" strokeWidth={2} />
           New session
         </Link>
-        <p className="mt-1 px-0.5 text-[9px] leading-snug text-white/28">Starts in workspace chat; HAM session model in a follow-up</p>
+        <p className="mt-1 px-0.5 text-[9px] leading-snug text-white/28">Opens a fresh chat; session id is set after the first HAM turn.</p>
       </div>
 
       <div className="hww-side-section">Main</div>
@@ -119,17 +155,72 @@ function WorkspaceSideNav({ onNavigate, showClose, onClose }: SideNavOptions) {
       </nav>
 
       <div className="hww-side-section">Sessions</div>
-      <p className="mb-1 px-0.5 text-[11px] leading-relaxed text-white/40">
-        No sessions yet.{" "}
-        <Link
-          to="/workspace/chat"
-          onClick={onNavigate}
-          className="text-[#ffb27a]/90 underline-offset-2 hover:underline"
-        >
-          Start a conversation →
-        </Link>
-      </p>
-      <p className="mb-3 px-0.5 text-[9px] text-white/28">List + search bind to the HAM session API in a later commit.</p>
+      {sessionsError ? (
+        <div className="mb-2 rounded-lg border border-amber-500/30 bg-amber-950/40 px-2 py-1.5 text-[10px] text-amber-100/90">
+          <p className="break-words">{sessionsError}</p>
+          <button
+            type="button"
+            onClick={() => {
+              onSessionsRetry();
+            }}
+            className="mt-1.5 text-[10px] font-medium text-[#ffb27a]/90 underline"
+          >
+            Retry
+          </button>
+        </div>
+      ) : null}
+      {sessionsLoading ? (
+        <p className="mb-2 px-0.5 text-[11px] text-white/40">Loading sessions…</p>
+      ) : !sessions.length ? (
+        <p className="mb-1 px-0.5 text-[11px] leading-relaxed text-white/40">
+          No sessions yet.{" "}
+          <Link
+            to="/workspace/chat"
+            onClick={onNavigate}
+            className="text-[#ffb27a]/90 underline-offset-2 hover:underline"
+          >
+            Start a conversation →
+          </Link>
+        </p>
+      ) : !filteredSessions.length ? (
+        <p className="mb-1 px-0.5 text-[11px] text-white/40">No matches for this filter.</p>
+      ) : (
+        <ul className="mb-2 max-h-44 min-h-0 space-y-1 overflow-y-auto pr-0.5" aria-label="Chat sessions">
+          {filteredSessions.map((s) => {
+            const active = activeSessionId === s.session_id;
+            return (
+              <li key={s.session_id}>
+                <Link
+                  to={`/workspace/chat?session=${encodeURIComponent(s.session_id)}`}
+                  onClick={onNavigate}
+                  className={cn(
+                    "block w-full min-w-0 rounded-lg border px-2 py-1.5 text-left transition",
+                    active
+                      ? "border-white/20 bg-white/[0.1] text-white/92"
+                      : "border-white/[0.04] bg-black/20 text-white/70 hover:border-white/10 hover:bg-white/[0.04]",
+                  )}
+                >
+                  <p className="line-clamp-2 text-[11px] leading-snug text-white/85">
+                    {s.preview?.trim() || "Untitled turn"}
+                  </p>
+                  <p className="mt-0.5 truncate font-mono text-[9px] text-white/35" title={s.session_id}>
+                    {s.session_id}
+                  </p>
+                  {s.created_at || s.turn_count > 0 ? (
+                    <p className="mt-0.5 text-[9px] text-white/30">
+                      {s.turn_count > 0 ? `${s.turn_count} turns` : ""}
+                      {s.created_at
+                        ? `${s.turn_count > 0 ? " · " : ""}${s.created_at}`
+                        : null}
+                    </p>
+                  ) : null}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      <p className="mb-3 px-0.5 text-[9px] text-white/25">List from <span className="font-mono">/api/chat/sessions</span></p>
 
       <div className="hww-side-section mt-1">Ham</div>
       <p className="mb-2 px-0.5 text-[10px] leading-relaxed text-white/32">
@@ -149,13 +240,53 @@ function WorkspaceSideNav({ onNavigate, showClose, onClose }: SideNavOptions) {
 
 export function WorkspaceShell({ children }: WorkspaceShellProps) {
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const [drawerOpen, setDrawerOpen] = React.useState(false);
+  const [sessions, setSessions] = React.useState<ChatSessionSummary[]>([]);
+  const [sessionsLoading, setSessionsLoading] = React.useState(true);
+  const [sessionsError, setSessionsError] = React.useState<string | null>(null);
+  const [sessionFilter, setSessionFilter] = React.useState("");
+
+  const activeSessionId =
+    location.pathname === "/workspace/chat" || location.pathname.endsWith("/workspace/chat")
+      ? searchParams.get("session")
+      : null;
+
+  const loadSessions = React.useCallback(async () => {
+    setSessionsLoading(true);
+    setSessionsError(null);
+    try {
+      const { sessions: list } = await workspaceSessionAdapter.list();
+      setSessions(list);
+    } catch (e) {
+      setSessionsError(e instanceof Error ? e.message : "Failed to load sessions");
+      setSessions([]);
+    } finally {
+      setSessionsLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    void loadSessions();
+  }, [loadSessions, location.pathname, location.search]);
 
   const pageTitle = workspacePathTitle(location.pathname);
 
   React.useEffect(() => {
     setDrawerOpen(false);
   }, [location.pathname]);
+
+  const sessionNavProps = {
+    sessions,
+    sessionsLoading,
+    sessionsError,
+    onSessionsRetry: () => {
+      void loadSessions();
+    },
+    sessionFilter,
+    onSessionFilterChange: setSessionFilter,
+    activeSessionId,
+  };
 
   return (
     <div className="hww-root flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden md:flex-row">
@@ -176,7 +307,7 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
       {/* Desktop sidebar */}
       <aside className="hww-sidebar hww-scroll hidden min-h-0 min-w-0 flex-col px-3 py-4 md:flex">
         <div className="flex min-h-0 flex-1 flex-col">
-          <WorkspaceSideNav />
+          <WorkspaceSideNav {...sessionNavProps} />
         </div>
       </aside>
 
@@ -199,6 +330,7 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
               showClose
               onClose={() => setDrawerOpen(false)}
               onNavigate={() => setDrawerOpen(false)}
+              {...sessionNavProps}
             />
           </aside>
         </>

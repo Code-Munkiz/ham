@@ -4,6 +4,8 @@
 
 export type WorkspaceNamespace = "hermes-workspace-lift";
 
+export type { ChatSessionSummary } from "@/lib/ham/api";
+
 export type WorkspaceChatMessageRole = "user" | "assistant" | "system";
 
 export type WorkspaceChatMessage = {

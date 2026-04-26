@@ -1,8 +1,8 @@
 import * as React from "react";
-import { Link } from "react-router-dom";
-import { AlertTriangle, MessageSquare, Search, Send } from "lucide-react";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
+import { AlertTriangle, Loader2, MessageSquare, Search, Send } from "lucide-react";
 import { HamAccessRestrictedError } from "@/lib/ham/api";
-import { workspaceChatAdapter } from "./workspaceAdapters";
+import { workspaceChatAdapter, workspaceSessionAdapter } from "./workspaceAdapters";
 import type { WorkspaceChatMessage } from "./workspaceTypes";
 
 function timeStr(): string {
@@ -16,15 +16,78 @@ const DEFAULT_WORKER = "builder";
  * HAM-wired namespaced chat: same stream contract as `/chat`, routed through `workspaceChatAdapter` only.
  */
 export function WorkspaceChat() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const sessionFromUrl = searchParams.get("session");
   const [sessionId, setSessionId] = React.useState<string | null>(null);
   const [input, setInput] = React.useState("");
   const [messages, setMessages] = React.useState<WorkspaceChatMessage[]>([]);
   const [sending, setSending] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [gatewayCode, setGatewayCode] = React.useState<string | null>(null);
+  const [historyLoading, setHistoryLoading] = React.useState(false);
+  const [historyError, setHistoryError] = React.useState<string | null>(null);
   const bottomRef = React.useRef<HTMLDivElement>(null);
+  const location = useLocation();
+  const navKeyRef = React.useRef<string | null>(null);
 
   const hasThread = messages.length > 0;
+
+  /** Reset when the user navigates (new `location.key`) to a chat URL with no `session` query — not on `setSearchParams` alone. */
+  React.useEffect(() => {
+    if (navKeyRef.current === null) {
+      navKeyRef.current = location.key;
+      return;
+    }
+    if (location.key === navKeyRef.current) {
+      return;
+    }
+    navKeyRef.current = location.key;
+    if (!searchParams.get("session")) {
+      setSessionId(null);
+      setMessages([]);
+      setHistoryError(null);
+      setError(null);
+      setGatewayCode(null);
+    }
+  }, [location.key, searchParams]);
+
+  React.useEffect(() => {
+    if (!sessionFromUrl) {
+      return;
+    }
+    if (sessionId === sessionFromUrl) {
+      return;
+    }
+    let cancelled = false;
+    setHistoryLoading(true);
+    setHistoryError(null);
+    void workspaceSessionAdapter
+      .get(sessionFromUrl)
+      .then((detail) => {
+        if (cancelled) return;
+        setSessionId(detail.session_id);
+        setMessages(
+          detail.messages.map((m, i) => ({
+            id: `hist-${detail.session_id}-${i}-${m.role}`,
+            role: m.role,
+            content: m.content,
+            timestamp: timeStr(),
+          })),
+        );
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setHistoryError(e instanceof Error ? e.message : "Failed to load session");
+        setMessages([]);
+        setSessionId(null);
+      })
+      .finally(() => {
+        if (!cancelled) setHistoryLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionFromUrl, sessionId]);
 
   React.useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
@@ -76,6 +139,14 @@ export function WorkspaceChat() {
         streamAuth,
       );
 
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.set("session", res.session_id);
+          return next;
+        },
+        { replace: true },
+      );
       setSessionId(res.session_id);
       if (res.gateway_error?.code) {
         setGatewayCode(res.gateway_error.code);
@@ -135,7 +206,8 @@ export function WorkspaceChat() {
           />
         </div>
         <p className="text-[11px] leading-relaxed text-white/40">
-          Session list will share the HAM model with <span className="font-mono">/chat</span>.
+          Chats in the same session as <span className="font-mono">/chat</span> when using HAM; pick a session in the
+          main sidebar to load history.
         </p>
       </aside>
 
@@ -152,6 +224,16 @@ export function WorkspaceChat() {
           </div>
           <p className="mt-1.5 text-[12px] text-white/42">{workspaceChatAdapter.description}</p>
         </header>
+
+        {historyError ? (
+          <div
+            className="mx-3 mt-3 flex shrink-0 items-start gap-2 rounded-lg border border-rose-500/30 bg-rose-950/40 px-3 py-2 text-[12px] text-rose-100/90 md:mx-4"
+            role="alert"
+          >
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-rose-300/80" />
+            <span className="min-w-0 flex-1 leading-snug">{historyError}</span>
+          </div>
+        ) : null}
 
         {error ? (
           <div
@@ -175,9 +257,16 @@ export function WorkspaceChat() {
         ) : null}
 
         <div className="hww-scroll min-h-0 flex-1 overflow-y-auto px-3 py-4 md:px-5">
-          {!hasThread ? (
+          {historyLoading ? (
+            <div className="flex min-h-[min(50vh,360px)] flex-col items-center justify-center gap-3 text-white/50">
+              <Loader2 className="h-8 w-8 animate-spin text-white/30" strokeWidth={1.5} />
+              <p className="text-[13px]">Loading session from HAM…</p>
+            </div>
+          ) : !hasThread ? (
             <div className="mx-auto flex min-h-[min(60vh,420px)] max-w-md flex-col items-center justify-center rounded-2xl border border-[color:var(--ham-workspace-line)] bg-[#040d14]/40 p-6 text-center">
-              <p className="text-[15px] font-medium text-white/70">Start a HAM turn</p>
+              <p className="text-[15px] font-medium text-white/70">
+                {sessionFromUrl ? "No messages in this session yet" : "Start a HAM turn"}
+              </p>
               <p className="mt-2 text-[13px] leading-relaxed text-white/45">
                 Messages stream from the same <span className="font-mono text-white/55">/api/chat/stream</span> contract
                 as the main chat — no browser-side Hermes proxy.

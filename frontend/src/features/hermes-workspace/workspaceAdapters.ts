@@ -3,6 +3,8 @@
  * Chat streaming is routed exclusively through `postChatStream` (no upstream Workspace VM routes).
  */
 import {
+  fetchChatSession,
+  fetchChatSessions,
   postChatStream,
   type HamChatRequest,
   type HamChatResponse,
@@ -51,4 +53,13 @@ export const workspaceChatAdapter = {
    * Delegates to `postChatStream` in `@/lib/ham/api` — the single HAM entry point for browser chat streaming.
    */
   stream: runWorkspaceChatStream,
+} as const;
+
+/**
+ * HAM chat history — `fetchChatSessions` / `fetchChatSession` from `@/lib/ham/api` only (no new transport).
+ */
+export const workspaceSessionAdapter = {
+  ready: true as const,
+  list: (limit = 50, offset = 0) => fetchChatSessions(limit, offset),
+  get: (sessionId: string) => fetchChatSession(sessionId),
 } as const;
