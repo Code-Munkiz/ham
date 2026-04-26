@@ -2,6 +2,8 @@
 
 **Status:** planning document. **Not** an instruction to start bulk copy/paste in code until the team approves this plan and a Phase 0 inventory exists.
 
+**Phase 0 inventory (pinned commit, API map, namespace):** [PHASE0_HERMES_WORKSPACE_INVENTORY.md](PHASE0_HERMES_WORKSPACE_INVENTORY.md)
+
 **Strategic correction (why this supersedes page-by-page “old HAM skinning” after `c3b0578`):**  
 Incremental restyling of legacy route components converges too slowly toward the *product* goal: **a single Hermes Workspace–class operator experience** driven by HAM’s runtime. Commits through `c3b0578` (shell, nav/header, activity/runs) remain useful foundations and **are not reverted**; **new** work should pivot to a **wholesale UI lift + adapter layer**, not “Commit 4 Command Center cosmetics.”
 
