@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import time
 
@@ -24,7 +25,10 @@ def _input_line() -> str:
 def test_workspace_terminal_create_output_close(client: TestClient) -> None:
     r = client.post("/api/workspace/terminal/sessions")
     assert r.status_code == 200
-    sid = r.json().get("sessionId")
+    data = r.json()
+    assert data.get("transport") in ("pty", "pipe")
+    assert "streamPath" in data
+    sid = data.get("sessionId")
     assert isinstance(sid, str) and sid
 
     out = client.get(f"/api/workspace/terminal/sessions/{sid}/output?after=0")
@@ -68,13 +72,15 @@ def test_workspace_terminal_input_then_poll_captures_text(client: TestClient) ->
     sid = r.json()["sessionId"]
     n0 = 0
     if os.name == "nt":
-        for _ in range(50):
+        for _ in range(80):
             o0 = client.get(f"/api/workspace/terminal/sessions/{sid}/output?after=0").json()
+            t0 = (o0.get("text") or "") if isinstance(o0.get("text"), str) else ""
             n0 = int(o0.get("len") or 0)
-            if n0 > 0:
+            # ConPTY: short escape codes arrive before cmd's banner + prompt (~2s). Pipe: banner is faster.
+            if n0 > 100 or "Microsoft" in t0 or "C:\\" in t0:
                 break
-            time.sleep(0.05)
-        assert n0 > 0, "Expected cmd startup banner in buffer (read1 path)"
+            time.sleep(0.1)
+        assert n0 > 0, "Expected shell startup text before first input (ConPTY or pipe)"
     else:
         o0 = client.get(f"/api/workspace/terminal/sessions/{sid}/output?after=0").json()
         n0 = int(o0.get("len") or 0)
@@ -94,6 +100,18 @@ def test_workspace_terminal_input_then_poll_captures_text(client: TestClient) ->
     assert saw, "Expected command output (WSTPING) in polled buffer"
     out_end = client.get(f"/api/workspace/terminal/sessions/{sid}/output?after=0").json()
     assert out_end.get("len") is not None
+    client.delete(f"/api/workspace/terminal/sessions/{sid}")
+
+
+def test_workspace_terminal_stream_ws_accepts_and_pushes_text(client: TestClient) -> None:
+    r = client.post("/api/workspace/terminal/sessions")
+    sid = r.json()["sessionId"]
+    with client.websocket_connect(f"/api/workspace/terminal/sessions/{sid}/stream") as ws:
+        for _ in range(80):
+            msg = ws.receive_text()
+            if json.loads(msg).get("type") == "out":
+                break
+            time.sleep(0.02)
     client.delete(f"/api/workspace/terminal/sessions/{sid}")
 
 

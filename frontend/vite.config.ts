@@ -11,6 +11,8 @@ export default defineConfig(({mode}) => {
     '/api': {
       target: apiProxyTarget,
       changeOrigin: true,
+      // WebSocket upgrade for /api/workspace/terminal/.../stream
+      ws: true,
     },
   } as const;
   return {

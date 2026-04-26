@@ -12,26 +12,54 @@ export type TerminalBridgeState =
 const PENDING: TerminalBridgeState = { status: "pending", detail: "Runtime bridge pending" };
 
 export const workspaceTerminalAdapter = {
-  description: "HAM /api/workspace/terminal/sessions — subprocess bridge; output polled via /output.",
+  description:
+    "HAM /api/workspace/terminal/sessions — ConPTY (Windows) or pipe; output via WebSocket /stream and/or HTTP /output.",
 
-  async createSession(_tabId: string): Promise<{ sessionId: string | null; bridge: TerminalBridgeState }> {
+  /** Same-origin WebSocket URL for terminal output (Vite must proxy with ws: true). */
+  webSocketStreamUrl(sessionId: string): string {
+    if (typeof window === "undefined") {
+      return "";
+    }
+    const path = `${TBASE}/sessions/${encodeURIComponent(sessionId)}/stream`;
+    const { protocol, host } = window.location;
+    const proto = protocol === "https:" ? "wss:" : "ws:";
+    return `${proto}//${host}${path}`;
+  },
+
+  async createSession(
+    _tabId: string,
+  ): Promise<{
+    sessionId: string | null;
+    transport: "pty" | "pipe" | null;
+    streamPath: string | null;
+    bridge: TerminalBridgeState;
+  }> {
     try {
       const res = await fetch(`${TBASE}/sessions`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({}),
+        body: JSON.stringify({ cols: 80, rows: 24 }),
       });
       if (!res.ok) {
-        return { sessionId: null, bridge: PENDING };
+        return { sessionId: null, transport: null, streamPath: null, bridge: PENDING };
       }
-      const data = (await res.json()) as { sessionId?: string };
+      const data = (await res.json()) as {
+        sessionId?: string;
+        transport?: string;
+        streamPath?: string;
+      };
+      const sid = typeof data.sessionId === "string" ? data.sessionId : null;
+      const transport =
+        data.transport === "pty" || data.transport === "pipe" ? data.transport : null;
       return {
-        sessionId: typeof data.sessionId === "string" ? data.sessionId : null,
+        sessionId: sid,
+        transport,
+        streamPath: typeof data.streamPath === "string" ? data.streamPath : null,
         bridge: data.sessionId ? { status: "ready" } : PENDING,
       };
     } catch {
-      return { sessionId: null, bridge: PENDING };
+      return { sessionId: null, transport: null, streamPath: null, bridge: PENDING };
     }
   },
 

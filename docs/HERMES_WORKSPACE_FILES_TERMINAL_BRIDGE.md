@@ -22,16 +22,21 @@ Bridge table (UI remains on `workspaceFileAdapter` / `workspaceTerminalAdapter`)
 | Mkdir / delete / rename | `mkdir`, `delete`, `rename` | `POST /api/workspace/files` | `workspace_files` | `action: mkdir \| delete \| rename`, `from` for rename (alias) | Cross-volume moves |
 | Download | `downloadFile` | `GET` download action (see `workspace_files.py`) | `workspace_files` | `FileResponse` or buffer | Malware scan, size caps |
 | Upload | `uploadFile` | `POST /api/workspace/files/upload` | `workspace_files` | `multipart` | Same as write + MIME |
-| Terminal create | `createSession` | `POST /api/workspace/terminal/sessions` | `workspace_terminal` | `{ sessionId }` | Process limits, no PTY yet |
+| Terminal create | `createSession` | `POST /api/workspace/terminal/sessions` | `workspace_terminal` | `{ sessionId, transport, streamPath }` (optional JSON `cols`/`rows`) | Win: `pywinpty` ConPTY when `HAM_TERMINAL_PTY` not `0` |
 | Input | `sendInput` | `POST /api/workspace/terminal/sessions/{id}/input` | `workspace_terminal` | `{ data }` (UTF-8, `\x03` for interrupt) | Injection, rate limits |
-| Output | `pollOutput` | `GET /api/workspace/terminal/sessions/{id}/output?after=` | `workspace_terminal` | `{ text, len, next }` | Polling load; consider SSE/WS |
-| Resize | `resize` | `POST /api/workspace/terminal/sessions/{id}/resize` | `workspace_terminal` (no-op today) | `{ cols, rows }` | Real TTY/pty |
-| Close | `closeSession` | `DELETE /api/workspace/terminal/sessions/{id}` | `workspace_terminal` | 204 | Reaper, zombie cleanup |
+| Output (poll) | `pollOutput` | `GET /api/workspace/terminal/sessions/{id}/output?after=` | `workspace_terminal` | `{ text, len, next }` | Fallback and tests; `read1` on pipe child |
+| Output (stream) | (WS URL from `webSocketStreamUrl`) | `WebSocket` `/api/workspace/terminal/sessions/{id}/stream` | `workspace_terminal` | JSON `{"type":"out","text"}`; optional in/out `resize` | Vite: `server.proxy["/api"].ws: true` |
+| Resize | `resize` | `POST /api/workspace/terminal/sessions/{id}/resize` | `workspace_terminal` | `{ cols, rows }` | ConPTY: `setwinsize`; pipe: no-op |
+| Close | `closeSession` | `DELETE /api/workspace/terminal/sessions/{id}` | `workspace_terminal` | 204 | Idle: `HAM_TERMINAL_IDLE_SECONDS` reaper; multi-process API still N/A for shared memory |
 
 **Settings IA:** Mobile and shell should use `/workspace/settings` (wraps `UnifiedSettings`) — not legacy `/settings` as the final home.
 
 **Hardening (not blocking bridge):** RBAC, audit logging, workspace root and path policy, process isolation, org/user policy, kill switch.
 
-**Terminal reader (Windows):** The background thread must call `BufferedIOBase.read1()` (or an unbuffered raw read), not `read(n)`: on Windows, `read(n)` on the subprocess `stdout` stream tries to **fill** *n* bytes, while `cmd.exe` only writes a short startup banner first, so the reader blocked indefinitely and the output buffer stayed empty. The shell’s `cwd` follows `HAM_WORKSPACE_ROOT` / `HAM_WORKSPACE_FILES_ROOT` when set and valid, so the prompt matches the Files tree.
+**Design details / roadmap:** see [`TERMINAL_PTY_PARITY.md`](./TERMINAL_PTY_PARITY.md).
+
+**Pipe bridge (Windows) reader:** the pipe-fallback path still uses `read1` on the child `stdout` (see `workspace_terminal`); the ConPTY path reads `PtyProcess.read()` in a thread.
+
+**Env:** `HAM_TERMINAL_PTY=0` forces pipe+read1 on Windows. `HAM_TERMINAL_IDLE_SECONDS` (default 3600) idles reaped. Shell `cwd` uses `HAM_WORKSPACE_ROOT` / `HAM_WORKSPACE_FILES_ROOT` when set.
 
 **Browser:** No API keys or privileged credentials in client bundles; use HAM FastAPI only; no `/api/hermes-proxy`.

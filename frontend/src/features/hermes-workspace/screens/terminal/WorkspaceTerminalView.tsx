@@ -55,11 +55,13 @@ export function WorkspaceTerminalView({ mode, onMinimize, onClosePanel, classNam
   const sessionAttempted = React.useRef<Set<string>>(new Set());
   /** Byte offset per session for /output?after= */
   const pollCursor = React.useRef<Record<string, number>>({});
+  /** When the WebSocket stream is open, skip HTTP polling to avoid duplicate output. */
+  const wsStopsPollRef = React.useRef(false);
   const active = tabs.find((t) => t.id === activeId) ?? tabs[0]!;
 
   /**
-   * Approximate grid from panel size. Backend has no true PTY yet; values are a hint for future TTY
-   * wiring. Uses 12px mono text: ~7.2px char width, ~16px line height, minus p-2 (8px) padding.
+   * Approximate grid from panel size (PTY resize on Windows ConPTY; pipe mode records dimensions only).
+   * Uses 12px mono text: ~7.2px char width, ~16px line height, minus p-2 (8px) padding.
    */
   const measureAndResize = React.useCallback(() => {
     const el = terminalAreaRef.current;
@@ -175,12 +177,60 @@ export function WorkspaceTerminalView({ mode, onMinimize, onClosePanel, classNam
     };
   }, [activeId, activeSessionId, append]);
 
-  // Poll server process output
+  // WebSocket: primary output when available; HTTP poll below is a fallback.
+  React.useEffect(() => {
+    wsStopsPollRef.current = false;
+    const sid = active.sessionId;
+    if (!sid) return;
+    const url = workspaceTerminalAdapter.webSocketStreamUrl(sid);
+    if (!url) return;
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(url);
+    } catch {
+      return;
+    }
+    const onMessage = (ev: MessageEvent<string>) => {
+      try {
+        const j = JSON.parse(ev.data) as { type?: string; text?: string };
+        if (j.type === "out" && typeof j.text === "string" && j.text) {
+          appendStream(activeId, j.text);
+        }
+      } catch {
+        /* ignore */
+      }
+    };
+    ws.addEventListener("message", onMessage);
+    ws.onopen = () => {
+      wsStopsPollRef.current = true;
+    };
+    ws.onerror = () => {
+      wsStopsPollRef.current = false;
+    };
+    ws.onclose = () => {
+      wsStopsPollRef.current = false;
+    };
+    return () => {
+      ws.onclose = null;
+      ws.removeEventListener("message", onMessage);
+      try {
+        ws.close();
+      } catch {
+        /* ignore */
+      }
+      wsStopsPollRef.current = false;
+    };
+  }, [active.sessionId, activeId, appendStream]);
+
+  // Poll server process output (fallback when WebSocket is unavailable)
   React.useEffect(() => {
     const sid = active.sessionId;
     if (!sid) return;
     const tid = setInterval(() => {
       void (async () => {
+        if (wsStopsPollRef.current) {
+          return;
+        }
         const after = pollCursor.current[sid] ?? 0;
         const { text, next, bridge } = await workspaceTerminalAdapter.pollOutput(sid, after);
         if (bridge.status === "ready" && text) {
