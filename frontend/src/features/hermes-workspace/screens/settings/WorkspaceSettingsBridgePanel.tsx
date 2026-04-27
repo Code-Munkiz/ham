@@ -3,7 +3,6 @@ import { fetchModelsCatalog } from "@/lib/ham/api";
 import type { ModelCatalogPayload } from "@/lib/ham/types";
 import { isDashboardChatGatewayReady } from "@/lib/ham/types";
 import type { WorkspaceSettingsBridgeSectionId } from "./workspaceSettingsNavData";
-import { Switch } from "@/components/ui/switch";
 import {
   WorkspaceSettingsCapabilityBadge,
   WorkspaceSettingsFieldRow,
@@ -11,6 +10,7 @@ import {
   WorkspaceSettingsSectionHeader,
   WorkspaceSettingsUnavailableNote,
 } from "./workspaceSettingsReadOnlyChrome";
+import { WorkspaceVoiceBridgeSection } from "./WorkspaceVoiceBridgeSection";
 
 type WorkspaceSettingsBridgePanelProps = {
   section: WorkspaceSettingsBridgeSectionId;
@@ -148,84 +148,8 @@ export function WorkspaceSettingsBridgePanel({ section }: WorkspaceSettingsBridg
         </WorkspaceSettingsReadOnlyCard>
       );
 
-    case "voice": {
-      const ttsRow = (
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-          <span className="shrink-0 text-[13px] text-white/65">TTS Provider</span>
-          <select
-            disabled
-            className="h-8 w-full max-w-xs cursor-not-allowed rounded-lg border border-white/[0.1] bg-white/[0.04] px-2.5 text-[12px] text-white/45 outline-none sm:max-w-sm"
-            aria-label="TTS provider (read-only)"
-            value="edge"
-          >
-            <option value="edge">Edge TTS</option>
-            <option value="elevenlabs">ElevenLabs</option>
-            <option value="openai_tts">OpenAI TTS</option>
-            <option value="neutts">NeuTTS</option>
-          </select>
-        </div>
-      );
-      const sttRows = (
-        <div className="space-y-3">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-            <span className="shrink-0 text-[13px] text-white/65">Enable STT</span>
-            <Switch checked={false} disabled className="opacity-50" aria-label="Enable STT (read-only)" />
-          </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-            <span className="shrink-0 text-[13px] text-white/65">STT Provider</span>
-            <select
-              disabled
-              className="h-8 w-full max-w-xs cursor-not-allowed rounded-lg border border-white/[0.1] bg-white/[0.04] px-2.5 text-[12px] text-white/45 outline-none sm:max-w-sm"
-              aria-label="STT provider (read-only)"
-              value="openai"
-            >
-              <option value="local">Local (Whisper)</option>
-              <option value="openai">OpenAI transcription (server)</option>
-            </select>
-          </div>
-        </div>
-      );
-      return (
-        <WorkspaceSettingsReadOnlyCard>
-          <div className="mb-1">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">Settings</p>
-          </div>
-          <WorkspaceSettingsSectionHeader
-            title="Voice"
-            subtitle="Text-to-speech and speech-to-text."
-            badge={<WorkspaceSettingsCapabilityBadge>Read-only</WorkspaceSettingsCapabilityBadge>}
-          />
-          <p className="mt-4 text-[12px] leading-relaxed text-white/50">
-            Voice settings are read-only until the HAM runtime config bridge is wired. Chat dictation in the workspace
-            composer uses <span className="font-mono text-white/65">POST /api/chat/transcribe</span> when the API host
-            sets <span className="font-mono text-white/65">HAM_TRANSCRIPTION_*</span> (OpenAI transcription). This is
-            not a &quot;Local (Whisper)&quot; path in the Ham stack as shown in upstream. Text-to-speech is not active
-            on the main Ham API process (<span className="font-mono text-white/65">/api/tts</span> is not mounted in
-            <span className="font-mono text-white/65"> server.py</span>).
-          </p>
-          <div className="mt-6 space-y-4">
-            <div className="rounded-xl border border-white/[0.1] bg-white/[0.02] px-4 py-3 shadow-sm">
-              <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-emerald-500/85">
-                Text-to-Speech
-              </p>
-              {ttsRow}
-            </div>
-            <div className="rounded-xl border border-white/[0.1] bg-white/[0.02] px-4 py-3 shadow-sm">
-              <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-emerald-500/85">
-                Speech-to-Text
-              </p>
-              {sttRows}
-            </div>
-          </div>
-          {catalog ? (
-            <p className="mt-4 text-[11px] text-white/35">
-              Text chat gateway: {isDashboardChatGatewayReady(catalog) ? "ready" : "not ready"} (GET /api/models) —
-              unrelated to TTS.
-            </p>
-          ) : null}
-        </WorkspaceSettingsReadOnlyCard>
-      );
-    }
+    case "voice":
+      return <WorkspaceVoiceBridgeSection catalog={catalog} />;
 
     case "appearance":
       return (

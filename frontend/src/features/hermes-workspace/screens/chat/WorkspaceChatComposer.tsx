@@ -33,6 +33,8 @@ type WorkspaceChatComposerProps = {
   catalog: ModelCatalogPayload | null;
   modelId: string | null;
   onModelIdChange: (id: string | null) => void;
+  /** When false, mic is off (persisted workspace Voice → STT disabled). Default true if omitted. */
+  sttDictationEnabled?: boolean;
 };
 
 function chatModelCandidates(c: ModelCatalogPayload | null): ModelCatalogItem[] {
@@ -72,6 +74,7 @@ export function WorkspaceChatComposer({
   catalog,
   modelId,
   onModelIdChange,
+  sttDictationEnabled = true,
 }: WorkspaceChatComposerProps) {
   const [voiceRecording, setVoiceRecording] = React.useState(false);
   const [voiceBanner, setVoiceBanner] = React.useState<string | null>(null);
@@ -359,7 +362,12 @@ export function WorkspaceChatComposer({
                 <WorkspaceVoiceMessageInput
                   compact
                   hidePreview
-                  disabled={sending || voiceTranscribing || disabled}
+                  disabled={sending || voiceTranscribing || disabled || sttDictationEnabled === false}
+                  disabledReason={
+                    sttDictationEnabled === false
+                      ? "Speech-to-text is off — enable it in Workspace → Settings → Voice."
+                      : undefined
+                  }
                   onRecordingChange={setVoiceRecording}
                   onVoiceRecorderErrorChange={setVoiceBanner}
                   onVoiceError={(err) => {

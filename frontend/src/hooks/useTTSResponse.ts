@@ -11,6 +11,7 @@
  */
 
 import { useState, useCallback, useRef } from 'react';
+import { hamApiFetch } from '@/lib/ham/api';
 
 interface UseTTSResponseOptions {
   onError?: (error: string) => void;
@@ -29,7 +30,7 @@ export function useTTSResponse(options: UseTTSResponseOptions = {}) {
     
     try {
       // Call backend TTS endpoint
-      const response = await fetch('/api/tts/generate', {
+      const response = await hamApiFetch('/api/tts/generate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

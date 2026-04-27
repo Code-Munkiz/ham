@@ -26,6 +26,7 @@ import {
   userTranscriptPreview,
 } from "@/lib/ham/chatUserContent";
 import { workspaceChatAdapter, workspaceSessionAdapter } from "../../workspaceAdapters";
+import { useVoiceWorkspaceSettingsOptional } from "../../voice/VoiceWorkspaceSettingsContext";
 import { WorkspaceChatEmptyState } from "./WorkspaceChatEmptyState";
 import { WorkspaceChatMessageList, type HwwMsgRow } from "./WorkspaceChatMessageList";
 import { WorkspaceChatComposer } from "./WorkspaceChatComposer";
@@ -111,6 +112,9 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   const streamTurnSessionRef = React.useRef<string | null>(null);
   const endRef = React.useRef<HTMLDivElement | null>(null);
   const listWrapRef = React.useRef<HTMLDivElement | null>(null);
+
+  const voiceWs = useVoiceWorkspaceSettingsOptional();
+  const sttDictationEnabled = voiceWs?.payload?.settings.stt.enabled ?? true;
 
   const chatModelIdForApi = catalog?.gateway_mode === "openrouter" ? modelId : null;
 
@@ -695,6 +699,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
             catalog={catalog}
             modelId={modelId}
             onModelIdChange={setModelId}
+            sttDictationEnabled={sttDictationEnabled}
           />
         </div>
       </div>
