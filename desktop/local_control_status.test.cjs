@@ -29,7 +29,7 @@ test('platformDerived: darwin unsupported', () => {
   });
 });
 
-test('buildLocalControlStatus: phase 3b aggregate + sidecar inert shell, enabled false', () => {
+test('buildLocalControlStatus: phase 4a aggregate + browser MVP fields, enabled false', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ham-lc-test-'));
   try {
     const st = buildLocalControlStatus({
@@ -40,17 +40,19 @@ test('buildLocalControlStatus: phase 3b aggregate + sidecar inert shell, enabled
       path,
     });
     assert.equal(st.kind, 'ham_desktop_local_control_status');
-    assert.equal(SCHEMA_VERSION, 4);
-    assert.equal(st.schema_version, 4);
+    assert.equal(SCHEMA_VERSION, 5);
+    assert.equal(st.schema_version, 5);
     assert.equal(st.phase, PHASE);
-    assert.equal(st.phase, 'policy_audit_kill_switch_only');
+    assert.equal(st.phase, 'browser_mvp_4a');
     assert.equal(st.enabled, false);
     assert.equal(st.available, true);
     assert.equal(st.supported_platform, true);
     assert.equal(st.platform_status, 'linux_first');
-    for (const v of Object.values(st.capabilities)) {
-      assert.equal(v, 'not_implemented');
-    }
+    assert.equal(st.capabilities.browser_automation, 'available_guarded');
+    assert.equal(st.capabilities.filesystem_access, 'not_implemented');
+    assert.equal(st.capabilities.shell_commands, 'not_implemented');
+    assert.equal(st.capabilities.app_window_control, 'not_implemented');
+    assert.equal(st.capabilities.mcp_adapters, 'not_implemented');
     assert.equal(st.paths.user_data_writable, true);
     assert.ok(st.policy);
     assert.equal(st.policy.enabled, false);
@@ -67,6 +69,10 @@ test('buildLocalControlStatus: phase 3b aggregate + sidecar inert shell, enabled
     for (const v of Object.values(st.sidecar.capabilities)) {
       assert.equal(v, 'not_implemented');
     }
+    assert.ok(st.browser_mvp);
+    assert.equal(st.browser_mvp.supported, true);
+    assert.equal(st.browser_mvp.armed, false);
+    assert.equal(st.browser_mvp.gate_blocked_reason, 'kill_switch_engaged');
     assert.ok(st.audit);
     assert.equal(st.audit.redacted, true);
     assert.ok(Array.isArray(st.warnings));

@@ -18,6 +18,15 @@ const SAFE_EVENT_TYPES = new Set([
   'local_control_sidecar_status_read',
   'local_control_sidecar_health_ping',
   'local_control_sidecar_stop',
+  'local_control_browser_arm',
+  'local_control_browser_start',
+  'local_control_browser_start_blocked',
+  'local_control_browser_navigate',
+  'local_control_browser_navigate_blocked',
+  'local_control_browser_screenshot',
+  'local_control_browser_stop',
+  'local_control_browser_error',
+  'local_control_kill_switch_disengaged_browser_mvp',
 ]);
 
 /** @param {string} userDataPath @param {typeof import('node:path')} path */

@@ -15,7 +15,7 @@
     "pack:win": "npm run build:frontend && electron-builder --win --x64",
     "pack:win:dir": "npm run build:frontend && electron-builder --win --x64 --dir",
     "pack:win:nsis": "npm run build:frontend && electron-builder --win --x64 -c.win.target=nsis",
-    "test:local-control": "node --test ./local_control_status.test.cjs ./local_control_policy.test.cjs ./local_control_audit.test.cjs ./local_control_sidecar_status.test.cjs ./local_control_sidecar_child.test.cjs ./local_control_sidecar_manager.test.cjs ./preload_contract.test.cjs"
+    "test:local-control": "node --test ./local_control_status.test.cjs ./local_control_policy.test.cjs ./local_control_audit.test.cjs ./local_control_sidecar_status.test.cjs ./local_control_sidecar_child.test.cjs ./local_control_sidecar_manager.test.cjs ./local_control_browser_url.test.cjs ./local_control_browser_mvp.test.cjs ./preload_contract.test.cjs"
   },
   "build": {
     "appId": "io.github.codemunkiz.ham-desktop",
@@ -34,6 +34,8 @@
       "local_control_sidecar_status.cjs",
       "local_control_sidecar_child.cjs",
       "local_control_sidecar_manager.cjs",
+      "local_control_browser_url.cjs",
+      "local_control_browser_mvp.cjs",
       "package.json",
       "default-public-api.json",
       "curated/**"

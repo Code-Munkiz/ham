@@ -6,10 +6,17 @@ const path = require('node:path');
 const fs = require('node:fs');
 
 const { buildLocalControlStatus } = require('./local_control_status.cjs');
-const { loadPolicy, getPolicyStatusPayload, engageKillSwitch } = require('./local_control_policy.cjs');
+const {
+  loadPolicy,
+  getPolicyStatusPayload,
+  engageKillSwitch,
+  armBrowserOnlyControl,
+  disengageKillSwitchForBrowserMvp,
+} = require('./local_control_policy.cjs');
 const { getAuditStatus, appendAuditEvent } = require('./local_control_audit.cjs');
 const { buildSidecarStatus } = require('./local_control_sidecar_status.cjs');
 const { createSidecarManager, defaultChildScriptPath } = require('./local_control_sidecar_manager.cjs');
+const { createBrowserMvpController, browserActionGates } = require('./local_control_browser_mvp.cjs');
 
 const CONFIG_FILENAME = 'ham-desktop-config.json';
 
@@ -317,6 +324,16 @@ function getSidecarManager() {
   return sidecarManagerSingleton;
 }
 
+/** @type {ReturnType<typeof createBrowserMvpController> | null} */
+let browserMvpSingleton = null;
+
+function getBrowserMvp() {
+  if (!browserMvpSingleton) {
+    browserMvpSingleton = createBrowserMvpController({ BrowserWindow });
+  }
+  return browserMvpSingleton;
+}
+
 /** Local Control Phase 2 — full status; appends redacted audit line. */
 ipcMain.handle('ham-desktop:local-control-get-status', () => {
   const c = localControlPaths();
@@ -331,6 +348,7 @@ ipcMain.handle('ham-desktop:local-control-get-status', () => {
     fs: c.fs,
     path: c.path,
     sidecarManager: getSidecarManager(),
+    browserMvpGetStatus: () => getBrowserMvp().getStatus(),
   });
   appendAuditEvent({
     userDataPath: c.userDataPath,
@@ -464,8 +482,190 @@ ipcMain.handle('ham-desktop:local-control-engage-kill-switch', () => {
   };
 });
 
+/** Phase 4A — narrow browser MVP (Electron BrowserWindow in main). */
+ipcMain.handle('ham-desktop:local-control-browser-arm', () => {
+  const c = localControlPaths();
+  armBrowserOnlyControl({
+    userDataPath: c.userDataPath,
+    platform: c.platform,
+    fs: c.fs,
+    path: c.path,
+  });
+  appendAuditEvent({
+    userDataPath: c.userDataPath,
+    type: 'local_control_browser_arm',
+    fs: c.fs,
+    path: c.path,
+  });
+  return { ok: true };
+});
+
+ipcMain.handle('ham-desktop:local-control-browser-release-kill-switch', (event, token) => {
+  const c = localControlPaths();
+  const r = disengageKillSwitchForBrowserMvp({
+    userDataPath: c.userDataPath,
+    platform: c.platform,
+    fs: c.fs,
+    path: c.path,
+    token,
+  });
+  if (r.ok) {
+    appendAuditEvent({
+      userDataPath: c.userDataPath,
+      type: 'local_control_kill_switch_disengaged_browser_mvp',
+      fs: c.fs,
+      path: c.path,
+    });
+  }
+  return r;
+});
+
+ipcMain.handle('ham-desktop:local-control-get-browser-status', () => {
+  const c = localControlPaths();
+  const { policy } = loadPolicy({
+    userDataPath: c.userDataPath,
+    platform: c.platform,
+    fs: c.fs,
+    path: c.path,
+  });
+  const snap = getBrowserMvp().getStatus();
+  const g = browserActionGates(policy, c.platform);
+  return {
+    kind: 'ham_desktop_local_control_browser_mvp_public',
+    running: snap.running,
+    title: snap.title,
+    display_url: snap.display_url,
+    armed: policy.browser_control_armed === true,
+    allow_loopback: policy.browser_allow_loopback === true,
+    gate_blocked_reason: g.ok ? null : g.reason,
+    kill_switch_engaged: policy.kill_switch.engaged,
+  };
+});
+
+ipcMain.handle('ham-desktop:local-control-browser-start-session', async () => {
+  const c = localControlPaths();
+  const { policy } = loadPolicy({
+    userDataPath: c.userDataPath,
+    platform: c.platform,
+    fs: c.fs,
+    path: c.path,
+  });
+  const g = browserActionGates(policy, c.platform);
+  if (!g.ok) {
+    appendAuditEvent({
+      userDataPath: c.userDataPath,
+      type: 'local_control_browser_start_blocked',
+      fs: c.fs,
+      path: c.path,
+    });
+    return { ok: false, blocked: true, reason: g.reason };
+  }
+  appendAuditEvent({
+    userDataPath: c.userDataPath,
+    type: 'local_control_browser_start',
+    fs: c.fs,
+    path: c.path,
+  });
+  try {
+    return await getBrowserMvp().startSession();
+  } catch {
+    appendAuditEvent({
+      userDataPath: c.userDataPath,
+      type: 'local_control_browser_error',
+      fs: c.fs,
+      path: c.path,
+    });
+    return { ok: false, error: 'start_failed' };
+  }
+});
+
+ipcMain.handle('ham-desktop:local-control-browser-navigate', async (event, url) => {
+  const c = localControlPaths();
+  const { policy } = loadPolicy({
+    userDataPath: c.userDataPath,
+    platform: c.platform,
+    fs: c.fs,
+    path: c.path,
+  });
+  const g = browserActionGates(policy, c.platform);
+  if (!g.ok) {
+    appendAuditEvent({
+      userDataPath: c.userDataPath,
+      type: 'local_control_browser_navigate_blocked',
+      fs: c.fs,
+      path: c.path,
+    });
+    return { ok: false, blocked: true, reason: g.reason };
+  }
+  appendAuditEvent({
+    userDataPath: c.userDataPath,
+    type: 'local_control_browser_navigate',
+    fs: c.fs,
+    path: c.path,
+  });
+  try {
+    return await getBrowserMvp().navigate(String(url || ''), {
+      allow_loopback: policy.browser_allow_loopback === true,
+    });
+  } catch {
+    appendAuditEvent({
+      userDataPath: c.userDataPath,
+      type: 'local_control_browser_error',
+      fs: c.fs,
+      path: c.path,
+    });
+    return { ok: false, error: 'navigate_failed' };
+  }
+});
+
+ipcMain.handle('ham-desktop:local-control-browser-screenshot', async () => {
+  const c = localControlPaths();
+  const { policy } = loadPolicy({
+    userDataPath: c.userDataPath,
+    platform: c.platform,
+    fs: c.fs,
+    path: c.path,
+  });
+  const g = browserActionGates(policy, c.platform);
+  if (!g.ok) {
+    return { ok: false, blocked: true, reason: g.reason };
+  }
+  appendAuditEvent({
+    userDataPath: c.userDataPath,
+    type: 'local_control_browser_screenshot',
+    fs: c.fs,
+    path: c.path,
+  });
+  try {
+    return await getBrowserMvp().screenshot();
+  } catch {
+    appendAuditEvent({
+      userDataPath: c.userDataPath,
+      type: 'local_control_browser_error',
+      fs: c.fs,
+      path: c.path,
+    });
+    return { ok: false, error: 'screenshot_failed' };
+  }
+});
+
+ipcMain.handle('ham-desktop:local-control-browser-stop-session', () => {
+  const c = localControlPaths();
+  const running = getBrowserMvp().getStatus().running;
+  if (running) {
+    appendAuditEvent({
+      userDataPath: c.userDataPath,
+      type: 'local_control_browser_stop',
+      fs: c.fs,
+      path: c.path,
+    });
+  }
+  return getBrowserMvp().stopSession();
+});
+
 app.on('before-quit', () => {
   if (sidecarManagerSingleton) void sidecarManagerSingleton.stop();
+  if (browserMvpSingleton) browserMvpSingleton.stopSession();
 });
 
 app.whenReady().then(() => {

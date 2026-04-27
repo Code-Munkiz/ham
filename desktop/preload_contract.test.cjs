@@ -12,6 +12,12 @@ test('preload exposes narrow localControl methods only', () => {
   assert.ok(src.includes('ham-desktop:local-control-sidecar-health'));
   assert.ok(src.includes('ham-desktop:local-control-sidecar-stop'));
   assert.ok(src.includes('ham-desktop:local-control-sidecar-start'));
+  assert.ok(src.includes('ham-desktop:local-control-browser-arm'));
+  assert.ok(src.includes('ham-desktop:local-control-get-browser-status'));
+  assert.ok(src.includes('ham-desktop:local-control-browser-start-session'));
+  assert.ok(src.includes('ham-desktop:local-control-browser-navigate'));
+  assert.ok(src.includes('ham-desktop:local-control-browser-screenshot'));
+  assert.ok(src.includes('ham-desktop:local-control-browser-stop-session'));
   assert.ok(src.includes("exposeInMainWorld('hamDesktop'"));
   const forbidden = [
     'local-control-enable',

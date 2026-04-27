@@ -63,6 +63,28 @@ test('appendAuditEvent accepts sidecar lifecycle types', () => {
   }
 });
 
+test('appendAuditEvent accepts browser MVP lifecycle types', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ham-lc-audit-br-'));
+  try {
+    for (const t of [
+      'local_control_browser_arm',
+      'local_control_browser_start',
+      'local_control_browser_start_blocked',
+      'local_control_browser_navigate',
+      'local_control_browser_navigate_blocked',
+      'local_control_browser_screenshot',
+      'local_control_browser_stop',
+      'local_control_browser_error',
+      'local_control_kill_switch_disengaged_browser_mvp',
+    ]) {
+      const r = appendAuditEvent({ userDataPath: tmp, type: t, fs, path });
+      assert.equal(r.ok, true);
+    }
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
 test('getAuditStatus exposes redacted flag, no paths', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ham-lc-audit3-'));
   try {

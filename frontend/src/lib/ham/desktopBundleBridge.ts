@@ -34,8 +34,44 @@ export type HamDesktopLocalControlPolicyStatus = {
   allowlist_counts: Record<string, number>;
   permissions: Record<string, boolean>;
   kill_switch: { engaged: boolean; reason: string };
+  browser_control_armed?: boolean;
+  browser_allow_loopback?: boolean;
   updated_at: string;
 };
+
+/** Must match `BROWSER_MVP_KILL_SWITCH_RELEASE_TOKEN` in desktop/local_control_policy.cjs */
+export const HAM_DESKTOP_BROWSER_MVP_KILL_SWITCH_RELEASE = "BROWSER_MVP_KILL_SWITCH_RELEASE";
+
+export type HamDesktopBrowserMvpStatus = {
+  kind: "ham_desktop_local_control_browser_mvp_status";
+  supported: boolean;
+  armed: boolean;
+  allow_loopback: boolean;
+  session_running: boolean;
+  title: string;
+  display_url: string;
+  gate_blocked_reason: string | null;
+};
+
+export type HamDesktopBrowserMvpPublic = {
+  kind: "ham_desktop_local_control_browser_mvp_public";
+  running: boolean;
+  title: string;
+  display_url: string;
+  armed: boolean;
+  allow_loopback: boolean;
+  gate_blocked_reason: string | null;
+  kill_switch_engaged: boolean;
+};
+
+export type HamDesktopBrowserSessionResult =
+  | { ok: true; idempotent?: boolean }
+  | { ok: false; blocked: true; reason: string }
+  | { ok: false; error: string };
+
+export type HamDesktopBrowserScreenshotResult =
+  | { ok: true; data_url: string }
+  | { ok: false; blocked?: boolean; reason?: string; error?: string };
 
 export type HamDesktopLocalControlAuditStatus = {
   kind: "ham_desktop_local_control_audit_status";
@@ -94,6 +130,7 @@ export type HamDesktopLocalControlStatus = {
   audit: HamDesktopLocalControlAuditStatus;
   kill_switch: { engaged: boolean; reason: string };
   sidecar: HamDesktopLocalControlSidecarStatus;
+  browser_mvp: HamDesktopBrowserMvpStatus;
   capabilities: Record<string, string>;
   warnings: string[];
   non_goals: string[];
@@ -115,6 +152,13 @@ export type HamDesktopLocalControlApi = {
   stopSidecar: () => Promise<HamDesktopSidecarStopResult>;
   startSidecar: () => Promise<HamDesktopSidecarStartResult>;
   engageKillSwitch: () => Promise<HamDesktopLocalControlKillSwitchEngageResult>;
+  armBrowserOnlyControl: () => Promise<{ ok: boolean }>;
+  releaseKillSwitchForBrowserMvp: (token: string) => Promise<{ ok: boolean; error?: string }>;
+  getBrowserStatus: () => Promise<HamDesktopBrowserMvpPublic>;
+  startBrowserSession: () => Promise<HamDesktopBrowserSessionResult>;
+  navigateBrowser: (url: string) => Promise<HamDesktopBrowserSessionResult>;
+  captureBrowserScreenshot: () => Promise<HamDesktopBrowserScreenshotResult>;
+  stopBrowserSession: () => Promise<HamDesktopBrowserSessionResult>;
 };
 
 export type HamDesktopBundleApi = {

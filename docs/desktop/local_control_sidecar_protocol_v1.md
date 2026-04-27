@@ -58,9 +58,17 @@ No `execute`, `shell`, `browser`, `fs`, or MCP methods.
 
 ---
 
+## Browser control (Phase 4A) — main process, not sidecar JSON-RPC
+
+Phase **4A** ships **desktop-local browser MVP** as an Electron **`BrowserWindow`** managed in **`main.cjs`** with narrow preload IPC (`local-control-browser-*`). This **does not** extend `local_control_sidecar_child.cjs`.
+
+**Reserved namespace (future):** a Playwright-backed sidecar *could* expose allowlisted logical methods such as `browser.status`, `browser.start`, `browser.navigate`, `browser.screenshot`, `browser.stop` over stdio; **Phase 4A does not** route browser control through the sidecar child (avoids heavy browser binary packaging).
+
+---
+
 ## Relationship to aggregate status
 
-HAM Desktop exposes **`sidecar`** on the aggregate Local Control status object with **`schema_version` 4**, **`implemented: true`**, **`mode: inert_process_shell`**, **`transport: stdio_json_rpc`**, plus **`start_allowed`**, **`blocked_reason`**, and **`health`**. See `desktop/local_control_sidecar_status.cjs`.
+HAM Desktop exposes **`sidecar`** on the aggregate Local Control status object (**`schema_version` ≥ 4**), **`implemented: true`**, **`mode: inert_process_shell`**, **`transport: stdio_json_rpc`**, plus **`start_allowed`**, **`blocked_reason`**, and **`health`**. See `desktop/local_control_sidecar_status.cjs`. Phase **4A** adds **`browser_mvp`** and bumps aggregate **`schema_version` to 5** — see `desktop/local_control_status.cjs`.
 
 ---
 
