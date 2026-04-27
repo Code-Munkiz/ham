@@ -25,6 +25,13 @@ import { workspaceFileEntryLabels } from "../../lib/workspaceHumanLabels";
 
 const ROOT_LABEL = "Workspace";
 
+const IMAGE_PATH_RE = /\.(png|jpe?g|gif|webp|svg)$/i;
+const NON_TEXT_PREVIEW_RE =
+  /\.(pdf|zip|7z|rar|exe|dll|wasm|mp3|mp4|mov|avi|mkv|doc|docx|ppt|pptx|xls|xlsx|bin|dmg|iso)$/i;
+const MAX_TEXT_PREVIEW_CHARS = 350_000;
+
+type FilePreviewKind = "none" | "text" | "image" | "unsupported";
+
 function normalizePath(p: string) {
   return p.replace(/\\/g, "/");
 }
@@ -107,6 +114,8 @@ function ready() {
   const [saveError, setSaveError] = React.useState<string | null>(null);
   const [fsHealth, setFsHealth] = React.useState<LocalRuntimeHealthPayload | null>(null);
   const [loadingFolder, setLoadingFolder] = React.useState<string | null>(null);
+  const [filePreviewKind, setFilePreviewKind] = React.useState<FilePreviewKind>("none");
+  const [textPreviewNotice, setTextPreviewNotice] = React.useState<string | null>(null);
   const uploadInputRef = React.useRef<HTMLInputElement | null>(null);
   const uploadTargetRef = React.useRef("");
   const saveFlashTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -222,6 +231,7 @@ function ready() {
     if (readPath === entry.path) {
       setReadPath(null);
       setPreviewPath(null);
+      setFilePreviewKind("none");
     }
     await refresh();
   };
@@ -287,13 +297,22 @@ function ready() {
 
   const loadFile = async (path: string) => {
     setReadPath(path);
+    setFilePreviewKind("text");
+    setTextPreviewNotice(null);
     setReadBridge(null);
     setSaveState("idle");
     setSaveError(null);
     const { text, bridge: b } = await workspaceFileAdapter.readText(path);
     setReadBridge(b);
     if (text != null) {
-      setEditorValue(text);
+      if (text.length > MAX_TEXT_PREVIEW_CHARS) {
+        setEditorValue(text.slice(0, MAX_TEXT_PREVIEW_CHARS));
+        setTextPreviewNotice(
+          `Large file — showing first ${MAX_TEXT_PREVIEW_CHARS.toLocaleString()} characters. Download the file for the full contents.`,
+        );
+      } else {
+        setEditorValue(text);
+      }
     }
   };
 
@@ -327,6 +346,23 @@ function ready() {
   const handleFileClick = async (entry: WorkspaceFileEntry) => {
     if (entry.type === "folder") {
       await handleFolderClick(entry);
+      return;
+    }
+    setTextPreviewNotice(null);
+    if (IMAGE_PATH_RE.test(entry.name)) {
+      setFilePreviewKind("image");
+      setReadPath(entry.path);
+      setPreviewPath(entry.path);
+      setReadBridge({ status: "ready" });
+      setEditorValue("");
+      return;
+    }
+    if (NON_TEXT_PREVIEW_RE.test(entry.name)) {
+      setFilePreviewKind("unsupported");
+      setReadPath(entry.path);
+      setPreviewPath(entry.path);
+      setReadBridge({ status: "ready" });
+      setEditorValue("");
       return;
     }
     const ref = `See file: workspace/${normalizePath(entry.path)}`;
@@ -543,7 +579,7 @@ function ready() {
               </span>
             ) : null}
             <div className="ml-auto flex shrink-0 items-center gap-1.5">
-              {readPath ? (
+              {readPath && filePreviewKind === "text" ? (
                 <>
                   {saveState === "error" && saveError ? (
                     <span className="max-w-[min(12rem,40vw)] truncate text-[10px] text-red-300/90" title={saveError}>
@@ -635,25 +671,81 @@ function ready() {
                 </p>
               </div>
             ) : null}
-            <textarea
-              value={editorValue}
-              onChange={(e) => {
-                setEditorValue(e.target.value);
-                if (saveState === "saved" || saveState === "error") {
-                  setSaveState("idle");
-                  setSaveError(null);
-                }
-              }}
-              onKeyDown={(e) => {
-                if (!readPath) return;
-                if ((e.ctrlKey || e.metaKey) && e.key === "s") {
-                  e.preventDefault();
-                  void handleSave();
-                }
-              }}
-              spellCheck={false}
-              className="h-full min-h-[200px] w-full resize-none rounded-lg border border-white/[0.08] bg-[#040a0f] px-2 py-2 font-mono text-[12px] leading-relaxed text-[#dbe7f0] outline-none ring-0"
-            />
+            {textPreviewNotice ? (
+              <p className="mb-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-100/90">
+                {textPreviewNotice}
+              </p>
+            ) : null}
+            {filePreviewKind === "image" && readPath ? (
+              <div className="flex min-h-[220px] flex-col items-center justify-center gap-3 p-4">
+                {workspaceFileAdapter.buildDownloadUrl(readPath) ? (
+                  <img
+                    src={workspaceFileAdapter.buildDownloadUrl(readPath)}
+                    alt=""
+                    className="max-h-[min(70vh,36rem)] max-w-full rounded-lg border border-white/[0.08] object-contain"
+                  />
+                ) : (
+                  <p className="text-center text-[13px] text-white/55">Connect the local runtime to preview images.</p>
+                )}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="border-white/15 text-white/85"
+                  onClick={() =>
+                    handleDownload({
+                      name: readPath.replace(/^.*[/\\]/, "") || "file",
+                      path: readPath,
+                      type: "file",
+                    })
+                  }
+                >
+                  Download
+                </Button>
+              </div>
+            ) : filePreviewKind === "unsupported" && readPath ? (
+              <div className="flex min-h-[220px] flex-col items-center justify-center gap-3 rounded-lg border border-white/[0.08] bg-[#040a0f]/80 p-6 text-center">
+                <p className="max-w-sm text-[13px] leading-relaxed text-white/70">
+                  In-browser preview is not available for this file type. Download the file or open it in another app.
+                </p>
+                <p className="font-mono text-[11px] text-white/45">{readPath}</p>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  className="text-white/90"
+                  onClick={() =>
+                    handleDownload({
+                      name: readPath.replace(/^.*[/\\]/, "") || "file",
+                      path: readPath,
+                      type: "file",
+                    })
+                  }
+                >
+                  Download
+                </Button>
+              </div>
+            ) : (
+              <textarea
+                value={editorValue}
+                onChange={(e) => {
+                  setEditorValue(e.target.value);
+                  if (saveState === "saved" || saveState === "error") {
+                    setSaveState("idle");
+                    setSaveError(null);
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (!readPath || filePreviewKind !== "text") return;
+                  if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+                    e.preventDefault();
+                    void handleSave();
+                  }
+                }}
+                spellCheck={false}
+                className="h-full min-h-[200px] w-full resize-none rounded-lg border border-white/[0.08] bg-[#040a0f] px-2 py-2 font-mono text-[12px] leading-relaxed text-[#dbe7f0] outline-none ring-0"
+              />
+            )}
             {!readPath && !previewPath ? (
               <p className="pointer-events-none absolute bottom-3 left-3 text-[11px] text-white/30">No file selected</p>
             ) : null}

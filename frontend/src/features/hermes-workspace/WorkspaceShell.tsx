@@ -12,7 +12,7 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { publicAssetUrl } from "@/lib/ham/publicAssets";
+import { hamWorkspaceLogoUrl } from "@/lib/ham/publicAssets";
 import { Button } from "@/components/ui/button";
 import { knowledgeNavItems, mainNavItems, workspacePathTitle } from "./workspaceNavConfig";
 import { workspaceSessionAdapter } from "./workspaceAdapters";
@@ -20,6 +20,7 @@ import type { ChatSessionSummary } from "./workspaceTypes";
 import { sessionCardSubtitle, sessionCardTitle } from "./utils/sessionListFormat";
 import { WorkspaceMobileTabBar } from "./WorkspaceMobileTabBar";
 import { WorkspaceChatFloatingToggle } from "./components/WorkspaceChatFloatingToggle";
+import { WorkspaceChatPanel } from "./components/WorkspaceChatPanel";
 import { WorkspaceTerminalView } from "./screens/terminal/WorkspaceTerminalView";
 
 const HWW_SIDEBAR_COLLAPSE_KEY = "hww.sidebar.collapsed";
@@ -85,8 +86,7 @@ function WorkspaceSideNav({
   activeSessionId,
   isChatRoute,
 }: SideNavOptions) {
-  const logoSrc = publicAssetUrl("ham-logo.png");
-  const hamAppMoonSrc = publicAssetUrl("ham-app-moon.png");
+  const brandLogoSrc = hamWorkspaceLogoUrl();
   const landingHref = hamLandingHref();
   const landingIsExternal = isAbsoluteHttpUrl(landingHref);
   const c = layoutCollapsed;
@@ -219,15 +219,17 @@ function WorkspaceSideNav({
           className={cn("flex min-w-0 items-center", c ? "w-full flex-col justify-center" : "gap-2")}
         >
           <img
-            src={logoSrc}
+            src={brandLogoSrc}
             alt=""
-            className={cn("shrink-0 object-contain brightness-0 invert opacity-90", c ? "h-7 w-7" : "h-7 w-7")}
+            className="h-7 w-7 shrink-0 object-contain opacity-95"
+            width={28}
+            height={28}
           />
           <div
             className={cn("min-w-0", c && "hidden")}
           >
             <p className="truncate text-[10px] font-semibold uppercase tracking-[0.12em] text-white/80">
-              {isChatRoute ? "Chat" : "Hermes workspace"}
+              {isChatRoute ? "Chat" : "HAM's Workspace"}
             </p>
           </div>
         </div>
@@ -396,7 +398,7 @@ function WorkspaceSideNav({
             aria-label="Go to HAM landing"
           >
             <img
-              src={hamAppMoonSrc}
+              src={brandLogoSrc}
               alt=""
               className="h-8 w-8 shrink-0 object-contain"
               width={32}
@@ -406,7 +408,7 @@ function WorkspaceSideNav({
             <span
               className={cn("text-[11px] font-medium text-white/40", c && "sr-only")}
             >
-              HAM app
+              HAM
             </span>
           </a>
         ) : (
@@ -421,7 +423,7 @@ function WorkspaceSideNav({
             aria-label="Go to HAM landing"
           >
             <img
-              src={hamAppMoonSrc}
+              src={brandLogoSrc}
               alt=""
               className="h-8 w-8 shrink-0 object-contain"
               width={32}
@@ -431,7 +433,7 @@ function WorkspaceSideNav({
             <span
               className={cn("text-[11px] font-medium text-white/40", c && "sr-only")}
             >
-              HAM app
+              HAM
             </span>
           </Link>
         )}
@@ -453,6 +455,7 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   /** SHELL-015 — docked terminal strip on chat route */
   const [chatTerminalDockOpen, setChatTerminalDockOpen] = React.useState(false);
+  const [workspaceChatPanelOpen, setWorkspaceChatPanelOpen] = React.useState(false);
   const [sessions, setSessions] = React.useState<ChatSessionSummary[]>([]);
   const [sessionsLoading, setSessionsLoading] = React.useState(true);
   const [sessionsError, setSessionsError] = React.useState<string | null>(null);
@@ -488,6 +491,10 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
   React.useEffect(() => {
     setDrawerOpen(false);
   }, [location.pathname]);
+
+  React.useEffect(() => {
+    if (isWorkspaceChat) setWorkspaceChatPanelOpen(false);
+  }, [isWorkspaceChat]);
 
   const sessionNavProps = {
     sessions,
@@ -623,7 +630,10 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
         </div>
       </div>
       <WorkspaceMobileTabBar />
-      {!isWorkspaceChat ? <WorkspaceChatFloatingToggle /> : null}
+      {!isWorkspaceChat ? (
+        <WorkspaceChatFloatingToggle onOpen={() => setWorkspaceChatPanelOpen(true)} />
+      ) : null}
+      <WorkspaceChatPanel open={workspaceChatPanelOpen} onClose={() => setWorkspaceChatPanelOpen(false)} />
     </div>
   );
 }

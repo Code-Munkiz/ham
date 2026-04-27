@@ -6,7 +6,7 @@
 import * as React from "react";
 import { motion } from "motion/react";
 import { Brain, Code, Puzzle } from "lucide-react";
-import { publicAssetUrl } from "@/lib/ham/publicAssets";
+import { hamWorkspaceLogoUrl } from "@/lib/ham/publicAssets";
 
 export type SuggestionChip = {
   label: string;
@@ -40,7 +40,7 @@ type WorkspaceChatEmptyStateProps = {
 };
 
 export function WorkspaceChatEmptyState({ onSuggestionClick }: WorkspaceChatEmptyStateProps) {
-  const avatarSrc = publicAssetUrl("ham-app-moon.png");
+  const avatarSrc = hamWorkspaceLogoUrl();
 
   return (
     <motion.div
@@ -50,20 +50,21 @@ export function WorkspaceChatEmptyState({ onSuggestionClick }: WorkspaceChatEmpt
       className="hww-chat-empty flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center px-4 py-8"
     >
       <div className="flex max-w-xl flex-col items-center text-center">
-        <div className="relative mb-6">
+        <div className="mb-6 flex justify-center">
+          {/*
+            Same asset + same presentation as the sidebar top brand (`WorkspaceShell`):
+            no bordered “card” frame — that was making ham-app-moon read like a wrong thumbnail.
+          */}
           <img
             src={avatarSrc}
-            alt="Hermes"
-            className="relative size-20 rounded-md object-contain"
-            style={{
-              border: "1px solid var(--hww-chat-border, rgba(255,255,255,0.12))",
-              padding: "4px",
-              background: "var(--hww-chat-card, rgba(255,255,255,0.04))",
-            }}
+            alt=""
+            className="h-7 w-7 shrink-0 object-contain opacity-95"
+            width={28}
+            height={28}
           />
         </div>
         <p className="hww-chat-micro-label mb-2 text-[11px] font-medium uppercase tracking-[0.12em] text-white/50">
-          Hermes Workspace
+          HAM's Workspace
         </p>
         <h2 className="text-2xl font-semibold tracking-tight text-[#e8eef8] md:text-3xl">Begin a session</h2>
         <p className="mt-3 text-sm text-white/40">Agent chat · live tools · memory · full observability</p>

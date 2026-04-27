@@ -1,3 +1,4 @@
+import type { HamChatUserContentV1 } from "./chatUserContent";
 import type {
   ContextEnginePayload,
   CursorCredentialsStatus,
@@ -1067,6 +1068,12 @@ export async function fetchProjectContextEngine(
 /** Ham-native chat DTOs (matches `src/api/chat.py`). */
 export type HamChatRole = "user" | "assistant" | "system";
 
+/** Inbound only: server accepts structured screenshot payloads; responses use string `content` only. */
+export interface HamChatRequestMessage {
+  role: HamChatRole;
+  content: string | HamChatUserContentV1;
+}
+
 export interface HamChatMessage {
   role: HamChatRole;
   content: string;
@@ -1084,7 +1091,7 @@ export interface HamChatActiveAgentMeta {
 
 export interface HamChatRequest {
   session_id?: string;
-  messages: HamChatMessage[];
+  messages: HamChatRequestMessage[];
   client_request_id?: string;
   /** When true (default), API injects `.cursor/skills` summary into system context for intent routing. */
   include_operator_skills?: boolean;

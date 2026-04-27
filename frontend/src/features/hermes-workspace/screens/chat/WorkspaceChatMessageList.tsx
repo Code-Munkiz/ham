@@ -5,6 +5,7 @@
 import * as React from "react";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { tryParseHamChatUserV1String } from "@/lib/ham/chatUserContent";
 
 export type HwwMsgRow = {
   id: string;
@@ -28,6 +29,8 @@ export function WorkspaceChatMessageList({ messages, isStreaming }: WorkspaceCha
     <div className="hww-chat-transcript w-full space-y-4 px-4 py-5 md:px-8 md:py-6">
       {messages.map((m, idx) => {
         if (m.role === "user") {
+          const v1 = tryParseHamChatUserV1String(m.content);
+          const showText = v1 ? (v1.text || "").trim() : m.content.trim();
           return (
             <div key={m.id} className="flex justify-end">
               <div
@@ -36,7 +39,27 @@ export function WorkspaceChatMessageList({ messages, isStreaming }: WorkspaceCha
                   "bg-gradient-to-b from-white/[0.1] to-white/[0.04] px-3.5 py-2.5 text-[13px] leading-relaxed text-[#e8eef3] shadow-sm",
                 )}
               >
-                <p className="whitespace-pre-wrap break-words">{m.content}</p>
+                {v1 && v1.images.length > 0 ? (
+                  <div className="mb-2 flex flex-wrap gap-1.5">
+                    {v1.images.map((im, j) => (
+                      <div
+                        key={`${m.id}-img-${j}`}
+                        className="h-20 w-28 overflow-hidden rounded-md border border-white/15 bg-black/30"
+                      >
+                        <img
+                          src={im.data_url}
+                          alt={im.name || "Screenshot"}
+                          className="h-full w-full object-cover"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+                {showText ? (
+                  <p className="whitespace-pre-wrap break-words">{showText}</p>
+                ) : v1 && v1.images.length > 0 ? null : (
+                  <p className="whitespace-pre-wrap break-words opacity-60">(empty message)</p>
+                )}
                 <p className="mt-1.5 text-right text-[10px] text-white/35">{m.timestamp}</p>
               </div>
             </div>

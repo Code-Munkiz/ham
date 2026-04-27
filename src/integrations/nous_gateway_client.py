@@ -113,7 +113,7 @@ def _iter_http_chat_completions(
     base: str,
     api_key: str,
     model: str,
-    messages: list[dict[str, str]],
+    messages: list[dict[str, Any]],
     timeout_sec: float,
 ) -> Iterator[str]:
     """Single POST to Hermes /v1/chat/completions (streaming SSE)."""
@@ -207,11 +207,27 @@ def _resolve_mode() -> str:
     return "http" if base else "mock"
 
 
-def _mock_assistant_text(messages: list[dict[str, str]]) -> str:
+def _text_for_mock_user_content(content: Any) -> str:
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        parts: list[str] = []
+        for p in content:
+            if not isinstance(p, dict):
+                continue
+            if p.get("type") == "text" and isinstance(p.get("text"), str):
+                parts.append(p["text"])
+            if p.get("type") == "image_url":
+                parts.append("[image]")
+        return "\n".join(parts).strip()
+    return str(content or "").strip()
+
+
+def _mock_assistant_text(messages: list[dict[str, Any]]) -> str:
     last_user = ""
     for t in reversed(messages):
         if t.get("role") == "user":
-            last_user = (t.get("content") or "").strip()
+            last_user = _text_for_mock_user_content(t.get("content"))
             break
     if not last_user:
         last_user = "(no user message in history)"
@@ -220,7 +236,7 @@ def _mock_assistant_text(messages: list[dict[str, str]]) -> str:
 
 
 def stream_chat_turn(
-    messages: list[dict[str, str]],
+    messages: list[dict[str, Any]],
     *,
     timeout_sec: float = DEFAULT_TIMEOUT_SEC,
     openrouter_model_override: str | None = None,
@@ -307,7 +323,7 @@ def stream_chat_turn(
 
 
 def complete_chat_turn(
-    messages: list[dict[str, str]],
+    messages: list[dict[str, Any]],
     *,
     timeout_sec: float = DEFAULT_TIMEOUT_SEC,
     openrouter_model_override: str | None = None,

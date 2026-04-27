@@ -10,6 +10,8 @@ import "./WorkspaceVoiceMessageInput.css";
 interface WorkspaceVoiceMessageInputProps {
   onVoiceMessage?: (audioBlob: Blob, duration: number) => void;
   onVoiceError?: (error: string) => void;
+  /** Compact composer: sync hook `error` for an inline strip above the row (avoids nested chrome in the mic column). */
+  onVoiceRecorderErrorChange?: (message: string | null) => void;
   /** Fires when the built-in MediaRecorder is actively recording (for send-block + inline status in composer). */
   onRecordingChange?: (isRecording: boolean) => void;
   /** Smaller, borderless treatment for the chat composer strip (no standalone card). */
@@ -25,6 +27,7 @@ export function WorkspaceVoiceMessageInput(props: WorkspaceVoiceMessageInputProp
   const {
     onVoiceMessage,
     onVoiceError,
+    onVoiceRecorderErrorChange,
     onRecordingChange,
     compact = false,
     hidePreview = false,
@@ -54,6 +57,11 @@ export function WorkspaceVoiceMessageInput(props: WorkspaceVoiceMessageInputProp
   React.useEffect(() => {
     onRecordingChange?.(isRecording);
   }, [isRecording, onRecordingChange]);
+
+  React.useEffect(() => {
+    if (!compact) return;
+    onVoiceRecorderErrorChange?.(error ?? null);
+  }, [compact, error, onVoiceRecorderErrorChange]);
 
   const handleCancelRecording = () => {
     cancelRecording();
@@ -129,12 +137,6 @@ export function WorkspaceVoiceMessageInput(props: WorkspaceVoiceMessageInputProp
           )}
         </div>
       )}
-
-      {compact && error ? (
-        <p className="recording-error-compact" role="status">
-          {error}
-        </p>
-      ) : null}
     </div>
   );
 }

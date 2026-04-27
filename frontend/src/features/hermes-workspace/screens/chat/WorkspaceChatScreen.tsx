@@ -18,6 +18,8 @@ import { CLIENT_MODEL_CATALOG_FALLBACK } from "@/lib/ham/modelCatalogFallback";
 import type { ModelCatalogPayload } from "@/lib/ham/types";
 import { applyHamUiActions } from "@/lib/ham/applyUiActions";
 import type { HamChatStreamAuth } from "@/lib/ham/api";
+import type { HamChatUserContentV1 } from "@/lib/ham/chatUserContent";
+import { buildHamChatUserPayloadV1, userTranscriptPreview } from "@/lib/ham/chatUserContent";
 import { workspaceChatAdapter, workspaceSessionAdapter } from "../../workspaceAdapters";
 import { WorkspaceChatEmptyState } from "./WorkspaceChatEmptyState";
 import { WorkspaceChatMessageList, type HwwMsgRow } from "./WorkspaceChatMessageList";
@@ -34,7 +36,6 @@ import {
   type ChatInspectorArtifactRow,
 } from "./workspaceInspectorChatDerived";
 import {
-  buildOutboundMessageWithAttachments,
   fileToWorkspaceAttachment,
   formatAttachmentByteSize,
   MAX_WORKSPACE_ATTACHMENT_BYTES,
@@ -42,6 +43,7 @@ import {
   type WorkspaceComposerAttachment,
 } from "./composerAttachmentHelpers";
 import { Button } from "@/components/ui/button";
+import { hamWorkspaceLogoUrl } from "@/lib/ham/publicAssets";
 import { cn } from "@/lib/utils";
 
 function timeStr() {
@@ -64,9 +66,10 @@ function workspaceChatSubtitle(opts: {
   }
   if (opts.sessionId) {
     const firstUser = opts.messages.find((m) => m.role === "user");
-    const raw = firstUser?.content?.trim();
-    if (raw) {
-      const oneLine = raw.replace(/\s+/g, " ");
+    const raw = firstUser?.content;
+    const preview = typeof raw === "string" ? userTranscriptPreview(raw) : "";
+    if (preview) {
+      const oneLine = preview.replace(/\s+/g, " ");
       return oneLine.length > 72 ? `${oneLine.slice(0, 72)}…` : oneLine;
     }
     return "Send a message to start this conversation.";
@@ -74,7 +77,13 @@ function workspaceChatSubtitle(opts: {
   return "Messages you send are stored by HAM after the first reply.";
 }
 
-export function WorkspaceChatScreen() {
+export type WorkspaceChatScreenProps = {
+  /** In-shell drawer: keep session off the URL; do not navigate on new session. */
+  embedMode?: boolean;
+};
+
+export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
+  const { embedMode = false } = props;
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [messages, setMessages] = React.useState<HwwMsgRow[]>([]);
@@ -190,8 +199,9 @@ export function WorkspaceChatScreen() {
     [sending],
   );
 
-  /** Deep link `?session=` */
+  /** Deep link `?session=` (full-page chat only). */
   React.useEffect(() => {
+    if (embedMode) return;
     const s = searchParams.get("session");
     if (!s) {
       streamTurnSessionRef.current = null;
@@ -208,7 +218,7 @@ export function WorkspaceChatScreen() {
       return;
     }
     void loadFromApi(s);
-  }, [searchParams, sessionId, sending, loadFromApi]);
+  }, [embedMode, searchParams, sessionId, sending, loadFromApi]);
 
   const startNew = React.useCallback(() => {
     setSessionId(null);
@@ -218,17 +228,20 @@ export function WorkspaceChatScreen() {
     setInput("");
     setAttachments([]);
     setLoadErr(null);
-    navigate({ pathname: "/workspace/chat", search: "" }, { replace: true });
+    if (!embedMode) {
+      navigate({ pathname: "/workspace/chat", search: "" }, { replace: true });
+    }
     queueMicrotask(() => {
       document.getElementById("hww-chat-composer")?.focus();
     });
-  }, [navigate]);
+  }, [embedMode, navigate]);
 
   const retryLoadSession = React.useCallback(() => {
+    if (embedMode) return;
     const s = searchParams.get("session");
     if (!s?.trim()) return;
     void loadFromApi(s.trim());
-  }, [searchParams, loadFromApi]);
+  }, [embedMode, searchParams, loadFromApi]);
 
   React.useEffect(() => {
     endRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
@@ -295,9 +308,14 @@ export function WorkspaceChatScreen() {
   }, []);
 
   const send = React.useCallback(
-    async (outboundUserMessage: string) => {
-      const trimmed = outboundUserMessage.trim();
-      if (!trimmed || sending || voiceTranscribing) return;
+    async (outboundUser: string | HamChatUserContentV1) => {
+      const isV1 = typeof outboundUser === "object" && outboundUser && outboundUser.h === "ham_chat_user_v1";
+      const displayContent = isV1
+        ? JSON.stringify(outboundUser)
+        : (outboundUser as string).trim();
+      if (!isV1 && !(outboundUser as string).trim()) return;
+      if (isV1 && !(outboundUser as HamChatUserContentV1).images?.length) return;
+      if (sending || voiceTranscribing) return;
       setInput("");
       setAttachments([]);
       setLoadErr(null);
@@ -307,7 +325,7 @@ export function WorkspaceChatScreen() {
       const userRow: HwwMsgRow = {
         id: `hww-user-${Date.now()}`,
         role: "user",
-        content: trimmed,
+        content: displayContent,
         timestamp: timeStr(),
       };
       const assistantPlaceId = `hww-assist-${Date.now()}`;
@@ -323,8 +341,8 @@ export function WorkspaceChatScreen() {
           atIso: new Date().toISOString(),
           kind: "user_message_sent",
           status: "info",
-          summary: `User message sent (${trimmed.length} character${trimmed.length === 1 ? "" : "s"})`,
-          meta: { message_id: userRow.id, char_count: trimmed.length },
+          summary: `User message sent (${displayContent.length} character${displayContent.length === 1 ? "" : "s"})`,
+          meta: { message_id: userRow.id, char_count: displayContent.length },
         }),
       );
       setInspectorEvents((prev) =>
@@ -341,7 +359,7 @@ export function WorkspaceChatScreen() {
         const res = await workspaceChatAdapter.stream(
           {
             session_id: sessionId ?? undefined,
-            messages: [{ role: "user", content: trimmed }],
+            messages: [{ role: "user", content: isV1 ? (outboundUser as HamChatUserContentV1) : (outboundUser as string).trim() }],
             ...(chatModelIdForApi ? { model_id: chatModelIdForApi } : {}),
             ...(projectId ? { project_id: projectId } : {}),
             workbench_mode: "agent",
@@ -352,10 +370,12 @@ export function WorkspaceChatScreen() {
             onSession: (sid) => {
               streamTurnSessionRef.current = sid;
               setSessionId(sid);
-              navigate(
-                { pathname: "/workspace/chat", search: `?session=${encodeURIComponent(sid)}` },
-                { replace: true },
-              );
+              if (!embedMode) {
+                navigate(
+                  { pathname: "/workspace/chat", search: `?session=${encodeURIComponent(sid)}` },
+                  { replace: true },
+                );
+              }
               setInspectorEvents((prev) => {
                 const patched = patchInspectorEventsSessionId(prev, sid);
                 if (sid === priorSession) return patched;
@@ -458,20 +478,42 @@ export function WorkspaceChatScreen() {
         setSending(false);
       }
     },
-    [sending, voiceTranscribing, sessionId, chatModelIdForApi, projectId, navigate],
+    [embedMode, sending, voiceTranscribing, sessionId, chatModelIdForApi, projectId, navigate],
   );
 
   const onFormSubmit = () => {
     const trimmed = input.trim();
-    const outbound = buildOutboundMessageWithAttachments(trimmed, attachments);
-    if (!outbound.trim() || voiceTranscribing) return;
-    void send(outbound);
+    const usable = attachments.filter((a) => !a.error);
+    if (voiceTranscribing) return;
+    if (attachments.length > 0 && usable.length === 0) {
+      toast.error("Every attachment failed. Remove them or add PNG, JPEG, or WebP under 500 KB, then try again.");
+      return;
+    }
+    if (usable.length > 0) {
+      const payload = buildHamChatUserPayloadV1(
+        trimmed,
+        usable.map((a) => {
+          const m = /^data:(image\/(?:png|jpe?g|webp));base64,/i.exec(a.payload.trim());
+          const raw = (m ? m[1] : "image/jpeg").toLowerCase();
+          const mime = raw === "image/jpg" ? "image/jpeg" : raw;
+          return { name: a.name, mime, dataUrl: a.payload, size: a.size };
+        }),
+      );
+      if (payload.images.length === 0) {
+        toast.error("Could not read screenshots. Use PNG, JPEG, or WebP (max 500 KB each).");
+        return;
+      }
+      void send(payload);
+      return;
+    }
+    if (!trimmed) return;
+    void send(trimmed);
   };
 
   const hasTranscript = messages.length > 0;
   const showEmpty = !loadingSession && !hasTranscript && !loadErr;
   const sessionLoadFailed = Boolean(loadErr && !hasTranscript && !loadingSession);
-  const staleSessionParam = searchParams.get("session");
+  const staleSessionParam = embedMode ? null : searchParams.get("session");
   const headerTitle = sessionLoadFailed
     ? "Session unavailable"
     : !sessionId
@@ -492,9 +534,18 @@ export function WorkspaceChatScreen() {
     <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col md:flex-row">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <header className="hww-chat-header flex shrink-0 items-start justify-between gap-3 border-b border-white/[0.06] bg-[#040d14]/80 px-4 py-3 backdrop-blur-sm md:px-8">
-          <div className="min-w-0">
-            <h1 className="text-[15px] font-semibold tracking-tight text-white/[0.95]">{headerTitle}</h1>
-            <p className="mt-0.5 truncate text-[11px] leading-snug text-white/50">{headerSubtitle}</p>
+          <div className="flex min-w-0 items-start gap-2.5">
+            <img
+              src={hamWorkspaceLogoUrl()}
+              alt=""
+              className="mt-0.5 h-8 w-8 shrink-0 object-contain opacity-95"
+              width={32}
+              height={32}
+            />
+            <div className="min-w-0">
+              <h1 className="text-[15px] font-semibold tracking-tight text-white/[0.95]">{headerTitle}</h1>
+              <p className="mt-0.5 truncate text-[11px] leading-snug text-white/50">{headerSubtitle}</p>
+            </div>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
             <button
@@ -584,23 +635,25 @@ export function WorkspaceChatScreen() {
             </>
           )}
         </div>
-        <WorkspaceChatComposer
-          value={input}
-          onChange={setInput}
-          onSubmit={onFormSubmit}
-          disabled={catalogLoading}
-          sending={sending}
-          voiceTranscribing={voiceTranscribing}
-          onVoiceBlob={handleVoiceBlob}
-          attachments={attachments}
-          onAddAttachments={handleAddAttachments}
-          onRemoveAttachment={(id) => {
-            setAttachments((p) => p.filter((a) => a.id !== id));
-          }}
-          catalog={catalog}
-          modelId={modelId}
-          onModelIdChange={setModelId}
-        />
+        <div className="flex w-full justify-center px-3 md:px-6">
+          <WorkspaceChatComposer
+            value={input}
+            onChange={setInput}
+            onSubmit={onFormSubmit}
+            disabled={catalogLoading}
+            sending={sending}
+            voiceTranscribing={voiceTranscribing}
+            onVoiceBlob={handleVoiceBlob}
+            attachments={attachments}
+            onAddAttachments={handleAddAttachments}
+            onRemoveAttachment={(id) => {
+              setAttachments((p) => p.filter((a) => a.id !== id));
+            }}
+            catalog={catalog}
+            modelId={modelId}
+            onModelIdChange={setModelId}
+          />
+        </div>
       </div>
       {inspectorOpen ? (
         <>

@@ -1,6 +1,6 @@
 /**
  * Hermes Workspace chat composer: PromptInput-style shell + action row (attach | mic | input | send).
- * Stream contract unchanged — attachments via `buildOutboundMessageWithAttachments`.
+ * PNG/JPEG/WebP attachments are sent as `ham_chat_user_v1` in `/api/chat/stream` (see `chatUserContent.ts`).
  */
 
 import * as React from "react";
@@ -55,13 +55,38 @@ export function WorkspaceChatComposer({
   onModelIdChange,
 }: WorkspaceChatComposerProps) {
   const [voiceRecording, setVoiceRecording] = React.useState(false);
+  const [voiceBanner, setVoiceBanner] = React.useState<string | null>(null);
   const formRef = React.useRef<HTMLFormElement>(null);
+  const textareaRef = React.useRef<HTMLTextAreaElement>(null);
+  /** Match upstream PromptInput default maxHeight (px) for autosize + scroll only when needed. */
+  const TEXTAREA_MAX_PX = 240;
+
+  const syncTextareaHeight = React.useCallback(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    const sh = el.scrollHeight;
+    const h = Math.min(sh, TEXTAREA_MAX_PX);
+    el.style.height = `${h}px`;
+    el.style.overflowY = sh > TEXTAREA_MAX_PX ? "auto" : "hidden";
+  }, [TEXTAREA_MAX_PX]);
+
+  React.useLayoutEffect(() => {
+    syncTextareaHeight();
+  }, [value, syncTextareaHeight]);
+
+  React.useEffect(() => {
+    if (voiceRecording) setVoiceBanner(null);
+  }, [voiceRecording]);
   const showModel = catalog && catalog.gateway_mode === "openrouter" && chatModelCandidates(catalog).length > 0;
   const gatewayOk = isDashboardChatGatewayReady(catalog);
   const hasAttachErrOnly =
     attachments.length > 0 && attachments.every((a) => a.error) && !value.trim();
+  /** Do not allow send while every attachment failed — avoids sending text-only and “losing” the image silently. */
+  const allAttachmentsFailed = attachments.length > 0 && attachments.every((a) => a.error);
   const canSend =
     gatewayOk &&
+    !allAttachmentsFailed &&
     (value.trim() || (attachments.length > 0 && !hasAttachErrOnly)) &&
     !sending &&
     !voiceTranscribing &&
@@ -83,12 +108,28 @@ export function WorkspaceChatComposer({
     [attachments.length, onAddAttachments],
   );
 
+  const onDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (disabled || sending || voiceTranscribing || voiceRecording) return;
+    const dt = e.dataTransfer?.files;
+    if (!dt?.length) return;
+    handleAddFiles(Array.from(dt));
+  };
+
   return (
     <div
-      className="hww-chat-composer-outer pointer-events-auto shrink-0 border-t border-white/[0.06] bg-[#030a10]/90 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-sm md:px-4"
+      className="hww-chat-composer-outer pointer-events-auto w-full max-w-[40rem] shrink-0 border-t border-white/[0.06] bg-[#030a10]/90 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-sm md:px-4"
+      onDragOver={onDragOver}
+      onDrop={onDrop}
     >
       {showModel ? (
-        <div className="mb-2 flex w-full max-w-[56rem] flex-wrap items-center gap-2 md:pl-1">
+        <div className="mb-2 flex w-full flex-wrap items-center gap-2 md:pl-1">
           <label htmlFor="hww-chat-model" className="text-[10px] font-medium uppercase tracking-wide text-white/35">
             Model
           </label>
@@ -116,14 +157,32 @@ export function WorkspaceChatComposer({
           e.preventDefault();
           onSubmit();
         }}
-        className="w-full max-w-[56rem] md:pl-1"
+        className="w-full md:pl-1"
       >
         <div
           className={cn(
             "flex flex-col overflow-hidden rounded-3xl border border-white/[0.1] bg-[#050c14]/95 shadow-[0_0_0_1px_rgba(255,255,255,0.03)]",
             "ring-0 focus-within:border-[#c45c12]/40 focus-within:shadow-[0_0_0_1px_rgba(196,92,18,0.2)]",
           )}
+          onDragOver={onDragOver}
+          onDrop={onDrop}
         >
+          {voiceBanner ? (
+            <div
+              className="flex items-start gap-2 border-b border-red-500/25 bg-red-950/35 px-3 py-2 text-[11px] leading-snug text-red-100/90"
+              role="alert"
+            >
+              <span className="min-w-0 flex-1">{voiceBanner}</span>
+              <button
+                type="button"
+                className="shrink-0 rounded-md px-1.5 py-0.5 text-[13px] leading-none text-red-200/90 hover:bg-white/10"
+                aria-label="Dismiss voice message"
+                onClick={() => setVoiceBanner(null)}
+              >
+                ×
+              </button>
+            </div>
+          ) : null}
           {(voiceRecording || voiceTranscribing) && (
             <div
               className="flex items-center gap-1.5 border-b border-white/[0.05] px-3 py-1.5 text-[10px] font-medium uppercase tracking-wide"
@@ -143,7 +202,7 @@ export function WorkspaceChatComposer({
             </div>
           )}
 
-          <div className="flex items-end justify-between gap-1.5 px-1.5 py-2 md:gap-2 md:px-3">
+          <div className="flex min-h-[52px] items-end justify-between gap-1.5 px-1.5 py-2 md:gap-2 md:px-3">
             <div className="flex shrink-0 items-end gap-0.5 md:gap-1">
               <WorkspaceChatAttachmentButton
                 onFiles={handleAddFiles}
@@ -161,8 +220,9 @@ export function WorkspaceChatComposer({
                   hidePreview
                   disabled={sending || voiceTranscribing || disabled}
                   onRecordingChange={setVoiceRecording}
+                  onVoiceRecorderErrorChange={setVoiceBanner}
                   onVoiceError={(err) => {
-                    toast.error(err, { duration: 5000 });
+                    setVoiceBanner(err);
                   }}
                   onVoiceMessage={(blob) => {
                     void onVoiceBlob(blob);
@@ -175,6 +235,7 @@ export function WorkspaceChatComposer({
               Message
             </label>
             <textarea
+              ref={textareaRef}
               id="hww-chat-composer"
               value={value}
               onChange={(e) => onChange(e.target.value)}
@@ -193,7 +254,7 @@ export function WorkspaceChatComposer({
                     ? "Chat gateway not ready — check /api/models"
                     : "Ask anything… (Enter to send, Shift+Enter for newline)"
               }
-              className="min-h-[44px] w-full min-w-0 max-h-40 flex-1 resize-none border-0 bg-transparent px-1.5 py-2 text-[13px] leading-snug text-[#e8eef3] outline-none placeholder:text-white/30 focus:ring-0"
+              className="min-h-[44px] w-full min-w-0 flex-1 resize-none border-0 bg-transparent px-1.5 py-2.5 text-[13px] leading-[1.35] text-[#e8eef3] outline-none placeholder:text-white/35 focus:ring-0 focus:outline-none [box-shadow:none] overflow-x-hidden"
             />
             <Button
               type="submit"

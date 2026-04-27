@@ -1,24 +1,32 @@
 import * as React from "react";
 import { Link } from "react-router-dom";
-import { ArrowRight, Layers, MessageSquare, Orbit, PanelLeft } from "lucide-react";
+import { ArrowRight, Layers, MessageSquare, PanelLeft } from "lucide-react";
+import { hamWorkspaceLogoUrl } from "@/lib/ham/publicAssets";
 
 export function WorkspaceHome() {
+  const logoSrc = hamWorkspaceLogoUrl();
   return (
     <div className="hww-home flex h-full min-h-0 flex-col overflow-y-auto p-4 sm:p-6 md:p-8">
       <div className="mx-auto w-full max-w-3xl">
         <div className="mb-8 flex flex-col items-center text-center sm:mb-10">
           <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-white/10 bg-[#0a1218]/85 shadow-[0_16px_48px_rgba(0,0,0,0.4)]">
-            <Orbit className="h-8 w-8 text-[#ffb27a]/90" strokeWidth={1.2} />
+            <img
+              src={logoSrc}
+              alt=""
+              className="h-12 w-12 object-contain"
+              width={48}
+              height={48}
+            />
           </div>
           <h1 className="text-2xl font-semibold tracking-tight text-white/95 sm:text-3xl">
             Dashboard
           </h1>
           <p className="mt-1 text-[12px] font-medium uppercase tracking-[0.14em] text-white/32">
-            Hermes workspace
+            HAM's Workspace
           </p>
           <p className="mt-2 max-w-lg text-sm leading-relaxed text-white/45">
-            HAM API and runtime unchanged — the sidebar reflects the full Hermes Workspace map; most
-            sections are still staging placeholders on top of the same backend seams.
+            Operator-facing workspace: chat, files, skills, and settings share the same HAM API and local runtime;
+            some sections are still staging placeholders.
           </p>
         </div>
 
