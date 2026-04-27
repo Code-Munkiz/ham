@@ -14,6 +14,9 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt \
     && python -m playwright install --with-deps chromium
 
+# TTS and other top-level `models.*` imports (src.api.tts_endpoint, src.api.audio_upload)
+COPY models/ models/
+
 COPY src/ src/
 
 # Repo instruction files optional but improve context-engine text if present in image.
