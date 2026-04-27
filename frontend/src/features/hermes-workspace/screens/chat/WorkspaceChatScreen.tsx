@@ -117,6 +117,12 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   /** When set, deep-link effect must not call `loadFromApi` for this session while the stream turn is active. */
   const streamTurnSessionRef = React.useRef<string | null>(null);
   const gohamAbortRef = React.useRef(false);
+  const gohamPausedRef = React.useRef(false);
+  const gohamTakeoverRef = React.useRef(false);
+  const [gohamPaused, setGohamPaused] = React.useState(false);
+  const [gohamTakeover, setGohamTakeover] = React.useState(false);
+  /** Slice 3 — show Pause / Resume / Take over only during an active research loop run. */
+  const [gohamResearchUi, setGohamResearchUi] = React.useState(false);
   const endRef = React.useRef<HTMLDivElement | null>(null);
   const listWrapRef = React.useRef<HTMLDivElement | null>(null);
 
@@ -399,6 +405,11 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
 
   const handleGohamStop = React.useCallback(() => {
     gohamAbortRef.current = true;
+    gohamPausedRef.current = false;
+    gohamTakeoverRef.current = false;
+    setGohamPaused(false);
+    setGohamTakeover(false);
+    setGohamResearchUi(false);
     const api = getHamDesktopLocalControlApi();
     if (api && typeof api.stopRealBrowserSession === "function") {
       void api.stopRealBrowserSession();
@@ -505,6 +516,11 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         return;
       }
       gohamAbortRef.current = false;
+      gohamPausedRef.current = false;
+      gohamTakeoverRef.current = false;
+      setGohamPaused(false);
+      setGohamTakeover(false);
+      setGohamResearchUi(true);
       setGohamActive(true);
       setGohamTrail([]);
       setSending(true);
@@ -540,6 +556,11 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
           taskText: displayContent,
           onTrail: setGohamTrail,
           shouldAbort: () => gohamAbortRef.current,
+          getHoldState: () => {
+            if (gohamTakeoverRef.current) return "takeover";
+            if (gohamPausedRef.current) return "pause";
+            return "none";
+          },
         });
         if (result.ok === true) {
           keepManagedBrowserOpen = true;
@@ -580,6 +601,11 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         void api.stopRealBrowserSession();
       } finally {
         gohamAbortRef.current = false;
+        gohamPausedRef.current = false;
+        gohamTakeoverRef.current = false;
+        setGohamPaused(false);
+        setGohamTakeover(false);
+        setGohamResearchUi(false);
         setGohamActive(keepManagedBrowserOpen);
         setSending(false);
       }
@@ -963,6 +989,32 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
           trail={gohamTrail}
           onStop={handleGohamStop}
           gateHint={gohamGateHint}
+          researchControls={
+            gohamResearchUi && gohamActive
+              ? {
+                  paused: gohamPaused,
+                  takeover: gohamTakeover,
+                  onPause: () => {
+                    gohamPausedRef.current = true;
+                    gohamTakeoverRef.current = false;
+                    setGohamPaused(true);
+                    setGohamTakeover(false);
+                  },
+                  onResume: () => {
+                    gohamPausedRef.current = false;
+                    gohamTakeoverRef.current = false;
+                    setGohamPaused(false);
+                    setGohamTakeover(false);
+                  },
+                  onTakeover: () => {
+                    gohamTakeoverRef.current = true;
+                    gohamPausedRef.current = false;
+                    setGohamTakeover(true);
+                    setGohamPaused(false);
+                  },
+                }
+              : undefined
+          }
         />
         <GoHamSlice1DevPanel visible={import.meta.env.DEV && gohamEffective} />
         <div className="flex w-full justify-center px-3 md:px-6">

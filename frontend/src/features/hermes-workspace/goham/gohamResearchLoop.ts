@@ -76,7 +76,7 @@ export type GohamLoopAction = {
   risk: "low" | "blocked";
 };
 
-export type GohamResearchStopReason = "complete" | "budget" | "time" | "stopped" | "error";
+export type GohamResearchStopReason = "done" | "budget" | "blocked" | "error" | "user_stopped" | "time";
 
 function redactSnippet(s: string, max = 44): string {
   const t = s.replace(/\s+/g, " ").trim();
@@ -172,12 +172,16 @@ export function rulesFirstPlan(ctx: PlanCtx): GohamLoopAction {
   return { type: "done", reason: "No further relevant actions", risk: "low" };
 }
 
+export type GohamHoldState = "none" | "pause" | "takeover";
+
 export type RunGohamResearchOptions = {
   api: HamDesktopLocalControlApi;
   url: string;
   taskText: string;
   onTrail: (steps: GoHamTrailStep[]) => void;
   shouldAbort: () => boolean;
+  /** Slice 3 — pause / takeover: HAM must not start a new action while not `none`. */
+  getHoldState: () => GohamHoldState;
 };
 
 export type RunGohamResearchResult =
@@ -185,7 +189,7 @@ export type RunGohamResearchResult =
   | { ok: false; userMessage: string; trailSteps: GoHamTrailStep[] };
 
 export async function runGohamResearchFlow(opts: RunGohamResearchOptions): Promise<RunGohamResearchResult> {
-  const { api, url, taskText, onTrail, shouldAbort } = opts;
+  const { api, url, taskText, onTrail, shouldAbort, getHoldState } = opts;
   const redacted = redactUrlForTrail(url);
   const goalTokens = goalTokensFromTask(taskText, url);
 
@@ -199,10 +203,21 @@ export async function runGohamResearchFlow(opts: RunGohamResearchOptions): Promi
     seq += 1;
     pushTrail([...trail, { id: `gr-${seq}`, label, status, detail }]);
   };
+  const addRow = (row: Pick<GoHamTrailStep, "label" | "status"> & Partial<Omit<GoHamTrailStep, "id">>) => {
+    seq += 1;
+    pushTrail([...trail, { id: `gr-${seq}`, ...row }]);
+  };
   const patchId = (id: string, status: GoHamTrailStep["status"], detail?: string) => {
     pushTrail(
       trail.map((s) => (s.id === id ? { ...s, status, ...(detail !== undefined ? { detail } : {}) } : s)),
     );
+  };
+  const patchIdFull = (
+    id: string,
+    status: GoHamTrailStep["status"],
+    patch: Partial<Pick<GoHamTrailStep, "detail" | "result" | "errorReason" | "targetRedacted" | "actionType">>,
+  ) => {
+    pushTrail(trail.map((s) => (s.id === id ? { ...s, status, ...patch } : s)));
   };
   const activate = (label: string): string => {
     seq += 1;
@@ -212,9 +227,48 @@ export async function runGohamResearchFlow(opts: RunGohamResearchOptions): Promi
     return id;
   };
 
+  /** Wait until pause/takeover released or user aborts. */
+  const yieldToUserHold = async (): Promise<"continue" | "abort"> => {
+    const h0 = getHoldState();
+    if (h0 === "none") return "continue";
+    if (shouldAbort()) return "abort";
+    if (h0 === "takeover") {
+      addRow({
+        label: "Takeover — HAM idle",
+        status: "done",
+        detail: "Browser is yours. Click Resume when you want HAM to continue.",
+        actionType: "takeover",
+        result: "waiting",
+      });
+    } else {
+      addRow({
+        label: "Paused",
+        status: "done",
+        detail: "HAM will not start a new action until you resume.",
+        actionType: "pause",
+        result: "waiting",
+      });
+    }
+    while (getHoldState() !== "none") {
+      if (shouldAbort()) return "abort";
+      await new Promise((r) => setTimeout(r, 120));
+    }
+    if (shouldAbort()) return "abort";
+    addRow({
+      label: "Resumed",
+      status: "done",
+      detail: "Continuing research loop.",
+      actionType: "resume",
+      result: "ok",
+    });
+    return "continue";
+  };
+
   const visited: { title: string; display: string }[] = [];
-  let stopReason: GohamResearchStopReason = "complete";
+  let stopReason: GohamResearchStopReason | null = null;
   let errorMessage: string | null = null;
+  let screenshotCaptureCount = 0;
+  let loopActionCount = 0;
 
   if (shouldAbort()) {
     add("GoHAM stopped", "error", "Before start");
@@ -273,14 +327,15 @@ export async function runGohamResearchFlow(opts: RunGohamResearchOptions): Promi
   const shot = await api.captureRealBrowserScreenshot();
   if (!shot || shot.ok !== true) {
     const msg = sessionErrorMessage(shot, "Screenshot");
-    patchId(shotId, "error", msg);
+    patchIdFull(shotId, "error", { detail: msg, actionType: "screenshot", errorReason: msg });
     await api.stopRealBrowserSession();
     return { ok: false, userMessage: msg, trailSteps: trail };
   }
+  screenshotCaptureCount += 1;
   let obs = await readObserve();
   if (!obs || obs.ok !== true) {
     const msg = sessionErrorMessage(obs, "Observe");
-    patchId(shotId, "error", msg);
+    patchIdFull(shotId, "error", { detail: msg, actionType: "observe", errorReason: msg });
     await api.stopRealBrowserSession();
     return { ok: false, userMessage: msg, trailSteps: trail };
   }
@@ -288,18 +343,27 @@ export async function runGohamResearchFlow(opts: RunGohamResearchOptions): Promi
   const title0 = (pub0.title || obs.title || "").trim() || "(no title)";
   const display0 = redactUrlForTrail((pub0.display_url || obs.display_url || obs.url || "").trim() || redacted);
   visited.push({ title: title0, display: display0 });
-  patchId(shotId, "done", redactUrlForTrail(display0));
+  patchIdFull(shotId, "done", {
+    detail: redactUrlForTrail(display0),
+    actionType: "screenshot",
+    result: "ok",
+    targetRedacted: redactUrlForTrail(display0),
+  });
 
   const listId = activate("Listing click candidates");
   let enumR = await api.realBrowserEnumerateClickCandidates();
   if (!enumR || enumR.ok !== true) {
     const msg = sessionErrorMessage(enumR, "Candidates");
-    patchId(listId, "error", msg);
+    patchIdFull(listId, "error", { detail: msg, actionType: "enumerate", errorReason: msg });
     await api.stopRealBrowserSession();
     return { ok: false, userMessage: msg, trailSteps: trail };
   }
   let candidates = enumR.candidates;
-  patchId(listId, "done", `${candidates.length} visible`);
+  patchIdFull(listId, "done", {
+    detail: `${candidates.length} visible`,
+    actionType: "enumerate",
+    result: `${candidates.length} candidates`,
+  });
 
   const loopStart = Date.now();
   let lastClickedId: string | null = null;
@@ -311,10 +375,34 @@ export async function runGohamResearchFlow(opts: RunGohamResearchOptions): Promi
   let hitExplicitDone = false;
 
   if (taskAppearsComplete(lastTitle, goalTokens)) {
-    stopReason = "complete";
+    stopReason = "done";
     hitExplicitDone = true;
   } else {
-    while (loopIteration < MAX_LOOP_ACTIONS && Date.now() - loopStart < LOOP_WALL_MS && !shouldAbort()) {
+    stopReason = null;
+    const yPre = await yieldToUserHold();
+    if (yPre === "abort") {
+      stopReason = "user_stopped";
+      addRow({
+        label: "Stopped by user",
+        status: "error",
+        detail: "Stop GoHAM",
+        actionType: "stop",
+        errorReason: "user",
+      });
+    } else {
+      while (loopIteration < MAX_LOOP_ACTIONS && Date.now() - loopStart < LOOP_WALL_MS && !shouldAbort()) {
+      const y = await yieldToUserHold();
+      if (y === "abort") {
+        stopReason = "user_stopped";
+        addRow({
+          label: "Stopped by user",
+          status: "error",
+          detail: "Stop GoHAM",
+          actionType: "stop",
+          errorReason: "user",
+        });
+        break;
+      }
       const action = rulesFirstPlan({
         taskText,
         goalTokens,
@@ -326,89 +414,141 @@ export async function runGohamResearchFlow(opts: RunGohamResearchOptions): Promi
       });
       const v = validatePlannerAction(action, candidates);
       if (v.ok === false) {
-        stopReason = "error";
+        stopReason = "blocked";
         errorMessage = v.reason;
-        add("Blocked", "error", "Invalid planned action");
+        addRow({
+          label: "Blocked",
+          status: "error",
+          detail: "Invalid planned action",
+          actionType: "plan",
+          errorReason: v.reason,
+        });
         break;
       }
       if (action.type === "done") {
-        stopReason = "complete";
+        stopReason = "done";
         hitExplicitDone = true;
-        add("Done", "done", redactSnippet(action.reason, 80));
+        addRow({
+          label: "Done",
+          status: "done",
+          detail: redactSnippet(action.reason, 80),
+          actionType: "done",
+          result: "planner_done",
+        });
         break;
       }
 
       if (action.type === "click_candidate" && action.candidate_id) {
         const cand = candidates.find((c) => c.id === action.candidate_id);
         const cid = activate("Clicking candidate");
+        loopActionCount += 1;
         const clickR = await api.realBrowserClickCandidate(action.candidate_id);
         if (!clickR || clickR.ok !== true) {
           const msg = sessionErrorMessage(clickR, "Click");
-          patchId(cid, "error", msg);
+          patchIdFull(cid, "error", {
+            detail: msg,
+            actionType: "click_candidate",
+            targetRedacted: cand ? redactSnippet(cand.text, 36) : action.candidate_id,
+            errorReason: msg,
+          });
           stopReason = "error";
           errorMessage = msg;
           break;
         }
         lastClickedId = action.candidate_id;
-        patchId(
-          cid,
-          "done",
-          cand ? redactSnippet(cand.text, 36) : "candidate",
-        );
+        patchIdFull(cid, "done", {
+          detail: cand ? redactSnippet(cand.text, 36) : "candidate",
+          actionType: "click_candidate",
+          targetRedacted: cand ? redactSnippet(cand.text, 36) : undefined,
+          result: "clicked",
+        });
         const w = await api.realBrowserWaitMs(WAIT_AFTER_CLICK_MS);
         if (!w || w.ok !== true) {
           stopReason = "error";
           errorMessage = sessionErrorMessage(w, "Wait after click");
-          add("Waiting", "error", errorMessage);
+          addRow({
+            label: "Waiting",
+            status: "error",
+            detail: errorMessage,
+            actionType: "wait",
+            errorReason: errorMessage,
+          });
           break;
         }
       } else if (action.type === "scroll") {
         const sid = activate("Scrolling");
+        loopActionCount += 1;
         const sr = await api.realBrowserScrollVertical(SCROLL_DELTA);
         if (!sr || sr.ok !== true) {
           const msg = sessionErrorMessage(sr, "Scroll");
-          patchId(sid, "error", msg);
+          patchIdFull(sid, "error", { detail: msg, actionType: "scroll", errorReason: msg });
           stopReason = "error";
           errorMessage = msg;
           break;
         }
         scrollsThisPage += 1;
-        patchId(sid, "done", `Δ ${sr.delta_applied ?? SCROLL_DELTA}`);
+        patchIdFull(sid, "done", {
+          detail: `Δ ${sr.delta_applied ?? SCROLL_DELTA}`,
+          actionType: "scroll",
+          result: `delta ${sr.delta_applied ?? SCROLL_DELTA}`,
+        });
       } else if (action.type === "wait") {
         const wid = activate("Waiting");
+        loopActionCount += 1;
         const wr = await api.realBrowserWaitMs(SETTLE_WAIT_MS);
         if (!wr || wr.ok !== true) {
           const msg = sessionErrorMessage(wr, "Wait");
-          patchId(wid, "error", msg);
+          patchIdFull(wid, "error", { detail: msg, actionType: "wait", errorReason: msg });
           stopReason = "error";
           errorMessage = msg;
           break;
         }
-        patchId(wid, "done", `${wr.waited_ms ?? SETTLE_WAIT_MS}ms`);
+        patchIdFull(wid, "done", {
+          detail: `${wr.waited_ms ?? SETTLE_WAIT_MS}ms`,
+          actionType: "wait",
+          result: `${wr.waited_ms ?? SETTLE_WAIT_MS}ms`,
+        });
       } else if (action.type === "observe") {
         const oid = activate("Re-observing");
+        loopActionCount += 1;
         obs = await readObserve();
         if (!obs || obs.ok !== true) {
           const msg = sessionErrorMessage(obs, "Observe");
-          patchId(oid, "error", msg);
+          patchIdFull(oid, "error", { detail: msg, actionType: "observe", errorReason: msg });
           stopReason = "error";
           errorMessage = msg;
           break;
         }
-        patchId(oid, "done", redactSnippet(obs.title || "", 48));
+        patchIdFull(oid, "done", {
+          detail: redactSnippet(obs.title || "", 48),
+          actionType: "observe",
+          result: "ok",
+        });
       }
 
       loopIteration += 1;
 
       if (shouldAbort()) {
-        stopReason = "stopped";
-        add("Stopped by user", "error", "Stop GoHAM");
+        stopReason = "user_stopped";
+        addRow({
+          label: "Stopped by user",
+          status: "error",
+          detail: "Stop GoHAM",
+          actionType: "stop",
+          errorReason: "user",
+        });
         break;
       }
       if (Date.now() - loopStart >= LOOP_WALL_MS) {
         stopReason = "time";
         hitExplicitDone = true;
-        add("Time budget reached", "done", "Wall clock limit");
+        addRow({
+          label: "Time budget reached",
+          status: "done",
+          detail: "Wall clock limit",
+          actionType: "budget",
+          result: "time",
+        });
         break;
       }
 
@@ -416,7 +556,7 @@ export async function runGohamResearchFlow(opts: RunGohamResearchOptions): Promi
       obs = await readObserve();
       if (!obs || obs.ok !== true) {
         const msg = sessionErrorMessage(obs, "Observe");
-        patchId(reId, "error", msg);
+        patchIdFull(reId, "error", { detail: msg, actionType: "observe", errorReason: msg });
         stopReason = "error";
         errorMessage = msg;
         break;
@@ -430,37 +570,86 @@ export async function runGohamResearchFlow(opts: RunGohamResearchOptions): Promi
         lastDisplayUrl = disp;
         visited.push({ title: lastTitle, display: disp });
       }
-      patchId(reId, "done", redactSnippet(lastTitle, 48));
+      patchIdFull(reId, "done", {
+        detail: redactSnippet(lastTitle, 48),
+        actionType: "observe",
+        result: "ok",
+        targetRedacted: disp,
+      });
 
       enumR = await api.realBrowserEnumerateClickCandidates();
       if (!enumR || enumR.ok !== true) {
         const msg = sessionErrorMessage(enumR, "Candidates");
-        add("Listing click candidates", "error", msg);
+        addRow({
+          label: "Listing click candidates",
+          status: "error",
+          detail: msg,
+          actionType: "enumerate",
+          errorReason: msg,
+        });
         stopReason = "error";
         errorMessage = msg;
         break;
       }
       candidates = enumR.candidates;
-      add("Listing click candidates", "done", `${candidates.length} visible`);
+      addRow({
+        label: "Listing click candidates",
+        status: "done",
+        detail: `${candidates.length} visible`,
+        actionType: "enumerate",
+        result: `${candidates.length} candidates`,
+      });
 
       if (taskAppearsComplete(lastTitle, goalTokens)) {
-        stopReason = "complete";
+        stopReason = "done";
         hitExplicitDone = true;
-        add("Done", "done", "Goal appears satisfied");
+        addRow({
+          label: "Done",
+          status: "done",
+          detail: "Goal appears satisfied",
+          actionType: "done",
+          result: "title_match",
+        });
         break;
       }
     }
-
-    if (!hitExplicitDone && stopReason === "complete" && loopIteration >= MAX_LOOP_ACTIONS) {
-      stopReason = "budget";
-      add("Step budget reached", "done", `${MAX_LOOP_ACTIONS} actions`);
-    } else if (!hitExplicitDone && stopReason === "complete" && Date.now() - loopStart >= LOOP_WALL_MS) {
-      stopReason = "time";
-      add("Time budget reached", "done", "Wall clock limit");
-    } else if (shouldAbort() && stopReason === "complete" && !errorMessage) {
-      stopReason = "stopped";
-      add("Stopped by user", "error", "Stop GoHAM");
     }
+
+    if (!hitExplicitDone && stopReason === null && loopIteration >= MAX_LOOP_ACTIONS) {
+      stopReason = "budget";
+      addRow({
+        label: "Step budget reached",
+        status: "done",
+        detail: `${MAX_LOOP_ACTIONS} actions`,
+        actionType: "budget",
+        result: "max_actions",
+      });
+    } else if (!hitExplicitDone && stopReason === null && Date.now() - loopStart >= LOOP_WALL_MS) {
+      stopReason = "time";
+      addRow({
+        label: "Time budget reached",
+        status: "done",
+        detail: "Wall clock limit",
+        actionType: "budget",
+        result: "time",
+      });
+    } else if (shouldAbort() && stopReason === null && !errorMessage) {
+      stopReason = "user_stopped";
+      addRow({
+        label: "Stopped by user",
+        status: "error",
+        detail: "Stop GoHAM",
+        actionType: "stop",
+        errorReason: "user",
+      });
+    }
+  }
+
+  if (stopReason === null) stopReason = "done";
+
+  const finalShot = await api.captureRealBrowserScreenshot();
+  if (finalShot && finalShot.ok === true) {
+    screenshotCaptureCount += 1;
   }
 
   const summarizeId = activate("Summarizing");
@@ -470,36 +659,52 @@ export async function runGohamResearchFlow(opts: RunGohamResearchOptions): Promi
 
   const stopLabel = ((): string => {
     switch (stopReason) {
-      case "complete":
-        return "Task complete or planner finished";
+      case "done":
+        return "Done (goal met or planner finished)";
       case "budget":
-        return "Step budget (max actions)";
+        return "Budget (max actions)";
       case "time":
-        return "Time budget (~75s)";
-      case "stopped":
-        return "You stopped GoHAM";
+        return "Budget (wall clock)";
+      case "blocked":
+        return "Blocked (invalid plan)";
+      case "user_stopped":
+        return "User stopped (includes Stop during pause or takeover)";
       case "error":
       default:
         return "Error";
     }
   })();
 
+  const pagesVisitedCount = visited.length;
+  const visitedUrlsLines = visited.map((v) => `- ${v.display}`).join("\n");
+
   const assistantText = [
-    `**GoHAM research (v1 Slice 2)**`,
+    `**GoHAM research (v1 Slice 3)**`,
+    ``,
+    `**Evidence summary**`,
+    `- **Pages visited:** ${pagesVisitedCount}`,
+    `- **Loop actions executed:** ${loopActionCount} (scroll / click / wait / observe in the research loop)`,
+    `- **Screenshot captures:** ${screenshotCaptureCount} (local validation only — not embedded here)`,
+    `- **Stop reason:** ${stopLabel}`,
+    `- **Stop reason code:** \`${stopReason}\` (machine-readable: \`done\` | \`budget\` | \`time\` | \`blocked\` | \`error\` | \`user_stopped\`; use **Pause** / **Take over** + **Stop** → \`user_stopped\`)`,
+    ``,
+    `**Visited locations (redacted)**`,
+    visitedUrlsLines || `- ${redacted}`,
     ``,
     `**What we found**`,
-    `- **Latest page:** ${redactSnippet(lastTitle, 80)}`,
+    `- **Latest page title:** ${redactSnippet(lastTitle, 80)}`,
     goalTokens.length ? `- **Keywords tracked:** ${goalTokens.slice(0, 8).join(", ")}${goalTokens.length > 8 ? "…" : ""}` : `- (No keywords extracted from your message.)`,
     ``,
-    `**Pages visited**`,
+    `**Pages visited (detail)**`,
     linesVisited || `- ${redacted}`,
+    errorMessage ? `**Error / block detail:** ${errorMessage}` : ``,
     ``,
-    `**Stop reason:** ${stopLabel}`,
-    errorMessage ? `**Error:** ${errorMessage}` : ``,
+    `**Limitations (this version)**`,
+    `- No typing, form fill, or submit/post/send.`,
+    `- No hidden browsing or full-page HTML extraction — title, redacted URL, compact observe, and screenshot bytes only.`,
+    `- Rules-first planner: at most **${MAX_LOOP_ACTIONS}** actions after load, **~${Math.round(LOOP_WALL_MS / 1000)}s** wall clock.`,
     ``,
-    `**Limitations:** At most **${MAX_LOOP_ACTIONS}** actions after load, **~${Math.round(LOOP_WALL_MS / 1000)}s** wall clock, rules-first planner (token overlap on link text). No forms, logins, downloads, or typing.`,
-    ``,
-    `Screenshot bytes were used locally only — **not embedded** here. The **managed browser stays open**; use **Stop GoHAM** to close it.`,
+    `The **managed browser stays open**; use **Stop GoHAM** to close it. **Pause** / **Take over** let you control the window without ending the session until you **Resume** or **Stop**.`,
     ``,
     `---`,
     `**Safety:** GoHAM does not automate purchases, permissions, or your default browser profile.`,
@@ -507,8 +712,14 @@ export async function runGohamResearchFlow(opts: RunGohamResearchOptions): Promi
     .filter(Boolean)
     .join("\n");
 
-  patchId(summarizeId, "done");
-  add("Done", "done", stopLabel);
+  patchIdFull(summarizeId, "done", { actionType: "summarize", result: stopLabel });
+  addRow({
+    label: "Done",
+    status: "done",
+    detail: stopLabel,
+    actionType: "done",
+    result: stopReason,
+  });
 
   return { ok: true, assistantText };
 }

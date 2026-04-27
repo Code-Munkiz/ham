@@ -16,6 +16,11 @@ export type GoHamTrailStep = {
   label: string;
   status: GoHamTrailStepStatus;
   detail?: string;
+  /** Slice 3 — optional structured fields for research actions */
+  actionType?: string;
+  targetRedacted?: string;
+  result?: string;
+  errorReason?: string;
 };
 
 function freshTrail(): GoHamTrailStep[] {

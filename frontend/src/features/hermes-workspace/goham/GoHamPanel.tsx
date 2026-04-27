@@ -14,10 +14,21 @@ type GoHamPanelProps = {
   trail: GoHamTrailStep[];
   onStop: () => void;
   gateHint: string | null;
+  /** Slice 3 — research loop controls (observe-only runs omit these). */
+  researchControls?: {
+    paused: boolean;
+    takeover: boolean;
+    onPause: () => void;
+    onResume: () => void;
+    onTakeover: () => void;
+  };
 };
 
-export function GoHamPanel({ enabled, active, trail, onStop, gateHint }: GoHamPanelProps) {
+export function GoHamPanel({ enabled, active, trail, onStop, gateHint, researchControls }: GoHamPanelProps) {
   if (!enabled && trail.length === 0 && !gateHint) return null;
+
+  const rc = researchControls;
+  const showResearchControls = Boolean(active && rc);
 
   return (
     <div
@@ -40,18 +51,63 @@ export function GoHamPanel({ enabled, active, trail, onStop, gateHint }: GoHamPa
                 {gateHint}
               </p>
             ) : null}
+            {rc?.takeover ? (
+              <p className="mt-1 text-[10px] text-sky-200/90" role="status">
+                Browser is yours. Click Resume when you want HAM to continue.
+              </p>
+            ) : rc?.paused ? (
+              <p className="mt-1 text-[10px] text-amber-200/85" role="status">
+                Paused — HAM will not start a new action until you resume.
+              </p>
+            ) : null}
           </div>
           {active ? (
-            <Button
-              type="button"
-              size="sm"
-              variant="destructive"
-              className="h-8 shrink-0 gap-1.5 rounded-lg text-[11px]"
-              onClick={onStop}
-            >
-              <Square className="h-3 w-3 fill-current" strokeWidth={0} />
-              Stop GoHAM
-            </Button>
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+              {showResearchControls ? (
+                <>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    className="h-8 rounded-lg text-[11px]"
+                    disabled={rc!.paused || rc!.takeover}
+                    onClick={rc!.onPause}
+                  >
+                    Pause
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    className="h-8 rounded-lg text-[11px]"
+                    disabled={!rc!.paused && !rc!.takeover}
+                    onClick={rc!.onResume}
+                  >
+                    Resume
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-8 rounded-lg border-white/20 text-[11px] text-white/90"
+                    disabled={rc!.takeover}
+                    onClick={rc!.onTakeover}
+                  >
+                    Take over
+                  </Button>
+                </>
+              ) : null}
+              <Button
+                type="button"
+                size="sm"
+                variant="destructive"
+                className="h-8 shrink-0 gap-1.5 rounded-lg text-[11px]"
+                onClick={onStop}
+              >
+                <Square className="h-3 w-3 fill-current" strokeWidth={0} />
+                Stop GoHAM
+              </Button>
+            </div>
           ) : null}
         </div>
         {trail.length > 0 ? (
@@ -74,6 +130,30 @@ export function GoHamPanel({ enabled, active, trail, onStop, gateHint }: GoHamPa
                   {s.detail ? (
                     <span className="mt-0.5 block break-words text-[9px] text-white/45">{s.detail}</span>
                   ) : null}
+                  {s.actionType || s.targetRedacted || s.result || s.errorReason ? (
+                    <span className="mt-0.5 block font-mono text-[9px] leading-snug text-white/40">
+                      {s.actionType ? (
+                        <span>
+                          <span className="text-white/50">action</span> {s.actionType}
+                        </span>
+                      ) : null}
+                      {s.targetRedacted ? (
+                        <span className={s.actionType ? " block" : ""}>
+                          <span className="text-white/50">target</span> {s.targetRedacted}
+                        </span>
+                      ) : null}
+                      {s.result ? (
+                        <span className={s.actionType || s.targetRedacted ? " block" : ""}>
+                          <span className="text-white/50">result</span> {s.result}
+                        </span>
+                      ) : null}
+                      {s.errorReason ? (
+                        <span className="block text-red-200/80">
+                          <span className="text-white/50">reason</span> {s.errorReason}
+                        </span>
+                      ) : null}
+                    </span>
+                  ) : null}
                 </span>
               </li>
             ))}
@@ -83,7 +163,8 @@ export function GoHamPanel({ enabled, active, trail, onStop, gateHint }: GoHamPa
           <p className="text-[9px] leading-snug text-white/40">
             Include a <code className="rounded bg-white/10 px-0.5">https://</code> or hostname. Messages with{" "}
             <em>find</em>, <em>research</em>, <em>tell me about</em>, etc. run a short multi-step loop (scroll /
-            safe link clicks). “What you see” style prompts stay on a single-page observe. No forms, logins, or
+            safe link clicks). Use <strong>Pause</strong>, <strong>Take over</strong>, and <strong>Resume</strong>{" "}
+            during research. “What you see” style prompts stay on a single-page observe. No forms, logins, or
             purchases.
           </p>
         ) : null}
