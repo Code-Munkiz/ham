@@ -21,6 +21,8 @@ interface WorkspaceVoiceMessageInputProps {
   hidePreview?: boolean;
   /** Disable mic controls (e.g. while transcribing or sending). */
   disabled?: boolean;
+  /** When `disabled` is true, overrides default tooltip (e.g. STT off in Voice settings). */
+  disabledReason?: string;
 }
 
 export function WorkspaceVoiceMessageInput(props: WorkspaceVoiceMessageInputProps) {
@@ -32,6 +34,7 @@ export function WorkspaceVoiceMessageInput(props: WorkspaceVoiceMessageInputProp
     compact = false,
     hidePreview = false,
     disabled = false,
+    disabledReason,
   } = props;
 
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
@@ -75,7 +78,8 @@ export function WorkspaceVoiceMessageInput(props: WorkspaceVoiceMessageInputProp
   };
 
   const micTitle = disabled
-    ? "Voice input unavailable while sending or transcribing."
+    ? disabledReason ||
+      "Voice input unavailable while sending, transcribing, or when speech-to-text is disabled in Voice settings."
     : error
       ? error
       : isRecording

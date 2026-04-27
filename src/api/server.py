@@ -36,6 +36,7 @@ from src.api.workspace_terminal import router as workspace_terminal_router
 from src.api.workspace_conductor import router as workspace_conductor_router
 from src.api.workspace_memory import router as workspace_memory_router
 from src.api.workspace_operations import router as workspace_operations_router
+from src.api.workspace_voice_settings import router as workspace_voice_settings_router
 from src.api.tts_endpoint import router as tts_router
 from src.api.pna_middleware import private_network_access_middleware
 from src.api.workspace_profiles import router as workspace_profiles_router
@@ -127,6 +128,7 @@ app.include_router(workspace_memory_router)
 app.include_router(workspace_skills_router)
 app.include_router(workspace_profiles_router)
 app.include_router(workspace_operations_router)
+app.include_router(workspace_voice_settings_router)
 app.include_router(tts_router)
 
 _store = RunStore()

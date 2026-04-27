@@ -48,6 +48,10 @@ Use a **different** GCP project for production when your org splits prod/staging
 
 Synthesis uses the **`edge-tts`** PyPI package (WebSocket to Microsoft; same protocol as the Edge browser). The API host needs **outbound internet**; **`GET /api/tts/health`** only checks that the route and `HAM_TTS_ENABLED` are on — it does not prove Microsoft accepted the request. No API keys for Edge TTS.
 
+### Voice settings persistence (`GET/PATCH /api/workspace/voice-settings`)
+
+Defaults to **local JSON** under the workspace root (`.ham/workspace_state/voice_settings/`). For **durable multi-replica** storage on Cloud Run, set **`HAM_VOICE_SETTINGS_STORE=firestore`** and optional **`HAM_VOICE_SETTINGS_FIRESTORE_COLLECTION`** / **`HAM_VOICE_SETTINGS_FIRESTORE_PROJECT`** / **`HAM_VOICE_SETTINGS_FIRESTORE_DATABASE`** (same multi-database story as chat sessions). Documents are keyed by a stable hash of the Clerk scope (`user:<id>` or `default`).
+
 ## What you do in GCP (not automatable from this repo)
 
 1. Confirm you are in the right project: **`gcloud config set project clarity-staging-488201`** (or another project for a one-off).

@@ -1,9 +1,8 @@
 import * as React from "react";
-import { fetchModelsCatalog, fetchTtsHealth } from "@/lib/ham/api";
-import type { ModelCatalogPayload, HamTtsHealthPayload } from "@/lib/ham/types";
+import { fetchModelsCatalog } from "@/lib/ham/api";
+import type { ModelCatalogPayload } from "@/lib/ham/types";
 import { isDashboardChatGatewayReady } from "@/lib/ham/types";
 import type { WorkspaceSettingsBridgeSectionId } from "./workspaceSettingsNavData";
-import { Switch } from "@/components/ui/switch";
 import {
   WorkspaceSettingsCapabilityBadge,
   WorkspaceSettingsFieldRow,
@@ -11,6 +10,7 @@ import {
   WorkspaceSettingsSectionHeader,
   WorkspaceSettingsUnavailableNote,
 } from "./workspaceSettingsReadOnlyChrome";
+import { WorkspaceVoiceBridgeSection } from "./WorkspaceVoiceBridgeSection";
 
 type WorkspaceSettingsBridgePanelProps = {
   section: WorkspaceSettingsBridgeSectionId;
@@ -41,31 +41,6 @@ function useModelsCatalog() {
   return { catalog, err };
 }
 
-function useTtsHealthProbe() {
-  const [payload, setPayload] = React.useState<HamTtsHealthPayload | null>(null);
-  const [err, setErr] = React.useState<string | null>(null);
-  React.useEffect(() => {
-    let cancelled = false;
-    fetchTtsHealth()
-      .then((h) => {
-        if (!cancelled) {
-          setPayload(h);
-          setErr(null);
-        }
-      })
-      .catch((e) => {
-        if (!cancelled) {
-          setPayload(null);
-          setErr(e instanceof Error ? e.message : "Failed to load TTS health");
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-  return { tts: payload, err };
-}
-
 function useOsColorScheme(): string {
   const [scheme, setScheme] = React.useState<string>(() =>
     typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light",
@@ -81,7 +56,6 @@ function useOsColorScheme(): string {
 
 export function WorkspaceSettingsBridgePanel({ section }: WorkspaceSettingsBridgePanelProps) {
   const { catalog, err } = useModelsCatalog();
-  const { tts: ttsHealth, err: ttsErr } = useTtsHealthProbe();
   const osScheme = useOsColorScheme();
 
   const chatModels =
@@ -174,100 +148,8 @@ export function WorkspaceSettingsBridgePanel({ section }: WorkspaceSettingsBridg
         </WorkspaceSettingsReadOnlyCard>
       );
 
-    case "voice": {
-      const ttsOnApi =
-        ttsHealth == null && !ttsErr ? null : Boolean(ttsHealth?.available);
-      const ttsRow = (
-        <div className="space-y-2">
-          <WorkspaceSettingsFieldRow
-            label="TTS on Ham API"
-            value={
-              ttsOnApi === null ? "Loading…" : ttsErr ? "Unknown (probe failed)" : ttsOnApi ? "Available" : "Not available"
-            }
-            hint={
-              ttsErr
-                ? ttsErr
-                : ttsOnApi
-                  ? "GET /api/tts/health only confirms the route is enabled — it does not verify Microsoft/Edge is reachable; synthesis can still fail at POST /api/tts/generate. No per-user provider saves in this UI."
-                  : ttsHealth?.reason === "disabled"
-                    ? "TTS is turned off on the server (HAM_TTS_ENABLED=0 or equivalent)."
-                    : "TTS health reports unavailable — generation may 503 or fail at runtime."
-            }
-          />
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-            <span className="shrink-0 text-[13px] text-white/65">Synthesis engine (read-only)</span>
-            <select
-              disabled
-              className="h-8 w-full max-w-xs cursor-not-allowed rounded-lg border border-white/[0.1] bg-white/[0.04] px-2.5 text-[12px] text-white/45 outline-none sm:max-w-sm"
-              aria-label="Synthesis engine (read-only, Ham API Edge path)"
-              value="edge"
-            >
-              <option value="edge">Microsoft Edge (server)</option>
-            </select>
-          </div>
-        </div>
-      );
-      const sttRows = (
-        <div className="space-y-3">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-            <span className="shrink-0 text-[13px] text-white/65">Enable STT</span>
-            <Switch checked={false} disabled className="opacity-50" aria-label="Enable STT (read-only)" />
-          </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-            <span className="shrink-0 text-[13px] text-white/65">STT Provider</span>
-            <select
-              disabled
-              className="h-8 w-full max-w-xs cursor-not-allowed rounded-lg border border-white/[0.1] bg-white/[0.04] px-2.5 text-[12px] text-white/45 outline-none sm:max-w-sm"
-              aria-label="STT provider (read-only)"
-              value="openai"
-            >
-              <option value="local">Local (Whisper)</option>
-              <option value="openai">OpenAI transcription (server)</option>
-            </select>
-          </div>
-        </div>
-      );
-      return (
-        <WorkspaceSettingsReadOnlyCard>
-          <div className="mb-1">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">Settings</p>
-          </div>
-          <WorkspaceSettingsSectionHeader
-            title="Voice"
-            subtitle="Text-to-speech and speech-to-text."
-            badge={<WorkspaceSettingsCapabilityBadge>Read-only</WorkspaceSettingsCapabilityBadge>}
-          />
-          <p className="mt-4 text-[12px] leading-relaxed text-white/50">
-            Voice policy fields stay read-only (no fake Hermes voice saves). Chat dictation uses{" "}
-            <span className="font-mono text-white/65">POST /api/chat/transcribe</span> when the API host sets{" "}
-            <span className="font-mono text-white/65">HAM_TRANSCRIPTION_*</span> — not a &quot;Local (Whisper)&quot; path
-            in the Ham stack. Text-to-speech: when the probe below says available, the Ham API exposes{" "}
-            <span className="font-mono text-white/65">POST /api/tts/generate</span> (see{" "}
-            <span className="font-mono text-white/65">GET /api/tts/health</span>).
-          </p>
-          <div className="mt-6 space-y-4">
-            <div className="rounded-xl border border-white/[0.1] bg-white/[0.02] px-4 py-3 shadow-sm">
-              <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-emerald-500/85">
-                Text-to-Speech
-              </p>
-              {ttsRow}
-            </div>
-            <div className="rounded-xl border border-white/[0.1] bg-white/[0.02] px-4 py-3 shadow-sm">
-              <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-emerald-500/85">
-                Speech-to-Text
-              </p>
-              {sttRows}
-            </div>
-          </div>
-          {catalog ? (
-            <p className="mt-4 text-[11px] text-white/35">
-              Text chat gateway: {isDashboardChatGatewayReady(catalog) ? "ready" : "not ready"} (GET /api/models) —
-              unrelated to TTS.
-            </p>
-          ) : null}
-        </WorkspaceSettingsReadOnlyCard>
-      );
-    }
+    case "voice":
+      return <WorkspaceVoiceBridgeSection catalog={catalog} />;
 
     case "appearance":
       return (

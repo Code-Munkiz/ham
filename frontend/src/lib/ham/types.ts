@@ -131,6 +131,31 @@ export interface HamTtsHealthPayload {
   engine?: string;
 }
 
+/** GET/PATCH `/api/workspace/voice-settings` — persisted TTS/STT preferences (HAM-native). */
+export interface HamVoiceSettingsPayload {
+  kind: "ham_voice_settings";
+  settings: {
+    tts: { enabled: boolean; provider: "edge"; voice: string };
+    stt: { enabled: boolean; provider: "openai" };
+  };
+  capabilities: {
+    tts: {
+      available: boolean;
+      providers: Array<{ id: string; label: string; available: boolean }>;
+      voices: Array<{ id: string; label: string }>;
+    };
+    stt: {
+      available: boolean;
+      providers: Array<{ id: string; label: string; available: boolean }>;
+    };
+  };
+}
+
+export type HamVoiceSettingsPatch = {
+  tts?: Partial<{ enabled: boolean; provider: "edge"; voice: string }>;
+  stt?: Partial<{ enabled: boolean; provider: "openai" }>;
+};
+
 /** Response from `GET /api/models`. */
 export interface ModelCatalogPayload {
   items: ModelCatalogItem[];

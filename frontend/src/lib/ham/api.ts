@@ -3,6 +3,8 @@ import type {
   ContextEnginePayload,
   CursorCredentialsStatus,
   HamTtsHealthPayload,
+  HamVoiceSettingsPayload,
+  HamVoiceSettingsPatch,
   ModelCatalogPayload,
   ProjectRecord,
 } from "./types";
@@ -144,6 +146,35 @@ export async function fetchTtsHealth(): Promise<HamTtsHealthPayload> {
     throw new Error(`TTS health: HTTP ${res.status}`);
   }
   return res.json() as Promise<HamTtsHealthPayload>;
+}
+
+/** GET /api/workspace/voice-settings — persisted voice prefs + capabilities. */
+export async function fetchVoiceSettings(): Promise<HamVoiceSettingsPayload> {
+  const res = await hamApiFetch("/api/workspace/voice-settings");
+  if (!res.ok) {
+    throw new Error(`voice settings: HTTP ${res.status}`);
+  }
+  return res.json() as Promise<HamVoiceSettingsPayload>;
+}
+
+/** PATCH /api/workspace/voice-settings — partial updates; returns normalized saved settings. */
+export async function patchVoiceSettings(patch: HamVoiceSettingsPatch): Promise<HamVoiceSettingsPayload> {
+  const res = await hamApiFetch("/api/workspace/voice-settings", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) {
+    let detail = `HTTP ${res.status}`;
+    try {
+      const j = (await res.json()) as { detail?: unknown };
+      if (j.detail !== undefined) detail = typeof j.detail === "string" ? j.detail : JSON.stringify(j.detail);
+    } catch {
+      /* ignore */
+    }
+    throw new Error(detail);
+  }
+  return res.json() as Promise<HamVoiceSettingsPayload>;
 }
 
 /** GET /api/hermes-hub — gateway + Hermes skills capabilities; no fake Hermes inventory. */
