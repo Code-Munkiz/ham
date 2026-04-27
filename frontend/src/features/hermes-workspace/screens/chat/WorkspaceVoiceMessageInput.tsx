@@ -7,6 +7,27 @@ import { cn } from "@/lib/utils";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import "./WorkspaceVoiceMessageInput.css";
 
+const VOICE_DEBUG_FLAG = "ham.voiceDebug";
+
+function voiceDebugEnabled(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(VOICE_DEBUG_FLAG) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function pushVoiceDebug(payload: Record<string, unknown>): void {
+  if (!voiceDebugEnabled() || typeof window === "undefined") return;
+  const event = { ...payload, ts: Date.now() };
+  const w = window as unknown as { __HAM_VOICE_DEBUG__?: Array<Record<string, unknown>> };
+  const arr = Array.isArray(w.__HAM_VOICE_DEBUG__) ? [...w.__HAM_VOICE_DEBUG__, event] : [event];
+  if (arr.length > 500) arr.splice(0, arr.length - 500);
+  w.__HAM_VOICE_DEBUG__ = arr;
+  console.debug("[ham.voice]", event);
+}
+
 interface WorkspaceVoiceMessageInputProps {
   onVoiceMessage?: (audioBlob: Blob, duration: number) => void;
   onVoiceError?: (error: string) => void;
@@ -38,6 +59,7 @@ export function WorkspaceVoiceMessageInput(props: WorkspaceVoiceMessageInputProp
   } = props;
 
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const voiceInstanceId = React.useRef(`voice-ui-${Math.random().toString(36).slice(2, 9)}`);
 
   const {
     isRecording,
@@ -59,6 +81,14 @@ export function WorkspaceVoiceMessageInput(props: WorkspaceVoiceMessageInputProp
 
   React.useEffect(() => {
     onRecordingChange?.(isRecording);
+    pushVoiceDebug({
+      event: "voice.render",
+      component: "WorkspaceVoiceMessageInput",
+      voiceInstanceId: voiceInstanceId.current,
+      isRecording,
+      hasError: Boolean(error),
+      disabled,
+    });
   }, [isRecording, onRecordingChange]);
 
   React.useEffect(() => {
@@ -92,6 +122,8 @@ export function WorkspaceVoiceMessageInput(props: WorkspaceVoiceMessageInputProp
         "voice-message-input-container",
         compact && "voice-message-input-container--compact",
       )}
+      data-hww-voice-instance={voiceInstanceId.current}
+      data-hww-voice-state={isRecording ? "recording" : "idle"}
     >
       {!compact && error ? <div className="recording-error recording-error--stacked">{error}</div> : null}
 
@@ -111,11 +143,33 @@ export function WorkspaceVoiceMessageInput(props: WorkspaceVoiceMessageInputProp
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              if (isRecording) stopRecording();
-              else void startRecording();
+              pushVoiceDebug({
+                event: "voice.button.click",
+                source: "mic-toggle",
+                component: "WorkspaceVoiceMessageInput",
+                voiceInstanceId: voiceInstanceId.current,
+                isRecording,
+                disabled,
+              });
+              if (isRecording) {
+                pushVoiceDebug({
+                  event: "voice.stop.click",
+                  source: "mic-toggle",
+                  component: "WorkspaceVoiceMessageInput",
+                  voiceInstanceId: voiceInstanceId.current,
+                  isRecording,
+                  disabled,
+                });
+                stopRecording();
+              } else {
+                void startRecording();
+              }
             }}
             className={cn("mic-button", error && !isRecording && "mic-button--had-error")}
             aria-label={isRecording ? "Stop recording" : "Start voice recording"}
+            data-hww-voice-button="mic-toggle"
+            data-hww-voice-instance={voiceInstanceId.current}
+            data-hww-voice-state={isRecording ? "recording" : "idle"}
           >
             {isRecording ? (
               <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
@@ -139,10 +193,21 @@ export function WorkspaceVoiceMessageInput(props: WorkspaceVoiceMessageInputProp
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
+                  pushVoiceDebug({
+                    event: "voice.stop.click",
+                    source: "stop-pill",
+                    component: "WorkspaceVoiceMessageInput",
+                    voiceInstanceId: voiceInstanceId.current,
+                    isRecording,
+                    disabled,
+                  });
                   stopRecording();
                 }}
                 className="stop-recording"
                 aria-label="Stop recording"
+                data-hww-voice-button="stop-pill"
+                data-hww-voice-instance={voiceInstanceId.current}
+                data-hww-voice-state={isRecording ? "recording" : "idle"}
               >
                 Stop
               </button>

@@ -19,6 +19,27 @@ import {
   MAX_WORKSPACE_ATTACHMENT_COUNT,
 } from "./composerAttachmentHelpers";
 
+const VOICE_DEBUG_FLAG = "ham.voiceDebug";
+
+function voiceDebugEnabled(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(VOICE_DEBUG_FLAG) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function pushVoiceDebug(payload: Record<string, unknown>): void {
+  if (!voiceDebugEnabled() || typeof window === "undefined") return;
+  const event = { ...payload, ts: Date.now() };
+  const w = window as unknown as { __HAM_VOICE_DEBUG__?: Array<Record<string, unknown>> };
+  const arr = Array.isArray(w.__HAM_VOICE_DEBUG__) ? [...w.__HAM_VOICE_DEBUG__, event] : [event];
+  if (arr.length > 500) arr.splice(0, arr.length - 500);
+  w.__HAM_VOICE_DEBUG__ = arr;
+  console.debug("[ham.voice]", event);
+}
+
 type WorkspaceChatComposerProps = {
   value: string;
   onChange: (v: string) => void;
@@ -88,6 +109,7 @@ export function WorkspaceChatComposer({
   const [voiceRecording, setVoiceRecording] = React.useState(false);
   const [voiceBanner, setVoiceBanner] = React.useState<string | null>(null);
   const [isDragging, setIsDragging] = React.useState(false);
+  const composerInstanceId = React.useRef(`composer-${Math.random().toString(36).slice(2, 9)}`);
   const outerRef = React.useRef<HTMLDivElement>(null);
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
   const modelSelectRef = React.useRef<HTMLSelectElement>(null);
@@ -126,6 +148,16 @@ export function WorkspaceChatComposer({
   React.useEffect(() => {
     if (voiceRecording) setVoiceBanner(null);
   }, [voiceRecording]);
+
+  React.useEffect(() => {
+    pushVoiceDebug({
+      event: "voice.render",
+      component: "WorkspaceChatComposer",
+      composerInstanceId: composerInstanceId.current,
+      voiceRecording,
+      voiceTranscribing,
+    });
+  }, [voiceRecording, voiceTranscribing]);
 
   const showModel =
     Boolean(catalog && catalog.gateway_mode === "openrouter" && chatModelCandidates(catalog).length > 0);
@@ -224,6 +256,9 @@ export function WorkspaceChatComposer({
     <div
       ref={outerRef}
       className="hww-chat-composer-outer pointer-events-auto w-full max-w-[40rem] shrink-0 border-t border-white/[0.06] bg-[#030a10]/90 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-sm md:px-4"
+      data-hww-composer-instance={composerInstanceId.current}
+      data-voice-recording={voiceRecording ? "true" : "false"}
+      data-voice-transcribing={voiceTranscribing ? "true" : "false"}
     >
       <form
         onSubmit={(e) => {
