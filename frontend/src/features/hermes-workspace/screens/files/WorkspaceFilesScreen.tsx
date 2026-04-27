@@ -21,6 +21,7 @@ import {
   type LocalRuntimeHealthPayload,
 } from "../../adapters/localRuntime";
 import { workspaceFileAdapter, type FileBridgeState, type WorkspaceFileEntry } from "../../adapters/filesAdapter";
+import { workspaceFileEntryLabels } from "../../lib/workspaceHumanLabels";
 
 const ROOT_LABEL = "Workspace";
 
@@ -337,6 +338,7 @@ function ready() {
   const renderEntry = (entry: WorkspaceFileEntry, depth: number): React.ReactNode => {
     const isEx = searchActive || expanded.has(entry.path);
     const padding = 10 + depth * 12;
+    const { label, technical } = workspaceFileEntryLabels(entry.name);
     return (
       <div key={entry.path}>
         <button
@@ -350,6 +352,7 @@ function ready() {
           }}
           className="group flex w-full items-center gap-1.5 rounded-md py-1 text-left text-[13px] text-[#c8d4e0] transition hover:bg-white/[0.06]"
           style={{ paddingLeft: padding }}
+          title={technical ?? entry.name}
         >
           {entry.type === "folder" ? (
             <ChevronRight
@@ -360,7 +363,10 @@ function ready() {
           )}
           {entry.type === "folder" ? <Folder className="h-4 w-4 shrink-0 text-[#7eb8ff]/90" /> : null}
           {entry.type === "file" ? <File className="h-4 w-4 shrink-0 text-white/55" /> : null}
-          <span className="truncate">{entry.name}</span>
+          <span className="flex min-w-0 flex-1 flex-col items-start">
+            <span className="truncate">{label}</span>
+            {technical ? <span className="truncate font-mono text-[10px] text-white/40">{technical}</span> : null}
+          </span>
         </button>
         {entry.type === "folder" && isEx && loadingFolder === entry.path ? (
           <p className="pl-[1.5rem] text-[11px] text-white/40" style={{ paddingLeft: 10 + (depth + 1) * 12 }}>

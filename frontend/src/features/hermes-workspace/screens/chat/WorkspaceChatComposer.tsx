@@ -143,31 +143,32 @@ export function WorkspaceChatComposer({
             </div>
           )}
 
-          <div className="flex items-end gap-1 px-1.5 py-1.5 md:gap-2">
-            <WorkspaceChatAttachmentButton
-              onFiles={handleAddFiles}
-              disabled={sending || voiceTranscribing || voiceRecording || disabled}
-            />
-
-            <div
-              className={cn(
-                "flex shrink-0 items-center",
-                voiceTranscribing && "pointer-events-none opacity-40",
-              )}
-              title="Voice — record, then HAM transcribes into the field"
-            >
-              <WorkspaceVoiceMessageInput
-                compact
-                hidePreview
-                disabled={sending || voiceTranscribing || disabled}
-                onRecordingChange={setVoiceRecording}
-                onVoiceError={(err) => {
-                  toast.error(err, { duration: 5000 });
-                }}
-                onVoiceMessage={(blob) => {
-                  void onVoiceBlob(blob);
-                }}
+          <div className="flex items-end justify-between gap-1.5 px-1.5 py-2 md:gap-2 md:px-3">
+            <div className="flex shrink-0 items-end gap-0.5 md:gap-1">
+              <WorkspaceChatAttachmentButton
+                onFiles={handleAddFiles}
+                disabled={sending || voiceTranscribing || voiceRecording || disabled}
               />
+              <div
+                className={cn(
+                  "flex shrink-0 items-end pb-0.5",
+                  voiceTranscribing && "pointer-events-none opacity-40",
+                )}
+                title="Voice — record, then HAM transcribes into the field"
+              >
+                <WorkspaceVoiceMessageInput
+                  compact
+                  hidePreview
+                  disabled={sending || voiceTranscribing || disabled}
+                  onRecordingChange={setVoiceRecording}
+                  onVoiceError={(err) => {
+                    toast.error(err, { duration: 5000 });
+                  }}
+                  onVoiceMessage={(blob) => {
+                    void onVoiceBlob(blob);
+                  }}
+                />
+              </div>
             </div>
 
             <label htmlFor="hww-chat-composer" className="sr-only">
@@ -192,13 +193,13 @@ export function WorkspaceChatComposer({
                     ? "Chat gateway not ready — check /api/models"
                     : "Ask anything… (Enter to send, Shift+Enter for newline)"
               }
-              className="hww-input min-h-[44px] w-full min-w-0 max-h-40 flex-1 resize-none border-0 bg-transparent px-1 py-2.5 text-[13px] text-[#e8eef3] placeholder:text-white/30 focus:ring-0"
+              className="min-h-[44px] w-full min-w-0 max-h-40 flex-1 resize-none border-0 bg-transparent px-1.5 py-2 text-[13px] leading-snug text-[#e8eef3] outline-none placeholder:text-white/30 focus:ring-0"
             />
             <Button
               type="submit"
               size="icon"
               disabled={!canSend}
-              className="h-10 w-10 shrink-0 rounded-xl bg-gradient-to-b from-[#c45c12] to-[#8f3d0a] text-white hover:from-[#d66a18] hover:to-[#a44a0c] disabled:opacity-40"
+              className="h-10 w-10 shrink-0 rounded-full bg-gradient-to-b from-[#c45c12] to-[#8f3d0a] text-white shadow-md hover:from-[#d66a18] hover:to-[#a44a0c] disabled:opacity-40"
               aria-label="Send"
             >
               {sending ? (
