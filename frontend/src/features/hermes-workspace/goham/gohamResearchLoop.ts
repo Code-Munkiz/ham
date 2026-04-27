@@ -8,6 +8,20 @@ import type {
   HamDesktopRealBrowserClickCandidate,
   HamDesktopRealBrowserObserveCompactResult,
 } from "@/lib/ham/desktopBundleBridge";
+
+/** Research loop requires Slice 1+ preload IPC; older desktop builds omit these. */
+const RESEARCH_DESKTOP_METHODS = [
+  "realBrowserObserveCompact",
+  "realBrowserWaitMs",
+  "realBrowserScrollVertical",
+  "realBrowserEnumerateClickCandidates",
+  "realBrowserClickCandidate",
+] as const satisfies readonly (keyof HamDesktopLocalControlApi)[];
+
+function missingResearchDesktopMethods(api: HamDesktopLocalControlApi): string[] {
+  const o = api as Record<string, unknown>;
+  return RESEARCH_DESKTOP_METHODS.filter((m) => typeof o[m] !== "function");
+}
 import { redactUrlForTrail } from "./extractGohamUrl";
 import { ensureGohamPolicy, sessionErrorMessage, type GoHamTrailStep } from "./gohamObserveFlow";
 
@@ -226,6 +240,28 @@ export async function runGohamResearchFlow(opts: RunGohamResearchOptions): Promi
     pushTrail([...prev, { id, label, status: "active" }]);
     return id;
   };
+
+  const bridgeMissing = missingResearchDesktopMethods(api);
+  if (bridgeMissing.length > 0) {
+    addRow({
+      label: "Desktop bridge outdated",
+      status: "error",
+      detail: `Missing API: ${bridgeMissing.join(", ")}`,
+      actionType: "bridge",
+      errorReason: "preload_mismatch",
+    });
+    return {
+      ok: false,
+      userMessage: [
+        `GoHAM research needs a **newer HAM Desktop** build. The running app’s preload does not expose: **${bridgeMissing.join(", ")}** (Slice 1 browser IPC).`,
+        ``,
+        `**What to do:** Fully **quit** HAM Desktop (all windows), update this repo to **main** (or rebuild from the same commit as the web UI), then from \`desktop/\` run \`npm start\` again so Electron loads the current \`preload.cjs\`.`,
+        ``,
+        `If you use a packaged install, reinstall from a build that includes GoHAM Slice 1+ desktop changes.`,
+      ].join("\n"),
+      trailSteps: trail,
+    };
+  }
 
   /** Wait until pause/takeover released or user aborts. */
   const yieldToUserHold = async (): Promise<"continue" | "abort"> => {
