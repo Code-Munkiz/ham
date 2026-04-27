@@ -30,6 +30,10 @@ import {
   type WorkspaceInspectorEvent,
 } from "./workspaceInspectorEvents";
 import {
+  mergeArtifactRowsAfterTurn,
+  type ChatInspectorArtifactRow,
+} from "./workspaceInspectorChatDerived";
+import {
   buildOutboundMessageWithAttachments,
   fileToWorkspaceAttachment,
   formatAttachmentByteSize,
@@ -87,6 +91,7 @@ export function WorkspaceChatScreen() {
   const [voiceTranscribing, setVoiceTranscribing] = React.useState(false);
   const [inspectorOpen, setInspectorOpen] = React.useState(false);
   const [inspectorEvents, setInspectorEvents] = React.useState<WorkspaceInspectorEvent[]>([]);
+  const [artifactRows, setArtifactRows] = React.useState<ChatInspectorArtifactRow[]>([]);
   /** When set, deep-link effect must not call `loadFromApi` for this session while the stream turn is active. */
   const streamTurnSessionRef = React.useRef<string | null>(null);
   const endRef = React.useRef<HTMLDivElement | null>(null);
@@ -153,6 +158,7 @@ export function WorkspaceChatScreen() {
             timestamp: ts(),
           })),
         );
+        setArtifactRows([]);
         setInspectorEvents((prev) =>
           appendInspectorEvent(prev, {
             atIso: new Date().toISOString(),
@@ -175,6 +181,7 @@ export function WorkspaceChatScreen() {
         setSessionId(null);
         setMessages([]);
         setInspectorEvents([]);
+        setArtifactRows([]);
         toast.error("Could not open this chat session.", { id: `hww-session-load-fail-${sid}`, duration: 6000 });
       } finally {
         setLoadingSession(false);
@@ -192,6 +199,7 @@ export function WorkspaceChatScreen() {
         setSessionId(null);
         setMessages([]);
         setInspectorEvents([]);
+        setArtifactRows([]);
       }
       return;
     }
@@ -206,6 +214,7 @@ export function WorkspaceChatScreen() {
     setSessionId(null);
     setMessages([]);
     setInspectorEvents([]);
+    setArtifactRows([]);
     setInput("");
     setAttachments([]);
     setLoadErr(null);
@@ -401,6 +410,14 @@ export function WorkspaceChatScreen() {
           setIsControlPanelOpen: () => {},
           isControlPanelOpen: false,
         });
+        setArtifactRows((prev) =>
+          mergeArtifactRowsAfterTurn(
+            prev,
+            new Date().toISOString(),
+            res.actions,
+            res.operator_result ?? null,
+          ),
+        );
       } catch (err) {
         const safeMsg = safeInspectorErrorMessage(
           err instanceof HamAccessRestrictedError
@@ -599,6 +616,9 @@ export function WorkspaceChatScreen() {
             <WorkspaceChatInspectorPanel
               sessionId={sessionId}
               events={inspectorEvents}
+              messages={messages}
+              composerAttachments={attachments}
+              artifactRows={artifactRows}
               onClose={() => {
                 setInspectorOpen(false);
               }}

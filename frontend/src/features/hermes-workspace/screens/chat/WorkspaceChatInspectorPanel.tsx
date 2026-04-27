@@ -23,6 +23,14 @@ import {
   publicMetaSummary,
   statusLabelForUi,
 } from "./workspaceInspectorEvents";
+import type { WorkspaceComposerAttachment } from "./composerAttachmentHelpers";
+import type { HwwMsgRow } from "./WorkspaceChatMessageList";
+import {
+  composerAttachmentRows,
+  extractTranscriptAttachmentRows,
+  type ChatInspectorArtifactRow,
+  type ChatInspectorFileRow,
+} from "./workspaceInspectorChatDerived";
 
 type TabId = "activity" | "artifacts" | "files" | "memory" | "skills" | "logs";
 
@@ -39,11 +47,9 @@ type WorkspaceChatInspectorPanelProps = {
   onClose: () => void;
   sessionId: string | null;
   events: WorkspaceInspectorEvent[];
-};
-
-const TAB_COPY: Record<Exclude<TabId, "activity" | "logs" | "memory" | "skills">, string> = {
-  artifacts: "Artifacts are not wired for Workspace chat yet",
-  files: "Files are available through the Files workspace, not live Inspector yet",
+  messages: HwwMsgRow[];
+  composerAttachments: WorkspaceComposerAttachment[];
+  artifactRows: ChatInspectorArtifactRow[];
 };
 
 const SKILL_BUILTIN = new Set(["ham-local-docs", "ham-local-plan"]);
@@ -387,11 +393,105 @@ function SkillsTabBody({ state, onRetry }: { state: SkillsInspectorState; onRetr
   );
 }
 
-function TabEmptyNotWired({ tabId }: { tabId: "artifacts" | "files" }) {
+function FilesTabBody({ fileRows }: { fileRows: ChatInspectorFileRow[] }) {
+  const hasRows = fileRows.length > 0;
   return (
-    <div className="p-3">
-      <p className="text-[12px] leading-relaxed text-white/60">{TAB_COPY[tabId]}</p>
+    <div>
+      {hasRows ? (
+        <ul className="divide-y divide-white/[0.06]">
+          {fileRows.map((r) => (
+            <li key={r.id} className="px-3 py-2">
+              <p className="truncate text-[12px] font-medium text-white/[0.88]">{r.name}</p>
+              <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                <span className="rounded bg-white/[0.08] px-1.5 py-0.5 text-[9px] text-white/55">
+                  {r.kindLabel}
+                </span>
+                <span className="text-[10px] text-white/45">{r.sizeLabel}</span>
+                <span
+                  className={cn(
+                    "rounded px-1.5 py-0.5 text-[9px]",
+                    r.source === "queued_in_composer"
+                      ? "bg-amber-500/15 text-amber-200/80"
+                      : "bg-white/[0.06] text-white/40",
+                  )}
+                >
+                  {r.source === "queued_in_composer" ? "in composer" : "in transcript"}
+                </span>
+              </div>
+              {r.atLabel ? (
+                <p className="mt-1 text-[9px] text-white/35">Sent {r.atLabel}</p>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div className="p-3">
+          <p className="text-[12px] leading-relaxed text-white/70">No files attached to this session yet.</p>
+          <p className="mt-1.5 text-[11px] leading-relaxed text-white/50">
+            Attach files in chat or open the workspace file browser.
+          </p>
+        </div>
+      )}
+      <p className="border-t border-white/[0.06] px-3 py-2 text-[10px] leading-relaxed text-white/45">
+        The full file browser uses the local HAM runtime. Session file references will appear here when available.
+      </p>
+      <InspectorLinkRow to="/workspace/files">Open Files</InspectorLinkRow>
     </div>
+  );
+}
+
+function ArtifactsTabBody({ rows }: { rows: ChatInspectorArtifactRow[] }) {
+  if (rows.length === 0) {
+    return (
+      <div className="p-3">
+        <p className="text-[12px] leading-relaxed text-white/70">No artifacts generated yet.</p>
+        <p className="mt-1.5 text-[11px] leading-relaxed text-white/50">
+          Generated files, UI actions, and mission outputs will appear here when available.
+        </p>
+      </div>
+    );
+  }
+  const newestFirst = [...rows].slice(-24).reverse();
+  return (
+    <ul className="divide-y divide-white/[0.06]">
+      {newestFirst.map((r) => (
+        <li key={r.id} className="px-3 py-2">
+          <p className="text-[12px] font-medium leading-snug text-white/[0.88]">{r.title}</p>
+          <div className="mt-1 flex flex-wrap gap-1">
+            <span className="rounded bg-violet-500/15 px-1.5 py-0.5 text-[9px] text-violet-200/85">
+              {r.typeLabel}
+            </span>
+            <span className="rounded bg-white/[0.08] px-1.5 py-0.5 text-[9px] text-white/50">{r.source}</span>
+            <span
+              className={cn(
+                "rounded px-1.5 py-0.5 text-[9px]",
+                r.status === "ok" || r.status === "applied"
+                  ? "bg-emerald-500/12 text-emerald-200/85"
+                  : r.status === "blocked"
+                    ? "bg-red-500/15 text-red-200/85"
+                    : "bg-white/[0.08] text-white/45",
+              )}
+            >
+              {r.status}
+            </span>
+          </div>
+          {r.detail ? (
+            <p className="mt-1 whitespace-pre-wrap break-words text-[10px] text-amber-200/70">{r.detail}</p>
+          ) : null}
+          <div className="mt-1.5 flex flex-wrap items-center gap-2">
+            <span className="text-[9px] text-white/35">{formatClock(r.atIso)}</span>
+            {r.navigateTo ? (
+              <Link
+                to={r.navigateTo}
+                className="text-[10px] font-medium text-[#ffb27a]/90 underline-offset-2 hover:underline"
+              >
+                Open
+              </Link>
+            ) : null}
+          </div>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -399,10 +499,19 @@ export function WorkspaceChatInspectorPanel({
   onClose,
   sessionId,
   events,
+  messages,
+  composerAttachments,
+  artifactRows,
 }: WorkspaceChatInspectorPanelProps) {
   const [activeTab, setActiveTab] = React.useState<TabId>("activity");
   const [memoryState, setMemoryState] = React.useState<MemoryInspectorState>({ status: "idle" });
   const [skillsState, setSkillsState] = React.useState<SkillsInspectorState>({ status: "idle" });
+
+  const fileRows = React.useMemo(() => {
+    const queued = composerAttachmentRows(composerAttachments);
+    const fromTx = extractTranscriptAttachmentRows(messages);
+    return [...queued, ...fromTx];
+  }, [composerAttachments, messages]);
 
   const loadMemory = React.useCallback(() => {
     setMemoryState({ status: "loading" });
@@ -513,8 +622,8 @@ export function WorkspaceChatInspectorPanel({
       <div className="hww-scroll min-h-0 flex-1 overflow-y-auto">
         {activeTab === "activity" ? <ActivityBody events={events} /> : null}
         {activeTab === "logs" ? <LogsBody events={events} /> : null}
-        {activeTab === "artifacts" ? <TabEmptyNotWired tabId="artifacts" /> : null}
-        {activeTab === "files" ? <TabEmptyNotWired tabId="files" /> : null}
+        {activeTab === "artifacts" ? <ArtifactsTabBody rows={artifactRows} /> : null}
+        {activeTab === "files" ? <FilesTabBody fileRows={fileRows} /> : null}
         {activeTab === "memory" ? (
           <MemoryTabBody state={memoryState} onRetry={loadMemory} />
         ) : null}
