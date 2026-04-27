@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { workspaceSkillsAdapter, type WorkspaceSkill } from "../../adapters/skillsAdapter";
+import { primaryHermesCatalogLabel } from "../../lib/workspaceHumanLabels";
 
 const BUILTIN = new Set(["ham-local-docs", "ham-local-plan"]);
 
@@ -468,8 +469,8 @@ export function WorkspaceSkillsScreen() {
                         className="flex min-h-[180px] flex-col rounded-2xl border border-white/10 bg-black/25 p-4"
                       >
                         <div className="min-w-0 space-y-1">
-                          <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--theme-text)]">
-                            {e.display_name}
+                          <h3 className="text-sm font-semibold tracking-tight text-[var(--theme-text)]">
+                            {primaryHermesCatalogLabel(e)}
                           </h3>
                           <p className="line-clamp-3 text-xs text-[var(--theme-muted)]">{e.summary || "—"}</p>
                           <p className="pt-1 font-mono text-[10px] text-white/40">{e.catalog_id}</p>

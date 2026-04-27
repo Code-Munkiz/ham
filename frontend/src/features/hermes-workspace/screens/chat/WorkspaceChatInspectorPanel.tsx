@@ -22,6 +22,7 @@ import {
   workspaceSkillsAdapter,
   type WorkspaceSkill,
 } from "../../adapters/skillsAdapter";
+import { primaryHermesCatalogLabel, workspaceFileEntryLabels } from "../../lib/workspaceHumanLabels";
 import type { WorkspaceInspectorEvent } from "./workspaceInspectorEvents";
 import {
   humanInspectorKindLabel,
@@ -506,8 +507,10 @@ function SkillsTabBody({
           {catalogPreview.map((e) => (
             <li key={e.catalog_id} className="flex items-start justify-between gap-2 px-3 py-2">
               <div className="min-w-0">
-                <p className="truncate font-mono text-[11px] text-white/[0.88]">{e.catalog_id}</p>
-                <p className="line-clamp-1 text-[10px] text-white/45">{e.display_name}</p>
+                <p className="truncate text-[12px] font-medium text-white/[0.88]" title={e.catalog_id}>
+                  {primaryHermesCatalogLabel(e)}
+                </p>
+                <p className="truncate font-mono text-[10px] text-white/45">{e.catalog_id}</p>
               </div>
               <Button
                 type="button"
@@ -547,7 +550,12 @@ function SkillsTabBody({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-2">
-              <h4 className="text-sm font-semibold text-white/90">Catalog: {catDetail.catalogId}</h4>
+              <div className="min-w-0">
+                <h4 className="text-sm font-semibold text-white/90">
+                  Catalog: {primaryHermesCatalogLabel({ catalog_id: catDetail.catalogId })}
+                </h4>
+                <p className="mt-0.5 truncate font-mono text-[10px] text-white/45">{catDetail.catalogId}</p>
+              </div>
               <Button type="button" variant="ghost" size="sm" className="h-7 text-[11px]" onClick={() => setCatDetail(null)}>
                 Close
               </Button>
@@ -558,7 +566,9 @@ function SkillsTabBody({
             ) : null}
             {catDetail.entry ? (
               <div className="mt-3 space-y-2 text-[11px] text-white/70">
-                <p className="font-medium text-white/85">{catDetail.entry.display_name ?? catDetail.catalogId}</p>
+                <p className="font-medium text-white/85">
+                  {primaryHermesCatalogLabel(catDetail.entry)}
+                </p>
                 {catDetail.entry.summary ? (
                   <p className="leading-relaxed text-white/60">{catDetail.entry.summary}</p>
                 ) : null}
@@ -704,15 +714,23 @@ function FilesTabBody({ fileRows }: { fileRows: ChatInspectorFileRow[] }) {
           </p>
           {ws.entries.length > 0 ? (
             <ul className="mt-2 rounded-lg border border-white/[0.08] bg-white/[0.03]">
-              {ws.entries.map((e) => (
-                <li
-                  key={`${e.type}:${e.name}`}
-                  className="flex items-center gap-2 border-b border-white/[0.05] px-2 py-1.5 text-[11px] last:border-b-0"
-                >
-                  <span className="text-white/35">{e.type === "folder" ? "📁" : "📄"}</span>
-                  <span className="min-w-0 truncate text-white/75">{e.name}</span>
-                </li>
-              ))}
+              {ws.entries.map((e) => {
+                const { label, technical } = workspaceFileEntryLabels(e.name);
+                return (
+                  <li
+                    key={`${e.type}:${e.name}`}
+                    className="flex items-center gap-2 border-b border-white/[0.05] px-2 py-1.5 text-[11px] last:border-b-0"
+                  >
+                    <span className="text-white/35">{e.type === "folder" ? "📁" : "📄"}</span>
+                    <span className="flex min-w-0 flex-1 flex-col">
+                      <span className="truncate text-white/80">{label}</span>
+                      {technical ? (
+                        <span className="truncate font-mono text-[9px] text-white/40">{technical}</span>
+                      ) : null}
+                    </span>
+                  </li>
+                );
+              })}
             </ul>
           ) : (
             <p className="mt-2 text-[10px] text-white/45">Root listing is empty (or not returned).</p>

@@ -19,6 +19,7 @@ import { workspaceSessionAdapter } from "./workspaceAdapters";
 import type { ChatSessionSummary } from "./workspaceTypes";
 import { sessionCardSubtitle, sessionCardTitle } from "./utils/sessionListFormat";
 import { WorkspaceMobileTabBar } from "./WorkspaceMobileTabBar";
+import { WorkspaceChatFloatingToggle } from "./components/WorkspaceChatFloatingToggle";
 import { WorkspaceTerminalView } from "./screens/terminal/WorkspaceTerminalView";
 
 const HWW_SIDEBAR_COLLAPSE_KEY = "hww.sidebar.collapsed";
@@ -622,6 +623,7 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
         </div>
       </div>
       <WorkspaceMobileTabBar />
+      {!isWorkspaceChat ? <WorkspaceChatFloatingToggle /> : null}
     </div>
   );
 }

@@ -44,13 +44,16 @@ export function WorkspaceChatAttachmentButton({
         type="button"
         variant="ghost"
         size="icon"
-        className={cn("h-10 w-9 shrink-0 rounded-full text-white/50 hover:bg-white/[0.06] hover:text-white/85", className)}
+        className={cn(
+          "h-10 w-10 shrink-0 rounded-lg text-white/55 hover:bg-white/[0.08] hover:text-[#7dd3fc]",
+          className,
+        )}
         disabled={disabled}
         onClick={() => inputRef.current?.click()}
         aria-label={ariaLabel}
         title="Add attachments — text and images are inlined into the message (max 500 KB each, up to 8 files)."
       >
-        <Plus className="h-4 w-4" strokeWidth={1.5} />
+        <Plus className="h-5 w-5" strokeWidth={1.5} />
       </Button>
     </>
   );

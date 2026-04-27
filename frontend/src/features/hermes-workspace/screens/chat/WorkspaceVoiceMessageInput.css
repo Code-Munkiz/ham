@@ -28,8 +28,8 @@
 }
 
 .voice-message-input-container--compact .mic-button {
-  width: 28px;
-  height: 28px;
+  width: 36px;
+  height: 36px;
   box-shadow: none;
 }
 
@@ -38,8 +38,8 @@
 }
 
 .voice-message-input-container--compact .mic-button svg {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
 }
 
 .voice-message-input-container--compact .duration-text {
