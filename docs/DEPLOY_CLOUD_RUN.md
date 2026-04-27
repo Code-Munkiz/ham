@@ -230,7 +230,7 @@ curl -sS -X POST "${SERVICE_URL}/api/chat" \
 
 ## In-app browser (Playwright) on Cloud Run
 
-The dashboard **Chat → Browser** / **War Room** pane calls **`/api/browser/*`**. For this to work **in production** (not just locally):
+The **`/api/browser/*`** Playwright runtime remains available for **future workspace/desktop** consumers and integration tests; the legacy dashboard War Room UI was removed (Batch 2A). For Playwright to work **in production** (not just locally):
 
 0. **One command (from repo root, after `gcloud` auth and `.gcloud/ham-api-env.yaml` exists):** run **`./scripts/deploy_ham_api_cloud_run.sh`** — Cloud Build, deploy, **`--memory 2Gi`**, and **`--cpu 2`** (overridable via `MEMORY` / `CPU` env). See the script header for `PROJECT_ID`, `SET_SECRETS`, etc.
 1. **Rebuild and redeploy the API image** from the repo **`Dockerfile`**, which runs `python -m playwright install --with-deps chromium`. Older images that only `pip install playwright` have **no Chromium** — sessions will fail.

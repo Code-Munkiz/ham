@@ -1,10 +1,5 @@
 /**
- * VoiceMessageInput.css
-
- * CSS styles for voice message input component.
- * 
- * Uses CSS animations only (no canvas required).
- * Safe for Vercel deployment.
+ * Voice mic control styles for Hermes Workspace composer (CSS animations only).
  */
 
 .voice-message-input-container {
@@ -20,7 +15,7 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
-/* Sits in Chat.tsx composer row: no outer card, smaller mic, matches tool strip density */
+/* Composer row: no outer card, smaller mic */
 .voice-message-input-container--compact {
   padding: 0;
   background: transparent;
@@ -135,7 +130,7 @@
 }
 
 .duration-text {
-  font-family: 'Courier New', monospace;
+  font-family: "Courier New", monospace;
   font-size: 14px;
   font-weight: 600;
   color: #fff;
@@ -190,7 +185,6 @@
   transform: translateY(-1px);
 }
 
-/* Non-compact card: error stacks above controls (no absolute positioning). */
 .recording-error--stacked {
   position: static;
   width: 100%;
@@ -205,7 +199,6 @@
   text-align: left;
 }
 
-/* Composer strip: small line below mic — does not overlap Attach/Fast. */
 .recording-error-compact {
   margin: 0;
   padding: 4px 6px;

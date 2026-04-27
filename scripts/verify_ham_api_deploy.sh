@@ -94,7 +94,7 @@ if [[ -z "${HAM_VERIFY_ALLOW_MOCK:-}" ]] && grep -q "Mock assistant reply" "$bod
   exit 1
 fi
 
-# Dashboard Chat.tsx calls POST /api/chat/stream (NDJSON), not only /api/chat.
+# Dashboard Workspace chat calls POST /api/chat/stream (NDJSON), not only /api/chat.
 echo "== OPTIONS ${BASE}/api/chat/stream (preflight, Origin: ${ORIGIN}, headers: content-type + accept)"
 code_so="$(
   curl -sS -D "$hdrs" -o "$body" -w '%{http_code}' -X OPTIONS "${BASE}/api/chat/stream" \

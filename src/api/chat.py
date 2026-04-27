@@ -35,7 +35,6 @@ from src.ham.clerk_policy import (
 )
 from src.ham.operator_audit import append_operator_action_audit
 from src.ham.ui_actions import split_assistant_ui_actions, ui_actions_system_instructions
-from src.ham.workbench_view_intent import augment_workbench_view_actions
 from src.integrations.nous_gateway_client import (
     GatewayCallError,
     complete_chat_turn,
@@ -170,9 +169,9 @@ You are **Ham**, the in-dashboard copilot for the Ham workspace UI—warm, conci
 
 **What the UI has (high level):** A left **nav** (Chat, workspace, logs, etc.), this **Chat** page, **Settings** (context engine, droids, preferences), and workspace panels for runs and tooling. You **cannot** see the user’s screen, current route, or saved settings—if that matters, ask them to describe what they see or paste text.
 
-**Control plane (skills & subagents):** When the message includes an **Operator skills** appendix, treat each entry as a real Ham workflow the IDE can run (Context Engine hardening, agent context wiring, Hermes review validation, prompt budget audit, repo regression tests, GoHam navigation). Map user goals to the best-matching skill id and tell them the exact slash command or doc path (e.g. `/audit-context-engine`, `.cursor/skills/.../SKILL.md`). When a **Cursor subagent rules** appendix is present, each entry is a **review/audit charter** (`.cursor/rules/subagent-*.mdc`): recommend the charter that fits the user’s review question using id, path, and `globs`; subagents are **not** execution SKILLS—they shape how to audit or review code. When **structured UI actions** are enabled, you may also emit **`HAM_UI_ACTIONS_JSON`** so the browser can navigate, show toasts, toggle the **right-side control panel**, or switch the **`/chat` workbench header** (CHAT / SPLIT / PREVIEW / WAR ROOM / BROWSER via `set_workbench_view`)—you still **do not** edit `.ham.json`, run shell tools, or change secrets from this chat.
+**Control plane (skills & subagents):** When the message includes an **Operator skills** appendix, treat each entry as a real Ham workflow the IDE can run (Context Engine hardening, agent context wiring, Hermes review validation, prompt budget audit, repo regression tests, GoHam navigation). Map user goals to the best-matching skill id and tell them the exact slash command or doc path (e.g. `/audit-context-engine`, `.cursor/skills/.../SKILL.md`). When a **Cursor subagent rules** appendix is present, each entry is a **review/audit charter** (`.cursor/rules/subagent-*.mdc`): recommend the charter that fits the user’s review question using id, path, and `globs`; subagents are **not** execution SKILLS—they shape how to audit or review code. When **structured UI actions** are enabled, you may also emit **`HAM_UI_ACTIONS_JSON`** so the browser can navigate (including **`/workspace/chat`**), show toasts, and toggle the **right-side control panel**—you still **do not** edit `.ham.json`, run shell tools, or change secrets from this chat.
 
-**Workbench header vs control panel:** On **`/chat`**, the **top bar** (CHAT, SPLIT, PREVIEW, WAR ROOM, BROWSER) changes the main workbench layout. Use **`{{"type":"set_workbench_view","mode":"chat|split|preview|war_room|browser"}}`**. The **control panel** is the separate right-hand workspace rail—use **`toggle_control_panel`** for that only. When the user asks for "split view", "preview", "war room", or "browser" in the workbench, they almost always mean **`set_workbench_view`**, not the control panel.
+**Navigation:** Product chat is **Hermes Workspace** at **`/workspace/chat`** (and **`/chat`** redirects there). Use **`navigate`** actions for in-app routes; use **`toggle_control_panel`** only for the right-hand workspace rail—not for layout modes (legacy workbench modes were removed).
 
 **How to engage:** Use short paragraphs or tight bullets; offer next steps; match energy without filler. If asked what you can do, explain Ham at a high level and suggest concrete actions (e.g. “open Settings → …”, “describe the error in Logs”).
 
@@ -242,13 +241,6 @@ def _workbench_system_lines(
     if max_mode:
         lines.append(
             "User preference: MAX mode — prefer deeper reasoning when trade-offs exist.",
-        )
-    if lines:
-        lines.append(
-            "Workbench header (/chat top bar): CHAT, SPLIT, PREVIEW, WAR ROOM, BROWSER — switch via "
-            '`{"type":"set_workbench_view","mode":"chat|split|preview|war_room|browser"}` in HAM_UI_ACTIONS_JSON. '
-            "This is **not** `toggle_control_panel` (the right-side panel). "
-            'Phrases like "split view", "preview screen", "war room", or "browser" refer to these modes.',
         )
     return lines
 
@@ -499,16 +491,6 @@ async def post_chat(
         if body.enable_ui_actions
         else (assistant_raw, [])
     )
-    last_user_text = (
-        body.messages[-1].content
-        if body.messages and body.messages[-1].role == "user"
-        else ""
-    )
-    actions = augment_workbench_view_actions(
-        last_user_text,
-        actions,
-        enable_ui_actions=body.enable_ui_actions,
-    )
     store.append_turns(sid, [ChatTurn(role="assistant", content=assistant_visible)])
     return ChatResponse(
         session_id=sid,
@@ -616,16 +598,6 @@ def post_chat_stream(
                 split_assistant_ui_actions(assistant_raw)
                 if body.enable_ui_actions
                 else (assistant_raw, [])
-            )
-            last_user_text = (
-                body.messages[-1].content
-                if body.messages and body.messages[-1].role == "user"
-                else ""
-            )
-            actions = augment_workbench_view_actions(
-                last_user_text,
-                actions,
-                enable_ui_actions=body.enable_ui_actions,
             )
             try:
                 store.append_turns(sid, [ChatTurn(role="assistant", content=assistant_visible)])

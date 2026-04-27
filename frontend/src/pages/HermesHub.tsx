@@ -430,12 +430,9 @@ export default function HermesHub() {
               <p className="text-sm text-white/70 leading-relaxed">
                 In HAM, the live browser is Playwright on this API host, enforced by{" "}
                 <span className="text-white/85 font-semibold">browser policy</span> — not a
-                separate Hermes-managed browser product. The same policy applies when you use the
-                browser pane from{" "}
-                <Link to={primaryChatPath()} className="text-[#FF6B00] font-semibold hover:underline">
-                  Chat
-                </Link>{" "}
-                in <span className="text-white/85">War Room</span> mode.
+                separate Hermes-managed browser product. Future workspace or desktop surfaces may
+                consume <span className="text-white/85 font-semibold">/api/browser</span>; this
+                dashboard page only shows policy readiness.
               </p>
               {browserPolicyLoading && (
                 <p className="text-xs font-bold uppercase tracking-widest text-white/40">Loading…</p>

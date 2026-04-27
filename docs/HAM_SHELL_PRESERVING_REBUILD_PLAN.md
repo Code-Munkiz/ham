@@ -100,8 +100,8 @@ These files/modules are preservation-critical because they anchor shell, theme, 
 
 ### Chat stream + Cloud Agent behavior seam (must remain behavior-compatible)
 
-- `/chat` route contract — preserve typed chat send, stream handling, and Cloud Agent orchestration behavior even if the current `frontend/src/pages/Chat.tsx` internals are replaced.
-- Cloud Agent UX contract — preserve managed/direct mission launch + attach semantics, managed mission polling, and deploy approval/deploy hook reachability even if UI components are replaced.
+- `/chat` → `/workspace/chat` redirect — preserve typed chat send, stream handling, and operator payloads on **`POST /api/chat`** / **`/api/chat/stream`** (Hermes **`WorkspaceChatScreen`** is the product client).
+- Cloud Agent **API** contract — managed/direct mission launch + attach semantics, mission polling, deploy approval/deploy hook remain on the server; dedicated legacy War Room panels were **removed Batch 2A** (re-home UX in Workspace/Command Center as needed).
 ### Voice backend seam (preserve temporarily)
 
 - `POST /api/chat/transcribe` in backend routes — preserve until replacement voice path is proven.
@@ -112,8 +112,7 @@ These files/modules are preservation-critical because they anchor shell, theme, 
 
 ### Voice frontend classification note
 
-- Current HAM voice frontend implementation is replaceable and should not block the rebuild.
-- This includes current voice-related wiring inside `frontend/src/pages/Chat.tsx`.
+- Voice UX lives in Hermes Workspace composer (`WorkspaceChatScreen` / `WorkspaceChatComposer`) using **`postChatTranscribe`**; legacy `Chat.tsx` wiring was removed **Batch 2A**.
 
 ### Env/config handling (frontend)
 
@@ -154,15 +153,14 @@ The following areas are safe to aggressively redesign as long as route/API contr
 | `frontend/src/pages/AgentBuilder.tsx` | project-scoped HAM agent profile editor | Workspace-style agent cards/editor backed by HAM profile APIs | `fetchContextEngine`, `ensureProjectIdForWorkspaceRoot`, `fetchProjectAgents`, `postSettingsPreview/apply` | New agent editor preserves preview/apply gating and primary profile behavior | High |
 | `frontend/src/pages/Runs.tsx` | run history list presentation | Workspace-inspired mission/runs table UX | `GET /api/runs` via `apiUrl` | Replacement runs view passes list/detail smoke tests | Low |
 | `frontend/src/components/workspace/UnifiedSettings.tsx` | settings IA and many panel internals | Workspace-style settings panes with HAM adapters | `fetchCursorCredentialsStatus`, `saveCursorApiKey`, `fetchContextEngine`, `postSettingsPreview/apply`, etc. | New settings panes preserve write-token and auth constraints | High |
-| `frontend/src/components/war-room/*` | chat right-pane panels/split visuals | Workspace operator pane composition | reads chat + managed cloud agent state | New pane stack preserves managed mission context behaviors | Medium |
-| `frontend/src/components/chat/*` (presentation layer except behavior-critical adapters) | message rows/composer auxiliaries/launch dialogs | Workspace chat components adapted to HAM data model | chat/Cloud Agent APIs via parent | New components preserve send/stream/Cloud Agent semantics | High |
+| ~~`frontend/src/components/war-room/*`~~ | *(removed Batch 2A)* | — | — | — | — |
+| ~~`frontend/src/components/chat/*`~~ (legacy) | *(removed Batch 2A)* | Workspace chat components | `/api/chat` via Workspace | N/A | — |
 | `frontend/src/pages/HermesHub.tsx` | legacy hub surface | Simplified workspace status hub | `fetchHermesHubSnapshot` and related read APIs | Replacement preserves route availability + read-only honesty | Low |
 | `frontend/src/pages/Analytics.tsx`, `frontend/src/pages/Logs.tsx`, `frontend/src/pages/HamShop.tsx` | secondary operational surfaces | Workspace-inspired dashboards/modules | mixed read APIs and placeholders | Route/API parity validated post-rebuild | Medium |
-| `frontend/src/components/chat/VoiceMessageInput.tsx` | current voice button/recording UI | Workspace-inspired voice controls and state machine | uses `postChatTranscribe` through `/chat` wiring | Replacement voice UI passes no-mic + working-mic smoke on HAM seam | High |
-| `frontend/src/components/chat/VoiceMessageInput.css` | voice-specific styling | Workspace voice visual system | none directly (style only) | New voice styling in place and accessible in composer | Low |
+| ~~`VoiceMessageInput`~~ | *(removed with legacy `components/chat`)* | Workspace composer mic UX | `postChatTranscribe` | See `WorkspaceChatScreen.tsx` | High |
 | `frontend/src/hooks/useVoiceRecorder.ts` | media recorder lifecycle and errors | Workspace voice capture logic adapted to HAM constraints | frontend-only media capture feeding transcribe path | Replacement recorder handles permission/no-device/abort correctly | High |
 | `frontend/src/lib/ham/voiceRecordingErrors.ts` | maps media errors to user text | Workspace-aligned error copy map | frontend-only; affects no-mic UX and permission messaging | New mapping preserves clear inline user messaging | Medium |
-| voice wiring in `frontend/src/pages/Chat.tsx` | composer/transcribe integration path | Workspace voice orchestration inside new chat UX | `postChatTranscribe` (`/api/chat/transcribe`) | Replacement voice path integrated, no auto-send regressions, send-state gating preserved | High |
+| Workspace chat voice | composer/transcribe integration | Hermes Workspace chat UX | `postChatTranscribe` (`/api/chat/transcribe`) | Preserve no-mic + working-mic smoke on HAM seam | High |
 
 ## 3) Compatibility adapters to keep during migration
 
@@ -197,13 +195,12 @@ Use adapters to decouple new UI from existing backend contracts:
 
 ## 6) Route-by-route contract
 
-### `/chat`
+### `/chat` (redirect) + `/workspace/chat`
 
-- **Current component:** `frontend/src/pages/Chat.tsx`
-- **Current API dependencies:** `postChatStream`, `postChatTranscribe`, `fetchModelsCatalog`, `fetchChatSessions`, `fetchChatSession`, managed Cloud Agent APIs (`launchCursorAgent`, `postCursorAgentSync`, deploy hook/approval/status calls), project metadata APIs.
-- **Must-preserve behavior:** preserve `/chat` route, stream completion UX, typed chat send behavior, Cloud Agent launch/attach/status loop, auth-gated API calls via HAM.
-- **Safe rebuild approach:** replace composer/message/workspace UI, voice UI, and attachment UI with Workspace-inspired patterns while preserving stream and Cloud Agent adapter seams.
-- **Manual smoke test:** send prompt and verify stream completes; no-mic voice path shows clean inline error; mic-enabled dictation inserts text without auto-send; attachment UI never bypasses HAM API; managed Cloud Agent launch/status still updates.
+- **Product chat:** `frontend/src/features/hermes-workspace/screens/chat/WorkspaceChatScreen.tsx` at **`/workspace/chat`**; **`/chat`** redirects (preserve query e.g. `?session=`).
+- **Current API dependencies:** `postChatStream`, `postChatTranscribe`, `fetchModelsCatalog`, workspace session adapters, project metadata APIs (managed Cloud Agent dedicated UI removed Batch 2A — APIs remain on server).
+- **Must-preserve behavior:** redirect, stream completion UX, typed chat send, auth-gated API calls via HAM.
+- **Manual smoke test:** send prompt from Workspace chat and verify stream completes; voice/attachments follow Workspace composer rules.
 
 ### `/command-center`
 
@@ -370,12 +367,9 @@ Stop immediately and require explicit review if a proposed change would:
 
 ## 12) Deletion candidates (post-parity only)
 
-- `frontend/src/components/chat/VoiceMessageInput.tsx`
-- `frontend/src/components/chat/VoiceMessageInput.css`
-- `frontend/src/hooks/useVoiceRecorder.ts`
-- `frontend/src/lib/ham/voiceRecordingErrors.ts`
-- Legacy voice/attachment wiring blocks inside `frontend/src/pages/Chat.tsx`
-- Any superseded legacy composer/message presentation modules after replacement parity.
+- ~~Legacy `components/chat/*` and `pages/Chat.tsx`~~ — **removed Batch 2A.**
+- `frontend/src/hooks/useVoiceRecorder.ts` — still used by Workspace composer until replaced.
+- `frontend/src/lib/ham/voiceRecordingErrors.ts` — keep while Workspace voice uses it.
 
 ## 13) Temporary backend voice/transcription seams to preserve
 

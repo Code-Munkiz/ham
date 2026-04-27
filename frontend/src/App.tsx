@@ -7,7 +7,6 @@ import { BrowserRouter, HashRouter, Routes, Route, Navigate, useLocation } from 
 import { ClerkProvider } from "@clerk/clerk-react";
 import { ThemeProvider } from "next-themes";
 import { AppLayout } from "./components/layout/AppLayout";
-import Chat from "./pages/Chat";
 import Runs from "./pages/Runs";
 import RunDetail from "./pages/RunDetail";
 import ControlPlaneRuns from "./pages/ControlPlaneRuns";
@@ -58,7 +57,6 @@ function AppRoutes() {
           {/* Legacy path: product stream lives on Activity, not a separate Overview page. */}
           <Route path="/overview" element={<Navigate to="/activity" replace />} />
           <Route path="/chat" element={<ChatEntryRoute />} />
-          <Route path="/legacy-chat" element={<Chat />} />
           <Route path="/workspace/*" element={<WorkspaceApp />} />
           <Route path="/droids" element={<Navigate to="/command-center" replace />} />
           <Route path="/runs" element={<Runs />} />

@@ -31,7 +31,7 @@
   --glass-border: rgba(0, 0, 0, 0.1);
   --glow-orange: 0 0 30px rgba(255, 107, 0, 0.2);
 
-  /* App shell (non-/chat) — aligns with operator-workspace canvas */
+  /* App shell (non-immersive routes) — aligns with workspace canvas tokens */
   --ham-workspace-fg: #e8eef8;
   --ham-workspace-canvas-0: #06141a;
   --ham-workspace-canvas-1: #041017;
@@ -68,7 +68,7 @@
 }
 
 /**
- * Non-`/chat` app frame only. Matches `operator-workspace` canvas language
+ * Non-immersive app frame only. Matches workspace canvas language
  * (dark teal/orange wash, deep base, cool foreground).
  */
 @layer components {

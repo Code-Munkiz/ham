@@ -6,6 +6,8 @@
 
 **Cleanup Batch 1 (post-audit):** Mock `/extensions` route, `Extensions.tsx`, and `MOCK_EXTENSIONS` were **removed** from the repo; use `/shop` and Capability Directory for real capability discovery.
 
+**Cleanup Batch 2A (2026-04-26):** Legacy **`/legacy-chat`**, **`frontend/src/pages/Chat.tsx`**, **`components/war-room/`**, **`components/chat/`**, **`features/operator-workspace/`**, and managed-cloud client helpers were **removed**. **`/api/browser`**, **`/api/browser-operator`**, and Hermes Workspace **`/workspace/chat`** are **unchanged**. UI action **`set_workbench_view`** was removed from `ui_actions.py`; **`src/ham/workbench_view_intent.py`** deleted. See git history / `VISION.md` / this doc’s stale rows below for narrative drift to ignore.
+
 ---
 
 ## 1. Executive summary

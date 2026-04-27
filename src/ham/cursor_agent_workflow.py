@@ -76,8 +76,8 @@ def build_managed_cloud_agent_prompt_py(
     *, user_prompt: str, repository: str, ref: str | None
 ) -> str:
     """
-    Parity with ``buildManagedCloudAgentPrompt`` in ``frontend/src/lib/ham/managedCloudAgent.ts``:
-    deterministic managed brief (no LLM) for **Managed by HAM** operator/chat launches.
+    Deterministic managed brief (no LLM) for **Managed by HAM** operator/chat launches.
+    (Legacy frontend helper removed in Batch 2A; server remains source of truth for this shape.)
     """
     u = (user_prompt or "").strip()
     repo = (repository or "").strip()

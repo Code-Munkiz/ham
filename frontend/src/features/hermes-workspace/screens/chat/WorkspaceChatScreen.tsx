@@ -1,6 +1,6 @@
 /**
  * Workspace-native chat: upstream Hermes `ChatScreen` visual/IA pattern, HAM `/api/chat/stream` only.
- * Does not render legacy `Chat.tsx` / OperatorWorkspace / war-room chrome.
+ * Hermes Workspace chat only (no legacy workbench chrome).
  */
 
 import * as React from "react";
@@ -282,7 +282,6 @@ export function WorkspaceChatScreen() {
           navigate,
           setIsControlPanelOpen: () => {},
           isControlPanelOpen: false,
-          setWorkbenchView: () => {},
         });
       } catch (err) {
         if (err instanceof HamAccessRestrictedError) {

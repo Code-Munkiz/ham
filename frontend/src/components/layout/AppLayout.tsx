@@ -25,9 +25,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   /** Transient during `/chat` → `/workspace/chat` redirect, or any `/chat/…` child route. */
   const isChatPage = location.pathname.startsWith("/chat");
   const isWorkspacePath = location.pathname.startsWith("/workspace");
-  const isLegacyFullChat =
-    location.pathname === "/legacy-chat" || location.pathname.startsWith("/legacy-chat/");
-  const isImmersiveAppShell = isChatPage || isWorkspacePath || isLegacyFullChat;
+  const isImmersiveAppShell = isChatPage || isWorkspacePath;
   const isSettingsPage = location.pathname.startsWith("/settings");
   // Control state for the global workbench console
   const [isConsoleOpen, setIsConsoleOpen] = React.useState(false);
@@ -53,8 +51,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // Route-scoped immersive layout: `/chat` and namespaced `/workspace/*` (Hermes lift) get full canvas.
-  // Keep providers/auth/runtime seams; hide old HAM shell chrome.
+  // Route-scoped immersive layout: `/chat` (redirect) and `/workspace/*` get full canvas.
   if (isImmersiveAppShell) {
     return (
       <div className="h-screen w-screen overflow-hidden bg-[#030b11] text-foreground transition-colors duration-300 relative font-sans">
@@ -88,7 +85,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         <div className="flex min-w-0 flex-1 overflow-hidden relative">
           <main className="flex min-w-0 flex-1 overflow-hidden relative flex flex-col">
             <div className="min-w-0 flex-1 overflow-hidden relative">
-              {/* Dynamic Workbench Layout — for `/chat`, layout/split is owned by `Chat.tsx` only; this block is for non-chat routes when preview/split is used here. */}
+              {/* Dynamic layout: preview/split for non-immersive routes when toggled from chrome. */}
               <div className={cn(
                 "h-full w-full flex transition-all duration-500",
                 viewMode === 'split' ? "gap-px bg-black/20" : ""

@@ -22,7 +22,7 @@ Computer Control in HAM is a **local runtime / tool capability layer**: it descr
 | Rule | Implication for Computer Control Pack |
 |------|----------------------------------------|
 | **Local capability layer** | Policy, tiers, and future MCP/tool attachments are **grounded on the operator machine**; cloud-hosted control of the local computer is **out of scope** for v1 and flagged as non-goal. |
-| **Not a Cursor / Droid harness** | Factory Droid CLI, Cursor Cloud Agent, and War Room uplink remain **separate execution lanes**. Computer Control Pack **must not** redefine them as the universal host for desktop automation. |
+| **Not a Cursor / Droid harness** | Factory Droid CLI, Cursor Cloud Agent, and legacy War Room uplink (removed **Batch 2A**) remain **separate execution lanes** from Computer Control. The pack **must not** redefine them as the universal host for desktop automation. |
 | **Not a ControlPlaneRun participant (v1)** | [`ControlPlaneRun`](../../docs/CONTROL_PLANE_RUN.md) stays a **read-side** launch/audit substrate for Cursor/Droid-style control plane; Computer Control **does not** join that schema or storage in v1. |
 | **Not cloud-first** | Design assumes **local-only** runtime boundary for high-trust modes; any remote broker is **documentation-only** future work, not v1. |
 | **Not arbitrary Shop execution** | HAM Shop and Capability Directory remain **read-only discovery** for Phase 1; directory rows are **data**, not behavior ([`capability_bundle_directory_v1.md`](capability_bundle_directory_v1.md)). No “run this bundle” from Shop for computer control. |
@@ -146,14 +146,14 @@ flowchart LR
 
 **Positioning:** Structured **action/event audit** for computer control (Phase 4+) should align with existing run/evidence patterns — **schema TBD**; v1 does not define new run kinds.
 
-### 1.9 War Room / Chat / browser view (later Browser Operator shell)
+### 1.9 Browser / Browser Operator (future surface)
 
 | Aspect | Ground truth |
 |--------|----------------|
-| **Chat** | [`frontend/src/pages/Chat.tsx`](../../frontend/src/pages/Chat.tsx) — view modes include `war_room`, `browser`, etc. |
-| **War Room** | [`frontend/src/components/war-room/`](../../frontend/src/components/war-room/). |
+| **API** | [`src/api/browser_runtime.py`](../../src/api/browser_runtime.py), [`src/api/browser_operator.py`](../../src/api/browser_operator.py) — Playwright sessions + proposal/approval path (unchanged). |
+| **Dashboard** | Hermes Workspace chat at **`/workspace/chat`**; legacy War Room / in-app browser operator UI removed (**Batch 2A**). |
 
-**Positioning:** A **Browser Operator** UX (Phase 2) could reuse this shell to drive **approval-gated** use of existing `/api/browser` — **UI plan only** in this spec.
+**Positioning:** A **Browser Operator** UX (Phase 2+) should target **Workspace or desktop** and reuse **approval-gated** `/api/browser` — **UI plan only** in this spec.
 
 ### 1.10 Gaps (summary)
 
@@ -409,7 +409,7 @@ The JSON below matches the **style** of entries in [`capability_directory_v1.jso
 |-------|--------|
 | **0** | **Spec only** — this document + review; no code. |
 | **1** | Add **Computer Control Pack** to Capability Directory + HAM Shop as **read-only**; extend **CLI readiness** checks for local prerequisites **only** (no install, no execution). |
-| **2** | **Browser Operator** — expose **existing** [`/api/browser`](../../src/api/browser_runtime.py) flows behind **approval-only** UX (e.g. Chat/War Room shell); no new arbitrary execution from Shop. |
+| **2** | **Browser Operator** — expose **existing** [`/api/browser`](../../src/api/browser_runtime.py) flows behind **approval-only** UX (e.g. Hermes Workspace or desktop shell); no new arbitrary execution from Shop. |
 | **3** | **Local desktop observe mode** behind **env flag** — minimal passive observation path in desktop/local runtime (**design detail TBD**). |
 | **4** | **Bounded autopilot** within declared caps + **evidence logs** (Runs/Activity alignment). |
 | **5** | **goHAM session mode** — full local high-trust session object per §5 + kill switch + auto-demotion. |

@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { ModelCatalogItem, ModelCatalogPayload } from "@/lib/ham/types";
 import { isDashboardChatGatewayReady } from "@/lib/ham/types";
-import { VoiceMessageInput } from "@/components/chat/VoiceMessageInput";
+import { WorkspaceVoiceMessageInput } from "./WorkspaceVoiceMessageInput";
 import { toast } from "sonner";
 import { WorkspaceChatAttachmentButton } from "./WorkspaceChatAttachmentButton";
 import { WorkspaceChatAttachmentPreviewList } from "./WorkspaceChatAttachmentPreview";
@@ -156,7 +156,7 @@ export function WorkspaceChatComposer({
               )}
               title="Voice — record, then HAM transcribes into the field"
             >
-              <VoiceMessageInput
+              <WorkspaceVoiceMessageInput
                 compact
                 hidePreview
                 disabled={sending || voiceTranscribing || disabled}
