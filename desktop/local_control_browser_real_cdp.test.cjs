@@ -84,6 +84,18 @@ test('fetchPageDebuggerWebSocketUrl: picks first page target', async () => {
   assert.equal(u, 'ws://127.0.0.1/devtools/page/1');
 });
 
+test('fetchPageDebuggerWebSocketUrl: falls back to /devtools/page/ when type omitted', async () => {
+  const fetchImpl = async () => ({
+    ok: true,
+    json: async () => [
+      { type: 'browser', webSocketDebuggerUrl: 'ws://127.0.0.1/devtools/browser/abc' },
+      { url: 'about:blank', webSocketDebuggerUrl: 'ws://127.0.0.1/devtools/page/99' },
+    ],
+  });
+  const u = await fetchPageDebuggerWebSocketUrl(9222, fetchImpl);
+  assert.equal(u, 'ws://127.0.0.1/devtools/page/99');
+});
+
 test('createRealBrowserCdpController: stop idempotent without spawn', () => {
   const c = createRealBrowserCdpController({
     userDataPath: '/tmp/ham-real-browser-test',

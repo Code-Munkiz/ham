@@ -8,6 +8,7 @@ const { validateNavigateUrl, safeDisplayUrl } = require('./local_control_browser
 
 const MAX_SCREENSHOT_DATA_URL_CHARS = 1_500_000;
 const CDP_READY_MS = 45_000;
+const CDP_ATTACH_RETRY_MS = 15_000;
 const NAV_WAIT_MS = 35_000;
 
 /** GoHAM v1 Slice 1 — bounded interaction primitives (scroll / wait / enumerated click). */
@@ -288,13 +289,24 @@ async function fetchPageDebuggerWebSocketUrl(port, fetchImpl) {
   if (!r.ok) throw new Error('json_list_failed');
   const list = await r.json();
   if (!Array.isArray(list)) throw new Error('json_list_invalid');
-  const page = list.find(
+  const isDevtools = (u) => String(u || '').startsWith('devtools://');
+  let page = list.find(
     (t) =>
       t &&
       t.type === 'page' &&
       typeof t.webSocketDebuggerUrl === 'string' &&
-      !String(t.url || '').startsWith('devtools://'),
+      !isDevtools(t.url),
   );
+  if (!page) {
+    page = list.find(
+      (t) =>
+        t &&
+        typeof t.webSocketDebuggerUrl === 'string' &&
+        String(t.webSocketDebuggerUrl).includes('/devtools/page/') &&
+        !isDevtools(t.url) &&
+        t.type !== 'browser',
+    );
+  }
   if (!page) throw new Error('no_page_target');
   return page.webSocketDebuggerUrl;
 }
@@ -635,6 +647,9 @@ function createRealBrowserCdpController(opts = {}) {
       `--user-data-dir=${profileDir}`,
       `--remote-debugging-port=${port}`,
       '--remote-debugging-address=127.0.0.1',
+      // Recent Chromium rejects CDP WebSocket upgrades that include an Origin header unless
+      // explicitly allowed; Node's `ws` client may send Origin → attach fails after /json/version is up.
+      '--remote-allow-origins=*',
       '--no-first-run',
       '--no-default-browser-check',
       '--disable-extensions',
@@ -689,14 +704,29 @@ function createRealBrowserCdpController(opts = {}) {
 
   async function attachCdp() {
     if (!debugPort) throw new Error('no_debug_port');
-    const wsUrl = await fetchPageDebuggerWebSocketUrl(debugPort, fetchImpl);
-    const session = new CdpSession(wsUrl);
-    await session.connect();
-    await session.send('Page.enable', {});
-    await session.send('Runtime.enable', {});
-    await session.send('Input.enable', {});
-    if (cdp) cdp.close();
-    cdp = session;
+    const deadline = Date.now() + CDP_ATTACH_RETRY_MS;
+    /** @type {Error} */
+    let lastErr = new Error('cdp_attach_failed');
+    while (Date.now() < deadline) {
+      /** @type {CdpSession | null} */
+      let session = null;
+      try {
+        const wsUrl = await fetchPageDebuggerWebSocketUrl(debugPort, fetchImpl);
+        session = new CdpSession(wsUrl);
+        await session.connect();
+        await session.send('Page.enable', {});
+        await session.send('Runtime.enable', {});
+        await session.send('Input.enable', {});
+        if (cdp) cdp.close();
+        cdp = session;
+        return;
+      } catch (e) {
+        if (session) session.close();
+        lastErr = e instanceof Error ? e : new Error(String(e));
+        await new Promise((r) => setTimeout(r, 100));
+      }
+    }
+    throw lastErr;
   }
 
   /**

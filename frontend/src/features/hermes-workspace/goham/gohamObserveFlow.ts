@@ -69,7 +69,7 @@ export function sessionErrorMessage(r: unknown, label: string): string {
       return `${label} failed: Chromium did not open its DevTools port in time. If this persists, set HAM_DESKTOP_CHROME_PATH to a known-good Chrome/Chromium binary and fully restart HAM Desktop.`;
     }
     if (err === "cdp_attach_failed" || err === "cdp_startup_failed") {
-      return `${label} failed: could not attach to the browser over CDP (${err}). Quit other apps using the same debug port range, confirm Chrome/Chromium runs on this machine, then try again.`;
+      return `${label} failed: could not attach to the browser over CDP (${err}). Update HAM Desktop to the latest build, quit other apps using ports 9200–9998, and confirm Chrome/Chromium runs locally.`;
     }
     return `${label} failed: ${err}`;
   }
