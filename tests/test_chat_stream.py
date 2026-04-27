@@ -314,3 +314,50 @@ def test_chat_stream_text_only_unchanged(mock_mode: None) -> None:
     done = [e for e in events if e["type"] == "done"][0]
     user_msgs = [m for m in done["messages"] if m["role"] == "user"]
     assert user_msgs[-1]["content"] == "plain text only"
+
+
+def test_chat_stream_accepts_ham_chat_user_v2(
+    mock_mode: None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.ham.chat_attachment_store import LocalDiskAttachmentStore, set_chat_attachment_store_for_tests
+
+    monkeypatch.setenv("HAM_CHAT_ATTACHMENT_DIR", str(tmp_path))
+    set_chat_attachment_store_for_tests(LocalDiskAttachmentStore(tmp_path))
+    tiny_png = (
+        b"\x89PNG\r\n\x1a\n"
+        b"\x00\x00\x00\x0dIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde"
+        b"\x00\x00\x00\x0bIDATx\x9cc``\x00\x00\x00\x02\x00\x01\xe2!\x03\x1a\x00\x00\x00"
+        b"\x00IEND\xaeB`\x82"
+    )
+    up = client.post(
+        "/api/chat/attachments",
+        files={"file": ("a.png", tiny_png, "image/png")},
+    )
+    assert up.status_code == 200, up.text
+    aid = up.json()["attachment_id"]
+    res = client.post(
+        "/api/chat/stream",
+        json={
+            "messages": [
+                {
+                    "role": "user",
+                    "content": {
+                        "h": "ham_chat_user_v2",
+                        "text": "what is this",
+                        "attachments": [
+                            {
+                                "id": aid,
+                                "name": "a.png",
+                                "mime": "image/png",
+                                "kind": "image",
+                            },
+                        ],
+                    },
+                },
+            ],
+        },
+    )
+    assert res.status_code == 200, res.text
+    done = [e for e in _parse_ndjson(res.text) if e["type"] == "done"][0]
+    user_msgs = [m for m in done["messages"] if m["role"] == "user"]
+    assert "ham_chat_user_v2" in user_msgs[-1]["content"]

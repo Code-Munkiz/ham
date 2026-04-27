@@ -6,9 +6,13 @@ export type WorkspaceComposerAttachment = {
   id: string;
   name: string;
   size: number;
-  kind: "image";
-  /** data: URL (allowed: png, jpeg, webp). */
+  kind: "image" | "file";
+  /** data: URL or `blob:` URL for preview. */
   payload: string;
+  /** Set after `POST /api/chat/attachments` — chat uses v2, not data URLs in Firestore. */
+  serverId?: string;
+  /** From upload response (required for v2). */
+  mime?: string;
   /** Shown in preview when the file is rejected or unreadable. */
   error?: string;
 };
@@ -17,14 +21,15 @@ export const MAX_WORKSPACE_ATTACHMENT_BYTES = 500 * 1024;
 
 export const MAX_WORKSPACE_ATTACHMENT_COUNT = 8;
 
-export const WORKSPACE_ATTACHMENT_ACCEPT = "image/png,image/jpeg,image/jpg,image/webp";
+export const WORKSPACE_ATTACHMENT_ACCEPT =
+  "image/png,image/jpeg,image/jpg,image/webp,text/plain,text/markdown,.txt,.md";
 
 const EXT_OK = new Set([".png", ".jpg", ".jpeg", ".webp"]);
 
 const MAX_IMAGE_DIMENSION = 1280;
 const TARGET_JPEG_QUALITY = 0.75;
 
-const UNSUPPORTED = "Use PNG, JPEG, or WebP screenshots only.";
+const UNSUPPORTED = "Use PNG, JPEG, WebP, plain text, or markdown (.txt, .md).";
 
 function fileExtensionLower(name: string): string {
   const i = name.lastIndexOf(".");
@@ -46,6 +51,14 @@ function mimeForFile(file: File): string {
   if (ext === ".jpg" || ext === ".jpeg") return "image/jpeg";
   if (ext === ".webp") return "image/webp";
   return "";
+}
+
+function isAllowedTextFile(file: File): boolean {
+  const ext = fileExtensionLower(file.name);
+  const m = mimeForFile(file);
+  if (m === "text/plain" || m === "text/markdown") return true;
+  if (ext === ".txt" || ext === ".md" || ext === ".markdown") return true;
+  return false;
 }
 
 /** Returns true if this file is one of the allowed screenshot types. */
@@ -167,6 +180,12 @@ export async function fileToWorkspaceAttachment(
 ): Promise<WorkspaceComposerAttachment | null> {
   const id = `hww-att-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
   const name = file.name || "attachment";
+  if (isAllowedTextFile(file)) {
+    if (file.size > MAX_WORKSPACE_ATTACHMENT_BYTES) {
+      return null;
+    }
+    return { id, name, size: file.size, kind: "file", payload: "" };
+  }
   if (!isAllowedScreenshotFile(file)) {
     return {
       id,
@@ -195,4 +214,19 @@ export async function fileToWorkspaceAttachment(
     return null;
   }
   return { id, name, size: file.size, kind: "image", payload: dataUrl };
+}
+
+/**
+ * Reconstruct a `File` for `POST /api/chat/attachments` from the local preview
+ * (uses the original `File` when size matches; otherwise the compressed data URL as a `File`).
+ */
+export async function buildFileForServerUpload(
+  original: File,
+  local: WorkspaceComposerAttachment,
+): Promise<File> {
+  if (local.kind === "file") return original;
+  if (local.size === original.size) return original;
+  const r = await fetch(local.payload);
+  const blob = await r.blob();
+  return new File([blob], local.name, { type: blob.type || "image/png" });
 }
