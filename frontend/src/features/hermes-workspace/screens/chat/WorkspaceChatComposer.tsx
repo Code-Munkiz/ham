@@ -313,6 +313,32 @@ export function WorkspaceChatComposer({
     [transitionVoiceState, voiceRecording, voiceTranscribing],
   );
 
+  const captureComposerPointer = React.useCallback((ev: React.SyntheticEvent) => {
+    const target = ev.target as HTMLElement | null;
+    if (!target) return;
+    pushVoiceDebug({
+      event: "voice.capture.pointer",
+      component: "WorkspaceChatComposer",
+      composerInstanceId: composerInstanceId.current,
+      targetTag: target.tagName,
+      targetClass: target.className,
+      voiceState,
+    });
+  }, [voiceState]);
+
+  const captureComposerClick = React.useCallback((ev: React.SyntheticEvent) => {
+    const target = ev.target as HTMLElement | null;
+    if (!target) return;
+    pushVoiceDebug({
+      event: "voice.capture.click",
+      component: "WorkspaceChatComposer",
+      composerInstanceId: composerInstanceId.current,
+      targetTag: target.tagName,
+      targetClass: target.className,
+      voiceState,
+    });
+  }, [voiceState]);
+
   return (
     <div
       ref={outerRef}
@@ -321,6 +347,8 @@ export function WorkspaceChatComposer({
       data-voice-recording={voiceRecording ? "true" : "false"}
       data-voice-transcribing={voiceTranscribing ? "true" : "false"}
       data-voice-state={voiceState}
+      onPointerDownCapture={captureComposerPointer}
+      onClickCapture={captureComposerClick}
     >
       <form
         onSubmit={(e) => {

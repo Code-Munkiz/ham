@@ -104,10 +104,25 @@ export function WorkspaceVoiceMessageInput(props: WorkspaceVoiceMessageInputProp
   }, [compact, error, onVoiceRecorderErrorChange]);
 
   const requestStop = React.useCallback(
-    (source: "pointerdown" | "click" | "banner_click" | "escape", ev?: React.SyntheticEvent | KeyboardEvent) => {
+    (
+      source: "pointerdown" | "click" | "banner_click" | "escape",
+      ev?: React.SyntheticEvent | KeyboardEvent,
+      opts: { force?: boolean } = {},
+    ) => {
       ev?.preventDefault?.();
       ev?.stopPropagation?.();
-      if (!isRecording) return;
+      if (!isRecording && !opts.force) {
+        pushVoiceDebug({
+          event: "voice.stop.early_return",
+          source,
+          reason: "not_recording",
+          component: "WorkspaceVoiceMessageInput",
+          voiceInstanceId: voiceInstanceId.current,
+          isRecording,
+          disabled,
+        });
+        return;
+      }
       const now = Date.now();
       if (now - lastStopRequestAtRef.current < 250) return;
       lastStopRequestAtRef.current = now;
@@ -126,7 +141,7 @@ export function WorkspaceVoiceMessageInput(props: WorkspaceVoiceMessageInputProp
   );
 
   React.useEffect(() => {
-    onStopRecorderReady?.(() => requestStop("banner_click"));
+    onStopRecorderReady?.(() => requestStop("banner_click", undefined, { force: true }));
     return () => onStopRecorderReady?.(null);
   }, [onStopRecorderReady, requestStop]);
 
@@ -134,7 +149,7 @@ export function WorkspaceVoiceMessageInput(props: WorkspaceVoiceMessageInputProp
     if (!isRecording) return;
     const onKeyDown = (ev: KeyboardEvent) => {
       if (ev.key !== "Escape") return;
-      requestStop("escape", ev);
+      requestStop("escape", ev, { force: true });
     };
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
