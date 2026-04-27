@@ -1,6 +1,7 @@
 /**
- * Workspace composer: PNG / JPEG / WebP screenshots only. Sent as `ham_chat_user_v1` JSON
- * to `/api/chat/stream` (see `hamChatUserPayload.ts` + `src/ham/chat_user_content.py`).
+ * Workspace composer: images + small text. Prefer `ham_chat_user_v2` (uploads via
+ * `POST /api/chat/attachments`); v1 inlines `data_url` in Firestore. See
+ * `chatUserContent.ts` + `src/ham/chat_user_content.py`.
  */
 export type WorkspaceComposerAttachment = {
   id: string;
