@@ -2,6 +2,7 @@ import type { HamChatUserContentV1, HamChatUserContentV2 } from "./chatUserConte
 import type {
   ContextEnginePayload,
   CursorCredentialsStatus,
+  HamTtsHealthPayload,
   ModelCatalogPayload,
   ProjectRecord,
 } from "./types";
@@ -71,7 +72,10 @@ export async function applyHamOperatorSecretHeaders(headers: Headers, hamBearerT
   }
 }
 
-/** Same-origin Ham API `fetch` with optional Clerk `Authorization` (skips if already set). */
+/**
+ * Same-origin Ham API `fetch` with optional Clerk `Authorization` (skips if already set).
+ * Returns the raw `Response` — use `.json()` for JSON, `.blob()` for binary (e.g. `POST /api/tts/generate` → `audio/mpeg`).
+ */
 export async function hamApiFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const url = apiUrl(path);
   const headers = new Headers(init.headers as HeadersInit | undefined);
@@ -131,6 +135,15 @@ export async function fetchModelsCatalog(): Promise<ModelCatalogPayload> {
     throw new Error(`models catalog: HTTP ${res.status}`);
   }
   return res.json() as Promise<ModelCatalogPayload>;
+}
+
+/** GET /api/tts/health — whether TTS routes are enabled on this API (no Microsoft network call). */
+export async function fetchTtsHealth(): Promise<HamTtsHealthPayload> {
+  const res = await hamApiFetch("/api/tts/health");
+  if (!res.ok) {
+    throw new Error(`TTS health: HTTP ${res.status}`);
+  }
+  return res.json() as Promise<HamTtsHealthPayload>;
 }
 
 /** GET /api/hermes-hub — gateway + Hermes skills capabilities; no fake Hermes inventory. */

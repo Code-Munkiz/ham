@@ -121,6 +121,16 @@ export interface ModelCatalogItem {
   openrouter_model?: string;
 }
 
+/** Response from `GET /api/tts/health` — TTS enabled and mounted (no network probe). */
+export interface HamTtsHealthPayload {
+  ok: boolean;
+  /** When false, UI should treat TTS as unavailable (e.g. HAM_TTS_ENABLED=0 or older API). */
+  available: boolean;
+  reason?: string;
+  generate_path?: string;
+  engine?: string;
+}
+
 /** Response from `GET /api/models`. */
 export interface ModelCatalogPayload {
   items: ModelCatalogItem[];
