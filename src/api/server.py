@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import os
 from pathlib import Path
 from typing import Annotated, Any
@@ -79,20 +80,22 @@ def _cors_allow_origin_regex() -> str | None:
     return raw or None
 
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=_cors_allow_origins(),
-    allow_origin_regex=_cors_allow_origin_regex(),
+_cors_kw: dict[str, Any] = {
+    "allow_origins": _cors_allow_origins(),
+    "allow_origin_regex": _cors_allow_origin_regex(),
     # Workspace adapters use hamApiFetch(..., credentials="include") for cross-origin Vercel → Cloud Run. Without this,
     # browsers omit Access-Control-Allow-Credentials and the response is treated as a CORS failure → "Failed to fetch".
-    allow_credentials=True,
-    # Private Network Access (`Access-Control-Allow-Private-Network`) is appended by
-    # ``private_network_access_middleware`` (outermost ASGI). Older Starlette ``CORSMiddleware`` does not accept
-    # ``allow_private_network=``; newer Starlette may add it — we rely on the custom middleware either way.
+    "allow_credentials": True,
     # PATCH required for /api/projects/{id} metadata updates (chat handoff repo save); browser preflight fails without it.
-    allow_methods=["GET", "POST", "PATCH", "DELETE"],
-    allow_headers=["*"],
-)
+    "allow_methods": ["GET", "POST", "PATCH", "DELETE"],
+    "allow_headers": ["*"],
+}
+# Starlette 0.45+ / 1.x: without this, OPTIONS with ``Access-Control-Request-Private-Network: true`` returns 400
+# ("Disallowed CORS private-network") before our ``private_network_access_middleware`` can attach the allow header.
+if "allow_private_network" in inspect.signature(CORSMiddleware.__init__).parameters:
+    _cors_kw["allow_private_network"] = True
+
+app.add_middleware(CORSMiddleware, **_cors_kw)
 
 app.include_router(chat_router)
 app.include_router(capability_directory_router)
