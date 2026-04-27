@@ -110,6 +110,7 @@ export function WorkspaceChatComposer({
   const [voiceBanner, setVoiceBanner] = React.useState<string | null>(null);
   const [isDragging, setIsDragging] = React.useState(false);
   const composerInstanceId = React.useRef(`composer-${Math.random().toString(36).slice(2, 9)}`);
+  const stopVoiceRecorderRef = React.useRef<(() => void) | null>(null);
   const outerRef = React.useRef<HTMLDivElement>(null);
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
   const modelSelectRef = React.useRef<HTMLSelectElement>(null);
@@ -252,6 +253,21 @@ export function WorkspaceChatComposer({
     if (dragDepthRef.current === 0) setIsDragging(false);
   };
 
+  const triggerBannerStop = React.useCallback(
+    (ev?: React.SyntheticEvent) => {
+      ev?.preventDefault?.();
+      ev?.stopPropagation?.();
+      if (!voiceRecording || voiceTranscribing) return;
+      pushVoiceDebug({
+        event: "voice.stop.banner_click",
+        component: "WorkspaceChatComposer",
+        composerInstanceId: composerInstanceId.current,
+      });
+      stopVoiceRecorderRef.current?.();
+    },
+    [voiceRecording, voiceTranscribing],
+  );
+
   return (
     <div
       ref={outerRef}
@@ -316,7 +332,18 @@ export function WorkspaceChatComposer({
               ) : (
                 <>
                   <span className="inline-flex h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-red-500" />
-                  <span className="text-red-200/90">Recording — stop the mic to finish</span>
+                  <button
+                    type="button"
+                    onPointerDownCapture={triggerBannerStop}
+                    onMouseDownCapture={triggerBannerStop}
+                    onClick={triggerBannerStop}
+                    className="pointer-events-auto rounded px-1 py-0.5 text-left text-red-200/90 underline-offset-2 hover:bg-red-400/10 hover:underline"
+                    aria-label="Stop recording from banner"
+                    data-hww-voice-button="recording-banner-stop"
+                    data-hww-voice-state="recording"
+                  >
+                    Recording - click to stop
+                  </button>
                 </>
               )}
             </div>
@@ -451,6 +478,9 @@ export function WorkspaceChatComposer({
                   }
                   onRecordingChange={setVoiceRecording}
                   onVoiceRecorderErrorChange={setVoiceBanner}
+                  onStopRecorderReady={(handler) => {
+                    stopVoiceRecorderRef.current = handler;
+                  }}
                   onVoiceError={(err) => {
                     setVoiceBanner(err);
                   }}
