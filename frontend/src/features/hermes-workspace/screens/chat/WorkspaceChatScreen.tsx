@@ -484,17 +484,22 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     const trimmed = input.trim();
     const usable = attachments.filter((a) => !a.error);
     if (voiceTranscribing) return;
+    if (attachments.length > 0 && usable.length === 0) {
+      toast.error("Every attachment failed. Remove them or add PNG, JPEG, or WebP under 500 KB, then try again.");
+      return;
+    }
     if (usable.length > 0) {
       const payload = buildHamChatUserPayloadV1(
         trimmed,
         usable.map((a) => {
-          const m = /^data:(image\/(?:png|jpeg|webp|jpg));base64,/i.exec(a.payload);
-          const mime = (m ? m[1] : "image/jpeg").toLowerCase();
+          const m = /^data:(image\/(?:png|jpe?g|webp));base64,/i.exec(a.payload.trim());
+          const raw = (m ? m[1] : "image/jpeg").toLowerCase();
+          const mime = raw === "image/jpg" ? "image/jpeg" : raw;
           return { name: a.name, mime, dataUrl: a.payload, size: a.size };
         }),
       );
       if (payload.images.length === 0) {
-        toast.error("Add a valid PNG, JPEG, or WebP screenshot.");
+        toast.error("Could not read screenshots. Use PNG, JPEG, or WebP (max 500 KB each).");
         return;
       }
       void send(payload);

@@ -60,8 +60,11 @@ export function WorkspaceChatComposer({
   const gatewayOk = isDashboardChatGatewayReady(catalog);
   const hasAttachErrOnly =
     attachments.length > 0 && attachments.every((a) => a.error) && !value.trim();
+  /** Do not allow send while every attachment failed — avoids sending text-only and “losing” the image silently. */
+  const allAttachmentsFailed = attachments.length > 0 && attachments.every((a) => a.error);
   const canSend =
     gatewayOk &&
+    !allAttachmentsFailed &&
     (value.trim() || (attachments.length > 0 && !hasAttachErrOnly)) &&
     !sending &&
     !voiceTranscribing &&

@@ -16,7 +16,8 @@ export type HamChatUserContentV1 = {
   images: HamChatUserImage[];
 };
 
-const RE_STRICT = /^data:(image\/(?:png|jpeg|webp));base64,/i;
+/** Browsers may emit `image/jpg` or `image/jpeg` for JPEG; accept both. */
+const RE_STRICT = /^data:(image\/(?:png|jpe?g|webp));base64,/i;
 
 export function tryParseHamChatUserV1String(raw: string): HamChatUserContentV1 | null {
   const t = raw.trim();
@@ -33,7 +34,8 @@ export function tryParseHamChatUserV1String(raw: string): HamChatUserContentV1 |
 function isAllowedScreenshotDataUrl(dataUrl: string, declaredMime: string): boolean {
   if (!RE_STRICT.test(dataUrl.trim())) return false;
   const m = declaredMime.toLowerCase();
-  return m === "image/png" || m === "image/jpeg" || m === "image/jpg" || m === "image/webp";
+  const d = m === "image/jpg" ? "image/jpeg" : m;
+  return d === "image/png" || d === "image/jpeg" || d === "image/webp";
 }
 
 export function buildHamChatUserPayloadV1(
@@ -42,7 +44,8 @@ export function buildHamChatUserPayloadV1(
 ): HamChatUserContentV1 {
   const out: HamChatUserImage[] = [];
   for (const im of images) {
-    const mime = im.mime.toLowerCase() === "image/jpg" ? "image/jpeg" : (im.mime.toLowerCase() as string);
+    const raw = im.mime.toLowerCase();
+    const mime = raw === "image/jpg" || raw === "image/jpeg" ? "image/jpeg" : raw;
     if (mime !== "image/png" && mime !== "image/jpeg" && mime !== "image/webp") {
       continue;
     }
