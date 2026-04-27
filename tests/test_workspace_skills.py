@@ -65,3 +65,35 @@ def test_catalog_list_custom_patch_delete(
     lq = client.get("/api/workspace/skills/items", params={"q": "documentation"})
     assert lq.status_code == 200
     assert any(x["id"] == "ham-local-docs" for x in lq.json()["skills"])
+
+
+def test_hermes_catalog_and_overlay_routes(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "w2"
+    root.mkdir()
+    monkeypatch.setenv("HAM_WORKSPACE_ROOT", str(root))
+    workspace_skills.StatePath = None
+
+    cat = client.get("/api/workspace/skills/hermes-catalog")
+    assert cat.status_code == 200
+    j = cat.json()
+    assert j.get("kind") == "hermes_runtime_skills_catalog"
+    assert j.get("readOnly") is True
+    assert j.get("source") == "hermes_static_catalog"
+    assert isinstance(j.get("entries"), list)
+    assert j.get("count", 0) == len(j["entries"])
+    assert j["count"] > 0
+
+    first_id = j["entries"][0]["catalog_id"]
+    d = client.get(f"/api/workspace/skills/hermes-catalog/{first_id}")
+    assert d.status_code == 200
+    dj = d.json()
+    assert dj.get("readOnly") is True
+    assert dj["entry"]["catalog_id"] == first_id
+
+    live = client.get("/api/workspace/skills/hermes-live-overlay")
+    assert live.status_code == 200
+    lj = live.json()
+    assert lj.get("kind") == "hermes_skills_live_overlay"
+    assert "status" in lj

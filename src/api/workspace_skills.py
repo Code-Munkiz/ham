@@ -21,6 +21,14 @@ from pydantic import BaseModel, Field
 
 from src.api.clerk_gate import get_ham_clerk_actor
 from src.ham.clerk_auth import HamActor
+from src.ham.hermes_skills_catalog import (
+    catalog_note,
+    catalog_schema_version,
+    catalog_upstream_meta,
+    get_catalog_entry_detail,
+    list_catalog_entries,
+)
+from src.ham.hermes_skills_live import build_skills_installed_overlay
 
 router = APIRouter(prefix="/api/workspace/skills", tags=["workspace-skills"])
 
@@ -256,3 +264,62 @@ def delete_skill(
             raise HTTPException(status_code=404, detail="Skill not found")
         del skills[skill_id]
         _save(raw)
+
+
+# --- Hermes static catalog + live overlay (same sources as /shop Skills tab, server-side only) ---
+
+
+@router.get("/hermes-catalog")
+def workspace_hermes_static_catalog(
+    _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)] = None,
+) -> dict[str, Any]:
+    """Vendored Hermes-runtime skills catalog (read-only); mirrors GET /api/hermes-skills/catalog."""
+    entries = list_catalog_entries()
+    payload: dict[str, Any] = {
+        "kind": "hermes_runtime_skills_catalog",
+        "schema_version": catalog_schema_version(),
+        "count": len(entries),
+        "entries": entries,
+        "readOnly": True,
+        "source": "hermes_static_catalog",
+    }
+    up = catalog_upstream_meta()
+    if up:
+        payload["upstream"] = up
+    note = catalog_note()
+    if note:
+        payload["catalog_note"] = note
+    return payload
+
+
+@router.get("/hermes-catalog/{catalog_id}")
+def workspace_hermes_static_catalog_entry(
+    catalog_id: str,
+    _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)] = None,
+) -> dict[str, Any]:
+    """Single catalog entry; mirrors GET /api/hermes-skills/catalog/{catalog_id}."""
+    detail = get_catalog_entry_detail(catalog_id)
+    if detail is None:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": {
+                    "code": "HERMES_SKILL_CATALOG_UNKNOWN",
+                    "message": f"No Hermes catalog entry for id {catalog_id!r}.",
+                }
+            },
+        )
+    return {
+        "kind": "hermes_runtime_skill_detail",
+        "entry": detail,
+        "readOnly": True,
+        "source": "hermes_static_catalog",
+    }
+
+
+@router.get("/hermes-live-overlay")
+def workspace_hermes_live_skills_overlay(
+    _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)] = None,
+) -> dict[str, Any]:
+    """Read-only live Hermes install observation; same payload as GET /api/hermes-skills/installed."""
+    return build_skills_installed_overlay()
