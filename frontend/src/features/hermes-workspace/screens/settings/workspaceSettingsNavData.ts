@@ -75,7 +75,7 @@ const LEGACY_TAB_TO_SECTION: Record<string, UpstreamSettingsNavId> = {
 };
 
 /**
- * Coerce a raw `?section=` (or legacy `?tab=`) to a valid upstream section id, or return default.
+ * Coerce a raw `?section=` (or older `?tab=`) to a valid upstream section id, or return default.
  */
 export function parseWorkspaceSettingsSection(
   sectionRaw: string | null | undefined,

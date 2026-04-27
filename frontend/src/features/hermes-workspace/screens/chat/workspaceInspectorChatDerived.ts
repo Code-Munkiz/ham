@@ -1,6 +1,9 @@
 /**
  * Read-only Inspector summaries for Workspace chat: file mentions in transcript + composer queue,
  * and structured signals from assistant UI actions / operator results (no fake rows).
+ *
+ * Transcript attachment rows: `ham_chat_user_v2` / v1 JSON first, then plain-text marker regex for
+ * older sessions — not used for new sends (new sends prefer v2 after upload).
  */
 import type { HamOperatorResult, HamUiAction } from "@/lib/ham/api";
 import { tryParseHamChatUserV1String, tryParseHamChatUserV2String } from "@/lib/ham/chatUserContent";

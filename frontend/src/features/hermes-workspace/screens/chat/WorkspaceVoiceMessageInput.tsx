@@ -1,5 +1,5 @@
 /**
- * Mic-enabled control for Hermes Workspace chat composer (migrated from legacy `components/chat`).
+ * Mic-enabled control for Hermes Workspace chat composer (migrated from pre-workspace chat).
  */
 
 import React, { useState } from "react";
