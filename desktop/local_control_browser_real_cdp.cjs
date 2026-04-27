@@ -640,8 +640,13 @@ function createRealBrowserCdpController(opts = {}) {
       '--disable-extensions',
       '--disable-dev-shm-usage',
       '--disable-background-networking',
-      'about:blank',
     ];
+    // Linux: Chromium often exits immediately when spawned from Electron unless the
+    // sandbox is disabled for this dedicated profile (same pattern as Puppeteer/CI).
+    if (process.platform === 'linux') {
+      args.push('--no-sandbox', '--disable-setuid-sandbox');
+    }
+    args.push('about:blank');
 
     try {
       child = spawnImpl(exe, args, {
@@ -668,10 +673,15 @@ function createRealBrowserCdpController(opts = {}) {
 
     try {
       await waitForDevtoolsJsonVersion(port, fetchImpl, CDP_READY_MS);
+    } catch {
+      stopSession();
+      return { ok: false, error: 'cdp_devtools_timeout' };
+    }
+    try {
       await attachCdp();
     } catch {
       stopSession();
-      return { ok: false, error: 'cdp_startup_failed' };
+      return { ok: false, error: 'cdp_attach_failed' };
     }
 
     return { ok: true };

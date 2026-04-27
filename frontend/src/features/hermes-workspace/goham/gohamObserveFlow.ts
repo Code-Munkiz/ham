@@ -65,6 +65,12 @@ export function sessionErrorMessage(r: unknown, label: string): string {
     if (err === "chromium_not_found") {
       return `${label} failed: Chromium not found — install Chrome/Chromium or run scripts/ensure_chromium_for_desktop.sh, then restart HAM Desktop.`;
     }
+    if (err === "cdp_devtools_timeout") {
+      return `${label} failed: Chromium did not open its DevTools port in time. If this persists, set HAM_DESKTOP_CHROME_PATH to a known-good Chrome/Chromium binary and fully restart HAM Desktop.`;
+    }
+    if (err === "cdp_attach_failed" || err === "cdp_startup_failed") {
+      return `${label} failed: could not attach to the browser over CDP (${err}). Quit other apps using the same debug port range, confirm Chrome/Chromium runs on this machine, then try again.`;
+    }
     return `${label} failed: ${err}`;
   }
   return `${label} failed.`;
