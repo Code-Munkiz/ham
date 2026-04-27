@@ -76,7 +76,13 @@ function workspaceChatSubtitle(opts: {
   return "Messages you send are stored by HAM after the first reply.";
 }
 
-export function WorkspaceChatScreen() {
+export type WorkspaceChatScreenProps = {
+  /** In-shell drawer: keep session off the URL; do not navigate on new session. */
+  embedMode?: boolean;
+};
+
+export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
+  const { embedMode = false } = props;
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [messages, setMessages] = React.useState<HwwMsgRow[]>([]);
@@ -192,8 +198,9 @@ export function WorkspaceChatScreen() {
     [sending],
   );
 
-  /** Deep link `?session=` */
+  /** Deep link `?session=` (full-page chat only). */
   React.useEffect(() => {
+    if (embedMode) return;
     const s = searchParams.get("session");
     if (!s) {
       streamTurnSessionRef.current = null;
@@ -210,7 +217,7 @@ export function WorkspaceChatScreen() {
       return;
     }
     void loadFromApi(s);
-  }, [searchParams, sessionId, sending, loadFromApi]);
+  }, [embedMode, searchParams, sessionId, sending, loadFromApi]);
 
   const startNew = React.useCallback(() => {
     setSessionId(null);
@@ -220,17 +227,20 @@ export function WorkspaceChatScreen() {
     setInput("");
     setAttachments([]);
     setLoadErr(null);
-    navigate({ pathname: "/workspace/chat", search: "" }, { replace: true });
+    if (!embedMode) {
+      navigate({ pathname: "/workspace/chat", search: "" }, { replace: true });
+    }
     queueMicrotask(() => {
       document.getElementById("hww-chat-composer")?.focus();
     });
-  }, [navigate]);
+  }, [embedMode, navigate]);
 
   const retryLoadSession = React.useCallback(() => {
+    if (embedMode) return;
     const s = searchParams.get("session");
     if (!s?.trim()) return;
     void loadFromApi(s.trim());
-  }, [searchParams, loadFromApi]);
+  }, [embedMode, searchParams, loadFromApi]);
 
   React.useEffect(() => {
     endRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
@@ -359,10 +369,12 @@ export function WorkspaceChatScreen() {
             onSession: (sid) => {
               streamTurnSessionRef.current = sid;
               setSessionId(sid);
-              navigate(
-                { pathname: "/workspace/chat", search: `?session=${encodeURIComponent(sid)}` },
-                { replace: true },
-              );
+              if (!embedMode) {
+                navigate(
+                  { pathname: "/workspace/chat", search: `?session=${encodeURIComponent(sid)}` },
+                  { replace: true },
+                );
+              }
               setInspectorEvents((prev) => {
                 const patched = patchInspectorEventsSessionId(prev, sid);
                 if (sid === priorSession) return patched;
@@ -465,7 +477,7 @@ export function WorkspaceChatScreen() {
         setSending(false);
       }
     },
-    [sending, voiceTranscribing, sessionId, chatModelIdForApi, projectId, navigate],
+    [embedMode, sending, voiceTranscribing, sessionId, chatModelIdForApi, projectId, navigate],
   );
 
   const onFormSubmit = () => {
@@ -495,7 +507,7 @@ export function WorkspaceChatScreen() {
   const hasTranscript = messages.length > 0;
   const showEmpty = !loadingSession && !hasTranscript && !loadErr;
   const sessionLoadFailed = Boolean(loadErr && !hasTranscript && !loadingSession);
-  const staleSessionParam = searchParams.get("session");
+  const staleSessionParam = embedMode ? null : searchParams.get("session");
   const headerTitle = sessionLoadFailed
     ? "Session unavailable"
     : !sessionId
@@ -608,23 +620,25 @@ export function WorkspaceChatScreen() {
             </>
           )}
         </div>
-        <WorkspaceChatComposer
-          value={input}
-          onChange={setInput}
-          onSubmit={onFormSubmit}
-          disabled={catalogLoading}
-          sending={sending}
-          voiceTranscribing={voiceTranscribing}
-          onVoiceBlob={handleVoiceBlob}
-          attachments={attachments}
-          onAddAttachments={handleAddAttachments}
-          onRemoveAttachment={(id) => {
-            setAttachments((p) => p.filter((a) => a.id !== id));
-          }}
-          catalog={catalog}
-          modelId={modelId}
-          onModelIdChange={setModelId}
-        />
+        <div className="flex w-full justify-center px-3 md:px-6">
+          <WorkspaceChatComposer
+            value={input}
+            onChange={setInput}
+            onSubmit={onFormSubmit}
+            disabled={catalogLoading}
+            sending={sending}
+            voiceTranscribing={voiceTranscribing}
+            onVoiceBlob={handleVoiceBlob}
+            attachments={attachments}
+            onAddAttachments={handleAddAttachments}
+            onRemoveAttachment={(id) => {
+              setAttachments((p) => p.filter((a) => a.id !== id));
+            }}
+            catalog={catalog}
+            modelId={modelId}
+            onModelIdChange={setModelId}
+          />
+        </div>
       </div>
       {inspectorOpen ? (
         <>

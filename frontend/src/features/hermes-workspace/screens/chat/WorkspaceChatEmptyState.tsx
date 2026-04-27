@@ -53,7 +53,7 @@ export function WorkspaceChatEmptyState({ onSuggestionClick }: WorkspaceChatEmpt
         <div className="relative mb-6">
           <img
             src={avatarSrc}
-            alt="Hermes"
+            alt=""
             className="relative size-20 rounded-md object-contain"
             style={{
               border: "1px solid var(--hww-chat-border, rgba(255,255,255,0.12))",
@@ -63,7 +63,7 @@ export function WorkspaceChatEmptyState({ onSuggestionClick }: WorkspaceChatEmpt
           />
         </div>
         <p className="hww-chat-micro-label mb-2 text-[11px] font-medium uppercase tracking-[0.12em] text-white/50">
-          Hermes Workspace
+          HAM's Workspace
         </p>
         <h2 className="text-2xl font-semibold tracking-tight text-[#e8eef8] md:text-3xl">Begin a session</h2>
         <p className="mt-3 text-sm text-white/40">Agent chat · live tools · memory · full observability</p>

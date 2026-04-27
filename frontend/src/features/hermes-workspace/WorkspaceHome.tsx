@@ -14,11 +14,11 @@ export function WorkspaceHome() {
             Dashboard
           </h1>
           <p className="mt-1 text-[12px] font-medium uppercase tracking-[0.14em] text-white/32">
-            Hermes workspace
+            HAM's Workspace
           </p>
           <p className="mt-2 max-w-lg text-sm leading-relaxed text-white/45">
-            HAM API and runtime unchanged — the sidebar reflects the full Hermes Workspace map; most
-            sections are still staging placeholders on top of the same backend seams.
+            Operator-facing workspace: chat, files, skills, and settings share the same HAM API and local runtime;
+            some sections are still staging placeholders.
           </p>
         </div>
 

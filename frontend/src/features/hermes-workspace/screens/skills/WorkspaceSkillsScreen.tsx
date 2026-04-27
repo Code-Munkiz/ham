@@ -318,7 +318,7 @@ export function WorkspaceSkillsScreen() {
     <div className="hws-root min-h-full overflow-y-auto" style={{ color: "var(--theme-text)" }}>
       <div className="mx-auto flex w-full max-w-[1200px] flex-col gap-5 px-4 py-6 sm:px-6 lg:px-8">
         <header className="rounded-2xl border border-white/10 bg-black/20 p-4 backdrop-blur-md">
-          <p className="text-xs font-medium uppercase tracking-wide text-[var(--theme-muted)]">Hermes Workspace</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-[var(--theme-muted)]">HAM's Workspace</p>
           <h1 className="text-balance text-2xl font-medium sm:text-3xl">Skills Browser</h1>
           <p className="mt-1 max-w-2xl text-pretty text-sm text-[var(--theme-muted)] sm:text-base">
             <strong>Installed</strong> uses the workspace JSON store via{" "}
@@ -469,11 +469,13 @@ export function WorkspaceSkillsScreen() {
                         className="flex min-h-[180px] flex-col rounded-2xl border border-white/10 bg-black/25 p-4"
                       >
                         <div className="min-w-0 space-y-1">
-                          <h3 className="text-sm font-semibold tracking-tight text-[var(--theme-text)]">
+                          <h3
+                            className="text-sm font-semibold tracking-tight text-[var(--theme-text)]"
+                            title={e.catalog_id}
+                          >
                             {primaryHermesCatalogLabel(e)}
                           </h3>
                           <p className="line-clamp-3 text-xs text-[var(--theme-muted)]">{e.summary || "—"}</p>
-                          <p className="pt-1 font-mono text-[10px] text-white/40">{e.catalog_id}</p>
                         </div>
                         <div className="mt-auto flex flex-wrap items-center gap-1.5 border-t border-white/10 pt-3">
                           <span

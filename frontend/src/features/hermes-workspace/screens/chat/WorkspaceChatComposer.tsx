@@ -83,12 +83,28 @@ export function WorkspaceChatComposer({
     [attachments.length, onAddAttachments],
   );
 
+  const onDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (disabled || sending || voiceTranscribing || voiceRecording) return;
+    const dt = e.dataTransfer?.files;
+    if (!dt?.length) return;
+    handleAddFiles(Array.from(dt));
+  };
+
   return (
     <div
-      className="hww-chat-composer-outer pointer-events-auto shrink-0 border-t border-white/[0.06] bg-[#030a10]/90 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-sm md:px-4"
+      className="hww-chat-composer-outer pointer-events-auto w-full max-w-[40rem] shrink-0 border-t border-white/[0.06] bg-[#030a10]/90 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-sm md:px-4"
+      onDragOver={onDragOver}
+      onDrop={onDrop}
     >
       {showModel ? (
-        <div className="mb-2 flex w-full max-w-[56rem] flex-wrap items-center gap-2 md:pl-1">
+        <div className="mb-2 flex w-full flex-wrap items-center gap-2 md:pl-1">
           <label htmlFor="hww-chat-model" className="text-[10px] font-medium uppercase tracking-wide text-white/35">
             Model
           </label>
@@ -116,13 +132,15 @@ export function WorkspaceChatComposer({
           e.preventDefault();
           onSubmit();
         }}
-        className="w-full max-w-[56rem] md:pl-1"
+        className="w-full md:pl-1"
       >
         <div
           className={cn(
             "flex flex-col overflow-hidden rounded-3xl border border-white/[0.1] bg-[#050c14]/95 shadow-[0_0_0_1px_rgba(255,255,255,0.03)]",
             "ring-0 focus-within:border-[#c45c12]/40 focus-within:shadow-[0_0_0_1px_rgba(196,92,18,0.2)]",
           )}
+          onDragOver={onDragOver}
+          onDrop={onDrop}
         >
           {(voiceRecording || voiceTranscribing) && (
             <div

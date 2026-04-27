@@ -507,10 +507,12 @@ function SkillsTabBody({
           {catalogPreview.map((e) => (
             <li key={e.catalog_id} className="flex items-start justify-between gap-2 px-3 py-2">
               <div className="min-w-0">
-                <p className="truncate text-[12px] font-medium text-white/[0.88]" title={e.catalog_id}>
+                <p
+                  className="truncate text-[12px] font-medium text-white/[0.88]"
+                  title={`${primaryHermesCatalogLabel(e)} — ${e.catalog_id}`}
+                >
                   {primaryHermesCatalogLabel(e)}
                 </p>
-                <p className="truncate font-mono text-[10px] text-white/45">{e.catalog_id}</p>
               </div>
               <Button
                 type="button"

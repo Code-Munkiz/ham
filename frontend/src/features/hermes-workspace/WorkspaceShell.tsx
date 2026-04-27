@@ -20,6 +20,7 @@ import type { ChatSessionSummary } from "./workspaceTypes";
 import { sessionCardSubtitle, sessionCardTitle } from "./utils/sessionListFormat";
 import { WorkspaceMobileTabBar } from "./WorkspaceMobileTabBar";
 import { WorkspaceChatFloatingToggle } from "./components/WorkspaceChatFloatingToggle";
+import { WorkspaceChatPanel } from "./components/WorkspaceChatPanel";
 import { WorkspaceTerminalView } from "./screens/terminal/WorkspaceTerminalView";
 
 const HWW_SIDEBAR_COLLAPSE_KEY = "hww.sidebar.collapsed";
@@ -227,7 +228,7 @@ function WorkspaceSideNav({
             className={cn("min-w-0", c && "hidden")}
           >
             <p className="truncate text-[10px] font-semibold uppercase tracking-[0.12em] text-white/80">
-              {isChatRoute ? "Chat" : "Hermes workspace"}
+              {isChatRoute ? "Chat" : "HAM's Workspace"}
             </p>
           </div>
         </div>
@@ -406,7 +407,7 @@ function WorkspaceSideNav({
             <span
               className={cn("text-[11px] font-medium text-white/40", c && "sr-only")}
             >
-              HAM app
+              HAM
             </span>
           </a>
         ) : (
@@ -431,7 +432,7 @@ function WorkspaceSideNav({
             <span
               className={cn("text-[11px] font-medium text-white/40", c && "sr-only")}
             >
-              HAM app
+              HAM
             </span>
           </Link>
         )}
@@ -453,6 +454,7 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   /** SHELL-015 — docked terminal strip on chat route */
   const [chatTerminalDockOpen, setChatTerminalDockOpen] = React.useState(false);
+  const [workspaceChatPanelOpen, setWorkspaceChatPanelOpen] = React.useState(false);
   const [sessions, setSessions] = React.useState<ChatSessionSummary[]>([]);
   const [sessionsLoading, setSessionsLoading] = React.useState(true);
   const [sessionsError, setSessionsError] = React.useState<string | null>(null);
@@ -488,6 +490,10 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
   React.useEffect(() => {
     setDrawerOpen(false);
   }, [location.pathname]);
+
+  React.useEffect(() => {
+    if (isWorkspaceChat) setWorkspaceChatPanelOpen(false);
+  }, [isWorkspaceChat]);
 
   const sessionNavProps = {
     sessions,
@@ -623,7 +629,10 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
         </div>
       </div>
       <WorkspaceMobileTabBar />
-      {!isWorkspaceChat ? <WorkspaceChatFloatingToggle /> : null}
+      {!isWorkspaceChat ? (
+        <WorkspaceChatFloatingToggle onOpen={() => setWorkspaceChatPanelOpen(true)} />
+      ) : null}
+      <WorkspaceChatPanel open={workspaceChatPanelOpen} onClose={() => setWorkspaceChatPanelOpen(false)} />
     </div>
   );
 }
