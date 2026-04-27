@@ -6,7 +6,27 @@ This repo ships a **`Dockerfile`** that runs **`uvicorn src.api.server:app`**. T
 
 ### Chat sessions and `?session=` deep links
 
-By default, Ham stores chat sessions in SQLite under `~/.ham/chat_sessions.sqlite` (or `HAM_CHAT_SESSION_DB`). **Cloud Run’s container disk is ephemeral** unless you mount a persistent volume or external DB—**a new revision often starts with an empty session store**, so old `/workspace/chat?session=…` links may return 404. The workspace UI handles that with a recovery card (start new / retry). For production durability, set `HAM_CHAT_SESSION_DB` to a persistent path or add a managed store (see `src/api/chat.py` TODO near `_build_chat_session_store`).
+**Local / dev (default):** Ham stores chat sessions in SQLite under `~/.ham/chat_sessions.sqlite` (override with `HAM_CHAT_SESSION_DB`). This is fine on a laptop; it is **not** durable on Cloud Run unless the DB path is on a mounted volume (unusual).
+
+**Cloud Run (recommended):** set **`HAM_CHAT_SESSION_STORE=firestore`** so session documents live in **Firestore** in the same GCP project as the service. Container restarts, new revisions, and scale-to-zero then reuse the same data; `/workspace/chat?session=<id>` keeps working after redeploys.
+
+| Variable | Meaning |
+|----------|---------|
+| `HAM_CHAT_SESSION_STORE` | `sqlite` (default), `memory`, or `firestore`. (`postgres` is reserved — not implemented.) |
+| `HAM_CHAT_SESSION_DB` | SQLite file path when store is `sqlite`. |
+| `HAM_CHAT_SESSION_FIRESTORE_PROJECT` | Optional GCP project id for Firestore; omit to use the Cloud Run service’s default project (ADC). |
+| `HAM_CHAT_SESSION_FIRESTORE_COLLECTION` | Top-level collection name (default `ham_chat_sessions`). |
+
+**Firestore setup (operator):**
+
+1. In the target project, enable **Firestore** (Native mode) if not already enabled.
+2. Grant the **Cloud Run runtime service account** a role that can read/write Firestore in that project, e.g. **`roles/datastore.user`** (or a custom role with the needed `datastore.*` permissions).
+3. Set the env vars above on the Cloud Run service (add them to your `.gcloud/ham-api-env.yaml` or use **`gcloud run services update … --set-env-vars`** / **`--update-env-vars`** — avoid replacing the whole env file with a minimal YAML that drops Hermes/OpenRouter keys; see the warning earlier in this doc).
+4. Redeploy **`ham-api`**. No migration of old ephemeral SQLite sessions — only new traffic uses Firestore.
+
+The workspace UI still shows a recovery card for missing or permission-denied sessions.
+
+**In-process only:** `HAM_CHAT_SESSION_STORE=memory` (tests / special cases; not durable).
 
 ## Source of truth: Clarity Staging (team GCP)
 

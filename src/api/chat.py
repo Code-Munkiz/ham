@@ -41,26 +41,11 @@ from src.integrations.nous_gateway_client import (
     format_gateway_error_user_message,
     stream_chat_turn,
 )
-from src.persistence.chat_session_store import ChatTurn, InMemoryChatSessionStore
-from src.persistence.sqlite_chat_session_store import SqliteChatSessionStore
+from src.persistence.chat_session_store import ChatTurn, build_chat_session_store
 
 router = APIRouter(tags=["chat"])
 
-_ChatStore = InMemoryChatSessionStore | SqliteChatSessionStore
-
-
-def _build_chat_session_store() -> _ChatStore:
-    # Default SQLite lives on the process filesystem (ephemeral on Cloud Run new revisions/instances unless
-    # HAM_CHAT_SESSION_DB points to a mounted volume). TODO: durable store if ?session= deep links must survive redeploys.
-    mode = (os.environ.get("HAM_CHAT_SESSION_STORE") or "sqlite").strip().lower()
-    if mode == "memory":
-        return InMemoryChatSessionStore()
-    raw = (os.environ.get("HAM_CHAT_SESSION_DB") or "").strip()
-    db_path = Path(raw).expanduser() if raw else Path.home() / ".ham" / "chat_sessions.sqlite"
-    return SqliteChatSessionStore(db_path)
-
-
-_chat_store = _build_chat_session_store()
+_chat_store = build_chat_session_store()
 
 
 class ChatMessageIn(BaseModel):

@@ -5,8 +5,10 @@ Session IDs are issued by Ham. Upstream gateway conversation refs stay server-si
 """
 from __future__ import annotations
 
+import os
 import uuid
 from dataclasses import dataclass, field, replace
+from pathlib import Path
 from threading import RLock
 from typing import Any, Protocol, Sequence, runtime_checkable
 
@@ -62,6 +64,34 @@ class ChatSessionStore(Protocol):
     def list_messages(self, session_id: str) -> list[dict[str, str]]: ...
 
     def list_sessions(self, *, limit: int = 50, offset: int = 0) -> list[ChatSessionSummary]: ...
+
+
+def build_chat_session_store() -> ChatSessionStore:
+    """
+    Select store from env:
+
+    - ``HAM_CHAT_SESSION_STORE=memory`` — in-process only.
+    - ``HAM_CHAT_SESSION_STORE=sqlite`` (default) — local file; path from ``HAM_CHAT_SESSION_DB`` or ``~/.ham/chat_sessions.sqlite``.
+    - ``HAM_CHAT_SESSION_STORE=firestore`` — Cloud Firestore (durable on Cloud Run when ADC has datastore access).
+    """
+    mode = (os.environ.get("HAM_CHAT_SESSION_STORE") or "sqlite").strip().lower()
+    if mode == "memory":
+        return InMemoryChatSessionStore()
+    if mode == "postgres":
+        raise RuntimeError(
+            "HAM_CHAT_SESSION_STORE=postgres is not implemented; use firestore (durable on Cloud Run) or sqlite (local).",
+        )
+    if mode == "firestore":
+        from src.persistence.firestore_chat_session_store import FirestoreChatSessionStore
+
+        coll = (os.environ.get("HAM_CHAT_SESSION_FIRESTORE_COLLECTION") or "ham_chat_sessions").strip()
+        project = (os.environ.get("HAM_CHAT_SESSION_FIRESTORE_PROJECT") or "").strip() or None
+        return FirestoreChatSessionStore(coll, project=project)
+    raw = (os.environ.get("HAM_CHAT_SESSION_DB") or "").strip()
+    db_path = Path(raw).expanduser() if raw else Path.home() / ".ham" / "chat_sessions.sqlite"
+    from src.persistence.sqlite_chat_session_store import SqliteChatSessionStore
+
+    return SqliteChatSessionStore(db_path)
 
 
 class InMemoryChatSessionStore:

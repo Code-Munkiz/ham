@@ -35,3 +35,10 @@ HAM_CORS_ORIGIN_REGEX: "https://.*\\.vercel\\.app"
 
 # Hermes runtime skills UI: Cloud Run is not co-located with ~/.hermes — mark remote-only.
 # HAM_HERMES_SKILLS_MODE: remote_only
+
+# --- Durable chat sessions (recommended on Cloud Run) ---
+# Default sqlite uses container-local disk → ephemeral across revisions. Use Firestore for ?session= deep links.
+# HAM_CHAT_SESSION_STORE: firestore
+# Optional if Firestore is in the same project as Cloud Run (uses default credentials):
+# HAM_CHAT_SESSION_FIRESTORE_PROJECT: clarity-staging-488201
+# HAM_CHAT_SESSION_FIRESTORE_COLLECTION: ham_chat_sessions
