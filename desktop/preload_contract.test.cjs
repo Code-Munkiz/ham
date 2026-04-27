@@ -18,6 +18,13 @@ test('preload exposes narrow localControl methods only', () => {
   assert.ok(src.includes('ham-desktop:local-control-browser-navigate'));
   assert.ok(src.includes('ham-desktop:local-control-browser-screenshot'));
   assert.ok(src.includes('ham-desktop:local-control-browser-stop-session'));
+  assert.ok(src.includes('ham-desktop:local-control-browser-real-arm'));
+  assert.ok(src.includes('ham-desktop:local-control-get-browser-real-status'));
+  assert.ok(src.includes('ham-desktop:local-control-browser-real-start-session'));
+  assert.ok(src.includes('ham-desktop:local-control-browser-real-navigate'));
+  assert.ok(src.includes('ham-desktop:local-control-browser-real-reload'));
+  assert.ok(src.includes('ham-desktop:local-control-browser-real-screenshot'));
+  assert.ok(src.includes('ham-desktop:local-control-browser-real-stop-session'));
   assert.ok(src.includes("exposeInMainWorld('hamDesktop'"));
   const forbidden = [
     'local-control-enable',

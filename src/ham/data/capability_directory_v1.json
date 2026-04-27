@@ -467,7 +467,7 @@
       "kind": "bundle",
       "display_name": "Computer Control / Local Operator",
       "summary": "Read-only pack: local computer-control roadmap, safety metadata, and prerequisites (Phase 1).",
-      "description": "First-party documentation bundle for Computer Control Pack v1. Phase 1 is observe-only at the product level: workspace Capability Directory visibility only. Shipped desktop control is defined by docs/desktop/local_control_v1.md (Linux first, Windows planned; macOS out of scope unless approved). No execution, no MCP activation, no Hermes or settings mutation, no goHAM session. Cloud-hosted /api/browser is not the desktop local control product plane.",
+      "description": "First-party documentation bundle for Computer Control Pack v1. Phase 1 is observe-only at the product level: workspace Capability Directory visibility only. Shipped desktop managed-browser control (managed Chromium + localhost CDP) lives in HAM Desktop Settings → Display → Local Control only — navigate, reload (Phase 1A), screenshot, stop; not executable from this directory row or Shop. Defined in docs/desktop/local_control_v1.md (Linux first). No MCP activation, no Hermes or settings mutation from this pack. Cloud-hosted /api/browser is not the desktop local control product plane.",
       "trust_tier": "first_party",
       "provenance": {
         "source_kind": "ham_repo",
@@ -495,6 +495,7 @@
         "notes": [
           "No computer control execution from this directory row.",
           "Does not invoke shell, MCP, or browser automation.",
+          "Managed browser actions (start, navigate, reload, screenshot, stop) are available only inside HAM Desktop Local Control panel — not from Shop, not from chat, apply_available stays false.",
           "Cursor/Droid execution lanes remain separate; not a harness for this pack.",
           "desktop_local: planning token for Desktop Local Control v1 (docs/desktop/local_control_v1.md); not an executable backend in Phase 1."
         ]

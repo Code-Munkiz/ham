@@ -25,6 +25,13 @@ const localControlBridge = {
   navigateBrowser: (url) => ipcRenderer.invoke('ham-desktop:local-control-browser-navigate', url),
   captureBrowserScreenshot: () => ipcRenderer.invoke('ham-desktop:local-control-browser-screenshot'),
   stopBrowserSession: () => ipcRenderer.invoke('ham-desktop:local-control-browser-stop-session'),
+  armRealBrowserControl: () => ipcRenderer.invoke('ham-desktop:local-control-browser-real-arm'),
+  getRealBrowserStatus: () => ipcRenderer.invoke('ham-desktop:local-control-get-browser-real-status'),
+  startRealBrowserSession: () => ipcRenderer.invoke('ham-desktop:local-control-browser-real-start-session'),
+  navigateRealBrowser: (url) => ipcRenderer.invoke('ham-desktop:local-control-browser-real-navigate', url),
+  reloadRealBrowser: () => ipcRenderer.invoke('ham-desktop:local-control-browser-real-reload'),
+  captureRealBrowserScreenshot: () => ipcRenderer.invoke('ham-desktop:local-control-browser-real-screenshot'),
+  stopRealBrowserSession: () => ipcRenderer.invoke('ham-desktop:local-control-browser-real-stop-session'),
 };
 
 contextBridge.exposeInMainWorld('hamDesktop', {

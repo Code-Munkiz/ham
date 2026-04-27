@@ -27,6 +27,16 @@ const SAFE_EVENT_TYPES = new Set([
   'local_control_browser_stop',
   'local_control_browser_error',
   'local_control_kill_switch_disengaged_browser_mvp',
+  'local_control_real_browser_arm',
+  'local_control_real_browser_start',
+  'local_control_real_browser_start_blocked',
+  'local_control_real_browser_navigate',
+  'local_control_real_browser_navigate_blocked',
+  'local_control_real_browser_reload',
+  'local_control_real_browser_reload_blocked',
+  'local_control_real_browser_screenshot',
+  'local_control_real_browser_stop',
+  'local_control_real_browser_error',
 ]);
 
 /** @param {string} userDataPath @param {typeof import('node:path')} path */

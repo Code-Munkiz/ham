@@ -1,6 +1,6 @@
 # HAM Desktop — Local Control v1 (spec)
 
-**Status:** Phase 0 — documentation and capability metadata alignment only.  
+**Status:** Phases **1–4B** shipped in HAM Desktop (Linux): doctor, policy/audit/kill-switch, inert sidecar, **4A** embedded browser, **4B** managed Chromium/CDP — see phase table below; this doc remains the v1 contract.  
 **Product:** Desktop-only. Not the web app, not Cloud Run as the control plane, not War Room.  
 **Canonical sibling:** Computer Control Pack narrative — [`docs/capabilities/computer_control_pack_v1.md`](../capabilities/computer_control_pack_v1.md).
 
@@ -113,8 +113,9 @@ This is a **design target** for implementation phases; Phase 0 does not add IPC,
 | **3A** | **Shipped:** [`local_control_sidecar_protocol_v1.md`](local_control_sidecar_protocol_v1.md) (design) + mock **`sidecar`** status + read-only sidecar IPC (superseded by **3B** for live child shape; see protocol doc history in git). |
 | **3B** | **Shipped:** **inert sidecar shell** — stdio child (`health` / `status` / `shutdown` only), main-process manager (single instance); IPC **`getSidecarStatus`**, **`sidecar-start`** (blocked by default kill switch), **`sidecar-stop`**, **`sidecar-health`**; **no** tools, **no** inbound network, **no** Droid access; CLI **`local-control sidecar`** (+ **`health` / `stop` / `start`** stubs = `electron_only`). |
 | **3** | **Future:** further narrow Linux verticals (still no generic shell/filesystem / MCP / Droid local harness). |
-| **4A** | **Shipped (Linux):** **browser-only MVP** — **`BrowserWindow`** in Electron **main** (not Playwright, not `/api/browser`, not War Room): arm **`browser_control_armed`**, audited **kill-switch release** (fixed confirm token), navigate **http/https** only (loopback blocked unless `browser_allow_loopback` in policy), status, screenshot (size-capped data URL), stop; policy **schema v2**; aggregate **`schema_version` 5**; narrow preload IPC (`getBrowserStatus`, `startBrowserSession`, …); CLI **`local-control browser`** = static mirror only. |
-| **4** | **Windows parity** for browser MVP + packaging hardening. |
+| **4A** | **Shipped (Linux):** **embedded browser MVP** — **`BrowserWindow`** in Electron **main** (safety / parity proof): arm **`browser_control_armed`**, same kill-switch + URL gates as 4B sibling; policy fields live under **schema v3** on disk with 4B (see `local_control_policy.cjs`). |
+| **4B** | **Shipped (Linux preview):** **managed Chromium/Chrome + localhost CDP** in **main** (not Playwright driver in-process, not `/api/browser`, not War Room): dedicated **user-data-dir** under app userData, **127.0.0.1-only** debug port, arm **`real_browser_control_armed`**, audited **same browser MVP kill-switch release token**, navigate **http/https** only (loopback gated by **`real_browser_allow_loopback`**), **Phase 1A:** CDP **`Page.reload`** (explicit Reload in Settings → Display — no arbitrary input), status, screenshot (capped data URL), stop; **`real_browser_allow_default_profile`** exists but **4B never uses the OS default profile**; aggregate **`schema_version` 6**; preload IPC (`browser-real-*` channels); CLI **`local-control browser`** bundles **4A + 4B** static mirrors. |
+| **4 (future)** | **Windows parity** for 4A/4B + packaging hardening. |
 
 ---
 

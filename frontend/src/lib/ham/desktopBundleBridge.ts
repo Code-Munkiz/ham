@@ -36,6 +36,9 @@ export type HamDesktopLocalControlPolicyStatus = {
   kill_switch: { engaged: boolean; reason: string };
   browser_control_armed?: boolean;
   browser_allow_loopback?: boolean;
+  real_browser_control_armed?: boolean;
+  real_browser_allow_loopback?: boolean;
+  real_browser_allow_default_profile?: boolean;
   updated_at: string;
 };
 
@@ -60,6 +63,33 @@ export type HamDesktopBrowserMvpPublic = {
   display_url: string;
   armed: boolean;
   allow_loopback: boolean;
+  gate_blocked_reason: string | null;
+  kill_switch_engaged: boolean;
+};
+
+export type HamDesktopBrowserRealStatus = {
+  kind: "ham_desktop_local_control_browser_real_status";
+  supported: boolean;
+  armed: boolean;
+  allow_loopback: boolean;
+  managed_profile: boolean;
+  cdp_localhost_only: boolean;
+  uses_default_profile: boolean;
+  session_running: boolean;
+  title: string;
+  display_url: string;
+  gate_blocked_reason: string | null;
+};
+
+export type HamDesktopBrowserRealPublic = {
+  kind: "ham_desktop_local_control_browser_real_public";
+  running: boolean;
+  title: string;
+  display_url: string;
+  armed: boolean;
+  allow_loopback: boolean;
+  managed_profile: boolean;
+  cdp_localhost_only: boolean;
   gate_blocked_reason: string | null;
   kill_switch_engaged: boolean;
 };
@@ -131,6 +161,7 @@ export type HamDesktopLocalControlStatus = {
   kill_switch: { engaged: boolean; reason: string };
   sidecar: HamDesktopLocalControlSidecarStatus;
   browser_mvp: HamDesktopBrowserMvpStatus;
+  browser_real: HamDesktopBrowserRealStatus;
   capabilities: Record<string, string>;
   warnings: string[];
   non_goals: string[];
@@ -159,6 +190,13 @@ export type HamDesktopLocalControlApi = {
   navigateBrowser: (url: string) => Promise<HamDesktopBrowserSessionResult>;
   captureBrowserScreenshot: () => Promise<HamDesktopBrowserScreenshotResult>;
   stopBrowserSession: () => Promise<HamDesktopBrowserSessionResult>;
+  armRealBrowserControl: () => Promise<{ ok: boolean }>;
+  getRealBrowserStatus: () => Promise<HamDesktopBrowserRealPublic>;
+  startRealBrowserSession: () => Promise<HamDesktopBrowserSessionResult>;
+  navigateRealBrowser: (url: string) => Promise<HamDesktopBrowserSessionResult>;
+  reloadRealBrowser: () => Promise<HamDesktopBrowserSessionResult>;
+  captureRealBrowserScreenshot: () => Promise<HamDesktopBrowserScreenshotResult>;
+  stopRealBrowserSession: () => Promise<HamDesktopBrowserSessionResult>;
 };
 
 export type HamDesktopBundleApi = {

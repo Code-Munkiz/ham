@@ -63,6 +63,29 @@ test('appendAuditEvent accepts sidecar lifecycle types', () => {
   }
 });
 
+test('appendAuditEvent accepts managed real-browser (4B) lifecycle types', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ham-lc-audit-real-'));
+  try {
+    for (const t of [
+      'local_control_real_browser_arm',
+      'local_control_real_browser_start',
+      'local_control_real_browser_start_blocked',
+      'local_control_real_browser_navigate',
+      'local_control_real_browser_navigate_blocked',
+      'local_control_real_browser_reload',
+      'local_control_real_browser_reload_blocked',
+      'local_control_real_browser_screenshot',
+      'local_control_real_browser_stop',
+      'local_control_real_browser_error',
+    ]) {
+      const r = appendAuditEvent({ userDataPath: tmp, type: t, fs, path });
+      assert.equal(r.ok, true);
+    }
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
 test('appendAuditEvent accepts browser MVP lifecycle types', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ham-lc-audit-br-'));
   try {

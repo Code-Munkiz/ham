@@ -118,6 +118,7 @@ flowchart LR
 | **Docs** | [`desktop/README.md`](../../desktop/README.md). |
 | **Model** | Thin Electron shell; renderer = Vite app; FastAPI separate. |
 | **Hermes** | Curated bundle + allowlisted CLI presets (fixed argv, timeout, capped output) — **not** free-form terminal control. |
+| **Managed browser (4B + Phase 1A)** | Linux preview: main-process CDP to a **dedicated** Chromium profile; Settings → Display → Local Control supports start, navigate, **reload** (`Page.reload`), screenshot, stop — **desktop IPC only**; Capability Directory / Shop remain non-executable (`apply_available` false). |
 | **Future** | See [`docs/desktop/local_control_v1.md`](../desktop/local_control_v1.md) for **Local Control v1** (Phase 2+); Computer Control **aligns** to that seam, not to bypassing sandbox/security review. |
 
 ### 1.6 HAM CLI: `doctor` and `readiness`
