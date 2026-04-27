@@ -22,8 +22,15 @@ import { WorkspaceTerminalView } from "./screens/terminal/WorkspaceTerminalView"
 
 const HWW_SIDEBAR_COLLAPSE_KEY = "hww.sidebar.collapsed";
 
-/** Full HAM app (Vercel) — not local `/chat`; keeps workspace as lift preview. */
-const HAM_APP_EXTERNAL_URL = "https://ham-c9yitglhu-team-clarity.vercel.app/";
+/** SPA home / marketing landing. Default `/` uses the current deployment origin. Set `VITE_HAM_LANDING_URL` for a fixed URL (e.g. future marketing site). */
+function hamLandingHref(): string {
+  const v = (import.meta.env.VITE_HAM_LANDING_URL as string | undefined)?.trim();
+  return v || "/";
+}
+
+function isAbsoluteHttpUrl(s: string): boolean {
+  return /^https?:\/\//i.test(s);
+}
 
 type WorkspaceShellProps = {
   children: React.ReactNode;
@@ -78,6 +85,8 @@ function WorkspaceSideNav({
 }: SideNavOptions) {
   const logoSrc = publicAssetUrl("ham-logo.png");
   const hamAppMoonSrc = publicAssetUrl("ham-app-moon.png");
+  const landingHref = hamLandingHref();
+  const landingIsExternal = isAbsoluteHttpUrl(landingHref);
   const c = layoutCollapsed;
   const expand = onExpandFromCollapsed ?? (() => undefined);
 
@@ -381,32 +390,59 @@ function WorkspaceSideNav({
       ) : null}
 
       <div className="mt-auto border-t border-white/[0.06] pt-3">
-        <a
-          href={HAM_APP_EXTERNAL_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={onNavigate}
-          className={cn(
-            "flex items-center gap-2 rounded-lg px-2 py-2 text-white/50 transition-colors hover:bg-white/[0.05] hover:text-[#a5f3fc]/95",
-            c ? "justify-center" : "md:justify-start",
-          )}
-          title="Open HAM app"
-          aria-label="Open HAM app"
-        >
-          <img
-            src={hamAppMoonSrc}
-            alt=""
-            className="h-8 w-8 shrink-0 object-contain"
-            width={32}
-            height={32}
-            aria-hidden
-          />
-          <span
-            className={cn("text-[11px] font-medium text-white/40", c && "sr-only")}
+        {landingIsExternal ? (
+          <a
+            href={landingHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={onNavigate}
+            className={cn(
+              "flex items-center gap-2 rounded-lg px-2 py-2 text-white/50 transition-colors hover:bg-white/[0.05] hover:text-[#a5f3fc]/95",
+              c ? "justify-center" : "md:justify-start",
+            )}
+            title="Go to HAM landing"
+            aria-label="Go to HAM landing"
           >
-            HAM app
-          </span>
-        </a>
+            <img
+              src={hamAppMoonSrc}
+              alt=""
+              className="h-8 w-8 shrink-0 object-contain"
+              width={32}
+              height={32}
+              aria-hidden
+            />
+            <span
+              className={cn("text-[11px] font-medium text-white/40", c && "sr-only")}
+            >
+              HAM app
+            </span>
+          </a>
+        ) : (
+          <Link
+            to={landingHref}
+            onClick={onNavigate}
+            className={cn(
+              "flex items-center gap-2 rounded-lg px-2 py-2 text-white/50 transition-colors hover:bg-white/[0.05] hover:text-[#a5f3fc]/95",
+              c ? "justify-center" : "md:justify-start",
+            )}
+            title="Go to HAM landing"
+            aria-label="Go to HAM landing"
+          >
+            <img
+              src={hamAppMoonSrc}
+              alt=""
+              className="h-8 w-8 shrink-0 object-contain"
+              width={32}
+              height={32}
+              aria-hidden
+            />
+            <span
+              className={cn("text-[11px] font-medium text-white/40", c && "sr-only")}
+            >
+              HAM app
+            </span>
+          </Link>
+        )}
       </div>
     </div>
   );
