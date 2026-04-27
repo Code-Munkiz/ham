@@ -8,6 +8,7 @@ const fs = require('node:fs');
 const { buildLocalControlStatus } = require('./local_control_status.cjs');
 const { loadPolicy, getPolicyStatusPayload, engageKillSwitch } = require('./local_control_policy.cjs');
 const { getAuditStatus, appendAuditEvent } = require('./local_control_audit.cjs');
+const { buildMockSidecarStatus } = require('./local_control_sidecar_status.cjs');
 
 const CONFIG_FILENAME = 'ham-desktop-config.json';
 
@@ -370,6 +371,9 @@ ipcMain.handle('ham-desktop:local-control-get-kill-switch-status', () => {
     reason: policy.kill_switch.reason,
   };
 });
+
+/** Phase 3A — mock sidecar only; no spawn, no I/O. */
+ipcMain.handle('ham-desktop:local-control-get-sidecar-status', () => buildMockSidecarStatus());
 
 /** Engage only — idempotent; persists safer policy; never disengages. */
 ipcMain.handle('ham-desktop:local-control-engage-kill-switch', () => {

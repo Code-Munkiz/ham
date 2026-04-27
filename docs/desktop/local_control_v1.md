@@ -110,6 +110,7 @@ This is a **design target** for implementation phases; Phase 0 does not add IPC,
 | **0** | **Docs + metadata alignment** (this spec, Computer Control Pack surgical updates, capability directory tags/backends). |
 | **1** | **Shipped:** read-only **`ham-desktop:local-control-get-status`** IPC + **HAM + Hermes setup** settings card + optional **`ham desktop local-control status`** CLI; **disabled by default**; no automation, generic shell, or filesystem IPC. |
 | **2** | **Shipped (skeleton):** persisted **`policy.json`** (default deny, **enabled false**), redacted **audit JSONL**, **kill switch** default engaged + **engage-only** IPC (`ham-desktop:local-control-engage-kill-switch`), expanded status + **`window.hamDesktop.localControl`** narrow bridge; CLI **`local-control policy` / `audit` / `kill-switch engage`** (mirror / noop); still **no** automation. |
+| **3A** | **Shipped:** [`local_control_sidecar_protocol_v1.md`](local_control_sidecar_protocol_v1.md) (design-only) + mock **`sidecar`** on aggregate status (`schema_version` 3) + read-only **`ham-desktop:local-control-get-sidecar-status`** + **`getSidecarStatus()`** + CLI **`local-control sidecar`**; **no** child process, **no** inbound network, **no** Droid access. |
 | **3** | **One narrow automation vertical on Linux** (explicitly scoped; still no generic shell/filesystem). |
 | **4** | **Windows parity** for that vertical + packaging hardening. |
 
@@ -128,6 +129,7 @@ This is a **design target** for implementation phases; Phase 0 does not add IPC,
 
 ## References
 
+- [`local_control_sidecar_protocol_v1.md`](local_control_sidecar_protocol_v1.md) — planned stdio JSON-RPC sidecar (Phase 3A: doc + mock status only).
 - [`desktop/README.md`](../../desktop/README.md) — Desktop M1 shell (current shipped reality).
 - [`docs/capabilities/computer_control_pack_v1.md`](../capabilities/computer_control_pack_v1.md) — pack narrative and permission tiers.
 - [`docs/BROWSER_RUNTIME_PLAYWRIGHT.md`](../BROWSER_RUNTIME_PLAYWRIGHT.md) — server-side browser runtime context (distinct from desktop-local product path).

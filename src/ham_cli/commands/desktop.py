@@ -53,6 +53,27 @@ def _cli_local_control_audit_skeleton() -> dict[str, object]:
     }
 
 
+def _cli_local_control_sidecar_skeleton() -> dict[str, object]:
+    return {
+        "kind": "ham_cli_desktop_local_control_sidecar_skeleton",
+        "expected": True,
+        "implemented": False,
+        "mode": "mock_status_only",
+        "transport": "stdio_json_rpc_planned",
+        "inbound_network": False,
+        "running": False,
+        "droid_access": "not_enabled",
+        "capabilities": {
+            "browser_automation": "not_implemented",
+            "filesystem_access": "not_implemented",
+            "shell_commands": "not_implemented",
+            "app_window_control": "not_implemented",
+            "mcp_adapters": "not_implemented",
+        },
+        "note": "Live sidecar is not started from CLI; HAM Desktop reports mock status only in Phase 3A.",
+    }
+
+
 def _run_pack(script: str, npm_args: list[str]) -> None:
     repo = find_repo_root()
     if repo is None:
@@ -102,7 +123,7 @@ def run_desktop_local_control_status(*, json_out: bool) -> None:
 
     payload = {
         "kind": "ham_cli_desktop_local_control_status",
-        "schema_version": 2,
+        "schema_version": 3,
         "phase": _LC_PHASE2,
         "enabled": False,
         "spec_present": spec_present,
@@ -113,7 +134,8 @@ def run_desktop_local_control_status(*, json_out: bool) -> None:
         "policy": _cli_local_control_policy_skeleton(),
         "audit": _cli_local_control_audit_skeleton(),
         "kill_switch": {"engaged": True, "reason": "default_disabled"},
-        "note": "CLI checks repo spec + OS + static Phase 2 skeleton. HAM Desktop → Settings → HAM + Hermes shows live IPC.",
+        "sidecar": _cli_local_control_sidecar_skeleton(),
+        "note": "CLI checks repo spec + OS + static skeletons (incl. Phase 3A sidecar mock). HAM Desktop shows live IPC.",
     }
     if json_out:
         typer.echo(json.dumps(payload, indent=2))
@@ -154,3 +176,15 @@ def run_desktop_local_control_kill_switch_engage() -> None:
         "Kill switch engage is not available from the CLI. "
         "Open HAM Desktop → Settings → HAM + Hermes setup → Engage kill switch.",
     )
+
+
+def run_desktop_local_control_sidecar(*, json_out: bool) -> None:
+    """Static Phase 3A sidecar mock (no Electron child process from CLI)."""
+    s = _cli_local_control_sidecar_skeleton()
+    if json_out:
+        typer.echo(json.dumps(s, indent=2))
+        return
+    typer.echo("Desktop Local Control — sidecar (CLI mock, read-only)")
+    typer.echo(f"  Mode: {s['mode']} · running: {s['running']} · transport: {s['transport']}")
+    typer.echo(f"  Droid access: {s['droid_access']} · inbound network: {s['inbound_network']}")
+    typer.echo(f"  {s['note']}")

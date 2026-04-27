@@ -7,8 +7,9 @@
 
 const { loadPolicy, getPolicyStatusPayload } = require('./local_control_policy.cjs');
 const { getAuditStatus } = require('./local_control_audit.cjs');
+const { buildMockSidecarStatus } = require('./local_control_sidecar_status.cjs');
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 const PHASE = 'policy_audit_kill_switch_only';
 
 /** @param {string} platform process.platform */
@@ -88,6 +89,7 @@ function buildLocalControlStatus(opts) {
       engaged: policy.kill_switch.engaged,
       reason: policy.kill_switch.reason,
     },
+    sidecar: buildMockSidecarStatus(),
     capabilities: {
       browser_automation: 'not_implemented',
       filesystem_access: 'not_implemented',
@@ -97,7 +99,8 @@ function buildLocalControlStatus(opts) {
     },
     warnings,
     non_goals: [
-      'no automation in phase 2',
+      'no automation in phase 3a',
+      'no sidecar child process in phase 3a',
       'no cloud-run browser control',
       'no war-room revival',
       'no disengage kill_switch via product ui',

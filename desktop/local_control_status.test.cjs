@@ -6,7 +6,7 @@ const path = require('node:path');
 const fs = require('node:fs');
 const os = require('node:os');
 
-const { buildLocalControlStatus, platformDerived, PHASE } = require('./local_control_status.cjs');
+const { buildLocalControlStatus, platformDerived, PHASE, SCHEMA_VERSION } = require('./local_control_status.cjs');
 
 test('platformDerived: linux_first', () => {
   assert.deepEqual(platformDerived('linux'), {
@@ -29,7 +29,7 @@ test('platformDerived: darwin unsupported', () => {
   });
 });
 
-test('buildLocalControlStatus: phase 2 skeleton, enabled false, capabilities not_implemented', () => {
+test('buildLocalControlStatus: phase 3a aggregate + sidecar mock, enabled false', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ham-lc-test-'));
   try {
     const st = buildLocalControlStatus({
@@ -40,6 +40,8 @@ test('buildLocalControlStatus: phase 2 skeleton, enabled false, capabilities not
       path,
     });
     assert.equal(st.kind, 'ham_desktop_local_control_status');
+    assert.equal(SCHEMA_VERSION, 3);
+    assert.equal(st.schema_version, 3);
     assert.equal(st.phase, PHASE);
     assert.equal(st.phase, 'policy_audit_kill_switch_only');
     assert.equal(st.enabled, false);
@@ -54,6 +56,14 @@ test('buildLocalControlStatus: phase 2 skeleton, enabled false, capabilities not
     assert.equal(st.policy.enabled, false);
     assert.equal(st.policy.default_deny, true);
     assert.equal(st.kill_switch.engaged, true);
+    assert.ok(st.sidecar);
+    assert.equal(st.sidecar.mode, 'mock_status_only');
+    assert.equal(st.sidecar.running, false);
+    assert.equal(st.sidecar.inbound_network, false);
+    assert.equal(st.sidecar.droid_access, 'not_enabled');
+    for (const v of Object.values(st.sidecar.capabilities)) {
+      assert.equal(v, 'not_implemented');
+    }
     assert.ok(st.audit);
     assert.equal(st.audit.redacted, true);
     assert.ok(Array.isArray(st.warnings));

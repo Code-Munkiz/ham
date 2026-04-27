@@ -10,6 +10,7 @@ from src.ham_cli.commands.desktop import (
     run_desktop_local_control_audit,
     run_desktop_local_control_kill_switch_engage,
     run_desktop_local_control_policy,
+    run_desktop_local_control_sidecar,
     run_desktop_local_control_status,
     run_package_linux,
     run_package_win,
@@ -157,6 +158,14 @@ def desktop_local_control_audit_cmd(
 ) -> None:
     """Audit placeholder (redacted JSONL is desktop main process only)."""
     run_desktop_local_control_audit(json_out=json_out)
+
+
+@local_control_app.command("sidecar")
+def desktop_local_control_sidecar_cmd(
+    json_out: bool = typer.Option(False, "--json", help="Emit JSON."),
+) -> None:
+    """Phase 3A sidecar mock mirror (no child process from CLI)."""
+    run_desktop_local_control_sidecar(json_out=json_out)
 
 
 @kill_switch_cli.command("engage")

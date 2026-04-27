@@ -45,6 +45,18 @@ export type HamDesktopLocalControlAuditStatus = {
   redacted: boolean;
 };
 
+export type HamDesktopLocalControlSidecarStatus = {
+  kind: "ham_desktop_local_control_sidecar_status";
+  expected: boolean;
+  implemented: boolean;
+  mode: string;
+  transport: string;
+  inbound_network: boolean;
+  running: boolean;
+  droid_access: string;
+  capabilities: Record<string, string>;
+};
+
 /** Payload from Electron main — doctor + Phase 2 skeleton; no filesystem paths. */
 export type HamDesktopLocalControlStatus = {
   kind: "ham_desktop_local_control_status";
@@ -67,6 +79,7 @@ export type HamDesktopLocalControlStatus = {
   policy: HamDesktopLocalControlPolicyStatus;
   audit: HamDesktopLocalControlAuditStatus;
   kill_switch: { engaged: boolean; reason: string };
+  sidecar: HamDesktopLocalControlSidecarStatus;
   capabilities: Record<string, string>;
   warnings: string[];
   non_goals: string[];
@@ -83,6 +96,7 @@ export type HamDesktopLocalControlApi = {
   getPolicyStatus: () => Promise<HamDesktopLocalControlPolicyStatus>;
   getAuditStatus: () => Promise<HamDesktopLocalControlAuditStatus>;
   getKillSwitchStatus: () => Promise<{ kind: string; engaged: boolean; reason: string }>;
+  getSidecarStatus: () => Promise<HamDesktopLocalControlSidecarStatus>;
   engageKillSwitch: () => Promise<HamDesktopLocalControlKillSwitchEngageResult>;
 };
 

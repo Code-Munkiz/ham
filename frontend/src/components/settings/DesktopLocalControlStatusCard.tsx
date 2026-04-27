@@ -8,6 +8,8 @@ import {
 
 const SPEC_HREF =
   "https://github.com/Code-Munkiz/ham/blob/main/docs/desktop/local_control_v1.md";
+const SIDECAR_SPEC_HREF =
+  "https://github.com/Code-Munkiz/ham/blob/main/docs/desktop/local_control_sidecar_protocol_v1.md";
 
 function platformLabel(s: HamDesktopLocalControlStatus): string {
   if (s.platform_status === "linux_first") return "Linux first (supported)";
@@ -67,7 +69,7 @@ export function DesktopLocalControlStatusCard() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-white/35">
           <Shield className="h-4 w-4 text-[#FF6B00]" />
-          Local Control (Phase 2 — policy / audit / kill switch)
+          Local Control (Phase 3A — sidecar protocol / mock status)
         </div>
         <button
           type="button"
@@ -82,8 +84,9 @@ export function DesktopLocalControlStatusCard() {
 
       <p className="text-[9px] text-white/35 leading-relaxed">
         Local Control stays <span className="text-white/55">disabled</span> by default. Kill switch defaults{" "}
-        <span className="text-white/55">engaged</span> (safe). No automation, shell, filesystem, or browser control in this
-        phase.
+        <span className="text-white/55">engaged</span>. Phase 3A adds a <span className="text-white/50">sidecar protocol</span>{" "}
+        doc and <span className="text-white/50">mock</span> status only — no child process, no inbound network, no Droid
+        access, no automation.
       </p>
 
       <div className="flex flex-wrap gap-2">
@@ -161,6 +164,18 @@ export function DesktopLocalControlStatusCard() {
             <dd>{status.paths.audit_log_dir_writable ? "yes" : "no"}</dd>
           </div>
           <div className="flex flex-wrap gap-x-2">
+            <dt className="text-white/35 shrink-0">Sidecar</dt>
+            <dd className="text-[10px] leading-relaxed">
+              {status.sidecar.mode} · running: {status.sidecar.running ? "yes" : "no"} · transport:{" "}
+              <span className="font-mono text-white/45">{status.sidecar.transport}</span> · inbound network:{" "}
+              {status.sidecar.inbound_network ? "yes" : "no"} · Droid: {status.sidecar.droid_access}
+            </dd>
+          </div>
+          <div className="flex flex-wrap gap-x-2">
+            <dt className="text-white/35 shrink-0">Sidecar capabilities</dt>
+            <dd className="text-[10px]">all not_implemented (mock)</dd>
+          </div>
+          <div className="flex flex-wrap gap-x-2">
             <dt className="text-white/35 shrink-0">Capabilities</dt>
             <dd>not implemented (no automation)</dd>
           </div>
@@ -175,14 +190,24 @@ export function DesktopLocalControlStatusCard() {
         <p className="text-xs text-white/30">Loading status…</p>
       ) : null}
 
-      <a
-        className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-[#FF6B00] hover:underline"
-        href={SPEC_HREF}
-        target="_blank"
-        rel="noreferrer"
-      >
-        Local Control v1 spec (docs) <ExternalLink className="h-3 w-3" />
-      </a>
+      <div className="flex flex-wrap gap-4">
+        <a
+          className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-[#FF6B00] hover:underline"
+          href={SPEC_HREF}
+          target="_blank"
+          rel="noreferrer"
+        >
+          Local Control v1 spec (docs) <ExternalLink className="h-3 w-3" />
+        </a>
+        <a
+          className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-[#FF6B00]/80 hover:underline"
+          href={SIDECAR_SPEC_HREF}
+          target="_blank"
+          rel="noreferrer"
+        >
+          Sidecar protocol v1 (design) <ExternalLink className="h-3 w-3" />
+        </a>
+      </div>
     </div>
   );
 }
