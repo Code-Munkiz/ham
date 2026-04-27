@@ -73,6 +73,7 @@ def build_chat_session_store() -> ChatSessionStore:
     - ``HAM_CHAT_SESSION_STORE=memory`` — in-process only.
     - ``HAM_CHAT_SESSION_STORE=sqlite`` (default) — local file; path from ``HAM_CHAT_SESSION_DB`` or ``~/.ham/chat_sessions.sqlite``.
     - ``HAM_CHAT_SESSION_STORE=firestore`` — Cloud Firestore (durable on Cloud Run when ADC has datastore access).
+      Use ``HAM_CHAT_SESSION_FIRESTORE_DATABASE`` when the project has no ``(default)`` database (multi-DB / AI Studio–only setups).
     """
     mode = (os.environ.get("HAM_CHAT_SESSION_STORE") or "sqlite").strip().lower()
     if mode == "memory":
@@ -86,7 +87,8 @@ def build_chat_session_store() -> ChatSessionStore:
 
         coll = (os.environ.get("HAM_CHAT_SESSION_FIRESTORE_COLLECTION") or "ham_chat_sessions").strip()
         project = (os.environ.get("HAM_CHAT_SESSION_FIRESTORE_PROJECT") or "").strip() or None
-        return FirestoreChatSessionStore(coll, project=project)
+        database = (os.environ.get("HAM_CHAT_SESSION_FIRESTORE_DATABASE") or "").strip() or None
+        return FirestoreChatSessionStore(coll, project=project, database=database)
     raw = (os.environ.get("HAM_CHAT_SESSION_DB") or "").strip()
     db_path = Path(raw).expanduser() if raw else Path.home() / ".ham" / "chat_sessions.sqlite"
     from src.persistence.sqlite_chat_session_store import SqliteChatSessionStore

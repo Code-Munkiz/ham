@@ -16,13 +16,16 @@ This repo ships a **`Dockerfile`** that runs **`uvicorn src.api.server:app`**. T
 | `HAM_CHAT_SESSION_DB` | SQLite file path when store is `sqlite`. |
 | `HAM_CHAT_SESSION_FIRESTORE_PROJECT` | Optional GCP project id for Firestore; omit to use the Cloud Run service’s default project (ADC). |
 | `HAM_CHAT_SESSION_FIRESTORE_COLLECTION` | Top-level collection name (default `ham_chat_sessions`). |
+| `HAM_CHAT_SESSION_FIRESTORE_DATABASE` | Firestore **database id** (not project id). Required when the project has **no** `(default)` database — e.g. **Clarity Staging** (`clarity-staging-488201`) currently lists only named `ai-studio-…` databases. Either create a dedicated database (recommended) and set this to its id, or create `(default)` and leave this unset. |
 
 **Firestore setup (operator):**
 
-1. In the target project, enable **Firestore** (Native mode) if not already enabled.
+1. In the target project, ensure at least one **Firestore Native** database exists that Ham should use. The Python client defaults to database id **`(default)`**; if that database does not exist (common when only AI Studio–created DBs are present), set **`HAM_CHAT_SESSION_FIRESTORE_DATABASE`** to a database id in the same region you intend to use, or create `(default)` / a dedicated DB first, e.g.  
+   `gcloud firestore databases create --database=ham-chat-sessions --location=us-central1 --project=YOUR_PROJECT_ID`  
+   then set **`HAM_CHAT_SESSION_FIRESTORE_DATABASE=ham-chat-sessions`** on Cloud Run.
 2. Grant the **Cloud Run runtime service account** a role that can read/write Firestore in that project, e.g. **`roles/datastore.user`** (or a custom role with the needed `datastore.*` permissions).
 3. Set the env vars above on the Cloud Run service (add them to your `.gcloud/ham-api-env.yaml` or use **`gcloud run services update … --set-env-vars`** / **`--update-env-vars`** — avoid replacing the whole env file with a minimal YAML that drops Hermes/OpenRouter keys; see the warning earlier in this doc).
-4. Redeploy **`ham-api`**. No migration of old ephemeral SQLite sessions — only new traffic uses Firestore.
+4. Redeploy **`ham-api`** if the running image does not yet include the Firestore session store code. No migration of old ephemeral SQLite sessions — only new traffic uses Firestore.
 
 The workspace UI still shows a recovery card for missing or permission-denied sessions.
 

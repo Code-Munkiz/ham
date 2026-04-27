@@ -30,6 +30,7 @@ class FirestoreChatSessionStore:
         collection_name: str,
         *,
         project: str | None = None,
+        database: str | None = None,
         client: firestore.Client | None = None,
     ) -> None:
         self._lock = RLock()
@@ -37,7 +38,12 @@ class FirestoreChatSessionStore:
         if client is not None:
             self._db = client
         else:
-            self._db = firestore.Client(project=project) if project else firestore.Client()
+            kwargs: dict[str, Any] = {}
+            if project:
+                kwargs["project"] = project
+            if database:
+                kwargs["database"] = database
+            self._db = firestore.Client(**kwargs) if kwargs else firestore.Client()
 
     def _coll(self) -> firestore.CollectionReference:
         return self._db.collection(self._coll_name)

@@ -32,11 +32,24 @@ def test_factory_memory(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_factory_firestore(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HAM_CHAT_SESSION_STORE", "firestore")
     monkeypatch.setenv("HAM_CHAT_SESSION_FIRESTORE_COLLECTION", "ham_test_sessions")
+    monkeypatch.delenv("HAM_CHAT_SESSION_FIRESTORE_DATABASE", raising=False)
     sentinel = object()
     with patch("src.persistence.firestore_chat_session_store.FirestoreChatSessionStore") as mock_fs:
         mock_fs.return_value = sentinel
         store = build_chat_session_store()
-        mock_fs.assert_called_once()
+        mock_fs.assert_called_once_with("ham_test_sessions", project=None, database=None)
+        assert store is sentinel
+
+
+def test_factory_firestore_database_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HAM_CHAT_SESSION_STORE", "firestore")
+    monkeypatch.setenv("HAM_CHAT_SESSION_FIRESTORE_COLLECTION", "c1")
+    monkeypatch.setenv("HAM_CHAT_SESSION_FIRESTORE_DATABASE", "ham-chat-db")
+    sentinel = object()
+    with patch("src.persistence.firestore_chat_session_store.FirestoreChatSessionStore") as mock_fs:
+        mock_fs.return_value = sentinel
+        store = build_chat_session_store()
+        mock_fs.assert_called_once_with("c1", project=None, database="ham-chat-db")
         assert store is sentinel
 
 

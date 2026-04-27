@@ -42,3 +42,5 @@ HAM_CORS_ORIGIN_REGEX: "https://.*\\.vercel\\.app"
 # Optional if Firestore is in the same project as Cloud Run (uses default credentials):
 # HAM_CHAT_SESSION_FIRESTORE_PROJECT: clarity-staging-488201
 # HAM_CHAT_SESSION_FIRESTORE_COLLECTION: ham_chat_sessions
+# If the GCP project has no (default) Firestore DB (e.g. only ai-studio-* DBs), set the database id explicitly:
+# HAM_CHAT_SESSION_FIRESTORE_DATABASE: ham-chat-sessions
