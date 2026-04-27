@@ -491,14 +491,15 @@ function createRealBrowserCdpController(opts = {}) {
   const fsMod = opts.fs || require('node:fs');
 
   const userDataPath = opts.userDataPath || '';
-  const profileDir =
+  const profileRoot =
     userDataPath && pathMod
-      ? pathMod.join(userDataPath, 'ham-desktop', 'local-control', 'real-browser-profile')
+      ? pathMod.join(userDataPath, 'ham-desktop', 'local-control', 'real-browser-sessions')
       : '';
 
   /** @type {import('node:child_process').ChildProcess | null} */
   let child = null;
   let debugPort = /** @type {number | null} */ (null);
+  let sessionProfileDir = '';
   /** @type {CdpSession | null} */
   let cdp = null;
   let candidateEpoch = 0;
@@ -508,6 +509,16 @@ function createRealBrowserCdpController(opts = {}) {
 
   function isChildAlive() {
     return !!(child && child.exitCode === null && !child.killed);
+  }
+
+  function cleanupSessionProfile(dir) {
+    if (!dir) return;
+    try {
+      fsMod.rmSync(dir, { recursive: true, force: true });
+    } catch {
+      /* best effort */
+    }
+    if (sessionProfileDir === dir) sessionProfileDir = '';
   }
 
   function getStatus() {
@@ -692,16 +703,23 @@ function createRealBrowserCdpController(opts = {}) {
     const exe = discoverChromiumExecutableLinux(execFileSyncImpl);
     if (!exe) return { ok: false, error: 'chromium_not_found' };
 
-    if (!profileDir) return { ok: false, error: 'profile_root_missing' };
+    if (!profileRoot) return { ok: false, error: 'profile_root_missing' };
     try {
-      fsMod.mkdirSync(profileDir, { recursive: true });
+      fsMod.mkdirSync(profileRoot, { recursive: true });
+    } catch {
+      return { ok: false, error: 'profile_mkdir_failed' };
+    }
+    let launchProfileDir = '';
+    try {
+      launchProfileDir = fsMod.mkdtempSync(pathMod.join(profileRoot, 'session-'));
+      sessionProfileDir = launchProfileDir;
     } catch {
       return { ok: false, error: 'profile_mkdir_failed' };
     }
 
     const port = pickDebugPort();
     const args = [
-      `--user-data-dir=${profileDir}`,
+      `--user-data-dir=${launchProfileDir}`,
       `--remote-debugging-port=${port}`,
       '--remote-debugging-address=127.0.0.1',
       // Recent Chromium rejects CDP WebSocket upgrades that include an Origin header unless
@@ -727,12 +745,14 @@ function createRealBrowserCdpController(opts = {}) {
         env: { ...process.env },
       });
     } catch {
+      cleanupSessionProfile(launchProfileDir);
       return { ok: false, error: 'spawn_failed' };
     }
 
     debugPort = port;
     const spawnedProc = child;
     const spawnedPort = port;
+    const spawnedProfileDir = launchProfileDir;
     spawnedProc.on('exit', () => {
       // A *previous* Chrome child's exit can fire after we've already spawned a replacement;
       // without this guard we'd clear debugPort for the live session → :null CDP URLs.
@@ -750,6 +770,7 @@ function createRealBrowserCdpController(opts = {}) {
         cdp.close();
         cdp = null;
       }
+      cleanupSessionProfile(spawnedProfileDir);
     });
 
     try {
@@ -870,6 +891,7 @@ function createRealBrowserCdpController(opts = {}) {
         /* ignore */
       }
       const c = child;
+      const dir = sessionProfileDir;
       setTimeout(() => {
         try {
           if (c && c.exitCode === null && !c.killed) c.kill('SIGKILL');
@@ -877,6 +899,7 @@ function createRealBrowserCdpController(opts = {}) {
           /* ignore */
         }
       }, 3500).unref?.();
+      setTimeout(() => cleanupSessionProfile(dir), 4500).unref?.();
     }
     child = null;
     debugPort = null;
