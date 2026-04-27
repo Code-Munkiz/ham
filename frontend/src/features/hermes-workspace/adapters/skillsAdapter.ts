@@ -13,6 +13,18 @@ import { hamApiFetch } from "@/lib/ham/api";
 import { workspaceApiPending } from "../lib/workspaceHamApiState";
 
 const BASE = "/api/workspace/skills";
+/** Same catalog JSON as GET ${BASE}/hermes-catalog; available on older API builds before workspace routes shipped. */
+const LEGACY_HERMES_CATALOG = "/api/hermes-skills/catalog";
+const LEGACY_HERMES_CATALOG_ENTRY = (id: string) => `/api/hermes-skills/catalog/${encodeURIComponent(id)}`;
+const LEGACY_HERMES_INSTALLED = "/api/hermes-skills/installed";
+
+function withCatalogMeta(raw: HermesSkillsCatalogResponse): WorkspaceHermesCatalogListResponse {
+  return {
+    ...raw,
+    readOnly: true,
+    source: "hermes_static_catalog",
+  };
+}
 
 export type WorkspaceSkill = {
   id: string;
@@ -107,9 +119,17 @@ export const workspaceSkillsAdapter = {
   async hermesStaticCatalog(): Promise<{ data: WorkspaceHermesCatalogListResponse | null; bridge: SkillsBridge }> {
     try {
       const res = await hamApiFetch(`${BASE}/hermes-catalog`, { credentials: "include" });
-      if (!res.ok) return { data: null, bridge: workspaceApiPending("skills", res) };
-      const data = (await res.json()) as WorkspaceHermesCatalogListResponse;
-      return { data, bridge: { status: "ready" } };
+      if (res.ok) {
+        const data = (await res.json()) as WorkspaceHermesCatalogListResponse;
+        return { data, bridge: { status: "ready" } };
+      }
+      if (res.status === 404) {
+        const leg = await hamApiFetch(LEGACY_HERMES_CATALOG, { credentials: "include" });
+        if (!leg.ok) return { data: null, bridge: workspaceApiPending("skills", leg) };
+        const raw = (await leg.json()) as HermesSkillsCatalogResponse;
+        return { data: withCatalogMeta(raw), bridge: { status: "ready" } };
+      }
+      return { data: null, bridge: workspaceApiPending("skills", res) };
     } catch (e) {
       return { data: null, bridge: workspaceApiPending("skills", null, e) };
     }
@@ -122,9 +142,17 @@ export const workspaceSkillsAdapter = {
       const res = await hamApiFetch(`${BASE}/hermes-catalog/${encodeURIComponent(catalogId)}`, {
         credentials: "include",
       });
-      if (!res.ok) return { entry: null, bridge: workspaceApiPending("skills", res), error: `HTTP ${res.status}` };
-      const j = (await res.json()) as { entry?: HermesSkillCatalogEntryDetail };
-      return { entry: j.entry ?? null, bridge: { status: "ready" } };
+      if (res.ok) {
+        const j = (await res.json()) as { entry?: HermesSkillCatalogEntryDetail };
+        return { entry: j.entry ?? null, bridge: { status: "ready" } };
+      }
+      if (res.status === 404) {
+        const leg = await hamApiFetch(LEGACY_HERMES_CATALOG_ENTRY(catalogId), { credentials: "include" });
+        if (!leg.ok) return { entry: null, bridge: workspaceApiPending("skills", leg), error: `HTTP ${leg.status}` };
+        const j = (await leg.json()) as { entry?: HermesSkillCatalogEntryDetail };
+        return { entry: j.entry ?? null, bridge: { status: "ready" } };
+      }
+      return { entry: null, bridge: workspaceApiPending("skills", res), error: `HTTP ${res.status}` };
     } catch (e) {
       return { entry: null, bridge: workspaceApiPending("skills", null, e), error: e instanceof Error ? e.message : String(e) };
     }
@@ -134,8 +162,15 @@ export const workspaceSkillsAdapter = {
   async hermesLiveOverlay(): Promise<{ overlay: HermesSkillsInstalledResponse | null; bridge: SkillsBridge }> {
     try {
       const res = await hamApiFetch(`${BASE}/hermes-live-overlay`, { credentials: "include" });
-      if (!res.ok) return { overlay: null, bridge: workspaceApiPending("skills", res) };
-      return { overlay: (await res.json()) as HermesSkillsInstalledResponse, bridge: { status: "ready" } };
+      if (res.ok) {
+        return { overlay: (await res.json()) as HermesSkillsInstalledResponse, bridge: { status: "ready" } };
+      }
+      if (res.status === 404) {
+        const leg = await hamApiFetch(LEGACY_HERMES_INSTALLED, { credentials: "include" });
+        if (!leg.ok) return { overlay: null, bridge: workspaceApiPending("skills", leg) };
+        return { overlay: (await leg.json()) as HermesSkillsInstalledResponse, bridge: { status: "ready" } };
+      }
+      return { overlay: null, bridge: workspaceApiPending("skills", res) };
     } catch (e) {
       return { overlay: null, bridge: workspaceApiPending("skills", null, e) };
     }
