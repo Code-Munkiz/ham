@@ -1,7 +1,13 @@
 /**
- * HAM /api/workspace/skills — local catalog + install/enable (no upstream Hermes).
+ * HAM /api/workspace/skills — JSON-backed items + server-side Hermes static catalog
+ * (same vendored data as /shop; no browser → Hermes VM / external hub).
  */
 
+import type {
+  HermesSkillCatalogEntryDetail,
+  HermesSkillsCatalogResponse,
+  HermesSkillsInstalledResponse,
+} from "@/lib/ham/api";
 import { hamApiFetch } from "@/lib/ham/api";
 
 import { workspaceApiPending } from "../lib/workspaceHamApiState";
@@ -20,6 +26,12 @@ export type WorkspaceSkill = {
 };
 
 export type SkillsBridge = { status: "ready" } | { status: "pending"; detail: string };
+
+/** GET /api/workspace/skills/hermes-catalog — extends the hermes-skills catalog payload. */
+export type WorkspaceHermesCatalogListResponse = HermesSkillsCatalogResponse & {
+  readOnly: boolean;
+  source: string;
+};
 
 export const workspaceSkillsAdapter = {
   description: "HAM /api/workspace/skills — list/create/patch/delete items",
@@ -88,6 +100,44 @@ export const workspaceSkillsAdapter = {
       return { ok: true, bridge: { status: "ready" } };
     } catch (e) {
       return { ok: false, bridge: workspaceApiPending("skills", null, e), error: e instanceof Error ? e.message : String(e) };
+    }
+  },
+
+  /** Vendored Hermes runtime skills catalog (read-only, bundled JSON; same as /api/hermes-skills/catalog). */
+  async hermesStaticCatalog(): Promise<{ data: WorkspaceHermesCatalogListResponse | null; bridge: SkillsBridge }> {
+    try {
+      const res = await hamApiFetch(`${BASE}/hermes-catalog`, { credentials: "include" });
+      if (!res.ok) return { data: null, bridge: workspaceApiPending("skills", res) };
+      const data = (await res.json()) as WorkspaceHermesCatalogListResponse;
+      return { data, bridge: { status: "ready" } };
+    } catch (e) {
+      return { data: null, bridge: workspaceApiPending("skills", null, e) };
+    }
+  },
+
+  async hermesStaticCatalogEntry(
+    catalogId: string,
+  ): Promise<{ entry: HermesSkillCatalogEntryDetail | null; bridge: SkillsBridge; error?: string }> {
+    try {
+      const res = await hamApiFetch(`${BASE}/hermes-catalog/${encodeURIComponent(catalogId)}`, {
+        credentials: "include",
+      });
+      if (!res.ok) return { entry: null, bridge: workspaceApiPending("skills", res), error: `HTTP ${res.status}` };
+      const j = (await res.json()) as { entry?: HermesSkillCatalogEntryDetail };
+      return { entry: j.entry ?? null, bridge: { status: "ready" } };
+    } catch (e) {
+      return { entry: null, bridge: workspaceApiPending("skills", null, e), error: e instanceof Error ? e.message : String(e) };
+    }
+  },
+
+  /** Live overlay (read-only); same as GET /api/hermes-skills/installed. */
+  async hermesLiveOverlay(): Promise<{ overlay: HermesSkillsInstalledResponse | null; bridge: SkillsBridge }> {
+    try {
+      const res = await hamApiFetch(`${BASE}/hermes-live-overlay`, { credentials: "include" });
+      if (!res.ok) return { overlay: null, bridge: workspaceApiPending("skills", res) };
+      return { overlay: (await res.json()) as HermesSkillsInstalledResponse, bridge: { status: "ready" } };
+    } catch (e) {
+      return { overlay: null, bridge: workspaceApiPending("skills", null, e) };
     }
   },
 } as const;

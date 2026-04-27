@@ -1,19 +1,17 @@
 /**
- * Upstream: src/routes/skills.tsx + src/screens/skills/skills-screen.tsx
- * (header "Skills Browser", tabs Installed / Marketplace, grid cards, detail sheet).
- * Marketplace hub calls are not available in HAM — show the same empty/fallback pattern.
+ * HAM Workspace Skills: installed items from /api/workspace/skills/items; catalog tab uses
+ * /api/workspace/skills/hermes-* (server-side vendored Hermes catalog + read-only live overlay, same
+ * sources as /shop). No direct browser calls to external hubs.
  */
 import * as React from "react";
 import { Link } from "react-router-dom";
+import type { HermesSkillCatalogEntry, HermesSkillCatalogEntryDetail } from "@/lib/ham/api";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { cn } from "@/lib/utils";
 import { workspaceSkillsAdapter, type WorkspaceSkill } from "../../adapters/skillsAdapter";
 
 const BUILTIN = new Set(["ham-local-docs", "ham-local-plan"]);
-
-type SkillsTab = "installed" | "marketplace";
 
 type SkillView = {
   id: string;
@@ -44,30 +42,26 @@ function toView(s: WorkspaceSkill): SkillView {
 function SkillsGrid({
   skills,
   loading,
-  tab,
   actionId,
   emptyTitle,
   emptyDescription,
   onOpen,
-  onInstall,
   onUninstall,
   onToggle,
 }: {
   skills: SkillView[];
   loading: boolean;
-  tab: SkillsTab;
   actionId: string | null;
   emptyTitle: string;
   emptyDescription: string;
   onOpen: (s: SkillView) => void;
-  onInstall: (id: string) => void;
   onUninstall: (id: string) => void;
   onToggle: (id: string, en: boolean) => void;
 }) {
   if (loading) {
     return (
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {Array.from({ length: tab === "installed" ? 4 : 6 }).map((_, i) => (
+        {Array.from({ length: 4 }).map((_, i) => (
           <div
             key={i}
             className="h-[200px] animate-pulse rounded-2xl border border-white/10 bg-black/20"
@@ -92,7 +86,7 @@ function SkillsGrid({
         const busy = actionId === skill.id;
         return (
           <article
-            key={`${tab}-${skill.id}`}
+            key={skill.id}
             className="flex min-h-[200px] flex-col rounded-2xl border border-white/10 bg-black/25 p-4 shadow-sm backdrop-blur-sm"
           >
             <div className="mb-2 flex items-start justify-between gap-2">
@@ -107,7 +101,7 @@ function SkillsGrid({
                 {skill.author} · {skill.category}
               </div>
               <div className="flex items-center gap-2">
-                {skill.installed && tab === "installed" ? (
+                {skill.installed ? (
                   <div className="flex items-center gap-1.5">
                     <span className="text-[10px] text-[var(--theme-muted)]">On</span>
                     <Switch
@@ -117,12 +111,7 @@ function SkillsGrid({
                     />
                   </div>
                 ) : null}
-                {tab === "marketplace" && !skill.installed ? (
-                  <Button size="sm" className="h-7 text-xs" disabled={busy} onClick={() => onInstall(skill.id)}>
-                    Install
-                  </Button>
-                ) : null}
-                {tab === "installed" && skill.installed ? (
+                {skill.installed ? (
                   <Button
                     size="sm"
                     variant="outline"
@@ -145,8 +134,18 @@ function SkillsGrid({
   );
 }
 
+function trustBadgeClass(level: string) {
+  if (level === "community") return "border-amber-500/35 text-amber-200/75 bg-amber-500/5";
+  if (level === "trusted") return "border-blue-500/40 text-blue-300/80 bg-blue-500/5";
+  if (level === "official" || level === "builtin")
+    return "border-emerald-500/40 text-emerald-300/80 bg-emerald-500/5";
+  return "border-white/15 text-white/50 bg-white/[0.03]";
+}
+
+type TabKey = "installed" | "catalog";
+
 export function WorkspaceSkillsScreen() {
-  const [tab, setTab] = React.useState<SkillsTab>("installed");
+  const [tab, setTab] = React.useState<TabKey>("installed");
   const [raw, setRaw] = React.useState<WorkspaceSkill[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [err, setErr] = React.useState<string | null>(null);
@@ -155,6 +154,20 @@ export function WorkspaceSkillsScreen() {
   const [selected, setSelected] = React.useState<SkillView | null>(null);
   const [page, setPage] = React.useState(1);
   const pageSize = 30;
+
+  const [catPayload, setCatPayload] = React.useState<Awaited<
+    ReturnType<typeof workspaceSkillsAdapter.hermesStaticCatalog>
+  >["data"]>(null);
+  const [catLive, setCatLive] = React.useState<Awaited<
+    ReturnType<typeof workspaceSkillsAdapter.hermesLiveOverlay>
+  >["overlay"]>(null);
+  const [catLoading, setCatLoading] = React.useState(false);
+  const [catErr, setCatErr] = React.useState<string | null>(null);
+  const [catalogSearch, setCatalogSearch] = React.useState("");
+  const [catalogPage, setCatalogPage] = React.useState(1);
+  const [hermesDetail, setHermesDetail] = React.useState<HermesSkillCatalogEntryDetail | null>(null);
+  const [hermesDetailErr, setHermesDetailErr] = React.useState<string | null>(null);
+  const [hermesDetailBusy, setHermesDetailBusy] = React.useState(false);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -172,6 +185,38 @@ export function WorkspaceSkillsScreen() {
   React.useEffect(() => {
     void load();
   }, [load]);
+
+  React.useEffect(() => {
+    if (tab !== "catalog") return;
+    let cancelled = false;
+    (async () => {
+      setCatLoading(true);
+      setCatErr(null);
+      const [cRes, oRes] = await Promise.all([
+        workspaceSkillsAdapter.hermesStaticCatalog(),
+        workspaceSkillsAdapter.hermesLiveOverlay(),
+      ]);
+      if (cancelled) return;
+      if (cRes.bridge.status === "pending") {
+        setCatErr(cRes.bridge.detail);
+        setCatPayload(null);
+        setCatLive(null);
+        setCatLoading(false);
+        return;
+      }
+      setCatErr(null);
+      setCatPayload(cRes.data);
+      if (oRes.bridge.status === "ready") {
+        setCatLive(oRes.overlay);
+      } else {
+        setCatLive(null);
+      }
+      setCatLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [tab]);
 
   const q = searchInput.trim().toLowerCase();
   const installedViews = React.useMemo(() => {
@@ -193,6 +238,35 @@ export function WorkspaceSkillsScreen() {
   }, [installedViews, page, pageSize]);
 
   const totalPages = Math.max(1, Math.ceil(installedViews.length / pageSize));
+
+  const linkedCatalogIds = React.useMemo(() => {
+    const s = new Set<string>();
+    if (!catLive?.installations) return s;
+    for (const row of catLive.installations) {
+      if (row.resolution === "linked" && row.catalog_id) s.add(row.catalog_id);
+    }
+    return s;
+  }, [catLive]);
+
+  const catalogFiltered = React.useMemo(() => {
+    const entries = catPayload?.entries ?? [];
+    const cq = catalogSearch.trim().toLowerCase();
+    if (!cq) return entries;
+    return entries.filter(
+      (e) =>
+        e.catalog_id.toLowerCase().includes(cq) ||
+        e.display_name.toLowerCase().includes(cq) ||
+        e.summary.toLowerCase().includes(cq) ||
+        e.trust_level.toLowerCase().includes(cq),
+    );
+  }, [catPayload, catalogSearch]);
+
+  const catalogPaged = React.useMemo(() => {
+    const start = (catalogPage - 1) * pageSize;
+    return catalogFiltered.slice(start, start + pageSize);
+  }, [catalogFiltered, catalogPage, pageSize]);
+
+  const catalogTotalPages = Math.max(1, Math.ceil(catalogFiltered.length / pageSize));
 
   async function runAction(
     kind: "install" | "uninstall" | "toggle",
@@ -222,17 +296,37 @@ export function WorkspaceSkillsScreen() {
     }
   }
 
+  const openHermesDetail = async (e: HermesSkillCatalogEntry) => {
+    setHermesDetailBusy(true);
+    setHermesDetail(null);
+    setHermesDetailErr(null);
+    const { entry, error, bridge } = await workspaceSkillsAdapter.hermesStaticCatalogEntry(e.catalog_id);
+    setHermesDetailBusy(false);
+    if (bridge.status === "pending") {
+      setHermesDetailErr(bridge.detail);
+      return;
+    }
+    if (error || !entry) {
+      setHermesDetailErr(error ?? "Failed to load details.");
+      return;
+    }
+    setHermesDetail(entry);
+  };
+
   return (
     <div className="hws-root min-h-full overflow-y-auto" style={{ color: "var(--theme-text)" }}>
       <div className="mx-auto flex w-full max-w-[1200px] flex-col gap-5 px-4 py-6 sm:px-6 lg:px-8">
         <header className="rounded-2xl border border-white/10 bg-black/20 p-4 backdrop-blur-md">
-          <p className="text-xs font-medium uppercase tracking-wide text-[var(--theme-muted)]">
-            Hermes Workspace Marketplace
-          </p>
+          <p className="text-xs font-medium uppercase tracking-wide text-[var(--theme-muted)]">Hermes Workspace</p>
           <h1 className="text-balance text-2xl font-medium sm:text-3xl">Skills Browser</h1>
           <p className="mt-1 max-w-2xl text-pretty text-sm text-[var(--theme-muted)] sm:text-base">
-            Install and manage skills stored by the HAM Skills API. Marketplace catalog search is shown for layout parity;
-            inventory comes from your deployment only — no upstream hub calls from the browser.
+            <strong>Installed</strong> uses the workspace JSON store via{" "}
+            <code className="text-xs opacity-80">/api/workspace/skills</code>. <strong>Catalog</strong> is the read-only
+            Hermes static catalog and live install overlay (same data as the{" "}
+            <Link to="/shop" className="text-emerald-400/90 underline-offset-2 hover:underline">
+              Capabilities
+            </Link>{" "}
+            page), server-side only.
           </p>
         </header>
 
@@ -240,49 +334,40 @@ export function WorkspaceSkillsScreen() {
           <Tabs
             value={tab}
             onValueChange={(v) => {
-              setTab(v as SkillsTab);
+              setTab(v as TabKey);
               setPage(1);
+              setCatalogPage(1);
             }}
             className="w-full"
           >
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <TabsList className="w-full rounded-xl border border-white/10 bg-black/30 p-1 sm:w-auto">
-                <TabsTrigger value="installed" className="flex-1 sm:min-w-[132px]">
-                  Installed
-                </TabsTrigger>
-                <TabsTrigger value="marketplace" className="flex-1 sm:min-w-[140px]">
-                  Marketplace
-                </TabsTrigger>
-              </TabsList>
+            <TabsList className="mb-3 w-full justify-start rounded-xl border border-white/10 bg-black/30 p-1 sm:w-auto">
+              <TabsTrigger value="installed" className="px-4">
+                Installed
+              </TabsTrigger>
+              <TabsTrigger value="catalog" className="px-4">
+                Catalog
+              </TabsTrigger>
+            </TabsList>
 
-              {tab === "installed" ? (
-                <div className="flex flex-wrap items-center gap-2">
-                  <input
-                    value={searchInput}
-                    onChange={(e) => {
-                      setSearchInput(e.target.value);
-                      setPage(1);
-                    }}
-                    placeholder="Search by name, tags, or description"
-                    className="h-9 w-full min-w-0 rounded-lg border border-white/10 bg-black/30 px-3 text-sm text-[var(--theme-text)] outline-none sm:min-w-[220px]"
-                  />
-                </div>
-              ) : null}
-            </div>
-
-            {err ? (
-              <div className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100/90">
-                <p className="font-medium">Skills API unavailable</p>
-                <p className="mt-1 whitespace-pre-wrap break-words leading-relaxed opacity-95">{err}</p>
-              </div>
-            ) : null}
-
-            <TabsContent value="installed" className="mt-3 outline-none">
-              <div className="mb-2 flex justify-end">
+            <TabsContent value="installed" className="mt-0 space-y-3 outline-none">
+              <p className="text-xs text-[var(--theme-muted)]">
+                Workspace-local skills and toggles. Add custom entries or manage built-ins when present.
+              </p>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end sm:gap-3">
+                <input
+                  value={searchInput}
+                  onChange={(e) => {
+                    setSearchInput(e.target.value);
+                    setPage(1);
+                  }}
+                  placeholder="Search by name, tags, or description"
+                  className="h-9 w-full min-w-0 flex-1 rounded-lg border border-white/10 bg-black/30 px-3 text-sm text-[var(--theme-text)] outline-none sm:max-w-md"
+                />
                 <Button
                   type="button"
                   size="sm"
                   variant="secondary"
+                  className="shrink-0"
                   onClick={async () => {
                     const name = window.prompt("Custom skill name");
                     if (!name?.trim()) return;
@@ -296,49 +381,139 @@ export function WorkspaceSkillsScreen() {
                   Add custom skill
                 </Button>
               </div>
+
+              {err ? (
+                <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100/90">
+                  <p className="font-medium">Skills API unavailable</p>
+                  <p className="mt-1 whitespace-pre-wrap break-words leading-relaxed opacity-95">{err}</p>
+                </div>
+              ) : null}
+
               <SkillsGrid
                 skills={paged}
                 loading={loading}
-                tab="installed"
                 actionId={actionId}
-                emptyTitle="No skills installed yet"
-                emptyDescription="Add a custom skill or connect a skills catalog when your HAM API exposes one. Built-in entries appear when the API returns them."
+                emptyTitle="No skills in this deployment yet"
+                emptyDescription="Add a custom skill, or use built-ins from /api/workspace/skills on this host."
                 onOpen={setSelected}
-                onInstall={(id) => void runAction("install", id)}
                 onUninstall={(id) => void runAction("uninstall", id)}
                 onToggle={(id, en) => void runAction("toggle", id, en)}
               />
             </TabsContent>
 
-            <TabsContent value="marketplace" className="mt-3 space-y-3 outline-none">
-              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100/90">
-                <p className="font-medium">Skills catalog is not available from this HAM API yet.</p>
-                <p className="mt-1 text-xs leading-relaxed opacity-95">
-                  There are no browser calls to an external Skills Hub. Use <strong>Installed</strong> for the catalog
-                  returned by <code className="text-xs">/api/workspace/skills</code> on your deployment.
+            <TabsContent value="catalog" className="mt-0 space-y-3 outline-none">
+              <p className="text-xs text-[var(--theme-muted)]">
+                Read-only Hermes runtime skills catalog. Installing on a remote host is not available from this browser;
+                this view mirrors the Capabilities page catalog.
+              </p>
+              {catPayload?.upstream ? (
+                <p className="text-[10px] text-[var(--theme-muted)]">
+                  Static source:{" "}
+                  <span className="font-mono text-[var(--theme-text)]/80">
+                    {catPayload.upstream.repo} @ {String(catPayload.upstream.commit).slice(0, 12)}…
+                  </span>{" "}
+                  · {catPayload.count.toLocaleString()} entries
                 </p>
-              </div>
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              ) : null}
+              {catLive ? (
+                <p className="text-[10px] text-[var(--theme-muted)]">
+                  Live overlay: status {catLive.status} · rows {catLive.live_count} · linked {catLive.linked_count} ·
+                  catalog-only {catLive.catalog_only_count}
+                </p>
+              ) : null}
+
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
                 <input
-                  value={searchInput}
-                  onChange={(e) => setSearchInput(e.target.value)}
-                  placeholder="Search Skills Hub, GitHub, and local fallback"
-                  className="h-10 w-full rounded-lg border border-white/10 bg-black/30 px-3 text-sm outline-none"
+                  value={catalogSearch}
+                  onChange={(e) => {
+                    setCatalogSearch(e.target.value);
+                    setCatalogPage(1);
+                  }}
+                  placeholder="Filter by name, id, summary…"
+                  className="h-9 w-full min-w-0 flex-1 rounded-lg border border-white/10 bg-black/30 px-3 text-sm text-[var(--theme-text)] outline-none sm:max-w-xl"
                 />
-                <div className="text-right text-xs text-[var(--theme-muted)]">Source: hams-local</div>
+                <div className="shrink-0 text-[10px] text-[var(--theme-muted)]">
+                  Source: {catPayload?.source ?? "hermes_static_catalog"} · read-only
+                </div>
               </div>
-              <SkillsGrid
-                skills={[]}
-                loading={false}
-                tab="marketplace"
-                actionId={null}
-                emptyTitle="Search the Skills Hub"
-                emptyDescription="Hub integration is not wired in this HAM build. Switch to Installed to manage local skills."
-                onOpen={(_s) => undefined}
-                onInstall={(_id) => undefined}
-                onUninstall={(_id) => undefined}
-                onToggle={(_id, _e) => undefined}
-              />
+
+              {catErr && !catPayload ? (
+                <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100/90">
+                  <p className="font-medium">Catalog unavailable</p>
+                  <p className="mt-1 whitespace-pre-wrap break-words opacity-95">
+                    {catErr} Use Capabilities in the main app to verify server catalog configuration.
+                  </p>
+                </div>
+              ) : null}
+
+              {catLoading ? (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="h-[180px] animate-pulse rounded-2xl border border-white/10 bg-black/20"
+                    />
+                  ))}
+                </div>
+              ) : catPayload ? (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  {catalogPaged.map((e) => {
+                    const st = catLive?.status;
+                    const overlayBad =
+                      st === "remote_only" || st === "unavailable" || st === "error";
+                    const linked = linkedCatalogIds.has(e.catalog_id);
+                    return (
+                      <article
+                        key={e.catalog_id}
+                        className="flex min-h-[180px] flex-col rounded-2xl border border-white/10 bg-black/25 p-4"
+                      >
+                        <div className="min-w-0 space-y-1">
+                          <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--theme-text)]">
+                            {e.display_name}
+                          </h3>
+                          <p className="line-clamp-3 text-xs text-[var(--theme-muted)]">{e.summary || "—"}</p>
+                          <p className="pt-1 font-mono text-[10px] text-white/40">{e.catalog_id}</p>
+                        </div>
+                        <div className="mt-auto flex flex-wrap items-center gap-1.5 border-t border-white/10 pt-3">
+                          <span
+                            className={`text-[8px] font-semibold uppercase tracking-wider rounded border px-1.5 py-0.5 ${trustBadgeClass(e.trust_level)}`}
+                          >
+                            {e.trust_level}
+                          </span>
+                          {overlayBad ? (
+                            <span className="text-[8px] font-semibold uppercase tracking-wider rounded border border-white/20 text-white/45 px-1.5 py-0.5">
+                              Unavailable
+                            </span>
+                          ) : linked ? (
+                            <span className="text-[8px] font-semibold uppercase tracking-wider rounded border border-emerald-500/40 text-emerald-200/80 px-1.5 py-0.5">
+                              Linked
+                            </span>
+                          ) : (
+                            <span className="text-[8px] font-semibold uppercase tracking-wider rounded border border-white/15 text-white/40 px-1.5 py-0.5">
+                              Catalog-only
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-2 flex justify-end">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 text-xs"
+                            onClick={() => void openHermesDetail(e)}
+                          >
+                            View details
+                          </Button>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              ) : null}
+
+              {!catLoading && catPayload && catalogFiltered.length === 0 ? (
+                <p className="text-center text-sm text-[var(--theme-muted)]">No catalog entries match this filter.</p>
+              ) : null}
             </TabsContent>
           </Tabs>
         </section>
@@ -377,7 +552,32 @@ export function WorkspaceSkillsScreen() {
               </Button>
             </div>
           </footer>
-        ) : null}
+        ) : (
+          <footer className="flex flex-col gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm text-[var(--theme-muted)] tabular-nums sm:flex-row sm:items-center sm:justify-between">
+            <span>{catalogFiltered.length.toLocaleString()} entries (filtered)</span>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={catalogPage <= 1 || catLoading}
+                onClick={() => setCatalogPage((p) => Math.max(1, p - 1))}
+              >
+                Previous
+              </Button>
+              <span className="min-w-[82px] text-center">
+                {catalogPage} / {catalogTotalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={catalogPage >= catalogTotalPages || catLoading}
+                onClick={() => setCatalogPage((p) => Math.min(catalogTotalPages, p + 1))}
+              >
+                Next
+              </Button>
+            </div>
+          </footer>
+        )}
       </div>
 
       {selected ? (
@@ -402,6 +602,63 @@ export function WorkspaceSkillsScreen() {
             </div>
             <div className="flex justify-end gap-2 border-t border-white/10 px-5 py-3">
               <Button type="button" size="sm" variant="secondary" onClick={() => setSelected(null)}>
+                Close
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {hermesDetailBusy || hermesDetail || hermesDetailErr ? (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 sm:items-center">
+          <div
+            className="flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-[var(--theme-bg)] shadow-2xl"
+            style={{ color: "var(--theme-text)" }}
+          >
+            <div className="border-b border-white/10 px-5 py-4">
+              <h2 className="text-lg font-semibold">
+                {hermesDetail ? hermesDetail.display_name : "Skill details"}
+              </h2>
+              {hermesDetail ? (
+                <p className="mt-1 font-mono text-xs text-[var(--theme-muted)]">{hermesDetail.catalog_id}</p>
+              ) : null}
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 text-sm">
+              {hermesDetailBusy ? <p className="text-[var(--theme-muted)]">Loading…</p> : null}
+              {hermesDetailErr ? <p className="text-amber-200/90">{hermesDetailErr}</p> : null}
+              {hermesDetail ? (
+                <div className="space-y-3">
+                  <p className="whitespace-pre-wrap text-neutral-200">{hermesDetail.summary || "—"}</p>
+                  {hermesDetail.platforms.length ? (
+                    <p className="text-xs text-[var(--theme-muted)]">
+                      Platforms: {hermesDetail.platforms.join(", ")}
+                    </p>
+                  ) : null}
+                  {hermesDetail.detail ? (
+                    <div className="rounded-lg border border-white/10 bg-black/20 p-3 text-xs">
+                      <p className="text-[var(--theme-muted)]">{hermesDetail.detail.provenance_note}</p>
+                      {hermesDetail.detail.warnings.length ? (
+                        <ul className="mt-2 list-disc pl-4 text-amber-200/80">
+                          {hermesDetail.detail.warnings.map((w) => (
+                            <li key={w}>{w}</li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+            <div className="flex justify-end gap-2 border-t border-white/10 px-5 py-3">
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                  setHermesDetail(null);
+                  setHermesDetailErr(null);
+                }}
+              >
                 Close
               </Button>
             </div>
