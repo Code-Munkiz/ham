@@ -13,13 +13,18 @@ import {
   fetchModelsCatalog,
   HamAccessRestrictedError,
   postChatTranscribe,
+  postChatUploadAttachment,
 } from "@/lib/ham/api";
 import { CLIENT_MODEL_CATALOG_FALLBACK } from "@/lib/ham/modelCatalogFallback";
 import type { ModelCatalogPayload } from "@/lib/ham/types";
 import { applyHamUiActions } from "@/lib/ham/applyUiActions";
 import type { HamChatStreamAuth } from "@/lib/ham/api";
-import type { HamChatUserContentV1 } from "@/lib/ham/chatUserContent";
-import { buildHamChatUserPayloadV1, userTranscriptPreview } from "@/lib/ham/chatUserContent";
+import type { HamChatUserContentV1, HamChatUserContentV2 } from "@/lib/ham/chatUserContent";
+import {
+  buildHamChatUserPayloadV1,
+  buildHamChatUserPayloadV2,
+  userTranscriptPreview,
+} from "@/lib/ham/chatUserContent";
 import { workspaceChatAdapter, workspaceSessionAdapter } from "../../workspaceAdapters";
 import { WorkspaceChatEmptyState } from "./WorkspaceChatEmptyState";
 import { WorkspaceChatMessageList, type HwwMsgRow } from "./WorkspaceChatMessageList";
@@ -36,6 +41,7 @@ import {
   type ChatInspectorArtifactRow,
 } from "./workspaceInspectorChatDerived";
 import {
+  buildFileForServerUpload,
   fileToWorkspaceAttachment,
   formatAttachmentByteSize,
   MAX_WORKSPACE_ATTACHMENT_BYTES,
@@ -257,11 +263,26 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
           toast.error(
             `“${f.name || "file"}” is too large (max ${formatAttachmentByteSize(MAX_WORKSPACE_ATTACHMENT_BYTES)} per file, after compression for images).`,
           );
-        } else {
-          next.push(a);
+          continue;
         }
-      } catch {
-        toast.error(`Could not read “${f.name || "file"}”.`);
+        if (a.error) {
+          next.push(a);
+          continue;
+        }
+        const uploadFile = await buildFileForServerUpload(f, a);
+        const up = await postChatUploadAttachment(uploadFile);
+        next.push({
+          ...a,
+          serverId: up.attachment_id,
+          name: up.filename || a.name,
+          size: up.size,
+          mime: up.mime,
+          kind: up.kind === "file" ? "file" : "image",
+        });
+      } catch (e) {
+        toast.error(
+          e instanceof Error ? e.message : `Upload failed for "${f.name || "file"}".`,
+        );
       }
     }
     if (next.length === 0) return;
@@ -308,13 +329,15 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   }, []);
 
   const send = React.useCallback(
-    async (outboundUser: string | HamChatUserContentV1) => {
+    async (outboundUser: string | HamChatUserContentV1 | HamChatUserContentV2) => {
       const isV1 = typeof outboundUser === "object" && outboundUser && outboundUser.h === "ham_chat_user_v1";
-      const displayContent = isV1
+      const isV2 = typeof outboundUser === "object" && outboundUser && outboundUser.h === "ham_chat_user_v2";
+      const displayContent = isV1 || isV2
         ? JSON.stringify(outboundUser)
         : (outboundUser as string).trim();
-      if (!isV1 && !(outboundUser as string).trim()) return;
+      if (!isV1 && !isV2 && !(outboundUser as string).trim()) return;
       if (isV1 && !(outboundUser as HamChatUserContentV1).images?.length) return;
+      if (isV2 && !(outboundUser as HamChatUserContentV2).attachments?.length) return;
       if (sending || voiceTranscribing) return;
       setInput("");
       setAttachments([]);
@@ -359,7 +382,12 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         const res = await workspaceChatAdapter.stream(
           {
             session_id: sessionId ?? undefined,
-            messages: [{ role: "user", content: isV1 ? (outboundUser as HamChatUserContentV1) : (outboundUser as string).trim() }],
+            messages: [
+              {
+                role: "user",
+                content: isV1 || isV2 ? (outboundUser as HamChatUserContentV1 | HamChatUserContentV2) : (outboundUser as string).trim(),
+              },
+            ],
             ...(chatModelIdForApi ? { model_id: chatModelIdForApi } : {}),
             ...(projectId ? { project_id: projectId } : {}),
             workbench_mode: "agent",
@@ -490,17 +518,32 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       return;
     }
     if (usable.length > 0) {
+      if (usable.every((a) => a.serverId)) {
+        const payload = buildHamChatUserPayloadV2(
+          trimmed,
+          usable.map((a) => ({
+            id: a.serverId!,
+            name: a.name,
+            mime: a.mime ?? (a.kind === "file" ? "text/plain" : "image/png"),
+            kind: a.kind,
+          })),
+        );
+        void send(payload);
+        return;
+      }
       const payload = buildHamChatUserPayloadV1(
         trimmed,
-        usable.map((a) => {
-          const m = /^data:(image\/(?:png|jpe?g|webp));base64,/i.exec(a.payload.trim());
-          const raw = (m ? m[1] : "image/jpeg").toLowerCase();
-          const mime = raw === "image/jpg" ? "image/jpeg" : raw;
-          return { name: a.name, mime, dataUrl: a.payload, size: a.size };
-        }),
+        usable
+          .filter((a) => a.kind === "image" && a.payload.startsWith("data:"))
+          .map((a) => {
+            const m = /^data:(image\/(?:png|jpe?g|webp));base64,/i.exec(a.payload.trim());
+            const raw = (m ? m[1] : "image/jpeg").toLowerCase();
+            const mime = raw === "image/jpg" ? "image/jpeg" : raw;
+            return { name: a.name, mime, dataUrl: a.payload, size: a.size };
+          }),
       );
       if (payload.images.length === 0) {
-        toast.error("Could not read screenshots. Use PNG, JPEG, or WebP (max 500 KB each).");
+        toast.error("Re-add attachments (upload may have been interrupted).");
         return;
       }
       void send(payload);

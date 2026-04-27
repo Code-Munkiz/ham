@@ -1,28 +1,46 @@
 """
 Structured workspace chat user content (screenshots / multimodal).
 
-Wire format (persisted in chat session ``content`` string)::
+Wire formats (persisted in chat session ``content`` string)::
 
     {"h": "ham_chat_user_v1", "text": "...", "images": [{"name", "mime", "data_url"}]}
 
-The browser sends the same object as JSON for ``ChatMessageIn.content``; the API
-normalizes to a single JSON string for storage. OpenRouter receives OpenAI-style
-``content`` parts; HTTP/mock gateways may not forward image bytes (see
-``to_llm_message_content``).
+    {"h": "ham_chat_user_v2", "text": "...", "attachments": [{"id", "name", "mime", "kind"}]}
+
+v2 uses opaque ``attachment`` ids and server-side blob storage; v1 embeds
+base64 in Firestore. OpenRouter receives OpenAI-style ``content`` parts;
+HTTP/mock gateways may not forward image bytes (see ``to_llm_message_content``).
 """
 from __future__ import annotations
 
+import base64
 import json
 import os
 import re
 from typing import Any, Literal
 
+from src.ham.chat_attachment_store import (
+    get_chat_attachment_store,
+    is_safe_attachment_id,
+)
+
 HAM_CHAT_USER_V1 = "ham_chat_user_v1"
+HAM_CHAT_USER_V2 = "ham_chat_user_v2"
 
 _MAX_MESSAGE_JSON_BYTES = 1_200_000
 _MAX_IMAGES = 8
 
 _ALLOWED_MIME = frozenset({"image/png", "image/jpeg", "image/jpg", "image/webp"})
+_ALLOWED_MIME_V2 = frozenset(
+    {
+        "image/png",
+        "image/jpeg",
+        "image/jpg",
+        "image/webp",
+        "text/plain",
+        "text/markdown",
+    },
+)
 _RE_DATA_URL = re.compile(
     r"^data:(image/(?:png|jpeg|jpg|webp));base64,([A-Za-z0-9+/=\s]+)\s*$",
     re.IGNORECASE,
@@ -99,6 +117,77 @@ def _validate_v1(doc: dict[str, Any]) -> dict[str, Any]:
     return {"h": HAM_CHAT_USER_V1, "text": t, "images": out_images}
 
 
+def _check_attachment_owner(
+    owner_in_meta: str,
+    current_user: str | None,
+) -> bool:
+    """
+    If the uploaded file was tagged with a Clerk user id, the same user must
+    reference it in chat. If ``owner_in_meta`` is empty (local dev / no auth),
+    allow any in-process user (id must still exist on disk).
+    """
+    o = (owner_in_meta or "").strip()
+    if not o:
+        return True
+    c = (current_user or "").strip()
+    return bool(c) and c == o
+
+
+def _validate_v2(
+    doc: dict[str, Any],
+    *,
+    attachment_user_id: str | None,
+) -> dict[str, Any]:
+    if doc.get("h") != HAM_CHAT_USER_V2:
+        raise ValueError("Invalid structured user message (missing ham_chat_user_v2 header).")
+    text = doc.get("text")
+    if text is not None and not isinstance(text, str):
+        raise ValueError("Invalid user message: text must be a string.")
+    t = (text or "").strip()
+    at_raw = doc.get("attachments")
+    if not isinstance(at_raw, list) or not at_raw:
+        raise ValueError("Invalid user message: attachments must be a non-empty list for v2.")
+    if len(at_raw) > _MAX_IMAGES:
+        raise ValueError(f"At most {_MAX_IMAGES} attachments are allowed per message.")
+    store = get_chat_attachment_store()
+    out: list[dict[str, str]] = []
+    for i, it in enumerate(at_raw):
+        if not isinstance(it, dict):
+            raise ValueError("Invalid user message: each attachment must be an object.")
+        aid = str(it.get("id") or "").strip()
+        if not is_safe_attachment_id(aid):
+            raise ValueError("Invalid attachment id.")
+        name = str(it.get("name") or f"file-{i + 1}").strip() or f"file-{i + 1}"
+        rec = store.get_meta(aid)
+        if rec is None:
+            raise ValueError("Unknown or expired attachment id (re-upload the file).")
+        if not _check_attachment_owner(rec.owner_key, attachment_user_id):
+            raise ValueError("Attachment is not available for this user.")
+        filed = _norm_mime(str(it.get("mime") or rec.mime))
+        if filed not in _ALLOWED_MIME_V2:
+            raise ValueError(
+                f"Unsupported attachment type: {filed!r} (use image/png, image/jpeg, image/webp, text/plain, text/markdown).",
+            )
+        if _norm_mime(rec.mime) != filed:
+            raise ValueError("Attachment `mime` does not match the uploaded file.")
+        expect_kind: Literal["image", "file"] = "image" if filed.startswith("image/") else "file"
+        if rec.kind not in ("image", "file"):
+            raise ValueError("Stored attachment is corrupted (invalid kind).")
+        if rec.kind != expect_kind:
+            raise ValueError("Attachment `mime` and stored kind do not match.")
+        out.append(
+            {
+                "id": aid,
+                "name": name[:240],
+                "mime": filed,
+                "kind": expect_kind,
+            }
+        )
+    if not t and not out:
+        raise ValueError("User message is empty (add text and/or attachments).")
+    return {"h": HAM_CHAT_USER_V2, "text": t, "attachments": out}
+
+
 def try_parse_stored_v1(stored: str) -> dict[str, Any] | None:
     s = (stored or "").strip()
     if not s.startswith("{"):
@@ -112,8 +201,30 @@ def try_parse_stored_v1(stored: str) -> dict[str, Any] | None:
     return doc  # not fully validated (already validated at write)
 
 
+def try_parse_stored_v2(stored: str) -> dict[str, Any] | None:
+    s = (stored or "").strip()
+    if not s.startswith("{"):
+        return None
+    try:
+        doc = json.loads(s)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(doc, dict) or doc.get("h") != HAM_CHAT_USER_V2:
+        return None
+    return doc
+
+
+def _dump_user_json(doc: dict[str, Any]) -> str:
+    out = json.dumps(doc, separators=(",", ":"), ensure_ascii=False)
+    if len(out.encode("utf-8")) > _MAX_MESSAGE_JSON_BYTES:
+        raise ValueError("Message with attachments is too large.")
+    return out
+
+
 def normalize_user_incoming_to_stored(
     content: str | dict[str, Any] | list[Any],
+    *,
+    attachment_user_id: str | None = None,
 ) -> str:
     """Normalize request ``content`` to a single string suitable for session storage."""
     if isinstance(content, str):
@@ -129,10 +240,10 @@ def normalize_user_incoming_to_stored(
                 return s
             if isinstance(doc, dict) and doc.get("h") == HAM_CHAT_USER_V1:
                 v = _validate_v1(doc)
-                out = json.dumps(v, separators=(",", ":"), ensure_ascii=False)
-                if len(out.encode("utf-8")) > _MAX_MESSAGE_JSON_BYTES:
-                    raise ValueError("Message with attachments is too large.")
-                return out
+                return _dump_user_json(v)
+            if isinstance(doc, dict) and doc.get("h") == HAM_CHAT_USER_V2:
+                v = _validate_v2(doc, attachment_user_id=attachment_user_id)
+                return _dump_user_json(v)
             # Valid JSON but not our structured message — store as literal user text.
             if len(s) > 100_000:
                 raise ValueError("Message is too long.")
@@ -141,16 +252,29 @@ def normalize_user_incoming_to_stored(
             raise ValueError("Message is too long.")
         return s
     if isinstance(content, dict):
-        v = _validate_v1(content)
-        out = json.dumps(v, separators=(",", ":"), ensure_ascii=False)
-        if len(out.encode("utf-8")) > _MAX_MESSAGE_JSON_BYTES:
-            raise ValueError("Message with attachments is too large.")
-        return out
+        h = content.get("h")
+        if h == HAM_CHAT_USER_V1:
+            v = _validate_v1(content)
+            return _dump_user_json(v)
+        if h == HAM_CHAT_USER_V2:
+            v = _validate_v2(content, attachment_user_id=attachment_user_id)
+            return _dump_user_json(v)
+        raise ValueError("Invalid user message: expected ham_chat_user_v1 or ham_chat_user_v2.")
     raise ValueError("Invalid user message content type.")
 
 
 def plain_text_for_operator(stored: str) -> str:
     """Text-only / safe summary for the operator and previews."""
+    v2 = try_parse_stored_v2(stored)
+    if v2 is not None:
+        t = (v2.get("text") or "").strip()
+        n = len(v2.get("attachments") or [])
+        img = sum(1 for x in (v2.get("attachments") or []) if isinstance(x, dict) and x.get("kind") == "image")
+        if n and t:
+            return f"{t}\n[User attached {n} file(s) in the dashboard ({img} image(s)).]".strip()
+        if n:
+            return f"[User attached {n} file(s) in the dashboard ({img} image(s)).]"
+        return t or ""
     v = try_parse_stored_v1(stored)
     if v is None:
         return stored
@@ -181,11 +305,32 @@ def _openrouter_vision_default() -> bool:
     return v not in {"0", "false", "no"}
 
 
+def _llm_vision_honest_no_forward(*, has_images: bool, text: str) -> str:
+    if not has_images and not text:
+        return ""
+    if has_images and not text:
+        return (
+            "[User attached a screenshot in Ham Workspace Chat, but this chat runtime does not forward "
+            "image bytes to the model. Enable OpenRouter (HERMES_GATEWAY_MODE=openrouter) with "
+            "HAM_CHAT_VISION_FORWARD=1, or for HTTP gateways set HAM_CHAT_HTTP_VISION=1 if the upstream "
+            "supports vision.]"
+        )
+    if has_images:
+        return (
+            f"{text}\n\n[User attached a screenshot. This deployment is not currently forwarding image "
+            f"bytes to the model; describe limitations honestly — you cannot see the image pixels.]"
+        ).strip()
+    return text
+
+
 def to_llm_message_content(stored: str) -> str | list[dict[str, Any]]:
     """
     Convert stored user message to ``content`` for the OpenAI-compatible gateway
     (string, or a list of text/image parts).
     """
+    v2 = try_parse_stored_v2(stored)
+    if v2 is not None:
+        return _to_llm_message_content_v2(v2)
     v = try_parse_stored_v1(stored)
     if v is None:
         return stored
@@ -199,21 +344,7 @@ def to_llm_message_content(stored: str) -> str | list[dict[str, Any]]:
     )
 
     if not forward_vision or not images:
-        if not text and not images:
-            return ""
-        if images and not text:
-            return (
-                "[User attached a screenshot in Ham Workspace Chat, but this chat runtime does not forward "
-                "image bytes to the model. Enable OpenRouter (HERMES_GATEWAY_MODE=openrouter) with "
-                "HAM_CHAT_VISION_FORWARD=1, or for HTTP gateways set HAM_CHAT_HTTP_VISION=1 if the upstream "
-                "supports vision.]"
-            )
-        if images:
-            return (
-                f"{text}\n\n[User attached a screenshot. This deployment is not currently forwarding image "
-                f"bytes to the model; describe limitations honestly — you cannot see the image pixels.]"
-            ).strip()
-        return text
+        return _llm_vision_honest_no_forward(has_images=bool(images), text=text)
 
     parts: list[dict[str, Any]] = []
     if text:
@@ -229,7 +360,73 @@ def to_llm_message_content(stored: str) -> str | list[dict[str, Any]]:
     return parts
 
 
+def _bytes_to_image_data_url(mime: str, raw: bytes) -> str:
+    b64 = base64.standard_b64encode(raw).decode("ascii")
+    m = _norm_mime(mime)
+    if m not in _CANON_MIME:
+        m = "image/png"
+    return f"data:{m};base64,{b64}"
+
+
+def _to_llm_message_content_v2(v2: dict[str, Any]) -> str | list[dict[str, Any]]:
+    base_text = (v2.get("text") or "").strip()
+    ats = [x for x in (v2.get("attachments") or []) if isinstance(x, dict)]
+    store = get_chat_attachment_store()
+    file_text_blocks: list[str] = []
+    image_data_urls: list[str] = []
+    for a in ats:
+        aid = str(a.get("id") or "")
+        if not is_safe_attachment_id(aid):
+            continue
+        got = store.get(aid)
+        if got is None:
+            name = str(a.get("name") or "attachment")
+            file_text_blocks.append(f"[Attachment missing on server: {name}]")
+            continue
+        raw, rec = got
+        m = _norm_mime(rec.mime)
+        if rec.kind == "file" and m in ("text/plain", "text/markdown"):
+            try:
+                body = raw.decode("utf-8")
+            except UnicodeDecodeError:
+                body = raw.decode("utf-8", errors="replace")
+            name = str(a.get("name") or rec.filename)
+            file_text_blocks.append(f"---\n[Attached file: {name}]\n{body}\n")
+        elif rec.kind == "image" or m.startswith("image/"):
+            image_data_urls.append(_bytes_to_image_data_url(rec.mime, raw))
+
+    text = base_text
+    if file_text_blocks:
+        merged = "\n".join(file_text_blocks).strip()
+        text = f"{text}\n\n{merged}".strip() if text else merged
+
+    mode = _gateway_mode()
+    forward_vision = (mode == "openrouter" and _openrouter_vision_default()) or (
+        mode == "http" and _http_vision_flag()
+    )
+
+    if not image_data_urls:
+        return text or ""
+
+    if not forward_vision:
+        return _llm_vision_honest_no_forward(has_images=True, text=text)
+
+    parts: list[dict[str, Any]] = []
+    if text:
+        parts.append({"type": "text", "text": text})
+    for u in image_data_urls:
+        parts.append({"type": "image_url", "image_url": {"url": u}})
+    if len(parts) == 1 and parts[0].get("type") == "text":
+        return str(parts[0].get("text") or "")
+    return parts
+
+
 def has_screenshot_in_stored(stored: str) -> bool:
+    v2 = try_parse_stored_v2(stored)
+    if v2 is not None:
+        return any(
+            isinstance(x, dict) and str(x.get("kind") or "") == "image" for x in (v2.get("attachments") or [])
+        )
     v = try_parse_stored_v1(stored)
     if v is None:
         return False

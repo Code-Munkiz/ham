@@ -8,7 +8,7 @@ from typing import Any, Literal
 
 import httpx
 from fastapi import APIRouter, File, Header, HTTPException, Request, UploadFile
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from src.api.models_catalog import resolve_model_id_for_chat
@@ -47,6 +47,14 @@ from src.integrations.nous_gateway_client import (
     stream_chat_turn,
 )
 from src.persistence.chat_session_store import ChatTurn, build_chat_session_store
+from src.ham.chat_attachment_store import (
+    CHAT_UPLOAD_ALLOWED_MIME,
+    AttachmentRecord,
+    default_attachment_max_bytes,
+    get_chat_attachment_store,
+    kind_for_mime,
+    safe_upload_filename,
+)
 
 router = APIRouter(tags=["chat"])
 
@@ -322,7 +330,11 @@ def _resolve_project_root_for_chat(project_id: str | None) -> Path | None:
     return Path(rec.root).expanduser().resolve()
 
 
-def _finalize_incoming_for_store(msgs: list[ChatMessageIn]) -> list[dict[str, str]]:
+def _finalize_incoming_for_store(
+    msgs: list[ChatMessageIn],
+    *,
+    attachment_user_id: str | None = None,
+) -> list[dict[str, str]]:
     """Normalize request messages to string ``content`` suitable for session persistence."""
     from src.ham.chat_user_content import normalize_user_incoming_to_stored
 
@@ -353,7 +365,10 @@ def _finalize_incoming_for_store(msgs: list[ChatMessageIn]) -> list[dict[str, st
             out.append({"role": m.role, "content": c})
         else:
             try:
-                stored = normalize_user_incoming_to_stored(m.content)
+                stored = normalize_user_incoming_to_stored(
+                    m.content,
+                    attachment_user_id=attachment_user_id,
+                )
             except ValueError as exc:
                 raise HTTPException(
                     status_code=422,
@@ -370,6 +385,8 @@ def _finalize_incoming_for_store(msgs: list[ChatMessageIn]) -> list[dict[str, st
 
 def _prepare_chat_session(
     body: ChatRequest,
+    *,
+    attachment_user_id: str | None = None,
 ) -> tuple[str, list[dict[str, Any]], dict[str, Any] | None, str]:
     """Returns ``(session_id, llm_messages, active_agent_meta, last_user_plain_for_operator)``."""
     store = _chat_store
@@ -388,7 +405,7 @@ def _prepare_chat_session(
     else:
         sid = store.create_session()
 
-    incoming = _finalize_incoming_for_store(body.messages)
+    incoming = _finalize_incoming_for_store(body.messages, attachment_user_id=attachment_user_id)
     last_user_plain = (
         plain_text_for_operator(incoming[-1]["content"])
         if incoming[-1]["role"] == "user"
@@ -453,8 +470,13 @@ def _prepare_chat_session(
 
 def _messages_for_completion(
     body: ChatRequest,
+    *,
+    attachment_user_id: str | None = None,
 ) -> tuple[str, list[dict[str, Any]], str | None, dict[str, Any] | None, str]:
-    sid, llm_messages, active_meta, last_user_plain = _prepare_chat_session(body)
+    sid, llm_messages, active_meta, last_user_plain = _prepare_chat_session(
+        body,
+        attachment_user_id=attachment_user_id,
+    )
     or_override = _resolve_openrouter_model_override(body)
     llm_messages = _append_workbench_to_messages(llm_messages, body)
     return sid, llm_messages, or_override, active_meta, last_user_plain
@@ -516,7 +538,11 @@ async def post_chat(
         route="post_chat",
     )
     store = _chat_store
-    sid, llm_messages, or_override, active_meta, last_user_plain = _messages_for_completion(body)
+    aid = ham_actor.user_id if ham_actor is not None else None
+    sid, llm_messages, or_override, active_meta, last_user_plain = _messages_for_completion(
+        body,
+        attachment_user_id=aid,
+    )
     if body.enable_operator and operator_enabled() and body.messages[-1].role == "user":
         from src.persistence.project_store import get_project_store
 
@@ -578,7 +604,11 @@ def post_chat_stream(
         route="post_chat_stream",
     )
     store = _chat_store
-    sid, llm_messages, or_override, stream_active_meta, last_user_plain = _messages_for_completion(body)
+    aid = ham_actor.user_id if ham_actor is not None else None
+    sid, llm_messages, or_override, stream_active_meta, last_user_plain = _messages_for_completion(
+        body,
+        attachment_user_id=aid,
+    )
 
     if body.enable_operator and operator_enabled() and body.messages[-1].role == "user":
         from src.persistence.project_store import get_project_store
@@ -844,3 +874,155 @@ async def post_chat_transcribe(
         ) from exc
 
     return TranscribeResponse(text=text)
+
+
+def _coerce_request_mime(content_type: str | None, filename: str) -> str | None:
+    raw = (content_type or "").split(";")[0].strip().lower()
+    if raw == "image/jpg":
+        raw = "image/jpeg"
+    if raw in CHAT_UPLOAD_ALLOWED_MIME:
+        return raw
+    name = (filename or "").lower()
+    if name.endswith(".png"):
+        return "image/png"
+    if name.endswith((".jpg", ".jpeg")):
+        return "image/jpeg"
+    if name.endswith(".webp"):
+        return "image/webp"
+    if name.endswith(".md") or name.endswith(".markdown"):
+        return "text/markdown"
+    if name.endswith(".txt"):
+        return "text/plain"
+    return None
+
+
+def _sniff_image_mime(head: bytes) -> str | None:
+    if len(head) >= 8 and head[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    if len(head) >= 3 and head[:3] == b"\xff\xd8\xff":
+        return "image/jpeg"
+    if len(head) >= 12 and head[:4] == b"RIFF" and head[8:12] == b"WEBP":
+        return "image/webp"
+    return None
+
+
+@router.post("/api/chat/attachments")
+async def post_chat_attachment(
+    file: UploadFile = File(...),
+    authorization: str | None = Header(None, alias="Authorization"),
+) -> dict[str, Any]:
+    """Upload a chat attachment; returns an opaque id (blobs are stored server-side, not in Firestore)."""
+    ham_actor, _xham = _resolve_chat_clerk_context(
+        authorization,
+        None,
+        route="post_chat_attachment",
+    )
+    cap = default_attachment_max_bytes()
+    data = await file.read()
+    if len(data) > cap:
+        raise HTTPException(
+            status_code=413,
+            detail={
+                "error": {
+                    "code": "ATTACHMENT_TOO_LARGE",
+                    "message": f"File exceeds maximum size ({cap} bytes).",
+                },
+            },
+        )
+    if not data:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": {"code": "ATTACHMENT_EMPTY", "message": "Empty upload."}},
+        )
+    name = safe_upload_filename(file.filename or "attachment")
+    sniffed = _sniff_image_mime(data[:64])
+    if sniffed:
+        mime = sniffed
+    else:
+        mime = _coerce_request_mime(file.content_type, name)
+        if mime in ("text/plain", "text/markdown"):
+            try:
+                data.decode("utf-8")
+            except UnicodeError as exc:
+                raise HTTPException(
+                    status_code=415,
+                    detail={
+                        "error": {
+                            "code": "ATTACHMENT_TEXT_NOT_UTF8",
+                            "message": "Text attachment must be valid UTF-8.",
+                        },
+                    },
+                ) from exc
+    if mime is None or mime not in CHAT_UPLOAD_ALLOWED_MIME:
+        raise HTTPException(
+            status_code=415,
+            detail={
+                "error": {
+                    "code": "ATTACHMENT_UNSUPPORTED_TYPE",
+                    "message": "Unsupported file type. Use png, jpeg, webp, plain text, or markdown.",
+                },
+            },
+        )
+    store = get_chat_attachment_store()
+    aid = store.new_id()
+    owner = ham_actor.user_id if ham_actor is not None else ""
+    rec = AttachmentRecord(
+        id=aid,
+        filename=name,
+        mime=mime,
+        size=len(data),
+        owner_key=owner,
+        kind=kind_for_mime(mime),
+    )
+    try:
+        store.put(data, rec)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": {"code": "ATTACHMENT_STORE_FAILED", "message": str(exc)}},
+        ) from exc
+    return {
+        "attachment_id": aid,
+        "filename": name,
+        "mime": mime,
+        "size": len(data),
+        "kind": rec.kind,
+    }
+
+
+@router.get("/api/chat/attachments/{attachment_id}")
+async def get_chat_attachment(
+    attachment_id: str,
+    authorization: str | None = Header(None, alias="Authorization"),
+) -> Response:
+    """Stream bytes for a previously uploaded chat attachment (requires same principal as uploader when set)."""
+    ham_actor, _xham = _resolve_chat_clerk_context(
+        authorization,
+        None,
+        route="get_chat_attachment",
+    )
+    store = get_chat_attachment_store()
+    got = store.get(attachment_id)
+    if got is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": {"code": "ATTACHMENT_NOT_FOUND", "message": "Unknown attachment id."}},
+        )
+    _raw, rec = got
+    if (rec.owner_key or "").strip():
+        if ham_actor is None or ham_actor.user_id != rec.owner_key:
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "error": {
+                        "code": "ATTACHMENT_FORBIDDEN",
+                        "message": "Not allowed to read this attachment.",
+                    },
+                },
+            )
+    safe_name = (rec.filename or "file").replace('"', "").replace("\r", "").replace("\n", "")[:200]
+    return Response(
+        content=_raw,
+        media_type=rec.mime,
+        headers={"Content-Disposition": f'inline; filename="{safe_name}"'},
+    )

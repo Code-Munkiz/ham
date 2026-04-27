@@ -3,7 +3,7 @@
  * and structured signals from assistant UI actions / operator results (no fake rows).
  */
 import type { HamOperatorResult, HamUiAction } from "@/lib/ham/api";
-import { tryParseHamChatUserV1String } from "@/lib/ham/chatUserContent";
+import { tryParseHamChatUserV1String, tryParseHamChatUserV2String } from "@/lib/ham/chatUserContent";
 import {
   formatAttachmentByteSize,
   type WorkspaceComposerAttachment,
@@ -87,6 +87,26 @@ export function extractTranscriptAttachmentRows(messages: HwwMsgRow[]): ChatInsp
 
   for (const m of messages) {
     if (m.role !== "user") continue;
+    const v2 = tryParseHamChatUserV2String(m.content);
+    if (v2 && v2.attachments.length > 0) {
+      for (const at of v2.attachments) {
+        const name = (at.name || "attachment").trim();
+        if (!name) continue;
+        const key = `${name}\0${at.mime}\0v2`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        seq += 1;
+        out.push({
+          id: `tx-v2-${seq}-${name.slice(0, 24)}`,
+          name,
+          sizeLabel: "—",
+          kindLabel: at.mime || at.kind,
+          source: "transcript",
+          atLabel: m.timestamp,
+        });
+      }
+      continue;
+    }
     const v1 = tryParseHamChatUserV1String(m.content);
     if (v1 && v1.images.length > 0) {
       for (const im of v1.images) {

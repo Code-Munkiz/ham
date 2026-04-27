@@ -5,7 +5,8 @@
 import * as React from "react";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { tryParseHamChatUserV1String } from "@/lib/ham/chatUserContent";
+import { tryParseHamChatUserV1String, tryParseHamChatUserV2String } from "@/lib/ham/chatUserContent";
+import { WorkspaceChatAuthImage } from "./WorkspaceChatAttachmentImage";
 
 export type HwwMsgRow = {
   id: string;
@@ -29,8 +30,15 @@ export function WorkspaceChatMessageList({ messages, isStreaming }: WorkspaceCha
     <div className="hww-chat-transcript w-full space-y-4 px-4 py-5 md:px-8 md:py-6">
       {messages.map((m, idx) => {
         if (m.role === "user") {
-          const v1 = tryParseHamChatUserV1String(m.content);
-          const showText = v1 ? (v1.text || "").trim() : m.content.trim();
+          const v2 = tryParseHamChatUserV2String(m.content);
+          const v1 = v2 ? null : tryParseHamChatUserV1String(m.content);
+          const showText = v2
+            ? (v2.text || "").trim()
+            : v1
+              ? (v1.text || "").trim()
+              : m.content.trim();
+          const hasV2Media = Boolean(v2?.attachments?.length);
+          const hasV1Media = Boolean(v1?.images?.length);
           return (
             <div key={m.id} className="flex justify-end">
               <div
@@ -39,6 +47,29 @@ export function WorkspaceChatMessageList({ messages, isStreaming }: WorkspaceCha
                   "bg-gradient-to-b from-white/[0.1] to-white/[0.04] px-3.5 py-2.5 text-[13px] leading-relaxed text-[#e8eef3] shadow-sm",
                 )}
               >
+                {v2 && v2.attachments.length > 0 ? (
+                  <div className="mb-2 flex flex-wrap gap-1.5">
+                    {v2.attachments.map((at, j) => (
+                      <div
+                        key={`${m.id}-att-${j}`}
+                        className={cn(
+                          at.kind === "image"
+                            ? "h-20 w-28 overflow-hidden rounded-md border border-white/15 bg-black/30"
+                            : "max-w-[14rem] rounded-md border border-white/12 bg-white/[0.04] px-2 py-1.5 text-left text-[11px] text-white/75",
+                        )}
+                      >
+                        {at.kind === "image" ? (
+                          <WorkspaceChatAuthImage
+                            attachmentId={at.id}
+                            alt={at.name || "Attachment"}
+                          />
+                        ) : (
+                          <span className="line-clamp-3">📄 {at.name || "file"}</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
                 {v1 && v1.images.length > 0 ? (
                   <div className="mb-2 flex flex-wrap gap-1.5">
                     {v1.images.map((im, j) => (
@@ -57,7 +88,7 @@ export function WorkspaceChatMessageList({ messages, isStreaming }: WorkspaceCha
                 ) : null}
                 {showText ? (
                   <p className="whitespace-pre-wrap break-words">{showText}</p>
-                ) : v1 && v1.images.length > 0 ? null : (
+                ) : hasV2Media || hasV1Media ? null : (
                   <p className="whitespace-pre-wrap break-words opacity-60">(empty message)</p>
                 )}
                 <p className="mt-1.5 text-right text-[10px] text-white/35">{m.timestamp}</p>

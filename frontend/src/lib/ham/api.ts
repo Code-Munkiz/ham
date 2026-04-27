@@ -1,4 +1,4 @@
-import type { HamChatUserContentV1 } from "./chatUserContent";
+import type { HamChatUserContentV1, HamChatUserContentV2 } from "./chatUserContent";
 import type {
   ContextEnginePayload,
   CursorCredentialsStatus,
@@ -77,6 +77,37 @@ export async function hamApiFetch(path: string, init: RequestInit = {}): Promise
   const headers = new Headers(init.headers as HeadersInit | undefined);
   await mergeClerkAuthBearerIfNeeded(headers);
   return fetch(url, { ...init, headers });
+}
+
+/** Multipart upload for workspace chat; returns an opaque `attachment_id` (blob stored server-side). */
+export async function postChatUploadAttachment(file: File): Promise<{
+  attachment_id: string;
+  filename: string;
+  mime: string;
+  size: number;
+  kind: string;
+}> {
+  const body = new FormData();
+  body.append("file", file, file.name);
+  const res = await hamApiFetch("/api/chat/attachments", { method: "POST", body });
+  if (!res.ok) {
+    let detail = `HTTP ${res.status}`;
+    try {
+      const j = (await res.json()) as { detail?: { error?: { message?: string } } };
+      const m = j?.detail?.error?.message;
+      if (m) detail = m;
+    } catch {
+      /* ignore */
+    }
+    throw new Error(detail);
+  }
+  return res.json() as Promise<{
+    attachment_id: string;
+    filename: string;
+    mime: string;
+    size: number;
+    kind: string;
+  }>;
 }
 
 async function readFastApiDetail(res: Response): Promise<string | null> {
@@ -1071,7 +1102,7 @@ export type HamChatRole = "user" | "assistant" | "system";
 /** Inbound only: server accepts structured screenshot payloads; responses use string `content` only. */
 export interface HamChatRequestMessage {
   role: HamChatRole;
-  content: string | HamChatUserContentV1;
+  content: string | HamChatUserContentV1 | HamChatUserContentV2;
 }
 
 export interface HamChatMessage {
