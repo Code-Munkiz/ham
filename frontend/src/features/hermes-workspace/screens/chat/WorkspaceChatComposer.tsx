@@ -1,6 +1,7 @@
 /**
- * Hermes Workspace chat: repomix-style PromptInput shell — preview strip, prompt row, then action toolbar
- * (attach | voice | token/model | send). v2 attachment uploads go through `POST /api/chat/attachments`.
+ * Hermes Workspace chat: upstream-style PromptInput shell — `PromptInput` in repomix
+ * uses `var(--composer-bg)` + `rounded-3xl` + `PromptInputTextarea` then `PromptInputActions` with
+ * attach + model (left) and mic + send (right). v2 attachment uploads go through `POST /api/chat/attachments`.
  */
 
 import * as React from "react";
@@ -39,6 +40,24 @@ function chatModelCandidates(c: ModelCatalogPayload | null): ModelCatalogItem[] 
   return c.items.filter((x) => x.supports_chat);
 }
 
+function primaryModelPillText(
+  catalog: ModelCatalogPayload | null,
+  modelId: string | null,
+): string | null {
+  if (!catalog) return null;
+  if (modelId) {
+    const it = catalog.items.find((i) => i.id === modelId);
+    if (it) return it.label || it.id;
+    return modelId;
+  }
+  const m = (catalog.gateway_mode || "").toLowerCase();
+  if (m === "http" && catalog.http_chat_model_primary) {
+    return catalog.http_chat_model_primary;
+  }
+  const first = catalog.items.find((i) => i.supports_chat);
+  return first ? first.label || first.id : null;
+}
+
 export function WorkspaceChatComposer({
   value,
   onChange,
@@ -57,9 +76,9 @@ export function WorkspaceChatComposer({
   const [voiceRecording, setVoiceRecording] = React.useState(false);
   const [voiceBanner, setVoiceBanner] = React.useState<string | null>(null);
   const [isDragging, setIsDragging] = React.useState(false);
-  const formRef = React.useRef<HTMLFormElement>(null);
   const outerRef = React.useRef<HTMLDivElement>(null);
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
+  const modelSelectRef = React.useRef<HTMLSelectElement>(null);
   const dragDepthRef = React.useRef(0);
   const TEXTAREA_MAX_PX = 240;
 
@@ -95,9 +114,11 @@ export function WorkspaceChatComposer({
   React.useEffect(() => {
     if (voiceRecording) setVoiceBanner(null);
   }, [voiceRecording]);
+
   const showModel =
     Boolean(catalog && catalog.gateway_mode === "openrouter" && chatModelCandidates(catalog).length > 0);
   const gatewayOk = isDashboardChatGatewayReady(catalog);
+  const modelPill = primaryModelPillText(catalog, modelId);
   const hasAttachErrOnly =
     attachments.length > 0 && attachments.every((a) => a.error) && !value.trim();
   const allAttachmentsFailed = attachments.length > 0 && attachments.every((a) => a.error);
@@ -108,6 +129,30 @@ export function WorkspaceChatComposer({
     !sending &&
     !voiceTranscribing &&
     !voiceRecording;
+
+  const placeholder = React.useMemo(() => {
+    if (voiceTranscribing) return "Transcribing…";
+    if (!gatewayOk && catalog && !sending) return "Chat gateway not ready — check /api/models";
+    if (showModel) {
+      const macLike =
+        typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/.test(navigator.userAgent || "");
+      const mod = macLike ? "⌘⇧M" : "Ctrl+Shift+M";
+      return `Ask anything... (↵ to send · ⇧↵ new line · ${mod} switch model)`;
+    }
+    return "Ask anything... (↵ to send · ⇧↵ new line)";
+  }, [catalog, gatewayOk, sending, showModel, voiceTranscribing]);
+
+  React.useEffect(() => {
+    if (!showModel) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || !e.shiftKey) return;
+      if (e.key.toLowerCase() !== "m") return;
+      e.preventDefault();
+      modelSelectRef.current?.focus();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [showModel]);
 
   const handleAddFiles = React.useCallback(
     (files: File[]) => {
@@ -162,7 +207,6 @@ export function WorkspaceChatComposer({
       className="hww-chat-composer-outer pointer-events-auto w-full max-w-[40rem] shrink-0 border-t border-white/[0.06] bg-[#030a10]/90 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-sm md:px-4"
     >
       <form
-        ref={formRef}
         onSubmit={(e) => {
           e.preventDefault();
           onSubmit();
@@ -171,11 +215,16 @@ export function WorkspaceChatComposer({
       >
         <div
           className={cn(
-            "relative flex min-w-0 flex-col overflow-hidden rounded-3xl border border-white/[0.1] bg-[#050c14]/95",
-            "shadow-[0_0_0_1px_rgba(255,255,255,0.03)]",
-            "ring-0 focus-within:border-[#c45c12]/40 focus-within:shadow-[0_0_0_1px_rgba(196,92,18,0.2)]",
-            isDragging && "border-[#c45c12]/50 ring-2 ring-[#c45c12]/20",
+            "relative flex min-w-0 flex-col overflow-hidden rounded-3xl",
+            "text-[#e8eef3] shadow-[0_1px_0_rgba(255,255,255,0.04)_inset,0_8px_28px_rgba(0,0,0,0.32)]",
+            isDragging
+              ? "ring-2 ring-emerald-400/35"
+              : "ring-1 ring-emerald-950/30 focus-within:ring-2 focus-within:ring-emerald-500/25",
           )}
+          style={{
+            background: "linear-gradient(180deg, #0a1814 0%, #050f0c 100%)",
+            border: "1px solid rgba(16, 185, 129, 0.14)",
+          }}
           onDragEnter={onDragEnter}
           onDragLeave={onDragLeave}
           onDragOver={onDragOver}
@@ -183,7 +232,7 @@ export function WorkspaceChatComposer({
         >
           {isDragging ? (
             <div
-              className="pointer-events-none absolute inset-1 z-20 flex items-center justify-center rounded-[1.1rem] border-2 border-dashed border-[#c45c12]/50 bg-[#030a10]/80 text-[12px] font-medium text-[#ffb27a] backdrop-blur-sm"
+              className="pointer-events-none absolute inset-1 z-20 flex items-center justify-center rounded-[1.1rem] border-2 border-dashed border-emerald-400/50 bg-[#020806]/75 text-[12px] font-medium text-emerald-100/90 backdrop-blur-sm"
               aria-hidden
             >
               Drop files to attach
@@ -191,7 +240,7 @@ export function WorkspaceChatComposer({
           ) : null}
 
           {attachments.length > 0 ? (
-            <div className="border-b border-white/[0.06] px-2 pb-1.5 pt-2 md:px-3">
+            <div className="border-b border-white/[0.07] px-2 pb-1.5 pt-2.5 md:px-3">
               <WorkspaceChatAttachmentPreviewList
                 className="mb-0"
                 attachments={attachments}
@@ -200,31 +249,15 @@ export function WorkspaceChatComposer({
             </div>
           ) : null}
 
-          {voiceBanner ? (
-            <div
-              className="flex items-start gap-2 border-b border-red-500/25 bg-red-950/35 px-3 py-2 text-[11px] leading-snug text-red-100/90"
-              role="alert"
-            >
-              <span className="min-w-0 flex-1">{voiceBanner}</span>
-              <button
-                type="button"
-                className="shrink-0 rounded-md px-1.5 py-0.5 text-[13px] leading-none text-red-200/90 hover:bg-white/10"
-                aria-label="Dismiss voice message"
-                onClick={() => setVoiceBanner(null)}
-              >
-                ×
-              </button>
-            </div>
-          ) : null}
           {(voiceRecording || voiceTranscribing) && (
             <div
-              className="flex items-center gap-1.5 border-b border-white/[0.05] px-3 py-1.5 text-[10px] font-medium uppercase tracking-wide"
+              className="flex items-center gap-1.5 border-b border-white/[0.06] px-3 py-1.5 text-[10px] font-medium uppercase tracking-wide"
               role="status"
             >
               {voiceTranscribing ? (
                 <>
-                  <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-[#7dd3fc]" />
-                  <span className="text-[#7dd3fc]">Transcribing…</span>
+                  <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-emerald-300" />
+                  <span className="text-emerald-200/90">Transcribing…</span>
                 </>
               ) : (
                 <>
@@ -235,7 +268,7 @@ export function WorkspaceChatComposer({
             </div>
           )}
 
-          <div className="px-2 pt-1 md:px-3 md:pt-1.5">
+          <div className="px-2.5 pb-0 pt-2.5 md:px-3.5 md:pt-3">
             <label htmlFor="hww-chat-composer" className="sr-only">
               Message
             </label>
@@ -252,23 +285,70 @@ export function WorkspaceChatComposer({
               }}
               rows={1}
               disabled={disabled || sending || voiceTranscribing}
-              placeholder={
-                voiceTranscribing
-                  ? "Transcribing…"
-                  : !gatewayOk && catalog && !sending
-                    ? "Chat gateway not ready — check /api/models"
-                    : "Ask anything… (Enter to send, Shift+Enter for newline)"
-              }
-              className="w-full min-h-[44px] max-h-[240px] resize-none border-0 bg-transparent px-1 py-2 text-[13px] leading-[1.35] text-[#e8eef3] outline-none placeholder:text-white/35 focus:ring-0 focus:outline-none [box-shadow:none] overflow-x-hidden"
+              placeholder={placeholder}
+              className="w-full min-h-[44px] max-h-[240px] resize-none border-0 bg-transparent px-1 py-1 text-[13px] leading-[1.45] text-[#e8eef3] outline-none placeholder:text-white/40 focus:ring-0 focus:outline-none [box-shadow:none] overflow-x-hidden overflow-y-hidden"
             />
           </div>
 
-          <div className="flex min-h-[48px] items-center justify-between gap-1 border-t border-white/[0.06] px-1.5 py-1.5 md:gap-2 md:px-2.5 md:py-2">
-            <div className="flex shrink-0 items-center gap-0.5 md:gap-1">
+          {voiceBanner ? (
+            <div
+              className="mx-2.5 flex min-h-0 items-start gap-2 rounded-md border border-red-500/20 bg-red-950/20 px-2 py-1.5 text-[10px] leading-snug text-red-100/90 md:mx-3.5"
+              role="alert"
+            >
+              <span className="min-w-0 flex-1 break-words">{voiceBanner}</span>
+              <button
+                type="button"
+                className="shrink-0 rounded px-0.5 text-[12px] leading-none text-red-200/80 hover:bg-white/10"
+                aria-label="Dismiss voice message"
+                onClick={() => setVoiceBanner(null)}
+              >
+                ×
+              </button>
+            </div>
+          ) : null}
+
+          <div className="flex min-h-[48px] items-center justify-between gap-1.5 border-t border-white/[0.08] px-1.5 py-1.5 md:gap-2 md:px-2.5 md:py-2">
+            <div className="flex min-w-0 flex-1 items-center gap-0.5 md:gap-1">
               <WorkspaceChatAttachmentButton
                 onFiles={handleAddFiles}
                 disabled={sending || voiceTranscribing || voiceRecording || disabled}
+                className="text-emerald-200/50 hover:text-emerald-200/90"
               />
+              {value.length >= 100 ? (
+                <span
+                  className="hidden min-w-0 text-[10px] tabular-nums text-white/30 select-none sm:inline"
+                  title="Approximate token count"
+                >
+                  ~{Math.ceil(value.length / 4)} tokens
+                </span>
+              ) : null}
+              {showModel ? (
+                <select
+                  ref={modelSelectRef}
+                  id="hww-chat-model"
+                  className="hww-input ml-0.5 max-w-[8rem] shrink cursor-pointer truncate rounded-md border-0 bg-emerald-500/10 py-1 pl-2 pr-1 text-[11px] text-emerald-200/90 outline-none ring-0 md:max-w-[14rem] md:py-1.5 md:pl-2.5 md:text-[12px]"
+                  value={modelId ?? ""}
+                  onChange={(e) => onModelIdChange(e.target.value ? e.target.value : null)}
+                  disabled={sending}
+                  aria-label="Model"
+                >
+                  {chatModelCandidates(catalog!).map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.label || m.id}
+                    </option>
+                  ))}
+                </select>
+              ) : modelPill ? (
+                <span
+                  className="ml-0.5 inline-flex min-w-0 max-w-[10rem] items-center rounded-full bg-emerald-500/10 px-2.5 py-1 font-mono text-[11px] text-emerald-200/80 md:max-w-[16rem] md:text-[12px]"
+                  title={modelPill}
+                >
+                  <span className="truncate">{modelPill}</span>
+                </span>
+              ) : null}
+            </div>
+
+            <div className="flex shrink-0 items-center gap-0.5 md:gap-1">
               <div
                 className={cn(
                   "flex shrink-0 items-center",
@@ -290,48 +370,20 @@ export function WorkspaceChatComposer({
                   }}
                 />
               </div>
+              <Button
+                type="submit"
+                size="icon"
+                disabled={!canSend}
+                className="h-10 w-10 shrink-0 rounded-full border border-emerald-400/15 bg-gradient-to-b from-emerald-600 to-emerald-900 text-white shadow-md hover:from-emerald-500 hover:to-emerald-800 disabled:opacity-40"
+                aria-label="Send"
+              >
+                {sending ? (
+                  <span className="h-4 w-4 animate-pulse rounded-full bg-white/80" />
+                ) : (
+                  <ArrowUp className="h-4 w-4" strokeWidth={2.2} />
+                )}
+              </Button>
             </div>
-
-            <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5 md:gap-2">
-              {value.length >= 100 ? (
-                <span
-                  className="hidden min-w-0 text-[10px] tabular-nums text-white/30 select-none sm:inline"
-                  title="Approximate token count"
-                >
-                  ~{Math.ceil(value.length / 4)} tokens
-                </span>
-              ) : null}
-              {showModel ? (
-                <select
-                  id="hww-chat-model"
-                  className="hww-input max-w-[9rem] shrink truncate rounded-md py-1 text-[11px] md:max-w-[14rem] md:py-1.5 md:text-[12px]"
-                  value={modelId ?? ""}
-                  onChange={(e) => onModelIdChange(e.target.value ? e.target.value : null)}
-                  disabled={sending}
-                  aria-label="Model"
-                >
-                  {chatModelCandidates(catalog!).map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.label || m.id}
-                    </option>
-                  ))}
-                </select>
-              ) : null}
-            </div>
-
-            <Button
-              type="submit"
-              size="icon"
-              disabled={!canSend}
-              className="h-10 w-10 shrink-0 rounded-full bg-gradient-to-b from-[#c45c12] to-[#8f3d0a] text-white shadow-md hover:from-[#d66a18] hover:to-[#a44a0c] disabled:opacity-40"
-              aria-label="Send"
-            >
-              {sending ? (
-                <span className="h-4 w-4 animate-pulse rounded-full bg-white/80" />
-              ) : (
-                <ArrowUp className="h-4 w-4" strokeWidth={2.2} />
-              )}
-            </Button>
           </div>
         </div>
       </form>
