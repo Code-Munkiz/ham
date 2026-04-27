@@ -495,7 +495,7 @@
         "notes": [
           "No computer control execution from this directory row.",
           "Does not invoke shell, MCP, or browser automation.",
-          "Managed browser actions (start, navigate, reload, screenshot, stop) are available only inside HAM Desktop Local Control panel — not from Shop, not from chat, apply_available stays false.",
+          "Managed browser actions (start, navigate, reload, screenshot, stop) run in HAM Desktop via Local Control IPC. GoHAM Mode v0 (workspace chat, HAM Desktop renderer only) may trigger the same managed-browser observe/summarize flow when the user opts in — not from Shop, not from API browser runtime, apply_available stays false.",
           "Cursor/Droid execution lanes remain separate; not a harness for this pack.",
           "desktop_local: planning token for Desktop Local Control v1 (docs/desktop/local_control_v1.md); not an executable backend in Phase 1."
         ]
