@@ -38,17 +38,20 @@ export function HermesOperatorConnectionStrip({ snapshot, className }: Props) {
           </p>
         </div>
         <div className="flex flex-wrap gap-2 text-[9px] font-black uppercase tracking-widest">
-          <Link to="/command-center" className="text-[#FF6B00] hover:underline">
-            Command Center
+          <Link to="/workspace/operations" className="text-[#FF6B00] hover:underline">
+            Operations
           </Link>
           <span className="text-white/15">·</span>
-          <Link to="/hermes" className="text-white/45 hover:text-[#FF6B00] hover:underline">
-            Hermes hub
+          <Link to="/workspace" className="text-white/45 hover:text-[#FF6B00] hover:underline">
+            Dashboard
           </Link>
           {desktop ? (
             <>
               <span className="text-white/15">·</span>
-              <Link to="/settings?tab=desktop-bundle" className="text-white/45 hover:text-[#FF6B00] hover:underline">
+              <Link
+                to="/workspace/settings?tab=desktop-bundle"
+                className="text-white/45 hover:text-[#FF6B00] hover:underline"
+              >
                 Desktop + Hermes
               </Link>
             </>

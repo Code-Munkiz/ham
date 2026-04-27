@@ -18,7 +18,7 @@ import "./hermesWorkspace.css";
 
 /**
  * Hermes Workspace surface (`/workspace/*`). Not gated on `VITE_ENABLE_HERMES_WORKSPACE` (routing);
- * that flag is only for non-route toggles.
+ * that flag is only for non-route toggles. `/legacy-chat` redirects to `/workspace/chat`.
  * @see docs/WHOLE_HERMES_WORKSPACE_LIFT_PLAN.md
  */
 export function WorkspaceApp() {

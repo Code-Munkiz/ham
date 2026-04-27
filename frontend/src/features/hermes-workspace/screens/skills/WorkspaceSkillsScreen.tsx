@@ -323,10 +323,10 @@ export function WorkspaceSkillsScreen() {
             <strong>Installed</strong> uses the workspace JSON store via{" "}
             <code className="text-xs opacity-80">/api/workspace/skills</code>. <strong>Catalog</strong> is the read-only
             Hermes static catalog and live install overlay (same data as the{" "}
-            <Link to="/shop" className="text-emerald-400/90 underline-offset-2 hover:underline">
-              Capabilities
+            <Link to="/workspace/skills" className="text-emerald-400/90 underline-offset-2 hover:underline">
+              Skills
             </Link>{" "}
-            page), server-side only.
+            surface), server-side only.
           </p>
         </header>
 

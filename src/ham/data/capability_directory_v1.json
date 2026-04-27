@@ -39,7 +39,7 @@
         "notes": []
       },
       "surfaces": [
-        { "route": "/hermes", "label": "Hermes Hub", "api": "/api/hermes-runtime/inventory" }
+        { "route": "/workspace", "label": "Hermes Hub", "api": "/api/hermes-runtime/inventory" }
       ],
       "mutability": "read_only",
       "preview_available": false,
@@ -86,7 +86,7 @@
         "notes": []
       },
       "surfaces": [
-        { "route": "/skills", "label": "Skills", "api": "/api/hermes-skills/installed" }
+        { "route": "/workspace/skills", "label": "Skills", "api": "/api/hermes-skills/installed" }
       ],
       "mutability": "read_only",
       "preview_available": false,
@@ -133,8 +133,8 @@
         "notes": []
       },
       "surfaces": [
-        { "route": "/shop", "label": "HAM Shop" },
-        { "route": "/chat", "label": "Chat" }
+        { "route": "/workspace/skills", "label": "Workspace skills" },
+        { "route": "/workspace/chat", "label": "Chat" }
       ],
       "mutability": "read_only",
       "preview_available": false,
@@ -181,7 +181,7 @@
         "notes": []
       },
       "surfaces": [
-        { "route": "/shop", "label": "HAM Shop" }
+        { "route": "/workspace/skills", "label": "Workspace skills" }
       ],
       "mutability": "read_only",
       "preview_available": false,
@@ -228,7 +228,7 @@
         "notes": []
       },
       "surfaces": [
-        { "route": "/shop", "label": "HAM Shop" }
+        { "route": "/workspace/skills", "label": "Workspace skills" }
       ],
       "mutability": "read_only",
       "preview_available": false,
@@ -282,8 +282,8 @@
         "notes": []
       },
       "surfaces": [
-        { "route": "/hermes", "label": "Hermes Hub" },
-        { "route": "/skills", "label": "Skills (related)" }
+        { "route": "/workspace", "label": "Hermes Hub" },
+        { "route": "/workspace/skills", "label": "Skills (related)" }
       ],
       "mutability": "read_only",
       "preview_available": false,
@@ -336,7 +336,7 @@
         "notes": []
       },
       "surfaces": [
-        { "route": "/skills", "label": "Skills" }
+        { "route": "/workspace/skills", "label": "Skills" }
       ],
       "mutability": "read_only",
       "preview_available": false,
@@ -394,7 +394,7 @@
         ]
       },
       "surfaces": [
-        { "route": "/chat", "label": "Chat" }
+        { "route": "/workspace/chat", "label": "Chat" }
       ],
       "mutability": "launch_via_existing_apis_only",
       "preview_available": false,
@@ -448,7 +448,7 @@
         "notes": []
       },
       "surfaces": [
-        { "route": "/settings", "label": "Settings / diagnostics context" }
+        { "route": "/workspace/settings", "label": "Settings / diagnostics context" }
       ],
       "mutability": "read_only",
       "preview_available": false,
@@ -513,9 +513,9 @@
         "notes": []
       },
       "surfaces": [
-        { "route": "/shop", "label": "HAM Shop" },
-        { "route": "/hermes", "label": "Hermes Hub" },
-        { "route": "/chat", "label": "Chat" }
+        { "route": "/workspace/skills", "label": "Workspace skills" },
+        { "route": "/workspace", "label": "Hermes Hub" },
+        { "route": "/workspace/chat", "label": "Chat" }
       ],
       "mutability": "read_only",
       "preview_available": false,
@@ -583,7 +583,7 @@
         "notes": ["memory_heist assembles repo truth for chat."]
       },
       "surfaces": [
-        { "route": "/agents", "label": "Agent Builder" }
+        { "route": "/workspace/profiles", "label": "Profiles" }
       ],
       "mutability": "read_only",
       "preview_available": false,

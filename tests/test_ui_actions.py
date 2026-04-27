@@ -29,13 +29,13 @@ def test_split_rejects_bad_nav_path() -> None:
     assert actions == []
 
 
-def test_split_accepts_settings_query_path() -> None:
+def test_split_accepts_workspace_settings_query_path() -> None:
     raw = (
-        'HAM_UI_ACTIONS_JSON: {"actions":[{"type":"navigate","path":"/settings?tab=context-memory"}]}'
+        'HAM_UI_ACTIONS_JSON: {"actions":[{"type":"navigate","path":"/workspace/settings?tab=context-memory"}]}'
     )
     _, actions = split_assistant_ui_actions(raw)
     assert len(actions) == 1
-    assert actions[0]["path"] == "/settings?tab=context-memory"
+    assert actions[0]["path"] == "/workspace/settings?tab=context-memory"
 
 
 def test_split_rejects_legacy_set_workbench_view() -> None:

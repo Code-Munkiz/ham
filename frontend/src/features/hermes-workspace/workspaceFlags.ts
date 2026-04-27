@@ -1,6 +1,6 @@
 /**
  * `VITE_ENABLE_HERMES_WORKSPACE` — optional; reserved for non-routing toggles (nav defaults, experiments).
- * **Product chat route is always `/workspace/chat`.** `/chat` redirects there.
+ * **Product chat route is always `/workspace/chat`.** `/chat` and `/legacy-chat` redirect there.
  */
 export function isHermesWorkspaceEnabled(): boolean {
   const v = import.meta.env.VITE_ENABLE_HERMES_WORKSPACE;

@@ -7,20 +7,6 @@ import { BrowserRouter, HashRouter, Routes, Route, Navigate, useLocation } from 
 import { ClerkProvider } from "@clerk/clerk-react";
 import { ThemeProvider } from "next-themes";
 import { AppLayout } from "./components/layout/AppLayout";
-import Runs from "./pages/Runs";
-import RunDetail from "./pages/RunDetail";
-import ControlPlaneRuns from "./pages/ControlPlaneRuns";
-import Storage from "./pages/Storage";
-import Activity from "./pages/Activity";
-import Settings from "./pages/Settings";
-
-import Logs from "./pages/Logs";
-import Analytics from "./pages/Analytics";
-import HermesHub from "./pages/HermesHub";
-import CommandCenter from "./pages/CommandCenter";
-import HermesSkills from "./pages/HermesSkills";
-import HamShop from "./pages/HamShop";
-import AgentBuilder from "./pages/AgentBuilder";
 import Landing from "./pages/Landing";
 
 import { AgentProvider } from "./lib/ham/AgentContext";
@@ -46,6 +32,22 @@ function ChatEntryRoute() {
   return <Navigate to={`/workspace/chat${search}`} replace />;
 }
 
+function LegacyChatRedirect() {
+  const { search } = useLocation();
+  return <Navigate to={`/workspace/chat${search}`} replace />;
+}
+
+function LegacySettingsRedirect() {
+  const { search } = useLocation();
+  return <Navigate to={`/workspace/settings${search}`} replace />;
+}
+
+/** Preserve query (e.g. `project_id`) when moving bookmarked URLs to workspace. */
+function RedirectWithSearch({ to }: { to: string }) {
+  const { search } = useLocation();
+  return <Navigate to={`${to}${search}`} replace />;
+}
+
 function AppRoutes() {
   const useHash = getHamDesktopConfig()?.useHashRouter === true;
   const Router = useHash ? HashRouter : BrowserRouter;
@@ -54,26 +56,26 @@ function AppRoutes() {
       <AppLayout>
         <Routes>
           <Route path="/" element={<HomeRoute />} />
-          {/* Legacy path: product stream lives on Activity, not a separate Overview page. */}
-          <Route path="/overview" element={<Navigate to="/activity" replace />} />
+          <Route path="/overview" element={<Navigate to="/workspace/operations" replace />} />
           <Route path="/chat" element={<ChatEntryRoute />} />
+          <Route path="/legacy-chat" element={<LegacyChatRedirect />} />
           <Route path="/workspace/*" element={<WorkspaceApp />} />
-          <Route path="/droids" element={<Navigate to="/command-center" replace />} />
-          <Route path="/runs" element={<Runs />} />
-          <Route path="/runs/:runId" element={<RunDetail />} />
-          <Route path="/control-plane" element={<ControlPlaneRuns />} />
-          <Route path="/profiles" element={<Navigate to="/agents" replace />} />
-          <Route path="/storage" element={<Storage />} />
-          <Route path="/activity" element={<Activity />} />
-          <Route path="/settings" element={<Settings />} />
-          <Route path="/logs" element={<Logs />} />
-          <Route path="/analytics" element={<Analytics />} />
-          <Route path="/hermes" element={<HermesHub />} />
-          <Route path="/command-center" element={<CommandCenter />} />
-          <Route path="/shop" element={<HamShop />} />
-          <Route path="/skills" element={<HermesSkills />} />
-          <Route path="/agents" element={<AgentBuilder />} />
-          <Route path="/hermes-skills" element={<Navigate to="/skills" replace />} />
+          <Route path="/droids" element={<Navigate to="/workspace/operations" replace />} />
+          <Route path="/runs" element={<Navigate to="/workspace/jobs" replace />} />
+          <Route path="/runs/:runId" element={<Navigate to="/workspace/jobs" replace />} />
+          <Route path="/control-plane" element={<Navigate to="/workspace/operations" replace />} />
+          <Route path="/profiles" element={<Navigate to="/workspace/profiles" replace />} />
+          <Route path="/storage" element={<Navigate to="/workspace" replace />} />
+          <Route path="/activity" element={<Navigate to="/workspace/operations" replace />} />
+          <Route path="/settings" element={<LegacySettingsRedirect />} />
+          <Route path="/logs" element={<Navigate to="/workspace/settings" replace />} />
+          <Route path="/analytics" element={<Navigate to="/workspace" replace />} />
+          <Route path="/hermes" element={<Navigate to="/workspace" replace />} />
+          <Route path="/command-center" element={<Navigate to="/workspace/operations" replace />} />
+          <Route path="/shop" element={<RedirectWithSearch to="/workspace/skills" />} />
+          <Route path="/skills" element={<RedirectWithSearch to="/workspace/skills" />} />
+          <Route path="/agents" element={<RedirectWithSearch to="/workspace/profiles" />} />
+          <Route path="/hermes-skills" element={<Navigate to="/workspace/skills" replace />} />
         </Routes>
       </AppLayout>
     </Router>
@@ -100,4 +102,3 @@ export default function App() {
   }
   return tree;
 }
-

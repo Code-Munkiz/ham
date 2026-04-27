@@ -20,7 +20,7 @@ export function applyHamUiActions(
         break;
       case "open_settings": {
         const tab = normalizeSettingsTabParam(a.tab ?? null);
-        ctx.navigate(`/settings?tab=${encodeURIComponent(tab)}`);
+        ctx.navigate(`/workspace/settings?tab=${encodeURIComponent(tab)}`);
         break;
       }
       case "toast": {
