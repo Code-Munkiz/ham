@@ -795,7 +795,6 @@ function createRealBrowserCdpController(opts = {}) {
         await session.connect();
         await session.send('Page.enable', {});
         await session.send('Runtime.enable', {});
-        await session.send('Input.enable', {});
         if (cdp) cdp.close();
         cdp = session;
         return;
