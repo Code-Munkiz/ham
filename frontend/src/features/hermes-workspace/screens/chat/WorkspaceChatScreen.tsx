@@ -37,6 +37,7 @@ import {
   MAX_WORKSPACE_ATTACHMENT_COUNT,
   type WorkspaceComposerAttachment,
 } from "./composerAttachmentHelpers";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 function timeStr() {
@@ -116,43 +117,54 @@ export function WorkspaceChatScreen() {
     };
   }, []);
 
-  const loadFromApi = React.useCallback(async (sid: string) => {
-    setLoadingSession(true);
-    setLoadErr(null);
-    try {
-      const detail = await workspaceSessionAdapter.get(sid);
-      const ts = timeStr;
-      setSessionId(sid);
-      setMessages(
-        detail.messages.map((m, i) => ({
-          id: `${sid}-hww-${i}-${m.role}`,
-          role: m.role as HwwMsgRow["role"],
-          content: m.content,
-          timestamp: ts(),
-        })),
-      );
-      setInspectorEvents((prev) =>
-        appendInspectorEvent(prev, {
-          atIso: new Date().toISOString(),
-          kind: "session_history_loaded",
-          status: "info",
-          summary: `Loaded session from server (${detail.messages.length} message${detail.messages.length === 1 ? "" : "s"})`,
-          meta: {
-            session_id: sid,
-            message_count: detail.messages.length,
-          },
-        }),
-      );
-    } catch {
-      setLoadErr("Session not found or could not be loaded.");
-      setSessionId(null);
-      setMessages([]);
-      setInspectorEvents([]);
-      toast.error("Failed to load session.");
-    } finally {
-      setLoadingSession(false);
-    }
-  }, []);
+  const loadFromApi = React.useCallback(
+    async (sid: string) => {
+      if (streamTurnSessionRef.current === sid && sending) {
+        return;
+      }
+      setLoadingSession(true);
+      setLoadErr(null);
+      try {
+        const detail = await workspaceSessionAdapter.get(sid);
+        const ts = timeStr;
+        setSessionId(sid);
+        setMessages(
+          detail.messages.map((m, i) => ({
+            id: `${sid}-hww-${i}-${m.role}`,
+            role: m.role as HwwMsgRow["role"],
+            content: m.content,
+            timestamp: ts(),
+          })),
+        );
+        setInspectorEvents((prev) =>
+          appendInspectorEvent(prev, {
+            atIso: new Date().toISOString(),
+            kind: "session_history_loaded",
+            status: "info",
+            summary: `Loaded session from server (${detail.messages.length} message${detail.messages.length === 1 ? "" : "s"})`,
+            meta: {
+              session_id: sid,
+              message_count: detail.messages.length,
+            },
+          }),
+        );
+      } catch {
+        if (streamTurnSessionRef.current === sid && sending) {
+          return;
+        }
+        setLoadErr(
+          "This session could not be loaded. It may have expired, been removed, or belong to a different API revision.",
+        );
+        setSessionId(null);
+        setMessages([]);
+        setInspectorEvents([]);
+        toast.error("Could not open this chat session.", { id: `hww-session-load-fail-${sid}`, duration: 6000 });
+      } finally {
+        setLoadingSession(false);
+      }
+    },
+    [sending],
+  );
 
   /** Deep link `?session=` */
   React.useEffect(() => {
@@ -181,7 +193,16 @@ export function WorkspaceChatScreen() {
     setAttachments([]);
     setLoadErr(null);
     navigate({ pathname: "/workspace/chat", search: "" }, { replace: true });
+    queueMicrotask(() => {
+      document.getElementById("hww-chat-composer")?.focus();
+    });
   }, [navigate]);
+
+  const retryLoadSession = React.useCallback(() => {
+    const s = searchParams.get("session");
+    if (!s?.trim()) return;
+    void loadFromApi(s.trim());
+  }, [searchParams, loadFromApi]);
 
   React.useEffect(() => {
     endRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
@@ -416,7 +437,12 @@ export function WorkspaceChatScreen() {
   const hasTranscript = messages.length > 0;
   const showEmpty = !loadingSession && !hasTranscript && !loadErr;
   const sessionLoadFailed = Boolean(loadErr && !hasTranscript && !loadingSession);
-  const headerTitle = !sessionId ? "New session" : "Chat";
+  const staleSessionParam = searchParams.get("session");
+  const headerTitle = sessionLoadFailed
+    ? "Session unavailable"
+    : !sessionId
+      ? "New session"
+      : "Chat";
   const last = messages[messages.length - 1];
   const isStreaming =
     sending && last?.role === "assistant" && !(last?.content || "").trim();
@@ -427,8 +453,15 @@ export function WorkspaceChatScreen() {
         <header className="hww-chat-header flex shrink-0 items-start justify-between gap-3 border-b border-white/[0.06] bg-[#040d14]/80 px-4 py-3 backdrop-blur-sm md:px-8">
           <div className="min-w-0">
             <h1 className="text-[15px] font-semibold tracking-tight text-white/[0.95]">{headerTitle}</h1>
-            <p className="mt-0.5 truncate font-mono text-[11px] text-white/40" title={sessionId ?? undefined}>
-              {sessionId ? shortId(sessionId, 12) : "No session selected · messages stay on-device via HAM"}
+            <p
+              className="mt-0.5 truncate font-mono text-[11px] text-white/40"
+              title={(sessionId ?? staleSessionParam) ?? undefined}
+            >
+              {sessionLoadFailed && staleSessionParam
+                ? `Link: ${shortId(staleSessionParam, 12)} · open a new session or pick one from the sidebar`
+                : sessionId
+                  ? shortId(sessionId, 12)
+                  : "No session selected · messages stay on-device via HAM"}
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
@@ -470,15 +503,46 @@ export function WorkspaceChatScreen() {
           {loadingSession ? (
             <div className="flex flex-1 items-center justify-center py-12 text-sm text-white/40">Loading…</div>
           ) : sessionLoadFailed ? (
-            <div className="flex flex-1 flex-col items-center justify-center gap-3 px-4 py-12 text-center">
-              <p className="max-w-sm text-sm text-amber-200/90">{loadErr}</p>
-              <button
-                type="button"
-                onClick={startNew}
-                className="text-[13px] text-[#7dd3fc] underline decoration-white/10 underline-offset-2"
+            <div className="flex flex-1 flex-col items-center justify-center px-4 py-10">
+              <div
+                className="w-full max-w-md rounded-xl border border-amber-500/25 bg-[#040d14]/90 px-5 py-5 text-left shadow-lg"
+                role="alert"
               >
-                Start new session
-              </button>
+                <h2 className="text-[14px] font-semibold text-amber-100/95">Could not open this session</h2>
+                <p className="mt-2 text-[13px] leading-relaxed text-white/70">{loadErr}</p>
+                {staleSessionParam ? (
+                  <p className="mt-2 font-mono text-[11px] text-white/40" title={staleSessionParam}>
+                    Session id: {shortId(staleSessionParam, 14)}
+                  </p>
+                ) : null}
+                <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="bg-[#7dd3fc] text-[#040d14] hover:bg-[#a5e9ff]"
+                    onClick={startNew}
+                  >
+                    Start new session
+                  </Button>
+                  <Button type="button" size="sm" variant="secondary" onClick={startNew}>
+                    Back to recent sessions
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="border-white/15 bg-transparent text-white/85 hover:bg-white/[0.06]"
+                    onClick={retryLoadSession}
+                  >
+                    Retry
+                  </Button>
+                </div>
+                <p className="mt-4 text-[11px] leading-relaxed text-white/35">
+                  The sidebar stays available — pick another session or start fresh. If this link is old, the API may
+                  have been redeployed; chat history on Cloud Run defaults to ephemeral storage unless configured
+                  otherwise.
+                </p>
+              </div>
             </div>
           ) : showEmpty ? (
             <WorkspaceChatEmptyState onSuggestionClick={(prompt) => void send(prompt)} />

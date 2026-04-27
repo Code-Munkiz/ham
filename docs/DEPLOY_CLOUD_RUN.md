@@ -4,6 +4,10 @@ This repo ships a **`Dockerfile`** that runs **`uvicorn src.api.server:app`**. T
 
 **End-to-end checklist (Vercel + GCP):** [`docs/DEPLOY_HANDOFF.md`](DEPLOY_HANDOFF.md). After deploy, run **`scripts/verify_ham_api_deploy.sh`** with your API URL and the **exact** Vercel `Origin` you use in the browser.
 
+### Chat sessions and `?session=` deep links
+
+By default, Ham stores chat sessions in SQLite under `~/.ham/chat_sessions.sqlite` (or `HAM_CHAT_SESSION_DB`). **Cloud Run’s container disk is ephemeral** unless you mount a persistent volume or external DB—**a new revision often starts with an empty session store**, so old `/workspace/chat?session=…` links may return 404. The workspace UI handles that with a recovery card (start new / retry). For production durability, set `HAM_CHAT_SESSION_DB` to a persistent path or add a managed store (see `src/api/chat.py` TODO near `_build_chat_session_store`).
+
 ## Source of truth: Clarity Staging (team GCP)
 
 **Staging** Ham API deployments use this GCP project (console name **Clarity-Staging**):

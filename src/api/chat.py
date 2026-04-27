@@ -50,6 +50,8 @@ _ChatStore = InMemoryChatSessionStore | SqliteChatSessionStore
 
 
 def _build_chat_session_store() -> _ChatStore:
+    # Default SQLite lives on the process filesystem (ephemeral on Cloud Run new revisions/instances unless
+    # HAM_CHAT_SESSION_DB points to a mounted volume). TODO: durable store if ?session= deep links must survive redeploys.
     mode = (os.environ.get("HAM_CHAT_SESSION_STORE") or "sqlite").strip().lower()
     if mode == "memory":
         return InMemoryChatSessionStore()
