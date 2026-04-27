@@ -139,6 +139,7 @@ export function useVoiceRecorder(props: UseVoiceRecorderProps = {}) {
           ...prev,
           isRecording: false,
           isPaused: false,
+          mediaRecorder: null,
           blobUrl,
           audioChunks: [blob],
           duration: durationSecs,
@@ -193,18 +194,27 @@ export function useVoiceRecorder(props: UseVoiceRecorderProps = {}) {
     }
   }, [onRecordingComplete, onRecordingError]);
 
-  // Stop recording
+  // Stop recording — use MediaRecorder.state, not React state; `state.isRecording` in the closure
+  // can be stale so Stop would no-op after mic UI already shows recording.
   const stopRecording = useCallback(() => {
-    if (mediaRecorderRef.current && state.isRecording) {
-      mediaRecorderRef.current.stop();
+    const rec = mediaRecorderRef.current;
+    if (!rec) return;
+    if (rec.state !== "recording" && rec.state !== "paused") return;
+    try {
+      if (typeof rec.requestData === "function") {
+        rec.requestData();
+      }
+      rec.stop();
+    } finally {
       mediaRecorderRef.current = null;
     }
-  }, [state.isRecording]);
+  }, []);
 
   // Cancel recording (discard)
   const cancelRecording = useCallback(() => {
-    if (mediaRecorderRef.current && state.isRecording) {
-      safeAbortMediaRecorder(mediaRecorderRef.current);
+    const rec = mediaRecorderRef.current;
+    if (rec && (rec.state === "recording" || rec.state === "paused")) {
+      safeAbortMediaRecorder(rec);
       mediaRecorderRef.current = null;
     }
 
@@ -214,25 +224,26 @@ export function useVoiceRecorder(props: UseVoiceRecorderProps = {}) {
       timerIntervalRef.current = null;
     }
 
-    // Stop all tracks
-    const currentRecorder = state.mediaRecorder;
-    if (currentRecorder?.stream) {
-      currentRecorder.stream.getTracks().forEach(track => track.stop());
-    }
-
-    setState((prev) => ({
-      ...prev,
-      isRecording: false,
-      isPaused: false,
-      audioChunks: [],
-      blobUrl: null,
-      duration: 0,
-      error: null,
-    }));
+    setState((prev) => {
+      const mr = prev.mediaRecorder;
+      if (mr?.stream) {
+        mr.stream.getTracks().forEach((track) => track.stop());
+      }
+      return {
+        ...prev,
+        isRecording: false,
+        isPaused: false,
+        mediaRecorder: null,
+        audioChunks: [],
+        blobUrl: null,
+        duration: 0,
+        error: null,
+      };
+    });
 
     timerIntervalRef.current = null;
     recordingStartedAtRef.current = null;
-  }, [state.isRecording, state.mediaRecorder]);
+  }, []);
 
   // Cleanup on unmount
   useEffect(() => {
