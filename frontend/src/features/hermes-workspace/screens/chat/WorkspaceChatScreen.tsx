@@ -43,6 +43,7 @@ import {
   type WorkspaceComposerAttachment,
 } from "./composerAttachmentHelpers";
 import { Button } from "@/components/ui/button";
+import { hamWorkspaceLogoUrl } from "@/lib/ham/publicAssets";
 import { cn } from "@/lib/utils";
 
 function timeStr() {
@@ -533,9 +534,18 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col md:flex-row">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <header className="hww-chat-header flex shrink-0 items-start justify-between gap-3 border-b border-white/[0.06] bg-[#040d14]/80 px-4 py-3 backdrop-blur-sm md:px-8">
-          <div className="min-w-0">
-            <h1 className="text-[15px] font-semibold tracking-tight text-white/[0.95]">{headerTitle}</h1>
-            <p className="mt-0.5 truncate text-[11px] leading-snug text-white/50">{headerSubtitle}</p>
+          <div className="flex min-w-0 items-start gap-2.5">
+            <img
+              src={hamWorkspaceLogoUrl()}
+              alt=""
+              className="mt-0.5 h-8 w-8 shrink-0 object-contain opacity-95"
+              width={32}
+              height={32}
+            />
+            <div className="min-w-0">
+              <h1 className="text-[15px] font-semibold tracking-tight text-white/[0.95]">{headerTitle}</h1>
+              <p className="mt-0.5 truncate text-[11px] leading-snug text-white/50">{headerSubtitle}</p>
+            </div>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
             <button

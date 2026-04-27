@@ -2,14 +2,14 @@
  * Opens the in-shell chat drawer on non-chat `/workspace/*` routes.
  */
 import { cn } from "@/lib/utils";
-import { publicAssetUrl } from "@/lib/ham/publicAssets";
+import { hamWorkspaceLogoUrl } from "@/lib/ham/publicAssets";
 
 export type WorkspaceChatFloatingToggleProps = {
   onOpen: () => void;
 };
 
 export function WorkspaceChatFloatingToggle({ onOpen }: WorkspaceChatFloatingToggleProps) {
-  const moon = publicAssetUrl("ham-app-moon.png");
+  const brand = hamWorkspaceLogoUrl();
 
   return (
     <button
@@ -24,7 +24,7 @@ export function WorkspaceChatFloatingToggle({ onOpen }: WorkspaceChatFloatingTog
       aria-label="Open workspace chat panel"
       title="Open chat"
     >
-      <img src={moon} alt="" className="h-9 w-9 object-contain" width={36} height={36} />
+      <img src={brand} alt="" className="h-9 w-9 object-contain" width={36} height={36} />
     </button>
   );
 }

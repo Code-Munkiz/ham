@@ -5,6 +5,7 @@ import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import { ExternalLink, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { hamWorkspaceLogoUrl } from "@/lib/ham/publicAssets";
 import { WorkspaceChatScreen } from "../screens/chat/WorkspaceChatScreen";
 
 export type WorkspaceChatPanelProps = {
@@ -41,7 +42,16 @@ export function WorkspaceChatPanel({ open, onClose }: WorkspaceChatPanelProps) {
         aria-label="Workspace chat"
       >
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/[0.06] bg-[#040d14]/95 px-3 py-2.5">
-          <p className="min-w-0 truncate text-[13px] font-semibold text-white/90">Chat</p>
+          <div className="flex min-w-0 items-center gap-2">
+            <img
+              src={hamWorkspaceLogoUrl()}
+              alt=""
+              className="h-7 w-7 shrink-0 object-contain"
+              width={28}
+              height={28}
+            />
+            <p className="min-w-0 truncate text-[13px] font-semibold text-white/90">Chat</p>
+          </div>
           <div className="flex shrink-0 items-center gap-1">
             <Button
               type="button"

@@ -6,7 +6,7 @@
 import * as React from "react";
 import { motion } from "motion/react";
 import { Brain, Code, Puzzle } from "lucide-react";
-import { publicAssetUrl } from "@/lib/ham/publicAssets";
+import { hamWorkspaceLogoUrl } from "@/lib/ham/publicAssets";
 
 export type SuggestionChip = {
   label: string;
@@ -40,7 +40,7 @@ type WorkspaceChatEmptyStateProps = {
 };
 
 export function WorkspaceChatEmptyState({ onSuggestionClick }: WorkspaceChatEmptyStateProps) {
-  const avatarSrc = publicAssetUrl("ham-app-moon.png");
+  const avatarSrc = hamWorkspaceLogoUrl();
 
   return (
     <motion.div

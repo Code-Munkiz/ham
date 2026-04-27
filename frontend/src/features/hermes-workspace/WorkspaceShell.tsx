@@ -12,7 +12,7 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { publicAssetUrl } from "@/lib/ham/publicAssets";
+import { hamWorkspaceLogoUrl } from "@/lib/ham/publicAssets";
 import { Button } from "@/components/ui/button";
 import { knowledgeNavItems, mainNavItems, workspacePathTitle } from "./workspaceNavConfig";
 import { workspaceSessionAdapter } from "./workspaceAdapters";
@@ -86,8 +86,7 @@ function WorkspaceSideNav({
   activeSessionId,
   isChatRoute,
 }: SideNavOptions) {
-  const logoSrc = publicAssetUrl("ham-logo.png");
-  const hamAppMoonSrc = publicAssetUrl("ham-app-moon.png");
+  const brandLogoSrc = hamWorkspaceLogoUrl();
   const landingHref = hamLandingHref();
   const landingIsExternal = isAbsoluteHttpUrl(landingHref);
   const c = layoutCollapsed;
@@ -220,9 +219,11 @@ function WorkspaceSideNav({
           className={cn("flex min-w-0 items-center", c ? "w-full flex-col justify-center" : "gap-2")}
         >
           <img
-            src={logoSrc}
+            src={brandLogoSrc}
             alt=""
-            className={cn("shrink-0 object-contain brightness-0 invert opacity-90", c ? "h-7 w-7" : "h-7 w-7")}
+            className="h-7 w-7 shrink-0 object-contain opacity-95"
+            width={28}
+            height={28}
           />
           <div
             className={cn("min-w-0", c && "hidden")}
@@ -397,7 +398,7 @@ function WorkspaceSideNav({
             aria-label="Go to HAM landing"
           >
             <img
-              src={hamAppMoonSrc}
+              src={brandLogoSrc}
               alt=""
               className="h-8 w-8 shrink-0 object-contain"
               width={32}
@@ -422,7 +423,7 @@ function WorkspaceSideNav({
             aria-label="Go to HAM landing"
           >
             <img
-              src={hamAppMoonSrc}
+              src={brandLogoSrc}
               alt=""
               className="h-8 w-8 shrink-0 object-contain"
               width={32}
