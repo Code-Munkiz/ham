@@ -29,7 +29,7 @@ test('platformDerived: darwin unsupported', () => {
   });
 });
 
-test('buildLocalControlStatus: phase 4a aggregate + browser MVP fields, enabled false', () => {
+test('buildLocalControlStatus: phase 4b aggregate + browser MVP + real browser fields, enabled false', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ham-lc-test-'));
   try {
     const st = buildLocalControlStatus({
@@ -40,10 +40,10 @@ test('buildLocalControlStatus: phase 4a aggregate + browser MVP fields, enabled 
       path,
     });
     assert.equal(st.kind, 'ham_desktop_local_control_status');
-    assert.equal(SCHEMA_VERSION, 5);
-    assert.equal(st.schema_version, 5);
+    assert.equal(SCHEMA_VERSION, 6);
+    assert.equal(st.schema_version, 6);
     assert.equal(st.phase, PHASE);
-    assert.equal(st.phase, 'browser_mvp_4a');
+    assert.equal(st.phase, 'browser_real_4b');
     assert.equal(st.enabled, false);
     assert.equal(st.available, true);
     assert.equal(st.supported_platform, true);
@@ -73,6 +73,13 @@ test('buildLocalControlStatus: phase 4a aggregate + browser MVP fields, enabled 
     assert.equal(st.browser_mvp.supported, true);
     assert.equal(st.browser_mvp.armed, false);
     assert.equal(st.browser_mvp.gate_blocked_reason, 'kill_switch_engaged');
+    assert.ok(st.browser_real);
+    assert.equal(st.browser_real.supported, true);
+    assert.equal(st.browser_real.managed_profile, true);
+    assert.equal(st.browser_real.cdp_localhost_only, true);
+    assert.equal(st.browser_real.uses_default_profile, false);
+    assert.equal(st.browser_real.gate_blocked_reason, 'kill_switch_engaged');
+    assert.equal(st.capabilities.real_browser_cdp, 'available_guarded');
     assert.ok(st.audit);
     assert.equal(st.audit.redacted, true);
     assert.ok(Array.isArray(st.warnings));

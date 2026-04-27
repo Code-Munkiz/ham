@@ -2,12 +2,13 @@
 
 /**
  * Desktop Local Control — persisted policy (main process only).
- * Phase 4A: schema v2 — browser MVP arm + optional loopback; kill_switch persisted as-is (no remand on v2).
+ * Phase 4A: schema v2 — embedded BrowserWindow MVP (fields retained).
+ * Phase 4B: schema v3 — real Chromium/CDP arm + loopback + default-profile flags (managed profile only in 4B).
  * Phase 2 v1 files migrate to v2 once (kill_switch disengaged on v1 is remanded on migration only).
  */
 
-const POLICY_SCHEMA_VERSION = 2;
-const POLICY_PHASE = 'browser_mvp_4a';
+const POLICY_SCHEMA_VERSION = 3;
+const POLICY_PHASE = 'browser_real_4b';
 const POLICY_BASENAME = 'policy.json';
 
 const BROWSER_MVP_KILL_SWITCH_RELEASE_TOKEN = 'BROWSER_MVP_KILL_SWITCH_RELEASE';
@@ -37,6 +38,7 @@ function defaultPolicy(platform) {
     allowlists: emptyAllowlists(),
     permissions: {
       browser_automation: false,
+      real_browser_automation: false,
       filesystem_access: false,
       shell_commands: false,
       app_window_control: false,
@@ -48,6 +50,9 @@ function defaultPolicy(platform) {
     },
     browser_control_armed: false,
     browser_allow_loopback: false,
+    real_browser_control_armed: false,
+    real_browser_allow_loopback: false,
+    real_browser_allow_default_profile: false,
     updated_at: now,
   };
 }
@@ -99,6 +104,9 @@ function normalizePolicyV2FromDisk(raw, platform) {
 
   const browser_control_armed = raw.browser_control_armed === true;
   const browser_allow_loopback = raw.browser_allow_loopback === true;
+  const real_browser_control_armed = raw.real_browser_control_armed === true;
+  const real_browser_allow_loopback = raw.real_browser_allow_loopback === true;
+  const real_browser_allow_default_profile = raw.real_browser_allow_default_profile === true;
 
   const permIn = raw.permissions && typeof raw.permissions === 'object' ? raw.permissions : {};
 
@@ -110,8 +118,12 @@ function normalizePolicyV2FromDisk(raw, platform) {
     kill_switch: { engaged, reason },
     browser_control_armed,
     browser_allow_loopback,
+    real_browser_control_armed,
+    real_browser_allow_loopback,
+    real_browser_allow_default_profile,
     permissions: {
       browser_automation: browser_control_armed && permIn.browser_automation === true,
+      real_browser_automation: real_browser_control_armed && permIn.real_browser_automation === true,
       filesystem_access: false,
       shell_commands: false,
       app_window_control: false,
@@ -129,11 +141,20 @@ function enforcePermissionInvariants(p) {
   p.permissions.shell_commands = false;
   p.permissions.app_window_control = false;
   p.permissions.mcp_adapters = false;
+  if (typeof p.permissions.real_browser_automation !== 'boolean') {
+    p.permissions.real_browser_automation = false;
+  }
   if (p.browser_control_armed && !p.permissions.browser_automation) {
     p.browser_control_armed = false;
   }
   if (!p.browser_control_armed) {
     p.permissions.browser_automation = false;
+  }
+  if (p.real_browser_control_armed && !p.permissions.real_browser_automation) {
+    p.real_browser_control_armed = false;
+  }
+  if (!p.real_browser_control_armed) {
+    p.permissions.real_browser_automation = false;
   }
 }
 
@@ -169,6 +190,9 @@ function getPolicyStatusPayload(policy, meta) {
     kill_switch: { ...p.kill_switch },
     browser_control_armed: p.browser_control_armed === true,
     browser_allow_loopback: p.browser_allow_loopback === true,
+    real_browser_control_armed: p.real_browser_control_armed === true,
+    real_browser_allow_loopback: p.real_browser_allow_loopback === true,
+    real_browser_allow_default_profile: p.real_browser_allow_default_profile === true,
     updated_at: p.updated_at,
   };
 }
@@ -196,6 +220,9 @@ function loadPolicy(opts) {
       migrated = true;
     } else {
       policy = normalizePolicyV2FromDisk(raw, platform);
+    }
+    if (ver < POLICY_SCHEMA_VERSION) {
+      migrated = true;
     }
     if (migrated) {
       try {
@@ -233,13 +260,16 @@ function engageKillSwitch(opts) {
   const already =
     next.kill_switch.engaged === true &&
     next.kill_switch.reason === 'operator_engaged' &&
-    next.browser_control_armed === false;
+    next.browser_control_armed === false &&
+    next.real_browser_control_armed === false;
   if (already && fs.existsSync(policyFilePath(userDataPath, path))) {
     return { policy: next, changed: false };
   }
   next.kill_switch = { engaged: true, reason: 'operator_engaged' };
   next.browser_control_armed = false;
+  next.real_browser_control_armed = false;
   next.permissions.browser_automation = false;
+  next.permissions.real_browser_automation = false;
   next.updated_at = new Date().toISOString();
   enforcePermissionInvariants(next);
   savePolicy({ userDataPath, policy: next, fs, path });
@@ -255,6 +285,23 @@ function armBrowserOnlyControl(opts) {
   const next = normalizePolicyV2FromDisk(cur, platform);
   next.browser_control_armed = true;
   next.permissions.browser_automation = true;
+  next.schema_version = POLICY_SCHEMA_VERSION;
+  next.phase = 'browser_mvp_4a';
+  next.updated_at = new Date().toISOString();
+  enforcePermissionInvariants(next);
+  savePolicy({ userDataPath, policy: next, fs, path });
+  return { policy: next };
+}
+
+/**
+ * Arm real-browser (Chromium/CDP) local control — narrow opt-in; does not disengage kill switch.
+ */
+function armRealBrowserControl(opts) {
+  const { userDataPath, platform, fs, path } = opts;
+  const { policy: cur } = loadPolicy({ userDataPath, platform, fs, path });
+  const next = normalizePolicyV2FromDisk(cur, platform);
+  next.real_browser_control_armed = true;
+  next.permissions.real_browser_automation = true;
   next.schema_version = POLICY_SCHEMA_VERSION;
   next.phase = POLICY_PHASE;
   next.updated_at = new Date().toISOString();
@@ -295,5 +342,6 @@ module.exports = {
   savePolicy,
   engageKillSwitch,
   armBrowserOnlyControl,
+  armRealBrowserControl,
   disengageKillSwitchForBrowserMvp,
 };

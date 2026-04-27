@@ -16,7 +16,7 @@ _PACK_LINUX = ["npm", "run", "pack:linux"]
 _PACK_WIN = ["npm", "run", "pack:win"]
 
 _LC_PHASE2 = "policy_audit_kill_switch_only"
-_LC_PHASE4A_CLI = "browser_mvp_4a"
+_LC_PHASE4B_CLI = "browser_real_4b"
 
 
 def _cli_local_control_policy_skeleton() -> dict[str, object]:
@@ -34,6 +34,7 @@ def _cli_local_control_policy_skeleton() -> dict[str, object]:
         },
         "permissions": {
             "browser_automation": False,
+            "real_browser_automation": False,
             "filesystem_access": False,
             "shell_commands": False,
             "app_window_control": False,
@@ -88,6 +89,22 @@ def _cli_local_control_browser_mvp_skeleton(*, platform_status: str) -> dict[str
         "session_running": False,
         "gate_blocked_reason": "kill_switch_engaged" if supported else "platform_not_supported",
         "note": "Live browser session is Electron main (HAM Desktop) only; CLI cannot start BrowserWindow.",
+    }
+
+
+def _cli_local_control_browser_real_skeleton(*, platform_status: str) -> dict[str, object]:
+    supported = platform_status == "linux_first"
+    return {
+        "kind": "ham_cli_desktop_local_control_browser_real_skeleton",
+        "supported": supported,
+        "armed": False,
+        "allow_loopback": False,
+        "managed_profile": True,
+        "cdp_localhost_only": True,
+        "uses_default_profile": False,
+        "session_running": False,
+        "gate_blocked_reason": "kill_switch_engaged" if supported else "platform_not_supported",
+        "note": "Managed Chromium + localhost CDP runs in HAM Desktop main only; CLI cannot spawn Chrome.",
     }
 
 
@@ -151,8 +168,8 @@ def run_desktop_local_control_status(*, json_out: bool) -> None:
 
     payload = {
         "kind": "ham_cli_desktop_local_control_status",
-        "schema_version": 5,
-        "phase": _LC_PHASE4A_CLI,
+        "schema_version": 6,
+        "phase": _LC_PHASE4B_CLI,
         "enabled": False,
         "spec_present": spec_present,
         "spec_relative_path": str(spec_rel).replace("\\", "/"),
@@ -164,14 +181,16 @@ def run_desktop_local_control_status(*, json_out: bool) -> None:
         "kill_switch": {"engaged": True, "reason": "default_disabled"},
         "sidecar": _cli_local_control_sidecar_skeleton(),
         "browser_mvp": _cli_local_control_browser_mvp_skeleton(platform_status=platform_status),
+        "browser_real": _cli_local_control_browser_real_skeleton(platform_status=platform_status),
         "capabilities": {
             "browser_automation": "available_guarded" if platform_status == "linux_first" else "not_implemented",
+            "real_browser_cdp": "available_guarded" if platform_status == "linux_first" else "not_implemented",
             "filesystem_access": "not_implemented",
             "shell_commands": "not_implemented",
             "app_window_control": "not_implemented",
             "mcp_adapters": "not_implemented",
         },
-        "note": "CLI mirrors Phase 4A shape; HAM Desktop runs browser MVP IPC + policy v2 on disk.",
+        "note": "CLI mirrors Phase 4B aggregate; HAM Desktop runs 4A embedded browser + 4B managed Chromium/CDP IPC + policy v3 on disk.",
     }
     if json_out:
         typer.echo(json.dumps(payload, indent=2))
@@ -215,7 +234,7 @@ def run_desktop_local_control_kill_switch_engage() -> None:
 
 
 def run_desktop_local_control_browser_status(*, json_out: bool) -> None:
-    """Static browser MVP mirror (no Electron)."""
+    """Static browser MVP + real-browser mirror (no Electron)."""
     plat = sys.platform
     if plat.startswith("linux"):
         platform_status = "linux_first"
@@ -223,13 +242,18 @@ def run_desktop_local_control_browser_status(*, json_out: bool) -> None:
         platform_status = "windows_planned"
     else:
         platform_status = "unsupported"
-    b = _cli_local_control_browser_mvp_skeleton(platform_status=platform_status)
+    bundle = {
+        "kind": "ham_cli_desktop_local_control_browser_status_bundle",
+        "browser_mvp": _cli_local_control_browser_mvp_skeleton(platform_status=platform_status),
+        "browser_real": _cli_local_control_browser_real_skeleton(platform_status=platform_status),
+    }
     if json_out:
-        typer.echo(json.dumps(b, indent=2))
+        typer.echo(json.dumps(bundle, indent=2))
         return
-    typer.echo("Desktop Local Control — browser MVP (CLI mirror, read-only)")
-    typer.echo(f"  Supported: {b['supported']} · gate: {b['gate_blocked_reason']}")
-    typer.echo(f"  {b['note']}")
+    typer.echo("Desktop Local Control — browser (CLI mirror, read-only)")
+    typer.echo(f"  4A embedded: {bundle['browser_mvp']['supported']} · gate: {bundle['browser_mvp']['gate_blocked_reason']}")
+    typer.echo(f"  4B real CDP: {bundle['browser_real']['supported']} · gate: {bundle['browser_real']['gate_blocked_reason']}")
+    typer.echo(f"  {bundle['browser_mvp']['note']}")
 
 
 def run_desktop_local_control_sidecar(*, json_out: bool) -> None:

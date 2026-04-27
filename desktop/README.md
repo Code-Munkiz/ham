@@ -5,7 +5,7 @@ Thin shell: renderer is the existing Vite/React app; FastAPI stays a separate HT
 ## Shell UX (M1)
 
 - **First screen:** the packaged app **opens the workspace app** with **`/` → `/chat`** (workspace chat). The marketing landing (“go ham” / astrochimp) is **web-only**.
-- **Local Control Phase 2–4A (Linux browser MVP):** narrow IPC (`ham-desktop:local-control-*`) + **`window.hamDesktop.localControl`** for status, policy/audit/kill-switch, inert sidecar lifecycle, **Phase 4A browser session** (`BrowserWindow` in main: arm, kill-switch release token, start/navigate/screenshot/stop), and **engage kill switch**; **`policy.json` schema v2** + redacted audit JSONL under userData; **disabled / default deny by default** — [`docs/desktop/local_control_v1.md`](../docs/desktop/local_control_v1.md), sidecar protocol [`docs/desktop/local_control_sidecar_protocol_v1.md`](../docs/desktop/local_control_sidecar_protocol_v1.md). Not Playwright; not `/api/browser`.
+- **Local Control Phase 2–4B (Linux):** narrow IPC (`ham-desktop:local-control-*`) + **`window.hamDesktop.localControl`** for status, policy/audit/kill-switch, inert sidecar lifecycle, **Phase 4A embedded browser** (`BrowserWindow` in main), **Phase 4B managed Chromium + localhost CDP** (dedicated profile, audited kill-switch release token, start/navigate/screenshot/stop), and **engage kill switch**; **`policy.json` schema v3** + redacted audit JSONL under userData; **default deny** — [`docs/desktop/local_control_v1.md`](../docs/desktop/local_control_v1.md), sidecar protocol [`docs/desktop/local_control_sidecar_protocol_v1.md`](../docs/desktop/local_control_sidecar_protocol_v1.md). Not Playwright; not `/api/browser`.
 - **Download and run:** packaged builds ship **`default-public-api.json`** next to `main.cjs` with the **project’s public Ham API origin**. Users can open the app with **no env vars**; power users override with **`HAM_DESKTOP_API_BASE`** or **`ham-desktop-config.json`**. Bump that file when the canonical public API URL changes, then cut a new desktop release.
 - **Menu bar:** on **Linux and Windows**, the default Electron **File / Edit / View** menu is **removed** so the window chrome stays dark; **macOS** keeps the normal app menu.
 - **Public assets:** the nav logo uses the same **relative `public/` URLs** as the Vite build (`base: ./`) so icons load under **`file://`** in the packaged renderer.
@@ -23,8 +23,8 @@ Linux and Windows artifacts **do not duplicate** the chat interface. `electron-b
 - Shipped under `desktop/curated/`: README, `default-curated-skills.json` (suggested `catalog_id` pins), and `ham-api-env.snippet`. These are included in the packaged app (`package.json` → `files`).
 - **Settings → HAM + Hermes setup** (desktop only): probes `hermes --version` on the **system PATH** and shows the curated list. HAM does **not** download or install Hermes binaries in this phase; install upstream, then use **Re-check CLI**.
 - **Allowlisted CLI presets (Phase B):** buttons that run a **fixed** argv list in the main process (`hermes --version`, `hermes plugins list`, `hermes mcp list`, …) and show stdout/stderr in the settings panel — not free-form TUI control; 25s timeout, capped output. Presets are defined in `main.cjs` only; add new ones there after review.
-- Additional IPC: `window.__HAM_DESKTOP_BUNDLE__` and **`window.hamDesktop`** share the same `localControl` bridge (status, policy, audit, kill switch, sidecar, **browser MVP**, `engageKillSwitch`) — see `preload.cjs`, `main.cjs`, `local_control_*.cjs`.
-- **CLI (repo, no Electron):** `ham desktop local-control status|policy|audit|browser|sidecar` (and `sidecar health|stop|start` = **electron_only** stubs); live browser + policy only in HAM Desktop.
+- Additional IPC: `window.__HAM_DESKTOP_BUNDLE__` and **`window.hamDesktop`** share the same `localControl` bridge (status, policy, audit, kill switch, sidecar, **4A + 4B browser** paths, `engageKillSwitch`) — see `preload.cjs`, `main.cjs`, `local_control_*.cjs`.
+- **CLI (repo, no Electron):** `ham desktop local-control status|policy|audit|browser|sidecar` (and `sidecar health|stop|start` = **electron_only** stubs); live browser + policy only in HAM Desktop (`browser` JSON bundles 4A + 4B mirrors).
 - **Tests:** `npm run test:local-control` from `desktop/` (Node built-in test runner over `local_control_status.cjs`).
 
 ## Security (M1)
@@ -53,8 +53,12 @@ Terminal 1 — API:
 
 ```bash
 cd /path/to/ham
-uvicorn src.api.server:app --reload --host 127.0.0.1 --port 8000
+.venv/bin/python scripts/run_local_api.py
 ```
+
+(Or classic: `PYTHONPATH=. uvicorn src.api.server:app --reload --host 127.0.0.1 --port 8000`.)
+
+**Phase 4B managed Chromium:** if you see `chromium_not_found`, install Google Chrome/Chromium system-wide *or* run once (no sudo): `bash scripts/ensure_chromium_for_desktop.sh` — HAM Desktop picks up `~/.cache/ms-playwright/chromium-*/chrome-linux64/chrome` automatically.
 
 Terminal 2 — Vite (proxy `/api` → 8000 by default):
 

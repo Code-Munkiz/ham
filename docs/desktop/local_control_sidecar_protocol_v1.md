@@ -68,7 +68,7 @@ Phase **4A** ships **desktop-local browser MVP** as an Electron **`BrowserWindow
 
 ## Relationship to aggregate status
 
-HAM Desktop exposes **`sidecar`** on the aggregate Local Control status object (**`schema_version` ≥ 4**), **`implemented: true`**, **`mode: inert_process_shell`**, **`transport: stdio_json_rpc`**, plus **`start_allowed`**, **`blocked_reason`**, and **`health`**. See `desktop/local_control_sidecar_status.cjs`. Phase **4A** adds **`browser_mvp`** and bumps aggregate **`schema_version` to 5** — see `desktop/local_control_status.cjs`.
+HAM Desktop exposes **`sidecar`** on the aggregate Local Control status object (**`schema_version` ≥ 4**), **`implemented: true`**, **`mode: inert_process_shell`**, **`transport: stdio_json_rpc`**, plus **`start_allowed`**, **`blocked_reason`**, and **`health`**. See `desktop/local_control_sidecar_status.cjs`. Phase **4A** adds **`browser_mvp`**; phase **4B** adds **`browser_real`** (managed Chromium + **main-process** localhost CDP — **not** sidecar-mediated). Aggregate **`schema_version` is 6** as of 4B — see `desktop/local_control_status.cjs`.
 
 ---
 
