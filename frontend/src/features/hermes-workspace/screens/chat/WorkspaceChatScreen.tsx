@@ -18,6 +18,8 @@ import { CLIENT_MODEL_CATALOG_FALLBACK } from "@/lib/ham/modelCatalogFallback";
 import type { ModelCatalogPayload } from "@/lib/ham/types";
 import { applyHamUiActions } from "@/lib/ham/applyUiActions";
 import type { HamChatStreamAuth } from "@/lib/ham/api";
+import type { HamChatUserContentV1 } from "@/lib/ham/chatUserContent";
+import { buildHamChatUserPayloadV1, userTranscriptPreview } from "@/lib/ham/chatUserContent";
 import { workspaceChatAdapter, workspaceSessionAdapter } from "../../workspaceAdapters";
 import { WorkspaceChatEmptyState } from "./WorkspaceChatEmptyState";
 import { WorkspaceChatMessageList, type HwwMsgRow } from "./WorkspaceChatMessageList";
@@ -34,7 +36,6 @@ import {
   type ChatInspectorArtifactRow,
 } from "./workspaceInspectorChatDerived";
 import {
-  buildOutboundMessageWithAttachments,
   fileToWorkspaceAttachment,
   formatAttachmentByteSize,
   MAX_WORKSPACE_ATTACHMENT_BYTES,
@@ -64,9 +65,10 @@ function workspaceChatSubtitle(opts: {
   }
   if (opts.sessionId) {
     const firstUser = opts.messages.find((m) => m.role === "user");
-    const raw = firstUser?.content?.trim();
-    if (raw) {
-      const oneLine = raw.replace(/\s+/g, " ");
+    const raw = firstUser?.content;
+    const preview = typeof raw === "string" ? userTranscriptPreview(raw) : "";
+    if (preview) {
+      const oneLine = preview.replace(/\s+/g, " ");
       return oneLine.length > 72 ? `${oneLine.slice(0, 72)}…` : oneLine;
     }
     return "Send a message to start this conversation.";
@@ -295,9 +297,14 @@ export function WorkspaceChatScreen() {
   }, []);
 
   const send = React.useCallback(
-    async (outboundUserMessage: string) => {
-      const trimmed = outboundUserMessage.trim();
-      if (!trimmed || sending || voiceTranscribing) return;
+    async (outboundUser: string | HamChatUserContentV1) => {
+      const isV1 = typeof outboundUser === "object" && outboundUser && outboundUser.h === "ham_chat_user_v1";
+      const displayContent = isV1
+        ? JSON.stringify(outboundUser)
+        : (outboundUser as string).trim();
+      if (!isV1 && !(outboundUser as string).trim()) return;
+      if (isV1 && !(outboundUser as HamChatUserContentV1).images?.length) return;
+      if (sending || voiceTranscribing) return;
       setInput("");
       setAttachments([]);
       setLoadErr(null);
@@ -307,7 +314,7 @@ export function WorkspaceChatScreen() {
       const userRow: HwwMsgRow = {
         id: `hww-user-${Date.now()}`,
         role: "user",
-        content: trimmed,
+        content: displayContent,
         timestamp: timeStr(),
       };
       const assistantPlaceId = `hww-assist-${Date.now()}`;
@@ -323,8 +330,8 @@ export function WorkspaceChatScreen() {
           atIso: new Date().toISOString(),
           kind: "user_message_sent",
           status: "info",
-          summary: `User message sent (${trimmed.length} character${trimmed.length === 1 ? "" : "s"})`,
-          meta: { message_id: userRow.id, char_count: trimmed.length },
+          summary: `User message sent (${displayContent.length} character${displayContent.length === 1 ? "" : "s"})`,
+          meta: { message_id: userRow.id, char_count: displayContent.length },
         }),
       );
       setInspectorEvents((prev) =>
@@ -341,7 +348,7 @@ export function WorkspaceChatScreen() {
         const res = await workspaceChatAdapter.stream(
           {
             session_id: sessionId ?? undefined,
-            messages: [{ role: "user", content: trimmed }],
+            messages: [{ role: "user", content: isV1 ? (outboundUser as HamChatUserContentV1) : (outboundUser as string).trim() }],
             ...(chatModelIdForApi ? { model_id: chatModelIdForApi } : {}),
             ...(projectId ? { project_id: projectId } : {}),
             workbench_mode: "agent",
@@ -463,9 +470,26 @@ export function WorkspaceChatScreen() {
 
   const onFormSubmit = () => {
     const trimmed = input.trim();
-    const outbound = buildOutboundMessageWithAttachments(trimmed, attachments);
-    if (!outbound.trim() || voiceTranscribing) return;
-    void send(outbound);
+    const usable = attachments.filter((a) => !a.error);
+    if (voiceTranscribing) return;
+    if (usable.length > 0) {
+      const payload = buildHamChatUserPayloadV1(
+        trimmed,
+        usable.map((a) => {
+          const m = /^data:(image\/(?:png|jpeg|webp|jpg));base64,/i.exec(a.payload);
+          const mime = (m ? m[1] : "image/jpeg").toLowerCase();
+          return { name: a.name, mime, dataUrl: a.payload, size: a.size };
+        }),
+      );
+      if (payload.images.length === 0) {
+        toast.error("Add a valid PNG, JPEG, or WebP screenshot.");
+        return;
+      }
+      void send(payload);
+      return;
+    }
+    if (!trimmed) return;
+    void send(trimmed);
   };
 
   const hasTranscript = messages.length > 0;

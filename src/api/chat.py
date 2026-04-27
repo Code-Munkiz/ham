@@ -12,6 +12,11 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from src.api.models_catalog import resolve_model_id_for_chat
+from src.ham.chat_user_content import (
+    plain_text_for_operator,
+    to_llm_message_content,
+    vision_system_suffix,
+)
 from src.ham.active_agent_context import try_active_agent_guidance_for_project_root
 from src.ham.cursor_skills_catalog import list_cursor_skills, render_skills_for_system_prompt
 from src.ham.cursor_subagents_catalog import list_cursor_subagents, render_subagents_for_system_prompt
@@ -49,8 +54,10 @@ _chat_store = build_chat_session_store()
 
 
 class ChatMessageIn(BaseModel):
+    """``content`` is a string for assistant/system; user may also send ``ham_chat_user_v1`` JSON objects."""
+
     role: Literal["user", "assistant", "system"]
-    content: str = Field(min_length=1, max_length=100_000)
+    content: str | dict[str, Any]
 
 
 class ChatRequest(BaseModel):
@@ -233,9 +240,9 @@ def _workbench_system_lines(
 
 
 def _append_workbench_to_messages(
-    llm_messages: list[dict[str, str]],
+    llm_messages: list[dict[str, Any]],
     body: ChatRequest,
-) -> list[dict[str, str]]:
+) -> list[dict[str, Any]]:
     extra = _workbench_system_lines(
         workbench_mode=body.workbench_mode,
         worker=body.worker,
@@ -315,7 +322,56 @@ def _resolve_project_root_for_chat(project_id: str | None) -> Path | None:
     return Path(rec.root).expanduser().resolve()
 
 
-def _prepare_chat_session(body: ChatRequest) -> tuple[str, list[dict[str, str]], dict[str, Any] | None]:
+def _finalize_incoming_for_store(msgs: list[ChatMessageIn]) -> list[dict[str, str]]:
+    """Normalize request messages to string ``content`` suitable for session persistence."""
+    from src.ham.chat_user_content import normalize_user_incoming_to_stored
+
+    out: list[dict[str, str]] = []
+    for m in msgs:
+        if m.role in ("assistant", "system"):
+            c = m.content
+            if not isinstance(c, str) or not c.strip():
+                raise HTTPException(
+                    status_code=422,
+                    detail={
+                        "error": {
+                            "code": "INVALID_MESSAGE",
+                            "message": "Assistant and system messages require a non-empty string content.",
+                        }
+                    },
+                )
+            if len(c) > 100_000:
+                raise HTTPException(
+                    status_code=422,
+                    detail={
+                        "error": {
+                            "code": "MESSAGE_TOO_LONG",
+                            "message": "Message exceeds maximum length.",
+                        }
+                    },
+                )
+            out.append({"role": m.role, "content": c})
+        else:
+            try:
+                stored = normalize_user_incoming_to_stored(m.content)
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=422,
+                    detail={
+                        "error": {
+                            "code": "INVALID_USER_MESSAGE",
+                            "message": str(exc),
+                        }
+                    },
+                ) from exc
+            out.append({"role": "user", "content": stored})
+    return out
+
+
+def _prepare_chat_session(
+    body: ChatRequest,
+) -> tuple[str, list[dict[str, Any]], dict[str, Any] | None, str]:
+    """Returns ``(session_id, llm_messages, active_agent_meta, last_user_plain_for_operator)``."""
     store = _chat_store
     if body.session_id:
         if store.get_session(body.session_id) is None:
@@ -332,7 +388,12 @@ def _prepare_chat_session(body: ChatRequest) -> tuple[str, list[dict[str, str]],
     else:
         sid = store.create_session()
 
-    incoming = [m.model_dump() for m in body.messages]
+    incoming = _finalize_incoming_for_store(body.messages)
+    last_user_plain = (
+        plain_text_for_operator(incoming[-1]["content"])
+        if incoming[-1]["role"] == "user"
+        else ""
+    )
     try:
         store.append_turns(sid, incoming)
     except KeyError:
@@ -364,23 +425,39 @@ def _prepare_chat_session(body: ChatRequest) -> tuple[str, list[dict[str, str]],
                     base_system = f"{base_system}\n\n{g}".strip()
                     active_meta = guidance_pack.meta
 
-    llm_messages = [
+    h_llm: list[dict[str, Any]] = []
+    any_multimodal = False
+    for h in history:
+        role, stored = h["role"], h["content"]
+        if role == "user":
+            c = to_llm_message_content(stored)
+            if isinstance(c, list):
+                any_multimodal = True
+            h_llm.append({"role": "user", "content": c})
+        else:
+            h_llm.append({"role": role, "content": stored})
+    sys_content = base_system
+    if any_multimodal:
+        sys_content = f"{base_system}{vision_system_suffix()}"
+        if len(sys_content) > _MAX_SYSTEM_PROMPT_CHARS:
+            sys_content = sys_content[:_MAX_SYSTEM_PROMPT_CHARS]
+    llm_messages: list[dict[str, Any]] = [
         {
             "role": "system",
-            "content": base_system,
+            "content": sys_content,
         },
-        *history,
+        *h_llm,
     ]
-    return sid, llm_messages, active_meta
+    return sid, llm_messages, active_meta, last_user_plain
 
 
 def _messages_for_completion(
     body: ChatRequest,
-) -> tuple[str, list[dict[str, str]], str | None, dict[str, Any] | None]:
-    sid, llm_messages, active_meta = _prepare_chat_session(body)
+) -> tuple[str, list[dict[str, Any]], str | None, dict[str, Any] | None, str]:
+    sid, llm_messages, active_meta, last_user_plain = _prepare_chat_session(body)
     or_override = _resolve_openrouter_model_override(body)
     llm_messages = _append_workbench_to_messages(llm_messages, body)
-    return sid, llm_messages, or_override, active_meta
+    return sid, llm_messages, or_override, active_meta, last_user_plain
 
 
 @router.get("/api/chat/sessions")
@@ -439,12 +516,12 @@ async def post_chat(
         route="post_chat",
     )
     store = _chat_store
-    sid, llm_messages, or_override, active_meta = _messages_for_completion(body)
+    sid, llm_messages, or_override, active_meta, last_user_plain = _messages_for_completion(body)
     if body.enable_operator and operator_enabled() and body.messages[-1].role == "user":
         from src.persistence.project_store import get_project_store
 
         op = process_operator_turn(
-            user_text=body.messages[-1].content,
+            user_text=last_user_plain,
             project_store=get_project_store(),
             default_project_id=body.project_id,
             operator_payload=body.operator,
@@ -501,13 +578,13 @@ def post_chat_stream(
         route="post_chat_stream",
     )
     store = _chat_store
-    sid, llm_messages, or_override, stream_active_meta = _messages_for_completion(body)
+    sid, llm_messages, or_override, stream_active_meta, last_user_plain = _messages_for_completion(body)
 
     if body.enable_operator and operator_enabled() and body.messages[-1].role == "user":
         from src.persistence.project_store import get_project_store
 
         op = process_operator_turn(
-            user_text=body.messages[-1].content,
+            user_text=last_user_plain,
             project_store=get_project_store(),
             default_project_id=body.project_id,
             operator_payload=body.operator,

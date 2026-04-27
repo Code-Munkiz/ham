@@ -1,6 +1,6 @@
 /**
  * Hermes Workspace chat composer: PromptInput-style shell + action row (attach | mic | input | send).
- * Stream contract unchanged — attachments via `buildOutboundMessageWithAttachments`.
+ * PNG/JPEG/WebP attachments are sent as `ham_chat_user_v1` in `/api/chat/stream` (see `chatUserContent.ts`).
  */
 
 import * as React from "react";

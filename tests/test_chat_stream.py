@@ -214,3 +214,59 @@ def test_transcribe_clerk_required_without_session(mock_mode: None, monkeypatch:
     assert r.status_code == 401
     assert r.json()["detail"]["error"]["code"] == "CLERK_SESSION_REQUIRED"
     monkeypatch.delenv("HAM_CLERK_REQUIRE_AUTH", raising=False)
+
+
+def test_chat_stream_accepts_ham_chat_user_v1(mock_mode: None) -> None:
+    """1×1 PNG data URL — stored as ham_chat_user_v1; mock stream still completes."""
+    tiny_png = (
+        "data:image/png;base64,"
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+    )
+    res = client.post(
+        "/api/chat/stream",
+        json={
+            "messages": [
+                {
+                    "role": "user",
+                    "content": {
+                        "h": "ham_chat_user_v1",
+                        "text": "describe this",
+                        "images": [
+                            {"name": "pixel.png", "mime": "image/png", "data_url": tiny_png},
+                        ],
+                    },
+                },
+            ],
+        },
+    )
+    assert res.status_code == 200, res.text
+    events = _parse_ndjson(res.text)
+    done = [e for e in events if e["type"] == "done"][0]
+    user_msgs = [m for m in done["messages"] if m["role"] == "user"]
+    assert user_msgs, "user turn should be persisted"
+    assert '"h":"ham_chat_user_v1"' in user_msgs[-1]["content"] or "ham_chat_user_v1" in user_msgs[-1]["content"]
+
+
+def test_chat_stream_rejects_bad_image_mime(mock_mode: None) -> None:
+    res = client.post(
+        "/api/chat/stream",
+        json={
+            "messages": [
+                {
+                    "role": "user",
+                    "content": {
+                        "h": "ham_chat_user_v1",
+                        "text": "x",
+                        "images": [
+                            {
+                                "name": "x.gif",
+                                "mime": "image/gif",
+                                "data_url": "data:image/gif;base64,R0lGODdhAQABAIABAP///wAAACwAAAAAAQABAAACAkQBADs=",
+                            },
+                        ],
+                    },
+                },
+            ],
+        },
+    )
+    assert res.status_code == 422

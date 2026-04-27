@@ -82,7 +82,7 @@ def resolve_openrouter_model_name_for_chat() -> str:
 
 
 def complete_chat_messages_openrouter(
-    messages: list[dict[str, str]],
+    messages: list[dict[str, Any]],
     *,
     model_override: str | None = None,
 ) -> str:
@@ -100,7 +100,7 @@ def complete_chat_messages_openrouter(
 
 
 def stream_chat_messages_openrouter(
-    messages: list[dict[str, str]],
+    messages: list[dict[str, Any]],
     *,
     model_override: str | None = None,
 ):
