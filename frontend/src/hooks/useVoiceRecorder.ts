@@ -15,6 +15,35 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 
 import { mapMediaStreamErrorToUserMessage } from '@/lib/ham/voiceRecordingErrors';
 
+const VOICE_DEBUG_FLAG = 'ham.voiceDebug';
+const VOICE_DEBUG_MAX_EVENTS = 500;
+
+type VoiceDebugPayload = Record<string, unknown> & {
+  event: string;
+  ts: number;
+};
+
+function voiceDebugEnabled(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return window.localStorage.getItem(VOICE_DEBUG_FLAG) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function pushVoiceDebug(payload: Omit<VoiceDebugPayload, 'ts'>): void {
+  if (!voiceDebugEnabled() || typeof window === 'undefined') return;
+  const event = { ...(payload as Record<string, unknown>), ts: Date.now() } as VoiceDebugPayload;
+  const w = window as unknown as { __HAM_VOICE_DEBUG__?: VoiceDebugPayload[] };
+  const next = Array.isArray(w.__HAM_VOICE_DEBUG__) ? [...w.__HAM_VOICE_DEBUG__, event] : [event];
+  if (next.length > VOICE_DEBUG_MAX_EVENTS) {
+    next.splice(0, next.length - VOICE_DEBUG_MAX_EVENTS);
+  }
+  w.__HAM_VOICE_DEBUG__ = next;
+  console.debug('[ham.voice]', event);
+}
+
 function pickRecorderMimeType(): string {
   const candidates = ['audio/webm;codecs=opus', 'audio/webm'];
   for (const c of candidates) {
@@ -67,6 +96,9 @@ interface UseVoiceRecorderProps {
 
 export function useVoiceRecorder(props: UseVoiceRecorderProps = {}) {
   const { onRecordingComplete, onRecordingError } = props;
+  const hookInstanceId = useRef(`vr-${Math.random().toString(36).slice(2, 9)}`);
+  const recorderSeqRef = useRef(0);
+  const recorderIdRef = useRef<string | null>(null);
   
   const [state, setState] = useState<RecordingState>({
     isRecording: false,
@@ -128,6 +160,14 @@ export function useVoiceRecorder(props: UseVoiceRecorderProps = {}) {
           : null;
       const blobUrl = blob ? URL.createObjectURL(blob) : null;
       const fallbackError = opts.fallbackError ?? null;
+      pushVoiceDebug({
+        event: 'voice.finalize.called',
+        hookInstanceId: hookInstanceId.current,
+        recorderId: recorderIdRef.current,
+        hasStream: Boolean(stream),
+        fallbackError,
+        chunkCount: chunks.length,
+      });
 
       setState((prev) => ({
         ...prev,
@@ -143,15 +183,35 @@ export function useVoiceRecorder(props: UseVoiceRecorderProps = {}) {
       if (fallbackError) {
         onRecordingError?.(fallbackError);
       }
+      pushVoiceDebug({
+        event: 'voice.finalize.blob_size',
+        hookInstanceId: hookInstanceId.current,
+        recorderId: recorderIdRef.current,
+        blobSize: blob?.size ?? 0,
+      });
       if (blob && blob.size > 0) {
+        pushVoiceDebug({
+          event: 'voice.complete.called',
+          hookInstanceId: hookInstanceId.current,
+          recorderId: recorderIdRef.current,
+          blobSize: blob.size,
+        });
         onRecordingComplete?.(blob, durationSecs);
       }
+      recorderIdRef.current = null;
     },
     [clearDurationTimer, clearStopWatchdog, onRecordingComplete, onRecordingError],
   );
 
   // Start recording
   const startRecording = useCallback(async () => {
+    pushVoiceDebug({
+      event: 'voice.start.called',
+      hookInstanceId: hookInstanceId.current,
+      isRecording: state.isRecording,
+      refExists: Boolean(mediaRecorderRef.current),
+      refState: mediaRecorderRef.current?.state ?? null,
+    });
     setState((prev) => ({ ...prev, error: null }));
 
     if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
@@ -183,6 +243,13 @@ export function useVoiceRecorder(props: UseVoiceRecorderProps = {}) {
       // Avoid orphaning a live MediaRecorder if start runs twice (double-click / Strict Mode churn).
       const existing = mediaRecorderRef.current;
       if (existing && (existing.state === "recording" || existing.state === "paused")) {
+        pushVoiceDebug({
+          event: 'voice.stop.early_return',
+          reason: 'start_blocked_existing_recorder',
+          hookInstanceId: hookInstanceId.current,
+          recorderId: recorderIdRef.current,
+          recState: existing.state,
+        });
         stream.getTracks().forEach((t) => t.stop());
         return;
       }
@@ -194,18 +261,34 @@ export function useVoiceRecorder(props: UseVoiceRecorderProps = {}) {
       const mediaRecorder = mime
         ? new MediaRecorder(stream, { mimeType: mime })
         : new MediaRecorder(stream);
+      recorderSeqRef.current += 1;
+      recorderIdRef.current = `${hookInstanceId.current}-rec-${recorderSeqRef.current}`;
       activeStreamRef.current = stream;
       audioChunksRef.current = [];
       finalizedRef.current = false;
       clearStopWatchdog();
 
       mediaRecorder.ondataavailable = (event) => {
+        pushVoiceDebug({
+          event: 'voice.ondataavailable',
+          hookInstanceId: hookInstanceId.current,
+          recorderId: recorderIdRef.current,
+          dataSize: event.data.size,
+          recState: mediaRecorder.state,
+        });
         if (event.data.size > 0) {
           audioChunksRef.current.push(event.data);
         }
       };
 
       mediaRecorder.onstop = () => {
+        pushVoiceDebug({
+          event: 'voice.onstop',
+          hookInstanceId: hookInstanceId.current,
+          recorderId: recorderIdRef.current,
+          chunkCount: audioChunksRef.current.length,
+          recState: mediaRecorder.state,
+        });
         mediaRecorderRef.current = null;
         finalizeRecording({ mimeType: mediaRecorder.mimeType || mime || 'audio/webm' });
       };
@@ -223,6 +306,12 @@ export function useVoiceRecorder(props: UseVoiceRecorderProps = {}) {
 
       mediaRecorderRef.current = mediaRecorder;
       recordingStartedAtRef.current = Date.now();
+      pushVoiceDebug({
+        event: 'voice.start.success',
+        hookInstanceId: hookInstanceId.current,
+        recorderId: recorderIdRef.current,
+        recState: mediaRecorder.state,
+      });
 
       setState((prev) => ({
         ...prev,
@@ -246,22 +335,54 @@ export function useVoiceRecorder(props: UseVoiceRecorderProps = {}) {
 
     } catch (err) {
       const msg = mapMediaStreamErrorToUserMessage(err);
+      pushVoiceDebug({
+        event: 'voice.start.error',
+        hookInstanceId: hookInstanceId.current,
+        error: msg,
+      });
       setState((prev) => ({ ...prev, error: msg }));
       onRecordingError?.(msg);
     }
-  }, [clearStopWatchdog, finalizeRecording, onRecordingError]);
+  }, [clearStopWatchdog, finalizeRecording, onRecordingError, state.isRecording]);
 
   // Stop recording — use MediaRecorder.state, not React state; `state.isRecording` in the closure
   // can be stale so Stop would no-op after mic UI already shows recording.
   const stopRecording = useCallback(() => {
     const rec = mediaRecorderRef.current;
+    pushVoiceDebug({
+      event: 'voice.stop.called',
+      hookInstanceId: hookInstanceId.current,
+      recorderId: recorderIdRef.current,
+      refExists: Boolean(rec),
+      recState: rec?.state ?? null,
+      isRecording: state.isRecording,
+    });
+    pushVoiceDebug({
+      event: 'voice.stop.ref_state',
+      hookInstanceId: hookInstanceId.current,
+      recorderId: recorderIdRef.current,
+      refExists: Boolean(rec),
+      recState: rec?.state ?? null,
+    });
     if (!rec) {
+      pushVoiceDebug({
+        event: 'voice.stop.early_return',
+        hookInstanceId: hookInstanceId.current,
+        recorderId: recorderIdRef.current,
+        reason: 'ref_null',
+      });
       finalizeRecording({
         fallbackError: "Recording stopped unexpectedly before audio finalized.",
       });
       return;
     }
     if (rec.state === "inactive") {
+      pushVoiceDebug({
+        event: 'voice.stop.early_return',
+        hookInstanceId: hookInstanceId.current,
+        recorderId: recorderIdRef.current,
+        reason: 'rec_inactive',
+      });
       mediaRecorderRef.current = null;
       finalizeRecording({
         mimeType: rec.mimeType || 'audio/webm',
@@ -270,10 +391,23 @@ export function useVoiceRecorder(props: UseVoiceRecorderProps = {}) {
       return;
     }
     if (rec.state !== "recording" && rec.state !== "paused") {
+      pushVoiceDebug({
+        event: 'voice.stop.early_return',
+        hookInstanceId: hookInstanceId.current,
+        recorderId: recorderIdRef.current,
+        reason: 'rec_state_not_stoppable',
+        recState: rec.state,
+      });
       return;
     }
     try {
       rec.stop();
+      pushVoiceDebug({
+        event: 'voice.stop.rec_stop_called',
+        hookInstanceId: hookInstanceId.current,
+        recorderId: recorderIdRef.current,
+        recState: rec.state,
+      });
     } catch {
       mediaRecorderRef.current = null;
       finalizeRecording({
@@ -283,8 +417,19 @@ export function useVoiceRecorder(props: UseVoiceRecorderProps = {}) {
       return;
     }
     clearStopWatchdog();
+    pushVoiceDebug({
+      event: 'voice.watchdog.started',
+      hookInstanceId: hookInstanceId.current,
+      recorderId: recorderIdRef.current,
+    });
     stopWatchdogRef.current = setTimeout(() => {
       if (!finalizedRef.current) {
+        pushVoiceDebug({
+          event: 'voice.watchdog.fired',
+          hookInstanceId: hookInstanceId.current,
+          recorderId: recorderIdRef.current,
+          recState: rec.state,
+        });
         mediaRecorderRef.current = null;
         finalizeRecording({
           mimeType: rec.mimeType || 'audio/webm',
@@ -292,7 +437,7 @@ export function useVoiceRecorder(props: UseVoiceRecorderProps = {}) {
         });
       }
     }, 2000);
-  }, [clearStopWatchdog, finalizeRecording]);
+  }, [clearStopWatchdog, finalizeRecording, state.isRecording]);
 
   // Cancel recording (discard)
   const cancelRecording = useCallback(() => {
@@ -325,6 +470,13 @@ export function useVoiceRecorder(props: UseVoiceRecorderProps = {}) {
 
   // Cleanup on unmount
   useEffect(() => {
+    pushVoiceDebug({
+      event: 'voice.render',
+      hookInstanceId: hookInstanceId.current,
+      isRecording: state.isRecording,
+      recState: mediaRecorderRef.current?.state ?? null,
+      refExists: Boolean(mediaRecorderRef.current),
+    });
     return () => {
       if (mediaRecorderRef.current) {
         safeAbortMediaRecorder(mediaRecorderRef.current);

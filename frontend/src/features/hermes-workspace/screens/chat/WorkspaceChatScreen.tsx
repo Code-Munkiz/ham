@@ -60,6 +60,27 @@ import { runGohamResearchFlow, shouldUseResearchLoop } from "../../goham/gohamRe
 import { GoHamPanel } from "../../goham/GoHamPanel";
 import { GoHamSlice1DevPanel } from "../../goham/GoHamSlice1DevPanel";
 
+const VOICE_DEBUG_FLAG = "ham.voiceDebug";
+
+function voiceDebugEnabled(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(VOICE_DEBUG_FLAG) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function pushVoiceDebug(payload: Record<string, unknown>): void {
+  if (!voiceDebugEnabled() || typeof window === "undefined") return;
+  const event = { ...payload, ts: Date.now() };
+  const w = window as unknown as { __HAM_VOICE_DEBUG__?: Array<Record<string, unknown>> };
+  const arr = Array.isArray(w.__HAM_VOICE_DEBUG__) ? [...w.__HAM_VOICE_DEBUG__, event] : [event];
+  if (arr.length > 500) arr.splice(0, arr.length - 500);
+  w.__HAM_VOICE_DEBUG__ = arr;
+  console.debug("[ham.voice]", event);
+}
+
 function timeStr() {
   return new Date().toLocaleTimeString([], {
     hour12: false,
@@ -100,6 +121,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   const { embedMode = false } = props;
   const navigate = useNavigate();
   const desktopGohamEligible = isHamDesktopShell();
+  const chatScreenInstanceId = React.useRef(`chat-screen-${Math.random().toString(36).slice(2, 9)}`);
   const [searchParams] = useSearchParams();
   const [messages, setMessages] = React.useState<HwwMsgRow[]>([]);
   const [sessionId, setSessionId] = React.useState<string | null>(null);
@@ -384,6 +406,13 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   }, []);
 
   const handleVoiceBlob = React.useCallback(async (blob: Blob) => {
+    pushVoiceDebug({
+      event: "voice.transcribe.called",
+      component: "WorkspaceChatScreen",
+      chatScreenInstanceId: chatScreenInstanceId.current,
+      blobSize: blob.size,
+      blobType: blob.type,
+    });
     if (!blob.size) {
       toast.error("No audio captured.");
       return;
@@ -396,12 +425,25 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     setVoiceTranscribing(true);
     try {
       const text = (await postChatTranscribe(blob, filename)).trim();
+      pushVoiceDebug({
+        event: "voice.transcribe.response",
+        component: "WorkspaceChatScreen",
+        chatScreenInstanceId: chatScreenInstanceId.current,
+        ok: true,
+        textLength: text.length,
+      });
       if (!text) {
         toast.message("No text returned from transcription.");
         return;
       }
       setInput((prev) => (prev.trim() ? `${prev.trim()}\n${text}` : text));
     } catch (err) {
+      pushVoiceDebug({
+        event: "voice.transcribe.error",
+        component: "WorkspaceChatScreen",
+        chatScreenInstanceId: chatScreenInstanceId.current,
+        message: err instanceof Error ? err.message : "Transcription failed.",
+      });
       if (err instanceof HamAccessRestrictedError) {
         toast.error(
           "Access restricted: this Ham deployment only allows approved sign-ins. Check Clerk or admin.",
