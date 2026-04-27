@@ -17,6 +17,8 @@
 
 /* Composer row: no outer card, smaller mic */
 .voice-message-input-container--compact {
+  position: relative;
+  z-index: 5;
   padding: 0;
   background: transparent;
   border: none;
@@ -28,6 +30,8 @@
 }
 
 .voice-message-input-container--compact .mic-button {
+  position: relative;
+  z-index: 6;
   width: 36px;
   height: 36px;
   box-shadow: none;

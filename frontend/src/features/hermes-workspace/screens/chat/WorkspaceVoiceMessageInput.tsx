@@ -108,7 +108,12 @@ export function WorkspaceVoiceMessageInput(props: WorkspaceVoiceMessageInputProp
             type="button"
             disabled={disabled}
             title={micTitle}
-            onClick={isRecording ? stopRecording : startRecording}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (isRecording) stopRecording();
+              else void startRecording();
+            }}
             className={cn("mic-button", error && !isRecording && "mic-button--had-error")}
             aria-label={isRecording ? "Stop recording" : "Start voice recording"}
           >
@@ -131,7 +136,11 @@ export function WorkspaceVoiceMessageInput(props: WorkspaceVoiceMessageInputProp
               <button
                 type="button"
                 disabled={disabled}
-                onClick={stopRecording}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  stopRecording();
+                }}
                 className="stop-recording"
                 aria-label="Stop recording"
               >

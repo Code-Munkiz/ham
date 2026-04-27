@@ -397,7 +397,7 @@ export function WorkspaceChatComposer({
               ) : null}
             </div>
 
-            <div className="flex shrink-0 items-center gap-0.5 md:gap-1">
+            <div className="relative z-[5] flex shrink-0 items-center gap-0.5 md:gap-1">
               <div
                 className={cn(
                   "flex shrink-0 items-center",

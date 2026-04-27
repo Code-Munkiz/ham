@@ -115,6 +115,16 @@ export function useVoiceRecorder(props: UseVoiceRecorderProps = {}) {
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
+      // Avoid orphaning a live MediaRecorder if start runs twice (double-click / Strict Mode churn).
+      const existing = mediaRecorderRef.current;
+      if (existing && (existing.state === "recording" || existing.state === "paused")) {
+        stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
+      if (existing?.state === "inactive") {
+        mediaRecorderRef.current = null;
+      }
+
       const mime = pickRecorderMimeType();
       const mediaRecorder = mime
         ? new MediaRecorder(stream, { mimeType: mime })
@@ -129,6 +139,7 @@ export function useVoiceRecorder(props: UseVoiceRecorderProps = {}) {
       };
 
       mediaRecorder.onstop = () => {
+        mediaRecorderRef.current = null;
         const blob = new Blob(chunks, { type: mediaRecorder.mimeType || mime || 'audio/webm' });
         const blobUrl = URL.createObjectURL(blob);
         const started = recordingStartedAtRef.current ?? Date.now();
@@ -205,9 +216,16 @@ export function useVoiceRecorder(props: UseVoiceRecorderProps = {}) {
         rec.requestData();
       }
       rec.stop();
-    } finally {
+    } catch {
       mediaRecorderRef.current = null;
+      try {
+        rec.stream?.getTracks().forEach((track) => track.stop());
+      } catch {
+        /* ignore */
+      }
     }
+    // Clear ref in `onstop` after chunks/blob finalize — not here — so nothing observes a null ref
+    // between `stop()` scheduling `onstop` and the handler running.
   }, []);
 
   // Cancel recording (discard)
