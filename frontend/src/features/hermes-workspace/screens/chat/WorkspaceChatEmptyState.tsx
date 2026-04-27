@@ -53,7 +53,7 @@ export function WorkspaceChatEmptyState({ onSuggestionClick }: WorkspaceChatEmpt
         <div className="mb-6 flex justify-center">
           {/*
             Same asset + same presentation as the sidebar top brand (`WorkspaceShell`):
-            no bordered “card” frame — that was making ham-app-moon read like a wrong thumbnail.
+            no bordered “card” frame — that was making the mark read like a wrong thumbnail.
           */}
           <img
             src={avatarSrc}
