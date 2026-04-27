@@ -270,3 +270,47 @@ def test_chat_stream_rejects_bad_image_mime(mock_mode: None) -> None:
         },
     )
     assert res.status_code == 422
+
+
+def test_chat_stream_rejects_oversized_image_data_url(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Server enforces HAM_CHAT_IMAGE_MAX_BYTES on embedded data URLs."""
+    monkeypatch.setenv("HAM_CHAT_IMAGE_MAX_BYTES", "20")
+    tiny_png = (
+        "data:image/png;base64,"
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+    )
+    res = client.post(
+        "/api/chat/stream",
+        json={
+            "messages": [
+                {
+                    "role": "user",
+                    "content": {
+                        "h": "ham_chat_user_v1",
+                        "text": "x",
+                        "images": [
+                            {"name": "big.png", "mime": "image/png", "data_url": tiny_png},
+                        ],
+                    },
+                },
+            ],
+        },
+    )
+    assert res.status_code == 422
+    detail = res.json().get("detail") if res.headers.get("content-type", "").startswith("application/json") else {}
+    msg = str(detail).lower()
+    assert "too large" in msg or "image" in msg
+
+
+def test_chat_stream_text_only_unchanged(mock_mode: None) -> None:
+    res = client.post(
+        "/api/chat/stream",
+        json={"messages": [{"role": "user", "content": "plain text only"}]},
+    )
+    assert res.status_code == 200
+    events = _parse_ndjson(res.text)
+    done = [e for e in events if e["type"] == "done"][0]
+    user_msgs = [m for m in done["messages"] if m["role"] == "user"]
+    assert user_msgs[-1]["content"] == "plain text only"
