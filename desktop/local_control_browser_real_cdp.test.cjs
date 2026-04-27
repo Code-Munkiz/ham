@@ -13,6 +13,7 @@ const {
   pickDebugPort,
   waitForDevtoolsJsonVersion,
   fetchPageDebuggerWebSocketUrl,
+  normalizeLoopbackWebSocketUrl,
   clampScrollDelta,
   clampWaitMs,
   isValidCandidateId,
@@ -94,6 +95,36 @@ test('fetchPageDebuggerWebSocketUrl: falls back to /devtools/page/ when type omi
   });
   const u = await fetchPageDebuggerWebSocketUrl(9222, fetchImpl);
   assert.equal(u, 'ws://127.0.0.1/devtools/page/99');
+});
+
+test('fetchPageDebuggerWebSocketUrl: tries /json when /json/list is not ok', async () => {
+  let calls = 0;
+  const fetchImpl = async (url) => {
+    calls += 1;
+    if (String(url).includes('/json/list')) {
+      return { ok: false, status: 404, json: async () => ({}) };
+    }
+    return {
+      ok: true,
+      json: async () => [
+        { type: 'page', url: 'about:blank', webSocketDebuggerUrl: 'ws://localhost:9333/devtools/page/z' },
+      ],
+    };
+  };
+  const u = await fetchPageDebuggerWebSocketUrl(9333, fetchImpl);
+  assert.equal(u, 'ws://localhost:9333/devtools/page/z');
+  assert.ok(calls >= 2);
+});
+
+test('normalizeLoopbackWebSocketUrl: localhost and ::1 become 127.0.0.1', () => {
+  assert.equal(
+    normalizeLoopbackWebSocketUrl('ws://localhost:9222/devtools/page/x'),
+    'ws://127.0.0.1:9222/devtools/page/x',
+  );
+  assert.equal(
+    normalizeLoopbackWebSocketUrl('ws://[::1]:9222/devtools/page/x'),
+    'ws://127.0.0.1:9222/devtools/page/x',
+  );
 });
 
 test('createRealBrowserCdpController: stop idempotent without spawn', () => {

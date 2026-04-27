@@ -777,14 +777,15 @@ ipcMain.handle('ham-desktop:local-control-browser-real-start-session', async () 
   });
   try {
     return await getRealBrowser().startSession();
-  } catch {
+  } catch (e) {
     appendAuditEvent({
       userDataPath: c.userDataPath,
       type: 'local_control_real_browser_error',
       fs: c.fs,
       path: c.path,
     });
-    return { ok: false, error: 'start_failed' };
+    const detail = e instanceof Error ? e.message : String(e);
+    return { ok: false, error: 'start_failed', detail };
   }
 });
 

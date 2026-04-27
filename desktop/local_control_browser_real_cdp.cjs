@@ -8,7 +8,7 @@ const { validateNavigateUrl, safeDisplayUrl } = require('./local_control_browser
 
 const MAX_SCREENSHOT_DATA_URL_CHARS = 1_500_000;
 const CDP_READY_MS = 45_000;
-const CDP_ATTACH_RETRY_MS = 15_000;
+const CDP_ATTACH_RETRY_MS = 25_000;
 const NAV_WAIT_MS = 35_000;
 
 /** GoHAM v1 Slice 1 — bounded interaction primitives (scroll / wait / enumerated click). */
@@ -240,6 +240,60 @@ function pickDebugPort() {
 }
 
 /**
+ * Force IPv4 loopback for CDP WebSocket URLs. Some Linux setups resolve `localhost`
+ * or `[::1]` inconsistently between HTTP (fetch) and the `ws` client, which yields
+ * flaky handshakes even when /json/list succeeds.
+ *
+ * @param {string} urlStr
+ * @returns {string}
+ */
+function normalizeLoopbackWebSocketUrl(urlStr) {
+  if (!urlStr || typeof urlStr !== 'string') return urlStr;
+  try {
+    const u = new URL(urlStr);
+    const h = u.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+    if (h === 'localhost' || h === '::1') {
+      u.hostname = '127.0.0.1';
+    }
+    return u.href;
+  } catch {
+    return urlStr;
+  }
+}
+
+/**
+ * @param {number} port
+ * @param {typeof fetch} fetchImpl
+ */
+async function fetchDebuggerTargets(port, fetchImpl) {
+  const listUrl = `http://127.0.0.1:${port}/json/list`;
+  const legacyUrl = `http://127.0.0.1:${port}/json`;
+  let r = await fetchImpl(listUrl);
+  if (!r.ok) {
+    r = await fetchImpl(legacyUrl);
+  }
+  if (!r.ok) throw new Error('json_list_failed');
+  const list = await r.json();
+  if (!Array.isArray(list)) throw new Error('json_list_invalid');
+  return list;
+}
+
+/**
+ * @param {unknown} err
+ * @returns {{ ok: false, error: string, detail: string }}
+ */
+function mapAttachExceptionToResult(err) {
+  const detail = err instanceof Error ? err.message : String(err);
+  if (detail === 'no_page_target') {
+    return { ok: false, error: 'cdp_no_page_target', detail };
+  }
+  if (detail === 'json_list_failed' || detail === 'json_list_invalid') {
+    return { ok: false, error: 'cdp_target_list_failed', detail };
+  }
+  return { ok: false, error: 'cdp_attach_failed', detail };
+}
+
+/**
  * @param {typeof fetch} fetchImpl
  */
 async function waitForDevtoolsJsonVersion(port, fetchImpl, deadlineMs) {
@@ -285,10 +339,7 @@ async function reloadPageViaCdp(cdp, navWaitMs) {
 }
 
 async function fetchPageDebuggerWebSocketUrl(port, fetchImpl) {
-  const r = await fetchImpl(`http://127.0.0.1:${port}/json/list`);
-  if (!r.ok) throw new Error('json_list_failed');
-  const list = await r.json();
-  if (!Array.isArray(list)) throw new Error('json_list_invalid');
+  const list = await fetchDebuggerTargets(port, fetchImpl);
   const isDevtools = (u) => String(u || '').startsWith('devtools://');
   let page = list.find(
     (t) =>
@@ -329,7 +380,10 @@ class CdpSession {
   async connect() {
     const WebSocket = require('ws');
     await new Promise((resolve, reject) => {
-      const ws = new WebSocket(this.wsUrl);
+      const ws = new WebSocket(this.wsUrl, {
+        perMessageDeflate: false,
+        handshakeTimeout: 15_000,
+      });
       this.ws = ws;
       ws.on('open', () => resolve());
       ws.on('error', (e) => reject(e instanceof Error ? e : new Error(String(e))));
@@ -627,8 +681,8 @@ function createRealBrowserCdpController(opts = {}) {
       try {
         await attachCdp();
         return { ok: true };
-      } catch {
-        return { ok: false, error: 'cdp_attach_failed' };
+      } catch (e) {
+        return mapAttachExceptionToResult(e);
       }
     }
 
@@ -694,9 +748,9 @@ function createRealBrowserCdpController(opts = {}) {
     }
     try {
       await attachCdp();
-    } catch {
+    } catch (e) {
       stopSession();
-      return { ok: false, error: 'cdp_attach_failed' };
+      return mapAttachExceptionToResult(e);
     }
 
     return { ok: true };
@@ -706,12 +760,13 @@ function createRealBrowserCdpController(opts = {}) {
     if (!debugPort) throw new Error('no_debug_port');
     const deadline = Date.now() + CDP_ATTACH_RETRY_MS;
     /** @type {Error} */
-    let lastErr = new Error('cdp_attach_failed');
+    let lastErr = new Error('cdp_attach_exhausted_retries');
     while (Date.now() < deadline) {
       /** @type {CdpSession | null} */
       let session = null;
       try {
-        const wsUrl = await fetchPageDebuggerWebSocketUrl(debugPort, fetchImpl);
+        const wsUrlRaw = await fetchPageDebuggerWebSocketUrl(debugPort, fetchImpl);
+        const wsUrl = normalizeLoopbackWebSocketUrl(wsUrlRaw);
         session = new CdpSession(wsUrl);
         await session.connect();
         await session.send('Page.enable', {});
@@ -839,6 +894,8 @@ module.exports = {
   MAX_SCREENSHOT_DATA_URL_CHARS,
   pickDebugPort,
   waitForDevtoolsJsonVersion,
+  fetchDebuggerTargets,
+  normalizeLoopbackWebSocketUrl,
   fetchPageDebuggerWebSocketUrl,
   clampScrollDelta,
   clampWaitMs,

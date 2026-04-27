@@ -54,6 +54,8 @@ function activate(steps: GoHamTrailStep[], id: string): GoHamTrailStep[] {
 export function sessionErrorMessage(r: unknown, label: string): string {
   if (!r || typeof r !== "object") return `${label} failed.`;
   const o = r as Record<string, unknown>;
+  const detailRaw = o.detail != null ? String(o.detail).trim() : "";
+  const detailBlock = detailRaw ? `\n\nTechnical detail: ${detailRaw}` : "";
   if (o.blocked === true) {
     return `${label} blocked: ${o.reason != null ? String(o.reason) : "(no reason)"}`;
   }
@@ -63,15 +65,24 @@ export function sessionErrorMessage(r: unknown, label: string): string {
   if (o.ok === false && o.error != null) {
     const err = String(o.error);
     if (err === "chromium_not_found") {
-      return `${label} failed: Chromium not found — install Chrome/Chromium or run scripts/ensure_chromium_for_desktop.sh, then restart HAM Desktop.`;
+      return `${label} failed: Chromium not found — install Chrome/Chromium or run scripts/ensure_chromium_for_desktop.sh, then restart HAM Desktop.${detailBlock}`;
     }
     if (err === "cdp_devtools_timeout") {
-      return `${label} failed: Chromium did not open its DevTools port in time. If this persists, set HAM_DESKTOP_CHROME_PATH to a known-good Chrome/Chromium binary and fully restart HAM Desktop.`;
+      return `${label} failed: Chromium did not open its DevTools port in time. If this persists, set HAM_DESKTOP_CHROME_PATH to a known-good Chrome/Chromium binary and fully restart HAM Desktop.${detailBlock}`;
+    }
+    if (err === "cdp_no_page_target") {
+      return `${label} failed: CDP did not report a page tab yet (no_page_target). Quit stray Chrome instances using the same profile, wait a few seconds, and try again — or fully restart HAM Desktop.${detailBlock}`;
+    }
+    if (err === "cdp_target_list_failed") {
+      return `${label} failed: Could not read DevTools target list from Chromium. Confirm Chrome/Chromium is not blocked by policy and that remote debugging is allowed.${detailBlock}`;
     }
     if (err === "cdp_attach_failed" || err === "cdp_startup_failed") {
-      return `${label} failed: could not attach to the browser over CDP (${err}). Update HAM Desktop to the latest build, quit other apps using ports 9200–9998, and confirm Chrome/Chromium runs locally.`;
+      return `${label} failed: could not attach to the browser over CDP (${err}). Update HAM Desktop, quit other apps using ports 9200–9998, and confirm Chrome/Chromium runs locally.${detailBlock}`;
     }
-    return `${label} failed: ${err}`;
+    if (err === "start_failed") {
+      return `${label} failed: Desktop hit an unexpected error starting the browser session.${detailBlock}`;
+    }
+    return `${label} failed: ${err}${detailBlock}`;
   }
   return `${label} failed.`;
 }
