@@ -19,6 +19,12 @@ export type UpstreamSettingsNavId =
   | "mcp"
   | "language";
 
+/** Sections rendered by `WorkspaceSettingsBridgePanel` (read-only / bridge parity). */
+export type WorkspaceSettingsBridgeSectionId = Extract<
+  UpstreamSettingsNavId,
+  "agent" | "routing" | "voice" | "appearance" | "chat" | "notifications" | "language"
+>;
+
 export const UPSTREAM_SETTINGS_NAV_ITEMS: ReadonlyArray<{
   id: UpstreamSettingsNavId;
   label: string;

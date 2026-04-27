@@ -7,6 +7,11 @@ import {
   parseWorkspaceSettingsSection,
   type UpstreamSettingsNavId,
 } from "./workspaceSettingsNavData";
+import {
+  WorkspaceSettingsCapabilityBadge,
+  WorkspaceSettingsReadOnlyCard,
+  WorkspaceSettingsSectionHeader,
+} from "./workspaceSettingsReadOnlyChrome";
 import { WorkspaceSettingsBridgePanel } from "./WorkspaceSettingsBridgePanel";
 import { WorkspaceSettingsSideNav } from "./WorkspaceSettingsSideNav";
 import { WorkspaceConnectionSection } from "./WorkspaceConnectionSection";
@@ -57,16 +62,23 @@ export function WorkspaceSettingsScreen() {
         return <WorkspaceSettingsBridgePanel section={s} />;
       case "mcp":
         return (
-          <p className="text-[13px] leading-relaxed text-white/45">
-            Open{" "}
-            <Link
-              className="text-[#7dd3fc] underline decoration-white/10 underline-offset-2 hover:decoration-[#7dd3fc]/50"
-              to="/workspace/settings/mcp"
-            >
-              MCP servers
-            </Link>{" "}
-            for the same layout as upstream.
-          </p>
+          <WorkspaceSettingsReadOnlyCard>
+            <WorkspaceSettingsSectionHeader
+              title="MCP servers"
+              subtitle="Upstream uses a dedicated MCP route. HAM mirrors that with a full MCP tools page; this section entry is a shortcut — server installation and writes stay on that screen."
+              badge={<WorkspaceSettingsCapabilityBadge>Managed in MCP page</WorkspaceSettingsCapabilityBadge>}
+            />
+            <p className="mt-4 text-[13px] leading-relaxed text-white/45">
+              Open{" "}
+              <Link
+                className="text-[#7dd3fc] underline decoration-white/10 underline-offset-2 hover:decoration-[#7dd3fc]/50"
+                to="/workspace/settings/mcp"
+              >
+                MCP servers
+              </Link>{" "}
+              for tools, extensions, and allowlisted configuration (read-only vs low-risk flows per HAM policy).
+            </p>
+          </WorkspaceSettingsReadOnlyCard>
         );
       default:
         return <WorkspaceModelProviderSection />;
