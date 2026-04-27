@@ -46,6 +46,8 @@ interface WorkspaceVoiceMessageInputProps {
   disabledReason?: string;
   /** Optional parent hook to request stop from external UI (banner/keyboard fallback). */
   onStopRecorderReady?: (handler: (() => void) | null) => void;
+  /** Notify parent when user requested stop from any input path. */
+  onStopRequested?: () => void;
 }
 
 export function WorkspaceVoiceMessageInput(props: WorkspaceVoiceMessageInputProps) {
@@ -59,6 +61,7 @@ export function WorkspaceVoiceMessageInput(props: WorkspaceVoiceMessageInputProp
     disabled = false,
     disabledReason,
     onStopRecorderReady,
+    onStopRequested,
   } = props;
 
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
@@ -116,9 +119,10 @@ export function WorkspaceVoiceMessageInput(props: WorkspaceVoiceMessageInputProp
         isRecording,
         disabled,
       });
+      onStopRequested?.();
       stopRecording();
     },
-    [disabled, isRecording, stopRecording],
+    [disabled, isRecording, onStopRequested, stopRecording],
   );
 
   React.useEffect(() => {

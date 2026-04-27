@@ -400,6 +400,12 @@ export function useVoiceRecorder(props: UseVoiceRecorderProps = {}) {
       });
       return;
     }
+    // Move UI out of "recording" immediately on stop request; do not wait for onstop.
+    setState((prev) => ({
+      ...prev,
+      isRecording: false,
+      isPaused: false,
+    }));
     try {
       rec.stop();
       pushVoiceDebug({
