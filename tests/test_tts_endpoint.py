@@ -76,6 +76,22 @@ def test_tts_generate_rejects_unknown_voice(client: TestClient, monkeypatch: pyt
     assert r.status_code == 400
 
 
+def test_tts_generate_safe_500_detail_no_leak(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HAM_TTS_ENABLED", "1")
+
+    async def fail_generate(self, *args, **kwargs):  # noqa: ANN001, ANN002
+        raise RuntimeError("upstream-404-traceid-secret")
+
+    import src.api.tts_endpoint as te
+
+    monkeypatch.setattr(te.TextToSpeechEngine, "generate", fail_generate)
+    r = client.post("/api/tts/generate", json={"text": "Hello"})
+    assert r.status_code == 500
+    assert r.json().get("detail") == "TTS generation failed"
+    assert "traceid" not in r.text
+    assert "secret" not in r.text
+
+
 def test_tts_generate_returns_mp3_bytes(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HAM_TTS_ENABLED", "1")
 

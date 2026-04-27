@@ -2,13 +2,14 @@
 tts_endpoint.py
 
 Text-to-speech endpoint for Ham API.
-Uses Edge TTS (pure Python, Cloud Run compatible).
+Uses the ``edge-tts`` package (WebSocket to Microsoft; no stale HTTP Bing endpoint).
 
 Auth: no Clerk/operator gate on /api/tts/* (same posture as e.g. public health-style probes).
 Protect at the network edge (API allowlists, rate limits) if needed.
 """
 from __future__ import annotations
 
+import logging
 import os
 from typing import Any, Optional
 
@@ -17,6 +18,7 @@ from pydantic import BaseModel
 
 from models.edge_tts_wrapper import TextToSpeechEngine
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/tts", tags=["tts"])
 
 
@@ -107,5 +109,6 @@ async def generate_tts(request: TTSRequest) -> Response:
             media_type="audio/mpeg",
             headers={"Content-Disposition": "inline; filename=tts.mp3"},
         )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"TTS generation failed: {str(e)}")
+    except Exception:
+        logger.exception("TTS generate failed")
+        raise HTTPException(status_code=500, detail="TTS generation failed")

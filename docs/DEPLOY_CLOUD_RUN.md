@@ -44,6 +44,10 @@ The workspace UI still shows a recovery card for missing or permission-denied se
 
 Use a **different** GCP project for production when your org splits prod/staging; this repo documents **staging** IDs only.
 
+### TTS (`POST /api/tts/generate`)
+
+Synthesis uses the **`edge-tts`** PyPI package (WebSocket to Microsoft; same protocol as the Edge browser). The API host needs **outbound internet**; **`GET /api/tts/health`** only checks that the route and `HAM_TTS_ENABLED` are on — it does not prove Microsoft accepted the request. No API keys for Edge TTS.
+
 ## What you do in GCP (not automatable from this repo)
 
 1. Confirm you are in the right project: **`gcloud config set project clarity-staging-488201`** (or another project for a one-off).
