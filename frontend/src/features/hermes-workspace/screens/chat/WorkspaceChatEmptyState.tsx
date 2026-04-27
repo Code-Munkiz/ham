@@ -50,16 +50,17 @@ export function WorkspaceChatEmptyState({ onSuggestionClick }: WorkspaceChatEmpt
       className="hww-chat-empty flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center px-4 py-8"
     >
       <div className="flex max-w-xl flex-col items-center text-center">
-        <div className="relative mb-6">
+        <div className="mb-6 flex justify-center">
+          {/*
+            Same asset + same presentation as the sidebar top brand (`WorkspaceShell`):
+            no bordered “card” frame — that was making ham-app-moon read like a wrong thumbnail.
+          */}
           <img
             src={avatarSrc}
             alt=""
-            className="relative size-20 rounded-md object-contain"
-            style={{
-              border: "1px solid var(--hww-chat-border, rgba(255,255,255,0.12))",
-              padding: "4px",
-              background: "var(--hww-chat-card, rgba(255,255,255,0.04))",
-            }}
+            className="h-7 w-7 shrink-0 object-contain opacity-95"
+            width={28}
+            height={28}
           />
         </div>
         <p className="hww-chat-micro-label mb-2 text-[11px] font-medium uppercase tracking-[0.12em] text-white/50">
