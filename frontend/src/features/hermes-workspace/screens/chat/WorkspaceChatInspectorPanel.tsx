@@ -123,7 +123,7 @@ function LogsBody({ events }: { events: WorkspaceInspectorEvent[] }) {
                 {e.status}
               </span>
             </div>
-            <p className="mt-1 break-all text-white/50">{meta}</p>
+            <p className="mt-1 whitespace-pre-wrap break-words text-white/50">{meta}</p>
           </li>
         );
       })}

@@ -25,6 +25,7 @@ import { WorkspaceChatComposer } from "./WorkspaceChatComposer";
 import { WorkspaceChatInspectorPanel } from "./WorkspaceChatInspectorPanel";
 import {
   appendInspectorEvent,
+  patchInspectorEventsSessionId,
   safeInspectorErrorMessage,
   type WorkspaceInspectorEvent,
 } from "./workspaceInspectorEvents";
@@ -68,6 +69,8 @@ export function WorkspaceChatScreen() {
   const [voiceTranscribing, setVoiceTranscribing] = React.useState(false);
   const [inspectorOpen, setInspectorOpen] = React.useState(false);
   const [inspectorEvents, setInspectorEvents] = React.useState<WorkspaceInspectorEvent[]>([]);
+  /** When set, deep-link effect must not call `loadFromApi` for this session while the stream turn is active. */
+  const streamTurnSessionRef = React.useRef<string | null>(null);
   const endRef = React.useRef<HTMLDivElement | null>(null);
   const listWrapRef = React.useRef<HTMLDivElement | null>(null);
 
@@ -155,6 +158,7 @@ export function WorkspaceChatScreen() {
   React.useEffect(() => {
     const s = searchParams.get("session");
     if (!s) {
+      streamTurnSessionRef.current = null;
       if (sessionId) {
         setSessionId(null);
         setMessages([]);
@@ -163,8 +167,11 @@ export function WorkspaceChatScreen() {
       return;
     }
     if (s === sessionId) return;
+    if (sending && streamTurnSessionRef.current === s) {
+      return;
+    }
     void loadFromApi(s);
-  }, [searchParams, sessionId, loadFromApi]);
+  }, [searchParams, sessionId, sending, loadFromApi]);
 
   const startNew = React.useCallback(() => {
     setSessionId(null);
@@ -248,6 +255,7 @@ export function WorkspaceChatScreen() {
       setAttachments([]);
       setLoadErr(null);
       setSending(true);
+      streamTurnSessionRef.current = null;
       const priorSession = sessionId;
       const userRow: HwwMsgRow = {
         id: `hww-user-${Date.now()}`,
@@ -268,7 +276,7 @@ export function WorkspaceChatScreen() {
           atIso: new Date().toISOString(),
           kind: "user_message_sent",
           status: "info",
-          summary: `You sent a message (${trimmed.length} character${trimmed.length === 1 ? "" : "s"})`,
+          summary: `User message sent (${trimmed.length} character${trimmed.length === 1 ? "" : "s"})`,
           meta: { message_id: userRow.id, char_count: trimmed.length },
         }),
       );
@@ -277,7 +285,7 @@ export function WorkspaceChatScreen() {
           atIso: new Date().toISOString(),
           kind: "assistant_stream_started",
           status: "info",
-          summary: "Assistant response started",
+          summary: "Assistant stream started",
           meta: { message_id: assistantPlaceId },
         }),
       );
@@ -295,24 +303,23 @@ export function WorkspaceChatScreen() {
           },
           {
             onSession: (sid) => {
+              streamTurnSessionRef.current = sid;
               setSessionId(sid);
               navigate(
                 { pathname: "/workspace/chat", search: `?session=${encodeURIComponent(sid)}` },
                 { replace: true },
               );
-              if (sid !== priorSession) {
-                setInspectorEvents((prev) =>
-                  appendInspectorEvent(prev, {
-                    atIso: new Date().toISOString(),
-                    kind: "session_assigned",
-                    status: "ok",
-                    summary: priorSession
-                      ? `Session updated (${sid.slice(0, 8)}…)`
-                      : `Session started (${sid.slice(0, 8)}…)`,
-                    meta: { session_id: sid },
-                  }),
-                );
-              }
+              setInspectorEvents((prev) => {
+                const patched = patchInspectorEventsSessionId(prev, sid);
+                if (sid === priorSession) return patched;
+                return appendInspectorEvent(patched, {
+                  atIso: new Date().toISOString(),
+                  kind: "session_assigned",
+                  status: "ok",
+                  summary: `Session assigned (${sid.slice(0, 8)}…)`,
+                  meta: { session_id: sid },
+                });
+              });
             },
             onDelta: (delta) => {
               setMessages((prev) =>
@@ -339,7 +346,7 @@ export function WorkspaceChatScreen() {
             kind: "assistant_response_completed",
             status: res.gateway_error ? "warning" : "ok",
             summary: res.gateway_error
-              ? `Assistant response completed (gateway: ${res.gateway_error.code})`
+              ? `Assistant response completed — gateway warning: ${res.gateway_error.code}`
               : `Assistant response completed (${assistantChars} character${assistantChars === 1 ? "" : "s"})`,
             meta: {
               session_id: res.session_id,
@@ -392,6 +399,7 @@ export function WorkspaceChatScreen() {
         }
         setMessages((prev) => prev.filter((m) => m.id !== assistantPlaceId));
       } finally {
+        streamTurnSessionRef.current = null;
         setSending(false);
       }
     },

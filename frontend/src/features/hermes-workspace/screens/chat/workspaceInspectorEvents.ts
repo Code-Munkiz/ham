@@ -51,3 +51,18 @@ export function appendInspectorEvent(
   const next = [...prev, row];
   return next.length > MAX_EVENTS ? next.slice(-MAX_EVENTS) : next;
 }
+
+/** Fill `meta.session_id` on rows that are missing it (live turn before server assigns id). */
+export function patchInspectorEventsSessionId(
+  prev: WorkspaceInspectorEvent[],
+  sessionId: string,
+): WorkspaceInspectorEvent[] {
+  return prev.map((e) => {
+    const sid = e.meta?.session_id;
+    if (sid != null && sid !== "") return e;
+    return {
+      ...e,
+      meta: { ...e.meta, session_id: sessionId },
+    };
+  });
+}
