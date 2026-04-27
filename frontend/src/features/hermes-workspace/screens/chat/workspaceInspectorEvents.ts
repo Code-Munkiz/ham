@@ -66,3 +66,65 @@ export function patchInspectorEventsSessionId(
     };
   });
 }
+
+/** Short label for the event type — used in the Inspector, not as raw `kind` snake_case. */
+export function humanInspectorKindLabel(kind: WorkspaceInspectorEventKind): string {
+  switch (kind) {
+    case "session_history_loaded":
+      return "History";
+    case "user_message_sent":
+      return "Your message";
+    case "assistant_stream_started":
+      return "Reply started";
+    case "session_assigned":
+      return "Session";
+    case "assistant_response_completed":
+      return "Reply";
+    case "stream_error":
+      return "Error";
+    default:
+      return "Event";
+  }
+}
+
+/**
+ * One optional detail line from meta, excluding internal ids.
+ * (Ids remain on the event for debugging via devtools, not in the main UI.)
+ */
+export function publicMetaSummary(meta: WorkspaceInspectorEvent["meta"]): string | null {
+  if (!meta || Object.keys(meta).length === 0) return null;
+  const parts: string[] = [];
+  const mc = meta.message_count;
+  if (typeof mc === "number" && mc > 0) {
+    parts.push(`${mc} message${mc === 1 ? "" : "s"}`);
+  }
+  const ac = meta.assistant_char_count;
+  if (typeof ac === "number" && ac > 0) {
+    parts.push(`reply ${ac} character${ac === 1 ? "" : "s"}`);
+  }
+  if (meta.gateway_code != null && String(meta.gateway_code).trim()) {
+    parts.push(`notice: ${String(meta.gateway_code)}`);
+  }
+  if (meta.code === "HAM_EMAIL_RESTRICTION") {
+    parts.push("access check");
+  } else if (meta.code != null && String(meta.code).trim() && meta.code !== "stream_error") {
+    parts.push(String(meta.code));
+  }
+  if (parts.length === 0) return null;
+  return parts.join(" · ");
+}
+
+export function statusLabelForUi(status: WorkspaceInspectorEventStatus): string {
+  switch (status) {
+    case "ok":
+      return "Done";
+    case "error":
+      return "Problem";
+    case "info":
+      return "Info";
+    case "warning":
+      return "Notice";
+    default:
+      return status;
+  }
+}

@@ -7,6 +7,11 @@ import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { WorkspaceInspectorEvent } from "./workspaceInspectorEvents";
+import {
+  humanInspectorKindLabel,
+  publicMetaSummary,
+  statusLabelForUi,
+} from "./workspaceInspectorEvents";
 
 type TabId = "activity" | "artifacts" | "files" | "memory" | "skills" | "logs";
 
@@ -58,76 +63,74 @@ function statusBadgeClass(status: WorkspaceInspectorEvent["status"]): string {
   }
 }
 
-function ActivityBody({ events }: { events: WorkspaceInspectorEvent[] }) {
+function InspectorEventList({
+  events,
+  emptyText,
+  showKindChip,
+}: {
+  events: WorkspaceInspectorEvent[];
+  emptyText: string;
+  showKindChip: boolean;
+}) {
   if (events.length === 0) {
     return (
       <div className="p-3">
-        <p className="text-[12px] leading-relaxed text-white/60">
-          No activity yet. Start a conversation to populate this timeline.
-        </p>
+        <p className="text-[12px] leading-relaxed text-white/60">{emptyText}</p>
       </div>
     );
   }
   return (
     <ul className="divide-y divide-white/[0.06]">
-      {events.map((e) => (
-        <li key={e.id} className="px-3 py-2.5">
-          <div className="flex items-start justify-between gap-2">
-            <p className="min-w-0 flex-1 text-[12px] leading-snug text-white/[0.88]">{e.summary}</p>
-            <span
-              className={cn(
-                "shrink-0 rounded px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide",
-                statusBadgeClass(e.status),
-              )}
-            >
-              {e.status}
-            </span>
-          </div>
-          <p className="mt-1 font-mono text-[10px] text-white/35">
-            {formatClock(e.atIso)}
-            {typeof e.meta?.session_id === "string" ? ` · ${String(e.meta.session_id).slice(0, 12)}…` : null}
-            {typeof e.meta?.message_id === "string" ? ` · msg ${String(e.meta.message_id).slice(0, 10)}…` : null}
-          </p>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function LogsBody({ events }: { events: WorkspaceInspectorEvent[] }) {
-  if (events.length === 0) {
-    return (
-      <div className="p-3">
-        <p className="text-[12px] leading-relaxed text-white/60">
-          No logs yet. Runtime events will appear after a chat turn.
-        </p>
-      </div>
-    );
-  }
-  return (
-    <ul className="space-y-2 p-3">
       {events.map((e) => {
-        const meta =
-          e.meta && Object.keys(e.meta).length > 0
-            ? JSON.stringify(e.meta, null, 0).replace(/","/g, '", "')
-            : "—";
+        const extra = publicMetaSummary(e.meta);
         return (
-          <li
-            key={e.id}
-            className="rounded-md border border-white/[0.06] bg-black/20 px-2 py-1.5 font-mono text-[10px] leading-relaxed text-white/70"
-          >
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-              <span className="text-[#ffb27a]/90">{e.kind}</span>
-              <span className="text-white/35">{e.atIso}</span>
-              <span className={cn("rounded px-1 text-[9px] uppercase", statusBadgeClass(e.status))}>
-                {e.status}
+          <li key={e.id} className="px-3 py-2.5">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                {showKindChip ? (
+                  <p className="mb-1 text-[10px] font-medium text-[#ffb27a]/85">
+                    {humanInspectorKindLabel(e.kind)}
+                  </p>
+                ) : null}
+                <p className="text-[12px] leading-snug text-white/[0.88]">{e.summary}</p>
+                <p className="mt-1 text-[10px] leading-relaxed text-white/40">
+                  {formatClock(e.atIso)}
+                  {extra ? <span className="text-white/35"> · {extra}</span> : null}
+                </p>
+              </div>
+              <span
+                className={cn(
+                  "shrink-0 rounded px-1.5 py-0.5 text-[9px] font-medium tracking-wide",
+                  statusBadgeClass(e.status),
+                )}
+              >
+                {statusLabelForUi(e.status)}
               </span>
             </div>
-            <p className="mt-1 whitespace-pre-wrap break-words text-white/50">{meta}</p>
           </li>
         );
       })}
     </ul>
+  );
+}
+
+function ActivityBody({ events }: { events: WorkspaceInspectorEvent[] }) {
+  return (
+    <InspectorEventList
+      events={events}
+      showKindChip={false}
+      emptyText="No activity yet. Start a conversation to populate this timeline."
+    />
+  );
+}
+
+function LogsBody({ events }: { events: WorkspaceInspectorEvent[] }) {
+  return (
+    <InspectorEventList
+      events={events}
+      showKindChip
+      emptyText="No events yet. They will show here after you send a message or load a session."
+    />
   );
 }
 
@@ -162,11 +165,9 @@ export function WorkspaceChatInspectorPanel({
         <div className="min-w-0">
           <h2 className="text-sm font-semibold text-white/90">Inspector</h2>
           {sessionId ? (
-            <p className="mt-0.5 truncate font-mono text-[10px] text-white/35" title={sessionId}>
-              Session {sessionId.slice(0, 12)}…
-            </p>
+            <p className="mt-0.5 truncate text-[10px] text-white/45">This chat is saved on the server</p>
           ) : (
-            <p className="mt-0.5 font-mono text-[10px] text-white/35">No session id yet</p>
+            <p className="mt-0.5 text-[10px] text-white/45">Start chatting to create a session</p>
           )}
         </div>
         <Button

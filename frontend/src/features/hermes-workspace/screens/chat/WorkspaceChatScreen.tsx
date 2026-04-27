@@ -49,8 +49,25 @@ function timeStr() {
   });
 }
 
-function shortId(id: string, n = 8) {
-  return id.length <= n ? id : `${id.slice(0, n)}…`;
+function workspaceChatSubtitle(opts: {
+  sessionLoadFailed: boolean;
+  staleSessionParam: string | null;
+  sessionId: string | null;
+  messages: HwwMsgRow[];
+}): string {
+  if (opts.sessionLoadFailed && opts.staleSessionParam) {
+    return "This link may be expired or the chat was removed. Start a new chat or pick one from the sidebar.";
+  }
+  if (opts.sessionId) {
+    const firstUser = opts.messages.find((m) => m.role === "user");
+    const raw = firstUser?.content?.trim();
+    if (raw) {
+      const oneLine = raw.replace(/\s+/g, " ");
+      return oneLine.length > 72 ? `${oneLine.slice(0, 72)}…` : oneLine;
+    }
+    return "Send a message to start this conversation.";
+  }
+  return "Messages you send are stored by HAM after the first reply.";
 }
 
 export function WorkspaceChatScreen() {
@@ -337,7 +354,7 @@ export function WorkspaceChatScreen() {
                   atIso: new Date().toISOString(),
                   kind: "session_assigned",
                   status: "ok",
-                  summary: `Session assigned (${sid.slice(0, 8)}…)`,
+                  summary: "Chat session is ready — your link is saved",
                   meta: { session_id: sid },
                 });
               });
@@ -447,22 +464,20 @@ export function WorkspaceChatScreen() {
   const isStreaming =
     sending && last?.role === "assistant" && !(last?.content || "").trim();
 
+  const headerSubtitle = workspaceChatSubtitle({
+    sessionLoadFailed,
+    staleSessionParam,
+    sessionId,
+    messages,
+  });
+
   return (
     <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col md:flex-row">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <header className="hww-chat-header flex shrink-0 items-start justify-between gap-3 border-b border-white/[0.06] bg-[#040d14]/80 px-4 py-3 backdrop-blur-sm md:px-8">
           <div className="min-w-0">
             <h1 className="text-[15px] font-semibold tracking-tight text-white/[0.95]">{headerTitle}</h1>
-            <p
-              className="mt-0.5 truncate font-mono text-[11px] text-white/40"
-              title={(sessionId ?? staleSessionParam) ?? undefined}
-            >
-              {sessionLoadFailed && staleSessionParam
-                ? `Link: ${shortId(staleSessionParam, 12)} · open a new session or pick one from the sidebar`
-                : sessionId
-                  ? shortId(sessionId, 12)
-                  : "No session selected · messages stay on-device via HAM"}
-            </p>
+            <p className="mt-0.5 truncate text-[11px] leading-snug text-white/50">{headerSubtitle}</p>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
             <button
@@ -484,7 +499,6 @@ export function WorkspaceChatScreen() {
               ) : (
                 <PanelRight className="h-3.5 w-3.5" strokeWidth={1.5} />
               )}
-              <span className="font-mono text-[10px] text-white/60">{"{ }"}</span>
               <span className="hidden sm:inline">Inspector</span>
             </button>
             <button
@@ -511,8 +525,8 @@ export function WorkspaceChatScreen() {
                 <h2 className="text-[14px] font-semibold text-amber-100/95">Could not open this session</h2>
                 <p className="mt-2 text-[13px] leading-relaxed text-white/70">{loadErr}</p>
                 {staleSessionParam ? (
-                  <p className="mt-2 font-mono text-[11px] text-white/40" title={staleSessionParam}>
-                    Session id: {shortId(staleSessionParam, 14)}
+                  <p className="mt-2 text-[11px] text-white/45">
+                    If you need help, support can use the link in your browser’s address bar.
                   </p>
                 ) : null}
                 <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
