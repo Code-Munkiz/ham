@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { knowledgeNavItems, mainNavItems, workspacePathTitle } from "./workspaceNavConfig";
 import { workspaceSessionAdapter } from "./workspaceAdapters";
 import type { ChatSessionSummary } from "./workspaceTypes";
+import { sessionCardSubtitle, sessionCardTitle } from "./utils/sessionListFormat";
 import { WorkspaceMobileTabBar } from "./WorkspaceMobileTabBar";
 import { WorkspaceTerminalView } from "./screens/terminal/WorkspaceTerminalView";
 
@@ -185,6 +186,7 @@ function WorkspaceSideNav({
       <ul className={ulClass} aria-label="Chat sessions">
         {filteredSessions.map((s) => {
           const active = activeSessionId === s.session_id;
+          const sub = sessionCardSubtitle(s.turn_count, s.created_at);
           return (
             <li key={s.session_id}>
               <Link
@@ -197,18 +199,8 @@ function WorkspaceSideNav({
                     : "border-white/[0.04] bg-black/20 text-white/70 hover:border-white/10 hover:bg-white/[0.04]",
                 )}
               >
-                <p className="line-clamp-2 text-[11px] leading-snug text-white/85">
-                  {s.preview?.trim() || "Untitled turn"}
-                </p>
-                <p className="mt-0.5 truncate font-mono text-[9px] text-white/35" title={s.session_id}>
-                  {s.session_id}
-                </p>
-                {s.created_at || s.turn_count > 0 ? (
-                  <p className="mt-0.5 text-[9px] text-white/30">
-                    {s.turn_count > 0 ? `${s.turn_count} turns` : ""}
-                    {s.created_at ? `${s.turn_count > 0 ? " · " : ""}${s.created_at}` : null}
-                  </p>
-                ) : null}
+                <p className="line-clamp-2 text-[11px] leading-snug text-white/85">{sessionCardTitle(s.preview)}</p>
+                {sub ? <p className="mt-0.5 truncate text-[10px] text-white/45">{sub}</p> : null}
               </Link>
             </li>
           );
@@ -281,10 +273,9 @@ function WorkspaceSideNav({
                 type="search"
                 value={sessionFilter}
                 onChange={(e) => onSessionFilterChange(e.target.value)}
-                placeholder="Filter by preview, id, date…"
+                placeholder="Search sessions…"
                 className="hww-input w-full rounded-lg"
                 autoComplete="off"
-                title="Client-side filter over the HAM session list"
               />
             </div>
           </div>
