@@ -29,7 +29,7 @@ test('platformDerived: darwin unsupported', () => {
   });
 });
 
-test('buildLocalControlStatus: enabled false, capabilities not_implemented', () => {
+test('buildLocalControlStatus: phase 2 skeleton, enabled false, capabilities not_implemented', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ham-lc-test-'));
   try {
     const st = buildLocalControlStatus({
@@ -41,6 +41,7 @@ test('buildLocalControlStatus: enabled false, capabilities not_implemented', () 
     });
     assert.equal(st.kind, 'ham_desktop_local_control_status');
     assert.equal(st.phase, PHASE);
+    assert.equal(st.phase, 'policy_audit_kill_switch_only');
     assert.equal(st.enabled, false);
     assert.equal(st.available, true);
     assert.equal(st.supported_platform, true);
@@ -49,6 +50,12 @@ test('buildLocalControlStatus: enabled false, capabilities not_implemented', () 
       assert.equal(v, 'not_implemented');
     }
     assert.equal(st.paths.user_data_writable, true);
+    assert.ok(st.policy);
+    assert.equal(st.policy.enabled, false);
+    assert.equal(st.policy.default_deny, true);
+    assert.equal(st.kill_switch.engaged, true);
+    assert.ok(st.audit);
+    assert.equal(st.audit.redacted, true);
     assert.ok(Array.isArray(st.warnings));
     assert.ok(!JSON.stringify(st).includes(tmp), 'payload must not leak userData path');
   } finally {

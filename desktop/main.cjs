@@ -6,6 +6,8 @@ const path = require('node:path');
 const fs = require('node:fs');
 
 const { buildLocalControlStatus } = require('./local_control_status.cjs');
+const { loadPolicy, getPolicyStatusPayload, engageKillSwitch } = require('./local_control_policy.cjs');
+const { getAuditStatus, appendAuditEvent } = require('./local_control_audit.cjs');
 
 const CONFIG_FILENAME = 'ham-desktop-config.json';
 
@@ -283,20 +285,112 @@ ipcMain.handle('ham-desktop:open-hermes-upstream-docs', () => {
   return shell.openExternal(u || 'https://github.com/NousResearch/hermes-agent').then(() => ({ ok: true }));
 });
 
-/** Read-only Local Control Phase 1 doctor — no paths or env returned (booleans only). */
-ipcMain.handle('ham-desktop:local-control-get-status', () => {
-  const userData = app.getPath('userData');
-  return buildLocalControlStatus({
+function localControlPaths() {
+  return {
+    userDataPath: app.getPath('userData'),
     platform: process.platform,
-    userDataPath: userData,
+    fs,
+    path,
+  };
+}
+
+/** Local Control Phase 2 — full status; appends redacted audit line. */
+ipcMain.handle('ham-desktop:local-control-get-status', () => {
+  const c = localControlPaths();
+  const st = buildLocalControlStatus({
+    platform: c.platform,
+    userDataPath: c.userDataPath,
     security: {
       context_isolation: true,
       node_integration: false,
       sandbox: true,
     },
-    fs,
-    path,
+    fs: c.fs,
+    path: c.path,
   });
+  appendAuditEvent({
+    userDataPath: c.userDataPath,
+    type: 'local_control_status_read',
+    fs: c.fs,
+    path: c.path,
+  });
+  return st;
+});
+
+ipcMain.handle('ham-desktop:local-control-get-policy-status', () => {
+  const c = localControlPaths();
+  const { policy, persisted } = loadPolicy({
+    userDataPath: c.userDataPath,
+    platform: c.platform,
+    fs: c.fs,
+    path: c.path,
+  });
+  appendAuditEvent({
+    userDataPath: c.userDataPath,
+    type: 'local_control_policy_read',
+    fs: c.fs,
+    path: c.path,
+  });
+  return getPolicyStatusPayload(policy, { persisted });
+});
+
+ipcMain.handle('ham-desktop:local-control-get-audit-status', () => {
+  const c = localControlPaths();
+  const st = getAuditStatus({
+    userDataPath: c.userDataPath,
+    fs: c.fs,
+    path: c.path,
+  });
+  appendAuditEvent({
+    userDataPath: c.userDataPath,
+    type: 'local_control_audit_status_read',
+    fs: c.fs,
+    path: c.path,
+  });
+  return st;
+});
+
+ipcMain.handle('ham-desktop:local-control-get-kill-switch-status', () => {
+  const c = localControlPaths();
+  const { policy } = loadPolicy({
+    userDataPath: c.userDataPath,
+    platform: c.platform,
+    fs: c.fs,
+    path: c.path,
+  });
+  appendAuditEvent({
+    userDataPath: c.userDataPath,
+    type: 'local_control_kill_switch_status_read',
+    fs: c.fs,
+    path: c.path,
+  });
+  return {
+    kind: 'ham_desktop_local_control_kill_switch_status',
+    engaged: policy.kill_switch.engaged,
+    reason: policy.kill_switch.reason,
+  };
+});
+
+/** Engage only — idempotent; persists safer policy; never disengages. */
+ipcMain.handle('ham-desktop:local-control-engage-kill-switch', () => {
+  const c = localControlPaths();
+  const r = engageKillSwitch({
+    userDataPath: c.userDataPath,
+    platform: c.platform,
+    fs: c.fs,
+    path: c.path,
+  });
+  appendAuditEvent({
+    userDataPath: c.userDataPath,
+    type: 'local_control_kill_switch_engaged',
+    fs: c.fs,
+    path: c.path,
+  });
+  return {
+    ok: true,
+    changed: r.changed,
+    kill_switch: r.policy.kill_switch,
+  };
 });
 
 app.whenReady().then(() => {

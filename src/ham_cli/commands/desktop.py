@@ -15,6 +15,43 @@ from src.ham_cli.util import err, find_repo_root
 _PACK_LINUX = ["npm", "run", "pack:linux"]
 _PACK_WIN = ["npm", "run", "pack:win"]
 
+_LC_PHASE2 = "policy_audit_kill_switch_only"
+
+
+def _cli_local_control_policy_skeleton() -> dict[str, object]:
+    return {
+        "kind": "ham_cli_desktop_local_control_policy_skeleton",
+        "schema_version": 1,
+        "enabled": False,
+        "phase": _LC_PHASE2,
+        "default_deny": True,
+        "allowlist_counts": {
+            "browser_origins": 0,
+            "filesystem_roots": 0,
+            "shell_commands": 0,
+            "mcp_servers": 0,
+        },
+        "permissions": {
+            "browser_automation": False,
+            "filesystem_access": False,
+            "shell_commands": False,
+            "app_window_control": False,
+            "mcp_adapters": False,
+        },
+        "kill_switch": {"engaged": True, "reason": "default_disabled"},
+        "note": "Live policy.json is under Electron userData; use HAM Desktop for persisted status.",
+    }
+
+
+def _cli_local_control_audit_skeleton() -> dict[str, object]:
+    return {
+        "kind": "ham_cli_desktop_local_control_audit_skeleton",
+        "schema_version": 1,
+        "phase": _LC_PHASE2,
+        "note": "Redacted JSONL audit is appended only by HAM Desktop (main process).",
+        "redacted": True,
+    }
+
 
 def _run_pack(script: str, npm_args: list[str]) -> None:
     repo = find_repo_root()
@@ -65,15 +102,18 @@ def run_desktop_local_control_status(*, json_out: bool) -> None:
 
     payload = {
         "kind": "ham_cli_desktop_local_control_status",
-        "schema_version": 1,
-        "phase": "doctor_status_only",
+        "schema_version": 2,
+        "phase": _LC_PHASE2,
         "enabled": False,
         "spec_present": spec_present,
         "spec_relative_path": str(spec_rel).replace("\\", "/"),
         "platform": plat,
         "supported_platform": supported,
         "platform_status": platform_status,
-        "note": "CLI checks repo spec + OS only. HAM Desktop → Settings → HAM + Hermes setup shows live IPC status.",
+        "policy": _cli_local_control_policy_skeleton(),
+        "audit": _cli_local_control_audit_skeleton(),
+        "kill_switch": {"engaged": True, "reason": "default_disabled"},
+        "note": "CLI checks repo spec + OS + static Phase 2 skeleton. HAM Desktop → Settings → HAM + Hermes shows live IPC.",
     }
     if json_out:
         typer.echo(json.dumps(payload, indent=2))
@@ -83,4 +123,34 @@ def run_desktop_local_control_status(*, json_out: bool) -> None:
     typer.echo(f"  Phase: {payload['phase']} · enabled: {payload['enabled']} (default)")
     typer.echo(f"  Spec {spec_rel}: {'present' if spec_present else 'missing'}")
     typer.echo(f"  Platform: {plat} · tier: {platform_status} · supported: {supported}")
+    typer.echo("  Kill switch (CLI mirror): engaged · reason default_disabled")
     typer.echo(f"  {payload['note']}")
+
+
+def run_desktop_local_control_policy(*, json_out: bool) -> None:
+    """Static Phase 2 policy skeleton (no Electron userData access from CLI)."""
+    p = _cli_local_control_policy_skeleton()
+    if json_out:
+        typer.echo(json.dumps(p, indent=2))
+        return
+    typer.echo("Desktop Local Control — policy skeleton (CLI mirror, read-only)")
+    typer.echo(f"  Phase: {p['phase']} · enabled: {p['enabled']} · default_deny: {p['default_deny']}")
+    typer.echo(f"  {p['note']}")
+
+
+def run_desktop_local_control_audit(*, json_out: bool) -> None:
+    """Static audit placeholder (live JSONL is desktop-only)."""
+    a = _cli_local_control_audit_skeleton()
+    if json_out:
+        typer.echo(json.dumps(a, indent=2))
+        return
+    typer.echo("Desktop Local Control — audit (CLI placeholder)")
+    typer.echo(f"  {a['note']}")
+
+
+def run_desktop_local_control_kill_switch_engage() -> None:
+    """Engage is desktop-only; CLI cannot persist Electron policy."""
+    typer.echo(
+        "Kill switch engage is not available from the CLI. "
+        "Open HAM Desktop → Settings → HAM + Hermes setup → Engage kill switch.",
+    )

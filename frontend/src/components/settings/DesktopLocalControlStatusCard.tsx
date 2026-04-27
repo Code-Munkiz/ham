@@ -1,8 +1,8 @@
 import * as React from "react";
-import { Shield, RefreshCw, ExternalLink, AlertCircle } from "lucide-react";
+import { Shield, RefreshCw, ExternalLink, AlertCircle, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
-  getDesktopBundleApi,
+  getHamDesktopLocalControlApi,
   type HamDesktopLocalControlStatus,
 } from "@/lib/ham/desktopBundleBridge";
 
@@ -19,15 +19,17 @@ export function DesktopLocalControlStatusCard() {
   const [status, setStatus] = React.useState<HamDesktopLocalControlStatus | null>(null);
   const [err, setErr] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(false);
+  const [engageBusy, setEngageBusy] = React.useState(false);
+
+  const lc = getHamDesktopLocalControlApi();
 
   const load = React.useCallback(async () => {
-    const b = getDesktopBundleApi();
-    const getStatus = b?.localControl?.getStatus;
-    if (typeof getStatus !== "function") return;
+    const api = getHamDesktopLocalControlApi();
+    if (typeof api?.getStatus !== "function") return;
     setLoading(true);
     setErr(null);
     try {
-      const s = await getStatus();
+      const s = await api.getStatus();
       setStatus(s);
     } catch (e) {
       setStatus(null);
@@ -41,17 +43,31 @@ export function DesktopLocalControlStatusCard() {
     void load();
   }, [load]);
 
-  const b = getDesktopBundleApi();
-  if (typeof b?.localControl?.getStatus !== "function") {
+  if (!lc || typeof lc.getStatus !== "function") {
     return null;
   }
+
+  const onEngage = async () => {
+    const api = getHamDesktopLocalControlApi();
+    if (typeof api?.engageKillSwitch !== "function") return;
+    setEngageBusy(true);
+    setErr(null);
+    try {
+      await api.engageKillSwitch();
+      await load();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Engage kill switch failed");
+    } finally {
+      setEngageBusy(false);
+    }
+  };
 
   return (
     <div className="rounded-xl border border-white/10 bg-[#0c0c0c] p-5 space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-white/35">
           <Shield className="h-4 w-4 text-[#FF6B00]" />
-          Local Control (Phase 1 — doctor only)
+          Local Control (Phase 2 — policy / audit / kill switch)
         </div>
         <button
           type="button"
@@ -65,8 +81,24 @@ export function DesktopLocalControlStatusCard() {
       </div>
 
       <p className="text-[9px] text-white/35 leading-relaxed">
-        Read-only readiness from the Electron main process. Local Control stays <span className="text-white/55">disabled</span>{" "}
-        by default — no automation, shell, or filesystem control in this phase.
+        Local Control stays <span className="text-white/55">disabled</span> by default. Kill switch defaults{" "}
+        <span className="text-white/55">engaged</span> (safe). No automation, shell, filesystem, or browser control in this
+        phase.
+      </p>
+
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => void onEngage()}
+          disabled={engageBusy || loading}
+          className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-emerald-500/25 text-[10px] font-black uppercase tracking-widest text-emerald-200/90 hover:border-emerald-400/50 disabled:opacity-50"
+        >
+          <Lock className={cn("h-3.5 w-3.5", engageBusy && "animate-pulse")} />
+          Engage kill switch
+        </button>
+      </div>
+      <p className="text-[8px] text-white/25 leading-relaxed">
+        Engage is idempotent and only makes policy safer (never disables the kill switch from this UI).
       </p>
 
       {err ? (
@@ -81,6 +113,19 @@ export function DesktopLocalControlStatusCard() {
           <div className="flex flex-wrap gap-x-2">
             <dt className="text-white/35 shrink-0">Enabled</dt>
             <dd className="font-mono text-white/70">{status.enabled ? "yes" : "no (default)"}</dd>
+          </div>
+          <div className="flex flex-wrap gap-x-2">
+            <dt className="text-white/35 shrink-0">Kill switch</dt>
+            <dd>
+              {status.kill_switch.engaged ? "engaged" : "engaged (unexpected — refresh)"} ·{" "}
+              <span className="font-mono text-[10px] text-white/45">{status.kill_switch.reason}</span>
+            </dd>
+          </div>
+          <div className="flex flex-wrap gap-x-2">
+            <dt className="text-white/35 shrink-0">Policy</dt>
+            <dd>
+              Default deny · persisted: {status.policy.persisted ? "yes" : "no (in-memory default)"}
+            </dd>
           </div>
           <div className="flex flex-wrap gap-x-2">
             <dt className="text-white/35 shrink-0">Platform</dt>
@@ -98,6 +143,16 @@ export function DesktopLocalControlStatusCard() {
             </dd>
           </div>
           <div className="flex flex-wrap gap-x-2">
+            <dt className="text-white/35 shrink-0">Audit log</dt>
+            <dd>
+              available: {status.audit.available ? "yes" : "no"} · writable: {status.audit.writable ? "yes" : "no"}
+              {status.audit.event_count_estimate != null
+                ? ` · events (est.): ${status.audit.event_count_estimate}`
+                : ""}{" "}
+              · redacted
+            </dd>
+          </div>
+          <div className="flex flex-wrap gap-x-2">
             <dt className="text-white/35 shrink-0">User data writable</dt>
             <dd>{status.paths.user_data_writable ? "yes" : "no"}</dd>
           </div>
@@ -106,8 +161,8 @@ export function DesktopLocalControlStatusCard() {
             <dd>{status.paths.audit_log_dir_writable ? "yes" : "no"}</dd>
           </div>
           <div className="flex flex-wrap gap-x-2">
-            <dt className="text-white/35 shrink-0">Automation</dt>
-            <dd>None enabled (all capabilities not_implemented)</dd>
+            <dt className="text-white/35 shrink-0">Capabilities</dt>
+            <dd>not implemented (no automation)</dd>
           </div>
           {status.warnings.length ? (
             <div className="flex flex-wrap gap-x-2">

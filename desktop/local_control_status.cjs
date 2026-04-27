@@ -1,12 +1,15 @@
 'use strict';
 
 /**
- * Desktop Local Control Phase 1 — read-only status/doctor payload (main process).
- * No automation, paths are never returned to the renderer (booleans only under `paths`).
+ * Desktop Local Control — read-only status/doctor payload (main process).
+ * Phase 2: policy / audit / kill-switch skeleton; paths are never returned (booleans only under `paths`).
  */
 
-const SCHEMA_VERSION = 1;
-const PHASE = 'doctor_status_only';
+const { loadPolicy, getPolicyStatusPayload } = require('./local_control_policy.cjs');
+const { getAuditStatus } = require('./local_control_audit.cjs');
+
+const SCHEMA_VERSION = 2;
+const PHASE = 'policy_audit_kill_switch_only';
 
 /** @param {string} platform process.platform */
 function platformDerived(platform) {
@@ -57,6 +60,10 @@ function buildLocalControlStatus(opts) {
     warnings.push('platform_out_of_scope');
   }
 
+  const { policy, persisted } = loadPolicy({ userDataPath, platform, fs, path });
+  const policy_status = getPolicyStatusPayload(policy, { persisted });
+  const audit_status = getAuditStatus({ userDataPath, fs, path });
+
   return {
     kind: 'ham_desktop_local_control_status',
     schema_version: SCHEMA_VERSION,
@@ -75,6 +82,12 @@ function buildLocalControlStatus(opts) {
       user_data_writable,
       audit_log_dir_writable,
     },
+    policy: policy_status,
+    audit: audit_status,
+    kill_switch: {
+      engaged: policy.kill_switch.engaged,
+      reason: policy.kill_switch.reason,
+    },
     capabilities: {
       browser_automation: 'not_implemented',
       filesystem_access: 'not_implemented',
@@ -84,9 +97,10 @@ function buildLocalControlStatus(opts) {
     },
     warnings,
     non_goals: [
-      'no automation in phase 1',
+      'no automation in phase 2',
       'no cloud-run browser control',
       'no war-room revival',
+      'no disengage kill_switch via product ui',
     ],
   };
 }

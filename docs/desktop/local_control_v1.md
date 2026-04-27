@@ -109,7 +109,7 @@ This is a **design target** for implementation phases; Phase 0 does not add IPC,
 |-------|--------|
 | **0** | **Docs + metadata alignment** (this spec, Computer Control Pack surgical updates, capability directory tags/backends). |
 | **1** | **Shipped:** read-only **`ham-desktop:local-control-get-status`** IPC + **HAM + Hermes setup** settings card + optional **`ham desktop local-control status`** CLI; **disabled by default**; no automation, generic shell, or filesystem IPC. |
-| **2** | **Permission model + audit log + kill switch** in desktop main (design implementation; renderer still bounded). |
+| **2** | **Shipped (skeleton):** persisted **`policy.json`** (default deny, **enabled false**), redacted **audit JSONL**, **kill switch** default engaged + **engage-only** IPC (`ham-desktop:local-control-engage-kill-switch`), expanded status + **`window.hamDesktop.localControl`** narrow bridge; CLI **`local-control policy` / `audit` / `kill-switch engage`** (mirror / noop); still **no** automation. |
 | **3** | **One narrow automation vertical on Linux** (explicitly scoped; still no generic shell/filesystem). |
 | **4** | **Windows parity** for that vertical + packaging hardening. |
 
