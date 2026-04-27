@@ -76,6 +76,9 @@ export function sessionErrorMessage(r: unknown, label: string): string {
     if (err === "cdp_target_list_failed") {
       return `${label} failed: Could not read DevTools target list from Chromium. Confirm Chrome/Chromium is not blocked by policy and that remote debugging is allowed.${detailBlock}`;
     }
+    if (err === "browser_exited_during_attach") {
+      return `${label} failed: The managed Chrome window exited or was closed before HAM finished connecting (CDP). Leave the automation window open, close duplicate Chrome profiles using the same HAM session, then try again.${detailBlock}`;
+    }
     if (err === "cdp_attach_failed" || err === "cdp_startup_failed") {
       return `${label} failed: could not attach to the browser over CDP (${err}). Update HAM Desktop, quit other apps using ports 9200–9998, and confirm Chrome/Chromium runs locally.${detailBlock}`;
     }

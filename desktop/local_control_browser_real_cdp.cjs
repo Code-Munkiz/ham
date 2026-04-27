@@ -290,6 +290,9 @@ function mapAttachExceptionToResult(err) {
   if (detail === 'json_list_failed' || detail === 'json_list_invalid') {
     return { ok: false, error: 'cdp_target_list_failed', detail };
   }
+  if (detail === 'managed_browser_exited_during_cdp_attach' || detail === 'cdp_debug_port_changed') {
+    return { ok: false, error: 'browser_exited_during_attach', detail };
+  }
   return { ok: false, error: 'cdp_attach_failed', detail };
 }
 
@@ -728,9 +731,18 @@ function createRealBrowserCdpController(opts = {}) {
     }
 
     debugPort = port;
-    child.on('exit', () => {
+    const spawnedProc = child;
+    const spawnedPort = port;
+    spawnedProc.on('exit', () => {
+      // A *previous* Chrome child's exit can fire after we've already spawned a replacement;
+      // without this guard we'd clear debugPort for the live session → :null CDP URLs.
+      if (child !== spawnedProc) {
+        return;
+      }
       child = null;
-      debugPort = null;
+      if (debugPort === spawnedPort) {
+        debugPort = null;
+      }
       lastCandidateIds.clear();
       lastCandidateAt = 0;
       candidateEpoch = 0;
@@ -757,15 +769,27 @@ function createRealBrowserCdpController(opts = {}) {
   }
 
   async function attachCdp() {
-    if (!debugPort) throw new Error('no_debug_port');
+    const portForAttach = debugPort;
+    if (!Number.isFinite(portForAttach)) {
+      throw new Error('no_debug_port');
+    }
     const deadline = Date.now() + CDP_ATTACH_RETRY_MS;
     /** @type {Error} */
     let lastErr = new Error('cdp_attach_exhausted_retries');
     while (Date.now() < deadline) {
+      // If the managed Chrome process exits (or stopSession clears state) while we retry,
+      // debugPort becomes null but this loop would keep running and call fetch with a null
+      // port → "http://127.0.0.1:null/json/list". Abort instead.
+      if (!isChildAlive()) {
+        throw new Error('managed_browser_exited_during_cdp_attach');
+      }
+      if (debugPort !== portForAttach) {
+        throw new Error('cdp_debug_port_changed');
+      }
       /** @type {CdpSession | null} */
       let session = null;
       try {
-        const wsUrlRaw = await fetchPageDebuggerWebSocketUrl(debugPort, fetchImpl);
+        const wsUrlRaw = await fetchPageDebuggerWebSocketUrl(portForAttach, fetchImpl);
         const wsUrl = normalizeLoopbackWebSocketUrl(wsUrlRaw);
         session = new CdpSession(wsUrl);
         await session.connect();
