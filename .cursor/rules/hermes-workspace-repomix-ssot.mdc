@@ -1,0 +1,29 @@
+---
+description: Hermes Workspace UI/UX parity — repomix SSOT must exist before parity implementation.
+globs: frontend/src/features/hermes-workspace/**/*, docs/**/*
+alwaysApply: false
+---
+
+# Hermes Workspace repomix (UI/UX SSOT)
+
+**Required reference file (exact name):**
+
+`repomix-output-outsourc-e-hermes-workspace.git.txt`
+
+**Expected locations (in order):**
+
+1. Repository root: `repomix-output-outsourc-e-hermes-workspace.git.txt`
+2. Or under `docs/` if your team stores it there (note: `docs/repomix-*` is gitignored — keep a local copy or team-approved tracked path)
+
+## Rule
+
+For **Workspace UI/UX parity** work (Inspector, workspace shell, Hermes-lifted screens, IA/layout/tone vs upstream Hermes Workspace):
+
+1. **Confirm the repomix file is present** (search the repo and parent workspace folders if needed).
+2. **If missing:** **stop and report** — do not implement parity from in-repo screens alone. Locate the file from the team, or regenerate via repomix from the upstream Hermes Workspace export, then proceed.
+3. **Do not** silently fall back to “use existing HAM components as SSOT” for **UI/UX parity** slices. Runtime wiring may still use HAM APIs/adapters after UX intent is taken from the repomix.
+4. **Do not commit** the repomix unless the user explicitly approves (large file / vendor dump). `.gitignore` may already exclude `docs/repomix-*`.
+
+## Exception (narrow)
+
+Purely **runtime/data** slices that do not change layout/IA/tone (e.g. read-only summaries using existing HAM APIs only) may proceed **only when the user explicitly scopes the task that way** — and the report must state that repomix was not used and why.
