@@ -4,7 +4,8 @@ Thin shell: renderer is the existing Vite/React app; FastAPI stays a separate HT
 
 ## Shell UX (M1)
 
-- **First screen:** the packaged app **opens Chat** (`/` redirects to `/chat`). The marketing landing (“go ham” / astrochimp) is **web-only**.
+- **First screen:** the packaged app **opens the workspace app** with **`/` → `/chat`** (workspace chat). The marketing landing (“go ham” / astrochimp) is **web-only**.
+- **Future direction:** permissioned desktop-local control is specified in [`docs/desktop/local_control_v1.md`](../docs/desktop/local_control_v1.md) (Phase 2+); **not implemented** in M1 beyond allowlisted Hermes CLI presets (see below).
 - **Download and run:** packaged builds ship **`default-public-api.json`** next to `main.cjs` with the **project’s public Ham API origin**. Users can open the app with **no env vars**; power users override with **`HAM_DESKTOP_API_BASE`** or **`ham-desktop-config.json`**. Bump that file when the canonical public API URL changes, then cut a new desktop release.
 - **Menu bar:** on **Linux and Windows**, the default Electron **File / Edit / View** menu is **removed** so the window chrome stays dark; **macOS** keeps the normal app menu.
 - **Public assets:** the nav logo uses the same **relative `public/` URLs** as the Vite build (`base: ./`) so icons load under **`file://`** in the packaged renderer.
@@ -28,7 +29,7 @@ Linux and Windows artifacts **do not duplicate** the chat interface. `electron-b
 
 - Main: window lifecycle, reads optional `userData/ham-desktop-config.json`, merges env.
 - Preload: `contextBridge.exposeInMainWorld('__HAM_DESKTOP_CONFIG__', …)` and `__HAM_DESKTOP_BUNDLE__` — no Node in the renderer (`nodeIntegration: false`, `contextIsolation: true`, `sandbox: true`).
-- Phase 2 (local capability host) extends this seam — do not add filesystem/process IPC without review.
+- Phase 2+ ([`docs/desktop/local_control_v1.md`](../docs/desktop/local_control_v1.md)) extends this seam — do not add filesystem/process IPC without review.
 
 ## Runtime API base
 

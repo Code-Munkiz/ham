@@ -467,15 +467,16 @@
       "kind": "bundle",
       "display_name": "Computer Control / Local Operator",
       "summary": "Read-only pack: local computer-control roadmap, safety metadata, and prerequisites (Phase 1).",
-      "description": "First-party documentation bundle for Computer Control Pack v1. Phase 1 is observe-only at the product level: directory and Shop visibility only. No execution, no MCP activation, no Hermes or settings mutation, no goHAM session. Future phases may align gated /api/browser, desktop observation, bounded autopilot, and goHAM per docs/capabilities/computer_control_pack_v1.md.",
+      "description": "First-party documentation bundle for Computer Control Pack v1. Phase 1 is observe-only at the product level: workspace Capability Directory visibility only. Shipped desktop control is defined by docs/desktop/local_control_v1.md (Linux first, Windows planned; macOS out of scope unless approved). No execution, no MCP activation, no Hermes or settings mutation, no goHAM session. Cloud-hosted /api/browser is not the desktop local control product plane.",
       "trust_tier": "first_party",
       "provenance": {
         "source_kind": "ham_repo",
         "registry_revision": "1",
-        "note": "Computer Control Pack Phase 1; spec docs/capabilities/computer_control_pack_v1.md"
+        "note": "Computer Control Pack Phase 1; specs docs/capabilities/computer_control_pack_v1.md and docs/desktop/local_control_v1.md"
       },
       "version": "1.0.0",
       "required_backends": [
+        "desktop_local",
         "desktop_shell",
         "local_runtime",
         "playwright_browser_service",
@@ -494,7 +495,8 @@
         "notes": [
           "No computer control execution from this directory row.",
           "Does not invoke shell, MCP, or browser automation.",
-          "Cursor/Droid execution lanes remain separate; not a harness for this pack."
+          "Cursor/Droid execution lanes remain separate; not a harness for this pack.",
+          "desktop_local: planning token for Desktop Local Control v1 (docs/desktop/local_control_v1.md); not an executable backend in Phase 1."
         ]
       },
       "mcp_policy": {
@@ -544,7 +546,12 @@
         "local-runtime",
         "browser-operator",
         "mcp",
-        "goham-future"
+        "goham-future",
+        "desktop-local",
+        "linux-first",
+        "windows-planned",
+        "permissioned",
+        "guarded"
       ]
     }
   ],

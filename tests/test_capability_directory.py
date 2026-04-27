@@ -122,6 +122,7 @@ def test_computer_control_pack_phase1_bundle() -> None:
     assert b["mutability"] == "read_only"
     backends = set(b["required_backends"])
     assert {
+        "desktop_local",
         "desktop_shell",
         "local_runtime",
         "playwright_browser_service",

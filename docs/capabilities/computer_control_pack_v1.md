@@ -8,7 +8,9 @@
 
 Define a **HAM-native Computer Control Pack v1** that maps external research on agentic computer control (MCP-first integration, browser automation, orchestration layers, credential safety, autonomy tiers, default-deny policy, audit, kill switches) onto **HAM’s existing surfaces** and a **phased, local-first** product path.
 
-This document is **not** an execution contract. It does **not** prescribe new tools, MCP installs, config mutations, or execution pathways in the HAM API or Shop.
+This document is **not** an execution contract. It does **not** prescribe new tools, MCP installs, config mutations, or execution pathways in the HAM API or workspace capability surfaces.
+
+**Desktop Local Control v1** (product path) is specified in [`docs/desktop/local_control_v1.md`](../desktop/local_control_v1.md). It is **not** implemented by **`/api/browser` on Cloud Run** as the desktop control plane; that API remains a separate, server-side surface. The legacy **War Room / in-app browser UI** is **removed** and **must not** be revived as the computer-control UX.
 
 **Research input:** [`computercontrolresearch.md`](../../computercontrolresearch.md) (repo root).  
 **Sibling spec (tone and registry model):** [`capability_bundle_directory_v1.md`](capability_bundle_directory_v1.md).
@@ -17,7 +19,7 @@ This document is **not** an execution contract. It does **not** prescribe new to
 
 ## Architecture alignment (non-negotiables)
 
-Computer Control in HAM is a **local runtime / tool capability layer**: it describes how **local** observation and (in later phases) **bounded** action could be exposed **under explicit operator policy**, with evidence and emergency stop — **not** how chat or Shop “runs” arbitrary third-party code.
+Computer Control in HAM is a **local runtime / tool capability layer**: it describes how **local** observation and (in later phases) **bounded** action could be exposed **under explicit operator policy**, with evidence and emergency stop — **not** how chat or workspace metadata surfaces “run” arbitrary third-party code.
 
 | Rule | Implication for Computer Control Pack |
 |------|----------------------------------------|
@@ -25,7 +27,7 @@ Computer Control in HAM is a **local runtime / tool capability layer**: it descr
 | **Not a Cursor / Droid harness** | Factory Droid CLI, Cursor Cloud Agent, and legacy War Room uplink (removed **Batch 2A**) remain **separate execution lanes** from Computer Control. The pack **must not** redefine them as the universal host for desktop automation. |
 | **Not a ControlPlaneRun participant (v1)** | [`ControlPlaneRun`](../../docs/CONTROL_PLANE_RUN.md) stays a **read-side** launch/audit substrate for Cursor/Droid-style control plane; Computer Control **does not** join that schema or storage in v1. |
 | **Not cloud-first** | Design assumes **local-only** runtime boundary for high-trust modes; any remote broker is **documentation-only** future work, not v1. |
-| **Not arbitrary Shop execution** | HAM Shop and Capability Directory remain **read-only discovery** for Phase 1; directory rows are **data**, not behavior ([`capability_bundle_directory_v1.md`](capability_bundle_directory_v1.md)). No “run this bundle” from Shop for computer control. |
+| **Not arbitrary workspace execution** | Workspace **Capability Directory** and **My Library** remain **read-only discovery** for Phase 1; directory rows are **data**, not behavior ([`capability_bundle_directory_v1.md`](capability_bundle_directory_v1.md)). No run/execute CTAs from metadata rows for computer control. |
 | **No credential exfiltration surface (v1)** | No secrets, raw config, env values, tokens, auth headers, or full local paths in operator-facing copy or APIs introduced by this pack in early phases. Phantom Token (see §3) is a **future** architectural pattern, not a shipped feature in v1. |
 | **No mock data as truth** | Demo or placeholder UI data must **never** back diagnostics or permission state for Computer Control. |
 | **Hermes = supervision / runtime inventory / skills** | Hermes CLI, vendored skills catalog, live overlay, and install preview/apply are **distinct** concerns; see §2. |
@@ -35,26 +37,26 @@ Computer Control in HAM is a **local runtime / tool capability layer**: it descr
 ```mermaid
 flowchart LR
   subgraph hamUI [HAM_UI_ReadOnly]
-    Shop[HamShop_CapDirectory]
+    Workspace[Workspace_CapDirectory_Library]
     Diag[Diagnostics_Runtime]
   end
   subgraph hamApi [HAM_API]
     CapAPI[capability_directory]
     HermesInv[hermes_runtime_inventory]
-    BrowserAPI[browser_runtime_phase2_plus]
+    BrowserAPI[api_browser_separate_surface]
   end
   subgraph execLanes [Execution_Lanes_Separate]
     Droid[Droid_CLI]
     Cursor[Cloud_Agent]
   end
-  subgraph futureLocal [Future_Local_Runtime]
+  subgraph futureLocal [Future_Desktop_Local_Runtime]
     MCP[MCP_Servers]
     Policy[Permission_Tiers_goHAM]
   end
-  Shop --> CapAPI
+  Workspace --> CapAPI
   Diag --> HermesInv
-  hamUI -.->|"no_shop_execution_v1"| execLanes
-  futureLocal -.->|"phase_2_plus"| BrowserAPI
+  hamUI -.->|"no_metadata_row_execution_v1"| execLanes
+  futureLocal -.->|"not_cloud_browser_as_desktop_plane"| BrowserAPI
   Policy --> MCP
 ```
 
@@ -73,9 +75,9 @@ flowchart LR
 | **API** | `GET/POST` under prefix `/api/browser` — [`src/api/browser_runtime.py`](../../src/api/browser_runtime.py). |
 | **Implementation** | [`src/ham/browser_runtime/`](../../src/ham/browser_runtime/) (session manager, I/O, policy errors). |
 | **Gate** | Router uses Clerk + email gate (`get_ham_clerk_actor`) for dashboard-class access. |
-| **Semantics** | Create session, navigate, click (selector / XY), type, scroll, key, screenshot/stream bodies — **existing** automation surface, not yet framed as “Computer Control Pack” in Capability Directory. |
+| **Semantics** | Create session, navigate, click (selector / XY), type, scroll, key, screenshot/stream bodies — **existing** automation surface on the **API host**, not the **Desktop Local Control v1** product plane ([`docs/desktop/local_control_v1.md`](../desktop/local_control_v1.md)). |
 
-**Gap:** [`src/ham/data/capability_directory_v1.json`](../../src/ham/data/capability_directory_v1.json) has **no** atomic row or bundle for `browser_runtime` today; Phase 1 should add **read-only** documentation rows only.
+**Directory:** Phase 1 includes the read-only bundle `computer-control-local-operator` plus atomic documentation ids; **`/api/browser` does not define shipped desktop-local policy** — see Local Control v1 spec.
 
 ### 1.2 Hermes runtime inventory
 
@@ -98,16 +100,16 @@ flowchart LR
 
 **Spec rule:** Computer Control Pack **documents** candidate Hermes skill / MCP alignment; it does **not** expand install apply scope or merge MCP config in v1.
 
-### 1.4 Capability Directory, HAM Shop, My Library
+### 1.4 Capability Directory, Workspace, My Library
 
 | Concern | Ground truth |
 |---------|----------------|
 | **Directory data** | [`src/ham/data/capability_directory_v1.json`](../../src/ham/data/capability_directory_v1.json). |
 | **Server** | [`src/ham/capability_directory.py`](../../src/ham/capability_directory.py), [`src/api/capability_directory.py`](../../src/api/capability_directory.py). |
 | **Library** | [`src/ham/capability_library/`](../../src/ham/capability_library/), API [`src/api/capability_library.py`](../../src/api/capability_library.py). |
-| **Shop UI** | [`frontend/src/pages/HamShop.tsx`](../../frontend/src/pages/HamShop.tsx), components [`frontend/src/components/shop/`](../../frontend/src/components/shop/). |
+| **Workspace UI** | Bundles surface as **read-only metadata** on workspace routes (e.g. skills / library flows); rows are **data**, not execution. Legacy `/shop` routes, if present, are **redirect-only** — do not treat them as a control execution surface. |
 
-**Semantics:** Shop is **read-only discovery** for capabilities, runtime, templates; aligns with Directory v1 “registry records = data, not behavior.”
+**Semantics:** Aligns with Directory v1 “registry records = data, not behavior.” **Desktop Local Control v1** is **not** [`/api/browser`](../../src/api/browser_runtime.py) on Cloud Run as the product control plane.
 
 ### 1.5 Desktop shell (Milestone 1)
 
@@ -116,7 +118,7 @@ flowchart LR
 | **Docs** | [`desktop/README.md`](../../desktop/README.md). |
 | **Model** | Thin Electron shell; renderer = Vite app; FastAPI separate. |
 | **Hermes** | Curated bundle + allowlisted CLI presets (fixed argv, timeout, capped output) — **not** free-form terminal control. |
-| **Future** | README references Phase 2 “local capability host” — Computer Control **aligns** to that seam, not to bypassing sandbox/security review. |
+| **Future** | See [`docs/desktop/local_control_v1.md`](../desktop/local_control_v1.md) for **Local Control v1** (Phase 2+); Computer Control **aligns** to that seam, not to bypassing sandbox/security review. |
 
 ### 1.6 HAM CLI: `doctor` and `readiness`
 
@@ -153,11 +155,11 @@ flowchart LR
 | **API** | [`src/api/browser_runtime.py`](../../src/api/browser_runtime.py), [`src/api/browser_operator.py`](../../src/api/browser_operator.py) — Playwright sessions + proposal/approval path (unchanged). |
 | **Dashboard** | Hermes Workspace chat at **`/workspace/chat`**; legacy War Room / in-app browser operator UI removed (**Batch 2A**). |
 
-**Positioning:** A **Browser Operator** UX (Phase 2+) should target **Workspace or desktop** and reuse **approval-gated** `/api/browser` — **UI plan only** in this spec.
+**Positioning:** Any **server-hosted** browser automation remains **approval-gated** under `/api/browser`; **Desktop Local Control v1** still does **not** use that route as the **desktop product control plane** ([`docs/desktop/local_control_v1.md`](../desktop/local_control_v1.md)) — **UI plan only** in this spec.
 
 ### 1.10 Gaps (summary)
 
-- No Capability Directory bundle for browser automation or computer control yet.
+- Read-only Capability Directory bundle `computer-control-local-operator` documents the pack; **no** executing browser automation from directory rows.
 - No first-class MCP server registry in HAM beyond documentation placeholders (see Directory v1).
 - No local MCP process supervisor in HAM product today — **by design** until Phase 3+.
 - Droid/Cursor lanes must remain **architecturally separate** from Computer Control Pack v1.
@@ -176,7 +178,7 @@ For each item: **fit for HAM**, **risk**, **local-only**, **v1 suitability**, **
 | **Risk** | Medium: misconfigured MCP servers can expose broad host access; marketplace/unvetted servers are hazardous (research: plugin hub supply-chain). |
 | **Local-only** | Yes — v1 assumes **local** MCP processes for any future attachment. |
 | **v1 suitability** | **Document only** — no new MCP wiring in Phase 0–1. |
-| **Do-not-touch-yet** | Auto-install of community MCP from Shop; remote MCP as default. |
+| **Do-not-touch-yet** | Auto-install of community MCP from product CTAs; remote MCP as default. |
 
 ### 2.2 Desktop Commander MCP
 
@@ -206,7 +208,7 @@ For each item: **fit for HAM**, **risk**, **local-only**, **v1 suitability**, **
 | **Risk** | Config complexity and accidental over-permissioning. |
 | **Local-only** | Hermes can run local MCP; HAM surfaces inventory/skills **read-only** today. |
 | **v1 suitability** | **Documentation + directory** only; tie-ins via `candidate_hermes_skills_toolsets` in bundle. |
-| **Do-not-touch-yet** | Mutating Hermes `config.yaml` or MCP lists from HAM Shop one-click. |
+| **Do-not-touch-yet** | Mutating Hermes `config.yaml` or MCP lists from one-click product flows. |
 
 ### 2.5 OpenHands / sandboxed execution model
 
@@ -293,7 +295,7 @@ Rows: autonomy tiers. Columns: capability / policy. Cells: **Y** = allowed in pr
 
 **id:** `computer-control-local-operator`
 
-The JSON below matches the **style** of entries in [`capability_directory_v1.json`](../../src/ham/data/capability_directory_v1.json) (`bundles[]`). **Not shipped** until Phase 1 directory work; **illustrative**.
+The JSON below is **historical / illustrative** only. The **canonical** bundle record is [`src/ham/data/capability_directory_v1.json`](../../src/ham/data/capability_directory_v1.json) (`computer-control-local-operator`), aligned with [`docs/desktop/local_control_v1.md`](../desktop/local_control_v1.md).
 
 ```json
 {
@@ -325,7 +327,7 @@ The JSON below matches the **style** of entries in [`capability_directory_v1.jso
     "mode": "documentation_only_phase_1",
     "notes": [
       "Phase 2 may attach policy.browser_operator_approval_only to existing /api/browser usage.",
-      "No arbitrary shell from Shop; Droid/Cursor remain separate harnesses."
+      "No arbitrary shell from capability metadata rows; Droid/Cursor remain separate harnesses."
     ]
   },
   "mcp_policy": {
@@ -346,9 +348,9 @@ The JSON below matches the **style** of entries in [`capability_directory_v1.jso
     "notes": []
   },
   "surfaces": [
-    { "route": "/shop", "label": "HAM Shop" },
-    { "route": "/hermes", "label": "Hermes Hub / Diagnostics" },
-    { "route": "/skills", "label": "Hermes Skills (related)" }
+    { "route": "/workspace/skills", "label": "Workspace skills (metadata)" },
+    { "route": "/workspace", "label": "Hermes Hub / Diagnostics" },
+    { "route": "/workspace/chat", "label": "Workspace chat (related)" }
   ],
   "mutability": "read_only",
   "preview_available": false,
@@ -359,7 +361,7 @@ The JSON below matches the **style** of entries in [`capability_directory_v1.jso
     "Using frontend mock extension data as runtime truth."
   ],
   "evidence_expectations": [
-    "Phase 1: operator can find bundle in Shop and see CLI readiness hints.",
+    "Phase 1: operator can find bundle in Workspace capability metadata and see CLI readiness hints.",
     "Phase 2+: browser actions produce auditable events tied to session and approval."
   ],
   "tags": ["computer_control", "local_only", "mcp_candidates", "browser_operator_future"],
@@ -393,7 +395,7 @@ The JSON below matches the **style** of entries in [`capability_directory_v1.jso
 
 | Surface | Phase 0–1 intent |
 |---------|------------------|
-| **HAM Shop** | New bundle row under Bundles (or equivalent tab); **read-only** copy; no Run CTA. |
+| **Workspace / Capability Directory** | Bundle row as **read-only** metadata (skills / library flows); no Run CTA. |
 | **My Library** | Optional save of directory ref (`hermes:` / `capdir:` style) — **same as other bundles**; no execution. |
 | **Diagnostics → Hermes / Runtime** | Cross-link from inventory/skills pages; explain **local vs remote** degradation. |
 | **Desktop shell** | Future: settings / diagnostics alignment with Phase 3 observe mode; **no new IPC** in v1 spec implementation. |
@@ -408,9 +410,9 @@ The JSON below matches the **style** of entries in [`capability_directory_v1.jso
 | Phase | Scope |
 |-------|--------|
 | **0** | **Spec only** — this document + review; no code. |
-| **1** | Add **Computer Control Pack** to Capability Directory + HAM Shop as **read-only**; extend **CLI readiness** checks for local prerequisites **only** (no install, no execution). |
-| **2** | **Browser Operator** — expose **existing** [`/api/browser`](../../src/api/browser_runtime.py) flows behind **approval-only** UX (e.g. Hermes Workspace or desktop shell); no new arbitrary execution from Shop. |
-| **3** | **Local desktop observe mode** behind **env flag** — minimal passive observation path in desktop/local runtime (**design detail TBD**). |
+| **1** | Add **Computer Control Pack** to Capability Directory as **read-only** workspace metadata; extend **CLI readiness** checks for local prerequisites **only** (no install, no execution). |
+| **2** | **Browser / automation (if any)** — any reuse of [`/api/browser`](../../src/api/browser_runtime.py) stays a **separate API surface**; **Desktop Local Control v1** does **not** treat Cloud Run `/api/browser` as the desktop product control plane ([`docs/desktop/local_control_v1.md`](../desktop/local_control_v1.md)). |
+| **3** | **Desktop-local** observe/control phases per Local Control v1 (Linux first); **not** War Room revival. |
 | **4** | **Bounded autopilot** within declared caps + **evidence logs** (Runs/Activity alignment). |
 | **5** | **goHAM session mode** — full local high-trust session object per §5 + kill switch + auto-demotion. |
 
@@ -426,8 +428,7 @@ When Phase 1 is approved, expect touches **only** along these paths (subject to 
 | [`src/ham/data/capability_directory_v1.json`](../../src/ham/data/capability_directory_v1.json) | Add bundle `computer-control-local-operator` (+ optional atomic stubs if needed for `capabilities` list consistency). |
 | [`src/ham/capability_directory.py`](../../src/ham/capability_directory.py) | Only if validation or indexing rules need extending for new ids. |
 | [`src/api/capability_directory.py`](../../src/api/capability_directory.py) | Only if API surface requires new filter metadata (prefer none). |
-| [`frontend/src/pages/HamShop.tsx`](../../frontend/src/pages/HamShop.tsx) | Copy/section ordering if bundle requires explicit callout (prefer data-driven from JSON). |
-| [`frontend/src/components/shop/*`](../../frontend/src/components/shop/) | Display labels / empty states for new bundle category if needed. |
+| Workspace / capability UI | Data-driven labels from JSON only; no execution hooks. |
 | [`src/ham_cli/commands/doctor.py`](../../src/ham_cli/commands/doctor.py) | Optional: print hints when browser/MCP prerequisites missing. |
 | [`src/ham_cli/commands/readiness.py`](../../src/ham_cli/commands/readiness.py) | Optional: table rows for computer-control readiness. |
 | [`docs/capabilities/capability_bundle_directory_v1.md`](capability_bundle_directory_v1.md) | One-line cross-link to Computer Control Pack. |
@@ -441,8 +442,10 @@ When Phase 1 is approved, expect touches **only** along these paths (subject to 
 - **No unattended full-computer autonomy** in v1–4.
 - **No credential handling** or Phantom Token implementation in v1.
 - **No payments or purchases** driven by computer control.
-- **No destructive file actions** as defaults; **no** `rm -rf`, mass delete, or shadow writes from Shop.
-- **No arbitrary shell execution** triggered from HAM Shop or directory rows.
+- **No destructive file actions** as defaults; **no** `rm -rf`, mass delete, or shadow writes from workspace metadata surfaces.
+- **No arbitrary shell execution** triggered from capability directory rows or library saves.
+- **No War Room / in-app browser operator UI** revival.
+- **No positioning `/api/browser` (Cloud Run) as Desktop Local Control v1** — see [`docs/desktop/local_control_v1.md`](../desktop/local_control_v1.md).
 - **No cloud-hosted control** of the local computer; **no public remote control endpoint**.
 - **No bypassing OS permissions** or elevation stories in v1.
 - **No using mock marketplace or extension-grid demo data** as operational truth.
@@ -452,7 +455,7 @@ When Phase 1 is approved, expect touches **only** along these paths (subject to 
 
 ## 11. Open questions (human decisions before implementation)
 
-1. **Browser Operator gate:** Reuse Clerk-gated `/api/browser` only vs additional **local** token for packaged desktop?
+1. **API vs desktop plane:** Clerk-gated `/api/browser` (server) vs **Desktop Local Control v1** (local policy/consent) — how do they stay distinct? See [`docs/desktop/local_control_v1.md`](../desktop/local_control_v1.md).
 2. **Kill switch ownership:** Electron **main process** vs separate supervisor vs Hermes-side — who is authoritative?
 3. **Audit storage:** New run kind vs extend `.ham/runs` vs append-only local JSONL — privacy and redaction rules?
 4. **Scope model:** Single **repo root** vs user-picked **allowlist folders** vs URL allowlists for browser — product default?
@@ -461,7 +464,7 @@ When Phase 1 is approved, expect touches **only** along these paths (subject to 
 7. **Hermes coupling:** Does Hermes **own** MCP allowlists for computer control, or HAM desktop shell, or **both** with explicit precedence?
 8. **Phase 3 observe:** Screen capture vs window metadata only — privacy/compliance threshold?
 9. **goHAM phrase and liability:** Legal/copy review for “high trust” messaging.
-10. **Approval UX:** Per-action vs batched plans — target for Phase 2 Browser Operator.
+10. **Approval UX:** Per-action vs batched plans — target for future desktop-local gates, not War Room revival.
 
 ---
 
