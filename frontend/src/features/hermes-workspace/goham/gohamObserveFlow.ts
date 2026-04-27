@@ -201,13 +201,14 @@ export async function runGohamObserveFlow(opts: RunGohamObserveOptions): Promise
     ``,
     `Screenshot bytes were captured for local validation only; they are **not embedded** in this message.`,
     ``,
+    `The **managed browser window stays open** so you can inspect the page. Click **Stop GoHAM** below when you are done — that closes the session.`,
+    ``,
     `---`,
-    `**Safety:** GoHAM v0 does not automate forms, logins, purchases, or downloads. Use **Stop GoHAM** if you need to end the session. Saved passwords from your everyday browser are not used.`,
+    `**Safety:** GoHAM v0 does not automate forms, logins, purchases, or downloads. Saved passwords from your everyday browser are not used.`,
   ].join("\n");
 
   update(patchTrail(steps, "summarize", "done"));
 
-  await api.stopRealBrowserSession();
   update(activate(steps, "done"));
   update(patchTrail(steps, "done", "done"));
 

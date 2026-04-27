@@ -439,6 +439,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
           meta: { url_redacted: url.replace(/\?.*$/, "") },
         }),
       );
+      let keepManagedBrowserOpen = false;
       try {
         const result = await runGohamObserveFlow({
           api,
@@ -447,6 +448,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
           shouldAbort: () => gohamAbortRef.current,
         });
         if (result.ok === true) {
+          keepManagedBrowserOpen = true;
           setMessages((prev) =>
             prev.map((m) => (m.id === assistantPlaceId ? { ...m, content: result.assistantText } : m)),
           );
@@ -486,13 +488,8 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         void api.stopRealBrowserSession();
       } finally {
         gohamAbortRef.current = false;
-        setGohamActive(false);
+        setGohamActive(keepManagedBrowserOpen);
         setSending(false);
-        try {
-          await api.stopRealBrowserSession();
-        } catch {
-          /* idempotent stop */
-        }
       }
     },
     [],
@@ -725,8 +722,8 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       const url = extractGohamUrl(trimmed);
       if (!url) {
         toast.error(
-          "GoHAM Mode needs an https:// or http:// link in your message. Example: Open https://example.com and tell me what's on the page.",
-          { duration: 10_000 },
+          "GoHAM Mode needs a website in your message — e.g. https://example.com or example.com. Turn GoHAM on (amber) first; it only runs in HAM Desktop on Linux.",
+          { duration: 12_000 },
         );
         return;
       }
