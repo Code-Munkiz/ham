@@ -52,6 +52,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { hamWorkspaceLogoUrl } from "@/lib/ham/publicAssets";
 import { getHamDesktopLocalControlApi } from "@/lib/ham/desktopBundleBridge";
+import { isHamDesktopShell } from "@/lib/ham/desktopConfig";
 import { cn } from "@/lib/utils";
 import { extractGohamUrl } from "../../goham/extractGohamUrl";
 import { runGohamObserveFlow, type GoHamTrailStep } from "../../goham/gohamObserveFlow";
@@ -98,6 +99,7 @@ export type WorkspaceChatScreenProps = {
 export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   const { embedMode = false } = props;
   const navigate = useNavigate();
+  const desktopGohamEligible = isHamDesktopShell();
   const [searchParams] = useSearchParams();
   const [messages, setMessages] = React.useState<HwwMsgRow[]>([]);
   const [sessionId, setSessionId] = React.useState<string | null>(null);
@@ -128,6 +130,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
 
   const [gohamGateHint, setGohamGateHint] = React.useState<string | null>(null);
   const [gohamEnabled, setGohamEnabled] = React.useState(() => {
+    if (!desktopGohamEligible) return false;
     if (typeof sessionStorage === "undefined") return false;
     return sessionStorage.getItem("hww-goham-enabled") === "1";
   });
@@ -137,6 +140,11 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   const gohamEffective = gohamEnabled && !gohamGateHint;
 
   React.useEffect(() => {
+    if (!desktopGohamEligible) {
+      setGohamGateHint(null);
+      setGohamEnabled(false);
+      return;
+    }
     const api = getHamDesktopLocalControlApi();
     if (!api) {
       setGohamGateHint(
@@ -161,7 +169,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [desktopGohamEligible]);
 
   React.useEffect(() => {
     if (gohamGateHint) {
@@ -175,6 +183,10 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   }, [gohamGateHint]);
 
   const setGohamEnabledPersist = React.useCallback((v: boolean) => {
+    if (!desktopGohamEligible) {
+      setGohamEnabled(false);
+      return;
+    }
     setGohamEnabled(v);
     try {
       if (v) sessionStorage.setItem("hww-goham-enabled", "1");
@@ -182,7 +194,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     } catch {
       /* ignore */
     }
-  }, []);
+  }, [desktopGohamEligible]);
 
   const voiceWs = useVoiceWorkspaceSettingsOptional();
   const sttDictationEnabled = voiceWs?.payload?.settings.stt.enabled ?? true;
@@ -836,7 +848,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     }
     if (!trimmed) return;
 
-    if (gohamEffective) {
+    if (desktopGohamEligible && gohamEffective) {
       const url = extractGohamUrl(trimmed);
       if (!url) {
         toast.error(
@@ -983,40 +995,44 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
             </>
           )}
         </div>
-        <GoHamPanel
-          enabled={gohamEffective}
-          active={gohamActive}
-          trail={gohamTrail}
-          onStop={handleGohamStop}
-          gateHint={gohamGateHint}
-          researchControls={
-            gohamResearchUi && gohamActive
-              ? {
-                  paused: gohamPaused,
-                  takeover: gohamTakeover,
-                  onPause: () => {
-                    gohamPausedRef.current = true;
-                    gohamTakeoverRef.current = false;
-                    setGohamPaused(true);
-                    setGohamTakeover(false);
-                  },
-                  onResume: () => {
-                    gohamPausedRef.current = false;
-                    gohamTakeoverRef.current = false;
-                    setGohamPaused(false);
-                    setGohamTakeover(false);
-                  },
-                  onTakeover: () => {
-                    gohamTakeoverRef.current = true;
-                    gohamPausedRef.current = false;
-                    setGohamTakeover(true);
-                    setGohamPaused(false);
-                  },
-                }
-              : undefined
-          }
-        />
-        <GoHamSlice1DevPanel visible={import.meta.env.DEV && gohamEffective} />
+        {desktopGohamEligible ? (
+          <>
+            <GoHamPanel
+              enabled={gohamEffective}
+              active={gohamActive}
+              trail={gohamTrail}
+              onStop={handleGohamStop}
+              gateHint={gohamGateHint}
+              researchControls={
+                gohamResearchUi && gohamActive
+                  ? {
+                      paused: gohamPaused,
+                      takeover: gohamTakeover,
+                      onPause: () => {
+                        gohamPausedRef.current = true;
+                        gohamTakeoverRef.current = false;
+                        setGohamPaused(true);
+                        setGohamTakeover(false);
+                      },
+                      onResume: () => {
+                        gohamPausedRef.current = false;
+                        gohamTakeoverRef.current = false;
+                        setGohamPaused(false);
+                        setGohamTakeover(false);
+                      },
+                      onTakeover: () => {
+                        gohamTakeoverRef.current = true;
+                        gohamPausedRef.current = false;
+                        setGohamTakeover(true);
+                        setGohamPaused(false);
+                      },
+                    }
+                  : undefined
+              }
+            />
+            <GoHamSlice1DevPanel visible={import.meta.env.DEV && gohamEffective} />
+          </>
+        ) : null}
         <div className="flex w-full justify-center px-3 md:px-6">
           <WorkspaceChatComposer
             value={input}
@@ -1035,10 +1051,10 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
             modelId={modelId}
             onModelIdChange={setModelId}
             sttDictationEnabled={sttDictationEnabled}
-            gohamEnabled={gohamEnabled}
-            onGohamEnabledChange={setGohamEnabledPersist}
-            gohamToggleDisabled={Boolean(gohamGateHint)}
-            gohamGateHint={gohamGateHint}
+            gohamEnabled={desktopGohamEligible ? gohamEnabled : false}
+            onGohamEnabledChange={desktopGohamEligible ? setGohamEnabledPersist : undefined}
+            gohamToggleDisabled={desktopGohamEligible ? Boolean(gohamGateHint) : false}
+            gohamGateHint={desktopGohamEligible ? gohamGateHint : null}
           />
         </div>
       </div>
