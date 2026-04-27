@@ -23,11 +23,38 @@ export type ReadCuratedFileResult =
   | { ok: true; name: string; text: string }
   | { ok: false; error: string };
 
+/** Payload from Electron main — read-only doctor; no filesystem paths (Phase 1). */
+export type HamDesktopLocalControlStatus = {
+  kind: "ham_desktop_local_control_status";
+  schema_version: number;
+  available: boolean;
+  enabled: boolean;
+  phase: string;
+  platform: string;
+  supported_platform: boolean;
+  platform_status: "linux_first" | "windows_planned" | "unsupported";
+  security: {
+    context_isolation: boolean;
+    node_integration: boolean;
+    sandbox: boolean;
+  };
+  paths: {
+    user_data_writable: boolean;
+    audit_log_dir_writable: boolean;
+  };
+  capabilities: Record<string, string>;
+  warnings: string[];
+  non_goals: string[];
+};
+
 export type HamDesktopBundleApi = {
   hermesCliProbe: () => Promise<HermesCliProbeResult>;
   runHermesPreset?: (id: HermesDesktopPresetId) => Promise<HermesPresetRunResult>;
   readCuratedFile: (name: string) => Promise<ReadCuratedFileResult>;
   openHermesUpstreamDocs: () => Promise<{ ok: boolean }>;
+  localControl?: {
+    getStatus: () => Promise<HamDesktopLocalControlStatus>;
+  };
 };
 
 declare global {

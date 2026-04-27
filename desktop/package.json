@@ -14,7 +14,8 @@
     "pack:linux:dir": "npm run build:frontend && electron-builder --linux --dir",
     "pack:win": "npm run build:frontend && electron-builder --win --x64",
     "pack:win:dir": "npm run build:frontend && electron-builder --win --x64 --dir",
-    "pack:win:nsis": "npm run build:frontend && electron-builder --win --x64 -c.win.target=nsis"
+    "pack:win:nsis": "npm run build:frontend && electron-builder --win --x64 -c.win.target=nsis",
+    "test:local-control": "node --test ./local_control_status.test.cjs"
   },
   "build": {
     "appId": "io.github.codemunkiz.ham-desktop",
@@ -27,6 +28,7 @@
     "files": [
       "main.cjs",
       "preload.cjs",
+      "local_control_status.cjs",
       "package.json",
       "default-public-api.json",
       "curated/**"

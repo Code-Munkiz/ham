@@ -5,6 +5,8 @@ const { execFile } = require('node:child_process');
 const path = require('node:path');
 const fs = require('node:fs');
 
+const { buildLocalControlStatus } = require('./local_control_status.cjs');
+
 const CONFIG_FILENAME = 'ham-desktop-config.json';
 
 /** Updated before each window load; preload reads via sendSync. */
@@ -279,6 +281,22 @@ ipcMain.handle('ham-desktop:read-curated-file', (event, name) => {
 ipcMain.handle('ham-desktop:open-hermes-upstream-docs', () => {
   const u = (process.env.HAM_HERMES_UPSTREAM_URL || 'https://github.com/NousResearch/hermes-agent').trim();
   return shell.openExternal(u || 'https://github.com/NousResearch/hermes-agent').then(() => ({ ok: true }));
+});
+
+/** Read-only Local Control Phase 1 doctor — no paths or env returned (booleans only). */
+ipcMain.handle('ham-desktop:local-control-get-status', () => {
+  const userData = app.getPath('userData');
+  return buildLocalControlStatus({
+    platform: process.platform,
+    userDataPath: userData,
+    security: {
+      context_isolation: true,
+      node_integration: false,
+      sandbox: true,
+    },
+    fs,
+    path,
+  });
 });
 
 app.whenReady().then(() => {

@@ -11,4 +11,7 @@ contextBridge.exposeInMainWorld('__HAM_DESKTOP_BUNDLE__', {
   runHermesPreset: (preset) => ipcRenderer.invoke('ham-desktop:hermes-preset', preset),
   readCuratedFile: (name) => ipcRenderer.invoke('ham-desktop:read-curated-file', name),
   openHermesUpstreamDocs: () => ipcRenderer.invoke('ham-desktop:open-hermes-upstream-docs'),
+  localControl: {
+    getStatus: () => ipcRenderer.invoke('ham-desktop:local-control-get-status'),
+  },
 });

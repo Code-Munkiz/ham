@@ -5,7 +5,7 @@ Thin shell: renderer is the existing Vite/React app; FastAPI stays a separate HT
 ## Shell UX (M1)
 
 - **First screen:** the packaged app **opens the workspace app** with **`/` → `/chat`** (workspace chat). The marketing landing (“go ham” / astrochimp) is **web-only**.
-- **Future direction:** permissioned desktop-local control is specified in [`docs/desktop/local_control_v1.md`](../docs/desktop/local_control_v1.md) (Phase 2+); **not implemented** in M1 beyond allowlisted Hermes CLI presets (see below).
+- **Local Control Phase 1 (doctor only):** read-only status via IPC `ham-desktop:local-control-get-status` and **Settings → HAM + Hermes setup** card; **disabled by default** — see [`docs/desktop/local_control_v1.md`](../docs/desktop/local_control_v1.md). Automation / sidecar is **Phase 2+**.
 - **Download and run:** packaged builds ship **`default-public-api.json`** next to `main.cjs` with the **project’s public Ham API origin**. Users can open the app with **no env vars**; power users override with **`HAM_DESKTOP_API_BASE`** or **`ham-desktop-config.json`**. Bump that file when the canonical public API URL changes, then cut a new desktop release.
 - **Menu bar:** on **Linux and Windows**, the default Electron **File / Edit / View** menu is **removed** so the window chrome stays dark; **macOS** keeps the normal app menu.
 - **Public assets:** the nav logo uses the same **relative `public/` URLs** as the Vite build (`base: ./`) so icons load under **`file://`** in the packaged renderer.
@@ -23,7 +23,9 @@ Linux and Windows artifacts **do not duplicate** the chat interface. `electron-b
 - Shipped under `desktop/curated/`: README, `default-curated-skills.json` (suggested `catalog_id` pins), and `ham-api-env.snippet`. These are included in the packaged app (`package.json` → `files`).
 - **Settings → HAM + Hermes setup** (desktop only): probes `hermes --version` on the **system PATH** and shows the curated list. HAM does **not** download or install Hermes binaries in this phase; install upstream, then use **Re-check CLI**.
 - **Allowlisted CLI presets (Phase B):** buttons that run a **fixed** argv list in the main process (`hermes --version`, `hermes plugins list`, `hermes mcp list`, …) and show stdout/stderr in the settings panel — not free-form TUI control; 25s timeout, capped output. Presets are defined in `main.cjs` only; add new ones there after review.
-- Additional IPC: `window.__HAM_DESKTOP_BUNDLE__` (`hermesCliProbe`, `runHermesPreset`, `readCuratedFile`, `openHermesUpstreamDocs`) — see `preload.cjs` / `main.cjs`.
+- Additional IPC: `window.__HAM_DESKTOP_BUNDLE__` (`hermesCliProbe`, `runHermesPreset`, `readCuratedFile`, `openHermesUpstreamDocs`, `localControl.getStatus`) — see `preload.cjs` / `main.cjs` / `local_control_status.cjs`.
+- **CLI (repo, no Electron):** `python -m src.ham_cli desktop local-control status` — spec-on-disk + OS tier only; use the desktop settings card for live path/security checks.
+- **Tests:** `npm run test:local-control` from `desktop/` (Node built-in test runner over `local_control_status.cjs`).
 
 ## Security (M1)
 

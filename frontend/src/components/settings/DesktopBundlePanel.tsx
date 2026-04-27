@@ -10,6 +10,7 @@ import {
 } from "@/lib/ham/hermesDesktopPresets";
 import { fetchHermesGatewaySnapshot, type HermesGatewaySnapshot } from "@/lib/ham/api";
 import { HermesOperatorConnectionStrip } from "@/components/hermes/HermesOperatorConnectionStrip";
+import { DesktopLocalControlStatusCard } from "@/components/settings/DesktopLocalControlStatusCard";
 
 type CuratedList = { schema_version?: number; description?: string; catalog_ids?: string[] };
 
@@ -141,6 +142,8 @@ export function DesktopBundlePanel() {
         </div>
       ) : null}
       {apiSnapshot?.operator_connection ? <HermesOperatorConnectionStrip snapshot={apiSnapshot} /> : null}
+
+      <DesktopLocalControlStatusCard />
 
       <div className="rounded-xl border border-white/10 bg-[#0c0c0c] p-5 space-y-3">
         <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-white/35">

@@ -108,7 +108,7 @@ This is a **design target** for implementation phases; Phase 0 does not add IPC,
 | Phase | Scope |
 |-------|--------|
 | **0** | **Docs + metadata alignment** (this spec, Computer Control Pack surgical updates, capability directory tags/backends). |
-| **1** | Desktop **local control doctor / status** only (readiness hints; no new risky IPC). |
+| **1** | **Shipped:** read-only **`ham-desktop:local-control-get-status`** IPC + **HAM + Hermes setup** settings card + optional **`ham desktop local-control status`** CLI; **disabled by default**; no automation, generic shell, or filesystem IPC. |
 | **2** | **Permission model + audit log + kill switch** in desktop main (design implementation; renderer still bounded). |
 | **3** | **One narrow automation vertical on Linux** (explicitly scoped; still no generic shell/filesystem). |
 | **4** | **Windows parity** for that vertical + packaging hardening. |

@@ -6,7 +6,11 @@ import typer
 
 from src.ham_cli import __version__
 from src.ham_cli.commands.api_cmd import run_api_status
-from src.ham_cli.commands.desktop import run_package_linux, run_package_win
+from src.ham_cli.commands.desktop import (
+    run_desktop_local_control_status,
+    run_package_linux,
+    run_package_win,
+)
 from src.ham_cli.commands.doctor import run_doctor
 from src.ham_cli.commands.readiness import run_readiness
 from src.ham_cli.commands.status import run_status
@@ -106,7 +110,11 @@ def api_status_cmd(
 
 desktop_app = typer.Typer(help="Desktop shell packaging (wraps npm/electron-builder).")
 package_app = typer.Typer(help="Build desktop artifacts from this repo.")
+local_control_app = typer.Typer(
+    help="Desktop Local Control read-only doctor (spec + OS; use desktop app for live IPC).",
+)
 desktop_app.add_typer(package_app, name="package")
+desktop_app.add_typer(local_control_app, name="local-control")
 app.add_typer(desktop_app, name="desktop")
 
 
@@ -120,6 +128,14 @@ def desktop_pack_linux() -> None:
 def desktop_pack_win() -> None:
     """Run `npm run pack:win` in desktop/ (Windows portable from Linux)."""
     run_package_win()
+
+
+@local_control_app.command("status")
+def desktop_local_control_status_cmd(
+    json_out: bool = typer.Option(False, "--json", help="Emit JSON."),
+) -> None:
+    """Show Local Control Phase 1 CLI doctor (no Electron required)."""
+    run_desktop_local_control_status(json_out=json_out)
 
 
 friendly_package = typer.Typer(
