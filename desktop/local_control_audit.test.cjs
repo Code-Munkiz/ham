@@ -46,6 +46,23 @@ test('appendAuditEvent lines contain no path segments', () => {
   }
 });
 
+test('appendAuditEvent accepts sidecar lifecycle types', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ham-lc-audit-sc-'));
+  try {
+    for (const t of [
+      'local_control_sidecar_start_blocked',
+      'local_control_sidecar_status_read',
+      'local_control_sidecar_health_ping',
+      'local_control_sidecar_stop',
+    ]) {
+      const r = appendAuditEvent({ userDataPath: tmp, type: t, fs, path });
+      assert.equal(r.ok, true);
+    }
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
 test('getAuditStatus exposes redacted flag, no paths', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ham-lc-audit3-'));
   try {

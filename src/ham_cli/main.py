@@ -11,6 +11,7 @@ from src.ham_cli.commands.desktop import (
     run_desktop_local_control_kill_switch_engage,
     run_desktop_local_control_policy,
     run_desktop_local_control_sidecar,
+    run_desktop_local_control_sidecar_lifecycle,
     run_desktop_local_control_status,
     run_package_linux,
     run_package_win,
@@ -118,9 +119,14 @@ local_control_app = typer.Typer(
     help="Desktop Local Control doctor (CLI mirrors; live policy/audit in HAM Desktop only).",
 )
 kill_switch_cli = typer.Typer(help="Kill switch: engage from HAM Desktop only.")
+sidecar_cli = typer.Typer(
+    invoke_without_command=True,
+    help="Sidecar: CLI shows a static mirror; lifecycle requires HAM Desktop.",
+)
 desktop_app.add_typer(package_app, name="package")
 desktop_app.add_typer(local_control_app, name="local-control")
 local_control_app.add_typer(kill_switch_cli, name="kill-switch")
+local_control_app.add_typer(sidecar_cli, name="sidecar")
 app.add_typer(desktop_app, name="desktop")
 
 
@@ -160,12 +166,39 @@ def desktop_local_control_audit_cmd(
     run_desktop_local_control_audit(json_out=json_out)
 
 
-@local_control_app.command("sidecar")
-def desktop_local_control_sidecar_cmd(
+@sidecar_cli.callback()
+def desktop_local_control_sidecar_group(
+    ctx: typer.Context,
     json_out: bool = typer.Option(False, "--json", help="Emit JSON."),
 ) -> None:
-    """Phase 3A sidecar mock mirror (no child process from CLI)."""
+    """Default: static sidecar shape mirror when no subcommand is given."""
+    if ctx.invoked_subcommand is not None:
+        return
     run_desktop_local_control_sidecar(json_out=json_out)
+
+
+@sidecar_cli.command("health")
+def desktop_local_control_sidecar_health_cmd(
+    json_out: bool = typer.Option(False, "--json", help="Emit JSON."),
+) -> None:
+    """Health ping is desktop-only; CLI returns electron_only stub."""
+    run_desktop_local_control_sidecar_lifecycle(operation="health", json_out=json_out)
+
+
+@sidecar_cli.command("stop")
+def desktop_local_control_sidecar_stop_cmd(
+    json_out: bool = typer.Option(False, "--json", help="Emit JSON."),
+) -> None:
+    """Stop sidecar is desktop-only; CLI returns electron_only stub."""
+    run_desktop_local_control_sidecar_lifecycle(operation="stop", json_out=json_out)
+
+
+@sidecar_cli.command("start")
+def desktop_local_control_sidecar_start_cmd(
+    json_out: bool = typer.Option(False, "--json", help="Emit JSON."),
+) -> None:
+    """Start sidecar is desktop-only; CLI returns electron_only stub."""
+    run_desktop_local_control_sidecar_lifecycle(operation="start", json_out=json_out)
 
 
 @kill_switch_cli.command("engage")

@@ -53,9 +53,23 @@ export type HamDesktopLocalControlSidecarStatus = {
   transport: string;
   inbound_network: boolean;
   running: boolean;
+  start_allowed: boolean;
+  blocked_reason: string | null;
+  health: string;
   droid_access: string;
   capabilities: Record<string, string>;
 };
+
+export type HamDesktopSidecarStartResult =
+  | { ok: true }
+  | { ok: false; blocked: true; reason: string }
+  | { ok: false; error: string };
+
+export type HamDesktopSidecarStopResult = { ok: true; idempotent?: boolean };
+
+export type HamDesktopSidecarHealthResult =
+  | { ok: true; result?: unknown }
+  | { ok: false; reason: string };
 
 /** Payload from Electron main — doctor + Phase 2 skeleton; no filesystem paths. */
 export type HamDesktopLocalControlStatus = {
@@ -97,6 +111,9 @@ export type HamDesktopLocalControlApi = {
   getAuditStatus: () => Promise<HamDesktopLocalControlAuditStatus>;
   getKillSwitchStatus: () => Promise<{ kind: string; engaged: boolean; reason: string }>;
   getSidecarStatus: () => Promise<HamDesktopLocalControlSidecarStatus>;
+  pingSidecarHealth: () => Promise<HamDesktopSidecarHealthResult>;
+  stopSidecar: () => Promise<HamDesktopSidecarStopResult>;
+  startSidecar: () => Promise<HamDesktopSidecarStartResult>;
   engageKillSwitch: () => Promise<HamDesktopLocalControlKillSwitchEngageResult>;
 };
 

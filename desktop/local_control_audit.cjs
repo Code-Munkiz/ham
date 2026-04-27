@@ -14,6 +14,10 @@ const SAFE_EVENT_TYPES = new Set([
   'local_control_audit_status_read',
   'local_control_kill_switch_status_read',
   'local_control_kill_switch_engaged',
+  'local_control_sidecar_start_blocked',
+  'local_control_sidecar_status_read',
+  'local_control_sidecar_health_ping',
+  'local_control_sidecar_stop',
 ]);
 
 /** @param {string} userDataPath @param {typeof import('node:path')} path */

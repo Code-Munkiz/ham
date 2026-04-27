@@ -7,9 +7,9 @@
 
 const { loadPolicy, getPolicyStatusPayload } = require('./local_control_policy.cjs');
 const { getAuditStatus } = require('./local_control_audit.cjs');
-const { buildMockSidecarStatus } = require('./local_control_sidecar_status.cjs');
+const { buildSidecarStatus, createIdleSidecarManagerView } = require('./local_control_sidecar_status.cjs');
 
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 const PHASE = 'policy_audit_kill_switch_only';
 
 /** @param {string} platform process.platform */
@@ -30,9 +30,11 @@ function platformDerived(platform) {
  * @param {{ context_isolation: boolean, node_integration: boolean, sandbox: boolean }} opts.security
  * @param {typeof import('node:fs')} opts.fs
  * @param {typeof import('node:path')} opts.path
+ * @param {{ getSnapshot: () => { running: boolean, health_last: 'ok' | 'error' | null } }} [opts.sidecarManager]
  */
 function buildLocalControlStatus(opts) {
-  const { platform, userDataPath, security, fs, path } = opts;
+  const { platform, userDataPath, security, fs, path, sidecarManager } = opts;
+  const mgr = sidecarManager || createIdleSidecarManagerView();
   const warnings = [];
 
   let user_data_writable = false;
@@ -89,7 +91,10 @@ function buildLocalControlStatus(opts) {
       engaged: policy.kill_switch.engaged,
       reason: policy.kill_switch.reason,
     },
-    sidecar: buildMockSidecarStatus(),
+    sidecar: buildSidecarStatus({
+      killSwitchEngaged: policy.kill_switch.engaged,
+      manager: mgr,
+    }),
     capabilities: {
       browser_automation: 'not_implemented',
       filesystem_access: 'not_implemented',
@@ -99,8 +104,8 @@ function buildLocalControlStatus(opts) {
     },
     warnings,
     non_goals: [
-      'no automation in phase 3a',
-      'no sidecar child process in phase 3a',
+      'no automation in phase 3b',
+      'sidecar is inert lifecycle shell only (no tools)',
       'no cloud-run browser control',
       'no war-room revival',
       'no disengage kill_switch via product ui',

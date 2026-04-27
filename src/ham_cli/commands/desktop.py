@@ -57,11 +57,14 @@ def _cli_local_control_sidecar_skeleton() -> dict[str, object]:
     return {
         "kind": "ham_cli_desktop_local_control_sidecar_skeleton",
         "expected": True,
-        "implemented": False,
-        "mode": "mock_status_only",
-        "transport": "stdio_json_rpc_planned",
+        "implemented": True,
+        "mode": "inert_process_shell",
+        "transport": "stdio_json_rpc",
         "inbound_network": False,
         "running": False,
+        "start_allowed": False,
+        "blocked_reason": "kill_switch_engaged",
+        "health": "unavailable",
         "droid_access": "not_enabled",
         "capabilities": {
             "browser_automation": "not_implemented",
@@ -70,7 +73,18 @@ def _cli_local_control_sidecar_skeleton() -> dict[str, object]:
             "app_window_control": "not_implemented",
             "mcp_adapters": "not_implemented",
         },
-        "note": "Live sidecar is not started from CLI; HAM Desktop reports mock status only in Phase 3A.",
+        "note": "CLI mirror only. Live inert sidecar lifecycle (spawn/stdio) runs in HAM Desktop main, not via this CLI.",
+    }
+
+
+def _cli_sidecar_lifecycle_stub(operation: str) -> dict[str, object]:
+    return {
+        "kind": "ham_cli_desktop_local_control_sidecar_lifecycle",
+        "ok": False,
+        "available": False,
+        "reason": "electron_only",
+        "operation": operation,
+        "note": "Sidecar start/stop/health IPC is implemented in HAM Desktop; CLI cannot attach without Electron.",
     }
 
 
@@ -123,7 +137,7 @@ def run_desktop_local_control_status(*, json_out: bool) -> None:
 
     payload = {
         "kind": "ham_cli_desktop_local_control_status",
-        "schema_version": 3,
+        "schema_version": 4,
         "phase": _LC_PHASE2,
         "enabled": False,
         "spec_present": spec_present,
@@ -135,7 +149,7 @@ def run_desktop_local_control_status(*, json_out: bool) -> None:
         "audit": _cli_local_control_audit_skeleton(),
         "kill_switch": {"engaged": True, "reason": "default_disabled"},
         "sidecar": _cli_local_control_sidecar_skeleton(),
-        "note": "CLI checks repo spec + OS + static skeletons (incl. Phase 3A sidecar mock). HAM Desktop shows live IPC.",
+        "note": "CLI checks repo spec + OS + static skeletons (incl. Phase 3B sidecar shape). HAM Desktop runs live IPC + inert child.",
     }
     if json_out:
         typer.echo(json.dumps(payload, indent=2))
@@ -179,12 +193,23 @@ def run_desktop_local_control_kill_switch_engage() -> None:
 
 
 def run_desktop_local_control_sidecar(*, json_out: bool) -> None:
-    """Static Phase 3A sidecar mock (no Electron child process from CLI)."""
+    """Static Phase 3B sidecar shape mirror (no Electron child process from CLI)."""
     s = _cli_local_control_sidecar_skeleton()
     if json_out:
         typer.echo(json.dumps(s, indent=2))
         return
-    typer.echo("Desktop Local Control — sidecar (CLI mock, read-only)")
+    typer.echo("Desktop Local Control — sidecar (CLI mirror, read-only)")
     typer.echo(f"  Mode: {s['mode']} · running: {s['running']} · transport: {s['transport']}")
+    typer.echo(f"  Start allowed: {s['start_allowed']} · blocked: {s.get('blocked_reason')}")
     typer.echo(f"  Droid access: {s['droid_access']} · inbound network: {s['inbound_network']}")
     typer.echo(f"  {s['note']}")
+
+
+def run_desktop_local_control_sidecar_lifecycle(*, operation: str, json_out: bool) -> None:
+    """Lifecycle is desktop-only; CLI returns an explicit stub."""
+    p = _cli_sidecar_lifecycle_stub(operation)
+    if json_out:
+        typer.echo(json.dumps(p, indent=2))
+        return
+    typer.echo(f"Sidecar {operation}: not available from CLI (requires HAM Desktop).")
+    typer.echo(f"  {p['note']}")

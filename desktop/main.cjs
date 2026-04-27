@@ -8,7 +8,8 @@ const fs = require('node:fs');
 const { buildLocalControlStatus } = require('./local_control_status.cjs');
 const { loadPolicy, getPolicyStatusPayload, engageKillSwitch } = require('./local_control_policy.cjs');
 const { getAuditStatus, appendAuditEvent } = require('./local_control_audit.cjs');
-const { buildMockSidecarStatus } = require('./local_control_sidecar_status.cjs');
+const { buildSidecarStatus } = require('./local_control_sidecar_status.cjs');
+const { createSidecarManager, defaultChildScriptPath } = require('./local_control_sidecar_manager.cjs');
 
 const CONFIG_FILENAME = 'ham-desktop-config.json';
 
@@ -295,6 +296,27 @@ function localControlPaths() {
   };
 }
 
+/** @type {ReturnType<typeof createSidecarManager> | null} */
+let sidecarManagerSingleton = null;
+
+function getSidecarManager() {
+  if (!sidecarManagerSingleton) {
+    sidecarManagerSingleton = createSidecarManager({
+      childScriptPath: defaultChildScriptPath(),
+      onAuditEvent: (type) => {
+        const c = localControlPaths();
+        appendAuditEvent({
+          userDataPath: c.userDataPath,
+          type,
+          fs: c.fs,
+          path: c.path,
+        });
+      },
+    });
+  }
+  return sidecarManagerSingleton;
+}
+
 /** Local Control Phase 2 — full status; appends redacted audit line. */
 ipcMain.handle('ham-desktop:local-control-get-status', () => {
   const c = localControlPaths();
@@ -308,6 +330,7 @@ ipcMain.handle('ham-desktop:local-control-get-status', () => {
     },
     fs: c.fs,
     path: c.path,
+    sidecarManager: getSidecarManager(),
   });
   appendAuditEvent({
     userDataPath: c.userDataPath,
@@ -372,8 +395,52 @@ ipcMain.handle('ham-desktop:local-control-get-kill-switch-status', () => {
   };
 });
 
-/** Phase 3A — mock sidecar only; no spawn, no I/O. */
-ipcMain.handle('ham-desktop:local-control-get-sidecar-status', () => buildMockSidecarStatus());
+/** Phase 3B — live sidecar status (inert child optional); read-only payload. */
+ipcMain.handle('ham-desktop:local-control-get-sidecar-status', () => {
+  const c = localControlPaths();
+  const { policy } = loadPolicy({
+    userDataPath: c.userDataPath,
+    platform: c.platform,
+    fs: c.fs,
+    path: c.path,
+  });
+  appendAuditEvent({
+    userDataPath: c.userDataPath,
+    type: 'local_control_sidecar_status_read',
+    fs: c.fs,
+    path: c.path,
+  });
+  return buildSidecarStatus({
+    killSwitchEngaged: policy.kill_switch.engaged,
+    manager: getSidecarManager(),
+  });
+});
+
+ipcMain.handle('ham-desktop:local-control-sidecar-start', async () => {
+  const c = localControlPaths();
+  const { policy } = loadPolicy({
+    userDataPath: c.userDataPath,
+    platform: c.platform,
+    fs: c.fs,
+    path: c.path,
+  });
+  return getSidecarManager().start({ killSwitchEngaged: policy.kill_switch.engaged });
+});
+
+ipcMain.handle('ham-desktop:local-control-sidecar-stop', async () => {
+  return getSidecarManager().stop();
+});
+
+ipcMain.handle('ham-desktop:local-control-sidecar-health', async () => {
+  const c = localControlPaths();
+  appendAuditEvent({
+    userDataPath: c.userDataPath,
+    type: 'local_control_sidecar_health_ping',
+    fs: c.fs,
+    path: c.path,
+  });
+  return getSidecarManager().pingHealth();
+});
 
 /** Engage only — idempotent; persists safer policy; never disengages. */
 ipcMain.handle('ham-desktop:local-control-engage-kill-switch', () => {
@@ -395,6 +462,10 @@ ipcMain.handle('ham-desktop:local-control-engage-kill-switch', () => {
     changed: r.changed,
     kill_switch: r.policy.kill_switch,
   };
+});
+
+app.on('before-quit', () => {
+  if (sidecarManagerSingleton) void sidecarManagerSingleton.stop();
 });
 
 app.whenReady().then(() => {

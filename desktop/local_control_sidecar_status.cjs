@@ -1,21 +1,41 @@
 'use strict';
 
 /**
- * Desktop Local Control Phase 3A — mocked sidecar status only.
- * No child process, no stdio, no network. Constants for doctor/UI/CLI alignment.
+ * Desktop Local Control Phase 3B — sidecar status shape for aggregate + IPC.
+ * Lifecycle details live in local_control_sidecar_manager.cjs (main only).
  */
 
 const KIND = 'ham_desktop_local_control_sidecar_status';
 
-function buildMockSidecarStatus() {
+/** @typedef {{ getSnapshot: () => { running: boolean, health_last: 'ok' | 'error' | null } }} SidecarManagerView */
+
+function healthLabel(snapshot) {
+  if (!snapshot.running) return 'unavailable';
+  if (snapshot.health_last === 'ok') return 'ok';
+  if (snapshot.health_last === 'error') return 'error';
+  return 'unknown';
+}
+
+/**
+ * @param {object} opts
+ * @param {boolean} opts.killSwitchEngaged
+ * @param {SidecarManagerView} opts.manager
+ */
+function buildSidecarStatus(opts) {
+  const { killSwitchEngaged, manager } = opts;
+  const snap = manager.getSnapshot();
+  const start_allowed = !killSwitchEngaged;
   return {
     kind: KIND,
     expected: true,
-    implemented: false,
-    mode: 'mock_status_only',
-    transport: 'stdio_json_rpc_planned',
+    implemented: true,
+    mode: 'inert_process_shell',
+    transport: 'stdio_json_rpc',
     inbound_network: false,
-    running: false,
+    running: snap.running,
+    start_allowed,
+    blocked_reason: killSwitchEngaged ? 'kill_switch_engaged' : null,
+    health: healthLabel(snap),
     droid_access: 'not_enabled',
     capabilities: {
       browser_automation: 'not_implemented',
@@ -27,7 +47,15 @@ function buildMockSidecarStatus() {
   };
 }
 
+/** @returns {SidecarManagerView} */
+function createIdleSidecarManagerView() {
+  return {
+    getSnapshot: () => ({ running: false, health_last: null }),
+  };
+}
+
 module.exports = {
   KIND,
-  buildMockSidecarStatus,
+  buildSidecarStatus,
+  createIdleSidecarManagerView,
 };

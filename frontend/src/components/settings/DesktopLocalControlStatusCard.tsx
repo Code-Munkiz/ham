@@ -22,6 +22,7 @@ export function DesktopLocalControlStatusCard() {
   const [err, setErr] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [engageBusy, setEngageBusy] = React.useState(false);
+  const [sidecarBusy, setSidecarBusy] = React.useState(false);
 
   const lc = getHamDesktopLocalControlApi();
 
@@ -64,12 +65,60 @@ export function DesktopLocalControlStatusCard() {
     }
   };
 
+  const onStopSidecar = async () => {
+    const api = getHamDesktopLocalControlApi();
+    if (typeof api?.stopSidecar !== "function") return;
+    setSidecarBusy(true);
+    setErr(null);
+    try {
+      await api.stopSidecar();
+      await load();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Stop sidecar failed");
+    } finally {
+      setSidecarBusy(false);
+    }
+  };
+
+  const onPingSidecarHealth = async () => {
+    const api = getHamDesktopLocalControlApi();
+    if (typeof api?.pingSidecarHealth !== "function") return;
+    setSidecarBusy(true);
+    setErr(null);
+    try {
+      await api.pingSidecarHealth();
+      await load();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Sidecar health ping failed");
+    } finally {
+      setSidecarBusy(false);
+    }
+  };
+
+  const onStartSidecar = async () => {
+    const api = getHamDesktopLocalControlApi();
+    if (typeof api?.startSidecar !== "function") return;
+    setSidecarBusy(true);
+    setErr(null);
+    try {
+      const r = await api.startSidecar();
+      if (r && typeof r === "object" && "ok" in r && r.ok === false && "blocked" in r && r.blocked) {
+        setErr("Start blocked: kill switch is engaged (default). Inert sidecar cannot start until policy allows.");
+      }
+      await load();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Start sidecar failed");
+    } finally {
+      setSidecarBusy(false);
+    }
+  };
+
   return (
     <div className="rounded-xl border border-white/10 bg-[#0c0c0c] p-5 space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-white/35">
           <Shield className="h-4 w-4 text-[#FF6B00]" />
-          Local Control (Phase 3A — sidecar protocol / mock status)
+          Local Control (Phase 3B — inert sidecar shell)
         </div>
         <button
           type="button"
@@ -84,9 +133,9 @@ export function DesktopLocalControlStatusCard() {
 
       <p className="text-[9px] text-white/35 leading-relaxed">
         Local Control stays <span className="text-white/55">disabled</span> by default. Kill switch defaults{" "}
-        <span className="text-white/55">engaged</span>. Phase 3A adds a <span className="text-white/50">sidecar protocol</span>{" "}
-        doc and <span className="text-white/50">mock</span> status only — no child process, no inbound network, no Droid
-        access, no automation.
+        <span className="text-white/55">engaged</span>, which <span className="text-white/50">blocks starting</span> the
+        inert sidecar. Phase 3B ships an <span className="text-white/50">stdio-only child</span> (health / status /
+        shutdown) — no tools, no automation, no inbound network, no Droid access.
       </p>
 
       <div className="flex flex-wrap gap-2">
@@ -98,6 +147,35 @@ export function DesktopLocalControlStatusCard() {
         >
           <Lock className={cn("h-3.5 w-3.5", engageBusy && "animate-pulse")} />
           Engage kill switch
+        </button>
+        <button
+          type="button"
+          onClick={() => void onPingSidecarHealth()}
+          disabled={loading || sidecarBusy || !status?.sidecar.running}
+          className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-white/10 text-[10px] font-black uppercase tracking-widest text-white/60 hover:text-[#FF6B00] hover:border-[#FF6B00]/30 disabled:opacity-50"
+        >
+          Ping sidecar health
+        </button>
+        <button
+          type="button"
+          onClick={() => void onStopSidecar()}
+          disabled={loading || sidecarBusy || !status?.sidecar.running}
+          className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-white/10 text-[10px] font-black uppercase tracking-widest text-white/60 hover:text-amber-200/90 hover:border-amber-500/30 disabled:opacity-50"
+        >
+          Stop sidecar
+        </button>
+        <button
+          type="button"
+          onClick={() => void onStartSidecar()}
+          disabled={loading || sidecarBusy || !status?.sidecar.start_allowed || !!status?.sidecar.running}
+          title={
+            status && !status.sidecar.start_allowed
+              ? "Start is blocked while the kill switch is engaged (default)."
+              : undefined
+          }
+          className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-white/10 text-[10px] font-black uppercase tracking-widest text-white/40 hover:border-white/20 disabled:opacity-40"
+        >
+          Start sidecar
         </button>
       </div>
       <p className="text-[8px] text-white/25 leading-relaxed">
@@ -166,14 +244,23 @@ export function DesktopLocalControlStatusCard() {
           <div className="flex flex-wrap gap-x-2">
             <dt className="text-white/35 shrink-0">Sidecar</dt>
             <dd className="text-[10px] leading-relaxed">
-              {status.sidecar.mode} · running: {status.sidecar.running ? "yes" : "no"} · transport:{" "}
-              <span className="font-mono text-white/45">{status.sidecar.transport}</span> · inbound network:{" "}
-              {status.sidecar.inbound_network ? "yes" : "no"} · Droid: {status.sidecar.droid_access}
+              implemented: {status.sidecar.implemented ? "yes (inert shell)" : "no"} · {status.sidecar.mode} · running:{" "}
+              {status.sidecar.running ? "yes" : "no"} · transport:{" "}
+              <span className="font-mono text-white/45">{status.sidecar.transport}</span> · health:{" "}
+              <span className="font-mono text-white/45">{status.sidecar.health}</span> · start allowed:{" "}
+              {status.sidecar.start_allowed ? "yes" : "no"}
+              {status.sidecar.blocked_reason ? (
+                <>
+                  {" "}
+                  · blocked: <span className="font-mono text-white/45">{status.sidecar.blocked_reason}</span>
+                </>
+              ) : null}{" "}
+              · inbound network: {status.sidecar.inbound_network ? "yes" : "no"} · Droid: {status.sidecar.droid_access}
             </dd>
           </div>
           <div className="flex flex-wrap gap-x-2">
             <dt className="text-white/35 shrink-0">Sidecar capabilities</dt>
-            <dd className="text-[10px]">all not_implemented (mock)</dd>
+            <dd className="text-[10px]">all not_implemented</dd>
           </div>
           <div className="flex flex-wrap gap-x-2">
             <dt className="text-white/35 shrink-0">Capabilities</dt>

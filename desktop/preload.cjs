@@ -13,6 +13,9 @@ const localControlBridge = {
   getAuditStatus: () => ipcRenderer.invoke('ham-desktop:local-control-get-audit-status'),
   getKillSwitchStatus: () => ipcRenderer.invoke('ham-desktop:local-control-get-kill-switch-status'),
   getSidecarStatus: () => ipcRenderer.invoke('ham-desktop:local-control-get-sidecar-status'),
+  pingSidecarHealth: () => ipcRenderer.invoke('ham-desktop:local-control-sidecar-health'),
+  stopSidecar: () => ipcRenderer.invoke('ham-desktop:local-control-sidecar-stop'),
+  startSidecar: () => ipcRenderer.invoke('ham-desktop:local-control-sidecar-start'),
   engageKillSwitch: () => ipcRenderer.invoke('ham-desktop:local-control-engage-kill-switch'),
 };
 
