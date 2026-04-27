@@ -8,11 +8,16 @@ import { Link } from "react-router-dom";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { HermesSkillsInstalledResponse } from "@/lib/ham/api";
+import type { HermesSkillCatalogEntry, HermesSkillCatalogEntryDetail, HermesSkillsInstalledResponse } from "@/lib/ham/api";
 import {
   workspaceMemoryAdapter,
   type WorkspaceMemoryItem,
 } from "../../adapters/memoryAdapter";
+import { workspaceFileAdapter } from "../../adapters/filesAdapter";
+import {
+  fetchLocalWorkspaceHealth,
+  isLocalRuntimeConfigured,
+} from "../../adapters/localRuntime";
 import {
   workspaceSkillsAdapter,
   type WorkspaceSkill,
@@ -54,6 +59,8 @@ type WorkspaceChatInspectorPanelProps = {
 
 const SKILL_BUILTIN = new Set(["ham-local-docs", "ham-local-plan"]);
 
+const CATALOG_PREVIEW_N = 8;
+
 function truncate(s: string, max: number): string {
   const t = s.trim();
   if (t.length <= max) return t;
@@ -82,8 +89,22 @@ type MemoryInspectorState =
 type SkillsInspectorState =
   | { status: "idle" }
   | { status: "loading" }
-  | { status: "ready"; skills: WorkspaceSkill[]; catalogCount: number | null; catalogError?: string; live: HermesSkillsInstalledResponse | null }
+  | {
+      status: "ready";
+      skills: WorkspaceSkill[];
+      catalogCount: number | null;
+      catalogError?: string;
+      catalogSource: string | null;
+      catalogPreview: HermesSkillCatalogEntry[];
+      live: HermesSkillsInstalledResponse | null;
+    }
   | { status: "error"; message: string };
+
+type FilesWorkspaceState =
+  | { status: "loading" }
+  | { status: "unconfigured" }
+  | { status: "error"; message: string }
+  | { status: "ready"; rootPath: string; broad: boolean; entries: Array<{ name: string; type: "file" | "folder" }> };
 
 function formatClock(iso: string): string {
   try {
@@ -275,7 +296,65 @@ function MemoryTabBody({ state, onRetry }: { state: MemoryInspectorState; onRetr
   );
 }
 
-function SkillsTabBody({ state, onRetry }: { state: SkillsInspectorState; onRetry: () => void }) {
+function SkillsTabBody({
+  state,
+  onRetry,
+  onReloadAfterAction,
+}: {
+  state: SkillsInspectorState;
+  onRetry: () => void;
+  onReloadAfterAction: () => void;
+}) {
+  const [skillBusy, setSkillBusy] = React.useState<string | null>(null);
+  const [skillActionErr, setSkillActionErr] = React.useState<string | null>(null);
+  const [catDetail, setCatDetail] = React.useState<{
+    catalogId: string;
+    loading: boolean;
+    entry: HermesSkillCatalogEntryDetail | null;
+    error: string | null;
+  } | null>(null);
+
+  const openCatalogDetail = async (catalogId: string) => {
+    setCatDetail({ catalogId, loading: true, entry: null, error: null });
+    const { entry, error, bridge } = await workspaceSkillsAdapter.hermesStaticCatalogEntry(catalogId);
+    if (bridge.status === "pending") {
+      setCatDetail({ catalogId, loading: false, entry: null, error: bridge.detail });
+      return;
+    }
+    setCatDetail({
+      catalogId,
+      loading: false,
+      entry: entry ?? null,
+      error: error ?? (!entry ? "No detail returned" : null),
+    });
+  };
+
+  const runSkillPatch = async (id: string, body: { enabled?: boolean; installed?: boolean }) => {
+    setSkillActionErr(null);
+    setSkillBusy(id);
+    const { error } = await workspaceSkillsAdapter.patch(id, body);
+    setSkillBusy(null);
+    if (error) {
+      setSkillActionErr(error);
+      return;
+    }
+    onReloadAfterAction();
+  };
+
+  const runSkillRemove = async (id: string) => {
+    if (SKILL_BUILTIN.has(id)) return;
+    if (!window.confirm("Remove this skill from the workspace?")) return;
+    setSkillActionErr(null);
+    setSkillBusy(id);
+    const { error } = await workspaceSkillsAdapter.remove(id);
+    setSkillBusy(null);
+    if (error) {
+      setSkillActionErr(error);
+      return;
+    }
+    onReloadAfterAction();
+  };
+
   if (state.status === "idle" || state.status === "loading") {
     return (
       <div className="space-y-2 p-3">
@@ -309,14 +388,106 @@ function SkillsTabBody({ state, onRetry }: { state: SkillsInspectorState; onRetr
     );
   }
 
-  const { skills, catalogCount, catalogError, live } = state;
+  const { skills, catalogCount, catalogError, catalogSource, catalogPreview, live } = state;
   const hasInstalled = skills.some((s) => s.installed);
+  const installedList = skills.filter((s) => s.installed);
 
   return (
     <div>
+      {skillActionErr ? (
+        <p className="mx-3 mt-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-2 py-1.5 text-[10px] text-amber-100/90">
+          {skillActionErr}
+        </p>
+      ) : null}
+      <div className="border-b border-white/[0.06] px-3 py-2">
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-white/45">Installed / workspace</p>
+      </div>
+
+      {!hasInstalled ? (
+        <div className="p-3">
+          <p className="text-[12px] leading-relaxed text-white/70">No skills installed yet.</p>
+          <p className="mt-1.5 text-[11px] leading-relaxed text-white/50">
+            Enable built-ins or add custom skills on the Skills page. Hermes catalog entries below are read-only until
+            linked on the server.
+          </p>
+        </div>
+      ) : (
+        <ul className="divide-y divide-white/[0.06]">
+          {installedList.slice(0, 16).map((s) => {
+            const builtin = SKILL_BUILTIN.has(s.id);
+            const busy = skillBusy === s.id;
+            return (
+              <li key={s.id} className="px-3 py-2">
+                <p className="truncate text-[12px] font-medium text-white/[0.88]">{s.name}</p>
+                <div className="mt-1 flex flex-wrap items-center gap-1">
+                  {builtin ? (
+                    <span className="rounded bg-sky-500/15 px-1.5 py-0.5 text-[9px] text-sky-200/85">built-in</span>
+                  ) : (
+                    <span className="rounded bg-violet-500/15 px-1.5 py-0.5 text-[9px] text-violet-200/85">
+                      workspace
+                    </span>
+                  )}
+                  <span className="rounded bg-white/[0.06] px-1.5 py-0.5 text-[9px] text-white/40">
+                    {builtin ? "source: catalog" : "source: workspace"}
+                  </span>
+                  <span
+                    className={cn(
+                      "rounded px-1.5 py-0.5 text-[9px]",
+                      s.enabled ? "bg-emerald-500/15 text-emerald-200/85" : "bg-white/[0.08] text-white/45",
+                    )}
+                  >
+                    {s.enabled ? "enabled" : "disabled"}
+                  </span>
+                </div>
+                {s.description ? (
+                  <p className="mt-1 line-clamp-2 text-[10px] text-white/45">{truncate(s.description, 100)}</p>
+                ) : null}
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-6 border-white/15 px-2 text-[10px] text-white/80"
+                    disabled={busy}
+                    onClick={() => void runSkillPatch(s.id, { enabled: !s.enabled })}
+                  >
+                    {s.enabled ? "Disable" : "Enable"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-6 border-white/15 px-2 text-[10px] text-white/80"
+                    disabled={busy || builtin}
+                    title={builtin ? "Built-in entries stay in the catalog" : undefined}
+                    onClick={() => void runSkillRemove(s.id)}
+                  >
+                    Remove
+                  </Button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {hasInstalled && installedList.length > 16 ? (
+        <p className="px-3 py-2 text-[10px] text-white/40">+{installedList.length - 16} more in Skills</p>
+      ) : null}
+
+      <div className="border-t border-white/[0.06]">
+        <p className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-white/45">Hermes catalog</p>
+      </div>
+
       {catalogCount != null ? (
         <p className="border-b border-white/[0.06] px-3 py-2 text-[10px] text-white/50">
           <span className="font-medium text-white/65">{catalogCount}</span> catalog entries available
+          {catalogSource ? (
+            <>
+              {" "}
+              · Source: <span className="font-mono text-white/55">{catalogSource}</span>
+            </>
+          ) : null}
+          <span className="text-white/40"> · Read-only catalog</span>
         </p>
       ) : catalogError ? (
         <p className="border-b border-white/[0.06] px-3 py-2 text-[10px] text-amber-200/70">
@@ -330,73 +501,123 @@ function SkillsTabBody({ state, onRetry }: { state: SkillsInspectorState; onRetr
         </p>
       ) : null}
 
-      {!hasInstalled ? (
-        <div className="p-3">
-          <p className="text-[12px] leading-relaxed text-white/70">No skills installed yet.</p>
-          <p className="mt-1.5 text-[11px] leading-relaxed text-white/50">
-            {catalogCount != null && !catalogError
-              ? "Hermes static catalog is available read-only."
-              : "Install and manage skills from the Skills workspace when available."}
-          </p>
-        </div>
-      ) : (
+      {catalogPreview.length > 0 ? (
         <ul className="divide-y divide-white/[0.06]">
-          {skills
-            .filter((s) => s.installed)
-            .slice(0, 16)
-            .map((s) => {
-              const builtin = SKILL_BUILTIN.has(s.id);
-              return (
-                <li key={s.id} className="px-3 py-2">
-                  <p className="truncate text-[12px] font-medium text-white/[0.88]">{s.name}</p>
-                  <div className="mt-1 flex flex-wrap gap-1">
-                    {builtin ? (
-                      <span className="rounded bg-sky-500/15 px-1.5 py-0.5 text-[9px] text-sky-200/85">
-                        built-in
-                      </span>
-                    ) : (
-                      <span className="rounded bg-violet-500/15 px-1.5 py-0.5 text-[9px] text-violet-200/85">
-                        workspace
-                      </span>
-                    )}
-                    <span
-                      className={cn(
-                        "rounded px-1.5 py-0.5 text-[9px]",
-                        s.enabled
-                          ? "bg-emerald-500/15 text-emerald-200/85"
-                          : "bg-white/[0.08] text-white/45",
-                      )}
-                    >
-                      {s.enabled ? "enabled" : "disabled"}
-                    </span>
-                    <span className="rounded bg-white/[0.06] px-1.5 py-0.5 text-[9px] text-white/40">
-                      read-only
-                    </span>
-                  </div>
-                  {s.description ? (
-                    <p className="mt-1 line-clamp-2 text-[10px] text-white/45">
-                      {truncate(s.description, 100)}
-                    </p>
-                  ) : null}
-                </li>
-              );
-            })}
+          {catalogPreview.map((e) => (
+            <li key={e.catalog_id} className="flex items-start justify-between gap-2 px-3 py-2">
+              <div className="min-w-0">
+                <p className="truncate font-mono text-[11px] text-white/[0.88]">{e.catalog_id}</p>
+                <p className="line-clamp-1 text-[10px] text-white/45">{e.display_name}</p>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-6 shrink-0 px-2 text-[10px] text-[#ffb27a]/90"
+                onClick={() => void openCatalogDetail(e.catalog_id)}
+              >
+                View
+              </Button>
+            </li>
+          ))}
         </ul>
-      )}
-      {hasInstalled && skills.filter((s) => s.installed).length > 16 ? (
-        <p className="px-3 py-2 text-[10px] text-white/40">
-          +{skills.filter((s) => s.installed).length - 16} more in Skills
-        </p>
+      ) : catalogCount != null && !catalogError ? (
+        <p className="px-3 py-2 text-[10px] text-white/45">No preview rows (empty catalog payload).</p>
       ) : null}
+
+      <p className="border-t border-white/[0.06] px-3 py-2 text-[10px] leading-relaxed text-white/40">
+        Installing catalog-only entries as workspace skills requires the full Skills page and server-backed items (
+        <span className="font-mono">/api/workspace/skills</span>). There is no Hermes VM or external hub call from the
+        browser here.
+      </p>
+
       <InspectorLinkRow to="/workspace/skills">Open Skills</InspectorLinkRow>
+
+      {catDetail ? (
+        <div
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 p-3"
+          role="dialog"
+          aria-modal="true"
+          onClick={(ev) => {
+            if (ev.target === ev.currentTarget) setCatDetail(null);
+          }}
+        >
+          <div
+            className="max-h-[min(85vh,480px)] w-full max-w-md overflow-y-auto rounded-xl border border-white/10 bg-[#061018] p-4 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-2">
+              <h4 className="text-sm font-semibold text-white/90">Catalog: {catDetail.catalogId}</h4>
+              <Button type="button" variant="ghost" size="sm" className="h-7 text-[11px]" onClick={() => setCatDetail(null)}>
+                Close
+              </Button>
+            </div>
+            {catDetail.loading ? <p className="mt-3 text-[12px] text-white/50">Loading…</p> : null}
+            {catDetail.error ? (
+              <p className="mt-3 whitespace-pre-wrap text-[11px] text-amber-200/80">{catDetail.error}</p>
+            ) : null}
+            {catDetail.entry ? (
+              <div className="mt-3 space-y-2 text-[11px] text-white/70">
+                <p className="font-medium text-white/85">{catDetail.entry.display_name ?? catDetail.catalogId}</p>
+                {catDetail.entry.summary ? (
+                  <p className="leading-relaxed text-white/60">{catDetail.entry.summary}</p>
+                ) : null}
+                {catDetail.entry.detail?.provenance_note ? (
+                  <p className="text-[10px] text-white/45">{catDetail.entry.detail.provenance_note}</p>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
 
 function FilesTabBody({ fileRows }: { fileRows: ChatInspectorFileRow[] }) {
   const hasRows = fileRows.length > 0;
+  const [ws, setWs] = React.useState<FilesWorkspaceState>({ status: "loading" });
+  const [wsTick, setWsTick] = React.useState(0);
+
+  const loadWorkspaceFiles = React.useCallback(async () => {
+    if (!isLocalRuntimeConfigured()) {
+      setWs({ status: "unconfigured" });
+      return;
+    }
+    setWs({ status: "loading" });
+    const health = await fetchLocalWorkspaceHealth();
+    const { entries, bridge } = await workspaceFileAdapter.list();
+    if (bridge.status !== "ready") {
+      setWs({ status: "error", message: bridge.detail });
+      return;
+    }
+    const rootPath =
+      health?.workspaceRootPath?.trim() ||
+      (health?.workspaceRootConfigured === true ? "(workspace root configured)" : "—");
+    const broad = health?.broadFilesystemAccess === true;
+    setWs({
+      status: "ready",
+      rootPath,
+      broad,
+      entries: entries.slice(0, 12).map((e) => ({ name: e.name, type: e.type })),
+    });
+  }, [wsTick]);
+
+  React.useEffect(() => {
+    void loadWorkspaceFiles();
+  }, [loadWorkspaceFiles]);
+
+  React.useEffect(() => {
+    const onRuntime = () => setWsTick((n) => n + 1);
+    window.addEventListener("hww-local-runtime-changed", onRuntime);
+    return () => window.removeEventListener("hww-local-runtime-changed", onRuntime);
+  }, []);
+
   return (
     <div>
+      <div className="border-b border-white/[0.06] px-3 py-2">
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-white/45">Session attachments</p>
+      </div>
       {hasRows ? (
         <ul className="divide-y divide-white/[0.06]">
           {fileRows.map((r) => (
@@ -428,13 +649,77 @@ function FilesTabBody({ fileRows }: { fileRows: ChatInspectorFileRow[] }) {
         <div className="p-3">
           <p className="text-[12px] leading-relaxed text-white/70">No files attached to this session yet.</p>
           <p className="mt-1.5 text-[11px] leading-relaxed text-white/50">
-            Attach files in chat or open the workspace file browser.
+            Queued composer attachments and transcript markers appear here.
           </p>
         </div>
       )}
-      <p className="border-t border-white/[0.06] px-3 py-2 text-[10px] leading-relaxed text-white/45">
-        The full file browser uses the local HAM runtime. Session file references will appear here when available.
-      </p>
+
+      <div className="border-t border-white/[0.06]">
+        <p className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-white/45">Workspace file browser</p>
+      </div>
+
+      {ws.status === "loading" ? (
+        <div className="space-y-2 p-3">
+          <div className="h-3 w-2/3 animate-pulse rounded bg-white/10" />
+          <div className="h-3 w-1/2 animate-pulse rounded bg-white/10" />
+        </div>
+      ) : null}
+
+      {ws.status === "unconfigured" ? (
+        <div className="p-3">
+          <p className="text-[12px] leading-relaxed text-white/70">Workspace file browser is not connected.</p>
+          <p className="mt-1.5 text-[11px] leading-relaxed text-white/50">
+            Connect the local HAM runtime in Settings → Connection to browse files on this machine.
+          </p>
+          <InspectorLinkRow to="/workspace/settings?section=connection">Open Connection</InspectorLinkRow>
+        </div>
+      ) : null}
+
+      {ws.status === "error" ? (
+        <div className="p-3">
+          <p className="text-[12px] font-medium text-white/80">Could not reach local file browser</p>
+          <p className="mt-1.5 whitespace-pre-wrap break-words text-[10px] leading-relaxed text-amber-200/75">
+            {ws.message}
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="mt-2 h-7 border-white/20 text-[11px] text-white/80"
+            onClick={() => setWsTick((n) => n + 1)}
+          >
+            Retry
+          </Button>
+        </div>
+      ) : null}
+
+      {ws.status === "ready" ? (
+        <div className="px-3 py-2">
+          <p className="text-[11px] font-medium text-emerald-200/85">Workspace file browser connected</p>
+          <p className="mt-1 text-[10px] text-white/55">
+            Root: <span className="font-mono text-white/70">{ws.rootPath}</span>
+          </p>
+          <p className="mt-1 text-[10px] text-white/45">
+            {ws.broad ? "Broad filesystem access (wide root)" : "Scoped to configured workspace root"}
+          </p>
+          {ws.entries.length > 0 ? (
+            <ul className="mt-2 rounded-lg border border-white/[0.08] bg-white/[0.03]">
+              {ws.entries.map((e) => (
+                <li
+                  key={`${e.type}:${e.name}`}
+                  className="flex items-center gap-2 border-b border-white/[0.05] px-2 py-1.5 text-[11px] last:border-b-0"
+                >
+                  <span className="text-white/35">{e.type === "folder" ? "📁" : "📄"}</span>
+                  <span className="min-w-0 truncate text-white/75">{e.name}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-2 text-[10px] text-white/45">Root listing is empty (or not returned).</p>
+          )}
+        </div>
+      ) : null}
+
       <InspectorLinkRow to="/workspace/files">Open Files</InspectorLinkRow>
     </div>
   );
@@ -537,11 +822,20 @@ export function WorkspaceChatInspectorPanel({
       ]).then(([cat, live]) => {
         const catalogCount =
           cat.data != null ? cat.data.count ?? cat.data.entries.length : null;
+        const catalogSource = cat.data?.source ?? null;
+        const catalogPreview =
+          cat.data != null && Array.isArray(cat.data.entries) && cat.data.entries.length > 0
+            ? [...cat.data.entries]
+                .sort((a, b) => a.catalog_id.localeCompare(b.catalog_id))
+                .slice(0, CATALOG_PREVIEW_N)
+            : [];
         setSkillsState({
           status: "ready",
           skills: inst.skills,
           catalogCount,
           catalogError: cat.bridge.status === "pending" ? cat.bridge.detail : undefined,
+          catalogSource,
+          catalogPreview,
           live: live.bridge.status === "ready" ? live.overlay : null,
         });
       });
@@ -628,7 +922,7 @@ export function WorkspaceChatInspectorPanel({
           <MemoryTabBody state={memoryState} onRetry={loadMemory} />
         ) : null}
         {activeTab === "skills" ? (
-          <SkillsTabBody state={skillsState} onRetry={loadSkills} />
+          <SkillsTabBody state={skillsState} onRetry={loadSkills} onReloadAfterAction={loadSkills} />
         ) : null}
       </div>
     </aside>
