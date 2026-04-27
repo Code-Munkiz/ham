@@ -24,6 +24,11 @@ import { WorkspaceChatMessageList, type HwwMsgRow } from "./WorkspaceChatMessage
 import { WorkspaceChatComposer } from "./WorkspaceChatComposer";
 import { WorkspaceChatInspectorPanel } from "./WorkspaceChatInspectorPanel";
 import {
+  appendInspectorEvent,
+  safeInspectorErrorMessage,
+  type WorkspaceInspectorEvent,
+} from "./workspaceInspectorEvents";
+import {
   buildOutboundMessageWithAttachments,
   fileToWorkspaceAttachment,
   formatAttachmentByteSize,
@@ -62,6 +67,7 @@ export function WorkspaceChatScreen() {
   const [attachments, setAttachments] = React.useState<WorkspaceComposerAttachment[]>([]);
   const [voiceTranscribing, setVoiceTranscribing] = React.useState(false);
   const [inspectorOpen, setInspectorOpen] = React.useState(false);
+  const [inspectorEvents, setInspectorEvents] = React.useState<WorkspaceInspectorEvent[]>([]);
   const endRef = React.useRef<HTMLDivElement | null>(null);
   const listWrapRef = React.useRef<HTMLDivElement | null>(null);
 
@@ -122,10 +128,23 @@ export function WorkspaceChatScreen() {
           timestamp: ts(),
         })),
       );
+      setInspectorEvents((prev) =>
+        appendInspectorEvent(prev, {
+          atIso: new Date().toISOString(),
+          kind: "session_history_loaded",
+          status: "info",
+          summary: `Loaded session from server (${detail.messages.length} message${detail.messages.length === 1 ? "" : "s"})`,
+          meta: {
+            session_id: sid,
+            message_count: detail.messages.length,
+          },
+        }),
+      );
     } catch {
       setLoadErr("Session not found or could not be loaded.");
       setSessionId(null);
       setMessages([]);
+      setInspectorEvents([]);
       toast.error("Failed to load session.");
     } finally {
       setLoadingSession(false);
@@ -139,6 +158,7 @@ export function WorkspaceChatScreen() {
       if (sessionId) {
         setSessionId(null);
         setMessages([]);
+        setInspectorEvents([]);
       }
       return;
     }
@@ -149,6 +169,7 @@ export function WorkspaceChatScreen() {
   const startNew = React.useCallback(() => {
     setSessionId(null);
     setMessages([]);
+    setInspectorEvents([]);
     setInput("");
     setAttachments([]);
     setLoadErr(null);
@@ -227,6 +248,7 @@ export function WorkspaceChatScreen() {
       setAttachments([]);
       setLoadErr(null);
       setSending(true);
+      const priorSession = sessionId;
       const userRow: HwwMsgRow = {
         id: `hww-user-${Date.now()}`,
         role: "user",
@@ -241,6 +263,24 @@ export function WorkspaceChatScreen() {
         timestamp: timeStr(),
       };
       setMessages((prev) => [...prev, userRow, assistantRow]);
+      setInspectorEvents((prev) =>
+        appendInspectorEvent(prev, {
+          atIso: new Date().toISOString(),
+          kind: "user_message_sent",
+          status: "info",
+          summary: `You sent a message (${trimmed.length} character${trimmed.length === 1 ? "" : "s"})`,
+          meta: { message_id: userRow.id, char_count: trimmed.length },
+        }),
+      );
+      setInspectorEvents((prev) =>
+        appendInspectorEvent(prev, {
+          atIso: new Date().toISOString(),
+          kind: "assistant_stream_started",
+          status: "info",
+          summary: "Assistant response started",
+          meta: { message_id: assistantPlaceId },
+        }),
+      );
       const streamAuth: HamChatStreamAuth | undefined = await workspaceChatAdapter.getStreamAuth();
       try {
         const res = await workspaceChatAdapter.stream(
@@ -260,6 +300,19 @@ export function WorkspaceChatScreen() {
                 { pathname: "/workspace/chat", search: `?session=${encodeURIComponent(sid)}` },
                 { replace: true },
               );
+              if (sid !== priorSession) {
+                setInspectorEvents((prev) =>
+                  appendInspectorEvent(prev, {
+                    atIso: new Date().toISOString(),
+                    kind: "session_assigned",
+                    status: "ok",
+                    summary: priorSession
+                      ? `Session updated (${sid.slice(0, 8)}…)`
+                      : `Session started (${sid.slice(0, 8)}…)`,
+                    meta: { session_id: sid },
+                  }),
+                );
+              }
             },
             onDelta: (delta) => {
               setMessages((prev) =>
@@ -278,12 +331,50 @@ export function WorkspaceChatScreen() {
             timestamp: timeStr(),
           })),
         );
+        const assistantLast = [...res.messages].reverse().find((m) => m.role === "assistant");
+        const assistantChars = assistantLast?.content?.length ?? 0;
+        setInspectorEvents((prev) =>
+          appendInspectorEvent(prev, {
+            atIso: new Date().toISOString(),
+            kind: "assistant_response_completed",
+            status: res.gateway_error ? "warning" : "ok",
+            summary: res.gateway_error
+              ? `Assistant response completed (gateway: ${res.gateway_error.code})`
+              : `Assistant response completed (${assistantChars} character${assistantChars === 1 ? "" : "s"})`,
+            meta: {
+              session_id: res.session_id,
+              message_count: res.messages.length,
+              assistant_char_count: assistantChars,
+              ...(res.gateway_error?.code
+                ? { gateway_code: res.gateway_error.code }
+                : {}),
+            },
+          }),
+        );
         applyHamUiActions(res.actions ?? [], {
           navigate,
           setIsControlPanelOpen: () => {},
           isControlPanelOpen: false,
         });
       } catch (err) {
+        const safeMsg = safeInspectorErrorMessage(
+          err instanceof HamAccessRestrictedError
+            ? "Access restricted (email or domain not allowed for this deployment)."
+            : err instanceof Error
+              ? err.message
+              : "Request failed",
+        );
+        setInspectorEvents((prev) =>
+          appendInspectorEvent(prev, {
+            atIso: new Date().toISOString(),
+            kind: "stream_error",
+            status: "error",
+            summary: `Stream error: ${safeMsg}`,
+            meta: {
+              code: err instanceof HamAccessRestrictedError ? "HAM_EMAIL_RESTRICTION" : "stream_error",
+            },
+          }),
+        );
         if (err instanceof HamAccessRestrictedError) {
           const msg =
             "Access restricted: this Ham deployment only allows approved sign-ins. Check Clerk or admin.";
@@ -421,6 +512,7 @@ export function WorkspaceChatScreen() {
           <div className="fixed right-0 top-0 z-30 flex h-full max-h-full overflow-hidden shadow-2xl md:static md:z-auto md:shadow-none">
             <WorkspaceChatInspectorPanel
               sessionId={sessionId}
+              events={inspectorEvents}
               onClose={() => {
                 setInspectorOpen(false);
               }}
