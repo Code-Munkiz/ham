@@ -21,6 +21,7 @@ import {
   type QuickAction,
   type WorkspaceMission,
 } from "../../adapters/conductorAdapter";
+import { WorkspaceManagedMissionsLivePanel } from "../../components/WorkspaceManagedMissionsLivePanel";
 import { WorkspaceSurfaceStateCard } from "../../components/workspaceSurfaceChrome";
 
 /**
@@ -378,6 +379,7 @@ export function WorkspaceConductorScreen() {
   const [completeCostExpanded, setCompleteCostExpanded] = React.useState(true);
   const [sDraft, setSDraft] = React.useState({ budgetCents: 10_000, defaultModel: "ham-local", notes: "" });
   const [now, setNow] = React.useState(() => Date.now());
+  const [managedLiveRefresh, setManagedLiveRefresh] = React.useState(0);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -410,6 +412,11 @@ export function WorkspaceConductorScreen() {
     const t = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(t);
   }, []);
+
+  const bumpManagedAndLoad = React.useCallback(() => {
+    setManagedLiveRefresh((n) => n + 1);
+    void load();
+  }, [load]);
 
   const selected = missions.find((m) => m.id === selectedId) ?? null;
   const uiKind: "home" | "missing" | "preview" | "active" | "complete" = !selectedId
@@ -611,7 +618,7 @@ export function WorkspaceConductorScreen() {
                     type="button"
                     size="sm"
                     className="bg-[var(--theme-accent)] text-white hover:bg-[var(--theme-accent-strong)]"
-                    onClick={() => void load()}
+                    onClick={() => bumpManagedAndLoad()}
                     disabled={!!busy}
                   >
                     Retry
@@ -620,6 +627,7 @@ export function WorkspaceConductorScreen() {
               />
             </div>
           )}
+          <WorkspaceManagedMissionsLivePanel refreshSignal={managedLiveRefresh} variant="conductor" />
           <div className="w-full space-y-6">
             <div className="space-y-2 text-center">
               <div className="relative flex items-center justify-center">
@@ -630,7 +638,7 @@ export function WorkspaceConductorScreen() {
                 <div className="absolute right-0 flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => void load()}
+                    onClick={() => bumpManagedAndLoad()}
                     className="inline-flex size-9 items-center justify-center rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-0 text-[var(--theme-muted)] hover:border-[var(--theme-accent)]"
                     aria-label="Sync"
                     disabled={!!busy}
@@ -916,7 +924,7 @@ export function WorkspaceConductorScreen() {
             tone="amber"
             technicalDetail={error}
             primaryAction={
-              <Button type="button" size="sm" variant="secondary" onClick={() => void load()} disabled={!!busy}>
+              <Button type="button" size="sm" variant="secondary" onClick={() => bumpManagedAndLoad()} disabled={!!busy}>
                 Retry
               </Button>
             }
@@ -993,7 +1001,7 @@ export function WorkspaceConductorScreen() {
             tone="amber"
             technicalDetail={error}
             primaryAction={
-              <Button type="button" size="sm" variant="secondary" onClick={() => void load()} disabled={!!busy}>
+              <Button type="button" size="sm" variant="secondary" onClick={() => bumpManagedAndLoad()} disabled={!!busy}>
                 Retry
               </Button>
             }
@@ -1072,7 +1080,7 @@ export function WorkspaceConductorScreen() {
             tone="amber"
             technicalDetail={error}
             primaryAction={
-              <Button type="button" size="sm" variant="secondary" onClick={() => void load()} disabled={!!busy}>
+              <Button type="button" size="sm" variant="secondary" onClick={() => bumpManagedAndLoad()} disabled={!!busy}>
                 Retry
               </Button>
             }

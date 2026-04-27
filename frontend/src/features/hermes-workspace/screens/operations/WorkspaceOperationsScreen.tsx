@@ -28,6 +28,7 @@ import {
   type ScheduledJob,
   type WorkspaceAgent,
 } from "../../adapters/operationsAdapter";
+import { WorkspaceManagedMissionsLivePanel } from "../../components/WorkspaceManagedMissionsLivePanel";
 import { WorkspaceSurfaceStateCard } from "../../components/workspaceSurfaceChrome";
 
 function fmt(ts: number) {
@@ -98,6 +99,7 @@ export function WorkspaceOperationsScreen() {
   const [focusId, setFocusId] = React.useState<string | null>(null);
   const [chatDraft, setChatDraft] = React.useState("");
   const [cronPanelFor, setCronPanelFor] = React.useState<string | null>(null);
+  const [managedLiveRefresh, setManagedLiveRefresh] = React.useState(0);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -271,8 +273,9 @@ export function WorkspaceOperationsScreen() {
             <div>
               <h1 className="text-base font-semibold text-[var(--theme-text)]">Operations</h1>
               <p className="mt-1 text-sm text-[var(--theme-muted)]">
-                Agent roster and outputs from <span className="font-mono text-xs">/api/workspace/operations</span> — HAM
-                v0, not the local Files bridge.
+                Local agent roster from <span className="font-mono text-xs">/api/workspace/operations</span> (HAM JSON
+                v0). Live Cloud Agent missions load separately below from{" "}
+                <span className="font-mono text-xs">/api/cursor/managed/missions</span>.
               </p>
             </div>
           </div>
@@ -282,7 +285,10 @@ export function WorkspaceOperationsScreen() {
               size="sm"
               variant="secondary"
               className="border border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-text)] hover:bg-[var(--theme-card2)]"
-              onClick={() => void load()}
+              onClick={() => {
+                setManagedLiveRefresh((n) => n + 1);
+                void load();
+              }}
               disabled={loading}
             >
               <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
@@ -347,6 +353,8 @@ export function WorkspaceOperationsScreen() {
             </Button>
           </div>
         </header>
+
+        <WorkspaceManagedMissionsLivePanel refreshSignal={managedLiveRefresh} variant="operations" />
 
         {loading && agents.length === 0 ? (
           <section className="rounded-3xl border border-[var(--theme-border)] bg-[var(--theme-card)] px-6 py-12 text-center text-sm text-[var(--theme-muted)] shadow-[0_24px_80px_var(--theme-shadow)]">
