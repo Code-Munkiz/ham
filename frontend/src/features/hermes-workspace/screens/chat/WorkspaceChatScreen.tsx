@@ -55,6 +55,7 @@ import { getHamDesktopLocalControlApi } from "@/lib/ham/desktopBundleBridge";
 import { cn } from "@/lib/utils";
 import { extractGohamUrl } from "../../goham/extractGohamUrl";
 import { runGohamObserveFlow, type GoHamTrailStep } from "../../goham/gohamObserveFlow";
+import { runGohamResearchFlow, shouldUseResearchLoop } from "../../goham/gohamResearchLoop";
 import { GoHamPanel } from "../../goham/GoHamPanel";
 import { GoHamSlice1DevPanel } from "../../goham/GoHamSlice1DevPanel";
 
@@ -496,6 +497,96 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     [],
   );
 
+  const sendGohamResearch = React.useCallback(
+    async (displayContent: string, url: string) => {
+      const api = getHamDesktopLocalControlApi();
+      if (!api) {
+        toast.error("GoHAM needs HAM Desktop with Local Control.", { duration: 8000 });
+        return;
+      }
+      gohamAbortRef.current = false;
+      setGohamActive(true);
+      setGohamTrail([]);
+      setSending(true);
+      setLoadErr(null);
+      const userRow: HwwMsgRow = {
+        id: `hww-user-${Date.now()}`,
+        role: "user",
+        content: displayContent,
+        timestamp: timeStr(),
+      };
+      const assistantPlaceId = `hww-assist-${Date.now()}`;
+      const assistantRow: HwwMsgRow = {
+        id: assistantPlaceId,
+        role: "assistant",
+        content: "",
+        timestamp: timeStr(),
+      };
+      setMessages((prev) => [...prev, userRow, assistantRow]);
+      setInspectorEvents((prev) =>
+        appendInspectorEvent(prev, {
+          atIso: new Date().toISOString(),
+          kind: "goham_research_started",
+          status: "info",
+          summary: "GoHAM research loop started (managed browser)",
+          meta: { url_redacted: url.replace(/\?.*$/, "") },
+        }),
+      );
+      let keepManagedBrowserOpen = false;
+      try {
+        const result = await runGohamResearchFlow({
+          api,
+          url,
+          taskText: displayContent,
+          onTrail: setGohamTrail,
+          shouldAbort: () => gohamAbortRef.current,
+        });
+        if (result.ok === true) {
+          keepManagedBrowserOpen = true;
+          setMessages((prev) =>
+            prev.map((m) => (m.id === assistantPlaceId ? { ...m, content: result.assistantText } : m)),
+          );
+          setInspectorEvents((prev) =>
+            appendInspectorEvent(prev, {
+              atIso: new Date().toISOString(),
+              kind: "goham_research_completed",
+              status: "ok",
+              summary: "GoHAM research loop completed",
+              meta: {},
+            }),
+          );
+        } else {
+          setGohamTrail(result.trailSteps);
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantPlaceId
+                ? {
+                    ...m,
+                    content: `**GoHAM could not complete this run.**\n\n${result.userMessage}\n\nThe managed browser session was stopped. You can adjust Local Control in Settings and try again.`,
+                  }
+                : m,
+            ),
+          );
+          toast.error("GoHAM run failed — see message above.", { duration: 8000 });
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "GoHAM failed unexpectedly.";
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantPlaceId ? { ...m, content: `**GoHAM error:** ${msg}` } : m,
+          ),
+        );
+        toast.error(msg, { duration: 8000 });
+        void api.stopRealBrowserSession();
+      } finally {
+        gohamAbortRef.current = false;
+        setGohamActive(keepManagedBrowserOpen);
+        setSending(false);
+      }
+    },
+    [],
+  );
+
   const send = React.useCallback(
     async (outboundUser: string | HamChatUserContentV1 | HamChatUserContentV2) => {
       const isV1 = typeof outboundUser === "object" && outboundUser && outboundUser.h === "ham_chat_user_v1";
@@ -730,7 +821,11 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       }
       setInput("");
       setAttachments([]);
-      void sendGohamObserve(trimmed, url);
+      if (shouldUseResearchLoop(trimmed)) {
+        void sendGohamResearch(trimmed, url);
+      } else {
+        void sendGohamObserve(trimmed, url);
+      }
       return;
     }
 

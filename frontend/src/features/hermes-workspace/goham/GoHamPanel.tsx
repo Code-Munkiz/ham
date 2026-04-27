@@ -81,8 +81,10 @@ export function GoHamPanel({ enabled, active, trail, onStop, gateHint }: GoHamPa
         ) : null}
         {enabled && !active ? (
           <p className="text-[9px] leading-snug text-white/40">
-            v0: include an <code className="rounded bg-white/10 px-0.5">https://</code> link in your message. No forms,
-            logins, or purchases are automated.
+            Include a <code className="rounded bg-white/10 px-0.5">https://</code> or hostname. Messages with{" "}
+            <em>find</em>, <em>research</em>, <em>tell me about</em>, etc. run a short multi-step loop (scroll /
+            safe link clicks). “What you see” style prompts stay on a single-page observe. No forms, logins, or
+            purchases.
           </p>
         ) : null}
       </div>

@@ -11,7 +11,9 @@ export type WorkspaceInspectorEventKind =
   | "assistant_response_completed"
   | "stream_error"
   | "goham_observe_started"
-  | "goham_observe_completed";
+  | "goham_observe_completed"
+  | "goham_research_started"
+  | "goham_research_completed";
 
 export type WorkspaceInspectorEventStatus = "ok" | "error" | "info" | "warning";
 
@@ -88,6 +90,10 @@ export function humanInspectorKindLabel(kind: WorkspaceInspectorEventKind): stri
       return "GoHAM";
     case "goham_observe_completed":
       return "GoHAM";
+    case "goham_research_started":
+      return "GoHAM research";
+    case "goham_research_completed":
+      return "GoHAM research";
     default:
       return "Event";
   }

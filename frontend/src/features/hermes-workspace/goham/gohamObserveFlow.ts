@@ -46,7 +46,7 @@ function activate(steps: GoHamTrailStep[], id: string): GoHamTrailStep[] {
   });
 }
 
-function sessionErrorMessage(r: unknown, label: string): string {
+export function sessionErrorMessage(r: unknown, label: string): string {
   if (!r || typeof r !== "object") return `${label} failed.`;
   const o = r as Record<string, unknown>;
   if (o.blocked === true) {
@@ -65,7 +65,10 @@ function sessionErrorMessage(r: unknown, label: string): string {
   return `${label} failed.`;
 }
 
-async function ensureGohamPolicy(api: HamDesktopLocalControlApi): Promise<{ ok: true } | { ok: false; reason: string }> {
+/** Shared by GoHAM observe + research flows (desktop Local Control gates). */
+export async function ensureGohamPolicy(
+  api: HamDesktopLocalControlApi,
+): Promise<{ ok: true } | { ok: false; reason: string }> {
   let st = await api.getStatus();
   if (!st.browser_real?.supported) {
     return { ok: false, reason: "Managed browser (Phase 4B) is not supported on this platform (Linux required)." };
