@@ -103,6 +103,47 @@ export type HamDesktopBrowserScreenshotResult =
   | { ok: true; data_url: string }
   | { ok: false; blocked?: boolean; reason?: string; error?: string };
 
+/** GoHAM v1 Slice 1 — compact page observe (no DOM dump). */
+export type HamDesktopRealBrowserObserveCompactResult =
+  | {
+      ok: true;
+      title: string;
+      url: string;
+      display_url: string;
+      viewport?: {
+        innerWidth: number;
+        innerHeight: number;
+        scrollX: number;
+        scrollY: number;
+      };
+    }
+  | { ok: false; blocked?: boolean; reason?: string; error?: string };
+
+export type HamDesktopRealBrowserWaitResult =
+  | { ok: true; waited_ms: number }
+  | { ok: false; blocked?: boolean; reason?: string; error?: string };
+
+export type HamDesktopRealBrowserScrollResult =
+  | { ok: true; delta_applied: number; scroll_y?: number; inner_height?: number }
+  | { ok: false; blocked?: boolean; reason?: string; error?: string };
+
+export type HamDesktopRealBrowserClickCandidate = {
+  id: string;
+  tag: string;
+  role: string | null;
+  text: string;
+  risk: string;
+  box: { x: number; y: number; w: number; h: number };
+};
+
+export type HamDesktopRealBrowserEnumerateCandidatesResult =
+  | { ok: true; candidates: HamDesktopRealBrowserClickCandidate[]; count: number }
+  | { ok: false; blocked?: boolean; reason?: string; error?: string };
+
+export type HamDesktopRealBrowserClickCandidateResult =
+  | { ok: true }
+  | { ok: false; blocked?: boolean; reason?: string; error?: string };
+
 export type HamDesktopLocalControlAuditStatus = {
   kind: "ham_desktop_local_control_audit_status";
   available: boolean;
@@ -196,6 +237,11 @@ export type HamDesktopLocalControlApi = {
   navigateRealBrowser: (url: string) => Promise<HamDesktopBrowserSessionResult>;
   reloadRealBrowser: () => Promise<HamDesktopBrowserSessionResult>;
   captureRealBrowserScreenshot: () => Promise<HamDesktopBrowserScreenshotResult>;
+  realBrowserObserveCompact: () => Promise<HamDesktopRealBrowserObserveCompactResult>;
+  realBrowserWaitMs: (ms: number) => Promise<HamDesktopRealBrowserWaitResult>;
+  realBrowserScrollVertical: (deltaY: number) => Promise<HamDesktopRealBrowserScrollResult>;
+  realBrowserEnumerateClickCandidates: () => Promise<HamDesktopRealBrowserEnumerateCandidatesResult>;
+  realBrowserClickCandidate: (candidateId: string) => Promise<HamDesktopRealBrowserClickCandidateResult>;
   stopRealBrowserSession: () => Promise<HamDesktopBrowserSessionResult>;
 };
 

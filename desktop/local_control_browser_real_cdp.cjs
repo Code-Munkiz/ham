@@ -10,6 +10,138 @@ const MAX_SCREENSHOT_DATA_URL_CHARS = 1_500_000;
 const CDP_READY_MS = 45_000;
 const NAV_WAIT_MS = 35_000;
 
+/** GoHAM v1 Slice 1 — bounded interaction primitives (scroll / wait / enumerated click). */
+const MAX_SCROLL_DELTA_PX = 600;
+const MIN_WAIT_MS = 500;
+const MAX_WAIT_MS = 3000;
+const MAX_CLICK_CANDIDATES = 20;
+const CANDIDATE_TEXT_SNIPPET = 64;
+const CANDIDATE_TTL_MS = 45_000;
+
+/**
+ * @param {number} dy
+ * @returns {number}
+ */
+function clampScrollDelta(dy) {
+  const d = Math.round(Number(dy) || 0);
+  if (!Number.isFinite(d)) return 0;
+  if (d === 0) return 0;
+  return Math.max(-MAX_SCROLL_DELTA_PX, Math.min(MAX_SCROLL_DELTA_PX, d));
+}
+
+/**
+ * @param {unknown} ms
+ * @returns {number | null}
+ */
+function clampWaitMs(ms) {
+  const n = Math.round(Number(ms) || 0);
+  if (!Number.isFinite(n)) return null;
+  if (n < MIN_WAIT_MS || n > MAX_WAIT_MS) return null;
+  return n;
+}
+
+/**
+ * @param {string} id
+ * @returns {boolean}
+ */
+function isValidCandidateId(id) {
+  return /^ham_cand_\d+_\d+$/.test(String(id || '').trim());
+}
+
+/**
+ * In-page script: tag candidates with data-ham-cand-id and return a compact JSON-serializable list.
+ * No full HTML; text snippets capped server-side via SNIP in script.
+ *
+ * @param {number} epoch
+ */
+function buildCandidateEnumerationExpression(epoch) {
+  const E = Math.floor(Number(epoch) || 0);
+  const MAX = MAX_CLICK_CANDIDATES;
+  const SNIP = CANDIDATE_TEXT_SNIPPET;
+  return `(function(){
+    var EPOCH = ${E};
+    var MAX = ${MAX};
+    var SNIP = ${SNIP};
+    var BAD = /pay|checkout|sign\\s*in|log\\s*in|password|card\\s*number|subscribe\\s*now|buy\\s*now/i;
+    document.querySelectorAll('[data-ham-cand-id]').forEach(function (el) {
+      el.removeAttribute('data-ham-cand-id');
+    });
+    var out = [];
+    var vw = window.innerWidth;
+    var vh = window.innerHeight;
+    var nodes = [];
+    document.querySelectorAll('a[href]').forEach(function (n) { nodes.push(n); });
+    document.querySelectorAll('button[type="button"]').forEach(function (n) { nodes.push(n); });
+    document.querySelectorAll('input[type="button"]').forEach(function (n) { nodes.push(n); });
+    document.querySelectorAll('[role="button"]').forEach(function (n) { nodes.push(n); });
+    document.querySelectorAll('[role="link"]').forEach(function (n) { nodes.push(n); });
+    var seen = new Set();
+    var idx = 0;
+    for (var i = 0; i < nodes.length && out.length < MAX; i++) {
+      var el = nodes[i];
+      if (seen.has(el)) continue;
+      seen.add(el);
+      var r = el.getBoundingClientRect();
+      if (r.width < 2 || r.height < 2) continue;
+      if (r.bottom < -2 || r.top > vh + 2 || r.right < -2 || r.left > vw + 2) continue;
+      var href = el.getAttribute && el.getAttribute('href');
+      if (href) {
+        var h = String(href).trim().toLowerCase();
+        if (h.indexOf('javascript:') === 0 || h.indexOf('mailto:') === 0 || h.indexOf('tel:') === 0) continue;
+      }
+      var txt = String((el.innerText || el.textContent || '')).trim().replace(/\\s+/g, ' ');
+      if (BAD.test(txt)) continue;
+      var al = String(el.getAttribute('aria-label') || '').trim();
+      if (BAD.test(al)) continue;
+      if (el.disabled === true) continue;
+      if (String(el.getAttribute('aria-disabled') || '').toLowerCase() === 'true') continue;
+      var tag = String(el.tagName || '').toLowerCase();
+      var role = String(el.getAttribute('role') || '').toLowerCase() || null;
+      var id = 'ham_cand_' + EPOCH + '_' + idx;
+      idx += 1;
+      el.setAttribute('data-ham-cand-id', id);
+      var snippet = txt.length > SNIP ? txt.slice(0, SNIP) + '\\u2026' : txt;
+      out.push({
+        id: id,
+        tag: tag,
+        role: role,
+        text: snippet,
+        risk: 'low',
+        box: { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) },
+      });
+    }
+    return out;
+  })()`;
+}
+
+/**
+ * Dispatch a conservative click on a previously enumerated candidate (data-ham-cand-id).
+ *
+ * @param {string} id
+ */
+function buildClickCandidateExpression(id) {
+  const idLit = JSON.stringify(String(id));
+  return `(() => {
+    const id = ${idLit};
+    const el = document.querySelector('[data-ham-cand-id="' + id + '"]');
+    if (!el) return { ok: false, err: 'gone' };
+    const r = el.getBoundingClientRect();
+    if (r.width < 2 || r.height < 2) return { ok: false, err: 'invisible' };
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    if (r.bottom < -2 || r.top > vh + 2 || r.right < -2 || r.left > vw + 2) return { ok: false, err: 'offscreen' };
+    const tag = String(el.tagName || '').toLowerCase();
+    const type = String(el.getAttribute('type') || '').toLowerCase();
+    if (tag === 'input' && type === 'password') return { ok: false, err: 'blocked' };
+    if (type === 'submit') return { ok: false, err: 'blocked' };
+    const txt = String((el.innerText || el.textContent || '')).trim();
+    const BAD = /pay|checkout|sign\\s*in|log\\s*in|password/i;
+    if (BAD.test(txt)) return { ok: false, err: 'blocked' };
+    el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+    return { ok: true };
+  })()`;
+}
+
 /**
  * @param {object} policy normalized policy v3+
  * @param {string} platform process.platform
@@ -300,6 +432,10 @@ function createRealBrowserCdpController(opts = {}) {
   let debugPort = /** @type {number | null} */ (null);
   /** @type {CdpSession | null} */
   let cdp = null;
+  let candidateEpoch = 0;
+  /** @type {Set<string>} */
+  let lastCandidateIds = new Set();
+  let lastCandidateAt = 0;
 
   function isChildAlive() {
     return !!(child && child.exitCode === null && !child.killed);
@@ -322,6 +458,152 @@ function createRealBrowserCdpController(opts = {}) {
       return { title, href, display_url: safeDisplayUrl(href) };
     } catch {
       return { title: '', href: '', display_url: '' };
+    }
+  }
+
+  /**
+   * Compact observe: title, URL, display URL, optional viewport (no DOM / storage).
+   */
+  async function observeCompact() {
+    if (!isChildAlive() || !cdp) return { ok: false, error: 'not_running' };
+    try {
+      const expr =
+        '(() => ({ title: document.title || "", href: location.href || "", viewport: { innerWidth: window.innerWidth, innerHeight: window.innerHeight, scrollX: window.scrollX, scrollY: window.scrollY } }))()';
+      const r = await cdp.send('Runtime.evaluate', { expression: expr, returnByValue: true });
+      const v = r && r.result && 'value' in r.result ? r.result.value : null;
+      const title = v && typeof v.title === 'string' ? v.title : '';
+      const href = v && typeof v.href === 'string' ? v.href : '';
+      const vp = v && v.viewport && typeof v.viewport === 'object' ? v.viewport : null;
+      return {
+        ok: true,
+        title,
+        url: href,
+        display_url: safeDisplayUrl(href),
+        viewport: vp
+          ? {
+              innerWidth: Number(vp.innerWidth) || 0,
+              innerHeight: Number(vp.innerHeight) || 0,
+              scrollX: Number(vp.scrollX) || 0,
+              scrollY: Number(vp.scrollY) || 0,
+            }
+          : undefined,
+      };
+    } catch {
+      return { ok: false, error: 'observe_failed' };
+    }
+  }
+
+  /**
+   * Bounded vertical scroll via CDP mouse wheel at layout viewport center.
+   *
+   * @param {number} deltaY
+   */
+  async function scrollVerticalBounded(deltaY) {
+    if (!isChildAlive() || !cdp) return { ok: false, error: 'not_running' };
+    const dy = clampScrollDelta(deltaY);
+    if (dy === 0) {
+      return { ok: true, delta_applied: 0 };
+    }
+    try {
+      const lm = await cdp.send('Page.getLayoutMetrics');
+      const lv = lm && typeof lm === 'object' && lm.layoutViewport ? lm.layoutViewport : null;
+      const cw = lv && typeof lv.clientWidth === 'number' ? lv.clientWidth : 800;
+      const ch = lv && typeof lv.clientHeight === 'number' ? lv.clientHeight : 600;
+      const cx = Math.max(1, Math.round(cw / 2));
+      const cy = Math.max(1, Math.round(ch / 2));
+      await cdp.send('Input.dispatchMouseEvent', {
+        type: 'mouseWheel',
+        x: cx,
+        y: cy,
+        deltaX: 0,
+        deltaY: dy,
+      });
+      const scrollR = await cdp.send('Runtime.evaluate', {
+        expression: '({ scrollY: window.scrollY, innerHeight: window.innerHeight })',
+        returnByValue: true,
+      });
+      const sv = scrollR && scrollR.result && 'value' in scrollR.result ? scrollR.result.value : null;
+      return {
+        ok: true,
+        delta_applied: dy,
+        scroll_y: sv && typeof sv.scrollY === 'number' ? sv.scrollY : undefined,
+        inner_height: sv && typeof sv.innerHeight === 'number' ? sv.innerHeight : undefined,
+      };
+    } catch {
+      return { ok: false, error: 'scroll_failed' };
+    }
+  }
+
+  /**
+   * @param {unknown} ms
+   */
+  async function waitBoundedMs(ms) {
+    if (!isChildAlive() || !cdp) return { ok: false, error: 'not_running' };
+    const w = clampWaitMs(ms);
+    if (w === null) return { ok: false, error: 'wait_out_of_range' };
+    await new Promise((resolve) => setTimeout(resolve, w));
+    return { ok: true, waited_ms: w };
+  }
+
+  async function enumerateClickCandidates() {
+    if (!isChildAlive() || !cdp) return { ok: false, error: 'not_running' };
+    candidateEpoch += 1;
+    const epoch = candidateEpoch;
+    try {
+      const expr = buildCandidateEnumerationExpression(epoch);
+      const r = await cdp.send('Runtime.evaluate', { expression: expr, returnByValue: true });
+      const val = r && r.result && 'value' in r.result ? r.result.value : null;
+      let list = [];
+      if (Array.isArray(val)) {
+        list = val.slice(0, MAX_CLICK_CANDIDATES).map((c) => ({
+          id: String((c && c.id) || ''),
+          tag: String((c && c.tag) || ''),
+          role: c && c.role != null ? String(c.role) : null,
+          text: String((c && c.text) || '').slice(0, CANDIDATE_TEXT_SNIPPET + 8),
+          risk: String((c && c.risk) || 'low'),
+          box:
+            c && c.box && typeof c.box === 'object'
+              ? {
+                  x: Number(c.box.x) || 0,
+                  y: Number(c.box.y) || 0,
+                  w: Number(c.box.w) || 0,
+                  h: Number(c.box.h) || 0,
+                }
+              : { x: 0, y: 0, w: 0, h: 0 },
+        }));
+      }
+      lastCandidateIds = new Set(list.map((x) => x.id).filter((id) => isValidCandidateId(id)));
+      lastCandidateAt = Date.now();
+      return { ok: true, candidates: list, count: list.length };
+    } catch {
+      lastCandidateIds.clear();
+      lastCandidateAt = 0;
+      return { ok: false, error: 'candidates_failed' };
+    }
+  }
+
+  /**
+   * @param {string} candidateId
+   */
+  async function clickCandidate(candidateId) {
+    if (!isChildAlive() || !cdp) return { ok: false, error: 'not_running' };
+    const id = String(candidateId || '').trim();
+    if (!isValidCandidateId(id)) return { ok: false, error: 'invalid_candidate_id' };
+    if (Date.now() - lastCandidateAt > CANDIDATE_TTL_MS) return { ok: false, error: 'candidates_stale' };
+    if (!lastCandidateIds.has(id)) return { ok: false, error: 'unknown_candidate_id' };
+    try {
+      const expr = buildClickCandidateExpression(id);
+      const r = await cdp.send('Runtime.evaluate', { expression: expr, returnByValue: true });
+      const val = r && r.result && 'value' in r.result ? r.result.value : null;
+      if (!val || typeof val !== 'object') return { ok: false, error: 'click_eval_invalid' };
+      if (val.ok === true) return { ok: true };
+      const err = val.err != null ? String(val.err) : 'click_failed';
+      if (err === 'blocked' || err === 'invisible' || err === 'offscreen' || err === 'gone') {
+        return { ok: false, error: err === 'blocked' ? 'click_blocked' : err === 'gone' ? 'target_gone' : err };
+      }
+      return { ok: false, error: 'click_failed' };
+    } catch {
+      return { ok: false, error: 'click_failed' };
     }
   }
 
@@ -375,6 +657,9 @@ function createRealBrowserCdpController(opts = {}) {
     child.on('exit', () => {
       child = null;
       debugPort = null;
+      lastCandidateIds.clear();
+      lastCandidateAt = 0;
+      candidateEpoch = 0;
       if (cdp) {
         cdp.close();
         cdp = null;
@@ -399,6 +684,7 @@ function createRealBrowserCdpController(opts = {}) {
     await session.connect();
     await session.send('Page.enable', {});
     await session.send('Runtime.enable', {});
+    await session.send('Input.enable', {});
     if (cdp) cdp.close();
     cdp = session;
   }
@@ -452,6 +738,9 @@ function createRealBrowserCdpController(opts = {}) {
   }
 
   function stopSession() {
+    lastCandidateIds.clear();
+    lastCandidateAt = 0;
+    candidateEpoch = 0;
     if (cdp) {
       cdp.close();
       cdp = null;
@@ -491,6 +780,11 @@ function createRealBrowserCdpController(opts = {}) {
     reload,
     screenshot,
     stopSession,
+    observeCompact,
+    scrollVerticalBounded,
+    waitBoundedMs,
+    enumerateClickCandidates,
+    clickCandidate,
     discoverChromiumExecutableLinux: () => discoverChromiumExecutableLinux(execFileSyncImpl),
     MAX_SCREENSHOT_DATA_URL_CHARS,
   };
@@ -506,4 +800,14 @@ module.exports = {
   pickDebugPort,
   waitForDevtoolsJsonVersion,
   fetchPageDebuggerWebSocketUrl,
+  clampScrollDelta,
+  clampWaitMs,
+  isValidCandidateId,
+  MAX_SCROLL_DELTA_PX,
+  MIN_WAIT_MS,
+  MAX_WAIT_MS,
+  MAX_CLICK_CANDIDATES,
+  CANDIDATE_TTL_MS,
+  buildCandidateEnumerationExpression,
+  buildClickCandidateExpression,
 };

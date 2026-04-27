@@ -895,6 +895,201 @@ ipcMain.handle('ham-desktop:local-control-browser-real-screenshot', async () => 
   }
 });
 
+/** GoHAM v1 Slice 1 — compact observe / bounded wait / scroll / enumerated click (no planner). */
+ipcMain.handle('ham-desktop:local-control-browser-real-observe-compact', async () => {
+  const c = localControlPaths();
+  const { policy } = loadPolicy({
+    userDataPath: c.userDataPath,
+    platform: c.platform,
+    fs: c.fs,
+    path: c.path,
+  });
+  const g = realBrowserActionGates(policy, c.platform);
+  if (!g.ok) {
+    appendAuditEvent({
+      userDataPath: c.userDataPath,
+      type: 'local_control_real_browser_observe_compact_blocked',
+      fs: c.fs,
+      path: c.path,
+    });
+    return { ok: false, blocked: true, reason: g.reason };
+  }
+  appendAuditEvent({
+    userDataPath: c.userDataPath,
+    type: 'local_control_real_browser_observe_compact',
+    fs: c.fs,
+    path: c.path,
+  });
+  try {
+    return await getRealBrowser().observeCompact();
+  } catch {
+    appendAuditEvent({
+      userDataPath: c.userDataPath,
+      type: 'local_control_real_browser_error',
+      fs: c.fs,
+      path: c.path,
+    });
+    return { ok: false, error: 'observe_failed' };
+  }
+});
+
+ipcMain.handle('ham-desktop:local-control-browser-real-wait', async (event, ms) => {
+  const c = localControlPaths();
+  const { policy } = loadPolicy({
+    userDataPath: c.userDataPath,
+    platform: c.platform,
+    fs: c.fs,
+    path: c.path,
+  });
+  const g = realBrowserActionGates(policy, c.platform);
+  if (!g.ok) {
+    appendAuditEvent({
+      userDataPath: c.userDataPath,
+      type: 'local_control_real_browser_wait_blocked',
+      fs: c.fs,
+      path: c.path,
+    });
+    return { ok: false, blocked: true, reason: g.reason };
+  }
+  appendAuditEvent({
+    userDataPath: c.userDataPath,
+    type: 'local_control_real_browser_wait',
+    fs: c.fs,
+    path: c.path,
+  });
+  try {
+    return await getRealBrowser().waitBoundedMs(ms);
+  } catch {
+    appendAuditEvent({
+      userDataPath: c.userDataPath,
+      type: 'local_control_real_browser_error',
+      fs: c.fs,
+      path: c.path,
+    });
+    return { ok: false, error: 'wait_failed' };
+  }
+});
+
+ipcMain.handle('ham-desktop:local-control-browser-real-scroll', async (event, deltaY) => {
+  const c = localControlPaths();
+  const { policy } = loadPolicy({
+    userDataPath: c.userDataPath,
+    platform: c.platform,
+    fs: c.fs,
+    path: c.path,
+  });
+  const g = realBrowserActionGates(policy, c.platform);
+  if (!g.ok) {
+    appendAuditEvent({
+      userDataPath: c.userDataPath,
+      type: 'local_control_real_browser_scroll_blocked',
+      fs: c.fs,
+      path: c.path,
+    });
+    return { ok: false, blocked: true, reason: g.reason };
+  }
+  appendAuditEvent({
+    userDataPath: c.userDataPath,
+    type: 'local_control_real_browser_scroll',
+    fs: c.fs,
+    path: c.path,
+  });
+  try {
+    return await getRealBrowser().scrollVerticalBounded(deltaY);
+  } catch {
+    appendAuditEvent({
+      userDataPath: c.userDataPath,
+      type: 'local_control_real_browser_error',
+      fs: c.fs,
+      path: c.path,
+    });
+    return { ok: false, error: 'scroll_failed' };
+  }
+});
+
+ipcMain.handle('ham-desktop:local-control-browser-real-enumerate-candidates', async () => {
+  const c = localControlPaths();
+  const { policy } = loadPolicy({
+    userDataPath: c.userDataPath,
+    platform: c.platform,
+    fs: c.fs,
+    path: c.path,
+  });
+  const g = realBrowserActionGates(policy, c.platform);
+  if (!g.ok) {
+    appendAuditEvent({
+      userDataPath: c.userDataPath,
+      type: 'local_control_real_browser_candidates_blocked',
+      fs: c.fs,
+      path: c.path,
+    });
+    return { ok: false, blocked: true, reason: g.reason };
+  }
+  appendAuditEvent({
+    userDataPath: c.userDataPath,
+    type: 'local_control_real_browser_candidates',
+    fs: c.fs,
+    path: c.path,
+  });
+  try {
+    return await getRealBrowser().enumerateClickCandidates();
+  } catch {
+    appendAuditEvent({
+      userDataPath: c.userDataPath,
+      type: 'local_control_real_browser_error',
+      fs: c.fs,
+      path: c.path,
+    });
+    return { ok: false, error: 'candidates_failed' };
+  }
+});
+
+ipcMain.handle('ham-desktop:local-control-browser-real-click-candidate', async (event, candidateId) => {
+  const c = localControlPaths();
+  const { policy } = loadPolicy({
+    userDataPath: c.userDataPath,
+    platform: c.platform,
+    fs: c.fs,
+    path: c.path,
+  });
+  const g = realBrowserActionGates(policy, c.platform);
+  if (!g.ok) {
+    appendAuditEvent({
+      userDataPath: c.userDataPath,
+      type: 'local_control_real_browser_click_candidate_gate_blocked',
+      fs: c.fs,
+      path: c.path,
+    });
+    return { ok: false, blocked: true, reason: g.reason };
+  }
+  appendAuditEvent({
+    userDataPath: c.userDataPath,
+    type: 'local_control_real_browser_click_candidate',
+    fs: c.fs,
+    path: c.path,
+  });
+  try {
+    const out = await getRealBrowser().clickCandidate(candidateId);
+    if (!out.ok && (out.error === 'click_blocked' || out.error === 'invisible' || out.error === 'offscreen')) {
+      appendAuditEvent({
+        userDataPath: c.userDataPath,
+        type: 'local_control_real_browser_click_candidate_blocked',
+        fs: c.fs,
+        path: c.path,
+      });
+    }
+    return out;
+  } catch {
+    appendAuditEvent({
+      userDataPath: c.userDataPath,
+      type: 'local_control_real_browser_error',
+      fs: c.fs,
+      path: c.path,
+    });
+    return { ok: false, error: 'click_failed' };
+  }
+});
+
 ipcMain.handle('ham-desktop:local-control-browser-real-stop-session', () => {
   const c = localControlPaths();
   const running = getRealBrowser().getStatus().running;

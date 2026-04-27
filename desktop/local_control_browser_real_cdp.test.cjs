@@ -13,6 +13,11 @@ const {
   pickDebugPort,
   waitForDevtoolsJsonVersion,
   fetchPageDebuggerWebSocketUrl,
+  clampScrollDelta,
+  clampWaitMs,
+  isValidCandidateId,
+  buildCandidateEnumerationExpression,
+  buildClickCandidateExpression,
 } = require('./local_control_browser_real_cdp.cjs');
 
 function baseRealPolicy(over) {
@@ -149,4 +154,65 @@ test('createRealBrowserCdpController: reload returns not_running without session
   const r = await c.reload();
   assert.equal(r.ok, false);
   assert.equal(r.error, 'not_running');
+});
+
+test('clampScrollDelta clamps magnitude', () => {
+  assert.equal(clampScrollDelta(99999), 600);
+  assert.equal(clampScrollDelta(-800), -600);
+  assert.equal(clampScrollDelta(0), 0);
+});
+
+test('clampWaitMs accepts only bounded inclusive range', () => {
+  assert.equal(clampWaitMs(499), null);
+  assert.equal(clampWaitMs(3001), null);
+  assert.equal(clampWaitMs(1500), 1500);
+});
+
+test('isValidCandidateId: ham prefix only', () => {
+  assert.equal(isValidCandidateId('ham_cand_1_0'), true);
+  assert.equal(isValidCandidateId('evil'), false);
+});
+
+test('buildCandidateEnumerationExpression embeds epoch', () => {
+  const s = buildCandidateEnumerationExpression(42);
+  assert.ok(s.includes('EPOCH = 42'));
+});
+
+test('buildClickCandidateExpression dispatches MouseEvent', () => {
+  const s = buildClickCandidateExpression('ham_cand_1_0');
+  assert.ok(s.includes('MouseEvent'));
+});
+
+test('createRealBrowserCdpController: slice1 helpers return not_running without session', async () => {
+  const c = createRealBrowserCdpController({
+    userDataPath: '/tmp/ham-slice1',
+    path,
+    fs,
+  });
+  const o = await c.observeCompact();
+  assert.equal(o.ok, false);
+  assert.equal(o.error, 'not_running');
+  const w = await c.waitBoundedMs(1000);
+  assert.equal(w.ok, false);
+  assert.equal(w.error, 'not_running');
+  const s = await c.scrollVerticalBounded(100);
+  assert.equal(s.ok, false);
+  assert.equal(s.error, 'not_running');
+  const e = await c.enumerateClickCandidates();
+  assert.equal(e.ok, false);
+  assert.equal(e.error, 'not_running');
+  const k = await c.clickCandidate('ham_cand_1_0');
+  assert.equal(k.ok, false);
+  assert.equal(k.error, 'not_running');
+});
+
+test('createRealBrowserCdpController: clickCandidate rejects without session before id validation', async () => {
+  const c = createRealBrowserCdpController({
+    userDataPath: '/tmp/ham-click-id',
+    path,
+    fs,
+  });
+  const k = await c.clickCandidate('ham_cand_1_0');
+  assert.equal(k.ok, false);
+  assert.equal(k.error, 'not_running');
 });

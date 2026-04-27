@@ -56,6 +56,7 @@ import { cn } from "@/lib/utils";
 import { extractGohamUrl } from "../../goham/extractGohamUrl";
 import { runGohamObserveFlow, type GoHamTrailStep } from "../../goham/gohamObserveFlow";
 import { GoHamPanel } from "../../goham/GoHamPanel";
+import { GoHamSlice1DevPanel } from "../../goham/GoHamSlice1DevPanel";
 
 function timeStr() {
   return new Date().toLocaleTimeString([], {
@@ -868,6 +869,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
           onStop={handleGohamStop}
           gateHint={gohamGateHint}
         />
+        <GoHamSlice1DevPanel visible={import.meta.env.DEV && gohamEffective} />
         <div className="flex w-full justify-center px-3 md:px-6">
           <WorkspaceChatComposer
             value={input}

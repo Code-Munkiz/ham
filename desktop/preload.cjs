@@ -31,6 +31,13 @@ const localControlBridge = {
   navigateRealBrowser: (url) => ipcRenderer.invoke('ham-desktop:local-control-browser-real-navigate', url),
   reloadRealBrowser: () => ipcRenderer.invoke('ham-desktop:local-control-browser-real-reload'),
   captureRealBrowserScreenshot: () => ipcRenderer.invoke('ham-desktop:local-control-browser-real-screenshot'),
+  realBrowserObserveCompact: () => ipcRenderer.invoke('ham-desktop:local-control-browser-real-observe-compact'),
+  realBrowserWaitMs: (ms) => ipcRenderer.invoke('ham-desktop:local-control-browser-real-wait', ms),
+  realBrowserScrollVertical: (deltaY) => ipcRenderer.invoke('ham-desktop:local-control-browser-real-scroll', deltaY),
+  realBrowserEnumerateClickCandidates: () =>
+    ipcRenderer.invoke('ham-desktop:local-control-browser-real-enumerate-candidates'),
+  realBrowserClickCandidate: (candidateId) =>
+    ipcRenderer.invoke('ham-desktop:local-control-browser-real-click-candidate', candidateId),
   stopRealBrowserSession: () => ipcRenderer.invoke('ham-desktop:local-control-browser-real-stop-session'),
 };
 
