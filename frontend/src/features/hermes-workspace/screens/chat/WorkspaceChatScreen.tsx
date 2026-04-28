@@ -55,6 +55,7 @@ import { getHamDesktopLocalControlApi } from "@/lib/ham/desktopBundleBridge";
 import { isHamDesktopShell } from "@/lib/ham/desktopConfig";
 import { cn } from "@/lib/utils";
 import { extractGohamUrl } from "../../goham/extractGohamUrl";
+import { planGohamResearchStart, type GohamSearchStart } from "../../goham/gohamSearchStrategy";
 import { runGohamObserveFlow, type GoHamTrailStep } from "../../goham/gohamObserveFlow";
 import { runGohamResearchFlow, shouldUseResearchLoop } from "../../goham/gohamResearchLoop";
 import { GoHamPanel } from "../../goham/GoHamPanel";
@@ -563,7 +564,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   );
 
   const sendGohamResearch = React.useCallback(
-    async (displayContent: string, url: string) => {
+    async (displayContent: string, url: string, searchStart?: GohamSearchStart | null) => {
       const api = getHamDesktopLocalControlApi();
       if (!api) {
         toast.error("GoHAM needs HAM Desktop with Local Control.", { duration: 8000 });
@@ -608,6 +609,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
           api,
           url,
           taskText: displayContent,
+          searchStart,
           onTrail: setGohamTrail,
           shouldAbort: () => gohamAbortRef.current,
           getHoldState: () => {
@@ -891,18 +893,25 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     if (!trimmed) return;
 
     if (desktopGohamEligible && gohamEffective) {
-      const url = extractGohamUrl(trimmed);
+      const extractedUrl = extractGohamUrl(trimmed);
+      const researchMode = shouldUseResearchLoop(trimmed);
+      const plan = researchMode
+        ? planGohamResearchStart(trimmed, extractedUrl)
+        : { url: extractedUrl, search: null };
+      const url = plan.url;
       if (!url) {
         toast.error(
-          "GoHAM Mode needs a website in your message — e.g. https://example.com or example.com. Turn GoHAM on (amber) first; it only runs in HAM Desktop on Linux.",
+          researchMode
+            ? "GoHAM research needs a topic or website it can turn into a safe search URL."
+            : "GoHAM Mode needs a website in your message — e.g. https://example.com or example.com. Turn GoHAM on (amber) first; it only runs in HAM Desktop on Linux.",
           { duration: 12_000 },
         );
         return;
       }
       setInput("");
       setAttachments([]);
-      if (shouldUseResearchLoop(trimmed)) {
-        void sendGohamResearch(trimmed, url);
+      if (researchMode) {
+        void sendGohamResearch(trimmed, url, plan.search);
       } else {
         void sendGohamObserve(trimmed, url);
       }

@@ -8,6 +8,7 @@ import type {
   HamDesktopRealBrowserClickCandidate,
   HamDesktopRealBrowserObserveCompactResult,
 } from "@/lib/ham/desktopBundleBridge";
+import type { GohamSearchStart } from "./gohamSearchStrategy";
 
 /** Research loop requires Slice 1+ preload IPC; older desktop builds omit these. */
 const RESEARCH_DESKTOP_METHODS = [
@@ -234,11 +235,25 @@ function observeEvidenceFromPage(
   title: string,
   displayUrl: string,
   candidates: HamDesktopRealBrowserClickCandidate[] = [],
+  opts: { includePageMeta?: boolean } = {},
 ) {
-  observeEvidenceFromText(evidence, "title", title);
-  observeEvidenceFromText(evidence, "url", displayUrl);
+  if (opts.includePageMeta !== false) {
+    observeEvidenceFromText(evidence, "title", title);
+    observeEvidenceFromText(evidence, "url", displayUrl);
+  }
   for (const c of candidates.slice(0, 12)) {
     observeEvidenceFromText(evidence, "candidate", c.text);
+  }
+}
+
+function isSearchProviderLocation(searchStart: GohamSearchStart | null, displayUrl: string): boolean {
+  if (!searchStart) return false;
+  try {
+    const u = new URL(displayUrl);
+    const su = new URL(searchStart.url);
+    return u.hostname === su.hostname;
+  } catch {
+    return displayUrl.startsWith("https://duckduckgo.com");
   }
 }
 
@@ -328,6 +343,7 @@ export type RunGohamResearchOptions = {
   api: HamDesktopLocalControlApi;
   url: string;
   taskText: string;
+  searchStart?: GohamSearchStart | null;
   onTrail: (steps: GoHamTrailStep[]) => void;
   shouldAbort: () => boolean;
   /** Slice 3 — pause / takeover: HAM must not start a new action while not `none`. */
@@ -339,7 +355,7 @@ export type RunGohamResearchResult =
   | { ok: false; userMessage: string; trailSteps: GoHamTrailStep[] };
 
 export async function runGohamResearchFlow(opts: RunGohamResearchOptions): Promise<RunGohamResearchResult> {
-  const { api, url, taskText, onTrail, shouldAbort, getHoldState } = opts;
+  const { api, url, taskText, searchStart = null, onTrail, shouldAbort, getHoldState } = opts;
   const redacted = redactUrlForTrail(url);
   const goalTokens = goalTokensFromTask(taskText, url);
   const evidence = makeEvidenceLedger(deriveRequiredEvidenceTerms(taskText, url));
@@ -448,6 +464,17 @@ export async function runGohamResearchFlow(opts: RunGohamResearchOptions): Promi
     return { ok: false, userMessage: "GoHAM was stopped before it started.", trailSteps: trail };
   }
 
+  if (searchStart) {
+    addRow({
+      label: "Searching the web",
+      status: "done",
+      detail: `Searching the web for: ${redactSnippet(searchStart.displayQuery, 96)}`,
+      actionType: "search",
+      targetRedacted: redactUrlForTrail(searchStart.url),
+      result: searchStart.provider,
+    });
+  }
+
   const polId = activate("Preparing managed browser policy");
   const pol = await ensureGohamPolicy(api);
   if (pol.ok === false) {
@@ -532,7 +559,9 @@ export async function runGohamResearchFlow(opts: RunGohamResearchOptions): Promi
     return { ok: false, userMessage: msg, trailSteps: trail };
   }
   let candidates = enumR.candidates;
-  observeEvidenceFromPage(evidence, title0, display0, candidates);
+  observeEvidenceFromPage(evidence, title0, display0, candidates, {
+    includePageMeta: !isSearchProviderLocation(searchStart, display0),
+  });
   patchIdFull(listId, "done", {
     detail: `${candidates.length} visible`,
     actionType: "enumerate",
@@ -773,7 +802,9 @@ export async function runGohamResearchFlow(opts: RunGohamResearchOptions): Promi
         break;
       }
       candidates = enumR.candidates;
-      observeEvidenceFromPage(evidence, lastTitle, disp, candidates);
+      observeEvidenceFromPage(evidence, lastTitle, disp, candidates, {
+        includePageMeta: !isSearchProviderLocation(searchStart, disp),
+      });
       addRow({
         label: "Listing click candidates",
         status: "done",
@@ -888,6 +919,7 @@ export async function runGohamResearchFlow(opts: RunGohamResearchOptions): Promi
     `- **Pages visited:** ${pagesVisitedCount}`,
     `- **Loop actions executed:** ${loopActionCount} (scroll / click / wait / observe in the research loop)`,
     `- **Screenshot captures:** ${screenshotCaptureCount} (local validation only — not embedded here)`,
+    searchStart ? `- **Search start:** DuckDuckGo results for “${redactSnippet(searchStart.displayQuery, 96)}”` : ``,
     `- **Stop reason:** ${stopLabel}`,
     `- **Stop reason code:** \`${stopReason}\` (machine-readable: \`done\` | \`budget\` | \`time\` | \`insufficient_evidence\` | \`budget_without_evidence\` | \`blocked\` | \`error\` | \`user_stopped\`; use **Pause** / **Take over** + **Stop** → \`user_stopped\`)`,
     evidence.requiredTerms.length
