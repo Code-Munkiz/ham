@@ -12,6 +12,7 @@ from src.ham.ham_x.config import (
     DEFAULT_AGENT_ID,
     DEFAULT_AUTONOMY_MODE,
     DEFAULT_BRAND_VOICE_ID,
+    DEFAULT_CATALOG_SKILL_ID,
     DEFAULT_CAMPAIGN_ID,
     DEFAULT_POLICY_PROFILE_ID,
     DEFAULT_PROFILE_ID,
@@ -32,6 +33,7 @@ PLATFORM_CONTEXT_DEFAULTS: dict[str, str] = {
     "autonomy_mode": DEFAULT_AUTONOMY_MODE,
     "policy_profile_id": DEFAULT_POLICY_PROFILE_ID,
     "brand_voice_id": DEFAULT_BRAND_VOICE_ID,
+    "catalog_skill_id": DEFAULT_CATALOG_SKILL_ID,
 }
 
 
@@ -55,6 +57,7 @@ class SocialActionEnvelope(BaseModel):
     autonomy_mode: AutonomyMode = DEFAULT_AUTONOMY_MODE
     policy_profile_id: str = DEFAULT_POLICY_PROFILE_ID
     brand_voice_id: str = DEFAULT_BRAND_VOICE_ID
+    catalog_skill_id: str = DEFAULT_CATALOG_SKILL_ID
     dry_run: bool = True
     autonomy_enabled: bool = False
     input_ref: str | None = None
@@ -101,6 +104,10 @@ def platform_context_from_config(config: Any | None = None) -> dict[str, str]:
         ),
         "brand_voice_id": str(
             getattr(config, "brand_voice_id", DEFAULT_BRAND_VOICE_ID) or DEFAULT_BRAND_VOICE_ID
+        ),
+        "catalog_skill_id": str(
+            getattr(config, "catalog_skill_id", DEFAULT_CATALOG_SKILL_ID)
+            or DEFAULT_CATALOG_SKILL_ID
         ),
     }
 

@@ -33,6 +33,7 @@ def draft_social_action(
         autonomy_mode=cfg.autonomy_mode,  # type: ignore[arg-type]
         policy_profile_id=cfg.policy_profile_id,
         brand_voice_id=cfg.brand_voice_id,
+        catalog_skill_id=cfg.catalog_skill_id,
         dry_run=cfg.dry_run,
         autonomy_enabled=cfg.autonomy_enabled,
         input_ref=input_ref,

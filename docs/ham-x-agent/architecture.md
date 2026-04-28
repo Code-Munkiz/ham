@@ -23,12 +23,15 @@ Every action envelope, review queue record, and audit record should carry platfo
 - `agent_id=ham-pr-rockstar`
 - `campaign_id=base-stealth-launch`
 - `account_id=ham-x-official`
-- `profile_id=ham-default`
+- `profile_id=ham.default`
 - `autonomy_mode=draft`
 - `policy_profile_id=platform-default`
 - `brand_voice_id=ham-canonical`
+- `catalog_skill_id=bundled.social-media.xurl`
 
 Tenant-created X agents can override these values through platform configuration in later phases while keeping the same audit and review schema.
+
+The catalog skill id links xurl plans to HAM's vendored Hermes runtime skills catalog. Phase 1A records the linkage only; it does not install, invoke, or assume the skill is live.
 
 ## Autonomy Modes
 
@@ -43,6 +46,15 @@ Tenant-created X agents can override these values through platform configuration
 - Execution stays behind bounded adapters such as the xurl wrapper.
 - `memory_heist` remains the repo context source when future HAM-on-X prompts need project context.
 - GoHAM compatibility means the review queue and audit trail can later be surfaced in the workspace UI without adding autonomous posting in Phase 1A.
+
+## Record Semantics
+
+- `SocialActionEnvelope` records are per-action proposals.
+- Review queue records are human-review proposals for proposed social actions.
+- Audit records are append-only event traces.
+- Durable multi-step campaign and control-plane runs are future work.
+
+HAM-on-X review and audit helpers mirror existing HAM proposal/audit patterns in Phase 1A. Future phases should consolidate shared persistence primitives where doing so does not mix browser-control and social-agent semantics.
 
 ## Default Safety Posture
 

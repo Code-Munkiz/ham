@@ -8,6 +8,7 @@ import pytest
 from src.ham.ham_x.action_envelope import SocialActionEnvelope
 from src.ham.ham_x.audit import append_audit_event
 from src.ham.ham_x.config import HamXConfig, load_ham_x_config
+from src.ham.ham_x.hermes_policy_adapter import review_social_action
 from src.ham.ham_x.redaction import redact_text
 from src.ham.ham_x.review_queue import append_review_record
 from src.ham.ham_x.safety_policy import check_social_action
@@ -26,10 +27,11 @@ def _test_config(tmp_path: Path) -> HamXConfig:
         agent_id="ham-pr-rockstar",
         campaign_id="base-stealth-launch",
         account_id="ham-x-official",
-        profile_id="ham-default",
+        profile_id="ham.default",
         autonomy_mode="draft",
         policy_profile_id="platform-default",
         brand_voice_id="ham-canonical",
+        catalog_skill_id="bundled.social-media.xurl",
         autonomy_enabled=False,
         dry_run=True,
         max_posts_per_hour=0,
@@ -45,12 +47,18 @@ def _test_config(tmp_path: Path) -> HamXConfig:
 
 def test_default_config_disables_autonomy(monkeypatch) -> None:
     monkeypatch.delenv("HAM_X_AUTONOMY_ENABLED", raising=False)
+    monkeypatch.delenv("HAM_X_PROFILE_ID", raising=False)
+    monkeypatch.delenv("HAM_X_CATALOG_SKILL_ID", raising=False)
+    monkeypatch.delenv("HAM_X_REVIEW_QUEUE_PATH", raising=False)
+    monkeypatch.delenv("HAM_X_AUDIT_LOG_PATH", raising=False)
     cfg = load_ham_x_config()
     assert cfg.autonomy_enabled is False
     assert cfg.max_posts_per_hour == 0
     assert cfg.max_quotes_per_hour == 0
     assert str(cfg.review_queue_path) == ".data/ham-x/review_queue.jsonl"
     assert str(cfg.audit_log_path) == ".data/ham-x/audit.jsonl"
+    assert cfg.profile_id == "ham.default"
+    assert cfg.catalog_skill_id == "bundled.social-media.xurl"
 
 
 def test_default_config_dry_run_true(monkeypatch) -> None:
@@ -65,7 +73,15 @@ def test_mutating_xurl_actions_are_blocked_by_default(tmp_path: Path, action_typ
     result = XurlWrapper(config=cfg).plan_mutating_action(action_type, text="hello")
     assert result.blocked is True
     assert result.reason == "autonomy_disabled"
+    assert result.metadata["catalog_skill_id"] == "bundled.social-media.xurl"
     assert not result.metadata["rate_limit_result"]["allowed"]  # type: ignore[index]
+
+
+def test_xurl_search_plan_metadata_includes_catalog_skill_id(tmp_path: Path) -> None:
+    cfg = _test_config(tmp_path)
+    result = XurlWrapper(config=cfg).plan_search("base ecosystem", max_results=5)
+    assert result.blocked is False
+    assert result.metadata["catalog_skill_id"] == "bundled.social-media.xurl"
 
 
 def test_review_queue_writes_redacted_jsonl(tmp_path: Path) -> None:
@@ -82,6 +98,11 @@ def test_review_queue_writes_redacted_jsonl(tmp_path: Path) -> None:
     assert row["tenant_id"] == "ham-official"
     assert row["agent_id"] == "ham-pr-rockstar"
     assert row["campaign_id"] == "base-stealth-launch"
+    assert row["account_id"] == "ham-x-official"
+    assert row["profile_id"] == "ham.default"
+    assert row["policy_profile_id"] == "platform-default"
+    assert row["brand_voice_id"] == "ham-canonical"
+    assert row["autonomy_mode"] == "draft"
     assert "alice@example.com" not in dumped
     assert "abcdefghijklmnopqrstuvwxyz123456" not in dumped
     assert "secret-token-value" not in dumped
@@ -104,6 +125,11 @@ def test_audit_writes_redacted_jsonl(tmp_path: Path) -> None:
     assert row["tenant_id"] == "ham-official"
     assert row["agent_id"] == "ham-pr-rockstar"
     assert row["campaign_id"] == "base-stealth-launch"
+    assert row["account_id"] == "ham-x-official"
+    assert row["profile_id"] == "ham.default"
+    assert row["policy_profile_id"] == "platform-default"
+    assert row["brand_voice_id"] == "ham-canonical"
+    assert row["autonomy_mode"] == "draft"
     assert "abcdefghijklmnopqrstuvwxyz123456" not in dumped
     assert "secret123" not in dumped
     assert row["event_type"] == "draft_attempt"
@@ -167,10 +193,23 @@ def test_action_envelope_has_platform_ready_defaults() -> None:
     assert data["agent_id"] == "ham-pr-rockstar"
     assert data["campaign_id"] == "base-stealth-launch"
     assert data["account_id"] == "ham-x-official"
-    assert data["profile_id"] == "ham-default"
+    assert data["profile_id"] == "ham.default"
     assert data["autonomy_mode"] == "draft"
     assert data["policy_profile_id"] == "platform-default"
     assert data["brand_voice_id"] == "ham-canonical"
+    assert data["catalog_skill_id"] == "bundled.social-media.xurl"
+
+
+def test_hermes_policy_adapter_uses_local_safety_policy() -> None:
+    envelope = SocialActionEnvelope(
+        action_type="draft",
+        text="This is guaranteed to deliver 10x gains.",
+    )
+    result = review_social_action(envelope)
+    assert result.allowed is False
+    assert result.status == "blocked"
+    assert result.live_calls == 0
+    assert "price_promise_or_guaranteed_gain" in result.reasons
 
 
 def test_action_envelope_serializes_cleanly() -> None:

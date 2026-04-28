@@ -56,9 +56,18 @@ class XurlWrapper:
         argv = [self.config.xurl_bin, "search", query, "--max-results", str(limited)]
         append_audit_event(
             "search_attempt",
-            {"argv": argv, "rate_limit_result": rate.as_dict(), "dry_run": True},
+            {
+                "argv": argv,
+                "catalog_skill_id": self.config.catalog_skill_id,
+                "rate_limit_result": rate.as_dict(),
+                "dry_run": True,
+            },
             config=self.config,
         )
+        metadata = {
+            "catalog_skill_id": self.config.catalog_skill_id,
+            "rate_limit_result": rate.as_dict(),
+        }
         if not rate.allowed:
             return XurlCommandResult(
                 action_type="search",
@@ -66,7 +75,7 @@ class XurlWrapper:
                 dry_run=True,
                 blocked=True,
                 reason=rate.reason,
-                metadata={"rate_limit_result": rate.as_dict()},
+                metadata=metadata,
             )
         return XurlCommandResult(
             action_type="search",
@@ -74,7 +83,7 @@ class XurlWrapper:
             dry_run=True,
             blocked=False,
             reason="planned_only_no_live_api_call",
-            metadata={"rate_limit_result": rate.as_dict()},
+            metadata=metadata,
         )
 
     def plan_mutating_action(self, action_type: str, *, text: str | None = None) -> XurlCommandResult:
@@ -104,6 +113,7 @@ class XurlWrapper:
             {
                 "action_type": action_type,
                 "argv": argv,
+                "catalog_skill_id": self.config.catalog_skill_id,
                 "rate_limit_result": rate.as_dict(),
                 "reason": reason,
             },
@@ -115,5 +125,8 @@ class XurlWrapper:
             dry_run=self.config.dry_run,
             blocked=True,
             reason=reason if gate_closed else "mutating_execution_not_implemented",
-            metadata={"rate_limit_result": rate.as_dict()},
+            metadata={
+                "catalog_skill_id": self.config.catalog_skill_id,
+                "rate_limit_result": rate.as_dict(),
+            },
         )

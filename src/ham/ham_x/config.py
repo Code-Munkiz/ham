@@ -13,10 +13,11 @@ DEFAULT_TENANT_ID = "ham-official"
 DEFAULT_AGENT_ID = "ham-pr-rockstar"
 DEFAULT_CAMPAIGN_ID = "base-stealth-launch"
 DEFAULT_ACCOUNT_ID = "ham-x-official"
-DEFAULT_PROFILE_ID = "ham-default"
+DEFAULT_PROFILE_ID = "ham.default"
 DEFAULT_AUTONOMY_MODE = "draft"
 DEFAULT_POLICY_PROFILE_ID = "platform-default"
 DEFAULT_BRAND_VOICE_ID = "ham-canonical"
+DEFAULT_CATALOG_SKILL_ID = "bundled.social-media.xurl"
 
 
 def _bool_env(name: str, default: bool) -> bool:
@@ -67,6 +68,7 @@ class HamXConfig:
     autonomy_mode: str
     policy_profile_id: str
     brand_voice_id: str
+    catalog_skill_id: str
     autonomy_enabled: bool
     dry_run: bool
     max_posts_per_hour: int
@@ -104,6 +106,8 @@ def load_ham_x_config() -> HamXConfig:
         or DEFAULT_POLICY_PROFILE_ID,
         brand_voice_id=(os.environ.get("HAM_X_BRAND_VOICE_ID") or DEFAULT_BRAND_VOICE_ID).strip()
         or DEFAULT_BRAND_VOICE_ID,
+        catalog_skill_id=(os.environ.get("HAM_X_CATALOG_SKILL_ID") or DEFAULT_CATALOG_SKILL_ID).strip()
+        or DEFAULT_CATALOG_SKILL_ID,
         autonomy_enabled=_bool_env("HAM_X_AUTONOMY_ENABLED", False),
         dry_run=_bool_env("HAM_X_DRY_RUN", True),
         max_posts_per_hour=_int_env("HAM_X_MAX_POSTS_PER_HOUR", 0),

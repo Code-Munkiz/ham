@@ -19,6 +19,7 @@ Phase 1 is review-queue oriented. It prepares the surfaces needed for the offici
 - Mutating actions use `xurl_wrapper.plan_mutating_action()` and are blocked.
 - Queue and audit writes are append-only JSONL.
 - Records include tenant, agent, campaign, account, profile, policy profile, brand voice, and autonomy mode context.
+- xurl plans include `catalog_skill_id=bundled.social-media.xurl` as Hermes catalog metadata only.
 
 ## Reusable Agent Template
 
@@ -29,3 +30,5 @@ Supported autonomy modes are `draft`, `approval`, `guarded`, and `goham`. Phase 
 ## Future Promotion Criteria
 
 Before any live posting phase, HAM-on-X needs explicit product approval, integration tests with mocked xurl/xAI clients, dashboard review controls, and a deployment-specific kill switch procedure.
+
+Durable multi-step campaign/control-plane runs are not part of Phase 1A. The current records are per-action proposals plus append-only event traces.
