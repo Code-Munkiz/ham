@@ -18,6 +18,12 @@ from src.ham.chat_user_content import (
     to_llm_message_content,
     vision_system_suffix,
 )
+from src.ham.execution_mode import (
+    ExecutionEnvironment,
+    ExecutionModePreference,
+    browser_runtime_available,
+    resolve_execution_mode,
+)
 from src.ham.active_agent_context import try_active_agent_guidance_for_project_root
 from src.ham.cursor_skills_catalog import list_cursor_skills, render_skills_for_system_prompt
 from src.ham.cursor_subagents_catalog import list_cursor_subagents, render_subagents_for_system_prompt
@@ -61,6 +67,7 @@ from src.ham.transcription_config import (
     transcription_provider,
     transcription_runtime_configured,
 )
+from src.memory_heist import browser_policy_from_config, discover_config
 
 router = APIRouter(tags=["chat"])
 _LOG = logging.getLogger(__name__)
@@ -96,6 +103,9 @@ class ChatRequest(BaseModel):
     # Server-side operator (projects, agents preview/apply, runs, launch) — see docs/HAM_CHAT_CONTROL_PLANE.md
     enable_operator: bool = True
     operator: ChatOperatorPayload | None = None
+    # Execution routing preferences for browser/local-machine/chat control surfaces.
+    execution_mode_preference: ExecutionModePreference = "auto"
+    execution_environment: ExecutionEnvironment = "unknown"
 
 
 class ChatActiveAgentMeta(BaseModel):
@@ -115,6 +125,7 @@ class ChatResponse(BaseModel):
     actions: list[dict] = Field(default_factory=list)
     active_agent: ChatActiveAgentMeta | None = None
     operator_result: dict[str, Any] | None = None
+    execution_mode: dict[str, Any] | None = None
 
 
 def _gateway_status_code(code: str) -> int:
@@ -337,6 +348,39 @@ def _resolve_project_root_for_chat(project_id: str | None) -> Path | None:
     return Path(rec.root).expanduser().resolve()
 
 
+def _resolve_browser_adapter(project_id: str | None) -> str:
+    root = _resolve_project_root_for_chat(project_id)
+    if root is None:
+        return "playwright"
+    cfg = discover_config(root)
+    policy = browser_policy_from_config(cfg)
+    adapter = str(policy.get("adapter", "playwright")).strip().lower()
+    return adapter if adapter in {"playwright", "chromium"} else "playwright"
+
+
+def _execution_mode_payload(body: ChatRequest, *, last_user_plain: str) -> dict[str, Any]:
+    env = body.execution_environment
+    local_machine_available = env == "desktop"
+    browser_available = browser_runtime_available()
+    decision = resolve_execution_mode(
+        preference=body.execution_mode_preference,
+        environment=env,
+        user_text=last_user_plain,
+        browser_available=browser_available,
+        local_machine_available=local_machine_available,
+    )
+    return {
+        "requested_mode": decision.requested_mode,
+        "selected_mode": decision.selected_mode,
+        "auto_selected": decision.auto_selected,
+        "environment": decision.environment,
+        "browser_available": decision.browser_available,
+        "local_machine_available": decision.local_machine_available,
+        "browser_adapter": _resolve_browser_adapter(body.project_id) if decision.selected_mode == "browser" else None,
+        "reason": decision.reason,
+    }
+
+
 def _finalize_incoming_for_store(
     msgs: list[ChatMessageIn],
     *,
@@ -420,7 +464,7 @@ def _prepare_chat_session(
     )
     try:
         store.append_turns(sid, incoming)
-    except KeyError:
+    except KeyError as exc:
         raise HTTPException(
             status_code=404,
             detail={
@@ -429,7 +473,7 @@ def _prepare_chat_session(
                     "message": "Unknown chat session.",
                 }
             },
-        )
+        ) from exc
 
     history = store.list_messages(sid)
     base_system = _chat_system_prompt(
@@ -550,6 +594,7 @@ async def post_chat(
         body,
         attachment_user_id=aid,
     )
+    execution_mode = _execution_mode_payload(body, last_user_plain=last_user_plain)
     if body.enable_operator and operator_enabled() and body.messages[-1].role == "user":
         from src.persistence.project_store import get_project_store
 
@@ -571,6 +616,7 @@ async def post_chat(
                 actions=[],
                 active_agent=ChatActiveAgentMeta.model_validate(active_meta) if active_meta else None,
                 operator_result=op.model_dump(mode="json"),
+                execution_mode=execution_mode,
             )
     try:
         assistant_raw = complete_chat_turn(
@@ -595,6 +641,7 @@ async def post_chat(
         actions=actions,
         active_agent=ChatActiveAgentMeta.model_validate(active_meta) if active_meta else None,
         operator_result=None,
+        execution_mode=execution_mode,
     )
 
 
@@ -616,6 +663,7 @@ def post_chat_stream(
         body,
         attachment_user_id=aid,
     )
+    stream_execution_mode = _execution_mode_payload(body, last_user_plain=last_user_plain)
 
     if body.enable_operator and operator_enabled() and body.messages[-1].role == "user":
         from src.persistence.project_store import get_project_store
@@ -643,6 +691,7 @@ def post_chat_stream(
                     "messages": msgs,
                     "actions": [],
                     "operator_result": op_dict,
+                    "execution_mode": stream_execution_mode,
                 }
                 if stream_active_meta:
                     payload["active_agent"] = stream_active_meta
@@ -679,6 +728,7 @@ def post_chat_stream(
                         "messages": store.list_messages(sid),
                         "actions": [],
                         "operator_result": None,
+                        "execution_mode": stream_execution_mode,
                         "gateway_error": {"code": exc.code},
                     }
                     if stream_active_meta:
@@ -708,6 +758,7 @@ def post_chat_stream(
                     "messages": store.list_messages(sid),
                     "actions": actions,
                     "operator_result": None,
+                    "execution_mode": stream_execution_mode,
                 }
                 if stream_active_meta:
                     payload["active_agent"] = stream_active_meta

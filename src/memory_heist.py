@@ -113,6 +113,14 @@ DEFAULT_SESSION_COMPACTION_MAX_TOKENS = 10_000
 DEFAULT_SESSION_COMPACTION_PRESERVE = 4
 DEFAULT_SESSION_TOOL_PRUNE_CHARS = 200
 DEFAULT_TOOL_PRUNE_PLACEHOLDER = "[Old tool output cleared to save context space]"
+DEFAULT_BROWSER_MAX_STEPS = 25
+DEFAULT_BROWSER_STEP_TIMEOUT_MS = 10_000
+DEFAULT_BROWSER_MAX_DOM_CHARS = 8_000
+DEFAULT_BROWSER_MAX_CONSOLE_CHARS = 4_000
+DEFAULT_BROWSER_MAX_NETWORK_EVENTS = 200
+DEFAULT_BROWSER_ALLOW_FILE_DOWNLOAD = False
+DEFAULT_BROWSER_ALLOW_FORM_SUBMIT = False
+DEFAULT_BROWSER_ADAPTER = "playwright"
 
 INSTRUCTION_INVISIBLE_CHARS = (
     "\u200b",  # zero-width space
@@ -707,6 +715,90 @@ def _coerce_positive_int(raw: Any, default: int) -> int:
     return default
 
 
+def _coerce_bool(raw: Any, default: bool) -> bool:
+    if isinstance(raw, bool):
+        return raw
+    if isinstance(raw, str):
+        low = raw.strip().lower()
+        if low in {"1", "true", "yes", "on"}:
+            return True
+        if low in {"0", "false", "no", "off"}:
+            return False
+    return default
+
+
+def _coerce_string_list(raw: Any) -> list[str]:
+    if isinstance(raw, str):
+        item = raw.strip()
+        return [item] if item else []
+    if isinstance(raw, (list, tuple, set)):
+        out: list[str] = []
+        for item in raw:
+            if not isinstance(item, str):
+                continue
+            cleaned = item.strip()
+            if cleaned:
+                out.append(cleaned)
+        return out
+    return []
+
+
+def browser_policy_from_config(config: ProjectConfig | dict[str, Any] | None) -> dict[str, Any]:
+    merged: dict[str, Any]
+    if isinstance(config, ProjectConfig):
+        merged = config.merged
+    elif isinstance(config, dict):
+        merged = config
+    else:
+        merged = {}
+
+    section = merged.get("memory_heist")
+    if not isinstance(section, dict):
+        section = {}
+    browser = section.get("browser")
+    if not isinstance(browser, dict):
+        browser = {}
+    adapter_raw = browser.get("adapter", section.get("browser_adapter", DEFAULT_BROWSER_ADAPTER))
+    adapter = str(adapter_raw).strip().lower() if adapter_raw is not None else DEFAULT_BROWSER_ADAPTER
+    if adapter not in {"playwright", "chromium"}:
+        adapter = DEFAULT_BROWSER_ADAPTER
+
+    return {
+        "adapter": adapter,
+        "max_steps": _coerce_positive_int(
+            browser.get("max_steps", section.get("browser_max_steps")),
+            DEFAULT_BROWSER_MAX_STEPS,
+        ),
+        "step_timeout_ms": _coerce_positive_int(
+            browser.get("step_timeout_ms", section.get("browser_step_timeout_ms")),
+            DEFAULT_BROWSER_STEP_TIMEOUT_MS,
+        ),
+        "max_dom_chars": _coerce_positive_int(
+            browser.get("max_dom_chars", section.get("browser_max_dom_chars")),
+            DEFAULT_BROWSER_MAX_DOM_CHARS,
+        ),
+        "max_console_chars": _coerce_positive_int(
+            browser.get("max_console_chars", section.get("browser_max_console_chars")),
+            DEFAULT_BROWSER_MAX_CONSOLE_CHARS,
+        ),
+        "max_network_events": _coerce_positive_int(
+            browser.get("max_network_events", section.get("browser_max_network_events")),
+            DEFAULT_BROWSER_MAX_NETWORK_EVENTS,
+        ),
+        "allowed_domains": _coerce_string_list(
+            browser.get("allowed_domains", section.get("browser_allowed_domains")),
+        ),
+        "allow_file_download": _coerce_bool(
+            browser.get("allow_file_download", section.get("browser_allow_file_download")),
+            DEFAULT_BROWSER_ALLOW_FILE_DOWNLOAD,
+        ),
+        "allow_form_submit": _coerce_bool(
+            browser.get("allow_form_submit", section.get("browser_allow_form_submit")),
+            DEFAULT_BROWSER_ALLOW_FORM_SUBMIT,
+        ),
+    }
+
+
 def context_engine_dashboard_payload(cwd: Path | None = None) -> dict[str, Any]:
     """JSON-serializable snapshot for dashboards (no raw git diff / instruction body).
 
@@ -718,6 +810,7 @@ def context_engine_dashboard_payload(cwd: Path | None = None) -> dict[str, Any]:
 
     mem = SessionMemory()
     mem.configure_from_project_config(project.config)
+    browser_policy = browser_policy_from_config(project.config)
 
     mh_raw = project.config.merged.get("memory_heist")
     memory_heist_section: dict[str, Any] = mh_raw if isinstance(mh_raw, dict) else {}
@@ -775,6 +868,7 @@ def context_engine_dashboard_payload(cwd: Path | None = None) -> dict[str, Any]:
             "tool_prune_chars": mem.tool_prune_chars,
             "tool_prune_placeholder": mem.tool_prune_placeholder,
         },
+        "browser_policy": browser_policy,
         "module_defaults": {
             "max_instruction_file_chars": MAX_INSTRUCTION_FILE_CHARS,
             "max_total_instruction_chars": MAX_TOTAL_INSTRUCTION_CHARS,

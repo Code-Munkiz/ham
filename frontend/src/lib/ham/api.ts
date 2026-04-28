@@ -1186,6 +1186,10 @@ export interface HamChatRequest {
   enable_operator?: boolean;
   /** Structured confirm/apply/register/launch (see API `ChatOperatorPayload` / `src/ham/chat_operator.py`). */
   operator?: HamChatOperatorPayload | null;
+  /** Execution routing hint: auto/browser/machine/chat. */
+  execution_mode_preference?: "auto" | "browser" | "machine" | "chat";
+  /** Client environment hint for routing policy. */
+  execution_environment?: "web" | "desktop" | "unknown";
 }
 
 /** Matches server `ChatOperatorPayload` (subset used by the dashboard; extra fields are ignored if unset). */
@@ -1252,12 +1256,24 @@ export interface HamOperatorResult {
   data?: Record<string, unknown>;
 }
 
+export interface HamChatExecutionMode {
+  requested_mode: "auto" | "browser" | "machine" | "chat";
+  selected_mode: "browser" | "machine" | "chat";
+  auto_selected: boolean;
+  environment: "web" | "desktop" | "unknown";
+  browser_available: boolean;
+  local_machine_available: boolean;
+  browser_adapter?: "playwright" | "chromium" | null;
+  reason: string;
+}
+
 export interface HamChatResponse {
   session_id: string;
   messages: HamChatMessage[];
   actions: HamUiAction[];
   active_agent?: HamChatActiveAgentMeta | null;
   operator_result?: HamOperatorResult | null;
+  execution_mode?: HamChatExecutionMode | null;
   /** Present on terminal `done` when the model gateway failed after retries; safe text is in `messages`. */
   gateway_error?: { code: string };
 }
@@ -1399,6 +1415,7 @@ export type HamChatStreamEvent =
       actions?: HamUiAction[];
       active_agent?: HamChatActiveAgentMeta | null;
       operator_result?: HamOperatorResult | null;
+      execution_mode?: HamChatExecutionMode | null;
       /** Structured signal when the assistant turn ended in a gateway failure (safe copy in `messages`). */
       gateway_error?: { code: string };
     }
@@ -1523,6 +1540,7 @@ export async function postChatStream(
         actions: Array.isArray(ev.actions) ? ev.actions : [],
         active_agent: ev.active_agent ?? undefined,
         operator_result: ev.operator_result ?? undefined,
+        execution_mode: ev.execution_mode ?? undefined,
         ...(ev.gateway_error ? { gateway_error: ev.gateway_error } : {}),
       };
       return;
