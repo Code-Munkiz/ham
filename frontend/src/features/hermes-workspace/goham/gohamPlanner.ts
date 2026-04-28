@@ -6,6 +6,7 @@
  */
 
 import type { HamDesktopRealBrowserClickCandidate } from "@/lib/ham/desktopBundleBridge";
+import { hamApiFetch } from "@/lib/ham/api";
 import { classifyGohamCandidate } from "./gohamSafetyClassifier";
 import { parseGohamPlannerAction, type GohamPlannerAction } from "./gohamPlannerSchema";
 
@@ -40,6 +41,15 @@ export type GohamPlannerResult =
   | { ok: true; action: GohamPlannerAction; source: "llm" }
   | { ok: false; reason: string; source: "disabled" | "unavailable" | "parse" | "validate" };
 
+type GohamPlannerApiResponse = {
+  kind: "goham_planner_next_action";
+  schema_version: 1;
+  status: "ok" | "fallback" | "error";
+  planner_mode: "llm" | "fallback";
+  action?: unknown;
+  warnings?: string[];
+};
+
 export function compactPlannerCandidate(
   candidate: HamDesktopRealBrowserClickCandidate,
   score: number,
@@ -73,17 +83,39 @@ export function validateGohamPlannerAction(
   return { ok: true };
 }
 
-/**
- * Placeholder for a future safe planner transport. We intentionally do not call
- * `/api/chat` here because it persists chat sessions and injects broad assistant
- * context. Until a narrow planner endpoint exists, enabling the flag records an
- * unavailable planner and the loop falls back to rules-first.
- */
-export async function proposeGohamPlannerAction(_input: GohamPlannerInput): Promise<GohamPlannerResult> {
+export async function proposeGohamPlannerAction(input: GohamPlannerInput): Promise<GohamPlannerResult> {
   if (!GOHAM_LLM_PLANNER_ENABLED) return { ok: false, reason: "planner_disabled", source: "disabled" };
 
-  // Keep parse/validate exercised as the boundary for future transport.
-  const parsed = parseGohamPlannerAction(null);
-  if (!parsed.ok) return { ok: false, reason: "safe_planner_transport_unavailable", source: "unavailable" };
-  return { ok: false, reason: "safe_planner_transport_unavailable", source: "unavailable" };
+  let response: Response;
+  try {
+    response = await hamApiFetch("/api/goham/planner/next-action", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+  } catch {
+    return { ok: false, reason: "planner_endpoint_unavailable", source: "unavailable" };
+  }
+  if (!response.ok) return { ok: false, reason: `planner_http_${response.status}`, source: "unavailable" };
+
+  let payload: GohamPlannerApiResponse;
+  try {
+    payload = (await response.json()) as GohamPlannerApiResponse;
+  } catch {
+    return { ok: false, reason: "planner_bad_json", source: "parse" };
+  }
+  if (payload.kind !== "goham_planner_next_action" || payload.schema_version !== 1) {
+    return { ok: false, reason: "planner_bad_schema", source: "parse" };
+  }
+  if (payload.status !== "ok" || payload.planner_mode !== "llm") {
+    const warning = Array.isArray(payload.warnings) && payload.warnings[0] ? String(payload.warnings[0]) : payload.status;
+    return { ok: false, reason: warning, source: payload.status === "error" ? "validate" : "unavailable" };
+  }
+
+  const parsed = parseGohamPlannerAction(payload.action);
+  if (!parsed.ok) {
+    const reason = "reason" in parsed ? parsed.reason : "planner_parse_failed";
+    return { ok: false, reason, source: "parse" };
+  }
+  return { ok: true, action: parsed.action, source: "llm" };
 }

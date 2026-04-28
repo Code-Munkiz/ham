@@ -33,10 +33,11 @@ Chrome profile, not the operator's default browser profile.
 - Evidence honesty: missing terms report `insufficient_evidence` or
   `budget_without_evidence`; search-provider title/query echo is not counted as
   evidence.
-- Planner boundary: optional LLM-assisted planning is interface-gated and
-  disabled unless `VITE_GOHAM_LLM_PLANNER=1`; unavailable or rejected proposals
-  fall back to rules-first planning and still pass through candidate validation
-  and safety gates.
+- Planner boundary: optional LLM-assisted planning uses the dedicated
+  non-persistent `POST /api/goham/planner/next-action` endpoint only when
+  `VITE_GOHAM_LLM_PLANNER=1` and `GOHAM_LLM_PLANNER_ENABLED=true`; unavailable
+  or rejected proposals fall back to rules-first planning and still pass through
+  candidate validation and safety gates.
 - Shop safety: Shop / Skills surfaces expose no execution buttons for GoHAM.
 
 ## Evidence Scope

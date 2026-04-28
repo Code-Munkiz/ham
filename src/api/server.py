@@ -26,6 +26,7 @@ from src.api.hermes_gateway import router as hermes_gateway_router
 from src.api.hermes_hub import router as hermes_hub_router
 from src.api.hermes_runtime_inventory import router as hermes_runtime_inventory_router
 from src.api.hermes_skills import router as hermes_skills_router
+from src.api.goham_planner import router as goham_planner_router
 from src.api.models_catalog import router as models_catalog_router
 from src.api.project_settings import router as project_settings_router
 from src.api.workspace_health import router as workspace_health_router
@@ -115,6 +116,7 @@ app.include_router(hermes_hub_router)
 app.include_router(hermes_gateway_router)
 app.include_router(hermes_runtime_inventory_router)
 app.include_router(hermes_skills_router)
+app.include_router(goham_planner_router)
 app.include_router(project_settings_router)
 app.include_router(control_plane_runs_router)
 app.include_router(models_catalog_router)
