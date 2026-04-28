@@ -26,6 +26,7 @@ From repo root:
    - `npm install --prefix frontend`
 4. Create local env file:
    - `cp .env.example .env`
+   - For full `pytest` runs, leave `HERMES_GATEWAY_MODEL=` blank in `.env`; tests that exercise OpenRouter set `DEFAULT_MODEL` explicitly and should not inherit the example gateway model.
 
 ## 2) Authentication + mode defaults (practical)
 
@@ -136,6 +137,8 @@ Useful env flags:
   - Use `python3 -m uvicorn ...` instead of bare `uvicorn`.
 - Chat endpoint errors in non-mock mode:
   - Re-check `HERMES_GATEWAY_MODE` and matching credentials in `.env`.
+- Full `python3 -m pytest` fails in `test_openrouter_mode_calls_litellm` after copying `.env.example`:
+  - Set `HERMES_GATEWAY_MODEL=` blank in local `.env`, then rerun tests.
 
 ## 6) Keep this skill updated
 
