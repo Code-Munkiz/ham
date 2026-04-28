@@ -60,6 +60,36 @@ const STOPWORDS = new Set([
   "will",
   "into",
   "onto",
+  "one",
+  "most",
+  "within",
+  "bounded",
+]);
+
+const RESEARCH_GOAL_STOPWORDS = new Set([
+  ...STOPWORDS,
+  "find",
+  "finding",
+  "research",
+  "information",
+  "info",
+  "about",
+  "start",
+  "page",
+  "pages",
+  "link",
+  "links",
+  "available",
+  "follow",
+  "useful",
+  "goham",
+  "report",
+  "found",
+  "shown",
+  "show",
+  "whether",
+  "what",
+  "window",
 ]);
 
 /** User message hints at a multi-step research task (vs v0 “what you see”). */
@@ -90,7 +120,15 @@ export type GohamLoopAction = {
   risk: "low" | "blocked";
 };
 
-export type GohamResearchStopReason = "done" | "budget" | "blocked" | "error" | "user_stopped" | "time";
+export type GohamResearchStopReason =
+  | "done"
+  | "budget"
+  | "blocked"
+  | "error"
+  | "user_stopped"
+  | "time"
+  | "insufficient_evidence"
+  | "budget_without_evidence";
 
 function redactSnippet(s: string, max = 44): string {
   const t = s.replace(/\s+/g, " ").trim();
@@ -109,6 +147,99 @@ export function goalTokensFromTask(text: string, url: string): string[] {
   }
   const raw = t.split(/\W+/u).filter((w) => w.length > 2 && !STOPWORDS.has(w));
   return [...new Set(raw)];
+}
+
+function normalizeEvidenceText(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[._/-]+/gu, " ")
+    .replace(/\s+/gu, " ")
+    .trim();
+}
+
+function deriveRequiredEvidenceTerms(text: string, url: string): string[] {
+  let t = text.toLowerCase();
+  try {
+    const u = new URL(url);
+    t = t.split(u.hostname.toLowerCase()).join(" ");
+    t = t.split(u.origin.toLowerCase()).join(" ");
+  } catch {
+    /* ignore */
+  }
+
+  const terms: string[] = [];
+  const add = (term: string) => {
+    const cleaned = normalizeEvidenceText(term);
+    if (cleaned.length >= 2 && !terms.includes(cleaned)) terms.push(cleaned);
+  };
+
+  const versionLike = t.match(/\b[a-z]+\d+(?:[._-]\d+)+\b|\b[a-z]+\s+\d+(?:[._-]\d+)+\b/giu) ?? [];
+  versionLike.forEach(add);
+
+  if (/\bfree\s+tier\b/iu.test(t)) {
+    add("free tier");
+    add("free");
+    add("tier");
+  }
+  if (/\bcontext\s+window\b/iu.test(t)) {
+    add("context window");
+    add("context");
+  }
+
+  t.split(/[^\p{L}\p{N}.]+/u)
+    .map((w) => w.trim().toLowerCase())
+    .filter((w) => w.length > 2 && !RESEARCH_GOAL_STOPWORDS.has(w))
+    .forEach(add);
+
+  return terms.slice(0, 10);
+}
+
+type EvidenceLedger = {
+  requiredTerms: string[];
+  observedTerms: Set<string>;
+  snippets: string[];
+};
+
+function makeEvidenceLedger(requiredTerms: string[]): EvidenceLedger {
+  return { requiredTerms, observedTerms: new Set(), snippets: [] };
+}
+
+function evidenceMissingTerms(evidence: EvidenceLedger): string[] {
+  return evidence.requiredTerms.filter((term) => !evidence.observedTerms.has(term));
+}
+
+function hasMissingEvidence(evidence: EvidenceLedger): boolean {
+  return evidenceMissingTerms(evidence).length > 0;
+}
+
+function addEvidenceSnippet(evidence: EvidenceLedger, snippet: string) {
+  const clean = redactSnippet(snippet, 96);
+  if (!clean || evidence.snippets.includes(clean)) return;
+  if (evidence.snippets.length < 8) evidence.snippets.push(clean);
+}
+
+function observeEvidenceFromText(evidence: EvidenceLedger, sourceLabel: string, text: string) {
+  const normalized = normalizeEvidenceText(text);
+  if (!normalized) return;
+  for (const term of evidence.requiredTerms) {
+    if (!evidence.observedTerms.has(term) && normalized.includes(term)) {
+      evidence.observedTerms.add(term);
+      addEvidenceSnippet(evidence, `${sourceLabel}: ${text}`);
+    }
+  }
+}
+
+function observeEvidenceFromPage(
+  evidence: EvidenceLedger,
+  title: string,
+  displayUrl: string,
+  candidates: HamDesktopRealBrowserClickCandidate[] = [],
+) {
+  observeEvidenceFromText(evidence, "title", title);
+  observeEvidenceFromText(evidence, "url", displayUrl);
+  for (const c of candidates.slice(0, 12)) {
+    observeEvidenceFromText(evidence, "candidate", c.text);
+  }
 }
 
 function scoreCandidate(c: HamDesktopRealBrowserClickCandidate, tokens: string[]): number {
@@ -150,13 +281,14 @@ type PlanCtx = {
   scrollsThisPage: number;
   loopIteration: number;
   lastTitle: string;
+  evidenceMissing: boolean;
 };
 
 /** Rules-first planner: token overlap on candidates, else scroll, else done. */
 export function rulesFirstPlan(ctx: PlanCtx): GohamLoopAction {
-  const { goalTokens, candidates, lastClickedId, scrollsThisPage, loopIteration, lastTitle } = ctx;
+  const { goalTokens, candidates, lastClickedId, scrollsThisPage, loopIteration, lastTitle, evidenceMissing } = ctx;
 
-  if (taskAppearsComplete(lastTitle, goalTokens)) {
+  if (!evidenceMissing && taskAppearsComplete(lastTitle, goalTokens)) {
     return { type: "done", reason: "Page title matches research keywords", risk: "low" };
   }
   if (loopIteration >= MAX_LOOP_ACTIONS) {
@@ -179,11 +311,15 @@ export function rulesFirstPlan(ctx: PlanCtx): GohamLoopAction {
     };
   }
 
-  if (scrollsThisPage < 3) {
+  if (scrollsThisPage < (evidenceMissing ? MAX_LOOP_ACTIONS : 3)) {
     return { type: "scroll", reason: "No matching link in view — scrolling", risk: "low" };
   }
 
-  return { type: "done", reason: "No further relevant actions", risk: "low" };
+  return {
+    type: "done",
+    reason: evidenceMissing ? "No further relevant actions with required evidence still missing" : "No further relevant actions",
+    risk: "low",
+  };
 }
 
 export type GohamHoldState = "none" | "pause" | "takeover";
@@ -206,6 +342,7 @@ export async function runGohamResearchFlow(opts: RunGohamResearchOptions): Promi
   const { api, url, taskText, onTrail, shouldAbort, getHoldState } = opts;
   const redacted = redactUrlForTrail(url);
   const goalTokens = goalTokensFromTask(taskText, url);
+  const evidence = makeEvidenceLedger(deriveRequiredEvidenceTerms(taskText, url));
 
   let trail: GoHamTrailStep[] = [];
   let seq = 0;
@@ -395,6 +532,7 @@ export async function runGohamResearchFlow(opts: RunGohamResearchOptions): Promi
     return { ok: false, userMessage: msg, trailSteps: trail };
   }
   let candidates = enumR.candidates;
+  observeEvidenceFromPage(evidence, title0, display0, candidates);
   patchIdFull(listId, "done", {
     detail: `${candidates.length} visible`,
     actionType: "enumerate",
@@ -410,7 +548,7 @@ export async function runGohamResearchFlow(opts: RunGohamResearchOptions): Promi
 
   let hitExplicitDone = false;
 
-  if (taskAppearsComplete(lastTitle, goalTokens)) {
+  if (!hasMissingEvidence(evidence) && taskAppearsComplete(lastTitle, goalTokens)) {
     stopReason = "done";
     hitExplicitDone = true;
   } else {
@@ -447,6 +585,7 @@ export async function runGohamResearchFlow(opts: RunGohamResearchOptions): Promi
         scrollsThisPage,
         loopIteration,
         lastTitle,
+        evidenceMissing: hasMissingEvidence(evidence),
       });
       const v = validatePlannerAction(action, candidates);
       if (v.ok === false) {
@@ -462,14 +601,17 @@ export async function runGohamResearchFlow(opts: RunGohamResearchOptions): Promi
         break;
       }
       if (action.type === "done") {
-        stopReason = "done";
+        const missingEvidence = hasMissingEvidence(evidence);
+        stopReason = missingEvidence ? "insufficient_evidence" : "done";
         hitExplicitDone = true;
         addRow({
-          label: "Done",
+          label: missingEvidence ? "Insufficient evidence" : "Done",
           status: "done",
-          detail: redactSnippet(action.reason, 80),
+          detail: missingEvidence
+            ? `Missing: ${evidenceMissingTerms(evidence).map((t) => redactSnippet(t, 18)).join(", ")}`
+            : redactSnippet(action.reason, 80),
           actionType: "done",
-          result: "planner_done",
+          result: missingEvidence ? "insufficient_evidence" : "planner_done",
         });
         break;
       }
@@ -576,14 +718,17 @@ export async function runGohamResearchFlow(opts: RunGohamResearchOptions): Promi
         break;
       }
       if (Date.now() - loopStart >= LOOP_WALL_MS) {
-        stopReason = "time";
+        const missingEvidence = hasMissingEvidence(evidence);
+        stopReason = missingEvidence ? "budget_without_evidence" : "time";
         hitExplicitDone = true;
         addRow({
-          label: "Time budget reached",
+          label: missingEvidence ? "Time budget reached without evidence" : "Time budget reached",
           status: "done",
-          detail: "Wall clock limit",
+          detail: missingEvidence
+            ? `Missing: ${evidenceMissingTerms(evidence).map((t) => redactSnippet(t, 18)).join(", ")}`
+            : "Wall clock limit",
           actionType: "budget",
-          result: "time",
+          result: missingEvidence ? "budget_without_evidence" : "time",
         });
         break;
       }
@@ -628,6 +773,7 @@ export async function runGohamResearchFlow(opts: RunGohamResearchOptions): Promi
         break;
       }
       candidates = enumR.candidates;
+      observeEvidenceFromPage(evidence, lastTitle, disp, candidates);
       addRow({
         label: "Listing click candidates",
         status: "done",
@@ -636,7 +782,7 @@ export async function runGohamResearchFlow(opts: RunGohamResearchOptions): Promi
         result: `${candidates.length} candidates`,
       });
 
-      if (taskAppearsComplete(lastTitle, goalTokens)) {
+      if (!hasMissingEvidence(evidence) && taskAppearsComplete(lastTitle, goalTokens)) {
         stopReason = "done";
         hitExplicitDone = true;
         addRow({
@@ -652,22 +798,28 @@ export async function runGohamResearchFlow(opts: RunGohamResearchOptions): Promi
     }
 
     if (!hitExplicitDone && stopReason === null && loopIteration >= MAX_LOOP_ACTIONS) {
-      stopReason = "budget";
+      const missingEvidence = hasMissingEvidence(evidence);
+      stopReason = missingEvidence ? "budget_without_evidence" : "budget";
       addRow({
-        label: "Step budget reached",
+        label: missingEvidence ? "Step budget reached without evidence" : "Step budget reached",
         status: "done",
-        detail: `${MAX_LOOP_ACTIONS} actions`,
+        detail: missingEvidence
+          ? `Missing: ${evidenceMissingTerms(evidence).map((t) => redactSnippet(t, 18)).join(", ")}`
+          : `${MAX_LOOP_ACTIONS} actions`,
         actionType: "budget",
-        result: "max_actions",
+        result: missingEvidence ? "budget_without_evidence" : "max_actions",
       });
     } else if (!hitExplicitDone && stopReason === null && Date.now() - loopStart >= LOOP_WALL_MS) {
-      stopReason = "time";
+      const missingEvidence = hasMissingEvidence(evidence);
+      stopReason = missingEvidence ? "budget_without_evidence" : "time";
       addRow({
-        label: "Time budget reached",
+        label: missingEvidence ? "Time budget reached without evidence" : "Time budget reached",
         status: "done",
-        detail: "Wall clock limit",
+        detail: missingEvidence
+          ? `Missing: ${evidenceMissingTerms(evidence).map((t) => redactSnippet(t, 18)).join(", ")}`
+          : "Wall clock limit",
         actionType: "budget",
-        result: "time",
+        result: missingEvidence ? "budget_without_evidence" : "time",
       });
     } else if (shouldAbort() && stopReason === null && !errorMessage) {
       stopReason = "user_stopped";
@@ -699,6 +851,10 @@ export async function runGohamResearchFlow(opts: RunGohamResearchOptions): Promi
         return "Done (goal met or planner finished)";
       case "budget":
         return "Budget (max actions)";
+      case "insufficient_evidence":
+        return "Insufficient evidence";
+      case "budget_without_evidence":
+        return "Budget reached without required evidence";
       case "time":
         return "Budget (wall clock)";
       case "blocked":
@@ -713,16 +869,34 @@ export async function runGohamResearchFlow(opts: RunGohamResearchOptions): Promi
 
   const pagesVisitedCount = visited.length;
   const visitedUrlsLines = visited.map((v) => `- ${v.display}`).join("\n");
+  const missingTerms = evidenceMissingTerms(evidence);
+  const evidenceTarget = evidence.requiredTerms.length
+    ? evidence.requiredTerms.map((t) => redactSnippet(t, 28)).join("/")
+    : "the requested research claim";
+  const insufficientEvidence = stopReason === "insufficient_evidence" || stopReason === "budget_without_evidence";
+  const observedTerms = [...evidence.observedTerms].map((t) => redactSnippet(t, 28));
+  const observedEvidenceLines = evidence.snippets.map((s) => `- ${s}`).join("\n");
 
   const assistantText = [
     `**GoHAM research (v1 Slice 3)**`,
     ``,
+    insufficientEvidence
+      ? `I did not find enough visible evidence for ${evidenceTarget} within this bounded GoHAM pass.`
+      : ``,
+    insufficientEvidence ? `` : ``,
     `**Evidence summary**`,
     `- **Pages visited:** ${pagesVisitedCount}`,
     `- **Loop actions executed:** ${loopActionCount} (scroll / click / wait / observe in the research loop)`,
     `- **Screenshot captures:** ${screenshotCaptureCount} (local validation only — not embedded here)`,
     `- **Stop reason:** ${stopLabel}`,
-    `- **Stop reason code:** \`${stopReason}\` (machine-readable: \`done\` | \`budget\` | \`time\` | \`blocked\` | \`error\` | \`user_stopped\`; use **Pause** / **Take over** + **Stop** → \`user_stopped\`)`,
+    `- **Stop reason code:** \`${stopReason}\` (machine-readable: \`done\` | \`budget\` | \`time\` | \`insufficient_evidence\` | \`budget_without_evidence\` | \`blocked\` | \`error\` | \`user_stopped\`; use **Pause** / **Take over** + **Stop** → \`user_stopped\`)`,
+    evidence.requiredTerms.length
+      ? `- **Required evidence terms:** ${evidence.requiredTerms.map((t) => redactSnippet(t, 24)).join(", ")}`
+      : `- **Required evidence terms:** (none extracted)`,
+    evidence.requiredTerms.length
+      ? `- **Observed required terms:** ${observedTerms.length ? observedTerms.join(", ") : "(none)"}`
+      : ``,
+    missingTerms.length ? `- **Missing evidence terms:** ${missingTerms.map((t) => redactSnippet(t, 24)).join(", ")}` : ``,
     ``,
     `**Visited locations (redacted)**`,
     visitedUrlsLines || `- ${redacted}`,
@@ -730,6 +904,7 @@ export async function runGohamResearchFlow(opts: RunGohamResearchOptions): Promi
     `**What we found**`,
     `- **Latest page title:** ${redactSnippet(lastTitle, 80)}`,
     goalTokens.length ? `- **Keywords tracked:** ${goalTokens.slice(0, 8).join(", ")}${goalTokens.length > 8 ? "…" : ""}` : `- (No keywords extracted from your message.)`,
+    observedEvidenceLines ? `**Observed bounded evidence snippets**\n${observedEvidenceLines}` : `**Observed bounded evidence snippets**\n- (No required evidence terms were visible in title, URL, or bounded candidate text.)`,
     ``,
     `**Pages visited (detail)**`,
     linesVisited || `- ${redacted}`,
@@ -738,6 +913,7 @@ export async function runGohamResearchFlow(opts: RunGohamResearchOptions): Promi
     `**Limitations (this version)**`,
     `- No typing, form fill, or submit/post/send.`,
     `- No hidden browsing or full-page HTML extraction — title, redacted URL, compact observe, and screenshot bytes only.`,
+    `- Rules-first planner only; no search typing in this version.`,
     `- Rules-first planner: at most **${MAX_LOOP_ACTIONS}** actions after load, **~${Math.round(LOOP_WALL_MS / 1000)}s** wall clock.`,
     ``,
     `The **managed browser stays open**; use **Stop GoHAM** to close it. **Pause** / **Take over** let you control the window without ending the session until you **Resume** or **Stop**.`,
@@ -750,7 +926,7 @@ export async function runGohamResearchFlow(opts: RunGohamResearchOptions): Promi
 
   patchIdFull(summarizeId, "done", { actionType: "summarize", result: stopLabel });
   addRow({
-    label: "Done",
+    label: insufficientEvidence ? "Insufficient evidence" : "Done",
     status: "done",
     detail: stopLabel,
     actionType: "done",
