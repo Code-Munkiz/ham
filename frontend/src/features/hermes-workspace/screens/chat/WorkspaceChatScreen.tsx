@@ -220,7 +220,25 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   }, [desktopGohamEligible]);
 
   const voiceWs = useVoiceWorkspaceSettingsOptional();
-  const sttDictationEnabled = voiceWs?.payload?.settings.stt.enabled ?? true;
+  const sttEnabledBySetting = voiceWs?.payload?.settings.stt.enabled ?? true;
+  const sttMode = voiceWs?.payload?.settings.stt.mode ?? "record";
+  const sttRuntimeAvailable = voiceWs?.payload?.capabilities.stt.available ?? true;
+  const sttDictationEnabled =
+    sttEnabledBySetting && (sttMode !== "record" || sttRuntimeAvailable);
+  const sttUnavailableReason =
+    !sttEnabledBySetting
+      ? "Speech-to-text is off — enable it in Workspace → Settings → Voice."
+      : sttMode === "record" && !sttRuntimeAvailable
+      ? "Speech-to-text is not configured on this HAM API host."
+      : null;
+
+  const handleSttModeChange = React.useCallback(
+    async (mode: "auto" | "live" | "record") => {
+      if (!voiceWs) return;
+      await voiceWs.updateVoiceSettings({ stt: { mode } });
+    },
+    [voiceWs],
+  );
 
   const chatModelIdForApi = catalog?.gateway_mode === "openrouter" ? modelId : null;
 
@@ -1102,6 +1120,9 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
             modelId={modelId}
             onModelIdChange={setModelId}
             sttDictationEnabled={sttDictationEnabled}
+            sttUnavailableReason={sttUnavailableReason}
+            sttMode={sttMode}
+            onSttModeChange={handleSttModeChange}
             gohamEnabled={desktopGohamEligible ? gohamEnabled : false}
             onGohamEnabledChange={desktopGohamEligible ? setGohamEnabledPersist : undefined}
             gohamToggleDisabled={desktopGohamEligible ? Boolean(gohamGateHint) : false}

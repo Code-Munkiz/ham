@@ -148,6 +148,48 @@ Chat **`cursor_agent_launch`** requires a Ham **operator bearer** separate from 
 
 5. **Browser:** paste the **same** secret value in the Cloud Agent launch field (or retrieve the current version locally with `gcloud secrets versions access latest --secret=ham-cursor-agent-launch-token --project="${PROJECT_ID}"`).
 
+## Transcription key (`HAM_TRANSCRIPTION_API_KEY`)
+
+`POST /api/chat/transcribe` requires:
+
+- `HAM_TRANSCRIPTION_PROVIDER=openai`
+- `HAM_TRANSCRIPTION_API_KEY` mounted from Secret Manager (not plain env)
+
+If the key is missing or placeholder-like (`PLACEHOLDER`, `changeme`, `dummy`, `test`, masked snippets), Ham reports transcription as **not configured** and returns a safe `503`.
+
+1. Create/rotate the secret version:
+
+   ```bash
+   export PROJECT_ID=clarity-staging-488201
+   # First create (one-time) if needed:
+   gcloud secrets create ham-transcription-api-key \
+     --project="${PROJECT_ID}" \
+     --replication-policy=automatic
+
+   # Add/rotate latest value safely (do not echo key):
+   printf '%s' "$REAL_OPENAI_API_KEY" | gcloud secrets versions add ham-transcription-api-key \
+     --project="${PROJECT_ID}" \
+     --data-file=-
+   ```
+
+2. Grant Cloud Run runtime service account secret access (same identity used for other Ham secrets):
+
+   ```bash
+   gcloud secrets add-iam-policy-binding ham-transcription-api-key \
+     --project=clarity-staging-488201 \
+     --member="serviceAccount:PROJECT_NUMBER-compute@developer.gserviceaccount.com" \
+     --role="roles/secretmanager.secretAccessor"
+   ```
+
+3. Mount on Cloud Run:
+
+   ```bash
+   gcloud run services update ham-api \
+     --region=us-central1 \
+     --project=clarity-staging-488201 \
+     --update-secrets=HAM_TRANSCRIPTION_API_KEY=ham-transcription-api-key:latest
+   ```
+
 ## Deploy to Cloud Run
 
 ```bash

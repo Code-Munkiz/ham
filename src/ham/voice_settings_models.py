@@ -8,12 +8,13 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from models.edge_tts_wrapper import TextToSpeechEngine
+from src.ham.transcription_config import transcription_runtime_configured
 
 
 def default_voice_settings() -> dict[str, Any]:
     return {
         "tts": {"enabled": True, "provider": "edge", "voice": "en-US-JennyNeural"},
-        "stt": {"enabled": True, "provider": "openai"},
+        "stt": {"enabled": True, "provider": "openai", "mode": "record"},
     }
 
 
@@ -36,12 +37,6 @@ def _tts_env_available() -> bool:
     return raw not in ("0", "false", "no", "off")
 
 
-def _stt_runtime_configured() -> bool:
-    provider = (os.environ.get("HAM_TRANSCRIPTION_PROVIDER") or "").strip().lower()
-    key = (os.environ.get("HAM_TRANSCRIPTION_API_KEY") or "").strip()
-    return provider == "openai" and bool(key)
-
-
 class TtsSettingsModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -55,6 +50,7 @@ class SttSettingsModel(BaseModel):
 
     enabled: bool = True
     provider: Literal["openai"] = "openai"
+    mode: Literal["auto", "live", "record"] = "record"
 
 
 class SavedVoiceSettings(BaseModel):
@@ -62,13 +58,14 @@ class SavedVoiceSettings(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    tts: TtsSettingsModel = Field(default_factory=lambda: TtsSettingsModel())
-    stt: SttSettingsModel = Field(default_factory=lambda: SttSettingsModel())
+    tts: TtsSettingsModel = Field(default_factory=TtsSettingsModel)
+    stt: SttSettingsModel = Field(default_factory=SttSettingsModel)
 
     @model_validator(mode="after")
     def _validate_voices(self) -> SavedVoiceSettings:
-        if self.tts.voice not in ALLOWED_EDGE_VOICES:
-            raise ValueError(f"Unsupported TTS voice: {self.tts.voice!r}")
+        tts = self.tts
+        if isinstance(tts, TtsSettingsModel) and tts.voice not in ALLOWED_EDGE_VOICES:
+            raise ValueError(f"Unsupported TTS voice: {tts.voice!r}")
         return self
 
 
@@ -85,6 +82,7 @@ class SttPatch(BaseModel):
 
     enabled: bool | None = None
     provider: Literal["openai"] | None = None
+    mode: Literal["auto", "live", "record"] | None = None
 
 
 class VoiceSettingsPatchBody(BaseModel):
@@ -115,7 +113,7 @@ def merge_voice_settings(current: dict[str, Any], patch: VoiceSettingsPatchBody)
 
 def capabilities_payload() -> dict[str, Any]:
     tts_ok = _tts_env_available()
-    stt_ok = _stt_runtime_configured()
+    stt_ok, stt_reason = transcription_runtime_configured()
     voices = [
         {"id": vid, "label": VOICE_DISPLAY_LABELS.get(vid, vid)}
         for vid in sorted(ALLOWED_EDGE_VOICES)
@@ -134,11 +132,13 @@ def capabilities_payload() -> dict[str, Any]:
         },
         "stt": {
             "available": stt_ok,
+            "reason": stt_reason,
             "providers": [
                 {
                     "id": "openai",
                     "label": "OpenAI transcription",
                     "available": stt_ok,
+                    "reason": stt_reason,
                 },
             ],
         },

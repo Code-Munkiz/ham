@@ -229,7 +229,9 @@ export function WorkspaceVoiceBridgeSection({ catalog }: Props) {
               hint={
                 sttCap.available
                   ? "HAM_TRANSCRIPTION_PROVIDER=openai and API key set on the server."
-                  : "Transcription not configured on the API host — dictation will fail until configured."
+                  : sttCap.reason === "not_configured"
+                    ? "Transcription not configured on the API host — dictation is disabled until configured."
+                    : "Transcription not configured on the API host — dictation will fail until configured."
               }
             />
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
@@ -250,6 +252,27 @@ export function WorkspaceVoiceBridgeSection({ catalog }: Props) {
                 ))}
               </select>
             </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+              <span className="shrink-0 text-[13px] text-white/65">Dictation mode</span>
+              <select
+                className="h-8 w-full max-w-xs rounded-lg border border-white/[0.12] bg-white/[0.06] px-2.5 text-[12px] text-white/85 outline-none sm:max-w-sm"
+                aria-label="Dictation mode"
+                value={settings.stt.mode}
+                disabled={saving || !settings.stt.enabled}
+                onChange={(e) =>
+                  void updateVoiceSettings({
+                    stt: { mode: e.target.value as "auto" | "live" | "record" },
+                  })
+                }
+              >
+                <option value="record">Record then transcribe</option>
+                <option value="live">Dictate live</option>
+                <option value="auto">Auto dictation</option>
+              </select>
+            </div>
+            <p className="text-[11px] text-white/45">
+              Record mode is the default and most reliable path. Live and Auto remain optional.
+            </p>
           </div>
         </div>
       </div>

@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -152,7 +153,7 @@ def test_transcribe_not_configured(mock_mode: None, monkeypatch: pytest.MonkeyPa
     monkeypatch.delenv("HAM_TRANSCRIPTION_API_KEY", raising=False)
     monkeypatch.setenv("HAM_TRANSCRIPTION_PROVIDER", "")
     r = client.post("/api/chat/transcribe", files={"file": ("d.webm", b"\x00\x01", "audio/webm")})
-    assert r.status_code == 501
+    assert r.status_code == 503
     assert r.json()["detail"]["error"]["code"] == "TRANSCRIPTION_NOT_CONFIGURED"
 
 
@@ -160,12 +161,23 @@ def test_transcribe_openai_without_key(mock_mode: None, monkeypatch: pytest.Monk
     monkeypatch.setenv("HAM_TRANSCRIPTION_PROVIDER", "openai")
     monkeypatch.delenv("HAM_TRANSCRIPTION_API_KEY", raising=False)
     r = client.post("/api/chat/transcribe", files={"file": ("d.webm", b"x", "audio/webm")})
-    assert r.status_code == 501
+    assert r.status_code == 503
+
+
+def test_transcribe_openai_placeholder_key_not_configured(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HAM_TRANSCRIPTION_PROVIDER", "openai")
+    monkeypatch.setenv("HAM_TRANSCRIPTION_API_KEY", "PLACEHOLDER")
+    r = client.post("/api/chat/transcribe", files={"file": ("d.webm", b"x", "audio/webm")})
+    assert r.status_code == 503
+    j = r.json()
+    assert j["detail"]["error"]["code"] == "TRANSCRIPTION_NOT_CONFIGURED"
 
 
 def test_transcribe_upload_too_large(mock_mode: None, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HAM_TRANSCRIPTION_PROVIDER", "openai")
-    monkeypatch.setenv("HAM_TRANSCRIPTION_API_KEY", "sk-test-fake")
+    monkeypatch.setenv("HAM_TRANSCRIPTION_API_KEY", "sk-live-demo-key-12345")
     big = b"z" * (_MAX_TRANSCRIBE + 1)
     r = client.post("/api/chat/transcribe", files={"file": ("d.webm", big, "audio/webm")})
     assert r.status_code == 413
@@ -173,7 +185,7 @@ def test_transcribe_upload_too_large(mock_mode: None, monkeypatch: pytest.Monkey
 
 def test_transcribe_content_length_rejected(mock_mode: None, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HAM_TRANSCRIPTION_PROVIDER", "openai")
-    monkeypatch.setenv("HAM_TRANSCRIPTION_API_KEY", "sk-test-fake")
+    monkeypatch.setenv("HAM_TRANSCRIPTION_API_KEY", "sk-live-demo-key-12345")
     r = client.post(
         "/api/chat/transcribe",
         headers={"Content-Length": str(_MAX_TRANSCRIBE + 1)},
@@ -184,14 +196,14 @@ def test_transcribe_content_length_rejected(mock_mode: None, monkeypatch: pytest
 
 def test_transcribe_empty_file(mock_mode: None, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HAM_TRANSCRIPTION_PROVIDER", "openai")
-    monkeypatch.setenv("HAM_TRANSCRIPTION_API_KEY", "sk-test-fake")
+    monkeypatch.setenv("HAM_TRANSCRIPTION_API_KEY", "sk-live-demo-key-12345")
     r = client.post("/api/chat/transcribe", files={"file": ("d.webm", b"", "audio/webm")})
     assert r.status_code == 400
 
 
 def test_transcribe_success_mocks_openai(mock_mode: None, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HAM_TRANSCRIPTION_PROVIDER", "openai")
-    monkeypatch.setenv("HAM_TRANSCRIPTION_API_KEY", "sk-test-fake")
+    monkeypatch.setenv("HAM_TRANSCRIPTION_API_KEY", "sk-live-demo-key-12345")
 
     async def fake(**_kwargs: object) -> str:
         return "hello from speech"
@@ -205,11 +217,42 @@ def test_transcribe_success_mocks_openai(mock_mode: None, monkeypatch: pytest.Mo
     assert r.json() == {"text": "hello from speech"}
 
 
+def test_transcribe_upstream_auth_error_sanitized(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HAM_TRANSCRIPTION_PROVIDER", "openai")
+    monkeypatch.setenv("HAM_TRANSCRIPTION_API_KEY", "sk-real-looking")
+
+    async def fake(**_kwargs: object) -> str:
+        req = httpx.Request("POST", "https://api.openai.com/v1/audio/transcriptions")
+        resp = httpx.Response(
+            status_code=401,
+            request=req,
+            json={
+                "error": {
+                    "type": "invalid_request_error",
+                    "message": "Incorrect API key provided: PLACEHOL********",
+                }
+            },
+        )
+        raise httpx.HTTPStatusError("unauthorized", request=req, response=resp)
+
+    import src.api.chat as chat_mod
+
+    monkeypatch.setattr(chat_mod, "_transcribe_with_openai", fake)
+
+    r = client.post("/api/chat/transcribe", files={"file": ("d.webm", b"fake-audio", "audio/webm")})
+    assert r.status_code == 503
+    j = r.json()
+    assert j["detail"]["error"]["code"] == "TRANSCRIPTION_PROVIDER_REJECTED"
+    assert "PLACEHOL" not in j["detail"]["error"]["message"]
+
+
 def test_transcribe_clerk_required_without_session(mock_mode: None, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HAM_CLERK_REQUIRE_AUTH", "true")
     monkeypatch.setenv("CLERK_JWT_ISSUER", "https://clerk.example.com")
     monkeypatch.setenv("HAM_TRANSCRIPTION_PROVIDER", "openai")
-    monkeypatch.setenv("HAM_TRANSCRIPTION_API_KEY", "sk-test-fake")
+    monkeypatch.setenv("HAM_TRANSCRIPTION_API_KEY", "sk-live-demo-key-12345")
     r = client.post("/api/chat/transcribe", files={"file": ("d.webm", b"x", "audio/webm")})
     assert r.status_code == 401
     assert r.json()["detail"]["error"]["code"] == "CLERK_SESSION_REQUIRED"

@@ -1577,10 +1577,17 @@ export async function postChatTranscribe(audio: Blob, filename: string = "dictat
         messageFromFastApiDetail(d) ?? "Access restricted for this Ham deployment.",
       );
     }
-    if (res.status === 501 && fastApiStructuredErrorCode(d) === "TRANSCRIPTION_NOT_CONFIGURED") {
+    const errCode = fastApiStructuredErrorCode(d);
+    if (
+      res.status === 503 &&
+      (errCode === "TRANSCRIPTION_NOT_CONFIGURED" || errCode === "TRANSCRIPTION_PROVIDER_REJECTED")
+    ) {
       throw new Error(
-        messageFromFastApiDetail(d) ?? "Voice transcription is not configured on this server.",
+        "Transcription failed. Check HAM transcription configuration.",
       );
+    }
+    if (res.status === 502 && errCode === "TRANSCRIPTION_UPSTREAM_FAILED") {
+      throw new Error("Transcription failed. Check HAM transcription configuration.");
     }
     const msg =
       messageFromFastApiDetail(d) ?? `Transcription failed (HTTP ${res.status}).`;
