@@ -495,7 +495,7 @@
         "notes": [
           "No computer control execution from this directory row.",
           "Does not invoke shell, MCP, or browser automation.",
-          "HAM Desktop Renderer shows Local Control doctor rows only — **GoHAM/workspace managed-browser execution was removed**; `POST /api/goham/planner` may remain enabled as a standalone planning substrate.",
+          "HAM Desktop Renderer shows Local Control doctor rows only — **workspace GoHAM-mode managed-browser chat execution was removed**; **main-process** Local Control browser slices remain in Electron where policy allows. `POST /api/goham/planner` may remain enabled as a standalone planning substrate.",
           "Cursor/Droid execution lanes remain separate; not a harness for this pack.",
           "desktop_local: planning token for Desktop Local Control v1 (docs/desktop/local_control_v1.md); not an executable backend in Phase 1."
         ]

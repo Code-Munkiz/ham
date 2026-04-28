@@ -133,7 +133,7 @@ def run_desktop_local_control_status(*, json_out: bool) -> None:
 
     payload = {
         "kind": "ham_cli_desktop_local_control_status",
-        "schema_version": 7,
+        "schema_version": 8,
         "phase": _LC_PHASE_POLICY_SIDECAR,
         "enabled": False,
         "spec_present": spec_present,
@@ -147,14 +147,14 @@ def run_desktop_local_control_status(*, json_out: bool) -> None:
         "sidecar": _cli_local_control_sidecar_skeleton(),
         "capabilities": {
             "desktop_local_control": "policy_audit_sidecar",
-            "browser_automation": "not_shipped",
-            "real_browser_cdp": "not_shipped",
+            "browser_automation": "electron_main_optional_not_visible_from_cli",
+            "real_browser_cdp": "electron_main_optional_not_visible_from_cli",
             "filesystem_access": "not_implemented",
             "shell_commands": "not_implemented",
             "app_window_control": "not_implemented",
             "mcp_adapters": "not_implemented",
         },
-        "note": "CLI mirrors desktop status v7: Local Control is policy/audit/kill-switch + inert sidecar; shipped browser automation was removed.",
+        "note": "CLI mirrors policy/sidecar spec only — it does not introspect Electron. Main-process Phase 4A/4B Local Control may still be shipped in Desktop (Settings → Display → Local Control). Removed from packaging: Linux AppImage/deb installers; workspace GoHAM-mode chat/browser execution UX.",
     }
     if json_out:
         typer.echo(json.dumps(payload, indent=2))
@@ -198,20 +198,21 @@ def run_desktop_local_control_kill_switch_engage() -> None:
 
 
 def run_desktop_local_control_browser_status(*, json_out: bool) -> None:
-    """Desktop managed-browser automation was removed; use Ham API server browser/runtime if needed."""
+    """CLI stub: cannot attach to Electron; local browser slices live in the desktop app."""
     bundle = {
         "kind": "ham_cli_desktop_local_control_browser_status_bundle",
-        "schema_version": 7,
-        "browser_automation": "not_shipped",
-        "real_browser_cdp": "not_shipped",
-        "note": "HAM Desktop no longer exposes managed-browser IPC. Use `/api/browser` and `src/api/browser_*` on the Ham API host for browser runtime.",
+        "schema_version": 8,
+        "browser_automation": "cli_not_connected_main_process_optional_in_desktop",
+        "real_browser_cdp": "cli_not_connected_main_process_optional_in_desktop",
+        "note": "This CLI cannot introspect Electron. HAM Desktop may expose gated main-process Local Control browsers (Phase 4A/4B) in Settings → Display → Local Control. Removed: Linux installers and workspace GoHAM chat/browser execution UX. Ham API `/api/browser*` is server-side automation on the API host—not the desktop control plane.",
     }
     if json_out:
         typer.echo(json.dumps(bundle, indent=2))
         return
-    typer.echo("Desktop Local Control — browser automation")
-    typer.echo("  Shipped Electron managed browser / GoHAM execution path has been removed from HAM Desktop.")
-    typer.echo("  Browser runtime for automation lives on the Ham API (`/api/browser*`), not in the Electron shell.")
+    typer.echo("Desktop Local Control — browser status (CLI stub)")
+    typer.echo("  Does not attach to Electron. Open HAM Desktop → Settings → Display → Local Control for main-process MVP/real-browser slices.")
+    typer.echo("  Removed workspace GoHAM-mode chat execution and Linux desktop installer targets; `/api/goham/planner` remains API-only.")
+    typer.echo("  Server-hosted Playwright/automation via Ham API: `/api/browser*` — separate from Electron policy.")
 
 
 def run_desktop_local_control_sidecar(*, json_out: bool) -> None:

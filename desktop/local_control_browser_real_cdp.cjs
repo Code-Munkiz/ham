@@ -11,7 +11,7 @@ const CDP_READY_MS = 45_000;
 const CDP_ATTACH_RETRY_MS = 25_000;
 const NAV_WAIT_MS = 35_000;
 
-/** GoHAM v1 Slice 1 — bounded interaction primitives (scroll / wait / enumerated click). */
+/** Real browser — bounded interaction primitives (scroll / wait / enumerated click) via CDP. */
 const MAX_SCROLL_DELTA_PX = 600;
 const MIN_WAIT_MS = 500;
 const MAX_WAIT_MS = 3000;

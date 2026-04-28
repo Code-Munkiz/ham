@@ -103,7 +103,7 @@ export type HamDesktopBrowserScreenshotResult =
   | { ok: true; data_url: string }
   | { ok: false; blocked?: boolean; reason?: string; error?: string };
 
-/** GoHAM v1 Slice 1 — compact page observe (no DOM dump). */
+/** Real browser CDP helper — compact page observe snapshot (no full DOM dump). */
 export type HamDesktopRealBrowserObserveCompactResult =
   | {
       ok: true;

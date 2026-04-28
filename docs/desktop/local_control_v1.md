@@ -1,7 +1,7 @@
 # HAM Desktop — Local Control v1 (spec)
 
-**Status:** **policy / audit / kill-switch / inert sidecar** remains in HAM Desktop. **Historical Electron Phase 4A/4B managed-browser IPC and Linux installer packaging (`npm run pack:linux*`) were removed** from this repository ([`desktop/README.md`](../../desktop/README.md)); server-side automation uses **`/api/browser*`** ([`docs/capabilities/computer_control_pack_v1.md`](../capabilities/computer_control_pack_v1.md)).  
-**Product:** Desktop-only Electron shell surfaces (today: **Windows** packaging helpers; developer `npm start` on Linux/macOS). Not the Cloud Run browser operator path for desktop policy.
+**Status:** **policy / audit / kill-switch / inert stdio sidecar** remains in HAM Desktop. **Main-process** Phase **4A** (embedded `BrowserWindow` MVP) and **4B** (dedicated Chromium + localhost-only CDP) are implemented where platform policy allows—**separate** from Ham API **`/api/browser*`** ([`docs/capabilities/computer_control_pack_v1.md`](../capabilities/computer_control_pack_v1.md)). **Linux `.deb` / AppImage installer pipelines** and **workspace GoHAM-mode chat-driven browser execution** were **removed**; **`POST /api/goham/planner`** stays on the API as an optional substrate ([`desktop/README.md`](../../desktop/README.md)).  
+**Product:** Desktop-only Electron shell (**Windows** `pack:win*` installers; **Linux/macOS** dev via `npm start` only). Desktop policy is **not** the Cloud Run browser operator surface.
 
 ---
 
@@ -39,11 +39,11 @@ Hermes and HAM API may **supervise, recommend, or display metadata**; they **do 
 
 | Layer | Role |
 |-------|------|
-| **Electron main** | Owns **policy**, **consent**, **audit**, **lifecycle**, and **kill switch**; no inbound network **by default**. |
-| **Future local child / sidecar** (not in Phase 0) | Would own **risky I/O** (e.g. browser automation, shell, filesystem) under main-enforced caps — **not** implemented in this milestone. |
+| **Electron main** | Owns **policy**, **consent**, **audit**, **lifecycle**, **kill switch**, and **main-process** browser slices (**4A** MVP / **4B** managed Chromium + CDP) where shipped; see `desktop/local_control_status.cjs`. No inbound network **by default**. |
+| **stdio sidecar child** (`local_control_sidecar_*`) | **Inert process shell today** — health/ping only; not the browser/CDP automation transport. |
 | **Renderer** | Sandboxed; **no Node**; only explicit, reviewed preload bridges. |
 
-This is a **design target** for implementation phases; Phase 0 does not add IPC, Playwright, or a sidecar.
+Older spec text scoped “Phase 0” as policy-only; shipped code adds **preload/main IPC** for Local Control surfaces without using the sidecar as a CDP conduit.
 
 ---
 
@@ -63,7 +63,7 @@ This is a **design target** for implementation phases; Phase 0 does not add IPC,
 
 | Area | v1 stance |
 |------|-----------|
-| **Browser automation** | Out of scope for Phase 0–1; future **desktop-local** alignment only — **not** “cloud API drives the desktop browser” as the product story. |
+| **Browser automation** | **Directory / Shop Phase 1** stays documentation-only; **Electron** may still expose gated **desktop-local** main-process browser slices (4A/4B). **`/api/browser`** on an API host is a **different** automation plane—not the Desktop Local Control product control path. |
 | **Filesystem access** | Out of scope for early phases except any **doctor/status** style hints; broad access is non-goal until a scoped model exists. |
 | **Shell commands** | Desktop M1 allows **allowlisted Hermes CLI presets** only — not generic shell from Local Control v1. |
 | **App / window control** | Not in scope for initial phases. |
@@ -111,16 +111,16 @@ This is a **design target** for implementation phases; Phase 0 does not add IPC,
 | **2** | **Shipped (skeleton):** persisted **`policy.json`** (default deny, **enabled false**), redacted **audit JSONL**, **kill switch** default engaged + **engage-only** IPC (`ham-desktop:local-control-engage-kill-switch`), expanded status + **`window.hamDesktop.localControl`** narrow bridge; CLI **`local-control policy` / `audit` / `kill-switch engage`** (mirror / noop); still **no** automation. |
 | **3A** | **Shipped:** [`local_control_sidecar_protocol_v1.md`](local_control_sidecar_protocol_v1.md) (design) + mock **`sidecar`** status + read-only sidecar IPC (superseded by **3B** for live child shape; see protocol doc history in git). |
 | **3B** | **Shipped:** **inert sidecar shell** — stdio child (`health` / `status` / `shutdown` only), main-process manager (single instance); IPC **`getSidecarStatus`**, **`sidecar-start`** (blocked by default kill switch), **`sidecar-stop`**, **`sidecar-health`**; **no** tools, **no** inbound network, **no** Droid access; CLI **`local-control sidecar`** (+ **`health` / `stop` / `start`** stubs = `electron_only`). |
-| **3** | **Future:** further narrow automation verticals (**not** restored legacy Linux-only browser IPC). |
-| **4A / 4B** | **Removed from repo:** Electron **managed-browser** MVP + Chromium/CDP **IPC stacks** were deleted; aggregate status is **`schema_version` 7** without `browser_*` snapshots. Prefer Ham API **`/api/browser*`** for server-side automation ([`computer_control_pack_v1.md`](../capabilities/computer_control_pack_v1.md)). |
-| **4 (future)** | **Windows** packaging + any retargeted local automation is TBD outside this removal milestone. |
+| **3** | **Future:** further narrow automation verticals (**not** resurrecting removed **Linux installers** or workspace **GoHAM-mode** chat/browser execution UX). |
+| **4A / 4B** | **Shipped (Electron main):** Phase **4A** embedded **`BrowserWindow` MVP** (Linux-only) + Phase **4B** managed Chromium / **localhost-only CDP** (Linux dev + Windows packaged build) under policy; aggregate status **`schema_version` 6** includes **`browser_mvp` / `browser_real`** snapshots. Separate from Ham API **`/api/browser*`** ([`computer_control_pack_v1.md`](../capabilities/computer_control_pack_v1.md)). |
+| **Windows / roadmap** | **Windows** Electron releases via **`npm run pack:win*`** remain packaged; iterative hardening is outside this spec. |
 
 ---
 
 ## Explicit non-goals
 
-- Generic **filesystem**, **process**, or **browser** control from the renderer in Phase 0–1.
-- **IPC** expansion, **Playwright**, or a **sidecar** in Phase 0.
+- Generic **filesystem**, **process**, or **browser** control from an **unchecked** renderer (preload stays narrow; risky I/O stays in Electron main policy).
+- **Playwright-driven sidecar** automation or **renderer** Node escapes — the shipped **stdio sidecar remains inert**; Playwright **`/api/browser*`** stays on the API host unless product explicitly adopts it for desktop (**not today**).
 - **War Room** or in-app browser **revival**.
 - Using **`/api/browser`** on Cloud Run as the **desktop product** control plane.
 - Changing **ControlPlaneRun** semantics or making Hermes the **harness anchor**.

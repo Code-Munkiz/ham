@@ -87,13 +87,13 @@ export function humanInspectorKindLabel(kind: WorkspaceInspectorEventKind): stri
     case "stream_error":
       return "Error";
     case "goham_observe_started":
-      return "GoHAM";
+      return "Observe started";
     case "goham_observe_completed":
-      return "GoHAM";
+      return "Observe completed";
     case "goham_research_started":
-      return "GoHAM research";
+      return "Research started";
     case "goham_research_completed":
-      return "GoHAM research";
+      return "Research completed";
     default:
       return "Event";
   }

@@ -164,7 +164,7 @@ def desktop_local_control_audit_cmd(
 def desktop_local_control_browser_cmd(
     json_out: bool = typer.Option(False, "--json", help="Emit JSON."),
 ) -> None:
-    """Static snapshot: Electron managed-browser path removed — see `ham desktop local-control browser`."""
+    """CLI stub — cannot attach to Electron; see `run_desktop_local_control_browser_status` docstring."""
     run_desktop_local_control_browser_status(json_out=json_out)
 
 

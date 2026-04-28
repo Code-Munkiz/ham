@@ -703,7 +703,7 @@ ipcMain.handle('ham-desktop:local-control-browser-stop-session', () => {
   return getBrowserMvp().stopSession();
 });
 
-/** Phase 4B — managed Chromium + localhost CDP (Linux). */
+/** Phase 4B — managed Chromium + localhost CDP (Linux + Windows). */
 ipcMain.handle('ham-desktop:local-control-browser-real-arm', () => {
   const c = localControlPaths();
   armRealBrowserControl({
@@ -896,7 +896,7 @@ ipcMain.handle('ham-desktop:local-control-browser-real-screenshot', async () => 
   }
 });
 
-/** GoHAM v1 Slice 1 — compact observe / bounded wait / scroll / enumerated click (no planner). */
+/** Real browser — compact observe / bounded wait / scroll / enumerated click (Phase 4B; no planner API). */
 ipcMain.handle('ham-desktop:local-control-browser-real-observe-compact', async () => {
   const c = localControlPaths();
   const { policy } = loadPolicy({

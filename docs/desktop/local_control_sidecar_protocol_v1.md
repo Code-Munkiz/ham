@@ -58,17 +58,19 @@ No `execute`, `shell`, `browser`, `fs`, or MCP methods.
 
 ---
 
-## Browser control (historic Phase 4A/4B — removed)
+## Browser control (main process, not sidecar)
 
-Electron **managed browser** stacks (embedded `BrowserWindow` MVP, real Chromium + CDP IPC) were **removed** from this repository. Browser automation for operators uses the **Ham API** **`/api/browser*`** surface ([`computer_control_pack_v1.md`](../capabilities/computer_control_pack_v1.md)).
+**Managed browser** flows (Phase **4A** embedded `BrowserWindow` MVP, Phase **4B** real Chromium + localhost CDP) live in **Electron main** + **`preload.cjs`** IPC — they do **not** traverse the stdio sidecar (`local_control_sidecar_child.cjs`). Operators may also use the Ham API **`/api/browser*`** surface on the server ([`computer_control_pack_v1.md`](../capabilities/computer_control_pack_v1.md)), which is a **separate** automation plane from Desktop Local Control policy.
 
-**Reserved namespace (future):** a Playwright-backed sidecar *could* expose allowlisted logical methods over stdio — **not** implemented here.
+**Linux `.deb` / AppImage installers** are **not** published from this repository (packaging is **`npm run pack:win*`** for Windows artifacts; dev shells use `npm start`).
+
+**Reserved (future):** a Playwright-backed sidecar *could* expose additional allowlisted methods over stdio — **not** implemented here.
 
 ---
 
 ## Relationship to aggregate status
 
-HAM Desktop exposes **`sidecar`** on the aggregate Local Control status object (**`schema_version` current: 7 for policy/sidecar bundles**), **`implemented: true`**, **`mode: inert_process_shell`**, **`transport: stdio_json_rpc`**, plus **`start_allowed`**, **`blocked_reason`**, and **`health`**. See `desktop/local_control_sidecar_status.cjs`. Aggregate status **no longer carries** `browser_mvp` / `browser_real` snapshots — see `desktop/local_control_status.cjs`.
+HAM Desktop exposes **`sidecar`** on the aggregate Local Control status object (**schema** from `desktop/local_control_status.cjs`; **`schema_version` 6** as of Phase **4B**), along with **`browser_mvp`** and **`browser_real`** snapshots when the main process wires session status. See `desktop/local_control_sidecar_status.cjs` for **`sidecar`** (`implemented: true`, **`mode: inert_process_shell`**, **`transport: stdio_json_rpc`**, **`start_allowed`**, **`blocked_reason`**, **`health`**).
 
 ---
 

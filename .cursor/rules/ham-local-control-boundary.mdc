@@ -58,4 +58,4 @@ Never add broad inbound network listeners for local control.
 
 ## Implementation rule
 
-Verify first; patch only confirmed gaps; preserve Linux GoHAM behavior; keep changes minimal-diff.
+Verify first; patch only confirmed gaps; preserve Windows/shared Electron local-control parity; keep changes minimal-diff. (Linux desktop **installer** artifacts are not shipped from the repo; workspace **GoHAM chat/browser execution** was removed—see `VISION.md`.)

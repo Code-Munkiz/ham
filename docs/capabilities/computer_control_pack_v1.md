@@ -118,7 +118,7 @@ flowchart LR
 | **Docs** | [`desktop/README.md`](../../desktop/README.md). |
 | **Model** | Thin Electron shell; renderer = Vite app; FastAPI separate. |
 | **Hermes** | Curated bundle + allowlisted CLI presets (fixed argv, timeout, capped output) — **not** free-form terminal control. |
-| **Managed browser (4B + Phase 1A)** | Linux preview: main-process CDP to a **dedicated** Chromium profile; Settings → Display → Local Control supports start, navigate, **reload** (`Page.reload`), screenshot, stop — **desktop IPC only**; Capability Directory / Shop remain non-executable (`apply_available` false). |
+| **Managed browser (4B + Phase 1A)** | Where policy allows: **main-process** embedded MVP (**Linux-only**) and managed Chromium **+ localhost CDP** (**Linux dev shell + Windows** packaged builds — see `desktop/local_control_status.cjs`). Settings → Display → Local Control supports **desktop IPC**: start, navigate, **reload**, screenshot, stop; Capability Directory / Shop stay non-executable (`apply_available` false). **Linux AppImage `.deb` installers are not shipped** from this repo. |
 | **Future** | See [`docs/desktop/local_control_v1.md`](../desktop/local_control_v1.md) for **Local Control v1** (Phase 2+); Computer Control **aligns** to that seam, not to bypassing sandbox/security review. |
 
 ### 1.6 HAM CLI: `doctor` and `readiness`
@@ -413,7 +413,7 @@ The JSON below is **historical / illustrative** only. The **canonical** bundle r
 | **0** | **Spec only** — this document + review; no code. |
 | **1** | Add **Computer Control Pack** to Capability Directory as **read-only** workspace metadata; extend **CLI readiness** checks for local prerequisites **only** (no install, no execution). |
 | **2** | **Browser / automation (if any)** — any reuse of [`/api/browser`](../../src/api/browser_runtime.py) stays a **separate API surface**; **Desktop Local Control v1** does **not** treat Cloud Run `/api/browser` as the desktop product control plane ([`docs/desktop/local_control_v1.md`](../desktop/local_control_v1.md)). |
-| **3** | **Desktop-local** observe/control phases per Local Control v1 (Linux first); **not** War Room revival. |
+| **3** | **Desktop-local** observe/control milestones per [`local_control_v1.md`](../desktop/local_control_v1.md) — prioritize **Windows** packaged app + **Linux** dev shells (**not** “Linux installers”); **not** War Room revival. |
 | **4** | **Bounded autopilot** within declared caps + **evidence logs** (Runs/Activity alignment). |
 | **5** | **goHAM session mode** — full local high-trust session object per §5 + kill switch + auto-demotion. |
 

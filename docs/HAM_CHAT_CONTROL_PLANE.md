@@ -33,6 +33,8 @@ Skills are **composable checklists** for Cursor/Hermes-aligned work, for example
 | Validate critic loop | `hermes-review-loop-validation` | `prompt-budget-audit` |
 | Navigate dashboard / explain UI | `goham` | — |
 
+The **`goham`** skill is **dashboard navigation** (where to click in the workspace UI)—**not** Electron managed-browser / GoHAM chat execution.
+
 Chat should name the **skill id**, the **`.cursor/skills/.../SKILL.md`** path, and any **slash command** from `.cursor/rules/commands.mdc` when applicable.
 
 ## Structured UI actions (Phase B — shipped)

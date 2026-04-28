@@ -46,8 +46,8 @@ function opErrorMessage(r: unknown, label: string): string | null {
 }
 
 function platformLabel(s: HamDesktopLocalControlStatus): string {
-  if (s.platform_status === "linux_first") return "Linux first (supported)";
-  if (s.platform_status === "windows_planned") return "Windows guarded preview (supported)";
+  if (s.platform_status === "linux_first") return "Linux (dev shell; MVP + real)";
+  if (s.platform_status === "windows_planned") return "Windows (packaged build; real CDP; MVP N/A)";
   return "Unsupported for Local Control v1 (macOS / other)";
 }
 
@@ -472,12 +472,14 @@ export function DesktopLocalControlStatusCard() {
       </div>
 
       <p className="text-[9px] text-white/35 leading-relaxed">
-        <span className="text-white/50">Phase 4A</span>: Linux-only{" "}
-        <span className="text-white/45">Electron BrowserWindow</span> in main (proof / fallback).{" "}
-        <span className="text-white/50">Phase 4B</span>: managed local{" "}
+        <span className="text-white/50">Phase 4A</span>: embedded{" "}
+        <span className="text-white/45">Electron BrowserWindow</span> MVP (main process;{" "}
+        <span className="text-white/50">Linux-only</span> today).
+        <span className="text-white/50"> Phase 4B</span>: managed local{" "}
         <span className="text-white/45">Chromium/Chrome</span> with a{" "}
         <span className="text-white/50">HAM-only profile</span>,{" "}
-        <span className="text-white/45">127.0.0.1-only CDP</span>, same navigate / status / screenshot / stop gates.
+        <span className="text-white/45">127.0.0.1-only CDP</span> — <span className="text-white/45">Linux dev + Windows</span>{" "}
+        builds; same navigate / status / screenshot / stop gates as 4A policy.
         Default deny; <span className="text-white/50">arm</span> the slice you need, then{" "}
         <span className="text-white/50">release kill switch</span> (audited token) before starting. No attach to your
         default profile, no shell, filesystem, MCP, Droid, Cloud Run, or <span className="text-white/45">/api/browser</span>.
@@ -530,7 +532,9 @@ export function DesktopLocalControlStatusCard() {
       </p>
 
       <div className="rounded-lg border border-white/10 bg-black/40 p-4 space-y-3">
-        <div className="text-[10px] font-black uppercase tracking-widest text-white/40">Browser-only session (Linux)</div>
+        <div className="text-[10px] font-black uppercase tracking-widest text-white/40">
+          Phase 4A browser-only session (Linux)
+        </div>
         <p className="text-[9px] text-white/35 leading-relaxed">
           Audit log records arm / release / navigate / screenshot / stop — never full URLs with query strings in audit
           lines; screenshots stay in this panel only.
@@ -671,8 +675,8 @@ export function DesktopLocalControlStatusCard() {
         <p className="text-[9px] text-white/35 leading-relaxed">
           HAM spawns a <span className="text-white/50">dedicated Chromium/Chrome profile</span> under desktop userData
           (never your default profile). Debugging listens on <span className="text-white/50">127.0.0.1 only</span> with a
-          random port — not exposed beyond localhost. The window may briefly show{" "}
-          <span className="text-white/45 font-mono">about:blank</span> or a “Chrome for Testing” banner (Playwright build);
+          random port — not exposed beyond localhost.           The window may briefly show{" "}
+          <span className="text-white/45 font-mono">about:blank</span> or Chromium vendor branding on first paint;
           after <span className="text-white/50">Start</span>, HAM loads the URL in the field below when it is http(s).{" "}
           <span className="text-white/50">Reload</span> refreshes the current page only (no new URL) — explicit,
           panel-only actions; not your default browser and not invokable from Shop.
