@@ -220,7 +220,15 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   }, [desktopGohamEligible]);
 
   const voiceWs = useVoiceWorkspaceSettingsOptional();
-  const sttDictationEnabled = voiceWs?.payload?.settings.stt.enabled ?? true;
+  const sttEnabledBySetting = voiceWs?.payload?.settings.stt.enabled ?? true;
+  const sttRuntimeAvailable = voiceWs?.payload?.capabilities.stt.available ?? true;
+  const sttDictationEnabled = sttEnabledBySetting && sttRuntimeAvailable;
+  const sttUnavailableReason =
+    !sttRuntimeAvailable
+      ? "Speech-to-text is not configured on this HAM API host."
+      : !sttEnabledBySetting
+        ? "Speech-to-text is off — enable it in Workspace → Settings → Voice."
+        : null;
 
   const chatModelIdForApi = catalog?.gateway_mode === "openrouter" ? modelId : null;
 
@@ -1102,6 +1110,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
             modelId={modelId}
             onModelIdChange={setModelId}
             sttDictationEnabled={sttDictationEnabled}
+            sttUnavailableReason={sttUnavailableReason}
             gohamEnabled={desktopGohamEligible ? gohamEnabled : false}
             onGohamEnabledChange={desktopGohamEligible ? setGohamEnabledPersist : undefined}
             gohamToggleDisabled={desktopGohamEligible ? Boolean(gohamGateHint) : false}

@@ -141,12 +141,13 @@ export interface HamVoiceSettingsPayload {
   capabilities: {
     tts: {
       available: boolean;
-      providers: Array<{ id: string; label: string; available: boolean }>;
+      providers: Array<{ id: string; label: string; available: boolean; reason?: string | null }>;
       voices: Array<{ id: string; label: string }>;
     };
     stt: {
       available: boolean;
-      providers: Array<{ id: string; label: string; available: boolean }>;
+      reason?: string | null;
+      providers: Array<{ id: string; label: string; available: boolean; reason?: string | null }>;
     };
   };
 }

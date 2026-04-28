@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Any, Literal
@@ -55,8 +56,14 @@ from src.ham.chat_attachment_store import (
     kind_for_mime,
     safe_upload_filename,
 )
+from src.ham.transcription_config import (
+    transcription_api_key,
+    transcription_provider,
+    transcription_runtime_configured,
+)
 
 router = APIRouter(tags=["chat"])
+_LOG = logging.getLogger(__name__)
 
 _chat_store = build_chat_session_store()
 
@@ -788,15 +795,16 @@ async def post_chat_transcribe(
         x_ham_operator_authorization,
         route="post_chat_transcribe",
     )
-    provider = (os.environ.get("HAM_TRANSCRIPTION_PROVIDER") or "").strip().lower()
-    api_key = (os.environ.get("HAM_TRANSCRIPTION_API_KEY") or "").strip()
-    if provider != "openai" or not api_key:
+    configured, _reason = transcription_runtime_configured()
+    provider = transcription_provider()
+    api_key = transcription_api_key()
+    if not configured:
         raise HTTPException(
-            status_code=501,
+            status_code=503,
             detail={
                 "error": {
                     "code": "TRANSCRIPTION_NOT_CONFIGURED",
-                    "message": "Voice transcription provider not configured.",
+                    "message": "Transcription is not configured on this HAM API host.",
                 },
             },
         )
@@ -849,26 +857,55 @@ async def post_chat_transcribe(
             model=model,
         )
     except httpx.HTTPStatusError as exc:
-        msg = "Transcription service returned an error."
+        status = exc.response.status_code
+        error_type = None
         try:
             err_json = exc.response.json()
-            if isinstance(err_json, dict) and "error" in err_json:
-                em = err_json.get("error")
-                if isinstance(em, dict) and em.get("message"):
-                    msg = str(em["message"])
+            if isinstance(err_json, dict) and isinstance(err_json.get("error"), dict):
+                error_type = str((err_json.get("error") or {}).get("type") or "").strip() or None
         except Exception:
             pass
-        raise HTTPException(
-            status_code=502,
-            detail={"error": {"code": "TRANSCRIPTION_UPSTREAM_FAILED", "message": msg}},
-        ) from exc
-    except httpx.RequestError as exc:
+        _LOG.warning(
+            "Transcription upstream rejected request",
+            extra={
+                "provider": provider,
+                "status_code": status,
+                "error_type": error_type or "unknown",
+            },
+        )
+        if status in (401, 403):
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "error": {
+                        "code": "TRANSCRIPTION_PROVIDER_REJECTED",
+                        "message": "Transcription provider rejected the server configuration.",
+                    },
+                },
+            ) from exc
         raise HTTPException(
             status_code=502,
             detail={
                 "error": {
                     "code": "TRANSCRIPTION_UPSTREAM_FAILED",
-                    "message": f"Transcription request failed: {exc}",
+                    "message": "Transcription provider request failed.",
+                }
+            },
+        ) from exc
+    except httpx.RequestError as exc:
+        _LOG.warning(
+            "Transcription upstream request error",
+            extra={
+                "provider": provider,
+                "error_type": type(exc).__name__,
+            },
+        )
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "error": {
+                    "code": "TRANSCRIPTION_UPSTREAM_FAILED",
+                    "message": "Transcription provider request failed.",
                 },
             },
         ) from exc

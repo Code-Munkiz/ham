@@ -8,6 +8,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from models.edge_tts_wrapper import TextToSpeechEngine
+from src.ham.transcription_config import transcription_runtime_configured
 
 
 def default_voice_settings() -> dict[str, Any]:
@@ -34,12 +35,6 @@ VOICE_DISPLAY_LABELS: dict[str, str] = {
 def _tts_env_available() -> bool:
     raw = (os.environ.get("HAM_TTS_ENABLED") or "1").strip().lower()
     return raw not in ("0", "false", "no", "off")
-
-
-def _stt_runtime_configured() -> bool:
-    provider = (os.environ.get("HAM_TRANSCRIPTION_PROVIDER") or "").strip().lower()
-    key = (os.environ.get("HAM_TRANSCRIPTION_API_KEY") or "").strip()
-    return provider == "openai" and bool(key)
 
 
 class TtsSettingsModel(BaseModel):
@@ -115,7 +110,7 @@ def merge_voice_settings(current: dict[str, Any], patch: VoiceSettingsPatchBody)
 
 def capabilities_payload() -> dict[str, Any]:
     tts_ok = _tts_env_available()
-    stt_ok = _stt_runtime_configured()
+    stt_ok, stt_reason = transcription_runtime_configured()
     voices = [
         {"id": vid, "label": VOICE_DISPLAY_LABELS.get(vid, vid)}
         for vid in sorted(ALLOWED_EDGE_VOICES)
@@ -134,11 +129,13 @@ def capabilities_payload() -> dict[str, Any]:
         },
         "stt": {
             "available": stt_ok,
+            "reason": stt_reason,
             "providers": [
                 {
                     "id": "openai",
                     "label": "OpenAI transcription",
                     "available": stt_ok,
+                    "reason": stt_reason,
                 },
             ],
         },

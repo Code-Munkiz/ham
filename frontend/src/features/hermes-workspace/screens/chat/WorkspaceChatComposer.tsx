@@ -56,6 +56,7 @@ type WorkspaceChatComposerProps = {
   onModelIdChange: (id: string | null) => void;
   /** When false, mic is off (persisted workspace Voice → STT disabled). Default true if omitted. */
   sttDictationEnabled?: boolean;
+  sttUnavailableReason?: string | null;
   /** GoHAM Mode v0 — opt-in managed browser observe flow (HAM Desktop only). */
   gohamEnabled?: boolean;
   onGohamEnabledChange?: (enabled: boolean) => void;
@@ -103,6 +104,7 @@ export function WorkspaceChatComposer({
   modelId,
   onModelIdChange,
   sttDictationEnabled = true,
+  sttUnavailableReason = null,
   gohamEnabled = false,
   onGohamEnabledChange,
   gohamToggleDisabled = false,
@@ -607,7 +609,8 @@ export function WorkspaceChatComposer({
                   disabled={sending || voiceTranscribing || disabled || sttDictationEnabled === false}
                   disabledReason={
                     sttDictationEnabled === false
-                      ? "Speech-to-text is off — enable it in Workspace → Settings → Voice."
+                      ? sttUnavailableReason ||
+                        "Speech-to-text is off — enable it in Workspace → Settings → Voice."
                       : undefined
                   }
                   onRecordingChange={(isRecording) => {

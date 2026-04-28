@@ -32,7 +32,7 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
 def test_get_returns_defaults_and_capabilities(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HAM_TTS_ENABLED", "1")
     monkeypatch.setenv("HAM_TRANSCRIPTION_PROVIDER", "openai")
-    monkeypatch.setenv("HAM_TRANSCRIPTION_API_KEY", "sk-test")
+    monkeypatch.setenv("HAM_TRANSCRIPTION_API_KEY", "sk-live-demo-key-12345")
 
     r = client.get("/api/workspace/voice-settings")
     assert r.status_code == 200
@@ -44,6 +44,19 @@ def test_get_returns_defaults_and_capabilities(client: TestClient, monkeypatch: 
     assert j["capabilities"]["tts"]["available"] is True
     assert j["capabilities"]["stt"]["available"] is True
     assert any(v["id"] == "en-US-JennyNeural" for v in j["capabilities"]["tts"]["voices"])
+
+
+def test_get_stt_unavailable_when_placeholder_key(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HAM_TRANSCRIPTION_PROVIDER", "openai")
+    monkeypatch.setenv("HAM_TRANSCRIPTION_API_KEY", "PLACEHOLDER")
+    r = client.get("/api/workspace/voice-settings")
+    assert r.status_code == 200
+    j = r.json()
+    assert j["capabilities"]["stt"]["available"] is False
+    assert j["capabilities"]["stt"]["reason"] == "not_configured"
+    assert j["capabilities"]["stt"]["providers"][0]["reason"] == "not_configured"
 
 
 def test_patch_saves_and_round_trips(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:

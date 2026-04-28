@@ -229,7 +229,9 @@ export function WorkspaceVoiceBridgeSection({ catalog }: Props) {
               hint={
                 sttCap.available
                   ? "HAM_TRANSCRIPTION_PROVIDER=openai and API key set on the server."
-                  : "Transcription not configured on the API host — dictation will fail until configured."
+                  : sttCap.reason === "not_configured"
+                    ? "Transcription not configured on the API host — dictation is disabled until configured."
+                    : "Transcription not configured on the API host — dictation will fail until configured."
               }
             />
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
