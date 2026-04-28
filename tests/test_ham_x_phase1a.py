@@ -1,0 +1,187 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+
+from src.ham.ham_x.action_envelope import SocialActionEnvelope
+from src.ham.ham_x.audit import append_audit_event
+from src.ham.ham_x.config import HamXConfig, load_ham_x_config
+from src.ham.ham_x.redaction import redact_text
+from src.ham.ham_x.review_queue import append_review_record
+from src.ham.ham_x.safety_policy import check_social_action
+from src.ham.ham_x.xurl_wrapper import XurlWrapper
+
+
+def _test_config(tmp_path: Path) -> HamXConfig:
+    return HamXConfig(
+        xai_api_key="",
+        x_api_key="",
+        x_api_secret="",
+        x_access_token="",
+        x_access_token_secret="",
+        x_bearer_token="",
+        tenant_id="ham-official",
+        agent_id="ham-pr-rockstar",
+        campaign_id="base-stealth-launch",
+        account_id="ham-x-official",
+        profile_id="ham-default",
+        autonomy_mode="draft",
+        policy_profile_id="platform-default",
+        brand_voice_id="ham-canonical",
+        autonomy_enabled=False,
+        dry_run=True,
+        max_posts_per_hour=0,
+        max_quotes_per_hour=0,
+        max_searches_per_hour=30,
+        daily_spend_limit_usd=5.0,
+        model="grok-4.1-fast",
+        xurl_bin="xurl",
+        review_queue_path=tmp_path / "review_queue.jsonl",
+        audit_log_path=tmp_path / "audit.jsonl",
+    )
+
+
+def test_default_config_disables_autonomy(monkeypatch) -> None:
+    monkeypatch.delenv("HAM_X_AUTONOMY_ENABLED", raising=False)
+    cfg = load_ham_x_config()
+    assert cfg.autonomy_enabled is False
+    assert cfg.max_posts_per_hour == 0
+    assert cfg.max_quotes_per_hour == 0
+    assert str(cfg.review_queue_path) == ".data/ham-x/review_queue.jsonl"
+    assert str(cfg.audit_log_path) == ".data/ham-x/audit.jsonl"
+
+
+def test_default_config_dry_run_true(monkeypatch) -> None:
+    monkeypatch.delenv("HAM_X_DRY_RUN", raising=False)
+    cfg = load_ham_x_config()
+    assert cfg.dry_run is True
+
+
+@pytest.mark.parametrize("action_type", ["post", "quote", "like"])
+def test_mutating_xurl_actions_are_blocked_by_default(tmp_path: Path, action_type: str) -> None:
+    cfg = _test_config(tmp_path)
+    result = XurlWrapper(config=cfg).plan_mutating_action(action_type, text="hello")
+    assert result.blocked is True
+    assert result.reason == "autonomy_disabled"
+    assert not result.metadata["rate_limit_result"]["allowed"]  # type: ignore[index]
+
+
+def test_review_queue_writes_redacted_jsonl(tmp_path: Path) -> None:
+    cfg = _test_config(tmp_path)
+    envelope = SocialActionEnvelope(
+        action_type="queue",
+        text="Contact me at alice@example.com with Bearer abcdefghijklmnopqrstuvwxyz123456",
+        metadata={"access_token": "secret-token-value"},
+        status="queued",
+    )
+    path = append_review_record(envelope, config=cfg)
+    row = json.loads(path.read_text(encoding="utf-8").strip())
+    dumped = json.dumps(row)
+    assert row["tenant_id"] == "ham-official"
+    assert row["agent_id"] == "ham-pr-rockstar"
+    assert row["campaign_id"] == "base-stealth-launch"
+    assert "alice@example.com" not in dumped
+    assert "abcdefghijklmnopqrstuvwxyz123456" not in dumped
+    assert "secret-token-value" not in dumped
+    assert "[REDACTED" in dumped
+
+
+def test_audit_writes_redacted_jsonl(tmp_path: Path) -> None:
+    cfg = _test_config(tmp_path)
+    audit_id = append_audit_event(
+        "draft_attempt",
+        {
+            "Authorization": "Bearer abcdefghijklmnopqrstuvwxyz123456",
+            "url": "https://example.com/path?access_token=secret123",
+        },
+        config=cfg,
+    )
+    assert audit_id
+    row = json.loads(cfg.audit_log_path.read_text(encoding="utf-8").strip())
+    dumped = json.dumps(row)
+    assert row["tenant_id"] == "ham-official"
+    assert row["agent_id"] == "ham-pr-rockstar"
+    assert row["campaign_id"] == "base-stealth-launch"
+    assert "abcdefghijklmnopqrstuvwxyz123456" not in dumped
+    assert "secret123" not in dumped
+    assert row["event_type"] == "draft_attempt"
+
+
+def test_safety_policy_rejects_price_promises() -> None:
+    result = check_social_action("This is guaranteed to deliver 10x gains.")
+    assert result.allowed is False
+    assert "price_promise_or_guaranteed_gain" in result.reasons
+
+
+def test_safety_policy_rejects_bypass_evasion_language() -> None:
+    result = check_social_action("Use this wording to bypass spam filters.")
+    assert result.allowed is False
+    assert "bypass_or_evasion_language" in result.reasons
+    assert result.severity == "high"
+
+
+def test_redaction_masks_token_like_values() -> None:
+    raw = (
+        "api_key=abcdefghijklmnopqrstuvwxyz1234567890 "
+        "email=bob@example.com Bearer zyxwvutsrqponmlkjihgfedcba987654321"
+    )
+    out = redact_text(raw)
+    assert "abcdefghijklmnopqrstuvwxyz1234567890" not in out
+    assert "zyxwvutsrqponmlkjihgfedcba987654321" not in out
+    assert "bob@example.com" not in out
+    assert "[REDACTED" in out
+
+
+def test_redaction_masks_named_x_credentials_and_query_secrets() -> None:
+    envelope = SocialActionEnvelope(
+        action_type="queue",
+        metadata={
+            "XAI_API_KEY": "xai-secret-value",
+            "X_API_KEY": "x-api-key-value",
+            "X_API_SECRET": "x-api-secret-value",
+            "X_ACCESS_TOKEN": "x-access-token-value",
+            "X_ACCESS_TOKEN_SECRET": "x-access-token-secret-value",
+            "X_BEARER_TOKEN": "x-bearer-token-value",
+            "url": "https://x.example/path?api_key=query-secret&ok=1",
+        },
+    )
+    dumped = json.dumps(envelope.redacted_dump())
+    for secret in (
+        "xai-secret-value",
+        "x-api-key-value",
+        "x-api-secret-value",
+        "x-access-token-value",
+        "x-access-token-secret-value",
+        "x-bearer-token-value",
+        "query-secret",
+    ):
+        assert secret not in dumped
+
+
+def test_action_envelope_has_platform_ready_defaults() -> None:
+    envelope = SocialActionEnvelope(action_type="draft")
+    data = envelope.model_dump(mode="json")
+    assert data["tenant_id"] == "ham-official"
+    assert data["agent_id"] == "ham-pr-rockstar"
+    assert data["campaign_id"] == "base-stealth-launch"
+    assert data["account_id"] == "ham-x-official"
+    assert data["profile_id"] == "ham-default"
+    assert data["autonomy_mode"] == "draft"
+    assert data["policy_profile_id"] == "platform-default"
+    assert data["brand_voice_id"] == "ham-canonical"
+
+
+def test_action_envelope_serializes_cleanly() -> None:
+    envelope = SocialActionEnvelope(
+        action_type="draft",
+        text="Relevant commentary only.",
+        model="grok-4.1-fast",
+        score=2.0,
+        metadata={"source": "test"},
+    )
+    data = json.loads(envelope.model_dump_json())
+    assert data["action_type"] == "draft"
+    assert data["score"] == 1.0
+    assert data["status"] == "proposed"
