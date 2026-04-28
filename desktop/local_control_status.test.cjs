@@ -22,6 +22,25 @@ test('platformDerived: windows_planned', () => {
   });
 });
 
+test('buildLocalControlStatus: windows browser_real not categorically unsupported', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ham-lc-test-win-'));
+  try {
+    const st = buildLocalControlStatus({
+      platform: 'win32',
+      userDataPath: tmp,
+      security: { context_isolation: true, node_integration: false, sandbox: true },
+      fs,
+      path,
+    });
+    assert.equal(st.supported_platform, true);
+    assert.equal(st.browser_real.supported, true);
+    assert.notEqual(st.browser_real.gate_blocked_reason, 'platform_not_supported');
+    assert.ok(['available_guarded', 'not_implemented'].includes(st.capabilities.real_browser_cdp));
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
 test('platformDerived: darwin unsupported', () => {
   assert.deepEqual(platformDerived('darwin'), {
     supported_platform: false,
@@ -79,7 +98,7 @@ test('buildLocalControlStatus: phase 4b aggregate + browser MVP + real browser f
     assert.equal(st.browser_real.cdp_localhost_only, true);
     assert.equal(st.browser_real.uses_default_profile, false);
     assert.equal(st.browser_real.gate_blocked_reason, 'kill_switch_engaged');
-    assert.equal(st.capabilities.real_browser_cdp, 'available_guarded');
+    assert.ok(['available_guarded', 'not_implemented'].includes(st.capabilities.real_browser_cdp));
     assert.ok(st.audit);
     assert.equal(st.audit.redacted, true);
     assert.ok(Array.isArray(st.warnings));

@@ -148,10 +148,11 @@ function buildClickCandidateExpression(id) {
  * @param {string} platform process.platform
  */
 function realBrowserActionGates(policy, platform) {
-  if (platform !== 'linux') return { ok: false, reason: 'platform_not_supported' };
+  if (platform !== 'linux' && platform !== 'win32') return { ok: false, reason: 'platform_not_supported' };
   if (policy.kill_switch.engaged) return { ok: false, reason: 'kill_switch_engaged' };
   if (!policy.real_browser_control_armed) return { ok: false, reason: 'real_browser_not_armed' };
   if (!policy.permissions.real_browser_automation) return { ok: false, reason: 'real_browser_automation_off' };
+  if (!isRealBrowserRuntimeDiscoverable(platform)) return { ok: false, reason: 'chromium_not_found' };
   return { ok: true };
 }
 
@@ -233,6 +234,56 @@ function discoverChromiumExecutableLinux(execFileSync) {
   const pw = discoverPlaywrightChromiumLinux();
   if (pw) return pw;
   return null;
+}
+
+function discoverChromiumExecutableWindows() {
+  const env = String(process.env.HAM_DESKTOP_CHROME_PATH || process.env.CHROME_PATH || '').trim();
+  if (env) return env;
+  const programFiles = (process.env.PROGRAMFILES || '').trim();
+  const programFilesX86 = (process.env['PROGRAMFILES(X86)'] || '').trim();
+  const localAppData = (process.env.LOCALAPPDATA || '').trim();
+  const roots = [programFiles, programFilesX86, localAppData].filter((p) => p.length > 0);
+  const rels = [
+    ['Google', 'Chrome', 'Application', 'chrome.exe'],
+    ['Microsoft', 'Edge', 'Application', 'msedge.exe'],
+    ['Chromium', 'Application', 'chrome.exe'],
+  ];
+  for (const root of roots) {
+    for (const rel of rels) {
+      const p = path.join(root, ...rel);
+      try {
+        fs.accessSync(p, fs.constants.X_OK);
+        return p;
+      } catch {
+        /* continue */
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Discover browser executable by platform while preserving Linux path behavior.
+ *
+ * @param {(cmd: string, args: string[], opts?: object) => string} execFileSync
+ * @param {string} platform
+ */
+function discoverChromiumExecutable(execFileSync, platform) {
+  if (platform === 'linux') return discoverChromiumExecutableLinux(execFileSync);
+  if (platform === 'win32') return discoverChromiumExecutableWindows();
+  return null;
+}
+
+/**
+ * @param {string} platform
+ */
+function isRealBrowserRuntimeDiscoverable(platform) {
+  try {
+    const execFileSync = require('node:child_process').execFileSync;
+    return Boolean(discoverChromiumExecutable(execFileSync, platform));
+  } catch {
+    return false;
+  }
 }
 
 function pickDebugPort() {
@@ -700,7 +751,7 @@ function createRealBrowserCdpController(opts = {}) {
       }
     }
 
-    const exe = discoverChromiumExecutableLinux(execFileSyncImpl);
+    const exe = discoverChromiumExecutable(execFileSyncImpl, process.platform);
     if (!exe) return { ok: false, error: 'chromium_not_found' };
 
     if (!profileRoot) return { ok: false, error: 'profile_root_missing' };
@@ -927,6 +978,9 @@ function createRealBrowserCdpController(opts = {}) {
     enumerateClickCandidates,
     clickCandidate,
     discoverChromiumExecutableLinux: () => discoverChromiumExecutableLinux(execFileSyncImpl),
+    discoverChromiumExecutableWindows,
+    discoverChromiumExecutable: (platform = process.platform) =>
+      discoverChromiumExecutable(execFileSyncImpl, platform),
     MAX_SCREENSHOT_DATA_URL_CHARS,
   };
 }
@@ -934,8 +988,11 @@ function createRealBrowserCdpController(opts = {}) {
 module.exports = {
   createRealBrowserCdpController,
   realBrowserActionGates,
+  isRealBrowserRuntimeDiscoverable,
   discoverPlaywrightChromiumLinux,
   discoverChromiumExecutableLinux,
+  discoverChromiumExecutableWindows,
+  discoverChromiumExecutable,
   reloadPageViaCdp,
   MAX_SCREENSHOT_DATA_URL_CHARS,
   pickDebugPort,

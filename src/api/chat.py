@@ -4,8 +4,11 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Literal
+from uuid import uuid4
 
 import httpx
 from fastapi import APIRouter, File, Header, HTTPException, Request, UploadFile
@@ -13,6 +16,15 @@ from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from src.api.models_catalog import resolve_model_id_for_chat
+from src.bridge import (
+    BrowserAction,
+    BrowserIntent,
+    BrowserPolicySpec,
+    BrowserRunStatus,
+    BrowserStepSpec,
+    build_browser_executor,
+    run_browser_v0,
+)
 from src.ham.chat_user_content import (
     plain_text_for_operator,
     to_llm_message_content,
@@ -137,6 +149,7 @@ def _gateway_status_code(code: str) -> int:
 
 
 _MAX_SYSTEM_PROMPT_CHARS = 12_000
+_URL_IN_TEXT_RE = re.compile(r"https?://[^\s)]+", re.IGNORECASE)
 
 
 def _resolve_chat_clerk_context(
@@ -381,6 +394,130 @@ def _execution_mode_payload(body: ChatRequest, *, last_user_plain: str) -> dict[
     }
 
 
+def _build_browser_policy_spec(project_id: str | None) -> tuple[BrowserPolicySpec, str]:
+    root = _resolve_project_root_for_chat(project_id)
+    if root is None:
+        policy = browser_policy_from_config(None)
+    else:
+        policy = browser_policy_from_config(discover_config(root))
+    return (
+        BrowserPolicySpec(
+            max_steps=int(policy.get("max_steps", 25)),
+            step_timeout_ms=int(policy.get("step_timeout_ms", 10_000)),
+            max_dom_chars=int(policy.get("max_dom_chars", 8_000)),
+            max_console_chars=int(policy.get("max_console_chars", 4_000)),
+            max_network_events=int(policy.get("max_network_events", 200)),
+            allowed_domains=list(policy.get("allowed_domains", [])),
+            allow_file_download=bool(policy.get("allow_file_download", False)),
+            allow_form_submit=bool(policy.get("allow_form_submit", False)),
+        ),
+        str(policy.get("adapter", "playwright")).strip().lower() or "playwright",
+    )
+
+
+def _build_browser_intent_for_turn(
+    *,
+    body: ChatRequest,
+    last_user_plain: str,
+) -> BrowserIntent | None:
+    match = _URL_IN_TEXT_RE.search(last_user_plain or "")
+    if not match:
+        return None
+    url = match.group(0).rstrip(".,;:!?")
+    if not url:
+        return None
+    policy_spec, _adapter = _build_browser_policy_spec(body.project_id)
+    rid = uuid4().hex
+    return BrowserIntent(
+        intent_id=f"chat-browser-intent-{rid}",
+        request_id=f"chat-request-{rid}",
+        run_id=f"chat-run-{rid}",
+        start_url=url,
+        steps=[
+            BrowserStepSpec(
+                step_id="navigate-1",
+                action=BrowserAction.NAVIGATE,
+                args={"url": url},
+            ),
+            BrowserStepSpec(
+                step_id="screenshot-1",
+                action=BrowserAction.SCREENSHOT,
+                args={},
+            ),
+        ],
+        policy=policy_spec,
+        reason="Phase 3 browser intent trial for execution-mode routing.",
+        tags=["chat", "phase3", "browser-intent"],
+    )
+
+
+def _build_browser_assembly_for_turn(body: ChatRequest) -> Any:
+    _policy_spec, adapter = _build_browser_policy_spec(body.project_id)
+    return SimpleNamespace(browser_executor=build_browser_executor(adapter), browser_adapter=adapter)
+
+
+def _apply_browser_bridge_for_turn(
+    *,
+    execution_mode: dict[str, Any],
+    body: ChatRequest,
+    last_user_plain: str,
+) -> dict[str, Any]:
+    if execution_mode.get("selected_mode") != "browser":
+        return execution_mode
+    intent = _build_browser_intent_for_turn(body=body, last_user_plain=last_user_plain)
+    if intent is None:
+        execution_mode["browser_bridge"] = {
+            "status": "skipped",
+            "reason": "No URL detected in user message for browser intent routing.",
+        }
+        return execution_mode
+
+    root = _resolve_project_root_for_chat(body.project_id)
+    assembly = _build_browser_assembly_for_turn(body)
+    result = run_browser_v0(assembly, intent, repo_root=root)
+    execution_mode["browser_bridge"] = {
+        "status": result.status.value,
+        "summary": result.summary,
+        "step_count": len(result.steps),
+        "mutation_detected": result.mutation_detected,
+    }
+    _LOG.info(
+        "Phase3 browser bridge run completed",
+        extra={
+            "chat_execution_mode": execution_mode.get("selected_mode"),
+            "browser_status": result.status.value,
+            "step_count": len(result.steps),
+            "project_id": body.project_id,
+        },
+    )
+    if (
+        result.status
+        in {
+            BrowserRunStatus.BLOCKED,
+            BrowserRunStatus.REJECTED,
+            BrowserRunStatus.FAILED,
+            BrowserRunStatus.TIMED_OUT,
+            BrowserRunStatus.PARTIAL,
+        }
+        and bool(execution_mode.get("local_machine_available"))
+    ):
+        execution_mode["selected_mode"] = "machine"
+        execution_mode["auto_selected"] = True
+        execution_mode["reason"] = (
+            f"Escalated browser->machine: browser runtime returned {result.status.value} and local machine is available."
+        )
+        execution_mode["escalated_from"] = "browser"
+        execution_mode["escalation_trigger"] = result.status.value
+        _LOG.info(
+            "Phase3 execution-mode escalation browser->machine",
+            extra={
+                "browser_status": result.status.value,
+                "project_id": body.project_id,
+            },
+        )
+    return execution_mode
+
+
 def _finalize_incoming_for_store(
     msgs: list[ChatMessageIn],
     *,
@@ -595,6 +732,11 @@ async def post_chat(
         attachment_user_id=aid,
     )
     execution_mode = _execution_mode_payload(body, last_user_plain=last_user_plain)
+    execution_mode = _apply_browser_bridge_for_turn(
+        execution_mode=execution_mode,
+        body=body,
+        last_user_plain=last_user_plain,
+    )
     if body.enable_operator and operator_enabled() and body.messages[-1].role == "user":
         from src.persistence.project_store import get_project_store
 
@@ -664,6 +806,11 @@ def post_chat_stream(
         attachment_user_id=aid,
     )
     stream_execution_mode = _execution_mode_payload(body, last_user_plain=last_user_plain)
+    stream_execution_mode = _apply_browser_bridge_for_turn(
+        execution_mode=stream_execution_mode,
+        body=body,
+        last_user_plain=last_user_plain,
+    )
 
     if body.enable_operator and operator_enabled() and body.messages[-1].role == "user":
         from src.persistence.project_store import get_project_store

@@ -187,7 +187,11 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       .then((s) => {
         if (cancelled) return;
         if (!s.browser_real?.supported) {
-          setGohamGateHint("Managed browser is unavailable here (Linux + HAM Desktop Phase 4B required).");
+          setGohamGateHint("Managed browser is unavailable on this platform in HAM Desktop.");
+        } else if (s.browser_real?.gate_blocked_reason === "chromium_not_found") {
+          setGohamGateHint(
+            "Managed browser is supported but unavailable: install Chrome/Edge or set HAM_DESKTOP_CHROME_PATH, then restart HAM Desktop.",
+          );
         } else {
           setGohamGateHint(null);
         }
@@ -941,7 +945,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         toast.error(
           researchMode
             ? "GoHAM research needs a topic or website it can turn into a safe search URL."
-            : "GoHAM Mode needs a website in your message — e.g. https://example.com or example.com. Turn GoHAM on (amber) first; it only runs in HAM Desktop on Linux.",
+            : "GoHAM Mode needs a website in your message — e.g. https://example.com or example.com. Turn GoHAM on (amber) first; it runs only in HAM Desktop with managed browser support.",
           { duration: 12_000 },
         );
         return;

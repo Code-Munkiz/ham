@@ -47,7 +47,7 @@ function opErrorMessage(r: unknown, label: string): string | null {
 
 function platformLabel(s: HamDesktopLocalControlStatus): string {
   if (s.platform_status === "linux_first") return "Linux first (supported)";
-  if (s.platform_status === "windows_planned") return "Windows planned (supported)";
+  if (s.platform_status === "windows_planned") return "Windows guarded preview (supported)";
   return "Unsupported for Local Control v1 (macOS / other)";
 }
 
@@ -666,7 +666,7 @@ export function DesktopLocalControlStatusCard() {
 
       <div className="rounded-lg border border-cyan-500/20 bg-black/40 p-4 space-y-3">
         <div className="text-[10px] font-black uppercase tracking-widest text-cyan-200/70">
-          Real browser control — Linux preview
+          Real browser control — managed browser (guarded)
         </div>
         <p className="text-[9px] text-white/35 leading-relaxed">
           HAM spawns a <span className="text-white/50">dedicated Chromium/Chrome profile</span> under desktop userData
@@ -781,7 +781,19 @@ export function DesktopLocalControlStatusCard() {
           <dl className="grid gap-1.5 text-[10px] text-white/50">
             <div className="flex flex-wrap gap-x-2">
               <dt className="text-white/35">Supported</dt>
-              <dd>{status.browser_real.supported ? "yes (Linux)" : "no"}</dd>
+              <dd>{status.browser_real.supported ? "yes (platform supports managed browser)" : "no"}</dd>
+            </div>
+            <div className="flex flex-wrap gap-x-2">
+              <dt className="text-white/35">Availability</dt>
+              <dd>
+                {!status.browser_real.supported
+                  ? "unsupported"
+                  : status.browser_real.gate_blocked_reason === "chromium_not_found"
+                    ? "supported but unavailable (browser executable not found)"
+                    : status.browser_real.gate_blocked_reason
+                      ? `blocked (${status.browser_real.gate_blocked_reason})`
+                      : "available"}
+              </dd>
             </div>
             <div className="flex flex-wrap gap-x-2">
               <dt className="text-white/35">Managed profile</dt>

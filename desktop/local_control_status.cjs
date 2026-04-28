@@ -9,7 +9,7 @@ const { loadPolicy, getPolicyStatusPayload } = require('./local_control_policy.c
 const { getAuditStatus } = require('./local_control_audit.cjs');
 const { buildSidecarStatus, createIdleSidecarManagerView } = require('./local_control_sidecar_status.cjs');
 const { browserActionGates } = require('./local_control_browser_mvp.cjs');
-const { realBrowserActionGates } = require('./local_control_browser_real_cdp.cjs');
+const { realBrowserActionGates, isRealBrowserRuntimeDiscoverable } = require('./local_control_browser_real_cdp.cjs');
 
 const SCHEMA_VERSION = 6;
 const PHASE = 'browser_real_4b';
@@ -118,7 +118,7 @@ function buildLocalControlStatus(opts) {
     },
     browser_real: {
       kind: 'ham_desktop_local_control_browser_real_status',
-      supported: platform === 'linux',
+      supported: platform === 'linux' || platform === 'win32',
       armed: policy.real_browser_control_armed === true,
       allow_loopback: policy.real_browser_allow_loopback === true,
       managed_profile: true,
@@ -131,7 +131,10 @@ function buildLocalControlStatus(opts) {
     },
     capabilities: {
       browser_automation: platform === 'linux' ? 'available_guarded' : 'not_implemented',
-      real_browser_cdp: platform === 'linux' ? 'available_guarded' : 'not_implemented',
+      real_browser_cdp:
+        (platform === 'linux' || platform === 'win32') && isRealBrowserRuntimeDiscoverable(platform)
+          ? 'available_guarded'
+          : 'not_implemented',
       filesystem_access: 'not_implemented',
       shell_commands: 'not_implemented',
       app_window_control: 'not_implemented',

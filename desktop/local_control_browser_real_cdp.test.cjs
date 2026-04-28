@@ -9,6 +9,8 @@ const {
   realBrowserActionGates,
   createRealBrowserCdpController,
   discoverPlaywrightChromiumLinux,
+  discoverChromiumExecutableWindows,
+  discoverChromiumExecutable,
   reloadPageViaCdp,
   pickDebugPort,
   waitForDevtoolsJsonVersion,
@@ -31,10 +33,35 @@ function baseRealPolicy(over) {
   };
 }
 
-test('realBrowserActionGates: linux required', () => {
-  const g = realBrowserActionGates(baseRealPolicy({}), 'win32');
-  assert.equal(g.ok, false);
-  assert.equal(g.reason, 'platform_not_supported');
+test('realBrowserActionGates: windows denied when runtime missing', () => {
+  const prevEnv = {
+    HAM_DESKTOP_CHROME_PATH: process.env.HAM_DESKTOP_CHROME_PATH,
+    CHROME_PATH: process.env.CHROME_PATH,
+    PROGRAMFILES: process.env.PROGRAMFILES,
+    'PROGRAMFILES(X86)': process.env['PROGRAMFILES(X86)'],
+    LOCALAPPDATA: process.env.LOCALAPPDATA,
+  };
+  const prevAccessSync = fs.accessSync;
+  process.env.HAM_DESKTOP_CHROME_PATH = '';
+  process.env.CHROME_PATH = '';
+  process.env.PROGRAMFILES = '';
+  process.env['PROGRAMFILES(X86)'] = '';
+  process.env.LOCALAPPDATA = '';
+  fs.accessSync = () => {
+    throw new Error('missing');
+  };
+  try {
+    const g = realBrowserActionGates(baseRealPolicy({}), 'win32');
+    assert.equal(g.ok, false);
+    assert.equal(g.reason, 'chromium_not_found');
+  } finally {
+    fs.accessSync = prevAccessSync;
+    process.env.HAM_DESKTOP_CHROME_PATH = prevEnv.HAM_DESKTOP_CHROME_PATH;
+    process.env.CHROME_PATH = prevEnv.CHROME_PATH;
+    process.env.PROGRAMFILES = prevEnv.PROGRAMFILES;
+    process.env['PROGRAMFILES(X86)'] = prevEnv['PROGRAMFILES(X86)'];
+    process.env.LOCALAPPDATA = prevEnv.LOCALAPPDATA;
+  }
 });
 
 test('realBrowserActionGates: kill switch blocks', () => {
@@ -54,7 +81,94 @@ test('realBrowserActionGates: not armed blocks', () => {
 
 test('realBrowserActionGates: ok when clear on linux', () => {
   const g = realBrowserActionGates(baseRealPolicy({}), 'linux');
+  if (!g.ok) {
+    assert.equal(g.reason, 'chromium_not_found');
+    return;
+  }
   assert.equal(g.ok, true);
+});
+
+test('realBrowserActionGates: unsupported platform denied', () => {
+  const g = realBrowserActionGates(baseRealPolicy({}), 'darwin');
+  assert.equal(g.ok, false);
+  assert.equal(g.reason, 'platform_not_supported');
+});
+
+test('discoverChromiumExecutableWindows: env override wins', () => {
+  const prev = {
+    HAM_DESKTOP_CHROME_PATH: process.env.HAM_DESKTOP_CHROME_PATH,
+    CHROME_PATH: process.env.CHROME_PATH,
+  };
+  process.env.HAM_DESKTOP_CHROME_PATH = 'C:\\custom\\chrome.exe';
+  process.env.CHROME_PATH = '';
+  try {
+    assert.equal(discoverChromiumExecutableWindows(), 'C:\\custom\\chrome.exe');
+  } finally {
+    process.env.HAM_DESKTOP_CHROME_PATH = prev.HAM_DESKTOP_CHROME_PATH;
+    process.env.CHROME_PATH = prev.CHROME_PATH;
+  }
+});
+
+test('discoverChromiumExecutableWindows: finds Program Files chrome', () => {
+  const prevEnv = {
+    HAM_DESKTOP_CHROME_PATH: process.env.HAM_DESKTOP_CHROME_PATH,
+    CHROME_PATH: process.env.CHROME_PATH,
+    PROGRAMFILES: process.env.PROGRAMFILES,
+    'PROGRAMFILES(X86)': process.env['PROGRAMFILES(X86)'],
+    LOCALAPPDATA: process.env.LOCALAPPDATA,
+  };
+  const prevAccessSync = fs.accessSync;
+  process.env.HAM_DESKTOP_CHROME_PATH = '';
+  process.env.CHROME_PATH = '';
+  process.env.PROGRAMFILES = 'C:\\Program Files';
+  process.env['PROGRAMFILES(X86)'] = '';
+  process.env.LOCALAPPDATA = '';
+  fs.accessSync = (p) => {
+    if (String(p).toLowerCase().includes('google\\chrome\\application\\chrome.exe')) return;
+    throw new Error('missing');
+  };
+  try {
+    const found = discoverChromiumExecutableWindows();
+    assert.ok(found && found.toLowerCase().includes('google\\chrome\\application\\chrome.exe'));
+  } finally {
+    fs.accessSync = prevAccessSync;
+    process.env.HAM_DESKTOP_CHROME_PATH = prevEnv.HAM_DESKTOP_CHROME_PATH;
+    process.env.CHROME_PATH = prevEnv.CHROME_PATH;
+    process.env.PROGRAMFILES = prevEnv.PROGRAMFILES;
+    process.env['PROGRAMFILES(X86)'] = prevEnv['PROGRAMFILES(X86)'];
+    process.env.LOCALAPPDATA = prevEnv.LOCALAPPDATA;
+  }
+});
+
+test('discoverChromiumExecutableWindows: missing env vars does not crash', () => {
+  const prevEnv = {
+    HAM_DESKTOP_CHROME_PATH: process.env.HAM_DESKTOP_CHROME_PATH,
+    CHROME_PATH: process.env.CHROME_PATH,
+    PROGRAMFILES: process.env.PROGRAMFILES,
+    'PROGRAMFILES(X86)': process.env['PROGRAMFILES(X86)'],
+    LOCALAPPDATA: process.env.LOCALAPPDATA,
+  };
+  process.env.HAM_DESKTOP_CHROME_PATH = '';
+  process.env.CHROME_PATH = '';
+  process.env.PROGRAMFILES = '';
+  process.env['PROGRAMFILES(X86)'] = '';
+  process.env.LOCALAPPDATA = '';
+  try {
+    assert.equal(discoverChromiumExecutableWindows(), null);
+  } finally {
+    process.env.HAM_DESKTOP_CHROME_PATH = prevEnv.HAM_DESKTOP_CHROME_PATH;
+    process.env.CHROME_PATH = prevEnv.CHROME_PATH;
+    process.env.PROGRAMFILES = prevEnv.PROGRAMFILES;
+    process.env['PROGRAMFILES(X86)'] = prevEnv['PROGRAMFILES(X86)'];
+    process.env.LOCALAPPDATA = prevEnv.LOCALAPPDATA;
+  }
+});
+
+test('discoverChromiumExecutable: routes by platform', () => {
+  const linux = discoverChromiumExecutable(() => '/usr/bin/chromium', 'linux');
+  const unsupported = discoverChromiumExecutable(() => '/bin/false', 'darwin');
+  assert.equal(typeof linux, 'string');
+  assert.equal(unsupported, null);
 });
 
 test('pickDebugPort: bounded range for localhost CDP', () => {
