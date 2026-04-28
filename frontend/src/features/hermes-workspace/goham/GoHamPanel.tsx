@@ -161,11 +161,10 @@ export function GoHamPanel({ enabled, active, trail, onStop, gateHint, researchC
         ) : null}
         {enabled && !active ? (
           <p className="text-[9px] leading-snug text-white/40">
-            Include a <code className="rounded bg-white/10 px-0.5">https://</code> or hostname. Messages with{" "}
-            <em>find</em>, <em>research</em>, <em>tell me about</em>, etc. run a short multi-step loop (scroll /
-            safe link clicks). Use <strong>Pause</strong>, <strong>Take over</strong>, and <strong>Resume</strong>{" "}
-            during research. “What you see” style prompts stay on a single-page observe. No forms, logins, or
-            purchases.
+            Use a direct <code className="rounded bg-white/10 px-0.5">https://</code> URL for observe prompts.
+            Research prompts can start from a safe DuckDuckGo URL (no search-box typing) and then use only bounded
+            observe / scroll / safe-link actions. Use <strong>Pause</strong>, <strong>Take over</strong>, and{" "}
+            <strong>Resume</strong> during research. No forms, logins, purchases, or downloads.
           </p>
         ) : null}
       </div>

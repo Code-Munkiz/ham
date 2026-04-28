@@ -32,6 +32,10 @@ const WAIT_AFTER_CLICK_MS = 1500;
 const SCROLL_DELTA = 400;
 const SETTLE_WAIT_MS = 1200;
 
+const GENERIC_NAV_RE =
+  /\b(sign\s*in|sign\s*up|log\s*in|login|api\s*key|get\s+api\s+key|careers?|blog|contact|privacy|terms|status|about|home|github)\b/iu;
+const RESULT_INTENT_RE = /\b(api|docs?|documentation|quickstart|free|pricing|model|context|window|tier)\b/iu;
+
 const STOPWORDS = new Set([
   "the",
   "and",
@@ -257,9 +261,32 @@ function isSearchProviderLocation(searchStart: GohamSearchStart | null, displayU
   }
 }
 
-function scoreCandidate(c: HamDesktopRealBrowserClickCandidate, tokens: string[]): number {
-  const blob = `${c.text} ${c.role ?? ""}`.toLowerCase();
-  return tokens.filter((k) => k.length > 2 && blob.includes(k)).length;
+function candidateFingerprint(c: HamDesktopRealBrowserClickCandidate): string {
+  return normalizeEvidenceText(c.text).slice(0, 160);
+}
+
+function scoreCandidate(
+  c: HamDesktopRealBrowserClickCandidate,
+  tokens: string[],
+  requiredEvidenceTerms: string[],
+  taskText: string,
+): number {
+  const blob = normalizeEvidenceText(`${c.text} ${c.role ?? ""}`);
+  if (!blob) return -100;
+  if (/\bgithub\b/iu.test(blob) && !/\bgithub\b/iu.test(taskText)) return -50;
+
+  let score = 0;
+  for (const term of requiredEvidenceTerms) {
+    if (term.length > 2 && blob.includes(term)) score += term.includes(" ") ? 5 : 3;
+  }
+  for (const token of tokens) {
+    const t = normalizeEvidenceText(token);
+    if (t.length > 2 && blob.includes(t)) score += /\d/u.test(t) ? 3 : 1;
+  }
+  if (RESULT_INTENT_RE.test(c.text)) score += 2;
+  if (GENERIC_NAV_RE.test(c.text)) score -= 4;
+  if (blob.split(" ").length <= 2 && score < 4) score -= 2;
+  return score;
 }
 
 function taskAppearsComplete(title: string, tokens: string[]): boolean {
@@ -297,11 +324,24 @@ type PlanCtx = {
   loopIteration: number;
   lastTitle: string;
   evidenceMissing: boolean;
+  requiredEvidenceTerms: string[];
+  clickedFingerprints: Set<string>;
 };
 
 /** Rules-first planner: token overlap on candidates, else scroll, else done. */
 export function rulesFirstPlan(ctx: PlanCtx): GohamLoopAction {
-  const { goalTokens, candidates, lastClickedId, scrollsThisPage, loopIteration, lastTitle, evidenceMissing } = ctx;
+  const {
+    taskText,
+    goalTokens,
+    candidates,
+    lastClickedId,
+    scrollsThisPage,
+    loopIteration,
+    lastTitle,
+    evidenceMissing,
+    requiredEvidenceTerms,
+    clickedFingerprints,
+  } = ctx;
 
   if (!evidenceMissing && taskAppearsComplete(lastTitle, goalTokens)) {
     return { type: "done", reason: "Page title matches research keywords", risk: "low" };
@@ -312,8 +352,9 @@ export function rulesFirstPlan(ctx: PlanCtx): GohamLoopAction {
 
   const scored = candidates
     .filter((c) => c.risk === "low")
-    .map((c) => ({ c, score: scoreCandidate(c, goalTokens) }))
-    .filter((x) => x.score > 0)
+    .filter((c) => !clickedFingerprints.has(candidateFingerprint(c)))
+    .map((c) => ({ c, score: scoreCandidate(c, goalTokens, requiredEvidenceTerms, taskText) }))
+    .filter((x) => x.score >= (evidenceMissing ? 2 : 1))
     .sort((a, b) => b.score - a.score);
 
   const best = scored[0];
@@ -321,7 +362,7 @@ export function rulesFirstPlan(ctx: PlanCtx): GohamLoopAction {
     return {
       type: "click_candidate",
       candidate_id: best.c.id,
-      reason: `Candidate matches topic: ${redactSnippet(best.c.text)}`,
+      reason: `Candidate matches topic (${best.score}): ${redactSnippet(best.c.text)}`,
       risk: "low",
     };
   }
@@ -574,6 +615,7 @@ export async function runGohamResearchFlow(opts: RunGohamResearchOptions): Promi
   let lastDisplayUrl = display0;
   let loopIteration = 0;
   let lastTitle = title0;
+  const clickedFingerprints = new Set<string>();
 
   let hitExplicitDone = false;
 
@@ -615,6 +657,8 @@ export async function runGohamResearchFlow(opts: RunGohamResearchOptions): Promi
         loopIteration,
         lastTitle,
         evidenceMissing: hasMissingEvidence(evidence),
+        requiredEvidenceTerms: evidence.requiredTerms,
+        clickedFingerprints,
       });
       const v = validatePlannerAction(action, candidates);
       if (v.ok === false) {
@@ -663,11 +707,12 @@ export async function runGohamResearchFlow(opts: RunGohamResearchOptions): Promi
           break;
         }
         lastClickedId = action.candidate_id;
+        if (cand) clickedFingerprints.add(candidateFingerprint(cand));
         patchIdFull(cid, "done", {
-          detail: cand ? redactSnippet(cand.text, 36) : "candidate",
+          detail: cand ? `Chose: ${redactSnippet(cand.text, 44)}` : "candidate",
           actionType: "click_candidate",
           targetRedacted: cand ? redactSnippet(cand.text, 36) : undefined,
-          result: "clicked",
+          result: redactSnippet(action.reason, 72),
         });
         const w = await api.realBrowserWaitMs(WAIT_AFTER_CLICK_MS);
         if (!w || w.ok !== true) {
@@ -907,46 +952,66 @@ export async function runGohamResearchFlow(opts: RunGohamResearchOptions): Promi
   const insufficientEvidence = stopReason === "insufficient_evidence" || stopReason === "budget_without_evidence";
   const observedTerms = [...evidence.observedTerms].map((t) => redactSnippet(t, 28));
   const observedEvidenceLines = evidence.snippets.map((s) => `- ${s}`).join("\n");
+  const actionSummary = [
+    searchStart ? `started from DuckDuckGo safe-search URL` : "",
+    "navigated managed Chrome",
+    "captured screenshots for local validation",
+    "observed compact page metadata",
+    "enumerated visible safe click candidates",
+    loopActionCount > 0 ? `ran ${loopActionCount} bounded loop action${loopActionCount === 1 ? "" : "s"}` : "",
+  ].filter(Boolean);
+  const suggestedNextStep = insufficientEvidence
+    ? "Try a more specific starting URL or ask for a narrower target; this version cannot type into site search boxes."
+    : "Use Stop GoHAM when you are done inspecting the managed browser window.";
 
   const assistantText = [
     `**GoHAM research (v1 Slice 3)**`,
     ``,
+    `## Result`,
     insufficientEvidence
       ? `I did not find enough visible evidence for ${evidenceTarget} within this bounded GoHAM pass.`
-      : ``,
-    insufficientEvidence ? `` : ``,
-    `**Evidence summary**`,
-    `- **Pages visited:** ${pagesVisitedCount}`,
-    `- **Loop actions executed:** ${loopActionCount} (scroll / click / wait / observe in the research loop)`,
-    `- **Screenshot captures:** ${screenshotCaptureCount} (local validation only — not embedded here)`,
-    searchStart ? `- **Search start:** DuckDuckGo results for “${redactSnippet(searchStart.displayQuery, 96)}”` : ``,
-    `- **Stop reason:** ${stopLabel}`,
-    `- **Stop reason code:** \`${stopReason}\` (machine-readable: \`done\` | \`budget\` | \`time\` | \`insufficient_evidence\` | \`budget_without_evidence\` | \`blocked\` | \`error\` | \`user_stopped\`; use **Pause** / **Take over** + **Stop** → \`user_stopped\`)`,
+      : `GoHAM found enough visible evidence to stop this bounded pass.`,
+    ``,
+    `## Evidence Found`,
     evidence.requiredTerms.length
       ? `- **Required evidence terms:** ${evidence.requiredTerms.map((t) => redactSnippet(t, 24)).join(", ")}`
       : `- **Required evidence terms:** (none extracted)`,
     evidence.requiredTerms.length
       ? `- **Observed required terms:** ${observedTerms.length ? observedTerms.join(", ") : "(none)"}`
       : ``,
-    missingTerms.length ? `- **Missing evidence terms:** ${missingTerms.map((t) => redactSnippet(t, 24)).join(", ")}` : ``,
+    observedEvidenceLines ? `**Bounded evidence snippets**\n${observedEvidenceLines}` : `**Bounded evidence snippets**\n- (No required evidence terms were visible in title, URL, or bounded candidate text.)`,
     ``,
-    `**Visited locations (redacted)**`,
+    `## Missing Evidence`,
+    missingTerms.length
+      ? `- ${missingTerms.map((t) => redactSnippet(t, 24)).join("\n- ")}`
+      : `- No required evidence terms are currently missing.`,
+    ``,
+    `## Pages Checked`,
+    `- **Pages visited:** ${pagesVisitedCount}`,
     visitedUrlsLines || `- ${redacted}`,
+    linesVisited ? `\n**Page titles**\n${linesVisited}` : ``,
     ``,
-    `**What we found**`,
+    `## What HAM Did`,
+    actionSummary.map((s) => `- ${s}`).join("\n"),
+    `- **Loop actions executed:** ${loopActionCount} (scroll / click / wait / observe in the research loop)`,
+    `- **Screenshot captures:** ${screenshotCaptureCount} (local validation only — not embedded here)`,
     `- **Latest page title:** ${redactSnippet(lastTitle, 80)}`,
     goalTokens.length ? `- **Keywords tracked:** ${goalTokens.slice(0, 8).join(", ")}${goalTokens.length > 8 ? "…" : ""}` : `- (No keywords extracted from your message.)`,
-    observedEvidenceLines ? `**Observed bounded evidence snippets**\n${observedEvidenceLines}` : `**Observed bounded evidence snippets**\n- (No required evidence terms were visible in title, URL, or bounded candidate text.)`,
+    searchStart ? `- **Search start:** DuckDuckGo results for “${redactSnippet(searchStart.displayQuery, 96)}”` : ``,
     ``,
-    `**Pages visited (detail)**`,
-    linesVisited || `- ${redacted}`,
+    `## Why HAM Stopped`,
+    `- **Stop reason:** ${stopLabel}`,
+    `- **Stop reason code:** \`${stopReason}\``,
     errorMessage ? `**Error / block detail:** ${errorMessage}` : ``,
     ``,
-    `**Limitations (this version)**`,
+    `## Limits`,
     `- No typing, form fill, or submit/post/send.`,
     `- No hidden browsing or full-page HTML extraction — title, redacted URL, compact observe, and screenshot bytes only.`,
     `- Rules-first planner only; no search typing in this version.`,
     `- Rules-first planner: at most **${MAX_LOOP_ACTIONS}** actions after load, **~${Math.round(LOOP_WALL_MS / 1000)}s** wall clock.`,
+    ``,
+    `## Suggested Next Step`,
+    suggestedNextStep,
     ``,
     `The **managed browser stays open**; use **Stop GoHAM** to close it. **Pause** / **Take over** let you control the window without ending the session until you **Resume** or **Stop**.`,
     ``,

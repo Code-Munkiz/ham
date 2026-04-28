@@ -20,6 +20,7 @@ const QUERY_STOPWORDS = new Set([
   "look",
   "lookup",
   "learn",
+  "up",
   "tell",
   "whether",
   "what",
@@ -41,6 +42,9 @@ const QUERY_STOPWORDS = new Set([
   "are",
   "it",
   "me",
+  "whats",
+  "what's",
+  "on",
 ]);
 
 const DOMAIN_STOPWORDS = new Set(["www", "com", "org", "net", "ai", "io", "app", "dev"]);
@@ -93,7 +97,8 @@ export function buildGohamSearchQuery(taskText: string, directUrl: string | null
     .replace(/\bstart\s+at\b/giu, " ")
     .replace(/\bfind\s+(information|info)\s+about\b/giu, " ")
     .replace(/\btell\s+me\s+(whether|what|about)?\b/giu, " ")
-    .replace(/\blook\s+up\b/giu, " ");
+    .replace(/\blook\s+up\b/giu, " ")
+    .replace(/\bwhat'?s\s+on\b/giu, " ");
 
   for (const raw of splitQueryTokens(withoutUrls)) {
     const lower = raw.toLowerCase();
