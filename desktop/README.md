@@ -5,7 +5,7 @@ Thin shell: renderer is the existing Vite/React app; FastAPI stays a separate HT
 ## Shell UX (M1)
 
 - **First screen:** the packaged app **opens the workspace app** with **`/` → `/chat`** (workspace chat). The marketing landing (“go ham” / astrochimp) is **web-only**.
-- **Local Control Phase 2–4B (Linux):** narrow IPC (`ham-desktop:local-control-*`) + **`window.hamDesktop.localControl`** for status, policy/audit/kill-switch, inert sidecar lifecycle, **Phase 4A embedded browser** (`BrowserWindow` in main), **Phase 4B managed Chromium + localhost CDP** (dedicated profile, audited kill-switch release token, start/navigate/screenshot/stop), and **engage kill switch**; **`policy.json` schema v3** + redacted audit JSONL under userData; **default deny** — [`docs/desktop/local_control_v1.md`](../docs/desktop/local_control_v1.md), sidecar protocol [`docs/desktop/local_control_sidecar_protocol_v1.md`](../docs/desktop/local_control_sidecar_protocol_v1.md). Not Playwright; not `/api/browser`.
+- **Local Control (desktop):** narrow IPC (`ham-desktop:local-control-*`) + **`window.hamDesktop.localControl`** for status, policy, audit/kill-switch, and inert sidecar lifecycle (**no packaged managed-browser / localhost CDP in the Electron shell**; use Ham **`/api/browser*`** on the API host instead). **`policy.json` schema v3** + redacted audit JSONL under userData; **default deny** — [`docs/desktop/local_control_v1.md`](../docs/desktop/local_control_v1.md), sidecar protocol [`docs/desktop/local_control_sidecar_protocol_v1.md`](../docs/desktop/local_control_sidecar_protocol_v1.md). Not Playwright inside desktop; **`/api/browser`** remains on FastAPI.
 - **Download and run:** packaged builds ship **`default-public-api.json`** next to `main.cjs` with the **project’s public Ham API origin**. Users can open the app with **no env vars**; power users override with **`HAM_DESKTOP_API_BASE`** or **`ham-desktop-config.json`**. Bump that file when the canonical public API URL changes, then cut a new desktop release.
 - **Menu bar:** on **Linux and Windows**, the default Electron **File / Edit / View** menu is **removed** so the window chrome stays dark; **macOS** keeps the normal app menu.
 - **Public assets:** the nav logo uses the same **relative `public/` URLs** as the Vite build (`base: ./`) so icons load under **`file://`** in the packaged renderer.
@@ -15,7 +15,7 @@ Thin shell: renderer is the existing Vite/React app; FastAPI stays a separate HT
 Linux and Windows artifacts **do not duplicate** the chat interface. `electron-builder` copies **`../frontend/dist`** into `resources/renderer/` (`desktop/package.json` → `extraResources`). Any change under **`frontend/src`** (including `/chat`) applies to desktop automatically **after** you rebuild the web app and repackage:
 
 - **Dev:** `npm start` from `desktop/` loads the Vite dev server by default, so you see the same React app as the browser.
-- **Release:** run `npm run pack:linux` / `npm run pack:win` (they run `build:frontend` first). Bump `version` in `desktop/package.json` when shipping so users can tell builds apart.
+- **Release:** run **`npm run pack:win`** (runs `build:frontend` first). Bump `version` in `desktop/package.json` when shipping so users can tell builds apart. Legacy **Linux AppImage / `.deb`** pipelines were removed; Windows Electron packaging (`pack:win*`) remains. Develop on Linux with **`npm start`** in `desktop/` (no installer).
 
 ## HAM + Hermes curated bundle (desktop)
 
@@ -23,8 +23,8 @@ Linux and Windows artifacts **do not duplicate** the chat interface. `electron-b
 - Shipped under `desktop/curated/`: README, `default-curated-skills.json` (suggested `catalog_id` pins), and `ham-api-env.snippet`. These are included in the packaged app (`package.json` → `files`).
 - **Settings → HAM + Hermes setup** (desktop only): probes `hermes --version` on the **system PATH** and shows the curated list. HAM does **not** download or install Hermes binaries in this phase; install upstream, then use **Re-check CLI**.
 - **Allowlisted CLI presets (Phase B):** buttons that run a **fixed** argv list in the main process (`hermes --version`, `hermes plugins list`, `hermes mcp list`, …) and show stdout/stderr in the settings panel — not free-form TUI control; 25s timeout, capped output. Presets are defined in `main.cjs` only; add new ones there after review.
-- Additional IPC: `window.__HAM_DESKTOP_BUNDLE__` and **`window.hamDesktop`** share the same `localControl` bridge (status, policy, audit, kill switch, sidecar, **4A + 4B browser** paths, `engageKillSwitch`) — see `preload.cjs`, `main.cjs`, `local_control_*.cjs`.
-- **CLI (repo, no Electron):** `ham desktop local-control status|policy|audit|browser|sidecar` (and `sidecar health|stop|start` = **electron_only** stubs); live browser + policy only in HAM Desktop (`browser` JSON bundles 4A + 4B mirrors).
+- Additional IPC: `window.__HAM_DESKTOP_BUNDLE__` and **`window.hamDesktop`** share the same `localControl` bridge (status, policy, audit, kill switch, sidecar — **no browser session IPC**) — see `preload.cjs`, `main.cjs`, `local_control_*.cjs`.
+- **CLI (repo, no Electron):** `ham desktop local-control status|policy|audit|browser|sidecar` (`browser` reflects **not_shipped** for Electron-managed sessions). Sidecar lifecycle stubs: `sidecar health|stop|start` = **electron_only**.
 - **Tests:** `npm run test:local-control` from `desktop/` (Node built-in test runner over `local_control_status.cjs`).
 
 ## Security (M1)
@@ -57,8 +57,6 @@ cd /path/to/ham
 ```
 
 (Or classic: `PYTHONPATH=. uvicorn src.api.server:app --reload --host 127.0.0.1 --port 8000`.)
-
-**Phase 4B managed Chromium:** if you see `chromium_not_found`, install Google Chrome/Chromium system-wide *or* run once (no sudo): `bash scripts/ensure_chromium_for_desktop.sh` — HAM Desktop picks up `~/.cache/ms-playwright/chromium-*/chrome-linux64/chrome` automatically.
 
 Terminal 2 — Vite (proxy `/api` → 8000 by default):
 
@@ -105,74 +103,11 @@ For packaged-style testing without the dev server:
 
 Main sets `useHashRouter` for `file` loads so client-side routes work.
 
-## Linux packaging (Pop!_OS / Ubuntu-class)
+## Linux desktop installers removed
 
-Artifacts are built with **[electron-builder](https://www.electron.build/)**. Primary output is **AppImage** (single file, no root install). **`.deb`** is also produced for `dpkg`/Software installs.
+HAM no longer publishes **`npm run pack:linux`** targets (AppImage / `.deb`) from this repo. Packaging for **Windows** remains (**`npm run pack:win*`**). On Linux/macOS use **`cd desktop && npm start`** during development — that does **not** produce installers.
 
-**Why AppImage first:** one portable binary, fast iteration on Pop!_OS, no repo signing. **deb** is optional system integration for the same build.
-
-### Prerequisites
-
-- Node **20–24** (matches `engines` in `package.json`).
-- From repo root once: `cd frontend && npm install` (the pack script builds the Vite app with `--base ./`).
-
-### Build
-
-```bash
-cd desktop
-npm install          # pulls electron-builder
-npm run pack:linux   # builds ../frontend/dist, then Linux targets
-```
-
-**Outputs** (under `desktop/dist-pack/`):
-
-| Artifact | Example (v0.1.0, x64) |
-|----------|------------------------|
-| AppImage | `HAM Desktop-0.1.0.AppImage` |
-| deb | `ham-desktop_0.1.0_amd64.deb` |
-
-The AppImage name includes a space (from `productName`). The `.deb` requires `homepage` in `desktop/package.json` (used by the Debian metadata step).
-
-**Faster unpack-only smoke build** (no installer wrappers):
-
-```bash
-cd desktop && npm run pack:linux:dir
-```
-
-Unpacked app: `desktop/dist-pack/linux-unpacked/` (run the `ham-desktop` or `HAM Desktop` binary inside).
-
-### Run / install on Pop!_OS
-
-**AppImage**
-
-```bash
-chmod +x "./HAM Desktop-"*.AppImage
-HAM_DESKTOP_API_BASE=http://127.0.0.1:8000 "./HAM Desktop-"*.AppImage
-```
-
-(AppImage may need [FUSE](https://docs.appimage.org/user-guide/troubleshooting/fuse.html) on minimal systems; Pop!_OS normally has it.)
-
-**AppImage: Chromium sandbox / launch failures**
-
-Some Linux setups block the setuid sandbox inside the AppImage (kernel/user namespace policy, older FUSE setups, or unusual mounts). If the window never appears or the process exits with sandbox-related errors, try launching with Chromium’s troubleshooting flag (reduces sandboxing — use only when needed):
-
-```bash
-./"HAM Desktop-0.1.0.AppImage" --no-sandbox
-```
-
-This does not change HAM’s renderer security model (`contextIsolation` / no `nodeIntegration`); it relaxes the **Chromium** process sandbox for that run. Prefer fixing host configuration when possible; keep this as an operator fallback.
-
-**deb**
-
-```bash
-sudo apt install ./ham-desktop_*_amd64.deb
-# Application menu: "HAM Desktop", or from a terminal:
-"/opt/HAM Desktop/ham-desktop"
-```
-
-(Install path is under `/opt/HAM Desktop/`; quote the path because of the space.)
-
-Packaged builds default to **`file` load mode** and load the bundled renderer from `resources/renderer/`. **API base** resolution: **`HAM_DESKTOP_API_BASE`** (env) → **`ham-desktop-config.json`** `apiBase` → bundled **`default-public-api.json`** (public Ham API for download-and-run). Override the file or env to point at your own API (e.g. local `http://127.0.0.1:8000`).
+---
 
 ### Packaged app and CORS (`Origin: null`)
 
@@ -239,11 +174,11 @@ npm run pack:win
 
 Copy the portable `.exe` or zip **`win-unpacked/`** to Windows. First run may trigger **Microsoft Defender SmartScreen** (“Unknown publisher”) because the build is **not code-signed** — use “More info” → “Run anyway” for internal testing only.
 
-**API base** and **`file://` / `Origin: null` / `HAM_CORS_ORIGINS`** behave like the Linux packaged app (see above). Set `HAM_DESKTOP_API_BASE` or `userData`-local `ham-desktop-config.json` so the dashboard can reach your Ham API.
+**API base** and **`file://` / `Origin: null` / `HAM_CORS_ORIGINS`** behave as documented in the packaged CORS section above. Set `HAM_DESKTOP_API_BASE` or `userData`-local `ham-desktop-config.json` so the dashboard can reach your Ham API.
 
 ### CI / clean builds
 
-- Reuse the same `dist-pack/` hygiene as Linux; Windows artifacts sit alongside Linux outputs in that directory.
+- Reuse `desktop/dist-pack/` hygiene between releases (`gitignored` scratch output).
 
 ## Environment reference
 

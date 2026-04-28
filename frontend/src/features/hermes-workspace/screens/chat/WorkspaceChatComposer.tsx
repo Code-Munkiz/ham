@@ -59,11 +59,6 @@ type WorkspaceChatComposerProps = {
   sttUnavailableReason?: string | null;
   sttMode?: "auto" | "live" | "record";
   onSttModeChange?: (mode: "auto" | "live" | "record") => Promise<void> | void;
-  /** GoHAM Mode v0 — opt-in managed browser observe flow (HAM Desktop only). */
-  gohamEnabled?: boolean;
-  onGohamEnabledChange?: (enabled: boolean) => void;
-  gohamToggleDisabled?: boolean;
-  gohamGateHint?: string | null;
 };
 
 type VoiceUiState = "idle" | "recording" | "live" | "stopping" | "transcribing" | "error";
@@ -109,10 +104,6 @@ export function WorkspaceChatComposer({
   sttUnavailableReason = null,
   sttMode = "record",
   onSttModeChange,
-  gohamEnabled = false,
-  onGohamEnabledChange,
-  gohamToggleDisabled = false,
-  gohamGateHint = null,
 }: WorkspaceChatComposerProps) {
   const [voiceState, setVoiceState] = React.useState<VoiceUiState>("idle");
   const [voiceBanner, setVoiceBanner] = React.useState<string | null>(null);
@@ -291,17 +282,12 @@ export function WorkspaceChatComposer({
   const hasAttachErrOnly =
     attachments.length > 0 && attachments.every((a) => a.error) && !value.trim();
   const allAttachmentsFailed = attachments.length > 0 && attachments.every((a) => a.error);
-  const gohamTextOnlyReady =
-    gohamEnabled &&
-    !gohamToggleDisabled &&
-    value.trim().length > 0 &&
-    attachments.length === 0;
   const normalSendReady =
     gatewayOk &&
     (value.trim() || (attachments.length > 0 && !hasAttachErrOnly));
   const canSend =
     !allAttachmentsFailed &&
-    (gohamTextOnlyReady || normalSendReady) &&
+    normalSendReady &&
     !sending &&
     !voiceBusy;
 
@@ -585,36 +571,6 @@ export function WorkspaceChatComposer({
                 disabled={sending || voiceBusy || disabled}
                 className="text-emerald-200/50 hover:text-emerald-200/90"
               />
-              {onGohamEnabledChange ? (
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={gohamEnabled}
-                  disabled={sending || voiceBusy || disabled || gohamToggleDisabled}
-                  title={
-                    gohamGateHint ||
-                    "GoHAM uses a separate managed browser window. It will not use your default browser or saved passwords."
-                  }
-                  onClick={() => onGohamEnabledChange(!gohamEnabled)}
-                  className={cn(
-                    "ml-0.5 flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-2 text-[10px] font-semibold uppercase tracking-wide transition",
-                    gohamEnabled && !gohamToggleDisabled
-                      ? "border-amber-400/35 bg-amber-500/15 text-amber-100/95"
-                      : "border-white/[0.1] bg-white/[0.04] text-white/55",
-                    (sending || voiceBusy || disabled || gohamToggleDisabled) &&
-                      "cursor-not-allowed opacity-45",
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "h-1.5 w-1.5 shrink-0 rounded-full",
-                      gohamEnabled && !gohamToggleDisabled ? "bg-amber-300 shadow-[0_0_6px_rgba(251,191,36,0.7)]" : "bg-white/25",
-                    )}
-                    aria-hidden
-                  />
-                  <span className="max-[380px]:sr-only">GoHAM</span>
-                </button>
-              ) : null}
               {value.length >= 100 ? (
                 <span
                   className="hidden min-w-0 text-[10px] tabular-nums text-white/30 select-none sm:inline"

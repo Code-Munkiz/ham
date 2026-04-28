@@ -2,17 +2,15 @@
 
 /**
  * Desktop Local Control — read-only status/doctor payload (main process).
- * Phase 2: policy / audit / kill-switch skeleton; paths are never returned (booleans only under `paths`).
+ * Policy / audit / kill-switch / sidecar; browser automation is not shipped (removed).
  */
 
 const { loadPolicy, getPolicyStatusPayload } = require('./local_control_policy.cjs');
 const { getAuditStatus } = require('./local_control_audit.cjs');
 const { buildSidecarStatus, createIdleSidecarManagerView } = require('./local_control_sidecar_status.cjs');
-const { browserActionGates } = require('./local_control_browser_mvp.cjs');
-const { realBrowserActionGates } = require('./local_control_browser_real_cdp.cjs');
 
-const SCHEMA_VERSION = 6;
-const PHASE = 'browser_real_4b';
+const SCHEMA_VERSION = 7;
+const PHASE = 'policy_sidecar_v1';
 
 /** @param {string} platform process.platform */
 function platformDerived(platform) {
@@ -33,17 +31,10 @@ function platformDerived(platform) {
  * @param {typeof import('node:fs')} opts.fs
  * @param {typeof import('node:path')} opts.path
  * @param {{ getSnapshot: () => { running: boolean, health_last: 'ok' | 'error' | null } }} [opts.sidecarManager]
- * @param {() => { running: boolean, title: string, display_url: string }} [opts.browserMvpGetStatus]
- * @param {{ running: boolean, title: string, display_url: string }} [opts.browserRealSnapshot]
  */
 function buildLocalControlStatus(opts) {
-  const { platform, userDataPath, security, fs, path, sidecarManager, browserMvpGetStatus, browserRealSnapshot } = opts;
+  const { platform, userDataPath, security, fs, path, sidecarManager } = opts;
   const mgr = sidecarManager || createIdleSidecarManagerView();
-  const browserSnap =
-    typeof browserMvpGetStatus === 'function'
-      ? browserMvpGetStatus()
-      : { running: false, title: '', display_url: '' };
-  const realSnap = browserRealSnapshot || { running: false, title: '', display_url: '' };
   const warnings = [];
 
   let user_data_writable = false;
@@ -75,8 +66,6 @@ function buildLocalControlStatus(opts) {
   const { policy, persisted } = loadPolicy({ userDataPath, platform, fs, path });
   const policy_status = getPolicyStatusPayload(policy, { persisted });
   const audit_status = getAuditStatus({ userDataPath, fs, path });
-  const bg = browserActionGates(policy, platform);
-  const rg = realBrowserActionGates(policy, platform);
 
   return {
     kind: 'ham_desktop_local_control_status',
@@ -106,32 +95,10 @@ function buildLocalControlStatus(opts) {
       killSwitchEngaged: policy.kill_switch.engaged,
       manager: mgr,
     }),
-    browser_mvp: {
-      kind: 'ham_desktop_local_control_browser_mvp_status',
-      supported: platform === 'linux',
-      armed: policy.browser_control_armed === true,
-      allow_loopback: policy.browser_allow_loopback === true,
-      session_running: browserSnap.running,
-      title: browserSnap.title || '',
-      display_url: browserSnap.display_url || '',
-      gate_blocked_reason: bg.ok ? null : bg.reason,
-    },
-    browser_real: {
-      kind: 'ham_desktop_local_control_browser_real_status',
-      supported: platform === 'linux',
-      armed: policy.real_browser_control_armed === true,
-      allow_loopback: policy.real_browser_allow_loopback === true,
-      managed_profile: true,
-      cdp_localhost_only: true,
-      uses_default_profile: false,
-      session_running: realSnap.running,
-      title: realSnap.title || '',
-      display_url: realSnap.display_url || '',
-      gate_blocked_reason: rg.ok ? null : rg.reason,
-    },
     capabilities: {
-      browser_automation: platform === 'linux' ? 'available_guarded' : 'not_implemented',
-      real_browser_cdp: platform === 'linux' ? 'available_guarded' : 'not_implemented',
+      desktop_local_control: 'policy_audit_sidecar',
+      browser_automation: 'not_shipped',
+      real_browser_cdp: 'not_shipped',
       filesystem_access: 'not_implemented',
       shell_commands: 'not_implemented',
       app_window_control: 'not_implemented',
@@ -139,11 +106,11 @@ function buildLocalControlStatus(opts) {
     },
     warnings,
     non_goals: [
-      'Phase 4A: embedded Electron BrowserWindow MVP (proof); Phase 4B: managed Chromium + localhost CDP only',
+      'Desktop Local Control is policy/audit/kill-switch + inert sidecar only; no shipped browser automation.',
       'no attach to operator default browser profile; no cookie/header extraction; no paths in renderer',
-      'no Playwright sidecar; no /api/browser; no War Room',
+      'no Playwright sidecar; desktop does not host /api/browser; use Ham API for server browser runtime',
       'no shell, filesystem, app, or MCP local control',
-      'no cloud-run browser control plane',
+      'no cloud-run browser control plane in the desktop shell',
     ],
   };
 }

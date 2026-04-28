@@ -6,7 +6,7 @@ const config = ipcRenderer.sendSync('ham-desktop:get-config-sync');
 
 contextBridge.exposeInMainWorld('__HAM_DESKTOP_CONFIG__', config && typeof config === 'object' ? config : {});
 
-/** Narrow Local Control API — no generic IPC invoke. */
+/** Narrow Local Control API — no generic IPC invoke; browser automation not shipped (removed). */
 const localControlBridge = {
   getStatus: () => ipcRenderer.invoke('ham-desktop:local-control-get-status'),
   getPolicyStatus: () => ipcRenderer.invoke('ham-desktop:local-control-get-policy-status'),
@@ -17,28 +17,6 @@ const localControlBridge = {
   stopSidecar: () => ipcRenderer.invoke('ham-desktop:local-control-sidecar-stop'),
   startSidecar: () => ipcRenderer.invoke('ham-desktop:local-control-sidecar-start'),
   engageKillSwitch: () => ipcRenderer.invoke('ham-desktop:local-control-engage-kill-switch'),
-  armBrowserOnlyControl: () => ipcRenderer.invoke('ham-desktop:local-control-browser-arm'),
-  releaseKillSwitchForBrowserMvp: (token) =>
-    ipcRenderer.invoke('ham-desktop:local-control-browser-release-kill-switch', token),
-  getBrowserStatus: () => ipcRenderer.invoke('ham-desktop:local-control-get-browser-status'),
-  startBrowserSession: () => ipcRenderer.invoke('ham-desktop:local-control-browser-start-session'),
-  navigateBrowser: (url) => ipcRenderer.invoke('ham-desktop:local-control-browser-navigate', url),
-  captureBrowserScreenshot: () => ipcRenderer.invoke('ham-desktop:local-control-browser-screenshot'),
-  stopBrowserSession: () => ipcRenderer.invoke('ham-desktop:local-control-browser-stop-session'),
-  armRealBrowserControl: () => ipcRenderer.invoke('ham-desktop:local-control-browser-real-arm'),
-  getRealBrowserStatus: () => ipcRenderer.invoke('ham-desktop:local-control-get-browser-real-status'),
-  startRealBrowserSession: () => ipcRenderer.invoke('ham-desktop:local-control-browser-real-start-session'),
-  navigateRealBrowser: (url) => ipcRenderer.invoke('ham-desktop:local-control-browser-real-navigate', url),
-  reloadRealBrowser: () => ipcRenderer.invoke('ham-desktop:local-control-browser-real-reload'),
-  captureRealBrowserScreenshot: () => ipcRenderer.invoke('ham-desktop:local-control-browser-real-screenshot'),
-  realBrowserObserveCompact: () => ipcRenderer.invoke('ham-desktop:local-control-browser-real-observe-compact'),
-  realBrowserWaitMs: (ms) => ipcRenderer.invoke('ham-desktop:local-control-browser-real-wait', ms),
-  realBrowserScrollVertical: (deltaY) => ipcRenderer.invoke('ham-desktop:local-control-browser-real-scroll', deltaY),
-  realBrowserEnumerateClickCandidates: () =>
-    ipcRenderer.invoke('ham-desktop:local-control-browser-real-enumerate-candidates'),
-  realBrowserClickCandidate: (candidateId) =>
-    ipcRenderer.invoke('ham-desktop:local-control-browser-real-click-candidate', candidateId),
-  stopRealBrowserSession: () => ipcRenderer.invoke('ham-desktop:local-control-browser-real-stop-session'),
 };
 
 contextBridge.exposeInMainWorld('hamDesktop', {

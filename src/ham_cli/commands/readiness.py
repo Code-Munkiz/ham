@@ -21,19 +21,19 @@ def _module_ok(name: str) -> bool:
     return importlib.util.find_spec(name) is not None
 
 
-def _desktop_pack_scripts(repo: Path) -> tuple[bool, bool, bool]:
-    """Return (package_json_ok, has_pack_linux, has_pack_win)."""
+def _desktop_pack_scripts(repo: Path) -> tuple[bool, bool]:
+    """Return (package_json_ok, has_pack_win)."""
     pkg = repo / "desktop" / "package.json"
     if not pkg.is_file():
-        return False, False, False
+        return False, False
     try:
         data = json.loads(pkg.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return True, False, False
+        return True, False
     scripts = data.get("scripts") if isinstance(data, dict) else None
     if not isinstance(scripts, dict):
-        return True, False, False
-    return True, "pack:linux" in scripts, "pack:win" in scripts
+        return True, False
+    return True, "pack:win" in scripts
 
 
 def _git_branch_and_clean(repo: Path) -> tuple[str | None, bool | None, str | None]:
@@ -80,8 +80,8 @@ def collect_readiness() -> dict[str, Any]:
 
     desktop_dir = repo / "desktop" if repo else None
     desktop_exists = desktop_dir.is_dir() if desktop_dir else False
-    pkg_ok, has_linux, has_win = _desktop_pack_scripts(repo) if repo else (False, False, False)
-    scripts_ok = pkg_ok and has_linux and has_win
+    pkg_ok, has_win = _desktop_pack_scripts(repo) if repo else (False, False)
+    scripts_ok = pkg_ok and has_win
 
     branch, clean, git_err = (None, None, None)
     if repo:
@@ -117,7 +117,6 @@ def collect_readiness() -> dict[str, Any]:
         "repo_root": str(repo) if repo else None,
         "desktop_dir_ok": desktop_exists,
         "desktop_package_json_ok": pkg_ok,
-        "pack_linux_script": has_linux,
         "pack_win_script": has_win,
         "pack_scripts_ok": scripts_ok,
         "git_branch": branch,
@@ -170,11 +169,11 @@ def run_readiness() -> None:
     row(
         "Desktop pack scripts",
         data["pack_scripts_ok"],
-        "pack:linux + pack:win in package.json"
+        "pack:win in package.json"
         if data["pack_scripts_ok"]
         else (
             f"package.json ok={data['desktop_package_json_ok']}, "
-            f"linux={data['pack_linux_script']}, win={data['pack_win_script']}"
+            f"win={data['pack_win_script']}"
         ),
     )
     if data["repo_root"]:

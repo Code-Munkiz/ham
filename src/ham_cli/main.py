@@ -14,7 +14,6 @@ from src.ham_cli.commands.desktop import (
     run_desktop_local_control_sidecar,
     run_desktop_local_control_sidecar_lifecycle,
     run_desktop_local_control_status,
-    run_package_linux,
     run_package_win,
 )
 from src.ham_cli.commands.doctor import run_doctor
@@ -131,12 +130,6 @@ local_control_app.add_typer(sidecar_cli, name="sidecar")
 app.add_typer(desktop_app, name="desktop")
 
 
-@package_app.command("linux")
-def desktop_pack_linux() -> None:
-    """Run `npm run pack:linux` in desktop/ (AppImage + deb)."""
-    run_package_linux()
-
-
 @package_app.command("win")
 def desktop_pack_win() -> None:
     """Run `npm run pack:win` in desktop/ (Windows portable from Linux)."""
@@ -171,7 +164,7 @@ def desktop_local_control_audit_cmd(
 def desktop_local_control_browser_cmd(
     json_out: bool = typer.Option(False, "--json", help="Emit JSON."),
 ) -> None:
-    """Static browser MVP mirror (session control requires HAM Desktop)."""
+    """Static snapshot: Electron managed-browser path removed — see `ham desktop local-control browser`."""
     run_desktop_local_control_browser_status(json_out=json_out)
 
 
@@ -220,12 +213,6 @@ friendly_package = typer.Typer(
     help="Shorthand for `ham desktop package` — same behavior.",
 )
 app.add_typer(friendly_package, name="package")
-
-
-@friendly_package.command("linux")
-def friendly_pack_linux() -> None:
-    """Alias: same as `ham desktop package linux`."""
-    run_package_linux()
 
 
 @friendly_package.command("win")

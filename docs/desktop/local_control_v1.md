@@ -1,8 +1,7 @@
 # HAM Desktop — Local Control v1 (spec)
 
-**Status:** Phases **1–4B** shipped in HAM Desktop (Linux): doctor, policy/audit/kill-switch, inert sidecar, **4A** embedded browser, **4B** managed Chromium/CDP — see phase table below; this doc remains the v1 contract.  
-**Product:** Desktop-only. Not the web app, not Cloud Run as the control plane, not War Room.  
-**Canonical sibling:** Computer Control Pack narrative — [`docs/capabilities/computer_control_pack_v1.md`](../capabilities/computer_control_pack_v1.md).
+**Status:** **policy / audit / kill-switch / inert sidecar** remains in HAM Desktop. **Historical Electron Phase 4A/4B managed-browser IPC and Linux installer packaging (`npm run pack:linux*`) were removed** from this repository ([`desktop/README.md`](../../desktop/README.md)); server-side automation uses **`/api/browser*`** ([`docs/capabilities/computer_control_pack_v1.md`](../capabilities/computer_control_pack_v1.md)).  
+**Product:** Desktop-only Electron shell surfaces (today: **Windows** packaging helpers; developer `npm start` on Linux/macOS). Not the Cloud Run browser operator path for desktop policy.
 
 ---
 
@@ -30,8 +29,8 @@ Hermes and HAM API may **supervise, recommend, or display metadata**; they **do 
 
 | Order | Platform | Notes |
 |-------|-----------|--------|
-| **1** | **Linux** | First-class desktop packaging and future narrow automation vertical. |
-| **2** | **Windows** | Parity after Linux; signing, AV, and SmartScreen are release concerns. |
+| **1** | **Windows** | Packaged Electron (`npm run pack:win*`) remains the installer story. |
+| **2** | **Linux / macOS** | **Dev shell** (`cd desktop && npm start`) supported; Linux **AppImage/deb installers removed**. |
 | **—** | **macOS** | **Out of scope** unless separately approved. |
 
 ---
@@ -112,10 +111,9 @@ This is a **design target** for implementation phases; Phase 0 does not add IPC,
 | **2** | **Shipped (skeleton):** persisted **`policy.json`** (default deny, **enabled false**), redacted **audit JSONL**, **kill switch** default engaged + **engage-only** IPC (`ham-desktop:local-control-engage-kill-switch`), expanded status + **`window.hamDesktop.localControl`** narrow bridge; CLI **`local-control policy` / `audit` / `kill-switch engage`** (mirror / noop); still **no** automation. |
 | **3A** | **Shipped:** [`local_control_sidecar_protocol_v1.md`](local_control_sidecar_protocol_v1.md) (design) + mock **`sidecar`** status + read-only sidecar IPC (superseded by **3B** for live child shape; see protocol doc history in git). |
 | **3B** | **Shipped:** **inert sidecar shell** — stdio child (`health` / `status` / `shutdown` only), main-process manager (single instance); IPC **`getSidecarStatus`**, **`sidecar-start`** (blocked by default kill switch), **`sidecar-stop`**, **`sidecar-health`**; **no** tools, **no** inbound network, **no** Droid access; CLI **`local-control sidecar`** (+ **`health` / `stop` / `start`** stubs = `electron_only`). |
-| **3** | **Future:** further narrow Linux verticals (still no generic shell/filesystem / MCP / Droid local harness). |
-| **4A** | **Shipped (Linux):** **embedded browser MVP** — **`BrowserWindow`** in Electron **main** (safety / parity proof): arm **`browser_control_armed`**, same kill-switch + URL gates as 4B sibling; policy fields live under **schema v3** on disk with 4B (see `local_control_policy.cjs`). |
-| **4B** | **Shipped (Linux preview):** **managed Chromium/Chrome + localhost CDP** in **main** (not Playwright driver in-process, not `/api/browser`, not War Room): dedicated **user-data-dir** under app userData, **127.0.0.1-only** debug port, arm **`real_browser_control_armed`**, audited **same browser MVP kill-switch release token**, navigate **http/https** only (loopback gated by **`real_browser_allow_loopback`**), **Phase 1A:** CDP **`Page.reload`** (explicit Reload in Settings → Display — no arbitrary input), status, screenshot (capped data URL), stop; **`real_browser_allow_default_profile`** exists but **4B never uses the OS default profile**; aggregate **`schema_version` 6**; preload IPC (`browser-real-*` channels); CLI **`local-control browser`** bundles **4A + 4B** static mirrors. |
-| **4 (future)** | **Windows parity** for 4A/4B + packaging hardening. |
+| **3** | **Future:** further narrow automation verticals (**not** restored legacy Linux-only browser IPC). |
+| **4A / 4B** | **Removed from repo:** Electron **managed-browser** MVP + Chromium/CDP **IPC stacks** were deleted; aggregate status is **`schema_version` 7** without `browser_*` snapshots. Prefer Ham API **`/api/browser*`** for server-side automation ([`computer_control_pack_v1.md`](../capabilities/computer_control_pack_v1.md)). |
+| **4 (future)** | **Windows** packaging + any retargeted local automation is TBD outside this removal milestone. |
 
 ---
 

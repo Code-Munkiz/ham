@@ -10,16 +10,12 @@
     "start": "electron .",
     "start:file": "electron .",
     "build:frontend": "npm run build --prefix ../frontend -- --base ./",
-    "pack:linux": "npm run build:frontend && electron-builder --linux",
-    "pack:linux:dir": "npm run build:frontend && electron-builder --linux --dir",
     "pack:win": "npm run build:frontend && electron-builder --win --x64",
     "pack:win:dir": "npm run build:frontend && electron-builder --win --x64 --dir",
     "pack:win:nsis": "npm run build:frontend && electron-builder --win --x64 -c.win.target=nsis",
-    "test:local-control": "node --test ./local_control_status.test.cjs ./local_control_policy.test.cjs ./local_control_audit.test.cjs ./local_control_sidecar_status.test.cjs ./local_control_sidecar_child.test.cjs ./local_control_sidecar_manager.test.cjs ./local_control_browser_url.test.cjs ./local_control_browser_mvp.test.cjs ./local_control_browser_real_cdp.test.cjs ./preload_contract.test.cjs"
+    "test:local-control": "node --test ./local_control_status.test.cjs ./local_control_policy.test.cjs ./local_control_audit.test.cjs ./local_control_sidecar_status.test.cjs ./local_control_sidecar_child.test.cjs ./local_control_sidecar_manager.test.cjs ./preload_contract.test.cjs"
   },
-  "dependencies": {
-    "ws": "^8.20.0"
-  },
+  "dependencies": {},
   "build": {
     "appId": "io.github.codemunkiz.ham-desktop",
     "productName": "HAM Desktop",
@@ -37,9 +33,6 @@
       "local_control_sidecar_status.cjs",
       "local_control_sidecar_child.cjs",
       "local_control_sidecar_manager.cjs",
-      "local_control_browser_url.cjs",
-      "local_control_browser_mvp.cjs",
-      "local_control_browser_real_cdp.cjs",
       "package.json",
       "default-public-api.json",
       "curated/**"
@@ -54,26 +47,6 @@
         ]
       }
     ],
-    "linux": {
-      "target": [
-        {
-          "target": "AppImage",
-          "arch": [
-            "x64"
-          ]
-        },
-        {
-          "target": "deb",
-          "arch": [
-            "x64"
-          ]
-        }
-      ],
-      "category": "Development",
-      "maintainer": "Code-Munkiz",
-      "synopsis": "HAM operator desktop shell (Electron)",
-      "description": "Thin Electron shell for the HAM dashboard. Requires a running Ham API (local or remote); see desktop/README.md."
-    },
     "win": {
       "signAndEditExecutable": false,
       "verifyUpdateCodeSignature": false,

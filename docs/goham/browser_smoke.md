@@ -1,48 +1,17 @@
-# GoHAM Managed Browser Smoke Checklist
+# GoHAM managed browser — smoke checklist (historical / future)
 
-GoHAM runs only in HAM Desktop with Local Control. It uses a separate managed
-Chrome profile, not the operator's default browser profile.
+**Current repo state (2026):** HAM Desktop **no longer** ships Electron IPC for managed Chromium, CDP observe flows, or workspace **GoHAM Mode** chat execution. The dedicated planning API **`POST /api/goham/planner`** remains on the Ham API as an optional, future-safe substrate (not tied to Desktop).
 
-## Demo Prompts
+Use **server-side** **`/api/browser*`** ([`src/api/browser_runtime.py`](../../src/api/browser_runtime.py)) for Playwright-backed automation on the API host.
 
-- `Open https://example.com and tell me what you see.`
-- `GoHAM, research MiniMax M2.5 OpenRouter free tier context window.`
-- `GoHAM, start at https://openrouter.ai and find information about MiniMax M2.5. Tell me whether it has a free tier and what context window is shown.`
+Below is a **retained checklist** for any future retargeted GoHAM surface (not shipped in this tree).
 
-## Smoke Checklist
+## Reference scenarios (not executed in-tree)
 
-- Observe path: Chrome opens visibly, leaves `about:blank`, navigates to the
-  requested URL, and posts the v0 bounded observation.
-- Search-first research path: GoHAM builds a DuckDuckGo URL directly, without
-  typing into a search box, then uses bounded observe / enumerate / scroll /
-  click-candidate actions.
-- Direct URL research path: strong research intent may start from safe search
-  when target terms are specific; observe-only direct URL prompts stay on the
-  direct observe path.
-- Pause / Resume / Take over: controls are visible during research and resume
-  the same managed browser session.
-- Stop cleanup: Stop GoHAM closes the managed Chrome session.
-- No unsafe actions: no generic type/key behavior, no form fill, no submit/post,
-  no login/purchase/download/upload/install.
-- Safety gates: candidates such as `Sign in`, `Log in`, `Get API Key`,
-  checkout/payment/billing, upload/download, permission/extension prompts, and
-  external app links are skipped or blocked with a short explanation.
-- Domain changes: ordinary search-result links may cross domains; the trail
-  should show the source and target domain and whether the move was allowed or
-  deferred.
-- Evidence honesty: missing terms report `insufficient_evidence` or
-  `budget_without_evidence`; search-provider title/query echo is not counted as
-  evidence.
-- Planner boundary: optional LLM-assisted planning uses the dedicated
-  non-persistent `POST /api/goham/planner/next-action` endpoint only when
-  `VITE_GOHAM_LLM_PLANNER=1` and `GOHAM_LLM_PLANNER_ENABLED=true`; unavailable
-  or rejected proposals fall back to rules-first planning and still pass through
-  candidate validation and safety gates.
-- Shop safety: Shop / Skills surfaces expose no execution buttons for GoHAM.
+- Bounded page observe from a dedicated profile (no default browser cookies).
+- Pause / resume / take-over style controls during long research (if reintroduced outside Electron local-control).
+- Evidence honesty: `insufficient_evidence` / bounded snippets only.
 
-## Evidence Scope
+## Planner API (may stay enabled)
 
-Research summaries may include page count, redacted URLs, titles, bounded
-evidence snippets from titles / URLs / candidate text, action counts, screenshot
-count, stop reason, limitations, and suggested next step. Do not paste full
-HTML, cookies, secrets, or raw page dumps.
+Optional LLM-assisted proposals may use **`POST /api/goham/planner/next-action`** when gated by server env — independent of Desktop.

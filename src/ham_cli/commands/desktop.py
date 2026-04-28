@@ -12,11 +12,10 @@ import typer
 
 from src.ham_cli.util import err, find_repo_root
 
-_PACK_LINUX = ["npm", "run", "pack:linux"]
 _PACK_WIN = ["npm", "run", "pack:win"]
 
+_LC_PHASE_POLICY_SIDECAR = "policy_sidecar_v1"
 _LC_PHASE2 = "policy_audit_kill_switch_only"
-_LC_PHASE4B_CLI = "browser_real_4b"
 
 
 def _cli_local_control_policy_skeleton() -> dict[str, object]:
@@ -79,35 +78,6 @@ def _cli_local_control_sidecar_skeleton() -> dict[str, object]:
     }
 
 
-def _cli_local_control_browser_mvp_skeleton(*, platform_status: str) -> dict[str, object]:
-    supported = platform_status == "linux_first"
-    return {
-        "kind": "ham_cli_desktop_local_control_browser_mvp_skeleton",
-        "supported": supported,
-        "armed": False,
-        "allow_loopback": False,
-        "session_running": False,
-        "gate_blocked_reason": "kill_switch_engaged" if supported else "platform_not_supported",
-        "note": "Live browser session is Electron main (HAM Desktop) only; CLI cannot start BrowserWindow.",
-    }
-
-
-def _cli_local_control_browser_real_skeleton(*, platform_status: str) -> dict[str, object]:
-    supported = platform_status == "linux_first"
-    return {
-        "kind": "ham_cli_desktop_local_control_browser_real_skeleton",
-        "supported": supported,
-        "armed": False,
-        "allow_loopback": False,
-        "managed_profile": True,
-        "cdp_localhost_only": True,
-        "uses_default_profile": False,
-        "session_running": False,
-        "gate_blocked_reason": "kill_switch_engaged" if supported else "platform_not_supported",
-        "note": "Managed Chromium + localhost CDP runs in HAM Desktop main only; CLI cannot spawn Chrome.",
-    }
-
-
 def _cli_sidecar_lifecycle_stub(operation: str) -> dict[str, object]:
     return {
         "kind": "ham_cli_desktop_local_control_sidecar_lifecycle",
@@ -143,11 +113,6 @@ def _run_pack(script: str, npm_args: list[str]) -> None:
         raise typer.Exit(code=proc.returncode)
 
 
-def run_package_linux() -> None:
-    """Build Linux AppImage/deb via electron-builder (same as npm run pack:linux)."""
-    _run_pack("linux", _PACK_LINUX)
-
-
 def run_package_win() -> None:
     """Build Windows portable via electron-builder (npm run pack:win)."""
     _run_pack("win", _PACK_WIN)
@@ -168,8 +133,8 @@ def run_desktop_local_control_status(*, json_out: bool) -> None:
 
     payload = {
         "kind": "ham_cli_desktop_local_control_status",
-        "schema_version": 6,
-        "phase": _LC_PHASE4B_CLI,
+        "schema_version": 7,
+        "phase": _LC_PHASE_POLICY_SIDECAR,
         "enabled": False,
         "spec_present": spec_present,
         "spec_relative_path": str(spec_rel).replace("\\", "/"),
@@ -180,17 +145,16 @@ def run_desktop_local_control_status(*, json_out: bool) -> None:
         "audit": _cli_local_control_audit_skeleton(),
         "kill_switch": {"engaged": True, "reason": "default_disabled"},
         "sidecar": _cli_local_control_sidecar_skeleton(),
-        "browser_mvp": _cli_local_control_browser_mvp_skeleton(platform_status=platform_status),
-        "browser_real": _cli_local_control_browser_real_skeleton(platform_status=platform_status),
         "capabilities": {
-            "browser_automation": "available_guarded" if platform_status == "linux_first" else "not_implemented",
-            "real_browser_cdp": "available_guarded" if platform_status == "linux_first" else "not_implemented",
+            "desktop_local_control": "policy_audit_sidecar",
+            "browser_automation": "not_shipped",
+            "real_browser_cdp": "not_shipped",
             "filesystem_access": "not_implemented",
             "shell_commands": "not_implemented",
             "app_window_control": "not_implemented",
             "mcp_adapters": "not_implemented",
         },
-        "note": "CLI mirrors Phase 4B aggregate; HAM Desktop runs 4A embedded browser + 4B managed Chromium/CDP IPC + policy v3 on disk.",
+        "note": "CLI mirrors desktop status v7: Local Control is policy/audit/kill-switch + inert sidecar; shipped browser automation was removed.",
     }
     if json_out:
         typer.echo(json.dumps(payload, indent=2))
@@ -234,26 +198,20 @@ def run_desktop_local_control_kill_switch_engage() -> None:
 
 
 def run_desktop_local_control_browser_status(*, json_out: bool) -> None:
-    """Static browser MVP + real-browser mirror (no Electron)."""
-    plat = sys.platform
-    if plat.startswith("linux"):
-        platform_status = "linux_first"
-    elif plat == "win32":
-        platform_status = "windows_planned"
-    else:
-        platform_status = "unsupported"
+    """Desktop managed-browser automation was removed; use Ham API server browser/runtime if needed."""
     bundle = {
         "kind": "ham_cli_desktop_local_control_browser_status_bundle",
-        "browser_mvp": _cli_local_control_browser_mvp_skeleton(platform_status=platform_status),
-        "browser_real": _cli_local_control_browser_real_skeleton(platform_status=platform_status),
+        "schema_version": 7,
+        "browser_automation": "not_shipped",
+        "real_browser_cdp": "not_shipped",
+        "note": "HAM Desktop no longer exposes managed-browser IPC. Use `/api/browser` and `src/api/browser_*` on the Ham API host for browser runtime.",
     }
     if json_out:
         typer.echo(json.dumps(bundle, indent=2))
         return
-    typer.echo("Desktop Local Control — browser (CLI mirror, read-only)")
-    typer.echo(f"  4A embedded: {bundle['browser_mvp']['supported']} · gate: {bundle['browser_mvp']['gate_blocked_reason']}")
-    typer.echo(f"  4B real CDP: {bundle['browser_real']['supported']} · gate: {bundle['browser_real']['gate_blocked_reason']}")
-    typer.echo(f"  {bundle['browser_mvp']['note']}")
+    typer.echo("Desktop Local Control — browser automation")
+    typer.echo("  Shipped Electron managed browser / GoHAM execution path has been removed from HAM Desktop.")
+    typer.echo("  Browser runtime for automation lives on the Ham API (`/api/browser*`), not in the Electron shell.")
 
 
 def run_desktop_local_control_sidecar(*, json_out: bool) -> None:

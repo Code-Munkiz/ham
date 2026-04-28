@@ -467,7 +467,7 @@
       "kind": "bundle",
       "display_name": "Computer Control / Local Operator",
       "summary": "Read-only pack: local computer-control roadmap, safety metadata, and prerequisites (Phase 1).",
-      "description": "First-party documentation bundle for Computer Control Pack v1. Phase 1 is observe-only at the product level: workspace Capability Directory visibility only. Shipped desktop managed-browser control (managed Chromium + localhost CDP) lives in HAM Desktop Settings → Display → Local Control only — navigate, reload (Phase 1A), screenshot, stop; not executable from this directory row or Shop. Defined in docs/desktop/local_control_v1.md (Linux first). No MCP activation, no Hermes or settings mutation from this pack. Cloud-hosted /api/browser is not the desktop local control product plane.",
+      "description": "First-party documentation bundle for Computer Control Pack v1. Phase 1 is observe-only at the product level: workspace Capability Directory visibility only. **HAM Desktop no longer ships managed Chromium + localhost CDP in the Electron shell** (legacy path removed); policy/audit/sidecar IPC remains. Server-side browser automation is **`/api/browser*`** on the Ham API — not the same product plane as Desktop Local Control. Defined in `docs/desktop/local_control_v1.md`. No MCP activation from this pack row.",
       "trust_tier": "first_party",
       "provenance": {
         "source_kind": "ham_repo",
@@ -495,7 +495,7 @@
         "notes": [
           "No computer control execution from this directory row.",
           "Does not invoke shell, MCP, or browser automation.",
-          "Managed browser actions (start, navigate, reload, screenshot, stop) run in HAM Desktop via Local Control IPC. GoHAM Mode v0 (workspace chat, HAM Desktop renderer only) may trigger the same managed-browser observe/summarize flow when the user opts in — not from Shop, not from API browser runtime, apply_available stays false.",
+          "HAM Desktop Renderer shows Local Control doctor rows only — **GoHAM/workspace managed-browser execution was removed**; `POST /api/goham/planner` may remain enabled as a standalone planning substrate.",
           "Cursor/Droid execution lanes remain separate; not a harness for this pack.",
           "desktop_local: planning token for Desktop Local Control v1 (docs/desktop/local_control_v1.md); not an executable backend in Phase 1."
         ]
@@ -549,8 +549,7 @@
         "mcp",
         "goham-future",
         "desktop-local",
-        "linux-first",
-        "windows-planned",
+        "windows-desktop",
         "permissioned",
         "guarded"
       ]

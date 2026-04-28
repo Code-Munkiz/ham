@@ -51,15 +51,7 @@ import {
 } from "./composerAttachmentHelpers";
 import { Button } from "@/components/ui/button";
 import { hamWorkspaceLogoUrl } from "@/lib/ham/publicAssets";
-import { getHamDesktopLocalControlApi } from "@/lib/ham/desktopBundleBridge";
-import { isHamDesktopShell } from "@/lib/ham/desktopConfig";
 import { cn } from "@/lib/utils";
-import { extractGohamUrl } from "../../goham/extractGohamUrl";
-import { planGohamResearchStart, type GohamSearchStart } from "../../goham/gohamSearchStrategy";
-import { runGohamObserveFlow, type GoHamTrailStep } from "../../goham/gohamObserveFlow";
-import { runGohamResearchFlow, shouldUseResearchLoop } from "../../goham/gohamResearchLoop";
-import { GoHamPanel } from "../../goham/GoHamPanel";
-import { GoHamSlice1DevPanel } from "../../goham/GoHamSlice1DevPanel";
 
 const VOICE_DEBUG_FLAG = "ham.voiceDebug";
 
@@ -121,7 +113,6 @@ export type WorkspaceChatScreenProps = {
 export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   const { embedMode = false } = props;
   const navigate = useNavigate();
-  const desktopGohamEligible = isHamDesktopShell();
   const chatScreenInstanceId = React.useRef(`chat-screen-${Math.random().toString(36).slice(2, 9)}`);
   const [searchParams] = useSearchParams();
   const [messages, setMessages] = React.useState<HwwMsgRow[]>([]);
@@ -141,83 +132,8 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   const [artifactRows, setArtifactRows] = React.useState<ChatInspectorArtifactRow[]>([]);
   /** When set, deep-link effect must not call `loadFromApi` for this session while the stream turn is active. */
   const streamTurnSessionRef = React.useRef<string | null>(null);
-  const gohamAbortRef = React.useRef(false);
-  const gohamPausedRef = React.useRef(false);
-  const gohamTakeoverRef = React.useRef(false);
-  const [gohamPaused, setGohamPaused] = React.useState(false);
-  const [gohamTakeover, setGohamTakeover] = React.useState(false);
-  /** Slice 3 — show Pause / Resume / Take over only during an active research loop run. */
-  const [gohamResearchUi, setGohamResearchUi] = React.useState(false);
   const endRef = React.useRef<HTMLDivElement | null>(null);
   const listWrapRef = React.useRef<HTMLDivElement | null>(null);
-
-  const [gohamGateHint, setGohamGateHint] = React.useState<string | null>(null);
-  const [gohamEnabled, setGohamEnabled] = React.useState(() => {
-    if (!desktopGohamEligible) return false;
-    if (typeof sessionStorage === "undefined") return false;
-    return sessionStorage.getItem("hww-goham-enabled") === "1";
-  });
-  const [gohamTrail, setGohamTrail] = React.useState<GoHamTrailStep[]>([]);
-  const [gohamActive, setGohamActive] = React.useState(false);
-
-  const gohamEffective = gohamEnabled && !gohamGateHint;
-
-  React.useEffect(() => {
-    if (!desktopGohamEligible) {
-      setGohamGateHint(null);
-      setGohamEnabled(false);
-      return;
-    }
-    const api = getHamDesktopLocalControlApi();
-    if (!api) {
-      setGohamGateHint(
-        "GoHAM Mode runs in HAM Desktop with Local Control. Use the packaged Electron app — not this browser tab.",
-      );
-      return;
-    }
-    let cancelled = false;
-    void api
-      .getStatus()
-      .then((s) => {
-        if (cancelled) return;
-        if (!s.browser_real?.supported) {
-          setGohamGateHint("Managed browser is unavailable here (Linux + HAM Desktop Phase 4B required).");
-        } else {
-          setGohamGateHint(null);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setGohamGateHint("Could not read Local Control status from HAM Desktop.");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [desktopGohamEligible]);
-
-  React.useEffect(() => {
-    if (gohamGateHint) {
-      setGohamEnabled(false);
-      try {
-        sessionStorage.removeItem("hww-goham-enabled");
-      } catch {
-        /* ignore */
-      }
-    }
-  }, [gohamGateHint]);
-
-  const setGohamEnabledPersist = React.useCallback((v: boolean) => {
-    if (!desktopGohamEligible) {
-      setGohamEnabled(false);
-      return;
-    }
-    setGohamEnabled(v);
-    try {
-      if (v) sessionStorage.setItem("hww-goham-enabled", "1");
-      else sessionStorage.removeItem("hww-goham-enabled");
-    } catch {
-      /* ignore */
-    }
-  }, [desktopGohamEligible]);
 
   const voiceWs = useVoiceWorkspaceSettingsOptional();
   const sttEnabledBySetting = voiceWs?.payload?.settings.stt.enabled ?? true;
@@ -476,217 +392,6 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     }
   }, []);
 
-  const handleGohamStop = React.useCallback(() => {
-    gohamAbortRef.current = true;
-    gohamPausedRef.current = false;
-    gohamTakeoverRef.current = false;
-    setGohamPaused(false);
-    setGohamTakeover(false);
-    setGohamResearchUi(false);
-    const api = getHamDesktopLocalControlApi();
-    if (api && typeof api.stopRealBrowserSession === "function") {
-      void api.stopRealBrowserSession();
-    }
-    setGohamActive(false);
-  }, []);
-
-  const sendGohamObserve = React.useCallback(
-    async (displayContent: string, url: string) => {
-      const api = getHamDesktopLocalControlApi();
-      if (!api) {
-        toast.error("GoHAM needs HAM Desktop with Local Control.", { duration: 8000 });
-        return;
-      }
-      gohamAbortRef.current = false;
-      setGohamActive(true);
-      setGohamTrail([]);
-      setSending(true);
-      setLoadErr(null);
-      const userRow: HwwMsgRow = {
-        id: `hww-user-${Date.now()}`,
-        role: "user",
-        content: displayContent,
-        timestamp: timeStr(),
-      };
-      const assistantPlaceId = `hww-assist-${Date.now()}`;
-      const assistantRow: HwwMsgRow = {
-        id: assistantPlaceId,
-        role: "assistant",
-        content: "",
-        timestamp: timeStr(),
-      };
-      setMessages((prev) => [...prev, userRow, assistantRow]);
-      setInspectorEvents((prev) =>
-        appendInspectorEvent(prev, {
-          atIso: new Date().toISOString(),
-          kind: "goham_observe_started",
-          status: "info",
-          summary: "GoHAM observe flow started (managed browser)",
-          meta: { url_redacted: url.replace(/\?.*$/, "") },
-        }),
-      );
-      let keepManagedBrowserOpen = false;
-      try {
-        const result = await runGohamObserveFlow({
-          api,
-          url,
-          onTrail: setGohamTrail,
-          shouldAbort: () => gohamAbortRef.current,
-        });
-        if (result.ok === true) {
-          keepManagedBrowserOpen = true;
-          setMessages((prev) =>
-            prev.map((m) => (m.id === assistantPlaceId ? { ...m, content: result.assistantText } : m)),
-          );
-          setInspectorEvents((prev) =>
-            appendInspectorEvent(prev, {
-              atIso: new Date().toISOString(),
-              kind: "goham_observe_completed",
-              status: "ok",
-              summary: "GoHAM observe flow completed",
-              meta: {},
-            }),
-          );
-        } else {
-          setGohamTrail(result.trailSteps);
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === assistantPlaceId
-                ? {
-                    ...m,
-                    content: `**GoHAM could not complete this run.**\n\n${result.userMessage}\n\nThe managed browser session was stopped. You can adjust Local Control in Settings and try again.`,
-                  }
-                : m,
-            ),
-          );
-          toast.error("GoHAM run failed — see message above.", { duration: 8000 });
-        }
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : "GoHAM failed unexpectedly.";
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === assistantPlaceId
-              ? { ...m, content: `**GoHAM error:** ${msg}` }
-              : m,
-          ),
-        );
-        toast.error(msg, { duration: 8000 });
-        void api.stopRealBrowserSession();
-      } finally {
-        gohamAbortRef.current = false;
-        setGohamActive(keepManagedBrowserOpen);
-        setSending(false);
-      }
-    },
-    [],
-  );
-
-  const sendGohamResearch = React.useCallback(
-    async (displayContent: string, url: string, searchStart?: GohamSearchStart | null) => {
-      const api = getHamDesktopLocalControlApi();
-      if (!api) {
-        toast.error("GoHAM needs HAM Desktop with Local Control.", { duration: 8000 });
-        return;
-      }
-      gohamAbortRef.current = false;
-      gohamPausedRef.current = false;
-      gohamTakeoverRef.current = false;
-      setGohamPaused(false);
-      setGohamTakeover(false);
-      setGohamResearchUi(true);
-      setGohamActive(true);
-      setGohamTrail([]);
-      setSending(true);
-      setLoadErr(null);
-      const userRow: HwwMsgRow = {
-        id: `hww-user-${Date.now()}`,
-        role: "user",
-        content: displayContent,
-        timestamp: timeStr(),
-      };
-      const assistantPlaceId = `hww-assist-${Date.now()}`;
-      const assistantRow: HwwMsgRow = {
-        id: assistantPlaceId,
-        role: "assistant",
-        content: "",
-        timestamp: timeStr(),
-      };
-      setMessages((prev) => [...prev, userRow, assistantRow]);
-      setInspectorEvents((prev) =>
-        appendInspectorEvent(prev, {
-          atIso: new Date().toISOString(),
-          kind: "goham_research_started",
-          status: "info",
-          summary: "GoHAM research loop started (managed browser)",
-          meta: { url_redacted: url.replace(/\?.*$/, "") },
-        }),
-      );
-      let keepManagedBrowserOpen = false;
-      try {
-        const result = await runGohamResearchFlow({
-          api,
-          url,
-          taskText: displayContent,
-          searchStart,
-          onTrail: setGohamTrail,
-          shouldAbort: () => gohamAbortRef.current,
-          getHoldState: () => {
-            if (gohamTakeoverRef.current) return "takeover";
-            if (gohamPausedRef.current) return "pause";
-            return "none";
-          },
-        });
-        if (result.ok === true) {
-          keepManagedBrowserOpen = true;
-          setMessages((prev) =>
-            prev.map((m) => (m.id === assistantPlaceId ? { ...m, content: result.assistantText } : m)),
-          );
-          setInspectorEvents((prev) =>
-            appendInspectorEvent(prev, {
-              atIso: new Date().toISOString(),
-              kind: "goham_research_completed",
-              status: "ok",
-              summary: "GoHAM research loop completed",
-              meta: {},
-            }),
-          );
-        } else {
-          setGohamTrail(result.trailSteps);
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === assistantPlaceId
-                ? {
-                    ...m,
-                    content: `**GoHAM could not complete this run.**\n\n${result.userMessage}\n\nThe managed browser session was stopped. You can adjust Local Control in Settings and try again.`,
-                  }
-                : m,
-            ),
-          );
-          toast.error("GoHAM run failed — see message above.", { duration: 8000 });
-        }
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : "GoHAM failed unexpectedly.";
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === assistantPlaceId ? { ...m, content: `**GoHAM error:** ${msg}` } : m,
-          ),
-        );
-        toast.error(msg, { duration: 8000 });
-        void api.stopRealBrowserSession();
-      } finally {
-        gohamAbortRef.current = false;
-        gohamPausedRef.current = false;
-        gohamTakeoverRef.current = false;
-        setGohamPaused(false);
-        setGohamTakeover(false);
-        setGohamResearchUi(false);
-        setGohamActive(keepManagedBrowserOpen);
-        setSending(false);
-      }
-    },
-    [],
-  );
-
   const send = React.useCallback(
     async (outboundUser: string | HamChatUserContentV1 | HamChatUserContentV2) => {
       const isV1 = typeof outboundUser === "object" && outboundUser && outboundUser.h === "ham_chat_user_v1";
@@ -910,32 +615,6 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     }
     if (!trimmed) return;
 
-    if (desktopGohamEligible && gohamEffective) {
-      const extractedUrl = extractGohamUrl(trimmed);
-      const researchMode = shouldUseResearchLoop(trimmed);
-      const plan = researchMode
-        ? planGohamResearchStart(trimmed, extractedUrl)
-        : { url: extractedUrl, search: null };
-      const url = plan.url;
-      if (!url) {
-        toast.error(
-          researchMode
-            ? "GoHAM research needs a topic or website it can turn into a safe search URL."
-            : "GoHAM Mode needs a website in your message — e.g. https://example.com or example.com. Turn GoHAM on (amber) first; it only runs in HAM Desktop on Linux.",
-          { duration: 12_000 },
-        );
-        return;
-      }
-      setInput("");
-      setAttachments([]);
-      if (researchMode) {
-        void sendGohamResearch(trimmed, url, plan.search);
-      } else {
-        void sendGohamObserve(trimmed, url);
-      }
-      return;
-    }
-
     void send(trimmed);
   };
 
@@ -1064,44 +743,6 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
             </>
           )}
         </div>
-        {desktopGohamEligible ? (
-          <>
-            <GoHamPanel
-              enabled={gohamEffective}
-              active={gohamActive}
-              trail={gohamTrail}
-              onStop={handleGohamStop}
-              gateHint={gohamGateHint}
-              researchControls={
-                gohamResearchUi && gohamActive
-                  ? {
-                      paused: gohamPaused,
-                      takeover: gohamTakeover,
-                      onPause: () => {
-                        gohamPausedRef.current = true;
-                        gohamTakeoverRef.current = false;
-                        setGohamPaused(true);
-                        setGohamTakeover(false);
-                      },
-                      onResume: () => {
-                        gohamPausedRef.current = false;
-                        gohamTakeoverRef.current = false;
-                        setGohamPaused(false);
-                        setGohamTakeover(false);
-                      },
-                      onTakeover: () => {
-                        gohamTakeoverRef.current = true;
-                        gohamPausedRef.current = false;
-                        setGohamTakeover(true);
-                        setGohamPaused(false);
-                      },
-                    }
-                  : undefined
-              }
-            />
-            <GoHamSlice1DevPanel visible={import.meta.env.DEV && gohamEffective} />
-          </>
-        ) : null}
         <div className="flex w-full justify-center px-3 md:px-6">
           <WorkspaceChatComposer
             value={input}
@@ -1123,10 +764,6 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
             sttUnavailableReason={sttUnavailableReason}
             sttMode={sttMode}
             onSttModeChange={handleSttModeChange}
-            gohamEnabled={desktopGohamEligible ? gohamEnabled : false}
-            onGohamEnabledChange={desktopGohamEligible ? setGohamEnabledPersist : undefined}
-            gohamToggleDisabled={desktopGohamEligible ? Boolean(gohamGateHint) : false}
-            gohamGateHint={desktopGohamEligible ? gohamGateHint : null}
           />
         </div>
       </div>
