@@ -14,6 +14,7 @@ import {
   HamAccessRestrictedError,
   postChatTranscribe,
   postChatUploadAttachment,
+  type HamChatExecutionMode,
 } from "@/lib/ham/api";
 import { CLIENT_MODEL_CATALOG_FALLBACK } from "@/lib/ham/modelCatalogFallback";
 import type { ModelCatalogPayload } from "@/lib/ham/types";
@@ -52,6 +53,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { hamWorkspaceLogoUrl } from "@/lib/ham/publicAssets";
 import { cn } from "@/lib/utils";
+import { isHamDesktopShell } from "@/lib/ham/desktopConfig";
 
 const VOICE_DEBUG_FLAG = "ham.voiceDebug";
 
@@ -113,6 +115,8 @@ export type WorkspaceChatScreenProps = {
 export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   const { embedMode = false } = props;
   const navigate = useNavigate();
+  const desktopShell = isHamDesktopShell();
+  const executionEnvironment: "desktop" | "web" = desktopShell ? "desktop" : "web";
   const chatScreenInstanceId = React.useRef(`chat-screen-${Math.random().toString(36).slice(2, 9)}`);
   const [searchParams] = useSearchParams();
   const [messages, setMessages] = React.useState<HwwMsgRow[]>([]);
@@ -124,6 +128,10 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   const [catalog, setCatalog] = React.useState<ModelCatalogPayload | null>(null);
   const [catalogLoading, setCatalogLoading] = React.useState(true);
   const [modelId, setModelId] = React.useState<string | null>(null);
+  const [executionModePreference, setExecutionModePreference] = React.useState<
+    "auto" | "browser" | "machine" | "chat"
+  >("auto");
+  const [executionMode, setExecutionMode] = React.useState<HamChatExecutionMode | null>(null);
   const [projectId, setProjectId] = React.useState<string | null>(null);
   const [attachments, setAttachments] = React.useState<WorkspaceComposerAttachment[]>([]);
   const [voiceTranscribing, setVoiceTranscribing] = React.useState(false);
@@ -457,6 +465,8 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
             workbench_mode: "agent",
             worker: "builder",
             max_mode: false,
+            execution_mode_preference: executionModePreference,
+            execution_environment: executionEnvironment,
           },
           {
             onSession: (sid) => {
@@ -489,6 +499,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
           streamAuth,
         );
         setSessionId(res.session_id);
+        setExecutionMode(res.execution_mode ?? null);
         setMessages(
           res.messages.map((m, i) => ({
             id: `${res.session_id}-done-${i}-${m.role}`,
@@ -528,6 +539,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
             new Date().toISOString(),
             res.actions,
             res.operator_result ?? null,
+            res.execution_mode ?? null,
           ),
         );
       } catch (err) {
@@ -570,7 +582,17 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         setSending(false);
       }
     },
-    [embedMode, sending, voiceTranscribing, sessionId, chatModelIdForApi, projectId, navigate],
+    [
+      embedMode,
+      sending,
+      voiceTranscribing,
+      sessionId,
+      chatModelIdForApi,
+      projectId,
+      navigate,
+      executionModePreference,
+      executionEnvironment,
+    ],
   );
 
   const onFormSubmit = () => {
@@ -656,6 +678,42 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
+            <div className="hidden items-center gap-2 rounded-lg border border-white/[0.1] bg-white/[0.04] px-2.5 py-1.5 md:flex">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-white/55">Execution</span>
+              <select
+                value={executionModePreference}
+                onChange={(e) =>
+                  setExecutionModePreference(
+                    e.target.value as "auto" | "browser" | "machine" | "chat",
+                  )
+                }
+                className="hww-input rounded bg-transparent text-[11px] text-white/90 outline-none"
+                aria-label="Execution mode preference"
+                title="Control how HAM routes browser vs machine vs chat execution"
+              >
+                <option value="auto">Auto</option>
+                <option value="browser">Browser</option>
+                <option value="machine" disabled={!desktopShell}>
+                  Machine{desktopShell ? "" : " (desktop only)"}
+                </option>
+                <option value="chat">Chat</option>
+              </select>
+              <span
+                className={cn(
+                  "rounded px-1.5 py-0.5 text-[10px] font-medium",
+                  executionMode?.selected_mode === "browser"
+                    ? "bg-emerald-500/15 text-emerald-200/90"
+                    : executionMode?.selected_mode === "machine"
+                    ? "bg-amber-500/15 text-amber-200/90"
+                    : "bg-white/[0.08] text-white/70",
+                )}
+                title={executionMode?.reason || "Execution mode is determined after the next turn."}
+              >
+                {executionMode
+                  ? `${executionMode.selected_mode}${executionMode.browser_adapter ? ` (${executionMode.browser_adapter})` : ""}`
+                  : "pending"}
+              </span>
+            </div>
             <button
               type="button"
               onClick={() => {
@@ -686,6 +744,37 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
             </button>
           </div>
         </header>
+        <div className="flex items-center justify-between gap-2 border-b border-white/[0.06] bg-[#030a10]/80 px-4 py-2 md:hidden">
+          <div className="min-w-0">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-white/55">Execution</p>
+            <p
+              className="truncate text-[10px] text-white/45"
+              title={executionMode?.reason || "Execution mode is determined after the next turn."}
+            >
+              {executionMode
+                ? `${executionMode.selected_mode}${executionMode.browser_adapter ? ` (${executionMode.browser_adapter})` : ""}`
+                : "pending"}
+            </p>
+          </div>
+          <select
+            value={executionModePreference}
+            onChange={(e) =>
+              setExecutionModePreference(
+                e.target.value as "auto" | "browser" | "machine" | "chat",
+              )
+            }
+            className="hww-input rounded-md border border-white/[0.1] bg-white/[0.04] px-2 py-1 text-[11px] text-white/90 outline-none"
+            aria-label="Execution mode preference (mobile)"
+            title="Control how HAM routes browser vs machine vs chat execution"
+          >
+            <option value="auto">Auto</option>
+            <option value="browser">Browser</option>
+            <option value="machine" disabled={!desktopShell}>
+              Machine{desktopShell ? "" : " (desktop only)"}
+            </option>
+            <option value="chat">Chat</option>
+          </select>
+        </div>
         <div
           ref={listWrapRef}
           className="hww-scroll flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto"
@@ -784,6 +873,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
               messages={messages}
               composerAttachments={attachments}
               artifactRows={artifactRows}
+              executionMode={executionMode}
               onClose={() => {
                 setInspectorOpen(false);
               }}

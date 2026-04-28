@@ -74,8 +74,8 @@ This is a **design target** for implementation phases; Phase 0 does not add IPC,
 
 ## Desktop packaging implications
 
-- **Linux first:** AppImage / deb-style artifacts per existing desktop packaging docs.
-- **Windows second:** Portable / NSIS-style flows later; plan for **code signing**, AV false positives, and **SmartScreen** friction for unsigned or new publishers.
+- **Linux installers:** **AppImage/deb pipelines were removed** from this repo; development uses `npm start` only.
+- **Windows:** Portable / NSIS via `npm run pack:win*`; plan for **code signing**, AV false positives, and **SmartScreen** friction for unsigned or new publishers.
 - **macOS:** Out of scope unless approved separately.
 
 ---

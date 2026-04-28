@@ -5,7 +5,7 @@
  * Transcript attachment rows: `ham_chat_user_v2` / v1 JSON first, then plain-text marker regex for
  * older sessions — not used for new sends (new sends prefer v2 after upload).
  */
-import type { HamOperatorResult, HamUiAction } from "@/lib/ham/api";
+import type { HamChatExecutionMode, HamOperatorResult, HamUiAction } from "@/lib/ham/api";
 import { tryParseHamChatUserV1String, tryParseHamChatUserV2String } from "@/lib/ham/chatUserContent";
 import {
   formatAttachmentByteSize,
@@ -176,6 +176,7 @@ export function mergeArtifactRowsAfterTurn(
   atIso: string,
   actions: HamUiAction[] | undefined,
   operatorResult: HamOperatorResult | null | undefined,
+  executionMode: HamChatExecutionMode | null | undefined,
 ): ChatInspectorArtifactRow[] {
   const next = [...prev];
   let n = 0;
@@ -216,6 +217,22 @@ export function mergeArtifactRowsAfterTurn(
         detail: operatorResult.blocking_reason?.trim() || undefined,
       });
     }
+  }
+
+  if (executionMode) {
+    next.push({
+      id: `mode-${Date.now()}`,
+      atIso,
+      title: truncate(
+        `Execution mode: ${executionMode.selected_mode}${executionMode.browser_adapter ? ` (${executionMode.browser_adapter})` : ""}`,
+        72,
+      ),
+      typeLabel: "Execution",
+      source: executionMode.auto_selected ? "auto_router" : "user_preference",
+      status: "ok",
+      navigateTo: null,
+      detail: executionMode.reason,
+    });
   }
 
   return next.length > MAX_ARTIFACT_ROWS ? next.slice(-MAX_ARTIFACT_ROWS) : next;

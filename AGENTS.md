@@ -27,6 +27,7 @@ Shipped muscle today centers on **Bridge + Droid executor** (`src/tools/droid_ex
 
 ## Architecture
 
+- `.cursor/rules/ham-local-control-boundary.mdc` — local control boundary (web UI + local Windows bridge, mandatory desktop/IDE lane, `chat → browser-real → machine` escalation, ancillary cloud browser, non-negotiable safety invariants; verify-first, minimal-diff, preserve Linux behavior)
 - `VISION.md` — canonical architecture, core pillars, design principles
 - **`src/ham_cli/`** — HAM operator CLI v1 (`python -m src.ham_cli` or `./scripts/ham`): `doctor`, `status`, `api status`, `desktop package linux|win` — diagnostics and packaging helpers; not chat/missions (see `main.py` for bridge/Hermes one-shot CLI)
 - `docs/CONTROL_PLANE_RUN.md` — `ControlPlaneRun` substrate (v1 file-backed: `src/persistence/control_plane_run.py`): durable provider-neutral launch record (Cursor/Droid) + Cursor status updates, separate from bridge runs and audit JSONL; read API: `src/api/control_plane_runs.py` (`GET /api/control-plane-runs`, `GET /api/control-plane-runs/{ham_run_id}`) — not orchestration, queues, or mission graphs

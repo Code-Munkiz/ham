@@ -1,0 +1,61 @@
+---
+description: HAM local control must target the user’s local Windows runtime with a mandatory desktop lane; escalation chat → browser-real → machine; cloud browser is ancillary. Agents must verify before patching and preserve Linux behavior.
+alwaysApply: true
+---
+
+# HAM Local Control Boundary Rule
+
+HAM local browser/machine control must target the end user’s local Windows runtime, not a hosted VM/browser as the primary product path.
+
+## Required product lanes
+
+HAM must support both:
+
+1. **Web app lane**
+   - HAM Web App acts as the command UI.
+   - It must pair with a trusted local Windows runtime/bridge.
+   - The local runtime performs browser and machine control.
+   - The web app must not pretend it can directly control the user’s machine without the local bridge.
+
+2. **Desktop / IDE lane**
+   - HAM Desktop/IDE app must include, launch, or connect to the same local Windows control runtime.
+   - This lane is mandatory, not optional.
+
+## Control sequence
+
+Escalation model:
+
+`chat → local browser-real → local machine control`
+
+- **Browser-real** is the first control rung for web/navigation tasks.
+- **Machine control** is an escalation path when browser-real is blocked, partial, or insufficient.
+
+## Cloud/hosted browser runtime
+
+Cloud Run or VM browser runtime may be used for hosted web-task support, API metadata validation, or non-local automation, but **it is not the primary end-user control plane**.
+
+Do not optimize Phase 3 around Cloud Run controlling a browser unless explicitly requested.
+
+## Safety invariants
+
+Never weaken:
+
+- Kill switch.
+- Armed Local Control requirement.
+- Browser-real permission requirement.
+- URL policy from `desktop/local_control_browser_url.cjs`.
+- Dedicated HAM browser profile.
+- localhost-only CDP.
+- Bounded screenshots.
+- IPC channel compatibility.
+- Deny-by-default behavior.
+
+Never use the user’s default browser profile.
+
+Never expose raw profile paths to renderer payloads.
+
+Never add broad inbound network listeners for local control.
+
+## Implementation rule
+
+Verify first; patch only confirmed gaps; preserve Linux GoHAM behavior; keep changes minimal-diff.

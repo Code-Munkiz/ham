@@ -37,6 +37,7 @@ import {
   type ChatInspectorArtifactRow,
   type ChatInspectorFileRow,
 } from "./workspaceInspectorChatDerived";
+import type { HamChatExecutionMode } from "@/lib/ham/api";
 
 type TabId = "activity" | "artifacts" | "files" | "memory" | "skills" | "logs";
 
@@ -56,6 +57,7 @@ type WorkspaceChatInspectorPanelProps = {
   messages: HwwMsgRow[];
   composerAttachments: WorkspaceComposerAttachment[];
   artifactRows: ChatInspectorArtifactRow[];
+  executionMode: HamChatExecutionMode | null;
 };
 
 const SKILL_BUILTIN = new Set(["ham-local-docs", "ham-local-plan"]);
@@ -807,6 +809,7 @@ export function WorkspaceChatInspectorPanel({
   messages,
   composerAttachments,
   artifactRows,
+  executionMode,
 }: WorkspaceChatInspectorPanelProps) {
   const [activeTab, setActiveTab] = React.useState<TabId>("activity");
   const [memoryState, setMemoryState] = React.useState<MemoryInspectorState>({ status: "idle" });
@@ -894,6 +897,15 @@ export function WorkspaceChatInspectorPanel({
           ) : (
             <p className="mt-0.5 text-[10px] text-white/45">Start chatting to create a session</p>
           )}
+          {executionMode ? (
+            <p className="mt-1 text-[10px] text-white/55">
+              Execution:{" "}
+              <span className="font-medium text-white/80">
+                {executionMode.selected_mode}
+                {executionMode.browser_adapter ? ` (${executionMode.browser_adapter})` : ""}
+              </span>
+            </p>
+          ) : null}
         </div>
         <Button
           type="button"

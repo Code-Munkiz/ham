@@ -2,7 +2,7 @@ import type { HermesDesktopPresetId } from "./hermesDesktopPresets";
 
 /**
  * HAM Desktop only: `preload.cjs` exposes `window.__HAM_DESKTOP_BUNDLE__` (Hermes CLI probe, curated files).
- * Local Control also uses `window.hamDesktop.localControl` (policy, audit, kill-switch, sidecar; no browser automation).
+ * Local Control also uses `window.hamDesktop.localControl` (same narrow bridge object).
  */
 export type HermesCliProbeResult =
   | { ok: true; versionLine: string }
@@ -42,6 +42,108 @@ export type HamDesktopLocalControlPolicyStatus = {
   updated_at: string;
 };
 
+/** Must match `BROWSER_MVP_KILL_SWITCH_RELEASE_TOKEN` in desktop/local_control_policy.cjs */
+export const HAM_DESKTOP_BROWSER_MVP_KILL_SWITCH_RELEASE = "BROWSER_MVP_KILL_SWITCH_RELEASE";
+
+export type HamDesktopBrowserMvpStatus = {
+  kind: "ham_desktop_local_control_browser_mvp_status";
+  supported: boolean;
+  armed: boolean;
+  allow_loopback: boolean;
+  session_running: boolean;
+  title: string;
+  display_url: string;
+  gate_blocked_reason: string | null;
+};
+
+export type HamDesktopBrowserMvpPublic = {
+  kind: "ham_desktop_local_control_browser_mvp_public";
+  running: boolean;
+  title: string;
+  display_url: string;
+  armed: boolean;
+  allow_loopback: boolean;
+  gate_blocked_reason: string | null;
+  kill_switch_engaged: boolean;
+};
+
+export type HamDesktopBrowserRealStatus = {
+  kind: "ham_desktop_local_control_browser_real_status";
+  supported: boolean;
+  armed: boolean;
+  allow_loopback: boolean;
+  managed_profile: boolean;
+  cdp_localhost_only: boolean;
+  uses_default_profile: boolean;
+  session_running: boolean;
+  title: string;
+  display_url: string;
+  gate_blocked_reason: string | null;
+};
+
+export type HamDesktopBrowserRealPublic = {
+  kind: "ham_desktop_local_control_browser_real_public";
+  running: boolean;
+  title: string;
+  display_url: string;
+  armed: boolean;
+  allow_loopback: boolean;
+  managed_profile: boolean;
+  cdp_localhost_only: boolean;
+  gate_blocked_reason: string | null;
+  kill_switch_engaged: boolean;
+};
+
+export type HamDesktopBrowserSessionResult =
+  | { ok: true; idempotent?: boolean }
+  | { ok: false; blocked: true; reason: string }
+  | { ok: false; error: string };
+
+export type HamDesktopBrowserScreenshotResult =
+  | { ok: true; data_url: string }
+  | { ok: false; blocked?: boolean; reason?: string; error?: string };
+
+/** GoHAM v1 Slice 1 — compact page observe (no DOM dump). */
+export type HamDesktopRealBrowserObserveCompactResult =
+  | {
+      ok: true;
+      title: string;
+      url: string;
+      display_url: string;
+      viewport?: {
+        innerWidth: number;
+        innerHeight: number;
+        scrollX: number;
+        scrollY: number;
+      };
+    }
+  | { ok: false; blocked?: boolean; reason?: string; error?: string };
+
+export type HamDesktopRealBrowserWaitResult =
+  | { ok: true; waited_ms: number }
+  | { ok: false; blocked?: boolean; reason?: string; error?: string };
+
+export type HamDesktopRealBrowserScrollResult =
+  | { ok: true; delta_applied: number; scroll_y?: number; inner_height?: number }
+  | { ok: false; blocked?: boolean; reason?: string; error?: string };
+
+export type HamDesktopRealBrowserClickCandidate = {
+  id: string;
+  tag: string;
+  role: string | null;
+  text: string;
+  risk: string;
+  box: { x: number; y: number; w: number; h: number };
+};
+
+export type HamDesktopRealBrowserEnumerateCandidatesResult =
+  | { ok: true; candidates: HamDesktopRealBrowserClickCandidate[]; count: number }
+  | { ok: false; blocked?: boolean; reason?: string; error?: string };
+
+export type HamDesktopRealBrowserClickCandidateResult =
+  | { ok: true }
+  | { ok: false; blocked?: boolean; reason?: string; error?: string };
+
 export type HamDesktopLocalControlAuditStatus = {
   kind: "ham_desktop_local_control_audit_status";
   available: boolean;
@@ -76,7 +178,7 @@ export type HamDesktopSidecarHealthResult =
   | { ok: true; result?: unknown }
   | { ok: false; reason: string };
 
-/** Payload from Electron main — doctor + policy/audit/sidecar; no browser sessions. */
+/** Payload from Electron main — doctor + Phase 2 skeleton; no filesystem paths. */
 export type HamDesktopLocalControlStatus = {
   kind: "ham_desktop_local_control_status";
   schema_version: number;
@@ -99,6 +201,8 @@ export type HamDesktopLocalControlStatus = {
   audit: HamDesktopLocalControlAuditStatus;
   kill_switch: { engaged: boolean; reason: string };
   sidecar: HamDesktopLocalControlSidecarStatus;
+  browser_mvp: HamDesktopBrowserMvpStatus;
+  browser_real: HamDesktopBrowserRealStatus;
   capabilities: Record<string, string>;
   warnings: string[];
   non_goals: string[];
@@ -120,6 +224,25 @@ export type HamDesktopLocalControlApi = {
   stopSidecar: () => Promise<HamDesktopSidecarStopResult>;
   startSidecar: () => Promise<HamDesktopSidecarStartResult>;
   engageKillSwitch: () => Promise<HamDesktopLocalControlKillSwitchEngageResult>;
+  armBrowserOnlyControl: () => Promise<{ ok: boolean }>;
+  releaseKillSwitchForBrowserMvp: (token: string) => Promise<{ ok: boolean; error?: string }>;
+  getBrowserStatus: () => Promise<HamDesktopBrowserMvpPublic>;
+  startBrowserSession: () => Promise<HamDesktopBrowserSessionResult>;
+  navigateBrowser: (url: string) => Promise<HamDesktopBrowserSessionResult>;
+  captureBrowserScreenshot: () => Promise<HamDesktopBrowserScreenshotResult>;
+  stopBrowserSession: () => Promise<HamDesktopBrowserSessionResult>;
+  armRealBrowserControl: () => Promise<{ ok: boolean }>;
+  getRealBrowserStatus: () => Promise<HamDesktopBrowserRealPublic>;
+  startRealBrowserSession: () => Promise<HamDesktopBrowserSessionResult>;
+  navigateRealBrowser: (url: string) => Promise<HamDesktopBrowserSessionResult>;
+  reloadRealBrowser: () => Promise<HamDesktopBrowserSessionResult>;
+  captureRealBrowserScreenshot: () => Promise<HamDesktopBrowserScreenshotResult>;
+  realBrowserObserveCompact: () => Promise<HamDesktopRealBrowserObserveCompactResult>;
+  realBrowserWaitMs: (ms: number) => Promise<HamDesktopRealBrowserWaitResult>;
+  realBrowserScrollVertical: (deltaY: number) => Promise<HamDesktopRealBrowserScrollResult>;
+  realBrowserEnumerateClickCandidates: () => Promise<HamDesktopRealBrowserEnumerateCandidatesResult>;
+  realBrowserClickCandidate: (candidateId: string) => Promise<HamDesktopRealBrowserClickCandidateResult>;
+  stopRealBrowserSession: () => Promise<HamDesktopBrowserSessionResult>;
 };
 
 export type HamDesktopBundleApi = {
