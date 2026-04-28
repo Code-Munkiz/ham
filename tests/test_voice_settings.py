@@ -41,6 +41,7 @@ def test_get_returns_defaults_and_capabilities(client: TestClient, monkeypatch: 
     assert j["settings"]["tts"]["provider"] == "edge"
     assert j["settings"]["tts"]["voice"] == "en-US-JennyNeural"
     assert j["settings"]["stt"]["provider"] == "openai"
+    assert j["settings"]["stt"]["mode"] == "auto"
     assert j["capabilities"]["tts"]["available"] is True
     assert j["capabilities"]["stt"]["available"] is True
     assert any(v["id"] == "en-US-JennyNeural" for v in j["capabilities"]["tts"]["voices"])
@@ -73,6 +74,30 @@ def test_patch_saves_and_round_trips(client: TestClient, monkeypatch: pytest.Mon
 
     r2 = client.get("/api/workspace/voice-settings")
     assert r2.json()["settings"]["tts"]["enabled"] is False
+
+
+def test_patch_saves_stt_mode(client: TestClient) -> None:
+    r = client.patch("/api/workspace/voice-settings", json={"stt": {"mode": "live"}})
+    assert r.status_code == 200
+    assert r.json()["settings"]["stt"]["mode"] == "live"
+
+    r2 = client.patch("/api/workspace/voice-settings", json={"stt": {"mode": "record"}})
+    assert r2.status_code == 200
+    assert r2.json()["settings"]["stt"]["mode"] == "record"
+
+
+def test_patch_rejects_invalid_stt_mode(client: TestClient) -> None:
+    r = client.patch("/api/workspace/voice-settings", json={"stt": {"mode": "invalid"}})
+    assert r.status_code == 422
+
+
+def test_existing_settings_without_mode_defaults_to_auto(client: TestClient) -> None:
+    import src.api.workspace_voice_settings as wvs
+
+    wvs._STORE.put_raw("default", {"stt": {"enabled": True, "provider": "openai"}})
+    r = client.get("/api/workspace/voice-settings")
+    assert r.status_code == 200
+    assert r.json()["settings"]["stt"]["mode"] == "auto"
 
 
 def test_patch_rejects_bad_tts_provider(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -14,7 +14,7 @@ from src.ham.transcription_config import transcription_runtime_configured
 def default_voice_settings() -> dict[str, Any]:
     return {
         "tts": {"enabled": True, "provider": "edge", "voice": "en-US-JennyNeural"},
-        "stt": {"enabled": True, "provider": "openai"},
+        "stt": {"enabled": True, "provider": "openai", "mode": "auto"},
     }
 
 
@@ -50,6 +50,7 @@ class SttSettingsModel(BaseModel):
 
     enabled: bool = True
     provider: Literal["openai"] = "openai"
+    mode: Literal["auto", "live", "record"] = "auto"
 
 
 class SavedVoiceSettings(BaseModel):
@@ -57,13 +58,14 @@ class SavedVoiceSettings(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    tts: TtsSettingsModel = Field(default_factory=lambda: TtsSettingsModel())
-    stt: SttSettingsModel = Field(default_factory=lambda: SttSettingsModel())
+    tts: TtsSettingsModel = Field(default_factory=TtsSettingsModel)
+    stt: SttSettingsModel = Field(default_factory=SttSettingsModel)
 
     @model_validator(mode="after")
     def _validate_voices(self) -> SavedVoiceSettings:
-        if self.tts.voice not in ALLOWED_EDGE_VOICES:
-            raise ValueError(f"Unsupported TTS voice: {self.tts.voice!r}")
+        tts = self.tts
+        if isinstance(tts, TtsSettingsModel) and tts.voice not in ALLOWED_EDGE_VOICES:
+            raise ValueError(f"Unsupported TTS voice: {tts.voice!r}")
         return self
 
 
@@ -80,6 +82,7 @@ class SttPatch(BaseModel):
 
     enabled: bool | None = None
     provider: Literal["openai"] | None = None
+    mode: Literal["auto", "live", "record"] | None = None
 
 
 class VoiceSettingsPatchBody(BaseModel):

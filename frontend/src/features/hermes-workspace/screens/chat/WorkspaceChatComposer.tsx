@@ -57,6 +57,8 @@ type WorkspaceChatComposerProps = {
   /** When false, mic is off (persisted workspace Voice → STT disabled). Default true if omitted. */
   sttDictationEnabled?: boolean;
   sttUnavailableReason?: string | null;
+  sttMode?: "auto" | "live" | "record";
+  onSttModeChange?: (mode: "auto" | "live" | "record") => Promise<void> | void;
   /** GoHAM Mode v0 — opt-in managed browser observe flow (HAM Desktop only). */
   gohamEnabled?: boolean;
   onGohamEnabledChange?: (enabled: boolean) => void;
@@ -64,7 +66,7 @@ type WorkspaceChatComposerProps = {
   gohamGateHint?: string | null;
 };
 
-type VoiceUiState = "idle" | "recording" | "stopping" | "transcribing" | "error";
+type VoiceUiState = "idle" | "recording" | "live" | "stopping" | "transcribing" | "error";
 
 function chatModelCandidates(c: ModelCatalogPayload | null): ModelCatalogItem[] {
   if (!c?.items?.length) return [];
@@ -105,6 +107,8 @@ export function WorkspaceChatComposer({
   onModelIdChange,
   sttDictationEnabled = true,
   sttUnavailableReason = null,
+  sttMode = "auto",
+  onSttModeChange,
   gohamEnabled = false,
   onGohamEnabledChange,
   gohamToggleDisabled = false,
@@ -131,9 +135,14 @@ export function WorkspaceChatComposer({
     [],
   );
 
+  const [liveListening, setLiveListening] = React.useState(false);
+  const liveBaseDraftRef = React.useRef<string>("");
+  const liveCommittedDraftRef = React.useRef<string>("");
+  const liveInterimDraftRef = React.useRef<string>("");
   const voiceRecording = voiceState === "recording";
   const voiceStopping = voiceState === "stopping";
-  const voiceBusy = voiceRecording || voiceStopping || voiceTranscribing;
+  const voiceLive = voiceState === "live";
+  const voiceBusy = voiceRecording || voiceStopping || voiceTranscribing || voiceLive;
 
   const composerInstanceId = React.useRef(`composer-${Math.random().toString(36).slice(2, 9)}`);
   const stopVoiceRecorderRef = React.useRef<(() => void) | null>(null);
@@ -223,12 +232,26 @@ export function WorkspaceChatComposer({
   }, [voiceRecording]);
 
   React.useEffect(() => {
+    if (!liveListening) return;
+    transitionVoiceState("live", "live_dictation_started");
+    setVoiceBanner(null);
+  }, [liveListening, transitionVoiceState]);
+
+  React.useEffect(() => {
+    if (liveListening) return;
+    setVoiceState((prev) => {
+      if (prev === "live") return "idle";
+      return prev;
+    });
+  }, [liveListening]);
+
+  React.useEffect(() => {
     if (voiceTranscribing) {
       transitionVoiceState("transcribing", "transcribe_started");
       return;
     }
     setVoiceState((prev) => {
-      if (prev === "transcribing" || prev === "stopping") {
+      if (prev === "transcribing" || prev === "stopping" || prev === "live") {
         pushVoiceDebug({
           event: "voice.state.transition",
           component: "WorkspaceChatComposer",
@@ -357,7 +380,7 @@ export function WorkspaceChatComposer({
     (ev?: React.SyntheticEvent) => {
       ev?.preventDefault?.();
       ev?.stopPropagation?.();
-      if (!voiceRecording || voiceTranscribing) return;
+      if ((!voiceRecording && !voiceLive) || voiceTranscribing) return;
       pushVoiceDebug({
         event: "voice.stop.banner_click",
         component: "WorkspaceChatComposer",
@@ -372,8 +395,23 @@ export function WorkspaceChatComposer({
       });
       stopVoiceRecorderRef.current?.();
     },
-    [beginStopRequest, voiceRecording, voiceTranscribing],
+    [beginStopRequest, voiceLive, voiceRecording, voiceTranscribing],
   );
+
+  const composeLiveDraft = React.useCallback(() => {
+    const base = liveBaseDraftRef.current.trim();
+    const committed = liveCommittedDraftRef.current.trim();
+    const interim = liveInterimDraftRef.current.trim();
+    const body = [base, committed, interim].filter(Boolean).join(" ");
+    return body;
+  }, []);
+
+  const appendLiveFinalChunk = React.useCallback((chunk: string) => {
+    const clean = chunk.replace(/\s+/g, " ").trim();
+    if (!clean) return;
+    const prior = liveCommittedDraftRef.current.trim();
+    liveCommittedDraftRef.current = prior ? `${prior} ${clean}` : clean;
+  }, []);
 
   const captureComposerPointer = React.useCallback((ev: React.SyntheticEvent) => {
     const target = ev.target as HTMLElement | null;
@@ -455,12 +493,28 @@ export function WorkspaceChatComposer({
             </div>
           ) : null}
 
-          {(voiceRecording || voiceStopping || voiceTranscribing) && (
+          {(voiceRecording || voiceStopping || voiceTranscribing || voiceLive) && (
             <div
               className="flex items-center gap-1.5 border-b border-white/[0.06] px-3 py-1.5 text-[10px] font-medium uppercase tracking-wide"
               role="status"
             >
-              {voiceTranscribing || voiceStopping ? (
+              {voiceLive ? (
+                <>
+                  <span className="inline-flex h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-emerald-400" />
+                  <button
+                    type="button"
+                    onPointerDownCapture={triggerBannerStop}
+                    onMouseDownCapture={triggerBannerStop}
+                    onClick={triggerBannerStop}
+                    className="pointer-events-auto rounded px-1 py-0.5 text-left text-emerald-100/90 underline-offset-2 hover:bg-emerald-400/10 hover:underline"
+                    aria-label="Stop live dictation"
+                    data-hww-voice-button="live-banner-stop"
+                    data-hww-voice-state="live"
+                  >
+                    Listening… live dictation
+                  </button>
+                </>
+              ) : voiceTranscribing || voiceStopping ? (
                 <>
                   <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-emerald-300" />
                   <span className="text-emerald-200/90">{voiceStopping ? "Stopping…" : "Transcribing…"}</span>
@@ -601,11 +655,18 @@ export function WorkspaceChatComposer({
                   "flex shrink-0 items-center",
                   voiceTranscribing && "pointer-events-none opacity-40",
                 )}
-                title="Voice — record, then HAM transcribes into the field"
+                title={
+                  sttMode === "record"
+                    ? "Record then transcribe"
+                    : sttMode === "live"
+                      ? "Dictate live"
+                      : "Auto dictation"
+                }
               >
                 <WorkspaceVoiceMessageInput
                   compact
                   hidePreview
+                  mode={sttMode}
                   disabled={sending || voiceTranscribing || disabled || sttDictationEnabled === false}
                   disabledReason={
                     sttDictationEnabled === false
@@ -614,6 +675,9 @@ export function WorkspaceChatComposer({
                       : undefined
                   }
                   onRecordingChange={(isRecording) => {
+                    if (liveListening) {
+                      return;
+                    }
                     pushVoiceDebug({
                       event: "voice.child.isRecording.signal",
                       component: "WorkspaceChatComposer",
@@ -679,6 +743,33 @@ export function WorkspaceChatComposer({
                   }}
                   onVoiceMessage={(blob) => {
                     void onVoiceBlob(blob);
+                  }}
+                  onModeChange={(mode) => {
+                    void onSttModeChange?.(mode);
+                  }}
+                  onLiveListeningChange={(active) => {
+                    setLiveListening(active);
+                    if (!active) {
+                      onChange(composeLiveDraft());
+                    } else {
+                      liveBaseDraftRef.current = value;
+                      liveCommittedDraftRef.current = "";
+                      liveInterimDraftRef.current = "";
+                    }
+                  }}
+                  onLiveInterimChange={(interim) => {
+                    liveInterimDraftRef.current = interim;
+                    onChange(composeLiveDraft());
+                  }}
+                  onLiveFinalText={(text) => {
+                    appendLiveFinalChunk(text);
+                    liveInterimDraftRef.current = "";
+                    onChange(composeLiveDraft());
+                  }}
+                  onLiveError={(message) => {
+                    setVoiceBanner(message);
+                    transitionVoiceState("error", "live_dictation_error");
+                    setLiveListening(false);
                   }}
                 />
               </div>

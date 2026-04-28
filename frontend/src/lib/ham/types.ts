@@ -136,7 +136,7 @@ export interface HamVoiceSettingsPayload {
   kind: "ham_voice_settings";
   settings: {
     tts: { enabled: boolean; provider: "edge"; voice: string };
-    stt: { enabled: boolean; provider: "openai" };
+    stt: { enabled: boolean; provider: "openai"; mode: "auto" | "live" | "record" };
   };
   capabilities: {
     tts: {
@@ -154,7 +154,7 @@ export interface HamVoiceSettingsPayload {
 
 export type HamVoiceSettingsPatch = {
   tts?: Partial<{ enabled: boolean; provider: "edge"; voice: string }>;
-  stt?: Partial<{ enabled: boolean; provider: "openai" }>;
+  stt?: Partial<{ enabled: boolean; provider: "openai"; mode: "auto" | "live" | "record" }>;
 };
 
 /** Response from `GET /api/models`. */
