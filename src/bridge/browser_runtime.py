@@ -50,7 +50,6 @@ def run_browser_v0(
         return _result_from_rejection(intent, BrowserRunStatus.REJECTED, policy, started)
 
     root = (repo_root or Path.cwd()).resolve()
-    executor = _resolve_executor(assembly)
     pre_git = git_status(root)
 
     steps: list[BrowserStepEvidence] = []
@@ -59,7 +58,9 @@ def run_browser_v0(
     saw_timeout = False
     saw_blocked = False
 
+    executor: BrowserStepExecutor | None = None
     try:
+        executor = _resolve_executor(assembly)
         for step in intent.steps:
             timeout_ms = step.timeout_ms or intent.policy.step_timeout_ms
             step_started = datetime.now(UTC)
@@ -140,7 +141,9 @@ def _resolve_executor(assembly: Any) -> BrowserStepExecutor:
     raise ValueError("Assembly.browser_executor must be callable or implement execute_step().")
 
 
-def _close_executor(executor: BrowserStepExecutor) -> None:
+def _close_executor(executor: BrowserStepExecutor | None) -> None:
+    if executor is None:
+        return
     close = getattr(executor, "close", None)
     if callable(close):
         try:

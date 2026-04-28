@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+import pytest
+
 from src.bridge.contracts import BrowserIntent, BrowserPolicySpec, BrowserRunStatus, BrowserStepSpec
 from src.bridge.browser_runtime import run_browser_v0
 
@@ -103,3 +105,11 @@ def test_browser_runtime_mutation_signal_true_when_git_changes(monkeypatch):
     result = run_browser_v0(assembly, _intent(), enabled_override=True)
     assert result.status == BrowserRunStatus.EXECUTED
     assert result.mutation_detected is True
+
+
+def test_browser_runtime_resolve_failure_does_not_crash_finally():
+    """Regression: executor must be created inside try/finally so close runs on failure,
+    and ``finally`` must not reference an unbound executor if resolve raises."""
+    assembly = _FakeAssembly(browser_executor=None)
+    with pytest.raises(ValueError, match="browser_executor"):
+        run_browser_v0(assembly, _intent(), enabled_override=True)
