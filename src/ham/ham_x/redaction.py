@@ -28,6 +28,10 @@ _KEY_VALUE_RE = re.compile(
     r"authorization|client[_-]?secret|x-api-key)\s*[:=]\s*['\"]?[^'\"\s,;]+"
 )
 _OPAQUE_RE = re.compile(r"\b[A-Za-z0-9_./+=-]{32,}\b")
+_UUID_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+    re.I,
+)
 
 
 def _mask_query_secrets(text: str) -> str:
@@ -69,7 +73,7 @@ def redact_text(value: str) -> str:
 
     def redact_opaque(match: re.Match[str]) -> str:
         token = match.group(0)
-        if token.startswith("http"):
+        if token.startswith("http") or _UUID_RE.match(token):
             return token
         return "[REDACTED_TOKEN]"
 

@@ -1,4 +1,4 @@
-# HAM-on-X Phase 1A Runbook
+# HAM-on-X Phase 1 Runbook
 
 ## Local Setup
 
@@ -14,6 +14,8 @@ Run the focused tests:
 ```bash
 python -m pytest tests/test_ham_x_phase1a.py -v
 ```
+
+Phase 1B uses the same narrow test target. It covers the non-mutating opportunity pipeline, candidate scoring, review queue writes, audit traces, and mutating-action blocks.
 
 ## Inspect Review Output
 
@@ -50,7 +52,13 @@ HAM_X_AUTONOMY_ENABLED=false
 HAM_X_DRY_RUN=true
 ```
 
-In Phase 1A, mutating actions are blocked even if these values are changed.
+In Phase 1, mutating actions are blocked even if these values are changed.
+
+## Phase 1B Dry-Run Loop
+
+Use `run_supervised_opportunity_loop()` with candidate-like records collected from dry-run search planning or fixtures. The loop writes allowed draft proposals to the review queue and audit trace, but it does not post, quote, like, or call xAI/Grok.
+
+Review queue records are human-review proposals. Audit records are append-only traces. Durable multi-step campaign/control-plane runs are future work.
 
 ## Autonomy Modes
 

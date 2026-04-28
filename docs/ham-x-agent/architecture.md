@@ -1,6 +1,6 @@
-# HAM-on-X Phase 1A Architecture
+# HAM-on-X Phase 1 Architecture
 
-HAM-on-X Phase 1A is a supervised, non-mutating scaffold for social research and review. It supports the official HAM PR agent on X and the future reusable template for tenant-created HAM agents. It does not post, quote, like, or reply on X.
+HAM-on-X Phase 1 is a supervised, non-mutating scaffold for social research and review. It supports the official HAM PR agent on X and the future reusable template for tenant-created HAM agents. It does not post, quote, like, or reply on X.
 
 ## Loop Shape
 
@@ -13,7 +13,7 @@ The intended production loop is:
 5. Write a bounded review queue record.
 6. Require human review before any future mutating action.
 
-Phase 1A implements only the scaffold for this loop. Search is represented as a dry-run command plan. Draft generation returns a deterministic placeholder. Mutating actions are blocked.
+Phase 1A implemented the safe scaffold. Phase 1B adds a dry-run social opportunity pipeline: search plan, candidate normalization, deterministic scoring, deterministic draft generation, local Hermes policy review, budget/rate guardrails, review queue output, and audit traces. Mutating actions remain blocked.
 
 ## Platform Context
 
@@ -31,7 +31,7 @@ Every action envelope, review queue record, and audit record should carry platfo
 
 Tenant-created X agents can override these values through platform configuration in later phases while keeping the same audit and review schema.
 
-The catalog skill id links xurl plans to HAM's vendored Hermes runtime skills catalog. Phase 1A records the linkage only; it does not install, invoke, or assume the skill is live.
+The catalog skill id links xurl plans to HAM's vendored Hermes runtime skills catalog. Phase 1 records the linkage only; it does not install, invoke, or assume the skill is live.
 
 ## Autonomy Modes
 
@@ -45,7 +45,7 @@ The catalog skill id links xurl plans to HAM's vendored Hermes runtime skills ca
 - Hermes remains the supervisory policy layer.
 - Execution stays behind bounded adapters such as the xurl wrapper.
 - `memory_heist` remains the repo context source when future HAM-on-X prompts need project context.
-- GoHAM compatibility means the review queue and audit trail can later be surfaced in the workspace UI without adding autonomous posting in Phase 1A.
+- GoHAM compatibility means the review queue and audit trail can later be surfaced in the workspace UI without adding autonomous posting in Phase 1.
 
 ## Record Semantics
 
@@ -54,7 +54,7 @@ The catalog skill id links xurl plans to HAM's vendored Hermes runtime skills ca
 - Audit records are append-only event traces.
 - Durable multi-step campaign and control-plane runs are future work.
 
-HAM-on-X review and audit helpers mirror existing HAM proposal/audit patterns in Phase 1A. Future phases should consolidate shared persistence primitives where doing so does not mix browser-control and social-agent semantics.
+HAM-on-X review and audit helpers mirror existing HAM proposal/audit patterns in Phase 1. Future phases should consolidate shared persistence primitives where doing so does not mix browser-control and social-agent semantics.
 
 ## Default Safety Posture
 
@@ -63,4 +63,4 @@ HAM-on-X review and audit helpers mirror existing HAM proposal/audit patterns in
 - `HAM_X_MAX_POSTS_PER_HOUR=0`
 - `HAM_X_MAX_QUOTES_PER_HOUR=0`
 
-These defaults mean Phase 1A can produce reviewable records but cannot publish content.
+These defaults mean Phase 1 can produce reviewable records but cannot publish content.

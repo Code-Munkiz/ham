@@ -18,9 +18,15 @@ from src.ham.ham_x.review_queue import _cap
 
 AuditEventType = Literal[
     "search_attempt",
+    "search_plan_created",
     "score_attempt",
+    "candidate_scored",
+    "candidate_ignored",
     "draft_attempt",
+    "draft_created",
     "safety_reject",
+    "policy_allowed",
+    "policy_rejected",
     "queued_for_review",
     "blocked_mutating_action",
     "dry_run_action",

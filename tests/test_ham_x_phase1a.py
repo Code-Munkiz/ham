@@ -9,9 +9,11 @@ from src.ham.ham_x.action_envelope import SocialActionEnvelope
 from src.ham.ham_x.audit import append_audit_event
 from src.ham.ham_x.config import HamXConfig, load_ham_x_config
 from src.ham.ham_x.hermes_policy_adapter import review_social_action
+from src.ham.ham_x.pipeline import run_supervised_opportunity_loop
 from src.ham.ham_x.redaction import redact_text
 from src.ham.ham_x.review_queue import append_review_record
 from src.ham.ham_x.safety_policy import check_social_action
+from src.ham.ham_x.target_scoring import candidate_from_record, score_candidate
 from src.ham.ham_x.xurl_wrapper import XurlWrapper
 
 
@@ -224,3 +226,174 @@ def test_action_envelope_serializes_cleanly() -> None:
     assert data["action_type"] == "draft"
     assert data["score"] == 1.0
     assert data["status"] == "proposed"
+
+
+def test_phase1b_candidate_scoring_is_deterministic() -> None:
+    candidate = candidate_from_record(
+        {
+            "source": "fixture",
+            "source_post_id": "post-good-1",
+            "author_handle": "basebuilder",
+            "text_excerpt": "Base ecosystem builders are shipping open source autonomous agent tooling this week.",
+            "matched_keywords": ["base", "builders", "autonomous agents"],
+        }
+    )
+    first = score_candidate(candidate)
+    second = score_candidate(candidate)
+    assert first == second
+    assert first.decision == "queue"
+    assert first.score >= 0.62
+
+
+def test_phase1b_spam_bot_candidate_ignored() -> None:
+    candidate = candidate_from_record(
+        {
+            "source": "fixture",
+            "source_post_id": "spam-1",
+            "author_handle": "airdrop_bot",
+            "text_excerpt": (
+                "BASE AIRDROP 100x pump buy now claim now!!! "
+                "#base #airdrop #airdrop #airdrop #crypto #deal #moon #pump"
+            ),
+        }
+    )
+    result = score_candidate(candidate)
+    assert result.decision == "ignore"
+    assert any(r in result.reasons for r in ("spam_or_promo_language", "bot_like_content"))
+
+
+def test_phase1b_hostile_candidate_ignored() -> None:
+    candidate = candidate_from_record(
+        {
+            "source": "fixture",
+            "source_post_id": "hostile-1",
+            "author_handle": "angry_user",
+            "text_excerpt": "Base builders are worthless idiots and should go die.",
+            "matched_keywords": ["base", "builders"],
+        }
+    )
+    result = score_candidate(candidate)
+    assert result.decision == "ignore"
+    assert "direct_harassment" in result.reasons
+
+
+def test_phase1b_good_base_candidate_produces_queued_review_item(tmp_path: Path) -> None:
+    cfg = _test_config(tmp_path)
+    run = run_supervised_opportunity_loop(
+        [
+            {
+                "source": "dry_run_fixture",
+                "source_post_id": "base-good-1",
+                "source_url": "https://x.example/base-good-1",
+                "author_handle": "builderalice",
+                "text_excerpt": (
+                    "Base ecosystem builders are shipping a demo for autonomous "
+                    "agent tooling and open source developer workflows."
+                ),
+                "matched_keywords": ["base", "builders", "autonomous agents"],
+            }
+        ],
+        config=cfg,
+    )
+    assert run.queued_count == 1
+    item = run.candidates[0]
+    assert item.status == "queued"
+    assert item.envelope is not None
+    assert item.envelope.status == "queued"
+    row = json.loads(cfg.review_queue_path.read_text(encoding="utf-8").strip())
+    assert row["tenant_id"] == "ham-official"
+    assert row["agent_id"] == "ham-pr-rockstar"
+    assert row["campaign_id"] == "base-stealth-launch"
+    assert row["account_id"] == "ham-x-official"
+    assert row["profile_id"] == "ham.default"
+    assert row["policy_profile_id"] == "platform-default"
+    assert row["brand_voice_id"] == "ham-canonical"
+    assert row["autonomy_mode"] == "draft"
+    assert row["metadata"]["score_decision"] == "queue"
+
+
+def test_phase1b_audit_records_include_context_and_action_id(tmp_path: Path) -> None:
+    cfg = _test_config(tmp_path)
+    run = run_supervised_opportunity_loop(
+        [
+            {
+                "source": "dry_run_fixture",
+                "source_post_id": "base-good-2",
+                "text_excerpt": "Base builders are launching open source agent tooling for developers.",
+                "matched_keywords": ["base", "builders", "agent"],
+            }
+        ],
+        config=cfg,
+    )
+    assert run.queued_count == 1
+    lines = [json.loads(line) for line in cfg.audit_log_path.read_text(encoding="utf-8").splitlines()]
+    queued = [row for row in lines if row["event_type"] == "queued_for_review"]
+    assert queued
+    row = queued[-1]
+    assert row["tenant_id"] == "ham-official"
+    assert row["agent_id"] == "ham-pr-rockstar"
+    assert row["campaign_id"] == "base-stealth-launch"
+    assert row["account_id"] == "ham-x-official"
+    assert row["profile_id"] == "ham.default"
+    assert row["autonomy_mode"] == "draft"
+    assert row["payload"]["action_id"] == run.candidates[0].envelope.action_id  # type: ignore[union-attr]
+
+
+def test_phase1b_policy_can_block_high_scoring_draft(tmp_path: Path, monkeypatch) -> None:
+    from src.ham.ham_x import pipeline as pipeline_module
+
+    cfg = _test_config(tmp_path)
+
+    def unsafe_draft(**kwargs):
+        return SocialActionEnvelope(
+            action_type="draft",
+            tenant_id=cfg.tenant_id,
+            agent_id=cfg.agent_id,
+            campaign_id=cfg.campaign_id,
+            account_id=cfg.account_id,
+            profile_id=cfg.profile_id,
+            policy_profile_id=cfg.policy_profile_id,
+            brand_voice_id=cfg.brand_voice_id,
+            autonomy_mode=cfg.autonomy_mode,
+            catalog_skill_id=cfg.catalog_skill_id,
+            text="This is guaranteed to deliver 10x gains.",
+            dry_run=True,
+            autonomy_enabled=False,
+        )
+
+    monkeypatch.setattr(pipeline_module, "draft_social_action", unsafe_draft)
+    run = pipeline_module.run_supervised_opportunity_loop(
+        [
+            {
+                "source": "dry_run_fixture",
+                "source_post_id": "base-good-3",
+                "text_excerpt": "Base ecosystem builders are shipping open source autonomous agent tooling.",
+                "matched_keywords": ["base", "builders", "autonomous agents"],
+            }
+        ],
+        config=cfg,
+    )
+    assert run.queued_count == 0
+    assert run.candidates[0].status == "policy_rejected"
+    assert not cfg.review_queue_path.exists()
+
+
+def test_phase1b_pipeline_works_with_default_config(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("HAM_X_REVIEW_QUEUE_PATH", str(tmp_path / "default_review.jsonl"))
+    monkeypatch.setenv("HAM_X_AUDIT_LOG_PATH", str(tmp_path / "default_audit.jsonl"))
+    monkeypatch.delenv("HAM_X_AUTONOMY_ENABLED", raising=False)
+    monkeypatch.delenv("HAM_X_DRY_RUN", raising=False)
+    run = run_supervised_opportunity_loop(
+        [
+            {
+                "source": "dry_run_fixture",
+                "source_post_id": "base-default-1",
+                "text_excerpt": "Base ecosystem builders are shipping developer agent tooling.",
+                "matched_keywords": ["base", "builders", "agent"],
+            }
+        ]
+    )
+    assert run.queued_count == 1
+    assert run.candidates[0].envelope is not None
+    assert run.candidates[0].envelope.autonomy_enabled is False
+    assert run.candidates[0].envelope.dry_run is True
