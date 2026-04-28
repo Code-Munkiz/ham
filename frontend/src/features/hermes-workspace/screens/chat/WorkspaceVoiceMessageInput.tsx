@@ -110,7 +110,7 @@ export function WorkspaceVoiceMessageInput(props: WorkspaceVoiceMessageInputProp
     onStopRecorderReady,
     onStopRequested,
     onStartRequested,
-    mode = "auto",
+    mode = "record",
     onModeChange,
     onLiveListeningChange,
     onLiveInterimChange,
@@ -502,19 +502,6 @@ export function WorkspaceVoiceMessageInput(props: WorkspaceVoiceMessageInputProp
           <button
             type="button"
             role="menuitemradio"
-            aria-checked={mode === "live"}
-            className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left hover:bg-white/[0.08]"
-            onClick={() => {
-              onModeChange?.("live");
-              setMenu(null);
-            }}
-          >
-            <span>Dictate live</span>
-            {mode === "live" ? <span>✓</span> : null}
-          </button>
-          <button
-            type="button"
-            role="menuitemradio"
             aria-checked={mode === "record"}
             className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left hover:bg-white/[0.08]"
             onClick={() => {
@@ -524,6 +511,19 @@ export function WorkspaceVoiceMessageInput(props: WorkspaceVoiceMessageInputProp
           >
             <span>Record then transcribe</span>
             {mode === "record" ? <span>✓</span> : null}
+          </button>
+          <button
+            type="button"
+            role="menuitemradio"
+            aria-checked={mode === "live"}
+            className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left hover:bg-white/[0.08]"
+            onClick={() => {
+              onModeChange?.("live");
+              setMenu(null);
+            }}
+          >
+            <span>Dictate live</span>
+            {mode === "live" ? <span>✓</span> : null}
           </button>
           <button
             type="button"

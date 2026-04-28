@@ -14,7 +14,7 @@ from src.ham.transcription_config import transcription_runtime_configured
 def default_voice_settings() -> dict[str, Any]:
     return {
         "tts": {"enabled": True, "provider": "edge", "voice": "en-US-JennyNeural"},
-        "stt": {"enabled": True, "provider": "openai", "mode": "auto"},
+        "stt": {"enabled": True, "provider": "openai", "mode": "record"},
     }
 
 
@@ -50,7 +50,7 @@ class SttSettingsModel(BaseModel):
 
     enabled: bool = True
     provider: Literal["openai"] = "openai"
-    mode: Literal["auto", "live", "record"] = "auto"
+    mode: Literal["auto", "live", "record"] = "record"
 
 
 class SavedVoiceSettings(BaseModel):

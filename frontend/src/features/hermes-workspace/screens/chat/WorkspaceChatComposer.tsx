@@ -107,7 +107,7 @@ export function WorkspaceChatComposer({
   onModelIdChange,
   sttDictationEnabled = true,
   sttUnavailableReason = null,
-  sttMode = "auto",
+  sttMode = "record",
   onSttModeChange,
   gohamEnabled = false,
   onGohamEnabledChange,

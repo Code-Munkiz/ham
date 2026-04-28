@@ -265,14 +265,13 @@ export function WorkspaceVoiceBridgeSection({ catalog }: Props) {
                   })
                 }
               >
-                <option value="auto">Auto</option>
-                <option value="live">Dictate live</option>
                 <option value="record">Record then transcribe</option>
+                <option value="live">Dictate live</option>
+                <option value="auto">Auto dictation</option>
               </select>
             </div>
             <p className="text-[11px] text-white/45">
-              Auto prefers browser live dictation when available, otherwise falls back to record then
-              transcribe.
+              Record mode is the default and most reliable path. Live and Auto remain optional.
             </p>
           </div>
         </div>

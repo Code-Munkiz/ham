@@ -221,7 +221,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
 
   const voiceWs = useVoiceWorkspaceSettingsOptional();
   const sttEnabledBySetting = voiceWs?.payload?.settings.stt.enabled ?? true;
-  const sttMode = voiceWs?.payload?.settings.stt.mode ?? "auto";
+  const sttMode = voiceWs?.payload?.settings.stt.mode ?? "record";
   const sttRuntimeAvailable = voiceWs?.payload?.capabilities.stt.available ?? true;
   const sttDictationEnabled =
     sttEnabledBySetting && (sttMode !== "record" || sttRuntimeAvailable);
