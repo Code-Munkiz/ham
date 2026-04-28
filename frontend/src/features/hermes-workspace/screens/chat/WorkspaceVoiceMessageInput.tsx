@@ -48,6 +48,8 @@ interface WorkspaceVoiceMessageInputProps {
   onStopRecorderReady?: (handler: (() => void) | null) => void;
   /** Notify parent when user requested stop from any input path. */
   onStopRequested?: () => void;
+  /** Notify parent when user explicitly requested a new recording start. */
+  onStartRequested?: () => void;
 }
 
 export function WorkspaceVoiceMessageInput(props: WorkspaceVoiceMessageInputProps) {
@@ -62,6 +64,7 @@ export function WorkspaceVoiceMessageInput(props: WorkspaceVoiceMessageInputProp
     disabledReason,
     onStopRecorderReady,
     onStopRequested,
+    onStartRequested,
   } = props;
 
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
@@ -221,6 +224,7 @@ export function WorkspaceVoiceMessageInput(props: WorkspaceVoiceMessageInputProp
               } else {
                 e.preventDefault();
                 e.stopPropagation();
+                onStartRequested?.();
                 void startRecording();
               }
             }}

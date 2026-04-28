@@ -4,7 +4,7 @@
 
 export function mapMediaStreamErrorToUserMessage(err: unknown): string {
   if (err == null) {
-    return "Voice input could not start. Check your microphone and browser permissions.";
+    return "Voice input could not start. Check browser site permissions and OS microphone access.";
   }
 
   const e = err as DOMException & { message?: string };
@@ -25,6 +25,10 @@ export function mapMediaStreamErrorToUserMessage(err: unknown): string {
     return "Microphone permission is blocked. Allow microphone access in your browser settings.";
   }
 
+  if (name === "TypeError" || name === "NotSupportedError") {
+    return "Microphone recording is not supported in this browser context.";
+  }
+
   if (name === "NotReadableError" || name === "TrackStartError") {
     return "Your microphone is already in use or unavailable. Close other apps using it and try again.";
   }
@@ -37,9 +41,12 @@ export function mapMediaStreamErrorToUserMessage(err: unknown): string {
     return "Microphone recording was interrupted. Try again.";
   }
 
-  if (name === "SecurityError" || blob.includes("secure context")) {
+  if (blob.includes("secure context")) {
     return "Voice input requires a secure (HTTPS) connection in this browser.";
   }
+  if (name === "SecurityError") {
+    return "Microphone permission is blocked. Allow microphone access in your browser settings.";
+  }
 
-  return "Voice input could not start. Check your microphone and browser permissions.";
+  return "Voice input could not start. Check browser site permissions and OS microphone access.";
 }
