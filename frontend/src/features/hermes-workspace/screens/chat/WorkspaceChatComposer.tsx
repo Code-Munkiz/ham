@@ -63,6 +63,8 @@ type WorkspaceChatComposerProps = {
   gohamGateHint?: string | null;
 };
 
+type VoiceUiState = "idle" | "recording" | "stopping" | "transcribing" | "error";
+
 function chatModelCandidates(c: ModelCatalogPayload | null): ModelCatalogItem[] {
   if (!c?.items?.length) return [];
   return c.items.filter((x) => x.supports_chat);
@@ -106,10 +108,33 @@ export function WorkspaceChatComposer({
   gohamToggleDisabled = false,
   gohamGateHint = null,
 }: WorkspaceChatComposerProps) {
-  const [voiceRecording, setVoiceRecording] = React.useState(false);
+  const [voiceState, setVoiceState] = React.useState<VoiceUiState>("idle");
   const [voiceBanner, setVoiceBanner] = React.useState<string | null>(null);
   const [isDragging, setIsDragging] = React.useState(false);
+  const transitionVoiceState = React.useCallback(
+    (next: VoiceUiState, reason: string) => {
+      setVoiceState((prev) => {
+        if (prev === next) return prev;
+        pushVoiceDebug({
+          event: "voice.state.transition",
+          component: "WorkspaceChatComposer",
+          composerInstanceId: composerInstanceId.current,
+          from: prev,
+          to: next,
+          reason,
+        });
+        return next;
+      });
+    },
+    [],
+  );
+
+  const voiceRecording = voiceState === "recording";
+  const voiceStopping = voiceState === "stopping";
+  const voiceBusy = voiceRecording || voiceStopping || voiceTranscribing;
+
   const composerInstanceId = React.useRef(`composer-${Math.random().toString(36).slice(2, 9)}`);
+  const stopVoiceRecorderRef = React.useRef<(() => void) | null>(null);
   const outerRef = React.useRef<HTMLDivElement>(null);
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
   const modelSelectRef = React.useRef<HTMLSelectElement>(null);
@@ -143,21 +168,42 @@ export function WorkspaceChatComposer({
     return () => {
       ro.disconnect();
     };
-  }, [attachments.length, voiceRecording, voiceTranscribing, value]);
+  }, [attachments.length, value, voiceRecording, voiceState, voiceTranscribing]);
 
   React.useEffect(() => {
     if (voiceRecording) setVoiceBanner(null);
   }, [voiceRecording]);
 
   React.useEffect(() => {
+    if (voiceTranscribing) {
+      transitionVoiceState("transcribing", "transcribe_started");
+      return;
+    }
+    setVoiceState((prev) => {
+      if (prev === "transcribing" || prev === "stopping") {
+        pushVoiceDebug({
+          event: "voice.state.transition",
+          component: "WorkspaceChatComposer",
+          composerInstanceId: composerInstanceId.current,
+          from: prev,
+          to: "idle",
+          reason: "transcribe_finished",
+        });
+        return "idle";
+      }
+      return prev;
+    });
+  }, [transitionVoiceState, voiceTranscribing]);
+
+  React.useEffect(() => {
     pushVoiceDebug({
       event: "voice.render",
       component: "WorkspaceChatComposer",
       composerInstanceId: composerInstanceId.current,
-      voiceRecording,
+      voiceState,
       voiceTranscribing,
     });
-  }, [voiceRecording, voiceTranscribing]);
+  }, [voiceState, voiceTranscribing]);
 
   const showModel =
     Boolean(catalog && catalog.gateway_mode === "openrouter" && chatModelCandidates(catalog).length > 0);
@@ -178,8 +224,7 @@ export function WorkspaceChatComposer({
     !allAttachmentsFailed &&
     (gohamTextOnlyReady || normalSendReady) &&
     !sending &&
-    !voiceTranscribing &&
-    !voiceRecording;
+    !voiceBusy;
 
   const placeholder = React.useMemo(() => {
     if (voiceTranscribing) return "Transcribing…";
@@ -231,7 +276,7 @@ export function WorkspaceChatComposer({
     e.stopPropagation();
     dragDepthRef.current = 0;
     setIsDragging(false);
-    if (disabled || sending || voiceTranscribing || voiceRecording) return;
+    if (disabled || sending || voiceBusy) return;
     const dt = e.dataTransfer?.files;
     if (!dt?.length) return;
     handleAddFiles(Array.from(dt));
@@ -240,7 +285,7 @@ export function WorkspaceChatComposer({
   const onDragEnter = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (disabled || sending || voiceTranscribing || voiceRecording) return;
+    if (disabled || sending || voiceBusy) return;
     dragDepthRef.current += 1;
     if (dragDepthRef.current === 1) setIsDragging(true);
   };
@@ -252,6 +297,48 @@ export function WorkspaceChatComposer({
     if (dragDepthRef.current === 0) setIsDragging(false);
   };
 
+  const triggerBannerStop = React.useCallback(
+    (ev?: React.SyntheticEvent) => {
+      ev?.preventDefault?.();
+      ev?.stopPropagation?.();
+      if (!voiceRecording || voiceTranscribing) return;
+      pushVoiceDebug({
+        event: "voice.stop.banner_click",
+        component: "WorkspaceChatComposer",
+        composerInstanceId: composerInstanceId.current,
+      });
+      transitionVoiceState("stopping", "banner_stop");
+      stopVoiceRecorderRef.current?.();
+    },
+    [transitionVoiceState, voiceRecording, voiceTranscribing],
+  );
+
+  const captureComposerPointer = React.useCallback((ev: React.SyntheticEvent) => {
+    const target = ev.target as HTMLElement | null;
+    if (!target) return;
+    pushVoiceDebug({
+      event: "voice.capture.pointer",
+      component: "WorkspaceChatComposer",
+      composerInstanceId: composerInstanceId.current,
+      targetTag: target.tagName,
+      targetClass: target.className,
+      voiceState,
+    });
+  }, [voiceState]);
+
+  const captureComposerClick = React.useCallback((ev: React.SyntheticEvent) => {
+    const target = ev.target as HTMLElement | null;
+    if (!target) return;
+    pushVoiceDebug({
+      event: "voice.capture.click",
+      component: "WorkspaceChatComposer",
+      composerInstanceId: composerInstanceId.current,
+      targetTag: target.tagName,
+      targetClass: target.className,
+      voiceState,
+    });
+  }, [voiceState]);
+
   return (
     <div
       ref={outerRef}
@@ -259,6 +346,9 @@ export function WorkspaceChatComposer({
       data-hww-composer-instance={composerInstanceId.current}
       data-voice-recording={voiceRecording ? "true" : "false"}
       data-voice-transcribing={voiceTranscribing ? "true" : "false"}
+      data-voice-state={voiceState}
+      onPointerDownCapture={captureComposerPointer}
+      onClickCapture={captureComposerClick}
     >
       <form
         onSubmit={(e) => {
@@ -303,20 +393,31 @@ export function WorkspaceChatComposer({
             </div>
           ) : null}
 
-          {(voiceRecording || voiceTranscribing) && (
+          {(voiceRecording || voiceStopping || voiceTranscribing) && (
             <div
               className="flex items-center gap-1.5 border-b border-white/[0.06] px-3 py-1.5 text-[10px] font-medium uppercase tracking-wide"
               role="status"
             >
-              {voiceTranscribing ? (
+              {voiceTranscribing || voiceStopping ? (
                 <>
                   <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-emerald-300" />
-                  <span className="text-emerald-200/90">Transcribing…</span>
+                  <span className="text-emerald-200/90">{voiceStopping ? "Stopping…" : "Transcribing…"}</span>
                 </>
               ) : (
                 <>
                   <span className="inline-flex h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-red-500" />
-                  <span className="text-red-200/90">Recording — stop the mic to finish</span>
+                  <button
+                    type="button"
+                    onPointerDownCapture={triggerBannerStop}
+                    onMouseDownCapture={triggerBannerStop}
+                    onClick={triggerBannerStop}
+                    className="pointer-events-auto rounded px-1 py-0.5 text-left text-red-200/90 underline-offset-2 hover:bg-red-400/10 hover:underline"
+                    aria-label="Stop recording from banner"
+                    data-hww-voice-button="recording-banner-stop"
+                    data-hww-voice-state="recording"
+                  >
+                    Recording - click to stop
+                  </button>
                 </>
               )}
             </div>
@@ -365,7 +466,7 @@ export function WorkspaceChatComposer({
             <div className="flex min-w-0 flex-1 items-center gap-0.5 md:gap-1">
               <WorkspaceChatAttachmentButton
                 onFiles={handleAddFiles}
-                disabled={sending || voiceTranscribing || voiceRecording || disabled}
+                disabled={sending || voiceBusy || disabled}
                 className="text-emerald-200/50 hover:text-emerald-200/90"
               />
               {onGohamEnabledChange ? (
@@ -373,7 +474,7 @@ export function WorkspaceChatComposer({
                   type="button"
                   role="switch"
                   aria-checked={gohamEnabled}
-                  disabled={sending || voiceTranscribing || voiceRecording || disabled || gohamToggleDisabled}
+                  disabled={sending || voiceBusy || disabled || gohamToggleDisabled}
                   title={
                     gohamGateHint ||
                     "GoHAM uses a separate managed browser window. It will not use your default browser or saved passwords."
@@ -384,7 +485,7 @@ export function WorkspaceChatComposer({
                     gohamEnabled && !gohamToggleDisabled
                       ? "border-amber-400/35 bg-amber-500/15 text-amber-100/95"
                       : "border-white/[0.1] bg-white/[0.04] text-white/55",
-                    (sending || voiceTranscribing || voiceRecording || disabled || gohamToggleDisabled) &&
+                    (sending || voiceBusy || disabled || gohamToggleDisabled) &&
                       "cursor-not-allowed opacity-45",
                   )}
                 >
@@ -449,10 +550,27 @@ export function WorkspaceChatComposer({
                       ? "Speech-to-text is off — enable it in Workspace → Settings → Voice."
                       : undefined
                   }
-                  onRecordingChange={setVoiceRecording}
+                  onRecordingChange={(isRecording) => {
+                    if (isRecording) {
+                      transitionVoiceState("recording", "recorder_started");
+                      return;
+                    }
+                    if (voiceTranscribing) {
+                      transitionVoiceState("transcribing", "recorder_stopped_transcribe");
+                    } else {
+                      transitionVoiceState("idle", "recorder_stopped");
+                    }
+                  }}
+                  onStopRequested={() => {
+                    transitionVoiceState("stopping", "stop_requested");
+                  }}
                   onVoiceRecorderErrorChange={setVoiceBanner}
+                  onStopRecorderReady={(handler) => {
+                    stopVoiceRecorderRef.current = handler;
+                  }}
                   onVoiceError={(err) => {
                     setVoiceBanner(err);
+                    transitionVoiceState("error", "recorder_error");
                   }}
                   onVoiceMessage={(blob) => {
                     void onVoiceBlob(blob);

@@ -31,9 +31,12 @@
 
 .voice-message-input-container--compact .mic-button {
   position: relative;
-  z-index: 6;
-  width: 36px;
-  height: 36px;
+  z-index: 30;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  pointer-events: auto;
   box-shadow: none;
 }
 
@@ -67,6 +70,7 @@
   border-radius: 50%;
   color: white;
   cursor: pointer;
+  pointer-events: auto;
   transition: all 0.3s ease;
   box-shadow: 0 4px 8px rgba(102, 126, 234, 0.4);
 }
@@ -152,11 +156,16 @@
   background: #ff4757;
   color: white;
   border: none;
-  padding: 6px 12px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 8px 12px;
   border-radius: 6px;
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
+  pointer-events: auto;
+  position: relative;
+  z-index: 31;
   transition: all 0.2s ease;
 }
 

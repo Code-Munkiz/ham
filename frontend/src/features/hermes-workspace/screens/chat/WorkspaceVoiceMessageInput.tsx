@@ -44,6 +44,10 @@ interface WorkspaceVoiceMessageInputProps {
   disabled?: boolean;
   /** When `disabled` is true, overrides default tooltip (e.g. STT off in Voice settings). */
   disabledReason?: string;
+  /** Optional parent hook to request stop from external UI (banner/keyboard fallback). */
+  onStopRecorderReady?: (handler: (() => void) | null) => void;
+  /** Notify parent when user requested stop from any input path. */
+  onStopRequested?: () => void;
 }
 
 export function WorkspaceVoiceMessageInput(props: WorkspaceVoiceMessageInputProps) {
@@ -56,10 +60,13 @@ export function WorkspaceVoiceMessageInput(props: WorkspaceVoiceMessageInputProp
     hidePreview = false,
     disabled = false,
     disabledReason,
+    onStopRecorderReady,
+    onStopRequested,
   } = props;
 
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const voiceInstanceId = React.useRef(`voice-ui-${Math.random().toString(36).slice(2, 9)}`);
+  const lastStopRequestAtRef = React.useRef(0);
 
   const {
     isRecording,
@@ -95,6 +102,58 @@ export function WorkspaceVoiceMessageInput(props: WorkspaceVoiceMessageInputProp
     if (!compact) return;
     onVoiceRecorderErrorChange?.(error ?? null);
   }, [compact, error, onVoiceRecorderErrorChange]);
+
+  const requestStop = React.useCallback(
+    (
+      source: "pointerdown" | "click" | "banner_click" | "escape",
+      ev?: React.SyntheticEvent | KeyboardEvent,
+      opts: { force?: boolean } = {},
+    ) => {
+      ev?.preventDefault?.();
+      ev?.stopPropagation?.();
+      if (!isRecording && !opts.force) {
+        pushVoiceDebug({
+          event: "voice.stop.early_return",
+          source,
+          reason: "not_recording",
+          component: "WorkspaceVoiceMessageInput",
+          voiceInstanceId: voiceInstanceId.current,
+          isRecording,
+          disabled,
+        });
+        return;
+      }
+      const now = Date.now();
+      if (now - lastStopRequestAtRef.current < 250) return;
+      lastStopRequestAtRef.current = now;
+      pushVoiceDebug({
+        event: source === "pointerdown" ? "voice.stop.pointerdown" : source === "escape" ? "voice.stop.escape" : source === "banner_click" ? "voice.stop.banner_click" : "voice.stop.click",
+        source,
+        component: "WorkspaceVoiceMessageInput",
+        voiceInstanceId: voiceInstanceId.current,
+        isRecording,
+        disabled,
+      });
+      onStopRequested?.();
+      stopRecording();
+    },
+    [disabled, isRecording, onStopRequested, stopRecording],
+  );
+
+  React.useEffect(() => {
+    onStopRecorderReady?.(() => requestStop("banner_click", undefined, { force: true }));
+    return () => onStopRecorderReady?.(null);
+  }, [onStopRecorderReady, requestStop]);
+
+  React.useEffect(() => {
+    if (!isRecording) return;
+    const onKeyDown = (ev: KeyboardEvent) => {
+      if (ev.key !== "Escape") return;
+      requestStop("escape", ev, { force: true });
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [isRecording, requestStop]);
 
   const handleCancelRecording = () => {
     cancelRecording();
@@ -140,9 +199,15 @@ export function WorkspaceVoiceMessageInput(props: WorkspaceVoiceMessageInputProp
             type="button"
             disabled={disabled}
             title={micTitle}
+            onPointerDownCapture={(e) => {
+              if (!isRecording) return;
+              requestStop("pointerdown", e);
+            }}
+            onMouseDownCapture={(e) => {
+              if (!isRecording) return;
+              requestStop("pointerdown", e);
+            }}
             onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
               pushVoiceDebug({
                 event: "voice.button.click",
                 source: "mic-toggle",
@@ -152,24 +217,19 @@ export function WorkspaceVoiceMessageInput(props: WorkspaceVoiceMessageInputProp
                 disabled,
               });
               if (isRecording) {
-                pushVoiceDebug({
-                  event: "voice.stop.click",
-                  source: "mic-toggle",
-                  component: "WorkspaceVoiceMessageInput",
-                  voiceInstanceId: voiceInstanceId.current,
-                  isRecording,
-                  disabled,
-                });
-                stopRecording();
+                requestStop("click", e);
               } else {
+                e.preventDefault();
+                e.stopPropagation();
                 void startRecording();
               }
             }}
             className={cn("mic-button", error && !isRecording && "mic-button--had-error")}
-            aria-label={isRecording ? "Stop recording" : "Start voice recording"}
+            aria-label={isRecording ? "Stop voice recording" : "Start voice recording"}
             data-hww-voice-button="mic-toggle"
             data-hww-voice-instance={voiceInstanceId.current}
             data-hww-voice-state={isRecording ? "recording" : "idle"}
+            data-hww-stop-primary={isRecording ? "true" : "false"}
           >
             {isRecording ? (
               <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
@@ -190,21 +250,11 @@ export function WorkspaceVoiceMessageInput(props: WorkspaceVoiceMessageInputProp
               <button
                 type="button"
                 disabled={disabled}
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  pushVoiceDebug({
-                    event: "voice.stop.click",
-                    source: "stop-pill",
-                    component: "WorkspaceVoiceMessageInput",
-                    voiceInstanceId: voiceInstanceId.current,
-                    isRecording,
-                    disabled,
-                  });
-                  stopRecording();
-                }}
+                onPointerDownCapture={(e) => requestStop("pointerdown", e)}
+                onMouseDownCapture={(e) => requestStop("pointerdown", e)}
+                onClick={(e) => requestStop("click", e)}
                 className="stop-recording"
-                aria-label="Stop recording"
+                aria-label="Stop voice recording"
                 data-hww-voice-button="stop-pill"
                 data-hww-voice-instance={voiceInstanceId.current}
                 data-hww-voice-state={isRecording ? "recording" : "idle"}
