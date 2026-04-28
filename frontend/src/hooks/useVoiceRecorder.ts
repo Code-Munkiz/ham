@@ -206,6 +206,14 @@ export function useVoiceRecorder(props: UseVoiceRecorderProps = {}) {
   // Start recording
   const startRecording = useCallback(async () => {
     pushVoiceDebug({
+      event: 'voice.mic.preflight',
+      hookInstanceId: hookInstanceId.current,
+      hasNavigator: typeof navigator !== 'undefined',
+      hasMediaDevices: typeof navigator !== 'undefined' && Boolean(navigator.mediaDevices),
+      hasGetUserMedia:
+        typeof navigator !== 'undefined' && Boolean(navigator.mediaDevices?.getUserMedia),
+    });
+    pushVoiceDebug({
       event: 'voice.start.called',
       hookInstanceId: hookInstanceId.current,
       isRecording: state.isRecording,
@@ -223,22 +231,54 @@ export function useVoiceRecorder(props: UseVoiceRecorderProps = {}) {
     }
 
     try {
+      if (typeof navigator.permissions?.query === 'function') {
+        try {
+          const permission = await navigator.permissions.query({ name: 'microphone' as PermissionName });
+          pushVoiceDebug({
+            event: 'voice.mic.permission_state',
+            hookInstanceId: hookInstanceId.current,
+            state: permission.state,
+          });
+        } catch (permissionErr) {
+          pushVoiceDebug({
+            event: 'voice.mic.permission_state',
+            hookInstanceId: hookInstanceId.current,
+            state: 'unknown',
+            error:
+              permissionErr instanceof Error
+                ? permissionErr.message
+                : String(permissionErr ?? 'permission_query_failed'),
+          });
+        }
+      }
+
+      pushVoiceDebug({
+        event: 'voice.mic.get_user_media.called',
+        hookInstanceId: hookInstanceId.current,
+      });
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      pushVoiceDebug({
+        event: 'voice.mic.get_user_media.success',
+        hookInstanceId: hookInstanceId.current,
+        trackCount: stream.getAudioTracks().length,
+      });
+
       try {
         const devices = await navigator.mediaDevices.enumerateDevices();
         const inputs = devices.filter((d) => d.kind === 'audioinput');
-        if (inputs.length === 0) {
-          const msg = mapMediaStreamErrorToUserMessage(
-            Object.assign(new Error('No audio input devices'), { name: 'NotFoundError' }),
-          );
-          setState((prev) => ({ ...prev, error: msg }));
-          onRecordingError?.(msg);
-          return;
-        }
+        pushVoiceDebug({
+          event: 'voice.mic.devices_after_permission',
+          hookInstanceId: hookInstanceId.current,
+          audioInputCount: inputs.length,
+        });
       } catch {
-        /* enumerate can fail pre-permission; fall through to getUserMedia */
+        pushVoiceDebug({
+          event: 'voice.mic.devices_after_permission',
+          hookInstanceId: hookInstanceId.current,
+          audioInputCount: null,
+          error: 'enumerate_failed',
+        });
       }
-
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
       // Avoid orphaning a live MediaRecorder if start runs twice (double-click / Strict Mode churn).
       const existing = mediaRecorderRef.current;
@@ -335,6 +375,12 @@ export function useVoiceRecorder(props: UseVoiceRecorderProps = {}) {
 
     } catch (err) {
       const msg = mapMediaStreamErrorToUserMessage(err);
+      pushVoiceDebug({
+        event: 'voice.mic.get_user_media.error',
+        hookInstanceId: hookInstanceId.current,
+        errorName: err instanceof Error ? err.name : null,
+        errorMessage: err instanceof Error ? err.message : String(err ?? ''),
+      });
       pushVoiceDebug({
         event: 'voice.start.error',
         hookInstanceId: hookInstanceId.current,
