@@ -135,11 +135,47 @@ export function WorkspaceChatComposer({
 
   const composerInstanceId = React.useRef(`composer-${Math.random().toString(36).slice(2, 9)}`);
   const stopVoiceRecorderRef = React.useRef<(() => void) | null>(null);
+  const stopRequestedRef = React.useRef(false);
+  const stopTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const outerRef = React.useRef<HTMLDivElement>(null);
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
   const modelSelectRef = React.useRef<HTMLSelectElement>(null);
   const dragDepthRef = React.useRef(0);
   const TEXTAREA_MAX_PX = 240;
+
+  const clearStopTimeout = React.useCallback(() => {
+    if (stopTimeoutRef.current) {
+      clearTimeout(stopTimeoutRef.current);
+      stopTimeoutRef.current = null;
+    }
+  }, []);
+
+  const beginStopRequest = React.useCallback(
+    (reason: string) => {
+      stopRequestedRef.current = true;
+      pushVoiceDebug({
+        event: "voice.stop.requested",
+        component: "WorkspaceChatComposer",
+        composerInstanceId: composerInstanceId.current,
+        reason,
+        voiceState,
+      });
+      transitionVoiceState("stopping", reason);
+      clearStopTimeout();
+      stopTimeoutRef.current = setTimeout(() => {
+        if (!stopRequestedRef.current) return;
+        pushVoiceDebug({
+          event: "voice.stop.timeout",
+          component: "WorkspaceChatComposer",
+          composerInstanceId: composerInstanceId.current,
+        });
+        transitionVoiceState("idle", "stop_timeout_forced_idle");
+        setVoiceBanner("Recording stop timed out. Please try again.");
+        stopRequestedRef.current = false;
+      }, 3000);
+    },
+    [clearStopTimeout, transitionVoiceState, voiceState],
+  );
 
   const syncTextareaHeight = React.useCallback(() => {
     const el = textareaRef.current;
@@ -189,11 +225,19 @@ export function WorkspaceChatComposer({
           to: "idle",
           reason: "transcribe_finished",
         });
+        stopRequestedRef.current = false;
+        clearStopTimeout();
         return "idle";
       }
       return prev;
     });
-  }, [transitionVoiceState, voiceTranscribing]);
+  }, [clearStopTimeout, transitionVoiceState, voiceTranscribing]);
+
+  React.useEffect(() => {
+    return () => {
+      clearStopTimeout();
+    };
+  }, [clearStopTimeout]);
 
   React.useEffect(() => {
     pushVoiceDebug({
@@ -307,10 +351,16 @@ export function WorkspaceChatComposer({
         component: "WorkspaceChatComposer",
         composerInstanceId: composerInstanceId.current,
       });
-      transitionVoiceState("stopping", "banner_stop");
+      beginStopRequest("banner_stop");
+      pushVoiceDebug({
+        event: "voice.recorder.stop.called",
+        component: "WorkspaceChatComposer",
+        composerInstanceId: composerInstanceId.current,
+        source: "banner_stop",
+      });
       stopVoiceRecorderRef.current?.();
     },
-    [transitionVoiceState, voiceRecording, voiceTranscribing],
+    [beginStopRequest, voiceRecording, voiceTranscribing],
   );
 
   const captureComposerPointer = React.useCallback((ev: React.SyntheticEvent) => {
@@ -551,18 +601,58 @@ export function WorkspaceChatComposer({
                       : undefined
                   }
                   onRecordingChange={(isRecording) => {
+                    pushVoiceDebug({
+                      event: "voice.child.isRecording.signal",
+                      component: "WorkspaceChatComposer",
+                      composerInstanceId: composerInstanceId.current,
+                      isRecording,
+                      voiceState,
+                      stopRequested: stopRequestedRef.current,
+                    });
                     if (isRecording) {
+                      if (
+                        stopRequestedRef.current ||
+                        voiceState === "stopping" ||
+                        voiceState === "transcribing"
+                      ) {
+                        pushVoiceDebug({
+                          event: "voice.state.blocked_bounce",
+                          component: "WorkspaceChatComposer",
+                          composerInstanceId: composerInstanceId.current,
+                          attempted: "recording",
+                          voiceState,
+                          stopRequested: stopRequestedRef.current,
+                        });
+                        return;
+                      }
                       transitionVoiceState("recording", "recorder_started");
                       return;
                     }
+                    pushVoiceDebug({
+                      event: "voice.recorder.onstop",
+                      component: "WorkspaceChatComposer",
+                      composerInstanceId: composerInstanceId.current,
+                    });
+                    clearStopTimeout();
                     if (voiceTranscribing) {
                       transitionVoiceState("transcribing", "recorder_stopped_transcribe");
                     } else {
                       transitionVoiceState("idle", "recorder_stopped");
+                      stopRequestedRef.current = false;
                     }
                   }}
+                  onStartRequested={() => {
+                    stopRequestedRef.current = false;
+                    clearStopTimeout();
+                  }}
                   onStopRequested={() => {
-                    transitionVoiceState("stopping", "stop_requested");
+                    beginStopRequest("stop_requested");
+                    pushVoiceDebug({
+                      event: "voice.recorder.stop.called",
+                      component: "WorkspaceChatComposer",
+                      composerInstanceId: composerInstanceId.current,
+                      source: "stop_button_or_escape",
+                    });
                   }}
                   onVoiceRecorderErrorChange={setVoiceBanner}
                   onStopRecorderReady={(handler) => {
@@ -571,6 +661,8 @@ export function WorkspaceChatComposer({
                   onVoiceError={(err) => {
                     setVoiceBanner(err);
                     transitionVoiceState("error", "recorder_error");
+                    stopRequestedRef.current = false;
+                    clearStopTimeout();
                   }}
                   onVoiceMessage={(blob) => {
                     void onVoiceBlob(blob);
