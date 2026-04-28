@@ -162,10 +162,20 @@ export function WorkspaceChatComposer({
       });
       transitionVoiceState("stopping", reason);
       clearStopTimeout();
+      pushVoiceDebug({
+        event: "voice.stop.timeout_started",
+        component: "WorkspaceChatComposer",
+        composerInstanceId: composerInstanceId.current,
+      });
       stopTimeoutRef.current = setTimeout(() => {
         if (!stopRequestedRef.current) return;
         pushVoiceDebug({
           event: "voice.stop.timeout",
+          component: "WorkspaceChatComposer",
+          composerInstanceId: composerInstanceId.current,
+        });
+        pushVoiceDebug({
+          event: "voice.stop.force_idle",
           component: "WorkspaceChatComposer",
           composerInstanceId: composerInstanceId.current,
         });
