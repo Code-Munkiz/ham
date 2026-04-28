@@ -120,6 +120,11 @@ export function useVoiceRecorder(props: UseVoiceRecorderProps = {}) {
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
   /** Wall-clock start for accurate duration in `onRecordingComplete` (avoids stale React state in `onstop`). */
   const recordingStartedAtRef = useRef<number | null>(null);
+  const latestBlobUrlRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    latestBlobUrlRef.current = state.blobUrl;
+  }, [state.blobUrl]);
 
   const clearStopWatchdog = useCallback(() => {
     if (stopWatchdogRef.current) {
@@ -185,6 +190,12 @@ export function useVoiceRecorder(props: UseVoiceRecorderProps = {}) {
       }
       pushVoiceDebug({
         event: 'voice.finalize.blob_size',
+        hookInstanceId: hookInstanceId.current,
+        recorderId: recorderIdRef.current,
+        blobSize: blob?.size ?? 0,
+      });
+      pushVoiceDebug({
+        event: 'voice.blob.finalized',
         hookInstanceId: hookInstanceId.current,
         recorderId: recorderIdRef.current,
         blobSize: blob?.size ?? 0,
@@ -411,6 +422,11 @@ export function useVoiceRecorder(props: UseVoiceRecorderProps = {}) {
       recState: rec?.state ?? null,
     });
     if (!rec) {
+      setState((prev) => ({
+        ...prev,
+        isRecording: false,
+        isPaused: false,
+      }));
       pushVoiceDebug({
         event: 'voice.stop.early_return',
         hookInstanceId: hookInstanceId.current,
@@ -423,6 +439,11 @@ export function useVoiceRecorder(props: UseVoiceRecorderProps = {}) {
       return;
     }
     if (rec.state === "inactive") {
+      setState((prev) => ({
+        ...prev,
+        isRecording: false,
+        isPaused: false,
+      }));
       pushVoiceDebug({
         event: 'voice.stop.early_return',
         hookInstanceId: hookInstanceId.current,
@@ -461,6 +482,12 @@ export function useVoiceRecorder(props: UseVoiceRecorderProps = {}) {
         recState: rec.state,
       });
     } catch {
+      pushVoiceDebug({
+        event: 'voice.stop.rec_stop_error',
+        hookInstanceId: hookInstanceId.current,
+        recorderId: recorderIdRef.current,
+        recState: rec.state,
+      });
       mediaRecorderRef.current = null;
       finalizeRecording({
         mimeType: rec.mimeType || 'audio/webm',
@@ -529,6 +556,10 @@ export function useVoiceRecorder(props: UseVoiceRecorderProps = {}) {
       recState: mediaRecorderRef.current?.state ?? null,
       refExists: Boolean(mediaRecorderRef.current),
     });
+  }, [state.isRecording]);
+
+  // Cleanup on unmount only
+  useEffect(() => {
     return () => {
       if (mediaRecorderRef.current) {
         safeAbortMediaRecorder(mediaRecorderRef.current);
@@ -544,16 +575,12 @@ export function useVoiceRecorder(props: UseVoiceRecorderProps = {}) {
       audioChunksRef.current = [];
       finalizedRef.current = true;
 
-      // Stop all tracks
-      if (state.mediaRecorder?.stream) {
-        state.mediaRecorder.stream.getTracks().forEach(track => track.stop());
-      }
-
-      if (state.blobUrl) {
-        URL.revokeObjectURL(state.blobUrl);
+      if (latestBlobUrlRef.current) {
+        URL.revokeObjectURL(latestBlobUrlRef.current);
+        latestBlobUrlRef.current = null;
       }
     };
-  }, [clearDurationTimer, clearStopWatchdog, state.mediaRecorder, state.blobUrl]);
+  }, [clearDurationTimer, clearStopWatchdog]);
 
   return {
     ...state,
