@@ -10,6 +10,11 @@ import type {
 } from "@/lib/ham/desktopBundleBridge";
 import type { GohamSearchStart } from "./gohamSearchStrategy";
 import { classifyGohamCandidate, classifyGohamUrl } from "./gohamSafetyClassifier";
+import {
+  compactPlannerCandidate,
+  proposeGohamPlannerAction,
+  validateGohamPlannerAction,
+} from "./gohamPlanner";
 
 /** Research loop requires Slice 1+ preload IPC; older desktop builds omit these. */
 const RESEARCH_DESKTOP_METHODS = [
@@ -210,6 +215,13 @@ type BlockedCandidateRecord = {
   reason: string;
 };
 
+type PlannerUsage = {
+  llmAccepted: number;
+  fallbackCount: number;
+  lastMode: "rules_first" | "llm" | "fallback";
+  fallbackReasons: string[];
+};
+
 function makeEvidenceLedger(requiredTerms: string[]): EvidenceLedger {
   return { requiredTerms, observedTerms: new Set(), snippets: [] };
 }
@@ -292,6 +304,15 @@ function scoreCandidate(
   if (GENERIC_NAV_RE.test(c.text)) score -= 4;
   if (blob.split(" ").length <= 2 && score < 4) score -= 2;
   return score;
+}
+
+function candidateScoreForPlanner(
+  c: HamDesktopRealBrowserClickCandidate,
+  tokens: string[],
+  requiredEvidenceTerms: string[],
+  taskText: string,
+): number {
+  return scoreCandidate(c, tokens, requiredEvidenceTerms, taskText);
 }
 
 function taskAppearsComplete(title: string, tokens: string[]): boolean {
@@ -640,6 +661,7 @@ export async function runGohamResearchFlow(opts: RunGohamResearchOptions): Promi
   const clickedFingerprints = new Set<string>();
   const blockedFingerprints = new Set<string>();
   const blockedCandidates: BlockedCandidateRecord[] = [];
+  const plannerUsage: PlannerUsage = { llmAccepted: 0, fallbackCount: 0, lastMode: "rules_first", fallbackReasons: [] };
 
   let hitExplicitDone = false;
 
@@ -672,7 +694,7 @@ export async function runGohamResearchFlow(opts: RunGohamResearchOptions): Promi
         });
         break;
       }
-      const action = rulesFirstPlan({
+      const rulesAction = rulesFirstPlan({
         taskText,
         goalTokens,
         candidates,
@@ -686,6 +708,70 @@ export async function runGohamResearchFlow(opts: RunGohamResearchOptions): Promi
         blockedFingerprints,
         blockedCandidates,
       });
+      let action = rulesAction;
+      const plannerInput = {
+        goal: redactSnippet(taskText, 240),
+        currentUrl: lastDisplayUrl,
+        title: redactSnippet(lastTitle, 120),
+        requiredEvidenceTerms: evidence.requiredTerms.map((t) => redactSnippet(t, 40)),
+        observedEvidenceTerms: [...evidence.observedTerms].map((t) => redactSnippet(t, 40)),
+        missingEvidenceTerms: evidenceMissingTerms(evidence).map((t) => redactSnippet(t, 40)),
+        candidates: candidates
+          .slice(0, 16)
+          .map((c) =>
+            compactPlannerCandidate(
+              c,
+              candidateScoreForPlanner(c, goalTokens, evidence.requiredTerms, taskText),
+            ),
+          ),
+        stepNumber: loopIteration + 1,
+        remainingBudget: Math.max(0, MAX_LOOP_ACTIONS - loopIteration),
+      };
+      const planner = await proposeGohamPlannerAction(plannerInput);
+      if (planner.ok) {
+        const safePlanner = validateGohamPlannerAction(planner.action, candidates);
+        if (safePlanner.ok) {
+          action = {
+            type: planner.action.type,
+            candidate_id: planner.action.candidate_id,
+            reason: `Planner suggested: ${planner.action.reason}`,
+            risk: "low",
+          };
+          plannerUsage.llmAccepted += 1;
+          plannerUsage.lastMode = "llm";
+          addRow({
+            label: "Planner suggested",
+            status: "done",
+            detail: redactSnippet(planner.action.reason, 88),
+            actionType: "plan",
+            result: `${planner.action.type} (${planner.action.confidence.toFixed(2)})`,
+          });
+        } else {
+          const fallbackReason = "reason" in safePlanner ? safePlanner.reason : "planner_rejected";
+          plannerUsage.fallbackCount += 1;
+          plannerUsage.lastMode = "fallback";
+          plannerUsage.fallbackReasons.push(fallbackReason);
+          addRow({
+            label: "Planner fallback",
+            status: "done",
+            detail: `rules-first: ${fallbackReason}`,
+            actionType: "plan",
+            result: "rules_first",
+          });
+        }
+      } else {
+        const fallbackReason = "reason" in planner ? planner.reason : "planner_unavailable";
+        plannerUsage.fallbackCount += 1;
+        plannerUsage.lastMode = "fallback";
+        plannerUsage.fallbackReasons.push(fallbackReason);
+        addRow({
+          label: "Planner fallback",
+          status: "done",
+          detail: `rules-first: ${fallbackReason}`,
+          actionType: "plan",
+          result: "rules_first",
+        });
+      }
       const v = validatePlannerAction(action, candidates);
       if (v.ok === false) {
         stopReason = "blocked";
@@ -1013,8 +1099,12 @@ export async function runGohamResearchFlow(opts: RunGohamResearchOptions): Promi
     "captured screenshots for local validation",
     "observed compact page metadata",
     "enumerated visible safe click candidates",
+    plannerUsage.llmAccepted > 0
+      ? `used LLM-assisted planner for ${plannerUsage.llmAccepted} accepted action${plannerUsage.llmAccepted === 1 ? "" : "s"}`
+      : "used rules-first planner fallback",
     loopActionCount > 0 ? `ran ${loopActionCount} bounded loop action${loopActionCount === 1 ? "" : "s"}` : "",
   ].filter(Boolean);
+  const fallbackReasons = [...new Set(plannerUsage.fallbackReasons)].slice(0, 5);
   const suggestedNextStep = insufficientEvidence
     ? "Try a more specific starting URL or ask for a narrower target; this version cannot type into site search boxes."
     : "Use Stop GoHAM when you are done inspecting the managed browser window.";
@@ -1048,6 +1138,10 @@ export async function runGohamResearchFlow(opts: RunGohamResearchOptions): Promi
     ``,
     `## What HAM Did`,
     actionSummary.map((s) => `- ${s}`).join("\n"),
+    `- **Planner mode:** ${
+      plannerUsage.llmAccepted > 0 ? "LLM-assisted proposals accepted after validation" : "Rules-first fallback"
+    }`,
+    fallbackReasons.length ? `- **Planner fallback reason(s):** ${fallbackReasons.join(", ")}` : ``,
     `- **Loop actions executed:** ${loopActionCount} (scroll / click / wait / observe in the research loop)`,
     `- **Screenshot captures:** ${screenshotCaptureCount} (local validation only — not embedded here)`,
     `- **Latest page title:** ${redactSnippet(lastTitle, 80)}`,
