@@ -164,7 +164,8 @@ export function GoHamPanel({ enabled, active, trail, onStop, gateHint, researchC
             Use a direct <code className="rounded bg-white/10 px-0.5">https://</code> URL for observe prompts.
             Research prompts can start from a safe DuckDuckGo URL (no search-box typing) and then use only bounded
             observe / scroll / safe-link actions. Use <strong>Pause</strong>, <strong>Take over</strong>, and{" "}
-            <strong>Resume</strong> during research. No forms, logins, purchases, or downloads.
+            <strong>Resume</strong> during research. Login, account, checkout, download/upload, external-app, and
+            submit-style actions are blocked/deferred in this version.
           </p>
         ) : null}
       </div>

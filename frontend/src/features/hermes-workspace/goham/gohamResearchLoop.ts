@@ -9,6 +9,7 @@ import type {
   HamDesktopRealBrowserObserveCompactResult,
 } from "@/lib/ham/desktopBundleBridge";
 import type { GohamSearchStart } from "./gohamSearchStrategy";
+import { classifyGohamCandidate, classifyGohamUrl } from "./gohamSafetyClassifier";
 
 /** Research loop requires Slice 1+ preload IPC; older desktop builds omit these. */
 const RESEARCH_DESKTOP_METHODS = [
@@ -32,8 +33,7 @@ const WAIT_AFTER_CLICK_MS = 1500;
 const SCROLL_DELTA = 400;
 const SETTLE_WAIT_MS = 1200;
 
-const GENERIC_NAV_RE =
-  /\b(sign\s*in|sign\s*up|log\s*in|login|api\s*key|get\s+api\s+key|careers?|blog|contact|privacy|terms|status|about|home|github)\b/iu;
+const GENERIC_NAV_RE = /\b(careers?|blog|contact|privacy|terms|status|about|home|github)\b/iu;
 const RESULT_INTENT_RE = /\b(api|docs?|documentation|quickstart|free|pricing|model|context|window|tier)\b/iu;
 
 const STOPWORDS = new Set([
@@ -205,6 +205,11 @@ type EvidenceLedger = {
   snippets: string[];
 };
 
+type BlockedCandidateRecord = {
+  label: string;
+  reason: string;
+};
+
 function makeEvidenceLedger(requiredTerms: string[]): EvidenceLedger {
   return { requiredTerms, observedTerms: new Set(), snippets: [] };
 }
@@ -326,6 +331,8 @@ type PlanCtx = {
   evidenceMissing: boolean;
   requiredEvidenceTerms: string[];
   clickedFingerprints: Set<string>;
+  blockedFingerprints: Set<string>;
+  blockedCandidates: BlockedCandidateRecord[];
 };
 
 /** Rules-first planner: token overlap on candidates, else scroll, else done. */
@@ -341,6 +348,8 @@ export function rulesFirstPlan(ctx: PlanCtx): GohamLoopAction {
     evidenceMissing,
     requiredEvidenceTerms,
     clickedFingerprints,
+    blockedFingerprints,
+    blockedCandidates,
   } = ctx;
 
   if (!evidenceMissing && taskAppearsComplete(lastTitle, goalTokens)) {
@@ -353,6 +362,19 @@ export function rulesFirstPlan(ctx: PlanCtx): GohamLoopAction {
   const scored = candidates
     .filter((c) => c.risk === "low")
     .filter((c) => !clickedFingerprints.has(candidateFingerprint(c)))
+    .filter((c) => {
+      const classification = classifyGohamCandidate(c);
+      if (!classification.blocked) return true;
+      const fp = candidateFingerprint(c);
+      if (!blockedFingerprints.has(fp)) {
+        blockedFingerprints.add(fp);
+        blockedCandidates.push({
+          label: redactSnippet(c.text || "(untitled candidate)", 48),
+          reason: classification.reason,
+        });
+      }
+      return false;
+    })
     .map((c) => ({ c, score: scoreCandidate(c, goalTokens, requiredEvidenceTerms, taskText) }))
     .filter((x) => x.score >= (evidenceMissing ? 2 : 1))
     .sort((a, b) => b.score - a.score);
@@ -616,6 +638,8 @@ export async function runGohamResearchFlow(opts: RunGohamResearchOptions): Promi
   let loopIteration = 0;
   let lastTitle = title0;
   const clickedFingerprints = new Set<string>();
+  const blockedFingerprints = new Set<string>();
+  const blockedCandidates: BlockedCandidateRecord[] = [];
 
   let hitExplicitDone = false;
 
@@ -659,6 +683,8 @@ export async function runGohamResearchFlow(opts: RunGohamResearchOptions): Promi
         evidenceMissing: hasMissingEvidence(evidence),
         requiredEvidenceTerms: evidence.requiredTerms,
         clickedFingerprints,
+        blockedFingerprints,
+        blockedCandidates,
       });
       const v = validatePlannerAction(action, candidates);
       if (v.ok === false) {
@@ -820,10 +846,35 @@ export async function runGohamResearchFlow(opts: RunGohamResearchOptions): Promi
       lastTitle = (pub.title || obs.title || "").trim() || "(no title)";
       const disp = redactUrlForTrail((pub.display_url || obs.display_url || obs.url || "").trim() || lastDisplayUrl);
       if (disp !== lastDisplayUrl) {
+        const fromDomain = (() => {
+          try {
+            return new URL(lastDisplayUrl).hostname;
+          } catch {
+            return lastDisplayUrl;
+          }
+        })();
+        const toDomain = (() => {
+          try {
+            return new URL(disp).hostname;
+          } catch {
+            return disp;
+          }
+        })();
         scrollsThisPage = 0;
         lastClickedId = null;
         lastDisplayUrl = disp;
         visited.push({ title: lastTitle, display: disp });
+        if (fromDomain !== toDomain) {
+          const domainSafety = classifyGohamUrl(disp);
+          addRow({
+            label: "Domain changed",
+            status: "done",
+            detail: `${fromDomain} → ${toDomain}`,
+            actionType: "navigate",
+            targetRedacted: disp,
+            result: domainSafety.blocked ? `deferred: ${domainSafety.reason}` : "allowed",
+          });
+        }
       }
       patchIdFull(reId, "done", {
         detail: redactSnippet(lastTitle, 48),
@@ -952,6 +1003,10 @@ export async function runGohamResearchFlow(opts: RunGohamResearchOptions): Promi
   const insufficientEvidence = stopReason === "insufficient_evidence" || stopReason === "budget_without_evidence";
   const observedTerms = [...evidence.observedTerms].map((t) => redactSnippet(t, 28));
   const observedEvidenceLines = evidence.snippets.map((s) => `- ${s}`).join("\n");
+  const blockedCandidateLines = blockedCandidates
+    .slice(0, 8)
+    .map((b) => `- ${b.label}: ${b.reason}`)
+    .join("\n");
   const actionSummary = [
     searchStart ? `started from DuckDuckGo safe-search URL` : "",
     "navigated managed Chrome",
@@ -1002,10 +1057,12 @@ export async function runGohamResearchFlow(opts: RunGohamResearchOptions): Promi
     `## Why HAM Stopped`,
     `- **Stop reason:** ${stopLabel}`,
     `- **Stop reason code:** \`${stopReason}\``,
+    blockedCandidateLines ? `**Blocked / skipped sensitive candidates**\n${blockedCandidateLines}` : ``,
     errorMessage ? `**Error / block detail:** ${errorMessage}` : ``,
     ``,
     `## Limits`,
     `- No typing, form fill, or submit/post/send.`,
+    `- Sensitive login, account, checkout, download/upload, external-app, and submit-style actions are blocked/deferred.`,
     `- No hidden browsing or full-page HTML extraction — title, redacted URL, compact observe, and screenshot bytes only.`,
     `- Rules-first planner only; no search typing in this version.`,
     `- Rules-first planner: at most **${MAX_LOOP_ACTIONS}** actions after load, **~${Math.round(LOOP_WALL_MS / 1000)}s** wall clock.`,

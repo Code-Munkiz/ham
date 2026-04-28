@@ -24,6 +24,12 @@ Chrome profile, not the operator's default browser profile.
 - Stop cleanup: Stop GoHAM closes the managed Chrome session.
 - No unsafe actions: no generic type/key behavior, no form fill, no submit/post,
   no login/purchase/download/upload/install.
+- Safety gates: candidates such as `Sign in`, `Log in`, `Get API Key`,
+  checkout/payment/billing, upload/download, permission/extension prompts, and
+  external app links are skipped or blocked with a short explanation.
+- Domain changes: ordinary search-result links may cross domains; the trail
+  should show the source and target domain and whether the move was allowed or
+  deferred.
 - Evidence honesty: missing terms report `insufficient_evidence` or
   `budget_without_evidence`; search-provider title/query echo is not counted as
   evidence.
