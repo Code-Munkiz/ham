@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 
 import httpx
@@ -80,6 +81,8 @@ def test_chat_stream_gateway_failure_done_with_safe_assistant_and_signal(
     done = events[-1]
     assert done.get("gateway_error") == {"code": "UPSTREAM_REJECTED"}
     msgs = done["messages"]
+    assistants = [m for m in msgs if m["role"] == "assistant"]
+    assert len(assistants) == 1
     assert msgs[-1]["role"] == "assistant"
     body = msgs[-1]["content"]
     assert "secret-upstream" not in body.lower()
@@ -142,8 +145,46 @@ def test_chat_stream_custom_chunks(mock_mode: None, monkeypatch: pytest.MonkeyPa
         json={"messages": [{"role": "user", "content": "x"}]},
     )
     assert res.status_code == 200
-    texts = [e["text"] for e in _parse_ndjson(res.text) if e["type"] == "delta"]
+    events = _parse_ndjson(res.text)
+    texts = [e["text"] for e in events if e["type"] == "delta"]
     assert "".join(texts) == "ab"
+    done = [e for e in events if e["type"] == "done"][0]
+    assistants = [m["content"] for m in done["messages"] if m["role"] == "assistant"]
+    assert assistants == ["ab"]
+
+
+def test_chat_stream_disconnect_checkpoint_persists_partial(mock_mode: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    def slow_stream(_msgs: list, **_kwargs):
+        yield "partial "
+        for _ in range(300):
+            time.sleep(0.005)
+            yield "x"
+
+    monkeypatch.setattr("src.api.chat.stream_chat_turn", slow_stream)
+
+    sid = ""
+    with client.stream(
+        "POST",
+        "/api/chat/stream",
+        json={"messages": [{"role": "user", "content": "keep going"}]},
+    ) as res:
+        assert res.status_code == 200
+        lines = res.iter_lines()
+        first = json.loads(next(lines))
+        assert first["type"] == "session"
+        sid = first["session_id"]
+        second = json.loads(next(lines))
+        assert second["type"] == "delta"
+        # Exit the context early to simulate navigation/reload disconnect.
+
+    # Allow generator cleanup/finally to flush a best-effort final checkpoint.
+    time.sleep(0.05)
+    detail = client.get(f"/api/chat/sessions/{sid}")
+    assert detail.status_code == 200
+    msgs = detail.json()["messages"]
+    assistants = [m["content"] for m in msgs if m["role"] == "assistant"]
+    assert len(assistants) == 1
+    assert "partial" in assistants[0]
 
 
 _MAX_TRANSCRIBE = 15 * 1024 * 1024

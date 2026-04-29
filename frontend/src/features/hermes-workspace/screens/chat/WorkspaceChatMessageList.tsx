@@ -21,6 +21,9 @@ type WorkspaceChatMessageListProps = {
   isStreaming?: boolean;
 };
 
+const INTERRUPTED_SUFFIX = "\n\nConnection interrupted. Ask me to continue.";
+const INTERRUPTED_EMPTY = "Connection interrupted before any content was saved. Ask me to continue.";
+
 export function WorkspaceChatMessageList({ messages, isStreaming }: WorkspaceChatMessageListProps) {
   const last = messages[messages.length - 1];
   const showThinking =
@@ -99,6 +102,12 @@ export function WorkspaceChatMessageList({ messages, isStreaming }: WorkspaceCha
         if (m.role === "assistant") {
           const isLastAssistant = idx === messages.length - 1;
           const thinkingHere = showThinking && isLastAssistant;
+          const interrupted = m.content.endsWith(INTERRUPTED_SUFFIX) || m.content === INTERRUPTED_EMPTY;
+          const visibleContent = m.content === INTERRUPTED_EMPTY
+            ? ""
+            : m.content.endsWith(INTERRUPTED_SUFFIX)
+              ? m.content.slice(0, -INTERRUPTED_SUFFIX.length).trimEnd()
+              : m.content;
           return (
             <div key={m.id} className="flex justify-start">
               <div
@@ -113,7 +122,12 @@ export function WorkspaceChatMessageList({ messages, isStreaming }: WorkspaceCha
                     <span>Thinking…</span>
                   </div>
                 ) : (
-                  <p className="whitespace-pre-wrap break-words">{m.content || "\u00a0"}</p>
+                  <>
+                    <p className="whitespace-pre-wrap break-words">{visibleContent || "\u00a0"}</p>
+                    {interrupted ? (
+                      <p className="mt-2 text-[11px] text-amber-200/85">Connection interrupted. Ask me to continue.</p>
+                    ) : null}
+                  </>
                 )}
                 <p className="mt-1.5 text-[10px] text-white/30">{m.timestamp}</p>
               </div>

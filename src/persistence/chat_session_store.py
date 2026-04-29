@@ -59,6 +59,8 @@ class ChatSessionStore(Protocol):
 
     def append_turns(self, session_id: str, turns: Sequence[ChatTurn | dict[str, Any]]) -> None: ...
 
+    def upsert_last_assistant_turn(self, session_id: str, content: str) -> None: ...
+
     def set_upstream_ref(self, session_id: str, ref: str | None) -> None: ...
 
     def list_messages(self, session_id: str) -> list[dict[str, str]]: ...
@@ -123,6 +125,16 @@ class InMemoryChatSessionStore:
             if rec is None:
                 raise KeyError(session_id)
             rec.turns.extend(normalized)
+
+    def upsert_last_assistant_turn(self, session_id: str, content: str) -> None:
+        with self._lock:
+            rec = self._sessions.get(session_id)
+            if rec is None:
+                raise KeyError(session_id)
+            if rec.turns and rec.turns[-1].role == "assistant":
+                rec.turns[-1] = ChatTurn(role="assistant", content=content)
+            else:
+                rec.turns.append(ChatTurn(role="assistant", content=content))
 
     def set_upstream_ref(self, session_id: str, ref: str | None) -> None:
         with self._lock:

@@ -26,3 +26,15 @@ def test_sqlite_unknown_session_raises(tmp_path: Path) -> None:
     store = SqliteChatSessionStore(tmp_path / "x.db")
     with pytest.raises(KeyError):
         store.append_turns("nope", [ChatTurn(role="user", content="x")])
+
+
+def test_sqlite_upsert_last_assistant_turn_updates_single_row(tmp_path: Path) -> None:
+    store = SqliteChatSessionStore(tmp_path / "u.db")
+    sid = store.create_session()
+    store.append_turns(sid, [ChatTurn(role="user", content="hello")])
+    store.upsert_last_assistant_turn(sid, "partial")
+    store.upsert_last_assistant_turn(sid, "final")
+    assert store.list_messages(sid) == [
+        {"role": "user", "content": "hello"},
+        {"role": "assistant", "content": "final"},
+    ]

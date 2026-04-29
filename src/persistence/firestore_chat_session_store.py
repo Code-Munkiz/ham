@@ -102,6 +102,32 @@ class FirestoreChatSessionStore:
         with self._lock:
             _append(transaction, doc_ref)
 
+    def upsert_last_assistant_turn(self, session_id: str, content: str) -> None:
+        doc_ref = self._coll().document(session_id)
+
+        @transactional
+        def _upsert(transaction: firestore.Transaction, ref: firestore.DocumentReference) -> None:
+            snap = ref.get(transaction=transaction)
+            if not snap.exists:
+                raise KeyError(session_id)
+            data = snap.to_dict() or {}
+            cur = list(data.get("turns") or [])
+            if cur and str((cur[-1] or {}).get("role", "")) == "assistant":
+                cur[-1] = {"role": "assistant", "content": content}
+            else:
+                cur.append({"role": "assistant", "content": content})
+            transaction.update(
+                ref,
+                {
+                    "turns": cur,
+                    "turn_count": len(cur),
+                },
+            )
+
+        transaction = self._db.transaction()
+        with self._lock:
+            _upsert(transaction, doc_ref)
+
     def set_upstream_ref(self, session_id: str, ref: str | None) -> None:
         doc_ref = self._coll().document(session_id)
 
