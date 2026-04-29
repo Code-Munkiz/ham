@@ -7,7 +7,7 @@ Phase 1 smoke tests validate the HAM-on-X safety path without enabling posting.
 - `local`: Uses fixture candidate data and runs the real dry-run pipeline through scoring, drafting, policy review, budget/rate checks, autonomy decision, queue/audit output.
 - `env`: Checks redacted environment status and safe defaults.
 - `x-readonly`: Runs only a read-only `xurl search` smoke when all live gates are set. It never posts, quotes, likes, replies, follows, or opens timelines/mentions in Phase 1E.
-- `xai`: Checks the future xAI smoke surface. Live calls are disabled unless `HAM_X_ENABLE_LIVE_SMOKE=true`; Phase 1D still returns not implemented.
+- `xai`: Validates `XAI_API_KEY` and `HAM_X_MODEL` with one tiny fixed prompt when `HAM_X_ENABLE_LIVE_SMOKE=true`. It does not draft campaign content or connect model output to xurl.
 - `e2e-dry-run`: Uses fixture data by default and runs the dry-run pipeline end to end. Future live read-only inputs may be added, but posting remains disabled.
 
 ## Safety Invariants
@@ -69,10 +69,28 @@ xurl search "Base ecosystem autonomous agents" --max-results 10
 
 Check the result has `mutation_attempted=false`, `execution_allowed=false`, and `summary.safety_status=read_only_search_only`.
 
+Run xAI tiny-call smoke only with a staging key and explicit gate:
+
+```bash
+HAM_X_ENABLE_LIVE_SMOKE=true \
+python - <<'PY'
+from src.ham.ham_x.smoke import run_smoke
+print(run_smoke("xai").redacted_dump())
+PY
+```
+
+Phase 1F sends only this fixed prompt:
+
+```text
+Return exactly: HAM_XAI_SMOKE_OK
+```
+
+The request caps output at 8 tokens, uses a short timeout, and sets `store=false`. The result is only a model-wiring smoke signal; do not use it for campaign drafting, review queue publishing, autonomy decisions, or xurl execution.
+
 Run the narrow tests:
 
 ```bash
-python -m pytest tests/test_ham_x_phase1a.py tests/test_ham_x_smoke.py tests/test_ham_x_xurl_readonly.py -v
+python -m pytest tests/test_ham_x_phase1a.py tests/test_ham_x_smoke.py tests/test_ham_x_xurl_readonly.py tests/test_ham_x_xai_smoke.py -v
 ```
 
 ## External Smoke Recommendation
@@ -80,3 +98,5 @@ python -m pytest tests/test_ham_x_phase1a.py tests/test_ham_x_smoke.py tests/tes
 Use staging X credentials only. Do not use production credentials for initial smoke validation, do not paste credential values into chat or logs, and do not change `HAM_X_AUTONOMY_ENABLED=false`.
 
 The read-only adapter should be considered healthy only if the audit log and returned smoke result show a search-only argv, redacted stdout/stderr, `mutation_attempted=false`, and `execution_allowed=false`.
+
+The xAI tiny-call smoke should be considered healthy only if the returned result is redacted, `network_attempted=true`, `mutation_attempted=false`, `execution_allowed=false`, and the response text is exactly `HAM_XAI_SMOKE_OK`.

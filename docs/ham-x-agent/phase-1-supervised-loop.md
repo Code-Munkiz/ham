@@ -59,6 +59,12 @@ Phase 1E adds a read-only X smoke adapter for `xurl search` only. It is gated by
 
 The adapter validates xurl/X wiring without enabling posting. It denies post, quote, and like before subprocess execution, uses argv arrays with `shell=False`, redacts stdout/stderr, and preserves `mutation_attempted=false` and `execution_allowed=false`.
 
+## Phase 1F Behavior
+
+Phase 1F adds an xAI tiny-call smoke for `XAI_API_KEY` and `HAM_X_MODEL` validation only. It sends the fixed prompt `Return exactly: HAM_XAI_SMOKE_OK` with a strict output cap and short timeout.
+
+The smoke result is not campaign drafting. It is not connected to review queue publishing, autonomy decisions, xurl, or posting, and it preserves `mutation_attempted=false` and `execution_allowed=false`.
+
 ## Reusable Agent Template
 
 The official launch agent uses `tenant_id=ham-official`, `agent_id=ham-pr-rockstar`, and `campaign_id=base-stealth-launch`. The same action envelope can be reused for tenant-created agents by changing those context fields and attaching tenant-specific policy and brand voice profiles.

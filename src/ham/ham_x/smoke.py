@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from src.ham.ham_x.action_envelope import platform_context_from_config
 from src.ham.ham_x.audit import append_audit_event
 from src.ham.ham_x.config import HamXConfig, load_ham_x_config
+from src.ham.ham_x.grok_client import XaiHttpPost, run_xai_tiny_smoke
 from src.ham.ham_x.pipeline import PipelineRunResult, run_supervised_opportunity_loop
 from src.ham.ham_x.redaction import redact
 from src.ham.ham_x.xurl_wrapper import XurlRunner, XurlWhich, XurlWrapper
@@ -64,6 +65,7 @@ def run_smoke(
     *,
     xurl_runner: XurlRunner | None = None,
     xurl_binary_resolver: XurlWhich | None = None,
+    xai_http_post: XaiHttpPost | None = None,
 ) -> SmokeResult:
     """Run one HAM-on-X smoke mode without mutating X."""
     cfg = config or load_ham_x_config()
@@ -91,7 +93,7 @@ def run_smoke(
             xurl_binary_resolver=xurl_binary_resolver,
         )
     if normalized == "xai":
-        return _xai_smoke(cfg)
+        return _xai_smoke(cfg, xai_http_post=xai_http_post)
     raise AssertionError("unreachable")
 
 
@@ -240,8 +242,22 @@ def _readonly_gate_reasons(config: HamXConfig) -> list[str]:
     return reasons
 
 
-def _xai_smoke(config: HamXConfig) -> SmokeResult:
+def _xai_smoke(
+    config: HamXConfig,
+    *,
+    xai_http_post: XaiHttpPost | None = None,
+) -> SmokeResult:
     if not config.enable_live_smoke:
+        append_audit_event(
+            "xai_smoke_blocked",
+            {
+                "reason": "HAM_X_ENABLE_LIVE_SMOKE_must_be_true",
+                "model": config.model,
+                "execution_allowed": False,
+                "mutation_attempted": False,
+            },
+            config=config,
+        )
         return _base_result(
             mode="xai",
             config=config,
@@ -252,18 +268,64 @@ def _xai_smoke(config: HamXConfig) -> SmokeResult:
                 "model": config.model,
                 "prompt_budget": "tiny_future_smoke",
                 "execution_allowed": False,
+                "mutation_attempted": False,
             },
         )
-    return _base_result(
-        mode="xai",
-        config=config,
-        ok=True,
-        warnings=["live xAI smoke not implemented in Phase 1D"],
-        summary={
-            "status": "not_implemented",
+    if not config.xai_api_key:
+        append_audit_event(
+            "xai_smoke_blocked",
+            {
+                "reason": "xai_api_key_missing",
+                "model": config.model,
+                "execution_allowed": False,
+                "mutation_attempted": False,
+            },
+            config=config,
+        )
+        return _base_result(
+            mode="xai",
+            config=config,
+            ok=True,
+            warnings=["XAI_API_KEY is required for live xAI smoke"],
+            summary={
+                "status": "blocked",
+                "reason": "xai_api_key_missing",
+                "model": config.model,
+                "prompt_budget": "tiny_future_smoke",
+                "execution_allowed": False,
+                "mutation_attempted": False,
+            },
+        )
+
+    append_audit_event(
+        "xai_smoke_planned",
+        {
             "model": config.model,
             "prompt_budget": "tiny_future_smoke",
             "execution_allowed": False,
+            "mutation_attempted": False,
+        },
+        config=config,
+    )
+    result = run_xai_tiny_smoke(config=config, http_post=xai_http_post)
+    append_audit_event(
+        "xai_smoke_executed" if result.ok else "xai_smoke_failed",
+        result.as_dict(),
+        config=config,
+    )
+    return _base_result(
+        mode="xai",
+        config=config,
+        ok=result.ok,
+        warnings=[] if result.ok else [result.reason],
+        network_attempted=result.network_attempted,
+        summary={
+            "status": result.reason,
+            "xai_result": result.as_dict(),
+            "model": config.model,
+            "prompt_budget": "tiny_future_smoke",
+            "execution_allowed": False,
+            "mutation_attempted": False,
         },
     )
 

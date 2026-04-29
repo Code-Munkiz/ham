@@ -45,6 +45,10 @@ AuditEventType = Literal[
     "x_readonly_smoke_executed",
     "x_readonly_smoke_failed",
     "x_mutation_blocked",
+    "xai_smoke_blocked",
+    "xai_smoke_planned",
+    "xai_smoke_executed",
+    "xai_smoke_failed",
 ]
 
 

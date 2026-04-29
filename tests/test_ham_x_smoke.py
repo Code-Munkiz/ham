@@ -9,9 +9,9 @@ from src.ham.ham_x.config import HamXConfig
 from src.ham.ham_x.smoke import run_smoke
 
 
-def _test_config(tmp_path: Path, *, live: bool = False) -> HamXConfig:
+def _test_config(tmp_path: Path, *, live: bool = False, xai_api_key: str = "") -> HamXConfig:
     return HamXConfig(
-        xai_api_key="",
+        xai_api_key=xai_api_key,
         x_api_key="",
         x_api_secret="",
         x_access_token="",

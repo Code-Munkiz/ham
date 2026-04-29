@@ -54,6 +54,8 @@ All smoke results preserve `execution_allowed=false` and `mutation_attempted=fal
 
 Phase 1E implements only a gated read-only `xurl search` smoke. It requires `HAM_X_DRY_RUN=true` and `HAM_X_AUTONOMY_ENABLED=false`, denies post/quote/like before subprocess execution, and keeps xAI smoke disabled/not implemented.
 
+Phase 1F implements only a gated xAI tiny-call smoke for credential/model validation. The returned text is never connected to campaign drafting, review queue publishing, autonomy decisions, or xurl execution.
+
 ## Boundaries
 
 - Hermes remains the supervisory policy layer.

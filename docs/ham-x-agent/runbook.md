@@ -13,7 +13,7 @@
 Run the focused tests:
 
 ```bash
-python -m pytest tests/test_ham_x_phase1a.py tests/test_ham_x_smoke.py tests/test_ham_x_xurl_readonly.py -v
+python -m pytest tests/test_ham_x_phase1a.py tests/test_ham_x_smoke.py tests/test_ham_x_xurl_readonly.py tests/test_ham_x_xai_smoke.py -v
 ```
 
 Phase 1B/1C/1D/1E use the same narrow test target. It covers the non-mutating opportunity pipeline, autonomy decisions, exception queue writes, review queue writes, audit traces, smoke summaries, read-only xurl smoke, and mutating-action blocks.
@@ -108,6 +108,18 @@ HAM_X_AUTONOMY_ENABLED=false
 Use staging X credentials for this check. Do not use production credentials for first-pass smoke validation, and never paste or print token values. The read-only smoke uses `xurl search "Base ecosystem autonomous agents" --max-results 10`; post, quote, like, reply, timeline, mentions, and xAI calls are not part of Phase 1E.
 
 After a run, verify the returned smoke result and `.data/ham-x/audit.jsonl` contain `mutation_attempted=false`, `execution_allowed=false`, and a search-only argv.
+
+## Phase 1F xAI Tiny-Call Smoke
+
+`run_smoke("xai")` can validate `XAI_API_KEY` and `HAM_X_MODEL` wiring with one tiny fixed prompt when `HAM_X_ENABLE_LIVE_SMOKE=true` and `XAI_API_KEY` is present.
+
+The smoke prompt is exactly:
+
+```text
+Return exactly: HAM_XAI_SMOKE_OK
+```
+
+The smoke caps output at 8 tokens and does not feed model output into campaign drafting, review queues, autonomy decisions, or xurl. Use staging xAI credentials first, never paste token values, and verify the returned smoke result preserves `mutation_attempted=false` and `execution_allowed=false`.
 
 ## Autonomy Modes
 
