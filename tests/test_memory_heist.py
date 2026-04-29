@@ -311,6 +311,21 @@ def test_config_precedence_section_overrides_top_level():
     assert s.tool_prune_chars == 33
 
 
+def test_config_string_numeric_values_coerced_for_session_compaction():
+    """Merged project config may carry numeric strings; they must not be ignored."""
+    s = SessionMemory()
+    s.configure_from_project_config({
+        "memory_heist": {
+            "session_compaction_max_tokens": "9000",
+            "session_compaction_preserve": "3",
+            "session_tool_prune_chars": "200",
+        }
+    })
+    assert s.compact_max_tokens == 9000
+    assert s.compact_preserve == 3
+    assert s.tool_prune_chars == 200
+
+
 def test_repeated_compaction_bounded_with_pruning_enabled():
     s = SessionMemory()
     s.tool_prune_chars = 40
