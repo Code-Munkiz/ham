@@ -7,7 +7,7 @@ import sys
 import typer
 
 from src.ham_cli.commands.api_cmd import run_api_status
-from src.ham_cli.commands.desktop import run_package_linux, run_package_win
+from src.ham_cli.commands.desktop import run_package_win
 from src.ham_cli.commands.doctor import run_doctor
 from src.ham_cli.commands.readiness import run_readiness
 from src.ham_cli.commands.status import run_status
@@ -38,18 +38,17 @@ def run_interactive_menu() -> None:
         print("  1  Check HAM health          (Python, imports, desktop tooling, optional API)")
         print("  2  Show HAM status          (local summary; remote if HAM_API_BASE is set)")
         print("  3  Check API connection     (GET /api/status — needs HAM_API_BASE)")
-        print("  4  Package Linux desktop    (npm run pack:linux in desktop/)")
-        print("  5  Package Windows desktop (npm run pack:win in desktop/)")
-        print("  6  Show release readiness   (checklist: git, scripts, API, …)")
-        print("  7  Exit")
+        print("  4  Package Windows desktop (npm run pack:win in desktop/)")
+        print("  5  Show release readiness   (checklist: git, scripts, API, …)")
+        print("  6  Exit")
         print()
         try:
-            choice = input("Choose [1–7]: ").strip()
+            choice = input("Choose [1–6]: ").strip()
         except (EOFError, KeyboardInterrupt):
             print()
             raise typer.Exit(code=0) from None
 
-        if choice == "7":
+        if choice == "6":
             raise typer.Exit(code=0)
         if choice == "1":
             try:
@@ -79,20 +78,13 @@ def run_interactive_menu() -> None:
                     pass
             _pause()
         elif choice == "4":
-            if _confirm("Run Linux desktop packaging now?"):
-                try:
-                    run_package_linux()
-                except typer.Exit:
-                    pass
-            _pause()
-        elif choice == "5":
             if _confirm("Run Windows desktop packaging now?"):
                 try:
                     run_package_win()
                 except typer.Exit:
                     pass
             _pause()
-        elif choice == "6":
+        elif choice == "5":
             try:
                 run_readiness()
             except typer.Exit:
@@ -101,4 +93,4 @@ def run_interactive_menu() -> None:
         elif choice in ("",):
             continue
         else:
-            print("Unknown choice. Enter a number from 1 to 7.", file=sys.stderr)
+            print("Unknown choice. Enter a number from 1 to 6.", file=sys.stderr)

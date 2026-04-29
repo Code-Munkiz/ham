@@ -62,7 +62,6 @@ export type ManagedDeployHandoffState =
   | "hook_accepted"
   | "hook_failed"
   | "hook_not_configured";
-
 export interface RunRecord {
   run_id: string;
   created_at: string;
@@ -151,17 +150,6 @@ export interface HermesReview {
   context?: string;
 }
 
-/** Matches `src/registry/profiles.py` IntentProfile (+ optional UI fields). */
-export interface ProfileRecord {
-  id: string;
-  version: string;
-  argv: string[];
-  metadata: Record<string, any>;
-  display_name?: string;
-  description?: string;
-  sample_command?: string;
-}
-
 /** Matches `src/registry/projects.py` ProjectRecord (JSON from /api/projects, /api/projects/{id}). */
 export interface ProjectRecord {
   id: string;
@@ -197,6 +185,42 @@ export interface ModelCatalogItem {
   openrouter_model?: string;
 }
 
+/** Response from `GET /api/tts/health` — TTS enabled and mounted (no network probe). */
+export interface HamTtsHealthPayload {
+  ok: boolean;
+  /** When false, UI should treat TTS as unavailable (e.g. HAM_TTS_ENABLED=0 or older API). */
+  available: boolean;
+  reason?: string;
+  generate_path?: string;
+  engine?: string;
+}
+
+/** GET/PATCH `/api/workspace/voice-settings` — persisted TTS/STT preferences (HAM-native). */
+export interface HamVoiceSettingsPayload {
+  kind: "ham_voice_settings";
+  settings: {
+    tts: { enabled: boolean; provider: "edge"; voice: string };
+    stt: { enabled: boolean; provider: "openai"; mode: "auto" | "live" | "record" };
+  };
+  capabilities: {
+    tts: {
+      available: boolean;
+      providers: Array<{ id: string; label: string; available: boolean; reason?: string | null }>;
+      voices: Array<{ id: string; label: string }>;
+    };
+    stt: {
+      available: boolean;
+      reason?: string | null;
+      providers: Array<{ id: string; label: string; available: boolean; reason?: string | null }>;
+    };
+  };
+}
+
+export type HamVoiceSettingsPatch = {
+  tts?: Partial<{ enabled: boolean; provider: "edge"; voice: string }>;
+  stt?: Partial<{ enabled: boolean; provider: "openai"; mode: "auto" | "live" | "record" }>;
+};
+
 /** Response from `GET /api/models`. */
 export interface ModelCatalogPayload {
   items: ModelCatalogItem[];
@@ -207,6 +231,10 @@ export interface ModelCatalogPayload {
   http_chat_ready?: boolean;
   /** True when dashboard chat can run (OpenRouter path ready, or HTTP gateway configured, or mock). */
   dashboard_chat_ready?: boolean;
+  /** When `gateway_mode` is `http`: `HERMES_GATEWAY_MODEL` sent to Hermes (informational). */
+  http_chat_model_primary?: string | null;
+  /** When set on API: `HAM_CHAT_FALLBACK_MODEL` for HTTP retry (informational). */
+  http_chat_model_fallback?: string | null;
 }
 
 /** Uses `dashboard_chat_ready` from API when present; otherwise infers from legacy fields. */
@@ -216,6 +244,36 @@ export function isDashboardChatGatewayReady(c: ModelCatalogPayload | null | unde
   return Boolean(
     c.openrouter_chat_ready || c.http_chat_ready === true || c.gateway_mode === "mock",
   );
+}
+
+/**
+ * Single-line status token for /chat: distinguishes Hermes HTTP vs mock dev vs other paths.
+ * Uses fields from `GET /api/models` (same payload as the composer catalog).
+ */
+export function getChatGatewayReadinessToken(
+  catalog: ModelCatalogPayload | null | undefined,
+  options: { sending: boolean; catalogLoading: boolean },
+): string {
+  if (options.sending) return "SENDING";
+  if (options.catalogLoading) return "GATEWAY_READY";
+  if (!catalog) return "GATEWAY_OFFLINE";
+  if (!isDashboardChatGatewayReady(catalog)) return "GATEWAY_OFFLINE";
+
+  const mode = (catalog.gateway_mode || "").trim().toLowerCase();
+
+  if (mode === "http") {
+    return catalog.http_chat_ready === true ? "HTTP_READY" : "GATEWAY_OFFLINE";
+  }
+  if (mode === "mock") {
+    return "MOCK_READY";
+  }
+  if (mode === "openrouter") {
+    return catalog.openrouter_chat_ready ? "OPENROUTER_READY" : "GATEWAY_OFFLINE";
+  }
+  if (!mode || mode === "unknown") {
+    return "GATEWAY_READY";
+  }
+  return "GATEWAY_READY";
 }
 
 /** From `GET /api/cursor/credentials-status` — never includes the full secret. */

@@ -35,7 +35,12 @@ class _FakeManager:
         }
 
     def create_session(
-        self, *, owner_key: str, viewport_width: int = 1280, viewport_height: int = 720
+        self,
+        *,
+        owner_key: str,
+        viewport_width: int = 1280,
+        viewport_height: int = 720,
+        operator_mode: bool = False,
     ) -> dict[str, Any]:
         _ = (viewport_width, viewport_height)
         sid = "brs_test"
@@ -59,10 +64,19 @@ class _FakeManager:
                 "requested_transport": "none",
                 "last_error": None,
             },
+            "operator_mode_required": bool(operator_mode),
             "owner_key": owner_key,
         }
         self._sessions[sid] = state
         return {k: v for k, v in state.items() if k != "owner_key"}
+
+    def is_operator_mode_required(self, *, session_id: str, owner_key: str) -> bool:
+        s = self._sessions.get(session_id)
+        if not s:
+            raise BrowserSessionNotFoundError("Unknown session_id")
+        if s["owner_key"] != owner_key:
+            raise BrowserSessionOwnerMismatchError("Session owner mismatch.")
+        return bool(s.get("operator_mode_required", False))
 
     def get_state(self, *, session_id: str, owner_key: str) -> dict[str, Any]:
         s = self._sessions.get(session_id)
@@ -304,3 +318,80 @@ def test_live_stream_and_interactive_endpoints(api_client: TestClient) -> None:
     stopped = api_client.post(f"/api/browser/sessions/{sid}/stream/stop", json={"owner_key": "pane_a"})
     assert stopped.status_code == 200
     assert stopped.json()["status"] == "disconnected"
+
+
+# ---------------------------------------------------------------------------
+# Operator-mode 409 gate (Phase 2 — Browser Operator)
+# ---------------------------------------------------------------------------
+
+
+def test_default_session_is_not_operator_mode(api_client: TestClient) -> None:
+    """Regression: ``operator_mode=false`` is the default and direct actions remain allowed."""
+    res = api_client.post("/api/browser/sessions", json={"owner_key": "pane_a"})
+    assert res.status_code == 200
+    body = res.json()
+    assert body.get("operator_mode_required") is False
+
+    sid = body["session_id"]
+    nav = api_client.post(
+        f"/api/browser/sessions/{sid}/navigate",
+        json={"owner_key": "pane_a", "url": "https://example.com"},
+    )
+    assert nav.status_code == 200
+
+
+def test_operator_mode_blocks_direct_actions_with_409(api_client: TestClient) -> None:
+    res = api_client.post(
+        "/api/browser/sessions",
+        json={"owner_key": "pane_a", "operator_mode": True},
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body.get("operator_mode_required") is True
+    sid = body["session_id"]
+
+    nav = api_client.post(
+        f"/api/browser/sessions/{sid}/navigate",
+        json={"owner_key": "pane_a", "url": "https://example.com"},
+    )
+    assert nav.status_code == 409
+    assert nav.json()["detail"] == "OPERATOR_MODE_REQUIRES_APPROVAL"
+
+    click_xy = api_client.post(
+        f"/api/browser/sessions/{sid}/actions/click-xy",
+        json={"owner_key": "pane_a", "x": 100, "y": 80, "button": "left"},
+    )
+    assert click_xy.status_code == 409
+    assert click_xy.json()["detail"] == "OPERATOR_MODE_REQUIRES_APPROVAL"
+
+    typed = api_client.post(
+        f"/api/browser/sessions/{sid}/actions/type",
+        json={"owner_key": "pane_a", "selector": "input", "text": "x", "clear_first": True},
+    )
+    assert typed.status_code == 409
+
+    scroll = api_client.post(
+        f"/api/browser/sessions/{sid}/actions/scroll",
+        json={"owner_key": "pane_a", "delta_x": 0, "delta_y": 100},
+    )
+    assert scroll.status_code == 409
+
+    key = api_client.post(
+        f"/api/browser/sessions/{sid}/actions/key",
+        json={"owner_key": "pane_a", "key": "Enter"},
+    )
+    assert key.status_code == 409
+
+    reset = api_client.post(
+        f"/api/browser/sessions/{sid}/reset",
+        json={"owner_key": "pane_a"},
+    )
+    assert reset.status_code == 409
+
+    # Read-side endpoints remain usable in operator-mode (state + screenshot).
+    state = api_client.get(f"/api/browser/sessions/{sid}", params={"owner_key": "pane_a"})
+    assert state.status_code == 200
+    shot = api_client.post(
+        f"/api/browser/sessions/{sid}/screenshot", json={"owner_key": "pane_a"}
+    )
+    assert shot.status_code == 200

@@ -4,6 +4,33 @@ This repo ships a **`Dockerfile`** that runs **`uvicorn src.api.server:app`**. T
 
 **End-to-end checklist (Vercel + GCP):** [`docs/DEPLOY_HANDOFF.md`](DEPLOY_HANDOFF.md). After deploy, run **`scripts/verify_ham_api_deploy.sh`** with your API URL and the **exact** Vercel `Origin` you use in the browser.
 
+### Chat sessions and `?session=` deep links
+
+**Local / dev (default):** Ham stores chat sessions in SQLite under `~/.ham/chat_sessions.sqlite` (override with `HAM_CHAT_SESSION_DB`). This is fine on a laptop; it is **not** durable on Cloud Run unless the DB path is on a mounted volume (unusual).
+
+**Cloud Run (recommended):** set **`HAM_CHAT_SESSION_STORE=firestore`** so session documents live in **Firestore** in the same GCP project as the service. Container restarts, new revisions, and scale-to-zero then reuse the same data; `/workspace/chat?session=<id>` keeps working after redeploys.
+
+| Variable | Meaning |
+|----------|---------|
+| `HAM_CHAT_SESSION_STORE` | `sqlite` (default), `memory`, or `firestore`. (`postgres` is reserved — not implemented.) |
+| `HAM_CHAT_SESSION_DB` | SQLite file path when store is `sqlite`. |
+| `HAM_CHAT_SESSION_FIRESTORE_PROJECT` | Optional GCP project id for Firestore; omit to use the Cloud Run service’s default project (ADC). |
+| `HAM_CHAT_SESSION_FIRESTORE_COLLECTION` | Top-level collection name (default `ham_chat_sessions`). |
+| `HAM_CHAT_SESSION_FIRESTORE_DATABASE` | Firestore **database id** (not project id). Required when the project has **no** `(default)` database — e.g. **Clarity Staging** (`clarity-staging-488201`) currently lists only named `ai-studio-…` databases. Either create a dedicated database (recommended) and set this to its id, or create `(default)` and leave this unset. |
+
+**Firestore setup (operator):**
+
+1. In the target project, ensure at least one **Firestore Native** database exists that Ham should use. The Python client defaults to database id **`(default)`**; if that database does not exist (common when only AI Studio–created DBs are present), set **`HAM_CHAT_SESSION_FIRESTORE_DATABASE`** to a database id in the same region you intend to use, or create `(default)` / a dedicated DB first, e.g.  
+   `gcloud firestore databases create --database=ham-chat-sessions --location=us-central1 --project=YOUR_PROJECT_ID`  
+   then set **`HAM_CHAT_SESSION_FIRESTORE_DATABASE=ham-chat-sessions`** on Cloud Run.
+2. Grant the **Cloud Run runtime service account** a role that can read/write Firestore in that project, e.g. **`roles/datastore.user`** (or a custom role with the needed `datastore.*` permissions).
+3. Set the env vars above on the Cloud Run service (add them to your `.gcloud/ham-api-env.yaml` or use **`gcloud run services update … --set-env-vars`** / **`--update-env-vars`** — avoid replacing the whole env file with a minimal YAML that drops Hermes/OpenRouter keys; see the warning earlier in this doc).
+4. Redeploy **`ham-api`** if the running image does not yet include the Firestore session store code. No migration of old ephemeral SQLite sessions — only new traffic uses Firestore.
+
+The workspace UI still shows a recovery card for missing or permission-denied sessions.
+
+**In-process only:** `HAM_CHAT_SESSION_STORE=memory` (tests / special cases; not durable).
+
 ## Source of truth: Clarity Staging (team GCP)
 
 **Staging** Ham API deployments use this GCP project (console name **Clarity-Staging**):
@@ -16,6 +43,14 @@ This repo ships a **`Dockerfile`** that runs **`uvicorn src.api.server:app`**. T
 | **Cloud Run service** | `ham-api` |
 
 Use a **different** GCP project for production when your org splits prod/staging; this repo documents **staging** IDs only.
+
+### TTS (`POST /api/tts/generate`)
+
+Synthesis uses the **`edge-tts`** PyPI package (WebSocket to Microsoft; same protocol as the Edge browser). The API host needs **outbound internet**; **`GET /api/tts/health`** only checks that the route and `HAM_TTS_ENABLED` are on — it does not prove Microsoft accepted the request. No API keys for Edge TTS.
+
+### Voice settings persistence (`GET/PATCH /api/workspace/voice-settings`)
+
+Defaults to **local JSON** under the workspace root (`.ham/workspace_state/voice_settings/`). For **durable multi-replica** storage on Cloud Run, set **`HAM_VOICE_SETTINGS_STORE=firestore`** and optional **`HAM_VOICE_SETTINGS_FIRESTORE_COLLECTION`** / **`HAM_VOICE_SETTINGS_FIRESTORE_PROJECT`** / **`HAM_VOICE_SETTINGS_FIRESTORE_DATABASE`** (same multi-database story as chat sessions). Documents are keyed by a stable hash of the Clerk scope (`user:<id>` or `default`).
 
 ## What you do in GCP (not automatable from this repo)
 
@@ -85,6 +120,76 @@ gcloud builds submit --tag "${IMAGE}" . --project="${PROJECT_ID}"
 
 3. **Deploy** with **`--set-secrets=CURSOR_API_KEY=ham-cursor-api-key:latest`** (see below) in addition to **`--env-vars-file`**.
 
+## Cloud Agent launch token (`HAM_CURSOR_AGENT_LAUNCH_TOKEN`)
+
+Chat **`cursor_agent_launch`** requires a Ham **operator bearer** separate from **`CURSOR_API_KEY`**. On Cloud Run, store it in **Secret Manager** (not `.gcloud/ham-api-env.yaml`) so it is never committed.
+
+1. **Create** the secret (skip if it already exists):
+
+   ```bash
+   export PROJECT_ID=clarity-staging-488201
+   gcloud secrets create ham-cursor-agent-launch-token \
+     --project="${PROJECT_ID}" \
+     --replication-policy=automatic
+   ```
+
+2. **Add** a version without putting the token on the command line (pick one):
+
+   ```bash
+   # From an env var already set in your shell (not echoed):
+   printf '%s' "$HAM_CURSOR_AGENT_LAUNCH_TOKEN" | gcloud secrets versions add ham-cursor-agent-launch-token \
+     --project="${PROJECT_ID}" \
+     --data-file=-
+   ```
+
+3. **Grant** the Cloud Run runtime service account **`roles/secretmanager.secretAccessor`** on **`ham-cursor-agent-launch-token`** (use the same member as for **`ham-cursor-api-key`** — see above).
+
+4. **Deploy** with **`HAM_CURSOR_AGENT_LAUNCH_TOKEN=ham-cursor-agent-launch-token:latest`** in **`--set-secrets`** alongside Cursor and Hermes keys. The default in **`scripts/deploy_ham_api_cloud_run.sh`** includes this mapping.
+
+5. **Browser:** paste the **same** secret value in the Cloud Agent launch field (or retrieve the current version locally with `gcloud secrets versions access latest --secret=ham-cursor-agent-launch-token --project="${PROJECT_ID}"`).
+
+## Transcription key (`HAM_TRANSCRIPTION_API_KEY`)
+
+`POST /api/chat/transcribe` requires:
+
+- `HAM_TRANSCRIPTION_PROVIDER=openai`
+- `HAM_TRANSCRIPTION_API_KEY` mounted from Secret Manager (not plain env)
+
+If the key is missing or placeholder-like (`PLACEHOLDER`, `changeme`, `dummy`, `test`, masked snippets), Ham reports transcription as **not configured** and returns a safe `503`.
+
+1. Create/rotate the secret version:
+
+   ```bash
+   export PROJECT_ID=clarity-staging-488201
+   # First create (one-time) if needed:
+   gcloud secrets create ham-transcription-api-key \
+     --project="${PROJECT_ID}" \
+     --replication-policy=automatic
+
+   # Add/rotate latest value safely (do not echo key):
+   printf '%s' "$REAL_OPENAI_API_KEY" | gcloud secrets versions add ham-transcription-api-key \
+     --project="${PROJECT_ID}" \
+     --data-file=-
+   ```
+
+2. Grant Cloud Run runtime service account secret access (same identity used for other Ham secrets):
+
+   ```bash
+   gcloud secrets add-iam-policy-binding ham-transcription-api-key \
+     --project=clarity-staging-488201 \
+     --member="serviceAccount:PROJECT_NUMBER-compute@developer.gserviceaccount.com" \
+     --role="roles/secretmanager.secretAccessor"
+   ```
+
+3. Mount on Cloud Run:
+
+   ```bash
+   gcloud run services update ham-api \
+     --region=us-central1 \
+     --project=clarity-staging-488201 \
+     --update-secrets=HAM_TRANSCRIPTION_API_KEY=ham-transcription-api-key:latest
+   ```
+
 ## Deploy to Cloud Run
 
 ```bash
@@ -95,6 +200,11 @@ export IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/ham/ham-api:staging"
 
 # Prefer an env YAML file: commas in HAM_CORS_ORIGINS break `--set-env-vars` parsing.
 # Copy `docs/examples/ham-api-cloud-run-env.yaml` to `.gcloud/ham-api-env.yaml` (gitignored) and edit.
+#
+# Important: each `gcloud run deploy --env-vars-file …` supplies the **full** set of plain env vars for
+# the new revision. A file that sets `HERMES_GATEWAY_MODE: mock` (the doc example default) will force
+# mock chat and **drop** any Hermes HTTP/OpenRouter vars that existed only on the previous revision.
+# Before redeploying staging, diff against a known-good revision: `gcloud run revisions describe REV --format=yaml(spec.containers[0].env)`.
 
 gcloud run deploy "${SERVICE}" \
   --image "${IMAGE}" \
@@ -103,7 +213,7 @@ gcloud run deploy "${SERVICE}" \
   --allow-unauthenticated \
   --project "${PROJECT_ID}" \
   --env-vars-file .gcloud/ham-api-env.yaml \
-  --set-secrets=CURSOR_API_KEY=ham-cursor-api-key:latest,HERMES_GATEWAY_API_KEY=ham-hermes-gateway-api-key:latest
+  --set-secrets=CURSOR_API_KEY=ham-cursor-api-key:latest,HERMES_GATEWAY_API_KEY=ham-hermes-gateway-api-key:latest,HAM_CURSOR_AGENT_LAUNCH_TOKEN=ham-cursor-agent-launch-token:latest
 ```
 
 Add more env vars as needed, e.g. **`HERMES_GATEWAY_MODE=http`**, **`HERMES_GATEWAY_BASE_URL`**, **`HERMES_GATEWAY_API_KEY`**, **`OPENROUTER_API_KEY`** (use **Secret Manager** for secrets in real deployments).
@@ -181,6 +291,8 @@ Set at least:
 
 See commented template in [`docs/examples/ham-api-cloud-run-env.yaml`](examples/ham-api-cloud-run-env.yaml) and [`docs/HERMES_GATEWAY_CONTRACT.md`](HERMES_GATEWAY_CONTRACT.md) (streaming **`stream: true`** behavior).
 
+**Incident recovery:** if dashboard chat hangs or shows blank replies after model or gateway changes, align Cloud Run env with Hermes `config.yaml` using [`docs/RUNBOOK_HAM_MODEL_RECOVERY.md`](RUNBOOK_HAM_MODEL_RECOVERY.md).
+
 ## Smoke tests
 
 ```bash
@@ -195,7 +307,7 @@ curl -sS -X POST "${SERVICE_URL}/api/chat" \
 
 ## In-app browser (Playwright) on Cloud Run
 
-The dashboard **Chat → Browser** / **War Room** pane calls **`/api/browser/*`**. For this to work **in production** (not just locally):
+The **`/api/browser/*`** Playwright runtime remains available for **future workspace/desktop** consumers and integration tests; the legacy dashboard War Room UI was removed (Batch 2A). For Playwright to work **in production** (not just locally):
 
 0. **One command (from repo root, after `gcloud` auth and `.gcloud/ham-api-env.yaml` exists):** run **`./scripts/deploy_ham_api_cloud_run.sh`** — Cloud Build, deploy, **`--memory 2Gi`**, and **`--cpu 2`** (overridable via `MEMORY` / `CPU` env). See the script header for `PROJECT_ID`, `SET_SECRETS`, etc.
 1. **Rebuild and redeploy the API image** from the repo **`Dockerfile`**, which runs `python -m playwright install --with-deps chromium`. Older images that only `pip install playwright` have **no Chromium** — sessions will fail.

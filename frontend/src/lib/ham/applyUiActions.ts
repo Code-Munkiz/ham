@@ -3,7 +3,7 @@ import { toast } from "sonner";
 
 import { normalizeSettingsTabParam } from "@/components/workspace/UnifiedSettings";
 
-import type { HamUiAction, HamWorkbenchViewMode } from "./api";
+import type { HamUiAction } from "./api";
 
 export function applyHamUiActions(
   actions: HamUiAction[],
@@ -11,9 +11,6 @@ export function applyHamUiActions(
     navigate: NavigateFunction;
     setIsControlPanelOpen: (open: boolean) => void;
     isControlPanelOpen: boolean;
-    setWorkbenchView: (mode: HamWorkbenchViewMode) => void;
-    /** Optional – needed to activate the browser-only split variant. */
-    setBrowserMode?: (active: boolean) => void;
   },
 ): void {
   for (const a of actions) {
@@ -23,7 +20,7 @@ export function applyHamUiActions(
         break;
       case "open_settings": {
         const tab = normalizeSettingsTabParam(a.tab ?? null);
-        ctx.navigate(`/settings?tab=${encodeURIComponent(tab)}`);
+        ctx.navigate(`/workspace/settings?tab=${encodeURIComponent(tab)}`);
         break;
       }
       case "toast": {
@@ -48,16 +45,6 @@ export function applyHamUiActions(
           ctx.setIsControlPanelOpen(!ctx.isControlPanelOpen);
         } else {
           ctx.setIsControlPanelOpen(a.open);
-        }
-        break;
-      case "set_workbench_view":
-        if (a.mode === "browser") {
-          // Browser mode is a split variant with browser panel only
-          ctx.setWorkbenchView("split");
-          ctx.setBrowserMode?.(true);
-        } else {
-          ctx.setWorkbenchView(a.mode);
-          ctx.setBrowserMode?.(false);
         }
         break;
       default:

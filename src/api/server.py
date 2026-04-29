@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import os
 from pathlib import Path
 from typing import Annotated, Any
@@ -8,8 +9,11 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
+from src.api.browser_operator import router as browser_operator_router
 from src.api.browser_runtime import router as browser_runtime_router
 from src.api.chat import router as chat_router
+from src.api.capability_directory import router as capability_directory_router
+from src.api.capability_library import router as capability_library_router
 from src.api.clerk_gate import get_ham_clerk_actor
 from src.api.cursor_managed_deploy import router as cursor_managed_deploy_router
 from src.api.cursor_managed_deploy_approval import router as cursor_managed_deploy_approval_router
@@ -18,11 +22,26 @@ from src.api.cursor_managed_vercel import router as cursor_managed_vercel_router
 from src.api.cursor_settings import router as cursor_settings_router
 from src.api.cursor_skills import router as cursor_skills_router
 from src.api.cursor_subagents import router as cursor_subagents_router
+from src.api.hermes_gateway import router as hermes_gateway_router
 from src.api.hermes_hub import router as hermes_hub_router
 from src.api.hermes_runtime_inventory import router as hermes_runtime_inventory_router
 from src.api.hermes_skills import router as hermes_skills_router
+from src.api.goham_planner import router as goham_planner_router
 from src.api.models_catalog import router as models_catalog_router
 from src.api.project_settings import router as project_settings_router
+from src.api.workspace_health import router as workspace_health_router
+from src.api.workspace_files import router as workspace_files_router
+from src.api.workspace_jobs import router as workspace_jobs_router
+from src.api.workspace_tasks import router as workspace_tasks_router
+from src.api.workspace_terminal import router as workspace_terminal_router
+from src.api.workspace_conductor import router as workspace_conductor_router
+from src.api.workspace_memory import router as workspace_memory_router
+from src.api.workspace_operations import router as workspace_operations_router
+from src.api.workspace_voice_settings import router as workspace_voice_settings_router
+from src.api.tts_endpoint import router as tts_router
+from src.api.pna_middleware import private_network_access_middleware
+from src.api.workspace_profiles import router as workspace_profiles_router
+from src.api.workspace_skills import router as workspace_skills_router
 from src.api.control_plane_runs import router as control_plane_runs_router
 from src.ham.agent_profiles import agents_config_from_merged
 from src.ham.clerk_auth import HamActor, clerk_authorization_is_clerk_session
@@ -37,18 +56,25 @@ app = FastAPI(title="HAM API", version="0.1.0")
 _DEFAULT_CORS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "http://localhost:3003",
+    "http://127.0.0.1:3003",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    # HAM Vercel production — local runtime (Files/Terminal) from this origin needs CORS on uvicorn.
+    "https://ham-nine-mu.vercel.app",
     # Packaged Electron loads the UI from file:// — fetch sends Origin: null (literal).
     "null",
 ]
 
 
 def _cors_allow_origins() -> list[str]:
+    """Merge env list with defaults so one forgotten origin (e.g. Vercel) does not break others."""
+    base = list(_DEFAULT_CORS)
     raw = (os.environ.get("HAM_CORS_ORIGINS") or "").strip()
     if not raw:
-        return list(_DEFAULT_CORS)
-    return [o.strip() for o in raw.split(",") if o.strip()]
+        return base
+    extra = [o.strip() for o in raw.split(",") if o.strip()]
+    return list(dict.fromkeys([*base, *extra]))
 
 
 def _cors_allow_origin_regex() -> str | None:
@@ -57,17 +83,28 @@ def _cors_allow_origin_regex() -> str | None:
     return raw or None
 
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=_cors_allow_origins(),
-    allow_origin_regex=_cors_allow_origin_regex(),
+_cors_kw: dict[str, Any] = {
+    "allow_origins": _cors_allow_origins(),
+    "allow_origin_regex": _cors_allow_origin_regex(),
+    # Workspace adapters use hamApiFetch(..., credentials="include") for cross-origin Vercel → Cloud Run. Without this,
+    # browsers omit Access-Control-Allow-Credentials and the response is treated as a CORS failure → "Failed to fetch".
+    "allow_credentials": True,
     # PATCH required for /api/projects/{id} metadata updates (chat handoff repo save); browser preflight fails without it.
-    allow_methods=["GET", "POST", "PATCH", "DELETE"],
-    allow_headers=["*"],
-)
+    "allow_methods": ["GET", "POST", "PATCH", "DELETE"],
+    "allow_headers": ["*"],
+}
+# Starlette 0.45+ / 1.x: without this, OPTIONS with ``Access-Control-Request-Private-Network: true`` returns 400
+# ("Disallowed CORS private-network") before our ``private_network_access_middleware`` can attach the allow header.
+if "allow_private_network" in inspect.signature(CORSMiddleware.__init__).parameters:
+    _cors_kw["allow_private_network"] = True
+
+app.add_middleware(CORSMiddleware, **_cors_kw)
 
 app.include_router(chat_router)
+app.include_router(capability_directory_router)
+app.include_router(capability_library_router)
 app.include_router(browser_runtime_router)
+app.include_router(browser_operator_router)
 app.include_router(cursor_settings_router)
 app.include_router(cursor_managed_deploy_router)
 app.include_router(cursor_managed_deploy_approval_router)
@@ -76,11 +113,25 @@ app.include_router(cursor_managed_missions_router)
 app.include_router(cursor_skills_router)
 app.include_router(cursor_subagents_router)
 app.include_router(hermes_hub_router)
+app.include_router(hermes_gateway_router)
 app.include_router(hermes_runtime_inventory_router)
 app.include_router(hermes_skills_router)
+app.include_router(goham_planner_router)
 app.include_router(project_settings_router)
 app.include_router(control_plane_runs_router)
 app.include_router(models_catalog_router)
+app.include_router(workspace_health_router)
+app.include_router(workspace_files_router)
+app.include_router(workspace_jobs_router)
+app.include_router(workspace_tasks_router)
+app.include_router(workspace_terminal_router)
+app.include_router(workspace_conductor_router)
+app.include_router(workspace_memory_router)
+app.include_router(workspace_skills_router)
+app.include_router(workspace_profiles_router)
+app.include_router(workspace_operations_router)
+app.include_router(workspace_voice_settings_router)
+app.include_router(tts_router)
 
 _store = RunStore()
 
@@ -103,6 +154,9 @@ async def root() -> dict[str, Any]:
         "hermes_skills_catalog": "/api/hermes-skills/catalog",
         "hermes_skills_installed": "/api/hermes-skills/installed",
         "hermes_runtime_inventory": "/api/hermes-runtime/inventory",
+        "hermes_gateway_snapshot": "/api/hermes-gateway/snapshot",
+        "hermes_gateway_capabilities": "/api/hermes-gateway/capabilities",
+        "hermes_gateway_stream": "/api/hermes-gateway/stream",
         "hermes_skills_capabilities": "/api/hermes-skills/capabilities",
         "hermes_skills_install_preview": "/api/hermes-skills/install/preview",
         "hermes_skills_install_apply": "/api/hermes-skills/install/apply",
@@ -110,6 +164,12 @@ async def root() -> dict[str, Any]:
         "settings_write_status": "/api/settings/write-status",
         "project_agents": "/api/projects/{project_id}/agents",
         "control_plane_runs": "/api/control-plane-runs?project_id=<id>",
+        "capability_directory": "/api/capability-directory",
+        "capability_directory_bundles": "/api/capability-directory/bundles",
+        "capability_library": "/api/capability-library/library?project_id=<id>",
+        "capability_library_aggregate": "/api/capability-library/aggregate?project_id=<id>",
+        "tts_health": "/api/tts/health",
+        "tts_generate": "/api/tts/generate",
     }
 
 
@@ -367,3 +427,10 @@ async def list_project_runs(
     store = RunStore(root=Path(record.root))
     runs = store.list_runs(limit=max(1, min(limit, 200)))
     return {"runs": [r.model_dump() for r in runs]}
+
+
+# Outermost ASGI: Chrome "Private Network Access" — public HTTPS (e.g. Vercel) → http://127.0.0.1
+# needs Access-Control-Allow-Private-Network. Default CORS includes production Vercel; merge via HAM_CORS_ORIGINS.
+# Keep the FastAPI instance for OpenAPI and introspection; uvicorn entrypoint is the wrapped ASGI `app`.
+fastapi_app = app
+app = private_network_access_middleware(fastapi_app)

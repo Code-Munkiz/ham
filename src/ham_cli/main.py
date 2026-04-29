@@ -6,7 +6,16 @@ import typer
 
 from src.ham_cli import __version__
 from src.ham_cli.commands.api_cmd import run_api_status
-from src.ham_cli.commands.desktop import run_package_linux, run_package_win
+from src.ham_cli.commands.desktop import (
+    run_desktop_local_control_audit,
+    run_desktop_local_control_browser_status,
+    run_desktop_local_control_kill_switch_engage,
+    run_desktop_local_control_policy,
+    run_desktop_local_control_sidecar,
+    run_desktop_local_control_sidecar_lifecycle,
+    run_desktop_local_control_status,
+    run_package_win,
+)
 from src.ham_cli.commands.doctor import run_doctor
 from src.ham_cli.commands.readiness import run_readiness
 from src.ham_cli.commands.status import run_status
@@ -106,14 +115,19 @@ def api_status_cmd(
 
 desktop_app = typer.Typer(help="Desktop shell packaging (wraps npm/electron-builder).")
 package_app = typer.Typer(help="Build desktop artifacts from this repo.")
+local_control_app = typer.Typer(
+    help="Desktop Local Control doctor (CLI mirrors; live policy/audit in HAM Desktop only).",
+)
+kill_switch_cli = typer.Typer(help="Kill switch: engage from HAM Desktop only.")
+sidecar_cli = typer.Typer(
+    invoke_without_command=True,
+    help="Sidecar: CLI shows a static mirror; lifecycle requires HAM Desktop.",
+)
 desktop_app.add_typer(package_app, name="package")
+desktop_app.add_typer(local_control_app, name="local-control")
+local_control_app.add_typer(kill_switch_cli, name="kill-switch")
+local_control_app.add_typer(sidecar_cli, name="sidecar")
 app.add_typer(desktop_app, name="desktop")
-
-
-@package_app.command("linux")
-def desktop_pack_linux() -> None:
-    """Run `npm run pack:linux` in desktop/ (AppImage + deb)."""
-    run_package_linux()
 
 
 @package_app.command("win")
@@ -122,16 +136,83 @@ def desktop_pack_win() -> None:
     run_package_win()
 
 
+@local_control_app.command("status")
+def desktop_local_control_status_cmd(
+    json_out: bool = typer.Option(False, "--json", help="Emit JSON."),
+) -> None:
+    """Show Local Control CLI doctor + Phase 2 skeleton (no Electron required)."""
+    run_desktop_local_control_status(json_out=json_out)
+
+
+@local_control_app.command("policy")
+def desktop_local_control_policy_cmd(
+    json_out: bool = typer.Option(False, "--json", help="Emit JSON."),
+) -> None:
+    """Static policy skeleton mirror (persisted policy is in HAM Desktop userData)."""
+    run_desktop_local_control_policy(json_out=json_out)
+
+
+@local_control_app.command("audit")
+def desktop_local_control_audit_cmd(
+    json_out: bool = typer.Option(False, "--json", help="Emit JSON."),
+) -> None:
+    """Audit placeholder (redacted JSONL is desktop main process only)."""
+    run_desktop_local_control_audit(json_out=json_out)
+
+
+@local_control_app.command("browser")
+def desktop_local_control_browser_cmd(
+    json_out: bool = typer.Option(False, "--json", help="Emit JSON."),
+) -> None:
+    """CLI stub — cannot attach to Electron; see `run_desktop_local_control_browser_status` docstring."""
+    run_desktop_local_control_browser_status(json_out=json_out)
+
+
+@sidecar_cli.callback()
+def desktop_local_control_sidecar_group(
+    ctx: typer.Context,
+    json_out: bool = typer.Option(False, "--json", help="Emit JSON."),
+) -> None:
+    """Default: static sidecar shape mirror when no subcommand is given."""
+    if ctx.invoked_subcommand is not None:
+        return
+    run_desktop_local_control_sidecar(json_out=json_out)
+
+
+@sidecar_cli.command("health")
+def desktop_local_control_sidecar_health_cmd(
+    json_out: bool = typer.Option(False, "--json", help="Emit JSON."),
+) -> None:
+    """Health ping is desktop-only; CLI returns electron_only stub."""
+    run_desktop_local_control_sidecar_lifecycle(operation="health", json_out=json_out)
+
+
+@sidecar_cli.command("stop")
+def desktop_local_control_sidecar_stop_cmd(
+    json_out: bool = typer.Option(False, "--json", help="Emit JSON."),
+) -> None:
+    """Stop sidecar is desktop-only; CLI returns electron_only stub."""
+    run_desktop_local_control_sidecar_lifecycle(operation="stop", json_out=json_out)
+
+
+@sidecar_cli.command("start")
+def desktop_local_control_sidecar_start_cmd(
+    json_out: bool = typer.Option(False, "--json", help="Emit JSON."),
+) -> None:
+    """Start sidecar is desktop-only; CLI returns electron_only stub."""
+    run_desktop_local_control_sidecar_lifecycle(operation="start", json_out=json_out)
+
+
+@kill_switch_cli.command("engage")
+def desktop_local_control_kill_switch_engage_cmd() -> None:
+    """Not supported from CLI — use HAM Desktop settings."""
+    run_desktop_local_control_kill_switch_engage()
+
+
 friendly_package = typer.Typer(
     help="Shorthand for `ham desktop package` — same behavior.",
 )
 app.add_typer(friendly_package, name="package")
-
-
-@friendly_package.command("linux")
-def friendly_pack_linux() -> None:
-    """Alias: same as `ham desktop package linux`."""
-    run_package_linux()
 
 
 @friendly_package.command("win")

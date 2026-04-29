@@ -1,0 +1,158 @@
+/* Namespaced Hermes Workspace lift — scope under .hww-root to limit global collision */
+
+.hww-root {
+  --hww-tabbar-h: 3.5rem;
+  min-height: 0;
+  height: 100%;
+  width: 100%;
+  color: #e8eef8;
+  background:
+    radial-gradient(1200px 700px at 70% -20%, rgba(6, 92, 84, 0.28), transparent 60%),
+    radial-gradient(800px 500px at -10% 20%, rgba(255, 107, 0, 0.08), transparent 60%),
+    linear-gradient(180deg, #06141a 0%, #041017 55%, #030b11 100%);
+}
+
+.hww-sidebar {
+  display: flex;
+  min-height: 0;
+  width: 260px;
+  flex-direction: column;
+  border-right: 1px solid var(--ham-workspace-line, rgba(255, 255, 255, 0.08));
+  background: rgba(8, 17, 24, 0.78);
+  backdrop-filter: blur(8px);
+  transition: width 0.2s ease, padding 0.2s ease;
+}
+
+.hww-sidebar--collapsed {
+  width: 3.5rem;
+  min-width: 3.5rem;
+  max-width: 3.5rem;
+  padding-left: 0.35rem;
+  padding-right: 0.35rem;
+  align-items: center;
+}
+
+.hww-main {
+  min-height: 0;
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.hww-pill {
+  display: inline-flex;
+  max-width: 100%;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.28);
+  padding: 0.2rem 0.55rem;
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255, 200, 150, 0.9);
+}
+
+.hww-side-section {
+  margin-bottom: 0.4rem;
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(232, 238, 248, 0.38);
+}
+
+.hww-input {
+  border: 1px solid var(--ham-workspace-line, rgba(255, 255, 255, 0.08));
+  background: rgba(0, 0, 0, 0.32);
+  color: rgba(232, 238, 248, 0.85);
+  font-size: 0.75rem;
+  line-height: 1.2;
+  padding: 0.45rem 0.5rem 0.45rem 0.1rem;
+  outline: none;
+}
+
+.hww-input::placeholder {
+  color: rgba(232, 238, 248, 0.32);
+}
+
+/* Search field: base `.hww-input` uses `padding` shorthand with tiny left inset, which
+   can fight Tailwind `pl-*` and let the leading icon overlap text. */
+#hww-workspace-search.hww-input {
+  padding-top: 0.45rem;
+  padding-bottom: 0.45rem;
+  padding-right: 0.5rem;
+  padding-left: 2.35rem;
+}
+
+/* Files panel search — same `hww-input` / `pl-8` fight as session filter */
+#hww-files-search.hww-input {
+  padding-top: 0.375rem; /* match py-1.5 */
+  padding-bottom: 0.375rem;
+  padding-right: 0.5rem;
+  padding-left: 2.35rem;
+}
+
+.hww-session-placeholder {
+  border-radius: 0.55rem;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.02);
+  padding: 0.45rem 0.5rem;
+  font-size: 0.7rem;
+  line-height: 1.3;
+  color: rgba(232, 238, 248, 0.35);
+  cursor: not-allowed;
+  opacity: 0.9;
+}
+
+.hww-scroll {
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
+}
+
+.hww-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.hww-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+}
+
+.hww-mobile-header {
+  position: relative;
+}
+
+/**
+ * Source-backed Hermes Workspace parity (repomix @ /memory, /skills, /profiles):
+ * theme tokens used by memory-browser-screen / skills-screen / profiles route layouts.
+ * Scoped so main app + /chat are unaffected.
+ */
+.hww-outer .hws-root {
+  --theme-bg: #0b1016;
+  --theme-text: #e5e7eb;
+  --theme-muted: #9ca3af;
+  --theme-border: rgba(255, 255, 255, 0.12);
+  --theme-card: rgba(0, 0, 0, 0.35);
+  --theme-hover: rgba(255, 255, 255, 0.06);
+  --theme-accent: #10b981;
+  color: var(--theme-text);
+}
+
+/* Workspace chat — upstream `chat-screen` / `chat-empty-state` token alignment */
+.hww-outer {
+  --hww-chat-border: rgba(255, 255, 255, 0.12);
+  --hww-chat-card: rgba(255, 255, 255, 0.04);
+}
+
+.hww-outer .hww-chat-chip {
+  background: var(--hww-chat-card);
+  border: 1px solid var(--hww-chat-border);
+}
+
+.hww-outer .hww-chat-chip:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(196, 92, 18, 0.35);
+}

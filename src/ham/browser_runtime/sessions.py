@@ -36,6 +36,10 @@ class BrowserScreenshotTooLargeError(BrowserSessionError):
     """Raised when screenshot bytes exceed configured v1 limit."""
 
 
+class BrowserOperatorApprovalRequiredError(BrowserSessionError):
+    """Raised when a session is in operator-mode and a direct action was attempted."""
+
+
 @dataclass
 class BrowserSessionRecord:
     session_id: str
@@ -52,6 +56,7 @@ class BrowserSessionRecord:
     stream_mode: str = "none"
     stream_requested_transport: str = "none"
     stream_last_error: str | None = None
+    operator_mode_required: bool = False
 
 
 def _utc_now_ms() -> int:
@@ -217,6 +222,7 @@ class BrowserSessionManager:
         owner_key: str,
         viewport_width: int = 1280,
         viewport_height: int = 720,
+        operator_mode: bool = False,
     ) -> dict[str, Any]:
         with self._lock:
             self._evict_expired_locked()
@@ -234,8 +240,22 @@ class BrowserSessionManager:
                 context=context,
                 viewport_width=viewport_width,
                 viewport_height=viewport_height,
+                operator_mode_required=bool(operator_mode),
             )
             return self._state_from_record(self._sessions[session_id])
+
+    def is_operator_mode_required(self, *, session_id: str, owner_key: str) -> bool:
+        """
+        Return True if the session was created with ``operator_mode=True``.
+        Used by HTTP route handlers to gate direct action calls; the in-process
+        Browser Operator dispatch helper bypasses this gate by calling manager
+        action methods directly.
+        """
+        with self._lock:
+            self._evict_expired_locked()
+            rec = self._get_session_locked(session_id)
+            self._check_owner(rec, owner_key)
+            return bool(rec.operator_mode_required)
 
     def close_session(self, *, session_id: str, owner_key: str) -> None:
         with self._lock:
@@ -392,6 +412,7 @@ class BrowserSessionManager:
             "streaming_supported": False,
             "cursor_embedding_supported": False,
             "stream_state": self._stream_payload(rec),
+            "operator_mode_required": bool(rec.operator_mode_required),
         }
 
     @staticmethod

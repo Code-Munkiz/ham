@@ -1,0 +1,62 @@
+/**
+ * TTSController.css
+
+ * Styles for TTS controller component.
+ */
+
+.tts-controller {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+}
+
+.tts-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 1px solid #667eea;
+  color: #667eea;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.tts-toggle:hover {
+  background: rgba(102, 126, 234, 0.1);
+}
+
+.tts-toggle.enabled {
+  background: #667eea;
+  color: white;
+}
+
+.tts-playback-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #ff4757;
+  border: none;
+  color: white;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.tts-playback-button:hover {
+  background: #ff3366;
+}
+
+.tts-label {
+  font-size: 12px;
+}

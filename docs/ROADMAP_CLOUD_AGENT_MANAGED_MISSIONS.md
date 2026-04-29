@@ -15,10 +15,10 @@ This document states **what works today**, what is **stub / partial / explicitly
 | **Managed mission record** | File-backed `ManagedMission` per `mission_registry_id`: cursor id, optional `control_plane_ham_run_id`, observed repo/ref, **server-mapped** lifecycle, bounded last-seen deploy/Vercel/post-deploy fields. |
 | **Deploy approval snapshot** | `mission_deploy_approval_mode` set **once at managed create** from bound project’s valid `default_deploy_approval_mode` if `project_id` is provided; else `off`. **Not** live-synced to project after create. |
 | **Deploy hook / approval API** | Managed deploy-approval status + decisions + hook path (`hard` enforces on server) — see `cursor_managed_deploy*`. |
-| **Vercel / post-deploy (bounded)** | Server poll + mapping tiers; post-deploy check — surfaced in War Room / CloudAgentPanel where wired. |
+| **Vercel / post-deploy (bounded)** | Server poll + mapping tiers; post-deploy check — API + future UI surfaces (legacy War Room UI removed Batch 2A). |
 | **Control plane runs (separate)** | Durable `ControlPlaneRun` for operator/chat-committed launches + status; **read** APIs — **factual**, not a queue or graph. |
 | **Read API: missions** | `GET /api/cursor/managed/missions` (list, optional filter by `cursor_agent_id`) and by `mission_registry_id` — full JSON includes `mission_deploy_approval_mode`. |
-| **UI** | Chat + CloudAgentPanel: managed vs direct, War Room overview with mission snapshot readout, mission history list patterns — **no full redesign** required for v1. |
+| **UI** | **Partial:** managed mission APIs and operator/chat flows remain; dedicated Cloud Agent / War Room panels were removed with legacy workbench (Batch 2A). Re-home mission UX in Hermes Workspace or Command Center as needed. |
 | **Project registry** | `ProjectStore` + `PATCH` metadata for `default_deploy_approval_mode` (validated). |
 
 ---
@@ -30,7 +30,7 @@ This document states **what works today**, what is **stub / partial / explicitly
 | **No repo URL → project mapping** | Only optional `project_id` on launch links registry defaults. GitHub URL alone does not resolve a project. |
 | **O(n) mission lookup** | `find_by_cursor_agent_id` scans JSON files (documented v1). |
 | **Mission row only when new** | `create_mission_after_managed_launch` skips if a row already exists for that agent id (no duplicate). |
-| **“Review” in War Room (managed)** | Largely **rules / heuristics** on polled Cursor payload (`managedCloudAgent.ts`) — **not** the same as `HermesReviewer.evaluate()` on bridge runs. |
+| **Managed “review” heuristics** | Server-side rules on polled Cursor payload (`src/ham/cursor_agent_workflow.py` and related) — **not** the same as `HermesReviewer.evaluate()` on bridge runs. Legacy client helpers were removed in Batch 2A. |
 | **Hermes ↔ Cursor path** | `HermesReviewer` is strong on **bridge / `main.py`-style** flows; **not** a single automatic closed loop over every Cloud Agent turn. |
 | **Chat** | `POST /api/chat` is **not** the Hermes reviewer; system prompt is explicit about that (`chat.py`). |
 
@@ -54,7 +54,7 @@ Phases are **sequenced**: earlier items unblock honesty and operability; later i
 ### Phase A — **Observability & honesty** (near-term, low risk)
 
 - **Docs + UI copy:** One screen-level truth table: *Cursor owns execution* vs *HAM owns record + policy edges* (deploy snapshot is create-time, etc.).
-- **Optional:** Expose `mission_registry_id` consistently in War Room when available (reduces “where is my mission?” confusion).
+- **Optional:** Expose `mission_registry_id` consistently in Workspace or Command Center when available (reduces “where is my mission?” confusion).
 - **Tests:** Keep mission + API regression tests green when touching cursor routes.
 
 **Exit:** Operators can answer “what does HAM know vs. what Cursor knows?” without reading source.

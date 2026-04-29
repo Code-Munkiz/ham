@@ -5,8 +5,10 @@ Session IDs are issued by Ham. Upstream gateway conversation refs stay server-si
 """
 from __future__ import annotations
 
+import os
 import uuid
 from dataclasses import dataclass, field, replace
+from pathlib import Path
 from threading import RLock
 from typing import Any, Protocol, Sequence, runtime_checkable
 
@@ -15,6 +17,7 @@ from typing import Any, Protocol, Sequence, runtime_checkable
 class ChatTurn:
     role: str
     content: str
+    turn_id: str | None = None
 
 
 @dataclass
@@ -43,7 +46,9 @@ def _normalize_turns(turns: Sequence[ChatTurn | dict[str, Any]]) -> list[ChatTur
         else:
             role = str(t.get("role", "")).strip()
             content = str(t.get("content", ""))
-            out.append(ChatTurn(role=role, content=content))
+            turn_id_raw = t.get("turn_id")
+            turn_id = str(turn_id_raw).strip() if isinstance(turn_id_raw, str) and turn_id_raw.strip() else None
+            out.append(ChatTurn(role=role, content=content, turn_id=turn_id))
     return out
 
 
@@ -57,11 +62,43 @@ class ChatSessionStore(Protocol):
 
     def append_turns(self, session_id: str, turns: Sequence[ChatTurn | dict[str, Any]]) -> None: ...
 
+    def upsert_assistant_turn(self, session_id: str, turn_id: str, content: str) -> None: ...
+
     def set_upstream_ref(self, session_id: str, ref: str | None) -> None: ...
 
     def list_messages(self, session_id: str) -> list[dict[str, str]]: ...
 
     def list_sessions(self, *, limit: int = 50, offset: int = 0) -> list[ChatSessionSummary]: ...
+
+
+def build_chat_session_store() -> ChatSessionStore:
+    """
+    Select store from env:
+
+    - ``HAM_CHAT_SESSION_STORE=memory`` — in-process only.
+    - ``HAM_CHAT_SESSION_STORE=sqlite`` (default) — local file; path from ``HAM_CHAT_SESSION_DB`` or ``~/.ham/chat_sessions.sqlite``.
+    - ``HAM_CHAT_SESSION_STORE=firestore`` — Cloud Firestore (durable on Cloud Run when ADC has datastore access).
+      Use ``HAM_CHAT_SESSION_FIRESTORE_DATABASE`` when the project has no ``(default)`` database (multi-DB / AI Studio–only setups).
+    """
+    mode = (os.environ.get("HAM_CHAT_SESSION_STORE") or "sqlite").strip().lower()
+    if mode == "memory":
+        return InMemoryChatSessionStore()
+    if mode == "postgres":
+        raise RuntimeError(
+            "HAM_CHAT_SESSION_STORE=postgres is not implemented; use firestore (durable on Cloud Run) or sqlite (local).",
+        )
+    if mode == "firestore":
+        from src.persistence.firestore_chat_session_store import FirestoreChatSessionStore
+
+        coll = (os.environ.get("HAM_CHAT_SESSION_FIRESTORE_COLLECTION") or "ham_chat_sessions").strip()
+        project = (os.environ.get("HAM_CHAT_SESSION_FIRESTORE_PROJECT") or "").strip() or None
+        database = (os.environ.get("HAM_CHAT_SESSION_FIRESTORE_DATABASE") or "").strip() or None
+        return FirestoreChatSessionStore(coll, project=project, database=database)
+    raw = (os.environ.get("HAM_CHAT_SESSION_DB") or "").strip()
+    db_path = Path(raw).expanduser() if raw else Path.home() / ".ham" / "chat_sessions.sqlite"
+    from src.persistence.sqlite_chat_session_store import SqliteChatSessionStore
+
+    return SqliteChatSessionStore(db_path)
 
 
 class InMemoryChatSessionStore:
@@ -91,6 +128,18 @@ class InMemoryChatSessionStore:
             if rec is None:
                 raise KeyError(session_id)
             rec.turns.extend(normalized)
+
+    def upsert_assistant_turn(self, session_id: str, turn_id: str, content: str) -> None:
+        with self._lock:
+            rec = self._sessions.get(session_id)
+            if rec is None:
+                raise KeyError(session_id)
+            for idx in range(len(rec.turns) - 1, -1, -1):
+                row = rec.turns[idx]
+                if row.role == "assistant" and row.turn_id == turn_id:
+                    rec.turns[idx] = ChatTurn(role="assistant", content=content, turn_id=turn_id)
+                    return
+            rec.turns.append(ChatTurn(role="assistant", content=content, turn_id=turn_id))
 
     def set_upstream_ref(self, session_id: str, ref: str | None) -> None:
         with self._lock:

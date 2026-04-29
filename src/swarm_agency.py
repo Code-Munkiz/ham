@@ -11,8 +11,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
+from src.bridge.browser_adapters import build_browser_executor
 from src.llm_client import configure_litellm_env, get_llm_client
-from src.memory_heist import ProjectContext
+from src.memory_heist import ProjectContext, browser_policy_from_config
 from src.registry.backends import BackendRegistry, DEFAULT_BACKEND_REGISTRY
 from src.tools.droid_executor import droid_executor
 
@@ -28,6 +29,8 @@ class HamRunAssembly:
     llm_client: Any
     backend_registry: BackendRegistry
     droid_executor: Callable[..., Any]
+    browser_executor: Any
+    browser_adapter: str
 
 
 def assemble_ham_run(user_prompt: str, project_root: Path | None = None) -> HamRunAssembly:
@@ -36,6 +39,8 @@ def assemble_ham_run(user_prompt: str, project_root: Path | None = None) -> HamR
     llm = get_llm_client()
 
     project = ProjectContext.discover(project_root)
+    browser_policy = browser_policy_from_config(project.config)
+    browser_adapter = str(browser_policy.get("adapter", "playwright"))
 
     arch_total = project.config.get("architect_instruction_chars", 16_000)
     cmd_total = project.config.get("commander_instruction_chars", 4_000)
@@ -76,4 +81,6 @@ def assemble_ham_run(user_prompt: str, project_root: Path | None = None) -> HamR
         llm_client=llm,
         backend_registry=DEFAULT_BACKEND_REGISTRY,
         droid_executor=droid_executor,
+        browser_executor=build_browser_executor(browser_adapter),
+        browser_adapter=browser_adapter,
     )

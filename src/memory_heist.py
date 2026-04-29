@@ -16,7 +16,22 @@ import subprocess
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
+
+from src.budget_parser import BudgetConfig, BudgetParseError, parse_role_budgets
+from src.observability import MemoryHeistMetrics, MetricsEmitter, ValidationMetrics
+from src.metadata_stamps import MetadataStamp, ScanMode, create_metadata_stamp, stamp_rendered_output
+from src.memory_heist_cache import DiscoveryCache, normalize_cache_key, IS_CASE_INSENSITIVE_SYSTEM
+from src.config_trust import ConfigTrustValidator, TrustLevel, ValidationResult
+
+# Re-export discovery_cache for backward compatibility
+from src.memory_heist_cache import discovery_cache
+
+
+# ---------------------------------------------------------------------------
+# Cross-Platform Cache Key Normalization (Phase 2)
+# ---------------------------------------------------------------------------
+# normalize_cache_key() and DiscoveryCache are imported from memory_heist_cache
 
 
 # ---------------------------------------------------------------------------
@@ -109,10 +124,18 @@ MAX_INSTRUCTION_FILE_CHARS = 4_000
 MAX_TOTAL_INSTRUCTION_CHARS = 12_000
 MAX_DIFF_CHARS = 8_000
 MAX_SUMMARY_CHARS = 4_000
-DEFAULT_SESSION_COMPACTION_MAX_TOKENS = 10_000
+DEFAULT_SESSION_COMPACTION_MAX_TOKENS = 8_000
 DEFAULT_SESSION_COMPACTION_PRESERVE = 4
 DEFAULT_SESSION_TOOL_PRUNE_CHARS = 200
 DEFAULT_TOOL_PRUNE_PLACEHOLDER = "[Old tool output cleared to save context space]"
+DEFAULT_BROWSER_MAX_STEPS = 25
+DEFAULT_BROWSER_STEP_TIMEOUT_MS = 10_000
+DEFAULT_BROWSER_MAX_DOM_CHARS = 8_000
+DEFAULT_BROWSER_MAX_CONSOLE_CHARS = 4_000
+DEFAULT_BROWSER_MAX_NETWORK_EVENTS = 200
+DEFAULT_BROWSER_ALLOW_FILE_DOWNLOAD = False
+DEFAULT_BROWSER_ALLOW_FORM_SUBMIT = False
+DEFAULT_BROWSER_ADAPTER = "playwright"
 
 INSTRUCTION_INVISIBLE_CHARS = (
     "\u200b",  # zero-width space
@@ -288,7 +311,10 @@ class ConfigEntry:
 class ProjectConfig:
     merged: dict[str, Any] = field(default_factory=dict)
     loaded_entries: list[ConfigEntry] = field(default_factory=list)
-
+    validation_metrics: ValidationMetrics | None = None
+    config_trust_score: float = 0.0
+    config_trust_level: TrustLevel = TrustLevel.HIGH
+    
     def get(self, key: str, default: Any = None) -> Any:
         return self.merged.get(key, default)
 
@@ -297,14 +323,27 @@ def discover_config(
     cwd: Path,
     *,
     project_settings_replacement: dict[str, Any] | None = None,
+    validator: ConfigTrustValidator | None = None,
 ) -> ProjectConfig:
-    """Load merged Ham config from the standard candidate chain.
+    """Load and validate merged Ham config from the standard candidate chain.
 
     If ``project_settings_replacement`` is set, it stands in for the on-disk
     contents of ``{cwd}/.ham/settings.json`` (used to preview post-write merge
     without mutating disk). When ``None``, that layer is read from the filesystem
     as usual.
+
+    Config files are validated using ConfigTrustValidator if provided.
+    Untrusted configs are skipped with a warning.
     """
+    import logging
+    
+    # Import logging here to avoid circular dependency
+    logger = logging.getLogger("memory_heist")
+    
+    # Create default validator if not provided
+    if validator is None:
+        validator = ConfigTrustValidator(min_trust_score=0.3)
+    
     home = Path(os.environ.get("HOME", os.environ.get("USERPROFILE", ".")))
     project_settings_path = cwd / ".ham" / "settings.json"
     candidates = [
@@ -316,15 +355,84 @@ def discover_config(
     ]
     merged: dict[str, Any] = {}
     loaded: list[ConfigEntry] = []
+    validation_results: list[ValidationResult] = []
+    
+    # Track validation metrics
+    scores: list[float] = []
+    skipped = 0
+    trusted = 0
+    
     for entry in candidates:
+        # Handle project_settings_replacement specially
         if project_settings_replacement is not None and entry.path == project_settings_path:
             data = dict(project_settings_replacement)
+            # Skip validation for replacement data
+            config_result = ValidationResult(
+                is_valid=True,
+                trust_score=0.9,
+                trust_level=TrustLevel.HIGH,
+                warnings=["Using replacement config data"],
+            )
         else:
-            data = _read_json_object(entry.path)
+            # Validate config file
+            if entry.path.exists():
+                config_result = validator.validate(entry.path)
+                
+                # Handle validation results
+                if not config_result.is_valid:
+                    msg = f"Skipping untrusted config: {entry.path} " \
+                          f"(score: {config_result.trust_score:.3f}, " \
+                          f"level: {config_result.trust_level.value})"
+                    if config_result.warnings:
+                        msg += f" - {', '.join(config_result.warnings)}"
+                    logger.warning(msg)
+                    skipped += 1
+                    continue
+                
+                # Log warnings for untrusted but acceptable configs
+                if config_result.warnings:
+                    logger.warning(f"Low-trust config: {entry.path} - {', '.join(config_result.warnings)}")
+                
+                # Load config data
+                data = _read_json_object(entry.path)
+            else:
+                continue
+        
         if data is not None:
             _deep_merge(merged, data)
             loaded.append(entry)
-    return ProjectConfig(merged=merged, loaded_entries=loaded)
+            validation_results.append(config_result)
+            scores.append(config_result.trust_score)
+            trusted += 1
+    
+    # Calculate validation metrics
+    validation_metrics = ValidationMetrics()
+    if scores:
+        validation_metrics.configs_validated = len(validation_results)
+        validation_metrics.configs_trusted = trusted
+        validation_metrics.configs_skipped = skipped
+        validation_metrics.trust_scores = scores
+        validation_metrics.total_score = sum(scores)
+        validation_metrics.avg_trust_score = sum(scores) / len(scores)
+    
+    # Determine overall trust level
+    avg_score = validation_metrics.avg_trust_score
+    if avg_score >= 0.8:
+        trust_level = TrustLevel.HIGH
+    elif avg_score >= 0.5:
+        trust_level = TrustLevel.MEDIUM
+    elif avg_score >= 0.2:
+        trust_level = TrustLevel.LOW
+    else:
+        trust_level = TrustLevel.INVALID
+    
+    return ProjectConfig(
+        merged=merged,
+        loaded_entries=loaded,
+        validation_metrics=validation_metrics,
+        config_trust_score=round(avg_score, 3),
+        config_trust_level=trust_level,
+    )
 
 
 def _read_json_object(path: Path) -> dict[str, Any] | None:
@@ -364,12 +472,32 @@ class ProjectContext:
     tree: str = ""
 
     @classmethod
-    def discover(cls, cwd: Path | None = None) -> ProjectContext:
+    def discover(
+        cls,
+        cwd: Path | None = None,
+        *,
+        use_relevance_filtering: bool = True,
+        user_query: str | None = None,
+        session_memory: "SessionMemory | None" = None,
+    ) -> ProjectContext:
+        """Discover project context with optional relevance filtering.
+        
+        Args:
+            cwd: Working directory, defaults to current working directory
+            use_relevance_filtering: Whether to use relevance filtering for
+                context discovery (default: True)
+            user_query: User's query for relevance matching (optional)
+            session_memory: SessionMemory for hot path tracking (optional)
+            
+        Returns:
+            ProjectContext with relevance metadata added
+        """
         root = (cwd or Path.cwd()).resolve()
         files = scan_workspace(root)
         instructions = discover_instruction_files(root)
         config = discover_config(root)
-        return cls(
+        
+        context = cls(
             cwd=root,
             current_date=time.strftime("%Y-%m-%d"),
             platform_info=f"{platform.system()} {platform.release()}",
@@ -381,6 +509,47 @@ class ProjectContext:
             file_count=len(files),
             tree=workspace_tree(root),
         )
+        
+        # Optional relevance filtering
+        if use_relevance_filtering:
+            from .context.relevance_scoring import (
+                RelevanceConfig,
+                filter_by_relevance,
+                filter_by_relevance_async,
+            )
+            
+            relevance_config = RelevanceConfig()
+            results, metadata = filter_by_relevance_async(
+                context,
+                user_query=user_query,
+                config=relevance_config,
+                session_memory=session_memory,
+                use_relevance_filtering=True,
+            )
+            
+            # Store relevance metadata in context
+            context._relevance_results = results
+            context._relevance_metadata = metadata
+        
+        return context
+    
+    @property
+    def relevance_results(self) -> list | None:
+        """Filtered relevance results if relevance filtering was enabled.
+        
+        Returns:
+            List of FileRelevanceScore or None if filtering was disabled
+        """
+        return getattr(self, "_relevance_results", None)
+    
+    @property
+    def relevance_metadata(self) -> dict | None:
+        """Relevance filtering metadata if enabled.
+        
+        Returns:
+            Dict with metadata or None if filtering was disabled
+        """
+        return getattr(self, "_relevance_metadata", None)
 
     def render(
         self,
@@ -479,15 +648,15 @@ class SessionMemory:
         if not isinstance(section, dict):
             section = {}
 
-        self.compact_max_tokens = self._positive_int(
+        self.compact_max_tokens = _coerce_positive_int(
             section.get("session_compaction_max_tokens", merged.get("session_compaction_max_tokens")),
             DEFAULT_SESSION_COMPACTION_MAX_TOKENS,
         )
-        self.compact_preserve = self._positive_int(
+        self.compact_preserve = _coerce_positive_int(
             section.get("session_compaction_preserve", merged.get("session_compaction_preserve")),
             DEFAULT_SESSION_COMPACTION_PRESERVE,
         )
-        self.tool_prune_chars = self._positive_int(
+        self.tool_prune_chars = _coerce_positive_int(
             section.get("session_tool_prune_chars", merged.get("session_tool_prune_chars")),
             DEFAULT_SESSION_TOOL_PRUNE_CHARS,
         )
@@ -681,15 +850,6 @@ class SessionMemory:
         items.reverse()
         return items
 
-    @staticmethod
-    def _positive_int(raw: Any, default: int) -> int:
-        if isinstance(raw, bool):
-            return default
-        if isinstance(raw, (int, float)):
-            value = int(raw)
-            return value if value > 0 else default
-        return default
-
 
 def _coerce_positive_int(raw: Any, default: int) -> int:
     """Parse instruction-budget style values from merged JSON config."""
@@ -707,34 +867,127 @@ def _coerce_positive_int(raw: Any, default: int) -> int:
     return default
 
 
-def context_engine_dashboard_payload(cwd: Path | None = None) -> dict[str, Any]:
+def _coerce_bool(raw: Any, default: bool) -> bool:
+    if isinstance(raw, bool):
+        return raw
+    if isinstance(raw, str):
+        low = raw.strip().lower()
+        if low in {"1", "true", "yes", "on"}:
+            return True
+        if low in {"0", "false", "no", "off"}:
+            return False
+    return default
+
+
+def _coerce_string_list(raw: Any) -> list[str]:
+    if isinstance(raw, str):
+        item = raw.strip()
+        return [item] if item else []
+    if isinstance(raw, (list, tuple, set)):
+        out: list[str] = []
+        for item in raw:
+            if not isinstance(item, str):
+                continue
+            cleaned = item.strip()
+            if cleaned:
+                out.append(cleaned)
+        return out
+    return []
+
+
+def browser_policy_from_config(config: ProjectConfig | dict[str, Any] | None) -> dict[str, Any]:
+    merged: dict[str, Any]
+    if isinstance(config, ProjectConfig):
+        merged = config.merged
+    elif isinstance(config, dict):
+        merged = config
+    else:
+        merged = {}
+
+    section = merged.get("memory_heist")
+    if not isinstance(section, dict):
+        section = {}
+    browser = section.get("browser")
+    if not isinstance(browser, dict):
+        browser = {}
+    adapter_raw = browser.get("adapter", section.get("browser_adapter", DEFAULT_BROWSER_ADAPTER))
+    adapter = str(adapter_raw).strip().lower() if adapter_raw is not None else DEFAULT_BROWSER_ADAPTER
+    if adapter not in {"playwright", "chromium"}:
+        adapter = DEFAULT_BROWSER_ADAPTER
+
+    return {
+        "adapter": adapter,
+        "max_steps": _coerce_positive_int(
+            browser.get("max_steps", section.get("browser_max_steps")),
+            DEFAULT_BROWSER_MAX_STEPS,
+        ),
+        "step_timeout_ms": _coerce_positive_int(
+            browser.get("step_timeout_ms", section.get("browser_step_timeout_ms")),
+            DEFAULT_BROWSER_STEP_TIMEOUT_MS,
+        ),
+        "max_dom_chars": _coerce_positive_int(
+            browser.get("max_dom_chars", section.get("browser_max_dom_chars")),
+            DEFAULT_BROWSER_MAX_DOM_CHARS,
+        ),
+        "max_console_chars": _coerce_positive_int(
+            browser.get("max_console_chars", section.get("browser_max_console_chars")),
+            DEFAULT_BROWSER_MAX_CONSOLE_CHARS,
+        ),
+        "max_network_events": _coerce_positive_int(
+            browser.get("max_network_events", section.get("browser_max_network_events")),
+            DEFAULT_BROWSER_MAX_NETWORK_EVENTS,
+        ),
+        "allowed_domains": _coerce_string_list(
+            browser.get("allowed_domains", section.get("browser_allowed_domains")),
+        ),
+        "allow_file_download": _coerce_bool(
+            browser.get("allow_file_download", section.get("browser_allow_file_download")),
+            DEFAULT_BROWSER_ALLOW_FILE_DOWNLOAD,
+        ),
+        "allow_form_submit": _coerce_bool(
+            browser.get("allow_form_submit", section.get("browser_allow_form_submit")),
+            DEFAULT_BROWSER_ALLOW_FORM_SUBMIT,
+        ),
+    }
+
+
+def context_engine_dashboard_payload(cwd: Path | None = None, *, scan_mode: ScanMode = ScanMode.FULL) -> dict[str, Any]:
     """JSON-serializable snapshot for dashboards (no raw git diff / instruction body).
 
     Aligns per-role render budgets with ``assemble_ham_run`` in ``swarm_agency``
     (Hermes-supervised context assembly; not a separate orchestrator).
+    
+    Args:
+        cwd: Current working directory; defaults to Path.cwd()
+        scan_mode: The scan mode (full or cached)
+        
+    Returns:
+        Dict containing full dashboard payload with budgets, rendered chars, etc.
     """
     root = (cwd or Path.cwd()).resolve()
     project = ProjectContext.discover(root)
 
     mem = SessionMemory()
     mem.configure_from_project_config(project.config)
+    browser_policy = browser_policy_from_config(project.config)
 
+    # Use centralized budget parser for role budgets
+    try:
+        budget_config = parse_role_budgets(project.config.merged)
+    except BudgetParseError:
+        budget_config = BudgetConfig.defaults()
+
+    arch_total = budget_config.architect_instruction_chars
+    cmd_total = budget_config.commander_instruction_chars
+    critic_total = budget_config.critic_instruction_chars
+
+    arch_diff = budget_config.architect_diff_chars
+    cmd_diff = budget_config.commander_diff_chars
+    critic_diff = budget_config.critic_diff_chars
+
+    # Extract memory_heist section for dashboard
     mh_raw = project.config.merged.get("memory_heist")
     memory_heist_section: dict[str, Any] = mh_raw if isinstance(mh_raw, dict) else {}
-
-    arch_total = _coerce_positive_int(
-        project.config.get("architect_instruction_chars"), 16_000,
-    )
-    cmd_total = _coerce_positive_int(
-        project.config.get("commander_instruction_chars"), 4_000,
-    )
-    critic_total = _coerce_positive_int(
-        project.config.get("critic_instruction_chars"), 8_000,
-    )
-
-    arch_diff = 8_000
-    cmd_diff = 2_000
-    critic_diff = 8_000
 
     def _role_block(total: int, diff_cap: int) -> dict[str, Any]:
         body = project.render(
@@ -775,6 +1028,7 @@ def context_engine_dashboard_payload(cwd: Path | None = None) -> dict[str, Any]:
             "tool_prune_chars": mem.tool_prune_chars,
             "tool_prune_placeholder": mem.tool_prune_placeholder,
         },
+        "browser_policy": browser_policy,
         "module_defaults": {
             "max_instruction_file_chars": MAX_INSTRUCTION_FILE_CHARS,
             "max_total_instruction_chars": MAX_TOTAL_INSTRUCTION_CHARS,
@@ -800,7 +1054,13 @@ def context_engine_dashboard_payload(cwd: Path | None = None) -> dict[str, Any]:
 
 class ContextBuilder:
     """Assembles filesystem context, config, instructions, git state, and
-    session memory into a single string you inject into agent prompts."""
+    session memory into a single string you inject into agent prompts.
+    
+    Supports:
+    - Budget parsing for role instructions
+    - Observability metrics (duration, chars, truncation hits)
+    - Metadata stamps (timestamp, git hash, scan mode)
+    """
 
     def __init__(
         self,
@@ -809,11 +1069,34 @@ class ContextBuilder:
         max_instruction_chars: int = MAX_INSTRUCTION_FILE_CHARS,
         max_total_instruction_chars: int = MAX_TOTAL_INSTRUCTION_CHARS,
         max_diff_chars: int = MAX_DIFF_CHARS,
+        scan_mode: ScanMode = ScanMode.FULL,
+        emit_metrics: Callable[[dict[str, Any]], None] | None = None,
     ) -> None:
         self.max_instruction_chars = max_instruction_chars
         self.max_total_instruction_chars = max_total_instruction_chars
         self.max_diff_chars = max_diff_chars
+        self.scan_mode = scan_mode
+        self._metrics_emitter: MetricsEmitter | None = None
+        if emit_metrics is not None:
+            self._metrics_emitter = MetricsEmitter(emit_metrics)
+        
+        # Start discovery timer
+        self._discovery_start = time.monotonic()
+        self._files_indexed = 0
+        self._chars_rendered_per_role: dict[str, int] = {}
+        self._truncation_hits: dict[str, bool] = {}
+        
         self.project = ProjectContext.discover(cwd)
+        self._files_indexed = self.project.file_count
+        
+        if self._metrics_emitter:
+            elapsed = time.monotonic() - self._discovery_start
+            self._metrics_emitter.set_discovery(
+                duration=elapsed,
+                files_indexed=self._files_indexed,
+                scan_mode=self.scan_mode.value,
+            )
+        
         self.extra_sections: list[str] = []
 
     def add_section(self, section: str) -> ContextBuilder:
@@ -827,13 +1110,86 @@ class ContextBuilder:
         return self
 
     def build(self) -> str:
+        """
+        Build the context string with optional metadata stamping.
+        
+        Returns:
+            The rendered context string, optionally prefixed with metadata stamp.
+        """
+        # Track rendering metrics  
+        render_start = time.monotonic()
+        
         parts = [self.project.render(
             max_instruction_file_chars=self.max_instruction_chars,
             max_total_instruction_chars=self.max_total_instruction_chars,
             max_diff_chars=self.max_diff_chars,
         )]
+        
         parts.extend(self.extra_sections)
-        return "\n\n".join(parts)
+        result = "\n\n".join(parts)
+        
+        # Track chars rendered
+        chars_rendered = len(result)
+        if self._metrics_emitter:
+            self._chars_rendered_per_role["overall"] = chars_rendered
+            elapsed = time.monotonic() - render_start
+            self._metrics_emitter.set_rendering(
+                chars_per_role=self._chars_rendered_per_role,
+                truncation_hit_rates=self._truncation_hits,
+            )
+        
+        # Optionally stamp with metadata
+        return result
+
+    def get_metrics(self) -> "MemoryHeistMetrics":
+        """Get accumulated metrics for this builder instance."""
+        from .observability import (
+            CompactionMetrics,
+            DiscoveryMetrics,
+            RenderingMetrics,
+        )
+        
+        metrics = MemoryHeistMetrics(
+            discovery=DiscoveryMetrics(
+                discovery_duration=time.monotonic() - self._discovery_start,
+                files_indexed=self._files_indexed,
+                scan_mode=self.scan_mode.value,
+            ),
+            rendering=RenderingMetrics(
+                chars_rendered_per_role=self._chars_rendered_per_role,
+                truncation_hit_rates=self._truncation_hits,
+            ),
+            compaction=CompactionMetrics(),
+        )
+        return metrics
+
+    def stamp(self, text: str) -> str:
+        """
+        Stamp text with metadata.
+        
+        Args:
+            text: The text to stamp
+            
+        Returns:
+            Text with metadata stamp embedded at the start.
+        """
+        stamp = create_metadata_stamp(
+            Path.cwd(),
+            scan_mode=self.scan_mode,
+            extra={"files_indexed": self._files_indexed},
+        )
+        return stamp_rendered_output(text, stamp)
+
+    def emit_metrics(self) -> dict[str, Any]:
+        """
+        Emit collected metrics via callback and return them.
+        
+        Returns:
+            The metrics dict if emitter is configured, else empty dict.
+        """
+        if self._metrics_emitter:
+            return self._metrics_emitter.to_dict()
+        return {}
 
 
 # ---------------------------------------------------------------------------

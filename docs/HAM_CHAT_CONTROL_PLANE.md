@@ -33,6 +33,8 @@ Skills are **composable checklists** for Cursor/Hermes-aligned work, for example
 | Validate critic loop | `hermes-review-loop-validation` | `prompt-budget-audit` |
 | Navigate dashboard / explain UI | `goham` | — |
 
+The **`goham`** skill is **dashboard navigation** (where to click in the workspace UI)—**not** Electron managed-browser / GoHAM chat execution.
+
 Chat should name the **skill id**, the **`.cursor/skills/.../SKILL.md`** path, and any **slash command** from `.cursor/rules/commands.mdc` when applicable.
 
 ## Structured UI actions (Phase B — shipped)
@@ -41,9 +43,9 @@ Chat should name the **skill id**, the **`.cursor/skills/.../SKILL.md`** path, a
 |-------|----------|
 | Marker line | Model adds final line: `HAM_UI_ACTIONS_JSON: {"actions":[...]}` (see `src/ham/ui_actions.py`). |
 | Server | Strips marker from stored assistant text; validates actions (allowlisted paths, settings tabs, toast length). |
-| `POST /api/chat` | Response field **`actions`**: `navigate`, `open_settings`, `toast`, `toggle_control_panel`. |
+| `POST /api/chat` | Response field **`actions`**: `navigate`, `open_settings`, `toast`, `toggle_control_panel` (legacy `set_workbench_view` removed; product chat is Hermes Workspace). |
 | `POST /api/chat/stream` | NDJSON: `session` → `delta` (token chunks) → `done` (`messages`, `actions`) or `error`. Gateway uses streaming for **openrouter** / **http** (`stream: true`); **mock** chunks the reply. |
-| Client | `postChatStream` in `frontend/src/lib/ham/api.ts`; `Chat.tsx` shows tokens as they arrive; `applyUiActions` runs on `done`. |
+| Client | `postChatStream` in `frontend/src/lib/ham/api.ts`; Hermes Workspace chat (`WorkspaceChatScreen`) shows tokens as they arrive; `applyHamUiActions` runs on `done`. |
 | Session persistence | Default in-memory; set **`HAM_CHAT_SESSION_STORE=sqlite`** (+ optional **`HAM_CHAT_SESSION_DB`**) so sessions survive API restarts (`src/persistence/sqlite_chat_session_store.py`). |
 | Request flag | `enable_ui_actions` (default **true**); set **false** to omit instructions and always get `actions: []`. |
 
@@ -108,7 +110,7 @@ Server-side **`src/ham/chat_operator.py`** runs **before** the LLM when `HAM_CHA
 | `cursor_agent_launch` | After preview: `confirmed=true`, matching digest + `cursor_base_revision`, **`Authorization: Bearer`** = **`HAM_CURSOR_AGENT_LAUNCH_TOKEN`**. Calls Cursor **`POST /v0/agents`** via [`src/integrations/cursor_cloud_client.py`](src/integrations/cursor_cloud_client.py) (Bearer auth). **Primary audit:** central JSONL (**`HAM_CURSOR_AGENT_AUDIT_FILE`** or default `~/.ham/_audit/cursor_cloud_agent.jsonl`). **Mirror** append to `<root>/.ham/_audit/cursor_cloud_agent.jsonl` only if `project.root` is a writable directory. |
 | `cursor_agent_status` | **`cursor_agent_id`** + `project_id`; **`GET /v0/agents/{id}`** with server-side Cursor key only (no Ham launch token). Same central + optional mirror audit. NL: `cursor agent status` + `bc_…` + project mention. |
 
-`POST /api/chat` and **`POST /api/chat/stream`** accept optional **`operator`** (see `ChatOperatorPayload` in `src/api/chat.py`) and return **`operator_result`** JSON. The Chat page shows **Apply / Confirm launch / Confirm register** when `pending_*` is present. **`pending_droid`** carries Factory droid preview fields for a client confirm step (UI wiring optional in Phase 1). **`pending_cursor_agent`** carries Cursor Cloud Agent preview fields for confirm + launch.
+`POST /api/chat` and **`POST /api/chat/stream`** accept optional **`operator`** (see `ChatOperatorPayload` in `src/api/chat.py`) and return **`operator_result`** JSON. The dashboard chat UI may surface **Apply / Confirm launch / Confirm register** when `pending_*` is present (Hermes Workspace or future surfaces). **`pending_droid`** carries Factory droid preview fields for a client confirm step (UI wiring optional in Phase 1). **`pending_cursor_agent`** carries Cursor Cloud Agent preview fields for confirm + launch.
 
 ## Clerk (identity + authz slice)
 
@@ -130,7 +132,7 @@ Server-side **`src/ham/chat_operator.py`** runs **before** the LLM when `HAM_CHA
 | **Cursor API** | Unchanged: **`CURSOR_API_KEY`** / saved credentials for **`api.cursor.com`**; Clerk does **not** replace the Cursor team key. |
 | **M2M (future)** | `clerk_m2m_note()` documents the seam; keep **`HAM_DROID_RUNNER_SERVICE_TOKEN`** / launch tokens for service paths until M2M is wired. |
 
-Frontend: set **`VITE_CLERK_PUBLISHABLE_KEY`** to wrap the app with **`ClerkProvider`**; **`ClerkAccessBridge`** registers **`getToken()`** for shared **`api.ts`** fetches and shows a shell banner when the probe returns **`HAM_EMAIL_RESTRICTION`**. Chat also passes the session JWT on stream requests (`frontend/src/pages/Chat.tsx`). **`HamAccessRestrictedError`** maps **`HAM_EMAIL_RESTRICTION`** to a clear toast + transcript error on chat failures.
+Frontend: set **`VITE_CLERK_PUBLISHABLE_KEY`** to wrap the app with **`ClerkProvider`**; **`ClerkAccessBridge`** registers **`getToken()`** for shared **`api.ts`** fetches and shows a shell banner when the probe returns **`HAM_EMAIL_RESTRICTION`**. Workspace chat passes the session JWT on stream requests (`frontend/src/features/hermes-workspace/screens/chat/WorkspaceChatScreen.tsx`). **`HamAccessRestrictedError`** maps **`HAM_EMAIL_RESTRICTION`** to a clear toast + transcript error on chat failures.
 
 **Instructional skill (not policy):** `.cursor/skills/factory-droid-workflows/SKILL.md`.
 

@@ -21,5 +21,5 @@ def test_chat_system_prompt_preserves_ui_actions_when_skills_catalog_is_huge(
         enable_ui_actions=True,
     )
     assert "HAM_UI_ACTIONS_JSON:" in out
-    assert "set_workbench_view" in out
+    assert "toggle_control_panel" in out
     assert len(out) <= _MAX_SYSTEM_PROMPT_CHARS

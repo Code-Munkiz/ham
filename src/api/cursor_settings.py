@@ -22,6 +22,7 @@ from src.ham.managed_mission_wiring import (
     create_mission_after_managed_launch,
     observe_mission_from_cursor_payload,
 )
+from src.persistence.managed_mission import ManagedMission, ManagedMissionStore
 from src.persistence.cursor_credentials import (
     clear_saved_cursor_api_key,
     credentials_path_for_display,
@@ -359,6 +360,52 @@ async def cursor_get_agent(agent_id: str) -> dict[str, Any]:
         )
         out["mission_checkpoint"] = cp
     return out
+
+
+def _public_managed_mission(m: ManagedMission) -> dict[str, Any]:
+    d = m.model_dump(mode="json", exclude_none=False)
+    d["kind"] = "managed_mission"
+    return d
+
+
+@router.post("/agents/{agent_id}/sync")
+async def cursor_sync_managed_mission(agent_id: str) -> dict[str, Any]:
+    """
+    Cursor GET + observe_mission_from_cursor_payload; return persisted ManagedMission only.
+
+    404 when no registry row exists for this Cursor agent id (does not return raw Cursor JSON).
+    """
+    key = _require_cursor_key()
+    aid = agent_id.strip()
+    if not aid:
+        raise HTTPException(status_code=422, detail="agent_id required")
+    resp = _cursor_get(f"/v0/agents/{aid}", api_key=key)
+    if resp.status_code == 401:
+        raise HTTPException(status_code=401, detail="Cursor rejected this API key (401).")
+    if resp.status_code >= 400:
+        raise _cursor_proxy_error(resp, "Cursor agent error")
+    try:
+        out = resp.json()
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail="Cursor returned non-JSON") from exc
+    if isinstance(out, dict):
+        try:
+            observe_mission_from_cursor_payload(raw=out)
+        except (OSError, ValueError, TypeError) as exc:
+            _LOG.warning("cursor.managed_mission.observe_failed", extra={"err": str(exc)[:200]})
+    store = ManagedMissionStore()
+    m = store.find_by_cursor_agent_id(aid)
+    if m is None:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": {
+                    "code": "MANAGED_MISSION_NOT_FOUND",
+                    "message": "No managed mission for this agent id.",
+                },
+            },
+        )
+    return _public_managed_mission(m)
 
 
 @router.get("/agents/{agent_id}/conversation")

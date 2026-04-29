@@ -311,6 +311,21 @@ def test_config_precedence_section_overrides_top_level():
     assert s.tool_prune_chars == 33
 
 
+def test_config_string_numeric_values_coerced_for_session_compaction():
+    """Merged project config may carry numeric strings; they must not be ignored."""
+    s = SessionMemory()
+    s.configure_from_project_config({
+        "memory_heist": {
+            "session_compaction_max_tokens": "9000",
+            "session_compaction_preserve": "3",
+            "session_tool_prune_chars": "200",
+        }
+    })
+    assert s.compact_max_tokens == 9000
+    assert s.compact_preserve == 3
+    assert s.tool_prune_chars == 200
+
+
 def test_repeated_compaction_bounded_with_pruning_enabled():
     s = SessionMemory()
     s.tool_prune_chars = 40
@@ -336,7 +351,9 @@ def test_repeated_compaction_bounded_with_pruning_enabled():
 def test_context_engine_dashboard_payload_structure(tmp_path: Path) -> None:
     (tmp_path / "SWARM.md").write_text("# Project", encoding="utf-8")
     (tmp_path / ".ham.json").write_text(
-        '{"memory_heist": {"session_compaction_max_tokens": 4000}, '
+        '{"memory_heist": {"session_compaction_max_tokens": 4000, '
+        '"browser": {"max_steps": "33", "step_timeout_ms": 12000, '
+        '"allowed_domains": ["docs.example.com"], "allow_form_submit": "true"}}, '
         '"architect_instruction_chars": "9000"}',
         encoding="utf-8",
     )
@@ -349,5 +366,36 @@ def test_context_engine_dashboard_payload_structure(tmp_path: Path) -> None:
     assert payload["roles"]["architect"]["instruction_budget_chars"] == 9000
     assert payload["memory_heist_section"]["session_compaction_max_tokens"] == 4000
     assert payload["session_memory"]["compact_max_tokens"] == 4000
+    assert payload["browser_policy"]["max_steps"] == 33
+    assert payload["browser_policy"]["step_timeout_ms"] == 12000
+    assert payload["browser_policy"]["allowed_domains"] == ["docs.example.com"]
+    assert payload["browser_policy"]["allow_form_submit"] is True
+    assert payload["browser_policy"]["adapter"] == "playwright"
     for role in ("architect", "commander", "critic"):
         assert payload["roles"][role]["rendered_chars"] > 0
+
+
+def test_context_engine_dashboard_payload_browser_defaults(tmp_path: Path) -> None:
+    (tmp_path / "SWARM.md").write_text("# Project", encoding="utf-8")
+    payload = context_engine_dashboard_payload(tmp_path)
+
+    policy = payload["browser_policy"]
+    assert policy["adapter"] == "playwright"
+    assert policy["max_steps"] == 25
+    assert policy["step_timeout_ms"] == 10_000
+    assert policy["max_dom_chars"] == 8_000
+    assert policy["max_console_chars"] == 4_000
+    assert policy["max_network_events"] == 200
+    assert policy["allowed_domains"] == []
+    assert policy["allow_file_download"] is False
+    assert policy["allow_form_submit"] is False
+
+
+def test_context_engine_dashboard_payload_browser_adapter_override(tmp_path: Path) -> None:
+    (tmp_path / "SWARM.md").write_text("# Project", encoding="utf-8")
+    (tmp_path / ".ham.json").write_text(
+        '{"memory_heist": {"browser": {"adapter": "chromium"}}}',
+        encoding="utf-8",
+    )
+    payload = context_engine_dashboard_payload(tmp_path)
+    assert payload["browser_policy"]["adapter"] == "chromium"
