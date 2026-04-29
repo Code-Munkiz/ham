@@ -69,6 +69,25 @@ def test_preview_blocked_without_repository(
     assert row["ok"] is False
 
 
+def test_cloud_launch_heuristic_missing_repo_has_stable_reason_code(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CURSOR_API_KEY", "k")
+    monkeypatch.delenv("HAM_CURSOR_DEFAULT_REPOSITORY", raising=False)
+    store, rec = _make_store(tmp_path, root=str(tmp_path / "repo"), metadata={})
+    (tmp_path / "repo").mkdir()
+    out = process_operator_turn(
+        user_text="fire up a cloud agent to patch flaky tests",
+        project_store=store,
+        default_project_id=rec.id,
+        operator_payload=None,
+        ham_operator_authorization=None,
+    )
+    assert out is not None and out.handled and not out.ok
+    assert (out.data or {}).get("reason_code") == "missing_repo_context"
+
+
 def test_preview_blocked_without_cursor_key(
     central_audit: Path,
     tmp_path: Path,
@@ -267,6 +286,37 @@ def test_successful_launch_writes_central_audit_and_normalizes_summary(
     assert row["action"] == "launch"
     assert row["ok"] is True
     assert row["agent_id"] == "bc_xyz"
+
+
+def test_cloud_launch_heuristic_creates_managed_mission_id_without_launch_token(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CURSOR_API_KEY", "k")
+    monkeypatch.delenv("HAM_CURSOR_AGENT_LAUNCH_TOKEN", raising=False)
+    missions_dir = tmp_path / "missions"
+    monkeypatch.setenv("HAM_MANAGED_MISSIONS_DIR", str(missions_dir))
+    store, rec = _make_store(
+        tmp_path,
+        root=str(tmp_path / "repo"),
+        metadata={"cursor_cloud_repository": "https://github.com/o/r"},
+    )
+    (tmp_path / "repo").mkdir()
+    from src.ham import cursor_agent_workflow as caw
+
+    fake = {"id": "bc_heuristic", "status": "CREATING", "summary": "started"}
+    with patch.object(caw, "cursor_api_launch_agent", return_value=fake):
+        out = process_operator_turn(
+            user_text="launch a cloud agent to update the sdk adapter",
+            project_store=store,
+            default_project_id=rec.id,
+            operator_payload=None,
+            ham_operator_authorization=None,
+        )
+    assert out is not None and out.handled and out.ok
+    assert (out.data or {}).get("agent_id") == "bc_heuristic"
+    assert (out.data or {}).get("mission_registry_id")
+    assert (out.data or {}).get("reason_code") == "mission_launched"
 
 
 def test_managed_launch_calls_mission_registry(

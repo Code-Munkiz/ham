@@ -40,6 +40,28 @@ def test_heuristic_inspect_agents_uses_default_project() -> None:
     assert h[1]["project_id"] == "project.x-abc123"
 
 
+def test_heuristic_cloud_agent_preview_routing() -> None:
+    h = try_heuristic_intent(
+        "create a cloud agent preview to update the sdk adapter",
+        default_project_id="project.x-abc123",
+    )
+    assert h is not None
+    assert h[0] == "cursor_agent_preview"
+    assert h[1]["project_id"] == "project.x-abc123"
+    assert "sdk adapter" in h[1]["cursor_task_prompt"]
+
+
+def test_heuristic_cloud_agent_launch_routing() -> None:
+    h = try_heuristic_intent(
+        "fire up a cloud agent to patch flaky tests",
+        default_project_id="project.x-abc123",
+    )
+    assert h is not None
+    assert h[0] == "cursor_agent_launch"
+    assert h[1]["project_id"] == "project.x-abc123"
+    assert "flaky tests" in h[1]["cursor_task_prompt"]
+
+
 def test_process_list_projects(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store_path = tmp_path / "proj.json"
     store = ProjectStore(store_path=store_path)

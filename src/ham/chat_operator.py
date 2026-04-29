@@ -28,6 +28,7 @@ from src.ham.cursor_agent_workflow import (
     sanitize_cursor_agent_id,
     verify_cursor_launch_against_preview,
 )
+from src.ham.managed_mission_wiring import get_managed_mission_store
 from src.ham.droid_workflows import (
     build_droid_preview,
     execute_droid_workflow,
@@ -353,6 +354,71 @@ def _extract_cursor_agent_id(text: str) -> str | None:
     return m.group(1) if m else None
 
 
+def _looks_like_cloud_agent_command(text: str) -> bool:
+    low = text.lower()
+    if any(
+        key in low
+        for key in (
+            "cloud agent",
+            "cursor agent",
+            "managed mission",
+            "launch agent",
+            "fire up agent",
+            "start agent",
+            "run agent",
+            "agent preview",
+            "create preview",
+            "have cursor",
+            "use cursor cloud",
+        )
+    ):
+        return True
+    if re.search(r"\b(?:launch|start|fire up|run)\s+(?:nova|pixel|blaze)\b", low):
+        return True
+    return False
+
+
+def _extract_cloud_agent_task_prompt(text: str) -> str:
+    t = text.strip()
+    rules = (
+        r"^\s*(?:please\s+)?(?:create|make)\s+(?:a\s+)?(?:cloud|cursor)\s+agent\s+preview(?:\s+to|\s+for)?\s*",
+        r"^\s*(?:please\s+)?(?:launch|start|run|fire\s+up)\s+(?:a\s+)?(?:cloud|cursor)\s+agent(?:\s+to|\s+for)?\s*",
+        r"^\s*(?:please\s+)?(?:have\s+cursor|use\s+cursor\s+cloud)\s+(?:agent\s+)?(?:to\s+)?",
+        r"^\s*(?:please\s+)?start\s+(?:nova|pixel|blaze)(?:\s+on|\s+to|\s+for)?\s*",
+        r"^\s*(?:please\s+)?start\s+(?:a\s+)?managed\s+mission(?:\s+to|\s+for)?\s*",
+    )
+    out = t
+    for rule in rules:
+        out = re.sub(rule, "", out, flags=re.I).strip()
+    out = re.sub(r"^\s*(?:to|for|on)\s+", "", out, flags=re.I).strip()
+    return out
+
+
+def _reasoned_block(intent: str, code: str, message: str) -> OperatorTurnResult:
+    return OperatorTurnResult(
+        handled=True,
+        intent=intent,
+        ok=False,
+        blocking_reason=f"{code}: {message}",
+        data={"reason_code": code},
+    )
+
+
+def _map_cursor_launch_failure_code(payload: dict[str, Any], fallback: str | None) -> str:
+    status_code_raw = payload.get("status_code")
+    status_code = int(status_code_raw) if isinstance(status_code_raw, int) else None
+    if status_code in (401, 403):
+        return "provider_unauthorized"
+    if status_code == 429:
+        return "provider_rate_limited"
+    low = (fallback or "").lower()
+    if "unauthorized" in low or "forbidden" in low:
+        return "provider_unauthorized"
+    if "rate" in low and "limit" in low:
+        return "provider_rate_limited"
+    return "launch_failed"
+
+
 def _parse_skill_mutation(text: str) -> tuple[str | None, list[str], list[str], str | None]:
     """Returns (profile_id, add, remove, kind). kind is 'add'|'remove'|None"""
     # add skill X to PROFILE / add skill X to agent PROFILE
@@ -466,6 +532,42 @@ def try_heuristic_intent(
         if not focus:
             return "droid_preview", {"missing": "user_prompt", "workflow_id": wf_id, "project_id": pid}
         return "droid_preview", {"project_id": pid, "workflow_id": wf_id, "user_prompt": focus}
+
+    if _looks_like_cloud_agent_command(t):
+        pid = _extract_project_id(t) or default_project_id
+        aid = _extract_cursor_agent_id(t)
+        if re.search(r"\b(cancel|stop|abort|terminate)\b", low):
+            if not aid:
+                return "cursor_agent_cancel", {"missing": "agent_id"}
+            if not pid:
+                return "cursor_agent_cancel", {"missing": "project_id", "cursor_agent_id": aid}
+            return "cursor_agent_cancel", {"project_id": pid, "cursor_agent_id": aid}
+        if re.search(r"\b(status|checkpoint|progress|state|sync)\b", low):
+            if not aid:
+                return "cursor_agent_status", {"missing": "agent_id"}
+            if not pid:
+                return "cursor_agent_status", {"missing": "project_id"}
+            return "cursor_agent_status", {"project_id": pid, "cursor_agent_id": aid}
+        is_preview = bool(re.search(r"\b(preview|plan)\b", low))
+        is_launch = bool(
+            re.search(
+                r"\b(launch|fire\s+up|start|run|have\s+cursor|use\s+cursor\s+cloud)\b",
+                low,
+            )
+        )
+        task_prompt = _extract_cloud_agent_task_prompt(t)
+        if is_preview:
+            if not pid:
+                return "cursor_agent_preview", {"missing": "project_id"}
+            if not task_prompt:
+                return "cursor_agent_preview", {"missing": "task_prompt", "project_id": pid}
+            return "cursor_agent_preview", {"project_id": pid, "cursor_task_prompt": task_prompt}
+        if is_launch:
+            if not pid:
+                return "cursor_agent_launch", {"missing": "project_id"}
+            if not task_prompt:
+                return "cursor_agent_launch", {"missing": "task_prompt", "project_id": pid}
+            return "cursor_agent_launch", {"project_id": pid, "cursor_task_prompt": task_prompt}
 
     if re.search(r"\bcursor\s+agent\s+status\b", low):
         aid = _extract_cursor_agent_id(t)
@@ -1418,30 +1520,198 @@ def _dispatch_intent(
             user_prompt=str(params["user_prompt"]),
         )
 
+    if intent == "cursor_agent_preview":
+        if params.get("missing") == "project_id":
+            return _reasoned_block(
+                intent,
+                "missing_project_ref",
+                "No active project is selected for this workspace chat.",
+            )
+        if params.get("missing") == "task_prompt":
+            return _reasoned_block(
+                intent,
+                "missing_task_prompt",
+                "I need one task sentence to build a Cloud Agent preview.",
+            )
+        pid = str(params["project_id"])
+        task_prompt = str(params.get("cursor_task_prompt") or "").strip()
+        prec = project_store.get_project(pid)
+        if prec is None:
+            return _reasoned_block(
+                intent,
+                "missing_project_ref",
+                f"Unknown project_id {pid!r}.",
+            )
+        prev = build_cursor_agent_preview(
+            project_id=prec.id,
+            project_metadata=dict(prec.metadata or {}),
+            cursor_repository=None,
+            cursor_task_prompt=task_prompt,
+            cursor_ref=None,
+            cursor_model="default",
+            cursor_auto_create_pr=False,
+            cursor_branch_name=None,
+            cursor_expected_deliverable=None,
+            cursor_mission_handling="managed",
+        )
+        audit_cursor_preview(
+            project_id=prec.id,
+            proposal_digest=prev.proposal_digest,
+            repository=prev.repository,
+            ok=prev.ok,
+            summary=prev.summary_preview if prev.ok else None,
+            blocking_reason=prev.blocking_reason,
+            project_root_for_mirror=str(prec.root),
+        )
+        if not prev.ok:
+            reason = (prev.blocking_reason or "").lower()
+            if "repository" in reason:
+                return _reasoned_block(intent, "missing_repo_context", prev.blocking_reason or "Missing repository.")
+            if "api key" in reason:
+                return _reasoned_block(intent, "missing_cursor_api_key", prev.blocking_reason or "Missing Cursor API key.")
+            return _reasoned_block(intent, "config_gap", prev.blocking_reason or "Cannot build Cloud Agent preview.")
+        pending = {
+            "project_id": prec.id,
+            "proposal_digest": prev.proposal_digest,
+            "base_revision": prev.base_revision,
+            "repository": prev.repository,
+            "cursor_repository": None,
+            "cursor_mission_handling": "managed",
+            "cursor_task_prompt": task_prompt,
+            "cursor_ref": None,
+            "cursor_model": "default",
+            "cursor_auto_create_pr": False,
+            "cursor_branch_name": None,
+            "cursor_expected_deliverable": None,
+            "mutates": prev.mutates,
+            "summary_preview": prev.summary_preview or "",
+        }
+        return OperatorTurnResult(
+            handled=True,
+            intent=intent,
+            ok=True,
+            pending_cursor_agent=pending,
+            data={
+                "reason_code": "preview_ready",
+                "proposal_digest": prev.proposal_digest,
+                "repository": prev.repository,
+                "message": prev.summary_preview or "",
+            },
+        )
+
+    if intent == "cursor_agent_launch":
+        if params.get("missing") == "project_id":
+            return _reasoned_block(
+                intent,
+                "missing_project_ref",
+                "No active project is selected for this workspace chat.",
+            )
+        if params.get("missing") == "task_prompt":
+            return _reasoned_block(
+                intent,
+                "missing_task_prompt",
+                "I need one task sentence before launching a Cloud Agent mission.",
+            )
+        pid = str(params["project_id"])
+        task_prompt = str(params.get("cursor_task_prompt") or "").strip()
+        prec = project_store.get_project(pid)
+        if prec is None:
+            return _reasoned_block(
+                intent,
+                "missing_project_ref",
+                f"Unknown project_id {pid!r}.",
+            )
+        prev = build_cursor_agent_preview(
+            project_id=prec.id,
+            project_metadata=dict(prec.metadata or {}),
+            cursor_repository=None,
+            cursor_task_prompt=task_prompt,
+            cursor_ref=None,
+            cursor_model="default",
+            cursor_auto_create_pr=False,
+            cursor_branch_name=None,
+            cursor_expected_deliverable=None,
+            cursor_mission_handling="managed",
+        )
+        if not prev.ok:
+            reason = (prev.blocking_reason or "").lower()
+            if "repository" in reason:
+                return _reasoned_block(intent, "missing_repo_context", prev.blocking_reason or "Missing repository.")
+            if "api key" in reason:
+                return _reasoned_block(intent, "missing_cursor_api_key", prev.blocking_reason or "Missing Cursor API key.")
+            return _reasoned_block(intent, "config_gap", prev.blocking_reason or "Cannot launch Cloud Agent.")
+        api_key = get_effective_cursor_api_key()
+        if not api_key:
+            return _reasoned_block(
+                intent,
+                "missing_cursor_api_key",
+                "No Cursor API key configured on this API host.",
+            )
+        ok_launch, payload, blocking, _cp_hid = run_cursor_agent_launch(
+            api_key=api_key,
+            project_id=prec.id,
+            repository=str(prev.repository or ""),
+            ref=None,
+            model="default",
+            auto_create_pr=False,
+            branch_name=None,
+            expected_deliverable=None,
+            task_prompt=task_prompt,
+            proposal_digest=str(prev.proposal_digest or ""),
+            project_root_for_mirror=str(prec.root),
+            created_by=_control_plane_created_by(ham_actor),
+            mission_handling="managed",
+        )
+        if not ok_launch:
+            reason_code = _map_cursor_launch_failure_code(payload, blocking)
+            return OperatorTurnResult(
+                handled=True,
+                intent=intent,
+                ok=False,
+                blocking_reason=f"{reason_code}: {blocking or payload.get('error') or 'Cursor launch failed.'}",
+                data={
+                    "reason_code": reason_code,
+                    "status_code": payload.get("status_code"),
+                },
+            )
+        out_data: dict[str, Any] = {**payload}
+        out_data.setdefault("provider", "cursor_cloud_agent")
+        agent_id = str(out_data.get("agent_id") or "").strip()
+        if agent_id:
+            mission = get_managed_mission_store().find_by_cursor_agent_id(agent_id)
+            if mission is not None:
+                out_data["mission_registry_id"] = mission.mission_registry_id
+                out_data["mission_lifecycle"] = mission.mission_lifecycle
+                out_data["mission_checkpoint"] = mission.mission_checkpoint_latest
+        out_data["reason_code"] = "mission_launched"
+        return OperatorTurnResult(
+            handled=True,
+            intent=intent,
+            ok=True,
+            data=out_data,
+        )
+
     if intent == "cursor_agent_status":
         if params.get("missing") == "agent_id":
-            return OperatorTurnResult(
-                handled=True,
-                intent=intent,
-                ok=False,
-                blocking_reason="Include a Cursor agent id (e.g. `bc_…`) in your message.",
+            return _reasoned_block(
+                intent,
+                "missing_cursor_agent_id",
+                "Include a Cursor agent id (e.g. `bc_…`) in your message.",
             )
         if params.get("missing") == "project_id":
-            return OperatorTurnResult(
-                handled=True,
-                intent=intent,
-                ok=False,
-                blocking_reason="Mention a registered `project.…` id or set workspace project context.",
+            return _reasoned_block(
+                intent,
+                "missing_project_ref",
+                "Mention a registered `project.…` id or set workspace project context.",
             )
         pid = str(params["project_id"])
         aid_raw = str(params["cursor_agent_id"])
         prec = project_store.get_project(pid)
         if prec is None:
-            return OperatorTurnResult(
-                handled=True,
-                intent=intent,
-                ok=False,
-                blocking_reason=f"Unknown project_id {pid!r}.",
+            return _reasoned_block(
+                intent,
+                "missing_project_ref",
+                f"Unknown project_id {pid!r}.",
             )
         try:
             aid = sanitize_cursor_agent_id(aid_raw)
@@ -1454,11 +1724,10 @@ def _dispatch_intent(
             )
         api_key = get_effective_cursor_api_key()
         if not api_key:
-            return OperatorTurnResult(
-                handled=True,
-                intent=intent,
-                ok=False,
-                blocking_reason="No Cursor API key configured on this API host.",
+            return _reasoned_block(
+                intent,
+                "missing_cursor_api_key",
+                "No Cursor API key configured on this API host.",
             )
         ok_st, payload, blocking, _cp_hid = run_cursor_agent_status(
             api_key=api_key,
@@ -1469,12 +1738,27 @@ def _dispatch_intent(
         st_d: dict[str, Any] = {**payload}
         st_d.setdefault("provider", "cursor_cloud_agent")
         st_d["external_id"] = aid
+        if not ok_st:
+            st_d["reason_code"] = _map_cursor_launch_failure_code(payload, blocking)
         return OperatorTurnResult(
             handled=True,
             intent=intent,
             ok=ok_st,
             blocking_reason=blocking,
             data=st_d,
+        )
+
+    if intent == "cursor_agent_cancel":
+        if params.get("missing") == "agent_id":
+            return _reasoned_block(
+                intent,
+                "missing_cursor_agent_id",
+                "Include a Cursor agent id (e.g. `bc_…`) to cancel.",
+            )
+        return _reasoned_block(
+            intent,
+            "cancel_not_supported",
+            "Cloud Agent cancel is not available in this chat flow yet.",
         )
 
     return OperatorTurnResult(handled=False, ok=True, data={})
@@ -1628,13 +1912,13 @@ def format_operator_assistant_message(op: OperatorTurnResult) -> str:
     if intent == "cursor_agent_launch":
         data = op.data or {}
         return (
-            f"**Operator — cursor_agent_launch** ({'ok' if op.ok else 'failed'})\n\n"
-            f"- **agent_id:** `{data.get('agent_id')}`\n"
+            f"**Cloud Agent mission launched**\n\n"
+            f"- **managed_mission_id:** `{data.get('mission_registry_id') or '(pending sync)'}`\n"
+            f"- **cursor_agent_id:** `{data.get('agent_id') or data.get('external_id')}`\n"
             f"- **status:** `{data.get('status')}`\n"
-            f"- **repository:** `{data.get('repository')}`\n"
-            f"- **ref:** `{data.get('ref')}`\n"
-            f"- **pr_url:** `{data.get('pr_url')}`\n\n"
-            f"**Summary:** {data.get('summary') or '(none)'}"
+            f"- **checkpoint:** `{data.get('mission_checkpoint') or '(pending sync)'}`\n"
+            f"- **repository:** `{data.get('repository')}`\n\n"
+            f"Open `/workspace/conductor` for live mission state and `/workspace/operations` for history."
         )
     if intent == "cursor_agent_status":
         data = op.data or {}
