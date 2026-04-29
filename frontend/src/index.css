@@ -30,6 +30,15 @@
   --glass-bg: rgba(255, 107, 0, 0.05);
   --glass-border: rgba(0, 0, 0, 0.1);
   --glow-orange: 0 0 30px rgba(255, 107, 0, 0.2);
+
+  /* App shell (non-immersive routes) — aligns with workspace canvas tokens */
+  --ham-workspace-fg: #e8eef8;
+  --ham-workspace-canvas-0: #06141a;
+  --ham-workspace-canvas-1: #041017;
+  --ham-workspace-canvas-2: #030b11;
+  --ham-workspace-line: rgba(255, 255, 255, 0.08);
+  --ham-workspace-teal-glow: rgba(6, 92, 84, 0.22);
+  --ham-workspace-orange-glow: rgba(255, 107, 0, 0.08);
 }
 
 @keyframes drift {
@@ -58,4 +67,22 @@
   }
 }
 
+/**
+ * Non-immersive app frame only. Matches workspace canvas language
+ * (dark teal/orange wash, deep base, cool foreground).
+ */
+@layer components {
+  .ham-app-shell {
+    color: var(--ham-workspace-fg);
+    background:
+      radial-gradient(1200px 700px at 70% -20%, var(--ham-workspace-teal-glow), transparent 60%),
+      radial-gradient(800px 500px at -10% 20%, var(--ham-workspace-orange-glow), transparent 60%),
+      linear-gradient(
+        180deg,
+        var(--ham-workspace-canvas-0) 0%,
+        var(--ham-workspace-canvas-1) 55%,
+        var(--ham-workspace-canvas-2) 100%
+      );
+  }
+}
 

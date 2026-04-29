@@ -1,7 +1,7 @@
 """Read-only Hermes-forward control plane snapshot for the dashboard hub.
 
 Aggregates gateway truth from the model catalog builder and Hermes skills host probe.
-No Hermes CLI, no fake inventory — only repo-backed signals.
+For allowlisted read-only Hermes CLI inventory, see ``GET /api/hermes-runtime/inventory``.
 """
 from __future__ import annotations
 
@@ -72,9 +72,8 @@ def _dashboard_chat_summary(
     }
 
 
-@router.get("/api/hermes-hub")
-async def get_hermes_hub_snapshot() -> dict[str, Any]:
-    """HAM-native snapshot: Hermes-related dashboard chat gateway + runtime skills probe only."""
+def build_hermes_hub_payload() -> dict[str, Any]:
+    """Sync Hermes hub snapshot (shared by ``GET /api/hermes-hub`` and gateway broker)."""
     catalog = build_catalog_payload()
     gw = str(catalog["gateway_mode"])
     or_ready = bool(catalog["openrouter_chat_ready"])
@@ -97,7 +96,7 @@ async def get_hermes_hub_snapshot() -> dict[str, Any]:
             "in_ham_today": [
                 "Hermes runtime skills: vendored catalog, host capabilities probe, and (when co-located) shared install preview/apply under /api/hermes-skills/*",
                 "Dashboard chat may use OpenRouter (HERMES_GATEWAY_MODE=openrouter) or HTTP/SSE to a Hermes-compatible endpoint (HERMES_GATEWAY_MODE=http); see docs/HERMES_GATEWAY_CONTRACT.md",
-                "HAM Agent Builder (/agents) configures project-scoped HAM profiles — not Hermes CLI profiles",
+                "HAM workspace profiles (/workspace/profiles) — not Hermes CLI profiles",
             ],
             "not_in_ham_yet": [
                 "No generic Hermes agent, session, or workflow inventory APIs in this repository",
@@ -105,3 +104,9 @@ async def get_hermes_hub_snapshot() -> dict[str, Any]:
             ],
         },
     }
+
+
+@router.get("/api/hermes-hub")
+async def get_hermes_hub_snapshot() -> dict[str, Any]:
+    """HAM-native snapshot: Hermes-related dashboard chat gateway + runtime skills probe only."""
+    return build_hermes_hub_payload()

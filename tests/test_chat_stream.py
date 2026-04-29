@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -56,9 +57,15 @@ def test_chat_stream_mock_yields_session_delta_done(mock_mode: None) -> None:
     assert "Mock assistant reply" in msgs[-1]["content"]
 
 
-def test_chat_stream_gateway_error_emits_error_line(mock_mode: None, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_chat_stream_gateway_failure_done_with_safe_assistant_and_signal(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
     def failing_stream(*_a, **_k):
-        raise GatewayCallError("UPSTREAM_REJECTED", "nope")
+        raise GatewayCallError(
+            "UPSTREAM_REJECTED",
+            "secret-upstream-body-do-not-show-users",
+            http_status=503,
+        )
 
     monkeypatch.setattr("src.api.chat.stream_chat_turn", failing_stream)
 
@@ -68,8 +75,15 @@ def test_chat_stream_gateway_error_emits_error_line(mock_mode: None, monkeypatch
     )
     assert res.status_code == 200
     events = _parse_ndjson(res.text)
-    assert events[-1]["type"] == "error"
-    assert events[-1]["code"] == "UPSTREAM_REJECTED"
+    assert events[0]["type"] == "session"
+    assert events[-1]["type"] == "done"
+    done = events[-1]
+    assert done.get("gateway_error") == {"code": "UPSTREAM_REJECTED"}
+    msgs = done["messages"]
+    assert msgs[-1]["role"] == "assistant"
+    body = msgs[-1]["content"]
+    assert "secret-upstream" not in body.lower()
+    assert "rejected" in body.lower() or "gateway" in body.lower()
 
 
 def test_chat_stream_done_includes_active_agent_meta(
@@ -130,3 +144,263 @@ def test_chat_stream_custom_chunks(mock_mode: None, monkeypatch: pytest.MonkeyPa
     assert res.status_code == 200
     texts = [e["text"] for e in _parse_ndjson(res.text) if e["type"] == "delta"]
     assert "".join(texts) == "ab"
+
+
+_MAX_TRANSCRIBE = 15 * 1024 * 1024
+
+
+def test_transcribe_not_configured(mock_mode: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("HAM_TRANSCRIPTION_API_KEY", raising=False)
+    monkeypatch.setenv("HAM_TRANSCRIPTION_PROVIDER", "")
+    r = client.post("/api/chat/transcribe", files={"file": ("d.webm", b"\x00\x01", "audio/webm")})
+    assert r.status_code == 503
+    assert r.json()["detail"]["error"]["code"] == "TRANSCRIPTION_NOT_CONFIGURED"
+
+
+def test_transcribe_openai_without_key(mock_mode: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HAM_TRANSCRIPTION_PROVIDER", "openai")
+    monkeypatch.delenv("HAM_TRANSCRIPTION_API_KEY", raising=False)
+    r = client.post("/api/chat/transcribe", files={"file": ("d.webm", b"x", "audio/webm")})
+    assert r.status_code == 503
+
+
+def test_transcribe_openai_placeholder_key_not_configured(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HAM_TRANSCRIPTION_PROVIDER", "openai")
+    monkeypatch.setenv("HAM_TRANSCRIPTION_API_KEY", "PLACEHOLDER")
+    r = client.post("/api/chat/transcribe", files={"file": ("d.webm", b"x", "audio/webm")})
+    assert r.status_code == 503
+    j = r.json()
+    assert j["detail"]["error"]["code"] == "TRANSCRIPTION_NOT_CONFIGURED"
+
+
+def test_transcribe_upload_too_large(mock_mode: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HAM_TRANSCRIPTION_PROVIDER", "openai")
+    monkeypatch.setenv("HAM_TRANSCRIPTION_API_KEY", "sk-live-demo-key-12345")
+    big = b"z" * (_MAX_TRANSCRIBE + 1)
+    r = client.post("/api/chat/transcribe", files={"file": ("d.webm", big, "audio/webm")})
+    assert r.status_code == 413
+
+
+def test_transcribe_content_length_rejected(mock_mode: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HAM_TRANSCRIPTION_PROVIDER", "openai")
+    monkeypatch.setenv("HAM_TRANSCRIPTION_API_KEY", "sk-live-demo-key-12345")
+    r = client.post(
+        "/api/chat/transcribe",
+        headers={"Content-Length": str(_MAX_TRANSCRIBE + 1)},
+        files={"file": ("d.webm", b"tiny", "audio/webm")},
+    )
+    assert r.status_code == 413
+
+
+def test_transcribe_empty_file(mock_mode: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HAM_TRANSCRIPTION_PROVIDER", "openai")
+    monkeypatch.setenv("HAM_TRANSCRIPTION_API_KEY", "sk-live-demo-key-12345")
+    r = client.post("/api/chat/transcribe", files={"file": ("d.webm", b"", "audio/webm")})
+    assert r.status_code == 400
+
+
+def test_transcribe_success_mocks_openai(mock_mode: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HAM_TRANSCRIPTION_PROVIDER", "openai")
+    monkeypatch.setenv("HAM_TRANSCRIPTION_API_KEY", "sk-live-demo-key-12345")
+
+    async def fake(**_kwargs: object) -> str:
+        return "hello from speech"
+
+    import src.api.chat as chat_mod
+
+    monkeypatch.setattr(chat_mod, "_transcribe_with_openai", fake)
+
+    r = client.post("/api/chat/transcribe", files={"file": ("d.webm", b"fake-audio", "audio/webm")})
+    assert r.status_code == 200
+    assert r.json() == {"text": "hello from speech"}
+
+
+def test_transcribe_upstream_auth_error_sanitized(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HAM_TRANSCRIPTION_PROVIDER", "openai")
+    monkeypatch.setenv("HAM_TRANSCRIPTION_API_KEY", "sk-real-looking")
+
+    async def fake(**_kwargs: object) -> str:
+        req = httpx.Request("POST", "https://api.openai.com/v1/audio/transcriptions")
+        resp = httpx.Response(
+            status_code=401,
+            request=req,
+            json={
+                "error": {
+                    "type": "invalid_request_error",
+                    "message": "Incorrect API key provided: PLACEHOL********",
+                }
+            },
+        )
+        raise httpx.HTTPStatusError("unauthorized", request=req, response=resp)
+
+    import src.api.chat as chat_mod
+
+    monkeypatch.setattr(chat_mod, "_transcribe_with_openai", fake)
+
+    r = client.post("/api/chat/transcribe", files={"file": ("d.webm", b"fake-audio", "audio/webm")})
+    assert r.status_code == 503
+    j = r.json()
+    assert j["detail"]["error"]["code"] == "TRANSCRIPTION_PROVIDER_REJECTED"
+    assert "PLACEHOL" not in j["detail"]["error"]["message"]
+
+
+def test_transcribe_clerk_required_without_session(mock_mode: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HAM_CLERK_REQUIRE_AUTH", "true")
+    monkeypatch.setenv("CLERK_JWT_ISSUER", "https://clerk.example.com")
+    monkeypatch.setenv("HAM_TRANSCRIPTION_PROVIDER", "openai")
+    monkeypatch.setenv("HAM_TRANSCRIPTION_API_KEY", "sk-live-demo-key-12345")
+    r = client.post("/api/chat/transcribe", files={"file": ("d.webm", b"x", "audio/webm")})
+    assert r.status_code == 401
+    assert r.json()["detail"]["error"]["code"] == "CLERK_SESSION_REQUIRED"
+    monkeypatch.delenv("HAM_CLERK_REQUIRE_AUTH", raising=False)
+
+
+def test_chat_stream_accepts_ham_chat_user_v1(mock_mode: None) -> None:
+    """1×1 PNG data URL — stored as ham_chat_user_v1; mock stream still completes."""
+    tiny_png = (
+        "data:image/png;base64,"
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+    )
+    res = client.post(
+        "/api/chat/stream",
+        json={
+            "messages": [
+                {
+                    "role": "user",
+                    "content": {
+                        "h": "ham_chat_user_v1",
+                        "text": "describe this",
+                        "images": [
+                            {"name": "pixel.png", "mime": "image/png", "data_url": tiny_png},
+                        ],
+                    },
+                },
+            ],
+        },
+    )
+    assert res.status_code == 200, res.text
+    events = _parse_ndjson(res.text)
+    done = [e for e in events if e["type"] == "done"][0]
+    user_msgs = [m for m in done["messages"] if m["role"] == "user"]
+    assert user_msgs, "user turn should be persisted"
+    assert '"h":"ham_chat_user_v1"' in user_msgs[-1]["content"] or "ham_chat_user_v1" in user_msgs[-1]["content"]
+
+
+def test_chat_stream_rejects_bad_image_mime(mock_mode: None) -> None:
+    res = client.post(
+        "/api/chat/stream",
+        json={
+            "messages": [
+                {
+                    "role": "user",
+                    "content": {
+                        "h": "ham_chat_user_v1",
+                        "text": "x",
+                        "images": [
+                            {
+                                "name": "x.gif",
+                                "mime": "image/gif",
+                                "data_url": "data:image/gif;base64,R0lGODdhAQABAIABAP///wAAACwAAAAAAQABAAACAkQBADs=",
+                            },
+                        ],
+                    },
+                },
+            ],
+        },
+    )
+    assert res.status_code == 422
+
+
+def test_chat_stream_rejects_oversized_image_data_url(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Server enforces HAM_CHAT_IMAGE_MAX_BYTES on embedded data URLs."""
+    monkeypatch.setenv("HAM_CHAT_IMAGE_MAX_BYTES", "20")
+    tiny_png = (
+        "data:image/png;base64,"
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+    )
+    res = client.post(
+        "/api/chat/stream",
+        json={
+            "messages": [
+                {
+                    "role": "user",
+                    "content": {
+                        "h": "ham_chat_user_v1",
+                        "text": "x",
+                        "images": [
+                            {"name": "big.png", "mime": "image/png", "data_url": tiny_png},
+                        ],
+                    },
+                },
+            ],
+        },
+    )
+    assert res.status_code == 422
+    detail = res.json().get("detail") if res.headers.get("content-type", "").startswith("application/json") else {}
+    msg = str(detail).lower()
+    assert "too large" in msg or "image" in msg
+
+
+def test_chat_stream_text_only_unchanged(mock_mode: None) -> None:
+    res = client.post(
+        "/api/chat/stream",
+        json={"messages": [{"role": "user", "content": "plain text only"}]},
+    )
+    assert res.status_code == 200
+    events = _parse_ndjson(res.text)
+    done = [e for e in events if e["type"] == "done"][0]
+    user_msgs = [m for m in done["messages"] if m["role"] == "user"]
+    assert user_msgs[-1]["content"] == "plain text only"
+
+
+def test_chat_stream_accepts_ham_chat_user_v2(
+    mock_mode: None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.ham.chat_attachment_store import LocalDiskAttachmentStore, set_chat_attachment_store_for_tests
+
+    monkeypatch.setenv("HAM_CHAT_ATTACHMENT_DIR", str(tmp_path))
+    set_chat_attachment_store_for_tests(LocalDiskAttachmentStore(tmp_path))
+    tiny_png = (
+        b"\x89PNG\r\n\x1a\n"
+        b"\x00\x00\x00\x0dIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde"
+        b"\x00\x00\x00\x0bIDATx\x9cc``\x00\x00\x00\x02\x00\x01\xe2!\x03\x1a\x00\x00\x00"
+        b"\x00IEND\xaeB`\x82"
+    )
+    up = client.post(
+        "/api/chat/attachments",
+        files={"file": ("a.png", tiny_png, "image/png")},
+    )
+    assert up.status_code == 200, up.text
+    aid = up.json()["attachment_id"]
+    res = client.post(
+        "/api/chat/stream",
+        json={
+            "messages": [
+                {
+                    "role": "user",
+                    "content": {
+                        "h": "ham_chat_user_v2",
+                        "text": "what is this",
+                        "attachments": [
+                            {
+                                "id": aid,
+                                "name": "a.png",
+                                "mime": "image/png",
+                                "kind": "image",
+                            },
+                        ],
+                    },
+                },
+            ],
+        },
+    )
+    assert res.status_code == 200, res.text
+    done = [e for e in _parse_ndjson(res.text) if e["type"] == "done"][0]
+    user_msgs = [m for m in done["messages"] if m["role"] == "user"]
+    assert "ham_chat_user_v2" in user_msgs[-1]["content"]

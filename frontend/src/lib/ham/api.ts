@@ -1,9 +1,14 @@
+import type { HamChatUserContentV1, HamChatUserContentV2 } from "./chatUserContent";
 import type {
   ContextEnginePayload,
   CursorCredentialsStatus,
+  HamTtsHealthPayload,
+  HamVoiceSettingsPayload,
+  HamVoiceSettingsPatch,
   ModelCatalogPayload,
   ProjectRecord,
 } from "./types";
+import type { HermesGatewaySnapshot } from "./hermesGateway";
 import { getRegisteredClerkSessionToken } from "./clerkSession";
 import { getHamDesktopConfig } from "./desktopConfig";
 
@@ -69,12 +74,46 @@ export async function applyHamOperatorSecretHeaders(headers: Headers, hamBearerT
   }
 }
 
-/** Same-origin Ham API `fetch` with optional Clerk `Authorization` (skips if already set). */
+/**
+ * Same-origin Ham API `fetch` with optional Clerk `Authorization` (skips if already set).
+ * Returns the raw `Response` — use `.json()` for JSON, `.blob()` for binary (e.g. `POST /api/tts/generate` → `audio/mpeg`).
+ */
 export async function hamApiFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const url = apiUrl(path);
   const headers = new Headers(init.headers as HeadersInit | undefined);
   await mergeClerkAuthBearerIfNeeded(headers);
   return fetch(url, { ...init, headers });
+}
+
+/** Multipart upload for workspace chat; returns an opaque `attachment_id` (blob stored server-side). */
+export async function postChatUploadAttachment(file: File): Promise<{
+  attachment_id: string;
+  filename: string;
+  mime: string;
+  size: number;
+  kind: string;
+}> {
+  const body = new FormData();
+  body.append("file", file, file.name);
+  const res = await hamApiFetch("/api/chat/attachments", { method: "POST", body });
+  if (!res.ok) {
+    let detail = `HTTP ${res.status}`;
+    try {
+      const j = (await res.json()) as { detail?: { error?: { message?: string } } };
+      const m = j?.detail?.error?.message;
+      if (m) detail = m;
+    } catch {
+      /* ignore */
+    }
+    throw new Error(detail);
+  }
+  return res.json() as Promise<{
+    attachment_id: string;
+    filename: string;
+    mime: string;
+    size: number;
+    kind: string;
+  }>;
 }
 
 async function readFastApiDetail(res: Response): Promise<string | null> {
@@ -98,6 +137,44 @@ export async function fetchModelsCatalog(): Promise<ModelCatalogPayload> {
     throw new Error(`models catalog: HTTP ${res.status}`);
   }
   return res.json() as Promise<ModelCatalogPayload>;
+}
+
+/** GET /api/tts/health — whether TTS routes are enabled on this API (no Microsoft network call). */
+export async function fetchTtsHealth(): Promise<HamTtsHealthPayload> {
+  const res = await hamApiFetch("/api/tts/health");
+  if (!res.ok) {
+    throw new Error(`TTS health: HTTP ${res.status}`);
+  }
+  return res.json() as Promise<HamTtsHealthPayload>;
+}
+
+/** GET /api/workspace/voice-settings — persisted voice prefs + capabilities. */
+export async function fetchVoiceSettings(): Promise<HamVoiceSettingsPayload> {
+  const res = await hamApiFetch("/api/workspace/voice-settings");
+  if (!res.ok) {
+    throw new Error(`voice settings: HTTP ${res.status}`);
+  }
+  return res.json() as Promise<HamVoiceSettingsPayload>;
+}
+
+/** PATCH /api/workspace/voice-settings — partial updates; returns normalized saved settings. */
+export async function patchVoiceSettings(patch: HamVoiceSettingsPatch): Promise<HamVoiceSettingsPayload> {
+  const res = await hamApiFetch("/api/workspace/voice-settings", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) {
+    let detail = `HTTP ${res.status}`;
+    try {
+      const j = (await res.json()) as { detail?: unknown };
+      if (j.detail !== undefined) detail = typeof j.detail === "string" ? j.detail : JSON.stringify(j.detail);
+    } catch {
+      /* ignore */
+    }
+    throw new Error(detail);
+  }
+  return res.json() as Promise<HamVoiceSettingsPayload>;
 }
 
 /** GET /api/hermes-hub — gateway + Hermes skills capabilities; no fake Hermes inventory. */
@@ -129,6 +206,82 @@ export async function fetchHermesHubSnapshot(): Promise<HermesHubSnapshot> {
     throw new Error(`hermes-hub: HTTP ${res.status}`);
   }
   return res.json() as Promise<HermesHubSnapshot>;
+}
+
+export type { HermesGatewaySnapshot } from "./hermesGateway";
+
+/** GET /api/hermes-gateway/snapshot — broker-backed command center (Path B). */
+export async function fetchHermesGatewaySnapshot(opts?: {
+  projectId?: string;
+  refresh?: boolean;
+}): Promise<HermesGatewaySnapshot> {
+  const q = new URLSearchParams();
+  if (opts?.projectId?.trim()) q.set("project_id", opts.projectId.trim());
+  if (opts?.refresh) q.set("refresh", "true");
+  const suffix = q.toString() ? `?${q}` : "";
+  const res = await hamApiFetch(`/api/hermes-gateway/snapshot${suffix}`);
+  if (!res.ok) {
+    throw new Error(`hermes-gateway/snapshot: HTTP ${res.status}`);
+  }
+  return res.json() as Promise<HermesGatewaySnapshot>;
+}
+
+/** GET /api/hermes-gateway/capabilities — static capability manifest. */
+export async function fetchHermesGatewayCapabilities(): Promise<Record<string, unknown>> {
+  const res = await hamApiFetch("/api/hermes-gateway/capabilities");
+  if (!res.ok) {
+    throw new Error(`hermes-gateway/capabilities: HTTP ${res.status}`);
+  }
+  return res.json() as Promise<Record<string, unknown>>;
+}
+
+/** GET /api/hermes-runtime/inventory — read-only Hermes CLI + sanitized config (local/co-located). */
+export interface HermesRuntimeInventory {
+  kind: "ham_hermes_runtime_inventory";
+  mode: string;
+  available: boolean;
+  source: {
+    hermes_binary: string;
+    hermes_home: string;
+    colocated: boolean;
+  };
+  tools: {
+    status: string;
+    summary_text?: string;
+    toolsets: string[];
+    config_toolsets?: string[];
+    warning?: string;
+    raw_redacted: string;
+  };
+  plugins: {
+    status: string;
+    items: Array<{ text: string }>;
+    raw_redacted: string;
+  };
+  mcp: {
+    status: string;
+    servers: Array<{ text?: string; name?: string; transport?: string }>;
+    raw_redacted: string;
+  };
+  config: Record<string, unknown>;
+  skills: {
+    status: string;
+    catalog_count: number;
+    static_catalog: boolean;
+    installed_note?: string;
+  };
+  status: {
+    status_all: { status: string; raw_redacted: string };
+  };
+  warnings: string[];
+}
+
+export async function fetchHermesRuntimeInventory(): Promise<HermesRuntimeInventory> {
+  const res = await hamApiFetch("/api/hermes-runtime/inventory");
+  if (!res.ok) {
+    throw new Error(`hermes-runtime/inventory: HTTP ${res.status}`);
+  }
+  return res.json() as Promise<HermesRuntimeInventory>;
 }
 
 /** GET /api/browser/policy — HAM Playwright policy snapshot (not a remote Hermes service). */
@@ -210,6 +363,24 @@ export async function clearSavedCursorApiKey(): Promise<void> {
     const msg = (await readFastApiDetail(res)) ?? `HTTP ${res.status}`;
     throw new Error(msg);
   }
+}
+
+/**
+ * `POST /api/cursor/agents/{id}/sync` — Cursor GET + observe mission; returns `ManagedMission` JSON only.
+ * @throws Error on HTTP error; message includes server detail when available.
+ */
+export async function postCursorAgentSync(agentId: string): Promise<ManagedMissionRow> {
+  const res = await hamApiFetch(`/api/cursor/agents/${encodeURIComponent(agentId)}/sync`, {
+    method: "POST",
+  });
+  if (res.status === 404) {
+    throw new Error("No managed mission for this Cloud Agent. Try after a managed launch is recorded.");
+  }
+  if (!res.ok) {
+    const msg = (await readFastApiDetail(res)) ?? `HTTP ${res.status}`;
+    throw new Error(shortenHamApiErrorMessage(msg));
+  }
+  return res.json() as Promise<ManagedMissionRow>;
 }
 
 /** Proxy `GET /v0/agents/{id}` — Cloud Agent status and metadata. */
@@ -357,6 +528,7 @@ export type ManagedMissionRow = {
   repo_key?: string | null;
   repository_observed?: string | null;
   cursor_status_last_observed?: string | null;
+  status_reason_last_observed?: string | null;
   last_server_observed_at?: string;
   updated_at?: string;
 };
@@ -557,6 +729,8 @@ export interface BrowserRuntimeState {
   streaming_supported: boolean;
   cursor_embedding_supported: boolean;
   stream_state: BrowserStreamState;
+  /** When true, direct mutating /api/browser/* actions return 409; use Browser Operator proposals. */
+  operator_mode_required?: boolean;
 }
 
 export interface BrowserStreamState {
@@ -570,6 +744,182 @@ export interface BrowserSessionCreateRequest {
   owner_key: string;
   viewport_width?: number;
   viewport_height?: number;
+  /** When true, session requires proposal + approve for mutating browser actions. */
+  operator_mode?: boolean;
+}
+
+/** FastAPI detail when a direct browser action is blocked in operator mode. */
+export const BROWSER_OPERATOR_APPROVAL_REQUIRED_DETAIL = "OPERATOR_MODE_REQUIRES_APPROVAL";
+
+export type BrowserProposalState =
+  | "proposed"
+  | "approved"
+  | "denied"
+  | "executed"
+  | "failed"
+  | "expired";
+
+export type BrowserProposalActionType =
+  | "browser.navigate"
+  | "browser.click_xy"
+  | "browser.scroll"
+  | "browser.key"
+  | "browser.type"
+  | "browser.reset";
+
+export interface BrowserProposalActionPayload {
+  action_type: BrowserProposalActionType;
+  url?: string | null;
+  selector?: string | null;
+  text?: string | null;
+  clear_first?: boolean | null;
+  x?: number | null;
+  y?: number | null;
+  delta_x?: number | null;
+  delta_y?: number | null;
+  key?: string | null;
+}
+
+export interface BrowserProposerActor {
+  kind?: "operator" | "agent" | "chat" | "unknown";
+  label?: string | null;
+}
+
+export interface BrowserActionProposal {
+  kind?: "browser_action_proposal";
+  proposal_id: string;
+  session_id: string;
+  owner_key: string;
+  state: BrowserProposalState;
+  action: BrowserProposalActionPayload;
+  proposer: BrowserProposerActor;
+  created_at: string;
+  expires_at: string;
+  decided_at?: string | null;
+  decision_note?: string | null;
+  executed_at?: string | null;
+  result_status?: "ok" | "error" | null;
+  result_last_error?: string | null;
+}
+
+export interface BrowserOperatorPolicy {
+  kind: "browser_operator_policy";
+  approval_only: boolean;
+  allowed_action_types: string[];
+  ttl_seconds: number;
+  max_pending_per_session: number;
+  dispatch_mode: string;
+  header_unlock_supported: boolean;
+}
+
+export async function fetchBrowserOperatorPolicy(): Promise<BrowserOperatorPolicy | null> {
+  const res = await hamApiFetch("/api/browser-operator/policy");
+  if (!res.ok) {
+    return null;
+  }
+  return res.json() as Promise<BrowserOperatorPolicy>;
+}
+
+export async function createBrowserProposal(body: {
+  session_id: string;
+  owner_key: string;
+  action: BrowserProposalActionPayload;
+  proposer?: BrowserProposerActor | null;
+}): Promise<BrowserActionProposal> {
+  const res = await hamApiFetch("/api/browser-operator/proposals", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      session_id: body.session_id.trim(),
+      owner_key: body.owner_key.trim(),
+      action: body.action,
+      proposer: body.proposer ?? undefined,
+    }),
+  });
+  if (!res.ok) {
+    const msg = (await readFastApiDetail(res)) ?? `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+  return res.json() as Promise<BrowserActionProposal>;
+}
+
+export async function listBrowserProposals(
+  sessionId: string,
+  ownerKey: string,
+  limit = 64,
+): Promise<BrowserActionProposal[]> {
+  const q = new URLSearchParams({
+    session_id: sessionId.trim(),
+    owner_key: ownerKey.trim(),
+    limit: String(limit),
+  });
+  const res = await hamApiFetch(`/api/browser-operator/proposals?${q.toString()}`);
+  if (!res.ok) {
+    const msg = (await readFastApiDetail(res)) ?? `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+  const j = (await res.json()) as { items?: BrowserActionProposal[] };
+  return Array.isArray(j.items) ? j.items : [];
+}
+
+export async function fetchBrowserProposal(
+  proposalId: string,
+  ownerKey: string,
+): Promise<BrowserActionProposal> {
+  const q = new URLSearchParams({ owner_key: ownerKey.trim() }).toString();
+  const res = await hamApiFetch(
+    `/api/browser-operator/proposals/${encodeURIComponent(proposalId)}?${q}`,
+  );
+  if (!res.ok) {
+    const msg = (await readFastApiDetail(res)) ?? `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+  return res.json() as Promise<BrowserActionProposal>;
+}
+
+export async function approveBrowserProposal(
+  proposalId: string,
+  ownerKey: string,
+  note?: string | null,
+): Promise<BrowserActionProposal> {
+  const res = await hamApiFetch(
+    `/api/browser-operator/proposals/${encodeURIComponent(proposalId)}/approve`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ owner_key: ownerKey.trim(), note: note?.trim() || undefined }),
+    },
+  );
+  if (!res.ok) {
+    const msg = (await readFastApiDetail(res)) ?? `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+  return res.json() as Promise<BrowserActionProposal>;
+}
+
+export async function denyBrowserProposal(
+  proposalId: string,
+  ownerKey: string,
+  note?: string | null,
+): Promise<BrowserActionProposal> {
+  const res = await hamApiFetch(
+    `/api/browser-operator/proposals/${encodeURIComponent(proposalId)}/deny`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ owner_key: ownerKey.trim(), note: note?.trim() || undefined }),
+    },
+  );
+  if (!res.ok) {
+    const msg = (await readFastApiDetail(res)) ?? `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+  return res.json() as Promise<BrowserActionProposal>;
+}
+
+/** True if error message indicates direct action was blocked (operator mode). */
+export function isBrowserOperatorApprovalRequiredError(message: string): boolean {
+  return message.includes(BROWSER_OPERATOR_APPROVAL_REQUIRED_DETAIL);
 }
 
 /** Use ``hamApiFetch`` (not raw ``fetch``) so production sends Clerk session JWT like other API calls. */
@@ -793,6 +1143,12 @@ export async function fetchProjectContextEngine(
 /** Ham-native chat DTOs (matches `src/api/chat.py`). */
 export type HamChatRole = "user" | "assistant" | "system";
 
+/** Inbound only: server accepts structured screenshot payloads; responses use string `content` only. */
+export interface HamChatRequestMessage {
+  role: HamChatRole;
+  content: string | HamChatUserContentV1 | HamChatUserContentV2;
+}
+
 export interface HamChatMessage {
   role: HamChatRole;
   content: string;
@@ -810,7 +1166,7 @@ export interface HamChatActiveAgentMeta {
 
 export interface HamChatRequest {
   session_id?: string;
-  messages: HamChatMessage[];
+  messages: HamChatRequestMessage[];
   client_request_id?: string;
   /** When true (default), API injects `.cursor/skills` summary into system context for intent routing. */
   include_operator_skills?: boolean;
@@ -828,23 +1184,52 @@ export interface HamChatRequest {
   max_mode?: boolean;
   /** Server-side operator (projects, agents, runs). */
   enable_operator?: boolean;
-  /** Structured confirm/apply/register/launch (see API `ChatOperatorPayload`). */
-  operator?: {
-    phase?: "apply_settings" | "register_project" | "launch_run" | null;
-    confirmed?: boolean;
-    project_id?: string | null;
-    changes?: Record<string, unknown> | null;
-    base_revision?: string | null;
-    name?: string | null;
-    root?: string | null;
-    description?: string | null;
-    prompt?: string | null;
-    profile_id?: string | null;
-  } | null;
+  /** Structured confirm/apply/register/launch (see API `ChatOperatorPayload` / `src/ham/chat_operator.py`). */
+  operator?: HamChatOperatorPayload | null;
+  /** Execution routing hint: auto/browser/machine/chat. */
+  execution_mode_preference?: "auto" | "browser" | "machine" | "chat";
+  /** Client environment hint for routing policy. */
+  execution_environment?: "web" | "desktop" | "unknown";
 }
 
-/** Matches `/chat` workbench header: CHAT | SPLIT | PREVIEW | WAR ROOM */
-export type HamWorkbenchViewMode = "chat" | "split" | "preview" | "war_room" | "browser";
+/** Matches server `ChatOperatorPayload` (subset used by the dashboard; extra fields are ignored if unset). */
+export type HamChatOperatorPhase =
+  | "apply_settings"
+  | "register_project"
+  | "launch_run"
+  | "droid_preview"
+  | "droid_launch"
+  | "cursor_agent_preview"
+  | "cursor_agent_launch"
+  | "cursor_agent_status";
+
+export interface HamChatOperatorPayload {
+  phase?: HamChatOperatorPhase | null;
+  confirmed?: boolean;
+  project_id?: string | null;
+  changes?: Record<string, unknown> | null;
+  base_revision?: string | null;
+  name?: string | null;
+  root?: string | null;
+  description?: string | null;
+  prompt?: string | null;
+  profile_id?: string | null;
+  droid_workflow_id?: string | null;
+  droid_user_prompt?: string | null;
+  droid_proposal_digest?: string | null;
+  droid_base_revision?: string | null;
+  cursor_task_prompt?: string | null;
+  cursor_repository?: string | null;
+  cursor_ref?: string | null;
+  cursor_model?: string;
+  cursor_auto_create_pr?: boolean;
+  cursor_branch_name?: string | null;
+  cursor_expected_deliverable?: string | null;
+  cursor_proposal_digest?: string | null;
+  cursor_base_revision?: string | null;
+  cursor_mission_handling?: "direct" | "managed" | null;
+  cursor_agent_id?: string | null;
+}
 
 /** Structured UI actions from `POST /api/chat` (server-validated). */
 export type HamUiAction =
@@ -855,8 +1240,7 @@ export type HamUiAction =
       level: "info" | "success" | "warning" | "error";
       message: string;
     }
-  | { type: "toggle_control_panel"; open?: boolean | null }
-  | { type: "set_workbench_view"; mode: HamWorkbenchViewMode };
+  | { type: "toggle_control_panel"; open?: boolean | null };
 
 export interface HamOperatorResult {
   handled: boolean;
@@ -866,7 +1250,21 @@ export interface HamOperatorResult {
   pending_apply?: Record<string, unknown> | null;
   pending_launch?: Record<string, unknown> | null;
   pending_register?: Record<string, unknown> | null;
+  pending_droid?: Record<string, unknown> | null;
+  pending_cursor_agent?: Record<string, unknown> | null;
+  harness_advisory?: Record<string, unknown> | null;
   data?: Record<string, unknown>;
+}
+
+export interface HamChatExecutionMode {
+  requested_mode: "auto" | "browser" | "machine" | "chat";
+  selected_mode: "browser" | "machine" | "chat";
+  auto_selected: boolean;
+  environment: "web" | "desktop" | "unknown";
+  browser_available: boolean;
+  local_machine_available: boolean;
+  browser_adapter?: "playwright" | "chromium" | null;
+  reason: string;
 }
 
 export interface HamChatResponse {
@@ -875,6 +1273,9 @@ export interface HamChatResponse {
   actions: HamUiAction[];
   active_agent?: HamChatActiveAgentMeta | null;
   operator_result?: HamOperatorResult | null;
+  execution_mode?: HamChatExecutionMode | null;
+  /** Present on terminal `done` when the model gateway failed after retries; safe text is in `messages`. */
+  gateway_error?: { code: string };
 }
 
 /**
@@ -1014,6 +1415,9 @@ export type HamChatStreamEvent =
       actions?: HamUiAction[];
       active_agent?: HamChatActiveAgentMeta | null;
       operator_result?: HamOperatorResult | null;
+      execution_mode?: HamChatExecutionMode | null;
+      /** Structured signal when the assistant turn ended in a gateway failure (safe copy in `messages`). */
+      gateway_error?: { code: string };
     }
   | { type: "error"; code: string; message: string };
 
@@ -1136,6 +1540,8 @@ export async function postChatStream(
         actions: Array.isArray(ev.actions) ? ev.actions : [],
         active_agent: ev.active_agent ?? undefined,
         operator_result: ev.operator_result ?? undefined,
+        execution_mode: ev.execution_mode ?? undefined,
+        ...(ev.gateway_error ? { gateway_error: ev.gateway_error } : {}),
       };
       return;
     }
@@ -1165,6 +1571,48 @@ export async function postChatStream(
     throw new Error("Chat stream ended without a done event");
   }
   return final;
+}
+
+/**
+ * Multipart voice clip → server-side OpenAI transcription; appends returned text in the UI.
+ */
+export async function postChatTranscribe(audio: Blob, filename: string = "dictation.webm"): Promise<string> {
+  const fd = new FormData();
+  fd.append("file", audio, filename);
+  const headers = new Headers();
+  await mergeClerkAuthBearerIfNeeded(headers);
+  const res = await fetch(apiUrl("/api/chat/transcribe"), { method: "POST", body: fd, headers });
+  if (!res.ok) {
+    let detail: unknown;
+    try {
+      detail = (await res.json()) as { detail?: unknown };
+    } catch {
+      detail = undefined;
+    }
+    const d = typeof detail === "object" && detail !== null ? (detail as { detail?: unknown }).detail : undefined;
+    if (fastApiStructuredErrorCode(d) === "HAM_EMAIL_RESTRICTION") {
+      throw new HamAccessRestrictedError(
+        messageFromFastApiDetail(d) ?? "Access restricted for this Ham deployment.",
+      );
+    }
+    const errCode = fastApiStructuredErrorCode(d);
+    if (
+      res.status === 503 &&
+      (errCode === "TRANSCRIPTION_NOT_CONFIGURED" || errCode === "TRANSCRIPTION_PROVIDER_REJECTED")
+    ) {
+      throw new Error(
+        "Transcription failed. Check HAM transcription configuration.",
+      );
+    }
+    if (res.status === 502 && errCode === "TRANSCRIPTION_UPSTREAM_FAILED") {
+      throw new Error("Transcription failed. Check HAM transcription configuration.");
+    }
+    const msg =
+      messageFromFastApiDetail(d) ?? `Transcription failed (HTTP ${res.status}).`;
+    throw new Error(msg);
+  }
+  const data = (await res.json()) as { text?: string };
+  return typeof data.text === "string" ? data.text : "";
 }
 
 // --- Hermes runtime skills (Phase 1: read-only catalog + probe; not Cursor operator skills) ---
@@ -1242,6 +1690,39 @@ export interface HermesSkillsTargetsResponse {
   warnings: string[];
 }
 
+/** GET /api/hermes-skills/installed — live CLI observation joined to vendored catalog (read-only). */
+export type HermesSkillsInstalledStatus =
+  | "ok"
+  | "remote_only"
+  | "unavailable"
+  | "error"
+  | "parse_degraded";
+
+export type HermesSkillLiveResolution = "linked" | "live_only" | "unknown";
+
+export interface HermesSkillLiveInstallation {
+  name: string;
+  category: string;
+  hermes_source: string;
+  hermes_trust: string;
+  catalog_id: string | null;
+  resolution: HermesSkillLiveResolution;
+}
+
+export interface HermesSkillsInstalledResponse {
+  kind: "hermes_skills_live_overlay";
+  status: HermesSkillsInstalledStatus;
+  cli_source: string;
+  live_count: number;
+  linked_count: number;
+  live_only_count: number;
+  unknown_count: number;
+  catalog_only_count: number;
+  installations: HermesSkillLiveInstallation[];
+  warnings: string[];
+  raw_redacted: string;
+}
+
 export async function fetchHermesSkillsCatalog(): Promise<HermesSkillsCatalogResponse> {
   const res = await hamApiFetch("/api/hermes-skills/catalog");
   if (!res.ok) {
@@ -1274,6 +1755,14 @@ export async function fetchHermesSkillsTargets(): Promise<HermesSkillsTargetsRes
     throw new Error(`hermes-skills/targets: HTTP ${res.status}`);
   }
   return res.json() as Promise<HermesSkillsTargetsResponse>;
+}
+
+export async function fetchHermesSkillsInstalled(): Promise<HermesSkillsInstalledResponse> {
+  const res = await hamApiFetch("/api/hermes-skills/installed");
+  if (!res.ok) {
+    throw new Error(`hermes-skills/installed: HTTP ${res.status}`);
+  }
+  return res.json() as Promise<HermesSkillsInstalledResponse>;
 }
 
 /** Phase 2a — Hermes runtime skill install (shared target only; not Cursor operator skills). */
@@ -1366,6 +1855,262 @@ export async function postHermesSkillsInstallApply(
     throw new Error(msg || `hermes-skills install apply failed (HTTP ${res.status})`);
   }
   return res.json() as Promise<HermesSkillsInstallApplyResponse>;
+}
+
+// --- Capability Directory (Phase 1 — read-only; no apply from UI) ---
+
+export interface CapabilityDirectoryProvenance {
+  source_kind: string;
+  registry_revision?: string;
+  note?: string;
+  [key: string]: unknown;
+}
+
+export interface CapabilityDirectorySurface {
+  route: string;
+  label: string;
+  api?: string;
+}
+
+export interface CapabilityDirectoryRecord {
+  id: string;
+  schema_version: string;
+  kind: "atomic_capability" | "bundle" | "profile_template";
+  display_name: string;
+  summary: string;
+  description: string;
+  trust_tier: string;
+  provenance: CapabilityDirectoryProvenance;
+  version: string;
+  required_backends: string[];
+  capabilities: string[];
+  skills: string[];
+  tools_policy: Record<string, unknown>;
+  mcp_policy: Record<string, unknown>;
+  model_policy: Record<string, unknown>;
+  memory_policy: Record<string, unknown>;
+  surfaces: CapabilityDirectorySurface[];
+  mutability: string;
+  preview_available: boolean;
+  apply_available: boolean;
+  risks: string[];
+  evidence_expectations: string[];
+  tags: string[];
+  /** Optional autonomy tier labels (e.g. Computer Control Pack). */
+  permission_tiers?: Record<string, string>;
+}
+
+export interface CapabilityDirectoryIndexResponse {
+  kind: "capability_directory_index";
+  schema_version: string;
+  registry_id: string;
+  mutation_policy: string;
+  apply_available_globally: boolean;
+  no_execution_notice?: string;
+  counts: {
+    capabilities: number;
+    bundles: number;
+    profile_templates: number;
+  };
+  trust_tier_counts: Record<string, number>;
+  endpoints: Record<string, string>;
+  registry_note?: string | null;
+}
+
+export interface CapabilityDirectoryCapabilitiesResponse {
+  kind: "capability_directory_capabilities";
+  schema_version: string;
+  registry_id: string;
+  mutation_policy: string;
+  apply_available_globally: boolean;
+  count: number;
+  capabilities: CapabilityDirectoryRecord[];
+}
+
+export interface CapabilityDirectoryBundlesResponse {
+  kind: "capability_directory_bundles";
+  schema_version: string;
+  registry_id: string;
+  mutation_policy: string;
+  apply_available_globally: boolean;
+  count: number;
+  bundles: CapabilityDirectoryRecord[];
+}
+
+export interface CapabilityDirectoryBundleResponse {
+  kind: "capability_directory_bundle";
+  schema_version: string;
+  registry_id: string;
+  mutation_policy: string;
+  apply_available_globally: boolean;
+  no_execution_notice?: string;
+  bundle: CapabilityDirectoryRecord;
+}
+
+export async function fetchCapabilityDirectoryIndex(): Promise<CapabilityDirectoryIndexResponse> {
+  const res = await hamApiFetch("/api/capability-directory");
+  if (!res.ok) {
+    throw new Error(`capability-directory: HTTP ${res.status}`);
+  }
+  return res.json() as Promise<CapabilityDirectoryIndexResponse>;
+}
+
+export async function fetchCapabilityDirectoryCapabilities(): Promise<CapabilityDirectoryCapabilitiesResponse> {
+  const res = await hamApiFetch("/api/capability-directory/capabilities");
+  if (!res.ok) {
+    throw new Error(`capability-directory/capabilities: HTTP ${res.status}`);
+  }
+  return res.json() as Promise<CapabilityDirectoryCapabilitiesResponse>;
+}
+
+export async function fetchCapabilityDirectoryBundles(): Promise<CapabilityDirectoryBundlesResponse> {
+  const res = await hamApiFetch("/api/capability-directory/bundles");
+  if (!res.ok) {
+    throw new Error(`capability-directory/bundles: HTTP ${res.status}`);
+  }
+  return res.json() as Promise<CapabilityDirectoryBundlesResponse>;
+}
+
+export async function fetchCapabilityDirectoryBundle(
+  bundleId: string,
+): Promise<CapabilityDirectoryBundleResponse> {
+  const res = await hamApiFetch(
+    `/api/capability-directory/bundles/${encodeURIComponent(bundleId)}`,
+  );
+  if (!res.ok) {
+    const msg = await detailMessageFromResponse(res);
+    throw new Error(
+      msg || `capability-directory/bundles/${bundleId}: HTTP ${res.status}`,
+    );
+  }
+  return res.json() as Promise<CapabilityDirectoryBundleResponse>;
+}
+
+// --- Capability library (saved catalog refs; token-gated writes) ---
+
+export interface CapabilityLibraryWriteStatus {
+  kind: "ham_capability_library_write_status";
+  writes_enabled: boolean;
+}
+
+export interface CapabilityLibraryEntryRow {
+  ref: string;
+  notes: string;
+  user_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CapabilityLibraryResponse {
+  kind: "ham_capability_library";
+  schema_version: string;
+  project_root: string;
+  revision: string;
+  entries: CapabilityLibraryEntryRow[];
+}
+
+export interface CapabilityLibraryAggregateItem {
+  ref: string;
+  source: string;
+  in_library: boolean;
+  library: {
+    notes: string;
+    user_order: number;
+    created_at: string;
+    updated_at: string;
+  };
+  in_catalog?: boolean;
+  in_directory?: boolean;
+  hermes?: {
+    catalog_id?: string;
+    display_name?: string;
+    summary?: string;
+    trust_level?: string;
+    installed_summary?: { status?: string; linked?: boolean };
+  };
+  capability_directory?: {
+    kind?: string;
+    id?: string;
+    display_name?: string;
+    trust_tier?: string;
+  };
+}
+
+export interface CapabilityLibraryAggregateResponse {
+  kind: "ham_capability_library_aggregate";
+  schema_version: string;
+  project_root: string;
+  revision: string;
+  entry_count: number;
+  items: CapabilityLibraryAggregateItem[];
+}
+
+export async function fetchCapabilityLibraryWriteStatus(): Promise<CapabilityLibraryWriteStatus> {
+  const res = await hamApiFetch("/api/capability-library/write-status");
+  if (!res.ok) {
+    throw new Error(`capability-library write-status: HTTP ${res.status}`);
+  }
+  return res.json() as Promise<CapabilityLibraryWriteStatus>;
+}
+
+export async function fetchCapabilityLibrary(projectId: string): Promise<CapabilityLibraryResponse> {
+  const res = await hamApiFetch(
+    `/api/capability-library/library?project_id=${encodeURIComponent(projectId)}`,
+  );
+  if (!res.ok) {
+    const msg = await detailMessageFromResponse(res);
+    throw new Error(msg || `capability-library: HTTP ${res.status}`);
+  }
+  return res.json() as Promise<CapabilityLibraryResponse>;
+}
+
+export async function fetchCapabilityLibraryAggregate(
+  projectId: string,
+): Promise<CapabilityLibraryAggregateResponse> {
+  const res = await hamApiFetch(
+    `/api/capability-library/aggregate?project_id=${encodeURIComponent(projectId)}`,
+  );
+  if (!res.ok) {
+    const msg = await detailMessageFromResponse(res);
+    throw new Error(msg || `capability-library aggregate: HTTP ${res.status}`);
+  }
+  return res.json() as Promise<CapabilityLibraryAggregateResponse>;
+}
+
+export async function postCapabilityLibrarySave(
+  projectId: string,
+  body: { ref: string; notes: string; base_revision: string },
+  writeToken: string,
+): Promise<{ new_revision: string; audit_id: string }> {
+  const headers = new Headers({ "Content-Type": "application/json" });
+  await applyHamOperatorSecretHeaders(headers, writeToken);
+  const res = await fetch(
+    apiUrl(`/api/capability-library/save?project_id=${encodeURIComponent(projectId)}`),
+    { method: "POST", headers, body: JSON.stringify(body) },
+  );
+  if (!res.ok) {
+    const msg = await detailMessageFromResponse(res);
+    throw new Error(msg || `capability-library save: HTTP ${res.status}`);
+  }
+  return res.json() as Promise<{ new_revision: string; audit_id: string }>;
+}
+
+export async function postCapabilityLibraryRemove(
+  projectId: string,
+  body: { ref: string; base_revision: string },
+  writeToken: string,
+): Promise<{ new_revision: string; audit_id: string }> {
+  const headers = new Headers({ "Content-Type": "application/json" });
+  await applyHamOperatorSecretHeaders(headers, writeToken);
+  const res = await fetch(
+    apiUrl(`/api/capability-library/remove?project_id=${encodeURIComponent(projectId)}`),
+    { method: "POST", headers, body: JSON.stringify(body) },
+  );
+  if (!res.ok) {
+    const msg = await detailMessageFromResponse(res);
+    throw new Error(msg || `capability-library remove: HTTP ${res.status}`);
+  }
+  return res.json() as Promise<{ new_revision: string; audit_id: string }>;
 }
 
 // --- Allowlisted project settings (v1 control plane) ---

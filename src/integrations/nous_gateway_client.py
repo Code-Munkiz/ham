@@ -7,7 +7,9 @@ See docs/HERMES_GATEWAY_CONTRACT.md.
 from __future__ import annotations
 
 import json
+import logging
 import os
+import time
 from collections.abc import Iterator
 from typing import Any
 
@@ -15,15 +17,182 @@ import httpx
 
 DEFAULT_TIMEOUT_SEC = 300.0
 DEFAULT_MODEL = "hermes-agent"
+DEFAULT_STREAM_STALL_SEC = 45.0
+DEFAULT_STREAM_MAX_EXTRA_SEC = 120.0
+
+logger = logging.getLogger(__name__)
+
+# Retry primary Hermes request with HAM_CHAT_FALLBACK_MODEL on overload / transport / stall errors.
+_HTTP_FALLBACK_STATUSES = frozenset({429, 502, 503, 504})
+_FALLBACK_ERROR_CODES = frozenset(
+    {
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNAVAILABLE",
+        "STREAM_STALLED",
+        "STREAM_MAX_DURATION",
+    },
+)
 
 
 class GatewayCallError(Exception):
     """Upstream failure or unusable response (HAM maps this to HTTP errors)."""
 
-    def __init__(self, code: str, message: str) -> None:
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        *,
+        http_status: int | None = None,
+    ) -> None:
         super().__init__(message)
         self.code = code
         self.message = message
+        self.http_status = http_status
+
+
+def _fallback_eligible(exc: GatewayCallError) -> bool:
+    if exc.code in _FALLBACK_ERROR_CODES:
+        return True
+    st = getattr(exc, "http_status", None)
+    return st is not None and st in _HTTP_FALLBACK_STATUSES
+
+
+def format_gateway_error_user_message(exc: GatewayCallError) -> str:
+    """Safe, user-visible explanation (no raw upstream text)."""
+    if exc.code == "UPSTREAM_TIMEOUT":
+        return (
+            "The model gateway stopped responding in time. "
+            "Try again shortly, or check gateway health if this persists."
+        )
+    if exc.code == "UPSTREAM_UNAVAILABLE":
+        return (
+            "Chat could not reach the model gateway (connection error). "
+            "Check network and gateway availability, then retry."
+        )
+    if exc.code == "STREAM_STALLED":
+        return (
+            "The assistant stream stalled (no new data from the gateway for too long). "
+            "Try again or switch models if this keeps happening."
+        )
+    if exc.code == "STREAM_MAX_DURATION":
+        return (
+            "This reply took too long overall and was stopped. "
+            "Try a shorter question or retry."
+        )
+    if exc.code == "UPSTREAM_REJECTED":
+        return "The model gateway rejected the request. Try again or contact support if it continues."
+    if exc.code == "INVALID_REQUEST":
+        return exc.message
+    if exc.code == "CONFIG_ERROR":
+        return "Chat is misconfigured on the server. An administrator needs to fix gateway settings."
+    return f"The assistant could not complete this turn ({exc.code})."
+
+
+def _stream_stall_sec() -> float:
+    raw = (os.environ.get("HAM_CHAT_HTTP_STALL_SEC") or "").strip()
+    if raw:
+        try:
+            return max(0.001, float(raw))
+        except ValueError:
+            pass
+    return DEFAULT_STREAM_STALL_SEC
+
+
+def _stream_max_wall_sec(timeout_sec: float) -> float:
+    raw = (os.environ.get("HAM_CHAT_HTTP_STREAM_MAX_SEC") or "").strip()
+    if raw:
+        try:
+            return max(30.0, float(raw))
+        except ValueError:
+            pass
+    return max(timeout_sec + DEFAULT_STREAM_MAX_EXTRA_SEC, 300.0)
+
+
+def _iter_http_chat_completions(
+    *,
+    base: str,
+    api_key: str,
+    model: str,
+    messages: list[dict[str, Any]],
+    timeout_sec: float,
+) -> Iterator[str]:
+    """Single POST to Hermes /v1/chat/completions (streaming SSE)."""
+    url = f"{base}/v1/chat/completions"
+    headers: dict[str, str] = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    payload: dict[str, Any] = {
+        "model": model,
+        "messages": messages,
+        "stream": True,
+    }
+
+    stall_sec = _stream_stall_sec()
+    max_wall_sec = _stream_max_wall_sec(timeout_sec)
+    # Per-chunk read timeout catches TCP silence; stall_sec also enforced on empty SSE deltas below.
+    connect_pool = min(30.0, max(5.0, stall_sec))
+    httpx_timeout = httpx.Timeout(
+        connect=connect_pool,
+        read=stall_sec,
+        write=min(60.0, max(10.0, stall_sec)),
+        pool=connect_pool,
+    )
+
+    try:
+        with httpx.Client(timeout=httpx_timeout) as client:
+            with client.stream("POST", url, headers=headers, json=payload) as resp:
+                if resp.status_code >= 400:
+                    raise GatewayCallError(
+                        "UPSTREAM_REJECTED",
+                        f"Gateway HTTP {resp.status_code}",
+                        http_status=resp.status_code,
+                    )
+                stream_started = time.monotonic()
+                # Any received SSE line advances progress; gaps without new lines rely on httpx read timeout.
+                last_stream_progress = stream_started
+                for line in resp.iter_lines():
+                    now = time.monotonic()
+                    if now - stream_started > max_wall_sec:
+                        raise GatewayCallError(
+                            "STREAM_MAX_DURATION",
+                            f"No completion within {max_wall_sec:.0f}s wall clock",
+                        )
+                    if line:
+                        last_stream_progress = now
+                    if now - last_stream_progress > stall_sec:
+                        raise GatewayCallError(
+                            "STREAM_STALLED",
+                            f"No SSE progress for {stall_sec:.0f}s",
+                        )
+                    if not line:
+                        continue
+                    if not line.startswith("data: "):
+                        continue
+                    data_str = line[6:].strip()
+                    if data_str == "[DONE]":
+                        break
+                    try:
+                        data = json.loads(data_str)
+                    except json.JSONDecodeError:
+                        continue
+                    choices = data.get("choices")
+                    if not choices:
+                        continue
+                    delta = (choices[0].get("delta") or {}) if isinstance(choices[0], dict) else {}
+                    content = delta.get("content")
+                    if content:
+                        yield str(content)
+    except httpx.TimeoutException as exc:
+        raise GatewayCallError(
+            "UPSTREAM_TIMEOUT",
+            f"Gateway request timed out: {exc}",
+        ) from exc
+    except httpx.RequestError as exc:
+        raise GatewayCallError(
+            "UPSTREAM_UNAVAILABLE",
+            f"Gateway connection failed: {exc}",
+        ) from exc
 
 
 def _resolve_mode() -> str:
@@ -38,11 +207,27 @@ def _resolve_mode() -> str:
     return "http" if base else "mock"
 
 
-def _mock_assistant_text(messages: list[dict[str, str]]) -> str:
+def _text_for_mock_user_content(content: Any) -> str:
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        parts: list[str] = []
+        for p in content:
+            if not isinstance(p, dict):
+                continue
+            if p.get("type") == "text" and isinstance(p.get("text"), str):
+                parts.append(p["text"])
+            if p.get("type") == "image_url":
+                parts.append("[image]")
+        return "\n".join(parts).strip()
+    return str(content or "").strip()
+
+
+def _mock_assistant_text(messages: list[dict[str, Any]]) -> str:
     last_user = ""
     for t in reversed(messages):
         if t.get("role") == "user":
-            last_user = (t.get("content") or "").strip()
+            last_user = _text_for_mock_user_content(t.get("content"))
             break
     if not last_user:
         last_user = "(no user message in history)"
@@ -51,7 +236,7 @@ def _mock_assistant_text(messages: list[dict[str, str]]) -> str:
 
 
 def stream_chat_turn(
-    messages: list[dict[str, str]],
+    messages: list[dict[str, Any]],
     *,
     timeout_sec: float = DEFAULT_TIMEOUT_SEC,
     openrouter_model_override: str | None = None,
@@ -99,60 +284,46 @@ def stream_chat_turn(
         )
 
     api_key = (os.environ.get("HERMES_GATEWAY_API_KEY") or "").strip()
-    model = (os.environ.get("HERMES_GATEWAY_MODEL") or DEFAULT_MODEL).strip() or DEFAULT_MODEL
+    primary = (os.environ.get("HERMES_GATEWAY_MODEL") or DEFAULT_MODEL).strip() or DEFAULT_MODEL
+    fallback = (os.environ.get("HAM_CHAT_FALLBACK_MODEL") or "").strip()
 
-    url = f"{base}/v1/chat/completions"
-    headers: dict[str, str] = {"Content-Type": "application/json"}
-    if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
-
-    payload: dict[str, Any] = {
-        "model": model,
-        "messages": messages,
-        "stream": True,
-    }
-
+    primary_emitted_chunk = False
     try:
-        with httpx.Client(timeout=timeout_sec) as client:
-            with client.stream("POST", url, headers=headers, json=payload) as resp:
-                if resp.status_code >= 400:
-                    raise GatewayCallError(
-                        "UPSTREAM_REJECTED",
-                        f"Gateway HTTP {resp.status_code}",
-                    )
-                for line in resp.iter_lines():
-                    if not line:
-                        continue
-                    if not line.startswith("data: "):
-                        continue
-                    data_str = line[6:].strip()
-                    if data_str == "[DONE]":
-                        break
-                    try:
-                        data = json.loads(data_str)
-                    except json.JSONDecodeError:
-                        continue
-                    choices = data.get("choices")
-                    if not choices:
-                        continue
-                    delta = (choices[0].get("delta") or {}) if isinstance(choices[0], dict) else {}
-                    content = delta.get("content")
-                    if content:
-                        yield str(content)
-    except httpx.TimeoutException as exc:
-        raise GatewayCallError(
-            "UPSTREAM_TIMEOUT",
-            f"Gateway request timed out: {exc}",
-        ) from exc
-    except httpx.RequestError as exc:
-        raise GatewayCallError(
-            "UPSTREAM_UNAVAILABLE",
-            f"Gateway connection failed: {exc}",
-        ) from exc
+        for chunk in _iter_http_chat_completions(
+            base=base,
+            api_key=api_key,
+            model=primary,
+            messages=messages,
+            timeout_sec=timeout_sec,
+        ):
+            primary_emitted_chunk = True
+            yield chunk
+    except GatewayCallError as exc:
+        # Only retry before any user-visible tokens: mixing models mid-reply is worse than surfacing an error.
+        if (
+            not primary_emitted_chunk
+            and fallback
+            and fallback != primary
+            and _fallback_eligible(exc)
+        ):
+            logger.warning(
+                "ham_http_chat: primary model failed (code=%s http_status=%s); retrying once with fallback",
+                exc.code,
+                exc.http_status,
+            )
+            yield from _iter_http_chat_completions(
+                base=base,
+                api_key=api_key,
+                model=fallback,
+                messages=messages,
+                timeout_sec=timeout_sec,
+            )
+        else:
+            raise
 
 
 def complete_chat_turn(
-    messages: list[dict[str, str]],
+    messages: list[dict[str, Any]],
     *,
     timeout_sec: float = DEFAULT_TIMEOUT_SEC,
     openrouter_model_override: str | None = None,

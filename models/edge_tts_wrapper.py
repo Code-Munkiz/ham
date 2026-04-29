@@ -1,31 +1,29 @@
 """
 edge_tts_wrapper.py
 
-Lightweight Edge TTS wrapper for text-to-speech.
-Uses Microsoft Edge TTS (cloud-based, no local dependencies).
+Microsoft Edge text-to-speech via the maintained ``edge-tts`` package (WebSocket + current
+``Sec-MS-GEC``/DRM flow). The previous HTTP POST to ``speech.platform.bing.com/.../v1`` is stale
+and returns 404; do not reintroduce it.
 
-Safe for Cloud Run and Vercel deployment.
-
-Usage:
-    from models.edge_tts_wrapper import TextToSpeechEngine
-    
-    tts = TextToSpeechEngine()
-    audio_bytes = tts.generate("Hello world", voice="en-US-JennyNeural")
+No local models; Cloud Run / Linux compatible. Requires network egress to Microsoft.
 """
 
+from __future__ import annotations
+
 import base64
-import httpx
+import logging
 from typing import Optional
+
+import edge_tts
+
+logger = logging.getLogger(__name__)
+
 
 class TextToSpeechEngine:
     """
-    Edge TTS text-to-speech integration.
-    
-    Cloud-based TTS via Microsoft Edge TTS API.
-    No local models, no heavy dependencies.
-    Fits within Cloud Run image size limits.
+    Edge TTS — delegates to ``edge_tts.Communicate`` (audio-24khz-48kbitrate-mono-mp3 / MPEG).
     """
-    
+
     VOICES = {
         "en-US": "en-US-JennyNeural",
         "en-GB": "en-GB-SoniaNeural",
@@ -33,94 +31,64 @@ class TextToSpeechEngine:
         "fr-FR": "fr-FR-DeniseNeural",
         "de-DE": "de-DE-KatjaNeural",
     }
-    
+
     def __init__(self, voice: str = "en-US-JennyNeural"):
-        """
-        Initialize TTS engine.
-        
-        Args:
-            voice: Microsoft Edge neural voice ID
-                   Default: en-US-JennyNeural (female, warm)
-        """
         self.voice = voice
-    
+
+    @staticmethod
+    def _rate_string(speed: float) -> str:
+        """Map ``speed`` (0.5–2.0 style) to edge-tts ``rate`` like ``+0%`` or ``-25%``."""
+        try:
+            pct = int(round((float(speed) - 1.0) * 100))
+        except (TypeError, ValueError):
+            pct = 0
+        pct = max(-100, min(100, pct))
+        return f"{pct:+d}%"
+
+    @staticmethod
+    def _pitch_string(pitch: float) -> str:
+        """Map ``pitch`` to edge-tts ``pitch`` like ``+0Hz`` (service expects Hz steps)."""
+        try:
+            hz = float(pitch)
+        except (TypeError, ValueError):
+            hz = 0.0
+        return f"{hz:+.0f}Hz"
+
     async def generate(
         self,
         text: str,
         voice: Optional[str] = None,
         speed: float = 1.0,
-        pitch: float = 0.0
+        pitch: float = 0.0,
     ) -> bytes:
-        """
-        Generate speech audio from text.
-        
-        Args:
-            text: Text to convert to speech
-            voice: Override default voice
-            speed: Speech rate (0.5-2.0, default 1.0)
-            pitch: Speech pitch (-20.0-20.0, default 0.0)
-        
-        Returns:
-            Audio bytes in MP3 format
-        """
-        voice = voice or self.voice
-        
-        async with httpx.AsyncClient() as client:
-            # Edge TTS API endpoint
-            url = "https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1"
-            
-            # Headers
-            headers = {
-                "Authorization": f"Bearer {voice}",
-                "Content-Type": "application/ssml+xml",
-                "X-Timestamp": self._get_timestamp(),
-                "user-agent": "Mozilla/5.0",
-            }
-            
-            # SSML payload
-            ssml = f"""
-            <speak version="1.0" xml:lang="en-US">
-                <voice xml:lang="en-US" name="{voice}">
-                    <prosody rate="{speed}x" pitch="{pitch}Hz">
-                        {text}
-                    </prosody>
-                </voice>
-            </speak>
-            """
-            
-            response = await client.post(
-                url,
-                headers=headers,
-                content=ssml.encode('utf-8'),
-                timeout=30.0
-            )
-            
-            if response.status_code != 200:
-                raise RuntimeError(f"TTS generation failed: {response.status_code} - {response.text}")
-            
-            return response.content
-    
+        use_voice = voice or self.voice
+        rate = self._rate_string(speed)
+        pitch_s = self._pitch_string(pitch)
+        comm: edge_tts.Communicate = edge_tts.Communicate(
+            text,
+            use_voice,
+            rate=rate,
+            volume="+0%",
+            pitch=pitch_s,
+        )
+        out = bytearray()
+        try:
+            async for chunk in comm.stream():
+                if chunk.get("type") == "audio":
+                    out.extend(chunk["data"])
+        except Exception as e:
+            logger.exception("edge-tts Communicate failed")
+            raise RuntimeError("TTS generation failed") from e
+        if not out:
+            raise RuntimeError("TTS generation failed: no audio data")
+        return bytes(out)
+
     def generate_base64(self, text: str, voice: Optional[str] = None) -> str:
-        """
-        Generate speech and return as Base64 string.
-        
-        Useful for embedding directly in HTML/audio elements.
-        
-        Args:
-            text: Text to convert to speech
-            voice: Override default voice
-        
-        Returns:
-            Base64-encoded MP3 audio string
-        """
-        audio_bytes = self.generate(text, voice)
-        return base64.b64encode(audio_bytes).decode('utf-8')
-    
-    def _get_timestamp(self) -> str:
-        """Generate TTS API timestamp."""
-        import time
-        return str(int(time.time() * 1000))
-    
-    def list_voices(self) -> list:
-        """List available neural voices."""
+        """Synchronous base64: prefer ``async`` ``generate`` in server code; this uses asyncio.run."""
+        import asyncio
+
+        audio_bytes = asyncio.run(self.generate(text, voice))
+        return base64.b64encode(audio_bytes).decode("utf-8")
+
+    def list_voices(self) -> list[str]:
         return list(self.VOICES.keys())

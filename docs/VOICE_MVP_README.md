@@ -65,8 +65,8 @@ This implementation provides **Cloud Run** and **Vercel** compatible voice chat 
 |------|---------|-------|
 | `frontend/src/hooks/useVoiceRecorder.ts` | Browser media recorder hook | 176 |
 | `frontend/src/hooks/useTTSResponse.ts` | TTS playback hook | 73 |
-| `frontend/src/components/chat/VoiceMessageInput.tsx` | Mic button + recording UI | 93 |
-| `frontend/src/components/chat/VoiceMessageInput.css` | CSS styles | 124 |
+| `frontend/src/features/hermes-workspace/screens/chat/WorkspaceVoiceMessageInput.tsx` | Mic control in Hermes Workspace composer (migrated from legacy `components/chat`). | — |
+| `frontend/src/features/hermes-workspace/screens/chat/WorkspaceVoiceMessageInput.css` | Styles for workspace voice mic. | — |
 | `frontend/src/components/TTSController.tsx` | TTS on/off toggle | 76 |
 | `frontend/src/components/TTSController.css` | CSS styles | 49 |
 
@@ -154,28 +154,9 @@ Generate speech from text.
 
 ## Integration Guide
 
-### Step 1: Add Voice Component to Chat
+### Step 1: Add Voice to chat (Workspace)
 
-```tsx
-import { VoiceMessageInput } from '@/components/chat/VoiceMessageInput';
-
-function ChatInterface() {
-  const handleVoiceMessage = (blob, duration) => {
-    // Send to HAM API or external transcription service
-    sendToHAMAPI(blob);
-  };
-
-  return (
-    <div className="chat-interface">
-      {/* Your existing chat input */}
-      <VoiceMessageInput 
-        onVoiceMessage={handleVoiceMessage}
-        onVoiceError={(err) => console.error(err)}
-      />
-    </div>
-  );
-}
-```
+Legacy `VoiceMessageInput` was removed with the old workbench. Integrate recording in **`WorkspaceChatComposer`** (or equivalent) and call **`postChatTranscribe`** from `frontend/src/lib/ham/api.ts`, which posts to **`POST /api/chat/transcribe`** — see `WorkspaceChatScreen.tsx` for the shipped pattern.
 
 ### Step 2: Integrate TTS Controller
 

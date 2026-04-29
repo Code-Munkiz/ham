@@ -9,6 +9,7 @@
       "DOM",
       "DOM.Iterable"
     ],
+    "resolveJsonModule": true,
     "skipLibCheck": true,
     "moduleResolution": "bundler",
     "isolatedModules": true,

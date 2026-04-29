@@ -1,8 +1,6 @@
 """Parse and validate HAM_UI_ACTIONS_JSON from assistant replies."""
 from __future__ import annotations
 
-import json
-
 import pytest
 from fastapi.testclient import TestClient
 
@@ -31,37 +29,32 @@ def test_split_rejects_bad_nav_path() -> None:
     assert actions == []
 
 
-def test_split_accepts_settings_query_path() -> None:
+def test_split_accepts_workspace_settings_query_path() -> None:
     raw = (
-        'HAM_UI_ACTIONS_JSON: {"actions":[{"type":"navigate","path":"/settings?tab=context-memory"}]}'
+        'HAM_UI_ACTIONS_JSON: {"actions":[{"type":"navigate","path":"/workspace/settings?tab=context-memory"}]}'
     )
     _, actions = split_assistant_ui_actions(raw)
     assert len(actions) == 1
-    assert actions[0]["path"] == "/settings?tab=context-memory"
+    assert actions[0]["path"] == "/workspace/settings?tab=context-memory"
 
 
-def test_split_accepts_set_workbench_view() -> None:
+def test_split_rejects_legacy_set_workbench_view() -> None:
+    """Legacy workbench modes were removed (Hermes Workspace Batch 2A)."""
     raw = (
         'Done.\nHAM_UI_ACTIONS_JSON: {"actions":[{"type":"set_workbench_view","mode":"war_room"}]}'
     )
     visible, actions = split_assistant_ui_actions(raw)
     assert visible == "Done."
-    assert actions == [{"type": "set_workbench_view", "mode": "war_room"}]
+    assert actions == []
 
 
-def test_split_accepts_browser_workbench_view() -> None:
+def test_split_accepts_workspace_chat_navigate() -> None:
     raw = (
-        'Opening browser.\nHAM_UI_ACTIONS_JSON: {"actions":[{"type":"set_workbench_view","mode":"browser"}]}'
+        'Opening chat.\nHAM_UI_ACTIONS_JSON: {"actions":[{"type":"navigate","path":"/workspace/chat"}]}'
     )
     visible, actions = split_assistant_ui_actions(raw)
-    assert visible == "Opening browser."
-    assert actions == [{"type": "set_workbench_view", "mode": "browser"}]
-
-
-def test_split_rejects_invalid_workbench_mode() -> None:
-    raw = 'HAM_UI_ACTIONS_JSON: {"actions":[{"type":"set_workbench_view","mode":"fullscreen"}]}'
-    _, actions = split_assistant_ui_actions(raw)
-    assert actions == []
+    assert visible == "Opening chat."
+    assert actions == [{"type": "navigate", "path": "/workspace/chat"}]
 
 
 @pytest.fixture

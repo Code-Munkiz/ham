@@ -3,42 +3,49 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { BrowserRouter, HashRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, HashRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { ClerkProvider } from "@clerk/clerk-react";
 import { ThemeProvider } from "next-themes";
 import { AppLayout } from "./components/layout/AppLayout";
-import Overview from "./pages/Overview";
-import Droids from "./pages/Droids";
-import Chat from "./pages/Chat";
-import Extensions from "./pages/Extensions";
-import Runs from "./pages/Runs";
-import RunDetail from "./pages/RunDetail";
-import ControlPlaneRuns from "./pages/ControlPlaneRuns";
-import Profiles from "./pages/Profiles";
-import Storage from "./pages/Storage";
-import Activity from "./pages/Activity";
-import Settings from "./pages/Settings";
-
-import Logs from "./pages/Logs";
-import Analytics from "./pages/Analytics";
-import HermesHub from "./pages/HermesHub";
-import HermesSkills from "./pages/HermesSkills";
-import AgentBuilder from "./pages/AgentBuilder";
 import Landing from "./pages/Landing";
 
 import { AgentProvider } from "./lib/ham/AgentContext";
 import { WorkspaceProvider } from "./lib/ham/WorkspaceContext";
 import { ClerkAccessBridge } from "./lib/ham/ClerkAccessBridge";
 import { getHamDesktopConfig, isHamDesktopShell } from "./lib/ham/desktopConfig";
+import { WorkspaceApp } from "./features/hermes-workspace";
+import { primaryChatPath } from "./features/hermes-workspace/workspaceFlags";
 
 const clerkPublishableKey = (import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined)?.trim();
 
 /** Web: marketing landing. Desktop shell: go straight to chat (no landing hero). */
 function HomeRoute() {
   if (isHamDesktopShell()) {
-    return <Navigate to="/chat" replace />;
+    return <Navigate to={primaryChatPath()} replace />;
   }
   return <Landing />;
+}
+
+/** `/chat` is not a product page — always send users to Workspace chat (preserve `?session=`). */
+function ChatEntryRoute() {
+  const { search } = useLocation();
+  return <Navigate to={`/workspace/chat${search}`} replace />;
+}
+
+function LegacyChatRedirect() {
+  const { search } = useLocation();
+  return <Navigate to={`/workspace/chat${search}`} replace />;
+}
+
+function LegacySettingsRedirect() {
+  const { search } = useLocation();
+  return <Navigate to={`/workspace/settings${search}`} replace />;
+}
+
+/** Preserve query (e.g. `project_id`) when moving bookmarked URLs to workspace. */
+function RedirectWithSearch({ to }: { to: string }) {
+  const { search } = useLocation();
+  return <Navigate to={`${to}${search}`} replace />;
 }
 
 function AppRoutes() {
@@ -49,23 +56,26 @@ function AppRoutes() {
       <AppLayout>
         <Routes>
           <Route path="/" element={<HomeRoute />} />
-          <Route path="/overview" element={<Overview />} />
-          <Route path="/chat" element={<Chat />} />
-          <Route path="/droids" element={<Droids />} />
-          <Route path="/extensions" element={<Extensions />} />
-          <Route path="/runs" element={<Runs />} />
-          <Route path="/runs/:runId" element={<RunDetail />} />
-          <Route path="/control-plane" element={<ControlPlaneRuns />} />
-          <Route path="/profiles" element={<Profiles />} />
-          <Route path="/storage" element={<Storage />} />
-          <Route path="/activity" element={<Activity />} />
-          <Route path="/settings" element={<Settings />} />
-          <Route path="/logs" element={<Logs />} />
-          <Route path="/analytics" element={<Analytics />} />
-          <Route path="/hermes" element={<HermesHub />} />
-          <Route path="/skills" element={<HermesSkills />} />
-          <Route path="/agents" element={<AgentBuilder />} />
-          <Route path="/hermes-skills" element={<Navigate to="/skills" replace />} />
+          <Route path="/overview" element={<Navigate to="/workspace/operations" replace />} />
+          <Route path="/chat" element={<ChatEntryRoute />} />
+          <Route path="/legacy-chat" element={<LegacyChatRedirect />} />
+          <Route path="/workspace/*" element={<WorkspaceApp />} />
+          <Route path="/droids" element={<Navigate to="/workspace/operations" replace />} />
+          <Route path="/runs" element={<Navigate to="/workspace/jobs" replace />} />
+          <Route path="/runs/:runId" element={<Navigate to="/workspace/jobs" replace />} />
+          <Route path="/control-plane" element={<Navigate to="/workspace/operations" replace />} />
+          <Route path="/profiles" element={<Navigate to="/workspace/profiles" replace />} />
+          <Route path="/storage" element={<Navigate to="/workspace" replace />} />
+          <Route path="/activity" element={<Navigate to="/workspace/operations" replace />} />
+          <Route path="/settings" element={<LegacySettingsRedirect />} />
+          <Route path="/logs" element={<Navigate to="/workspace/settings" replace />} />
+          <Route path="/analytics" element={<Navigate to="/workspace" replace />} />
+          <Route path="/hermes" element={<Navigate to="/workspace" replace />} />
+          <Route path="/command-center" element={<Navigate to="/workspace/operations" replace />} />
+          <Route path="/shop" element={<RedirectWithSearch to="/workspace/skills" />} />
+          <Route path="/skills" element={<RedirectWithSearch to="/workspace/skills" />} />
+          <Route path="/agents" element={<RedirectWithSearch to="/workspace/profiles" />} />
+          <Route path="/hermes-skills" element={<Navigate to="/workspace/skills" replace />} />
         </Routes>
       </AppLayout>
     </Router>
@@ -92,4 +102,3 @@ export default function App() {
   }
   return tree;
 }
-

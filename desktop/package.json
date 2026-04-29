@@ -1,8 +1,8 @@
 {
   "name": "ham-desktop",
   "private": true,
-  "version": "0.1.2",
-  "description": "Thin Electron shell for HAM (Milestone 1 — no bundled API)",
+  "version": "0.1.9",
+  "description": "HAM Desktop — Electron shell with bundled curated Hermes setup docs and CLI probe",
   "homepage": "https://github.com/Code-Munkiz/ham",
   "main": "main.cjs",
   "author": "Code-Munkiz",
@@ -10,11 +10,14 @@
     "start": "electron .",
     "start:file": "electron .",
     "build:frontend": "npm run build --prefix ../frontend -- --base ./",
-    "pack:linux": "npm run build:frontend && electron-builder --linux",
-    "pack:linux:dir": "npm run build:frontend && electron-builder --linux --dir",
     "pack:win": "npm run build:frontend && electron-builder --win --x64",
     "pack:win:dir": "npm run build:frontend && electron-builder --win --x64 --dir",
-    "pack:win:nsis": "npm run build:frontend && electron-builder --win --x64 -c.win.target=nsis"
+    "pack:win:nsis": "npm run build:frontend && electron-builder --win --x64 -c.win.target=nsis",
+    "test:local-control": "node --test ./local_control_status.test.cjs ./local_control_policy.test.cjs ./local_control_audit.test.cjs ./local_control_sidecar_status.test.cjs ./local_control_sidecar_child.test.cjs ./local_control_sidecar_manager.test.cjs ./local_control_browser_url.test.cjs ./local_control_browser_mvp.test.cjs ./local_control_browser_real_cdp.test.cjs ./local_control_web_bridge_enablement.test.cjs ./local_control_web_bridge.test.cjs ./preload_contract.test.cjs ./desktop_updates.test.cjs",
+    "smoke:trusted-connect": "node trusted_connect_smoke.cjs"
+  },
+  "dependencies": {
+    "ws": "^8.20.0"
   },
   "build": {
     "appId": "io.github.codemunkiz.ham-desktop",
@@ -25,35 +28,35 @@
       "output": "dist-pack"
     },
     "files": [
+      "desktop_updates.cjs",
       "main.cjs",
       "preload.cjs",
+      "local_control_status.cjs",
+      "local_control_policy.cjs",
+      "local_control_audit.cjs",
+      "local_control_sidecar_status.cjs",
+      "local_control_sidecar_child.cjs",
+      "local_control_sidecar_manager.cjs",
+      "local_control_browser_url.cjs",
+      "local_control_browser_mvp.cjs",
+      "local_control_browser_real_cdp.cjs",
+      "local_control_web_bridge_enablement.cjs",
+      "local_control_web_bridge.cjs",
+      "local_control_web_bridge_pairing.cjs",
       "package.json",
-      "default-public-api.json"
+      "default-public-api.json",
+      "curated/**"
     ],
     "asar": true,
     "extraResources": [
       {
         "from": "../frontend/dist",
         "to": "renderer",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       }
     ],
-    "linux": {
-      "target": [
-        {
-          "target": "AppImage",
-          "arch": ["x64"]
-        },
-        {
-          "target": "deb",
-          "arch": ["x64"]
-        }
-      ],
-      "category": "Development",
-      "maintainer": "Code-Munkiz",
-      "synopsis": "HAM operator desktop shell (Electron)",
-      "description": "Thin Electron shell for the HAM dashboard. Requires a running Ham API (local or remote); see desktop/README.md."
-    },
     "win": {
       "signAndEditExecutable": false,
       "verifyUpdateCodeSignature": false,
@@ -61,7 +64,9 @@
       "target": [
         {
           "target": "portable",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ]
     },
@@ -73,7 +78,8 @@
   },
   "devDependencies": {
     "electron": "^34.2.0",
-    "electron-builder": "^25.1.8"
+    "electron-builder": "^25.1.8",
+    "puppeteer-core": "^24.0.0"
   },
   "engines": {
     "node": ">=20 <25"

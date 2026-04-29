@@ -1,33 +1,4 @@
-import { RunRecord, ProfileRecord, BackendRecord, ActivityEvent, Agent, ApiKey } from './types';
-
-export const MOCK_PROFILES: ProfileRecord[] = [
-  {
-    id: "security-audit-v1",
-    version: "1.0.4",
-    argv: ["python", "-m", "ham", "audit", "--profile", "security"],
-    display_name: "Security Audit",
-    description: "Deep inspection of security vulnerabilities and compliance gaps.",
-    metadata: { author: "HAM Core", tags: ["security", "audit"] },
-    sample_command: "ham run --profile security-audit-v1 --target /path/to/repo"
-  },
-  {
-    id: "perf-bench-v2",
-    version: "2.1.0",
-    argv: ["k6", "run", "script.js"],
-    display_name: "Performance Benchmark",
-    description: "Multi-point performance benchmarking across distributed systems.",
-    metadata: { author: "Perf Team", tags: ["performance", "benchmark"] },
-    sample_command: "ham run --profile perf-bench-v2 --iterations 100"
-  },
-  {
-    id: "code-quality-v1",
-    version: "1.2.0",
-    argv: ["ruff", "check", "."],
-    display_name: "Code Quality",
-    description: "Static analysis and architectural consistency check.",
-    metadata: { author: "HAM Core", tags: ["quality", "lint"] }
-  }
-];
+import { RunRecord, BackendRecord, ActivityEvent, Agent, ApiKey } from './types';
 
 export const MOCK_BACKENDS: BackendRecord[] = [
   {
@@ -278,45 +249,6 @@ export const MOCK_KEYS: ApiKey[] = [
     maskedKey: "pplx-••••••••••••••••••••••••",
     status: "Inactive",
     assignedAgents: ["Researcher"]
-  }
-];
-
-export const MOCK_EXTENSIONS = [
-  {
-    id: "ext_git_bridge",
-    name: "Git Inspector",
-    description: "Deep repository history analysis and change-set verification.",
-    category: "Connectivity",
-    author: "HAM Core",
-    installed: true,
-    powers: ["Context Extraction", "Diff Analysis"]
-  },
-  {
-    id: "ext_cloud_vision",
-    name: "Infrastructure Vision",
-    description: "Real-time visual monitoring of cloud topology and resource flow.",
-    category: "Monitoring",
-    author: "Hermes Labs",
-    installed: true,
-    powers: ["Drift Detection", "Visual Mapping"]
-  },
-  {
-    id: "ext_data_vault",
-    name: "Data Vault",
-    description: "Hardened AES-256 storage adapter for sensitive run artifacts.",
-    category: "Security",
-    author: "Shield Team",
-    installed: false,
-    powers: ["Encryption", "Persistence"]
-  },
-  {
-    id: "ext_neural_audit",
-    name: "Neural Auditor",
-    description: "Enforce advanced architectural consistency using LLM-driven consensus.",
-    category: "Intelli",
-    author: "HAM AI",
-    installed: true,
-    powers: ["Consensus", "Compliance"]
   }
 ];
 

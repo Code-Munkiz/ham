@@ -18,16 +18,7 @@ _MAX_ACTIONS = 8
 
 _ALLOWED_NAV_PREFIXES = (
     "/",
-    "/chat",
-    "/settings",
-    "/droids",
-    "/runs",
-    "/logs",
-    "/activity",
-    "/analytics",
-    "/profiles",
-    "/extensions",
-    "/storage",
+    "/workspace",
 )
 
 
@@ -52,20 +43,11 @@ class ToggleControlPanelAction(BaseModel):
     open: bool | None = None
 
 
-WorkbenchViewMode = Literal["chat", "split", "preview", "war_room", "browser"]
-
-
-class SetWorkbenchViewAction(BaseModel):
-    type: Literal["set_workbench_view"] = "set_workbench_view"
-    mode: WorkbenchViewMode
-
-
 UiAction = (
     NavigateAction
     | OpenSettingsAction
     | ToastAction
     | ToggleControlPanelAction
-    | SetWorkbenchViewAction
 )
 _action_adapter: TypeAdapter[UiAction] = TypeAdapter(UiAction)
 
@@ -140,23 +122,19 @@ def ui_actions_system_instructions() -> str:
     )
     paths = ", ".join(sorted(x for x in _ALLOWED_NAV_PREFIXES if x != "/")) + ", / (home)"
     return f"""
-**Structured UI actions:** If the user clearly wants navigation, a settings tab, a toast, the **right-side control panel** toggled, or the **`/chat` workbench top bar** (CHAT / SPLIT / PREVIEW / WAR ROOM / BROWSER), add **one final line** after your reply (no code fence):
+**Structured UI actions:** If the user clearly wants navigation, a Hermes workspace settings tab, a toast, or the **control panel** toggled, add **one final line** after your reply (no code fence):
 {_MARKER}{{"actions":[...]}}
 
-**Map common asks (workbench header ≠ control panel):**
-- “split view” / “split the workbench” / “side by side” (main workbench) → `set_workbench_view` with `mode: split`
-- “preview” / “preview mode” / “preview screen” (workbench) → `mode: preview`
-- “war room” → `mode: war_room`
-- "chat only" / "full width chat" → `mode: chat`
-- "browser" / "open the browser" / "browser view" → `mode: browser`
-- "open the control panel" / "workspace panel" / "side panel" → `toggle_control_panel`
+**Navigation:** Product UI lives under **`/workspace/*`** (e.g. `/workspace/chat`, `/workspace/skills`, `/workspace/operations`, `/workspace/settings`). Use `navigate` only with paths starting with `/workspace` or `/`.
+**Map common asks:**
+- "open the control panel" / "workspace panel" / "side panel" → `toggle_control_panel` (client may ignore if no panel)
+- "go to workspace chat" / "open chat" → `navigate` to `/workspace/chat`
 
 Allowed action objects (array may be empty):
 - `{{"type":"navigate","path":"<path>"}}` — path must start with one of: {paths}
-- `{{"type":"open_settings","tab":"<optional>"}}` — tab one of: {tabs}
+- `{{"type":"open_settings","tab":"<optional>"}}` — opens `/workspace/settings` with tab one of: {tabs}
 - `{{"type":"toast","level":"info|success|warning|error","message":"<short>"}}`
-- `{{"type":"toggle_control_panel","open":true|false}}` — omit `open` to toggle (**right rail only**)
-- `{{"type":"set_workbench_view","mode":"chat|split|preview|war_room|browser"}}` — **top bar** on `/chat`
+- `{{"type":"toggle_control_panel","open":true|false}}` — omit `open` to toggle
 
 If no UI change is needed, omit the line entirely or use {{"actions":[]}}.
 Do not repeat the marker elsewhere in your message.

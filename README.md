@@ -20,7 +20,7 @@ cp .env.example .env   # add OPENROUTER_API_KEY
 python main.py "your task"
 ```
 
-**In-app browser (Chat → Browser / War Room):** the API must have Chromium for Playwright. One-shot (creates **`./.venv`** on PEP 668 distros if needed, e.g. Pop!_OS/Ubuntu):
+**Playwright browser runtime (`/api/browser/*`):** the API must have Chromium when you use in-process Playwright. One-shot (creates **`./.venv`** on PEP 668 distros if needed, e.g. Pop!_OS/Ubuntu):
 
 ```bash
 ./scripts/install_playwright_chromium.sh
