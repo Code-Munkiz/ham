@@ -291,6 +291,26 @@ HAM_X_GOHAM_REACTIVE_BLOCK_LINKS=true
 
 The prepared inbound must have a valid reply target id, bounded safe reply text, policy route `reply_candidate`, and an allowed reactive governor decision. Provider failures are not retried; 401/403 responses update reactive stop state so later canary attempts fail closed.
 
+## Phase 4B.1 Reactive Inbox Discovery
+
+Phase 4B.1 adds `goham_reactive_inbox.py` as a read-only one-shot discovery controller. It uses direct Bearer X recent search through `InboundClient`, normalizes mentions/comments into `ReactiveInboundItem` records, marks known handled inbound ids from `execution_kind="goham_reactive_reply"` journal rows, applies reactive policy and governor checks, and returns at most one selected candidate with an automatic `reply_target_id`.
+
+This phase does not execute replies and does not call `reactive_reply_executor.py` or `goham_reactive_live.py`. It is target acquisition only; live reply execution still requires a separate explicit operator instruction.
+
+Safe defaults:
+
+```dotenv
+HAM_X_ENABLE_REACTIVE_INBOX_DISCOVERY=false
+HAM_X_REACTIVE_INBOX_QUERY=
+HAM_X_REACTIVE_INBOX_MAX_RESULTS=25
+HAM_X_REACTIVE_INBOX_MAX_THREADS=5
+HAM_X_REACTIVE_INBOX_LOOKBACK_HOURS=24
+HAM_X_REACTIVE_HANDLE=
+HAM_X_REACTIVE_INBOX_INCLUDE_REPLIES_TO_OWN_POSTS=true
+```
+
+If `HAM_X_REACTIVE_INBOX_QUERY` is empty, discovery uses `@{HAM_X_REACTIVE_HANDLE} -is:retweet`. X search responses request tweet fields, author expansion, referenced tweet ids, and usernames so replies can be normalized with `conversation_id`, `post_id`, `in_reply_to_post_id`, and author handle.
+
 ## Autonomy Modes
 
 - `draft`: queue draft content only.

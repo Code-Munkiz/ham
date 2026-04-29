@@ -135,6 +135,13 @@ class HamXConfig:
     goham_reactive_policy_rejection_stop: int = 10
     goham_reactive_max_inbound_per_run: int = 25
     goham_reactive_max_replies_per_run: int = 1
+    enable_reactive_inbox_discovery: bool = False
+    reactive_inbox_query: str = ""
+    reactive_inbox_max_results: int = 25
+    reactive_inbox_max_threads: int = 5
+    reactive_inbox_lookback_hours: int = 24
+    reactive_handle: str = ""
+    reactive_inbox_include_replies_to_own_posts: bool = True
 
 
 def load_ham_x_config() -> HamXConfig:
@@ -245,4 +252,14 @@ def load_ham_x_config() -> HamXConfig:
         goham_reactive_policy_rejection_stop=_int_env("HAM_X_GOHAM_REACTIVE_POLICY_REJECTION_STOP", 10),
         goham_reactive_max_inbound_per_run=_int_env("HAM_X_GOHAM_REACTIVE_MAX_INBOUND_PER_RUN", 25),
         goham_reactive_max_replies_per_run=_int_env("HAM_X_GOHAM_REACTIVE_MAX_REPLIES_PER_RUN", 1),
+        enable_reactive_inbox_discovery=_bool_env("HAM_X_ENABLE_REACTIVE_INBOX_DISCOVERY", False),
+        reactive_inbox_query=(os.environ.get("HAM_X_REACTIVE_INBOX_QUERY") or "").strip(),
+        reactive_inbox_max_results=_int_env("HAM_X_REACTIVE_INBOX_MAX_RESULTS", 25),
+        reactive_inbox_max_threads=_int_env("HAM_X_REACTIVE_INBOX_MAX_THREADS", 5),
+        reactive_inbox_lookback_hours=_int_env("HAM_X_REACTIVE_INBOX_LOOKBACK_HOURS", 24),
+        reactive_handle=(os.environ.get("HAM_X_REACTIVE_HANDLE") or "").strip().lstrip("@"),
+        reactive_inbox_include_replies_to_own_posts=_bool_env(
+            "HAM_X_REACTIVE_INBOX_INCLUDE_REPLIES_TO_OWN_POSTS",
+            True,
+        ),
     )

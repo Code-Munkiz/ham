@@ -107,6 +107,13 @@ def _test_config(
         goham_reactive_policy_rejection_stop=10,
         goham_reactive_max_inbound_per_run=max_inbound,
         goham_reactive_max_replies_per_run=max_replies,
+        enable_reactive_inbox_discovery=False,
+        reactive_inbox_query="",
+        reactive_inbox_max_results=25,
+        reactive_inbox_max_threads=5,
+        reactive_inbox_lookback_hours=24,
+        reactive_handle="Ham",
+        reactive_inbox_include_replies_to_own_posts=True,
     )
 
 

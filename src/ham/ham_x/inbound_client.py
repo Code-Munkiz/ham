@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 from typing import Any, Callable, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -9,10 +10,15 @@ from pydantic import BaseModel, ConfigDict, Field
 from src.ham.ham_x.config import HamXConfig, load_ham_x_config
 from src.ham.ham_x.redaction import redact
 from src.ham.ham_x.review_queue import _cap
+from src.ham.ham_x.x_readonly_client import XDirectReadonlyClient
 
 InboundKind = Literal["mention", "comment", "dm"]
 InboundFetchStatus = Literal["blocked", "ok", "failed"]
 InboundHttpGet = Callable[..., Any]
+_TWEET_FIELDS = "id,text,author_id,conversation_id,created_at,in_reply_to_user_id,referenced_tweets"
+_EXPANSIONS = "author_id,referenced_tweets.id"
+_USER_FIELDS = "username"
+_REACTIVE_RELEVANCE_RE = re.compile(r"(?i)\b(ham|goham|hermes|base|agent|agents|automation|campaign|x)\b")
 
 
 class ReactiveInboundItem(BaseModel):
@@ -107,7 +113,7 @@ class InboundClient:
         )
 
     def fetch_mentions(self, *, query: str, max_results: int = 25) -> InboundFetchResult:
-        """Fail-closed live read placeholder; tests should inject prepared records."""
+        """Read mentions via direct Bearer search and normalize into inbound items."""
         capability = self.capability_probe()
         if not capability.mentions_search:
             return InboundFetchResult(
@@ -115,12 +121,118 @@ class InboundClient:
                 blocked=True,
                 source="mentions_search",
                 reason=capability.reason or "mentions_search_unavailable",
-                diagnostic="Reactive inbound live mentions search is not wired for Phase 4A.",
+                diagnostic="Reactive inbound discovery requires X_BEARER_TOKEN and an HTTP GET transport.",
+            )
+        client = XDirectReadonlyClient(config=self.config, http_get=self.http_get)
+        result = client.search_recent(
+            query,
+            max_results=max_results,
+            tweet_fields=_TWEET_FIELDS,
+            expansions=_EXPANSIONS,
+            user_fields=_USER_FIELDS,
+        )
+        if result.blocked:
+            return InboundFetchResult(
+                status="blocked",
+                blocked=True,
+                source="x_recent_search",
+                reason=result.reason,
+                diagnostic=result.diagnostic,
+                status_code=result.status_code,
+            )
+        if result.status != "ok":
+            return InboundFetchResult(
+                status="failed",
+                source="x_recent_search",
+                reason=result.reason,
+                diagnostic=result.diagnostic,
+                status_code=result.status_code,
             )
         return InboundFetchResult(
-            status="blocked",
-            blocked=True,
-            source="mentions_search",
-            reason="phase_4a_live_ingestion_disabled",
-            diagnostic=f"Phase 4A accepts prepared inbound records only; query={query[:80]} max_results={max_results}.",
+            status="ok",
+            ok=True,
+            source="x_recent_search",
+            items=normalize_x_recent_search_response(result.response or {}),
+            status_code=result.status_code,
+            reason="x_recent_search_normalized",
         )
+
+
+def normalize_x_recent_search_response(body: dict[str, Any], *, source: str = "x_recent_search") -> list[ReactiveInboundItem]:
+    users = _users_by_id(body)
+    referenced = _tweets_by_id(body)
+    data = body.get("data")
+    if not isinstance(data, list):
+        return []
+    items: list[ReactiveInboundItem] = []
+    for tweet in data:
+        if not isinstance(tweet, dict):
+            continue
+        tweet_id = str(tweet.get("id") or "").strip()
+        text = str(tweet.get("text") or "").strip()
+        if not tweet_id or not text:
+            continue
+        author_id = str(tweet.get("author_id") or "").strip() or None
+        conversation_id = str(tweet.get("conversation_id") or "").strip() or None
+        reply_target = _reply_target(tweet, referenced)
+        user = users.get(author_id or "")
+        username = str(user.get("username") or "").strip() if user else ""
+        items.append(
+            ReactiveInboundItem(
+                inbound_id=tweet_id,
+                inbound_type="comment" if reply_target else "mention",
+                text=text,
+                author_id=author_id,
+                author_handle=username or None,
+                post_id=tweet_id,
+                thread_id=conversation_id or tweet_id,
+                conversation_id=conversation_id,
+                in_reply_to_post_id=reply_target,
+                created_at=str(tweet.get("created_at") or "").strip() or None,
+                relevance_score=1.0 if _REACTIVE_RELEVANCE_RE.search(text) else 0.5,
+                metadata={"source": source},
+            )
+        )
+    return items
+
+
+def _users_by_id(body: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    includes = body.get("includes")
+    users = includes.get("users") if isinstance(includes, dict) else None
+    if not isinstance(users, list):
+        return {}
+    out: dict[str, dict[str, Any]] = {}
+    for user in users:
+        if isinstance(user, dict) and user.get("id"):
+            out[str(user["id"])] = user
+    return out
+
+
+def _tweets_by_id(body: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    includes = body.get("includes")
+    tweets = includes.get("tweets") if isinstance(includes, dict) else None
+    if not isinstance(tweets, list):
+        return {}
+    out: dict[str, dict[str, Any]] = {}
+    for tweet in tweets:
+        if isinstance(tweet, dict) and tweet.get("id"):
+            out[str(tweet["id"])] = tweet
+    return out
+
+
+def _reply_target(tweet: dict[str, Any], referenced: dict[str, dict[str, Any]]) -> str | None:
+    refs = tweet.get("referenced_tweets")
+    if not isinstance(refs, list):
+        return None
+    for ref in refs:
+        if not isinstance(ref, dict):
+            continue
+        if ref.get("type") != "replied_to":
+            continue
+        ref_id = str(ref.get("id") or "").strip()
+        if ref_id:
+            return ref_id
+    for ref in refs:
+        if isinstance(ref, dict) and str(ref.get("id") or "") in referenced:
+            return str(ref.get("id"))
+    return None

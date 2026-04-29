@@ -75,6 +75,9 @@ class XDirectReadonlyClient:
         *,
         max_results: int = 10,
         timeout_seconds: int = DEFAULT_DIRECT_TIMEOUT_SECONDS,
+        tweet_fields: str | None = None,
+        expansions: str | None = None,
+        user_fields: str | None = None,
     ) -> XDirectSearchResult:
         limited = max(10, min(int(max_results), 100))
         if not self.config.x_bearer_token:
@@ -94,6 +97,12 @@ class XDirectReadonlyClient:
 
         headers = {"Authorization": f"Bearer {self.config.x_bearer_token}"}
         params = {"query": query, "max_results": limited}
+        if tweet_fields:
+            params["tweet.fields"] = tweet_fields
+        if expansions:
+            params["expansions"] = expansions
+        if user_fields:
+            params["user.fields"] = user_fields
         try:
             response = self.http_get(
                 X_RECENT_SEARCH_URL,
@@ -199,6 +208,12 @@ def _bounded_response(body: dict[str, Any]) -> dict[str, Any]:
     errors = body.get("errors")
     if isinstance(errors, list):
         bounded["errors"] = errors[:5]
+    includes = body.get("includes")
+    if isinstance(includes, dict):
+        bounded["includes"] = {
+            "users": includes.get("users", [])[:10] if isinstance(includes.get("users"), list) else [],
+            "tweets": includes.get("tweets", [])[:10] if isinstance(includes.get("tweets"), list) else [],
+        }
     return bounded or body
 
 
