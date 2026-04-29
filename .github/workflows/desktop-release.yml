@@ -1,0 +1,124 @@
+# Tag-driven releases for HAM Desktop (Windows portable x64).
+# Manual runs upload build artifacts without creating a Release (dry validation).
+#
+# Does NOT silently install updates. Does NOT auto-merge manifest changes — see docs/desktop/RELEASE_PIPELINE.md.
+
+name: Desktop release
+
+on:
+  push:
+    tags:
+      - "desktop-v*"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  desktop-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            desktop/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install desktop dependencies
+        working-directory: desktop
+        run: npm ci
+
+      - name: Verify desktop package.json version matches tag
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG_REF="${GITHUB_REF#refs/tags/}"
+          if [[ "${TAG_REF}" != desktop-v* ]]; then
+            echo "::error::Unexpected ref ${GITHUB_REF}"
+            exit 1
+          fi
+          PKG_VER="$(node -p "require('./desktop/package.json').version")"
+          TAG_VER="${TAG_REF#desktop-v}"
+          if [[ "${PKG_VER}" != "${TAG_VER}" ]]; then
+            echo "::error::Tag version ${TAG_VER} != desktop/package.json version ${PKG_VER}. Bump desktop/package.json, commit, then re-tag."
+            exit 1
+          fi
+
+      - name: Pack Windows portable
+        working-directory: desktop
+        run: npm run pack:win
+        env:
+          # electron-builder skips code signing explicitly in desktop/package.json; avoid signing hooks in CI
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - name: List dist-pack artifacts
+        working-directory: desktop/dist-pack
+        shell: bash
+        run: ls -la
+
+      - name: Write SHA-256 sidecar (.sha256 files)
+        working-directory: desktop/dist-pack
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+          Get-ChildItem -File -Filter '*.exe' | ForEach-Object {
+            $h = Get-FileHash -Algorithm SHA256 -Path $_.FullName
+            $line = "{0}  {1}" -f ($h.Hash.ToLowerInvariant()), $_.Name
+            $out = Join-Path $_.DirectoryName ($_.Name + '.sha256')
+            [System.IO.File]::WriteAllText($out, "$line`n", $utf8NoBom)
+            Write-Host "Wrote $(Split-Path -Leaf $out)"
+          }
+
+      - name: Upload build directory (manual runs — no Release)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ham-desktop-dist-pack-${{ github.run_id }}
+          path: desktop/dist-pack/*
+
+      - name: Create GitHub Release and upload assets (tag pushes only)
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/desktop-v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          draft: false
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            desktop/dist-pack/*.exe
+            desktop/dist-pack/*.exe.sha256
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Manifest snippet for maintainers (tag pushes only)
+        if: github.ref_type == 'tag' && startsWith(github.ref, 'refs/tags/desktop-v')
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG_REF="${GITHUB_REF#refs/tags/}"
+          PKG_VER="$(node -p "require('./desktop/package.json').version")"
+          RAW_BASE="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${{ github.sha }}/frontend/public"
+          PROVENANCE="${RAW_BASE}/desktop-downloads.json"
+          OWNER_REPO="${GITHUB_REPOSITORY}"
+          DOWNLOAD_BASE="https://github.com/${OWNER_REPO}/releases/download/${TAG_REF}"
+          WIN="$(basename "$(ls desktop/dist-pack/HAM-Desktop-*-Win-x64-Portable.exe 2>/dev/null | head -1)")"
+          HASH="$(cut -d' ' -f1 "desktop/dist-pack/${WIN}.sha256" || true)"
+          {
+            echo "## Next step: desktop-downloads manifest (manual)"
+            echo "Artifacts published for **${TAG_REF}**. \`electron-updater\` is **not** used — update [\`frontend/public/desktop-downloads.json\`](${PROVENANCE}) and twin \`frontend/src/lib/ham/desktop-downloads.manifest.json\`."
+            echo ""
+            echo "### Windows (${PKG_VER})"
+            echo "- **URL**: \`${DOWNLOAD_BASE}/${WIN}\`"
+            echo "- **SHA-256**: \`${HASH:-"(open .exe.sha256 on Release)"}\`"
+            echo "- Set \`platforms.windows.version\`, \`.url\`, \`.sha256\`, \`.release_page_url\` GitHub Releases tag URL."
+          } >> "$GITHUB_STEP_SUMMARY"

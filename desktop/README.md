@@ -25,7 +25,9 @@ Linux and Windows artifacts **do not duplicate** the chat interface. `electron-b
 
 ### CI note
 
-Ham’s GitHub Action today runs **pytest + frontend `tsc`**, not Electron packaging — desktop artifacts are manual/tagged publishes. Do not advertise “auto-installed from CI on every merge” unless a release workflow + signing story exists.
+- **[`/.github/workflows/ci.yml`](../.github/workflows/ci.yml)** runs **pytest + frontend `tsc`** — it never packages Electron desktops.
+- **Tagged Windows desktops:** **[`/.github/workflows/desktop-release.yml`](../.github/workflows/desktop-release.yml)** builds `pack:win` on **`desktop-v*`** pushes, uploads **`*.exe` + `.sha256`**, writes a **[GitHub Release](https://docs.github.com/repositories/releasing-projects-on-github/managing-releases-in-a-repository)**, and prints a manifest snippet into the workflow summary. **`workflow_dispatch`** runs the pack + checksum steps and uploads **`dist-pack/**` artifacts only (**no Release**).
+- Maintainer step: manually sync **`frontend/public/desktop-downloads.json`** (and **`frontend/src/lib/ham/desktop-downloads.manifest.json`**) plus deploy the web bundle — drift prevention is spelled out in **[`docs/desktop/RELEASE_PIPELINE.md`](../docs/desktop/RELEASE_PIPELINE.md)**.
 
 ## HAM + Hermes curated bundle (desktop)
 
