@@ -142,6 +142,11 @@ class HamXConfig:
     reactive_inbox_lookback_hours: int = 24
     reactive_handle: str = ""
     reactive_inbox_include_replies_to_own_posts: bool = True
+    enable_goham_reactive_batch: bool = False
+    goham_reactive_batch_dry_run: bool = True
+    goham_reactive_batch_max_replies_per_run: int = 3
+    goham_reactive_batch_stop_on_auth_failure: bool = True
+    goham_reactive_batch_stop_on_provider_failures: int = 2
 
 
 def load_ham_x_config() -> HamXConfig:
@@ -261,5 +266,16 @@ def load_ham_x_config() -> HamXConfig:
         reactive_inbox_include_replies_to_own_posts=_bool_env(
             "HAM_X_REACTIVE_INBOX_INCLUDE_REPLIES_TO_OWN_POSTS",
             True,
+        ),
+        enable_goham_reactive_batch=_bool_env("HAM_X_ENABLE_GOHAM_REACTIVE_BATCH", False),
+        goham_reactive_batch_dry_run=_bool_env("HAM_X_GOHAM_REACTIVE_BATCH_DRY_RUN", True),
+        goham_reactive_batch_max_replies_per_run=_int_env("HAM_X_GOHAM_REACTIVE_BATCH_MAX_REPLIES_PER_RUN", 3),
+        goham_reactive_batch_stop_on_auth_failure=_bool_env(
+            "HAM_X_GOHAM_REACTIVE_BATCH_STOP_ON_AUTH_FAILURE",
+            True,
+        ),
+        goham_reactive_batch_stop_on_provider_failures=_int_env(
+            "HAM_X_GOHAM_REACTIVE_BATCH_STOP_ON_PROVIDER_FAILURES",
+            2,
         ),
     )

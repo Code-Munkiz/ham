@@ -114,6 +114,11 @@ def _test_config(
         reactive_inbox_lookback_hours=24,
         reactive_handle="Ham",
         reactive_inbox_include_replies_to_own_posts=True,
+        enable_goham_reactive_batch=False,
+        goham_reactive_batch_dry_run=True,
+        goham_reactive_batch_max_replies_per_run=3,
+        goham_reactive_batch_stop_on_auth_failure=True,
+        goham_reactive_batch_stop_on_provider_failures=2,
     )
 
 

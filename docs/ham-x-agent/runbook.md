@@ -311,6 +311,22 @@ HAM_X_REACTIVE_INBOX_INCLUDE_REPLIES_TO_OWN_POSTS=true
 
 If `HAM_X_REACTIVE_INBOX_QUERY` is empty, discovery uses `@{HAM_X_REACTIVE_HANDLE} -is:retweet`. X search responses request tweet fields, author expansion, referenced tweet ids, and usernames so replies can be normalized with `conversation_id`, `post_id`, `in_reply_to_post_id`, and author handle.
 
+## Phase 4C Reactive Batch Mode
+
+Phase 4C adds `goham_reactive_batch.py` as an opt-in, dry-run-first one-command runner for multiple already-discovered reactive candidates. It consumes `ReactiveInboundItem` or inbox candidate records, re-checks reactive policy and governor per item, respects the existing reactive rolling caps and cooldowns, and in dry-run mode records per-item outcomes without calling the provider.
+
+Live batch mode remains explicitly gated and bounded. When enabled later, it calls `ReactiveReplyExecutor.execute()` at most `HAM_X_GOHAM_REACTIVE_BATCH_MAX_REPLIES_PER_RUN` times, journals each executed reply as `execution_kind="goham_reactive_reply"`, updates in-memory duplicate/cooldown state after each success, stops on configured auth/provider failures, and never retries the same inbound item in the same run. It is not a scheduler, daemon, infinite loop, uncontrolled runner, or discovery replacement.
+
+Safe defaults:
+
+```dotenv
+HAM_X_ENABLE_GOHAM_REACTIVE_BATCH=false
+HAM_X_GOHAM_REACTIVE_BATCH_DRY_RUN=true
+HAM_X_GOHAM_REACTIVE_BATCH_MAX_REPLIES_PER_RUN=3
+HAM_X_GOHAM_REACTIVE_BATCH_STOP_ON_AUTH_FAILURE=true
+HAM_X_GOHAM_REACTIVE_BATCH_STOP_ON_PROVIDER_FAILURES=2
+```
+
 ## Autonomy Modes
 
 - `draft`: queue draft content only.
