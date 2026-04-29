@@ -218,6 +218,8 @@ export type HamDesktopLocalControlKillSwitchEngageResult = {
 export type HamDesktopWebBridgeStatusSnapshot = {
   paired?: boolean;
   enabled?: boolean;
+  /** Why bridge is disabled (e.g. explicit env override). */
+  disabled_reason?: string;
   running?: boolean;
   pairing_required?: boolean;
   listener?: unknown;

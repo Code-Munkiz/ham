@@ -1,7 +1,7 @@
 {
   "name": "ham-desktop",
   "private": true,
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "HAM Desktop — Electron shell with bundled curated Hermes setup docs and CLI probe",
   "homepage": "https://github.com/Code-Munkiz/ham",
   "main": "main.cjs",
@@ -13,7 +13,7 @@
     "pack:win": "npm run build:frontend && electron-builder --win --x64",
     "pack:win:dir": "npm run build:frontend && electron-builder --win --x64 --dir",
     "pack:win:nsis": "npm run build:frontend && electron-builder --win --x64 -c.win.target=nsis",
-    "test:local-control": "node --test ./local_control_status.test.cjs ./local_control_policy.test.cjs ./local_control_audit.test.cjs ./local_control_sidecar_status.test.cjs ./local_control_sidecar_child.test.cjs ./local_control_sidecar_manager.test.cjs ./local_control_browser_url.test.cjs ./local_control_browser_mvp.test.cjs ./local_control_browser_real_cdp.test.cjs ./local_control_web_bridge.test.cjs ./preload_contract.test.cjs ./desktop_updates.test.cjs",
+    "test:local-control": "node --test ./local_control_status.test.cjs ./local_control_policy.test.cjs ./local_control_audit.test.cjs ./local_control_sidecar_status.test.cjs ./local_control_sidecar_child.test.cjs ./local_control_sidecar_manager.test.cjs ./local_control_browser_url.test.cjs ./local_control_browser_mvp.test.cjs ./local_control_browser_real_cdp.test.cjs ./local_control_web_bridge_enablement.test.cjs ./local_control_web_bridge.test.cjs ./preload_contract.test.cjs ./desktop_updates.test.cjs",
     "smoke:trusted-connect": "node trusted_connect_smoke.cjs"
   },
   "dependencies": {
@@ -40,6 +40,7 @@
       "local_control_browser_url.cjs",
       "local_control_browser_mvp.cjs",
       "local_control_browser_real_cdp.cjs",
+      "local_control_web_bridge_enablement.cjs",
       "local_control_web_bridge.cjs",
       "local_control_web_bridge_pairing.cjs",
       "package.json",

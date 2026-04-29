@@ -21,6 +21,10 @@ const { createBrowserMvpController, browserActionGates } = require('./local_cont
 const { createRealBrowserCdpController, realBrowserActionGates } = require('./local_control_browser_real_cdp.cjs');
 const { createLocalControlWebBridge } = require('./local_control_web_bridge.cjs');
 const {
+  localWebBridgeEnabled: computeLocalWebBridgeEnabled,
+  localWebBridgeDisabledReason,
+} = require('./local_control_web_bridge_enablement.cjs');
+const {
   DEFAULT_PAIRING_CODE_TTL_MS,
   DEFAULT_TOKEN_TTL_MS,
   MIN_PAIRING_CODE_TTL_MS,
@@ -574,8 +578,10 @@ function getRealBrowser() {
 }
 
 function localWebBridgeEnabled() {
-  const raw = String(process.env.HAM_LOCAL_WEB_BRIDGE_ENABLED || '').trim().toLowerCase();
-  return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on';
+  return computeLocalWebBridgeEnabled({
+    envValue: process.env.HAM_LOCAL_WEB_BRIDGE_ENABLED,
+    isPackaged: app.isPackaged,
+  });
 }
 
 function getLocalWebBridge() {
@@ -604,10 +610,15 @@ function getLocalWebBridge() {
 }
 
 function localWebBridgeDefaults() {
+  const disabledReason = localWebBridgeDisabledReason({
+    envValue: process.env.HAM_LOCAL_WEB_BRIDGE_ENABLED,
+    isPackaged: app.isPackaged,
+  });
   return {
     ok: true,
     bridge_version: 'v1',
     enabled: false,
+    disabled_reason: disabledReason || null,
     running: false,
     detected: false,
     listener: null,
@@ -1456,9 +1467,14 @@ ipcMain.handle('ham-desktop:local-control-web-bridge-pairing-revoke', () => {
   return revoked ? { ok: true } : { ok: false, error: 'revoke_failed' };
 });
 
-ipcMain.handle('ham-desktop:local-control-web-bridge-trusted-connect', () => {
+ipcMain.handle('ham-desktop:local-control-web-bridge-trusted-connect', async () => {
   if (!localWebBridgeEnabled()) return { ok: false, error: 'bridge_disabled' };
   const bridge = getLocalWebBridge();
+  try {
+    await bridge.start();
+  } catch {
+    return { ok: false, error: 'bridge_start_failed' };
+  }
   if (localWebBridgeTrustedToken) {
     const status = bridge.readStatusTrusted({ token: localWebBridgeTrustedToken });
     if (status.ok) return { ok: true, status: 'connected', already_connected: true };
