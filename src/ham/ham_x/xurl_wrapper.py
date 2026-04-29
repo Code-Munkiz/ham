@@ -6,6 +6,7 @@ search smoke path for validating xurl wiring without enabling posting.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import json
 import shutil
 import subprocess
 from typing import Any, Callable
@@ -55,6 +56,8 @@ class XurlReadonlyResult:
     executed: bool
     exit_code: int | None
     reason: str
+    status: str
+    diagnostic: str = ""
     stdout: str = ""
     stderr: str = ""
     catalog_skill_id: str = ""
@@ -70,6 +73,8 @@ class XurlReadonlyResult:
                 "executed": self.executed,
                 "exit_code": self.exit_code,
                 "reason": self.reason,
+                "status": self.status,
+                "diagnostic": self.diagnostic,
                 "stdout": self.stdout,
                 "stderr": self.stderr,
                 "catalog_skill_id": self.catalog_skill_id,
@@ -219,6 +224,7 @@ class XurlWrapper:
                 executed=False,
                 exit_code=None,
                 reason="mutating_action_blocked_before_runner",
+                status="blocked",
                 catalog_skill_id=self.config.catalog_skill_id,
             )
         if action_type not in READONLY_ACTIONS:
@@ -229,6 +235,7 @@ class XurlWrapper:
                 executed=False,
                 exit_code=None,
                 reason="unsupported_readonly_action",
+                status="blocked",
                 catalog_skill_id=self.config.catalog_skill_id,
             )
 
@@ -297,6 +304,7 @@ class XurlWrapper:
             executed=True,
             exit_code=exit_code,
             reason="xurl_readonly_smoke_executed",
+            status="ok",
             stdout=redact(stdout),
             stderr=redact(stderr),
             catalog_skill_id=self.config.catalog_skill_id,
@@ -318,6 +326,7 @@ class XurlWrapper:
             executed=False,
             exit_code=None,
             reason=reason,
+            status="blocked",
             catalog_skill_id=self.config.catalog_skill_id,
         )
         append_audit_event(event_type, result.as_dict(), config=self.config)  # type: ignore[arg-type]
@@ -332,16 +341,62 @@ class XurlWrapper:
         stdout: str,
         stderr: str,
     ) -> XurlReadonlyResult:
+        normalized_reason, diagnostic = _normalize_xurl_failure(
+            reason=reason,
+            stdout=stdout,
+            stderr=stderr,
+            exit_code=exit_code,
+        )
         result = XurlReadonlyResult(
             action_type="search",
             argv=argv,
             blocked=False,
             executed=True,
             exit_code=exit_code,
-            reason=reason,
+            reason=normalized_reason,
+            status="failed",
+            diagnostic=diagnostic,
             stdout=redact(stdout),
             stderr=redact(stderr),
             catalog_skill_id=self.config.catalog_skill_id,
         )
         append_audit_event("x_readonly_smoke_failed", result.as_dict(), config=self.config)
         return result
+
+
+def _normalize_xurl_failure(
+    *,
+    reason: str,
+    stdout: str,
+    stderr: str,
+    exit_code: int | None,
+) -> tuple[str, str]:
+    payload = _first_json_object(stdout) or _first_json_object(stderr)
+    if payload:
+        status = payload.get("status")
+        title = str(payload.get("title") or "").lower()
+        detail = str(payload.get("detail") or "").lower()
+        if status == 401 or "unauthorized" in {title, detail}:
+            return (
+                "xurl_returned_401_unauthorized",
+                "X returned 401 Unauthorized. Check xurl active profile, bearer token, "
+                "app/project permissions, and token freshness.",
+            )
+    if exit_code == 401:
+        return (
+            "xurl_returned_401_unauthorized",
+            "X returned 401 Unauthorized. Check xurl active profile, bearer token, "
+            "app/project permissions, and token freshness.",
+        )
+    return reason, ""
+
+
+def _first_json_object(text: str) -> dict[str, Any] | None:
+    stripped = (text or "").strip()
+    if not stripped:
+        return None
+    try:
+        value = json.loads(stripped)
+    except json.JSONDecodeError:
+        return None
+    return value if isinstance(value, dict) else None

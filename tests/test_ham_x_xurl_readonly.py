@@ -111,6 +111,30 @@ def test_readonly_search_redacts_stdout_and_stderr(tmp_path: Path) -> None:
     assert "[REDACTED" in dumped
 
 
+def test_readonly_search_401_returns_actionable_diagnostic(tmp_path: Path) -> None:
+    def runner(argv, **kwargs):
+        return subprocess.CompletedProcess(
+            argv,
+            1,
+            stdout='{"title":"Unauthorized","type":"about:blank","status":401,"detail":"Unauthorized"}',
+            stderr="",
+        )
+
+    result = XurlWrapper(
+        config=_test_config(tmp_path),
+        runner=runner,
+        binary_resolver=lambda _: "/usr/bin/xurl",
+    ).execute_readonly_search("Base ecosystem autonomous agents")
+
+    data = result.as_dict()
+    assert data["status"] == "failed"
+    assert data["reason"] == "xurl_returned_401_unauthorized"
+    assert data["exit_code"] == 1
+    assert "Check xurl active profile" in str(data["diagnostic"])
+    assert data["execution_allowed"] is False
+    assert data["mutation_attempted"] is False
+
+
 def test_mutating_actions_blocked_before_runner_invocation(tmp_path: Path) -> None:
     calls: list[object] = []
 

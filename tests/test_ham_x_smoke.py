@@ -126,6 +126,34 @@ def test_x_readonly_smoke_runs_only_when_live_gates_pass(tmp_path: Path) -> None
     assert result.summary["status"] == "executed"
 
 
+def test_x_readonly_401_smoke_summary_remains_diagnostic(tmp_path: Path) -> None:
+    def runner(argv, **kwargs):
+        return subprocess.CompletedProcess(
+            argv,
+            1,
+            stdout='{"title":"Unauthorized","type":"about:blank","status":401,"detail":"Unauthorized"}',
+            stderr="",
+        )
+
+    result = run_smoke(
+        "x-readonly",
+        config=_test_config(tmp_path, live=True),
+        xurl_runner=runner,
+        xurl_binary_resolver=lambda _: "/usr/bin/xurl",
+    )
+    data = result.redacted_dump()
+
+    assert data["ok"] is False
+    assert data["live_enabled"] is True
+    assert data["network_attempted"] is True
+    assert data["execution_allowed"] is False
+    assert data["mutation_attempted"] is False
+    assert data["summary"]["xurl_result"]["status"] == "failed"
+    assert data["summary"]["xurl_result"]["reason"] == "xurl_returned_401_unauthorized"
+    assert "Check xurl active profile" in data["summary"]["xurl_result"]["diagnostic"]
+    assert data["exception_queue_path"] == str(tmp_path / "exception_queue.jsonl")
+
+
 def test_xai_smoke_does_not_call_network_by_default(tmp_path: Path) -> None:
     result = run_smoke("xai", config=_test_config(tmp_path))
     assert result.network_attempted is False

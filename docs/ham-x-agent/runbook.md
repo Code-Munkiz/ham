@@ -109,6 +109,8 @@ Use staging X credentials for this check. Do not use production credentials for 
 
 After a run, verify the returned smoke result and `.data/ham-x/audit.jsonl` contain `mutation_attempted=false`, `execution_allowed=false`, and a search-only argv.
 
+If the read-only smoke returns `xurl_returned_401_unauthorized`, check the active xurl profile, bearer token, X app/project permissions, and token freshness. The smoke output should keep that status and diagnostic readable while still redacting secrets.
+
 ## Phase 1F xAI Tiny-Call Smoke
 
 `run_smoke("xai")` can validate `XAI_API_KEY` and `HAM_X_MODEL` wiring with one tiny fixed prompt when `HAM_X_ENABLE_LIVE_SMOKE=true` and `XAI_API_KEY` is present.

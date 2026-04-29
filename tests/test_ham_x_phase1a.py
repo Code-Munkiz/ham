@@ -13,7 +13,7 @@ from src.ham.ham_x.campaign import HamXCampaignConfig, campaign_from_config
 from src.ham.ham_x.config import HamXConfig, load_ham_x_config
 from src.ham.ham_x.hermes_policy_adapter import review_social_action
 from src.ham.ham_x.pipeline import run_supervised_opportunity_loop
-from src.ham.ham_x.redaction import redact_text
+from src.ham.ham_x.redaction import redact, redact_text
 from src.ham.ham_x.review_queue import append_review_record
 from src.ham.ham_x.safety_policy import check_social_action
 from src.ham.ham_x.target_scoring import candidate_from_record, score_candidate
@@ -198,6 +198,39 @@ def test_redaction_masks_named_x_credentials_and_query_secrets() -> None:
         "query-secret",
     ):
         assert secret not in dumped
+
+
+def test_redaction_preserves_harmless_status_reason_paths_and_context() -> None:
+    payload = {
+        "status": "failed",
+        "reason": "xurl_returned_401_unauthorized",
+        "warnings": ["live_smoke_disabled", "missing_xai_api_key"],
+        "audit_path": ".data/ham-x/audit.jsonl",
+        "review_queue_path": ".data/ham-x/review_queue.jsonl",
+        "exception_queue_path": ".data/ham-x/exception_queue.jsonl",
+        "catalog_skill_id": "bundled.social-media.xurl",
+        "tenant_id": "ham-official",
+        "agent_id": "ham-pr-rockstar",
+        "campaign_id": "base-stealth-launch",
+        "profile_id": "ham.default",
+        "autonomy_mode": "draft",
+    }
+    assert redact(payload) == payload
+
+
+def test_redaction_still_masks_auth_headers_and_opaque_tokens() -> None:
+    payload = {
+        "safe_path": ".data/ham-x/exception_queue.jsonl",
+        "authorization": "Bearer abcdefghijklmnopqrstuvwxyz123456",
+        "message": "Authorization: Bearer abcdefghijklmnopqrstuvwxyz123456",
+        "url": "https://example.test/path?access_token=secret-value&ok=1",
+        "opaque": "abcdefghijklmnopqrstuvwxyz1234567890",
+    }
+    dumped = json.dumps(redact(payload))
+    assert "abcdefghijklmnopqrstuvwxyz123456" not in dumped
+    assert "abcdefghijklmnopqrstuvwxyz1234567890" not in dumped
+    assert "secret-value" not in dumped
+    assert ".data/ham-x/exception_queue.jsonl" in dumped
 
 
 def test_action_envelope_has_platform_ready_defaults() -> None:

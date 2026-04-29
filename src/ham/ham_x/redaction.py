@@ -34,6 +34,15 @@ _UUID_RE = re.compile(
 )
 
 
+def _is_secret_key(key: str) -> bool:
+    lowered = key.lower()
+    if lowered in SECRET_KEYS:
+        return True
+    if "api_key" in lowered or "apikey" in lowered:
+        return True
+    return lowered.endswith(("token", "secret", "password", "authorization"))
+
+
 def _mask_query_secrets(text: str) -> str:
     def replace_url(match: re.Match[str]) -> str:
         raw = match.group(0)
@@ -75,6 +84,13 @@ def redact_text(value: str) -> str:
         token = match.group(0)
         if token.startswith("http") or _UUID_RE.match(token):
             return token
+        if "/" in token and (
+            token.startswith(("/", "./", ".data/", "data/", "tmp/"))
+            or token.endswith((".jsonl", ".json", ".yaml", ".yml", ".txt", ".md"))
+        ):
+            return token
+        if not any(char.isdigit() for char in token):
+            return token
         return "[REDACTED_TOKEN]"
 
     return _OPAQUE_RE.sub(redact_opaque, text)
@@ -92,8 +108,7 @@ def redact(value: Any) -> Any:
         out: dict[str, Any] = {}
         for key, item in value.items():
             skey = str(key)
-            lowered = skey.lower()
-            if lowered in SECRET_KEYS or any(part in lowered for part in ("token", "secret", "api_key", "apikey")):
+            if _is_secret_key(skey):
                 out[skey] = "[REDACTED]"
             else:
                 out[skey] = redact(item)

@@ -99,4 +99,6 @@ Use staging X credentials only. Do not use production credentials for initial sm
 
 The read-only adapter should be considered healthy only if the audit log and returned smoke result show a search-only argv, redacted stdout/stderr, `mutation_attempted=false`, and `execution_allowed=false`.
 
+If X returns `401 Unauthorized`, the smoke result should preserve `status=failed`, `reason=xurl_returned_401_unauthorized`, and a diagnostic that points to xurl profile, bearer token, app/project permissions, and token freshness. Secret values, auth headers, and token-like strings must still be redacted.
+
 The xAI tiny-call smoke should be considered healthy only if the returned result is redacted, `network_attempted=true`, `mutation_attempted=false`, `execution_allowed=false`, and the response text is exactly `HAM_XAI_SMOKE_OK`.
