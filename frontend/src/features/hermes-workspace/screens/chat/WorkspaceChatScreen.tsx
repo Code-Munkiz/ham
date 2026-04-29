@@ -616,18 +616,23 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
             },
           }),
         );
-      } catch {
+      } catch (err) {
         if (streamTurnSessionRef.current === sid && sending) {
           return;
         }
+        const sessionNotFound =
+          err instanceof Error && /session not found/i.test(err.message || "");
         setLoadErr(
           "This session could not be loaded. It may have expired, been removed, or belong to a different API revision.",
         );
-        setSessionId(null);
-        writeLastChatSessionId(null);
-        setMessages([]);
-        setInspectorEvents([]);
-        setArtifactRows([]);
+        if (sessionNotFound) {
+          // Only clear durable selection when API confirms session is gone.
+          setSessionId(null);
+          writeLastChatSessionId(null);
+          setMessages([]);
+          setInspectorEvents([]);
+          setArtifactRows([]);
+        }
         toast.error("Could not open this chat session.", { id: `hww-session-load-fail-${sid}`, duration: 6000 });
       } finally {
         setLoadingSession(false);
@@ -642,17 +647,15 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     if (sessionId) return;
     const saved = readLastChatSessionId();
     if (!saved) return;
-    if (embedMode) {
-      void loadFromApi(saved);
-      return;
-    }
-    const fromQuery = searchParams.get("session");
-    if (!fromQuery) {
+    const fromQuery = embedMode ? null : searchParams.get("session");
+    if (!embedMode && !fromQuery) {
       navigate(
         { pathname: "/workspace/chat", search: `?session=${encodeURIComponent(saved)}` },
         { replace: true },
       );
     }
+    // Always attempt load from durable key so packaged restarts are not blocked by URL lag.
+    void loadFromApi(saved);
   }, [embedMode, loadFromApi, navigate, searchParams, sessionId]);
 
   React.useEffect(() => {
