@@ -13,10 +13,10 @@
 Run the focused tests:
 
 ```bash
-python -m pytest tests/test_ham_x_phase1a.py tests/test_ham_x_smoke.py -v
+python -m pytest tests/test_ham_x_phase1a.py tests/test_ham_x_smoke.py tests/test_ham_x_xurl_readonly.py -v
 ```
 
-Phase 1B/1C/1D use the same narrow test target. It covers the non-mutating opportunity pipeline, autonomy decisions, exception queue writes, review queue writes, audit traces, smoke summaries, and mutating-action blocks.
+Phase 1B/1C/1D/1E use the same narrow test target. It covers the non-mutating opportunity pipeline, autonomy decisions, exception queue writes, review queue writes, audit traces, smoke summaries, read-only xurl smoke, and mutating-action blocks.
 
 Run a local smoke from Python:
 
@@ -93,7 +93,21 @@ Review queue records are human-review proposals. Audit records are append-only t
 
 ## Phase 1D Smoke Modes
 
-`run_smoke("local")` uses fixture candidate data and the real dry-run pipeline. `run_smoke("env")` reports redacted environment status and safe-default checks. `x-readonly`, `xai`, and `e2e-dry-run` stay non-mutating; live behavior is disabled unless `HAM_X_ENABLE_LIVE_SMOKE=true`, and Phase 1D still returns `execution_allowed=false`.
+`run_smoke("local")` uses fixture candidate data and the real dry-run pipeline. `run_smoke("env")` reports redacted environment status and safe-default checks. `x-readonly`, `xai`, and `e2e-dry-run` stay non-mutating; live behavior is disabled unless `HAM_X_ENABLE_LIVE_SMOKE=true`, and smoke results still return `execution_allowed=false`.
+
+## Phase 1E Read-Only X Smoke
+
+`run_smoke("x-readonly")` can validate xurl/X wiring with a search-only command when all gates are set:
+
+```dotenv
+HAM_X_ENABLE_LIVE_SMOKE=true
+HAM_X_DRY_RUN=true
+HAM_X_AUTONOMY_ENABLED=false
+```
+
+Use staging X credentials for this check. Do not use production credentials for first-pass smoke validation, and never paste or print token values. The read-only smoke uses `xurl search "Base ecosystem autonomous agents" --max-results 10`; post, quote, like, reply, timeline, mentions, and xAI calls are not part of Phase 1E.
+
+After a run, verify the returned smoke result and `.data/ham-x/audit.jsonl` contain `mutation_attempted=false`, `execution_allowed=false`, and a search-only argv.
 
 ## Autonomy Modes
 

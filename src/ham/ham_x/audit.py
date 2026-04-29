@@ -40,6 +40,11 @@ AuditEventType = Literal[
     "action_auto_approved_candidate",
     "emergency_stop_blocked",
     "execution_blocked_phase1c",
+    "x_readonly_smoke_planned",
+    "x_readonly_smoke_blocked",
+    "x_readonly_smoke_executed",
+    "x_readonly_smoke_failed",
+    "x_mutation_blocked",
 ]
 
 

@@ -11,9 +11,11 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from src.ham.ham_x.action_envelope import platform_context_from_config
+from src.ham.ham_x.audit import append_audit_event
 from src.ham.ham_x.config import HamXConfig, load_ham_x_config
 from src.ham.ham_x.pipeline import PipelineRunResult, run_supervised_opportunity_loop
 from src.ham.ham_x.redaction import redact
+from src.ham.ham_x.xurl_wrapper import XurlRunner, XurlWhich, XurlWrapper
 
 SmokeMode = Literal["local", "env", "x-readonly", "xai", "e2e-dry-run"]
 
@@ -25,6 +27,7 @@ SECRET_ENV_NAMES = (
     "X_ACCESS_TOKEN_SECRET",
     "X_BEARER_TOKEN",
 )
+DEFAULT_READONLY_SMOKE_QUERY = "Base ecosystem autonomous agents"
 
 
 class SmokeResult(BaseModel):
@@ -55,7 +58,13 @@ class SmokeResult(BaseModel):
         return redact(self.model_dump(mode="json"))
 
 
-def run_smoke(mode: str, config: HamXConfig | None = None) -> SmokeResult:
+def run_smoke(
+    mode: str,
+    config: HamXConfig | None = None,
+    *,
+    xurl_runner: XurlRunner | None = None,
+    xurl_binary_resolver: XurlWhich | None = None,
+) -> SmokeResult:
     """Run one HAM-on-X smoke mode without mutating X."""
     cfg = config or load_ham_x_config()
     normalized = _normalize_mode(mode)
@@ -76,7 +85,11 @@ def run_smoke(mode: str, config: HamXConfig | None = None) -> SmokeResult:
             warnings=["live e2e smoke not implemented; fixture candidate data used"],
         )
     if normalized == "x-readonly":
-        return _readonly_x_smoke(cfg)
+        return _readonly_x_smoke(
+            cfg,
+            xurl_runner=xurl_runner,
+            xurl_binary_resolver=xurl_binary_resolver,
+        )
     if normalized == "xai":
         return _xai_smoke(cfg)
     raise AssertionError("unreachable")
@@ -157,35 +170,74 @@ def _env_smoke(config: HamXConfig) -> SmokeResult:
     )
 
 
-def _readonly_x_smoke(config: HamXConfig) -> SmokeResult:
-    planned = [config.xurl_bin, "search", "base ecosystem builders", "--max-results", "5"]
-    if not config.enable_live_smoke:
+def _readonly_x_smoke(
+    config: HamXConfig,
+    *,
+    xurl_runner: XurlRunner | None = None,
+    xurl_binary_resolver: XurlWhich | None = None,
+) -> SmokeResult:
+    planned = [config.xurl_bin, "search", DEFAULT_READONLY_SMOKE_QUERY, "--max-results", "10"]
+    gate_reasons = _readonly_gate_reasons(config)
+    if gate_reasons:
+        append_audit_event(
+            "x_readonly_smoke_blocked",
+            {
+                "argv": planned,
+                "gate_reasons": gate_reasons,
+                "catalog_skill_id": config.catalog_skill_id,
+                "execution_allowed": False,
+                "mutation_attempted": False,
+            },
+            config=config,
+        )
         return _base_result(
             mode="x-readonly",
             config=config,
             ok=True,
-            warnings=["live smoke disabled; read-only xurl execution not attempted"],
+            warnings=["read-only X smoke blocked by live smoke gates"],
             summary={
-                "status": "disabled",
+                "status": "blocked",
                 "planned_command": planned,
                 "catalog_skill_id": config.catalog_skill_id,
                 "safety_status": "not_executed",
+                "gate_reasons": gate_reasons,
                 "execution_allowed": False,
+                "mutation_attempted": False,
             },
         )
+
+    wrapper = XurlWrapper(
+        config=config,
+        runner=xurl_runner,
+        binary_resolver=xurl_binary_resolver,
+    )
+    result = wrapper.execute_readonly_search(DEFAULT_READONLY_SMOKE_QUERY, max_results=10)
     return _base_result(
         mode="x-readonly",
         config=config,
-        ok=True,
-        warnings=["live read-only xurl smoke not implemented in Phase 1D"],
+        ok=(result.executed and not result.blocked and result.exit_code == 0),
+        warnings=[] if result.executed and result.exit_code == 0 else [result.reason],
+        network_attempted=result.executed,
         summary={
-            "status": "not_implemented",
-            "planned_command": planned,
+            "status": "executed" if result.executed and result.exit_code == 0 else result.reason,
+            "xurl_result": result.as_dict(),
             "catalog_skill_id": config.catalog_skill_id,
-            "safety_status": "not_executed",
+            "safety_status": "read_only_search_only",
             "execution_allowed": False,
+            "mutation_attempted": False,
         },
     )
+
+
+def _readonly_gate_reasons(config: HamXConfig) -> list[str]:
+    reasons: list[str] = []
+    if not config.enable_live_smoke:
+        reasons.append("HAM_X_ENABLE_LIVE_SMOKE_must_be_true")
+    if not config.dry_run:
+        reasons.append("HAM_X_DRY_RUN_must_remain_true")
+    if config.autonomy_enabled:
+        reasons.append("HAM_X_AUTONOMY_ENABLED_must_remain_false")
+    return reasons
 
 
 def _xai_smoke(config: HamXConfig) -> SmokeResult:

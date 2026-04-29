@@ -50,7 +50,9 @@ The emergency stop (`HAM_X_EMERGENCY_STOP=true`) blocks autonomous approval and 
 
 Phase 1D exposes `run_smoke()` for local safety checks. The supported modes are `local`, `env`, `x-readonly`, `xai`, and `e2e-dry-run`.
 
-All Phase 1D smoke results preserve `execution_allowed=false` and `mutation_attempted=false`. Live-capable smoke behavior is gated by `HAM_X_ENABLE_LIVE_SMOKE=true`; by default, read-only X and xAI smoke modes return safe disabled or not-implemented summaries without network calls.
+All smoke results preserve `execution_allowed=false` and `mutation_attempted=false`. Live-capable smoke behavior is gated by `HAM_X_ENABLE_LIVE_SMOKE=true`; by default, read-only X and xAI smoke modes return safe disabled summaries without network calls.
+
+Phase 1E implements only a gated read-only `xurl search` smoke. It requires `HAM_X_DRY_RUN=true` and `HAM_X_AUTONOMY_ENABLED=false`, denies post/quote/like before subprocess execution, and keeps xAI smoke disabled/not implemented.
 
 ## Boundaries
 

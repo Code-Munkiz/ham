@@ -53,6 +53,12 @@ Phase 1C adds `decide_autonomy()` after policy, budget, and rate checks. The dec
 
 The exception queue stores uncertain, risky, emergency-stop-blocked, budget-blocked, and rate-blocked action proposals as bounded redacted JSONL. The review queue remains for calibration and approval-mode review, not as a permanent requirement for every action.
 
+## Phase 1E Behavior
+
+Phase 1E adds a read-only X smoke adapter for `xurl search` only. It is gated by `HAM_X_ENABLE_LIVE_SMOKE=true`, `HAM_X_DRY_RUN=true`, and `HAM_X_AUTONOMY_ENABLED=false`.
+
+The adapter validates xurl/X wiring without enabling posting. It denies post, quote, and like before subprocess execution, uses argv arrays with `shell=False`, redacts stdout/stderr, and preserves `mutation_attempted=false` and `execution_allowed=false`.
+
 ## Reusable Agent Template
 
 The official launch agent uses `tenant_id=ham-official`, `agent_id=ham-pr-rockstar`, and `campaign_id=base-stealth-launch`. The same action envelope can be reused for tenant-created agents by changing those context fields and attaching tenant-specific policy and brand voice profiles.

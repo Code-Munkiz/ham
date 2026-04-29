@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+from dataclasses import replace
 from pathlib import Path
 
 from src.ham.ham_x.config import HamXConfig
@@ -75,11 +77,11 @@ def test_live_smoke_modes_disabled_by_default(tmp_path: Path) -> None:
         assert result.live_enabled is False
         assert result.network_attempted is False
         assert result.execution_allowed is False
-        assert result.summary["status"] == "disabled"
+        assert result.summary["status"] in {"blocked", "disabled"}
 
 
 def test_x_readonly_smoke_cannot_post_quote_or_like(tmp_path: Path) -> None:
-    result = run_smoke("x-readonly", config=_test_config(tmp_path, live=True))
+    result = run_smoke("x-readonly", config=_test_config(tmp_path))
     planned = " ".join(result.summary["planned_command"])
     assert "post" not in planned
     assert "quote" not in planned
@@ -87,6 +89,41 @@ def test_x_readonly_smoke_cannot_post_quote_or_like(tmp_path: Path) -> None:
     assert result.summary["catalog_skill_id"] == "bundled.social-media.xurl"
     assert result.execution_allowed is False
     assert result.mutation_attempted is False
+
+
+def test_x_readonly_smoke_requires_all_live_gates(tmp_path: Path) -> None:
+    live_but_not_dry = replace(_test_config(tmp_path, live=True), dry_run=False)
+    live_but_autonomous = replace(_test_config(tmp_path, live=True), autonomy_enabled=True)
+    for cfg in (live_but_not_dry, live_but_autonomous):
+        result = run_smoke("x-readonly", config=cfg)
+        assert result.network_attempted is False
+        assert result.execution_allowed is False
+        assert result.mutation_attempted is False
+        assert result.summary["status"] == "blocked"
+
+
+def test_x_readonly_smoke_runs_only_when_live_gates_pass(tmp_path: Path) -> None:
+    calls: list[dict[str, object]] = []
+
+    def runner(argv, **kwargs):
+        calls.append({"argv": argv, **kwargs})
+        return subprocess.CompletedProcess(argv, 0, stdout="safe search output", stderr="")
+
+    result = run_smoke(
+        "x-readonly",
+        config=_test_config(tmp_path, live=True),
+        xurl_runner=runner,
+        xurl_binary_resolver=lambda _: "/usr/bin/xurl",
+    )
+
+    assert result.ok is True
+    assert result.network_attempted is True
+    assert result.execution_allowed is False
+    assert result.mutation_attempted is False
+    assert calls
+    assert isinstance(calls[0]["argv"], list)
+    assert calls[0]["shell"] is False
+    assert result.summary["status"] == "executed"
 
 
 def test_xai_smoke_does_not_call_network_by_default(tmp_path: Path) -> None:
