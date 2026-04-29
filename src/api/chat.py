@@ -7,6 +7,7 @@ import os
 import re
 import time
 from pathlib import Path
+from threading import RLock
 from types import SimpleNamespace
 from typing import Any, Literal
 from uuid import uuid4
@@ -163,6 +164,21 @@ _URL_IN_TEXT_RE = re.compile(r"https?://[^\s)]+", re.IGNORECASE)
 _STREAM_PARTIAL_NOTE = "\n\nConnection interrupted. Ask me to continue."
 _STREAM_CHECKPOINT_MIN_CHARS = 800
 _STREAM_CHECKPOINT_MIN_SEC = 1.5
+_ACTIVE_STREAM_SESSIONS: set[str] = set()
+_ACTIVE_STREAM_SESSIONS_LOCK = RLock()
+
+
+def _claim_stream_session(session_id: str) -> bool:
+    with _ACTIVE_STREAM_SESSIONS_LOCK:
+        if session_id in _ACTIVE_STREAM_SESSIONS:
+            return False
+        _ACTIVE_STREAM_SESSIONS.add(session_id)
+        return True
+
+
+def _release_stream_session(session_id: str) -> None:
+    with _ACTIVE_STREAM_SESSIONS_LOCK:
+        _ACTIVE_STREAM_SESSIONS.discard(session_id)
 
 
 def _resolve_chat_clerk_context(
@@ -883,6 +899,24 @@ def post_chat_stream(
         body,
         attachment_user_id=aid,
     )
+    if not _claim_stream_session(sid):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": {
+                    "code": "STREAM_ALREADY_ACTIVE",
+                    "message": "A stream is already active for this session. Wait for it to finish before starting another.",
+                }
+            },
+        )
+    stream_lock_claimed = True
+
+    def release_stream_lock() -> None:
+        nonlocal stream_lock_claimed
+        if stream_lock_claimed:
+            _release_stream_session(sid)
+            stream_lock_claimed = False
+
     stream_execution_mode = _execution_mode_payload(body, last_user_plain=last_user_plain)
     stream_execution_mode = _apply_browser_bridge_for_turn(
         execution_mode=stream_execution_mode,
@@ -890,74 +924,79 @@ def post_chat_stream(
         last_user_plain=last_user_plain,
     )
 
-    if body.enable_operator and operator_enabled() and body.messages[-1].role == "user":
-        from src.persistence.project_store import get_project_store
+    try:
+        if body.enable_operator and operator_enabled() and body.messages[-1].role == "user":
+            from src.persistence.project_store import get_project_store
 
-        op = process_operator_turn(
-            user_text=last_user_plain,
-            project_store=get_project_store(),
-            default_project_id=body.project_id,
-            operator_payload=body.operator,
-            ham_operator_authorization=ham_op_hdr,
-            ham_actor=ham_actor,
-        )
-        if op is not None and op.handled:
-            _record_operator_audit(body=body, op=op, ham_actor=ham_actor, route="post_chat_stream")
-            msg = format_operator_assistant_message(op)
-            store.append_turns(sid, [ChatTurn(role="assistant", content=msg)])
-            msgs = store.list_messages(sid)
-            op_dict = op.model_dump(mode="json")
-
-            def operator_only():
-                yield json.dumps({"type": "session", "session_id": sid}) + "\n"
-                payload: dict[str, Any] = {
-                    "type": "done",
-                    "session_id": sid,
-                    "messages": msgs,
-                    "actions": [],
-                    "operator_result": op_dict,
-                    "execution_mode": stream_execution_mode,
-                }
-                if stream_active_meta:
-                    payload["active_agent"] = stream_active_meta
-                yield json.dumps(payload) + "\n"
-
-            return StreamingResponse(
-                operator_only(),
-                media_type="application/x-ndjson; charset=utf-8",
-                headers={
-                    "Cache-Control": "no-cache",
-                    "X-Accel-Buffering": "no",
-                },
+            op = process_operator_turn(
+                user_text=last_user_plain,
+                project_store=get_project_store(),
+                default_project_id=body.project_id,
+                operator_payload=body.operator,
+                ham_operator_authorization=ham_op_hdr,
+                ham_actor=ham_actor,
             )
+            if op is not None and op.handled:
+                _record_operator_audit(body=body, op=op, ham_actor=ham_actor, route="post_chat_stream")
+                msg = format_operator_assistant_message(op)
+                store.append_turns(sid, [ChatTurn(role="assistant", content=msg)])
+                msgs = store.list_messages(sid)
+                op_dict = op.model_dump(mode="json")
 
-    def ndjson_gen():
-        yield json.dumps({"type": "session", "session_id": sid}) + "\n"
-        pieces: list[str] = []
-        stream_completed = False
-        chars_since_checkpoint = 0
-        checkpoint_started = False
-        last_checkpoint_at = time.monotonic()
+                def operator_only():
+                    try:
+                        yield json.dumps({"type": "session", "session_id": sid}) + "\n"
+                        payload: dict[str, Any] = {
+                            "type": "done",
+                            "session_id": sid,
+                            "messages": msgs,
+                            "actions": [],
+                            "operator_result": op_dict,
+                            "execution_mode": stream_execution_mode,
+                        }
+                        if stream_active_meta:
+                            payload["active_agent"] = stream_active_meta
+                        yield json.dumps(payload) + "\n"
+                    finally:
+                        release_stream_lock()
 
-        def checkpoint_partial(*, interrupted: bool) -> None:
-            nonlocal chars_since_checkpoint, last_checkpoint_at, checkpoint_started
-            if not pieces:
-                return
-            partial = "".join(pieces)
-            if not partial.strip():
-                return
-            visible, _ = (
-                split_assistant_ui_actions(partial)
-                if body.enable_ui_actions
-                else (partial, [])
-            )
-            payload = _with_interrupted_note(visible) if interrupted else visible
-            store.upsert_last_assistant_turn(sid, payload)
-            checkpoint_started = True
+                return StreamingResponse(
+                    operator_only(),
+                    media_type="application/x-ndjson; charset=utf-8",
+                    headers={
+                        "Cache-Control": "no-cache",
+                        "X-Accel-Buffering": "no",
+                    },
+                )
+
+        assistant_turn_id = str(uuid4())
+
+        def ndjson_gen():
+            yield json.dumps({"type": "session", "session_id": sid}) + "\n"
+            pieces: list[str] = []
+            stream_completed = False
             chars_since_checkpoint = 0
+            checkpoint_started = False
             last_checkpoint_at = time.monotonic()
 
-        try:
+            def checkpoint_partial(*, interrupted: bool) -> None:
+                nonlocal chars_since_checkpoint, last_checkpoint_at, checkpoint_started
+                if not pieces:
+                    return
+                partial = "".join(pieces)
+                if not partial.strip():
+                    return
+                visible, _ = (
+                    split_assistant_ui_actions(partial)
+                    if body.enable_ui_actions
+                    else (partial, [])
+                )
+                payload = _with_interrupted_note(visible) if interrupted else visible
+                store.upsert_assistant_turn(sid, assistant_turn_id, payload)
+                checkpoint_started = True
+                chars_since_checkpoint = 0
+                last_checkpoint_at = time.monotonic()
+
             try:
                 for part in stream_chat_turn(
                     llm_messages,
@@ -980,7 +1019,7 @@ def post_chat_stream(
             except GatewayCallError as exc:
                 assistant_visible = format_gateway_error_user_message(exc)
                 try:
-                    store.upsert_last_assistant_turn(sid, assistant_visible)
+                    store.upsert_assistant_turn(sid, assistant_turn_id, assistant_visible)
                     payload_err: dict[str, Any] = {
                         "type": "done",
                         "session_id": sid,
@@ -1010,7 +1049,7 @@ def post_chat_stream(
                 else (assistant_raw, [])
             )
             try:
-                store.upsert_last_assistant_turn(sid, assistant_visible)
+                store.upsert_assistant_turn(sid, assistant_turn_id, assistant_visible)
                 payload: dict[str, Any] = {
                     "type": "done",
                     "session_id": sid,
@@ -1030,22 +1069,26 @@ def post_chat_stream(
                         "message": "Session disappeared during stream.",
                     },
                 ) + "\n"
-        finally:
-            # If stream was interrupted (generator closed), save partial content.
-            if not stream_completed and pieces:
-                try:
-                    checkpoint_partial(interrupted=True)
-                except Exception:
-                    pass  # Best-effort: don't crash on cleanup
+            finally:
+                # If stream was interrupted (generator closed), save partial content.
+                if not stream_completed and pieces:
+                    try:
+                        checkpoint_partial(interrupted=True)
+                    except Exception:
+                        pass  # Best-effort: don't crash on cleanup
+                release_stream_lock()
 
-    return StreamingResponse(
-        ndjson_gen(),
-        media_type="application/x-ndjson; charset=utf-8",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-        },
-    )
+        return StreamingResponse(
+            ndjson_gen(),
+            media_type="application/x-ndjson; charset=utf-8",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+            },
+        )
+    except Exception:
+        release_stream_lock()
+        raise
 
 
 _MAX_TRANSCRIBE_BYTES = 15 * 1024 * 1024

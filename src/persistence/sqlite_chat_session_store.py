@@ -52,11 +52,16 @@ class SqliteChatSessionStore:
                     seq INTEGER NOT NULL,
                     role TEXT NOT NULL,
                     content TEXT NOT NULL,
+                    turn_id TEXT,
                     UNIQUE(session_id, seq),
                     FOREIGN KEY(session_id) REFERENCES sessions(session_id)
                 )
                 """
             )
+            try:
+                self._conn.execute("SELECT turn_id FROM turns LIMIT 0")
+            except sqlite3.OperationalError:
+                self._conn.execute("ALTER TABLE turns ADD COLUMN turn_id TEXT")
 
     def create_session(self) -> str:
         sid = str(uuid4())
@@ -76,10 +81,17 @@ class SqliteChatSessionStore:
             if row is None:
                 return None
             cur = self._conn.execute(
-                "SELECT role, content FROM turns WHERE session_id = ? ORDER BY seq ASC",
+                "SELECT role, content, turn_id FROM turns WHERE session_id = ? ORDER BY seq ASC",
                 (session_id,),
             )
-            turns = [ChatTurn(role=str(r["role"]), content=str(r["content"])) for r in cur.fetchall()]
+            turns = [
+                ChatTurn(
+                    role=str(r["role"]),
+                    content=str(r["content"]),
+                    turn_id=str(r["turn_id"]) if r["turn_id"] is not None else None,
+                )
+                for r in cur.fetchall()
+            ]
             return ChatSessionRecord(
                 session_id=str(row["session_id"]),
                 turns=turns,
@@ -103,11 +115,11 @@ class SqliteChatSessionStore:
             start = int(max_row["m"]) + 1
             for i, t in enumerate(normalized):
                 self._conn.execute(
-                    "INSERT INTO turns (session_id, seq, role, content) VALUES (?, ?, ?, ?)",
-                    (session_id, start + i, t.role, t.content),
+                    "INSERT INTO turns (session_id, seq, role, content, turn_id) VALUES (?, ?, ?, ?, ?)",
+                    (session_id, start + i, t.role, t.content, t.turn_id),
                 )
 
-    def upsert_last_assistant_turn(self, session_id: str, content: str) -> None:
+    def upsert_assistant_turn(self, session_id: str, turn_id: str, content: str) -> None:
         with self._lock, self._conn:
             row = self._conn.execute(
                 "SELECT 1 FROM sessions WHERE session_id = ?",
@@ -115,20 +127,24 @@ class SqliteChatSessionStore:
             ).fetchone()
             if row is None:
                 raise KeyError(session_id)
-            last = self._conn.execute(
-                "SELECT seq, role FROM turns WHERE session_id = ? ORDER BY seq DESC LIMIT 1",
-                (session_id,),
+            existing = self._conn.execute(
+                "SELECT seq FROM turns WHERE session_id = ? AND role = 'assistant' AND turn_id = ? ORDER BY seq DESC LIMIT 1",
+                (session_id, turn_id),
             ).fetchone()
-            if last is not None and str(last["role"]) == "assistant":
+            if existing is not None:
                 self._conn.execute(
                     "UPDATE turns SET content = ? WHERE session_id = ? AND seq = ?",
-                    (content, session_id, int(last["seq"])),
+                    (content, session_id, int(existing["seq"])),
                 )
                 return
+            last = self._conn.execute(
+                "SELECT seq FROM turns WHERE session_id = ? ORDER BY seq DESC LIMIT 1",
+                (session_id,),
+            ).fetchone()
             next_seq = 0 if last is None else int(last["seq"]) + 1
             self._conn.execute(
-                "INSERT INTO turns (session_id, seq, role, content) VALUES (?, ?, ?, ?)",
-                (session_id, next_seq, "assistant", content),
+                "INSERT INTO turns (session_id, seq, role, content, turn_id) VALUES (?, ?, ?, ?, ?)",
+                (session_id, next_seq, "assistant", content, turn_id),
             )
 
     def set_upstream_ref(self, session_id: str, ref: str | None) -> None:

@@ -164,13 +164,13 @@ def test_firestore_set_upstream_ref() -> None:
     assert rec.upstream_ref == "gw-123"
 
 
-def test_firestore_upsert_last_assistant_turn_updates_single_turn() -> None:
+def test_firestore_upsert_assistant_turn_updates_single_turn() -> None:
     fake = _FakeFirestoreClient()
     store = FirestoreChatSessionStore("sessions", client=fake)  # type: ignore[arg-type]
     sid = store.create_session()
     store.append_turns(sid, [ChatTurn(role="user", content="hello")])
-    store.upsert_last_assistant_turn(sid, "partial")
-    store.upsert_last_assistant_turn(sid, "final")
+    store.upsert_assistant_turn(sid, "turn-1", "partial")
+    store.upsert_assistant_turn(sid, "turn-1", "final")
     assert store.list_messages(sid) == [
         {"role": "user", "content": "hello"},
         {"role": "assistant", "content": "final"},

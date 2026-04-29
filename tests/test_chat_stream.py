@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import threading
 import time
 from pathlib import Path
 
@@ -184,6 +185,51 @@ def test_chat_stream_disconnect_checkpoint_persists_partial(mock_mode: None, mon
     assert len(assistants) == 1
     assert "partial" in assistants[0]
     assert "Connection interrupted. Ask me to continue." in assistants[0]
+
+
+def test_chat_stream_rejects_concurrent_same_session_streams(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    stream_started = threading.Event()
+    allow_finish = threading.Event()
+
+    def blocked_stream(_msgs: list, **_kwargs):
+        yield "locked "
+        stream_started.set()
+        assert allow_finish.wait(timeout=2.0)
+        yield "done"
+
+    monkeypatch.setattr("src.api.chat.stream_chat_turn", blocked_stream)
+    create = client.post("/api/chat/sessions")
+    assert create.status_code == 200
+    sid = create.json()["session_id"]
+
+    first: dict[str, object] = {}
+
+    def run_first() -> None:
+        res = client.post(
+            "/api/chat/stream",
+            json={"session_id": sid, "messages": [{"role": "user", "content": "first"}]},
+        )
+        first["status_code"] = res.status_code
+        first["events"] = _parse_ndjson(res.text)
+
+    t = threading.Thread(target=run_first, daemon=True)
+    t.start()
+    assert stream_started.wait(timeout=1.0)
+
+    second = client.post(
+        "/api/chat/stream",
+        json={"session_id": sid, "messages": [{"role": "user", "content": "second"}]},
+    )
+    assert second.status_code == 409
+    detail = second.json().get("detail", {})
+    assert detail.get("error", {}).get("code") == "STREAM_ALREADY_ACTIVE"
+
+    allow_finish.set()
+    t.join(timeout=2.0)
+    assert not t.is_alive()
+    assert first["status_code"] == 200
 
 
 _MAX_TRANSCRIBE = 15 * 1024 * 1024

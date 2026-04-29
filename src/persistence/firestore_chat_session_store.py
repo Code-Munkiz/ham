@@ -69,7 +69,14 @@ class FirestoreChatSessionStore:
                 return None
             data = snap.to_dict() or {}
             turns_raw = data.get("turns") or []
-            turns = [ChatTurn(role=str(t.get("role", "")), content=str(t.get("content", ""))) for t in turns_raw]
+            turns = [
+                ChatTurn(
+                    role=str(t.get("role", "")),
+                    content=str(t.get("content", "")),
+                    turn_id=str(t.get("turn_id")) if t.get("turn_id") is not None else None,
+                )
+                for t in turns_raw
+            ]
             return ChatSessionRecord(
                 session_id=session_id,
                 turns=turns,
@@ -80,7 +87,7 @@ class FirestoreChatSessionStore:
     def append_turns(self, session_id: str, turns: Sequence[ChatTurn | dict[str, Any]]) -> None:
         normalized = _normalize_turns(turns)
         doc_ref = self._coll().document(session_id)
-        new_chunks = [{"role": t.role, "content": t.content} for t in normalized]
+        new_chunks = [{"role": t.role, "content": t.content, "turn_id": t.turn_id} for t in normalized]
 
         @transactional
         def _append(transaction: firestore.Transaction, ref: firestore.DocumentReference) -> None:
@@ -102,7 +109,7 @@ class FirestoreChatSessionStore:
         with self._lock:
             _append(transaction, doc_ref)
 
-    def upsert_last_assistant_turn(self, session_id: str, content: str) -> None:
+    def upsert_assistant_turn(self, session_id: str, turn_id: str, content: str) -> None:
         doc_ref = self._coll().document(session_id)
 
         @transactional
@@ -112,10 +119,15 @@ class FirestoreChatSessionStore:
                 raise KeyError(session_id)
             data = snap.to_dict() or {}
             cur = list(data.get("turns") or [])
-            if cur and str((cur[-1] or {}).get("role", "")) == "assistant":
-                cur[-1] = {"role": "assistant", "content": content}
-            else:
-                cur.append({"role": "assistant", "content": content})
+            replaced = False
+            for i in range(len(cur) - 1, -1, -1):
+                row = cur[i] if isinstance(cur[i], dict) else {}
+                if str(row.get("role", "")) == "assistant" and str(row.get("turn_id", "")) == turn_id:
+                    cur[i] = {"role": "assistant", "content": content, "turn_id": turn_id}
+                    replaced = True
+                    break
+            if not replaced:
+                cur.append({"role": "assistant", "content": content, "turn_id": turn_id})
             transaction.update(
                 ref,
                 {
