@@ -29,4 +29,6 @@ Phase 2B live read/model dry-run treats live X search results as untrusted input
 
 Phase 2C GoHAM execution applies an additional stricter policy before any autonomous provider call. It allows only original posts, requires low-risk `auto_approve` autonomy decisions with high score/confidence, blocks links and quote/reply targets, and rejects financial advice, price, token, buy/sell, guarantee, promo, and referral language.
 
+GoHAM v0 ops/status is read-only. It can summarize the GoHAM execution journal, report caps and gates, and run dry preflight through the same GoHAM eligibility policy, but it must not call provider/executor code or mark mutation attempts.
+
 GoHAM mode, when introduced later, must remain bounded high-autonomy: visible operator controls, policy checks, budgets, rate limits, audit records, and a kill switch are still required.

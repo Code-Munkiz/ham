@@ -184,6 +184,17 @@ HAM_X_GOHAM_BLOCK_LINKS=true
 
 Live GoHAM execution additionally requires `HAM_X_AUTONOMY_ENABLED=true`, `HAM_X_DRY_RUN=false`, `HAM_X_ENABLE_LIVE_EXECUTION=true`, and `HAM_X_EMERGENCY_STOP=false`. Do not run live GoHAM execution without a separate explicit operator instruction.
 
+## GoHAM v0 Ops/Status
+
+`src.ham.ham_x.goham_ops` provides read-only operator helpers for daily GoHAM checks before any future autonomous action. These helpers summarize the execution journal, report today's GoHAM autonomous cap usage, expose the current gate state, and run dry candidate preflight through `evaluate_goham_eligibility()` only.
+
+Daily operator flow:
+
+1. Inspect `show_goham_status()` for `last_autonomous_post`, `provider_post_id`, cap used/remaining, journal/audit paths, emergency stop, and gate state.
+2. Use `check_goham_cap()` to confirm only `execution_kind="goham_autonomous"` rows count against the GoHAM autonomous cap. Manual canary rows do not count.
+3. Use `dry_preflight_goham_candidate()` on a prepared candidate to see deterministic block reasons before any scheduled or repeated GoHAM run.
+4. Treat all ops/status output as non-mutating: `mutation_attempted=false`; these helpers do not call `x_executor`, `manual_canary`, `goham_bridge`, `pipeline`, `smoke`, or `live_dry_run`.
+
 ## Autonomy Modes
 
 - `draft`: queue draft content only.
