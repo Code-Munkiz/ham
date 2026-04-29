@@ -1333,26 +1333,61 @@ export type ChatSessionDetail = {
   created_at: string | null;
 };
 
+export type ChatSessionTurn = {
+  role: "user" | "assistant";
+  content: string;
+};
+
 /** List past chat sessions (newest first). */
 export async function fetchChatSessions(
   limit = 50,
   offset = 0,
 ): Promise<{ sessions: ChatSessionSummary[] }> {
-  const res = await hamApiFetch(`/api/chat/sessions?limit=${limit}&offset=${offset}`);
+  const path = `/api/chat/sessions?limit=${limit}&offset=${offset}`;
+  const res = await hamApiFetch(path);
   if (!res.ok) {
-    throw new Error(`Failed to list chat sessions (HTTP ${res.status})`);
+    const target = apiUrl(path);
+    throw new Error(`Failed to list chat sessions (HTTP ${res.status}) via ${target}. Retry, or verify desktop API base.`);
   }
   return (await res.json()) as { sessions: ChatSessionSummary[] };
 }
 
 /** Fetch full message history for a single chat session. */
 export async function fetchChatSession(sessionId: string): Promise<ChatSessionDetail> {
-  const res = await hamApiFetch(`/api/chat/sessions/${encodeURIComponent(sessionId)}`);
+  const path = `/api/chat/sessions/${encodeURIComponent(sessionId)}`;
+  const res = await hamApiFetch(path);
   if (!res.ok) {
     if (res.status === 404) throw new Error("Session not found");
-    throw new Error(`Failed to fetch chat session (HTTP ${res.status})`);
+    throw new Error(`Failed to fetch chat session (HTTP ${res.status}) via ${apiUrl(path)}.`);
   }
   return (await res.json()) as ChatSessionDetail;
+}
+
+/** Create an empty chat session id for explicit turn persistence (desktop local-control turns). */
+export async function createChatSession(): Promise<{ session_id: string; created_at: string | null }> {
+  const path = "/api/chat/sessions";
+  const res = await hamApiFetch(path, { method: "POST" });
+  if (!res.ok) {
+    throw new Error(`Failed to create chat session (HTTP ${res.status}) via ${apiUrl(path)}.`);
+  }
+  return (await res.json()) as { session_id: string; created_at: string | null };
+}
+
+/** Append already-finalized user/assistant turns to an existing chat session. */
+export async function appendChatSessionTurns(
+  sessionId: string,
+  turns: ChatSessionTurn[],
+): Promise<{ session_id: string; messages: HamChatMessage[] }> {
+  const path = `/api/chat/sessions/${encodeURIComponent(sessionId)}/turns`;
+  const res = await hamApiFetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ turns }),
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to append chat turns (HTTP ${res.status}) via ${apiUrl(path)}.`);
+  }
+  return (await res.json()) as { session_id: string; messages: HamChatMessage[] };
 }
 
 export async function postChat(body: HamChatRequest): Promise<HamChatResponse> {

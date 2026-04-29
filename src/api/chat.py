@@ -140,6 +140,15 @@ class ChatResponse(BaseModel):
     execution_mode: dict[str, Any] | None = None
 
 
+class ChatSessionAppendTurnIn(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str
+
+
+class ChatSessionAppendRequest(BaseModel):
+    turns: list[ChatSessionAppendTurnIn] = Field(min_length=1, max_length=20)
+
+
 def _gateway_status_code(code: str) -> int:
     if code == "INVALID_REQUEST":
         return 400
@@ -701,6 +710,62 @@ async def get_chat_session(
 ) -> dict:
     """Get full message history for a single chat session."""
     enforce_clerk_session_and_email_for_request(authorization, route="get_chat_session")
+    rec = _chat_store.get_session(session_id)
+    if rec is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": {"code": "SESSION_NOT_FOUND", "message": "Unknown chat session."}},
+        )
+    return {
+        "session_id": rec.session_id,
+        "messages": [{"role": t.role, "content": t.content} for t in rec.turns],
+        "created_at": rec.created_at,
+    }
+
+
+@router.post("/api/chat/sessions")
+async def create_chat_session(
+    authorization: str | None = Header(None, alias="Authorization"),
+) -> dict:
+    """Create an empty chat session for explicit persistence flows (desktop local-control turns)."""
+    enforce_clerk_session_and_email_for_request(authorization, route="create_chat_session")
+    sid = _chat_store.create_session()
+    rec = _chat_store.get_session(sid)
+    return {
+        "session_id": sid,
+        "created_at": rec.created_at if rec is not None else None,
+    }
+
+
+@router.post("/api/chat/sessions/{session_id}/turns")
+async def append_chat_session_turns(
+    session_id: str,
+    body: ChatSessionAppendRequest,
+    authorization: str | None = Header(None, alias="Authorization"),
+) -> dict:
+    """Append finalized user/assistant turns to an existing session."""
+    enforce_clerk_session_and_email_for_request(authorization, route="append_chat_session_turns")
+    normalized: list[ChatTurn] = []
+    for t in body.turns:
+        content = str(t.content or "")
+        if not content.strip():
+            raise HTTPException(
+                status_code=422,
+                detail={"error": {"code": "INVALID_MESSAGE", "message": "Turn content must be non-empty."}},
+            )
+        if len(content) > 100_000:
+            raise HTTPException(
+                status_code=422,
+                detail={"error": {"code": "MESSAGE_TOO_LONG", "message": "Message exceeds maximum length."}},
+            )
+        normalized.append(ChatTurn(role=t.role, content=content))
+    try:
+        _chat_store.append_turns(session_id, normalized)
+    except KeyError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": {"code": "SESSION_NOT_FOUND", "message": "Unknown chat session."}},
+        ) from exc
     rec = _chat_store.get_session(session_id)
     if rec is None:
         raise HTTPException(

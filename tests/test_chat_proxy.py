@@ -117,6 +117,55 @@ def test_post_chat_unknown_session() -> None:
     assert res.json()["detail"]["error"]["code"] == "SESSION_NOT_FOUND"
 
 
+def test_chat_session_create_and_append_turns() -> None:
+    created = client.post("/api/chat/sessions")
+    assert created.status_code == 200, created.text
+    sid = created.json()["session_id"]
+    assert sid
+
+    appended = client.post(
+        f"/api/chat/sessions/{sid}/turns",
+        json={
+            "turns": [
+                {"role": "user", "content": "open https://example.com"},
+                {"role": "assistant", "content": "Opening that locally."},
+            ]
+        },
+    )
+    assert appended.status_code == 200, appended.text
+    body = appended.json()
+    assert body["session_id"] == sid
+    assert len(body["messages"]) == 2
+    assert body["messages"][0] == {"role": "user", "content": "open https://example.com"}
+    assert body["messages"][1] == {"role": "assistant", "content": "Opening that locally."}
+
+    fetched = client.get(f"/api/chat/sessions/{sid}")
+    assert fetched.status_code == 200, fetched.text
+    f = fetched.json()
+    assert f["session_id"] == sid
+    assert len(f["messages"]) == 2
+
+
+def test_chat_session_append_turns_unknown_session() -> None:
+    res = client.post(
+        "/api/chat/sessions/00000000-0000-4000-8000-000000000001/turns",
+        json={"turns": [{"role": "user", "content": "x"}]},
+    )
+    assert res.status_code == 404
+    assert res.json()["detail"]["error"]["code"] == "SESSION_NOT_FOUND"
+
+
+def test_chat_session_append_turns_rejects_empty_content() -> None:
+    created = client.post("/api/chat/sessions")
+    sid = created.json()["session_id"]
+    res = client.post(
+        f"/api/chat/sessions/{sid}/turns",
+        json={"turns": [{"role": "assistant", "content": "   "}]},
+    )
+    assert res.status_code == 422
+    assert res.json()["detail"]["error"]["code"] == "INVALID_MESSAGE"
+
+
 def test_post_chat_validation_empty_messages(mock_mode: None) -> None:
     res = client.post("/api/chat", json={"messages": []})
     assert res.status_code == 422

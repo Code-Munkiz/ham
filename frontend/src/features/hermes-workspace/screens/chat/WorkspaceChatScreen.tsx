@@ -8,6 +8,8 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { Loader2, PanelRight, PanelRightClose } from "lucide-react";
 import { toast } from "sonner";
 import {
+  appendChatSessionTurns,
+  createChatSession,
   ensureProjectIdForWorkspaceRoot,
   fetchContextEngine,
   fetchModelsCatalog,
@@ -57,6 +59,7 @@ import { isHamDesktopShell } from "@/lib/ham/desktopConfig";
 import { getHamDesktopLocalControlApi, getHamDesktopWebBridgeApi } from "@/lib/ham/desktopBundleBridge";
 
 const VOICE_DEBUG_FLAG = "ham.voiceDebug";
+const HWW_LAST_SESSION_KEY = "hww.chat.lastSessionId";
 
 function voiceDebugEnabled(): boolean {
   if (typeof window === "undefined") return false;
@@ -84,6 +87,29 @@ function timeStr() {
     minute: "2-digit",
     second: "2-digit",
   });
+}
+
+function readLastChatSessionId(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(HWW_LAST_SESSION_KEY);
+    return raw?.trim() ? raw.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeLastChatSessionId(sessionId: string | null): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (sessionId?.trim()) {
+      window.localStorage.setItem(HWW_LAST_SESSION_KEY, sessionId.trim());
+    } else {
+      window.localStorage.removeItem(HWW_LAST_SESSION_KEY);
+    }
+  } catch {
+    /* ignore */
+  }
 }
 
 function workspaceChatSubtitle(opts: {
@@ -303,6 +329,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   const [gohamBridgeExplicitlyDisabled, setGohamBridgeExplicitlyDisabled] = React.useState(false);
   /** When set, deep-link effect must not call `loadFromApi` for this session while the stream turn is active. */
   const streamTurnSessionRef = React.useRef<string | null>(null);
+  const initialSessionRestoreAttemptedRef = React.useRef(false);
   const endRef = React.useRef<HTMLDivElement | null>(null);
   const listWrapRef = React.useRef<HTMLDivElement | null>(null);
 
@@ -452,6 +479,70 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
 
   const chatModelIdForApi = catalog?.gateway_mode === "openrouter" ? modelId : null;
 
+  const persistLocalDesktopTurn = React.useCallback(
+    async (userContent: string, assistantContent: string, sessionHint: string | null) => {
+      let sid = sessionHint;
+      let createdNew = false;
+      try {
+        if (!sid) {
+          const created = await createChatSession();
+          sid = created.session_id;
+          createdNew = true;
+          setSessionId(sid);
+        }
+        if (!sid) return;
+        writeLastChatSessionId(sid);
+        if (!embedMode) {
+          navigate(
+            { pathname: "/workspace/chat", search: `?session=${encodeURIComponent(sid)}` },
+            { replace: true },
+          );
+        }
+        const persisted = await appendChatSessionTurns(sid, [
+          { role: "user", content: userContent },
+          { role: "assistant", content: assistantContent },
+        ]);
+        setSessionId(persisted.session_id);
+        writeLastChatSessionId(persisted.session_id);
+        setMessages(
+          persisted.messages.map((m, i) => ({
+            id: `${persisted.session_id}-persisted-${i}-${m.role}`,
+            role: m.role as HwwMsgRow["role"],
+            content: m.content,
+            timestamp: timeStr(),
+          })),
+        );
+        if (createdNew) {
+          setInspectorEvents((prev) =>
+            appendInspectorEvent(prev, {
+              atIso: new Date().toISOString(),
+              kind: "session_assigned",
+              status: "ok",
+              summary: "Chat session is ready — your link is saved",
+              meta: { session_id: persisted.session_id },
+            }),
+          );
+        }
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : "persist_failed";
+        setInspectorEvents((prev) =>
+          appendInspectorEvent(prev, {
+            atIso: new Date().toISOString(),
+            kind: "stream_error",
+            status: "warning",
+            summary: `Chat persistence warning: ${safeInspectorErrorMessage(reason)}`,
+            meta: { code: "local_turn_not_persisted", reason },
+          }),
+        );
+        toast.error(
+          `Local browser result is shown, but persistence failed (${reason}). Retry this turn or check API connectivity.`,
+          { duration: 10_000 },
+        );
+      }
+    },
+    [embedMode, navigate],
+  );
+
   React.useEffect(() => {
     let c = false;
     setCatalogLoading(true);
@@ -503,6 +594,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         const detail = await workspaceSessionAdapter.get(sid);
         const ts = timeStr;
         setSessionId(sid);
+        writeLastChatSessionId(sid);
         setMessages(
           detail.messages.map((m, i) => ({
             id: `${sid}-hww-${i}-${m.role}`,
@@ -532,6 +624,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
           "This session could not be loaded. It may have expired, been removed, or belong to a different API revision.",
         );
         setSessionId(null);
+        writeLastChatSessionId(null);
         setMessages([]);
         setInspectorEvents([]);
         setArtifactRows([]);
@@ -542,6 +635,31 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     },
     [sending],
   );
+
+  React.useEffect(() => {
+    if (initialSessionRestoreAttemptedRef.current) return;
+    initialSessionRestoreAttemptedRef.current = true;
+    if (sessionId) return;
+    const saved = readLastChatSessionId();
+    if (!saved) return;
+    if (embedMode) {
+      void loadFromApi(saved);
+      return;
+    }
+    const fromQuery = searchParams.get("session");
+    if (!fromQuery) {
+      navigate(
+        { pathname: "/workspace/chat", search: `?session=${encodeURIComponent(saved)}` },
+        { replace: true },
+      );
+    }
+  }, [embedMode, loadFromApi, navigate, searchParams, sessionId]);
+
+  React.useEffect(() => {
+    if (sessionId) {
+      writeLastChatSessionId(sessionId);
+    }
+  }, [sessionId]);
 
   /** Deep link `?session=` (full-page chat only). */
   React.useEffect(() => {
@@ -566,6 +684,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
 
   const startNew = React.useCallback(() => {
     setSessionId(null);
+    writeLastChatSessionId(null);
     setMessages([]);
     setInspectorEvents([]);
     setArtifactRows([]);
@@ -735,6 +854,17 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
           meta: { message_id: assistantPlaceId },
         }),
       );
+      const finalizeLocalBrowserTurn = async (assistantContent: string) => {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantPlaceId
+              ? { ...m, content: assistantContent }
+              : m,
+          ),
+        );
+        await persistLocalDesktopTurn(displayContent, assistantContent, sessionId);
+        setSending(false);
+      };
       const plainOutbound =
         typeof outboundUser === "string" ? (outboundUser as string).trim() : "";
       const outboundPlain = !isV1 && !isV2;
@@ -742,13 +872,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       if (desktopShell && browserTaskRequested) {
         const webBridgeApi = getHamDesktopWebBridgeApi();
         if (!webBridgeApi || typeof webBridgeApi.browserIntent !== "function") {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === assistantPlaceId
-                ? { ...m, content: "Local browser bridge is unavailable in this build. Reconnect GOHAM and retry." }
-                : m,
-            ),
-          );
+          await finalizeLocalBrowserTurn("Local browser bridge is unavailable in this build. Reconnect GOHAM and retry.");
           setInspectorEvents((prev) =>
             appendInspectorEvent(prev, {
               atIso: new Date().toISOString(),
@@ -758,7 +882,6 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
               meta: { reason: "bridge_api_unavailable" },
             }),
           );
-          setSending(false);
           return;
         }
 
@@ -776,13 +899,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
 
         if (!trusted) {
           browserSessionFollowThroughRef.current = false;
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === assistantPlaceId
-                ? { ...m, content: "Connect GOHAM first to run browser tasks locally." }
-                : m,
-            ),
-          );
+          await finalizeLocalBrowserTurn("Connect GOHAM first to run browser tasks locally.");
           setInspectorEvents((prev) =>
             appendInspectorEvent(prev, {
               atIso: new Date().toISOString(),
@@ -792,7 +909,6 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
               meta: { reason: "trusted_status_missing" },
             }),
           );
-          setSending(false);
           return;
         }
 
@@ -811,14 +927,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         if (primitiveIntent) {
           try {
             if (primitiveIntent.action === "blocked_coordinate") {
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === assistantPlaceId
-                    ? { ...m, content: "Coordinate clicks are blocked. Ask me to observe and click a listed candidate." }
-                    : m,
-                ),
-              );
-              setSending(false);
+              await finalizeLocalBrowserTurn("Coordinate clicks are blocked. Ask me to observe and click a listed candidate.");
               return;
             }
             if (primitiveIntent.action === "observe") {
@@ -834,12 +943,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
                     : typeof observe.error === "string"
                       ? observe.error
                       : "observe_failed";
-                setMessages((prev) =>
-                  prev.map((m) =>
-                    m.id === assistantPlaceId ? { ...m, content: localBrowserFailureMessage(reason) } : m,
-                  ),
-                );
-                setSending(false);
+                await finalizeLocalBrowserTurn(localBrowserFailureMessage(reason));
                 return;
               }
               const candidates = Array.isArray((observe as Record<string, unknown>).browser_bridge &&
@@ -851,14 +955,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
                 : [];
               liveCopilotCandidatesRef.current = candidates;
               browserSessionFollowThroughRef.current = true;
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === assistantPlaceId
-                    ? { ...m, content: `Observed locally. Found ${candidates.length} clickable candidates.` }
-                    : m,
-                ),
-              );
-              setSending(false);
+              await finalizeLocalBrowserTurn(`Observed locally. Found ${candidates.length} clickable candidates.`);
               return;
             }
             if (primitiveIntent.action === "click_candidate") {
@@ -884,14 +981,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
               const idx = Math.max(0, primitiveIntent.ordinal - 1);
               const candidateId = candidates[idx]?.id || candidates[0]?.id || "";
               if (!candidateId) {
-                setMessages((prev) =>
-                  prev.map((m) =>
-                    m.id === assistantPlaceId
-                      ? { ...m, content: "No safe clickable candidates yet. Ask me to observe first." }
-                      : m,
-                  ),
-                );
-                setSending(false);
+                await finalizeLocalBrowserTurn("No safe clickable candidates yet. Ask me to observe first.");
                 return;
               }
               const clicked = await webBridgeApi.browserIntent({
@@ -907,19 +997,11 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
                     : typeof clicked.error === "string"
                       ? clicked.error
                       : "click_failed";
-                setMessages((prev) =>
-                  prev.map((m) =>
-                    m.id === assistantPlaceId ? { ...m, content: localBrowserFailureMessage(reason) } : m,
-                  ),
-                );
-                setSending(false);
+                await finalizeLocalBrowserTurn(localBrowserFailureMessage(reason));
                 return;
               }
               browserSessionFollowThroughRef.current = true;
-              setMessages((prev) =>
-                prev.map((m) => (m.id === assistantPlaceId ? { ...m, content: "Clicked that locally." } : m)),
-              );
-              setSending(false);
+              await finalizeLocalBrowserTurn("Clicked that locally.");
               return;
             }
             if (primitiveIntent.action === "scroll") {
@@ -936,19 +1018,11 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
                     : typeof scrolled.error === "string"
                       ? scrolled.error
                       : "scroll_failed";
-                setMessages((prev) =>
-                  prev.map((m) =>
-                    m.id === assistantPlaceId ? { ...m, content: localBrowserFailureMessage(reason) } : m,
-                  ),
-                );
-                setSending(false);
+                await finalizeLocalBrowserTurn(localBrowserFailureMessage(reason));
                 return;
               }
               browserSessionFollowThroughRef.current = true;
-              setMessages((prev) =>
-                prev.map((m) => (m.id === assistantPlaceId ? { ...m, content: "Scrolled locally." } : m)),
-              );
-              setSending(false);
+              await finalizeLocalBrowserTurn("Scrolled locally.");
               return;
             }
             if (primitiveIntent.action === "type_into_field") {
@@ -967,19 +1041,11 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
                     : typeof typed.error === "string"
                       ? typed.error
                       : "type_failed";
-                setMessages((prev) =>
-                  prev.map((m) =>
-                    m.id === assistantPlaceId ? { ...m, content: localBrowserFailureMessage(reason) } : m,
-                  ),
-                );
-                setSending(false);
+                await finalizeLocalBrowserTurn(localBrowserFailureMessage(reason));
                 return;
               }
               browserSessionFollowThroughRef.current = true;
-              setMessages((prev) =>
-                prev.map((m) => (m.id === assistantPlaceId ? { ...m, content: "Typed into the field locally." } : m)),
-              );
-              setSending(false);
+              await finalizeLocalBrowserTurn("Typed into the field locally.");
               return;
             }
             if (primitiveIntent.action === "key_press") {
@@ -996,19 +1062,11 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
                     : typeof pressed.error === "string"
                       ? pressed.error
                       : "key_press_failed";
-                setMessages((prev) =>
-                  prev.map((m) =>
-                    m.id === assistantPlaceId ? { ...m, content: localBrowserFailureMessage(reason) } : m,
-                  ),
-                );
-                setSending(false);
+                await finalizeLocalBrowserTurn(localBrowserFailureMessage(reason));
                 return;
               }
               browserSessionFollowThroughRef.current = true;
-              setMessages((prev) =>
-                prev.map((m) => (m.id === assistantPlaceId ? { ...m, content: "Pressed that key locally." } : m)),
-              );
-              setSending(false);
+              await finalizeLocalBrowserTurn("Pressed that key locally.");
               return;
             }
             if (primitiveIntent.action === "wait") {
@@ -1025,29 +1083,16 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
                     : typeof waited.error === "string"
                       ? waited.error
                       : "wait_failed";
-                setMessages((prev) =>
-                  prev.map((m) =>
-                    m.id === assistantPlaceId ? { ...m, content: localBrowserFailureMessage(reason) } : m,
-                  ),
-                );
-                setSending(false);
+                await finalizeLocalBrowserTurn(localBrowserFailureMessage(reason));
                 return;
               }
               browserSessionFollowThroughRef.current = true;
-              setMessages((prev) =>
-                prev.map((m) => (m.id === assistantPlaceId ? { ...m, content: "Paused locally." } : m)),
-              );
-              setSending(false);
+              await finalizeLocalBrowserTurn("Paused locally.");
               return;
             }
           } catch (err) {
             const reason = err instanceof Error ? err.message : "browser_intent_failed";
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === assistantPlaceId ? { ...m, content: localBrowserFailureMessage(reason) } : m,
-              ),
-            );
-            setSending(false);
+            await finalizeLocalBrowserTurn(localBrowserFailureMessage(reason));
             return;
           }
         } else if (!providedUrl && activeBrowserSession && isFollowUpBrowserInstruction(plainOutbound)) {
@@ -1066,17 +1111,10 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
             });
             if (browserIntent.ok) {
               browserSessionFollowThroughRef.current = true;
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === assistantPlaceId
-                    ? {
-                        ...m,
-                        content: providedUrl
-                          ? "Opening that locally."
-                          : "Opening that locally. I found the page.",
-                      }
-                    : m,
-                ),
+              await finalizeLocalBrowserTurn(
+                providedUrl
+                  ? "Opening that locally."
+                  : "Opening that locally. I found the page.",
               );
               setInspectorEvents((prev) =>
                 appendInspectorEvent(prev, {
@@ -1095,13 +1133,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
                   : typeof browserIntent.error === "string"
                     ? browserIntent.error
                     : "browser_intent_failed";
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === assistantPlaceId
-                    ? { ...m, content: localBrowserFailureMessage(reason) }
-                    : m,
-                ),
-              );
+              await finalizeLocalBrowserTurn(localBrowserFailureMessage(reason));
               setInspectorEvents((prev) =>
                 appendInspectorEvent(prev, {
                   atIso: new Date().toISOString(),
@@ -1112,18 +1144,11 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
                 }),
               );
             }
-            setSending(false);
             return;
           } catch (err) {
             browserSessionFollowThroughRef.current = false;
             const reason = err instanceof Error ? err.message : "browser_intent_failed";
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === assistantPlaceId
-                  ? { ...m, content: localBrowserFailureMessage(reason) }
-                  : m,
-              ),
-            );
+            await finalizeLocalBrowserTurn(localBrowserFailureMessage(reason));
             setInspectorEvents((prev) =>
               appendInspectorEvent(prev, {
                 atIso: new Date().toISOString(),
@@ -1133,7 +1158,6 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
                 meta: { reason },
               }),
             );
-            setSending(false);
             return;
           }
         }
@@ -1297,6 +1321,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       executionModePreference,
       executionEnvironment,
       desktopShell,
+      persistLocalDesktopTurn,
     ],
   );
 
