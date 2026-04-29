@@ -5,7 +5,7 @@
 
 import * as React from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { PanelRight, PanelRightClose } from "lucide-react";
+import { Loader2, PanelRight, PanelRightClose } from "lucide-react";
 import { toast } from "sonner";
 import {
   ensureProjectIdForWorkspaceRoot,
@@ -54,6 +54,7 @@ import { Button } from "@/components/ui/button";
 import { hamWorkspaceLogoUrl } from "@/lib/ham/publicAssets";
 import { cn } from "@/lib/utils";
 import { isHamDesktopShell } from "@/lib/ham/desktopConfig";
+import { getHamDesktopWebBridgeApi } from "@/lib/ham/desktopBundleBridge";
 
 const VOICE_DEBUG_FLAG = "ham.voiceDebug";
 
@@ -138,6 +139,16 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   const [inspectorOpen, setInspectorOpen] = React.useState(false);
   const [inspectorEvents, setInspectorEvents] = React.useState<WorkspaceInspectorEvent[]>([]);
   const [artifactRows, setArtifactRows] = React.useState<ChatInspectorArtifactRow[]>([]);
+  /** Desktop GOHAM web bridge: trusted session is main-process only; this tracks UI + follow-up routing. */
+  const desktopWebBridgeTrustedRef = React.useRef(false);
+  /** After a turn used browser execution, follow-up plain text can stay on current screen (desktop + trusted bridge). */
+  const browserSessionFollowThroughRef = React.useRef(false);
+  const [gohamModalOpen, setGohamModalOpen] = React.useState(false);
+  const [gohamBridgeLinked, setGohamBridgeLinked] = React.useState(false);
+  const [gohamModalPhase, setGohamModalPhase] = React.useState<
+    "idle" | "checking" | "connecting" | "connected" | "blocked" | "failed"
+  >("idle");
+  const [gohamModalDetail, setGohamModalDetail] = React.useState<string | null>(null);
   /** When set, deep-link effect must not call `loadFromApi` for this session while the stream turn is active. */
   const streamTurnSessionRef = React.useRef<string | null>(null);
   const endRef = React.useRef<HTMLDivElement | null>(null);
@@ -163,6 +174,115 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     },
     [voiceWs],
   );
+
+  const refreshGohamBridgeLinked = React.useCallback(async () => {
+    const api = getHamDesktopWebBridgeApi();
+    if (!api || !desktopShell) return;
+    try {
+      const rst = await api.readTrustedStatus();
+      if (rst.ok) {
+        desktopWebBridgeTrustedRef.current = true;
+        setGohamBridgeLinked(true);
+        return;
+      }
+      const snap = await api.getStatus();
+      const linked = snap.paired === true;
+      desktopWebBridgeTrustedRef.current = linked;
+      setGohamBridgeLinked(linked);
+    } catch {
+      desktopWebBridgeTrustedRef.current = false;
+      setGohamBridgeLinked(false);
+    }
+  }, [desktopShell]);
+
+  React.useEffect(() => {
+    if (!desktopShell) {
+      desktopWebBridgeTrustedRef.current = false;
+      browserSessionFollowThroughRef.current = false;
+      setGohamBridgeLinked(false);
+      setGohamModalOpen(false);
+      return;
+    }
+    void refreshGohamBridgeLinked();
+  }, [desktopShell, refreshGohamBridgeLinked]);
+
+  const openGohamDesktopModal = React.useCallback(async () => {
+    setGohamModalOpen(true);
+    setGohamModalPhase("checking");
+    setGohamModalDetail(null);
+    const api = getHamDesktopWebBridgeApi();
+    if (!api) {
+      setGohamModalPhase("failed");
+      setGohamModalDetail("Local web bridge API is not available in this build.");
+      return;
+    }
+    try {
+      const snap = await api.getStatus();
+      if (snap.enabled === false) {
+        setGohamModalPhase("blocked");
+        setGohamModalDetail("Local web bridge is disabled on this desktop.");
+        return;
+      }
+      const rst = await api.readTrustedStatus();
+      if (rst.ok) {
+        setGohamModalPhase("connected");
+        desktopWebBridgeTrustedRef.current = true;
+        setGohamBridgeLinked(true);
+        setGohamModalDetail("Connected for this session.");
+        return;
+      }
+      setGohamModalPhase("idle");
+    } catch (err) {
+      setGohamModalPhase("failed");
+      setGohamModalDetail(err instanceof Error ? err.message : "Could not read bridge status.");
+    }
+  }, []);
+
+  const runGohamTrustedConnect = React.useCallback(async () => {
+    const api = getHamDesktopWebBridgeApi();
+    if (!api) return;
+    setGohamModalPhase("connecting");
+    setGohamModalDetail(null);
+    try {
+      const r = await api.trustedConnect();
+      if (r.ok === true) {
+        setGohamModalPhase("connected");
+        desktopWebBridgeTrustedRef.current = true;
+        setGohamBridgeLinked(true);
+        setGohamModalDetail(r.already_connected ? "Already linked." : "Connected for this session.");
+      } else {
+        setGohamModalPhase("failed");
+        setGohamModalDetail(
+          "error" in r && typeof r.error === "string" ? r.error : "trusted_connect_failed",
+        );
+      }
+    } catch (err) {
+      setGohamModalPhase("failed");
+      setGohamModalDetail(err instanceof Error ? err.message : String(err));
+    }
+  }, []);
+
+  const runGohamRevokeBridge = React.useCallback(async () => {
+    const api = getHamDesktopWebBridgeApi();
+    if (!api) return;
+    try {
+      const r = await api.revoke();
+      if (r.ok === true) {
+        desktopWebBridgeTrustedRef.current = false;
+        setGohamBridgeLinked(false);
+        setGohamModalPhase("idle");
+        setGohamModalDetail(null);
+      } else {
+        setGohamModalPhase("failed");
+        setGohamModalDetail(
+          "error" in r && typeof r.error === "string" ? r.error : "revoke_failed",
+        );
+      }
+    } catch (err) {
+      setGohamModalPhase("failed");
+      setGohamModalDetail(err instanceof Error ? err.message : String(err));
+    }
+  }, []);
 
   const chatModelIdForApi = catalog?.gateway_mode === "openrouter" ? modelId : null;
 
@@ -451,6 +571,21 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       );
       const streamAuth: HamChatStreamAuth | undefined = await workspaceChatAdapter.getStreamAuth();
       try {
+        let execPrefEffective = executionModePreference;
+        const plainOutbound =
+          typeof outboundUser === "string" ? (outboundUser as string).trim() : "";
+        const outboundPlain = !isV1 && !isV2;
+        if (
+          desktopShell &&
+          desktopWebBridgeTrustedRef.current &&
+          browserSessionFollowThroughRef.current &&
+          outboundPlain &&
+          plainOutbound.length > 0 &&
+          !/^https?:\/\//i.test(plainOutbound) &&
+          execPrefEffective === "auto"
+        ) {
+          execPrefEffective = "browser";
+        }
         const res = await workspaceChatAdapter.stream(
           {
             session_id: sessionId ?? undefined,
@@ -465,7 +600,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
             workbench_mode: "agent",
             worker: "builder",
             max_mode: false,
-            execution_mode_preference: executionModePreference,
+            execution_mode_preference: execPrefEffective,
             execution_environment: executionEnvironment,
           },
           {
@@ -500,6 +635,8 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         );
         setSessionId(res.session_id);
         setExecutionMode(res.execution_mode ?? null);
+        browserSessionFollowThroughRef.current =
+          res.execution_mode?.selected_mode === "browser";
         setMessages(
           res.messages.map((m, i) => ({
             id: `${res.session_id}-done-${i}-${m.role}`,
@@ -592,6 +729,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       navigate,
       executionModePreference,
       executionEnvironment,
+      desktopShell,
     ],
   );
 
@@ -853,9 +991,115 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
             sttUnavailableReason={sttUnavailableReason}
             sttMode={sttMode}
             onSttModeChange={handleSttModeChange}
+            gohamDesktopChip={
+              desktopShell && getHamDesktopWebBridgeApi()
+                ? {
+                    linked: gohamBridgeLinked,
+                    busy:
+                      gohamModalOpen &&
+                      (gohamModalPhase === "checking" || gohamModalPhase === "connecting"),
+                    onOpenModal: () => void openGohamDesktopModal(),
+                  }
+                : null
+            }
           />
         </div>
       </div>
+      {desktopShell && gohamModalOpen ? (
+        <>
+          <button
+            type="button"
+            className="fixed inset-0 z-[35] cursor-default bg-black/65 backdrop-blur-[1px]"
+            aria-label="Close GOHAM local web bridge dialog"
+            onClick={() => {
+              setGohamModalOpen(false);
+              setGohamModalPhase("idle");
+              setGohamModalDetail(null);
+            }}
+          />
+          <div
+            className="fixed left-1/2 top-[8%] z-[36] max-h-[min(78vh,32rem)] w-[min(100%,26rem)] -translate-x-1/2 overflow-y-auto rounded-xl border border-emerald-500/22 bg-[#040d14]/[0.98] p-5 text-[13px] text-white/88 shadow-[0_20px_50px_rgba(0,0,0,0.55)]"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="ham-goham-desktop-heading"
+          >
+            <div className="border-b border-white/[0.08] pb-3">
+              <h2 id="ham-goham-desktop-heading" className="text-[15px] font-semibold text-white/[0.95]">
+                GOHAM · Local web bridge
+              </h2>
+              <p className="mt-1 text-[11px] leading-snug text-white/50">
+                One-click trusted connect uses the packaged desktop preload path — no manual pairing code here.
+              </p>
+            </div>
+            <div className="mt-3 space-y-3">
+              {gohamModalPhase === "checking" || gohamModalPhase === "connecting" ? (
+                <p className="flex items-center gap-2 text-[12px] text-emerald-100/85">
+                  <Loader2 className="h-4 w-4 shrink-0 animate-spin opacity-95" aria-hidden />
+                  {gohamModalPhase === "checking" ? "Checking status…" : "Connecting trusted session…"}
+                </p>
+              ) : null}
+              {gohamModalPhase === "blocked" ? (
+                <p className="rounded-md border border-amber-500/25 bg-amber-950/35 px-2.5 py-2 text-[12px] text-amber-100/95">
+                  <span className="font-medium text-amber-200/95">Blocked.</span>{" "}
+                  {gohamModalDetail || "Bridge disabled or policy blocked this desktop."}
+                </p>
+              ) : null}
+              {gohamModalPhase === "failed" ? (
+                <p className="rounded-md border border-red-500/28 bg-red-950/35 px-2.5 py-2 text-[12px] text-red-100/95">
+                  <span className="font-medium text-red-200/95">Failed.</span> {gohamModalDetail}
+                </p>
+              ) : null}
+              {gohamModalPhase === "connected" ? (
+                <p className="rounded-md border border-emerald-500/25 bg-emerald-950/35 px-2.5 py-2 text-[12px] text-emerald-100/95">
+                  <span className="font-medium text-emerald-200/95">Connected.</span>{" "}
+                  {gohamModalDetail || "Trusted local-control session active."}
+                </p>
+              ) : null}
+              {gohamModalPhase === "idle" && gohamModalDetail ? (
+                <p className="text-[12px] text-white/60">{gohamModalDetail}</p>
+              ) : null}
+            </div>
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              {gohamModalPhase === "idle" ||
+              gohamModalPhase === "failed" ||
+              gohamModalPhase === "connected" ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  className="bg-[#34d399] font-medium text-[#041014] hover:bg-[#5eead4]"
+                  onClick={() => void runGohamTrustedConnect()}
+                >
+                  {gohamModalPhase === "connected" ? "Renew trusted session" : "Connect trusted"}
+                </Button>
+              ) : null}
+              {gohamModalPhase === "connected" ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="border-white/15 bg-transparent text-white/85 hover:bg-white/[0.06]"
+                  onClick={() => void runGohamRevokeBridge()}
+                >
+                  Revoke
+                </Button>
+              ) : null}
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="text-white/65 hover:bg-white/[0.06]"
+                onClick={() => {
+                  setGohamModalOpen(false);
+                  setGohamModalPhase("idle");
+                  setGohamModalDetail(null);
+                }}
+              >
+                Close
+              </Button>
+            </div>
+          </div>
+        </>
+      ) : null}
       {inspectorOpen ? (
         <>
           <button

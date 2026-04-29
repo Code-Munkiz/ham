@@ -5,7 +5,7 @@
  */
 
 import * as React from "react";
-import { ArrowUp, Loader2 } from "lucide-react";
+import { ArrowUp, Link2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { ModelCatalogItem, ModelCatalogPayload } from "@/lib/ham/types";
@@ -40,6 +40,13 @@ function pushVoiceDebug(payload: Record<string, unknown>): void {
   console.debug("[ham.voice]", event);
 }
 
+export type WorkspaceGohamDesktopChipProps = {
+  linked: boolean;
+  /** True while modal is checking or running trusted connect — chip shows spinner. */
+  busy?: boolean;
+  onOpenModal: () => void;
+};
+
 type WorkspaceChatComposerProps = {
   value: string;
   onChange: (v: string) => void;
@@ -59,6 +66,8 @@ type WorkspaceChatComposerProps = {
   sttUnavailableReason?: string | null;
   sttMode?: "auto" | "live" | "record";
   onSttModeChange?: (mode: "auto" | "live" | "record") => Promise<void> | void;
+  /** Windows Desktop shell: GOHAM local web bridge entry (trusted connect via preload). */
+  gohamDesktopChip?: WorkspaceGohamDesktopChipProps | null;
 };
 
 type VoiceUiState = "idle" | "recording" | "live" | "stopping" | "transcribing" | "error";
@@ -104,6 +113,7 @@ export function WorkspaceChatComposer({
   sttUnavailableReason = null,
   sttMode = "record",
   onSttModeChange,
+  gohamDesktopChip = null,
 }: WorkspaceChatComposerProps) {
   const [voiceState, setVoiceState] = React.useState<VoiceUiState>("idle");
   const [voiceBanner, setVoiceBanner] = React.useState<string | null>(null);
@@ -566,6 +576,33 @@ export function WorkspaceChatComposer({
 
           <div className="flex min-h-[48px] items-center justify-between gap-1.5 border-t border-white/[0.08] px-1.5 py-1.5 md:gap-2 md:px-2.5 md:py-2">
             <div className="flex min-w-0 flex-1 items-center gap-0.5 md:gap-1">
+              {gohamDesktopChip ? (
+                <button
+                  type="button"
+                  onClick={gohamDesktopChip.onOpenModal}
+                  disabled={Boolean(sending || voiceBusy || disabled || gohamDesktopChip.busy)}
+                  title={
+                    gohamDesktopChip.linked
+                      ? "GOHAM linked — local web bridge (trusted). Open status."
+                      : "GOHAM — trusted local-control web bridge connect"
+                  }
+                  className={cn(
+                    "mr-1 flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors disabled:opacity-45",
+                    gohamDesktopChip.linked
+                      ? "border-emerald-400/35 bg-emerald-500/[0.12] text-emerald-100/90 hover:bg-emerald-500/20"
+                      : "border-white/[0.12] bg-white/[0.06] text-white/70 hover:bg-white/[0.1]",
+                  )}
+                  aria-label="GOHAM local web bridge"
+                  data-ham-goham-chip="desktop"
+                >
+                  {gohamDesktopChip.busy ? (
+                    <Loader2 className="h-3 w-3 shrink-0 animate-spin opacity-95" aria-hidden />
+                  ) : (
+                    <Link2 className="h-3 w-3 shrink-0 opacity-90" aria-hidden />
+                  )}
+                  GOHAM
+                </button>
+              ) : null}
               <WorkspaceChatAttachmentButton
                 onFiles={handleAddFiles}
                 disabled={sending || voiceBusy || disabled}

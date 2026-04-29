@@ -51,3 +51,17 @@ test('preload exposes narrow localControl methods only', () => {
     assert.ok(!src.includes(f), `must not include ${f}`);
   }
 });
+
+test('preload webBridge allowlists ipc channels for local-control web bridge (no token strings)', () => {
+  const src = fs.readFileSync(path.join(__dirname, 'preload.cjs'), 'utf8');
+  assert.ok(src.includes('webBridge:'), 'expected nested webBridge on localControl');
+  assert.ok(src.includes('ham-desktop:local-control-web-bridge-status'));
+  assert.ok(src.includes('ham-desktop:local-control-web-bridge-trusted-connect'));
+  assert.ok(src.includes('ham-desktop:local-control-web-bridge-pairing-revoke'));
+  assert.ok(src.includes('ham-desktop:local-control-web-bridge-pairing-get'));
+  assert.ok(src.includes('ham-desktop:local-control-web-bridge-pairing-set'));
+  assert.ok(src.includes('ham-desktop:local-control-web-bridge-status-read'));
+  assert.ok(!src.includes('access_token'), 'preload must not surface token field names');
+  assert.ok(!src.includes('ham-desktop:local-control-web-bridge-pairing-issue'));
+  assert.ok(!src.includes('ham-desktop:local-control-web-bridge-pairing-exchange'));
+});

@@ -214,6 +214,39 @@ export type HamDesktopLocalControlKillSwitchEngageResult = {
   kill_switch: { engaged: boolean; reason: string };
 };
 
+/** Snapshot from main-process web bridge (`getStatus`). No access tokens returned. */
+export type HamDesktopWebBridgeStatusSnapshot = {
+  paired?: boolean;
+  enabled?: boolean;
+  running?: boolean;
+  pairing_required?: boolean;
+  listener?: unknown;
+  pairing?: Record<string, unknown>;
+  /** Allow forward-compatible fields without claiming full schema. */
+  [key: string]: unknown;
+};
+
+export type HamDesktopWebBridgeTrustedConnectResult =
+  | { ok: true; status: string; already_connected?: boolean }
+  | { ok: false; error: string };
+
+export type HamDesktopWebBridgeRevokeResult =
+  | { ok: true }
+  | { ok: false; error?: string };
+
+export type HamDesktopWebBridgeReadTrustedStatusResult =
+  | ({ ok: true } & Record<string, unknown>)
+  | { ok: false; error?: string };
+
+export type HamDesktopWebBridgeApi = {
+  getStatus: () => Promise<HamDesktopWebBridgeStatusSnapshot>;
+  trustedConnect: () => Promise<HamDesktopWebBridgeTrustedConnectResult>;
+  revoke: () => Promise<HamDesktopWebBridgeRevokeResult>;
+  getPairingConfig: () => Promise<Record<string, unknown>>;
+  setPairingConfig: (payload: { pairing_code_ttl_sec?: number }) => Promise<Record<string, unknown>>;
+  readTrustedStatus: () => Promise<HamDesktopWebBridgeReadTrustedStatusResult>;
+};
+
 export type HamDesktopLocalControlApi = {
   getStatus: () => Promise<HamDesktopLocalControlStatus>;
   getPolicyStatus: () => Promise<HamDesktopLocalControlPolicyStatus>;
@@ -243,6 +276,8 @@ export type HamDesktopLocalControlApi = {
   realBrowserEnumerateClickCandidates: () => Promise<HamDesktopRealBrowserEnumerateCandidatesResult>;
   realBrowserClickCandidate: (candidateId: string) => Promise<HamDesktopRealBrowserClickCandidateResult>;
   stopRealBrowserSession: () => Promise<HamDesktopBrowserSessionResult>;
+  /** Local web bridge — trusted connect + pairing config; no token fields in TS surface. */
+  webBridge?: HamDesktopWebBridgeApi;
 };
 
 export type HamDesktopBundleApi = {
@@ -275,4 +310,12 @@ export function getHamDesktopLocalControlApi(): HamDesktopLocalControlApi | null
   const b = window.__HAM_DESKTOP_BUNDLE__?.localControl;
   if (b && typeof b.getStatus === "function") return b;
   return null;
+}
+
+/** Desktop GOHAM local web bridge — `preload.cjs` nested under `localControl.webBridge`. */
+export function getHamDesktopWebBridgeApi(): HamDesktopWebBridgeApi | null {
+  const lc = getHamDesktopLocalControlApi();
+  const w = lc?.webBridge;
+  if (!w || typeof w.trustedConnect !== "function" || typeof w.getStatus !== "function") return null;
+  return w;
 }

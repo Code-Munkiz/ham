@@ -39,6 +39,17 @@ const localControlBridge = {
   realBrowserClickCandidate: (candidateId) =>
     ipcRenderer.invoke('ham-desktop:local-control-browser-real-click-candidate', candidateId),
   stopRealBrowserSession: () => ipcRenderer.invoke('ham-desktop:local-control-browser-real-stop-session'),
+  /** Local web bridge — explicit channel allowlist; no ipcRenderer.invoke escape hatch. */
+  webBridge: {
+    getStatus: () => ipcRenderer.invoke('ham-desktop:local-control-web-bridge-status'),
+    trustedConnect: () => ipcRenderer.invoke('ham-desktop:local-control-web-bridge-trusted-connect'),
+    revoke: () => ipcRenderer.invoke('ham-desktop:local-control-web-bridge-pairing-revoke'),
+    getPairingConfig: () => ipcRenderer.invoke('ham-desktop:local-control-web-bridge-pairing-get'),
+    setPairingConfig: (payload) =>
+      ipcRenderer.invoke('ham-desktop:local-control-web-bridge-pairing-set', payload || {}),
+    readTrustedStatus: () =>
+      ipcRenderer.invoke('ham-desktop:local-control-web-bridge-status-read'),
+  },
 };
 
 contextBridge.exposeInMainWorld('hamDesktop', {
