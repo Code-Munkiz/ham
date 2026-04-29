@@ -65,6 +65,10 @@ Phase 1F adds an xAI tiny-call smoke for `XAI_API_KEY` and `HAM_X_MODEL` validat
 
 The smoke result is not campaign drafting. It is not connected to review queue publishing, autonomy decisions, xurl, or posting, and it preserves `mutation_attempted=false` and `execution_allowed=false`.
 
+## Phase 2A Boundary
+
+Phase 2A manual canary execution is outside the supervised opportunity loop. The loop may still create proposals and decisions, but it must not call the canary executor. The executor is a separate operator-triggered path for one manually confirmed `post` or `quote`.
+
 ## Reusable Agent Template
 
 The official launch agent uses `tenant_id=ham-official`, `agent_id=ham-pr-rockstar`, and `campaign_id=base-stealth-launch`. The same action envelope can be reused for tenant-created agents by changing those context fields and attaching tenant-specific policy and brand voice profiles.

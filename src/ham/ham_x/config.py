@@ -19,6 +19,8 @@ DEFAULT_POLICY_PROFILE_ID = "platform-default"
 DEFAULT_BRAND_VOICE_ID = "ham-canonical"
 DEFAULT_CATALOG_SKILL_ID = "bundled.social-media.xurl"
 DEFAULT_READONLY_TRANSPORT = "direct"
+DEFAULT_EXECUTION_TRANSPORT = "direct_oauth1"
+DEFAULT_CANARY_ALLOWED_ACTIONS = "post,quote"
 
 
 def _bool_env(name: str, default: bool) -> bool:
@@ -72,17 +74,23 @@ class HamXConfig:
     catalog_skill_id: str
     emergency_stop: bool
     enable_live_smoke: bool
+    enable_live_execution: bool
     autonomy_enabled: bool
     dry_run: bool
     max_posts_per_hour: int
     max_quotes_per_hour: int
     max_searches_per_hour: int
+    execution_daily_cap: int
+    execution_per_run_cap: int
     daily_spend_limit_usd: float
     model: str
     xurl_bin: str
     readonly_transport: str
+    execution_transport: str
+    canary_allowed_actions: str
     review_queue_path: Path
     exception_queue_path: Path
+    execution_journal_path: Path
     audit_log_path: Path
 
 
@@ -115,16 +123,23 @@ def load_ham_x_config() -> HamXConfig:
         or DEFAULT_CATALOG_SKILL_ID,
         emergency_stop=_bool_env("HAM_X_EMERGENCY_STOP", False),
         enable_live_smoke=_bool_env("HAM_X_ENABLE_LIVE_SMOKE", False),
+        enable_live_execution=_bool_env("HAM_X_ENABLE_LIVE_EXECUTION", False),
         autonomy_enabled=_bool_env("HAM_X_AUTONOMY_ENABLED", False),
         dry_run=_bool_env("HAM_X_DRY_RUN", True),
         max_posts_per_hour=_int_env("HAM_X_MAX_POSTS_PER_HOUR", 0),
         max_quotes_per_hour=_int_env("HAM_X_MAX_QUOTES_PER_HOUR", 0),
         max_searches_per_hour=_int_env("HAM_X_MAX_SEARCHES_PER_HOUR", 30),
+        execution_daily_cap=_int_env("HAM_X_EXECUTION_DAILY_CAP", 1),
+        execution_per_run_cap=_int_env("HAM_X_EXECUTION_PER_RUN_CAP", 1),
         daily_spend_limit_usd=_float_env("HAM_X_DAILY_SPEND_LIMIT_USD", 5.0),
         model=(os.environ.get("HAM_X_MODEL") or "grok-4.1-fast").strip() or "grok-4.1-fast",
         xurl_bin=(os.environ.get("HAM_X_XURL_BIN") or "xurl").strip() or "xurl",
         readonly_transport=(os.environ.get("HAM_X_READONLY_TRANSPORT") or DEFAULT_READONLY_TRANSPORT).strip()
         or DEFAULT_READONLY_TRANSPORT,
+        execution_transport=(os.environ.get("HAM_X_EXECUTION_TRANSPORT") or DEFAULT_EXECUTION_TRANSPORT).strip()
+        or DEFAULT_EXECUTION_TRANSPORT,
+        canary_allowed_actions=(os.environ.get("HAM_X_CANARY_ALLOWED_ACTIONS") or DEFAULT_CANARY_ALLOWED_ACTIONS).strip()
+        or DEFAULT_CANARY_ALLOWED_ACTIONS,
         review_queue_path=_path_env(
             "HAM_X_REVIEW_QUEUE_PATH",
             ".data/ham-x/review_queue.jsonl",
@@ -132,6 +147,10 @@ def load_ham_x_config() -> HamXConfig:
         exception_queue_path=_path_env(
             "HAM_X_EXCEPTION_QUEUE_PATH",
             ".data/ham-x/exception_queue.jsonl",
+        ),
+        execution_journal_path=_path_env(
+            "HAM_X_EXECUTION_JOURNAL_PATH",
+            ".data/ham-x/execution_journal.jsonl",
         ),
         audit_log_path=_path_env("HAM_X_AUDIT_LOG_PATH", ".data/ham-x/audit.jsonl"),
     )

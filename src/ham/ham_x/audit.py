@@ -49,6 +49,14 @@ AuditEventType = Literal[
     "xai_smoke_planned",
     "xai_smoke_executed",
     "xai_smoke_failed",
+    "execution_canary_requested",
+    "execution_canary_blocked",
+    "execution_canary_dry_run",
+    "execution_canary_executed",
+    "execution_canary_failed",
+    "execution_cap_blocked",
+    "execution_duplicate_blocked",
+    "execution_emergency_stop_blocked",
 ]
 
 

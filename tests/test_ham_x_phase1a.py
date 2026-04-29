@@ -39,17 +39,23 @@ def _test_config(tmp_path: Path) -> HamXConfig:
         catalog_skill_id="bundled.social-media.xurl",
         emergency_stop=False,
         enable_live_smoke=False,
+        enable_live_execution=False,
         autonomy_enabled=False,
         dry_run=True,
         max_posts_per_hour=0,
         max_quotes_per_hour=0,
         max_searches_per_hour=30,
+        execution_daily_cap=1,
+        execution_per_run_cap=1,
         daily_spend_limit_usd=5.0,
         model="grok-4.1-fast",
         xurl_bin="xurl",
         readonly_transport="direct",
+        execution_transport="direct_oauth1",
+        canary_allowed_actions="post,quote",
         review_queue_path=tmp_path / "review_queue.jsonl",
         exception_queue_path=tmp_path / "exception_queue.jsonl",
+        execution_journal_path=tmp_path / "execution_journal.jsonl",
         audit_log_path=tmp_path / "audit.jsonl",
     )
 
@@ -60,9 +66,15 @@ def test_default_config_disables_autonomy(monkeypatch) -> None:
     monkeypatch.delenv("HAM_X_CATALOG_SKILL_ID", raising=False)
     monkeypatch.delenv("HAM_X_EMERGENCY_STOP", raising=False)
     monkeypatch.delenv("HAM_X_ENABLE_LIVE_SMOKE", raising=False)
+    monkeypatch.delenv("HAM_X_ENABLE_LIVE_EXECUTION", raising=False)
     monkeypatch.delenv("HAM_X_READONLY_TRANSPORT", raising=False)
+    monkeypatch.delenv("HAM_X_EXECUTION_DAILY_CAP", raising=False)
+    monkeypatch.delenv("HAM_X_EXECUTION_PER_RUN_CAP", raising=False)
+    monkeypatch.delenv("HAM_X_EXECUTION_TRANSPORT", raising=False)
+    monkeypatch.delenv("HAM_X_CANARY_ALLOWED_ACTIONS", raising=False)
     monkeypatch.delenv("HAM_X_REVIEW_QUEUE_PATH", raising=False)
     monkeypatch.delenv("HAM_X_EXCEPTION_QUEUE_PATH", raising=False)
+    monkeypatch.delenv("HAM_X_EXECUTION_JOURNAL_PATH", raising=False)
     monkeypatch.delenv("HAM_X_AUDIT_LOG_PATH", raising=False)
     cfg = load_ham_x_config()
     assert cfg.autonomy_enabled is False
@@ -75,7 +87,12 @@ def test_default_config_disables_autonomy(monkeypatch) -> None:
     assert cfg.catalog_skill_id == "bundled.social-media.xurl"
     assert cfg.emergency_stop is False
     assert cfg.enable_live_smoke is False
+    assert cfg.enable_live_execution is False
     assert cfg.readonly_transport == "direct"
+    assert cfg.execution_daily_cap == 1
+    assert cfg.execution_per_run_cap == 1
+    assert cfg.execution_transport == "direct_oauth1"
+    assert cfg.canary_allowed_actions == "post,quote"
 
 
 def test_default_config_dry_run_true(monkeypatch) -> None:

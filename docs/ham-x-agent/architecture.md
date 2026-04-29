@@ -56,6 +56,8 @@ Phase 1E implements only gated read-only X search smoke. The preferred transport
 
 Phase 1F implements only a gated xAI tiny-call smoke for credential/model validation. The returned text is never connected to campaign drafting, review queue publishing, autonomy decisions, or xurl execution.
 
+Phase 2A introduces a manually triggered canary executor for one `post` or `quote` action. It is separate from scoring, autonomy, xAI drafting, read-only smoke, and queues; live execution is disabled by default and requires explicit manual confirmation plus execution gates and caps.
+
 ## Boundaries
 
 - Hermes remains the supervisory policy layer.
@@ -78,6 +80,7 @@ HAM-on-X review and audit helpers mirror existing HAM proposal/audit patterns in
 - `HAM_X_AUTONOMY_ENABLED=false`
 - `HAM_X_DRY_RUN=true`
 - `HAM_X_ENABLE_LIVE_SMOKE=false`
+- `HAM_X_ENABLE_LIVE_EXECUTION=false`
 - `HAM_X_MAX_POSTS_PER_HOUR=0`
 - `HAM_X_MAX_QUOTES_PER_HOUR=0`
 

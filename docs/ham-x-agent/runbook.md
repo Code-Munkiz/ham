@@ -124,6 +124,23 @@ Return exactly: HAM_XAI_SMOKE_OK
 
 The smoke caps output at 8 tokens and does not feed model output into campaign drafting, review queues, autonomy decisions, or xurl. Use staging xAI credentials first, never paste token values, and verify the returned smoke result preserves `mutation_attempted=false` and `execution_allowed=false`.
 
+## Phase 2A Manual Canary Execution
+
+Phase 2A adds a manual-only canary executor for one `post` or one `quote`. It is not called by scoring, autonomy, the opportunity pipeline, xAI drafting, smoke, review queues, or exception queues.
+
+Live execution remains disabled unless all gates pass:
+
+```dotenv
+HAM_X_ENABLE_LIVE_EXECUTION=true
+HAM_X_DRY_RUN=false
+HAM_X_AUTONOMY_ENABLED=false
+HAM_X_EMERGENCY_STOP=false
+HAM_X_EXECUTION_PER_RUN_CAP=1
+HAM_X_EXECUTION_DAILY_CAP=1
+```
+
+The caller must also pass `manual_confirm=true`. Do not run a live canary from this runbook without a separate explicit operator instruction.
+
 ## Autonomy Modes
 
 - `draft`: queue draft content only.
