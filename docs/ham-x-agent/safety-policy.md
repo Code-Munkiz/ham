@@ -31,4 +31,6 @@ Phase 2C GoHAM execution applies an additional stricter policy before any autono
 
 GoHAM v0 ops/status is read-only. It can summarize the GoHAM execution journal, report caps and gates, and run dry preflight through the same GoHAM eligibility policy, but it must not call provider/executor code or mark mutation attempts.
 
+GoHAM v0 daily execution is one-shot only. `run_goham_daily_once()` may call the guarded bridge at most once for one manually prepared original-post candidate, then stops; it must not schedule loops, retry failures, generate candidates, run Phase 2B, or execute arbitrary live model output.
+
 GoHAM mode, when introduced later, must remain bounded high-autonomy: visible operator controls, policy checks, budgets, rate limits, audit records, and a kill switch are still required.

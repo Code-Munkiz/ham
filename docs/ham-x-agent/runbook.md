@@ -195,6 +195,22 @@ Daily operator flow:
 3. Use `dry_preflight_goham_candidate()` on a prepared candidate to see deterministic block reasons before any scheduled or repeated GoHAM run.
 4. Treat all ops/status output as non-mutating: `mutation_attempted=false`; these helpers do not call `x_executor`, `manual_canary`, `goham_bridge`, `pipeline`, `smoke`, or `live_dry_run`.
 
+## GoHAM v0 Daily Runner
+
+`src.ham.ham_x.goham_daily.run_goham_daily_once()` is the one-shot operator runner for a single prepared GoHAM candidate. It composes status, dry preflight, the guarded bridge, and status again:
+
+`show_goham_status()` -> `dry_preflight_goham_candidate()` -> `run_goham_guarded_post()` at most once -> `show_goham_status()`
+
+It accepts exactly one `GohamExecutionRequest` and one `AutonomyDecisionResult`. It does not generate candidates, run Phase 2B, schedule future work, retry failures, or accept arbitrary live model output for execution. If dry preflight blocks, it returns without calling the bridge. If the bridge is called, the runner stops immediately after that single result.
+
+First live daily run checklist:
+
+1. Confirm `show_goham_status()` reports `daily_cap_used=0`, `daily_cap_remaining=1`, safe gates, and `HAM_X_EMERGENCY_STOP=false`.
+2. Prepare one manual safe original post candidate with no links, no target ids, and a unique idempotency key.
+3. Confirm dry preflight allows it.
+4. Run `run_goham_daily_once()` once.
+5. Stop immediately and verify the post, audit row, journal row, and cap status before considering any future run.
+
 ## Autonomy Modes
 
 - `draft`: queue draft content only.
