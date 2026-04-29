@@ -129,9 +129,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   const [catalog, setCatalog] = React.useState<ModelCatalogPayload | null>(null);
   const [catalogLoading, setCatalogLoading] = React.useState(true);
   const [modelId, setModelId] = React.useState<string | null>(null);
-  const [executionModePreference, setExecutionModePreference] = React.useState<
-    "auto" | "browser" | "machine" | "chat"
-  >("auto");
+  const executionModePreference: "auto" | "browser" | "machine" | "chat" = "auto";
   const [executionMode, setExecutionMode] = React.useState<HamChatExecutionMode | null>(null);
   const [projectId, setProjectId] = React.useState<string | null>(null);
   const [attachments, setAttachments] = React.useState<WorkspaceComposerAttachment[]>([]);
@@ -586,7 +584,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       );
       const streamAuth: HamChatStreamAuth | undefined = await workspaceChatAdapter.getStreamAuth();
       try {
-        let execPrefEffective = executionModePreference;
+        let execPrefEffective: "auto" | "browser" | "machine" | "chat" = executionModePreference;
         const plainOutbound =
           typeof outboundUser === "string" ? (outboundUser as string).trim() : "";
         const outboundPlain = !isV1 && !isV2;
@@ -831,42 +829,6 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
-            <div className="hidden items-center gap-2 rounded-lg border border-white/[0.1] bg-white/[0.04] px-2.5 py-1.5 md:flex">
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-white/55">Execution</span>
-              <select
-                value={executionModePreference}
-                onChange={(e) =>
-                  setExecutionModePreference(
-                    e.target.value as "auto" | "browser" | "machine" | "chat",
-                  )
-                }
-                className="hww-input rounded bg-transparent text-[11px] text-white/90 outline-none"
-                aria-label="Execution mode preference"
-                title="Control how HAM routes browser vs machine vs chat execution"
-              >
-                <option value="auto">Auto</option>
-                <option value="browser">Browser</option>
-                <option value="machine" disabled={!desktopShell}>
-                  Machine{desktopShell ? "" : " (desktop only)"}
-                </option>
-                <option value="chat">Chat</option>
-              </select>
-              <span
-                className={cn(
-                  "rounded px-1.5 py-0.5 text-[10px] font-medium",
-                  executionMode?.selected_mode === "browser"
-                    ? "bg-emerald-500/15 text-emerald-200/90"
-                    : executionMode?.selected_mode === "machine"
-                    ? "bg-amber-500/15 text-amber-200/90"
-                    : "bg-white/[0.08] text-white/70",
-                )}
-                title={executionMode?.reason || "Execution mode is determined after the next turn."}
-              >
-                {executionMode
-                  ? `${executionMode.selected_mode}${executionMode.browser_adapter ? ` (${executionMode.browser_adapter})` : ""}`
-                  : "pending"}
-              </span>
-            </div>
             <button
               type="button"
               onClick={() => {
@@ -888,46 +850,8 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
               )}
               <span className="hidden sm:inline">Inspector</span>
             </button>
-            <button
-              type="button"
-              onClick={startNew}
-              className="shrink-0 rounded-lg border border-white/[0.1] bg-white/[0.06] px-2.5 py-1.5 text-[11px] font-medium text-[#7dd3fc] transition hover:bg-white/[0.09] hover:text-[#a5e9ff]"
-            >
-              New
-            </button>
           </div>
         </header>
-        <div className="flex items-center justify-between gap-2 border-b border-white/[0.06] bg-[#030a10]/80 px-4 py-2 md:hidden">
-          <div className="min-w-0">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-white/55">Execution</p>
-            <p
-              className="truncate text-[10px] text-white/45"
-              title={executionMode?.reason || "Execution mode is determined after the next turn."}
-            >
-              {executionMode
-                ? `${executionMode.selected_mode}${executionMode.browser_adapter ? ` (${executionMode.browser_adapter})` : ""}`
-                : "pending"}
-            </p>
-          </div>
-          <select
-            value={executionModePreference}
-            onChange={(e) =>
-              setExecutionModePreference(
-                e.target.value as "auto" | "browser" | "machine" | "chat",
-              )
-            }
-            className="hww-input rounded-md border border-white/[0.1] bg-white/[0.04] px-2 py-1 text-[11px] text-white/90 outline-none"
-            aria-label="Execution mode preference (mobile)"
-            title="Control how HAM routes browser vs machine vs chat execution"
-          >
-            <option value="auto">Auto</option>
-            <option value="browser">Browser</option>
-            <option value="machine" disabled={!desktopShell}>
-              Machine{desktopShell ? "" : " (desktop only)"}
-            </option>
-            <option value="chat">Chat</option>
-          </select>
-        </div>
         <div
           ref={listWrapRef}
           className="hww-scroll flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto"

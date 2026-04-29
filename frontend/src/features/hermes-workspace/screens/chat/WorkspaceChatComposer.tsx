@@ -303,7 +303,7 @@ export function WorkspaceChatComposer({
 
   const placeholder = React.useMemo(() => {
     if (voiceTranscribing) return "Transcribing…";
-    if (!gatewayOk && catalog && !sending) return "Chat gateway not ready — check /api/models";
+    if (!gatewayOk && catalog && !sending) return "Chat gateway not ready — check the API model settings.";
     if (showModel) {
       const macLike =
         typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/.test(navigator.userAgent || "");

@@ -1,6 +1,8 @@
 import * as React from "react";
 import { Link, NavLink, useLocation, useSearchParams } from "react-router-dom";
 import {
+  ChevronDown,
+  ChevronRight,
   ChevronsUp,
   Menu,
   MessageSquare,
@@ -93,6 +95,25 @@ function WorkspaceSideNav({
   const expand = onExpandFromCollapsed ?? (() => undefined);
 
   const q = sessionFilter.trim().toLowerCase();
+  const [workspaceNavOpen, setWorkspaceNavOpen] = React.useState(true);
+  const [knowledgeNavOpen, setKnowledgeNavOpen] = React.useState(true);
+
+  const sectionToggle = (
+    label: string,
+    open: boolean,
+    onToggle: () => void,
+  ) =>
+    c ? null : (
+      <button
+        type="button"
+        onClick={onToggle}
+        className="hww-side-section shrink-0 flex w-full items-center justify-between text-left"
+        aria-expanded={open}
+      >
+        <span>{label}</span>
+        {open ? <ChevronDown className="h-3.5 w-3.5 opacity-70" /> : <ChevronRight className="h-3.5 w-3.5 opacity-70" />}
+      </button>
+    );
   const filteredSessions = React.useMemo(() => {
     if (!q) return sessions;
     return sessions.filter((s) => {
@@ -337,17 +358,17 @@ function WorkspaceSideNav({
               "min-h-0 flex-1 space-y-1 overflow-y-auto pr-0.5 [scrollbar-gutter:stable]",
             )}
           </div>
-          <div className="hww-side-section shrink-0">Workspace</div>
-          {mainNav}
-          <div className="hww-side-section shrink-0">Knowledge</div>
-          {knowledgeNav}
+          {sectionToggle("Workspace", workspaceNavOpen, () => setWorkspaceNavOpen((v) => !v))}
+          {workspaceNavOpen ? mainNav : null}
+          {sectionToggle("Knowledge", knowledgeNavOpen, () => setKnowledgeNavOpen((v) => !v))}
+          {knowledgeNavOpen ? knowledgeNav : null}
         </>
       ) : (
         <>
-          <div className="hww-side-section">Main</div>
-          {mainNav}
-          <div className="hww-side-section">Knowledge</div>
-          {knowledgeNav}
+          {sectionToggle("Workspace", workspaceNavOpen, () => setWorkspaceNavOpen((v) => !v))}
+          {workspaceNavOpen ? mainNav : null}
+          {sectionToggle("Knowledge", knowledgeNavOpen, () => setKnowledgeNavOpen((v) => !v))}
+          {knowledgeNavOpen ? knowledgeNav : null}
           <div className="hww-side-section">Sessions</div>
           {expandedSessionsContent(
             "mb-2 max-h-44 min-h-0 space-y-1 overflow-y-auto pr-0.5",

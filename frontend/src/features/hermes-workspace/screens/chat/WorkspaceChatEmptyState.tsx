@@ -58,9 +58,9 @@ export function WorkspaceChatEmptyState({ onSuggestionClick }: WorkspaceChatEmpt
           <img
             src={avatarSrc}
             alt=""
-            className="h-7 w-7 shrink-0 object-contain opacity-95"
-            width={28}
-            height={28}
+            className="h-12 w-12 shrink-0 object-contain opacity-95"
+            width={48}
+            height={48}
           />
         </div>
         <p className="hww-chat-micro-label mb-2 text-[11px] font-medium uppercase tracking-[0.12em] text-white/50">
