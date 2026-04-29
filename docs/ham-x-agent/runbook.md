@@ -272,6 +272,25 @@ HAM_X_GOHAM_REACTIVE_MAX_INBOUND_PER_RUN=25
 HAM_X_GOHAM_REACTIVE_MAX_REPLIES_PER_RUN=1
 ```
 
+## Phase 4B Reactive Live Reply Canary
+
+Phase 4B adds a separate one-shot live reply canary lane: `reactive_reply_executor.py` and `goham_reactive_live.py`. It accepts exactly one prepared inbound record, or one Phase 4A `ReactiveItemResult` whose status is `reply_candidate`, re-checks reactive policy and the reactive governor, sends at most one reply through `POST /2/tweets` with `reply: { in_reply_to_tweet_id }`, then stops.
+
+This lane is reply-only. It does not support original posts, quotes, likes, follows, DMs, xurl mutation, manual canary execution, broadcast `XCanaryExecutor`, scheduling, daemons, loops, batches, or second replies. Reactive replies write execution journal rows with `execution_kind="goham_reactive_reply"` and do not count against GoHAM original-post or broadcast controller caps.
+
+Required live canary gates:
+
+```dotenv
+HAM_X_ENABLE_GOHAM_REACTIVE=true
+HAM_X_GOHAM_REACTIVE_DRY_RUN=false
+HAM_X_GOHAM_REACTIVE_LIVE_CANARY=true
+HAM_X_EMERGENCY_STOP=false
+HAM_X_GOHAM_REACTIVE_MAX_REPLIES_PER_RUN=1
+HAM_X_GOHAM_REACTIVE_BLOCK_LINKS=true
+```
+
+The prepared inbound must have a valid reply target id, bounded safe reply text, policy route `reply_candidate`, and an allowed reactive governor decision. Provider failures are not retried; 401/403 responses update reactive stop state so later canary attempts fail closed.
+
 ## Autonomy Modes
 
 - `draft`: queue draft content only.
