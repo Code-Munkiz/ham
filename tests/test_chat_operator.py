@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 
 import pytest
@@ -62,7 +61,37 @@ def test_heuristic_cloud_agent_launch_routing() -> None:
     assert "flaky tests" in h[1]["cursor_task_prompt"]
 
 
-def test_process_list_projects(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_heuristic_factory_route_blocks_with_stable_reason() -> None:
+    h = try_heuristic_intent(
+        "send this to Factory Droid to patch flaky tests",
+        default_project_id="project.x-abc123",
+    )
+    assert h is not None
+    assert h[0] == "agent_router_blocked"
+    assert h[1]["reason_code"] == "provider_not_implemented"
+    assert h[1]["provider"] == "factory"
+
+
+def test_heuristic_claude_route_blocks_with_stable_reason() -> None:
+    h = try_heuristic_intent(
+        "use Claude to implement this",
+        default_project_id="project.x-abc123",
+    )
+    assert h is not None
+    assert h[0] == "agent_router_blocked"
+    assert h[1]["reason_code"] == "provider_not_implemented"
+    assert h[1]["provider"] == "claude"
+
+
+def test_heuristic_normal_chat_remains_normal() -> None:
+    h = try_heuristic_intent(
+        "explain what a cloud is",
+        default_project_id="project.x-abc123",
+    )
+    assert h is None
+
+
+def test_process_list_projects(tmp_path: Path) -> None:
     store_path = tmp_path / "proj.json"
     store = ProjectStore(store_path=store_path)
     rec = store.make_record(name="t", root=str(tmp_path), description="")
@@ -98,7 +127,7 @@ def test_inspect_project_inaccessible_root(tmp_path: Path) -> None:
     assert op.blocking_reason
 
 
-def test_update_agents_preview_roundtrip(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_update_agents_preview_roundtrip(tmp_path: Path) -> None:
     ham = tmp_path / ".ham"
     ham.mkdir()
     settings = {

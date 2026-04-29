@@ -19,6 +19,7 @@ from src.ham.agent_profiles import (
     agents_config_from_merged,
     validate_agents_config,
 )
+from src.ham.agent_router import AgentRouteResult, route_agent_intent
 from src.ham.cursor_agent_workflow import (
     audit_cursor_preview,
     build_cursor_agent_preview,
@@ -354,44 +355,74 @@ def _extract_cursor_agent_id(text: str) -> str | None:
     return m.group(1) if m else None
 
 
-def _looks_like_cloud_agent_command(text: str) -> bool:
-    low = text.lower()
-    if any(
-        key in low
-        for key in (
-            "cloud agent",
-            "cursor agent",
-            "managed mission",
-            "launch agent",
-            "fire up agent",
-            "start agent",
-            "run agent",
-            "agent preview",
-            "create preview",
-            "have cursor",
-            "use cursor cloud",
+def _map_agent_router_result(
+    *,
+    routed: AgentRouteResult,
+    user_text: str,
+    default_project_id: str | None,
+) -> tuple[str, dict[str, Any]] | None:
+    resolved_pid = _extract_project_id(user_text) or default_project_id
+    if routed.intent == "normal_chat":
+        return None
+    if routed.provider not in ("cursor",):
+        return (
+            "agent_router_blocked",
+            {
+                "reason_code": routed.reason_code or "provider_not_implemented",
+                "provider": routed.provider,
+            },
         )
-    ):
-        return True
-    if re.search(r"\b(?:launch|start|fire up|run)\s+(?:nova|pixel|blaze)\b", low):
-        return True
-    return False
-
-
-def _extract_cloud_agent_task_prompt(text: str) -> str:
-    t = text.strip()
-    rules = (
-        r"^\s*(?:please\s+)?(?:create|make)\s+(?:a\s+)?(?:cloud|cursor)\s+agent\s+preview(?:\s+to|\s+for)?\s*",
-        r"^\s*(?:please\s+)?(?:launch|start|run|fire\s+up)\s+(?:a\s+)?(?:cloud|cursor)\s+agent(?:\s+to|\s+for)?\s*",
-        r"^\s*(?:please\s+)?(?:have\s+cursor|use\s+cursor\s+cloud)\s+(?:agent\s+)?(?:to\s+)?",
-        r"^\s*(?:please\s+)?start\s+(?:nova|pixel|blaze)(?:\s+on|\s+to|\s+for)?\s*",
-        r"^\s*(?:please\s+)?start\s+(?:a\s+)?managed\s+mission(?:\s+to|\s+for)?\s*",
-    )
-    out = t
-    for rule in rules:
-        out = re.sub(rule, "", out, flags=re.I).strip()
-    out = re.sub(r"^\s*(?:to|for|on)\s+", "", out, flags=re.I).strip()
-    return out
+    if routed.intent == "agent_preview":
+        params: dict[str, Any] = {}
+        if "project" in routed.missing:
+            params["missing"] = "project_id"
+            return "cursor_agent_preview", params
+        if "task" in routed.missing:
+            params["missing"] = "task_prompt"
+            return "cursor_agent_preview", params
+        return (
+            "cursor_agent_preview",
+            {"project_id": resolved_pid, "cursor_task_prompt": routed.task or ""},
+        )
+    if routed.intent == "agent_launch":
+        params = {}
+        if "project" in routed.missing:
+            params["missing"] = "project_id"
+            return "cursor_agent_launch", params
+        if "task" in routed.missing:
+            params["missing"] = "task_prompt"
+            return "cursor_agent_launch", params
+        return (
+            "cursor_agent_launch",
+            {"project_id": resolved_pid, "cursor_task_prompt": routed.task or ""},
+        )
+    if routed.intent == "agent_status":
+        aid = _extract_cursor_agent_id(user_text)
+        if not aid:
+            return "cursor_agent_status", {"missing": "agent_id"}
+        return (
+            "cursor_agent_status",
+            {"project_id": resolved_pid, "cursor_agent_id": aid},
+        )
+    if routed.intent == "agent_cancel":
+        aid = _extract_cursor_agent_id(user_text)
+        if not aid:
+            return "cursor_agent_cancel", {"missing": "agent_id"}
+        return (
+            "cursor_agent_cancel",
+            {"project_id": resolved_pid, "cursor_agent_id": aid},
+        )
+    if routed.intent == "agent_continue":
+        return (
+            "agent_router_blocked",
+            {"reason_code": "continue_not_supported", "provider": routed.provider},
+        )
+    if routed.intent == "agent_choose_provider":
+        return (
+            "agent_router_blocked",
+            {"reason_code": "missing_provider", "provider": "auto"},
+        )
+    return None
 
 
 def _reasoned_block(intent: str, code: str, message: str) -> OperatorTurnResult:
@@ -519,6 +550,19 @@ def try_heuristic_intent(
             prompt = re.sub(prefix, "", t, flags=re.I).strip()
         return "launch_run", {"project_id": pid, "prompt": prompt or t}
 
+    routed = route_agent_intent(
+        t,
+        default_provider="cursor",
+        default_project_id=default_project_id,
+    )
+    mapped = _map_agent_router_result(
+        routed=routed,
+        user_text=t,
+        default_project_id=default_project_id,
+    )
+    if mapped is not None:
+        return mapped
+
     if re.search(r"\bpreview\s+(?:factory\s+)?droid\b", low):
         m_wf = re.search(r"\b(readonly_repo_audit|safe_edit_low)\b", t, re.I)
         if not m_wf:
@@ -532,42 +576,6 @@ def try_heuristic_intent(
         if not focus:
             return "droid_preview", {"missing": "user_prompt", "workflow_id": wf_id, "project_id": pid}
         return "droid_preview", {"project_id": pid, "workflow_id": wf_id, "user_prompt": focus}
-
-    if _looks_like_cloud_agent_command(t):
-        pid = _extract_project_id(t) or default_project_id
-        aid = _extract_cursor_agent_id(t)
-        if re.search(r"\b(cancel|stop|abort|terminate)\b", low):
-            if not aid:
-                return "cursor_agent_cancel", {"missing": "agent_id"}
-            if not pid:
-                return "cursor_agent_cancel", {"missing": "project_id", "cursor_agent_id": aid}
-            return "cursor_agent_cancel", {"project_id": pid, "cursor_agent_id": aid}
-        if re.search(r"\b(status|checkpoint|progress|state|sync)\b", low):
-            if not aid:
-                return "cursor_agent_status", {"missing": "agent_id"}
-            if not pid:
-                return "cursor_agent_status", {"missing": "project_id"}
-            return "cursor_agent_status", {"project_id": pid, "cursor_agent_id": aid}
-        is_preview = bool(re.search(r"\b(preview|plan)\b", low))
-        is_launch = bool(
-            re.search(
-                r"\b(launch|fire\s+up|start|run|have\s+cursor|use\s+cursor\s+cloud)\b",
-                low,
-            )
-        )
-        task_prompt = _extract_cloud_agent_task_prompt(t)
-        if is_preview:
-            if not pid:
-                return "cursor_agent_preview", {"missing": "project_id"}
-            if not task_prompt:
-                return "cursor_agent_preview", {"missing": "task_prompt", "project_id": pid}
-            return "cursor_agent_preview", {"project_id": pid, "cursor_task_prompt": task_prompt}
-        if is_launch:
-            if not pid:
-                return "cursor_agent_launch", {"missing": "project_id"}
-            if not task_prompt:
-                return "cursor_agent_launch", {"missing": "task_prompt", "project_id": pid}
-            return "cursor_agent_launch", {"project_id": pid, "cursor_task_prompt": task_prompt}
 
     if re.search(r"\bcursor\s+agent\s+status\b", low):
         aid = _extract_cursor_agent_id(t)
@@ -1760,6 +1768,17 @@ def _dispatch_intent(
             "cancel_not_supported",
             "Cloud Agent cancel is not available in this chat flow yet.",
         )
+
+    if intent == "agent_router_blocked":
+        code = str(params.get("reason_code") or "provider_not_implemented")
+        provider = str(params.get("provider") or "unknown")
+        message = {
+            "provider_not_implemented": f"Provider `{provider}` is routed but not executable yet.",
+            "provider_not_configured": f"Provider `{provider}` is not configured on this HAM host.",
+            "missing_provider": "Specify a provider (e.g. Cursor) or configure a default agent provider.",
+            "continue_not_supported": f"Continue/resume is not supported for provider `{provider}` yet.",
+        }.get(code, f"Agent route blocked for provider `{provider}`.")
+        return _reasoned_block(intent, code, message)
 
     return OperatorTurnResult(handled=False, ok=True, data={})
 
