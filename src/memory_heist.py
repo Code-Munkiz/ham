@@ -491,15 +491,15 @@ class SessionMemory:
         if not isinstance(section, dict):
             section = {}
 
-        self.compact_max_tokens = self._positive_int(
+        self.compact_max_tokens = _coerce_positive_int(
             section.get("session_compaction_max_tokens", merged.get("session_compaction_max_tokens")),
             DEFAULT_SESSION_COMPACTION_MAX_TOKENS,
         )
-        self.compact_preserve = self._positive_int(
+        self.compact_preserve = _coerce_positive_int(
             section.get("session_compaction_preserve", merged.get("session_compaction_preserve")),
             DEFAULT_SESSION_COMPACTION_PRESERVE,
         )
-        self.tool_prune_chars = self._positive_int(
+        self.tool_prune_chars = _coerce_positive_int(
             section.get("session_tool_prune_chars", merged.get("session_tool_prune_chars")),
             DEFAULT_SESSION_TOOL_PRUNE_CHARS,
         )
@@ -692,15 +692,6 @@ class SessionMemory:
                 break
         items.reverse()
         return items
-
-    @staticmethod
-    def _positive_int(raw: Any, default: int) -> int:
-        if isinstance(raw, bool):
-            return default
-        if isinstance(raw, (int, float)):
-            value = int(raw)
-            return value if value > 0 else default
-        return default
 
 
 def _coerce_positive_int(raw: Any, default: int) -> int:
