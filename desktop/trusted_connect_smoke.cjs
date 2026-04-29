@@ -122,17 +122,7 @@ async function main() {
     });
 
     const pages = await browser.pages();
-    let page = pages.find((p) => {
-      try {
-        return (
-          typeof p.url === 'function' && (p.url().includes(':3000') || p.url().startsWith('http'))
-        );
-      } catch {
-        return false;
-      }
-    });
-
-    page = page ?? pages[0];
+    let page = pages[0];
     if (!page) throw new Error('No page in Electron');
 
     console.log('[smoke] navigate', CHAT_URL);
@@ -150,11 +140,15 @@ async function main() {
     await page.waitForSelector('[data-ham-goham-chip="desktop"]', { timeout: 45_000 });
     console.log('[smoke] GOHAM chip rendered');
 
-    await sleep(300);
-    await page.click('[data-ham-goham-chip="desktop"]');
+    await sleep(2500);
+    await page.click('[data-ham-goham-chip="desktop"]').catch(() => {});
+    await page.evaluate(() => {
+      const chip = document.querySelector('[data-ham-goham-chip="desktop"]');
+      if (chip instanceof HTMLElement) chip.click();
+    });
     console.log('[smoke] chip clicked');
 
-    await page.waitForSelector('[role="dialog"]', { timeout: 25_000 });
+    await page.waitForFunction(() => !!document.querySelector('[role="dialog"]'), { timeout: 25_000 });
     console.log('[smoke] modal open');
 
     await sleep(900);

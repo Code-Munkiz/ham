@@ -6,7 +6,7 @@ Thin shell: renderer is the existing Vite/React app; FastAPI stays a separate HT
 
 - **First screen:** the packaged app **opens the workspace app** with **`/` → `/chat`** (workspace chat). The marketing landing (“go ham” / astrochimp) is **web-only**.
 - **Local Control (desktop):** narrow IPC (`ham-desktop:local-control-*`) + **`window.hamDesktop.localControl`** for status, policy, audit/kill-switch, and inert sidecar lifecycle (**no packaged managed-browser / localhost CDP in the Electron shell**; use Ham **`/api/browser*`** on the API host instead). **`policy.json` schema v3** + redacted audit JSONL under userData; **default deny** — [`docs/desktop/local_control_v1.md`](../docs/desktop/local_control_v1.md), sidecar protocol [`docs/desktop/local_control_sidecar_protocol_v1.md`](../docs/desktop/local_control_sidecar_protocol_v1.md). Not Playwright inside desktop; **`/api/browser`** remains on FastAPI.
-- **Download and run:** packaged builds ship **`default-public-api.json`** next to `main.cjs` with the **project’s public Ham API origin**. Users can open the app with **no env vars**; power users override with **`HAM_DESKTOP_API_BASE`** or **`ham-desktop-config.json`**. Bump that file when the canonical public API URL changes, then cut a new desktop release.
+- **Download and run:** builds read **`default-public-api.json`** next to `main.cjs` with the **project’s public Ham API origin**. If `HAM_DESKTOP_API_BASE` / `ham-desktop-config.json` are unset, desktop uses this default (packaged and dev). Bump that file when the canonical public API URL changes, then cut a new desktop release.
 - **Menu bar:** on **Linux and Windows**, the default Electron **File / Edit / View** menu is **removed** so the window chrome stays dark; **macOS** keeps the normal app menu.
 - **Public assets:** the nav logo uses the same **relative `public/` URLs** as the Vite build (`base: ./`) so icons load under **`file://`** in the packaged renderer.
 
@@ -57,6 +57,7 @@ Shell-side sources (merged in main, passed to preload via sync IPC):
 
 - `HAM_DESKTOP_API_BASE` — non-empty forces absolute API origin (local, staging, or prod).
 - `userData/ham-desktop-config.json` — optional `{"apiBase":"https://…"}` (see Electron `app.getPath('userData')` on your OS).
+- `desktop/default-public-api.json` — default fallback when env/file are unset (packaged + dev).
 - Env wins over file for `apiBase`.
 
 ## Linux dev workflow (recommended)
@@ -77,7 +78,7 @@ cd frontend
 BROWSER=none npm run dev
 ```
 
-Terminal 3 — Electron (loads `http://127.0.0.1:3000`, uses Vite proxy if you leave `HAM_DESKTOP_API_BASE` unset):
+Terminal 3 — Electron (loads `http://127.0.0.1:3000`, uses `default-public-api.json` unless you set `HAM_DESKTOP_API_BASE`):
 
 ```bash
 cd desktop
