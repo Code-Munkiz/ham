@@ -53,9 +53,6 @@ function AppRoutes() {
           <Route path="/overview" element={<Navigate to="/workspace/operations" replace />} />
           <Route path="/chat" element={<Navigate to="/workspace/chat" replace />} />
           <Route path="/legacy-chat" element={<LegacyChatRedirect />} />
-          <Route path="/workspace/chat" element={<Navigate to={primaryChatPath()} replace />} />
-          <Route path="/workspace/conductor" element={<WorkspaceApp />} />
-          <Route path="/workspace/operations" element={<WorkspaceApp />} />
           <Route path="/workspace/*" element={<WorkspaceApp />} />
           <Route path="/droids" element={<Navigate to="/workspace/operations" replace />} />
           <Route path="/runs" element={<Navigate to="/workspace/jobs" replace />} />

@@ -19,7 +19,5 @@ def test_frontend_has_no_direct_cursor_api_calls() -> None:
 
 def test_workspace_routes_are_defined_and_legacy_chat_redirects() -> None:
     app_tsx = Path("frontend/src/App.tsx").read_text(encoding="utf-8")
-    assert 'path="/workspace/chat"' in app_tsx
-    assert 'path="/workspace/conductor"' in app_tsx
-    assert 'path="/workspace/operations"' in app_tsx
+    assert 'path="/workspace/*" element={<WorkspaceApp />}' in app_tsx
     assert 'path="/chat" element={<Navigate to="/workspace/chat" replace />}' in app_tsx
