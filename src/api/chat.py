@@ -965,7 +965,6 @@ def post_chat_stream(
                 ):
                     pieces.append(part)
                     chars_since_checkpoint += len(part)
-                    yield json.dumps({"type": "delta", "text": part}) + "\n"
                     now = time.monotonic()
                     if (
                         not checkpoint_started
@@ -974,6 +973,7 @@ def post_chat_stream(
                         or (checkpoint_started and (now - last_checkpoint_at) >= _STREAM_CHECKPOINT_MIN_SEC)
                     ):
                         checkpoint_partial(interrupted=True)
+                    yield json.dumps({"type": "delta", "text": part}) + "\n"
             except GatewayCallError as exc:
                 assistant_visible = format_gateway_error_user_message(exc)
                 try:
