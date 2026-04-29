@@ -78,15 +78,16 @@ def run_manual_canary_action(
     reasons = evaluate_canary_request(request, config=cfg, journal=jrnl, per_run_count=per_run_count)
     if reasons:
         event = _blocked_event(reasons)
+        status = _blocked_status(reasons)
         audit_id = append_audit_event(
             event,
-            {"request": request.redacted_dump(), "status": "blocked", "reasons": reasons},
+            {"request": request.redacted_dump(), "status": status, "reasons": reasons},
             config=cfg,
         )
         return _result(
             request,
             cfg,
-            status="blocked",
+            status=status,
             reasons=reasons,
             diagnostic="Manual canary execution blocked by Phase 2A gates.",
             audit_event_id=audit_id,
@@ -109,6 +110,7 @@ def run_manual_canary_action(
             request,
             cfg,
             status="executed",
+            execution_allowed=True,
             mutation_attempted=True,
             provider=provider,
             audit_event_id=audit_id,
@@ -123,6 +125,7 @@ def run_manual_canary_action(
         request,
         cfg,
         status="failed",
+        execution_allowed=True,
         mutation_attempted=True,
         provider=provider,
         diagnostic=provider.diagnostic,
@@ -137,6 +140,7 @@ def _result(
     status: CanaryStatus,
     reasons: list[str] | None = None,
     diagnostic: str = "",
+    execution_allowed: bool = False,
     mutation_attempted: bool = False,
     provider: XProviderResult | None = None,
     audit_event_id: str | None = None,
@@ -145,7 +149,7 @@ def _result(
         status=status,
         action_id=request.action_id,
         action_type=request.action_type,
-        execution_allowed=False,
+        execution_allowed=execution_allowed,
         mutation_attempted=mutation_attempted,
         provider_status_code=provider.status_code if provider else None,
         provider_post_id=provider.provider_post_id if provider else None,
@@ -167,6 +171,12 @@ def _blocked_event(reasons: list[str]) -> str:
     if "dry_run_enabled" in reasons:
         return "execution_canary_dry_run"
     return "execution_canary_blocked"
+
+
+def _blocked_status(reasons: list[str]) -> CanaryStatus:
+    if "dry_run_enabled" in reasons:
+        return "dry_run"
+    return "blocked"
 
 
 def _provider_payload(

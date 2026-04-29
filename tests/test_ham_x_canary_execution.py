@@ -101,7 +101,7 @@ def _executor(config: HamXConfig, response: FakeResponse, calls: list[dict[str, 
 
 def test_execution_blocked_by_default(tmp_path: Path) -> None:
     result = run_manual_canary_action(_request(), config=_test_config(tmp_path))
-    assert result.status == "blocked"
+    assert result.status == "dry_run"
     assert "live_execution_disabled" in result.reasons
     assert "dry_run_enabled" in result.reasons
     assert result.execution_allowed is False
@@ -117,14 +117,19 @@ def test_execution_blocked_when_live_flag_false(tmp_path: Path) -> None:
 def test_execution_blocked_when_dry_run_true(tmp_path: Path) -> None:
     cfg = _test_config(tmp_path, live_execution=True, dry_run=True)
     result = run_manual_canary_action(_request(), config=cfg)
-    assert result.status == "blocked"
+    assert result.status == "dry_run"
     assert "dry_run_enabled" in result.reasons
+    assert result.execution_allowed is False
+    assert result.mutation_attempted is False
 
 
 def test_execution_blocked_when_autonomy_enabled(tmp_path: Path) -> None:
     cfg = _test_config(tmp_path, live_execution=True, dry_run=False, autonomy_enabled=True)
     result = run_manual_canary_action(_request(), config=cfg)
+    assert result.status == "blocked"
     assert "autonomy_enabled" in result.reasons
+    assert result.execution_allowed is False
+    assert result.mutation_attempted is False
 
 
 def test_execution_blocked_when_emergency_stop_true(tmp_path: Path) -> None:
@@ -214,7 +219,7 @@ def test_mocked_successful_post_returns_executed(tmp_path: Path) -> None:
     assert result.status == "executed"
     assert result.provider_post_id == "post-1"
     assert result.mutation_attempted is True
-    assert result.execution_allowed is False
+    assert result.execution_allowed is True
     assert calls
     assert calls[0]["json"] == {"text": "HAM can safely test one manual canary post."}
     assert "Authorization" in calls[0]["headers"]  # Value is never asserted or printed.
@@ -228,6 +233,8 @@ def test_mocked_successful_quote_returns_executed(tmp_path: Path) -> None:
     result = run_manual_canary_action(request, config=cfg, executor=executor)
     assert result.status == "executed"
     assert result.provider_post_id == "quote-1"
+    assert result.execution_allowed is True
+    assert result.mutation_attempted is True
     assert calls[0]["json"]["quote_tweet_id"] == "2049175321996312863"
 
 
@@ -242,6 +249,8 @@ def test_provider_failure_returns_failed_with_bounded_response(tmp_path: Path) -
     dumped = json.dumps(result.redacted_dump())
     assert result.status == "failed"
     assert result.provider_status_code == 403
+    assert result.execution_allowed is True
+    assert result.mutation_attempted is True
     assert "abcdefghijklmnopqrstuvwxyz1234567890" not in dumped
 
 

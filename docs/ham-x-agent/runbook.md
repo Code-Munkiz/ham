@@ -141,6 +141,12 @@ HAM_X_EXECUTION_DAILY_CAP=1
 
 The caller must also pass `manual_confirm=true`. Do not run a live canary from this runbook without a separate explicit operator instruction.
 
+Manual canary result semantics:
+
+- `execution_allowed=false` means local gates did not permit a provider call (`blocked` or `dry_run`).
+- `execution_allowed=true` means all local gates passed and the provider call was allowed. It does not mean autonomy is enabled.
+- `mutation_attempted=true` means the direct OAuth1 provider call was attempted. `failed` results after a provider call still set this to `true`.
+
 ## Autonomy Modes
 
 - `draft`: queue draft content only.
