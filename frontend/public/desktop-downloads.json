@@ -18,10 +18,10 @@
       "label": "Windows",
       "arch": "x64",
       "type": "Portable",
-      "version": "0.1.9",
-      "url": "https://github.com/Code-Munkiz/ham/releases/download/desktop-v0.1.9/HAM-Desktop-0.1.9-Win-x64-Portable.exe",
-      "sha256": "4957b27e685f5e20a0302346aa0c2831737f8582f3302f634cc07f318a549c29",
-      "release_page_url": "https://github.com/Code-Munkiz/ham/releases/tag/desktop-v0.1.9"
+      "version": "0.1.10",
+      "url": "https://github.com/Code-Munkiz/ham/releases/download/desktop-v0.1.10/HAM-Desktop-0.1.10-Win-x64-Portable.exe",
+      "sha256": "2382899783348390e4a86f8ccf36697f4e6429b9011f4c178a72e8e6dd384ad7",
+      "release_page_url": "https://github.com/Code-Munkiz/ham/releases/tag/desktop-v0.1.10"
     },
     "macos": null
   }
