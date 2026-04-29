@@ -974,6 +974,9 @@ def post_chat_stream(
                     ):
                         checkpoint_partial(interrupted=True)
                     yield json.dumps({"type": "delta", "text": part}) + "\n"
+            except GeneratorExit:
+                # Client/runtime disconnected while streaming; `finally` persists checkpointed partial.
+                return
             except GatewayCallError as exc:
                 assistant_visible = format_gateway_error_user_message(exc)
                 try:

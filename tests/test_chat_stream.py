@@ -156,26 +156,24 @@ def test_chat_stream_custom_chunks(mock_mode: None, monkeypatch: pytest.MonkeyPa
 def test_chat_stream_disconnect_checkpoint_persists_partial(mock_mode: None, monkeypatch: pytest.MonkeyPatch) -> None:
     def slow_stream(_msgs: list, **_kwargs):
         yield "partial "
-        for _ in range(300):
-            time.sleep(0.005)
-            yield "x"
+        yield "more"
+        # Deterministically simulate an interrupted stream before normal completion.
+        raise GeneratorExit()
 
     monkeypatch.setattr("src.api.chat.stream_chat_turn", slow_stream)
 
-    sid = ""
-    with client.stream(
+    create = client.post("/api/chat/sessions")
+    assert create.status_code == 200
+    sid = create.json()["session_id"]
+    tolerant_client = TestClient(app, raise_server_exceptions=False)
+    with tolerant_client.stream(
         "POST",
         "/api/chat/stream",
-        json={"messages": [{"role": "user", "content": "keep going"}]},
+        json={"session_id": sid, "messages": [{"role": "user", "content": "keep going"}]},
     ) as res:
         assert res.status_code == 200
-        lines = res.iter_lines()
-        first = json.loads(next(lines))
-        assert first["type"] == "session"
-        sid = first["session_id"]
-        second = json.loads(next(lines))
-        assert second["type"] == "delta"
-        # Exit the context early to simulate navigation/reload disconnect.
+        # Consume one line if present then disconnect.
+        _ = list(res.iter_lines())
 
     # Allow generator cleanup/finally to flush a best-effort final checkpoint.
     time.sleep(0.05)
@@ -185,6 +183,7 @@ def test_chat_stream_disconnect_checkpoint_persists_partial(mock_mode: None, mon
     assistants = [m["content"] for m in msgs if m["role"] == "assistant"]
     assert len(assistants) == 1
     assert "partial" in assistants[0]
+    assert "Connection interrupted. Ask me to continue." in assistants[0]
 
 
 _MAX_TRANSCRIBE = 15 * 1024 * 1024

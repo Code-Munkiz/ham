@@ -7,6 +7,7 @@ import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { tryParseHamChatUserV1String, tryParseHamChatUserV2String } from "@/lib/ham/chatUserContent";
 import { WorkspaceChatAuthImage } from "./WorkspaceChatAttachmentImage";
+import { interruptedAssistantView } from "./interruptedAssistantView";
 
 export type HwwMsgRow = {
   id: string;
@@ -20,9 +21,6 @@ type WorkspaceChatMessageListProps = {
   /** True while the last assistant message is still receiving stream deltas. */
   isStreaming?: boolean;
 };
-
-const INTERRUPTED_SUFFIX = "\n\nConnection interrupted. Ask me to continue.";
-const INTERRUPTED_EMPTY = "Connection interrupted before any content was saved. Ask me to continue.";
 
 export function WorkspaceChatMessageList({ messages, isStreaming }: WorkspaceChatMessageListProps) {
   const last = messages[messages.length - 1];
@@ -102,12 +100,7 @@ export function WorkspaceChatMessageList({ messages, isStreaming }: WorkspaceCha
         if (m.role === "assistant") {
           const isLastAssistant = idx === messages.length - 1;
           const thinkingHere = showThinking && isLastAssistant;
-          const interrupted = m.content.endsWith(INTERRUPTED_SUFFIX) || m.content === INTERRUPTED_EMPTY;
-          const visibleContent = m.content === INTERRUPTED_EMPTY
-            ? ""
-            : m.content.endsWith(INTERRUPTED_SUFFIX)
-              ? m.content.slice(0, -INTERRUPTED_SUFFIX.length).trimEnd()
-              : m.content;
+          const { interrupted, visibleContent } = interruptedAssistantView(m.content);
           return (
             <div key={m.id} className="flex justify-start">
               <div
