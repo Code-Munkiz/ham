@@ -57,6 +57,15 @@ AuditEventType = Literal[
     "execution_cap_blocked",
     "execution_duplicate_blocked",
     "execution_emergency_stop_blocked",
+    "live_dry_run_blocked",
+    "live_dry_run_planned",
+    "live_dry_run_search_completed",
+    "live_dry_run_candidate_scored",
+    "live_dry_run_draft_created",
+    "live_dry_run_policy_reviewed",
+    "live_dry_run_autonomy_decision",
+    "live_dry_run_routed",
+    "live_dry_run_completed",
 ]
 
 

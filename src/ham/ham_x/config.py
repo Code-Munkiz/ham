@@ -21,6 +21,7 @@ DEFAULT_CATALOG_SKILL_ID = "bundled.social-media.xurl"
 DEFAULT_READONLY_TRANSPORT = "direct"
 DEFAULT_EXECUTION_TRANSPORT = "direct_oauth1"
 DEFAULT_CANARY_ALLOWED_ACTIONS = "post,quote"
+DEFAULT_LIVE_DRY_RUN_QUERY = "Base ecosystem autonomous agents"
 
 
 def _bool_env(name: str, default: bool) -> bool:
@@ -88,6 +89,12 @@ class HamXConfig:
     readonly_transport: str
     execution_transport: str
     canary_allowed_actions: str
+    enable_live_read_model_dry_run: bool
+    live_dry_run_query: str
+    live_dry_run_max_results: int
+    live_dry_run_max_candidates: int
+    live_draft_max_output_tokens: int
+    live_draft_timeout_seconds: int
     review_queue_path: Path
     exception_queue_path: Path
     execution_journal_path: Path
@@ -132,7 +139,7 @@ def load_ham_x_config() -> HamXConfig:
         execution_daily_cap=_int_env("HAM_X_EXECUTION_DAILY_CAP", 1),
         execution_per_run_cap=_int_env("HAM_X_EXECUTION_PER_RUN_CAP", 1),
         daily_spend_limit_usd=_float_env("HAM_X_DAILY_SPEND_LIMIT_USD", 5.0),
-        model=(os.environ.get("HAM_X_MODEL") or "grok-4.1-fast").strip() or "grok-4.1-fast",
+        model=(os.environ.get("HAM_X_MODEL") or "grok-4.20").strip() or "grok-4.20",
         xurl_bin=(os.environ.get("HAM_X_XURL_BIN") or "xurl").strip() or "xurl",
         readonly_transport=(os.environ.get("HAM_X_READONLY_TRANSPORT") or DEFAULT_READONLY_TRANSPORT).strip()
         or DEFAULT_READONLY_TRANSPORT,
@@ -140,6 +147,16 @@ def load_ham_x_config() -> HamXConfig:
         or DEFAULT_EXECUTION_TRANSPORT,
         canary_allowed_actions=(os.environ.get("HAM_X_CANARY_ALLOWED_ACTIONS") or DEFAULT_CANARY_ALLOWED_ACTIONS).strip()
         or DEFAULT_CANARY_ALLOWED_ACTIONS,
+        enable_live_read_model_dry_run=_bool_env(
+            "HAM_X_ENABLE_LIVE_READ_MODEL_DRY_RUN",
+            False,
+        ),
+        live_dry_run_query=(os.environ.get("HAM_X_LIVE_DRY_RUN_QUERY") or DEFAULT_LIVE_DRY_RUN_QUERY).strip()
+        or DEFAULT_LIVE_DRY_RUN_QUERY,
+        live_dry_run_max_results=_int_env("HAM_X_LIVE_DRY_RUN_MAX_RESULTS", 10),
+        live_dry_run_max_candidates=_int_env("HAM_X_LIVE_DRY_RUN_MAX_CANDIDATES", 3),
+        live_draft_max_output_tokens=_int_env("HAM_X_LIVE_DRAFT_MAX_OUTPUT_TOKENS", 120),
+        live_draft_timeout_seconds=_int_env("HAM_X_LIVE_DRAFT_TIMEOUT_SECONDS", 20),
         review_queue_path=_path_env(
             "HAM_X_REVIEW_QUEUE_PATH",
             ".data/ham-x/review_queue.jsonl",

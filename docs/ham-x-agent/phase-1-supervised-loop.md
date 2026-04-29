@@ -69,6 +69,20 @@ The smoke result is not campaign drafting. It is not connected to review queue p
 
 Phase 2A manual canary execution is outside the supervised opportunity loop. The loop may still create proposals and decisions, but it must not call the canary executor. The executor is a separate operator-triggered path for one manually confirmed `post` or `quote`.
 
+## Phase 2B Live Read/Model Dry-Run
+
+Phase 2B adds a live-read/live-model dry-run path:
+
+1. Run direct Bearer X recent search.
+2. Normalize returned tweets into bounded `CandidateTarget` records.
+3. Score candidates deterministically.
+4. Draft with xAI using bounded prompts, bounded output, and `store=false`.
+5. Apply deterministic safety policy and Hermes local policy review.
+6. Run autonomy decisioning for routing only.
+7. Append review or exception queue records and redacted audit events.
+
+This path is for GoHAM-style opportunity preparation, not posting. It does not import or call `manual_canary` or `x_executor`, and every result preserves `execution_allowed=false` and `mutation_attempted=false`.
+
 ## Reusable Agent Template
 
 The official launch agent uses `tenant_id=ham-official`, `agent_id=ham-pr-rockstar`, and `campaign_id=base-stealth-launch`. The same action envelope can be reused for tenant-created agents by changing those context fields and attaching tenant-specific policy and brand voice profiles.

@@ -147,6 +147,25 @@ Manual canary result semantics:
 - `execution_allowed=true` means all local gates passed and the provider call was allowed. It does not mean autonomy is enabled.
 - `mutation_attempted=true` means the direct OAuth1 provider call was attempted. `failed` results after a provider call still set this to `true`.
 
+## Phase 2B Live Read/Model Dry-Run
+
+Phase 2B lets Ham run a live X read-only search, select bounded candidates, draft with xAI, apply deterministic safety policy, run autonomy decisioning, and write review/exception/audit records. It stops there: it does not call `manual_canary`, `x_executor`, xurl mutations, or posting APIs.
+
+Required gates:
+
+```dotenv
+HAM_X_ENABLE_LIVE_READ_MODEL_DRY_RUN=true
+HAM_X_DRY_RUN=true
+HAM_X_AUTONOMY_ENABLED=false
+HAM_X_ENABLE_LIVE_EXECUTION=false
+HAM_X_EMERGENCY_STOP=false
+HAM_X_ENABLE_LIVE_SMOKE=false
+HAM_X_READONLY_TRANSPORT=direct
+HAM_X_MODEL=grok-4.20
+```
+
+`X_BEARER_TOKEN` and `XAI_API_KEY` must be present locally, but never printed. Every Phase 2B result, draft envelope, autonomy decision, queue record, and audit record must preserve `execution_allowed=false` and `mutation_attempted=false`.
+
 ## Autonomy Modes
 
 - `draft`: queue draft content only.
