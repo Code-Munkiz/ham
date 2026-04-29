@@ -43,12 +43,13 @@ class ExecutionJournal:
                 return True
         return False
 
-    def daily_executed_count(self, *, day: str | None = None) -> int:
+    def daily_executed_count(self, *, day: str | None = None, execution_kind: str | None = None) -> int:
         target = day or _today()
         return sum(
             1
             for row in self.records()
             if row.get("status") == "executed" and str(row.get("executed_at", "")).startswith(target)
+            and (execution_kind is None or row.get("execution_kind") == execution_kind)
         )
 
     def append_executed(
@@ -58,12 +59,16 @@ class ExecutionJournal:
         idempotency_key: str,
         action_type: str,
         provider_post_id: str | None,
+        execution_kind: str = "manual_canary",
+        source_action_id: str | None = None,
     ) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         row = {
             "action_id": action_id,
+            "source_action_id": source_action_id,
             "idempotency_key": idempotency_key,
             "action_type": action_type,
+            "execution_kind": execution_kind,
             "provider_post_id": provider_post_id,
             "status": "executed",
             "executed_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),

@@ -166,6 +166,24 @@ HAM_X_MODEL=grok-4.20
 
 `X_BEARER_TOKEN` and `XAI_API_KEY` must be present locally, but never printed. Every Phase 2B result, draft envelope, autonomy decision, queue record, and audit record must preserve `execution_allowed=false` and `mutation_attempted=false`.
 
+## Phase 2C Guarded GoHAM Bridge
+
+Phase 2C introduces a separate guarded bridge for autonomous original posts only. It is not called by Phase 2B dry-run, smoke, pipeline, or autonomy modules. It supports no quotes, replies, likes, follows, DMs, links, bulk actions, scheduling, or arbitrary model output.
+
+Safe defaults keep it off:
+
+```dotenv
+HAM_X_ENABLE_GOHAM_EXECUTION=false
+HAM_X_GOHAM_AUTONOMOUS_DAILY_CAP=1
+HAM_X_GOHAM_AUTONOMOUS_PER_RUN_CAP=1
+HAM_X_GOHAM_MIN_SCORE=0.90
+HAM_X_GOHAM_MIN_CONFIDENCE=0.90
+HAM_X_GOHAM_ALLOWED_ACTIONS=post
+HAM_X_GOHAM_BLOCK_LINKS=true
+```
+
+Live GoHAM execution additionally requires `HAM_X_AUTONOMY_ENABLED=true`, `HAM_X_DRY_RUN=false`, `HAM_X_ENABLE_LIVE_EXECUTION=true`, and `HAM_X_EMERGENCY_STOP=false`. Do not run live GoHAM execution without a separate explicit operator instruction.
+
 ## Autonomy Modes
 
 - `draft`: queue draft content only.

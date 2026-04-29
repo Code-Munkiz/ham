@@ -66,6 +66,14 @@ AuditEventType = Literal[
     "live_dry_run_autonomy_decision",
     "live_dry_run_routed",
     "live_dry_run_completed",
+    "goham_execution_requested",
+    "goham_execution_blocked",
+    "goham_execution_allowed",
+    "goham_execution_executed",
+    "goham_execution_failed",
+    "goham_execution_cap_blocked",
+    "goham_execution_duplicate_blocked",
+    "goham_execution_policy_blocked",
 ]
 
 

@@ -22,6 +22,7 @@ DEFAULT_READONLY_TRANSPORT = "direct"
 DEFAULT_EXECUTION_TRANSPORT = "direct_oauth1"
 DEFAULT_CANARY_ALLOWED_ACTIONS = "post,quote"
 DEFAULT_LIVE_DRY_RUN_QUERY = "Base ecosystem autonomous agents"
+DEFAULT_GOHAM_ALLOWED_ACTIONS = "post"
 
 
 def _bool_env(name: str, default: bool) -> bool:
@@ -95,6 +96,13 @@ class HamXConfig:
     live_dry_run_max_candidates: int
     live_draft_max_output_tokens: int
     live_draft_timeout_seconds: int
+    enable_goham_execution: bool
+    goham_autonomous_daily_cap: int
+    goham_autonomous_per_run_cap: int
+    goham_min_score: float
+    goham_min_confidence: float
+    goham_allowed_actions: str
+    goham_block_links: bool
     review_queue_path: Path
     exception_queue_path: Path
     execution_journal_path: Path
@@ -157,6 +165,14 @@ def load_ham_x_config() -> HamXConfig:
         live_dry_run_max_candidates=_int_env("HAM_X_LIVE_DRY_RUN_MAX_CANDIDATES", 3),
         live_draft_max_output_tokens=_int_env("HAM_X_LIVE_DRAFT_MAX_OUTPUT_TOKENS", 120),
         live_draft_timeout_seconds=_int_env("HAM_X_LIVE_DRAFT_TIMEOUT_SECONDS", 20),
+        enable_goham_execution=_bool_env("HAM_X_ENABLE_GOHAM_EXECUTION", False),
+        goham_autonomous_daily_cap=_int_env("HAM_X_GOHAM_AUTONOMOUS_DAILY_CAP", 1),
+        goham_autonomous_per_run_cap=_int_env("HAM_X_GOHAM_AUTONOMOUS_PER_RUN_CAP", 1),
+        goham_min_score=_float_env("HAM_X_GOHAM_MIN_SCORE", 0.90),
+        goham_min_confidence=_float_env("HAM_X_GOHAM_MIN_CONFIDENCE", 0.90),
+        goham_allowed_actions=(os.environ.get("HAM_X_GOHAM_ALLOWED_ACTIONS") or DEFAULT_GOHAM_ALLOWED_ACTIONS).strip()
+        or DEFAULT_GOHAM_ALLOWED_ACTIONS,
+        goham_block_links=_bool_env("HAM_X_GOHAM_BLOCK_LINKS", True),
         review_queue_path=_path_env(
             "HAM_X_REVIEW_QUEUE_PATH",
             ".data/ham-x/review_queue.jsonl",

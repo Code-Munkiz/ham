@@ -83,6 +83,12 @@ Phase 2B adds a live-read/live-model dry-run path:
 
 This path is for GoHAM-style opportunity preparation, not posting. It does not import or call `manual_canary` or `x_executor`, and every result preserves `execution_allowed=false` and `mutation_attempted=false`.
 
+## Phase 2C Guarded GoHAM Bridge
+
+Phase 2C is the first autonomous execution bridge, but it stays outside the Phase 2B dry-run loop. Only `goham_bridge.py` may call the low-level X executor for autonomous work, and only after `goham_policy.py` passes a narrow original-post eligibility check.
+
+The bridge supports original posts only. It blocks quote/reply/like/follow/DM actions, links, financial or buy language, non-low-risk decisions, low score/confidence, duplicate idempotency keys, and cap overages. Phase 2B remains a preparation loop and does not gain posting authority.
+
 ## Reusable Agent Template
 
 The official launch agent uses `tenant_id=ham-official`, `agent_id=ham-pr-rockstar`, and `campaign_id=base-stealth-launch`. The same action envelope can be reused for tenant-created agents by changing those context fields and attaching tenant-specific policy and brand voice profiles.

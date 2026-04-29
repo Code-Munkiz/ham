@@ -27,4 +27,6 @@ Phase 2A manual canary execution is not autonomous. It may only handle one expli
 
 Phase 2B live read/model dry-run treats live X search results as untrusted input before asking xAI for drafts. xAI output must pass this deterministic safety policy before it can enter review or exception queues, and Phase 2B never grants execution authority: `execution_allowed=false` and `mutation_attempted=false` remain required on all records.
 
+Phase 2C GoHAM execution applies an additional stricter policy before any autonomous provider call. It allows only original posts, requires low-risk `auto_approve` autonomy decisions with high score/confidence, blocks links and quote/reply targets, and rejects financial advice, price, token, buy/sell, guarantee, promo, and referral language.
+
 GoHAM mode, when introduced later, must remain bounded high-autonomy: visible operator controls, policy checks, budgets, rate limits, audit records, and a kill switch are still required.
