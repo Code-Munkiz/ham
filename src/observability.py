@@ -39,11 +39,38 @@ class CompactionMetrics:
 
 
 @dataclass
+class RelevanceMetrics:
+    """Metrics for relevance filtering phase."""
+    total_candidates: int = 0
+    filtered_count: int = 0
+    filtering_duration: float = 0.0
+    enable_hot_tracking: bool = True
+    tier_distribution: dict[str, int] = field(default_factory=dict)
+    avg_score: float = 0.0
+    max_score: float = 0.0
+    min_score: float = 0.0
+    
+    def to_dict(self) -> dict[str, Any]:
+        """Convert metrics to a JSON-serializable dict."""
+        return {
+            "total_candidates": self.total_candidates,
+            "filtered_count": self.filtered_count,
+            "filtering_duration_sec": round(self.filtering_duration, 4),
+            "enable_hot_tracking": self.enable_hot_tracking,
+            "tier_distribution": self.tier_distribution,
+            "avg_score": round(self.avg_score, 4),
+            "max_score": round(self.max_score, 4),
+            "min_score": round(self.min_score, 4),
+        }
+
+
+@dataclass
 class MemoryHeistMetrics:
     """All metrics from memory_heist operations."""
     discovery: DiscoveryMetrics = field(default_factory=DiscoveryMetrics)
     rendering: RenderingMetrics = field(default_factory=RenderingMetrics)
     compaction: CompactionMetrics = field(default_factory=CompactionMetrics)
+    relevance: RelevanceMetrics = field(default_factory=RelevanceMetrics)
     
     def to_dict(self) -> dict[str, Any]:
         """Convert metrics to a JSON-serializable dict."""
@@ -59,6 +86,16 @@ class MemoryHeistMetrics:
             },
             "compaction": {
                 "compaction_count": self.compaction.compaction_count,
+            },
+            "relevance": {
+                "total_candidates": self.relevance.total_candidates,
+                "filtered_count": self.relevance.filtered_count,
+                "filtering_duration_sec": round(self.relevance.filtering_duration, 4),
+                "enable_hot_tracking": self.relevance.enable_hot_tracking,
+                "tier_distribution": self.relevance.tier_distribution,
+                "avg_score": round(self.relevance.avg_score, 4),
+                "max_score": round(self.relevance.max_score, 4),
+                "min_score": round(self.relevance.min_score, 4),
             },
         }
 
@@ -114,6 +151,30 @@ class MetricsEmitter:
         self._pending_metrics.compaction.compaction_count += 1
         return self
     
+    def set_relevance(
+        self,
+        total_candidates: int,
+        filtered_count: int,
+        filtering_duration: float,
+        tier_distribution: dict[str, int] | None = None,
+        avg_score: float = 0.0,
+        max_score: float = 0.0,
+        min_score: float = 0.0,
+        enable_hot_tracking: bool = True,
+    ) -> "MetricsEmitter":
+        """Set relevance filtering metrics."""
+        self._pending_metrics.relevance = RelevanceMetrics(
+            total_candidates=total_candidates,
+            filtered_count=filtered_count,
+            filtering_duration=filtering_duration,
+            enable_hot_tracking=enable_hot_tracking,
+            tier_distribution=tier_distribution or {},
+            avg_score=avg_score,
+            max_score=max_score,
+            min_score=min_score,
+        )
+        return self
+    
     def snapshot(self) -> MemoryHeistMetrics:
         """Return a copy of current metrics without emitting."""
         return self._pending_metrics
@@ -144,6 +205,15 @@ class SessionMetricsCollector:
             for role, chars in m.rendering.chars_rendered_per_role.items():
                 chars_per_role[role] = chars_per_role.get(role, 0) + chars
         
+        # Merge relevance metrics (use last non-default values)
+        total_candidates = sum(m.relevance.total_candidates for m in self.metrics)
+        total_filtered = sum(m.relevance.filtered_count for m in self.metrics)
+        relevance_duration = sum(m.relevance.filtering_duration for m in self.metrics)
+        tier_dist = {}
+        for m in self.metrics:
+            for tier, count in m.relevance.tier_distribution.items():
+                tier_dist[tier] = tier_dist.get(tier, 0) + count
+        
         return MemoryHeistMetrics(
             discovery=DiscoveryMetrics(
                 discovery_duration=total_duration,
@@ -156,6 +226,16 @@ class SessionMetricsCollector:
             ),
             compaction=CompactionMetrics(
                 compaction_count=total_compaction,
+            ),
+            relevance=RelevanceMetrics(
+                total_candidates=total_candidates,
+                filtered_count=total_filtered,
+                filtering_duration=relevance_duration,
+                enable_hot_tracking=self.metrics[0].relevance.enable_hot_tracking,
+                tier_distribution=tier_dist or {},
+                avg_score=0.0,  # Would need weighted average calculation
+                max_score=0.0,
+                min_score=0.0,
             ),
         )
 
