@@ -36,7 +36,7 @@ const clerkPublishableKey = (import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as strin
 /** Web: marketing landing. Desktop shell: go straight to chat (no landing hero). */
 function HomeRoute() {
   if (isHamDesktopShell()) {
-    return <Navigate to="/chat" replace />;
+    return <Navigate to="/workspace/chat" replace />;
   }
   return <Landing />;
 }
@@ -49,8 +49,12 @@ function AppRoutes() {
       <AppLayout>
         <Routes>
           <Route path="/" element={<HomeRoute />} />
+          <Route path="/workspace" element={<Navigate to="/workspace/chat" replace />} />
+          <Route path="/workspace/chat" element={<Chat />} />
+          <Route path="/workspace/conductor" element={<Chat />} />
+          <Route path="/workspace/operations" element={<Overview />} />
+          <Route path="/chat" element={<Navigate to="/workspace/chat" replace />} />
           <Route path="/overview" element={<Overview />} />
-          <Route path="/chat" element={<Chat />} />
           <Route path="/droids" element={<Droids />} />
           <Route path="/extensions" element={<Extensions />} />
           <Route path="/runs" element={<Runs />} />

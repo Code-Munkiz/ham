@@ -4,6 +4,7 @@
  */
 import * as React from "react";
 import { useAuth } from "@clerk/clerk-react";
+import { useLocation } from "react-router-dom";
 import {
   Paperclip,
   Sparkles,
@@ -660,7 +661,11 @@ function ChatPageInner({
   const [historyLoading, setHistoryLoading] = React.useState(false);
   const [serverMissions, setServerMissions] = React.useState<ManagedMissionRow[]>([]);
   const [serverMissionsLoading, setServerMissionsLoading] = React.useState(false);
-
+  // Workspace route aliases: /workspace/chat, /workspace/conductor, /workspace/operations.
+  const workspaceRoute =
+    typeof window !== "undefined" && window.location.pathname.startsWith("/workspace")
+      ? window.location.pathname
+      : null;
   /** Dedupe recent missions: same id → newest timestamp wins (single list order: newest first after push). */
   const pushRecentMission = React.useCallback((id: string, label?: string) => {
     const trimmed = id.trim();
@@ -880,6 +885,26 @@ function ChatPageInner({
       cancelled = true;
     };
   }, [projectsOpen]);
+
+  React.useEffect(() => {
+    if (!workspaceRoute) return;
+    if (workspaceRoute === "/workspace/conductor") {
+      setUplinkId("cloud_agent");
+      setViewMode("war_room");
+      if (activeCloudAgentId?.trim()) {
+        setCloudMissionHandling("managed");
+      }
+      return;
+    }
+    if (workspaceRoute === "/workspace/operations") {
+      setHistoryOpen(true);
+      setViewMode("chat");
+      return;
+    }
+    if (workspaceRoute === "/workspace/chat") {
+      setViewMode("chat");
+    }
+  }, [activeCloudAgentId, workspaceRoute]);
 
   const persistProjectMount = React.useCallback(() => {
     try {

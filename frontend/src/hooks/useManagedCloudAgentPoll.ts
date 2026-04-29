@@ -103,6 +103,14 @@ export function useManagedCloudAgentPoll(options: UseManagedCloudAgentPollOption
       if (!enabledRef.current || agentIdRef.current.trim() !== requestId) {
         return;
       }
+      try {
+        const mrow = await fetchManagedMissionForAgent(requestId);
+        if (enabledRef.current && agentIdRef.current.trim() === requestId) {
+          setManagedMissionRow(mrow);
+        }
+      } catch {
+        /* keep prior row */
+      }
       setPollError(e instanceof Error ? e.message : "Request failed");
     } finally {
       inFlightCountRef.current -= 1;

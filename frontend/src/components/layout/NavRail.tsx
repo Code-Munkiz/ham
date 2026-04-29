@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect } from "react";
-import { 
-  MessageSquare, 
-  Activity, 
-  Users, 
-  Settings, 
+import {
+  MessageSquare,
+  Activity,
+  Users,
+  Settings,
   ScrollText,
   BarChart2,
   SlidersHorizontal,
@@ -12,6 +12,7 @@ import {
   Orbit,
   Layers,
   History,
+  PlayCircle,
 } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -19,7 +20,9 @@ import { isHamDesktopShell } from "@/lib/ham/desktopConfig";
 import { publicAssetUrl } from "@/lib/ham/publicAssets";
 
 const primaryNav = [
-  { icon: MessageSquare, label: "Chat", path: "/chat" },
+  { icon: MessageSquare, label: "Workspace Chat", path: "/workspace/chat" },
+  { icon: PlayCircle, label: "Workspace Conductor", path: "/workspace/conductor" },
+  { icon: History, label: "Workspace Operations", path: "/workspace/operations" },
   { icon: Activity, label: "Activity", path: "/overview" },
   { icon: Users, label: "Droids", path: "/droids" },
   { icon: UserCog, label: "Agents", path: "/agents" },
@@ -31,7 +34,7 @@ export function NavRail() {
   const navigate = useNavigate();
   const isDesktop = isHamDesktopShell();
   const logoSrc = publicAssetUrl("ham-logo.png");
-  const homePath = isDesktop ? "/chat" : "/";
+  const homePath = isDesktop ? "/workspace/chat" : "/";
   const [isDiagnosticsOpen, setIsDiagnosticsOpen] = useState(false);
   const diagnosticsRef = useRef<HTMLDivElement>(null);
 
@@ -57,8 +60,8 @@ export function NavRail() {
       <Link
         to={homePath}
         className="mb-10 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg hover:bg-white/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF6B00]/55 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
-        title={isDesktop ? "Ham — chat" : "Ham — home"}
-        aria-label={isDesktop ? "Open chat" : "Return to landing page"}
+        title={isDesktop ? "Ham — workspace chat" : "Ham — home"}
+        aria-label={isDesktop ? "Open workspace chat" : "Return to landing page"}
       >
         <img
           src={logoSrc}

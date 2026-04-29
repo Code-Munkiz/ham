@@ -20,6 +20,10 @@ export function Header() {
     if (segments.length === 0) return ["HAM", "ACTIVITY"];
     return ["HAM", ...segments.map(s => {
       const mapping: Record<string, string> = {
+        'workspace': 'WORKSPACE',
+        'chat': 'CHAT',
+        'conductor': 'CONDUCTOR',
+        'operations': 'OPERATIONS',
         'overview': 'LIVE ACTIVITY',
         'runs': 'HISTORY',
         'activity': 'ACTIVITY STREAM',
@@ -32,7 +36,7 @@ export function Header() {
     })];
   };
 
-  if (location.pathname.startsWith("/chat")) return null;
+  if (location.pathname.startsWith("/workspace/chat")) return null;
 
   return (
     <header className="flex h-12 items-center justify-between px-6 bg-[#080808] border-b border-white/5 sticky top-0 z-40 transition-colors shrink-0">
