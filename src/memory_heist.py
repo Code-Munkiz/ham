@@ -21,6 +21,13 @@ from typing import Any, Callable
 from src.budget_parser import BudgetConfig, BudgetParseError, parse_role_budgets
 from src.observability import MemoryHeistMetrics, MetricsEmitter
 from src.metadata_stamps import MetadataStamp, ScanMode, create_metadata_stamp, stamp_rendered_output
+from src.memory_heist_cache import DiscoveryCache, normalize_cache_key
+
+
+# ---------------------------------------------------------------------------
+# Cross-Platform Cache Key Normalization (Phase 2)
+# ---------------------------------------------------------------------------
+# normalize_cache_key() and DiscoveryCache are imported from memory_heist_cache
 
 
 # ---------------------------------------------------------------------------
@@ -376,12 +383,32 @@ class ProjectContext:
     tree: str = ""
 
     @classmethod
-    def discover(cls, cwd: Path | None = None) -> ProjectContext:
+    def discover(
+        cls,
+        cwd: Path | None = None,
+        *,
+        use_relevance_filtering: bool = True,
+        user_query: str | None = None,
+        session_memory: "SessionMemory | None" = None,
+    ) -> ProjectContext:
+        """Discover project context with optional relevance filtering.
+        
+        Args:
+            cwd: Working directory, defaults to current working directory
+            use_relevance_filtering: Whether to use relevance filtering for
+                context discovery (default: True)
+            user_query: User's query for relevance matching (optional)
+            session_memory: SessionMemory for hot path tracking (optional)
+            
+        Returns:
+            ProjectContext with relevance metadata added
+        """
         root = (cwd or Path.cwd()).resolve()
         files = scan_workspace(root)
         instructions = discover_instruction_files(root)
         config = discover_config(root)
-        return cls(
+        
+        context = cls(
             cwd=root,
             current_date=time.strftime("%Y-%m-%d"),
             platform_info=f"{platform.system()} {platform.release()}",
@@ -393,6 +420,47 @@ class ProjectContext:
             file_count=len(files),
             tree=workspace_tree(root),
         )
+        
+        # Optional relevance filtering
+        if use_relevance_filtering:
+            from .context.relevance_scoring import (
+                RelevanceConfig,
+                filter_by_relevance,
+                filter_by_relevance_async,
+            )
+            
+            relevance_config = RelevanceConfig()
+            results, metadata = filter_by_relevance_async(
+                context,
+                user_query=user_query,
+                config=relevance_config,
+                session_memory=session_memory,
+                use_relevance_filtering=True,
+            )
+            
+            # Store relevance metadata in context
+            context._relevance_results = results
+            context._relevance_metadata = metadata
+        
+        return context
+    
+    @property
+    def relevance_results(self) -> list | None:
+        """Filtered relevance results if relevance filtering was enabled.
+        
+        Returns:
+            List of FileRelevanceScore or None if filtering was disabled
+        """
+        return getattr(self, "_relevance_results", None)
+    
+    @property
+    def relevance_metadata(self) -> dict | None:
+        """Relevance filtering metadata if enabled.
+        
+        Returns:
+            Dict with metadata or None if filtering was disabled
+        """
+        return getattr(self, "_relevance_metadata", None)
 
     def render(
         self,
