@@ -1232,8 +1232,15 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         setExecutionMode(res.execution_mode ?? null);
         browserSessionFollowThroughRef.current =
           res.execution_mode?.selected_mode === "browser";
+        const normalizedMessages =
+          res.messages.some((m) => m.role === "user")
+            ? res.messages
+            : [
+                { role: "user" as const, content: displayContent },
+                ...res.messages,
+              ];
         setMessages(
-          res.messages.map((m, i) => ({
+          normalizedMessages.map((m, i) => ({
             id: `${res.session_id}-done-${i}-${m.role}`,
             role: m.role,
             content: m.content,
