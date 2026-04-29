@@ -121,6 +121,20 @@ class HamXConfig:
     enable_goham_live_controller: bool = False
     goham_live_controller_original_posts_only: bool = True
     goham_live_max_actions_per_run: int = 1
+    enable_goham_reactive: bool = False
+    goham_reactive_dry_run: bool = True
+    goham_reactive_live_canary: bool = False
+    goham_reactive_max_replies_per_15m: int = 5
+    goham_reactive_max_replies_per_hour: int = 20
+    goham_reactive_max_replies_per_user_per_day: int = 3
+    goham_reactive_max_replies_per_thread_per_day: int = 5
+    goham_reactive_min_seconds_between_replies: int = 60
+    goham_reactive_min_relevance: float = 0.75
+    goham_reactive_block_links: bool = True
+    goham_reactive_failure_stop: int = 2
+    goham_reactive_policy_rejection_stop: int = 10
+    goham_reactive_max_inbound_per_run: int = 25
+    goham_reactive_max_replies_per_run: int = 1
 
 
 def load_ham_x_config() -> HamXConfig:
@@ -217,4 +231,18 @@ def load_ham_x_config() -> HamXConfig:
             True,
         ),
         goham_live_max_actions_per_run=_int_env("HAM_X_GOHAM_LIVE_MAX_ACTIONS_PER_RUN", 1),
+        enable_goham_reactive=_bool_env("HAM_X_ENABLE_GOHAM_REACTIVE", False),
+        goham_reactive_dry_run=_bool_env("HAM_X_GOHAM_REACTIVE_DRY_RUN", True),
+        goham_reactive_live_canary=_bool_env("HAM_X_GOHAM_REACTIVE_LIVE_CANARY", False),
+        goham_reactive_max_replies_per_15m=_int_env("HAM_X_GOHAM_REACTIVE_MAX_REPLIES_PER_15M", 5),
+        goham_reactive_max_replies_per_hour=_int_env("HAM_X_GOHAM_REACTIVE_MAX_REPLIES_PER_HOUR", 20),
+        goham_reactive_max_replies_per_user_per_day=_int_env("HAM_X_GOHAM_REACTIVE_MAX_REPLIES_PER_USER_PER_DAY", 3),
+        goham_reactive_max_replies_per_thread_per_day=_int_env("HAM_X_GOHAM_REACTIVE_MAX_REPLIES_PER_THREAD_PER_DAY", 5),
+        goham_reactive_min_seconds_between_replies=_int_env("HAM_X_GOHAM_REACTIVE_MIN_SECONDS_BETWEEN_REPLIES", 60),
+        goham_reactive_min_relevance=_float_env("HAM_X_GOHAM_REACTIVE_MIN_RELEVANCE", 0.75),
+        goham_reactive_block_links=_bool_env("HAM_X_GOHAM_REACTIVE_BLOCK_LINKS", True),
+        goham_reactive_failure_stop=_int_env("HAM_X_GOHAM_REACTIVE_FAILURE_STOP", 2),
+        goham_reactive_policy_rejection_stop=_int_env("HAM_X_GOHAM_REACTIVE_POLICY_REJECTION_STOP", 10),
+        goham_reactive_max_inbound_per_run=_int_env("HAM_X_GOHAM_REACTIVE_MAX_INBOUND_PER_RUN", 25),
+        goham_reactive_max_replies_per_run=_int_env("HAM_X_GOHAM_REACTIVE_MAX_REPLIES_PER_RUN", 1),
     )

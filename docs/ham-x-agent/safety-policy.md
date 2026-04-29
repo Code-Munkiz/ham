@@ -37,4 +37,6 @@ Phase 3A Firehose Controller is dry-run-only. Its governor may mark original-pos
 
 Phase 3B Live Governed Controller is a separate one-shot live path for prepared candidates only. It may call the guarded GoHAM bridge at most once, only for an original post whose governor decision is `auto_original_post` with provider calls allowed, with no target/quote/reply ids, deterministic idempotency, shared journal checks, and all existing live GoHAM gates enabled. It must not generate candidates, run Phase 2B, connect live X+xAI acquisition, schedule loops, retry provider failures, or execute quotes/replies/likes/follows/DMs.
 
+Phase 4A Reactive Engine is dry-run-only. It may classify inbound mentions/comments and produce reviewable reply candidates, but it must not call live reply providers, DMs, likes, follows, quote replies, xurl mutations, broadcast controllers, or Phase 2B execution. Reactive reply candidates must be relevant to the inbound item, non-duplicative, link-free by default, non-financial, non-harassing, non-secret-bearing, and auditable. Reactive budgets are separate from broadcast original-post caps.
+
 GoHAM mode, when introduced later, must remain bounded high-autonomy: visible operator controls, policy checks, budgets, rate limits, audit records, and a kill switch are still required.

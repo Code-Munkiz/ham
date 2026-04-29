@@ -80,6 +80,16 @@ AuditEventType = Literal[
     "goham_live_controller_started",
     "goham_live_controller_candidate_decision",
     "goham_live_controller_completed",
+    "goham_reactive_started",
+    "goham_reactive_inbound_seen",
+    "goham_reactive_classified",
+    "goham_reactive_governor_decision",
+    "goham_reactive_reply_candidate_created",
+    "goham_reactive_completed",
+    "goham_reactive_reply_requested",
+    "goham_reactive_reply_executed",
+    "goham_reactive_reply_failed",
+    "goham_reactive_reply_blocked",
 ]
 
 

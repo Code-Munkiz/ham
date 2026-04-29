@@ -247,6 +247,31 @@ HAM_X_GOHAM_LIVE_MAX_ACTIONS_PER_RUN=1
 
 Live governed execution still requires all existing GoHAM live gates (`HAM_X_ENABLE_GOHAM_EXECUTION=true`, `HAM_X_AUTONOMY_ENABLED=true`, `HAM_X_DRY_RUN=false`, `HAM_X_ENABLE_LIVE_EXECUTION=true`, `HAM_X_EMERGENCY_STOP=false`) plus `HAM_X_ENABLE_GOHAM_CONTROLLER=true` and `HAM_X_GOHAM_CONTROLLER_DRY_RUN=false`. The live controller derives a deterministic idempotency key from `campaign_id + source_action_id + text_key`, checks the shared execution journal before the bridge call, passes that same journal to the bridge, and does not retry failed provider attempts.
 
+## Phase 4A Reactive Engine Dry-Run
+
+Phase 4A adds a separate dry-run-only reactive lane for inbound engagement: `inbound_client.py`, `reactive_policy.py`, `reactive_governor.py`, and `goham_reactive.py`. It accepts prepared/read-only inbound records for mentions or comments, classifies them, applies reactive policy, asks a separate governor, and routes safe reply candidates to review records or unsafe/ambiguous items to exception records.
+
+Reactive is not governed by the broadcast original-post daily cap. It uses separate reply budgets, per-user/thread cooldowns, duplicate inbound and duplicate response checks, rolling 15-minute/hour caps, emergency stop, and policy circuit breakers. Phase 4A never calls providers and always returns `execution_allowed=false` and `mutation_attempted=false`.
+
+Safe defaults keep it disabled and dry-run-only:
+
+```dotenv
+HAM_X_ENABLE_GOHAM_REACTIVE=false
+HAM_X_GOHAM_REACTIVE_DRY_RUN=true
+HAM_X_GOHAM_REACTIVE_LIVE_CANARY=false
+HAM_X_GOHAM_REACTIVE_MAX_REPLIES_PER_15M=5
+HAM_X_GOHAM_REACTIVE_MAX_REPLIES_PER_HOUR=20
+HAM_X_GOHAM_REACTIVE_MAX_REPLIES_PER_USER_PER_DAY=3
+HAM_X_GOHAM_REACTIVE_MAX_REPLIES_PER_THREAD_PER_DAY=5
+HAM_X_GOHAM_REACTIVE_MIN_SECONDS_BETWEEN_REPLIES=60
+HAM_X_GOHAM_REACTIVE_MIN_RELEVANCE=0.75
+HAM_X_GOHAM_REACTIVE_BLOCK_LINKS=true
+HAM_X_GOHAM_REACTIVE_FAILURE_STOP=2
+HAM_X_GOHAM_REACTIVE_POLICY_REJECTION_STOP=10
+HAM_X_GOHAM_REACTIVE_MAX_INBOUND_PER_RUN=25
+HAM_X_GOHAM_REACTIVE_MAX_REPLIES_PER_RUN=1
+```
+
 ## Autonomy Modes
 
 - `draft`: queue draft content only.
