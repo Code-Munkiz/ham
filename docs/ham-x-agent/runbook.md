@@ -15,7 +15,7 @@ Run the focused tests:
 python -m pytest tests/test_ham_x_phase1a.py -v
 ```
 
-Phase 1B uses the same narrow test target. It covers the non-mutating opportunity pipeline, candidate scoring, review queue writes, audit traces, and mutating-action blocks.
+Phase 1B/1C use the same narrow test target. It covers the non-mutating opportunity pipeline, autonomy decisions, exception queue writes, review queue writes, audit traces, and mutating-action blocks.
 
 ## Inspect Review Output
 
@@ -29,6 +29,12 @@ Audit events are written to:
 
 ```text
 .data/ham-x/audit.jsonl
+```
+
+Exception queue records are written to:
+
+```text
+.data/ham-x/exception_queue.jsonl
 ```
 
 These files must contain redacted, bounded JSONL records only.
@@ -50,6 +56,7 @@ Set either of these values to keep mutating actions blocked:
 ```dotenv
 HAM_X_AUTONOMY_ENABLED=false
 HAM_X_DRY_RUN=true
+HAM_X_EMERGENCY_STOP=true
 ```
 
 In Phase 1, mutating actions are blocked even if these values are changed.
@@ -59,6 +66,10 @@ In Phase 1, mutating actions are blocked even if these values are changed.
 Use `run_supervised_opportunity_loop()` with candidate-like records collected from dry-run search planning or fixtures. The loop writes allowed draft proposals to the review queue and audit trace, but it does not post, quote, like, or call xAI/Grok.
 
 Review queue records are human-review proposals. Audit records are append-only traces. Durable multi-step campaign/control-plane runs are future work.
+
+## Phase 1C Autonomy Decisions
+
+`decide_autonomy()` emits decision states such as `draft_only`, `queue_review`, `queue_exception`, and `auto_approve`. In Phase 1C, `auto_approve` is only an autonomous approval candidate; `execution_allowed` is always `false`, and no xurl mutation is executed.
 
 ## Autonomy Modes
 

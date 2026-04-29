@@ -37,14 +37,30 @@ Phase 1B adds `run_supervised_opportunity_loop()` as a non-mutating pipeline:
 
 The pipeline does not make live xurl calls, live xAI/Grok calls, or mutating X calls.
 
+## Phase 1C Behavior
+
+Phase 1C adds `decide_autonomy()` after policy, budget, and rate checks. The decision engine produces one of:
+
+- `auto_reject`
+- `ignore`
+- `monitor`
+- `draft_only`
+- `queue_exception`
+- `queue_review`
+- `auto_approve`
+
+`auto_approve` is only an execution candidate record for future phases. In Phase 1C, every decision has `execution_allowed=false`; no xurl post, quote, or like command is executed.
+
+The exception queue stores uncertain, risky, emergency-stop-blocked, budget-blocked, and rate-blocked action proposals as bounded redacted JSONL. The review queue remains for calibration and approval-mode review, not as a permanent requirement for every action.
+
 ## Reusable Agent Template
 
 The official launch agent uses `tenant_id=ham-official`, `agent_id=ham-pr-rockstar`, and `campaign_id=base-stealth-launch`. The same action envelope can be reused for tenant-created agents by changing those context fields and attaching tenant-specific policy and brand voice profiles.
 
-Supported autonomy modes are `draft`, `approval`, `guarded`, and `goham`. Phase 1 operates as `draft`; higher-autonomy modes are future states and must remain bounded by safety policy, rate limits, budgets, review/audit trails, and a kill switch.
+Supported autonomy modes are `draft`, `approval`, `guarded`, and `goham`. Higher-autonomy modes remain bounded by safety policy, rate limits, budgets, review/audit trails, emergency stop, and later execution gates.
 
 ## Future Promotion Criteria
 
 Before any live posting phase, HAM-on-X needs explicit product approval, integration tests with mocked xurl/xAI clients, dashboard review controls, and a deployment-specific kill switch procedure.
 
-Durable multi-step campaign/control-plane runs are not part of Phase 1A. The current records are per-action proposals plus append-only event traces.
+Durable multi-step campaign/control-plane runs are not part of Phase 1. The current records are per-action proposals, autonomy decisions, queue records, and append-only event traces.

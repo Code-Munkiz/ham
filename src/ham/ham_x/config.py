@@ -69,6 +69,7 @@ class HamXConfig:
     policy_profile_id: str
     brand_voice_id: str
     catalog_skill_id: str
+    emergency_stop: bool
     autonomy_enabled: bool
     dry_run: bool
     max_posts_per_hour: int
@@ -78,6 +79,7 @@ class HamXConfig:
     model: str
     xurl_bin: str
     review_queue_path: Path
+    exception_queue_path: Path
     audit_log_path: Path
 
 
@@ -108,6 +110,7 @@ def load_ham_x_config() -> HamXConfig:
         or DEFAULT_BRAND_VOICE_ID,
         catalog_skill_id=(os.environ.get("HAM_X_CATALOG_SKILL_ID") or DEFAULT_CATALOG_SKILL_ID).strip()
         or DEFAULT_CATALOG_SKILL_ID,
+        emergency_stop=_bool_env("HAM_X_EMERGENCY_STOP", False),
         autonomy_enabled=_bool_env("HAM_X_AUTONOMY_ENABLED", False),
         dry_run=_bool_env("HAM_X_DRY_RUN", True),
         max_posts_per_hour=_int_env("HAM_X_MAX_POSTS_PER_HOUR", 0),
@@ -119,6 +122,10 @@ def load_ham_x_config() -> HamXConfig:
         review_queue_path=_path_env(
             "HAM_X_REVIEW_QUEUE_PATH",
             ".data/ham-x/review_queue.jsonl",
+        ),
+        exception_queue_path=_path_env(
+            "HAM_X_EXCEPTION_QUEUE_PATH",
+            ".data/ham-x/exception_queue.jsonl",
         ),
         audit_log_path=_path_env("HAM_X_AUDIT_LOG_PATH", ".data/ham-x/audit.jsonl"),
     )

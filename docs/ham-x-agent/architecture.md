@@ -13,7 +13,7 @@ The intended production loop is:
 5. Write a bounded review queue record.
 6. Require human review before any future mutating action.
 
-Phase 1A implemented the safe scaffold. Phase 1B adds a dry-run social opportunity pipeline: search plan, candidate normalization, deterministic scoring, deterministic draft generation, local Hermes policy review, budget/rate guardrails, review queue output, and audit traces. Mutating actions remain blocked.
+Phase 1A implemented the safe scaffold. Phase 1B added a dry-run social opportunity pipeline: search plan, candidate normalization, deterministic scoring, deterministic draft generation, local Hermes policy review, budget/rate guardrails, review queue output, and audit traces. Phase 1C adds the Autonomy Decision Engine and exception queue. Mutating actions remain blocked.
 
 ## Platform Context
 
@@ -40,6 +40,12 @@ The catalog skill id links xurl plans to HAM's vendored Hermes runtime skills ca
 - `guarded`: future mode for tightly capped actions with policy, budget, and rate-limit gates.
 - `goham`: bounded high-autonomy operation with visible controls, audit trails, and kill switch behavior. GoHAM is not reckless automation and must still respect platform policy and X rules.
 
+## Autonomy Decisions
+
+Phase 1C can decide `auto_reject`, `ignore`, `monitor`, `draft_only`, `queue_exception`, `queue_review`, or `auto_approve`. These are decision states only. `execution_allowed` is always `false`, and `auto_approve` means "autonomous approval candidate for a later execution phase," not an xurl call.
+
+The emergency stop (`HAM_X_EMERGENCY_STOP=true`) blocks autonomous approval and routes affected actions to human attention.
+
 ## Boundaries
 
 - Hermes remains the supervisory policy layer.
@@ -51,6 +57,7 @@ The catalog skill id links xurl plans to HAM's vendored Hermes runtime skills ca
 
 - `SocialActionEnvelope` records are per-action proposals.
 - Review queue records are human-review proposals for proposed social actions.
+- Exception queue records are uncertain, risky, budget-blocked, rate-blocked, or emergency-stop-blocked proposals.
 - Audit records are append-only event traces.
 - Durable multi-step campaign and control-plane runs are future work.
 

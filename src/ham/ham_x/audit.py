@@ -30,6 +30,16 @@ AuditEventType = Literal[
     "queued_for_review",
     "blocked_mutating_action",
     "dry_run_action",
+    "autonomy_decision_created",
+    "action_auto_rejected",
+    "action_ignored",
+    "action_monitored",
+    "action_draft_only",
+    "action_queued_review",
+    "action_queued_exception",
+    "action_auto_approved_candidate",
+    "emergency_stop_blocked",
+    "execution_blocked_phase1c",
 ]
 
 

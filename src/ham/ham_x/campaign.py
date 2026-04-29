@@ -5,6 +5,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from src.ham.ham_x.config import HamXConfig, load_ham_x_config
 
+CampaignRiskLevel = str
+
 DEFAULT_CAMPAIGN_TOPICS = (
     "ham",
     "hermes",
@@ -28,6 +30,7 @@ class HamXCampaignConfig(BaseModel):
     brand_voice_id: str
     autonomy_mode: str
     catalog_skill_id: str
+    risk_level: CampaignRiskLevel = "low"
     topics: list[str] = Field(default_factory=lambda: list(DEFAULT_CAMPAIGN_TOPICS))
 
     def platform_context(self) -> dict[str, str]:

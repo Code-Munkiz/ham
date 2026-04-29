@@ -21,7 +21,22 @@ from src.ham.ham_x.config import (
 from src.ham.ham_x.redaction import redact
 
 ActionType = Literal["search", "draft", "quote", "post", "like", "reject", "queue"]
-ActionStatus = Literal["proposed", "rejected", "queued", "approved", "executed", "failed"]
+ActionStatus = Literal[
+    "proposed",
+    "rejected",
+    "queued",
+    "approved",
+    "executed",
+    "failed",
+    "auto_rejected",
+    "ignored",
+    "monitored",
+    "draft_only",
+    "queued_exception",
+    "queued_review",
+    "auto_approved",
+    "auto_approved_candidate",
+]
 AutonomyMode = Literal["draft", "approval", "guarded", "goham"]
 
 PLATFORM_CONTEXT_DEFAULTS: dict[str, str] = {
