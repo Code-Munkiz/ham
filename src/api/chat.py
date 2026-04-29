@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import re
+import time
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Literal
@@ -159,6 +160,9 @@ def _gateway_status_code(code: str) -> int:
 
 _MAX_SYSTEM_PROMPT_CHARS = 12_000
 _URL_IN_TEXT_RE = re.compile(r"https?://[^\s)]+", re.IGNORECASE)
+_STREAM_PARTIAL_NOTE = "\n\nConnection interrupted. Ask me to continue."
+_STREAM_CHECKPOINT_MIN_CHARS = 800
+_STREAM_CHECKPOINT_MIN_SEC = 1.5
 
 
 def _resolve_chat_clerk_context(
@@ -679,6 +683,15 @@ def _messages_for_completion(
     return sid, llm_messages, or_override, active_meta, last_user_plain
 
 
+def _with_interrupted_note(content: str) -> str:
+    base = content.rstrip()
+    if not base:
+        return "Connection interrupted before any content was saved. Ask me to continue."
+    if base.endswith(_STREAM_PARTIAL_NOTE.strip()):
+        return base
+    return f"{base}{_STREAM_PARTIAL_NOTE}"
+
+
 @router.get("/api/chat/sessions")
 async def list_chat_sessions(
     limit: int = 50,
@@ -922,6 +935,28 @@ def post_chat_stream(
         yield json.dumps({"type": "session", "session_id": sid}) + "\n"
         pieces: list[str] = []
         stream_completed = False
+        chars_since_checkpoint = 0
+        checkpoint_started = False
+        last_checkpoint_at = time.monotonic()
+
+        def checkpoint_partial(*, interrupted: bool) -> None:
+            nonlocal chars_since_checkpoint, last_checkpoint_at, checkpoint_started
+            if not pieces:
+                return
+            partial = "".join(pieces)
+            if not partial.strip():
+                return
+            visible, _ = (
+                split_assistant_ui_actions(partial)
+                if body.enable_ui_actions
+                else (partial, [])
+            )
+            payload = _with_interrupted_note(visible) if interrupted else visible
+            store.upsert_last_assistant_turn(sid, payload)
+            checkpoint_started = True
+            chars_since_checkpoint = 0
+            last_checkpoint_at = time.monotonic()
+
         try:
             try:
                 for part in stream_chat_turn(
@@ -929,11 +964,20 @@ def post_chat_stream(
                     openrouter_model_override=or_override,
                 ):
                     pieces.append(part)
+                    chars_since_checkpoint += len(part)
+                    now = time.monotonic()
+                    if (
+                        not checkpoint_started
+                        or
+                        chars_since_checkpoint >= _STREAM_CHECKPOINT_MIN_CHARS
+                        or (checkpoint_started and (now - last_checkpoint_at) >= _STREAM_CHECKPOINT_MIN_SEC)
+                    ):
+                        checkpoint_partial(interrupted=True)
                     yield json.dumps({"type": "delta", "text": part}) + "\n"
             except GatewayCallError as exc:
                 assistant_visible = format_gateway_error_user_message(exc)
                 try:
-                    store.append_turns(sid, [ChatTurn(role="assistant", content=assistant_visible)])
+                    store.upsert_last_assistant_turn(sid, assistant_visible)
                     payload_err: dict[str, Any] = {
                         "type": "done",
                         "session_id": sid,
@@ -963,7 +1007,7 @@ def post_chat_stream(
                 else (assistant_raw, [])
             )
             try:
-                store.append_turns(sid, [ChatTurn(role="assistant", content=assistant_visible)])
+                store.upsert_last_assistant_turn(sid, assistant_visible)
                 payload: dict[str, Any] = {
                     "type": "done",
                     "session_id": sid,
@@ -986,17 +1030,10 @@ def post_chat_stream(
         finally:
             # If stream was interrupted (generator closed), save partial content.
             if not stream_completed and pieces:
-                partial = "".join(pieces)
-                if partial.strip():
-                    try:
-                        visible, _ = (
-                            split_assistant_ui_actions(partial)
-                            if body.enable_ui_actions
-                            else (partial, [])
-                        )
-                        store.append_turns(sid, [ChatTurn(role="assistant", content=visible)])
-                    except Exception:
-                        pass  # Best-effort: don't crash on cleanup
+                try:
+                    checkpoint_partial(interrupted=True)
+                except Exception:
+                    pass  # Best-effort: don't crash on cleanup
 
     return StreamingResponse(
         ndjson_gen(),

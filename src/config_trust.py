@@ -32,6 +32,9 @@ Audit trail: Every decision logged with full rationale chain.
 from __future__ import annotations
 
 import re
+import hmac
+import json
+import base64
 import hashlib
 import time
 from dataclasses import dataclass, field, replace
@@ -47,6 +50,7 @@ from typing import Any
 
 class TrustLevel(str, Enum):
     """Trust score classification."""
+    INVALID = "invalid"        # <0.20 - structurally invalid/untrusted
     CRITICAL = "critical"      # 0.00-0.20 - Block immediately
     LOW = "low"                # 0.20-0.40 - Manual approval required
     MEDIUM = "medium"          # 0.40-0.60 - Supervised automation
@@ -78,6 +82,50 @@ class InstructionOrigin(str, Enum):
     EXTERNAL_WEBHOOK = "external_webhook"
     SCHEDULED_JOB = "scheduled_job"
     UNKNOWN = "unknown"
+
+
+class ValidationErrorType(str, Enum):
+    """Compatibility error categories for config trust validation."""
+    FILE_NOT_FOUND = "file_not_found"
+    INVALID_JSON = "invalid_json"
+    MISSING_SIGNATURE = "missing_signature"
+    INVALID_SIGNATURE = "invalid_signature"
+    EXPIRED_SIGNATURE = "expired_signature"
+    UNKNOWN_AUTHORITY = "unknown_authority"
+    INTERNAL_ERROR = "internal_error"
+
+
+class ConfigValidationException(RuntimeError):
+    """Raised for fatal validation errors."""
+
+
+@dataclass(frozen=True)
+class SignatureInfo:
+    signature: str
+    algorithm: str
+    timestamp: float
+    public_key_id: str
+
+
+@dataclass(frozen=True)
+class AuthorityRecord:
+    key_id: str
+    name: str
+    public_key: bytes
+    trusted_since: float
+    permitted_paths: frozenset[str] = field(default_factory=frozenset)
+    expires_at: float | None = None
+    description: str = ""
+
+
+@dataclass(frozen=True)
+class ValidationResult:
+    is_valid: bool
+    trust_score: float
+    trust_level: TrustLevel
+    warnings: list[str] = field(default_factory=list)
+    error_type: ValidationErrorType | None = None
+    authority_chain: list[str] = field(default_factory=list)
 
 
 # =============================================================================
@@ -826,6 +874,229 @@ class TrustEvaluator:
             limits["require_manual_review"] = True
         
         return limits
+
+
+# =============================================================================
+# BACKWARD-COMPAT CONFIG TRUST VALIDATOR
+# =============================================================================
+
+class ConfigTrustValidator:
+    """
+    Backward-compatible validator used by memory_heist and legacy tests.
+
+    The richer trust-model classes above remain the long-term implementation.
+    This wrapper provides the historical API surface expected by existing code.
+    """
+
+    def __init__(
+        self,
+        *,
+        default_authorities: list[AuthorityRecord] | None = None,
+        require_all_signatures: bool = False,
+        min_trust_score: float = 0.3,
+        max_signature_age_sec: float = 7 * 24 * 3600,
+    ) -> None:
+        self.default_authorities = list(default_authorities or [])
+        self.require_all_signatures = bool(require_all_signatures)
+        self.min_trust_score = float(min_trust_score)
+        self.max_signature_age_sec = float(max_signature_age_sec)
+        self._authority_by_id = {a.key_id: a for a in self.default_authorities}
+
+    def compute_file_hash(self, path: Path) -> str:
+        raw = Path(path).read_bytes()
+        return hashlib.sha256(raw).hexdigest()
+
+    def read_signature(self, path: Path) -> SignatureInfo | None:
+        try:
+            payload = json.loads(Path(path).read_text(encoding="utf-8"))
+        except Exception:
+            return None
+        if not isinstance(payload, dict):
+            return None
+        meta = payload.get("meta")
+        if not isinstance(meta, dict):
+            return None
+        sig = meta.get("signature")
+        if not isinstance(sig, dict):
+            return None
+        try:
+            signature = str(sig["signature"])
+            algorithm = str(sig.get("algorithm") or "hmac-sha256")
+            timestamp = float(sig["timestamp"])
+            public_key_id = str(sig["public_key_id"])
+        except Exception:
+            return None
+        return SignatureInfo(
+            signature=signature,
+            algorithm=algorithm,
+            timestamp=timestamp,
+            public_key_id=public_key_id,
+        )
+
+    def check_timestamp_validity(self, timestamp: float) -> tuple[bool, str | None]:
+        age = time.time() - float(timestamp)
+        if age < 0:
+            return False, "Signature timestamp is in the future."
+        if age > self.max_signature_age_sec:
+            return False, "Signature is older than 7 days."
+        return True, None
+
+    def verify_signature(self, path: Path, signature: SignatureInfo) -> tuple[bool, str | None]:
+        authority = self._authority_by_id.get(signature.public_key_id)
+        if authority is None:
+            return False, "Unknown signing authority."
+        if signature.algorithm.lower() != "hmac-sha256":
+            return False, f"Unsupported signature algorithm: {signature.algorithm}"
+        try:
+            body = Path(path).read_bytes()
+            expected = hmac.new(authority.public_key, body, hashlib.sha256).digest()
+            provided = base64.b64decode(signature.signature)
+        except Exception as exc:
+            return False, f"Signature parse error: {exc}"
+        if not hmac.compare_digest(expected, provided):
+            return False, "Signature mismatch."
+        return True, None
+
+    def verify_authority_chain(
+        self,
+        signature: SignatureInfo,
+        _path: Path,
+    ) -> tuple[bool, list[str], list[str]]:
+        authority = self._authority_by_id.get(signature.public_key_id)
+        if authority is None:
+            return False, [], ["Unknown authority"]
+        warnings: list[str] = []
+        now = time.time()
+        if authority.expires_at is not None and now > authority.expires_at:
+            return False, [authority.key_id], ["Authority expired"]
+        if now < authority.trusted_since:
+            warnings.append("Authority trust start is in the future")
+        return True, [authority.key_id], warnings
+
+    def validate(self, path: Path) -> ValidationResult:
+        p = Path(path)
+        if not p.exists():
+            return ValidationResult(
+                is_valid=False,
+                trust_score=0.0,
+                trust_level=TrustLevel.INVALID,
+                warnings=["Config file not found."],
+                error_type=ValidationErrorType.FILE_NOT_FOUND,
+            )
+        try:
+            payload = json.loads(p.read_text(encoding="utf-8"))
+        except Exception as exc:
+            return ValidationResult(
+                is_valid=False,
+                trust_score=0.0,
+                trust_level=TrustLevel.INVALID,
+                warnings=[f"Invalid JSON: {exc}"],
+                error_type=ValidationErrorType.INVALID_JSON,
+            )
+        if not isinstance(payload, dict):
+            return ValidationResult(
+                is_valid=False,
+                trust_score=0.0,
+                trust_level=TrustLevel.INVALID,
+                warnings=["Top-level config must be an object."],
+                error_type=ValidationErrorType.INVALID_JSON,
+            )
+
+        sig = self.read_signature(p)
+        warnings: list[str] = []
+        chain: list[str] = []
+        score = 0.7  # unsigned-but-acceptable baseline used by memory_heist defaults
+
+        if sig is None:
+            if self.require_all_signatures:
+                return ValidationResult(
+                    is_valid=False,
+                    trust_score=0.0,
+                    trust_level=TrustLevel.INVALID,
+                    warnings=["Missing signature."],
+                    error_type=ValidationErrorType.MISSING_SIGNATURE,
+                )
+            warnings.append("Unsigned config accepted by policy.")
+        else:
+            ok_time, time_err = self.check_timestamp_validity(sig.timestamp)
+            if not ok_time:
+                return ValidationResult(
+                    is_valid=False,
+                    trust_score=0.1,
+                    trust_level=TrustLevel.LOW,
+                    warnings=[time_err or "Expired signature."],
+                    error_type=ValidationErrorType.EXPIRED_SIGNATURE,
+                )
+            ok_chain, chain, chain_warn = self.verify_authority_chain(sig, p)
+            warnings.extend(chain_warn)
+            if not ok_chain:
+                return ValidationResult(
+                    is_valid=False,
+                    trust_score=0.1,
+                    trust_level=TrustLevel.LOW,
+                    warnings=warnings or ["Unknown authority."],
+                    error_type=ValidationErrorType.UNKNOWN_AUTHORITY,
+                    authority_chain=chain,
+                )
+            ok_sig, sig_err = self.verify_signature(p, sig)
+            if not ok_sig:
+                return ValidationResult(
+                    is_valid=False,
+                    trust_score=0.1,
+                    trust_level=TrustLevel.LOW,
+                    warnings=[sig_err or "Invalid signature."],
+                    error_type=ValidationErrorType.INVALID_SIGNATURE,
+                    authority_chain=chain,
+                )
+            score = 0.95
+
+        if score >= 0.95:
+            level = TrustLevel.TRUSTED
+        elif score >= 0.8:
+            level = TrustLevel.HIGH
+        elif score >= 0.5:
+            level = TrustLevel.MEDIUM
+        elif score >= 0.2:
+            level = TrustLevel.LOW
+        else:
+            level = TrustLevel.INVALID
+        is_valid = score >= self.min_trust_score
+        return ValidationResult(
+            is_valid=is_valid,
+            trust_score=score,
+            trust_level=level,
+            warnings=warnings,
+            error_type=None if is_valid else ValidationErrorType.INTERNAL_ERROR,
+            authority_chain=chain,
+        )
+
+
+def create_trusted_validator(
+    *,
+    authorities: list[AuthorityRecord] | None = None,
+    min_trust_score: float = 0.3,
+) -> ConfigTrustValidator:
+    return ConfigTrustValidator(
+        default_authorities=authorities,
+        require_all_signatures=False,
+        min_trust_score=min_trust_score,
+    )
+
+
+def warn_on_untrusted(result: ValidationResult, logger: Any | None = None) -> None:
+    if result.is_valid:
+        return
+    message = (
+        f"Untrusted config (score={result.trust_score:.3f}, level={result.trust_level.value})"
+    )
+    if result.warnings:
+        message = f"{message}: {', '.join(result.warnings)}"
+    if logger is not None and hasattr(logger, "warning"):
+        logger.warning(message)
+
+
+def trust_validator_middleware(validator: ConfigTrustValidator | None = None) -> ConfigTrustValidator:
+    return validator or ConfigTrustValidator()
 
 
 # =============================================================================

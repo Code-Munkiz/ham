@@ -1,4 +1,4 @@
-"""Dry-run reactive reply governor for GoHAM Phase 4A."""
+"""Reactive reply governor for GoHAM dry-run and live canary lanes."""
 from __future__ import annotations
 
 import hashlib
@@ -54,6 +54,7 @@ def evaluate_reactive_governor(
     state: ReactiveGovernorState | None = None,
     actions_this_run: int = 0,
     now: datetime | None = None,
+    live_canary: bool = False,
 ) -> ReactiveGovernorDecision:
     cfg = config or load_ham_x_config()
     st = state or ReactiveGovernorState()
@@ -64,9 +65,14 @@ def evaluate_reactive_governor(
         reasons.append("emergency_stop")
     if not cfg.enable_goham_reactive:
         reasons.append("reactive_disabled")
-    if not cfg.goham_reactive_dry_run:
+    if live_canary:
+        if cfg.goham_reactive_dry_run:
+            reasons.append("reactive_dry_run_enabled")
+        if not cfg.goham_reactive_live_canary:
+            reasons.append("reactive_live_canary_required")
+    elif not cfg.goham_reactive_dry_run:
         reasons.append("reactive_dry_run_required")
-    if cfg.goham_reactive_live_canary:
+    if not live_canary and cfg.goham_reactive_live_canary:
         reasons.append("reactive_live_canary_disabled_phase4a")
     if policy.route != "reply_candidate" or not policy.allowed:
         reasons.append(f"policy_route_{policy.route}")

@@ -107,6 +107,30 @@ class SqliteChatSessionStore:
                     (session_id, start + i, t.role, t.content),
                 )
 
+    def upsert_last_assistant_turn(self, session_id: str, content: str) -> None:
+        with self._lock, self._conn:
+            row = self._conn.execute(
+                "SELECT 1 FROM sessions WHERE session_id = ?",
+                (session_id,),
+            ).fetchone()
+            if row is None:
+                raise KeyError(session_id)
+            last = self._conn.execute(
+                "SELECT seq, role FROM turns WHERE session_id = ? ORDER BY seq DESC LIMIT 1",
+                (session_id,),
+            ).fetchone()
+            if last is not None and str(last["role"]) == "assistant":
+                self._conn.execute(
+                    "UPDATE turns SET content = ? WHERE session_id = ? AND seq = ?",
+                    (content, session_id, int(last["seq"])),
+                )
+                return
+            next_seq = 0 if last is None else int(last["seq"]) + 1
+            self._conn.execute(
+                "INSERT INTO turns (session_id, seq, role, content) VALUES (?, ?, ?, ?)",
+                (session_id, next_seq, "assistant", content),
+            )
+
     def set_upstream_ref(self, session_id: str, ref: str | None) -> None:
         with self._lock, self._conn:
             cur = self._conn.execute(
