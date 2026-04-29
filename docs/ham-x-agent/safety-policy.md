@@ -33,4 +33,6 @@ GoHAM v0 ops/status is read-only. It can summarize the GoHAM execution journal, 
 
 GoHAM v0 daily execution is one-shot only. `run_goham_daily_once()` may call the guarded bridge at most once for one manually prepared original-post candidate, then stops; it must not schedule loops, retry failures, generate candidates, run Phase 2B, or execute arbitrary live model output.
 
+Phase 3A Firehose Controller is dry-run-only. Its governor may mark original-post candidates as allowed in a summary, but provider calls remain blocked by `HAM_X_GOHAM_CONTROLLER_DRY_RUN=true`; quotes are blocked by default, and the controller must audit every decision without executing.
+
 GoHAM mode, when introduced later, must remain bounded high-autonomy: visible operator controls, policy checks, budgets, rate limits, audit records, and a kill switch are still required.

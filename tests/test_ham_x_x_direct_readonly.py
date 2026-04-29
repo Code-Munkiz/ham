@@ -72,6 +72,18 @@ def _test_config(
         exception_queue_path=tmp_path / "exception_queue.jsonl",
         execution_journal_path=tmp_path / "execution_journal.jsonl",
         audit_log_path=tmp_path / "audit.jsonl",
+
+        enable_goham_controller=False,
+        goham_controller_dry_run=True,
+        goham_max_total_actions_per_day=1,
+        goham_max_original_posts_per_day=1,
+        goham_max_quotes_per_day=0,
+        goham_min_spacing_minutes=120,
+        goham_max_actions_per_run=1,
+        goham_max_candidates_per_run=5,
+        goham_consecutive_failure_stop=2,
+        goham_policy_rejection_stop=5,
+        goham_model_timeout_stop=3,
     )
 
 

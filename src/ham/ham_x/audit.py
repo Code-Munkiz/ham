@@ -74,6 +74,9 @@ AuditEventType = Literal[
     "goham_execution_cap_blocked",
     "goham_execution_duplicate_blocked",
     "goham_execution_policy_blocked",
+    "goham_controller_started",
+    "goham_controller_candidate_decision",
+    "goham_controller_completed",
 ]
 
 

@@ -211,6 +211,26 @@ First live daily run checklist:
 4. Run `run_goham_daily_once()` once.
 5. Stop immediately and verify the post, audit row, journal row, and cap status before considering any future run.
 
+## Phase 3A Firehose Controller Dry-Run
+
+Phase 3A adds a dry-run-only controller foundation: `goham_campaign.py`, `goham_governor.py`, and `goham_controller.py`. It accepts a bounded candidate bank, asks the governor for each candidate, audits every decision, and returns allowed/blocked dry-run summaries. It does not call `goham_bridge`, `manual_canary`, `x_executor`, Phase 2B, xurl mutations, or provider APIs.
+
+Safe defaults keep it disabled and non-mutating:
+
+```dotenv
+HAM_X_ENABLE_GOHAM_CONTROLLER=false
+HAM_X_GOHAM_CONTROLLER_DRY_RUN=true
+HAM_X_GOHAM_MAX_TOTAL_ACTIONS_PER_DAY=1
+HAM_X_GOHAM_MAX_ORIGINAL_POSTS_PER_DAY=1
+HAM_X_GOHAM_MAX_QUOTES_PER_DAY=0
+HAM_X_GOHAM_MIN_SPACING_MINUTES=120
+HAM_X_GOHAM_MAX_ACTIONS_PER_RUN=1
+HAM_X_GOHAM_MAX_CANDIDATES_PER_RUN=5
+HAM_X_GOHAM_CONSECUTIVE_FAILURE_STOP=2
+HAM_X_GOHAM_POLICY_REJECTION_STOP=5
+HAM_X_GOHAM_MODEL_TIMEOUT_STOP=3
+```
+
 ## Autonomy Modes
 
 - `draft`: queue draft content only.

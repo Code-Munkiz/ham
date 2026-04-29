@@ -107,6 +107,17 @@ class HamXConfig:
     exception_queue_path: Path
     execution_journal_path: Path
     audit_log_path: Path
+    enable_goham_controller: bool = False
+    goham_controller_dry_run: bool = True
+    goham_max_total_actions_per_day: int = 1
+    goham_max_original_posts_per_day: int = 1
+    goham_max_quotes_per_day: int = 0
+    goham_min_spacing_minutes: int = 120
+    goham_max_actions_per_run: int = 1
+    goham_max_candidates_per_run: int = 5
+    goham_consecutive_failure_stop: int = 2
+    goham_policy_rejection_stop: int = 5
+    goham_model_timeout_stop: int = 3
 
 
 def load_ham_x_config() -> HamXConfig:
@@ -186,4 +197,15 @@ def load_ham_x_config() -> HamXConfig:
             ".data/ham-x/execution_journal.jsonl",
         ),
         audit_log_path=_path_env("HAM_X_AUDIT_LOG_PATH", ".data/ham-x/audit.jsonl"),
+        enable_goham_controller=_bool_env("HAM_X_ENABLE_GOHAM_CONTROLLER", False),
+        goham_controller_dry_run=_bool_env("HAM_X_GOHAM_CONTROLLER_DRY_RUN", True),
+        goham_max_total_actions_per_day=_int_env("HAM_X_GOHAM_MAX_TOTAL_ACTIONS_PER_DAY", 1),
+        goham_max_original_posts_per_day=_int_env("HAM_X_GOHAM_MAX_ORIGINAL_POSTS_PER_DAY", 1),
+        goham_max_quotes_per_day=_int_env("HAM_X_GOHAM_MAX_QUOTES_PER_DAY", 0),
+        goham_min_spacing_minutes=_int_env("HAM_X_GOHAM_MIN_SPACING_MINUTES", 120),
+        goham_max_actions_per_run=_int_env("HAM_X_GOHAM_MAX_ACTIONS_PER_RUN", 1),
+        goham_max_candidates_per_run=_int_env("HAM_X_GOHAM_MAX_CANDIDATES_PER_RUN", 5),
+        goham_consecutive_failure_stop=_int_env("HAM_X_GOHAM_CONSECUTIVE_FAILURE_STOP", 2),
+        goham_policy_rejection_stop=_int_env("HAM_X_GOHAM_POLICY_REJECTION_STOP", 5),
+        goham_model_timeout_stop=_int_env("HAM_X_GOHAM_MODEL_TIMEOUT_STOP", 3),
     )
