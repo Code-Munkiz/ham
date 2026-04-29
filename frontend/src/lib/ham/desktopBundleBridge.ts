@@ -242,8 +242,22 @@ export type HamDesktopWebBridgeReadTrustedStatusResult =
 
 export type HamDesktopWebBridgeBrowserIntentPayload = {
   intent_id?: string;
-  action: "navigate_and_capture";
-  url: string;
+  action:
+    | "navigate_and_capture"
+    | "observe"
+    | "click_candidate"
+    | "scroll"
+    | "type_into_field"
+    | "key_press"
+    | "wait";
+  url?: string;
+  candidate_id?: string;
+  delta_y?: number;
+  selector?: string;
+  text?: string;
+  clear_first?: boolean;
+  key?: string;
+  wait_ms?: number;
   client_context?: Record<string, unknown>;
 };
 

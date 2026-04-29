@@ -60,6 +60,76 @@ function looksLikeDeniedStaleOrigin(origin) {
   return /^https:\/\/.*aaron-bundys-projects.*\.vercel\.app$/i.test(o);
 }
 
+function parseBrowserIntentPayload(raw) {
+  const body = raw && typeof raw === 'object' ? raw : {};
+  const action = String(body.action || '').trim();
+  const intentId = String(body.intent_id || '').trim();
+  const clientContext = body.client_context && typeof body.client_context === 'object' ? body.client_context : {};
+  if (action === 'navigate_and_capture') {
+    const url = String(body.url || '').trim();
+    if (!url) return { ok: false, error: 'invalid_intent' };
+    return { ok: true, payload: { action, intent_id: intentId, url, client_context: clientContext } };
+  }
+  if (action === 'observe') {
+    return { ok: true, payload: { action, intent_id: intentId, client_context: clientContext } };
+  }
+  if (action === 'click_candidate') {
+    const candidateId = String(body.candidate_id || '').trim();
+    if (!candidateId) return { ok: false, error: 'invalid_intent' };
+    return {
+      ok: true,
+      payload: { action, intent_id: intentId, candidate_id: candidateId, client_context: clientContext },
+    };
+  }
+  if (action === 'scroll') {
+    return {
+      ok: true,
+      payload: {
+        action,
+        intent_id: intentId,
+        delta_y: Number(body.delta_y || 0),
+        client_context: clientContext,
+      },
+    };
+  }
+  if (action === 'type_into_field') {
+    const selector = String(body.selector || '').trim();
+    const text = String(body.text || '');
+    if (!selector || !text) return { ok: false, error: 'invalid_intent' };
+    return {
+      ok: true,
+      payload: {
+        action,
+        intent_id: intentId,
+        selector,
+        text,
+        clear_first: body.clear_first !== false,
+        client_context: clientContext,
+      },
+    };
+  }
+  if (action === 'key_press') {
+    const key = String(body.key || '').trim();
+    if (!key) return { ok: false, error: 'invalid_intent' };
+    return {
+      ok: true,
+      payload: { action, intent_id: intentId, key, client_context: clientContext },
+    };
+  }
+  if (action === 'wait') {
+    return {
+      ok: true,
+      payload: {
+        action,
+        intent_id: intentId,
+        wait_ms: Number(body.wait_ms || 0),
+        client_context: clientContext,
+      },
+    };
+  }
+  return { ok: false, error: 'invalid_intent' };
+}
+
 function createLocalControlWebBridge(opts = {}) {
   const host = '127.0.0.1';
   const port = Number.isFinite(Number(opts.port)) ? Number(opts.port) : 0;
@@ -261,24 +331,20 @@ function createLocalControlWebBridge(opts = {}) {
         return;
       }
       const action = String(body.action || '').trim();
-      const url = String(body.url || '').trim();
-      const intentId = String(body.intent_id || '').trim();
-      if (!action || action !== 'navigate_and_capture' || !url) {
+      if (!action) {
         json(res, 400, { ok: false, error: 'invalid_intent' }, headers);
+        return;
+      }
+      const parsed = parseBrowserIntentPayload(body);
+      if (!parsed.ok) {
+        json(res, 400, { ok: false, error: parsed.error || 'invalid_intent' }, headers);
         return;
       }
       if (!executeBrowserIntent) {
         json(res, 503, { ok: false, error: 'browser_intent_unavailable' }, headers);
         return;
       }
-      const result = await executeBrowserIntent({
-        action,
-        url,
-        intent_id: intentId,
-        session_id: valid.session_id,
-        origin,
-        client_context: body.client_context && typeof body.client_context === 'object' ? body.client_context : {},
-      });
+      const result = await executeBrowserIntent({ ...parsed.payload, session_id: valid.session_id, origin });
       const statusCode =
         result && typeof result.http_status === 'number'
           ? result.http_status
@@ -456,23 +522,14 @@ function createLocalControlWebBridge(opts = {}) {
     if (!executeBrowserIntent) {
       return { ok: false, error: 'browser_intent_unavailable', reason_code: 'browser_intent_unavailable', http_status: 503 };
     }
-    const body = payload && typeof payload === 'object' ? payload : {};
-    const action = String(body.action || '').trim();
-    const url = String(body.url || '').trim();
-    const intentId = String(body.intent_id || '').trim();
-    if (action !== 'navigate_and_capture' || !url) {
+    const parsed = parseBrowserIntentPayload(payload);
+    if (!parsed.ok) {
       return { ok: false, error: 'invalid_intent', reason_code: 'invalid_intent', http_status: 400 };
     }
     const result = await executeBrowserIntent({
-      action,
-      url,
-      intent_id: intentId,
+      ...parsed.payload,
       session_id: valid.session_id,
       origin: canonicalOrigin,
-      client_context:
-        body.client_context && typeof body.client_context === 'object'
-          ? body.client_context
-          : {},
     });
     return result && typeof result === 'object' ? result : { ok: false, error: 'browser_intent_failed', reason_code: 'browser_intent_failed', http_status: 409 };
   }

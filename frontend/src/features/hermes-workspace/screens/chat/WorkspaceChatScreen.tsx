@@ -129,7 +129,7 @@ function isLikelyBrowserTask(text: string): boolean {
     /\bopen\b.*\b(browser|site|page|web)\b/,
     /\b(go to|visit|navigate to|open)\b/,
     /\b(search|look up|lookup|find)\b/,
-    /\b(click|scroll|what do you see|what do you notice|read this page)\b/,
+    /\b(click|scroll|type|press|wait|what do you see|what do you notice|read this page)\b/,
   ];
   return patterns.some((p) => p.test(t));
 }
@@ -165,9 +165,99 @@ function localBrowserFailureMessage(reason: string): string {
       return "Local browser executable was not found on this machine.";
     case "bridge_start_failed":
       return "Local bridge could not start. Reopen GOHAM and retry.";
+    case "selector_invalid":
+    case "field_not_allowed":
+    case "field_blocked":
+      return "That field is not allowed for live typing. Pick a visible safe text field.";
+    case "key_not_allowed":
+      return "That key is blocked in Copilot v1. Use navigation keys only.";
+    case "wait_out_of_range":
+      return "Wait must be between 0.5 and 3 seconds in Copilot v1.";
+    case "unknown_candidate_id":
+    case "candidates_stale":
+      return "I need a fresh page observe before clicking. Ask me to observe, then click.";
     default:
       return `Local browser handoff failed (${reason || "unknown_error"}).`;
   }
+}
+
+type LocalCopilotPrimitiveIntent =
+  | { action: "blocked_coordinate" }
+  | { action: "observe" }
+  | { action: "scroll"; delta_y: number }
+  | { action: "wait"; wait_ms: number }
+  | { action: "key_press"; key: string }
+  | { action: "type_into_field"; selector: string; text: string }
+  | { action: "click_candidate"; ordinal: number };
+
+function parseLocalCopilotPrimitive(text: string): LocalCopilotPrimitiveIntent | null {
+  const t = text.trim();
+  const lower = t.toLowerCase();
+  if (!lower) return null;
+  if (/\b(observe|what do you see|what's on the page|read this page)\b/.test(lower)) return { action: "observe" };
+  const waitMatch = /\bwait\s+(\d+(?:\.\d+)?)\s*(ms|millisecond|milliseconds|s|sec|secs|second|seconds)?\b/i.exec(t);
+  if (waitMatch) {
+    const amount = Number(waitMatch[1] || "0");
+    const unit = String(waitMatch[2] || "s").toLowerCase();
+    const waitMs = /ms|millisecond/.test(unit) ? Math.round(amount) : Math.round(amount * 1000);
+    return { action: "wait", wait_ms: waitMs };
+  }
+  if (/\bscroll\b/.test(lower)) {
+    const amount = Number((/\b(\d{2,4})\b/.exec(lower)?.[1] ?? "420").trim());
+    const dir = /\b(up|top)\b/.test(lower) ? -1 : 1;
+    return { action: "scroll", delta_y: Math.max(120, Math.min(600, amount)) * dir };
+  }
+  if (/\b(click|tap)\b.*\b(x|y)\s*[:=]?\s*\d+\b/.test(lower) || /\bcoordinates?\b/.test(lower)) {
+    return { action: "blocked_coordinate" };
+  }
+  const pressMatch = /\bpress\s+([a-z ]{2,20})\b/i.exec(t);
+  if (pressMatch) {
+    const raw = String(pressMatch[1] || "").toLowerCase();
+    const keyMap: Record<string, string> = {
+      tab: "Tab",
+      escape: "Escape",
+      up: "ArrowUp",
+      down: "ArrowDown",
+      left: "ArrowLeft",
+      right: "ArrowRight",
+      "page up": "PageUp",
+      "page down": "PageDown",
+      home: "Home",
+      end: "End",
+    };
+    return { action: "key_press", key: keyMap[raw] || raw.replace(/\s+/g, " ") };
+  }
+  const typeIntoMatch = /\btype\s+(.+?)\s+into\s+(.+)$/i.exec(t);
+  if (typeIntoMatch) {
+    const targetRaw = String(typeIntoMatch[2] || "").trim().toLowerCase();
+    const defaultSearchSelector =
+      'input[type="search"],input[name*="search" i],input[aria-label*="search" i],input[name="q" i],input[id*="search" i],textarea';
+    const normalizedSelector =
+      /\b(search|search box|search field)\b/.test(targetRaw)
+        ? defaultSearchSelector
+        : targetRaw;
+    return {
+      action: "type_into_field",
+      text: String(typeIntoMatch[1] || "").trim().replace(/^["']|["']$/g, ""),
+      selector: normalizedSelector,
+    };
+  }
+  const typeMatch = /\btype\s+(.+)$/i.exec(t);
+  if (typeMatch) {
+    return {
+      action: "type_into_field",
+      text: String(typeMatch[1] || "").trim().replace(/^["']|["']$/g, ""),
+      selector:
+        'input[type="search"],input[name*="search" i],input[aria-label*="search" i],input[name="q" i],input[id*="search" i],textarea',
+    };
+  }
+  const clickMatch = /\bclick(?:\s+the)?\s*(first|second|third|fourth|\d+)?/i.exec(t);
+  if (clickMatch) {
+    const raw = String(clickMatch[1] || "first").toLowerCase();
+    const n = raw === "first" ? 1 : raw === "second" ? 2 : raw === "third" ? 3 : raw === "fourth" ? 4 : Number(raw);
+    return { action: "click_candidate", ordinal: Number.isFinite(n) && n > 0 ? n : 1 };
+  }
+  return null;
 }
 
 export type WorkspaceChatScreenProps = {
@@ -203,6 +293,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   const desktopWebBridgeTrustedRef = React.useRef(false);
   /** After a turn used browser execution, follow-up plain text can stay on current screen (desktop + trusted bridge). */
   const browserSessionFollowThroughRef = React.useRef(false);
+  const liveCopilotCandidatesRef = React.useRef<Array<{ id: string }>>([]);
   const [gohamModalOpen, setGohamModalOpen] = React.useState(false);
   const [gohamBridgeLinked, setGohamBridgeLinked] = React.useState(false);
   const [gohamModalPhase, setGohamModalPhase] = React.useState<
@@ -715,9 +806,251 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         }
 
         const providedUrl = extractFirstUrl(plainOutbound);
-        const followUpInstruction =
-          !providedUrl && activeBrowserSession && isFollowUpBrowserInstruction(plainOutbound);
-        if (followUpInstruction) {
+        const primitiveIntent =
+          !providedUrl && activeBrowserSession ? parseLocalCopilotPrimitive(plainOutbound) : null;
+        if (primitiveIntent) {
+          try {
+            if (primitiveIntent.action === "blocked_coordinate") {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantPlaceId
+                    ? { ...m, content: "Coordinate clicks are blocked. Ask me to observe and click a listed candidate." }
+                    : m,
+                ),
+              );
+              setSending(false);
+              return;
+            }
+            if (primitiveIntent.action === "observe") {
+              const observe = await webBridgeApi.browserIntent({
+                intent_id: `desktop-goham-${Date.now()}`,
+                action: "observe",
+                client_context: { source: "desktop_goham", original_prompt: plainOutbound },
+              });
+              if (!observe.ok) {
+                const reason =
+                  typeof observe.reason_code === "string" && observe.reason_code
+                    ? observe.reason_code
+                    : typeof observe.error === "string"
+                      ? observe.error
+                      : "observe_failed";
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === assistantPlaceId ? { ...m, content: localBrowserFailureMessage(reason) } : m,
+                  ),
+                );
+                setSending(false);
+                return;
+              }
+              const candidates = Array.isArray((observe as Record<string, unknown>).browser_bridge &&
+                typeof (observe as Record<string, unknown>).browser_bridge === "object" &&
+                Array.isArray(((observe as Record<string, unknown>).browser_bridge as Record<string, unknown>).click_candidates)
+                ? (((observe as Record<string, unknown>).browser_bridge as Record<string, unknown>).click_candidates as Array<{ id?: string }>)
+                : [])
+                ? ((((observe as Record<string, unknown>).browser_bridge as Record<string, unknown>).click_candidates as Array<{ id?: string }>).filter((c) => typeof c?.id === "string") as Array<{ id: string }>)
+                : [];
+              liveCopilotCandidatesRef.current = candidates;
+              browserSessionFollowThroughRef.current = true;
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantPlaceId
+                    ? { ...m, content: `Observed locally. Found ${candidates.length} clickable candidates.` }
+                    : m,
+                ),
+              );
+              setSending(false);
+              return;
+            }
+            if (primitiveIntent.action === "click_candidate") {
+              let candidates = liveCopilotCandidatesRef.current;
+              if (!candidates.length) {
+                const observe = await webBridgeApi.browserIntent({
+                  intent_id: `desktop-goham-${Date.now()}`,
+                  action: "observe",
+                  client_context: { source: "desktop_goham", original_prompt: "refresh_candidates" },
+                });
+                if (observe.ok) {
+                  const extracted = Array.isArray((observe as Record<string, unknown>).browser_bridge &&
+                    typeof (observe as Record<string, unknown>).browser_bridge === "object" &&
+                    Array.isArray(((observe as Record<string, unknown>).browser_bridge as Record<string, unknown>).click_candidates)
+                    ? (((observe as Record<string, unknown>).browser_bridge as Record<string, unknown>).click_candidates as Array<{ id?: string }>)
+                    : [])
+                    ? ((((observe as Record<string, unknown>).browser_bridge as Record<string, unknown>).click_candidates as Array<{ id?: string }>).filter((c) => typeof c?.id === "string") as Array<{ id: string }>)
+                    : [];
+                  liveCopilotCandidatesRef.current = extracted;
+                  candidates = extracted;
+                }
+              }
+              const idx = Math.max(0, primitiveIntent.ordinal - 1);
+              const candidateId = candidates[idx]?.id || candidates[0]?.id || "";
+              if (!candidateId) {
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === assistantPlaceId
+                      ? { ...m, content: "No safe clickable candidates yet. Ask me to observe first." }
+                      : m,
+                  ),
+                );
+                setSending(false);
+                return;
+              }
+              const clicked = await webBridgeApi.browserIntent({
+                intent_id: `desktop-goham-${Date.now()}`,
+                action: "click_candidate",
+                candidate_id: candidateId,
+                client_context: { source: "desktop_goham", original_prompt: plainOutbound },
+              });
+              if (!clicked.ok) {
+                const reason =
+                  typeof clicked.reason_code === "string" && clicked.reason_code
+                    ? clicked.reason_code
+                    : typeof clicked.error === "string"
+                      ? clicked.error
+                      : "click_failed";
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === assistantPlaceId ? { ...m, content: localBrowserFailureMessage(reason) } : m,
+                  ),
+                );
+                setSending(false);
+                return;
+              }
+              browserSessionFollowThroughRef.current = true;
+              setMessages((prev) =>
+                prev.map((m) => (m.id === assistantPlaceId ? { ...m, content: "Clicked that locally." } : m)),
+              );
+              setSending(false);
+              return;
+            }
+            if (primitiveIntent.action === "scroll") {
+              const scrolled = await webBridgeApi.browserIntent({
+                intent_id: `desktop-goham-${Date.now()}`,
+                action: "scroll",
+                delta_y: primitiveIntent.delta_y,
+                client_context: { source: "desktop_goham", original_prompt: plainOutbound },
+              });
+              if (!scrolled.ok) {
+                const reason =
+                  typeof scrolled.reason_code === "string" && scrolled.reason_code
+                    ? scrolled.reason_code
+                    : typeof scrolled.error === "string"
+                      ? scrolled.error
+                      : "scroll_failed";
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === assistantPlaceId ? { ...m, content: localBrowserFailureMessage(reason) } : m,
+                  ),
+                );
+                setSending(false);
+                return;
+              }
+              browserSessionFollowThroughRef.current = true;
+              setMessages((prev) =>
+                prev.map((m) => (m.id === assistantPlaceId ? { ...m, content: "Scrolled locally." } : m)),
+              );
+              setSending(false);
+              return;
+            }
+            if (primitiveIntent.action === "type_into_field") {
+              const typed = await webBridgeApi.browserIntent({
+                intent_id: `desktop-goham-${Date.now()}`,
+                action: "type_into_field",
+                selector: primitiveIntent.selector,
+                text: primitiveIntent.text,
+                clear_first: true,
+                client_context: { source: "desktop_goham", original_prompt: plainOutbound },
+              });
+              if (!typed.ok) {
+                const reason =
+                  typeof typed.reason_code === "string" && typed.reason_code
+                    ? typed.reason_code
+                    : typeof typed.error === "string"
+                      ? typed.error
+                      : "type_failed";
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === assistantPlaceId ? { ...m, content: localBrowserFailureMessage(reason) } : m,
+                  ),
+                );
+                setSending(false);
+                return;
+              }
+              browserSessionFollowThroughRef.current = true;
+              setMessages((prev) =>
+                prev.map((m) => (m.id === assistantPlaceId ? { ...m, content: "Typed into the field locally." } : m)),
+              );
+              setSending(false);
+              return;
+            }
+            if (primitiveIntent.action === "key_press") {
+              const pressed = await webBridgeApi.browserIntent({
+                intent_id: `desktop-goham-${Date.now()}`,
+                action: "key_press",
+                key: primitiveIntent.key,
+                client_context: { source: "desktop_goham", original_prompt: plainOutbound },
+              });
+              if (!pressed.ok) {
+                const reason =
+                  typeof pressed.reason_code === "string" && pressed.reason_code
+                    ? pressed.reason_code
+                    : typeof pressed.error === "string"
+                      ? pressed.error
+                      : "key_press_failed";
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === assistantPlaceId ? { ...m, content: localBrowserFailureMessage(reason) } : m,
+                  ),
+                );
+                setSending(false);
+                return;
+              }
+              browserSessionFollowThroughRef.current = true;
+              setMessages((prev) =>
+                prev.map((m) => (m.id === assistantPlaceId ? { ...m, content: "Pressed that key locally." } : m)),
+              );
+              setSending(false);
+              return;
+            }
+            if (primitiveIntent.action === "wait") {
+              const waited = await webBridgeApi.browserIntent({
+                intent_id: `desktop-goham-${Date.now()}`,
+                action: "wait",
+                wait_ms: primitiveIntent.wait_ms,
+                client_context: { source: "desktop_goham", original_prompt: plainOutbound },
+              });
+              if (!waited.ok) {
+                const reason =
+                  typeof waited.reason_code === "string" && waited.reason_code
+                    ? waited.reason_code
+                    : typeof waited.error === "string"
+                      ? waited.error
+                      : "wait_failed";
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === assistantPlaceId ? { ...m, content: localBrowserFailureMessage(reason) } : m,
+                  ),
+                );
+                setSending(false);
+                return;
+              }
+              browserSessionFollowThroughRef.current = true;
+              setMessages((prev) =>
+                prev.map((m) => (m.id === assistantPlaceId ? { ...m, content: "Paused locally." } : m)),
+              );
+              setSending(false);
+              return;
+            }
+          } catch (err) {
+            const reason = err instanceof Error ? err.message : "browser_intent_failed";
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantPlaceId ? { ...m, content: localBrowserFailureMessage(reason) } : m,
+              ),
+            );
+            setSending(false);
+            return;
+          }
+        } else if (!providedUrl && activeBrowserSession && isFollowUpBrowserInstruction(plainOutbound)) {
           browserSessionFollowThroughRef.current = true;
         } else {
           const targetUrl = providedUrl || buildSafeSearchUrl(plainOutbound);

@@ -52,16 +52,59 @@ const localControlBridge = {
     browserIntent: (payload) => {
       const p = payload && typeof payload === 'object' ? payload : {};
       const action = String(p.action || '').trim();
-      const url = String(p.url || '').trim();
-      if (action !== 'navigate_and_capture' || !url) {
-        return Promise.resolve({ ok: false, error: 'invalid_intent', reason_code: 'invalid_intent' });
-      }
-      return ipcRenderer.invoke('ham-desktop:local-control-web-bridge-browser-intent', {
+      const base = {
         intent_id: String(p.intent_id || ''),
-        action: 'navigate_and_capture',
-        url,
+        action,
         client_context: p.client_context && typeof p.client_context === 'object' ? p.client_context : {},
-      });
+      };
+      if (action === 'navigate_and_capture') {
+        const url = String(p.url || '').trim();
+        if (!url) return Promise.resolve({ ok: false, error: 'invalid_intent', reason_code: 'invalid_intent' });
+        return ipcRenderer.invoke('ham-desktop:local-control-web-bridge-browser-intent', { ...base, url });
+      }
+      if (action === 'observe') {
+        return ipcRenderer.invoke('ham-desktop:local-control-web-bridge-browser-intent', base);
+      }
+      if (action === 'click_candidate') {
+        const candidateId = String(p.candidate_id || '').trim();
+        if (!candidateId) return Promise.resolve({ ok: false, error: 'invalid_intent', reason_code: 'invalid_intent' });
+        return ipcRenderer.invoke('ham-desktop:local-control-web-bridge-browser-intent', {
+          ...base,
+          candidate_id: candidateId,
+        });
+      }
+      if (action === 'scroll') {
+        return ipcRenderer.invoke('ham-desktop:local-control-web-bridge-browser-intent', {
+          ...base,
+          delta_y: Number(p.delta_y || 0),
+        });
+      }
+      if (action === 'type_into_field') {
+        const selector = String(p.selector || '').trim();
+        const text = String(p.text || '');
+        if (!selector || !text) return Promise.resolve({ ok: false, error: 'invalid_intent', reason_code: 'invalid_intent' });
+        return ipcRenderer.invoke('ham-desktop:local-control-web-bridge-browser-intent', {
+          ...base,
+          selector,
+          text,
+          clear_first: p.clear_first !== false,
+        });
+      }
+      if (action === 'key_press') {
+        const key = String(p.key || '').trim();
+        if (!key) return Promise.resolve({ ok: false, error: 'invalid_intent', reason_code: 'invalid_intent' });
+        return ipcRenderer.invoke('ham-desktop:local-control-web-bridge-browser-intent', {
+          ...base,
+          key,
+        });
+      }
+      if (action === 'wait') {
+        return ipcRenderer.invoke('ham-desktop:local-control-web-bridge-browser-intent', {
+          ...base,
+          wait_ms: Number(p.wait_ms || 0),
+        });
+      }
+      return Promise.resolve({ ok: false, error: 'invalid_intent', reason_code: 'invalid_intent' });
     },
   },
 };

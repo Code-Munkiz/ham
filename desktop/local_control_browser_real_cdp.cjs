@@ -18,6 +18,58 @@ const MAX_WAIT_MS = 3000;
 const MAX_CLICK_CANDIDATES = 20;
 const CANDIDATE_TEXT_SNIPPET = 64;
 const CANDIDATE_TTL_MS = 45_000;
+const MAX_TYPE_TEXT_CHARS = 280;
+const MAX_TYPE_SELECTOR_CHARS = 180;
+const SAFE_KEY_PRESS_ALLOWLIST = new Set([
+  'Tab',
+  'Escape',
+  'ArrowUp',
+  'ArrowDown',
+  'ArrowLeft',
+  'ArrowRight',
+  'PageUp',
+  'PageDown',
+  'Home',
+  'End',
+]);
+
+/**
+ * Type selector must stay within a conservative allowlist.
+ * Supports comma-separated simple selectors targeting input/textarea/contenteditable only.
+ *
+ * @param {unknown} selector
+ * @returns {{ ok: true, selector: string } | { ok: false, error: string }}
+ */
+function normalizeTypeSelector(selector) {
+  const sel = String(selector || '').trim();
+  if (!sel || sel.length > MAX_TYPE_SELECTOR_CHARS) return { ok: false, error: 'selector_invalid' };
+  const parts = sel
+    .split(',')
+    .map((x) => x.trim())
+    .filter(Boolean);
+  if (!parts.length) return { ok: false, error: 'selector_invalid' };
+  const safeInputOrTextarea = /^(input|textarea)(\[[^\]\n\r]+\])*$/i;
+  const safeContentEditable = /^\[contenteditable(?:\s*=\s*["']?(?:true|false)?["']?)?\]$/i;
+  for (const p of parts) {
+    if (!(safeInputOrTextarea.test(p) || safeContentEditable.test(p))) {
+      return { ok: false, error: 'selector_not_allowed' };
+    }
+  }
+  return { ok: true, selector: parts.join(',') };
+}
+
+/**
+ * Enforce bounded typing payload size.
+ *
+ * @param {unknown} text
+ * @returns {{ ok: true, text: string } | { ok: false, error: string }}
+ */
+function normalizeTypeText(text) {
+  const rawText = String(text || '');
+  if (!rawText.trim()) return { ok: false, error: 'text_required' };
+  if (rawText.length > MAX_TYPE_TEXT_CHARS) return { ok: false, error: 'text_too_long' };
+  return { ok: true, text: rawText };
+}
 
 /**
  * @param {number} dy
@@ -140,6 +192,75 @@ function buildClickCandidateExpression(id) {
     if (BAD.test(txt)) return { ok: false, err: 'blocked' };
     el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
     return { ok: true };
+  })()`;
+}
+
+/**
+ * Conservative field typing helper.
+ *
+ * @param {string} selector
+ * @param {string} text
+ * @param {boolean} clearFirst
+ */
+function buildTypeIntoFieldExpression(selector, text, clearFirst) {
+  const selectorLit = JSON.stringify(String(selector || ''));
+  const textLit = JSON.stringify(String(text || ''));
+  const clearFirstLit = clearFirst === false ? 'false' : 'true';
+  return `(() => {
+    const selector = ${selectorLit};
+    const txt = ${textLit};
+    const clearFirst = ${clearFirstLit};
+    const BAD = /pay|checkout|sign\\s*in|log\\s*in|password|card|purchase|delete|submit|send/i;
+    const node = document.querySelector(selector);
+    if (!node) return { ok: false, err: 'field_not_found' };
+    const el = node;
+    const rect = el.getBoundingClientRect();
+    if (rect.width < 2 || rect.height < 2) return { ok: false, err: 'field_not_visible' };
+    if (el.disabled === true) return { ok: false, err: 'field_disabled' };
+    if (el.readOnly === true) return { ok: false, err: 'field_readonly' };
+    const tag = String(el.tagName || '').toLowerCase();
+    const type = String(el.getAttribute && el.getAttribute('type') || '').toLowerCase();
+    const placeholder = String(el.getAttribute && el.getAttribute('placeholder') || '');
+    const aria = String(el.getAttribute && el.getAttribute('aria-label') || '');
+    const id = String(el.getAttribute && el.getAttribute('id') || '');
+    const name = String(el.getAttribute && el.getAttribute('name') || '');
+    const labels = [];
+    if (id) {
+      document.querySelectorAll('label').forEach(function (l) {
+        if (String(l && l.htmlFor || '') === id) labels.push(String((l && (l.innerText || l.textContent)) || ''));
+      });
+    }
+    if (el.closest) {
+      const wrapped = el.closest('label');
+      if (wrapped) labels.push(String(wrapped.innerText || wrapped.textContent || ''));
+    }
+    const txtLabel = [placeholder, aria, id, name].concat(labels).join(' ').trim();
+    if (BAD.test(txtLabel)) return { ok: false, err: 'field_blocked' };
+    const isContentEditable = el.isContentEditable === true;
+    const allowedInputType =
+      type === '' ||
+      type === 'text' ||
+      type === 'search' ||
+      type === 'email' ||
+      type === 'url' ||
+      type === 'tel' ||
+      type === 'number';
+    const allowed = (tag === 'textarea') || (tag === 'input' && allowedInputType) || isContentEditable;
+    if (!allowed) return { ok: false, err: 'field_not_allowed' };
+    if (tag === 'input' || tag === 'textarea') {
+      if (clearFirst) el.value = '';
+      el.value = clearFirst ? txt : String(el.value || '') + txt;
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+      return { ok: true, tag, type, chars: String(el.value || '').length };
+    }
+    if (isContentEditable) {
+      if (clearFirst) el.textContent = '';
+      el.textContent = clearFirst ? txt : String(el.textContent || '') + txt;
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      return { ok: true, tag, type: 'contenteditable', chars: String(el.textContent || '').length };
+    }
+    return { ok: false, err: 'field_not_allowed' };
   })()`;
 }
 
@@ -738,6 +859,59 @@ function createRealBrowserCdpController(opts = {}) {
     }
   }
 
+  /**
+   * Type into safe editable fields only (no password/submit controls).
+   *
+   * @param {string} selector
+   * @param {string} text
+   * @param {{ clear_first?: boolean }} [opts]
+   */
+  async function typeIntoFieldSafe(selector, text, opts = {}) {
+    if (!isChildAlive() || !cdp) return { ok: false, error: 'not_running' };
+    const selNorm = normalizeTypeSelector(selector);
+    if (!selNorm.ok) return { ok: false, error: selNorm.error };
+    const textNorm = normalizeTypeText(text);
+    if (!textNorm.ok) return { ok: false, error: textNorm.error };
+    try {
+      const expr = buildTypeIntoFieldExpression(selNorm.selector, textNorm.text, opts.clear_first !== false);
+      const r = await cdp.send('Runtime.evaluate', { expression: expr, returnByValue: true });
+      const v = r && r.result && 'value' in r.result ? r.result.value : null;
+      if (!v || typeof v !== 'object') return { ok: false, error: 'type_failed' };
+      if (v.ok === true) {
+        return {
+          ok: true,
+          chars: Number(v.chars) || textNorm.text.length,
+          field_tag: typeof v.tag === 'string' ? v.tag : '',
+          field_type: typeof v.type === 'string' ? v.type : '',
+        };
+      }
+      const err = v.err != null ? String(v.err) : 'type_failed';
+      return { ok: false, error: err };
+    } catch {
+      return { ok: false, error: 'type_failed' };
+    }
+  }
+
+  /**
+   * Send only low-risk navigation keys.
+   *
+   * @param {string} key
+   */
+  async function pressSafeKey(key) {
+    if (!isChildAlive() || !cdp) return { ok: false, error: 'not_running' };
+    const normalized = String(key || '').trim();
+    if (!SAFE_KEY_PRESS_ALLOWLIST.has(normalized)) {
+      return { ok: false, error: 'key_not_allowed' };
+    }
+    try {
+      await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: normalized, windowsVirtualKeyCode: 0 });
+      await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: normalized, windowsVirtualKeyCode: 0 });
+      return { ok: true, key: normalized };
+    } catch {
+      return { ok: false, error: 'key_press_failed' };
+    }
+  }
+
   async function startSession() {
     if (isChildAlive() && cdp) {
       return { ok: true };
@@ -977,6 +1151,8 @@ function createRealBrowserCdpController(opts = {}) {
     waitBoundedMs,
     enumerateClickCandidates,
     clickCandidate,
+    typeIntoFieldSafe,
+    pressSafeKey,
     discoverChromiumExecutableLinux: () => discoverChromiumExecutableLinux(execFileSyncImpl),
     discoverChromiumExecutableWindows,
     discoverChromiumExecutable: (platform = process.platform) =>
@@ -1008,6 +1184,12 @@ module.exports = {
   MAX_WAIT_MS,
   MAX_CLICK_CANDIDATES,
   CANDIDATE_TTL_MS,
+  MAX_TYPE_TEXT_CHARS,
+  SAFE_KEY_PRESS_ALLOWLIST,
+  MAX_TYPE_SELECTOR_CHARS,
   buildCandidateEnumerationExpression,
   buildClickCandidateExpression,
+  buildTypeIntoFieldExpression,
+  normalizeTypeSelector,
+  normalizeTypeText,
 };

@@ -583,6 +583,13 @@ test('executeBrowserIntentTrusted validates token scope and allowlisted action',
     assert.equal(okIntent.ok, true);
     assert.equal(okIntent.echoed.action, 'navigate_and_capture');
     assert.equal(okIntent.echoed.session_id, ex.session_id);
+
+    const observe = await bridge.executeBrowserIntentTrusted({
+      token,
+      payload: { action: 'observe' },
+    });
+    assert.equal(observe.ok, true);
+    assert.equal(observe.echoed.action, 'observe');
   } finally {
     await bridge.stop();
   }

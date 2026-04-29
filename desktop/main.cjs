@@ -423,64 +423,150 @@ async function executeLocalWebBridgeBrowserIntent(payload) {
       http_status: 409,
     };
   }
-  const nav = await rb.navigate(String(payload.url || ''), {
-    allow_loopback: policy.real_browser_allow_loopback === true,
-  });
-  if (!nav || nav.ok !== true) {
-    const reasonCode = nav && nav.error === 'scheme_not_allowed'
-      ? 'url_policy_blocked'
-      : nav && nav.error === 'url_loopback_blocked'
+  const action = String(payload && payload.action ? payload.action : '').trim();
+  if (action === 'navigate_and_capture') {
+    const nav = await rb.navigate(String(payload.url || ''), {
+      allow_loopback: policy.real_browser_allow_loopback === true,
+    });
+    if (!nav || nav.ok !== true) {
+      const reasonCode = nav && nav.error === 'scheme_not_allowed'
         ? 'url_policy_blocked'
-        : nav && nav.error === 'url_local_network_blocked'
+        : nav && nav.error === 'url_loopback_blocked'
           ? 'url_policy_blocked'
-          : nav && nav.error === 'url_private_network_blocked'
+          : nav && nav.error === 'url_local_network_blocked'
             ? 'url_policy_blocked'
-            : nav && typeof nav.error === 'string' && nav.error
-              ? nav.error
-              : 'navigate_failed';
-    return {
-      ok: false,
-      status: 'failed',
-      error: reasonCode,
-      reason_code: reasonCode,
-      browser_bridge: {
+            : nav && nav.error === 'url_private_network_blocked'
+              ? 'url_policy_blocked'
+              : nav && typeof nav.error === 'string' && nav.error
+                ? nav.error
+                : 'navigate_failed';
+      return {
+        ok: false,
         status: 'failed',
-        summary: reasonCode,
-        step_count: 1,
-        mutation_detected: false,
-      },
-      http_status: reasonCode === 'url_policy_blocked' ? 403 : 409,
-    };
-  }
-  const shot = await rb.screenshot();
-  if (!shot || shot.ok !== true || typeof shot.data_url !== 'string') {
-    const reasonCode =
-      shot && typeof shot.error === 'string' && shot.error ? shot.error : 'screenshot_failed';
+        error: reasonCode,
+        reason_code: reasonCode,
+        browser_bridge: {
+          status: 'failed',
+          summary: reasonCode,
+          step_count: 1,
+          mutation_detected: false,
+        },
+        http_status: reasonCode === 'url_policy_blocked' ? 403 : 409,
+      };
+    }
+    const shot = await rb.screenshot();
+    if (!shot || shot.ok !== true || typeof shot.data_url !== 'string') {
+      const reasonCode =
+        shot && typeof shot.error === 'string' && shot.error ? shot.error : 'screenshot_failed';
+      return {
+        ok: true,
+        status: 'partial',
+        reason_code: reasonCode,
+        browser_bridge: {
+          status: 'partial',
+          summary: reasonCode,
+          step_count: 2,
+          mutation_detected: false,
+        },
+        http_status: 200,
+      };
+    }
     return {
       ok: true,
-      status: 'partial',
-      reason_code: reasonCode,
+      status: 'executed',
       browser_bridge: {
-        status: 'partial',
-        summary: reasonCode,
+        status: 'executed',
+        summary: 'navigated + captured',
         step_count: 2,
         mutation_detected: false,
+        screenshot_data_url: shot.data_url,
       },
       http_status: 200,
     };
   }
-  return {
-    ok: true,
-    status: 'executed',
-    browser_bridge: {
+  if (action === 'observe') {
+    const obs = await rb.observeCompact();
+    if (!obs || obs.ok !== true) {
+      const reasonCode = obs && typeof obs.error === 'string' ? obs.error : 'observe_failed';
+      return { ok: false, status: 'failed', error: reasonCode, reason_code: reasonCode, http_status: 409 };
+    }
+    const candidates = await rb.enumerateClickCandidates();
+    return {
+      ok: true,
       status: 'executed',
-      summary: 'navigated + captured',
-      step_count: 2,
-      mutation_detected: false,
-      screenshot_data_url: shot.data_url,
-    },
-    http_status: 200,
-  };
+      browser_bridge: {
+        status: 'executed',
+        summary: 'observed',
+        observe: obs,
+        click_candidates: candidates && candidates.ok === true ? candidates.candidates : [],
+      },
+      http_status: 200,
+    };
+  }
+  if (action === 'click_candidate') {
+    const out = await rb.clickCandidate(String(payload && payload.candidate_id ? payload.candidate_id : ''));
+    if (!out || out.ok !== true) {
+      const reasonCode = out && typeof out.error === 'string' ? out.error : 'click_failed';
+      return { ok: false, status: 'failed', error: reasonCode, reason_code: reasonCode, http_status: 409 };
+    }
+    return { ok: true, status: 'executed', browser_bridge: { status: 'executed', summary: 'clicked_candidate' }, http_status: 200 };
+  }
+  if (action === 'scroll') {
+    const out = await rb.scrollVerticalBounded(Number(payload && payload.delta_y ? payload.delta_y : 0));
+    if (!out || out.ok !== true) {
+      const reasonCode = out && typeof out.error === 'string' ? out.error : 'scroll_failed';
+      return { ok: false, status: 'failed', error: reasonCode, reason_code: reasonCode, http_status: 409 };
+    }
+    return {
+      ok: true,
+      status: 'executed',
+      browser_bridge: { status: 'executed', summary: 'scrolled', delta_applied: out.delta_applied },
+      http_status: 200,
+    };
+  }
+  if (action === 'type_into_field') {
+    const out = await rb.typeIntoFieldSafe(
+      String(payload && payload.selector ? payload.selector : ''),
+      String(payload && payload.text ? payload.text : ''),
+      { clear_first: payload && payload.clear_first !== false },
+    );
+    if (!out || out.ok !== true) {
+      const reasonCode = out && typeof out.error === 'string' ? out.error : 'type_failed';
+      return { ok: false, status: 'failed', error: reasonCode, reason_code: reasonCode, http_status: 409 };
+    }
+    return {
+      ok: true,
+      status: 'executed',
+      browser_bridge: {
+        status: 'executed',
+        summary: 'typed_into_field',
+        chars: Number(out.chars) || 0,
+      },
+      http_status: 200,
+    };
+  }
+  if (action === 'key_press') {
+    const out = await rb.pressSafeKey(String(payload && payload.key ? payload.key : ''));
+    if (!out || out.ok !== true) {
+      const reasonCode = out && typeof out.error === 'string' ? out.error : 'key_press_failed';
+      return { ok: false, status: 'failed', error: reasonCode, reason_code: reasonCode, http_status: 409 };
+    }
+    return { ok: true, status: 'executed', browser_bridge: { status: 'executed', summary: 'key_pressed', key: out.key }, http_status: 200 };
+  }
+  if (action === 'wait') {
+    const out = await rb.waitBoundedMs(Number(payload && payload.wait_ms ? payload.wait_ms : 0));
+    if (!out || out.ok !== true) {
+      const reasonCode = out && typeof out.error === 'string' ? out.error : 'wait_failed';
+      return { ok: false, status: 'failed', error: reasonCode, reason_code: reasonCode, http_status: 409 };
+    }
+    return {
+      ok: true,
+      status: 'executed',
+      browser_bridge: { status: 'executed', summary: 'waited', waited_ms: Number(out.waited_ms) || 0 },
+      http_status: 200,
+    };
+  }
+  return { ok: false, status: 'failed', error: 'invalid_intent', reason_code: 'invalid_intent', http_status: 400 };
 }
 
 async function executeLocalWebBridgeMachineEscalationRequest(payload) {

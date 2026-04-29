@@ -21,6 +21,8 @@ const {
   isValidCandidateId,
   buildCandidateEnumerationExpression,
   buildClickCandidateExpression,
+  normalizeTypeSelector,
+  normalizeTypeText,
 } = require('./local_control_browser_real_cdp.cjs');
 
 function baseRealPolicy(over) {
@@ -345,6 +347,28 @@ test('buildCandidateEnumerationExpression embeds epoch', () => {
 test('buildClickCandidateExpression dispatches MouseEvent', () => {
   const s = buildClickCandidateExpression('ham_cand_1_0');
   assert.ok(s.includes('MouseEvent'));
+});
+
+test('normalizeTypeSelector: accepts safe field selectors only', () => {
+  const a = normalizeTypeSelector('input[name*="search" i], textarea');
+  assert.equal(a.ok, true);
+  const b = normalizeTypeSelector('form input[type="text"]');
+  assert.equal(b.ok, false);
+  assert.equal(b.error, 'selector_not_allowed');
+  const c = normalizeTypeSelector('#search');
+  assert.equal(c.ok, false);
+  assert.equal(c.error, 'selector_not_allowed');
+});
+
+test('normalizeTypeText: rejects empty and oversized payloads', () => {
+  const a = normalizeTypeText('');
+  assert.equal(a.ok, false);
+  assert.equal(a.error, 'text_required');
+  const b = normalizeTypeText('x'.repeat(281));
+  assert.equal(b.ok, false);
+  assert.equal(b.error, 'text_too_long');
+  const c = normalizeTypeText('antman 3');
+  assert.equal(c.ok, true);
 });
 
 test('createRealBrowserCdpController: slice1 helpers return not_running without session', async () => {
