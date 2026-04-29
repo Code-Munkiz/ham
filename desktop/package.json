@@ -13,7 +13,8 @@
     "pack:win": "npm run build:frontend && electron-builder --win --x64",
     "pack:win:dir": "npm run build:frontend && electron-builder --win --x64 --dir",
     "pack:win:nsis": "npm run build:frontend && electron-builder --win --x64 -c.win.target=nsis",
-    "test:local-control": "node --test ./local_control_status.test.cjs ./local_control_policy.test.cjs ./local_control_audit.test.cjs ./local_control_sidecar_status.test.cjs ./local_control_sidecar_child.test.cjs ./local_control_sidecar_manager.test.cjs ./local_control_browser_url.test.cjs ./local_control_browser_mvp.test.cjs ./local_control_browser_real_cdp.test.cjs ./local_control_web_bridge.test.cjs ./preload_contract.test.cjs ./desktop_updates.test.cjs"
+    "test:local-control": "node --test ./local_control_status.test.cjs ./local_control_policy.test.cjs ./local_control_audit.test.cjs ./local_control_sidecar_status.test.cjs ./local_control_sidecar_child.test.cjs ./local_control_sidecar_manager.test.cjs ./local_control_browser_url.test.cjs ./local_control_browser_mvp.test.cjs ./local_control_browser_real_cdp.test.cjs ./local_control_web_bridge.test.cjs ./preload_contract.test.cjs ./desktop_updates.test.cjs",
+    "smoke:trusted-connect": "node trusted_connect_smoke.cjs"
   },
   "dependencies": {
     "ws": "^8.20.0"
@@ -76,7 +77,8 @@
   },
   "devDependencies": {
     "electron": "^34.2.0",
-    "electron-builder": "^25.1.8"
+    "electron-builder": "^25.1.8",
+    "puppeteer-core": "^24.0.0"
   },
   "engines": {
     "node": ">=20 <25"
