@@ -550,3 +550,41 @@ test('/machine/escalation-request validates trigger, context, confirmation and s
   }
 });
 
+test('executeBrowserIntentTrusted validates token scope and allowlisted action', async () => {
+  const bridge = createLocalControlWebBridge({
+    port: 0,
+    executeBrowserIntent: async (payload) => ({
+      ok: true,
+      status: 'executed',
+      echoed: { action: payload.action, url: payload.url, session_id: payload.session_id },
+    }),
+  });
+  try {
+    await bridge.start();
+    const issued = bridge.issuePairingCode();
+    const ex = bridge.exchangePairingCodeTrusted({
+      pairing_code: issued.code,
+      client_nonce: 'trusted-browser-intent',
+    });
+    assert.equal(ex.ok, true);
+    const token = ex.access_token;
+
+    const badIntent = await bridge.executeBrowserIntentTrusted({
+      token,
+      payload: { action: 'click', url: 'https://example.com' },
+    });
+    assert.equal(badIntent.ok, false);
+    assert.equal(badIntent.error, 'invalid_intent');
+
+    const okIntent = await bridge.executeBrowserIntentTrusted({
+      token,
+      payload: { action: 'navigate_and_capture', url: 'https://example.com' },
+    });
+    assert.equal(okIntent.ok, true);
+    assert.equal(okIntent.echoed.action, 'navigate_and_capture');
+    assert.equal(okIntent.echoed.session_id, ex.session_id);
+  } finally {
+    await bridge.stop();
+  }
+});
+

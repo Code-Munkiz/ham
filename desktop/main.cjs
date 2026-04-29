@@ -1467,6 +1467,25 @@ ipcMain.handle('ham-desktop:local-control-web-bridge-pairing-revoke', () => {
   return revoked ? { ok: true } : { ok: false, error: 'revoke_failed' };
 });
 
+ipcMain.handle('ham-desktop:local-control-web-bridge-browser-intent', async (event, payload) => {
+  if (!localWebBridgeEnabled()) return { ok: false, error: 'bridge_disabled', reason_code: 'bridge_disabled' };
+  if (!localWebBridgeTrustedToken) return { ok: false, error: 'token_missing', reason_code: 'token_missing' };
+  const bridge = getLocalWebBridge();
+  try {
+    await bridge.start();
+  } catch {
+    return { ok: false, error: 'bridge_start_failed', reason_code: 'bridge_start_failed' };
+  }
+  const out = await bridge.executeBrowserIntentTrusted({
+    token: localWebBridgeTrustedToken,
+    payload,
+  });
+  if (out && out.ok === false && (out.error === 'token_expired' || out.error === 'token_invalid' || out.error === 'token_revoked')) {
+    localWebBridgeTrustedToken = '';
+  }
+  return out;
+});
+
 ipcMain.handle('ham-desktop:local-control-web-bridge-trusted-connect', async () => {
   if (!localWebBridgeEnabled()) return { ok: false, error: 'bridge_disabled' };
   const bridge = getLocalWebBridge();

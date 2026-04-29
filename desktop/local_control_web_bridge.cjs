@@ -444,6 +444,39 @@ function createLocalControlWebBridge(opts = {}) {
     };
   }
 
+  async function executeBrowserIntentTrusted({ token, payload }) {
+    const valid = pairing.validateToken({
+      token,
+      origin: canonicalOrigin,
+      requiredScope: 'browser.intent',
+    });
+    if (!valid.ok) {
+      return { ok: false, error: valid.reason_code, reason_code: valid.reason_code, http_status: 401 };
+    }
+    if (!executeBrowserIntent) {
+      return { ok: false, error: 'browser_intent_unavailable', reason_code: 'browser_intent_unavailable', http_status: 503 };
+    }
+    const body = payload && typeof payload === 'object' ? payload : {};
+    const action = String(body.action || '').trim();
+    const url = String(body.url || '').trim();
+    const intentId = String(body.intent_id || '').trim();
+    if (action !== 'navigate_and_capture' || !url) {
+      return { ok: false, error: 'invalid_intent', reason_code: 'invalid_intent', http_status: 400 };
+    }
+    const result = await executeBrowserIntent({
+      action,
+      url,
+      intent_id: intentId,
+      session_id: valid.session_id,
+      origin: canonicalOrigin,
+      client_context:
+        body.client_context && typeof body.client_context === 'object'
+          ? body.client_context
+          : {},
+    });
+    return result && typeof result === 'object' ? result : { ok: false, error: 'browser_intent_failed', reason_code: 'browser_intent_failed', http_status: 409 };
+  }
+
   function revokeTrustedToken({ token }) {
     return pairing.revokeToken(token);
   }
@@ -465,6 +498,7 @@ function createLocalControlWebBridge(opts = {}) {
     getStatusSnapshotTrusted,
     exchangePairingCodeTrusted,
     readStatusTrusted,
+    executeBrowserIntentTrusted,
     revokeTrustedToken,
     BRIDGE_PREFIX,
     BRIDGE_VERSION,

@@ -61,6 +61,8 @@ test('preload webBridge allowlists ipc channels for local-control web bridge (no
   assert.ok(src.includes('ham-desktop:local-control-web-bridge-pairing-get'));
   assert.ok(src.includes('ham-desktop:local-control-web-bridge-pairing-set'));
   assert.ok(src.includes('ham-desktop:local-control-web-bridge-status-read'));
+  assert.ok(src.includes('ham-desktop:local-control-web-bridge-browser-intent'));
+  assert.ok(src.includes("action !== 'navigate_and_capture'"));
   assert.ok(!src.includes('access_token'), 'preload must not surface token field names');
   assert.ok(!src.includes('ham-desktop:local-control-web-bridge-pairing-issue'));
   assert.ok(!src.includes('ham-desktop:local-control-web-bridge-pairing-exchange'));

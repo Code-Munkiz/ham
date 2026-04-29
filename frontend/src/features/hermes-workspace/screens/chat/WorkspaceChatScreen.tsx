@@ -54,7 +54,7 @@ import { Button } from "@/components/ui/button";
 import { hamWorkspaceLogoUrl } from "@/lib/ham/publicAssets";
 import { cn } from "@/lib/utils";
 import { isHamDesktopShell } from "@/lib/ham/desktopConfig";
-import { getHamDesktopWebBridgeApi } from "@/lib/ham/desktopBundleBridge";
+import { getHamDesktopLocalControlApi, getHamDesktopWebBridgeApi } from "@/lib/ham/desktopBundleBridge";
 
 const VOICE_DEBUG_FLAG = "ham.voiceDebug";
 
@@ -106,6 +106,68 @@ function workspaceChatSubtitle(opts: {
     return "Send a message to start this conversation.";
   }
   return "Messages you send are stored by HAM after the first reply.";
+}
+
+function extractFirstUrl(text: string): string | null {
+  const raw = text.match(/\b((?:https?:\/\/|www\.)[^\s]+)/i)?.[1];
+  if (!raw) return null;
+  const candidate = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  try {
+    const u = new URL(candidate);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return null;
+    return u.toString();
+  } catch {
+    return null;
+  }
+}
+
+function isLikelyBrowserTask(text: string): boolean {
+  const t = text.trim().toLowerCase();
+  if (!t) return false;
+  if (extractFirstUrl(t)) return true;
+  const patterns = [
+    /\bopen\b.*\b(browser|site|page|web)\b/,
+    /\b(go to|visit|navigate to|open)\b/,
+    /\b(search|look up|lookup|find)\b/,
+    /\b(click|scroll|what do you see|what do you notice|read this page)\b/,
+  ];
+  return patterns.some((p) => p.test(t));
+}
+
+function isFollowUpBrowserInstruction(text: string): boolean {
+  const t = text.trim().toLowerCase();
+  if (!t) return false;
+  return /\b(click|scroll|type|select|open that|what do you see|what does this page|read the page)\b/.test(t);
+}
+
+function buildSafeSearchUrl(text: string): string {
+  const q = text
+    .replace(/\b(open|browser|search|look up|lookup|find|for me|please)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return `https://duckduckgo.com/?q=${encodeURIComponent(q || text.trim())}`;
+}
+
+function localBrowserFailureMessage(reason: string): string {
+  switch (reason) {
+    case "bridge_disabled":
+      return "Local bridge unavailable: GOHAM is disabled in desktop settings.";
+    case "token_missing":
+    case "token_invalid":
+    case "token_expired":
+    case "token_revoked":
+      return "Connect GOHAM first, then retry this browser task.";
+    case "real_browser_automation_off":
+      return "Local control is not armed yet. Enable browser control, then retry.";
+    case "url_policy_blocked":
+      return "That URL is blocked by local browser safety policy.";
+    case "browser_not_found":
+      return "Local browser executable was not found on this machine.";
+    case "bridge_start_failed":
+      return "Local bridge could not start. Reopen GOHAM and retry.";
+    default:
+      return `Local browser handoff failed (${reason || "unknown_error"}).`;
+  }
 }
 
 export type WorkspaceChatScreenProps = {
@@ -582,12 +644,171 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
           meta: { message_id: assistantPlaceId },
         }),
       );
+      const plainOutbound =
+        typeof outboundUser === "string" ? (outboundUser as string).trim() : "";
+      const outboundPlain = !isV1 && !isV2;
+      const browserTaskRequested = outboundPlain && isLikelyBrowserTask(plainOutbound);
+      if (desktopShell && browserTaskRequested) {
+        const webBridgeApi = getHamDesktopWebBridgeApi();
+        if (!webBridgeApi || typeof webBridgeApi.browserIntent !== "function") {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantPlaceId
+                ? { ...m, content: "Local browser bridge is unavailable in this build. Reconnect GOHAM and retry." }
+                : m,
+            ),
+          );
+          setInspectorEvents((prev) =>
+            appendInspectorEvent(prev, {
+              atIso: new Date().toISOString(),
+              kind: "assistant_response_completed",
+              status: "warning",
+              summary: "Local browser handoff unavailable",
+              meta: { reason: "bridge_api_unavailable" },
+            }),
+          );
+          setSending(false);
+          return;
+        }
+
+        let trusted = desktopWebBridgeTrustedRef.current;
+        try {
+          if (!trusted) {
+            const rst = await webBridgeApi.readTrustedStatus();
+            trusted = rst.ok === true;
+            desktopWebBridgeTrustedRef.current = trusted;
+            setGohamBridgeLinked(trusted);
+          }
+        } catch {
+          trusted = false;
+        }
+
+        if (!trusted) {
+          browserSessionFollowThroughRef.current = false;
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantPlaceId
+                ? { ...m, content: "Connect GOHAM first to run browser tasks locally." }
+                : m,
+            ),
+          );
+          setInspectorEvents((prev) =>
+            appendInspectorEvent(prev, {
+              atIso: new Date().toISOString(),
+              kind: "assistant_response_completed",
+              status: "warning",
+              summary: "GOHAM not connected for local browser routing",
+              meta: { reason: "trusted_status_missing" },
+            }),
+          );
+          setSending(false);
+          return;
+        }
+
+        const localControlApi = getHamDesktopLocalControlApi();
+        let activeBrowserSession = false;
+        try {
+          const st = await localControlApi?.getRealBrowserStatus?.();
+          activeBrowserSession = st?.running === true;
+        } catch {
+          activeBrowserSession = false;
+        }
+
+        const providedUrl = extractFirstUrl(plainOutbound);
+        const followUpInstruction =
+          !providedUrl && activeBrowserSession && isFollowUpBrowserInstruction(plainOutbound);
+        if (followUpInstruction) {
+          browserSessionFollowThroughRef.current = true;
+        } else {
+          const targetUrl = providedUrl || buildSafeSearchUrl(plainOutbound);
+          try {
+            const browserIntent = await webBridgeApi.browserIntent({
+              intent_id: `desktop-goham-${Date.now()}`,
+              action: "navigate_and_capture",
+              url: targetUrl,
+              client_context: {
+                source: "desktop_goham",
+                original_prompt: plainOutbound,
+              },
+            });
+            if (browserIntent.ok) {
+              browserSessionFollowThroughRef.current = true;
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantPlaceId
+                    ? {
+                        ...m,
+                        content: providedUrl
+                          ? "Opening that locally."
+                          : "Opening that locally. I found the page.",
+                      }
+                    : m,
+                ),
+              );
+              setInspectorEvents((prev) =>
+                appendInspectorEvent(prev, {
+                  atIso: new Date().toISOString(),
+                  kind: "assistant_response_completed",
+                  status: "ok",
+                  summary: "GOHAM routed browser task to local bridge",
+                  meta: { url: targetUrl, browser_task: plainOutbound },
+                }),
+              );
+            } else {
+              browserSessionFollowThroughRef.current = false;
+              const reason =
+                typeof browserIntent.reason_code === "string" && browserIntent.reason_code
+                  ? browserIntent.reason_code
+                  : typeof browserIntent.error === "string"
+                    ? browserIntent.error
+                    : "browser_intent_failed";
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantPlaceId
+                    ? { ...m, content: localBrowserFailureMessage(reason) }
+                    : m,
+                ),
+              );
+              setInspectorEvents((prev) =>
+                appendInspectorEvent(prev, {
+                  atIso: new Date().toISOString(),
+                  kind: "assistant_response_completed",
+                  status: "warning",
+                  summary: `Local browser handoff blocked: ${reason}`,
+                  meta: { reason, url: targetUrl },
+                }),
+              );
+            }
+            setSending(false);
+            return;
+          } catch (err) {
+            browserSessionFollowThroughRef.current = false;
+            const reason = err instanceof Error ? err.message : "browser_intent_failed";
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantPlaceId
+                  ? { ...m, content: localBrowserFailureMessage(reason) }
+                  : m,
+              ),
+            );
+            setInspectorEvents((prev) =>
+              appendInspectorEvent(prev, {
+                atIso: new Date().toISOString(),
+                kind: "assistant_response_completed",
+                status: "error",
+                summary: `Local browser handoff failed: ${reason}`,
+                meta: { reason },
+              }),
+            );
+            setSending(false);
+            return;
+          }
+        }
+      }
+
       const streamAuth: HamChatStreamAuth | undefined = await workspaceChatAdapter.getStreamAuth();
       try {
         let execPrefEffective: "auto" | "browser" | "machine" | "chat" = executionModePreference;
-        const plainOutbound =
-          typeof outboundUser === "string" ? (outboundUser as string).trim() : "";
-        const outboundPlain = !isV1 && !isV2;
         if (
           desktopShell &&
           desktopWebBridgeTrustedRef.current &&

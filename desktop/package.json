@@ -1,7 +1,7 @@
 {
   "name": "ham-desktop",
   "private": true,
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "HAM Desktop — Electron shell with bundled curated Hermes setup docs and CLI probe",
   "homepage": "https://github.com/Code-Munkiz/ham",
   "main": "main.cjs",

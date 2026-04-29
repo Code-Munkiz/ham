@@ -240,6 +240,17 @@ export type HamDesktopWebBridgeReadTrustedStatusResult =
   | ({ ok: true } & Record<string, unknown>)
   | { ok: false; error?: string };
 
+export type HamDesktopWebBridgeBrowserIntentPayload = {
+  intent_id?: string;
+  action: "navigate_and_capture";
+  url: string;
+  client_context?: Record<string, unknown>;
+};
+
+export type HamDesktopWebBridgeBrowserIntentResult =
+  | ({ ok: true } & Record<string, unknown>)
+  | { ok: false; error?: string; reason_code?: string; http_status?: number };
+
 export type HamDesktopWebBridgeApi = {
   getStatus: () => Promise<HamDesktopWebBridgeStatusSnapshot>;
   trustedConnect: () => Promise<HamDesktopWebBridgeTrustedConnectResult>;
@@ -247,6 +258,9 @@ export type HamDesktopWebBridgeApi = {
   getPairingConfig: () => Promise<Record<string, unknown>>;
   setPairingConfig: (payload: { pairing_code_ttl_sec?: number }) => Promise<Record<string, unknown>>;
   readTrustedStatus: () => Promise<HamDesktopWebBridgeReadTrustedStatusResult>;
+  browserIntent: (
+    payload: HamDesktopWebBridgeBrowserIntentPayload,
+  ) => Promise<HamDesktopWebBridgeBrowserIntentResult>;
 };
 
 export type HamDesktopLocalControlApi = {

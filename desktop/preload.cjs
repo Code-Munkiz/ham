@@ -49,6 +49,20 @@ const localControlBridge = {
       ipcRenderer.invoke('ham-desktop:local-control-web-bridge-pairing-set', payload || {}),
     readTrustedStatus: () =>
       ipcRenderer.invoke('ham-desktop:local-control-web-bridge-status-read'),
+    browserIntent: (payload) => {
+      const p = payload && typeof payload === 'object' ? payload : {};
+      const action = String(p.action || '').trim();
+      const url = String(p.url || '').trim();
+      if (action !== 'navigate_and_capture' || !url) {
+        return Promise.resolve({ ok: false, error: 'invalid_intent', reason_code: 'invalid_intent' });
+      }
+      return ipcRenderer.invoke('ham-desktop:local-control-web-bridge-browser-intent', {
+        intent_id: String(p.intent_id || ''),
+        action: 'navigate_and_capture',
+        url,
+        client_context: p.client_context && typeof p.client_context === 'object' ? p.client_context : {},
+      });
+    },
   },
 };
 
