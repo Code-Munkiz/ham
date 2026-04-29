@@ -73,7 +73,7 @@ class InboundClientCapability:
 
 
 class InboundClient:
-    """Read-only inbound client shell; live endpoint wiring is fail-closed."""
+    """Read-only inbound client shell for prepared records or enabled discovery."""
 
     def __init__(
         self,
@@ -91,10 +91,16 @@ class InboundClient:
                 owned_post_replies=False,
                 reason="x_bearer_token_missing",
             )
+        if not self.config.enable_reactive_inbox_discovery:
+            return InboundClientCapability(
+                mentions_search=False,
+                owned_post_replies=False,
+                reason="reactive_inbox_discovery_disabled",
+            )
         return InboundClientCapability(
-            mentions_search=self.http_get is not None,
-            owned_post_replies=self.http_get is not None,
-            reason="read_only_transport_ready" if self.http_get is not None else "http_get_not_configured",
+            mentions_search=True,
+            owned_post_replies=True,
+            reason="read_only_transport_ready",
         )
 
     def from_records(
@@ -121,7 +127,7 @@ class InboundClient:
                 blocked=True,
                 source="mentions_search",
                 reason=capability.reason or "mentions_search_unavailable",
-                diagnostic="Reactive inbound discovery requires X_BEARER_TOKEN and an HTTP GET transport.",
+                diagnostic="Reactive inbound discovery requires X_BEARER_TOKEN and HAM_X_ENABLE_REACTIVE_INBOX_DISCOVERY=true.",
             )
         client = XDirectReadonlyClient(config=self.config, http_get=self.http_get)
         result = client.search_recent(

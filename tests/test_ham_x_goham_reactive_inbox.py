@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from src.ham.ham_x import x_readonly_client
 from src.ham.ham_x.execution_journal import ExecutionJournal
 from src.ham.ham_x.goham_reactive_inbox import discover_reactive_inbox_once, state_from_journal
 from src.ham.ham_x.inbound_client import InboundClient
@@ -81,10 +82,19 @@ def _client(cfg, body: dict[str, Any], calls: list[dict[str, Any]] | None = None
 
 def test_missing_bearer_token_blocks_discovery(tmp_path: Path) -> None:
     cfg = _inbox_config(tmp_path, x_bearer_token="")
+    calls = 0
+
+    def fail_if_called(*args: Any, **kwargs: Any) -> _Response:
+        nonlocal calls
+        calls += 1
+        raise AssertionError("network should not be called without bearer token")
+
+    client = InboundClient(config=cfg, http_get=fail_if_called)
     result = discover_reactive_inbox_once(config=cfg)
     assert result.status == "blocked"
     assert "x_bearer_token_missing" in result.reasons
     assert result.mutation_attempted is False
+    assert calls == 0
 
 
 def test_discovery_disabled_blocks(tmp_path: Path) -> None:
@@ -112,6 +122,28 @@ def test_mention_search_response_normalizes_into_inbound_items(tmp_path: Path) -
     assert calls[0]["params"]["tweet.fields"]
     assert calls[0]["params"]["expansions"]
     assert calls[0]["params"]["user.fields"]
+
+
+def test_default_readonly_transport_used_when_enabled_without_injection(tmp_path: Path, monkeypatch: Any) -> None:
+    cfg = _inbox_config(tmp_path)
+    calls: list[dict[str, Any]] = []
+    body = _body(_tweet(1, "Hey Ham, are you online?"))
+
+    def default_get(url: str, **kwargs: Any) -> _Response:
+        calls.append({"url": url, **kwargs})
+        return _Response(200, body)
+
+    monkeypatch.setattr(x_readonly_client, "_httpx_get", default_get)
+    result = discover_reactive_inbox_once(config=cfg)
+    dumped = json.dumps(result.redacted_dump(), sort_keys=True)
+
+    assert result.status == "completed"
+    assert result.selected_inbound is not None
+    assert len(calls) == 1
+    assert calls[0]["headers"]["Authorization"].startswith("Bearer ")
+    assert cfg.x_bearer_token not in dumped
+    assert result.execution_allowed is False
+    assert result.mutation_attempted is False
 
 
 def test_replies_normalize_with_conversation_post_and_reply_target(tmp_path: Path) -> None:
