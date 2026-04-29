@@ -17,6 +17,16 @@ Linux and Windows artifacts **do not duplicate** the chat interface. `electron-b
 - **Dev:** `npm start` from `desktop/` loads the Vite dev server by default, so you see the same React app as the browser.
 - **Release:** run **`npm run pack:win`** (runs `build:frontend` first). Bump `version` in `desktop/package.json` when shipping so users can tell builds apart. Legacy **Linux AppImage / `.deb`** pipelines were removed; Windows Electron packaging (`pack:win*`) remains. Develop on Linux with **`npm start`** in `desktop/` (no installer).
 
+### Download manifest · update prompts
+
+- Canonical download metadata (`channel`, SHA-256 fingerprints, artifact URLs aligned with GitHub Releases) ships as **`frontend/public/desktop-downloads.json`**. Keep the embedded **`frontend/src/lib/ham/desktop-downloads.manifest.json`** copy in sync so the landing page has a deterministic first paint and TypeScript can compile against the same blob.
+- On startup, **`desktop/desktop_updates.cjs`** compares **packaged** `app.getVersion()` against the **matching OS entry** (`linux`/`windows`; mac unsupported for now). If the manifest lists a **newer semver**, the user gets **Update** / **Later** — **Update** opens the **`release_page_url`** (fallback: direct `url`) in the browser. There is **no** built-in updater or silent reinstall.
+- Trusted fetch defaults to `https://raw.githubusercontent.com/Code-Munkiz/ham/main/frontend/public/desktop-downloads.json`. Override via **`HAM_DESKTOP_DOWNLOADS_MANIFEST_URL`** if you maintain a fork; non-HTTPS / non-allowlisted URLs are refused. **`HAM_DESKTOP_UPDATE_CHECK=0`** skips the prompt; **`HAM_DESKTOP_UPDATE_CHECK=1`** forces checks even during **unpackaged** desktop dev (otherwise dev skips to avoid noisy dialogs).
+
+### CI note
+
+Ham’s GitHub Action today runs **pytest + frontend `tsc`**, not Electron packaging — desktop artifacts are manual/tagged publishes. Do not advertise “auto-installed from CI on every merge” unless a release workflow + signing story exists.
+
 ## HAM + Hermes curated bundle (desktop)
 
 - **Terminology:** for how **desktop-side** (this app) and **API-side** (Ham API / broker) checks differ, see [docs/TEAM_HERMES_STATUS.md](../docs/TEAM_HERMES_STATUS.md).
@@ -25,7 +35,7 @@ Linux and Windows artifacts **do not duplicate** the chat interface. `electron-b
 - **Allowlisted CLI presets (Phase B):** buttons that run a **fixed** argv list in the main process (`hermes --version`, `hermes plugins list`, `hermes mcp list`, …) and show stdout/stderr in the settings panel — not free-form TUI control; 25s timeout, capped output. Presets are defined in `main.cjs` only; add new ones there after review.
 - Additional IPC: `window.__HAM_DESKTOP_BUNDLE__` and **`window.hamDesktop`** share the same `localControl` bridge (status, policy, audit, kill switch, sidecar — **no browser session IPC**) — see `preload.cjs`, `main.cjs`, `local_control_*.cjs`.
 - **CLI (repo, no Electron):** `ham desktop local-control status|policy|audit|browser|sidecar` (`browser` reflects **not_shipped** for Electron-managed sessions). Sidecar lifecycle stubs: `sidecar health|stop|start` = **electron_only**.
-- **Tests:** `npm run test:local-control` from `desktop/` (Node built-in test runner over `local_control_status.cjs`).
+- **Tests:** `npm run test:local-control` from `desktop/` (Node built-in test runner: `local_control_*.test.cjs`, `preload_contract.test.cjs`, `desktop_updates.test.cjs`).
 
 ## Security (M1)
 
@@ -189,3 +199,60 @@ Copy the portable `.exe` or zip **`win-unpacked/`** to Windows. First run may tr
 | `HAM_DESKTOP_WEB_ROOT` | Directory containing `index.html` for `file` mode (default `../frontend/dist`) |
 | `HAM_DESKTOP_API_BASE` | Ham API origin for runtime `getApiBase()` |
 | `HAM_DESKTOP_USE_HASH_ROUTER` | `1` / `true` to force HashRouter (usually auto for `file` mode) |
+
+## Windows local-control smoke (dev)
+
+PowerShell terminals from repo root (`C:\Projects\GoHam\ham`):
+
+### 1) Start frontend renderer (required in devserver mode)
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+Expected renderer URL: `http://127.0.0.1:3000` (matches `frontend/package.json` and desktop default `HAM_DESKTOP_DEV_SERVER_URL`).
+
+### 2) Start HAM Desktop with local bridge enabled
+
+```powershell
+cd desktop
+npm install
+$env:HAM_LOCAL_WEB_BRIDGE_ENABLED="true"
+$env:HAM_LOCAL_WEB_BRIDGE_PORT="8765"
+npm start
+```
+
+### 3) Verify bridge health + localhost-only bind
+
+```powershell
+curl.exe -i -H "Origin: https://ham-nine-mu.vercel.app" "http://127.0.0.1:8765/ham/local-control/v1/health"
+netstat -ano | findstr :8765
+```
+
+Expected:
+- Health returns `200` with `ok: true`.
+- Listener shows `127.0.0.1:8765`.
+- No `0.0.0.0:8765` listener.
+
+### 4) Pairing flow
+
+1. In HAM Desktop: `Settings -> Agent behavior -> Local Control / Pairing`, click **Generate pairing code**.
+2. In web app (or plain-web pairing panel), paste code into **Pairing code** and click **Pair**.
+3. Confirm **Status read** becomes available (authenticated `/status` succeeds).
+
+### 5) Browser handoff + policy checks
+
+1. Run browser handoff to `https://example.com`.
+2. Confirm Chrome/Edge launches with managed HAM profile and screenshot/status is returned.
+3. Run blocked URL check with `http://localhost:3000` and confirm policy block (no bypass).
+
+### 6) Escalation skeleton check
+
+From pairing panel, request escalation with trigger `partial` + explicit confirmation.
+
+Expected:
+- status `approved_pending_execution`
+- `machine_execution_available: false`
+- no machine action execution

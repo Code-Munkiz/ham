@@ -19,8 +19,19 @@ const { buildSidecarStatus } = require('./local_control_sidecar_status.cjs');
 const { createSidecarManager, defaultChildScriptPath } = require('./local_control_sidecar_manager.cjs');
 const { createBrowserMvpController, browserActionGates } = require('./local_control_browser_mvp.cjs');
 const { createRealBrowserCdpController, realBrowserActionGates } = require('./local_control_browser_real_cdp.cjs');
+const { createLocalControlWebBridge } = require('./local_control_web_bridge.cjs');
+const {
+  DEFAULT_PAIRING_CODE_TTL_MS,
+  DEFAULT_TOKEN_TTL_MS,
+  MIN_PAIRING_CODE_TTL_MS,
+  MAX_PAIRING_CODE_TTL_MS,
+} = require('./local_control_web_bridge_pairing.cjs');
+const { runStartupDesktopUpdatePrompt } = require('./desktop_updates.cjs');
 
 const CONFIG_FILENAME = 'ham-desktop-config.json';
+
+/** Main BrowserWindow reference for dialogs (startup update prompt). */
+let mainWindowSingleton = null;
 
 /** Updated before each window load; preload reads via sendSync. */
 let rendererConfigPayload = {};
@@ -264,6 +275,9 @@ function createWindow() {
     const url = (process.env.HAM_DESKTOP_DEV_SERVER_URL || 'http://127.0.0.1:3000').trim();
     void win.loadURL(url);
   }
+
+  mainWindowSingleton = win;
+  return win;
 }
 
 ipcMain.on('ham-desktop:get-config-sync', (event) => {
@@ -351,6 +365,201 @@ function getBrowserMvp() {
 
 /** @type {ReturnType<typeof createRealBrowserCdpController> | null} */
 let realBrowserSingleton = null;
+/** @type {ReturnType<typeof createLocalControlWebBridge> | null} */
+let localWebBridgeSingleton = null;
+const localWebBridgeAuditRing = [];
+let localWebBridgeTrustedToken = '';
+
+function mapWebBridgeBlockedReason(reason) {
+  if (reason === 'real_browser_automation_off') return 'real_browser_automation_off';
+  return reason || 'browser_blocked';
+}
+
+async function executeLocalWebBridgeBrowserIntent(payload) {
+  const c = localControlPaths();
+  const { policy } = loadPolicy({
+    userDataPath: c.userDataPath,
+    platform: c.platform,
+    fs: c.fs,
+    path: c.path,
+  });
+  const g = realBrowserActionGates(policy, c.platform);
+  if (!g.ok) {
+    return {
+      ok: false,
+      status: 'blocked',
+      error: mapWebBridgeBlockedReason(g.reason),
+      reason_code: mapWebBridgeBlockedReason(g.reason),
+      browser_bridge: {
+        status: 'blocked',
+        summary: mapWebBridgeBlockedReason(g.reason),
+        step_count: 0,
+        mutation_detected: false,
+      },
+      http_status: 403,
+    };
+  }
+  const rb = getRealBrowser();
+  const start = await rb.startSession();
+  if (!start || start.ok !== true) {
+    const reasonCode =
+      start && typeof start.error === 'string' && start.error
+        ? start.error
+        : 'start_failed';
+    return {
+      ok: false,
+      status: 'failed',
+      error: reasonCode,
+      reason_code: reasonCode,
+      browser_bridge: {
+        status: 'failed',
+        summary: reasonCode,
+        step_count: 0,
+        mutation_detected: false,
+      },
+      http_status: 409,
+    };
+  }
+  const nav = await rb.navigate(String(payload.url || ''), {
+    allow_loopback: policy.real_browser_allow_loopback === true,
+  });
+  if (!nav || nav.ok !== true) {
+    const reasonCode = nav && nav.error === 'scheme_not_allowed'
+      ? 'url_policy_blocked'
+      : nav && nav.error === 'url_loopback_blocked'
+        ? 'url_policy_blocked'
+        : nav && nav.error === 'url_local_network_blocked'
+          ? 'url_policy_blocked'
+          : nav && nav.error === 'url_private_network_blocked'
+            ? 'url_policy_blocked'
+            : nav && typeof nav.error === 'string' && nav.error
+              ? nav.error
+              : 'navigate_failed';
+    return {
+      ok: false,
+      status: 'failed',
+      error: reasonCode,
+      reason_code: reasonCode,
+      browser_bridge: {
+        status: 'failed',
+        summary: reasonCode,
+        step_count: 1,
+        mutation_detected: false,
+      },
+      http_status: reasonCode === 'url_policy_blocked' ? 403 : 409,
+    };
+  }
+  const shot = await rb.screenshot();
+  if (!shot || shot.ok !== true || typeof shot.data_url !== 'string') {
+    const reasonCode =
+      shot && typeof shot.error === 'string' && shot.error ? shot.error : 'screenshot_failed';
+    return {
+      ok: true,
+      status: 'partial',
+      reason_code: reasonCode,
+      browser_bridge: {
+        status: 'partial',
+        summary: reasonCode,
+        step_count: 2,
+        mutation_detected: false,
+      },
+      http_status: 200,
+    };
+  }
+  return {
+    ok: true,
+    status: 'executed',
+    browser_bridge: {
+      status: 'executed',
+      summary: 'navigated + captured',
+      step_count: 2,
+      mutation_detected: false,
+      screenshot_data_url: shot.data_url,
+    },
+    http_status: 200,
+  };
+}
+
+async function executeLocalWebBridgeMachineEscalationRequest(payload) {
+  const c = localControlPaths();
+  const { policy } = loadPolicy({
+    userDataPath: c.userDataPath,
+    platform: c.platform,
+    fs: c.fs,
+    path: c.path,
+  });
+  if (policy.kill_switch.engaged) {
+    return {
+      ok: false,
+      error: 'kill_switch_engaged',
+      reason_code: 'kill_switch_engaged',
+      status: 'denied',
+      http_status: 403,
+    };
+  }
+  if (!(policy.real_browser_control_armed === true || policy.browser_control_armed === true)) {
+    return {
+      ok: false,
+      error: 'local_control_not_armed',
+      reason_code: 'local_control_not_armed',
+      status: 'denied',
+      http_status: 403,
+    };
+  }
+  if (String(payload.escalated_from || '').trim() !== 'browser') {
+    return {
+      ok: false,
+      error: 'browser_context_required',
+      reason_code: 'browser_context_required',
+      status: 'denied',
+      http_status: 409,
+    };
+  }
+  const trigger = String(payload.trigger || '').trim();
+  if (trigger !== 'partial' && trigger !== 'blocked' && trigger !== 'browser_insufficient') {
+    return {
+      ok: false,
+      error: 'trigger_not_allowed',
+      reason_code: 'trigger_not_allowed',
+      status: 'denied',
+      http_status: 400,
+    };
+  }
+  if (payload.user_confirmed !== true) {
+    return {
+      ok: false,
+      error: 'user_confirmation_required',
+      reason_code: 'user_confirmation_required',
+      status: 'denied',
+      http_status: 409,
+    };
+  }
+  const requestedScope = String(payload.requested_scope || '').trim();
+  if (requestedScope && requestedScope !== 'narrow_task') {
+    return {
+      ok: false,
+      error: 'requested_scope_not_allowed',
+      reason_code: 'requested_scope_not_allowed',
+      status: 'denied',
+      http_status: 400,
+    };
+  }
+  appendAuditEvent({
+    userDataPath: c.userDataPath,
+    type: 'local_control_machine_escalation_requested',
+    fs: c.fs,
+    path: c.path,
+  });
+  return {
+    ok: true,
+    selected_mode: 'machine',
+    escalated_from: 'browser',
+    escalation_trigger: trigger,
+    status: 'approved_pending_execution',
+    machine_execution_available: false,
+    http_status: 200,
+  };
+}
 
 function getRealBrowser() {
   if (!realBrowserSingleton) {
@@ -362,6 +571,58 @@ function getRealBrowser() {
     });
   }
   return realBrowserSingleton;
+}
+
+function localWebBridgeEnabled() {
+  const raw = String(process.env.HAM_LOCAL_WEB_BRIDGE_ENABLED || '').trim().toLowerCase();
+  return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on';
+}
+
+function getLocalWebBridge() {
+  if (!localWebBridgeSingleton) {
+    const bridgePort = Number(process.env.HAM_LOCAL_WEB_BRIDGE_PORT || '0');
+    localWebBridgeSingleton = createLocalControlWebBridge({
+      port: Number.isFinite(bridgePort) ? bridgePort : 0,
+      executeBrowserIntent: executeLocalWebBridgeBrowserIntent,
+      executeMachineEscalationRequest: executeLocalWebBridgeMachineEscalationRequest,
+      emitAudit: (event) => {
+        const safe = {
+          event: String(event && event.event ? event.event : 'bridge_event'),
+          timestamp: new Date().toISOString(),
+          origin: String(event && event.origin ? event.origin : ''),
+          session_id: String(event && event.session_id ? event.session_id : ''),
+          reason_code: String(event && event.reason_code ? event.reason_code : ''),
+        };
+        localWebBridgeAuditRing.push(safe);
+        if (localWebBridgeAuditRing.length > 200) {
+          localWebBridgeAuditRing.splice(0, localWebBridgeAuditRing.length - 200);
+        }
+      },
+    });
+  }
+  return localWebBridgeSingleton;
+}
+
+function localWebBridgeDefaults() {
+  return {
+    ok: true,
+    bridge_version: 'v1',
+    enabled: false,
+    running: false,
+    detected: false,
+    listener: null,
+    pairing_required: true,
+    origin_allowed: false,
+    paired: false,
+    status_read_available: false,
+    pairing: {
+      pairing_code_ttl_sec: Math.floor(DEFAULT_PAIRING_CODE_TTL_MS / 1000),
+      pairing_code_ttl_min_sec: Math.floor(MIN_PAIRING_CODE_TTL_MS / 1000),
+      pairing_code_ttl_default_sec: Math.floor(DEFAULT_PAIRING_CODE_TTL_MS / 1000),
+      pairing_code_ttl_max_sec: Math.floor(MAX_PAIRING_CODE_TTL_MS / 1000),
+      token_ttl_sec: Math.floor(DEFAULT_TOKEN_TTL_MS / 1000),
+    },
+  };
 }
 
 /** Local Control Phase 2 — full status; appends redacted audit line. */
@@ -1105,10 +1366,127 @@ ipcMain.handle('ham-desktop:local-control-browser-real-stop-session', () => {
   return getRealBrowser().stopSession();
 });
 
+ipcMain.handle('ham-desktop:local-control-web-bridge-status', () => {
+  if (!localWebBridgeEnabled()) return localWebBridgeDefaults();
+  const bridge = getLocalWebBridge();
+  const snap = bridge.getStatusSnapshotTrusted();
+  if (localWebBridgeTrustedToken) {
+    const status = bridge.readStatusTrusted({ token: localWebBridgeTrustedToken });
+    if (!status.ok) {
+      localWebBridgeTrustedToken = '';
+      return {
+        ...snap,
+        paired: false,
+        status_read_available: false,
+      };
+    }
+  }
+  return snap;
+});
+
+ipcMain.handle('ham-desktop:local-control-web-bridge-pairing-get', () => {
+  if (!localWebBridgeEnabled()) return localWebBridgeDefaults().pairing;
+  return getLocalWebBridge().getPairingConfig();
+});
+
+ipcMain.handle('ham-desktop:local-control-web-bridge-pairing-set', (event, payload) => {
+  if (!localWebBridgeEnabled()) return localWebBridgeDefaults().pairing;
+  const ttlSec =
+    payload && typeof payload === 'object' && 'pairing_code_ttl_sec' in payload
+      ? Number(payload.pairing_code_ttl_sec)
+      : Number.NaN;
+  return getLocalWebBridge().setPairingCodeTtlSec(ttlSec);
+});
+
+ipcMain.handle('ham-desktop:local-control-web-bridge-pairing-issue', () => {
+  if (!localWebBridgeEnabled()) {
+    return { ok: false, error: 'bridge_disabled' };
+  }
+  const issued = getLocalWebBridge().issuePairingCode();
+  return {
+    ok: true,
+    code: String(issued.code || ''),
+    expires_at_ms: Number(issued.expires_at_ms || 0),
+  };
+});
+
+ipcMain.handle('ham-desktop:local-control-web-bridge-pairing-exchange', (event, payload) => {
+  if (!localWebBridgeEnabled()) return { ok: false, error: 'bridge_disabled' };
+  const bridge = getLocalWebBridge();
+  const pairingCode =
+    payload && typeof payload === 'object' && 'pairing_code' in payload
+      ? String(payload.pairing_code || '').trim()
+      : '';
+  if (!pairingCode) return { ok: false, error: 'pairing_code_required' };
+  const out = bridge.exchangePairingCodeTrusted({
+    pairing_code: pairingCode,
+    client_nonce:
+      payload && typeof payload === 'object' && 'client_nonce' in payload
+        ? String(payload.client_nonce || '').trim()
+        : '',
+  });
+  if (!out.ok) return { ok: false, error: out.reason_code || 'pairing_exchange_failed' };
+  localWebBridgeTrustedToken = String(out.access_token || '');
+  return {
+    ok: true,
+    expires_in_sec: Number(out.expires_in_sec || 0),
+    session_id: String(out.session_id || ''),
+    scopes: Array.isArray(out.scopes) ? out.scopes : [],
+  };
+});
+
+ipcMain.handle('ham-desktop:local-control-web-bridge-status-read', () => {
+  if (!localWebBridgeEnabled()) return { ok: false, error: 'bridge_disabled' };
+  if (!localWebBridgeTrustedToken) return { ok: false, error: 'token_missing' };
+  const bridge = getLocalWebBridge();
+  const status = bridge.readStatusTrusted({ token: localWebBridgeTrustedToken });
+  if (!status.ok) {
+    localWebBridgeTrustedToken = '';
+    return { ok: false, error: status.error || 'status_read_failed' };
+  }
+  return status;
+});
+
+ipcMain.handle('ham-desktop:local-control-web-bridge-pairing-revoke', () => {
+  if (!localWebBridgeEnabled()) return { ok: false, error: 'bridge_disabled' };
+  if (!localWebBridgeTrustedToken) return { ok: false, error: 'token_missing' };
+  const bridge = getLocalWebBridge();
+  const revoked = bridge.revokeTrustedToken({ token: localWebBridgeTrustedToken });
+  localWebBridgeTrustedToken = '';
+  return revoked ? { ok: true } : { ok: false, error: 'revoke_failed' };
+});
+
+ipcMain.handle('ham-desktop:local-control-web-bridge-trusted-connect', () => {
+  if (!localWebBridgeEnabled()) return { ok: false, error: 'bridge_disabled' };
+  const bridge = getLocalWebBridge();
+  if (localWebBridgeTrustedToken) {
+    const status = bridge.readStatusTrusted({ token: localWebBridgeTrustedToken });
+    if (status.ok) return { ok: true, status: 'connected', already_connected: true };
+    localWebBridgeTrustedToken = '';
+  }
+  const issued = bridge.issuePairingCode();
+  const exchanged = bridge.exchangePairingCodeTrusted({
+    pairing_code: String(issued.code || ''),
+    client_nonce: `trusted-${Date.now()}`,
+  });
+  if (!exchanged.ok) {
+    return { ok: false, error: exchanged.reason_code || 'pairing_exchange_failed' };
+  }
+  localWebBridgeTrustedToken = String(exchanged.access_token || '');
+  const status = bridge.readStatusTrusted({ token: localWebBridgeTrustedToken });
+  if (!status.ok) {
+    localWebBridgeTrustedToken = '';
+    return { ok: false, error: status.error || 'status_read_failed' };
+  }
+  return { ok: true, status: 'connected', already_connected: false };
+});
+
 app.on('before-quit', () => {
   if (sidecarManagerSingleton) void sidecarManagerSingleton.stop();
   if (browserMvpSingleton) browserMvpSingleton.stopSession();
   if (realBrowserSingleton) realBrowserSingleton.stopSession();
+  if (localWebBridgeSingleton) void localWebBridgeSingleton.stop();
+  localWebBridgeTrustedToken = '';
 });
 
 app.whenReady().then(() => {
@@ -1119,6 +1497,16 @@ app.whenReady().then(() => {
   }
 
   createWindow();
+
+  void runStartupDesktopUpdatePrompt({ parentWindow: mainWindowSingleton, app });
+
+  if (localWebBridgeEnabled()) {
+    void getLocalWebBridge()
+      .start()
+      .catch(() => {
+        /* non-fatal for desktop shell startup */
+      });
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
