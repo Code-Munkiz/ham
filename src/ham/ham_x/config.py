@@ -70,6 +70,7 @@ class HamXConfig:
     brand_voice_id: str
     catalog_skill_id: str
     emergency_stop: bool
+    enable_live_smoke: bool
     autonomy_enabled: bool
     dry_run: bool
     max_posts_per_hour: int
@@ -111,6 +112,7 @@ def load_ham_x_config() -> HamXConfig:
         catalog_skill_id=(os.environ.get("HAM_X_CATALOG_SKILL_ID") or DEFAULT_CATALOG_SKILL_ID).strip()
         or DEFAULT_CATALOG_SKILL_ID,
         emergency_stop=_bool_env("HAM_X_EMERGENCY_STOP", False),
+        enable_live_smoke=_bool_env("HAM_X_ENABLE_LIVE_SMOKE", False),
         autonomy_enabled=_bool_env("HAM_X_AUTONOMY_ENABLED", False),
         dry_run=_bool_env("HAM_X_DRY_RUN", True),
         max_posts_per_hour=_int_env("HAM_X_MAX_POSTS_PER_HOUR", 0),

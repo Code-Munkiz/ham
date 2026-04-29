@@ -38,6 +38,7 @@ def _test_config(tmp_path: Path) -> HamXConfig:
         brand_voice_id="ham-canonical",
         catalog_skill_id="bundled.social-media.xurl",
         emergency_stop=False,
+        enable_live_smoke=False,
         autonomy_enabled=False,
         dry_run=True,
         max_posts_per_hour=0,
@@ -57,6 +58,7 @@ def test_default_config_disables_autonomy(monkeypatch) -> None:
     monkeypatch.delenv("HAM_X_PROFILE_ID", raising=False)
     monkeypatch.delenv("HAM_X_CATALOG_SKILL_ID", raising=False)
     monkeypatch.delenv("HAM_X_EMERGENCY_STOP", raising=False)
+    monkeypatch.delenv("HAM_X_ENABLE_LIVE_SMOKE", raising=False)
     monkeypatch.delenv("HAM_X_REVIEW_QUEUE_PATH", raising=False)
     monkeypatch.delenv("HAM_X_EXCEPTION_QUEUE_PATH", raising=False)
     monkeypatch.delenv("HAM_X_AUDIT_LOG_PATH", raising=False)
@@ -70,6 +72,7 @@ def test_default_config_disables_autonomy(monkeypatch) -> None:
     assert cfg.profile_id == "ham.default"
     assert cfg.catalog_skill_id == "bundled.social-media.xurl"
     assert cfg.emergency_stop is False
+    assert cfg.enable_live_smoke is False
 
 
 def test_default_config_dry_run_true(monkeypatch) -> None:

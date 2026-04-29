@@ -13,7 +13,7 @@ The intended production loop is:
 5. Write a bounded review queue record.
 6. Require human review before any future mutating action.
 
-Phase 1A implemented the safe scaffold. Phase 1B added a dry-run social opportunity pipeline: search plan, candidate normalization, deterministic scoring, deterministic draft generation, local Hermes policy review, budget/rate guardrails, review queue output, and audit traces. Phase 1C adds the Autonomy Decision Engine and exception queue. Mutating actions remain blocked.
+Phase 1A implemented the safe scaffold. Phase 1B added a dry-run social opportunity pipeline: search plan, candidate normalization, deterministic scoring, deterministic draft generation, local Hermes policy review, budget/rate guardrails, review queue output, and audit traces. Phase 1C adds the Autonomy Decision Engine and exception queue. Phase 1D adds a safe smoke testing harness. Mutating actions remain blocked.
 
 ## Platform Context
 
@@ -46,6 +46,12 @@ Phase 1C can decide `auto_reject`, `ignore`, `monitor`, `draft_only`, `queue_exc
 
 The emergency stop (`HAM_X_EMERGENCY_STOP=true`) blocks autonomous approval and routes affected actions to human attention.
 
+## Smoke Harness
+
+Phase 1D exposes `run_smoke()` for local safety checks. The supported modes are `local`, `env`, `x-readonly`, `xai`, and `e2e-dry-run`.
+
+All Phase 1D smoke results preserve `execution_allowed=false` and `mutation_attempted=false`. Live-capable smoke behavior is gated by `HAM_X_ENABLE_LIVE_SMOKE=true`; by default, read-only X and xAI smoke modes return safe disabled or not-implemented summaries without network calls.
+
 ## Boundaries
 
 - Hermes remains the supervisory policy layer.
@@ -67,6 +73,7 @@ HAM-on-X review and audit helpers mirror existing HAM proposal/audit patterns in
 
 - `HAM_X_AUTONOMY_ENABLED=false`
 - `HAM_X_DRY_RUN=true`
+- `HAM_X_ENABLE_LIVE_SMOKE=false`
 - `HAM_X_MAX_POSTS_PER_HOUR=0`
 - `HAM_X_MAX_QUOTES_PER_HOUR=0`
 

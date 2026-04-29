@@ -5,17 +5,36 @@
 1. Copy `.env.example` to `.env`.
 2. Keep `HAM_X_AUTONOMY_ENABLED=false`.
 3. Keep `HAM_X_DRY_RUN=true`.
-4. Use staging credentials only if credentials are needed for future local testing.
+4. Keep `HAM_X_ENABLE_LIVE_SMOKE=false` unless running an explicitly approved live read-only smoke later.
+5. Use staging credentials only if credentials are needed for future local testing.
 
 ## Smoke Test
 
 Run the focused tests:
 
 ```bash
-python -m pytest tests/test_ham_x_phase1a.py -v
+python -m pytest tests/test_ham_x_phase1a.py tests/test_ham_x_smoke.py -v
 ```
 
-Phase 1B/1C use the same narrow test target. It covers the non-mutating opportunity pipeline, autonomy decisions, exception queue writes, review queue writes, audit traces, and mutating-action blocks.
+Phase 1B/1C/1D use the same narrow test target. It covers the non-mutating opportunity pipeline, autonomy decisions, exception queue writes, review queue writes, audit traces, smoke summaries, and mutating-action blocks.
+
+Run a local smoke from Python:
+
+```bash
+python - <<'PY'
+from src.ham.ham_x.smoke import run_smoke
+print(run_smoke("local").redacted_dump())
+PY
+```
+
+Run an environment smoke:
+
+```bash
+python - <<'PY'
+from src.ham.ham_x.smoke import run_smoke
+print(run_smoke("env").redacted_dump())
+PY
+```
 
 ## Inspect Review Output
 
@@ -57,6 +76,7 @@ Set either of these values to keep mutating actions blocked:
 HAM_X_AUTONOMY_ENABLED=false
 HAM_X_DRY_RUN=true
 HAM_X_EMERGENCY_STOP=true
+HAM_X_ENABLE_LIVE_SMOKE=false
 ```
 
 In Phase 1, mutating actions are blocked even if these values are changed.
@@ -70,6 +90,10 @@ Review queue records are human-review proposals. Audit records are append-only t
 ## Phase 1C Autonomy Decisions
 
 `decide_autonomy()` emits decision states such as `draft_only`, `queue_review`, `queue_exception`, and `auto_approve`. In Phase 1C, `auto_approve` is only an autonomous approval candidate; `execution_allowed` is always `false`, and no xurl mutation is executed.
+
+## Phase 1D Smoke Modes
+
+`run_smoke("local")` uses fixture candidate data and the real dry-run pipeline. `run_smoke("env")` reports redacted environment status and safe-default checks. `x-readonly`, `xai`, and `e2e-dry-run` stay non-mutating; live behavior is disabled unless `HAM_X_ENABLE_LIVE_SMOKE=true`, and Phase 1D still returns `execution_allowed=false`.
 
 ## Autonomy Modes
 
