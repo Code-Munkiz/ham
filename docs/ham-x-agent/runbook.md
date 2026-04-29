@@ -231,6 +231,22 @@ HAM_X_GOHAM_POLICY_REJECTION_STOP=5
 HAM_X_GOHAM_MODEL_TIMEOUT_STOP=3
 ```
 
+## Phase 3B Live Governed Controller
+
+Phase 3B adds `src.ham.ham_x.goham_live_controller.run_live_controller_once()` as a separate live controller. It accepts prepared bounded candidates only, asks the Phase 3A governor, selects at most one `auto_original_post`, converts it into the existing guarded GoHAM bridge request, calls the bridge through `run_post` at most once, then stops.
+
+It does not extend `goham_controller.py`; Phase 3A remains dry-run-only. It does not run Phase 2B, xAI drafting, live X read acquisition, xurl mutations, quotes, replies, likes, follows, DMs, scheduling, daemons, infinite loops, or multi-action live runs.
+
+Additional safe defaults keep Phase 3B off:
+
+```dotenv
+HAM_X_ENABLE_GOHAM_LIVE_CONTROLLER=false
+HAM_X_GOHAM_LIVE_CONTROLLER_ORIGINAL_POSTS_ONLY=true
+HAM_X_GOHAM_LIVE_MAX_ACTIONS_PER_RUN=1
+```
+
+Live governed execution still requires all existing GoHAM live gates (`HAM_X_ENABLE_GOHAM_EXECUTION=true`, `HAM_X_AUTONOMY_ENABLED=true`, `HAM_X_DRY_RUN=false`, `HAM_X_ENABLE_LIVE_EXECUTION=true`, `HAM_X_EMERGENCY_STOP=false`) plus `HAM_X_ENABLE_GOHAM_CONTROLLER=true` and `HAM_X_GOHAM_CONTROLLER_DRY_RUN=false`. The live controller derives a deterministic idempotency key from `campaign_id + source_action_id + text_key`, checks the shared execution journal before the bridge call, passes that same journal to the bridge, and does not retry failed provider attempts.
+
 ## Autonomy Modes
 
 - `draft`: queue draft content only.

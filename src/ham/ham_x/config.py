@@ -118,6 +118,9 @@ class HamXConfig:
     goham_consecutive_failure_stop: int = 2
     goham_policy_rejection_stop: int = 5
     goham_model_timeout_stop: int = 3
+    enable_goham_live_controller: bool = False
+    goham_live_controller_original_posts_only: bool = True
+    goham_live_max_actions_per_run: int = 1
 
 
 def load_ham_x_config() -> HamXConfig:
@@ -208,4 +211,10 @@ def load_ham_x_config() -> HamXConfig:
         goham_consecutive_failure_stop=_int_env("HAM_X_GOHAM_CONSECUTIVE_FAILURE_STOP", 2),
         goham_policy_rejection_stop=_int_env("HAM_X_GOHAM_POLICY_REJECTION_STOP", 5),
         goham_model_timeout_stop=_int_env("HAM_X_GOHAM_MODEL_TIMEOUT_STOP", 3),
+        enable_goham_live_controller=_bool_env("HAM_X_ENABLE_GOHAM_LIVE_CONTROLLER", False),
+        goham_live_controller_original_posts_only=_bool_env(
+            "HAM_X_GOHAM_LIVE_CONTROLLER_ORIGINAL_POSTS_ONLY",
+            True,
+        ),
+        goham_live_max_actions_per_run=_int_env("HAM_X_GOHAM_LIVE_MAX_ACTIONS_PER_RUN", 1),
     )

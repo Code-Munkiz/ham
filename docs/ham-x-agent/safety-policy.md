@@ -35,4 +35,6 @@ GoHAM v0 daily execution is one-shot only. `run_goham_daily_once()` may call the
 
 Phase 3A Firehose Controller is dry-run-only. Its governor may mark original-post candidates as allowed in a summary, but provider calls remain blocked by `HAM_X_GOHAM_CONTROLLER_DRY_RUN=true`; quotes are blocked by default, and the controller must audit every decision without executing.
 
+Phase 3B Live Governed Controller is a separate one-shot live path for prepared candidates only. It may call the guarded GoHAM bridge at most once, only for an original post whose governor decision is `auto_original_post` with provider calls allowed, with no target/quote/reply ids, deterministic idempotency, shared journal checks, and all existing live GoHAM gates enabled. It must not generate candidates, run Phase 2B, connect live X+xAI acquisition, schedule loops, retry provider failures, or execute quotes/replies/likes/follows/DMs.
+
 GoHAM mode, when introduced later, must remain bounded high-autonomy: visible operator controls, policy checks, budgets, rate limits, audit records, and a kill switch are still required.

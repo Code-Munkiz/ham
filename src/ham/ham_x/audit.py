@@ -77,6 +77,9 @@ AuditEventType = Literal[
     "goham_controller_started",
     "goham_controller_candidate_decision",
     "goham_controller_completed",
+    "goham_live_controller_started",
+    "goham_live_controller_candidate_decision",
+    "goham_live_controller_completed",
 ]
 
 
