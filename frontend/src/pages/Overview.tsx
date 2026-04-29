@@ -1,8 +1,6 @@
-import { 
-  Users, 
-  MessageSquare, 
-  ToyBrick, 
-  Zap,
+import {
+  Users,
+  MessageSquare,
   Activity,
   ArrowUpRight,
   ChevronRight,
@@ -10,41 +8,93 @@ import {
   Clock,
   CheckCircle2,
   AlertCircle,
-  Play
+  Play,
 } from "lucide-react";
-import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import * as React from "react";
 
-import { apiUrl } from "@/lib/ham/api";
+import { apiUrl, fetchManagedMissionsList, type ManagedMissionRow } from "@/lib/ham/api";
 
 interface Mission {
   id: string;
   title: string;
-  droid: string;
+  droid: string; // existing UI label; now mapped from mission source
   status: 'In Progress' | 'Completed' | 'Failed' | 'Paused';
   progress: number;
   timeElapsed: string;
   teamMember: string;
   category: string;
+  repo: string;
+  ref: string;
+  prUrl: string | null;
+  updatedAt: string | null;
+  checkpoint: string | null;
 }
 
-const MOCK_MISSIONS: Mission[] = [
-  { id: "m1", title: "Refactor Authentication Middleware", droid: "Builder", status: "In Progress", progress: 65, timeElapsed: "21m", teamMember: "Aaron", category: "Core Development" },
-  { id: "m2", title: "Security Audit: bridge-rpc service", droid: "Reviewer", status: "In Progress", progress: 12, timeElapsed: "8m", teamMember: "System", category: "Security" },
-  { id: "m3", title: "Find alternative to ESM module loading issue", droid: "Researcher", status: "Completed", progress: 100, timeElapsed: "45m", teamMember: "Aaron", category: "Research" },
-  { id: "m4", title: "Generate end-to-end tests for Profile flow", droid: "QA", status: "In Progress", progress: 42, timeElapsed: "1h 12m", teamMember: "QA Team", category: "Quality Assurance" },
-  { id: "m5", title: "Decompose user request #882 into tasks", droid: "Coordinator", status: "Completed", progress: 100, timeElapsed: "5m", teamMember: "Manager", category: "Planning" },
-  { id: "m6", title: "Audit dependency tree for CVE-2024-X", droid: "Reviewer", status: "Paused", progress: 5, timeElapsed: "2m", teamMember: "Aaron", category: "Security" },
-  { id: "m7", title: "Performance Benchmarking: US-East-1 vs US-West-2", droid: "Researcher", status: "In Progress", progress: 88, timeElapsed: "3h 10m", teamMember: "DevOps", category: "Performance" },
-  { id: "m8", title: "Implement dark mode theme synchronization", droid: "Builder", status: "Completed", progress: 100, timeElapsed: "2h 15m", teamMember: "Design Team", category: "UI/UX" },
-];
+function mapLifecycleToCardStatus(row: ManagedMissionRow): Mission["status"] {
+  const lc = (row.mission_lifecycle || "").trim().toLowerCase();
+  if (lc === "succeeded") return "Completed";
+  if (lc === "failed") return "Failed";
+  if (lc === "archived") return "Paused";
+  return "In Progress";
+}
+
+function mapCheckpointProgress(row: ManagedMissionRow): number {
+  const cp = (row.latest_checkpoint || "").trim().toLowerCase();
+  if (!cp) return 10;
+  if (cp === "queued") return 10;
+  if (cp === "launched") return 25;
+  if (cp === "running") return 55;
+  if (cp === "blocked") return 45;
+  if (cp === "pr_opened") return 80;
+  if (cp === "completed") return 100;
+  if (cp === "failed") return 100;
+  return 15;
+}
+
+function formatCheckpointLabel(raw: string | null): string | null {
+  const t = (raw || "").trim();
+  if (!t) return null;
+  return t.replace(/_/g, " ");
+}
+
+function mapMissionTitle(row: ManagedMissionRow): string {
+  const checkpoint = (row.latest_checkpoint || "").trim().replace(/_/g, " ");
+  const repo = (row.repo_key || row.repository_observed || "managed mission").trim();
+  if (checkpoint) return `${repo} · ${checkpoint}`;
+  return repo;
+}
+
+function toMissionCard(row: ManagedMissionRow): Mission {
+  const id = (row.mission_registry_id || row.cursor_agent_id || "mission").trim();
+  const status = mapLifecycleToCardStatus(row);
+  const updated = (row.last_server_observed_at || row.updated_at || "").trim() || null;
+  const repo = (row.repo_key || row.repository_observed || "—").trim();
+  const ref = (row.ref_observed || "—").trim();
+  return {
+    id,
+    title: mapMissionTitle(row),
+    droid: "Cloud Agent",
+    status,
+    progress: mapCheckpointProgress(row),
+    timeElapsed: updated ? "server-observed" : "—",
+    teamMember: "HAM",
+    category: "Managed Mission",
+    repo,
+    ref,
+    prUrl: row.pr_url_last_observed?.trim() || null,
+    updatedAt: updated,
+    checkpoint: row.latest_checkpoint?.trim() || null,
+  };
+}
 
 export default function Overview() {
   const [currentPage, setCurrentPage] = React.useState(0);
   const [status, setStatus] = React.useState<{ run_count: number } | null>(null);
   const [statusLoading, setStatusLoading] = React.useState(true);
   const [statusError, setStatusError] = React.useState<string | null>(null);
+  const [managedMissions, setManagedMissions] = React.useState<Mission[]>([]);
+  const [missionsLoading, setMissionsLoading] = React.useState(true);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -68,10 +118,30 @@ export default function Overview() {
     };
   }, []);
 
+  React.useEffect(() => {
+    let cancelled = false;
+    setMissionsLoading(true);
+    void fetchManagedMissionsList(120)
+      .then((rows) => {
+        if (cancelled) return;
+        setManagedMissions(rows.map(toMissionCard));
+        setCurrentPage(0);
+      })
+      .catch(() => {
+        if (!cancelled) setManagedMissions([]);
+      })
+      .finally(() => {
+        if (!cancelled) setMissionsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const itemsPerPage = 5;
-  const totalPages = Math.ceil(MOCK_MISSIONS.length / itemsPerPage);
+  const totalPages = Math.max(1, Math.ceil(managedMissions.length / itemsPerPage));
   
-  const currentMissions = MOCK_MISSIONS.slice(
+  const currentMissions = managedMissions.slice(
     currentPage * itemsPerPage, 
     (currentPage + 1) * itemsPerPage
   );
@@ -91,7 +161,7 @@ export default function Overview() {
                     Live <span className="text-[#FF6B00] not-italic">Activity</span>
                  </h1>
                  <div className="flex gap-4">
-                    {statusLoading ? (
+                    {statusLoading || missionsLoading ? (
                       <>
                         <div className="px-3 py-1 bg-white/[0.04] border border-white/5 rounded text-[9px] font-black uppercase tracking-widest text-[#FF6B00] italic flex items-center">
                           <span className="text-[10px] font-black text-white/20 uppercase tracking-widest animate-pulse">Loading...</span>
@@ -109,7 +179,7 @@ export default function Overview() {
                       </>
                     ) : (
                       <>
-                        <div className="px-3 py-1 bg-white/[0.04] border border-white/5 rounded text-[9px] font-black uppercase tracking-widest text-[#FF6B00] italic">Running 00</div>
+                        <div className="px-3 py-1 bg-white/[0.04] border border-white/5 rounded text-[9px] font-black uppercase tracking-widest text-[#FF6B00] italic">Running {managedMissions.filter((m) => m.status === "In Progress").length}</div>
                         <div className="px-3 py-1 bg-white/[0.04] border border-white/5 rounded text-[9px] font-black uppercase tracking-widest text-white/40 italic">Completed {status?.run_count ?? 0}</div>
                       </>
                     )}
@@ -154,7 +224,11 @@ export default function Overview() {
            </div>
 
            <div className="grid grid-cols-1 gap-px bg-white/5 border border-white/5 rounded-lg overflow-hidden shadow-2xl">
-              {currentMissions.map((mission) => (
+              {missionsLoading ? (
+                <div className="bg-[#080808] p-6 text-[11px] text-white/45 uppercase tracking-widest">Loading managed mission history…</div>
+              ) : currentMissions.length === 0 ? (
+                <div className="bg-[#080808] p-6 text-[11px] text-white/45 uppercase tracking-widest">No managed missions recorded on this API host yet.</div>
+              ) : currentMissions.map((mission) => (
                 <div key={mission.id} className="bg-[#080808] hover:bg-white/[0.04] p-6 transition-all group border-b border-white/[0.02] last:border-b-0">
                    <div className="flex flex-col md:flex-row md:items-center gap-6">
                       
@@ -184,9 +258,28 @@ export default function Overview() {
                                   <span className="text-[9px] font-black text-white/20 uppercase tracking-widest">ID: {mission.id.toUpperCase()}</span>
                                </div>
                                <h4 className="text-lg font-black text-white uppercase italic tracking-wider leading-tight group-hover:text-[#FF6B00] transition-colors">{mission.title}</h4>
+                               <p className="text-[9px] text-white/35 mt-1 font-mono">repo: {mission.repo} · ref: {mission.ref}</p>
+                               {mission.prUrl ? (
+                                 <a
+                                   href={mission.prUrl}
+                                   target="_blank"
+                                   rel="noreferrer"
+                                   className="text-[9px] text-[#00E5FF] underline underline-offset-2 break-all"
+                                 >
+                                   {mission.prUrl}
+                                 </a>
+                               ) : null}
+                               {mission.updatedAt ? (
+                                 <p className="text-[8px] text-white/25 mt-1">Last observed: {mission.updatedAt}</p>
+                               ) : null}
                             </div>
                             <div className="text-right hidden sm:block shrink-0">
                                <p className="text-[10px] font-black text-white/40 uppercase tracking-widest italic">{mission.status}</p>
+                               {formatCheckpointLabel(mission.checkpoint) ? (
+                                 <p className="text-[8px] font-mono text-cyan-300/80 uppercase tracking-widest mt-1">
+                                   {formatCheckpointLabel(mission.checkpoint)}
+                                 </p>
+                               ) : null}
                                <p className="text-[14px] font-black text-white tabular-nums">{mission.progress}%</p>
                             </div>
                          </div>
@@ -223,7 +316,7 @@ export default function Overview() {
                             <div className="pt-2 border-t border-white/[0.02] flex items-center gap-2">
                                <span className="h-1 w-1 bg-[#FF6B00] rounded-full animate-pulse" />
                                <span className="text-[8px] font-mono text-white/10 uppercase tracking-widest italic group-hover:text-white/30 transition-colors">
-                                  {mission.status === 'In Progress' ? `Running: git diff --name-only [Segment_${mission.id}]` : `Finalized: Mission ${mission.id} lifecycle ended`}
+                                  {mission.status === 'In Progress' ? `Running: managed mission ${mission.id}` : `Finalized: Mission ${mission.id} lifecycle ended`}
                                </span>
                             </div>
                          </div>
@@ -238,59 +331,6 @@ export default function Overview() {
                    </div>
                 </div>
               ))}
-           </div>
-        </div>
-
-        {/* Secondary Context */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-8 border-t border-white/5">
-           <div className="space-y-6">
-              <h3 className="text-[11px] font-black uppercase tracking-[0.3em] text-white/60 italic">Team Jobs</h3>
-              <div className="p-8 bg-[#0a0a0a] border border-white/5 rounded-xl space-y-6">
-                 <div className="flex items-end justify-between gap-1 h-20">
-                    {[45, 62, 38, 92, 55, 71, 85, 40, 66, 95].map((h, i) => (
-                      <div key={i} className="flex-1 space-y-1">
-                         <div 
-                           className={cn(
-                             "w-full rounded-t-sm transition-all duration-700",
-                             i === 9 ? "bg-[#FF6B00] shadow-[0_0_10px_#FF6B00]" : "bg-white/10"
-                           )} 
-                           style={{ height: `${h}%` }} 
-                         />
-                      </div>
-                    ))}
-                 </div>
-                 <div className="flex items-center justify-between border-t border-white/5 pt-4">
-                    <div className="space-y-1">
-                       <p className="text-[9px] font-black text-white/20 uppercase tracking-widest">Completed Jobs / Daily</p>
-                       <p className="text-lg font-black text-white italic">24.5 Avg</p>
-                    </div>
-                    <div className="p-2 bg-green-500/10 rounded text-green-500 text-[9px] font-black uppercase tracking-widest">
-                       +12.2% 
-                    </div>
-                 </div>
-              </div>
-           </div>
-
-           <div className="space-y-6">
-              <h3 className="text-[11px] font-black uppercase tracking-[0.3em] text-white/60 italic">Workforce Access</h3>
-              <div className="space-y-4">
-                 {[
-                   { label: "Anthropic Integration", status: "Active", latency: "142ms" },
-                   { label: "OpenAI Proxy", status: "Active", latency: "210ms" },
-                   { label: "Perplexity Internal Search", status: "Wait", latency: "---" },
-                 ].map((sys) => (
-                   <div key={sys.label} className="flex items-center justify-between p-4 bg-[#0a0a0a] border border-white/5 hover:border-white/10 transition-colors">
-                      <div className="flex items-center gap-3">
-                         <div className={cn("h-1.5 w-1.5 rounded-full", sys.status === 'Active' ? 'bg-[#FF6B00]' : 'bg-red-500/20')} />
-                         <span className="text-[11px] font-bold text-white uppercase tracking-widest">{sys.label}</span>
-                      </div>
-                      <div className="flex items-center gap-6">
-                         <span className="text-[9px] font-mono text-white/10 italic">LTC: {sys.latency}</span>
-                         <ChevronRight className="h-3 w-3 text-white/10" />
-                      </div>
-                   </div>
-                 ))}
-              </div>
            </div>
         </div>
 

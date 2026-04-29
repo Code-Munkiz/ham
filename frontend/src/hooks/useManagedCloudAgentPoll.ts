@@ -1,6 +1,11 @@
 import * as React from "react";
 
-import { fetchCursorAgent, fetchCursorAgentConversation } from "@/lib/ham/api";
+import {
+  fetchCursorAgent,
+  fetchCursorAgentConversation,
+  fetchManagedMissionForAgent,
+  type ManagedMissionRow,
+} from "@/lib/ham/api";
 import {
   deriveManagedDeployReadiness,
   deriveManagedMissionReview,
@@ -34,6 +39,7 @@ export function useManagedCloudAgentPoll(options: UseManagedCloudAgentPollOption
   lastSnapshot: ManagedMissionSnapshot | null;
   lastReview: ManagedMissionReview | null;
   lastDeployReadiness: ManagedDeployReadiness | null;
+  managedMissionRow: ManagedMissionRow | null;
   lastUpdated: number | null;
   pollError: string | null;
   pollPending: boolean;
@@ -43,6 +49,7 @@ export function useManagedCloudAgentPoll(options: UseManagedCloudAgentPollOption
   const [lastSnapshot, setLastSnapshot] = React.useState<ManagedMissionSnapshot | null>(null);
   const [lastReview, setLastReview] = React.useState<ManagedMissionReview | null>(null);
   const [lastDeployReadiness, setLastDeployReadiness] = React.useState<ManagedDeployReadiness | null>(null);
+  const [managedMissionRow, setManagedMissionRow] = React.useState<ManagedMissionRow | null>(null);
   const [lastUpdated, setLastUpdated] = React.useState<number | null>(null);
   const [pollError, setPollError] = React.useState<string | null>(null);
   const [pollPending, setPollPending] = React.useState(false);
@@ -81,6 +88,11 @@ export function useManagedCloudAgentPoll(options: UseManagedCloudAgentPollOption
       setLastSnapshot(snap);
       setLastReview(review);
       setLastDeployReadiness(deploy);
+      const mrow = await fetchManagedMissionForAgent(requestId);
+      if (!enabledRef.current || agentIdRef.current.trim() !== requestId) {
+        return;
+      }
+      setManagedMissionRow(mrow);
       setLastUpdated(Date.now());
       onAfterSuccessRef.current(agent, conv);
       const rvc = onTerminalReviewForChatRef.current;
@@ -106,6 +118,7 @@ export function useManagedCloudAgentPoll(options: UseManagedCloudAgentPollOption
       setLastSnapshot(null);
       setLastReview(null);
       setLastDeployReadiness(null);
+      setManagedMissionRow(null);
       setLastUpdated(null);
       setPollError(null);
       setPollPending(false);
@@ -138,6 +151,7 @@ export function useManagedCloudAgentPoll(options: UseManagedCloudAgentPollOption
     lastSnapshot,
     lastReview,
     lastDeployReadiness,
+    managedMissionRow,
     lastUpdated,
     pollError,
     pollPending,

@@ -160,6 +160,7 @@ export function CloudAgentPanel({
   const [postDeployLoading, setPostDeployLoading] = React.useState(false);
   const [postDeployRecheckBusy, setPostDeployRecheckBusy] = React.useState(false);
   const [missionDeployStamp, setMissionDeployStamp] = React.useState<string | null>(null);
+  const missionCheckpoint = (managed.managedMissionRow?.latest_checkpoint || "").trim() || null;
 
   const transcriptLines: CursorTranscriptLine[] = React.useMemo(
     () => parseCursorConversationToLines(convPayload),
@@ -548,6 +549,12 @@ export function CloudAgentPanel({
                 <p className="text-[11px] leading-[1.45] text-white/55">
                   <span className="text-white/35">Deploy approval snapshot (at mission create): </span>
                   <span className="font-mono text-cyan-200/90">{missionDeployStamp}</span>
+                </p>
+              ) : null}
+              {missionCheckpoint ? (
+                <p className="text-[11px] leading-[1.45] text-white/55">
+                  <span className="text-white/35">Checkpoint: </span>
+                  <span className="font-mono text-cyan-200/90">{missionCheckpoint.replace(/_/g, " ")}</span>
                 </p>
               ) : null}
               {managedPollPending && !managedViewSnapshot && !managedPollError ? (

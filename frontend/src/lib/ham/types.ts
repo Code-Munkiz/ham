@@ -31,6 +31,15 @@ export interface ManagedMissionReview {
   limitedSignal: boolean;
 }
 
+export type MissionCheckpointState =
+  | "queued"
+  | "launched"
+  | "running"
+  | "blocked"
+  | "pr_opened"
+  | "completed"
+  | "failed";
+
 /** Deterministic deploy handoff assessment (Vercel hook is configured separately on the server). */
 export type ManagedDeployReadiness = {
   ready: boolean;

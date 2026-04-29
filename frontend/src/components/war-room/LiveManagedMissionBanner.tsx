@@ -52,6 +52,7 @@ export function LiveManagedMissionBanner({ when, className }: LiveManagedMission
       ? "Syncing"
       : managed.lastSnapshot?.status?.trim() || (managed.pollPending ? "Syncing" : "Live");
   const progress = managed.lastSnapshot?.progress?.trim() || null;
+  const checkpoint = (managed.managedMissionRow?.latest_checkpoint || "").trim();
   const pollErr = managed.pollError;
 
   return (
@@ -93,6 +94,11 @@ export function LiveManagedMissionBanner({ when, className }: LiveManagedMission
             />
             <span className="min-w-0 text-[12px] font-bold uppercase tracking-wide text-white/80">{status}</span>
           </div>
+            {checkpoint ? (
+              <span className="shrink-0 rounded border border-cyan-400/30 bg-cyan-400/10 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-cyan-200/90">
+                {checkpoint.replace(/_/g, " ")}
+              </span>
+            ) : null}
           {progress ? (
             <p className="min-w-0 max-w-[min(200px,28vw)] truncate text-[11px] text-white/45" title={progress}>
               {progress}

@@ -261,6 +261,7 @@ def test_successful_launch_writes_central_audit_and_normalizes_summary(
     assert out is not None and out.ok
     assert out.data.get("agent_id") == "bc_xyz"
     assert out.data.get("provider") == "cursor_cloud_agent"
+    assert out.data.get("mission_checkpoint") == "queued"
     lines = central_audit.read_text(encoding="utf-8").strip().splitlines()
     row = json.loads(lines[-1])
     assert row["action"] == "launch"
@@ -360,6 +361,7 @@ def test_status_returns_normalized_summary(
         )
     assert out is not None and out.ok
     assert out.data.get("status") == "FINISHED"
+    assert out.data.get("mission_checkpoint") == "completed"
     lines = central_audit.read_text(encoding="utf-8").strip().splitlines()
     assert json.loads(lines[-1])["action"] == "status"
 

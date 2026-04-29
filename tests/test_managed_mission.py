@@ -22,6 +22,8 @@ from src.persistence.control_plane_run import (
 from src.persistence.managed_mission import (
     ManagedMission,
     ManagedMissionStore,
+    append_mission_checkpoint_event,
+    derive_mission_checkpoint,
     map_cursor_to_mission_lifecycle,
     new_mission_registry_id,
 )
@@ -79,6 +81,44 @@ def test_mission_lifecycle_sticky() -> None:
     )
     assert lc == "succeeded"
     assert reason == "mapped:FINISHED"
+
+
+def test_derive_checkpoint_pr_opened_from_completed_with_pr() -> None:
+    cp, reason = derive_mission_checkpoint(
+        mission_lifecycle="open",
+        cursor_status_raw="FINISHED",
+        status_reason=None,
+        pr_url="https://github.com/o/r/pull/12",
+        previous_checkpoint=None,
+    )
+    assert cp == "pr_opened"
+    assert reason == "cursor_completed_with_pr"
+
+
+def test_derive_checkpoint_blocked_from_reason_context() -> None:
+    cp, reason = derive_mission_checkpoint(
+        mission_lifecycle="open",
+        cursor_status_raw="RUNNING",
+        status_reason="policy: awaiting approval from operator",
+        pr_url=None,
+        previous_checkpoint="running",
+    )
+    assert cp == "blocked"
+    assert reason == "status_reason_blocked"
+
+
+def test_append_checkpoint_events_is_capped() -> None:
+    events = []
+    for i in range(30):
+        events = append_mission_checkpoint_event(
+            existing=events,
+            checkpoint="running",
+            observed_at=f"2026-01-01T00:00:{i:02d}Z",
+            reason=f"tick-{i}",
+        )
+    assert len(events) == 24
+    assert events[0].reason == "tick-6"
+    assert events[-1].reason == "tick-29"
 
 
 def test_mission_store_roundtrip(tmp_path: Path) -> None:
@@ -329,6 +369,8 @@ def test_missions_list_api(client: TestClient) -> None:
     assert body["kind"] == "managed_mission_list"
     assert len(body["missions"]) == 1
     assert body["missions"][0]["mission_registry_id"] == mid
+    assert body["missions"][0]["latest_checkpoint"] is None
+    assert isinstance(body["missions"][0]["checkpoint_events"], list)
     d = client.get(f"/api/cursor/managed/missions/{mid}")
     assert d.status_code == 200
     assert d.json()["cursor_agent_id"] == "c-agent-1"

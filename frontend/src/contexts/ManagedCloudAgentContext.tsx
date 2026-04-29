@@ -7,6 +7,7 @@ import type {
   ManagedMissionReview,
   ManagedMissionSnapshot,
 } from "@/lib/ham/types";
+import type { ManagedMissionRow } from "@/lib/ham/api";
 
 export type ManagedCloudAgentContextValue = {
   activeCloudAgentId: string | null;
@@ -20,6 +21,7 @@ export type ManagedCloudAgentContextValue = {
   /** Managed poll: in-flight */
   pollPending: boolean;
   refresh: () => void;
+  managedMissionRow: ManagedMissionRow | null;
   /** Server has a resolvable deploy hook for this agent (or global); null while loading */
   deployHookConfigured: boolean | null;
   /** Per-repo / global deploy hook mapping (no secrets) */

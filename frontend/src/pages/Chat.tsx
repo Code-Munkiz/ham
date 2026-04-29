@@ -183,6 +183,15 @@ function saveManagedDeployChatMap(m: Record<string, string>) {
   }
 }
 
+function buildCheckpointChatLine(mission: ManagedMissionRow): string | null {
+  const cp = (mission.latest_checkpoint || "").trim();
+  if (!cp) return null;
+  const when = (mission.latest_checkpoint_at || mission.last_server_observed_at || "").trim();
+  const parts = [`[HAM] Checkpoint: ${cp}`];
+  if (when) parts.push(`@ ${when}`);
+  return parts.join(" ");
+}
+
 type RecentMission = { id: string; label?: string; t: number };
 
 function loadRecentMissions(): RecentMission[] {
@@ -1217,6 +1226,7 @@ function ChatPageInner({
     [],
   );
 
+  const lastCheckpointChatSigRef = React.useRef<string | null>(null);
   React.useEffect(() => {
     if (uplinkId !== "cloud_agent" || cloudMissionHandling !== "managed") {
       try {
@@ -1238,6 +1248,52 @@ function ChatPageInner({
     onAfterSuccess: processManagedAgentPollForCompletion,
     onTerminalReviewForChat: processManagedAgentReviewForChat,
   });
+
+  React.useEffect(() => {
+    if (uplinkId !== "cloud_agent" || cloudMissionHandling !== "managed") {
+      lastCheckpointChatSigRef.current = null;
+      return;
+    }
+    const row = managedCloudPoll.managedMissionRow;
+    if (!row) return;
+    const cp = (row.latest_checkpoint || "").trim();
+    if (!cp) return;
+    const aid = (row.cursor_agent_id || activeCloudAgentId || "").trim();
+    if (!aid) return;
+    const stamp = (row.latest_checkpoint_at || row.updated_at || "").trim();
+    const sig = `${aid}::${cp}::${stamp}`;
+    if (lastCheckpointChatSigRef.current === sig) return;
+    lastCheckpointChatSigRef.current = sig;
+    const ts = new Date().toLocaleTimeString([], {
+      hour12: false,
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+    const pretty = cp.replace(/_/g, " ");
+    const reason = (row.latest_checkpoint_reason || "").trim();
+    const line = reason
+      ? `[HAM] Checkpoint: ${pretty} (${reason})`
+      : `[HAM] Checkpoint: ${pretty}`;
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `ham-managed-checkpoint-${aid}-${Date.now()}`,
+        role: "system",
+        content: line,
+        timestamp: ts,
+      },
+    ]);
+  }, [
+    uplinkId,
+    cloudMissionHandling,
+    activeCloudAgentId,
+    managedCloudPoll.managedMissionRow,
+    managedCloudPoll.managedMissionRow?.latest_checkpoint,
+    managedCloudPoll.managedMissionRow?.latest_checkpoint_at,
+    managedCloudPoll.managedMissionRow?.latest_checkpoint_reason,
+    managedCloudPoll.managedMissionRow?.updated_at,
+  ]);
 
   React.useEffect(() => {
     const aid = activeCloudAgentId?.trim() ?? null;
@@ -1389,6 +1445,7 @@ function ChatPageInner({
       lastSnapshot: managedCloudPoll.lastSnapshot,
       lastReview: managedCloudPoll.lastReview,
       lastDeployReadiness: managedCloudPoll.lastDeployReadiness,
+      managedMissionRow: managedCloudPoll.managedMissionRow,
       lastUpdated: managedCloudPoll.lastUpdated,
       pollError: managedCloudPoll.pollError,
       pollPending: managedCloudPoll.pollPending,
@@ -1410,6 +1467,7 @@ function ChatPageInner({
       managedCloudPoll.lastSnapshot,
       managedCloudPoll.lastReview,
       managedCloudPoll.lastDeployReadiness,
+      managedCloudPoll.managedMissionRow,
       managedCloudPoll.lastUpdated,
       managedCloudPoll.pollError,
       managedCloudPoll.pollPending,

@@ -15,6 +15,8 @@ from src.persistence.control_plane_run import ControlPlaneRunStore, utc_now_iso
 from src.persistence.managed_mission import (
     ManagedMission,
     ManagedMissionStore,
+    append_mission_checkpoint_event,
+    derive_mission_checkpoint,
     map_cursor_to_mission_lifecycle,
     new_mission_registry_id,
 )
@@ -43,6 +45,57 @@ def _repo_key_for_launch(repository: str) -> str | None:
     if not s:
         return None
     return s[:500]
+
+
+def _checkpoint_reason_context(
+    *,
+    status_reason_last_observed: str | None,
+    last_post_deploy_reason_code: str | None,
+    last_post_deploy_state: str | None,
+    last_hook_outcome: str | None,
+    last_review_severity: str | None,
+) -> str | None:
+    parts = [
+        str(status_reason_last_observed or "").strip(),
+        str(last_post_deploy_reason_code or "").strip(),
+        str(last_post_deploy_state or "").strip(),
+        str(last_hook_outcome or "").strip(),
+        str(last_review_severity or "").strip(),
+    ]
+    flat = " | ".join([p for p in parts if p])
+    return flat or None
+
+
+def _with_derived_checkpoint(m: ManagedMission, *, observed_at: str) -> ManagedMission:
+    cp_next, cp_reason = derive_mission_checkpoint(
+        mission_lifecycle=m.mission_lifecycle,
+        cursor_status_raw=m.cursor_status_last_observed,
+        status_reason=_checkpoint_reason_context(
+            status_reason_last_observed=m.status_reason_last_observed,
+            last_post_deploy_reason_code=m.last_post_deploy_reason_code,
+            last_post_deploy_state=m.last_post_deploy_state,
+            last_hook_outcome=m.last_hook_outcome,
+            last_review_severity=m.last_review_severity,
+        ),
+        pr_url=m.pr_url_last_observed,
+        previous_checkpoint=m.mission_checkpoint_latest,
+    )
+    if cp_next != m.mission_checkpoint_latest:
+        events = append_mission_checkpoint_event(
+            existing=m.mission_checkpoint_events,
+            checkpoint=cp_next,
+            observed_at=observed_at,
+            reason=cp_reason,
+        )
+        return m.model_copy(
+            update={
+                "mission_checkpoint_latest": cp_next,
+                "mission_checkpoint_reason_last": cp_reason,
+                "mission_checkpoint_updated_at": observed_at,
+                "mission_checkpoint_events": events,
+            }
+        )
+    return m
 
 
 def resolve_mission_deploy_approval_mode_at_managed_create(
@@ -118,6 +171,15 @@ def create_mission_after_managed_launch(
         mission_lifecycle="open",
         cursor_status_last_observed=None,
         status_reason_last_observed="managed_launch:created",
+        mission_checkpoint_latest="launched",
+        mission_checkpoint_updated_at=n,
+        mission_checkpoint_reason_last="managed_launch_created",
+        mission_checkpoint_events=append_mission_checkpoint_event(
+            existing=[],
+            checkpoint="launched",
+            observed_at=n,
+            reason="managed_launch_created",
+        ),
         created_at=n,
         updated_at=n,
         last_server_observed_at=n,
@@ -155,11 +217,13 @@ def observe_mission_from_cursor_payload(*, raw: Mapping[str, Any] | None) -> Non
             "ref_observed": (summ.get("ref") or m.ref_observed),
             "cursor_status_last_observed": cursor_tok,
             "status_reason_last_observed": s_reason,
+            "pr_url_last_observed": (summ.get("pr_url") or m.pr_url_last_observed),
             "mission_lifecycle": new_lc,
             "updated_at": n,
             "last_server_observed_at": n,
         }
     )
+    m2 = _with_derived_checkpoint(m2, observed_at=n)
     st.save(m2)
 
 
@@ -202,6 +266,7 @@ def maybe_patch_mission_from_vercel_managed_response(
             "last_server_observed_at": n,
         }
     )
+    m2 = _with_derived_checkpoint(m2, observed_at=n)
     get_managed_mission_store().save(m2)
 
 
@@ -235,4 +300,5 @@ def maybe_patch_mission_from_post_deploy_response(
             "last_server_observed_at": n,
         }
     )
+    m2 = _with_derived_checkpoint(m2, observed_at=n)
     get_managed_mission_store().save(m2)
