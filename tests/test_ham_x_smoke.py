@@ -9,7 +9,13 @@ from src.ham.ham_x.config import HamXConfig
 from src.ham.ham_x.smoke import run_smoke
 
 
-def _test_config(tmp_path: Path, *, live: bool = False, xai_api_key: str = "") -> HamXConfig:
+def _test_config(
+    tmp_path: Path,
+    *,
+    live: bool = False,
+    xai_api_key: str = "",
+    readonly_transport: str = "direct",
+) -> HamXConfig:
     return HamXConfig(
         xai_api_key=xai_api_key,
         x_api_key="",
@@ -36,6 +42,7 @@ def _test_config(tmp_path: Path, *, live: bool = False, xai_api_key: str = "") -
         daily_spend_limit_usd=5.0,
         model="grok-4.1-fast",
         xurl_bin="xurl",
+        readonly_transport=readonly_transport,
         review_queue_path=tmp_path / "review_queue.jsonl",
         exception_queue_path=tmp_path / "exception_queue.jsonl",
         audit_log_path=tmp_path / "audit.jsonl",
@@ -111,7 +118,7 @@ def test_x_readonly_smoke_runs_only_when_live_gates_pass(tmp_path: Path) -> None
 
     result = run_smoke(
         "x-readonly",
-        config=_test_config(tmp_path, live=True),
+        config=_test_config(tmp_path, live=True, readonly_transport="xurl"),
         xurl_runner=runner,
         xurl_binary_resolver=lambda _: "/usr/bin/xurl",
     )
@@ -137,7 +144,7 @@ def test_x_readonly_401_smoke_summary_remains_diagnostic(tmp_path: Path) -> None
 
     result = run_smoke(
         "x-readonly",
-        config=_test_config(tmp_path, live=True),
+        config=_test_config(tmp_path, live=True, readonly_transport="xurl"),
         xurl_runner=runner,
         xurl_binary_resolver=lambda _: "/usr/bin/xurl",
     )

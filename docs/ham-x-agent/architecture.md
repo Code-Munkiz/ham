@@ -52,7 +52,7 @@ Phase 1D exposes `run_smoke()` for local safety checks. The supported modes are 
 
 All smoke results preserve `execution_allowed=false` and `mutation_attempted=false`. Live-capable smoke behavior is gated by `HAM_X_ENABLE_LIVE_SMOKE=true`; by default, read-only X and xAI smoke modes return safe disabled summaries without network calls.
 
-Phase 1E implements only a gated read-only `xurl search` smoke. It requires `HAM_X_DRY_RUN=true` and `HAM_X_AUTONOMY_ENABLED=false`, denies post/quote/like before subprocess execution, and keeps xAI smoke disabled/not implemented.
+Phase 1E implements only gated read-only X search smoke. The preferred transport is direct Bearer X Recent Search, with xurl still available as a fallback. It requires `HAM_X_DRY_RUN=true` and `HAM_X_AUTONOMY_ENABLED=false`, denies post/quote/like before any subprocess path, and keeps xAI smoke disabled/not implemented.
 
 Phase 1F implements only a gated xAI tiny-call smoke for credential/model validation. The returned text is never connected to campaign drafting, review queue publishing, autonomy decisions, or xurl execution.
 

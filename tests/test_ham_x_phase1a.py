@@ -47,6 +47,7 @@ def _test_config(tmp_path: Path) -> HamXConfig:
         daily_spend_limit_usd=5.0,
         model="grok-4.1-fast",
         xurl_bin="xurl",
+        readonly_transport="direct",
         review_queue_path=tmp_path / "review_queue.jsonl",
         exception_queue_path=tmp_path / "exception_queue.jsonl",
         audit_log_path=tmp_path / "audit.jsonl",
@@ -59,6 +60,7 @@ def test_default_config_disables_autonomy(monkeypatch) -> None:
     monkeypatch.delenv("HAM_X_CATALOG_SKILL_ID", raising=False)
     monkeypatch.delenv("HAM_X_EMERGENCY_STOP", raising=False)
     monkeypatch.delenv("HAM_X_ENABLE_LIVE_SMOKE", raising=False)
+    monkeypatch.delenv("HAM_X_READONLY_TRANSPORT", raising=False)
     monkeypatch.delenv("HAM_X_REVIEW_QUEUE_PATH", raising=False)
     monkeypatch.delenv("HAM_X_EXCEPTION_QUEUE_PATH", raising=False)
     monkeypatch.delenv("HAM_X_AUDIT_LOG_PATH", raising=False)
@@ -73,6 +75,7 @@ def test_default_config_disables_autonomy(monkeypatch) -> None:
     assert cfg.catalog_skill_id == "bundled.social-media.xurl"
     assert cfg.emergency_stop is False
     assert cfg.enable_live_smoke is False
+    assert cfg.readonly_transport == "direct"
 
 
 def test_default_config_dry_run_true(monkeypatch) -> None:

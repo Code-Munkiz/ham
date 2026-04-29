@@ -18,6 +18,7 @@ DEFAULT_AUTONOMY_MODE = "draft"
 DEFAULT_POLICY_PROFILE_ID = "platform-default"
 DEFAULT_BRAND_VOICE_ID = "ham-canonical"
 DEFAULT_CATALOG_SKILL_ID = "bundled.social-media.xurl"
+DEFAULT_READONLY_TRANSPORT = "direct"
 
 
 def _bool_env(name: str, default: bool) -> bool:
@@ -79,6 +80,7 @@ class HamXConfig:
     daily_spend_limit_usd: float
     model: str
     xurl_bin: str
+    readonly_transport: str
     review_queue_path: Path
     exception_queue_path: Path
     audit_log_path: Path
@@ -121,6 +123,8 @@ def load_ham_x_config() -> HamXConfig:
         daily_spend_limit_usd=_float_env("HAM_X_DAILY_SPEND_LIMIT_USD", 5.0),
         model=(os.environ.get("HAM_X_MODEL") or "grok-4.1-fast").strip() or "grok-4.1-fast",
         xurl_bin=(os.environ.get("HAM_X_XURL_BIN") or "xurl").strip() or "xurl",
+        readonly_transport=(os.environ.get("HAM_X_READONLY_TRANSPORT") or DEFAULT_READONLY_TRANSPORT).strip()
+        or DEFAULT_READONLY_TRANSPORT,
         review_queue_path=_path_env(
             "HAM_X_REVIEW_QUEUE_PATH",
             ".data/ham-x/review_queue.jsonl",

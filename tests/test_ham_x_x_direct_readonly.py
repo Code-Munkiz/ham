@@ -1,0 +1,145 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+from src.ham.ham_x.config import HamXConfig
+from src.ham.ham_x.smoke import run_smoke
+from src.ham.ham_x.x_readonly_client import XDirectReadonlyClient
+
+
+class FakeResponse:
+    def __init__(self, status_code: int, body: dict[str, object], text: str = "") -> None:
+        self.status_code = status_code
+        self._body = body
+        self.text = text
+
+    def json(self) -> dict[str, object]:
+        return self._body
+
+
+def _test_config(
+    tmp_path: Path,
+    *,
+    live: bool = True,
+    bearer: str = "bearer-token-value",
+) -> HamXConfig:
+    return HamXConfig(
+        xai_api_key="",
+        x_api_key="",
+        x_api_secret="",
+        x_access_token="",
+        x_access_token_secret="",
+        x_bearer_token=bearer,
+        tenant_id="ham-official",
+        agent_id="ham-pr-rockstar",
+        campaign_id="base-stealth-launch",
+        account_id="ham-x-official",
+        profile_id="ham.default",
+        autonomy_mode="draft",
+        policy_profile_id="platform-default",
+        brand_voice_id="ham-canonical",
+        catalog_skill_id="bundled.social-media.xurl",
+        emergency_stop=False,
+        enable_live_smoke=live,
+        autonomy_enabled=False,
+        dry_run=True,
+        max_posts_per_hour=0,
+        max_quotes_per_hour=0,
+        max_searches_per_hour=30,
+        daily_spend_limit_usd=5.0,
+        model="grok-4.1-fast",
+        xurl_bin="xurl",
+        readonly_transport="direct",
+        review_queue_path=tmp_path / "review_queue.jsonl",
+        exception_queue_path=tmp_path / "exception_queue.jsonl",
+        audit_log_path=tmp_path / "audit.jsonl",
+    )
+
+
+def test_direct_readonly_search_success_with_mocked_http(tmp_path: Path) -> None:
+    calls: list[dict[str, object]] = []
+
+    def http_get(url, **kwargs):
+        calls.append({"url": url, **kwargs})
+        return FakeResponse(
+            200,
+            {
+                "data": [{"id": "1", "text": "Base ecosystem autonomous agents"}],
+                "meta": {"result_count": 1},
+            },
+        )
+
+    result = XDirectReadonlyClient(
+        config=_test_config(tmp_path),
+        http_get=http_get,
+    ).search_recent("Base ecosystem autonomous agents")
+
+    assert result.status == "ok"
+    assert result.reason == "x_direct_search_ok"
+    assert result.execution_allowed is False
+    assert result.mutation_attempted is False
+    assert calls
+    assert calls[0]["params"] == {
+        "query": "Base ecosystem autonomous agents",
+        "max_results": 10,
+    }
+    assert "Authorization" in calls[0]["headers"]  # Value is not asserted or printed.
+
+
+def test_direct_readonly_missing_bearer_blocks_safely(tmp_path: Path) -> None:
+    def http_get(*args, **kwargs):  # pragma: no cover - must not be called
+        raise AssertionError("HTTP should not be called")
+
+    result = XDirectReadonlyClient(
+        config=_test_config(tmp_path, bearer=""),
+        http_get=http_get,
+    ).search_recent("Base ecosystem autonomous agents")
+
+    assert result.blocked is True
+    assert result.executed is False
+    assert result.reason == "x_bearer_token_missing"
+    assert result.execution_allowed is False
+    assert result.mutation_attempted is False
+
+
+def test_direct_readonly_401_has_diagnostic_and_redacts_secret(tmp_path: Path) -> None:
+    secret = "Bearer abcdefghijklmnopqrstuvwxyz123456"
+
+    def http_get(*args, **kwargs):
+        return FakeResponse(
+            401,
+            {"title": "Unauthorized", "status": 401, "detail": "Unauthorized"},
+            text=f"Authorization: {secret}",
+        )
+
+    result = XDirectReadonlyClient(
+        config=_test_config(tmp_path, bearer=secret),
+        http_get=http_get,
+    ).search_recent("Base ecosystem autonomous agents")
+
+    dumped = str(result.as_dict())
+    assert result.status == "failed"
+    assert result.reason == "x_direct_search_401_unauthorized"
+    assert "bearer token" in result.diagnostic
+    assert "abcdefghijklmnopqrstuvwxyz123456" not in dumped
+    assert "[REDACTED" in dumped
+    assert result.execution_allowed is False
+    assert result.mutation_attempted is False
+
+
+def test_x_readonly_smoke_uses_direct_transport(tmp_path: Path) -> None:
+    def http_get(*args, **kwargs):
+        return FakeResponse(200, {"data": [{"id": "1", "text": "ok"}], "meta": {"result_count": 1}})
+
+    result = run_smoke(
+        "x-readonly",
+        config=_test_config(tmp_path),
+        x_http_get=http_get,
+    )
+
+    assert result.ok is True
+    assert result.network_attempted is True
+    assert result.execution_allowed is False
+    assert result.mutation_attempted is False
+    assert result.summary["transport"] == "direct_bearer"
+    assert result.summary["readonly_result"]["status"] == "ok"

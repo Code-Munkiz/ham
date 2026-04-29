@@ -55,13 +55,20 @@ Run read-only X smoke only with staging credentials and explicit gates:
 HAM_X_ENABLE_LIVE_SMOKE=true \
 HAM_X_DRY_RUN=true \
 HAM_X_AUTONOMY_ENABLED=false \
+HAM_X_READONLY_TRANSPORT=direct \
 python - <<'PY'
 from src.ham.ham_x.smoke import run_smoke
 print(run_smoke("x-readonly").redacted_dump())
 PY
 ```
 
-Phase 1E uses:
+The default read-only transport is direct Bearer X Recent Search:
+
+```text
+GET https://api.x.com/2/tweets/search/recent?query=Base%20ecosystem%20autonomous%20agents&max_results=10
+```
+
+The fallback xurl transport uses:
 
 ```text
 xurl search "Base ecosystem autonomous agents" --max-results 10
@@ -97,7 +104,7 @@ python -m pytest tests/test_ham_x_phase1a.py tests/test_ham_x_smoke.py tests/tes
 
 Use staging X credentials only. Do not use production credentials for initial smoke validation, do not paste credential values into chat or logs, and do not change `HAM_X_AUTONOMY_ENABLED=false`.
 
-The read-only adapter should be considered healthy only if the audit log and returned smoke result show a search-only argv, redacted stdout/stderr, `mutation_attempted=false`, and `execution_allowed=false`.
+The read-only adapter should be considered healthy only if the audit log and returned smoke result show search-only behavior, redacted response/error data, `mutation_attempted=false`, and `execution_allowed=false`.
 
 If X returns `401 Unauthorized`, the smoke result should preserve `status=failed`, `reason=xurl_returned_401_unauthorized`, and a diagnostic that points to xurl profile, bearer token, app/project permissions, and token freshness. Secret values, auth headers, and token-like strings must still be redacted.
 

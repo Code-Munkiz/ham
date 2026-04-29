@@ -50,6 +50,7 @@ def _test_config(
         daily_spend_limit_usd=5.0,
         model="grok-4.1-fast",
         xurl_bin="xurl",
+        readonly_transport="direct",
         review_queue_path=tmp_path / "review_queue.jsonl",
         exception_queue_path=tmp_path / "exception_queue.jsonl",
         audit_log_path=tmp_path / "audit.jsonl",

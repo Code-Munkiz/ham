@@ -16,6 +16,7 @@ from src.ham.ham_x.config import HamXConfig, load_ham_x_config
 from src.ham.ham_x.grok_client import XaiHttpPost, run_xai_tiny_smoke
 from src.ham.ham_x.pipeline import PipelineRunResult, run_supervised_opportunity_loop
 from src.ham.ham_x.redaction import redact
+from src.ham.ham_x.x_readonly_client import XDirectReadonlyClient, XHttpGet
 from src.ham.ham_x.xurl_wrapper import XurlRunner, XurlWhich, XurlWrapper
 
 SmokeMode = Literal["local", "env", "x-readonly", "xai", "e2e-dry-run"]
@@ -65,6 +66,7 @@ def run_smoke(
     *,
     xurl_runner: XurlRunner | None = None,
     xurl_binary_resolver: XurlWhich | None = None,
+    x_http_get: XHttpGet | None = None,
     xai_http_post: XaiHttpPost | None = None,
 ) -> SmokeResult:
     """Run one HAM-on-X smoke mode without mutating X."""
@@ -91,6 +93,7 @@ def run_smoke(
             cfg,
             xurl_runner=xurl_runner,
             xurl_binary_resolver=xurl_binary_resolver,
+            x_http_get=x_http_get,
         )
     if normalized == "xai":
         return _xai_smoke(cfg, xai_http_post=xai_http_post)
@@ -177,6 +180,7 @@ def _readonly_x_smoke(
     *,
     xurl_runner: XurlRunner | None = None,
     xurl_binary_resolver: XurlWhich | None = None,
+    x_http_get: XHttpGet | None = None,
 ) -> SmokeResult:
     planned = [config.xurl_bin, "search", DEFAULT_READONLY_SMOKE_QUERY, "--max-results", "10"]
     gate_reasons = _readonly_gate_reasons(config)
@@ -208,11 +212,48 @@ def _readonly_x_smoke(
             },
         )
 
-    wrapper = XurlWrapper(
-        config=config,
-        runner=xurl_runner,
-        binary_resolver=xurl_binary_resolver,
-    )
+    transport = (config.readonly_transport or "direct").strip().lower()
+    if transport == "direct":
+        client = XDirectReadonlyClient(config=config, http_get=x_http_get)
+        result = client.search_recent(DEFAULT_READONLY_SMOKE_QUERY, max_results=10)
+        append_audit_event(
+            "x_readonly_smoke_executed" if result.status == "ok" else "x_readonly_smoke_failed",
+            result.as_dict(),
+            config=config,
+        )
+        return _base_result(
+            mode="x-readonly",
+            config=config,
+            ok=(result.executed and not result.blocked and result.status == "ok"),
+            warnings=[] if result.status == "ok" else [result.reason],
+            network_attempted=result.executed,
+            summary={
+                "status": "executed" if result.status == "ok" else result.reason,
+                "readonly_result": result.as_dict(),
+                "transport": "direct_bearer",
+                "catalog_skill_id": config.catalog_skill_id,
+                "safety_status": "read_only_search_only",
+                "execution_allowed": False,
+                "mutation_attempted": False,
+            },
+        )
+    if transport != "xurl":
+        return _base_result(
+            mode="x-readonly",
+            config=config,
+            ok=False,
+            warnings=["unsupported_readonly_transport"],
+            summary={
+                "status": "blocked",
+                "reason": "unsupported_readonly_transport",
+                "transport": transport,
+                "catalog_skill_id": config.catalog_skill_id,
+                "execution_allowed": False,
+                "mutation_attempted": False,
+            },
+        )
+
+    wrapper = XurlWrapper(config=config, runner=xurl_runner, binary_resolver=xurl_binary_resolver)
     result = wrapper.execute_readonly_search(DEFAULT_READONLY_SMOKE_QUERY, max_results=10)
     return _base_result(
         mode="x-readonly",
@@ -223,6 +264,7 @@ def _readonly_x_smoke(
         summary={
             "status": "executed" if result.executed and result.exit_code == 0 else result.reason,
             "xurl_result": result.as_dict(),
+            "transport": "xurl",
             "catalog_skill_id": config.catalog_skill_id,
             "safety_status": "read_only_search_only",
             "execution_allowed": False,

@@ -103,11 +103,12 @@ Review queue records are human-review proposals. Audit records are append-only t
 HAM_X_ENABLE_LIVE_SMOKE=true
 HAM_X_DRY_RUN=true
 HAM_X_AUTONOMY_ENABLED=false
+HAM_X_READONLY_TRANSPORT=direct
 ```
 
-Use staging X credentials for this check. Do not use production credentials for first-pass smoke validation, and never paste or print token values. The read-only smoke uses `xurl search "Base ecosystem autonomous agents" --max-results 10`; post, quote, like, reply, timeline, mentions, and xAI calls are not part of Phase 1E.
+Use staging X credentials for this check. Do not use production credentials for first-pass smoke validation, and never paste or print token values. The default read-only smoke uses direct Bearer X Recent Search for `Base ecosystem autonomous agents` with `max_results=10`; `HAM_X_READONLY_TRANSPORT=xurl` remains available as a fallback. Post, quote, like, reply, timeline, mentions, and xAI calls are not part of Phase 1E.
 
-After a run, verify the returned smoke result and `.data/ham-x/audit.jsonl` contain `mutation_attempted=false`, `execution_allowed=false`, and a search-only argv.
+After a run, verify the returned smoke result and `.data/ham-x/audit.jsonl` contain `mutation_attempted=false`, `execution_allowed=false`, and search-only behavior.
 
 If the read-only smoke returns `xurl_returned_401_unauthorized`, check the active xurl profile, bearer token, X app/project permissions, and token freshness. The smoke output should keep that status and diagnostic readable while still redacting secrets.
 

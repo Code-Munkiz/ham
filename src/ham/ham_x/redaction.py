@@ -46,7 +46,10 @@ def _is_secret_key(key: str) -> bool:
 def _mask_query_secrets(text: str) -> str:
     def replace_url(match: re.Match[str]) -> str:
         raw = match.group(0)
-        parsed = urlparse(raw)
+        try:
+            parsed = urlparse(raw)
+        except ValueError:
+            return raw
         if not parsed.scheme or not parsed.netloc:
             return raw
         params = []
