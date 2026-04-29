@@ -1318,6 +1318,20 @@ export class HamAccessRestrictedError extends Error {
   }
 }
 
+/**
+ * NDJSON stream closed before a `done` event (proxy idle timeout, network reset, tab backgrounding, etc.).
+ * The server may still have persisted the user turn and a partial assistant message — callers can refetch the session.
+ */
+export class HamChatStreamIncompleteError extends Error {
+  readonly streamSessionId: string | null;
+
+  constructor(streamSessionId: string | null) {
+    super("Chat stream ended without a done event");
+    this.name = "HamChatStreamIncompleteError";
+    this.streamSessionId = streamSessionId;
+  }
+}
+
 /* ─── Chat session history ────────────────────────────────────────── */
 
 export type ChatSessionSummary = {
@@ -1550,6 +1564,7 @@ export async function postChatStream(
   const decoder = new TextDecoder();
   let buffer = "";
   let final: HamChatResponse | null = null;
+  let streamSessionId: string | null = null;
 
   const handleLine = (line: string) => {
     const trimmed = line.trim();
@@ -1561,6 +1576,7 @@ export async function postChatStream(
       throw new Error("Invalid NDJSON line from chat stream");
     }
     if (ev.type === "session") {
+      streamSessionId = ev.session_id;
       callbacks.onSession?.(ev.session_id);
       return;
     }
@@ -1603,7 +1619,7 @@ export async function postChatStream(
   }
 
   if (!final) {
-    throw new Error("Chat stream ended without a done event");
+    throw new HamChatStreamIncompleteError(streamSessionId);
   }
   return final;
 }

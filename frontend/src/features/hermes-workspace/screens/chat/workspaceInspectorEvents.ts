@@ -9,6 +9,7 @@ export type WorkspaceInspectorEventKind =
   | "assistant_stream_started"
   | "session_assigned"
   | "assistant_response_completed"
+  | "stream_recovered"
   | "stream_error"
   | "goham_observe_started"
   | "goham_observe_completed"
@@ -84,6 +85,8 @@ export function humanInspectorKindLabel(kind: WorkspaceInspectorEventKind): stri
       return "Session";
     case "assistant_response_completed":
       return "Reply";
+    case "stream_recovered":
+      return "Stream restored";
     case "stream_error":
       return "Error";
     case "goham_observe_started":

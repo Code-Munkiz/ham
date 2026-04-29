@@ -14,6 +14,7 @@ import {
   fetchContextEngine,
   fetchModelsCatalog,
   HamAccessRestrictedError,
+  HamChatStreamIncompleteError,
   postChatTranscribe,
   postChatUploadAttachment,
   type HamChatExecutionMode,
@@ -1281,33 +1282,84 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
               ? err.message
               : "Request failed",
         );
-        setInspectorEvents((prev) =>
-          appendInspectorEvent(prev, {
-            atIso: new Date().toISOString(),
-            kind: "stream_error",
-            status: "error",
-            summary: `Stream error: ${safeMsg}`,
-            meta: {
-              code: err instanceof HamAccessRestrictedError ? "HAM_EMAIL_RESTRICTION" : "stream_error",
-            },
-          }),
-        );
-        if (err instanceof HamAccessRestrictedError) {
-          const msg =
-            "Access restricted: this Ham deployment only allows approved sign-ins. Check Clerk or admin.";
-          setLoadErr(msg);
-          toast.error(msg, { duration: 12_000 });
-        } else if (
-          err instanceof Error &&
-          err.message === "Chat stream ended without a done event"
-        ) {
-          const msg = "Response was interrupted — partial message may be saved.";
-          toast.error(msg, { duration: 8_000 });
-        } else {
-          const msg = err instanceof Error ? err.message : "Request failed";
-          toast.error(msg, { duration: 8_000 });
+        const sidForRecovery =
+          (err instanceof HamChatStreamIncompleteError ? err.streamSessionId : null) ??
+          streamTurnSessionRef.current ??
+          sessionId ??
+          null;
+
+        let recoveredFromServer = false;
+        if (!(err instanceof HamAccessRestrictedError) && sidForRecovery) {
+          try {
+            const detail = await workspaceSessionAdapter.get(sidForRecovery);
+            if (detail.messages.length > 0) {
+              recoveredFromServer = true;
+              setSessionId(detail.session_id);
+              setMessages(
+                detail.messages.map((m, i) => ({
+                  id: `${detail.session_id}-recovered-${i}-${m.role}`,
+                  role: m.role,
+                  content: m.content,
+                  timestamp: timeStr(),
+                })),
+              );
+            }
+          } catch {
+            /* session refetch is best-effort */
+          }
         }
-        setMessages((prev) => prev.filter((m) => m.id !== assistantPlaceId));
+
+        if (recoveredFromServer) {
+          setInspectorEvents((prev) =>
+            appendInspectorEvent(prev, {
+              atIso: new Date().toISOString(),
+              kind: "stream_recovered",
+              status: "warning",
+              summary: "Stream interrupted — restored messages from the server",
+              meta: sidForRecovery ? { session_id: sidForRecovery } : undefined,
+            }),
+          );
+          toast.message(
+            "Connection interrupted. Chat was restored from the server. Ask me to continue if the last reply cuts off.",
+            { duration: 10_000 },
+          );
+        } else {
+          setInspectorEvents((prev) =>
+            appendInspectorEvent(prev, {
+              atIso: new Date().toISOString(),
+              kind: "stream_error",
+              status: "error",
+              summary: `Stream error: ${safeMsg}`,
+              meta: {
+                code: err instanceof HamAccessRestrictedError ? "HAM_EMAIL_RESTRICTION" : "stream_error",
+              },
+            }),
+          );
+          if (err instanceof HamAccessRestrictedError) {
+            const msg =
+              "Access restricted: this Ham deployment only allows approved sign-ins. Check Clerk or admin.";
+            setLoadErr(msg);
+            toast.error(msg, { duration: 12_000 });
+          } else if (
+            err instanceof HamChatStreamIncompleteError ||
+            (err instanceof Error && err.message === "Chat stream ended without a done event")
+          ) {
+            toast.error(
+              "Connection interrupted. Partial reply is kept below — ask me to continue if it cuts off.",
+              { duration: 10_000 },
+            );
+          } else {
+            const msg = err instanceof Error ? err.message : "Request failed";
+            toast.error(msg, { duration: 8_000 });
+          }
+          setMessages((prev) => {
+            const assist = prev.find((m) => m.id === assistantPlaceId);
+            if (assist && assist.content.trim().length > 0) {
+              return prev;
+            }
+            return prev.filter((m) => m.id !== assistantPlaceId);
+          });
+        }
       } finally {
         streamTurnSessionRef.current = null;
         setSending(false);
