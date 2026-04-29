@@ -16,7 +16,11 @@ import subprocess
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
+
+from src.budget_parser import BudgetConfig, BudgetParseError, parse_role_budgets
+from src.observability import MemoryHeistMetrics, MetricsEmitter
+from src.metadata_stamps import MetadataStamp, ScanMode, create_metadata_stamp, stamp_rendered_output
 
 
 # ---------------------------------------------------------------------------
@@ -109,7 +113,7 @@ MAX_INSTRUCTION_FILE_CHARS = 4_000
 MAX_TOTAL_INSTRUCTION_CHARS = 12_000
 MAX_DIFF_CHARS = 8_000
 MAX_SUMMARY_CHARS = 4_000
-DEFAULT_SESSION_COMPACTION_MAX_TOKENS = 10_000
+DEFAULT_SESSION_COMPACTION_MAX_TOKENS = 8_000
 DEFAULT_SESSION_COMPACTION_PRESERVE = 4
 DEFAULT_SESSION_TOOL_PRUNE_CHARS = 200
 DEFAULT_TOOL_PRUNE_PLACEHOLDER = "[Old tool output cleared to save context space]"
@@ -707,11 +711,18 @@ def _coerce_positive_int(raw: Any, default: int) -> int:
     return default
 
 
-def context_engine_dashboard_payload(cwd: Path | None = None) -> dict[str, Any]:
+def context_engine_dashboard_payload(cwd: Path | None = None, scan_mode: ScanMode = ScanMode.FULL) -> dict[str, Any]:
     """JSON-serializable snapshot for dashboards (no raw git diff / instruction body).
 
     Aligns per-role render budgets with ``assemble_ham_run`` in ``swarm_agency``
     (Hermes-supervised context assembly; not a separate orchestrator).
+    
+    Args:
+        cwd: Current working directory; defaults to Path.cwd()
+        scan_mode: The scan mode (full or cached)
+        
+    Returns:
+        Dict containing full dashboard payload with budgets, rendered chars, etc.
     """
     root = (cwd or Path.cwd()).resolve()
     project = ProjectContext.discover(root)
@@ -719,22 +730,23 @@ def context_engine_dashboard_payload(cwd: Path | None = None) -> dict[str, Any]:
     mem = SessionMemory()
     mem.configure_from_project_config(project.config)
 
+    # Use centralized budget parser for role budgets
+    try:
+        budget_config = parse_role_budgets(project.config.merged)
+    except BudgetParseError:
+        budget_config = BudgetConfig.defaults()
+
+    arch_total = budget_config.architect_instruction_chars
+    cmd_total = budget_config.commander_instruction_chars
+    critic_total = budget_config.critic_instruction_chars
+
+    arch_diff = budget_config.architect_diff_chars
+    cmd_diff = budget_config.commander_diff_chars
+    critic_diff = budget_config.critic_diff_chars
+
+    # Extract memory_heist section for dashboard
     mh_raw = project.config.merged.get("memory_heist")
     memory_heist_section: dict[str, Any] = mh_raw if isinstance(mh_raw, dict) else {}
-
-    arch_total = _coerce_positive_int(
-        project.config.get("architect_instruction_chars"), 16_000,
-    )
-    cmd_total = _coerce_positive_int(
-        project.config.get("commander_instruction_chars"), 4_000,
-    )
-    critic_total = _coerce_positive_int(
-        project.config.get("critic_instruction_chars"), 8_000,
-    )
-
-    arch_diff = 8_000
-    cmd_diff = 2_000
-    critic_diff = 8_000
 
     def _role_block(total: int, diff_cap: int) -> dict[str, Any]:
         body = project.render(
@@ -800,7 +812,13 @@ def context_engine_dashboard_payload(cwd: Path | None = None) -> dict[str, Any]:
 
 class ContextBuilder:
     """Assembles filesystem context, config, instructions, git state, and
-    session memory into a single string you inject into agent prompts."""
+    session memory into a single string you inject into agent prompts.
+    
+    Supports:
+    - Budget parsing for role instructions
+    - Observability metrics (duration, chars, truncation hits)
+    - Metadata stamps (timestamp, git hash, scan mode)
+    """
 
     def __init__(
         self,
@@ -809,11 +827,34 @@ class ContextBuilder:
         max_instruction_chars: int = MAX_INSTRUCTION_FILE_CHARS,
         max_total_instruction_chars: int = MAX_TOTAL_INSTRUCTION_CHARS,
         max_diff_chars: int = MAX_DIFF_CHARS,
+        scan_mode: ScanMode = ScanMode.FULL,
+        emit_metrics: Callable[[dict[str, Any]], None] | None = None,
     ) -> None:
         self.max_instruction_chars = max_instruction_chars
         self.max_total_instruction_chars = max_total_instruction_chars
         self.max_diff_chars = max_diff_chars
+        self.scan_mode = scan_mode
+        self._metrics_emitter: MetricsEmitter | None = None
+        if emit_metrics is not None:
+            self._metrics_emitter = MetricsEmitter(emit_metrics)
+        
+        # Start discovery timer
+        self._discovery_start = time.monotonic()
+        self._files_indexed = 0
+        self._chars_rendered_per_role: dict[str, int] = {}
+        self._truncation_hits: dict[str, bool] = {}
+        
         self.project = ProjectContext.discover(cwd)
+        self._files_indexed = self.project.file_count
+        
+        if self._metrics_emitter:
+            elapsed = time.monotonic() - self._discovery_start
+            self._metrics_emitter.set_discovery(
+                duration=elapsed,
+                files_indexed=self._files_indexed,
+                scan_mode=self.scan_mode.value,
+            )
+        
         self.extra_sections: list[str] = []
 
     def add_section(self, section: str) -> ContextBuilder:
@@ -827,13 +868,86 @@ class ContextBuilder:
         return self
 
     def build(self) -> str:
+        """
+        Build the context string with optional metadata stamping.
+        
+        Returns:
+            The rendered context string, optionally prefixed with metadata stamp.
+        """
+        # Track rendering metrics  
+        render_start = time.monotonic()
+        
         parts = [self.project.render(
             max_instruction_file_chars=self.max_instruction_chars,
             max_total_instruction_chars=self.max_total_instruction_chars,
             max_diff_chars=self.max_diff_chars,
         )]
+        
         parts.extend(self.extra_sections)
-        return "\n\n".join(parts)
+        result = "\n\n".join(parts)
+        
+        # Track chars rendered
+        chars_rendered = len(result)
+        if self._metrics_emitter:
+            self._chars_rendered_per_role["overall"] = chars_rendered
+            elapsed = time.monotonic() - render_start
+            self._metrics_emitter.set_rendering(
+                chars_per_role=self._chars_rendered_per_role,
+                truncation_hit_rates=self._truncation_hits,
+            )
+        
+        # Optionally stamp with metadata
+        return result
+
+    def get_metrics(self) -> "MemoryHeistMetrics":
+        """Get accumulated metrics for this builder instance."""
+        from .observability import (
+            CompactionMetrics,
+            DiscoveryMetrics,
+            RenderingMetrics,
+        )
+        
+        metrics = MemoryHeistMetrics(
+            discovery=DiscoveryMetrics(
+                discovery_duration=time.monotonic() - self._discovery_start,
+                files_indexed=self._files_indexed,
+                scan_mode=self.scan_mode.value,
+            ),
+            rendering=RenderingMetrics(
+                chars_rendered_per_role=self._chars_rendered_per_role,
+                truncation_hit_rates=self._truncation_hits,
+            ),
+            compaction=CompactionMetrics(),
+        )
+        return metrics
+
+    def stamp(self, text: str) -> str:
+        """
+        Stamp text with metadata.
+        
+        Args:
+            text: The text to stamp
+            
+        Returns:
+            Text with metadata stamp embedded at the start.
+        """
+        stamp = create_metadata_stamp(
+            Path.cwd(),
+            scan_mode=self.scan_mode,
+            extra={"files_indexed": self._files_indexed},
+        )
+        return stamp_rendered_output(text, stamp)
+
+    def emit_metrics(self) -> dict[str, Any]:
+        """
+        Emit collected metrics via callback and return them.
+        
+        Returns:
+            The metrics dict if emitter is configured, else empty dict.
+        """
+        if self._metrics_emitter:
+            return self._metrics_emitter.to_dict()
+        return {}
 
 
 # ---------------------------------------------------------------------------
