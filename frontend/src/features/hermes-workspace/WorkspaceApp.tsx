@@ -14,6 +14,7 @@ import { WorkspaceMemoryScreen } from "./screens/memory/WorkspaceMemoryScreen";
 import { WorkspaceOperationsScreen } from "./screens/operations/WorkspaceOperationsScreen";
 import { WorkspaceProfilesScreen } from "./screens/profiles/WorkspaceProfilesScreen";
 import { WorkspaceSkillsScreen } from "./screens/skills/WorkspaceSkillsScreen";
+import { WorkspaceSocialScreen } from "./screens/social/WorkspaceSocialScreen";
 import "./hermesWorkspace.css";
 import { VoiceWorkspaceSettingsProvider } from "./voice/VoiceWorkspaceSettingsContext";
 
@@ -42,6 +43,7 @@ export function WorkspaceApp() {
           <Route path="tasks" element={<WorkspaceTasksScreen />} />
           <Route path="conductor" element={<WorkspaceConductorScreen />} />
           <Route path="operations" element={<WorkspaceOperationsScreen />} />
+          <Route path="social" element={<WorkspaceSocialScreen />} />
           <Route path="memory" element={<WorkspaceMemoryScreen />} />
           <Route path="skills" element={<WorkspaceSkillsScreen />} />
           <Route path="profiles" element={<WorkspaceProfilesScreen />} />

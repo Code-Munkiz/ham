@@ -1,6 +1,6 @@
 import * as React from "react";
 import { Link } from "react-router-dom";
-import { ArrowRight, Layers, MessageSquare, PanelLeft } from "lucide-react";
+import { ArrowRight, Layers, MessageSquare, PanelLeft, Share2 } from "lucide-react";
 import { hamWorkspaceLogoUrl } from "@/lib/ham/publicAssets";
 
 export function WorkspaceHome() {
@@ -30,7 +30,7 @@ export function WorkspaceHome() {
           </p>
         </div>
 
-        <div className="mb-6 grid gap-3 sm:grid-cols-3">
+        <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-xl border border-[color:var(--ham-workspace-line)] bg-[#040d14]/60 p-4 text-left">
             <PanelLeft className="mb-2 h-4 w-4 text-white/40" strokeWidth={1.5} />
             <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-white/50">
@@ -50,6 +50,18 @@ export function WorkspaceHome() {
             </p>
             <p className="mt-1 text-[12px] text-white/40 group-hover:text-white/55">
               Open the workspace chat surface (stream wiring next).
+            </p>
+          </Link>
+          <Link
+            to="/workspace/social"
+            className="group rounded-xl border border-emerald-500/25 bg-gradient-to-b from-emerald-950/25 to-[#06100d]/40 p-4 text-left transition-colors hover:border-emerald-400/30 hover:from-emerald-950/35"
+          >
+            <Share2 className="mb-2 h-4 w-4 text-emerald-200/75" strokeWidth={1.5} />
+            <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-white/60 group-hover:text-white/80">
+              Social
+            </p>
+            <p className="mt-1 text-[12px] text-white/40 group-hover:text-white/55">
+              Read-only provider status for X and future social platforms.
             </p>
           </Link>
           <div className="rounded-xl border border-[color:var(--ham-workspace-line)] bg-[#040d14]/60 p-4 text-left">

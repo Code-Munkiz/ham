@@ -6,6 +6,7 @@ import {
   LayoutDashboard,
   MessageSquare,
   Network,
+  Share2,
   FolderOpen,
   Settings,
   Waypoints,
@@ -30,6 +31,7 @@ export const mainNavItems: MainNavItem[] = [
   { to: "/workspace/tasks", label: "Tasks", icon: CheckSquare },
   { to: "/workspace/conductor", label: "Conductor", icon: Waypoints },
   { to: "/workspace/operations", label: "Operations", icon: Network },
+  { to: "/workspace/social", label: "Social", icon: Share2 },
   { to: "/workspace/settings", label: "Settings", icon: Settings },
 ];
 
@@ -47,6 +49,7 @@ const MOBILE_TITLE_RULES: { test: (p: string) => boolean; title: string }[] = [
   { test: (p) => p === "/workspace/tasks" || p.startsWith("/workspace/tasks/"), title: "Tasks" },
   { test: (p) => p === "/workspace/conductor" || p.startsWith("/workspace/conductor/"), title: "Conductor" },
   { test: (p) => p === "/workspace/operations" || p.startsWith("/workspace/operations/"), title: "Operations" },
+  { test: (p) => p === "/workspace/social" || p.startsWith("/workspace/social/"), title: "Social" },
   { test: (p) => p === "/workspace/memory" || p.startsWith("/workspace/memory/"), title: "Memory" },
   { test: (p) => p === "/workspace/skills" || p.startsWith("/workspace/skills/"), title: "Skills" },
   { test: (p) => p === "/workspace/profiles" || p.startsWith("/workspace/profiles/"), title: "Profiles" },
