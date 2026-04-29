@@ -38,7 +38,7 @@ def normalize_cache_key(raw_path: str | Path) -> str:
     This function ALWAYS lowercases paths and normalizes separators for consistent
     cache keys regardless of:
     - Original case (Src vs src)
-    - Platform separators (Windows \ vs Unix /)
+- Platform separators (Windows \\ vs Unix /)
     - Relative vs absolute paths (keeps as-is)
     
     IMPORTANT: The cache is case-insensitive by design across ALL platforms.
@@ -70,9 +70,10 @@ def normalize_cache_key(raw_path: str | Path) -> str:
     # This handles Windows-style paths on Linux/Mac
     path_str = path_str.replace('\\', '/')
     
-    # Normalize path separators using os.path.normpath (will remove //, etc.)
-    # Keep relative paths relative, absolute paths absolute
-    normalized = os.path.normpath(path_str)
+    # Normalize path shape (collapses redundant separators, dot segments).
+    # On Windows, normpath emits backslashes, so canonicalize to POSIX-style
+    # separators after normalization for deterministic cross-platform keys.
+    normalized = os.path.normpath(path_str).replace("\\", "/")
     
     # ALWAYS lowercase for consistent cache keys across ALL platforms
     # This ensures cross-platform consistency regardless of OS
@@ -175,5 +176,3 @@ def cache_invalidated_by_git(cwd: Path, file_key: str, expected_git_head: str) -
         return False
 
 
-# Import required platform detection
-import platform
