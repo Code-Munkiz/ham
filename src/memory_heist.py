@@ -19,9 +19,13 @@ from pathlib import Path
 from typing import Any, Callable
 
 from src.budget_parser import BudgetConfig, BudgetParseError, parse_role_budgets
-from src.observability import MemoryHeistMetrics, MetricsEmitter
+from src.observability import MemoryHeistMetrics, MetricsEmitter, ValidationMetrics
 from src.metadata_stamps import MetadataStamp, ScanMode, create_metadata_stamp, stamp_rendered_output
-from src.memory_heist_cache import DiscoveryCache, normalize_cache_key
+from src.memory_heist_cache import DiscoveryCache, normalize_cache_key, IS_CASE_INSENSITIVE_SYSTEM
+from src.config_trust import ConfigTrustValidator, TrustLevel, ValidationResult
+
+# Re-export discovery_cache for backward compatibility
+from src.memory_heist_cache import discovery_cache
 
 
 # ---------------------------------------------------------------------------
@@ -307,7 +311,10 @@ class ConfigEntry:
 class ProjectConfig:
     merged: dict[str, Any] = field(default_factory=dict)
     loaded_entries: list[ConfigEntry] = field(default_factory=list)
-
+    validation_metrics: ValidationMetrics | None = None
+    config_trust_score: float = 0.0
+    config_trust_level: TrustLevel = TrustLevel.HIGH
+    
     def get(self, key: str, default: Any = None) -> Any:
         return self.merged.get(key, default)
 
@@ -316,14 +323,27 @@ def discover_config(
     cwd: Path,
     *,
     project_settings_replacement: dict[str, Any] | None = None,
+    validator: ConfigTrustValidator | None = None,
 ) -> ProjectConfig:
-    """Load merged Ham config from the standard candidate chain.
+    """Load and validate merged Ham config from the standard candidate chain.
 
     If ``project_settings_replacement`` is set, it stands in for the on-disk
     contents of ``{cwd}/.ham/settings.json`` (used to preview post-write merge
     without mutating disk). When ``None``, that layer is read from the filesystem
     as usual.
+
+    Config files are validated using ConfigTrustValidator if provided.
+    Untrusted configs are skipped with a warning.
     """
+    import logging
+    
+    # Import logging here to avoid circular dependency
+    logger = logging.getLogger("memory_heist")
+    
+    # Create default validator if not provided
+    if validator is None:
+        validator = ConfigTrustValidator(min_trust_score=0.3)
+    
     home = Path(os.environ.get("HOME", os.environ.get("USERPROFILE", ".")))
     project_settings_path = cwd / ".ham" / "settings.json"
     candidates = [
@@ -335,15 +355,84 @@ def discover_config(
     ]
     merged: dict[str, Any] = {}
     loaded: list[ConfigEntry] = []
+    validation_results: list[ValidationResult] = []
+    
+    # Track validation metrics
+    scores: list[float] = []
+    skipped = 0
+    trusted = 0
+    
     for entry in candidates:
+        # Handle project_settings_replacement specially
         if project_settings_replacement is not None and entry.path == project_settings_path:
             data = dict(project_settings_replacement)
+            # Skip validation for replacement data
+            config_result = ValidationResult(
+                is_valid=True,
+                trust_score=0.9,
+                trust_level=TrustLevel.HIGH,
+                warnings=["Using replacement config data"],
+            )
         else:
-            data = _read_json_object(entry.path)
+            # Validate config file
+            if entry.path.exists():
+                config_result = validator.validate(entry.path)
+                
+                # Handle validation results
+                if not config_result.is_valid:
+                    msg = f"Skipping untrusted config: {entry.path} " \
+                          f"(score: {config_result.trust_score:.3f}, " \
+                          f"level: {config_result.trust_level.value})"
+                    if config_result.warnings:
+                        msg += f" - {', '.join(config_result.warnings)}"
+                    logger.warning(msg)
+                    skipped += 1
+                    continue
+                
+                # Log warnings for untrusted but acceptable configs
+                if config_result.warnings:
+                    logger.warning(f"Low-trust config: {entry.path} - {', '.join(config_result.warnings)}")
+                
+                # Load config data
+                data = _read_json_object(entry.path)
+            else:
+                continue
+        
         if data is not None:
             _deep_merge(merged, data)
             loaded.append(entry)
-    return ProjectConfig(merged=merged, loaded_entries=loaded)
+            validation_results.append(config_result)
+            scores.append(config_result.trust_score)
+            trusted += 1
+    
+    # Calculate validation metrics
+    validation_metrics = ValidationMetrics()
+    if scores:
+        validation_metrics.configs_validated = len(validation_results)
+        validation_metrics.configs_trusted = trusted
+        validation_metrics.configs_skipped = skipped
+        validation_metrics.trust_scores = scores
+        validation_metrics.total_score = sum(scores)
+        validation_metrics.avg_trust_score = sum(scores) / len(scores)
+    
+    # Determine overall trust level
+    avg_score = validation_metrics.avg_trust_score
+    if avg_score >= 0.8:
+        trust_level = TrustLevel.HIGH
+    elif avg_score >= 0.5:
+        trust_level = TrustLevel.MEDIUM
+    elif avg_score >= 0.2:
+        trust_level = TrustLevel.LOW
+    else:
+        trust_level = TrustLevel.INVALID
+    
+    return ProjectConfig(
+        merged=merged,
+        loaded_entries=loaded,
+        validation_metrics=validation_metrics,
+        config_trust_score=round(avg_score, 3),
+        config_trust_level=trust_level,
+    )
 
 
 def _read_json_object(path: Path) -> dict[str, Any] | None:

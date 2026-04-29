@@ -65,12 +65,40 @@ class RelevanceMetrics:
 
 
 @dataclass
+class ValidationMetrics:
+    """Metrics for config validation phase."""
+    configs_validated: int = 0
+    configs_trusted: int = 0
+    configs_skipped: int = 0
+    avg_trust_score: float = 0.0
+    trust_scores: list[float] = field(default_factory=list)
+    total_score: float = 0.0
+    
+    def add_result(self, score: float) -> None:
+        """Add a validation result to metrics."""
+        self.configs_validated += 1
+        self.trust_scores.append(score)
+        self.total_score += score
+        self.avg_trust_score = self.total_score / self.configs_validated if self.configs_validated else 0.0
+    
+    def to_dict(self) -> dict[str, Any]:
+        """Convert metrics to a JSON-serializable dict."""
+        return {
+            "configs_validated": self.configs_validated,
+            "configs_trusted": self.configs_trusted,
+            "configs_skipped": self.configs_skipped,
+            "avg_trust_score": round(self.avg_trust_score, 3),
+        }
+
+
+@dataclass
 class MemoryHeistMetrics:
     """All metrics from memory_heist operations."""
     discovery: DiscoveryMetrics = field(default_factory=DiscoveryMetrics)
     rendering: RenderingMetrics = field(default_factory=RenderingMetrics)
     compaction: CompactionMetrics = field(default_factory=CompactionMetrics)
     relevance: RelevanceMetrics = field(default_factory=RelevanceMetrics)
+    validation: ValidationMetrics = field(default_factory=ValidationMetrics)
     
     def to_dict(self) -> dict[str, Any]:
         """Convert metrics to a JSON-serializable dict."""
@@ -96,6 +124,12 @@ class MemoryHeistMetrics:
                 "avg_score": round(self.relevance.avg_score, 4),
                 "max_score": round(self.relevance.max_score, 4),
                 "min_score": round(self.relevance.min_score, 4),
+            },
+            "validation": {
+                "configs_validated": self.validation.configs_validated,
+                "configs_trusted": self.validation.configs_trusted,
+                "configs_skipped": self.validation.configs_skipped,
+                "avg_trust_score": round(self.validation.avg_trust_score, 3),
             },
         }
 
@@ -172,6 +206,22 @@ class MetricsEmitter:
             avg_score=avg_score,
             max_score=max_score,
             min_score=min_score,
+        )
+        return self
+    
+    def set_validation(
+        self,
+        configs_validated: int = 0,
+        configs_trusted: int = 0,
+        configs_skipped: int = 0,
+        avg_trust_score: float = 0.0,
+    ) -> "MetricsEmitter":
+        """Set validation metrics."""
+        self._pending_metrics.validation = ValidationMetrics(
+            configs_validated=configs_validated,
+            configs_trusted=configs_trusted,
+            configs_skipped=configs_skipped,
+            avg_trust_score=avg_trust_score,
         )
         return self
     

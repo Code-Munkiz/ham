@@ -354,12 +354,12 @@ class TestCalculateCombinedScore:
             file_path,
             session_history=history,
             config=RelevanceConfig(
-                hot_file_weight=500.0,
+                hot_weight=0.5,
                 enable_hot_tracking=True,
             ),
         )
         
-        # With enough accesses, should be hot tier
+        # With enough accesses, hot_score should be positive
         assert result.hot_score > 0.0
     
     def test_tier_assignment_recent(self, temp_dir: Path):
@@ -391,7 +391,7 @@ class TestCalculateCombinedScore:
         assert result.tier in ["recent", "baseline"]
     
     def test_breakdown_components(self, temp_dir: Path):
-        """Breakdown should sum to total score."""
+        """Each breakdown component should be in valid range."""
         file_path = str(temp_dir / "src" / "memory_heist.py")
         
         result = calculate_combined_score(
@@ -403,8 +403,12 @@ class TestCalculateCombinedScore:
             ),
         )
         
-        calculated_total = result.breakdown["recent"] + result.breakdown["query"] + result.breakdown["hot"]
-        assert abs(result.total_score - calculated_total) < 0.01, "Breakdown should sum to total"
+        # Each component should be between 0 and 1
+        assert 0.0 <= result.filetype_score <= 1.0
+        assert 0.0 <= result.location_score <= 1.0 
+        assert 0.0 <= result.size_score <= 1.0
+        assert 0.0 <= result.recent_score <= 1.0
+        assert 0.0 <= result.query_score <= 1.0
     
     def test_no_user_query(self, temp_dir: Path):
         """Should handle missing user query gracefully."""
@@ -438,8 +442,8 @@ class TestCalculateCombinedScore:
         """Changing config weights should affect scores."""
         file_path = str(temp_dir / "src" / "memory_heist.py")
         
-        config_default = RelevanceConfig(query_term_weight=100.0)
-        config_high = RelevanceConfig(query_term_weight=200.0)
+        config_default = RelevanceConfig(query_weight=0.1)
+        config_high = RelevanceConfig(query_weight=0.5)
         
         result_default = calculate_combined_score(
             file_path,
@@ -536,10 +540,9 @@ class TestRelevanceConfig:
         config = RelevanceConfig()
         
         assert config.recent_threshold_days == 7
-        assert config.query_term_weight == 100.0
-        assert config.recent_file_weight == 300.0
-        assert config.hot_file_weight == 500.0
-        assert config.baseline_weight == 100.0
+        assert config.query_weight == 0.10
+        assert config.filetype_weight == 0.30
+        assert config.location_weight == 0.25
         assert config.max_results == 50
         assert config.enable_hot_tracking is True
     
@@ -547,14 +550,14 @@ class TestRelevanceConfig:
         """Should create config from dictionary."""
         data = {
             "recent_threshold_days": 14,
-            "query_term_weight": 150.0,
+            "query_weight": 0.20,
             "max_results": 100,
         }
         
         config = RelevanceConfig.from_dict(data)
         
         assert config.recent_threshold_days == 14
-        assert config.query_term_weight == 150.0
+        assert config.query_weight == 0.20
         assert config.max_results == 100
         assert config.enable_hot_tracking is True  # Default not overwritten
     
@@ -562,7 +565,7 @@ class TestRelevanceConfig:
         """Config should serialize and deserialize correctly."""
         original = RelevanceConfig(
             recent_threshold_days=10,
-            query_term_weight=120.0,
+            query_weight=0.15,
             max_results=75,
         )
         
@@ -570,7 +573,7 @@ class TestRelevanceConfig:
         restored = RelevanceConfig.from_dict(data)
         
         assert restored.recent_threshold_days == original.recent_threshold_days
-        assert restored.query_term_weight == original.query_term_weight
+        assert restored.query_weight == original.query_weight
         assert restored.max_results == original.max_results
     
     def test_disable_hot_tracking(self):

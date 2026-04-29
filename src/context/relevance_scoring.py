@@ -181,6 +181,32 @@ class RelevanceConfig:
 
 
 @dataclass
+class RelevanceMetrics:
+    """Metrics for relevance filtering phase."""
+    total_candidates: int = 0
+    filtered_count: int = 0
+    filtering_duration: float = 0.0
+    enable_hot_tracking: bool = True
+    tier_distribution: dict[str, int] = field(default_factory=dict)
+    avg_score: float = 0.0
+    max_score: float = 0.0
+    min_score: float = 0.0
+    
+    def to_dict(self) -> dict[str, Any]:
+        """Convert metrics to a JSON-serializable dict."""
+        return {
+            "total_candidates": self.total_candidates,
+            "filtered_count": self.filtered_count,
+            "filtering_duration_sec": round(self.filtering_duration, 4),
+            "enable_hot_tracking": self.enable_hot_tracking,
+            "tier_distribution": self.tier_distribution,
+            "avg_score": round(self.avg_score, 4),
+            "max_score": round(self.max_score, 4),
+            "min_score": round(self.min_score, 4),
+        }
+
+
+@dataclass
 class SessionHistory:
     """History entry for file access tracking."""
     
@@ -402,7 +428,8 @@ def calculate_recent_score(file_path: str, threshold_days: int = 7) -> float:
         return max(0.0, min(1.0, max_score))
         
     except (OSError, ValueError):
-        return 0.5
+        # File doesn't exist or can't be read - return 0.0
+        return 0.0
 
 
 # =============================================================================
@@ -615,14 +642,24 @@ def calculate_combined_score(
     if session_history is None:
         session_history = []
     
-    # Get file path from entry
-    file_path = str(entry.relative)
+    # Handle both FileEntry objects and string file paths
+    if isinstance(entry, str):
+        file_path = entry
+        # Create a minimal FileEntry-like object for size access
+        import os
+        try:
+            size = os.path.getsize(file_path)
+        except OSError:
+            size = 0
+    else:
+        file_path = str(entry.relative)
+        size = entry.size
     
     # Calculate individual scores (all 0-1 scale)
     filetype_score = get_filetype_priority(file_path)
     location_category, location_multiplier = get_location_category(file_path)
     location_score = min(1.0, (location_category != "normal") * 0.75 + 0.25)  # 0.25-1.0
-    size_score = get_size_score(entry.size, location_category)
+    size_score = get_size_score(size, location_category)
     recent_score = calculate_recent_score(file_path, config.recent_threshold_days)
     query_score = calculate_query_score(file_path, user_query or "")
     
@@ -768,9 +805,21 @@ def filter_by_relevance(
     # Convert to FileRelevanceScore format
     results: List[FileRelevanceScore] = []
     for result in top_files:
+        # Get file modification time - handle both relative and absolute paths
+        file_path_str = result.file_path
+        if not Path(file_path_str).is_absolute():
+            # If relative, we need the project root to get mtime
+            # For now, skip files we can't stat (they'll have stale timestamps)
+            try:
+                mtime = Path(file_path_str).stat().st_mtime
+            except FileNotFoundError:
+                mtime = time.time()  # Use current time as fallback
+        else:
+            mtime = Path(file_path_str).stat().st_mtime
+        
         results.append(FileRelevanceScore(
             file_path=result.file_path,
-            file_mod_time=datetime.fromtimestamp(Path(result.file_path).stat().st_mtime),
+            file_mod_time=datetime.fromtimestamp(mtime),
             score=result.total_score,
             raw_score=result.total_score,
             tier=result.tier,

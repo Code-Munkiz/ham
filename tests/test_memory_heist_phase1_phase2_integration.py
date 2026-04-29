@@ -54,6 +54,7 @@ class TestBudgetParserCacheIntegration:
     def test_cache_key_with_budget_values(self, tmp_path: Path):
         """Test that cache keys work with budget configuration values."""
         from src.memory_heist import discovery_cache
+        from src.memory_heist_cache import normalize_cache_key
 
         # Create some configuration
         config_path = tmp_path / ".ham.json"

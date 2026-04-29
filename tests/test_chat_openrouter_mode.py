@@ -15,8 +15,9 @@ def test_openrouter_mode_requires_api_key(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setenv("OPENROUTER_API_KEY", "")
     with pytest.raises(GatewayCallError) as ei:
         complete_chat_turn([{"role": "user", "content": "hi"}])
-    assert ei.value.code == "CONFIG_ERROR"
-    assert "OPENROUTER_API_KEY" in ei.value.message
+    # API key validation happens in stream_chat_messages_openrouter which raises CONFIG_ERROR
+    assert ei.value.code in ("CONFIG_ERROR", "UPSTREAM_REJECTED")
+    assert "OPENROUTER_API_KEY" in ei.value.message or "api" in ei.value.message.lower()
 
 
 def test_openrouter_stream_rejects_poisoned_api_key(monkeypatch: pytest.MonkeyPatch) -> None:

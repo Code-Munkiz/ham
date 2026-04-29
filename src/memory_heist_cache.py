@@ -35,24 +35,30 @@ def normalize_cache_key(raw_path: str | Path) -> str:
     """
     Create a normalized cache key from a file path for cross-platform consistency.
     
-    This function always lowercases paths and normalizes separators to ensure
-    consistent cache keys regardless of:
+    This function ALWAYS lowercases paths and normalizes separators for consistent
+    cache keys regardless of:
     - Original case (Src vs src)
     - Platform separators (Windows \ vs Unix /)
-    - Symlinks
+    - Relative vs absolute paths (keeps as-is)
     
-    IMPORTANT: For case-sensitive systems (Linux), we STILL lowercase to ensure
-    consistent cache behavior. The cache is case-insensitive by design.
+    IMPORTANT: The cache is case-insensitive by design across ALL platforms.
+    This ensures consistent cache behavior even on case-sensitive systems (Linux).
     
     Args:
         raw_path: The original file path as string or Path object
         
     Returns:
-        A lowercase, normalized cache key string
+        A lowercase, normalized cache key string with forward slashes
         
     Example:
         >>> normalize_cache_key("Src/HAM/engine.py")
         'src/ham/engine.py'
+        
+        >>> normalize_cache_key("path\\to\\file.py")
+        'path/to/file.py'
+        
+        >>> normalize_cache_key("/absolute/path/file.py")
+        '/absolute/path/file.py'
     """
     if raw_path is None:
         raise ValueError("normalize_cache_key() cannot handle None paths")
@@ -60,19 +66,18 @@ def normalize_cache_key(raw_path: str | Path) -> str:
     # Convert Path to string if needed
     path_str = str(raw_path)
     
-    # Normalize path separators using os.path.normpath
+    # First, convert any backslashes to forward slashes for consistency
+    # This handles Windows-style paths on Linux/Mac
+    path_str = path_str.replace('\\', '/')
+    
+    # Normalize path separators using os.path.normpath (will remove //, etc.)
+    # Keep relative paths relative, absolute paths absolute
     normalized = os.path.normpath(path_str)
     
-    # Resolve symlinks to their real paths
-    try:
-        real_path = os.path.realpath(normalized)
-    except (OSError, ValueError):
-        # If real() fails (e.g., broken symlink), use normalized path
-        real_path = normalized
-    
-    # ALWAYS lowercase for consistent cache keys
+    # ALWAYS lowercase for consistent cache keys across ALL platforms
     # This ensures cross-platform consistency regardless of OS
-    return real_path.lower()
+    # Even on Linux (case-sensitive), we lowercase for cache key consistency
+    return normalized.lower()
 
 
 # Cache implementation: Simple thread-safe in-memory cache with TTL
