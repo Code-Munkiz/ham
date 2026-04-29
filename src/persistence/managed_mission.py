@@ -15,7 +15,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Literal, cast
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from src.ham.managed_deploy_approval_policy import (
     ManagedDeployApprovalMode,
@@ -32,6 +32,59 @@ _RE_UUID = re.compile(
 )
 
 MissionLifecycle = Literal["open", "succeeded", "failed", "archived"]
+MissionCheckpoint = Literal[
+    "queued",
+    "launched",
+    "running",
+    "blocked",
+    "pr_opened",
+    "completed",
+    "failed",
+]
+
+_MAX_CHECKPOINT_REASON = 160
+_CHECKPOINT_HISTORY_CAP = 24
+_QUEUED_TOKENS = {
+    "QUEUED",
+    "PENDING",
+    "CREATING",
+    "NOT_STARTED",
+    "SCHEDULED",
+    "WAITING",
+}
+_RUNNING_TOKENS = {
+    "RUNNING",
+    "IN_PROGRESS",
+    "WORKING",
+    "PROCESSING",
+    "ACTIVE",
+}
+_FAILED_TOKENS = {
+    "FAILED",
+    "ERROR",
+    "CANCELED",
+    "CANCELLED",
+    "TIMED_OUT",
+    "TIMEOUT",
+    "EXPIRED",
+}
+_COMPLETED_TOKENS = {
+    "FINISHED",
+    "COMPLETED",
+    "COMPLETE",
+    "SUCCEEDED",
+    "SUCCESS",
+    "DONE",
+    "CLOSED",
+}
+_BLOCKED_REASON_SUBSTRINGS = (
+    "blocked",
+    "approval_required",
+    "approval required",
+    "awaiting approval",
+    "policy",
+    "denied",
+)
 
 
 def default_managed_missions_dir() -> Path:
@@ -54,6 +107,95 @@ def _cap(s: str | None, n: int) -> str | None:
 
 def new_mission_registry_id() -> str:
     return str(uuid.uuid4())
+
+
+def _normalize_status_token(raw: str | None) -> str | None:
+    t = str(raw or "").strip()
+    if not t:
+        return None
+    return re.sub(r"[^A-Z0-9]+", "_", t.upper()).strip("_")
+
+
+def _checkpoint_from_cursor_status(cursor_status_raw: str | None) -> MissionCheckpoint | None:
+    tok = _normalize_status_token(cursor_status_raw)
+    if not tok:
+        return None
+    if tok in _QUEUED_TOKENS:
+        return "queued"
+    if tok in _RUNNING_TOKENS:
+        return "running"
+    if tok in _FAILED_TOKENS:
+        return "failed"
+    if tok in _COMPLETED_TOKENS:
+        return "completed"
+    return None
+
+
+def _is_blocked_reason(raw_reason: str | None) -> bool:
+    t = str(raw_reason or "").strip().lower()
+    if not t:
+        return False
+    return any(s in t for s in _BLOCKED_REASON_SUBSTRINGS)
+
+
+def derive_mission_checkpoint(
+    *,
+    mission_lifecycle: MissionLifecycle,
+    cursor_status_raw: str | None,
+    status_reason: str | None,
+    pr_url: str | None,
+    previous_checkpoint: MissionCheckpoint | None,
+) -> tuple[MissionCheckpoint, str]:
+    if mission_lifecycle == "failed":
+        return "failed", "lifecycle_failed"
+    if mission_lifecycle == "succeeded":
+        return "completed", "lifecycle_succeeded"
+    if _is_blocked_reason(status_reason):
+        return "blocked", "status_reason_blocked"
+    cp = _checkpoint_from_cursor_status(cursor_status_raw)
+    if cp is not None:
+        if cp == "completed" and pr_url:
+            return "pr_opened", "cursor_completed_with_pr"
+        return cp, f"cursor_status:{_normalize_status_token(cursor_status_raw) or 'UNKNOWN'}"
+    if pr_url:
+        return "pr_opened", "pr_url_observed"
+    if str(status_reason or "").strip().lower().startswith("managed_launch:created"):
+        return "launched", "managed_launch_created"
+    if previous_checkpoint is not None:
+        return previous_checkpoint, "checkpoint_unchanged"
+    return "launched", "default_launched"
+
+
+class MissionCheckpointEvent(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    checkpoint: MissionCheckpoint
+    observed_at: str
+    reason: str | None = None
+
+    @field_validator("reason", mode="before")
+    @classmethod
+    def _cap_reason(cls, v: object) -> str | None:
+        return _cap(v if v is None else str(v), _MAX_CHECKPOINT_REASON)
+
+
+def append_mission_checkpoint_event(
+    *,
+    existing: list[MissionCheckpointEvent],
+    checkpoint: MissionCheckpoint,
+    observed_at: str,
+    reason: str | None,
+) -> list[MissionCheckpointEvent]:
+    nxt = list(existing)
+    nxt.append(
+        MissionCheckpointEvent(
+            checkpoint=checkpoint,
+            observed_at=observed_at,
+            reason=reason,
+        )
+    )
+    if len(nxt) > _CHECKPOINT_HISTORY_CAP:
+        nxt = nxt[-_CHECKPOINT_HISTORY_CAP:]
+    return nxt
 
 
 def map_cursor_to_mission_lifecycle(
@@ -104,6 +246,11 @@ class ManagedMission(BaseModel):
     cursor_status_last_observed: str | None = None
     # Short mapping / observation note (e.g. ``mapped:RUNNING``)
     status_reason_last_observed: str | None = None
+    pr_url_last_observed: str | None = None
+    mission_checkpoint_latest: MissionCheckpoint | None = None
+    mission_checkpoint_updated_at: str | None = None
+    mission_checkpoint_reason_last: str | None = None
+    mission_checkpoint_events: list[MissionCheckpointEvent] = Field(default_factory=list)
 
     created_at: str
     updated_at: str
@@ -125,9 +272,11 @@ class ManagedMission(BaseModel):
         "repo_key",
         "repository_observed",
         "ref_observed",
+        "pr_url_last_observed",
         "branch_name_launch",
         "last_vercel_mapping_tier",
         "last_post_deploy_state",
+        "mission_checkpoint_reason_last",
         mode="before",
     )
     @classmethod

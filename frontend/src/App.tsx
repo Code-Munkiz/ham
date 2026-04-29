@@ -26,12 +26,6 @@ function HomeRoute() {
   return <Landing />;
 }
 
-/** `/chat` is not a product page — always send users to Workspace chat (preserve `?session=`). */
-function ChatEntryRoute() {
-  const { search } = useLocation();
-  return <Navigate to={`/workspace/chat${search}`} replace />;
-}
-
 function LegacyChatRedirect() {
   const { search } = useLocation();
   return <Navigate to={`/workspace/chat${search}`} replace />;
@@ -57,8 +51,11 @@ function AppRoutes() {
         <Routes>
           <Route path="/" element={<HomeRoute />} />
           <Route path="/overview" element={<Navigate to="/workspace/operations" replace />} />
-          <Route path="/chat" element={<ChatEntryRoute />} />
+          <Route path="/chat" element={<Navigate to="/workspace/chat" replace />} />
           <Route path="/legacy-chat" element={<LegacyChatRedirect />} />
+          <Route path="/workspace/chat" element={<Navigate to={primaryChatPath()} replace />} />
+          <Route path="/workspace/conductor" element={<WorkspaceApp />} />
+          <Route path="/workspace/operations" element={<WorkspaceApp />} />
           <Route path="/workspace/*" element={<WorkspaceApp />} />
           <Route path="/droids" element={<Navigate to="/workspace/operations" replace />} />
           <Route path="/runs" element={<Navigate to="/workspace/jobs" replace />} />

@@ -523,10 +523,20 @@ export type ManagedMissionRow = {
   mission_registry_id?: string;
   cursor_agent_id?: string;
   mission_lifecycle?: string;
+  latest_checkpoint?: string | null;
+  latest_checkpoint_at?: string | null;
+  latest_checkpoint_reason?: string | null;
+  checkpoint_events?: {
+    checkpoint?: string;
+    observed_at?: string;
+    reason?: string | null;
+  }[];
   /** Create-time snapshot from project default (managed missions). */
   mission_deploy_approval_mode?: "off" | "audit" | "soft" | "hard";
   repo_key?: string | null;
   repository_observed?: string | null;
+  ref_observed?: string | null;
+  pr_url_last_observed?: string | null;
   cursor_status_last_observed?: string | null;
   status_reason_last_observed?: string | null;
   last_server_observed_at?: string;

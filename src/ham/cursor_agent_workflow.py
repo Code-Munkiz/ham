@@ -31,6 +31,7 @@ from src.persistence.control_plane_run import (
     utc_now_iso,
 )
 from src.persistence.cursor_credentials import get_effective_cursor_api_key
+from src.persistence.managed_mission import derive_mission_checkpoint
 
 CURSOR_AGENT_BASE_REVISION = "cursor-agent-v1"
 
@@ -199,6 +200,28 @@ def summarize_cursor_agent_payload(raw: dict[str, Any]) -> dict[str, Any]:
         "summary": str(summary)[:8000] if summary else None,
         "pr_url": str(pr_url) if pr_url else None,
     }
+
+
+def derive_checkpoint_for_cursor_summary(
+    *,
+    status: str | None,
+    pr_url: str | None,
+    control_plane_status: str | None = None,
+) -> str:
+    mission_lifecycle = "open"
+    cp = str(control_plane_status or "").strip().lower()
+    if cp == "failed":
+        mission_lifecycle = "failed"
+    elif cp == "succeeded":
+        mission_lifecycle = "succeeded"
+    cp, _reason = derive_mission_checkpoint(
+        mission_lifecycle=mission_lifecycle,
+        cursor_status_raw=status,
+        status_reason=None,
+        pr_url=pr_url,
+        previous_checkpoint=None,
+    )
+    return cp
 
 
 @dataclass(frozen=True)
@@ -528,6 +551,11 @@ def run_cursor_agent_launch(
         )
         st_global.save(run, project_root_for_mirror=pr_root)
         out: dict[str, Any] = {**summary, "ham_run_id": rid, "control_plane_status": run.status}
+        out["mission_checkpoint"] = derive_checkpoint_for_cursor_summary(
+            status=summary.get("status"),
+            pr_url=summary.get("pr_url"),
+            control_plane_status=run.status,
+        )
         out["mission_handling"] = mh
         if is_managed and isinstance(raw, dict):
             try:
@@ -672,6 +700,11 @@ def run_cursor_agent_status(
             except (OSError, ValueError, TypeError):
                 pass
         out = {**summary}
+        out["mission_checkpoint"] = derive_checkpoint_for_cursor_summary(
+            status=summary.get("status"),
+            pr_url=summary.get("pr_url"),
+            control_plane_status=hst_out,
+        )
         if hst_out is not None:
             out["control_plane_status"] = hst_out
         if existing:

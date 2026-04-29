@@ -27,6 +27,12 @@ router = APIRouter(
 def _public_mission(m: ManagedMission) -> dict[str, Any]:
     d = m.model_dump(mode="json", exclude_none=False)
     d["kind"] = "managed_mission"
+    d["latest_checkpoint"] = m.mission_checkpoint_latest
+    d["latest_checkpoint_at"] = m.mission_checkpoint_updated_at
+    d["latest_checkpoint_reason"] = m.mission_checkpoint_reason_last
+    d["checkpoint_events"] = [
+        e.model_dump(mode="json", exclude_none=False) for e in m.mission_checkpoint_events
+    ]
     return d
 
 

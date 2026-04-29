@@ -31,6 +31,7 @@ from src.persistence.cursor_credentials import (
     mask_api_key_preview,
     save_cursor_api_key,
 )
+from src.ham.cursor_agent_workflow import derive_checkpoint_for_cursor_summary
 
 router = APIRouter(
     prefix="/api/cursor",
@@ -310,8 +311,16 @@ async def cursor_launch_agent(body: LaunchCloudAgentBody) -> dict[str, Any]:
         )
     except (OSError, ValueError, TypeError) as exc:
         _LOG.warning("cursor.managed_mission.create_failed", extra={"err": str(exc)[:200]})
+    cp = derive_checkpoint_for_cursor_summary(
+        status=str(out.get("status")) if out.get("status") is not None else None,
+        pr_url=(
+            str((out.get("target") or {}).get("prUrl"))
+            if isinstance(out.get("target"), dict) and (out.get("target") or {}).get("prUrl")
+            else None
+        ),
+    )
     # HAM-only audit echo; never forward to api.cursor.com.
-    return {**out, "ham_mission_handling": body.mission_handling}
+    return {**out, "ham_mission_handling": body.mission_handling, "mission_checkpoint": cp}
 
 
 def _cursor_proxy_error(resp: httpx.Response, prefix: str) -> HTTPException:
@@ -340,6 +349,16 @@ async def cursor_get_agent(agent_id: str) -> dict[str, Any]:
             observe_mission_from_cursor_payload(raw=out)
         except (OSError, ValueError, TypeError) as exc:
             _LOG.warning("cursor.managed_mission.observe_failed", extra={"err": str(exc)[:200]})
+    if isinstance(out, dict):
+        cp = derive_checkpoint_for_cursor_summary(
+            status=str(out.get("status")) if out.get("status") is not None else None,
+            pr_url=(
+                str((out.get("target") or {}).get("prUrl"))
+                if isinstance(out.get("target"), dict) and (out.get("target") or {}).get("prUrl")
+                else None
+            ),
+        )
+        out["mission_checkpoint"] = cp
     return out
 
 

@@ -514,7 +514,7 @@ class TestMaliciousConfigs:
         # Empty files get warnings but may not fail completely
         assert "Invalid file hash" in result.warnings or True
     
-    def test_tampered_signature_handling(self, temp_dir: Path, sample_config: Path):
+    def test_tampered_signature_handling(self, temp_dir: Path, sample_config: Path, validator: ConfigTrustValidator):
         """Tampered signature should be rejected."""
         # Create config with a bogus signature
         sig_data = SignatureInfo(

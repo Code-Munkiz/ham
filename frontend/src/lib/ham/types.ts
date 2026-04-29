@@ -1,3 +1,67 @@
+/** How HAM should relate to a Cursor Cloud Agent mission (Cloud Uplink / mission modal only). */
+export type CloudMissionHandling = "direct" | "managed";
+
+/** Defensive summary of Cursor agent + conversation for managed mode (real API fields only, no invention). */
+export interface ManagedMissionSnapshot {
+  status: string | null;
+  progress: string | null;
+  blocker: string | null;
+  branchOrPr: string | null;
+  updatedAt: string | null;
+}
+
+/** Deterministic, operator-facing read on polled Cloud Agent data (v1: rules only, no LLM). */
+export type ManagedReviewSeverity = "info" | "success" | "warning" | "error";
+
+/** How much concrete evidence supports the current assessment (drives conservatism + optional chat gating). */
+export type ManagedReviewEvidenceLevel = "high" | "medium" | "low";
+
+export interface ManagedMissionReview {
+  severity: ManagedReviewSeverity;
+  headline: string;
+  details: string | null;
+  nextStep: string | null;
+  /** True when the assessment is for a terminal agent state (per `isCloudAgentTerminal`). */
+  hasTerminalAssessment: boolean;
+  evidenceLevel: ManagedReviewEvidenceLevel;
+  /**
+   * True when the payload is too thin for strong PR/blocker/handoff claims.
+   * Panel may still show a compact notice; optional chat is suppressed.
+   */
+  limitedSignal: boolean;
+}
+
+export type MissionCheckpointState =
+  | "queued"
+  | "launched"
+  | "running"
+  | "blocked"
+  | "pr_opened"
+  | "completed"
+  | "failed";
+
+/** Deterministic deploy handoff assessment (Vercel hook is configured separately on the server). */
+export type ManagedDeployReadiness = {
+  ready: boolean;
+  severity: "info" | "warning" | "error" | "success";
+  headline: string;
+  details: string | null;
+  nextStep: string | null;
+  prUrl: string | null;
+  branch: string | null;
+  repo: string | null;
+  /** Human-readable target class; not a live deploy guarantee. */
+  deploymentTarget: string | null;
+};
+
+export type ManagedDeployHandoffState =
+  | "idle"
+  | "not_ready"
+  | "ready"
+  | "triggering"
+  | "hook_accepted"
+  | "hook_failed"
+  | "hook_not_configured";
 export interface RunRecord {
   run_id: string;
   created_at: string;
