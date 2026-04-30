@@ -2,7 +2,7 @@
 
 This document states **what works today**, what is **stub / partial / explicitly out of scope**, and a **phased roadmap** to close product gaps without collapsing architecture boundaries (Hermes supervises; Cursor remains upstream execution; no second orchestration framework).
 
-**Related:** `GAPS.md`, `VISION.md` (transitional state table), `docs/CONTROL_PLANE_RUN.md` (factual run records vs. mission graph).
+**Related:** `GAPS.md`, `VISION.md` (transitional state table), `docs/CONTROL_PLANE_RUN.md` (factual run records vs. mission graph), [`docs/MANAGED_MISSION_LIFECYCLE.md`](MANAGED_MISSION_LIFECYCLE.md) (server-mapped lifecycle vs checkpoint, terminal stickiness).
 
 ---
 
