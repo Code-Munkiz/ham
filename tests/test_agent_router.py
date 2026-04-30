@@ -1,4 +1,4 @@
-from src.ham.agent_router import route_agent_intent
+from src.ham.agent_router import is_local_repo_operation_intent, route_agent_intent
 
 
 def test_router_cursor_launch_explicit() -> None:
@@ -62,3 +62,15 @@ def test_router_extracts_explicit_repo_ref_and_task() -> None:
 def test_router_normal_chat_not_over_triggered() -> None:
     out = route_agent_intent("explain what a cloud is")
     assert out.intent == "normal_chat"
+
+
+def test_local_repo_operation_intent_detected_for_git_and_gh() -> None:
+    text = "cd /home/user/.hermes/hermes-agent\ngh auth status\ngit pull --rebase origin main\ngit push origin main"
+    assert is_local_repo_operation_intent(text) is True
+    out = route_agent_intent(text, default_project_id=None)
+    assert out.intent == "normal_chat"
+    assert out.reason_code == "local_repo_operation"
+
+
+def test_local_repo_operation_not_triggered_for_cloud_agent_status() -> None:
+    assert is_local_repo_operation_intent("check cloud agent status") is False

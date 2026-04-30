@@ -472,6 +472,70 @@ def test_heuristic_logs_phrase_maps_to_cursor_agent_logs() -> None:
     assert h[1]["project_id"] == "project.demo-abc123"
 
 
+def test_heuristic_local_repo_operation_not_routed_to_mission_status() -> None:
+    h = try_heuristic_intent("gh auth status", default_project_id=None)
+    assert h is not None
+    assert h[0] == "local_repo_operation"
+    assert "commands" in h[1]
+
+
+def test_heuristic_multiline_repo_commands_classified_local_repo_ops() -> None:
+    prompt = (
+        "cd /home/user/.hermes/hermes-agent\n"
+        "gh auth setup-git\n"
+        "git pull --rebase origin main\n"
+        "git push origin main"
+    )
+    h = try_heuristic_intent(prompt, default_project_id=None)
+    assert h is not None
+    assert h[0] == "local_repo_operation"
+    commands = h[1].get("commands") or []
+    assert any("git pull --rebase origin main" in x for x in commands)
+    assert any("git push origin main" in x for x in commands)
+
+
+def test_heuristic_cloud_agent_status_still_mission_scoped() -> None:
+    h = try_heuristic_intent("check the cloud agent status", default_project_id="project.demo-abc123")
+    assert h is not None
+    assert h[0] == "cursor_agent_status"
+
+
+def test_heuristic_cancel_this_mission_still_mission_scoped() -> None:
+    h = try_heuristic_intent("cancel this mission", default_project_id="project.demo-abc123")
+    assert h is not None
+    assert h[0] == "cursor_agent_cancel"
+
+
+def test_process_operator_local_repo_operations_no_mission_block(tmp_path: Path) -> None:
+    store = ProjectStore(store_path=tmp_path / "projects.json")
+    op = process_operator_turn(
+        user_text="git pull --rebase origin main && git push origin main",
+        project_store=store,
+        default_project_id=None,
+        operator_payload=None,
+        ham_operator_authorization=None,
+    )
+    assert op is not None and op.handled and op.ok
+    assert op.intent == "local_repo_operation"
+    assert op.data.get("reason_code") == "local_repo_operation"
+    assert "missing_mission_context" not in (op.blocking_reason or "")
+
+
+def test_local_repo_operation_redacts_pat_in_output(tmp_path: Path) -> None:
+    store = ProjectStore(store_path=tmp_path / "projects.json")
+    op = process_operator_turn(
+        user_text="gh auth login --with-token ghp_SUPERSECRET1234567890",
+        project_store=store,
+        default_project_id=None,
+        operator_payload=None,
+        ham_operator_authorization=None,
+    )
+    assert op is not None and op.handled and op.ok
+    msg = format_operator_assistant_message(op)
+    assert "ghp_SUPERSECRET1234567890" not in msg
+    assert "<redacted>" in msg
+
+
 def test_status_resolves_latest_managed_mission_without_agent_id(tmp_path: Path) -> None:
     store = ProjectStore(store_path=tmp_path / "projects.json")
     rec = store.make_record(

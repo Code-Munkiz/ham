@@ -137,6 +137,23 @@ def test_chat_stream_agent_routed_turn_persists_in_session_when_operator_disable
     assert "provider_not_implemented" in msgs[-1]["content"]
 
 
+def test_chat_stream_local_repo_ops_not_forced_into_mission_route_when_operator_disabled(
+    mock_mode: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("HAM_CHAT_OPERATOR", "false")
+    res = client.post(
+        "/api/chat/stream",
+        json={"messages": [{"role": "user", "content": "gh auth status"}]},
+    )
+    assert res.status_code == 200, res.text
+    events = _parse_ndjson(res.text)
+    assert any(e.get("type") == "delta" for e in events), "should remain normal chat stream"
+    done = [e for e in events if e["type"] == "done"][0]
+    operator_result = done.get("operator_result")
+    assert not operator_result
+
+
 def test_chat_stream_gateway_failure_done_with_safe_assistant_and_signal(
     mock_mode: None, monkeypatch: pytest.MonkeyPatch,
 ) -> None:

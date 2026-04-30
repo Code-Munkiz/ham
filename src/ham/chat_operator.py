@@ -21,7 +21,7 @@ from src.ham.agent_profiles import (
     agents_config_from_merged,
     validate_agents_config,
 )
-from src.ham.agent_router import AgentRouteResult, route_agent_intent
+from src.ham.agent_router import AgentRouteResult, is_local_repo_operation_intent, route_agent_intent
 from src.ham.cursor_agent_workflow import (
     audit_cursor_preview,
     build_cursor_agent_preview,
@@ -357,6 +357,36 @@ def _extract_run_id(text: str) -> str | None:
 def _extract_cursor_agent_id(text: str) -> str | None:
     m = re.search(r"\b(bc_[a-z0-9._-]+)\b", text, re.I)
     return m.group(1) if m else None
+
+
+_SHELL_LINE_RE = re.compile(r"^\s*(cd|git|gh|npm|pnpm|yarn|pytest|python)\b", re.I)
+_SECRET_VALUE_RE = re.compile(r"\b(?:ghp_[A-Za-z0-9]{8,}|github_pat_[A-Za-z0-9_]{8,}|sk-[A-Za-z0-9]{8,})\b")
+
+
+def _redact_sensitive_shell_value(line: str) -> str:
+    out = _SECRET_VALUE_RE.sub("<redacted>", line)
+    out = re.sub(r"(?i)(--with-token)\s+\S+", r"\1 <redacted>", out)
+    out = re.sub(r"(?i)\b(token|pat)\s*[:=]\s*\S+", r"\1=<redacted>", out)
+    return out
+
+
+def _extract_local_repo_commands(text: str) -> list[str]:
+    lines = [ln.rstrip() for ln in text.splitlines() if ln.strip()]
+    if not lines:
+        return []
+    commands: list[str] = []
+    for ln in lines:
+        trimmed = ln.strip()
+        if trimmed.startswith("```"):
+            continue
+        if _SHELL_LINE_RE.search(trimmed):
+            commands.append(_redact_sensitive_shell_value(trimmed))
+    if commands:
+        return commands
+    # Single-line prose fallback
+    if is_local_repo_operation_intent(text):
+        return [_redact_sensitive_shell_value(text.strip())]
+    return []
 
 
 def _normalize_repo_hint(repo: str | None) -> str:
@@ -747,6 +777,8 @@ def try_heuristic_intent(
 ) -> tuple[str, dict[str, Any]] | None:
     t = user_text.strip()
     low = t.lower()
+    if is_local_repo_operation_intent(t):
+        return "local_repo_operation", {"commands": _extract_local_repo_commands(t)}
     if re.search(r"\b(list|show)\s+(all\s+)?projects?\b", low):
         return "list_projects", {}
     if re.search(r"\b(inspect|show)\s+agents?\b", low) or re.search(
@@ -778,6 +810,10 @@ def try_heuristic_intent(
         aid = _extract_cursor_agent_id(t)
         return "cursor_agent_logs", {"project_id": pid, "cursor_agent_id": aid}
     if re.search(r"\b(stop the agent|cancel the mission|cancel agent|stop agent)\b", low):
+        pid = _extract_project_id(t) or default_project_id
+        aid = _extract_cursor_agent_id(t)
+        return "cursor_agent_cancel", {"project_id": pid, "cursor_agent_id": aid}
+    if re.search(r"\bcancel\s+this\s+mission\b", low):
         pid = _extract_project_id(t) or default_project_id
         aid = _extract_cursor_agent_id(t)
         return "cursor_agent_cancel", {"project_id": pid, "cursor_agent_id": aid}
@@ -1484,6 +1520,31 @@ def _dispatch_intent(
             intent=intent,
             ok=True,
             data={"projects": [x.model_dump() for x in projects], "count": len(projects)},
+        )
+
+    if intent == "local_repo_operation":
+        commands = [str(x).strip() for x in (params.get("commands") or []) if str(x).strip()]
+        if not commands:
+            return OperatorTurnResult(
+                handled=True,
+                intent=intent,
+                ok=True,
+                data={
+                    "reason_code": "local_repo_operation",
+                    "message": (
+                        "This is a local repo operation, not a ManagedMission command. "
+                        "Run the requested git/gh/shell commands in the target environment."
+                    ),
+                },
+            )
+        return OperatorTurnResult(
+            handled=True,
+            intent=intent,
+            ok=True,
+            data={
+                "reason_code": "local_repo_operation",
+                "commands": commands,
+            },
         )
 
     if intent == "inspect_project":
@@ -2270,6 +2331,23 @@ def format_operator_assistant_message(op: OperatorTurnResult) -> str:
         if op.harness_advisory:
             body += format_harness_advisory_for_operator_message(op.harness_advisory)
         return body
+    if intent == "local_repo_operation":
+        commands = op.data.get("commands") if isinstance(op.data.get("commands"), list) else []
+        if commands:
+            cmd_lines = "\n".join(f"- `{str(c)}`" for c in commands[:16])
+            return (
+                "**Operator — local repo operation**\n\n"
+                "This is a local repo/terminal task, not a ManagedMission command.\n\n"
+                "Run these commands in the target environment:\n"
+                f"{cmd_lines}\n\n"
+                "_If authentication is required, use `gh auth login --with-token` in the terminal prompt. "
+                "Do not paste tokens in chat._"
+            )
+        return (
+            "**Operator — local repo operation**\n\n"
+            "This is a local repo/terminal task, not a ManagedMission command.\n\n"
+            "Run the requested git/gh/shell commands directly in the target environment."
+        )
     if intent == "list_projects":
         data = op.data.get("projects") or []
         if not data:

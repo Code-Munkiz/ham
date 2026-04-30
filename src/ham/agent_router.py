@@ -50,6 +50,29 @@ _BRANCH_HINT_RE = re.compile(
     r"\b(?:on\s+branch|branch|ref|from)\s+(?P<branch>[a-z0-9._/\-]+)\b",
     re.I,
 )
+_MISSION_SCOPE_RE = re.compile(
+    r"\b(cloud\s+agent|managed\s+mission|mission\s+logs?|mission\s+feed|agent\s+status|cancel\s+mission|sync\s+mission)\b",
+    re.I,
+)
+_LOCAL_REPO_PHRASE_RE = re.compile(
+    r"\b("
+    r"git\s+(status|push|pull|commit|fetch|checkout|rebase|merge|diff|log|branch|add|reset|restore)"
+    r"|gh\s+(auth|pr|repo|issue|api|workflow|run)"
+    r"|npm\s+run\b"
+    r"|pytest\b"
+    r"|python\s+-m\s+pytest\b"
+    r"|push\s+this\s+commit"
+    r"|pull\s+--rebase"
+    r"|show\s+me\s+commands\s+to\s+push"
+    r"|authenticate\s+gh"
+    r"|set\s+up\s+gh\s+auth"
+    r")\b",
+    re.I,
+)
+_LOCAL_REPO_LINE_RE = re.compile(
+    r"^\s*(cd|git|gh|npm|pnpm|yarn|pytest|python)\b",
+    re.I,
+)
 
 
 class AgentRouteResult(BaseModel):
@@ -131,6 +154,23 @@ def _extract_branch_ref(text: str) -> str | None:
     return ref.rstrip(".,;:)")
 
 
+def is_local_repo_operation_intent(user_text: str) -> bool:
+    """
+    Detect explicit local shell/repo operations that should not require mission context.
+    """
+    text = user_text.strip()
+    if not text:
+        return False
+    if _MISSION_SCOPE_RE.search(text):
+        return False
+    if _LOCAL_REPO_PHRASE_RE.search(text):
+        return True
+    lines = [ln for ln in text.splitlines() if ln.strip()]
+    if len(lines) >= 2 and any(_LOCAL_REPO_LINE_RE.search(ln) for ln in lines):
+        return True
+    return False
+
+
 def route_agent_intent(
     user_text: str,
     *,
@@ -141,6 +181,14 @@ def route_agent_intent(
     low = text.lower()
     if not text:
         return AgentRouteResult(intent="normal_chat", mode="chat", provider="auto", confidence=0.0)
+    if is_local_repo_operation_intent(text):
+        return AgentRouteResult(
+            intent="normal_chat",
+            mode="chat",
+            provider="auto",
+            confidence=0.0,
+            reason_code="local_repo_operation",
+        )
 
     has_work_verb = bool(_WORK_VERB_RE.search(low))
     has_agent_hint = bool(_AGENT_HINT_RE.search(low))
