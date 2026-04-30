@@ -59,6 +59,7 @@ SDK bridge attaches to existing `bc-*` agents; **`HAM_CURSOR_SDK_BRIDGE_ENABLED`
 
 | Doc | Purpose |
 |-----|---------|
+| [HAM_PRELAUNCH_SMOKE_CHECKLIST.md](HAM_PRELAUNCH_SMOKE_CHECKLIST.md) | Human checklist before ship (adapted from quarantined rescue notes; Ham paths only) |
 | [HAM_HARDENING_REMEDIATION.md](HAM_HARDENING_REMEDIATION.md) | Context Engine hardening and remediation order |
 | [TEAM_HERMES_STATUS.md](TEAM_HERMES_STATUS.md) | API vs desktop operator story for Command Center / Hermes |
 | [HERMES_WORKSPACE_FILES_TERMINAL_BRIDGE.md](HERMES_WORKSPACE_FILES_TERMINAL_BRIDGE.md) | Workspace files and terminal bridge |
