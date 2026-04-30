@@ -48,6 +48,11 @@ From repo root:
 - Verify key identity:
   - `GET /api/cursor/credentials-status`
 
+### Cursor Cloud Agent launch (HAM operator token + paths)
+
+- Set `HAM_CURSOR_AGENT_LAUNCH_TOKEN` in `.env` when testing **chat** `cursor_agent_launch` (commit gate; separate from `CURSOR_API_KEY`).
+- Product-oriented index: `docs/LAUNCH_CURSOR_CLOUD_AGENT.md` (API vs chat flow, Cloud Run secrets, related roadmap).
+
 ### Write-protected routes (set only when needed)
 
 - `HAM_SETTINGS_WRITE_TOKEN` for project settings apply/rollback
