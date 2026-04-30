@@ -16,6 +16,8 @@ This document explains the project’s Cursor rules, skills, subagents, and comm
 | File | Always apply? | Purpose (from rule text) |
 |------|---------------|---------------------------|
 | `ham-architecture.mdc` | yes | Core architecture fixed unless explicitly approved; Hermes supervisory ownership and Droid execution ownership are enforced; no bypassing `ContextBuilder.build()` for repo context; no model names outside `llm_client.py`; see `VISION.md`. |
+| `ham-local-control-boundary.mdc` | yes | Local browser/machine control targets the user’s **local Windows** runtime with a **mandatory desktop/IDE** lane; escalation `chat → browser-real → machine`; hosted/cloud browser is ancillary; verify-first, minimal-diff, safety invariants in the rule file. |
+| `ham-direct-main-workflow.mdc` | yes | Prefer committing on **`main`**; do not create draft PRs or run `gh pr` unless the user explicitly asks; stage only intended files; run scoped tests before push. |
 | `minimal-diffs.mdc` | yes | Scope changes narrowly; avoid unrelated refactors; >3 files → impact map + justification before editing; preserve public APIs unless breakage intended. |
 | `no-hallucinated-state.mdc` | yes | Read files; use `git status` / `git diff`; no invented paths; quote real constants; do not claim tests passed without running them; do not claim files updated without a diff. |
 | `role-boundaries.mdc` | yes | Supervisory-vs-execution boundaries are enforced: Hermes supervises/critiques, Droid executes; tiny bounded Hermes self-handling only; ambiguous execution defaults to Droid. |
@@ -35,6 +37,9 @@ This document explains the project’s Cursor rules, skills, subagents, and comm
 | `prompt-budget-audit` | Estimate prompts vs context window; audit `MAX_*`; flag red flags (diff size, timeline, merge caps). |
 | `repo-context-regression-testing` | Six test categories for `memory_heist.py`; `pytest` + `tmp_path`; marker parsing old + new. |
 | `hermes-review-loop-validation` | Hermes supervisory review path → `evaluate()` → learning signal contract; do not collapse Droid execution into review flow; `.hermes/` ignored. |
+| `factory-droid-workflows` | Allowlisted Factory **`droid exec`** preview/launch from chat (readonly audit vs low-risk edit); vocabulary and process — **policy** lives in `src/ham/droid_workflows/registry.py` and `docs/FACTORY_DROID_CONTRACT.md`. |
+| `cloud-agent-starter` | Minimal runbook: install, run API/frontend, chat gateway modes, Cursor key, browser runtime checks; keep the skill current as runbook facts change. |
+| `goham` | Dashboard navigation (settings, projects, Droids/registry, runs/activity); scaffolding workflows/agents via existing APIs without reading raw logs. |
 
 ## Subagents (charter files)
 
