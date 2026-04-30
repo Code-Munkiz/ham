@@ -61,6 +61,22 @@ def test_heuristic_cloud_agent_launch_routing() -> None:
     assert "flaky tests" in h[1]["cursor_task_prompt"]
 
 
+def test_process_operator_cursor_launch_missing_project_uses_stable_reason_code(tmp_path: Path) -> None:
+    store = ProjectStore(store_path=tmp_path / "projects.json")
+    op = process_operator_turn(
+        user_text="have Cursor implement the SDK adapter fix",
+        project_store=store,
+        default_project_id=None,
+        operator_payload=None,
+        ham_operator_authorization=None,
+    )
+    assert op is not None and op.handled
+    assert op.intent == "cursor_agent_launch"
+    assert not op.ok
+    assert op.data.get("reason_code") == "missing_project_ref"
+    assert (op.blocking_reason or "").startswith("missing_project_ref:")
+
+
 def test_heuristic_factory_route_blocks_with_stable_reason() -> None:
     h = try_heuristic_intent(
         "send this to Factory Droid to patch flaky tests",
