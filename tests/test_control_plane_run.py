@@ -123,7 +123,13 @@ def test_cursor_committed_launch_success_creates_run(
         auto_create_pr=False,
         branch_name=None,
         expected_deliverable=None,
-        task_prompt="fix tests",
+        task_prompt=caw.effective_cursor_launch_task_prompt(
+            task_prompt="fix tests",
+            expected_deliverable=None,
+            repository="https://github.com/o/r",
+            ref=None,
+            mission_handling=None,
+        ),
     )
     mock_launch.return_value = {
         "id": "bc_xyz",
@@ -136,7 +142,7 @@ def test_cursor_committed_launch_success_creates_run(
         project_id=rec.id,
         cursor_task_prompt="fix tests",
         cursor_proposal_digest=digest,
-        cursor_base_revision="cursor-agent-v1",
+        cursor_base_revision="cursor-agent-v2",
     )
     out = process_operator_turn(
         user_text="",
@@ -176,7 +182,13 @@ def test_cursor_committed_launch_api_failure_creates_failed_row(
         auto_create_pr=False,
         branch_name=None,
         expected_deliverable=None,
-        task_prompt="x",
+        task_prompt=caw.effective_cursor_launch_task_prompt(
+            task_prompt="x",
+            expected_deliverable=None,
+            repository="https://github.com/o/r",
+            ref=None,
+            mission_handling=None,
+        ),
     )
     mock_launch.side_effect = CursorCloudApiError("bad", status_code=500, body_excerpt="{}")
     op = ChatOperatorPayload(
@@ -185,7 +197,7 @@ def test_cursor_committed_launch_api_failure_creates_failed_row(
         project_id=rec.id,
         cursor_task_prompt="x",
         cursor_proposal_digest=digest,
-        cursor_base_revision="cursor-agent-v1",
+        cursor_base_revision="cursor-agent-v2",
     )
     out = process_operator_turn(
         user_text="",
@@ -358,7 +370,13 @@ def test_cursor_status_updates_existing_row(
         auto_create_pr=False,
         branch_name=None,
         expected_deliverable=None,
-        task_prompt="fix tests",
+        task_prompt=caw.effective_cursor_launch_task_prompt(
+            task_prompt="fix tests",
+            expected_deliverable=None,
+            repository="https://github.com/o/r",
+            ref=None,
+            mission_handling=None,
+        ),
     )
     mock_launch.return_value = {
         "id": "bc_status",
@@ -375,7 +393,7 @@ def test_cursor_status_updates_existing_row(
             project_id=rec.id,
             cursor_task_prompt="fix tests",
             cursor_proposal_digest=digest,
-            cursor_base_revision="cursor-agent-v1",
+            cursor_base_revision="cursor-agent-v2",
         ),
         ham_operator_authorization="Bearer launch-secret",
     )

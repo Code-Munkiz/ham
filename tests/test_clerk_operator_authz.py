@@ -75,7 +75,7 @@ def test_launch_forbidden_without_ham_launch_permission(
         project_id=rec.id,
         cursor_task_prompt="task",
         cursor_proposal_digest="a" * 64,
-        cursor_base_revision="cursor-agent-v1",
+        cursor_base_revision="cursor-agent-v2",
     )
     actor = _actor(perms=frozenset({HAM_PREVIEW, HAM_STATUS}))
     with pytest.raises(HTTPException) as ei:
@@ -183,7 +183,13 @@ def test_launch_succeeds_with_clerk_launch_permission(
         auto_create_pr=False,
         branch_name=None,
         expected_deliverable=None,
-        task_prompt="fix tests",
+        task_prompt=caw.effective_cursor_launch_task_prompt(
+            task_prompt="fix tests",
+            expected_deliverable=None,
+            repository="https://github.com/o/r",
+            ref=None,
+            mission_handling=None,
+        ),
     )
     fake = {"id": "bc_ok", "status": "CREATING", "summary": "started", "source": {"repository": "https://github.com/o/r"}}
     op = ChatOperatorPayload(
@@ -192,7 +198,7 @@ def test_launch_succeeds_with_clerk_launch_permission(
         project_id=rec.id,
         cursor_task_prompt="fix tests",
         cursor_proposal_digest=digest,
-        cursor_base_revision="cursor-agent-v1",
+        cursor_base_revision="cursor-agent-v2",
         cursor_auto_create_pr=False,
     )
     actor = _actor(perms=frozenset({HAM_LAUNCH}))
@@ -237,7 +243,13 @@ def test_cursor_api_key_still_separate_from_clerk(
         auto_create_pr=False,
         branch_name=None,
         expected_deliverable=None,
-        task_prompt="task",
+        task_prompt=caw.effective_cursor_launch_task_prompt(
+            task_prompt="task",
+            expected_deliverable=None,
+            repository="https://github.com/o/r",
+            ref=None,
+            mission_handling=None,
+        ),
     )
     op = ChatOperatorPayload(
         phase="cursor_agent_launch",
@@ -245,7 +257,7 @@ def test_cursor_api_key_still_separate_from_clerk(
         project_id=rec.id,
         cursor_task_prompt="task",
         cursor_proposal_digest=digest,
-        cursor_base_revision="cursor-agent-v1",
+        cursor_base_revision="cursor-agent-v2",
     )
     actor = _actor(perms=frozenset({HAM_LAUNCH}))
     out = process_operator_turn(

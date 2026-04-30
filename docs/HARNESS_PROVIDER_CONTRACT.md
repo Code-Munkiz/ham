@@ -156,7 +156,7 @@ This table is the **human-readable** source of the harness **vocabulary**. A **r
 | **Operator preview** | Yes — digest + pending summary (API key required for preview) | Yes — allowlisted workflow + digest |
 | **Operator launch** | Yes — verify digest + HAM bearer + Cursor API | Yes — verify digest + confirm + droid policy/tokens for mutating paths |
 | **Digest source** | Canonical task + repo/ref/model/PR options + `CURSOR_AGENT_BASE_REVISION` | `compute_proposal_digest` inputs + `REGISTRY_REVISION` |
-| **Base revision source** | `cursor-agent-v1` (constant) | Workflow registry `REGISTRY_REVISION` |
+| **Base revision source** | `cursor-agent-v2` (constant) | Workflow registry `REGISTRY_REVISION` |
 | **external id** | Cursor **agent** id (after launch) | **session_id** from runner JSON when present |
 | **Status / readback** | `GET` agent; may **update** same `ControlPlaneRun` | Primarily **terminal** mapping in launch flow (`droid_outcome_to_ham_status`); not Cursor-like poll |
 | **Terminal status mapping** | `map_cursor_raw_status` | `droid_outcome_to_ham_status` |

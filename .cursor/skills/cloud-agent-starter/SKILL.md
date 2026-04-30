@@ -140,6 +140,17 @@ Use when you need **managed mission** APIs or the **mission feed** path (not the
 - **Launch token (deploy / browser):** `HAM_CURSOR_AGENT_LAUNCH_TOKEN` — see `docs/DEPLOY_CLOUD_RUN.md` § "Cloud Agent launch token".
 - **List missions (read):** `curl -sS http://127.0.0.1:8000/api/cursor/managed/missions` (requires working Cursor credentials when exercising live Cursor-backed rows).
 
+### PR / docs checklist (prevent duplicate Cloud Agent PR churn)
+
+HAM launch prompts inject **cursor-agent-v2** PR hygiene; match it in Cursor Cloud agent behavior:
+
+1. **Plan/report first.** Do **not** run `gh pr create` unless the user explicitly asks for a PR.
+2. **No unsolicited docs-only PRs** — edit canonical Markdown in-place where possible (`AGENTS.md`, `README.md`, roadmap/mission-aware docs).
+3. **Before a docs PR:** `gh pr list --repo OWNER/REPO --state open --limit 50` — if overlaps exist → report `OVERLAPPING_DOCS_PR_FOUND` instead of spawning another duplicate.
+4. **One mission ⇒ at most one PR** when PRs were explicitly authorized.
+5. Regenerate **`CURSOR_EXACT_SETUP_EXPORT.md`** only via `python scripts/build_cursor_export.py`; do not hand-edit as a prose duplicate.
+6. Deeper governance: **`AGENTS.md`** → *Cloud Agent PR hygiene* section.
+
 ## 5) Common quick fixes
 
 - `python3 -m pytest ...` fails with `No module named pytest`:

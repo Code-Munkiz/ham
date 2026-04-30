@@ -33,7 +33,7 @@ from src.persistence.control_plane_run import (
 from src.persistence.cursor_credentials import get_effective_cursor_api_key
 from src.persistence.managed_mission import derive_mission_checkpoint
 
-CURSOR_AGENT_BASE_REVISION = "cursor-agent-v1"
+CURSOR_AGENT_BASE_REVISION = "cursor-agent-v2"
 
 _METADATA_REPO_KEY = "cursor_cloud_repository"
 
@@ -73,6 +73,71 @@ def compose_prompt_for_cursor(*, task_prompt: str, expected_deliverable: str | N
     return f"{task}\n\n**Expected deliverable:** {deliv}"
 
 
+def cloud_agent_pr_hygiene_block(*, repository: str, ref: str | None) -> str:
+    """
+    Appended to Cursor Cloud Agent launch prompts so agents default away from unsolicited PR churn.
+    Stays deterministic (no LLM) so previews/digests match launched payloads where applicable.
+    """
+    repo = (repository or "").strip()
+    rline = (ref or "").strip() or "(default branch)"
+    return (
+        "---\n"
+        "HAM mission metadata (operators / audit — obey the operator User request section above):\n"
+        f"- Repository: {repo}\n"
+        f"- Ref: {rline}\n"
+        "- mission_registry_id: assigned **after** this launch (HAM managed mission row — see Workspace / missions API).\n"
+        "- Cursor agent id: assigned by Cursor Cloud after launch.\n"
+        "---\n"
+        "HAM default PR / docs hygiene:\n"
+        "- Plan or report first unless the user explicitly asked you to ship commits immediately.\n"
+        '- **Do not open a PR unless the user explicitly requests it.** Explorer/plan missions return findings without `gh pr create`.\n'
+        "- Do not open docs-only PRs unless explicitly requested.\n"
+        "- Prefer editing **canonical docs** (`README.md`, `AGENTS.md`, `VISION.md`, `docs/README.md`, "
+        "`docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md`, `docs/MISSION_AWARE_FEED_CONTROLS.md`, "
+        "`docs/HAM_HARDENING_REMEDIATION.md`, `GAPS.md`, `.cursor/skills/**/SKILL.md`). "
+        "Regenerate `CURSOR_EXACT_SETUP_EXPORT.md` via `python scripts/build_cursor_export.py` — "
+        "do not hand-maintain duplicated exports.\n"
+        "- Do not duplicate the same Cloud Agent wording across unrelated files.\n"
+        "- One Cloud Agent mission should produce **at most one** PR **when** a PR is explicitly allowed.\n"
+        "- Before a docs PR, run `gh pr list --repo <org/repo> --state open --limit 50`; "
+        "inspect titles/branches — if overlapping docs coverage exists, **do not open another**. "
+        "Report `OVERLAPPING_DOCS_PR_FOUND`, list matching PR numbers, and propose updating/extending "
+        "an existing branch instead.\n"
+    )
+
+
+def append_cloud_agent_pr_hygiene(prompt_core: str, *, repository: str, ref: str | None) -> str:
+    core = (prompt_core or "").rstrip()
+    block = cloud_agent_pr_hygiene_block(repository=repository, ref=ref).strip()
+    return f"{core}\n\n{block}" if core else block
+
+
+def effective_cursor_launch_task_prompt(
+    *,
+    task_prompt: str,
+    expected_deliverable: str | None,
+    repository: str,
+    ref: str | None,
+    mission_handling: str | None,
+) -> str:
+    """Task text hashed for `proposal_digest` and sent to Cursor on launch."""
+    mh = (mission_handling or "").strip().lower() or "direct"
+    if mh == "managed":
+        return build_managed_cloud_agent_prompt_py(
+            user_prompt=task_prompt,
+            repository=repository,
+            ref=ref,
+        )
+    return append_cloud_agent_pr_hygiene(
+        compose_prompt_for_cursor(
+            task_prompt=task_prompt,
+            expected_deliverable=expected_deliverable,
+        ),
+        repository=repository,
+        ref=ref,
+    )
+
+
 def build_managed_cloud_agent_prompt_py(
     *, user_prompt: str, repository: str, ref: str | None
 ) -> str:
@@ -97,10 +162,12 @@ def build_managed_cloud_agent_prompt_py(
             "User request:",
             u,
             "---",
-            "Instructions: complete the user request in this repository, follow existing project conventions, keep changes focused, and use a clear commit/PR flow when applicable.",
+            "Instructions: complete the User request above in this repository; follow existing project conventions; "
+            "keep changes minimal and purposeful. Commits/Push/PR workflows run only under the HAM hygiene block below.",
         ]
     )
-    return "\n".join(parts)
+    brief = "\n".join(parts)
+    return append_cloud_agent_pr_hygiene(brief, repository=repo, ref=r)
 
 
 def compute_cursor_proposal_digest(
@@ -147,15 +214,13 @@ def verify_cursor_launch_against_preview(
         return f"Stale cursor_base_revision: expected {CURSOR_AGENT_BASE_REVISION!r}, got {base_revision!r}."
     mh = (mission_handling or "").strip().lower() or "direct"
     is_managed = mh == "managed"
-    eff_task: str
-    if is_managed:
-        eff_task = build_managed_cloud_agent_prompt_py(
-            user_prompt=task_prompt,
-            repository=repository,
-            ref=ref,
-        )
-    else:
-        eff_task = (task_prompt or "").strip()
+    eff_task = effective_cursor_launch_task_prompt(
+        task_prompt=task_prompt,
+        expected_deliverable=expected_deliverable,
+        repository=repository,
+        ref=ref,
+        mission_handling=mission_handling,
+    )
     eff_deliv: str | None
     if is_managed:
         eff_deliv = None
@@ -295,14 +360,12 @@ def build_cursor_agent_preview(
 
     mh = (cursor_mission_handling or "").strip().lower() or "direct"
     is_managed = mh == "managed"
-    task_for_digest = (
-        build_managed_cloud_agent_prompt_py(
-            user_prompt=focus,
-            repository=repo,
-            ref=cursor_ref.strip() if cursor_ref else None,
-        )
-        if is_managed
-        else focus
+    task_for_digest = effective_cursor_launch_task_prompt(
+        task_prompt=focus,
+        expected_deliverable=cursor_expected_deliverable,
+        repository=repo,
+        ref=cursor_ref.strip() if cursor_ref else None,
+        mission_handling=cursor_mission_handling,
     )
     eff_deliv = None if is_managed else cursor_expected_deliverable
 
@@ -466,17 +529,13 @@ def run_cursor_agent_launch(
     st_global = control_plane_run_store or ControlPlaneRunStore()
     mh = (mission_handling or "").strip().lower() or "direct"
     is_managed = mh == "managed"
-    if is_managed:
-        prompt_text = build_managed_cloud_agent_prompt_py(
-            user_prompt=task_prompt,
-            repository=repository,
-            ref=ref,
-        )
-    else:
-        prompt_text = compose_prompt_for_cursor(
-            task_prompt=task_prompt,
-            expected_deliverable=expected_deliverable,
-        )
+    prompt_text = effective_cursor_launch_task_prompt(
+        task_prompt=task_prompt,
+        expected_deliverable=expected_deliverable,
+        repository=repository,
+        ref=ref,
+        mission_handling=mission_handling,
+    )
     excerpt: str | None = None
     pr_root: str | None = None
     if project_root_for_mirror and str(project_root_for_mirror).strip():
