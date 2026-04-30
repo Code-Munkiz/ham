@@ -1,0 +1,34 @@
+# Cursor provider feed projection
+
+When the Ham API serves **`GET /api/cursor/managed/missions/{mission_registry_id}/feed`**, it may **enrich** the mission timeline with events derived from Cursor’s **agent conversation** API. That path is intentionally **not** a verbatim relay of provider JSON: it is a **safe projection** into Ham’s bounded mission-feed shape.
+
+## Why projection exists
+
+- **Cursor** remains the source of truth for execution and full conversation content upstream.
+- **Ham** stores a **durable, operator-safe** mission feed (checkpoints, follow-ups, and short status lines) suitable for list/detail APIs and UI without exposing secrets or unbounded provider payloads.
+
+## What the server does (high level)
+
+1. **Refresh** the latest Cursor agent payload (status) and **observe** the managed mission row (`observe_mission_from_cursor_payload`).
+2. **Fetch** the Cursor agent conversation payload for the same `cursor_agent_id`.
+3. **Map** that payload through `map_cursor_conversation_to_feed_events` in `src/ham/cursor_provider_adapter.py`, producing normalized feed events with stable synthetic `event_id`s.
+4. **Merge** only **new** projected events into `mission_feed_events` (deduped by `event_id`) and persist when something changed.
+
+Implementation references: `_sync_provider_projection` and `get_managed_mission_feed` in `src/api/cursor_managed_missions.py`.
+
+## Safety and bounds
+
+- **Redaction:** Known secret patterns (for example Cursor-style and bearer token shapes) are replaced before text is stored or returned.
+- **Truncation:** Per-event message text is capped (short preview, not full thread).
+- **Volume:** Projection keeps only the **tail** of mapped events from a single conversation fetch; the feed response also caps how many events are returned. These limits are **defense in depth** against oversized provider responses.
+
+If the Cursor API key is missing or Cursor returns an error, the feed still returns **HAM-synthesized** events from checkpoints (and similar) when available. The JSON body includes **`provider_projection_state`** (`ok` vs `fallback`) and **`provider_projection_reason`** so clients can tell enrichment failed without pretending the provider stream is complete.
+
+## Capability matrix
+
+`provider_capability_matrix()` in the same adapter module documents how Ham advertises **conversation_state** and related capabilities relative to Cursor (for example `implemented_now: "safe_feed_projection"` vs future session-resume work). Treat that structure as **declared intent**, not a guarantee of real-time parity with Cursor’s own UI.
+
+## Related
+
+- `docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md` — managed mission scope and roadmap.
+- `docs/CONTROL_PLANE_RUN.md` — control-plane runs are a **separate** substrate from managed mission feed rows.

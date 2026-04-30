@@ -18,6 +18,7 @@ This document states **what works today**, what is **stub / partial / explicitly
 | **Vercel / post-deploy (bounded)** | Server poll + mapping tiers; post-deploy check — API + future UI surfaces (legacy War Room UI removed Batch 2A). |
 | **Control plane runs (separate)** | Durable `ControlPlaneRun` for operator/chat-committed launches + status; **read** APIs — **factual**, not a queue or graph. |
 | **Read API: missions** | `GET /api/cursor/managed/missions` (list, optional filter by `cursor_agent_id`) and by `mission_registry_id` — full JSON includes `mission_deploy_approval_mode`. |
+| **Mission feed + Cursor projection** | `GET /api/cursor/managed/missions/{id}/feed` returns a bounded event list; when a Cursor API key is available, the server **projects** Cursor conversation payloads into Ham feed events (redacted, capped) — see `docs/CURSOR_PROVIDER_FEED_PROJECTION.md`. |
 | **UI** | **Partial:** managed mission APIs and operator/chat flows remain; dedicated Cloud Agent / War Room panels were removed with legacy workbench (Batch 2A). Re-home mission UX in Hermes Workspace or Command Center as needed. |
 | **Project registry** | `ProjectStore` + `PATCH` metadata for `default_deploy_approval_mode` (validated). |
 
