@@ -51,7 +51,9 @@ From repo root:
 ### Write-protected routes (set only when needed)
 
 - `HAM_SETTINGS_WRITE_TOKEN` for project settings apply/rollback
+- `HAM_CAPABILITY_LIBRARY_WRITE_TOKEN` for capability library mutations (`POST /api/capability-library/save|remove|reorder`; reads do not need it)
 - `HAM_RUN_LAUNCH_TOKEN` for operator launch_run turns
+- `HAM_DROID_EXEC_TOKEN` for operator droid_launch when a workflow requires it (see `.env.example`)
 - `HAM_SKILLS_WRITE_TOKEN` for Hermes skills install apply
 
 ## 3) Start the app (backend + frontend)
