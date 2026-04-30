@@ -161,3 +161,21 @@ There are many draft PRs for small docs notes. I want to stop accumulating PR cl
 - `tests/test_droid_registry.py` — Droid registry conventions (10 cases)
 - Run: `python -m pytest` — full suite (`pytest.ini` sets `pythonpath = .`; 158+ cases as of UI actions)
 - Other tests under `tests/` as added; bootstrap with `/test-context-regressions` for Context Engine focus
+
+## Cursor Cloud specific instructions
+
+### Services overview
+
+| Service | Command | Port | Notes |
+|---------|---------|------|-------|
+| Backend API | `python3 scripts/run_local_api.py` | 8000 | Sets `HERMES_GATEWAY_MODE=mock` + loose Clerk by default |
+| Frontend | `npm run dev` (in `frontend/`) | 3000 | Vite proxies `/api/*` to `:8000` automatically |
+
+### Startup caveats
+
+- **pytest is not in `requirements.txt`** — install separately: `pip install pytest`.
+- The backend uses `scripts/run_local_api.py` for local dev (not bare `uvicorn`). It auto-loads `.env`, sets mock gateway mode, and disables Clerk auth enforcement. Alternatively use `python3 -m uvicorn src.api.server:app --host 0.0.0.0 --port 8000`.
+- Create `.env` from `.env.example` before first run. Default mock mode needs no API keys.
+- Frontend lint is `npm run lint --prefix frontend` (`tsc --noEmit`).
+- Full test suite: `python3 -m pytest tests/ -q`. Some HAM-on-X reactive inbox tests may have pre-existing failures unrelated to setup.
+- See `.cursor/skills/cloud-agent-starter/SKILL.md` for detailed per-area testing workflows and common quick fixes.
