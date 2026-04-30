@@ -63,6 +63,30 @@ export type ManagedMissionListPayload = {
   missions: ManagedMissionSnapshot[];
 };
 
+export type ManagedMissionFeedEvent = {
+  id: string;
+  time: string;
+  kind: string;
+  source: string;
+  message: string;
+  reason_code?: string | null;
+};
+
+export type ManagedMissionFeedPayload = {
+  mission_id: string;
+  provider: "cursor";
+  status: string;
+  lifecycle: ManagedMissionLifecycle;
+  repo?: string | null;
+  ref?: string | null;
+  latest_checkpoint?: string | null;
+  updated_at?: string | null;
+  events: ManagedMissionFeedEvent[];
+  artifacts?: { kind?: string; title?: string; url?: string }[];
+  pr_url?: string | null;
+  cancel_supported?: boolean;
+};
+
 function parseErrorBody(status: number, text: string): string {
   const body = text.trim();
   if (!body) return `HTTP ${status}`;
@@ -150,5 +174,91 @@ export async function syncManagedMissionByAgentId(agentId: string): Promise<{
     return { mission, error: null, httpStatus: res.status };
   } catch (e) {
     return { mission: null, error: e instanceof Error ? e.message : String(e), httpStatus: null };
+  }
+}
+
+export async function fetchManagedMissionFeed(missionRegistryId: string): Promise<{
+  feed: ManagedMissionFeedPayload | null;
+  error: string | null;
+  httpStatus: number | null;
+}> {
+  const id = missionRegistryId.trim();
+  if (!id) {
+    return { feed: null, error: "Missing mission id", httpStatus: null };
+  }
+  try {
+    const res = await hamApiFetch(`${BASE}/missions/${encodeURIComponent(id)}/feed`, {
+      credentials: "include",
+    });
+    const text = await res.text();
+    if (!res.ok) {
+      return { feed: null, error: parseErrorBody(res.status, text), httpStatus: res.status };
+    }
+    const feed = JSON.parse(text) as ManagedMissionFeedPayload;
+    return { feed, error: null, httpStatus: res.status };
+  } catch (e) {
+    return { feed: null, error: e instanceof Error ? e.message : String(e), httpStatus: null };
+  }
+}
+
+export async function postManagedMissionMessage(missionRegistryId: string, message: string): Promise<{
+  ok: boolean;
+  reasonCode: string | null;
+  error: string | null;
+  httpStatus: number | null;
+}> {
+  const id = missionRegistryId.trim();
+  const msg = message.trim();
+  if (!id) return { ok: false, reasonCode: "mission_not_found", error: "Missing mission id", httpStatus: null };
+  if (!msg) return { ok: false, reasonCode: "mission_followup_not_supported", error: "Message is empty", httpStatus: null };
+  try {
+    const res = await hamApiFetch(`${BASE}/missions/${encodeURIComponent(id)}/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ message: msg }),
+    });
+    const text = await res.text();
+    if (!res.ok) {
+      return { ok: false, reasonCode: null, error: parseErrorBody(res.status, text), httpStatus: res.status };
+    }
+    const data = JSON.parse(text) as { ok?: boolean; reason_code?: string | null };
+    return {
+      ok: data.ok === true,
+      reasonCode: typeof data.reason_code === "string" ? data.reason_code : null,
+      error: null,
+      httpStatus: res.status,
+    };
+  } catch (e) {
+    return { ok: false, reasonCode: null, error: e instanceof Error ? e.message : String(e), httpStatus: null };
+  }
+}
+
+export async function cancelManagedMission(missionRegistryId: string): Promise<{
+  ok: boolean;
+  reasonCode: string | null;
+  error: string | null;
+  httpStatus: number | null;
+}> {
+  const id = missionRegistryId.trim();
+  if (!id) return { ok: false, reasonCode: "mission_not_found", error: "Missing mission id", httpStatus: null };
+  try {
+    const res = await hamApiFetch(`${BASE}/missions/${encodeURIComponent(id)}/cancel`, {
+      method: "POST",
+      credentials: "include",
+    });
+    const text = await res.text();
+    if (!res.ok) {
+      return { ok: false, reasonCode: null, error: parseErrorBody(res.status, text), httpStatus: res.status };
+    }
+    const data = JSON.parse(text) as { ok?: boolean; reason_code?: string | null };
+    return {
+      ok: data.ok === true,
+      reasonCode: typeof data.reason_code === "string" ? data.reason_code : null,
+      error: null,
+      httpStatus: res.status,
+    };
+  } catch (e) {
+    return { ok: false, reasonCode: null, error: e instanceof Error ? e.message : String(e), httpStatus: null };
   }
 }

@@ -4,6 +4,8 @@ Thin HTTP client for Cursor Cloud Agents API (Bearer auth only).
 Endpoints used in slice 1:
 - POST https://api.cursor.com/v0/agents
 - GET  https://api.cursor.com/v0/agents/{id}
+- POST https://api.cursor.com/v0/agents/{id}/followup
+- POST https://api.cursor.com/v0/agents/{id}/cancel (best-effort; provider capability may vary)
 
 Payload shapes match the existing Ham proxy in ``src/api/cursor_settings.py`` (no speculative fields).
 """
@@ -105,6 +107,73 @@ def cursor_api_get_agent(*, api_key: str, agent_id: str) -> dict[str, Any]:
     if resp.status_code >= 400:
         raise CursorCloudApiError(
             f"Cursor agent error: HTTP {resp.status_code}",
+            status_code=resp.status_code,
+            body_excerpt=_excerpt(resp.text),
+        )
+    try:
+        return resp.json()
+    except ValueError as exc:
+        raise CursorCloudApiError("Cursor returned non-JSON", status_code=resp.status_code) from exc
+
+
+def cursor_api_followup_agent(*, api_key: str, agent_id: str, prompt_text: str) -> dict[str, Any]:
+    """POST /v0/agents/{id}/followup. Returns parsed JSON on success."""
+    aid = agent_id.strip()
+    prompt = prompt_text.strip()
+    if not aid:
+        raise CursorCloudApiError("agent_id required", status_code=None)
+    if not prompt:
+        raise CursorCloudApiError("prompt_text required", status_code=None)
+    payload: dict[str, Any] = {"prompt": {"text": prompt}}
+    with httpx.Client(timeout=60.0) as client:
+        resp = client.post(
+            f"{CURSOR_API_BASE}/v0/agents/{aid}/followup",
+            headers={
+                "Authorization": f"Bearer {api_key.strip()}",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+        )
+    if resp.status_code == 401:
+        raise CursorCloudApiError(
+            "Cursor rejected this API key (401).",
+            status_code=401,
+            body_excerpt=_excerpt(resp.text),
+        )
+    if resp.status_code >= 400:
+        raise CursorCloudApiError(
+            f"Cursor followup error: HTTP {resp.status_code}",
+            status_code=resp.status_code,
+            body_excerpt=_excerpt(resp.text),
+        )
+    try:
+        return resp.json()
+    except ValueError as exc:
+        raise CursorCloudApiError("Cursor returned non-JSON", status_code=resp.status_code) from exc
+
+
+def cursor_api_cancel_agent(*, api_key: str, agent_id: str) -> dict[str, Any]:
+    """POST /v0/agents/{id}/cancel. Some providers/accounts may not support this yet."""
+    aid = agent_id.strip()
+    if not aid:
+        raise CursorCloudApiError("agent_id required", status_code=None)
+    with httpx.Client(timeout=60.0) as client:
+        resp = client.post(
+            f"{CURSOR_API_BASE}/v0/agents/{aid}/cancel",
+            headers={
+                "Authorization": f"Bearer {api_key.strip()}",
+                "Content-Type": "application/json",
+            },
+        )
+    if resp.status_code == 401:
+        raise CursorCloudApiError(
+            "Cursor rejected this API key (401).",
+            status_code=401,
+            body_excerpt=_excerpt(resp.text),
+        )
+    if resp.status_code >= 400:
+        raise CursorCloudApiError(
+            f"Cursor cancel error: HTTP {resp.status_code}",
             status_code=resp.status_code,
             body_excerpt=_excerpt(resp.text),
         )

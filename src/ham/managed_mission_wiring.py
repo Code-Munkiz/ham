@@ -16,6 +16,7 @@ from src.persistence.managed_mission import (
     ManagedMission,
     ManagedMissionStore,
     append_mission_checkpoint_event,
+    append_mission_feed_event,
     derive_mission_checkpoint,
     map_cursor_to_mission_lifecycle,
     new_mission_registry_id,
@@ -87,12 +88,21 @@ def _with_derived_checkpoint(m: ManagedMission, *, observed_at: str) -> ManagedM
             observed_at=observed_at,
             reason=cp_reason,
         )
+        feed = append_mission_feed_event(
+            existing=m.mission_feed_events,
+            observed_at=observed_at,
+            kind="checkpoint",
+            source="ham",
+            message=f"Checkpoint: {cp_next}",
+            reason_code=cp_reason,
+        )
         return m.model_copy(
             update={
                 "mission_checkpoint_latest": cp_next,
                 "mission_checkpoint_reason_last": cp_reason,
                 "mission_checkpoint_updated_at": observed_at,
                 "mission_checkpoint_events": events,
+                "mission_feed_events": feed,
             }
         )
     return m
@@ -180,6 +190,14 @@ def create_mission_after_managed_launch(
             observed_at=n,
             reason="managed_launch_created",
         ),
+        mission_feed_events=append_mission_feed_event(
+            existing=[],
+            observed_at=n,
+            kind="mission_started",
+            source="ham",
+            message="HAM launched Cursor Cloud Agent.",
+            reason_code="managed_launch_created",
+        ),
         created_at=n,
         updated_at=n,
         last_server_observed_at=n,
@@ -221,6 +239,18 @@ def observe_mission_from_cursor_payload(*, raw: Mapping[str, Any] | None) -> Non
             "mission_lifecycle": new_lc,
             "updated_at": n,
             "last_server_observed_at": n,
+        }
+    )
+    m2 = m2.model_copy(
+        update={
+            "mission_feed_events": append_mission_feed_event(
+                existing=m2.mission_feed_events,
+                observed_at=n,
+                kind="provider_status",
+                source="cursor",
+                message=f"Cursor status: {cursor_tok or 'unknown'}.",
+                reason_code=s_reason,
+            ),
         }
     )
     m2 = _with_derived_checkpoint(m2, observed_at=n)

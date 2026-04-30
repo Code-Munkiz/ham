@@ -379,6 +379,109 @@ def test_missions_list_api(client: TestClient) -> None:
     assert len(f.json()["missions"]) == 1
 
 
+def test_mission_feed_endpoint_returns_events(client: TestClient) -> None:
+    st = cmm._store
+    assert st is not None
+    mid = new_mission_registry_id()
+    n = utc_now_iso()
+    st.save(
+        ManagedMission(
+            mission_registry_id=mid,
+            cursor_agent_id="c-agent-feed-1",
+            control_plane_ham_run_id=None,
+            mission_handling="managed",
+            uplink_id=None,
+            repo_key="a/b",
+            repository_observed="Code-Munkiz/ham",
+            ref_observed="main",
+            mission_lifecycle="open",
+            cursor_status_last_observed="RUNNING",
+            status_reason_last_observed="mapped:RUNNING",
+            created_at=n,
+            updated_at=n,
+            last_server_observed_at=n,
+        )
+    )
+    r = client.get(f"/api/cursor/managed/missions/{mid}/feed")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["mission_id"] == mid
+    assert isinstance(body["events"], list)
+    assert len(body["events"]) >= 1
+    assert body["events"][0]["kind"] in ("mission_started", "checkpoint")
+
+
+def test_mission_message_endpoint_records_followup_when_provider_unsupported(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    st = cmm._store
+    assert st is not None
+    mid = new_mission_registry_id()
+    n = utc_now_iso()
+    st.save(
+        ManagedMission(
+            mission_registry_id=mid,
+            cursor_agent_id="c-agent-followup-1",
+            control_plane_ham_run_id=None,
+            mission_handling="managed",
+            uplink_id=None,
+            repo_key="a/b",
+            mission_lifecycle="open",
+            cursor_status_last_observed="RUNNING",
+            status_reason_last_observed="mapped:RUNNING",
+            created_at=n,
+            updated_at=n,
+            last_server_observed_at=n,
+        )
+    )
+    monkeypatch.delenv("CURSOR_API_KEY", raising=False)
+    monkeypatch.setattr(cmm, "get_effective_cursor_api_key", lambda: None)
+    r = client.post(
+        f"/api/cursor/managed/missions/{mid}/messages",
+        json={"message": "Please run tests before finishing."},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["ok"] is False
+    assert body["reason_code"] in ("provider_followup_not_supported", "mission_followup_not_supported")
+    feed = client.get(f"/api/cursor/managed/missions/{mid}/feed")
+    assert feed.status_code == 200
+    events = feed.json()["events"]
+    assert any(e.get("kind") == "followup_instruction" for e in events)
+
+
+def test_mission_cancel_endpoint_returns_stable_unsupported_reason(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    st = cmm._store
+    assert st is not None
+    mid = new_mission_registry_id()
+    n = utc_now_iso()
+    st.save(
+        ManagedMission(
+            mission_registry_id=mid,
+            cursor_agent_id="c-agent-cancel-1",
+            control_plane_ham_run_id=None,
+            mission_handling="managed",
+            uplink_id=None,
+            repo_key="a/b",
+            mission_lifecycle="open",
+            cursor_status_last_observed="RUNNING",
+            status_reason_last_observed="mapped:RUNNING",
+            created_at=n,
+            updated_at=n,
+            last_server_observed_at=n,
+        )
+    )
+    monkeypatch.delenv("CURSOR_API_KEY", raising=False)
+    monkeypatch.setattr(cmm, "get_effective_cursor_api_key", lambda: None)
+    r = client.post(f"/api/cursor/managed/missions/{mid}/cancel")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["ok"] is False
+    assert body["reason_code"] == "cancel_not_supported"
+
+
 @pytest.fixture
 def client(tmp_path: Path) -> TestClient:
     cmm._store = ManagedMissionStore(base_dir=tmp_path)

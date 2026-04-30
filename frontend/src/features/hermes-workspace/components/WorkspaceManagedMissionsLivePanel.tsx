@@ -4,8 +4,11 @@ import { Cloud, Loader2, MessageSquare, RefreshCw, RotateCw, Square } from "luci
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
+  cancelManagedMission,
   fetchManagedMissionDetail,
+  fetchManagedMissionFeed,
   fetchManagedMissions,
+  type ManagedMissionFeedPayload,
   syncManagedMissionByAgentId,
   type ManagedMissionLifecycle,
   type ManagedMissionSnapshot,
@@ -120,7 +123,11 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, variant }: Pr
   const [detailError, setDetailError] = React.useState<string | null>(null);
 
   const [syncAgentId, setSyncAgentId] = React.useState<string | null>(null);
+  const [cancelMissionId, setCancelMissionId] = React.useState<string | null>(null);
   const [actionError, setActionError] = React.useState<string | null>(null);
+  const [selectedMissionId, setSelectedMissionId] = React.useState<string | null>(null);
+  const [selectedFeed, setSelectedFeed] = React.useState<ManagedMissionFeedPayload | null>(null);
+  const [selectedFeedLoading, setSelectedFeedLoading] = React.useState(false);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -135,6 +142,36 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, variant }: Pr
   React.useEffect(() => {
     void load();
   }, [load, refreshSignal]);
+
+  React.useEffect(() => {
+    if (!missions.length) {
+      setSelectedMissionId(null);
+      setSelectedFeed(null);
+      return;
+    }
+    if (!selectedMissionId || !missions.some((m) => m.mission_registry_id === selectedMissionId)) {
+      setSelectedMissionId(missions[0].mission_registry_id);
+    }
+  }, [missions, selectedMissionId]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    const missionId = String(selectedMissionId || "").trim();
+    if (!missionId) return;
+    setSelectedFeedLoading(true);
+    void fetchManagedMissionFeed(missionId).then((r) => {
+      if (cancelled) return;
+      setSelectedFeedLoading(false);
+      if (r.feed) {
+        setSelectedFeed(r.feed);
+      } else {
+        setSelectedFeed(null);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedMissionId, missions, refreshSignal]);
 
   React.useEffect(() => {
     const t = window.setInterval(() => setNow(Date.now()), 30_000);
@@ -175,11 +212,36 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, variant }: Pr
       return;
     }
     await load();
+    if (selectedMissionId) {
+      const feed = await fetchManagedMissionFeed(selectedMissionId);
+      if (feed.feed) setSelectedFeed(feed.feed);
+    }
     if (r.mission) {
       setDetailMission((cur) => {
         if (!cur) return cur;
         return cur.mission_registry_id === r.mission?.mission_registry_id ? r.mission! : cur;
       });
+    }
+  };
+
+  const runCancel = async (missionRegistryId: string) => {
+    const mid = missionRegistryId.trim();
+    if (!mid) return;
+    setActionError(null);
+    setCancelMissionId(mid);
+    const r = await cancelManagedMission(mid);
+    setCancelMissionId(null);
+    if (r.error) {
+      setActionError(r.error);
+      return;
+    }
+    if (!r.ok) {
+      setActionError(r.reasonCode === "cancel_not_supported" ? "Stop is not supported for this provider yet." : (r.reasonCode || "Stop request was not accepted."));
+    }
+    await load();
+    if (selectedMissionId) {
+      const feed = await fetchManagedMissionFeed(selectedMissionId);
+      if (feed.feed) setSelectedFeed(feed.feed);
     }
   };
 
@@ -267,9 +329,16 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, variant }: Pr
                 const repo = [m.repository_observed, m.ref_observed].filter(Boolean).join(" @ ") || "—";
                 const agentOk = Boolean(m.cursor_agent_id?.trim());
                 const rowBusy = syncAgentId === m.cursor_agent_id;
-                const canCancel = m.cancel_supported === true;
+                const rowCancelBusy = cancelMissionId === m.mission_registry_id;
                 return (
-                  <tr key={m.mission_registry_id} className="border-b border-[var(--theme-border)]/80 last:border-b-0">
+                  <tr
+                    key={m.mission_registry_id}
+                    className={cn(
+                      "border-b border-[var(--theme-border)]/80 last:border-b-0",
+                      selectedMissionId === m.mission_registry_id && "bg-[var(--theme-card)]/60",
+                    )}
+                    onClick={() => setSelectedMissionId(m.mission_registry_id)}
+                  >
                     <td className="px-3 py-2 align-top">{lifecyclePill(m.mission_lifecycle)}</td>
                     <td className="max-w-[240px] px-3 py-2 align-top">
                       <p className="line-clamp-1 text-sm font-medium text-[var(--theme-text)]">{missionTitle(m)}</p>
@@ -316,10 +385,11 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, variant }: Pr
                           size="sm"
                           variant="secondary"
                           className="h-7 border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 text-[11px]"
-                          disabled={!canCancel}
-                          title={canCancel ? "Stop this mission" : "Stop is not available for this provider yet"}
+                          disabled={!!rowCancelBusy}
+                          title="Request stop"
+                          onClick={() => void runCancel(m.mission_registry_id)}
                         >
-                          <Square className="h-3 w-3" />
+                          {rowCancelBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Square className="h-3 w-3" />}
                           Stop
                         </Button>
                         <Button
@@ -329,7 +399,7 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, variant }: Pr
                           className="h-7 border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 text-[11px]"
                           asChild
                         >
-                          <Link to="/workspace/chat">
+                          <Link to={`/workspace/chat?mission_id=${encodeURIComponent(m.mission_registry_id)}`}>
                             <MessageSquare className="h-3 w-3" />
                             Open in Chat
                           </Link>
@@ -341,6 +411,34 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, variant }: Pr
               })}
             </tbody>
           </table>
+        </div>
+      ) : null}
+
+      {!error && missions.length > 0 ? (
+        <div className="mt-4 rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-muted)]">Live mission feed</p>
+            {selectedMissionId ? (
+              <span className="font-mono text-[10px] text-[var(--theme-muted-2)]">{shortId(selectedMissionId)}</span>
+            ) : null}
+          </div>
+          <div className="mt-2 space-y-2">
+            {selectedFeedLoading ? (
+              <p className="text-sm text-[var(--theme-muted)]">Loading mission feed…</p>
+            ) : (selectedFeed?.events || []).length > 0 ? (
+              (selectedFeed?.events || []).slice(-8).map((ev) => (
+                <div key={`${ev.id}-${ev.time}`} className="rounded-lg border border-[var(--theme-border)]/80 bg-[var(--theme-card)] px-3 py-2">
+                  <p className="text-sm text-[var(--theme-text)]">{ev.message}</p>
+                  <p className="mt-1 text-xs text-[var(--theme-muted)]">
+                    {fmtIsoLocal(ev.time)} · {ev.source}
+                    {ev.reason_code ? ` · ${ev.reason_code}` : ""}
+                  </p>
+                </div>
+              ))
+            ) : (
+              <p className="text-sm text-[var(--theme-muted-2)]">Waiting for agent progress…</p>
+            )}
+          </div>
         </div>
       ) : null}
 
@@ -485,7 +583,7 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, variant }: Pr
             {d?.cursor_agent_id?.trim() && !detailLoading ? (
               <div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-[var(--theme-border)] pt-4">
                 <Button type="button" size="sm" variant="secondary" className="border border-[var(--theme-border)]" asChild>
-                  <Link to="/workspace/chat">
+                  <Link to={`/workspace/chat?mission_id=${encodeURIComponent(d.mission_registry_id)}`}>
                     <MessageSquare className="mr-1 h-3.5 w-3.5" />
                     Open in Chat
                   </Link>
@@ -510,10 +608,15 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, variant }: Pr
                   size="sm"
                   variant="secondary"
                   className="border border-[var(--theme-border)]"
-                  disabled={d.cancel_supported !== true}
-                  title={d.cancel_supported === true ? "Stop this mission" : "Stop is not available for this provider yet"}
+                  disabled={cancelMissionId === d.mission_registry_id}
+                  title="Request stop"
+                  onClick={() => void runCancel(d.mission_registry_id)}
                 >
-                  <Square className="mr-1 h-3.5 w-3.5" />
+                  {cancelMissionId === d.mission_registry_id ? (
+                    <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Square className="mr-1 h-3.5 w-3.5" />
+                  )}
                   Stop mission
                 </Button>
               </div>

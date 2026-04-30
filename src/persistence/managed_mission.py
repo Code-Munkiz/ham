@@ -44,6 +44,7 @@ MissionCheckpoint = Literal[
 
 _MAX_CHECKPOINT_REASON = 160
 _CHECKPOINT_HISTORY_CAP = 24
+_FEED_HISTORY_CAP = 120
 _QUEUED_TOKENS = {
     "QUEUED",
     "PENDING",
@@ -178,6 +179,39 @@ class MissionCheckpointEvent(BaseModel):
         return _cap(v if v is None else str(v), _MAX_CHECKPOINT_REASON)
 
 
+class MissionFeedEvent(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    event_id: str
+    observed_at: str
+    kind: str
+    source: str
+    message: str
+    reason_code: str | None = None
+
+    @field_validator("event_id", mode="before")
+    @classmethod
+    def _norm_event_id(cls, v: object) -> str:
+        s = str(v or "").strip()
+        return s or f"evt_{uuid.uuid4().hex[:12]}"
+
+    @field_validator("kind", "source", mode="before")
+    @classmethod
+    def _norm_short(cls, v: object) -> str:
+        s = str(v or "").strip().lower()
+        return _cap(s or "event", 64) or "event"
+
+    @field_validator("message", mode="before")
+    @classmethod
+    def _norm_message(cls, v: object) -> str:
+        s = str(v or "").strip()
+        return _cap(s or "Mission event", 400) or "Mission event"
+
+    @field_validator("reason_code", mode="before")
+    @classmethod
+    def _norm_reason_code(cls, v: object) -> str | None:
+        return _cap(v if v is None else str(v), 120)
+
+
 def append_mission_checkpoint_event(
     *,
     existing: list[MissionCheckpointEvent],
@@ -195,6 +229,32 @@ def append_mission_checkpoint_event(
     )
     if len(nxt) > _CHECKPOINT_HISTORY_CAP:
         nxt = nxt[-_CHECKPOINT_HISTORY_CAP:]
+    return nxt
+
+
+def append_mission_feed_event(
+    *,
+    existing: list[MissionFeedEvent],
+    observed_at: str,
+    kind: str,
+    source: str,
+    message: str,
+    reason_code: str | None = None,
+    event_id: str | None = None,
+) -> list[MissionFeedEvent]:
+    nxt = list(existing)
+    nxt.append(
+        MissionFeedEvent(
+            event_id=str(event_id or "").strip() or f"evt_{uuid.uuid4().hex[:12]}",
+            observed_at=observed_at,
+            kind=kind,
+            source=source,
+            message=message,
+            reason_code=reason_code,
+        )
+    )
+    if len(nxt) > _FEED_HISTORY_CAP:
+        nxt = nxt[-_FEED_HISTORY_CAP:]
     return nxt
 
 
@@ -251,6 +311,7 @@ class ManagedMission(BaseModel):
     mission_checkpoint_updated_at: str | None = None
     mission_checkpoint_reason_last: str | None = None
     mission_checkpoint_events: list[MissionCheckpointEvent] = Field(default_factory=list)
+    mission_feed_events: list[MissionFeedEvent] = Field(default_factory=list)
 
     created_at: str
     updated_at: str

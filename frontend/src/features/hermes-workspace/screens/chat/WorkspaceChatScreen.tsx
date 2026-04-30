@@ -30,6 +30,13 @@ import {
   userTranscriptPreview,
 } from "@/lib/ham/chatUserContent";
 import { workspaceChatAdapter, workspaceSessionAdapter } from "../../workspaceAdapters";
+import {
+  fetchManagedMissionDetail,
+  fetchManagedMissionFeed,
+  postManagedMissionMessage,
+  type ManagedMissionFeedPayload,
+  type ManagedMissionSnapshot,
+} from "../../adapters/managedMissionsAdapter";
 import { useVoiceWorkspaceSettingsOptional } from "../../voice/VoiceWorkspaceSettingsContext";
 import { WorkspaceChatEmptyState } from "./WorkspaceChatEmptyState";
 import { WorkspaceChatMessageList, type HwwMsgRow } from "./WorkspaceChatMessageList";
@@ -88,6 +95,13 @@ function timeStr() {
     minute: "2-digit",
     second: "2-digit",
   });
+}
+
+function shortId(v: string | null | undefined): string {
+  const s = String(v || "").trim();
+  if (!s) return "—";
+  if (s.length <= 16) return s;
+  return `${s.slice(0, 8)}…${s.slice(-6)}`;
 }
 
 function readLastChatSessionId(): string | null {
@@ -173,6 +187,22 @@ function buildSafeSearchUrl(text: string): string {
     .replace(/\s+/g, " ")
     .trim();
   return `https://duckduckgo.com/?q=${encodeURIComponent(q || text.trim())}`;
+}
+
+function missionFollowupMessageForReason(reasonCode: string | null, ok: boolean): string {
+  if (ok) return "Instruction recorded for this mission and sent to the provider.";
+  switch (reasonCode) {
+    case "mission_not_active":
+      return "This mission is not active anymore, so follow-up instructions cannot be sent.";
+    case "mission_not_found":
+      return "I could not find that mission.";
+    case "mission_followup_not_supported":
+      return "This provider does not support mission follow-up yet. I still recorded your instruction in the mission feed.";
+    case "provider_followup_not_supported":
+      return "Provider follow-up is unavailable right now. I still recorded your instruction in the mission feed.";
+    default:
+      return "I could not send that follow-up right now. Your instruction was recorded in the mission feed.";
+  }
 }
 
 function localBrowserFailureMessage(reason: string): string {
@@ -299,6 +329,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   const executionEnvironment: "desktop" | "web" = desktopShell ? "desktop" : "web";
   const chatScreenInstanceId = React.useRef(`chat-screen-${Math.random().toString(36).slice(2, 9)}`);
   const [searchParams] = useSearchParams();
+  const missionIdFromQuery = embedMode ? null : (searchParams.get("mission_id") || "").trim() || null;
   const [messages, setMessages] = React.useState<HwwMsgRow[]>([]);
   const [sessionId, setSessionId] = React.useState<string | null>(null);
   const [input, setInput] = React.useState("");
@@ -307,6 +338,10 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   const [loadingSession, setLoadingSession] = React.useState(false);
   const [catalog, setCatalog] = React.useState<ModelCatalogPayload | null>(null);
   const [catalogLoading, setCatalogLoading] = React.useState(true);
+  const [missionContext, setMissionContext] = React.useState<ManagedMissionSnapshot | null>(null);
+  const [missionFeed, setMissionFeed] = React.useState<ManagedMissionFeedPayload | null>(null);
+  const [missionLoading, setMissionLoading] = React.useState(false);
+  const [missionError, setMissionError] = React.useState<string | null>(null);
   const [modelId, setModelId] = React.useState<string | null>(null);
   const executionModePreference: "auto" | "browser" | "machine" | "chat" = "auto";
   const [executionMode, setExecutionMode] = React.useState<HamChatExecutionMode | null>(null);
@@ -584,6 +619,38 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     };
   }, []);
 
+  React.useEffect(() => {
+    let cancelled = false;
+    const missionId = String(missionIdFromQuery || "").trim();
+    if (!missionId) {
+      setMissionContext(null);
+      setMissionFeed(null);
+      setMissionError(null);
+      setMissionLoading(false);
+      return;
+    }
+    setMissionLoading(true);
+    setMissionError(null);
+    void (async () => {
+      const [m, f] = await Promise.all([
+        fetchManagedMissionDetail(missionId),
+        fetchManagedMissionFeed(missionId),
+      ]);
+      if (cancelled) return;
+      setMissionLoading(false);
+      if (m.mission) {
+        setMissionContext(m.mission);
+      } else {
+        setMissionContext(null);
+        setMissionError(m.error ?? "Could not load mission context.");
+      }
+      setMissionFeed(f.feed ?? null);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [missionIdFromQuery]);
+
   const loadFromApi = React.useCallback(
     async (sid: string) => {
       if (streamTurnSessionRef.current === sid && sending) {
@@ -820,6 +887,59 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       if (isV1 && !(outboundUser as HamChatUserContentV1).images?.length) return;
       if (isV2 && !(outboundUser as HamChatUserContentV2).attachments?.length) return;
       if (sending || voiceTranscribing) return;
+      const missionModeId = String(missionIdFromQuery || "").trim();
+      const outboundPlain = !isV1 && !isV2;
+      if (missionModeId && outboundPlain) {
+        const plain = String(outboundUser || "").trim();
+        if (!plain) return;
+        setInput("");
+        setAttachments([]);
+        setLoadErr(null);
+        setSending(true);
+        const userRow: HwwMsgRow = {
+          id: `hww-user-${Date.now()}`,
+          role: "user",
+          content: plain,
+          timestamp: timeStr(),
+        };
+        const assistantPlaceId = `hww-assist-${Date.now()}`;
+        setMessages((prev) => [
+          ...prev,
+          userRow,
+          {
+            id: assistantPlaceId,
+            role: "assistant",
+            content: "",
+            timestamp: timeStr(),
+          },
+        ]);
+        const result = await postManagedMissionMessage(missionModeId, plain);
+        const assistantMessage = result.error
+          ? `Mission follow-up failed: ${result.error}`
+          : missionFollowupMessageForReason(result.reasonCode, result.ok);
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantPlaceId
+              ? { ...m, content: assistantMessage }
+              : m,
+          ),
+        );
+        const [mFresh, fFresh] = await Promise.all([
+          fetchManagedMissionDetail(missionModeId),
+          fetchManagedMissionFeed(missionModeId),
+        ]);
+        setMissionContext(mFresh.mission);
+        setMissionFeed(fFresh.feed);
+        if (!mFresh.mission) {
+          setMissionError(mFresh.error ?? "Could not refresh mission context.");
+        }
+        setSending(false);
+        return;
+      }
+      if (missionModeId && !outboundPlain) {
+        toast.error("Mission follow-up currently supports text-only instructions.");
+        return;
+      }
       setInput("");
       setAttachments([]);
       setLoadErr(null);
@@ -871,7 +991,6 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       };
       const plainOutbound =
         typeof outboundUser === "string" ? (outboundUser as string).trim() : "";
-      const outboundPlain = !isV1 && !isV2;
       const browserTaskRequested = outboundPlain && isLikelyBrowserTask(plainOutbound);
       if (desktopShell && browserTaskRequested) {
         const webBridgeApi = getHamDesktopWebBridgeApi();
@@ -1379,6 +1498,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       sessionId,
       chatModelIdForApi,
       projectId,
+      missionIdFromQuery,
       navigate,
       executionModePreference,
       executionEnvironment,
@@ -1436,21 +1556,27 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   const showEmpty = !loadingSession && !hasTranscript && !loadErr;
   const sessionLoadFailed = Boolean(loadErr && !hasTranscript && !loadingSession);
   const staleSessionParam = embedMode ? null : searchParams.get("session");
+  const missionModeActive = Boolean(missionIdFromQuery);
+  const missionTitle = missionContext?.title || missionContext?.task_summary || "Mission";
   const headerTitle = sessionLoadFailed
     ? "Session unavailable"
-    : !sessionId
+    : missionModeActive
+      ? "Mission chat"
+      : !sessionId
       ? "New session"
       : "Chat";
   const last = messages[messages.length - 1];
   const isStreaming =
     sending && last?.role === "assistant" && !(last?.content || "").trim();
 
-  const headerSubtitle = workspaceChatSubtitle({
-    sessionLoadFailed,
-    staleSessionParam,
-    sessionId,
-    messages,
-  });
+  const headerSubtitle = missionModeActive
+    ? "Mission-scoped follow-up mode. Your messages are routed to this mission."
+    : workspaceChatSubtitle({
+        sessionLoadFailed,
+        staleSessionParam,
+        sessionId,
+        messages,
+      });
 
   return (
     <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col md:flex-row">
@@ -1493,6 +1619,46 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
             </button>
           </div>
         </header>
+        {missionModeActive ? (
+          <div className="border-b border-white/[0.06] bg-[#06131d] px-4 py-3 md:px-8">
+            {missionLoading ? (
+              <p className="text-xs text-white/60">Loading mission context…</p>
+            ) : missionError ? (
+              <p className="text-xs text-amber-200/90">{missionError}</p>
+            ) : missionContext ? (
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center gap-2 text-xs text-white/75">
+                  <span className="rounded-full border border-sky-400/30 bg-sky-500/10 px-2 py-0.5 text-sky-200">
+                    {missionContext.provider === "cursor" ? "Cursor" : "Cloud Agent"}
+                  </span>
+                  <span className="font-medium text-white/90">{missionTitle}</span>
+                  <span className="text-white/40">·</span>
+                  <span>{missionContext.mission_lifecycle}</span>
+                  <span className="text-white/40">·</span>
+                  <span>{missionContext.latest_checkpoint || missionContext.cursor_status_last_observed || "waiting"}</span>
+                </div>
+                <p className="text-[11px] text-white/55">
+                  {missionContext.repository_observed || "—"} @ {missionContext.ref_observed || "default"} · mission{" "}
+                  <span className="font-mono">{shortId(missionContext.mission_registry_id)}</span> · agent{" "}
+                  <span className="font-mono">{shortId(missionContext.cursor_agent_id)}</span>
+                </p>
+                <div className="space-y-1">
+                  {(missionFeed?.events || []).length > 0 ? (
+                    (missionFeed?.events || []).slice(-3).map((ev) => (
+                      <p key={`${ev.id}-${ev.time}`} className="text-[11px] text-white/60">
+                        {ev.message}
+                      </p>
+                    ))
+                  ) : (
+                    <p className="text-[11px] text-white/55">Waiting for mission feed updates…</p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-white/60">Mission context is not available.</p>
+            )}
+          </div>
+        ) : null}
         <div
           ref={listWrapRef}
           className="hww-scroll flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto"
