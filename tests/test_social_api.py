@@ -402,6 +402,8 @@ def _broadcast_preview_digest(headers: dict[str, str] | None = None) -> str:
 
 _PROTECTED_ROUTES = (
     "/api/social/providers",
+    "/api/social/persona/current",
+    "/api/social/personas/ham-canonical",
     "/api/social/providers/telegram/status",
     "/api/social/providers/telegram/capabilities",
     "/api/social/providers/telegram/setup/checklist",
@@ -883,6 +885,53 @@ def test_td_has_no_preview_or_apply_routes(
         assert client.post(f"/api/social/providers/{provider}/messages/preview", json={}).status_code == 404
         assert client.post(f"/api/social/providers/{provider}/messages/apply", json={}).status_code == 404
         assert client.post(f"/api/social/providers/{provider}/reactive/reply/apply", json={}).status_code == 404
+
+
+def test_social_persona_api_returns_read_only_bounded_dto(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    res = client.get("/api/social/persona/current")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["persona_id"] == "ham-canonical"
+    assert body["version"] == 1
+    assert body["display_name"] == "Ham"
+    assert body["persona_digest"]
+    assert len(body["persona_digest"]) == 64
+    assert body["read_only"] is True
+    assert body["mutation_attempted"] is False
+    assert {"x", "telegram", "discord"} <= set(body["platform_adaptations"])
+    assert body["prohibited_content"]
+    assert body["safety_boundaries"]
+    assert body["example_replies"]
+    assert body["example_announcements"]
+    assert body["refusal_examples"]
+    assert len(res.text) < 20_000
+
+
+def test_social_persona_api_alias_matches_current(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    current = client.get("/api/social/persona/current").json()
+    canonical = client.get("/api/social/personas/ham-canonical").json()
+    assert canonical == current
+
+
+def test_social_persona_api_does_not_expose_secret_shaped_values(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    text = client.get("/api/social/persona/current").text
+    for value in ("api_key", "access_token", "Bearer ", "sk-", ".env", _BEARER, _XAI_KEY):
+        assert value not in text
 
 
 # ---------------------------------------------------------------------------

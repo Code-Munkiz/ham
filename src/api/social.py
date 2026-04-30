@@ -48,6 +48,7 @@ from src.ham.ham_x.reactive_governor import (
 )
 from src.ham.ham_x.reactive_policy import evaluate_reactive_policy
 from src.ham.ham_x.redaction import redact
+from src.ham.social_persona import load_social_persona, persona_digest
 
 router = APIRouter(prefix="/api/social", tags=["social"])
 
@@ -477,6 +478,27 @@ class SocialMessagingSetupChecklistResponse(BaseModel):
     mutation_attempted: bool = False
 
 
+class SocialPersonaResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    persona_id: str
+    version: int
+    display_name: str
+    short_bio: str
+    mission: str
+    values: list[str]
+    tone_rules: list[str]
+    platform_adaptations: dict[str, dict[str, Any]]
+    prohibited_content: list[str]
+    safety_boundaries: list[str]
+    example_replies: list[dict[str, str]]
+    example_announcements: list[str]
+    refusal_examples: list[dict[str, str]]
+    persona_digest: str
+    read_only: bool = True
+    mutation_attempted: bool = False
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -522,6 +544,64 @@ def _safe_payload(value: Any) -> dict[str, Any]:
             dumped = {}
         return _safe_dict(dumped)
     return _safe_dict(value)
+
+
+def _bounded_string_list(items: list[Any], *, max_items: int = 12, max_chars: int = 240) -> list[str]:
+    out: list[str] = []
+    for item in items[:max_items]:
+        text = str(redact(str(item or "").strip()))
+        if text:
+            out.append(text[:max_chars])
+    return out
+
+
+def _bounded_examples(items: list[Any], *, max_items: int = 3) -> list[dict[str, str]]:
+    out: list[dict[str, str]] = []
+    for item in items[:max_items]:
+        data = item.model_dump(mode="json") if hasattr(item, "model_dump") else item
+        if not isinstance(data, dict):
+            continue
+        raw_input = str(data.get("input") or "").strip()
+        raw_output = str(data.get("output") or "").strip()
+        if raw_input and raw_output:
+            out.append(
+                {
+                    "input": str(redact(raw_input))[:300],
+                    "output": str(redact(raw_output))[:500],
+                }
+            )
+    return out
+
+
+def _social_persona_response() -> SocialPersonaResponse:
+    persona = load_social_persona("ham-canonical", 1)
+    adaptations: dict[str, dict[str, Any]] = {}
+    for key, adaptation in persona.platform_adaptations.items():
+        data = adaptation.model_dump(mode="json")
+        adaptations[key] = _safe_dict(
+            {
+                "label": data.get("label"),
+                "style": data.get("style"),
+                "max_chars": data.get("max_chars"),
+                "guidance": _bounded_string_list(list(data.get("guidance") or []), max_items=8),
+            }
+        )
+    return SocialPersonaResponse(
+        persona_id=persona.persona_id,
+        version=persona.version,
+        display_name=persona.display_name,
+        short_bio=str(redact(persona.short_bio))[:500],
+        mission=str(redact(persona.mission))[:700],
+        values=_bounded_string_list(persona.values),
+        tone_rules=_bounded_string_list(persona.tone_rules),
+        platform_adaptations=adaptations,
+        prohibited_content=_bounded_string_list(persona.prohibited_content),
+        safety_boundaries=_bounded_string_list(persona.safety_boundaries),
+        example_replies=_bounded_examples(persona.example_replies),
+        example_announcements=_bounded_string_list(persona.example_announcements, max_items=3, max_chars=500),
+        refusal_examples=_bounded_examples(persona.refusal_examples),
+        persona_digest=persona_digest(persona),
+    )
 
 
 def _safe_id(value: str) -> str:
@@ -1781,6 +1861,20 @@ def list_social_providers(
     return SocialProvidersResponse(providers=providers)
 
 
+@router.get("/persona/current", response_model=SocialPersonaResponse)
+def current_social_persona(
+    _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
+) -> SocialPersonaResponse:
+    return _social_persona_response()
+
+
+@router.get("/personas/ham-canonical", response_model=SocialPersonaResponse)
+def ham_canonical_social_persona(
+    _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
+) -> SocialPersonaResponse:
+    return _social_persona_response()
+
+
 @router.get("/providers/telegram/status", response_model=SocialMessagingProviderStatusResponse)
 def telegram_provider_status(
     _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
@@ -2475,6 +2569,7 @@ __all__ = [
     "TelegramCapabilitiesResponse",
     "DiscordCapabilitiesResponse",
     "SocialMessagingSetupChecklistResponse",
+    "SocialPersonaResponse",
     "XJournalSummaryResponse",
     "XAuditSummaryResponse",
     "SocialPreviewRequest",

@@ -8,6 +8,7 @@ import {
   type SocialBroadcastApplyResponse,
   type SocialMessagingProviderStatus,
   type SocialMessagingSetupChecklist,
+  type SocialPersona,
   type SocialReactiveBatchApplyResponse,
   type SocialReactiveReplyApplyResponse,
   type SocialPreviewKind,
@@ -54,6 +55,8 @@ function BoolRow({ label, value }: { label: string; value: boolean }) {
     </div>
   );
 }
+
+type SocialSelection = "persona" | "x" | "telegram" | "discord";
 
 function ProviderCard({
   provider,
@@ -287,6 +290,130 @@ function MessagingProviderPanel({
   );
 }
 
+function TextList({ items, tone = "muted" }: { items: string[]; tone?: "muted" | "warn" }) {
+  const cls = tone === "warn" ? "text-amber-100/78" : "text-white/62";
+  return (
+    <div className="space-y-2">
+      {items.map((item) => (
+        <div key={item} className={cn("rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm", cls)}>
+          {item}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ExampleList({ examples }: { examples: { input?: string; output: string }[] }) {
+  return (
+    <div className="space-y-2">
+      {examples.map((example, idx) => (
+        <div key={`${example.output}-${idx}`} className="rounded-lg border border-white/10 bg-black/20 p-3 text-sm">
+          {example.input ? <div className="text-xs font-semibold uppercase tracking-[0.12em] text-white/38">Input: {example.input}</div> : null}
+          <div className="mt-1 leading-relaxed text-white/75">{example.output}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PersonaPanel({ persona }: { persona: SocialPersona }) {
+  const adaptations = Object.entries(persona.platform_adaptations).filter(([key]) => ["x", "telegram", "discord"].includes(key));
+  return (
+    <div className="grid gap-4 xl:grid-cols-2">
+      <Panel title="Canonical HAM persona">
+        <div className="space-y-4">
+          <div className="flex flex-wrap gap-2">
+            <StatusPill label={persona.display_name} tone="ok" />
+            <StatusPill label={`${persona.persona_id} v${persona.version}`} tone="muted" />
+            <StatusPill label={persona.read_only ? "Read-only" : "Editable"} tone={persona.read_only ? "ok" : "warn"} />
+          </div>
+          <p className="text-sm leading-relaxed text-white/65">{persona.short_bio}</p>
+          <KeyValueGrid
+            rows={[
+              { label: "Mission", value: persona.mission },
+              { label: "Digest", value: <span className="font-mono text-xs">{persona.persona_digest.slice(0, 16)}...</span> },
+            ]}
+          />
+        </div>
+      </Panel>
+
+      <Panel title="Digest protection">
+        <div className="space-y-2 text-sm text-white/62">
+          <p className="flex gap-2">
+            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" />
+            Read-only now. Future Social previews and apply routes should include this persona digest.
+          </p>
+          <p className="flex gap-2">
+            <Circle className="mt-1 h-3 w-3 shrink-0 text-white/40" />
+            Future apply should block if the persona changes after preview generation.
+          </p>
+        </div>
+      </Panel>
+
+      <Panel title="Voice rules">
+        <div className="space-y-4">
+          <div>
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-white/45">Values</h3>
+            <TextList items={persona.values} />
+          </div>
+          <div>
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-white/45">Tone</h3>
+            <TextList items={persona.tone_rules} />
+          </div>
+        </div>
+      </Panel>
+
+      <Panel title="Platform adaptations">
+        <div className="space-y-3">
+          {adaptations.map(([key, adaptation]) => (
+            <div key={key} className="rounded-xl border border-white/10 bg-black/20 p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <StatusPill label={adaptation.label || titleCase(key)} tone="ok" />
+                {adaptation.max_chars ? <StatusPill label={`${adaptation.max_chars} chars`} tone="muted" /> : null}
+              </div>
+              <p className="mt-2 text-sm leading-relaxed text-white/65">{adaptation.style}</p>
+              {adaptation.guidance.length ? (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {adaptation.guidance.map((item) => (
+                    <StatusPill key={item} label={item} tone="muted" />
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      </Panel>
+
+      <Panel title="Preview voice examples">
+        <div className="space-y-4">
+          <div>
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-white/45">Replies</h3>
+            <ExampleList examples={persona.example_replies} />
+          </div>
+          <div>
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-white/45">Announcements</h3>
+            <ExampleList examples={persona.example_announcements.map((output) => ({ output }))} />
+          </div>
+        </div>
+      </Panel>
+
+      <Panel title="What Ham will not say">
+        <div className="space-y-4">
+          <TextList items={persona.prohibited_content} tone="warn" />
+          <div>
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-white/45">Refusal examples</h3>
+            <ExampleList examples={persona.refusal_examples} />
+          </div>
+        </div>
+      </Panel>
+
+      <Panel title="Safety boundaries">
+        <TextList items={persona.safety_boundaries} />
+      </Panel>
+    </div>
+  );
+}
+
 function ChecklistGroup({
   title,
   rows,
@@ -362,7 +489,7 @@ function PreviewResultCard({ preview }: { preview: SocialPreviewResponse }) {
 
 export function WorkspaceSocialScreen() {
   const [snapshot, setSnapshot] = React.useState<SocialSnapshot | null>(null);
-  const [selectedProvider, setSelectedProvider] = React.useState<"x" | "telegram" | "discord">("x");
+  const [selectedProvider, setSelectedProvider] = React.useState<SocialSelection>("persona");
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [previewBusy, setPreviewBusy] = React.useState<SocialPreviewKind | null>(null);
@@ -538,8 +665,8 @@ export function WorkspaceSocialScreen() {
       />
 
       <WorkspaceSurfaceStateCard
-        title="Read-only surface"
-        description="Telegram and Discord panels call read-only GET endpoints only. They do not send messages, run previews, start bots, or expose credential inputs."
+        title="Persona-first Social"
+        description="The Persona section is read-only and provider panels keep Telegram/Discord readiness separate from X live controls. No persona editing or credential input is exposed."
         tone="neutral"
       />
 
@@ -562,6 +689,26 @@ export function WorkspaceSocialScreen() {
       {!loading && snapshot ? (
         <>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            <button
+              type="button"
+              onClick={() => setSelectedProvider("persona")}
+              className={cn(
+                "rounded-2xl border bg-black/25 p-4 text-left shadow-sm transition hover:border-white/25",
+                selectedProvider === "persona" ? "border-emerald-300/35" : "border-white/10",
+              )}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-base font-semibold text-white/92">Persona</div>
+                  <div className="mt-1 text-xs text-white/45">Canonical HAM voice and platform adaptations.</div>
+                </div>
+                <StatusPill label="Read Only" tone="ok" />
+              </div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <StatusPill label={snapshot.persona.display_name} tone="ok" />
+                <StatusPill label={`v${snapshot.persona.version}`} tone="muted" />
+              </div>
+            </button>
             {snapshot.providers.map((provider) => (
               <ProviderCard
                 key={provider.id}
@@ -575,6 +722,8 @@ export function WorkspaceSocialScreen() {
               />
             ))}
           </div>
+
+          {selectedProvider === "persona" ? <PersonaPanel persona={snapshot.persona} /> : null}
 
           {selectedMessaging ? (
             <MessagingProviderPanel

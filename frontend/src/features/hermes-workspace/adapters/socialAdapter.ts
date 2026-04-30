@@ -222,6 +222,33 @@ export type SocialMessagingSetupChecklist = {
   mutation_attempted: boolean;
 };
 
+export type SocialPersona = {
+  persona_id: string;
+  version: number;
+  display_name: string;
+  short_bio: string;
+  mission: string;
+  values: string[];
+  tone_rules: string[];
+  platform_adaptations: Record<
+    string,
+    {
+      label: string;
+      style: string;
+      max_chars?: number | null;
+      guidance: string[];
+    }
+  >;
+  prohibited_content: string[];
+  safety_boundaries: string[];
+  example_replies: { input: string; output: string }[];
+  example_announcements: string[];
+  refusal_examples: { input: string; output: string }[];
+  persona_digest: string;
+  read_only: boolean;
+  mutation_attempted: boolean;
+};
+
 export type SocialPreviewKind = "reactive_inbox" | "reactive_batch_dry_run" | "broadcast_preflight";
 
 export type SocialPreviewResponse = {
@@ -309,6 +336,7 @@ export type SocialSnapshot = {
   discordStatus: SocialMessagingProviderStatus;
   discordCapabilities: DiscordCapabilities;
   discordSetup: SocialMessagingSetupChecklist;
+  persona: SocialPersona;
 };
 
 async function getJson<T>(path: string): Promise<T> {
@@ -351,6 +379,7 @@ export const socialAdapter = {
         discordStatus,
         discordCapabilities,
         discordSetup,
+        persona,
       ] = await Promise.all([
         getJson<{ providers?: SocialProvider[] }>(`${BASE}/providers`),
         getJson<XProviderStatus>(`${BASE}/providers/x/status`),
@@ -365,6 +394,7 @@ export const socialAdapter = {
         getJson<SocialMessagingProviderStatus>(`${BASE}/providers/discord/status`),
         getJson<DiscordCapabilities>(`${BASE}/providers/discord/capabilities`),
         getJson<SocialMessagingSetupChecklist>(`${BASE}/providers/discord/setup/checklist`),
+        getJson<SocialPersona>(`${BASE}/persona/current`),
       ]);
       return {
         snapshot: {
@@ -381,6 +411,7 @@ export const socialAdapter = {
           discordStatus,
           discordCapabilities,
           discordSetup,
+          persona,
         },
         bridge: { status: "ready" },
       };
