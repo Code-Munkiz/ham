@@ -125,6 +125,28 @@ function CapabilityRows({ capabilities }: { capabilities: XCapabilities }) {
   );
 }
 
+function ChecklistGroup({
+  title,
+  rows,
+}: {
+  title: string;
+  rows: { id: string; label: string; ok: boolean }[];
+}) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+      <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-white/45">{title}</h3>
+      <div className="mt-3 space-y-2">
+        {rows.map((row) => (
+          <div key={row.id} className="flex items-center justify-between gap-3 text-sm">
+            <span className="text-white/68">{row.label}</span>
+            <StatusPill label={row.ok ? "Ready" : "Missing"} tone={row.ok ? "ok" : "warn"} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function LoadingCards() {
   return (
     <div className="grid gap-3 md:grid-cols-3">
@@ -239,6 +261,7 @@ export function WorkspaceSocialScreen() {
 
   const x = snapshot?.xStatus;
   const caps = snapshot?.xCapabilities;
+  const setup = snapshot?.xSetupSummary;
   const inboxPreview = previews.reactive_inbox;
   const batchPreview = previews.reactive_batch_dry_run;
   const broadcastPreview = previews.broadcast_preflight;
@@ -423,6 +446,98 @@ export function WorkspaceSocialScreen() {
               {Object.entries(previews).map(([kind, preview]) =>
                 preview ? <PreviewResultCard key={kind} preview={preview} /> : null,
               )}
+
+              {setup ? (
+                <Panel title="Setup and deployment">
+                  <div className="space-y-4">
+                    <div className="flex flex-wrap gap-2">
+                      <StatusPill label={setup.provider_configured ? "Provider configured" : "Provider limited"} tone={setup.provider_configured ? "ok" : "warn"} />
+                      <StatusPill label={titleCase(setup.overall_readiness)} tone={statusTone(setup.overall_readiness)} />
+                      <StatusPill label={setup.mutation_attempted ? "Mutation attempted" : "Read-only setup"} tone={setup.mutation_attempted ? "danger" : "ok"} />
+                    </div>
+                    <ChecklistGroup
+                      title="Required connections"
+                      rows={[
+                        { id: "x_read", label: "X read credential present", ok: Boolean(setup.required_connections.x_read_credential_present) },
+                        { id: "x_write", label: "X write credential present", ok: Boolean(setup.required_connections.x_write_credential_present) },
+                        { id: "xai", label: "xAI key present", ok: Boolean(setup.required_connections.xai_key_present) },
+                        { id: "reactive_handle", label: "Reactive handle configured", ok: Boolean(setup.required_connections.reactive_handle_configured) },
+                        { id: "operator", label: "Operator token ready", ok: Boolean(setup.required_connections.operator_token_ready) },
+                        { id: "emergency", label: "Emergency stop disabled", ok: Boolean(setup.required_connections.emergency_stop_disabled) },
+                      ]}
+                    />
+                    <ChecklistGroup
+                      title="Deployment checklist"
+                      rows={[
+                        { id: "dry_run", label: "Ready for dry-run", ok: setup.ready_for_dry_run },
+                        { id: "live_reply", label: "Ready for confirmed live reply", ok: setup.ready_for_confirmed_live_reply },
+                        { id: "batch", label: "Ready for reactive batch", ok: setup.ready_for_reactive_batch },
+                        { id: "broadcast", label: "Ready for broadcast", ok: setup.ready_for_broadcast },
+                      ]}
+                    />
+                    {setup.missing_requirement_ids.length ? (
+                      <div>
+                        <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-white/45">Missing requirements</h3>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {setup.missing_requirement_ids.map((id) => (
+                            <StatusPill key={id} label={titleCase(id)} tone="warn" />
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                    <KeyValueGrid
+                      rows={Object.entries(setup.safe_identifiers).map(([key, value]) => ({
+                        label: titleCase(key),
+                        value: value || "Not set",
+                      }))}
+                    />
+                  </div>
+                </Panel>
+              ) : null}
+
+              {setup ? (
+                <Panel title="Lane readiness">
+                  <div className="space-y-4">
+                    {Object.entries(setup.lane_readiness).map(([lane, data]) => (
+                      <div key={lane} className="rounded-xl border border-white/10 bg-black/20 p-3">
+                        <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-white/45">{titleCase(lane)}</h3>
+                        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                          {Object.entries(data)
+                            .filter(([, value]) => typeof value === "boolean")
+                            .map(([key, value]) => (
+                              <BoolRow key={key} label={titleCase(key)} value={Boolean(value)} />
+                            ))}
+                        </div>
+                        {Array.isArray(data.missing) && data.missing.length ? (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {(data.missing as string[]).map((item) => (
+                              <StatusPill key={item} label={titleCase(item)} tone="warn" />
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                </Panel>
+              ) : null}
+
+              {setup ? (
+                <Panel title="Agent-led setup guidance">
+                  <div className="space-y-3 text-sm text-white/62">
+                    <p>
+                      Ask Ham to help configure this is a placeholder for a future guided setup flow. This panel is read-only:
+                      no secrets, no credential entry, and no configuration mutation.
+                    </p>
+                    <div className="space-y-2">
+                      {setup.recommended_next_steps.map((step) => (
+                        <div key={step} className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                          {step}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </Panel>
+              ) : null}
 
               <Panel title="Confirmed live reply">
                 <div className="space-y-3">

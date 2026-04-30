@@ -95,6 +95,25 @@ export type XSetupChecklist = {
   read_only: boolean;
 };
 
+export type XSetupSummary = {
+  provider_id: "x";
+  provider_configured: boolean;
+  overall_readiness: "ready" | "limited" | "blocked" | "setup_required";
+  missing_requirement_ids: string[];
+  ready_for_dry_run: boolean;
+  ready_for_confirmed_live_reply: boolean;
+  ready_for_reactive_batch: boolean;
+  ready_for_broadcast: boolean;
+  required_connections: Record<string, boolean>;
+  lane_readiness: Record<string, Record<string, unknown>>;
+  safe_identifiers: Record<string, string>;
+  caps_cooldowns: Record<string, number>;
+  feature_flags: Record<string, boolean>;
+  recommended_next_steps: string[];
+  read_only: boolean;
+  mutation_attempted: boolean;
+};
+
 export type XJournalSummary = {
   provider_id: "x";
   journal_path: string;
@@ -208,6 +227,7 @@ export type SocialSnapshot = {
   xStatus: XProviderStatus;
   xCapabilities: XCapabilities;
   xSetup: XSetupChecklist;
+  xSetupSummary: XSetupSummary;
   xJournal: XJournalSummary;
   xAudit: XAuditSummary;
 };
@@ -238,11 +258,12 @@ export const socialAdapter = {
 
   async loadSnapshot(): Promise<{ snapshot: SocialSnapshot | null; bridge: SocialBridge; error?: string }> {
     try {
-      const [providers, xStatus, xCapabilities, xSetup, xJournal, xAudit] = await Promise.all([
+      const [providers, xStatus, xCapabilities, xSetup, xSetupSummary, xJournal, xAudit] = await Promise.all([
         getJson<{ providers?: SocialProvider[] }>(`${BASE}/providers`),
         getJson<XProviderStatus>(`${BASE}/providers/x/status`),
         getJson<XCapabilities>(`${BASE}/providers/x/capabilities`),
         getJson<XSetupChecklist>(`${BASE}/providers/x/setup/checklist`),
+        getJson<XSetupSummary>(`${BASE}/providers/x/setup/summary`),
         getJson<XJournalSummary>(`${BASE}/providers/x/journal/summary`),
         getJson<XAuditSummary>(`${BASE}/providers/x/audit/summary`),
       ]);
@@ -252,6 +273,7 @@ export const socialAdapter = {
           xStatus,
           xCapabilities,
           xSetup,
+          xSetupSummary,
           xJournal,
           xAudit,
         },

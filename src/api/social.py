@@ -371,6 +371,27 @@ class SocialBroadcastApplyResponse(BaseModel):
     result: dict[str, Any] = Field(default_factory=dict)
 
 
+class XSetupSummaryResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    provider_id: Literal["x"] = "x"
+    provider_configured: bool
+    overall_readiness: OverallReadiness
+    missing_requirement_ids: list[str] = Field(default_factory=list)
+    ready_for_dry_run: bool
+    ready_for_confirmed_live_reply: bool
+    ready_for_reactive_batch: bool
+    ready_for_broadcast: bool
+    required_connections: dict[str, bool]
+    lane_readiness: dict[str, dict[str, Any]]
+    safe_identifiers: dict[str, str]
+    caps_cooldowns: dict[str, int]
+    feature_flags: dict[str, bool]
+    recommended_next_steps: list[str] = Field(default_factory=list)
+    read_only: bool = True
+    mutation_attempted: bool = False
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -416,6 +437,10 @@ def _safe_payload(value: Any) -> dict[str, Any]:
             dumped = {}
         return _safe_dict(dumped)
     return _safe_dict(value)
+
+
+def _safe_id(value: str) -> str:
+    return str(redact((value or "").strip()))[:128]
 
 
 def _dedupe(items: list[str]) -> list[str]:
@@ -1282,6 +1307,50 @@ def _broadcast_proposal_digest(result: dict[str, Any], config: HamXConfig) -> st
     return _proposal_digest("broadcast_preflight", payload) if payload else None
 
 
+def _setup_missing_requirements(cfg: HamXConfig) -> list[str]:
+    missing: list[str] = []
+    if not _x_read_credential_present(cfg):
+        missing.append("x_read_credential")
+    if not _x_write_credential_present(cfg):
+        missing.append("x_write_credential")
+    if not _xai_key_present(cfg):
+        missing.append("xai_key")
+    if not _reactive_handle_configured(cfg):
+        missing.append("reactive_handle")
+    if not _social_live_token_enabled():
+        missing.append("social_live_apply_token")
+    if cfg.emergency_stop:
+        missing.append("emergency_stop_disabled")
+    if not cfg.enable_goham_reactive:
+        missing.append("reactive_enabled")
+    if not cfg.enable_goham_reactive_batch:
+        missing.append("reactive_batch_enabled")
+    if not cfg.enable_goham_controller:
+        missing.append("goham_controller_enabled")
+    if not cfg.enable_goham_live_controller:
+        missing.append("goham_live_controller_enabled")
+    return _dedupe(missing)
+
+
+def _setup_next_steps(cfg: HamXConfig, missing: list[str]) -> list[str]:
+    steps: list[str] = []
+    if "x_read_credential" in missing:
+        steps.append("Configure the X Bearer token on the API host to enable read-only discovery.")
+    if "x_write_credential" in missing:
+        steps.append("Configure X OAuth write credentials on the API host before confirmed live controls can run.")
+    if "xai_key" in missing:
+        steps.append("Configure the xAI key on the API host to enable model-backed broadcast dry-runs.")
+    if "reactive_handle" in missing:
+        steps.append("Set a reactive handle or inbox query so X inbox discovery can find inbound items.")
+    if "social_live_apply_token" in missing:
+        steps.append("Set HAM_SOCIAL_LIVE_APPLY_TOKEN on the API host to enable confirmed live controls.")
+    if cfg.emergency_stop:
+        steps.append("Emergency stop is enabled; live controls will remain blocked until it is disabled server-side.")
+    if not steps:
+        steps.append("Readiness checks look healthy. Use previews before any confirmed live action.")
+    return steps
+
+
 def _preflight_decision(request: SimpleNamespace, config: HamXConfig) -> AutonomyDecisionResult:
     return AutonomyDecisionResult(
         decision="auto_approve",
@@ -1532,6 +1601,98 @@ def x_setup_checklist(
         "ham_x_enable_live_execution": bool(cfg.enable_live_execution),
     }
     return XSetupChecklistResponse(items=items, feature_flags=feature_flags)
+
+
+@router.get("/providers/x/setup/summary", response_model=XSetupSummaryResponse)
+def x_setup_summary(
+    _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
+) -> XSetupSummaryResponse:
+    cfg = load_ham_x_config()
+    readiness, _readiness_reasons = _overall_readiness(cfg)
+    missing = _setup_missing_requirements(cfg)
+    connections = {
+        "x_read_credential_present": _x_read_credential_present(cfg),
+        "x_write_credential_present": _x_write_credential_present(cfg),
+        "xai_key_present": _xai_key_present(cfg),
+        "reactive_handle_configured": _reactive_handle_configured(cfg),
+        "operator_token_ready": _social_live_token_enabled(),
+        "emergency_stop_disabled": not cfg.emergency_stop,
+    }
+    lane_readiness = {
+        "broadcast": {
+            "dry_run_available": _broadcast_dry_run_available(cfg),
+            "live_configured": _broadcast_live_configured(cfg),
+            "confirmed_live_available": _broadcast_apply_available(cfg),
+            "missing": [item for item in missing if item in {"x_write_credential", "social_live_apply_token", "goham_controller_enabled", "goham_live_controller_enabled", "emergency_stop_disabled"}],
+        },
+        "reactive": {
+            "inbox_discovery_available": _reactive_inbox_discovery_available(cfg),
+            "dry_run_available": bool(cfg.enable_goham_reactive and cfg.goham_reactive_dry_run),
+            "reply_apply_available": _reply_apply_available(cfg),
+            "batch_apply_available": _batch_apply_available(cfg),
+            "missing": [item for item in missing if item in {"x_read_credential", "x_write_credential", "reactive_handle", "reactive_enabled", "reactive_batch_enabled", "social_live_apply_token", "emergency_stop_disabled"}],
+        },
+        "preview": {
+            "status_refresh_available": True,
+            "inbox_preview_available": _reactive_inbox_discovery_available(cfg),
+            "batch_dry_run_available": bool(cfg.enable_goham_reactive and cfg.enable_goham_reactive_batch),
+            "broadcast_preflight_available": _broadcast_dry_run_available(cfg),
+        },
+        "confirmed_live": {
+            "live_reply_available": _reply_apply_available(cfg),
+            "reactive_batch_available": _batch_apply_available(cfg),
+            "broadcast_available": _broadcast_apply_available(cfg),
+        },
+    }
+    safe_identifiers = {
+        "tenant_id": _safe_id(cfg.tenant_id),
+        "agent_id": _safe_id(cfg.agent_id),
+        "campaign_id": _safe_id(cfg.campaign_id),
+        "account_id": _safe_id(cfg.account_id),
+        "profile_id": _safe_id(cfg.profile_id),
+        "policy_profile_id": _safe_id(cfg.policy_profile_id),
+        "brand_voice_id": _safe_id(cfg.brand_voice_id),
+    }
+    caps = {
+        "broadcast_daily_cap": int(cfg.goham_autonomous_daily_cap),
+        "broadcast_per_run_cap": int(cfg.goham_autonomous_per_run_cap),
+        "broadcast_min_spacing_minutes": int(cfg.goham_min_spacing_minutes),
+        "reactive_max_replies_per_15m": int(cfg.goham_reactive_max_replies_per_15m),
+        "reactive_max_replies_per_hour": int(cfg.goham_reactive_max_replies_per_hour),
+        "reactive_max_replies_per_user_per_day": int(cfg.goham_reactive_max_replies_per_user_per_day),
+        "reactive_max_replies_per_thread_per_day": int(cfg.goham_reactive_max_replies_per_thread_per_day),
+        "reactive_min_seconds_between_replies": int(cfg.goham_reactive_min_seconds_between_replies),
+        "reactive_batch_max_replies_per_run": int(cfg.goham_reactive_batch_max_replies_per_run),
+    }
+    flags = {
+        "ham_x_dry_run": bool(cfg.dry_run),
+        "ham_x_emergency_stop": bool(cfg.emergency_stop),
+        "ham_x_autonomy_enabled": bool(cfg.autonomy_enabled),
+        "ham_x_enable_live_execution": bool(cfg.enable_live_execution),
+        "ham_x_enable_live_read_model_dry_run": bool(cfg.enable_live_read_model_dry_run),
+        "ham_x_enable_goham_execution": bool(cfg.enable_goham_execution),
+        "ham_x_enable_goham_controller": bool(cfg.enable_goham_controller),
+        "ham_x_enable_goham_live_controller": bool(cfg.enable_goham_live_controller),
+        "ham_x_enable_goham_reactive": bool(cfg.enable_goham_reactive),
+        "ham_x_enable_reactive_inbox_discovery": bool(cfg.enable_reactive_inbox_discovery),
+        "ham_x_enable_goham_reactive_batch": bool(cfg.enable_goham_reactive_batch),
+        "ham_x_goham_reactive_live_canary": bool(cfg.goham_reactive_live_canary),
+    }
+    return XSetupSummaryResponse(
+        provider_configured=_x_configured(cfg),
+        overall_readiness=readiness,
+        missing_requirement_ids=missing,
+        ready_for_dry_run=_broadcast_dry_run_available(cfg) or _reactive_inbox_discovery_available(cfg),
+        ready_for_confirmed_live_reply=_reply_apply_available(cfg),
+        ready_for_reactive_batch=_batch_apply_available(cfg),
+        ready_for_broadcast=_broadcast_apply_available(cfg),
+        required_connections=connections,
+        lane_readiness=lane_readiness,
+        safe_identifiers=safe_identifiers,
+        caps_cooldowns=caps,
+        feature_flags=flags,
+        recommended_next_steps=_setup_next_steps(cfg, missing),
+    )
 
 
 @router.get("/providers/x/journal/summary", response_model=XJournalSummaryResponse)
@@ -1892,6 +2053,7 @@ __all__ = [
     "XProviderStatusResponse",
     "XCapabilitiesResponse",
     "XSetupChecklistResponse",
+    "XSetupSummaryResponse",
     "XJournalSummaryResponse",
     "XAuditSummaryResponse",
     "SocialPreviewRequest",

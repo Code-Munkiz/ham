@@ -374,6 +374,7 @@ _PROTECTED_ROUTES = (
     "/api/social/providers/x/status",
     "/api/social/providers/x/capabilities",
     "/api/social/providers/x/setup/checklist",
+    "/api/social/providers/x/setup/summary",
     "/api/social/providers/x/journal/summary",
     "/api/social/providers/x/audit/summary",
 )
@@ -702,6 +703,76 @@ def test_x_write_credential_requires_all_four_fields(
     body = client.get("/api/social/providers/x/setup/checklist").json()
     item_ids = {item["id"]: item for item in body["items"]}
     assert item_ids["x_write_credential"]["ok"] is True
+
+
+def test_setup_summary_returns_booleans_safe_ids_and_next_steps(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _set_x_creds(monkeypatch)
+    monkeypatch.setenv("HAM_SOCIAL_LIVE_APPLY_TOKEN", _SOCIAL_TOKEN)
+    monkeypatch.setenv("HAM_X_REACTIVE_HANDLE", "HamOfficial")
+    body = client.get("/api/social/providers/x/setup/summary").json()
+    assert body["provider_id"] == "x"
+    assert body["read_only"] is True
+    assert body["mutation_attempted"] is False
+    assert body["provider_configured"] is True
+    assert isinstance(body["ready_for_dry_run"], bool)
+    assert isinstance(body["ready_for_confirmed_live_reply"], bool)
+    assert isinstance(body["ready_for_reactive_batch"], bool)
+    assert isinstance(body["ready_for_broadcast"], bool)
+    for value in body["required_connections"].values():
+        assert isinstance(value, bool)
+    for value in body["feature_flags"].values():
+        assert isinstance(value, bool)
+    assert body["safe_identifiers"]["campaign_id"]
+    assert body["recommended_next_steps"]
+
+
+def test_setup_summary_does_not_expose_raw_secret_values(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _set_x_creds(monkeypatch)
+    monkeypatch.setenv("HAM_SOCIAL_LIVE_APPLY_TOKEN", _SOCIAL_TOKEN)
+    monkeypatch.setenv("HAM_X_REACTIVE_HANDLE", "@SecretHandle1234")
+    monkeypatch.setenv("HAM_X_REACTIVE_INBOX_QUERY", "secret query test 9999")
+    text = client.get("/api/social/providers/x/setup/summary").text
+    for raw in (
+        _BEARER,
+        _API_KEY,
+        _API_SECRET,
+        _ACCESS_TOKEN,
+        _ACCESS_TOKEN_SECRET,
+        _XAI_KEY,
+        _SOCIAL_TOKEN,
+        "@SecretHandle1234",
+        "secret query test 9999",
+    ):
+        assert raw not in text
+
+
+def test_setup_summary_missing_requirements_and_emergency_stop(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _clear_x_creds(monkeypatch)
+    monkeypatch.setenv("HAM_X_EMERGENCY_STOP", "true")
+    body = client.get("/api/social/providers/x/setup/summary").json()
+    missing = set(body["missing_requirement_ids"])
+    assert "x_read_credential" in missing
+    assert "x_write_credential" in missing
+    assert "xai_key" in missing
+    assert "social_live_apply_token" in missing
+    assert "emergency_stop_disabled" in missing
+    assert body["overall_readiness"] == "blocked"
+    assert body["ready_for_broadcast"] is False
 
 
 # ---------------------------------------------------------------------------
