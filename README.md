@@ -37,3 +37,18 @@ Activate that venv when you run the API, or use `.venv/bin/python -m uvicorn ...
 - `src/memory_heist.py` — repo context, instructions, git, sessions
 - `src/llm_client.py` — LiteLLM / OpenRouter
 - `src/swarm_agency.py` — Hermes-supervised role context assembly (no CrewAI; orchestration is Hermes-led)
+
+## Documentation
+
+Recommended order: [VISION.md](VISION.md) (architecture), [AGENTS.md](AGENTS.md) (module index and deploy pointers), [SWARM.md](SWARM.md) (coding instructions for agents), [PRODUCT_DIRECTION.md](PRODUCT_DIRECTION.md) (product lens).
+
+| Topic | Doc |
+|-------|-----|
+| Gaps and roadmap | [GAPS.md](GAPS.md), [docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md](docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md) |
+| Context Engine hardening | [docs/HAM_HARDENING_REMEDIATION.md](docs/HAM_HARDENING_REMEDIATION.md) |
+| Chat / skills control plane | [docs/HAM_CHAT_CONTROL_PLANE.md](docs/HAM_CHAT_CONTROL_PLANE.md) |
+| Control plane runs (factual launch records) | [docs/CONTROL_PLANE_RUN.md](docs/CONTROL_PLANE_RUN.md) |
+| Deploy (Vercel + Cloud Run) | [docs/DEPLOY_HANDOFF.md](docs/DEPLOY_HANDOFF.md), [docs/DEPLOY_CLOUD_RUN.md](docs/DEPLOY_CLOUD_RUN.md) |
+| Dashboard chat gateway | [docs/HERMES_GATEWAY_CONTRACT.md](docs/HERMES_GATEWAY_CONTRACT.md) |
+| Cursor / IDE setup (rules, skills, subagents) | [CURSOR_SETUP_HANDOFF.md](CURSOR_SETUP_HANDOFF.md) |
+| Cloud workspace quick run | [.cursor/skills/cloud-agent-starter/SKILL.md](.cursor/skills/cloud-agent-starter/SKILL.md) |
