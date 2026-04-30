@@ -8,6 +8,10 @@ In Ham, **mission-aware** means the **live mission feed** and **operator control
 - **Controls apply to the selected mission** — Sync-by-agent, cancel, and follow-up instructions are issued against the **currently selected** `mission_registry_id` (or the agent id derived from that row for sync). Changing the selection changes which feed and which mission receive the next action.
 - **HAM vs Cursor** — Ham stores the managed record and feed events on the server; Cursor remains **upstream** for actual agent execution. The feed is a **HAM-side** view (persisted events plus synthesis when no stored feed exists yet — see `src/api/cursor_managed_missions.py`).
 
+## Live feed transcript (Hermes Workspace)
+
+The **Live Cloud Agent missions** panel does not only show a raw event list: it builds a **read-only transcript** from the bounded feed `events` so operators see a single thread (assistant turns, optional thinking blocks, user follow-ups, tool/status lines) with streaming hints when the bridge supplies partial turns. Logic lives in `frontend/src/features/hermes-workspace/utils/missionFeedTranscript.ts` (`buildMissionFeedTranscript`, `applyTranscriptStreamingHints`); **`WorkspaceManagedMissionsLivePanel`** renders it and can surface a short digest for the Outputs tab via `onMissionTranscriptDigest`.
+
 ## API surface (scoped by mission)
 
 | Route | Role |
@@ -18,7 +22,7 @@ In Ham, **mission-aware** means the **live mission feed** and **operator control
 | `POST /api/cursor/managed/missions/{mission_registry_id}/messages` | Follow-up instruction for **that** mission (when supported). |
 | `POST /api/cursor/managed/missions/{mission_registry_id}/cancel` | Stop request for **that** mission (when supported). |
 
-Frontend wiring lives in `frontend/src/features/hermes-workspace/adapters/managedMissionsAdapter.ts` and **`WorkspaceManagedMissionsLivePanel`**.
+Frontend wiring lives in `frontend/src/features/hermes-workspace/adapters/managedMissionsAdapter.ts`, **`WorkspaceManagedMissionsLivePanel`**, and `frontend/src/features/hermes-workspace/utils/missionFeedTranscript.ts` (transcript merge from feed events).
 
 ## Backend smoke (follow-up events)
 
