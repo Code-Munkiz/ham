@@ -35,6 +35,7 @@ from src.ham.ham_x.config import HamXConfig, load_ham_x_config
 from src.ham.ham_x.execution_journal import ExecutionJournal
 from src.ham.ham_x.goham_ops import dry_preflight_goham_candidate, show_goham_status
 from src.ham.ham_x.goham_policy import GOHAM_EXECUTION_KIND
+from src.ham.ham_x.goham_reactive_batch import run_reactive_batch_once
 from src.ham.ham_x.goham_reactive_inbox import discover_reactive_inbox_once, state_from_journal
 from src.ham.ham_x.goham_reactive_live import run_reactive_live_once
 from src.ham.ham_x.inbound_client import ReactiveInboundItem
@@ -65,8 +66,9 @@ OverallReadiness = Literal["ready", "limited", "blocked", "setup_required"]
 PreviewStatus = Literal["completed", "blocked", "failed"]
 PreviewKind = Literal["reactive_inbox", "reactive_batch_dry_run", "broadcast_preflight"]
 SocialApplyStatus = Literal["blocked", "executed", "failed"]
-SocialApplyKind = Literal["reactive_reply"]
+SocialApplyKind = Literal["reactive_reply", "reactive_batch"]
 LIVE_REPLY_CONFIRMATION_PHRASE = "SEND ONE LIVE REPLY"
+LIVE_BATCH_CONFIRMATION_PHRASE = "SEND LIVE REACTIVE BATCH"
 
 
 # ---------------------------------------------------------------------------
@@ -184,6 +186,7 @@ class XCapabilitiesResponse(BaseModel):
     reactive_reply_canary_available: bool
     reactive_batch_available: bool
     reactive_reply_apply_available: bool = False
+    reactive_batch_apply_available: bool = False
     live_apply_available: bool = False
     read_only: bool = True
 
@@ -296,6 +299,37 @@ class SocialReactiveReplyApplyResponse(BaseModel):
     live_apply_available: bool = False
     provider_status_code: int | None = None
     provider_post_id: str | None = None
+    execution_kind: str = GOHAM_REACTIVE_EXECUTION_KIND
+    audit_ids: list[str] = Field(default_factory=list)
+    journal_path: str
+    audit_path: str
+    reasons: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    result: dict[str, Any] = Field(default_factory=dict)
+
+
+class SocialReactiveBatchApplyRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    proposal_digest: str | None = Field(default=None, min_length=64, max_length=64, pattern=r"^[a-f0-9]{64}$")
+    confirmation_phrase: str = Field(min_length=1, max_length=64)
+    client_request_id: str | None = Field(default=None, max_length=128)
+
+
+class SocialReactiveBatchApplyResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    provider_id: Literal["x"] = "x"
+    apply_kind: SocialApplyKind = "reactive_batch"
+    status: Literal["blocked", "completed", "stopped", "failed"]
+    execution_allowed: bool = False
+    mutation_attempted: bool = False
+    live_apply_available: bool = False
+    attempted_count: int = 0
+    executed_count: int = 0
+    failed_count: int = 0
+    blocked_count: int = 0
+    provider_post_ids: list[str] = Field(default_factory=list)
     execution_kind: str = GOHAM_REACTIVE_EXECUTION_KIND
     audit_ids: list[str] = Field(default_factory=list)
     journal_path: str
@@ -521,6 +555,27 @@ def _reactive_apply_reasons(cfg: HamXConfig) -> list[str]:
     return _dedupe(reasons)
 
 
+def _reactive_batch_apply_reasons(cfg: HamXConfig) -> list[str]:
+    reasons: list[str] = []
+    if not _social_live_token_enabled():
+        reasons.append("social_live_apply_token_missing")
+    if cfg.emergency_stop:
+        reasons.append("emergency_stop")
+    if not cfg.enable_goham_reactive:
+        reasons.append("reactive_disabled")
+    if not cfg.enable_goham_reactive_batch:
+        reasons.append("reactive_batch_disabled")
+    if cfg.goham_reactive_batch_dry_run:
+        reasons.append("reactive_batch_dry_run_enabled")
+    if not cfg.goham_reactive_block_links:
+        reasons.append("reactive_link_blocking_required")
+    if cfg.goham_reactive_batch_max_replies_per_run <= 0:
+        reasons.append("reactive_batch_max_replies_required")
+    if not _x_write_credential_present(cfg):
+        reasons.append("x_write_credential_missing")
+    return _dedupe(reasons)
+
+
 def _broadcast_lane_reasons(cfg: HamXConfig) -> list[str]:
     reasons: list[str] = []
     if cfg.emergency_stop:
@@ -603,8 +658,23 @@ def _force_preview_flags(payload: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def _apply_available(config: HamXConfig) -> bool:
+def _reply_apply_available(config: HamXConfig) -> bool:
     return bool(_social_live_token_enabled() and _reactive_reply_canary_available(config))
+
+
+def _batch_apply_available(config: HamXConfig) -> bool:
+    return bool(
+        _social_live_token_enabled()
+        and config.enable_goham_reactive
+        and config.enable_goham_reactive_batch
+        and not config.goham_reactive_batch_dry_run
+        and not config.emergency_stop
+        and _x_write_credential_present(config)
+    )
+
+
+def _apply_available(config: HamXConfig) -> bool:
+    return _reply_apply_available(config) or _batch_apply_available(config)
 
 
 def _blocked_apply_response(
@@ -617,6 +687,24 @@ def _blocked_apply_response(
     return SocialReactiveReplyApplyResponse(
         status="blocked",
         live_apply_available=_apply_available(config),
+        journal_path=_display_path(config.execution_journal_path),
+        audit_path=_display_path(config.audit_log_path),
+        reasons=_dedupe(reasons),
+        warnings=warnings or [],
+        result=_safe_dict(result or {}),
+    )
+
+
+def _blocked_batch_apply_response(
+    config: HamXConfig,
+    *,
+    reasons: list[str],
+    warnings: list[str] | None = None,
+    result: dict[str, Any] | None = None,
+) -> SocialReactiveBatchApplyResponse:
+    return SocialReactiveBatchApplyResponse(
+        status="blocked",
+        live_apply_available=_batch_apply_available(config),
         journal_path=_display_path(config.execution_journal_path),
         audit_path=_display_path(config.audit_log_path),
         reasons=_dedupe(reasons),
@@ -772,6 +860,78 @@ def _discover_for_reactive_apply(config: HamXConfig) -> Any:
     return discover_reactive_inbox_once(config=_preview_config(config))
 
 
+def _discover_batch_candidates(config: HamXConfig) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
+    discovery = discover_reactive_inbox_once(config=_preview_config(config))
+    candidates: list[dict[str, Any]] = []
+    for candidate in list(getattr(discovery, "candidates", []) or []):
+        if getattr(candidate, "status", "") not in {"eligible", "selected"}:
+            continue
+        inbound = getattr(candidate, "inbound", None)
+        if inbound is None:
+            continue
+        if hasattr(inbound, "model_dump"):
+            candidates.append(inbound.model_dump(mode="json"))
+        elif hasattr(inbound, "redacted_dump"):
+            candidates.append(inbound.redacted_dump())
+    if not candidates and getattr(discovery, "selected_inbound", None) is not None:
+        inbound = discovery.selected_inbound
+        if hasattr(inbound, "model_dump"):
+            candidates.append(inbound.model_dump(mode="json"))
+        elif hasattr(inbound, "redacted_dump"):
+            candidates.append(inbound.redacted_dump())
+    return candidates, _safe_payload(discovery)
+
+
+def _batch_proposal_payload(result: dict[str, Any], config: HamXConfig) -> dict[str, Any] | None:
+    items = list(result.get("items") or [])
+    dry_items = [item for item in items if isinstance(item, dict) and item.get("status") == "dry_run"]
+    if not dry_items:
+        return None
+    canonical_items: list[dict[str, Any]] = []
+    for item in dry_items[: config.goham_reactive_batch_max_replies_per_run]:
+        inbound = item.get("inbound") if isinstance(item.get("inbound"), dict) else {}
+        policy = item.get("policy_decision") if isinstance(item.get("policy_decision"), dict) else {}
+        governor = item.get("governor_decision") if isinstance(item.get("governor_decision"), dict) else {}
+        canonical_items.append(
+            _safe_dict(
+                {
+                    "inbound_id": inbound.get("inbound_id"),
+                    "reply_target_id": inbound.get("post_id") or inbound.get("in_reply_to_post_id"),
+                    "classification": policy.get("classification"),
+                    "reply_text": policy.get("reply_text"),
+                    "governor": {
+                        "allowed": governor.get("allowed"),
+                        "action_tier": governor.get("action_tier"),
+                        "reasons": governor.get("reasons"),
+                        "response_fingerprint": governor.get("response_fingerprint"),
+                    },
+                }
+            )
+        )
+    return _safe_dict(
+        {
+            "provider_id": "x",
+            "preview_kind": "reactive_batch",
+            "items": canonical_items,
+            "max_replies_per_run": int(config.goham_reactive_batch_max_replies_per_run),
+            "safety_gates": {
+                "emergency_stop": bool(config.emergency_stop),
+                "enable_goham_reactive": bool(config.enable_goham_reactive),
+                "enable_goham_reactive_batch": bool(config.enable_goham_reactive_batch),
+                "goham_reactive_block_links": bool(config.goham_reactive_block_links),
+                "goham_reactive_max_replies_per_15m": int(config.goham_reactive_max_replies_per_15m),
+                "goham_reactive_max_replies_per_hour": int(config.goham_reactive_max_replies_per_hour),
+                "goham_reactive_min_seconds_between_replies": int(config.goham_reactive_min_seconds_between_replies),
+            },
+        }
+    )
+
+
+def _batch_proposal_digest(result: dict[str, Any], config: HamXConfig) -> str | None:
+    payload = _batch_proposal_payload(result, config)
+    return _proposal_digest("reactive_batch", payload) if payload else None
+
+
 def _preview_config(config: HamXConfig) -> HamXConfig:
     """Force dry-run-oriented flags for preview evaluation only."""
     return replace(
@@ -820,7 +980,12 @@ def _reactive_batch_preview(
     journal, state = _reactive_preview_state(cfg)
     warnings: list[str] = []
     reasons: list[str] = []
-    candidates = body.candidates[: body.max_candidates or len(body.candidates) or 25]
+    discovered_payload: dict[str, Any] | None = None
+    if body.candidates:
+        candidates = body.candidates[: body.max_candidates or len(body.candidates) or 25]
+    else:
+        candidates, discovered_payload = _discover_batch_candidates(cfg)
+        candidates = candidates[: body.max_candidates or len(candidates) or 25]
     if not candidates:
         warnings.append("no_candidates_provided")
     if not cfg.enable_goham_reactive:
@@ -898,6 +1063,8 @@ def _reactive_batch_preview(
         "audit_path": _display_path(cfg.audit_log_path),
         "diagnostic": "Reactive batch preview is dry-run-only and does not call providers.",
     }
+    if discovered_payload is not None:
+        result["discovery"] = discovered_payload
     status_out: PreviewStatus = "blocked" if reasons else "completed"
     return status_out, result, _dedupe(reasons), warnings
 
@@ -1121,7 +1288,8 @@ def x_capabilities(
         reactive_dry_run_available=cfg.enable_goham_reactive and cfg.goham_reactive_dry_run,
         reactive_reply_canary_available=_reactive_reply_canary_available(cfg),
         reactive_batch_available=cfg.enable_goham_reactive and cfg.enable_goham_reactive_batch,
-        reactive_reply_apply_available=_apply_available(cfg),
+        reactive_reply_apply_available=_reply_apply_available(cfg),
+        reactive_batch_apply_available=_batch_apply_available(cfg),
         live_apply_available=_apply_available(cfg),
     )
 
@@ -1262,18 +1430,17 @@ def x_reactive_batch_dry_run(
 ) -> SocialPreviewResponse:
     del _actor
     request = body or SocialPreviewRequest()
-    status, result, reasons, warnings = _reactive_batch_preview(request, load_ham_x_config())
+    actual_cfg = load_ham_x_config()
+    status, result, reasons, warnings = _reactive_batch_preview(request, actual_cfg)
     payload = _force_preview_flags(result)
+    proposal_digest = _batch_proposal_digest(result, actual_cfg)
     return SocialPreviewResponse(
         preview_kind="reactive_batch_dry_run",
         status=status,
         reasons=reasons,
         warnings=warnings,
         result=payload,
-        proposal_digest=_proposal_digest(
-            "reactive_batch_dry_run",
-            {"client_request_id": request.client_request_id, "result": payload},
-        ),
+        proposal_digest=proposal_digest,
     )
 
 
@@ -1377,6 +1544,91 @@ def x_reactive_reply_apply(
     )
 
 
+@router.post("/providers/x/reactive/batch/apply", response_model=SocialReactiveBatchApplyResponse)
+def x_reactive_batch_apply(
+    body: SocialReactiveBatchApplyRequest,
+    _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)] = None,
+    authorization: str | None = Header(None, alias="Authorization"),
+    x_ham_operator_authorization: str | None = Header(None, alias="X-Ham-Operator-Authorization"),
+) -> SocialReactiveBatchApplyResponse:
+    del _actor
+    cfg = load_ham_x_config()
+    if not body.proposal_digest:
+        return _blocked_batch_apply_response(cfg, reasons=["proposal_digest_required"])
+    if body.confirmation_phrase.strip() != LIVE_BATCH_CONFIRMATION_PHRASE:
+        return _blocked_batch_apply_response(cfg, reasons=["confirmation_phrase_required"])
+
+    ham_bearer = resolve_ham_operator_authorization_header(
+        authorization=authorization,
+        x_ham_operator_authorization=x_ham_operator_authorization,
+    )
+    _require_social_live_token(ham_bearer)
+
+    gate_reasons = _reactive_batch_apply_reasons(cfg)
+    if gate_reasons:
+        return _blocked_batch_apply_response(cfg, reasons=gate_reasons)
+
+    preview_request = SocialPreviewRequest()
+    _, dry_result, dry_reasons, dry_warnings = _reactive_batch_preview(preview_request, cfg)
+    expected_digest = _batch_proposal_digest(dry_result, cfg)
+    if expected_digest is None:
+        return _blocked_batch_apply_response(
+            cfg,
+            reasons=["no_current_batch_preview_candidate", *dry_reasons],
+            warnings=dry_warnings,
+            result=dry_result,
+        )
+    if body.proposal_digest != expected_digest:
+        return _blocked_batch_apply_response(
+            cfg,
+            reasons=["proposal_digest_mismatch"],
+            warnings=dry_warnings,
+            result={"expected_preview": dry_result},
+        )
+
+    candidates = [
+        item.get("inbound")
+        for item in list(dry_result.get("items") or [])
+        if isinstance(item, dict) and item.get("status") == "dry_run" and isinstance(item.get("inbound"), dict)
+    ]
+    if not candidates:
+        return _blocked_batch_apply_response(
+            cfg,
+            reasons=["no_live_batch_candidates"],
+            warnings=dry_warnings,
+            result=dry_result,
+        )
+
+    live_cfg = replace(cfg, goham_reactive_batch_dry_run=False)
+    live_result = run_reactive_batch_once(candidates, config=live_cfg)
+    result_payload = _safe_payload(live_result)
+    provider_post_ids: list[str] = []
+    for item in list(getattr(live_result, "items", []) or []):
+        execution_result = getattr(item, "execution_result", None)
+        provider_post_id = getattr(execution_result, "provider_post_id", None)
+        if provider_post_id:
+            safe_id = redact(provider_post_id) if isinstance(provider_post_id, str) else provider_post_id
+            if isinstance(safe_id, str):
+                provider_post_ids.append(safe_id)
+    return SocialReactiveBatchApplyResponse(
+        status=live_result.status,
+        execution_allowed=bool(live_result.execution_allowed),
+        mutation_attempted=bool(live_result.mutation_attempted),
+        live_apply_available=_batch_apply_available(cfg),
+        attempted_count=int(getattr(live_result, "attempted_count", 0) or 0),
+        executed_count=int(getattr(live_result, "executed_count", 0) or 0),
+        failed_count=int(getattr(live_result, "failed_count", 0) or 0),
+        blocked_count=int(getattr(live_result, "blocked_count", 0) or 0),
+        provider_post_ids=provider_post_ids,
+        audit_ids=list(getattr(live_result, "audit_ids", []) or []),
+        journal_path=_display_path(getattr(live_result, "journal_path", cfg.execution_journal_path)),
+        audit_path=_display_path(getattr(live_result, "audit_path", cfg.audit_log_path)),
+        reasons=_dedupe(list(getattr(live_result, "reasons", []) or [])),
+        warnings=dry_warnings,
+        result=result_payload,
+    )
+
+
 __all__ = [
     "router",
     "SocialProvidersResponse",
@@ -1389,4 +1641,6 @@ __all__ = [
     "SocialPreviewResponse",
     "SocialReactiveReplyApplyRequest",
     "SocialReactiveReplyApplyResponse",
+    "SocialReactiveBatchApplyRequest",
+    "SocialReactiveBatchApplyResponse",
 ]

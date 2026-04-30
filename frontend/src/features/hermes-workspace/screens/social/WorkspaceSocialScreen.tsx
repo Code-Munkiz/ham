@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
   socialAdapter,
+  type SocialReactiveBatchApplyResponse,
   type SocialReactiveReplyApplyResponse,
   type SocialPreviewKind,
   type SocialPreviewResponse,
@@ -140,6 +141,7 @@ const PREVIEW_LABELS: Record<SocialPreviewKind, string> = {
 };
 
 const LIVE_REPLY_CONFIRMATION_PHRASE = "SEND ONE LIVE REPLY";
+const LIVE_BATCH_CONFIRMATION_PHRASE = "SEND LIVE REACTIVE BATCH";
 
 function PreviewResultCard({ preview }: { preview: SocialPreviewResponse }) {
   return (
@@ -185,6 +187,12 @@ export function WorkspaceSocialScreen() {
   const [liveBusy, setLiveBusy] = React.useState(false);
   const [liveError, setLiveError] = React.useState<string | null>(null);
   const [liveResult, setLiveResult] = React.useState<SocialReactiveReplyApplyResponse | null>(null);
+  const [batchConfirmOpen, setBatchConfirmOpen] = React.useState(false);
+  const [batchConfirmText, setBatchConfirmText] = React.useState("");
+  const [batchOperatorToken, setBatchOperatorToken] = React.useState("");
+  const [batchBusy, setBatchBusy] = React.useState(false);
+  const [batchError, setBatchError] = React.useState<string | null>(null);
+  const [batchResult, setBatchResult] = React.useState<SocialReactiveBatchApplyResponse | null>(null);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -224,7 +232,9 @@ export function WorkspaceSocialScreen() {
   const x = snapshot?.xStatus;
   const caps = snapshot?.xCapabilities;
   const inboxPreview = previews.reactive_inbox;
+  const batchPreview = previews.reactive_batch_dry_run;
   const canSendOneLiveReply = Boolean(inboxPreview?.proposal_digest && caps?.reactive_reply_apply_available);
+  const canSendLiveReactiveBatch = Boolean(batchPreview?.proposal_digest && caps?.reactive_batch_apply_available);
 
   const sendOneLiveReply = async () => {
     if (!inboxPreview?.proposal_digest) return;
@@ -246,6 +256,29 @@ export function WorkspaceSocialScreen() {
     setConfirmOpen(false);
     setConfirmText("");
     setOperatorToken("");
+    void load();
+  };
+
+  const sendLiveReactiveBatch = async () => {
+    if (!batchPreview?.proposal_digest) return;
+    setBatchBusy(true);
+    setBatchError(null);
+    const result = await socialAdapter.sendLiveReactiveBatch({
+      proposalDigest: batchPreview.proposal_digest,
+      confirmationPhrase: batchConfirmText,
+      operatorToken: batchOperatorToken,
+      clientRequestId: `social-ui-batch-${Date.now()}`,
+    });
+    setBatchBusy(false);
+    if (result.bridge.status === "pending" || !result.apply) {
+      const detail = result.bridge.status === "pending" ? result.bridge.detail : result.error;
+      setBatchError(detail || "Live reactive batch request failed.");
+      return;
+    }
+    setBatchResult(result.apply);
+    setBatchConfirmOpen(false);
+    setBatchConfirmText("");
+    setBatchOperatorToken("");
     void load();
   };
 
@@ -405,6 +438,56 @@ export function WorkspaceSocialScreen() {
               {liveResult ? (
                 <Panel title="Confirmed live reply result">
                   <RecordPreview record={liveResult as unknown as Record<string, unknown>} emptyLabel="No live result payload." />
+                </Panel>
+              ) : null}
+
+              <Panel title="Confirmed live reactive batch">
+                <div className="space-y-3">
+                  <p className="text-sm leading-relaxed text-white/58">
+                    Confirmed live action. This may send multiple live replies, capped by the reactive governor. No retry. No broadcast post.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <StatusPill
+                      label={batchPreview?.proposal_digest ? "Batch preview digest present" : "Batch preview digest required"}
+                      tone={batchPreview?.proposal_digest ? "ok" : "warn"}
+                    />
+                    <StatusPill
+                      label={caps.reactive_batch_apply_available ? "Batch apply available" : "Batch apply unavailable"}
+                      tone={caps.reactive_batch_apply_available ? "ok" : "muted"}
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="bg-red-700 text-white hover:bg-red-600"
+                    disabled={!canSendLiveReactiveBatch}
+                    onClick={() => {
+                      setBatchConfirmOpen(true);
+                      setBatchError(null);
+                    }}
+                  >
+                    Send live reactive batch
+                  </Button>
+                  {!canSendLiveReactiveBatch ? (
+                    <p className="text-xs text-white/42">
+                      Run reactive batch dry-run preview first, and ensure the API reports reactive batch apply availability.
+                    </p>
+                  ) : null}
+                </div>
+              </Panel>
+
+              {batchError ? (
+                <WorkspaceSurfaceStateCard
+                  title="Live reactive batch request blocked"
+                  description="The confirmed live reactive batch did not run."
+                  tone="amber"
+                  technicalDetail={batchError}
+                />
+              ) : null}
+
+              {batchResult ? (
+                <Panel title="Confirmed live reactive batch result">
+                  <RecordPreview record={batchResult as unknown as Record<string, unknown>} emptyLabel="No live batch result payload." />
                 </Panel>
               ) : null}
 
@@ -656,6 +739,70 @@ export function WorkspaceSocialScreen() {
                 disabled={liveBusy || confirmText !== LIVE_REPLY_CONFIRMATION_PHRASE || !operatorToken.trim()}
               >
                 {liveBusy ? "Sending one live reply..." : "Send one live reply"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {batchConfirmOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="social-live-batch-title"
+            className="w-full max-w-lg rounded-2xl border border-red-400/30 bg-[#071016] p-5 text-white shadow-2xl"
+          >
+            <h2 id="social-live-batch-title" className="text-lg font-semibold">
+              Confirmed live reactive batch
+            </h2>
+            <p className="mt-2 text-sm leading-relaxed text-white/65">
+              This may send multiple live replies, capped by the reactive governor. No retry. No broadcast post.
+            </p>
+            <div className="mt-4 space-y-3">
+              <label className="block text-xs font-semibold uppercase tracking-[0.12em] text-white/50">
+                Type confirmation phrase
+                <input
+                  className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-red-300/50"
+                  value={batchConfirmText}
+                  onChange={(event) => setBatchConfirmText(event.target.value)}
+                  placeholder={LIVE_BATCH_CONFIRMATION_PHRASE}
+                />
+              </label>
+              <label className="block text-xs font-semibold uppercase tracking-[0.12em] text-white/50">
+                Operator token
+                <input
+                  className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-red-300/50"
+                  type="password"
+                  value={batchOperatorToken}
+                  onChange={(event) => setBatchOperatorToken(event.target.value)}
+                  placeholder="HAM_SOCIAL_LIVE_APPLY_TOKEN"
+                />
+              </label>
+              <p className="text-xs text-white/40">
+                The frontend sends only the batch proposal digest, confirmation phrase, and operator token. It never sends reply text or candidate bodies.
+              </p>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  setBatchConfirmOpen(false);
+                  setBatchConfirmText("");
+                  setBatchOperatorToken("");
+                }}
+                disabled={batchBusy}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                className="bg-red-700 text-white hover:bg-red-600"
+                onClick={() => void sendLiveReactiveBatch()}
+                disabled={batchBusy || batchConfirmText !== LIVE_BATCH_CONFIRMATION_PHRASE || !batchOperatorToken.trim()}
+              >
+                {batchBusy ? "Sending live reactive batch..." : "Send live reactive batch"}
               </Button>
             </div>
           </div>

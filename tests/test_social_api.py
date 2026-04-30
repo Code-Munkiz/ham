@@ -235,6 +235,43 @@ def _fake_live_result(
     )
 
 
+def _fake_batch_result(
+    *,
+    status: str = "completed",
+    provider_post_ids: list[str] | None = None,
+):
+    ids = provider_post_ids or ["reply-post-1", "reply-post-2"]
+    items = [SimpleNamespace(execution_result=SimpleNamespace(provider_post_id=provider_post_id)) for provider_post_id in ids]
+    return SimpleNamespace(
+        status=status,
+        execution_allowed=status != "blocked",
+        mutation_attempted=status != "blocked",
+        attempted_count=len(ids),
+        executed_count=len(ids) if status == "completed" else 0,
+        failed_count=0 if status == "completed" else 1,
+        blocked_count=0,
+        items=items,
+        audit_ids=["audit-batch-1"],
+        journal_path=".data/ham-x/execution_journal.jsonl",
+        audit_path=".data/ham-x/audit.jsonl",
+        reasons=[] if status == "completed" else ["provider_failed"],
+        redacted_dump=lambda: {
+            "status": status,
+            "execution_allowed": status != "blocked",
+            "mutation_attempted": status != "blocked",
+            "attempted_count": len(ids),
+            "executed_count": len(ids) if status == "completed" else 0,
+            "failed_count": 0 if status == "completed" else 1,
+            "blocked_count": 0,
+            "items": [{"execution_result": {"provider_post_id": provider_post_id}} for provider_post_id in ids],
+            "audit_ids": ["audit-batch-1"],
+            "journal_path": ".data/ham-x/execution_journal.jsonl",
+            "audit_path": ".data/ham-x/audit.jsonl",
+            "reasons": [] if status == "completed" else ["provider_failed"],
+        },
+    )
+
+
 def _enable_apply_env(monkeypatch: pytest.MonkeyPatch) -> None:
     _set_x_creds(monkeypatch)
     monkeypatch.setenv("HAM_SOCIAL_LIVE_APPLY_TOKEN", _SOCIAL_TOKEN)
@@ -246,8 +283,27 @@ def _enable_apply_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HAM_X_EMERGENCY_STOP", "false")
 
 
+def _enable_batch_apply_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    _set_x_creds(monkeypatch)
+    monkeypatch.setenv("HAM_SOCIAL_LIVE_APPLY_TOKEN", _SOCIAL_TOKEN)
+    monkeypatch.setenv("HAM_X_ENABLE_GOHAM_REACTIVE", "true")
+    monkeypatch.setenv("HAM_X_ENABLE_GOHAM_REACTIVE_BATCH", "true")
+    monkeypatch.setenv("HAM_X_GOHAM_REACTIVE_BATCH_DRY_RUN", "false")
+    monkeypatch.setenv("HAM_X_GOHAM_REACTIVE_BATCH_MAX_REPLIES_PER_RUN", "3")
+    monkeypatch.setenv("HAM_X_GOHAM_REACTIVE_BLOCK_LINKS", "true")
+    monkeypatch.setenv("HAM_X_EMERGENCY_STOP", "false")
+
+
 def _preview_digest(headers: dict[str, str] | None = None) -> str:
     res = client.post("/api/social/providers/x/reactive/inbox/preview", headers=headers or {}, json={})
+    assert res.status_code == 200
+    digest = res.json().get("proposal_digest")
+    assert isinstance(digest, str)
+    return digest
+
+
+def _batch_preview_digest(headers: dict[str, str] | None = None) -> str:
+    res = client.post("/api/social/providers/x/reactive/batch/dry-run", headers=headers or {}, json={})
     assert res.status_code == 200
     digest = res.json().get("proposal_digest")
     assert isinstance(digest, str)
@@ -275,8 +331,10 @@ _PREVIEW_ROUTES = (
 )
 
 _APPLY_ROUTE = "/api/social/providers/x/reactive/reply/apply"
+_BATCH_APPLY_ROUTE = "/api/social/providers/x/reactive/batch/apply"
 _SOCIAL_TOKEN = "social-live-apply-token-1234567890"
 _CONFIRM = "SEND ONE LIVE REPLY"
+_BATCH_CONFIRM = "SEND LIVE REACTIVE BATCH"
 
 
 def test_routes_require_clerk_session_when_required(
@@ -979,7 +1037,7 @@ def test_apply_route_exists_only_for_reactive_reply(
     _isolate_journal(monkeypatch, tmp_path)
     _disable_clerk(monkeypatch)
     assert client.post(_APPLY_ROUTE, json={}).status_code in {200, 422}
-    assert client.post("/api/social/providers/x/reactive/batch/apply", json={}).status_code == 404
+    assert client.post(_BATCH_APPLY_ROUTE, json={}).status_code in {200, 422}
     assert client.post("/api/social/providers/x/broadcast/apply", json={}).status_code == 404
 
 
@@ -1195,6 +1253,218 @@ def test_apply_response_redacted_and_bounded(
     assert "[REDACTED" in text
 
 
+def test_batch_apply_blocked_without_digest(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _enable_batch_apply_env(monkeypatch)
+    body = client.post(
+        _BATCH_APPLY_ROUTE,
+        headers={"Authorization": f"Bearer {_SOCIAL_TOKEN}"},
+        json={"confirmation_phrase": _BATCH_CONFIRM},
+    ).json()
+    assert body["status"] == "blocked"
+    assert body["execution_allowed"] is False
+    assert body["mutation_attempted"] is False
+    assert "proposal_digest_required" in body["reasons"]
+
+
+def test_batch_apply_blocked_with_stale_or_wrong_digest(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _enable_batch_apply_env(monkeypatch)
+    with patch("src.api.social.discover_reactive_inbox_once", return_value=_fake_discovery()):
+        body = client.post(
+            _BATCH_APPLY_ROUTE,
+            headers={"Authorization": f"Bearer {_SOCIAL_TOKEN}"},
+            json={"proposal_digest": "0" * 64, "confirmation_phrase": _BATCH_CONFIRM},
+        ).json()
+    assert body["status"] == "blocked"
+    assert "proposal_digest_mismatch" in body["reasons"]
+
+
+def test_batch_apply_blocked_without_operator_auth(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _enable_batch_apply_env(monkeypatch)
+    with patch("src.api.social.discover_reactive_inbox_once", return_value=_fake_discovery()):
+        digest = _batch_preview_digest()
+    res = client.post(_BATCH_APPLY_ROUTE, json={"proposal_digest": digest, "confirmation_phrase": _BATCH_CONFIRM})
+    assert res.status_code == 401
+    assert res.json()["detail"]["error"]["code"] == "SOCIAL_LIVE_APPLY_AUTH_REQUIRED"
+
+
+def test_batch_apply_blocked_with_wrong_token(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _enable_batch_apply_env(monkeypatch)
+    with patch("src.api.social.discover_reactive_inbox_once", return_value=_fake_discovery()):
+        digest = _batch_preview_digest()
+    res = client.post(
+        _BATCH_APPLY_ROUTE,
+        headers={"Authorization": "Bearer wrong-token"},
+        json={"proposal_digest": digest, "confirmation_phrase": _BATCH_CONFIRM},
+    )
+    assert res.status_code == 403
+    assert res.json()["detail"]["error"]["code"] == "SOCIAL_LIVE_APPLY_AUTH_INVALID"
+
+
+def test_batch_apply_blocked_without_exact_confirmation_phrase(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _enable_batch_apply_env(monkeypatch)
+    with patch("src.api.social.discover_reactive_inbox_once", return_value=_fake_discovery()):
+        digest = _batch_preview_digest()
+    body = client.post(
+        _BATCH_APPLY_ROUTE,
+        headers={"Authorization": f"Bearer {_SOCIAL_TOKEN}"},
+        json={"proposal_digest": digest, "confirmation_phrase": "send live reactive batch"},
+    ).json()
+    assert body["status"] == "blocked"
+    assert "confirmation_phrase_required" in body["reasons"]
+
+
+def test_batch_apply_blocked_by_emergency_stop(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _enable_batch_apply_env(monkeypatch)
+    with patch("src.api.social.discover_reactive_inbox_once", return_value=_fake_discovery()):
+        digest = _batch_preview_digest()
+    monkeypatch.setenv("HAM_X_EMERGENCY_STOP", "true")
+    body = client.post(
+        _BATCH_APPLY_ROUTE,
+        headers={"Authorization": f"Bearer {_SOCIAL_TOKEN}"},
+        json={"proposal_digest": digest, "confirmation_phrase": _BATCH_CONFIRM},
+    ).json()
+    assert body["status"] == "blocked"
+    assert "emergency_stop" in body["reasons"]
+
+
+def test_batch_apply_blocked_when_dry_run_candidate_set_changes(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _enable_batch_apply_env(monkeypatch)
+    with patch("src.api.social.discover_reactive_inbox_once", return_value=_fake_discovery(inbound_id="inbound-1")):
+        digest = _batch_preview_digest()
+    with patch("src.api.social.discover_reactive_inbox_once", return_value=_fake_discovery(inbound_id="inbound-2")):
+        body = client.post(
+            _BATCH_APPLY_ROUTE,
+            headers={"Authorization": f"Bearer {_SOCIAL_TOKEN}"},
+            json={"proposal_digest": digest, "confirmation_phrase": _BATCH_CONFIRM},
+        ).json()
+    assert body["status"] == "blocked"
+    assert "proposal_digest_mismatch" in body["reasons"]
+
+
+def test_batch_apply_calls_batch_runner_once_and_returns_journal_audit_ids(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _enable_batch_apply_env(monkeypatch)
+    with patch("src.api.social.discover_reactive_inbox_once", return_value=_fake_discovery()):
+        digest = _batch_preview_digest()
+        with patch("src.api.social.run_reactive_batch_once", return_value=_fake_batch_result()) as batch:
+            body = client.post(
+                _BATCH_APPLY_ROUTE,
+                headers={"Authorization": f"Bearer {_SOCIAL_TOKEN}"},
+                json={"proposal_digest": digest, "confirmation_phrase": _BATCH_CONFIRM},
+            ).json()
+    assert batch.call_count == 1
+    assert body["status"] == "completed"
+    assert body["execution_allowed"] is True
+    assert body["mutation_attempted"] is True
+    assert body["attempted_count"] == 2
+    assert body["executed_count"] == 2
+    assert body["execution_kind"] == "goham_reactive_reply"
+    assert body["audit_ids"] == ["audit-batch-1"]
+    assert body["provider_post_ids"] == ["reply-post-1", "reply-post-2"]
+
+
+def test_batch_apply_does_not_accept_arbitrary_reply_text_or_candidates(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _enable_batch_apply_env(monkeypatch)
+    with patch("src.api.social.discover_reactive_inbox_once", return_value=_fake_discovery()):
+        digest = _batch_preview_digest()
+    res = client.post(
+        _BATCH_APPLY_ROUTE,
+        headers={"Authorization": f"Bearer {_SOCIAL_TOKEN}"},
+        json={
+            "proposal_digest": digest,
+            "confirmation_phrase": _BATCH_CONFIRM,
+            "reply_text": "client supplied",
+            "candidates": [{"inbound_id": "client"}],
+        },
+    )
+    assert res.status_code == 422
+
+
+def test_batch_apply_provider_failure_does_not_retry(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _enable_batch_apply_env(monkeypatch)
+    with patch("src.api.social.discover_reactive_inbox_once", return_value=_fake_discovery()):
+        digest = _batch_preview_digest()
+        with patch("src.api.social.run_reactive_batch_once", return_value=_fake_batch_result(status="stopped", provider_post_ids=[])) as batch:
+            body = client.post(
+                _BATCH_APPLY_ROUTE,
+                headers={"Authorization": f"Bearer {_SOCIAL_TOKEN}"},
+                json={"proposal_digest": digest, "confirmation_phrase": _BATCH_CONFIRM},
+            ).json()
+    assert batch.call_count == 1
+    assert body["status"] == "stopped"
+    assert body["failed_count"] == 1
+
+
+def test_batch_apply_response_redacted_and_bounded(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _enable_batch_apply_env(monkeypatch)
+    secret = "tok_abcdefghijklmnopqrstuvwxyz1234567890XYZ"
+    with patch("src.api.social.discover_reactive_inbox_once", return_value=_fake_discovery(reply_text=secret)):
+        digest = _batch_preview_digest()
+        with patch("src.api.social.run_reactive_batch_once", return_value=_fake_batch_result(provider_post_ids=[secret])):
+            body = client.post(
+                _BATCH_APPLY_ROUTE,
+                headers={"Authorization": f"Bearer {_SOCIAL_TOKEN}"},
+                json={"proposal_digest": digest, "confirmation_phrase": _BATCH_CONFIRM},
+            ).json()
+    text = json.dumps(body, sort_keys=True)
+    assert secret not in text
+    assert "[REDACTED" in text
+
+
 # ---------------------------------------------------------------------------
 # Static safety: import isolation
 # ---------------------------------------------------------------------------
@@ -1224,7 +1494,6 @@ def test_social_api_does_not_import_write_or_execution_modules() -> None:
         "src.ham.ham_x.goham_controller",
         "src.ham.ham_x.goham_live_controller",
         "src.ham.ham_x.reactive_reply_executor",
-        "src.ham.ham_x.goham_reactive_batch",
         "src.ham.ham_x.goham_reactive",
         "src.ham.ham_x.live_dry_run",
         "src.ham.ham_x.smoke",
@@ -1236,7 +1505,6 @@ def test_social_api_does_not_import_write_or_execution_modules() -> None:
     )
     forbidden_names = {
         "append_audit_event",
-        "run_reactive_batch_once",
         "run_goham_guarded_post",
         "run_live_controller_once",
         "run_controller_once",
