@@ -5,7 +5,7 @@
 
 import * as React from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Loader2, PanelRight, PanelRightClose } from "lucide-react";
+import { ExternalLink, Loader2, PanelRight, PanelRightClose } from "lucide-react";
 import { toast } from "sonner";
 import {
   appendChatSessionTurns,
@@ -36,11 +36,8 @@ import {
   type ManagedMissionSnapshot,
 } from "../../adapters/managedMissionsAdapter";
 import { useManagedMissionFeedLiveStream } from "../../hooks/useManagedMissionFeedLiveStream";
-import {
-  applyTranscriptStreamingHints,
-  buildMissionFeedTranscript,
-  type MissionTranscriptItem,
-} from "../../utils/missionFeedTranscript";
+import { cursorCloudAgentWebHref, isBcCursorAgentId } from "../../utils/cursorCloudAgentWeb";
+import { formatTranscriptReasonCodeForDisplay, missionFeedTranscriptFromEvents, type MissionTranscriptItem } from "../../utils/missionFeedTranscript";
 import { MANAGED_MISSION_CHAT_OWNERSHIP_HINT } from "../../lib/managedMissionOwnershipCopy";
 import { useVoiceWorkspaceSettingsOptional } from "../../voice/VoiceWorkspaceSettingsContext";
 import { WorkspaceChatEmptyState } from "./WorkspaceChatEmptyState";
@@ -163,12 +160,13 @@ function ChatMissionFeedTranscript({
     <div className="space-y-1.5">
       {items.map((block) => {
         if (block.type === "assistant") {
+          const rcDisp = formatTranscriptReasonCodeForDisplay(block.reasonCode);
           return (
             <div key={block.id} className="rounded border border-white/[0.08] bg-black/15 px-2 py-1.5">
               <p className="whitespace-pre-wrap text-[12px] leading-relaxed text-white/80">{block.text}</p>
               <p className="mt-0.5 text-[10px] text-white/35">
                 {fmtMissionFeedIsoBrief(block.updatedAt)}
-                {block.reasonCode ? ` · ${block.reasonCode}` : ""}
+                {rcDisp ? ` · ${rcDisp}` : ""}
                 {block.status === "streaming" ? " · streaming…" : ""}
               </p>
             </div>
@@ -196,11 +194,12 @@ function ChatMissionFeedTranscript({
           );
         }
         if (block.type === "status") {
+          const rcDisp = formatTranscriptReasonCodeForDisplay(block.reasonCode);
           return (
             <div key={block.id} className="flex flex-wrap gap-x-2 text-[10px] text-white/45">
               <span className="text-white/60">{block.label}</span>
               {block.time ? <span className="text-white/30">{fmtMissionFeedIsoBrief(block.time)}</span> : null}
-              {block.reasonCode ? <span className="font-mono text-white/30">{block.reasonCode}</span> : null}
+              {rcDisp ? <span className="font-mono text-white/30">{rcDisp}</span> : null}
             </div>
           );
         }
@@ -452,12 +451,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
 
   const displayedMissionFeedTranscript = React.useMemo(() => {
     const ev = missionFeed?.events ?? [];
-    const merged = applyTranscriptStreamingHints(
-      buildMissionFeedTranscript(ev),
-      missionFeed?.lifecycle ?? null,
-      missionFeedBanner.phase,
-    );
-    return merged.slice(-5);
+    return missionFeedTranscriptFromEvents(ev, missionFeed?.lifecycle ?? null, missionFeedBanner.phase).slice(-5);
   }, [missionFeed?.events, missionFeed?.lifecycle, missionFeedBanner.phase]);
 
   const [messages, setMessages] = React.useState<HwwMsgRow[]>([]);
@@ -1774,8 +1768,19 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
                   <span className="font-mono" title={missionContext.mission_registry_id}>
                     {shortId(missionContext.mission_registry_id)}
                   </span>{" "}
-                  · agent{" "}
-                  <span className="font-mono">{shortId(missionContext.cursor_agent_id)}</span>
+                  · agent <span className="font-mono">{shortId(missionContext.cursor_agent_id)}</span>
+                  {isBcCursorAgentId(missionContext.cursor_agent_id) ? (
+                    <a
+                      href={cursorCloudAgentWebHref(String(missionContext.cursor_agent_id).trim())}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="Open this Cloud Agent in Cursor"
+                      className="ml-2 inline-flex items-center gap-1 text-[10px] font-medium text-sky-400/85 hover:text-sky-300/95"
+                    >
+                      Open in Cursor
+                      <ExternalLink className="h-3 w-3 opacity-70" aria-hidden />
+                    </a>
+                  ) : null}
                 </p>
                 <p className="text-[10px] leading-relaxed text-white/40">{MANAGED_MISSION_CHAT_OWNERSHIP_HINT}</p>
                 {missionFeedBanner.phase !== "idle" && missionFeedBanner.label ? (

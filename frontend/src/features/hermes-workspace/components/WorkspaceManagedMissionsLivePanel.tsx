@@ -1,6 +1,6 @@
 import * as React from "react";
 import { Link } from "react-router-dom";
-import { Cloud, Loader2, MessageSquare, RefreshCw, RotateCw, Square } from "lucide-react";
+import { Cloud, ExternalLink, Loader2, MessageSquare, RefreshCw, RotateCw, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -19,10 +19,11 @@ import {
   type ManagedMissionTruthPayload,
 } from "../adapters/managedMissionsAdapter";
 import { useManagedMissionFeedLiveStream } from "../hooks/useManagedMissionFeedLiveStream";
+import { cursorCloudAgentWebHref, isBcCursorAgentId } from "../utils/cursorCloudAgentWeb";
 import {
-  applyTranscriptStreamingHints,
-  buildMissionFeedTranscript,
+  formatTranscriptReasonCodeForDisplay,
   latestAssistantPreviewFromTranscript,
+  missionFeedTranscriptFromEvents,
   type MissionTranscriptItem,
 } from "../utils/missionFeedTranscript";
 import { WorkspaceSurfaceStateCard } from "./workspaceSurfaceChrome";
@@ -199,15 +200,16 @@ function LiveMissionFeedTranscript({
     <>
       {transcriptItems.map((block) => {
         if (block.type === "assistant") {
+          const rcDisp = formatTranscriptReasonCodeForDisplay(block.reasonCode);
           return (
             <div key={block.id} className="rounded-lg border border-[var(--theme-border)]/80 bg-[var(--theme-card)] px-3 py-2">
               <p className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--theme-text)]">{block.text}</p>
               <p className="mt-1 text-[10px] text-[var(--theme-muted)]">
                 <span className="text-[var(--theme-muted-2)]">{fmtIsoLocal(block.updatedAt)}</span>
-                {block.reasonCode ? (
+                {rcDisp ? (
                   <>
                     {" "}
-                    <span className="text-[var(--theme-muted)]/70">· {block.reasonCode}</span>
+                    <span className="text-[var(--theme-muted)]/70">· {rcDisp}</span>
                   </>
                 ) : null}
                 {block.status === "streaming" ? (
@@ -239,11 +241,12 @@ function LiveMissionFeedTranscript({
           );
         }
         if (block.type === "status") {
+          const rcDisp = formatTranscriptReasonCodeForDisplay(block.reasonCode);
           return (
             <div key={block.id} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-[var(--theme-muted)]">
               <span className="text-[var(--theme-text)]">{block.label}</span>
               {block.time ? <span className="text-[var(--theme-muted)]/80">{fmtIsoLocal(block.time)}</span> : null}
-              {block.reasonCode ? <span className="font-mono text-[10px] text-[var(--theme-muted)]/70">{block.reasonCode}</span> : null}
+              {rcDisp ? <span className="font-mono text-[10px] text-[var(--theme-muted)]/70">{rcDisp}</span> : null}
             </div>
           );
         }
@@ -309,11 +312,7 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, variant, onMi
 
   const fullMissionTranscriptItems = React.useMemo(() => {
     const ev = selectedFeed?.events ?? [];
-    return applyTranscriptStreamingHints(
-      buildMissionFeedTranscript(ev),
-      selectedFeed?.lifecycle ?? null,
-      selectedFeedBanner.phase,
-    );
+    return missionFeedTranscriptFromEvents(ev, selectedFeed?.lifecycle ?? null, selectedFeedBanner.phase);
   }, [selectedFeed?.events, selectedFeed?.lifecycle, selectedFeedBanner.phase]);
 
   const displayedMissionTranscriptItems = React.useMemo(
@@ -639,6 +638,26 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, variant, onMi
                             Open in Chat
                           </Link>
                         </Button>
+                        {isBcCursorAgentId(m.cursor_agent_id) ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="secondary"
+                            className="h-7 border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 text-[11px]"
+                            asChild
+                          >
+                            <a
+                              href={cursorCloudAgentWebHref(String(m.cursor_agent_id).trim())}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title="Open this Cloud Agent in Cursor"
+                              onClick={(ev) => ev.stopPropagation()}
+                            >
+                              <ExternalLink className="h-3 w-3" />
+                              Open in Cursor
+                            </a>
+                          </Button>
+                        ) : null}
                       </div>
                     </td>
                   </tr>
@@ -1005,6 +1024,19 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, variant, onMi
                     Open in Chat
                   </Link>
                 </Button>
+                {isBcCursorAgentId(d.cursor_agent_id) ? (
+                  <Button type="button" size="sm" variant="secondary" className="border border-[var(--theme-border)]" asChild>
+                    <a
+                      href={cursorCloudAgentWebHref(String(d.cursor_agent_id).trim())}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="Open this Cloud Agent in Cursor"
+                    >
+                      <ExternalLink className="mr-1 h-3.5 w-3.5" />
+                      Open in Cursor
+                    </a>
+                  </Button>
+                ) : null}
                 <Button
                   type="button"
                   size="sm"

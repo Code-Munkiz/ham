@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import subprocess
+import sys
 from pathlib import Path
 
 
@@ -64,14 +66,17 @@ def test_mission_feed_transcript_helper_contract() -> None:
     util = Path("frontend/src/features/hermes-workspace/utils/missionFeedTranscript.ts").read_text(encoding="utf-8")
     assert 'export type MissionTranscriptItem' in util
     assert "export function buildMissionFeedTranscript" in util
+    assert "export function joinTranscriptChunk" in util
+    assert "export function collapseAdjacentDuplicateTranscriptNoise" in util
+    assert "export function missionFeedTranscriptFromEvents" in util
+    assert "provider_status" in util
     assert "ManagedMissionFeedEvent" in util
     chat = Path("frontend/src/features/hermes-workspace/screens/chat/WorkspaceChatScreen.tsx").read_text(encoding="utf-8")
-    assert "buildMissionFeedTranscript" in chat
-    assert "applyTranscriptStreamingHints" in chat
+    assert "missionFeedTranscriptFromEvents" in chat
     panel = Path("frontend/src/features/hermes-workspace/components/WorkspaceManagedMissionsLivePanel.tsx").read_text(
         encoding="utf-8"
     )
-    assert "buildMissionFeedTranscript" in panel
+    assert "missionFeedTranscriptFromEvents" in panel
     assert "latestAssistantPreviewFromTranscript" in panel
 
 
@@ -104,6 +109,37 @@ def test_operations_outputs_latest_agent_wiring() -> None:
     assert "Latest agent output" in ops
     assert "onMissionTranscriptDigest={setLatestManagedAssistantPreview}" in ops
     assert "latestManagedAssistantPreview" in ops
+
+
+def test_open_in_cursor_navigation_only() -> None:
+    cursor_util = Path("frontend/src/features/hermes-workspace/utils/cursorCloudAgentWeb.ts").read_text(encoding="utf-8")
+    assert "export function isBcCursorAgentId" in cursor_util
+    assert "export function cursorCloudAgentWebHref" in cursor_util
+    assert "https://cursor.com/agents/" in cursor_util
+    assert "api.cursor.com" not in cursor_util
+    panel = Path("frontend/src/features/hermes-workspace/components/WorkspaceManagedMissionsLivePanel.tsx").read_text(
+        encoding="utf-8"
+    )
+    assert "Open in Cursor" in panel
+    assert "isBcCursorAgentId" in panel
+    assert "cursorCloudAgentWebHref" in panel
+    chat = Path("frontend/src/features/hermes-workspace/screens/chat/WorkspaceChatScreen.tsx").read_text(encoding="utf-8")
+    assert "Open in Cursor" in chat
+
+
+def test_mission_feed_transcript_runtime_verify_script() -> None:
+    frontend = Path("frontend")
+    script = frontend / "scripts" / "verify-mission-feed-transcript.ts"
+    assert script.is_file()
+    npx = "npx.cmd" if sys.platform == "win32" else "npx"
+    proc = subprocess.run(
+        [npx, "tsx", "scripts/verify-mission-feed-transcript.ts"],
+        cwd=str(frontend),
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert proc.returncode == 0, proc.stdout + "\n" + proc.stderr
 
 
 def test_managed_mission_feed_poll_delay_contract() -> None:
