@@ -7,6 +7,7 @@ In Ham, **mission-aware** means the **live mission feed** and **operator control
 - **Selection drives the feed** — After you pick a mission (for example in **Live Cloud Agent missions** on Operations or Conductor), the client loads **`GET /api/cursor/managed/missions/{mission_registry_id}/feed`**. That response is scoped to that mission only: bounded `events`, lifecycle, checkpoint summary, and optional artifacts (such as a PR link when observed).
 - **Controls apply to the selected mission** — Sync-by-agent, cancel, and follow-up instructions are issued against the **currently selected** `mission_registry_id` (or the agent id derived from that row for sync). Changing the selection changes which feed and which mission receive the next action.
 - **HAM vs Cursor** — Ham stores the managed record and feed events on the server; Cursor remains **upstream** for actual agent execution. The feed is a **HAM-side** view (persisted events plus synthesis when no stored feed exists yet — see `src/api/cursor_managed_missions.py`).
+- **Live feed as transcript** — In **Live Cloud Agent missions**, the UI does not show a raw event list only: it **folds** feed events into a readable **transcript** (assistant output, thinking, tool lines, status, user follow-ups, and a small “raw” bucket for anything else). Folding logic lives in `frontend/src/features/hermes-workspace/utils/missionFeedTranscript.ts` and is used by `WorkspaceManagedMissionsLivePanel` (Operations / Conductor). The API contract is unchanged; this is presentation on top of the same `events` array from the feed route.
 
 ## API surface (scoped by mission)
 
@@ -18,7 +19,7 @@ In Ham, **mission-aware** means the **live mission feed** and **operator control
 | `POST /api/cursor/managed/missions/{mission_registry_id}/messages` | Follow-up instruction for **that** mission (when supported). |
 | `POST /api/cursor/managed/missions/{mission_registry_id}/cancel` | Stop request for **that** mission (when supported). |
 
-Frontend wiring lives in `frontend/src/features/hermes-workspace/adapters/managedMissionsAdapter.ts` and **`WorkspaceManagedMissionsLivePanel`**.
+Frontend wiring lives in `frontend/src/features/hermes-workspace/adapters/managedMissionsAdapter.ts`, **`WorkspaceManagedMissionsLivePanel`**, and **`missionFeedTranscript.ts`** (transcript folding).
 
 ## Backend smoke (follow-up events)
 
