@@ -17,8 +17,10 @@ This document states **what works today**, what is **stub / partial / explicitly
 | **Deploy hook / approval API** | Managed deploy-approval status + decisions + hook path (`hard` enforces on server) — see `cursor_managed_deploy*`. |
 | **Vercel / post-deploy (bounded)** | Server poll + mapping tiers; post-deploy check — API + future UI surfaces (legacy War Room UI removed Batch 2A). |
 | **Control plane runs (separate)** | Durable `ControlPlaneRun` for operator/chat-committed launches + status; **read** APIs — **factual**, not a queue or graph. |
-| **Read API: missions** | `GET /api/cursor/managed/missions` (list, optional filter by `cursor_agent_id`) and by `mission_registry_id` — full JSON includes `mission_deploy_approval_mode`. |
-| **UI** | **Partial:** managed mission APIs and operator/chat flows remain; dedicated Cloud Agent / War Room panels were removed with legacy workbench (Batch 2A). Re-home mission UX in Hermes Workspace or Command Center as needed. |
+| **Read API: missions** | `GET /api/cursor/managed/missions` (list, optional filter by `cursor_agent_id`) and `GET .../missions/{mission_registry_id}` — full JSON includes `mission_deploy_approval_mode`. |
+| **Mission feed + controls (API)** | `GET /api/cursor/managed/missions/{mission_registry_id}/feed` returns bounded events (last 80), lifecycle, optional PR artifact, and `mission_id` (same UUID as `mission_registry_id`). `POST .../messages` appends a user instruction and forwards to Cursor when the mission is `open` and a Cursor API key is configured. `POST .../cancel` requests provider cancellation and appends feed events (outcomes depend on Cursor API support). |
+| **Workspace chat deep link** | Hermes Workspace chat (`/workspace/chat?mission_id=<uuid>`) loads mission-scoped context and feed when `mission_id` is present (not in embed drawer mode). Managed missions UI links into chat with this query param. |
+| **UI** | **Partial:** managed mission list/live panels and chat deep links exist; dedicated Cloud Agent / War Room panels were removed with legacy workbench (Batch 2A). Further mission UX can live in Hermes Workspace or Command Center. |
 | **Project registry** | `ProjectStore` + `PATCH` metadata for `default_deploy_approval_mode` (validated). |
 
 ---
@@ -54,7 +56,7 @@ Phases are **sequenced**: earlier items unblock honesty and operability; later i
 ### Phase A — **Observability & honesty** (near-term, low risk)
 
 - **Docs + UI copy:** One screen-level truth table: *Cursor owns execution* vs *HAM owns record + policy edges* (deploy snapshot is create-time, etc.).
-- **Optional:** Expose `mission_registry_id` consistently in Workspace or Command Center when available (reduces “where is my mission?” confusion).
+- **Mission identity in UI:** `mission_registry_id` is exposed in managed-mission APIs and as `mission_id` on the feed payload; Workspace chat accepts `?mission_id=` for scoped context. **Remaining:** surface the same id consistently everywhere operators expect it (e.g. Command Center summaries) if gaps remain.
 - **Tests:** Keep mission + API regression tests green when touching cursor routes.
 
 **Exit:** Operators can answer “what does HAM know vs. what Cursor knows?” without reading source.
