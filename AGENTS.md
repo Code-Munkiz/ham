@@ -99,5 +99,5 @@ Shipped muscle today centers on **Bridge + Droid executor** (`src/tools/droid_ex
 - `tests/test_memory_heist.py` — Context Engine + Phase 1/3 guardrails (18 cases)
 - `tests/test_hermes_feedback.py` — Critic MVP + Phase 3 guardrails (7 cases)
 - `tests/test_droid_registry.py` — Droid registry conventions (10 cases)
-- Run: `python -m pytest` — full suite (`pytest.ini` sets `pythonpath = .`; 158+ cases as of UI actions)
+- Run: `python -m pytest` — full suite (`pytest.ini` sets `pythonpath = .`; collection grows with `tests/` — use `--collect-only -q` for the current count)
 - Other tests under `tests/` as added; bootstrap with `/test-context-regressions` for Context Engine focus

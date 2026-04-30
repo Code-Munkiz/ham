@@ -37,3 +37,7 @@ Activate that venv when you run the API, or use `.venv/bin/python -m uvicorn ...
 - `src/memory_heist.py` — repo context, instructions, git, sessions
 - `src/llm_client.py` — LiteLLM / OpenRouter
 - `src/swarm_agency.py` — Hermes-supervised role context assembly (no CrewAI; orchestration is Hermes-led)
+
+## More documentation
+
+Use [AGENTS.md](AGENTS.md) for the recommended read order, deploy pointers, and a fuller module/API map. Deeper topics live under [`docs/`](docs/) (for example managed Cloud Agent missions, control-plane runs, local control, and the Hermes chat gateway).
