@@ -60,6 +60,32 @@ def test_managed_mission_feed_surfaces_use_live_stream_hook_not_direct_feed_fetc
     assert "fetchManagedMissionFeed" not in panel
 
 
+def test_mission_feed_transcript_helper_contract() -> None:
+    util = Path("frontend/src/features/hermes-workspace/utils/missionFeedTranscript.ts").read_text(encoding="utf-8")
+    assert 'export type MissionTranscriptItem' in util
+    assert "export function buildMissionFeedTranscript" in util
+    assert "ManagedMissionFeedEvent" in util
+    chat = Path("frontend/src/features/hermes-workspace/screens/chat/WorkspaceChatScreen.tsx").read_text(encoding="utf-8")
+    assert "buildMissionFeedTranscript" in chat
+    assert "applyTranscriptStreamingHints" in chat
+    panel = Path("frontend/src/features/hermes-workspace/components/WorkspaceManagedMissionsLivePanel.tsx").read_text(
+        encoding="utf-8"
+    )
+    assert "buildMissionFeedTranscript" in panel
+    assert "latestAssistantPreviewFromTranscript" in panel
+
+
+def test_no_raw_bounded_event_cards_for_managed_mission_live_feed_panel() -> None:
+    panel = Path("frontend/src/features/hermes-workspace/components/WorkspaceManagedMissionsLivePanel.tsx").read_text(
+        encoding="utf-8"
+    )
+    needle = "(selectedFeed?.events || []).slice(-8).map("
+    assert needle not in panel
+    needle_events = "(missionFeed?.events || []).slice(-3).map("
+    chat = Path("frontend/src/features/hermes-workspace/screens/chat/WorkspaceChatScreen.tsx").read_text(encoding="utf-8")
+    assert needle_events not in chat
+
+
 def test_rest_refresh_disclaimer_copy_still_present() -> None:
     chat = Path("frontend/src/features/hermes-workspace/screens/chat/WorkspaceChatScreen.tsx").read_text(encoding="utf-8")
     assert "REST refresh" in chat
@@ -69,6 +95,15 @@ def test_rest_refresh_disclaimer_copy_still_present() -> None:
     )
     assert "REST refresh" in panel
     assert 'provider_projection?.mode === "rest_projection"' in panel
+
+
+def test_operations_outputs_latest_agent_wiring() -> None:
+    ops = Path("frontend/src/features/hermes-workspace/screens/operations/WorkspaceOperationsScreen.tsx").read_text(
+        encoding="utf-8"
+    )
+    assert "Latest agent output" in ops
+    assert "onMissionTranscriptDigest={setLatestManagedAssistantPreview}" in ops
+    assert "latestManagedAssistantPreview" in ops
 
 
 def test_managed_mission_feed_poll_delay_contract() -> None:

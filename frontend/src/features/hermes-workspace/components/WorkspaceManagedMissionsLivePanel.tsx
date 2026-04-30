@@ -12,6 +12,12 @@ import {
   type ManagedMissionSnapshot,
 } from "../adapters/managedMissionsAdapter";
 import { useManagedMissionFeedLiveStream } from "../hooks/useManagedMissionFeedLiveStream";
+import {
+  applyTranscriptStreamingHints,
+  buildMissionFeedTranscript,
+  latestAssistantPreviewFromTranscript,
+  type MissionTranscriptItem,
+} from "../utils/missionFeedTranscript";
 import { WorkspaceSurfaceStateCard } from "./workspaceSurfaceChrome";
 
 function formatRelativeIso(iso: string | null | undefined, nowMs: number) {
@@ -107,9 +113,116 @@ type Props = {
   /** Increment (e.g. from parent Sync) to refetch this panel. */
   refreshSignal: number;
   variant: "operations" | "conductor";
+  /** Digest of merged assistant transcript for Outputs tab (bounded text). */
+  onMissionTranscriptDigest?: (preview: string | null) => void;
 };
 
-export function WorkspaceManagedMissionsLivePanel({ refreshSignal, variant }: Props) {
+function ThinkingTranscriptChunk({ item }: { item: Extract<MissionTranscriptItem, { type: "thinking" }> }) {
+  const [open, setOpen] = React.useState(false);
+  const long = (item.text || "").length > 200;
+  if (!long) {
+    return (
+      <div className="rounded-lg border border-[var(--theme-border)]/60 bg-[var(--theme-card)]/40 px-2.5 py-1.5">
+        <p className="whitespace-pre-wrap text-xs leading-relaxed text-[var(--theme-muted)]">{item.text}</p>
+      </div>
+    );
+  }
+  return (
+    <div className="rounded-lg border border-[var(--theme-border)]/60 bg-[var(--theme-card)]/40 px-2.5 py-1.5">
+      <button
+        type="button"
+        className="flex w-full items-center gap-2 text-left text-[10px] font-medium uppercase tracking-wider text-[var(--theme-muted)]"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className="truncate">
+          Thinking {item.status === "streaming" ? "(streaming)" : ""} · {open ? "hide" : "show"}
+        </span>
+      </button>
+      {open ? (
+        <p className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-[var(--theme-muted)]">{item.text}</p>
+      ) : (
+        <p className="mt-1 truncate text-[11px] text-[var(--theme-muted)]/85">
+          {item.text.length <= 120 ? item.text : `${item.text.slice(0, 120)}…`}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function LiveMissionFeedTranscript({
+  transcriptItems,
+  feedScrollAnchorRef,
+}: {
+  transcriptItems: MissionTranscriptItem[];
+  feedScrollAnchorRef: React.RefObject<HTMLDivElement | null>;
+}) {
+  if (!transcriptItems.length) return null;
+  return (
+    <>
+      {transcriptItems.map((block) => {
+        if (block.type === "assistant") {
+          return (
+            <div key={block.id} className="rounded-lg border border-[var(--theme-border)]/80 bg-[var(--theme-card)] px-3 py-2">
+              <p className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--theme-text)]">{block.text}</p>
+              <p className="mt-1 text-[10px] text-[var(--theme-muted)]">
+                <span className="text-[var(--theme-muted-2)]">{fmtIsoLocal(block.updatedAt)}</span>
+                {block.reasonCode ? (
+                  <>
+                    {" "}
+                    <span className="text-[var(--theme-muted)]/70">· {block.reasonCode}</span>
+                  </>
+                ) : null}
+                {block.status === "streaming" ? (
+                  <span className="text-[var(--theme-muted)]/70"> · streaming…</span>
+                ) : null}
+              </p>
+            </div>
+          );
+        }
+        if (block.type === "thinking") return <ThinkingTranscriptChunk key={block.id} item={block} />;
+        if (block.type === "user") {
+          return (
+            <div key={block.id} className="rounded-lg border border-sky-500/20 bg-sky-500/5 px-2.5 py-1.5">
+              <p className="whitespace-pre-wrap text-xs leading-relaxed text-[var(--theme-text)]">{block.text}</p>
+              <p className="mt-0.5 text-[10px] text-[var(--theme-muted-2)]">{fmtIsoLocal(block.time)} · user</p>
+            </div>
+          );
+        }
+        if (block.type === "tool") {
+          return (
+            <div
+              key={block.id}
+              className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 rounded-md border border-[var(--theme-border)]/70 bg-[var(--theme-card)] px-2 py-1 font-mono text-[11px] text-[var(--theme-text)]"
+            >
+              <span className="text-[var(--theme-muted)]">tool</span>
+              <span className="font-sans">{block.label}</span>
+              {block.time ? <span className="ml-auto shrink-0 text-[10px] text-[var(--theme-muted)]/80">{fmtIsoLocal(block.time)}</span> : null}
+            </div>
+          );
+        }
+        if (block.type === "status") {
+          return (
+            <div key={block.id} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-[var(--theme-muted)]">
+              <span className="text-[var(--theme-text)]">{block.label}</span>
+              {block.time ? <span className="text-[var(--theme-muted)]/80">{fmtIsoLocal(block.time)}</span> : null}
+              {block.reasonCode ? <span className="font-mono text-[10px] text-[var(--theme-muted)]/70">{block.reasonCode}</span> : null}
+            </div>
+          );
+        }
+        return (
+          <div key={block.id} className="flex flex-wrap gap-2 text-[11px] text-[var(--theme-muted)]">
+            <span className="font-mono text-[10px] uppercase tracking-wider">{block.label}</span>
+            {block.detail ? <span className="text-[var(--theme-text)]/90">{block.detail}</span> : null}
+            {block.time ? <span className="text-[var(--theme-muted)]/70">{fmtIsoLocal(block.time)}</span> : null}
+          </div>
+        );
+      })}
+      <div ref={feedScrollAnchorRef} className="h-px w-full shrink-0" aria-hidden />
+    </>
+  );
+}
+
+export function WorkspaceManagedMissionsLivePanel({ refreshSignal, variant, onMissionTranscriptDigest }: Props) {
   const [missions, setMissions] = React.useState<ManagedMissionSnapshot[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -133,6 +246,25 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, variant }: Pr
     banner: selectedFeedBanner,
     feedScrollAnchorRef,
   } = useManagedMissionFeedLiveStream(selectedMissionId, { refreshSignal });
+
+  const fullMissionTranscriptItems = React.useMemo(() => {
+    const ev = selectedFeed?.events ?? [];
+    return applyTranscriptStreamingHints(
+      buildMissionFeedTranscript(ev),
+      selectedFeed?.lifecycle ?? null,
+      selectedFeedBanner.phase,
+    );
+  }, [selectedFeed?.events, selectedFeed?.lifecycle, selectedFeedBanner.phase]);
+
+  const displayedMissionTranscriptItems = React.useMemo(
+    () => fullMissionTranscriptItems.slice(-15),
+    [fullMissionTranscriptItems],
+  );
+
+  React.useEffect(() => {
+    const digest = latestAssistantPreviewFromTranscript(fullMissionTranscriptItems);
+    onMissionTranscriptDigest?.(digest ?? null);
+  }, [fullMissionTranscriptItems, onMissionTranscriptDigest]);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -411,19 +543,11 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, variant }: Pr
           <div className="mt-2 max-h-[min(320px,40vh)] space-y-2 overflow-auto">
             {selectedFeedInitialLoading && !(selectedFeed?.events || []).length ? (
               <p className="text-sm text-[var(--theme-muted)]">Loading mission feed…</p>
-            ) : (selectedFeed?.events || []).length > 0 ? (
-              <>
-                {(selectedFeed?.events || []).slice(-8).map((ev) => (
-                  <div key={`${ev.id}-${ev.time}`} className="rounded-lg border border-[var(--theme-border)]/80 bg-[var(--theme-card)] px-3 py-2">
-                    <p className="text-sm text-[var(--theme-text)]">{ev.message}</p>
-                    <p className="mt-1 text-xs text-[var(--theme-muted)]">
-                      {fmtIsoLocal(ev.time)} · {ev.source}
-                      {ev.reason_code ? ` · ${ev.reason_code}` : ""}
-                    </p>
-                  </div>
-                ))}
-                <div ref={feedScrollAnchorRef} className="h-px w-full shrink-0" aria-hidden />
-              </>
+            ) : displayedMissionTranscriptItems.length > 0 ? (
+              <LiveMissionFeedTranscript
+                transcriptItems={displayedMissionTranscriptItems}
+                feedScrollAnchorRef={feedScrollAnchorRef}
+              />
             ) : (
               <p className="text-sm text-[var(--theme-muted-2)]">Waiting for agent progress…</p>
             )}

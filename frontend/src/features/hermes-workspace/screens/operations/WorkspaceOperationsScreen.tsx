@@ -100,6 +100,7 @@ export function WorkspaceOperationsScreen() {
   const [chatDraft, setChatDraft] = React.useState("");
   const [cronPanelFor, setCronPanelFor] = React.useState<string | null>(null);
   const [managedLiveRefresh, setManagedLiveRefresh] = React.useState(0);
+  const [latestManagedAssistantPreview, setLatestManagedAssistantPreview] = React.useState<string | null>(null);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -352,7 +353,11 @@ export function WorkspaceOperationsScreen() {
           </div>
         </header>
 
-        <WorkspaceManagedMissionsLivePanel refreshSignal={managedLiveRefresh} variant="operations" />
+        <WorkspaceManagedMissionsLivePanel
+          refreshSignal={managedLiveRefresh}
+          variant="operations"
+          onMissionTranscriptDigest={setLatestManagedAssistantPreview}
+        />
 
         {loading && agents.length === 0 ? (
           <section className="rounded-3xl border border-[var(--theme-border)] bg-[var(--theme-card)] px-6 py-12 text-center text-sm text-[var(--theme-muted)] shadow-[0_24px_80px_var(--theme-shadow)]">
@@ -417,13 +422,20 @@ export function WorkspaceOperationsScreen() {
 
         {view === "outputs" && !loading && (
           <div className="hww-scroll min-h-[40vh] overflow-auto rounded-3xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-5 shadow-[0_20px_60px_var(--theme-shadow)]">
-            <p className="text-xs font-semibold uppercase tracking-wider text-[var(--theme-muted)]">Full outputs (newest first)</p>
+            <div className="border-b border-[var(--theme-border)]/80 pb-4">
+              <p className="text-xs font-semibold uppercase tracking-wider text-[var(--theme-muted)]">Latest agent output</p>
+              {latestManagedAssistantPreview ? (
+                <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-[var(--theme-text)]">{latestManagedAssistantPreview}</p>
+              ) : (
+                <p className="mt-2 text-sm text-[var(--theme-muted)]">
+                  No final artifact yet. Live agent activity is shown above.
+                </p>
+              )}
+            </div>
+            <p className="mt-4 text-xs font-semibold uppercase tracking-wider text-[var(--theme-muted)]">Full outputs (newest first)</p>
             <div className="mt-3 space-y-2">
               {allOutputLines.length === 0 ? (
-                <p className="text-sm text-[var(--theme-muted)]">
-                  No orchestrator output lines yet. Managed Cloud Agent missions show live activity above; open a mission in chat for
-                  feed details.
-                </p>
+                <p className="text-sm text-[var(--theme-muted)]">No orchestrator output lines recorded for workspace agents.</p>
               ) : (
                 allOutputLines.map((l) => (
                   <div key={`${l.id}-${l.at}-${l.line.slice(0, 20)}`} className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] p-3">

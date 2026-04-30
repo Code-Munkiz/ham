@@ -36,6 +36,11 @@ import {
   type ManagedMissionSnapshot,
 } from "../../adapters/managedMissionsAdapter";
 import { useManagedMissionFeedLiveStream } from "../../hooks/useManagedMissionFeedLiveStream";
+import {
+  applyTranscriptStreamingHints,
+  buildMissionFeedTranscript,
+  type MissionTranscriptItem,
+} from "../../utils/missionFeedTranscript";
 import { useVoiceWorkspaceSettingsOptional } from "../../voice/VoiceWorkspaceSettingsContext";
 import { WorkspaceChatEmptyState } from "./WorkspaceChatEmptyState";
 import { WorkspaceChatMessageList, type HwwMsgRow } from "./WorkspaceChatMessageList";
@@ -101,6 +106,113 @@ function shortId(v: string | null | undefined): string {
   if (!s) return "—";
   if (s.length <= 16) return s;
   return `${s.slice(0, 8)}…${s.slice(-6)}`;
+}
+
+function fmtMissionFeedIsoBrief(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const t = new Date(iso).getTime();
+  if (!Number.isFinite(t)) return iso;
+  return new Date(t).toLocaleString([], {
+    hour12: false,
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function ChatThinkingTranscriptChunk({ item }: { item: Extract<MissionTranscriptItem, { type: "thinking" }> }) {
+  const [open, setOpen] = React.useState(false);
+  const long = (item.text || "").length > 200;
+  if (!long) {
+    return (
+      <div className="rounded border border-white/[0.08] bg-black/20 px-2 py-1">
+        <p className="whitespace-pre-wrap text-[11px] leading-relaxed text-white/55">{item.text}</p>
+      </div>
+    );
+  }
+  return (
+    <div className="rounded border border-white/[0.08] bg-black/20 px-2 py-1">
+      <button
+        type="button"
+        className="w-full text-left text-[10px] font-medium uppercase tracking-wider text-white/40"
+        onClick={() => setOpen((x) => !x)}
+      >
+        Thinking{item.status === "streaming" ? " (streaming)" : ""} · {open ? "hide" : "show"}
+      </button>
+      {open ? (
+        <p className="mt-1 whitespace-pre-wrap text-[11px] leading-relaxed text-white/55">{item.text}</p>
+      ) : (
+        <p className="mt-1 truncate text-[11px] text-white/45">
+          {item.text.length <= 120 ? item.text : `${item.text.slice(0, 120)}…`}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function ChatMissionFeedTranscript({
+  items,
+  anchorRef,
+}: {
+  items: MissionTranscriptItem[];
+  anchorRef: React.RefObject<HTMLDivElement | null>;
+}) {
+  return (
+    <div className="space-y-1.5">
+      {items.map((block) => {
+        if (block.type === "assistant") {
+          return (
+            <div key={block.id} className="rounded border border-white/[0.08] bg-black/15 px-2 py-1.5">
+              <p className="whitespace-pre-wrap text-[12px] leading-relaxed text-white/80">{block.text}</p>
+              <p className="mt-0.5 text-[10px] text-white/35">
+                {fmtMissionFeedIsoBrief(block.updatedAt)}
+                {block.reasonCode ? ` · ${block.reasonCode}` : ""}
+                {block.status === "streaming" ? " · streaming…" : ""}
+              </p>
+            </div>
+          );
+        }
+        if (block.type === "thinking") return <ChatThinkingTranscriptChunk key={block.id} item={block} />;
+        if (block.type === "user") {
+          return (
+            <div key={block.id} className="rounded border border-sky-500/20 bg-sky-500/10 px-2 py-1">
+              <p className="whitespace-pre-wrap text-[11px] leading-relaxed text-white/75">{block.text}</p>
+              <p className="mt-0.5 text-[10px] text-white/35">{fmtMissionFeedIsoBrief(block.time)} · user</p>
+            </div>
+          );
+        }
+        if (block.type === "tool") {
+          return (
+            <div
+              key={block.id}
+              className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 border-b border-white/[0.05] py-0.5 font-mono text-[10px] text-white/55"
+            >
+              <span className="text-white/35">tool</span>
+              <span className="font-sans text-white/65">{block.label}</span>
+              {block.time ? <span className="ml-auto text-white/30">{fmtMissionFeedIsoBrief(block.time)}</span> : null}
+            </div>
+          );
+        }
+        if (block.type === "status") {
+          return (
+            <div key={block.id} className="flex flex-wrap gap-x-2 text-[10px] text-white/45">
+              <span className="text-white/60">{block.label}</span>
+              {block.time ? <span className="text-white/30">{fmtMissionFeedIsoBrief(block.time)}</span> : null}
+              {block.reasonCode ? <span className="font-mono text-white/30">{block.reasonCode}</span> : null}
+            </div>
+          );
+        }
+        return (
+          <div key={block.id} className="flex flex-wrap gap-x-2 text-[10px] text-white/38">
+            <span className="font-mono uppercase tracking-wider text-white/30">{block.label}</span>
+            {block.detail ? <span className="text-white/55">{block.detail}</span> : null}
+          </div>
+        );
+      })}
+      <div ref={anchorRef} className="h-px w-full" aria-hidden />
+    </div>
+  );
 }
 
 function readLastChatSessionId(): string | null {
@@ -336,6 +448,17 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     initialLoading: missionFeedInitialLoading,
     feedScrollAnchorRef: missionFeedScrollAnchorRef,
   } = useManagedMissionFeedLiveStream(missionIdFromQuery);
+
+  const displayedMissionFeedTranscript = React.useMemo(() => {
+    const ev = missionFeed?.events ?? [];
+    const merged = applyTranscriptStreamingHints(
+      buildMissionFeedTranscript(ev),
+      missionFeed?.lifecycle ?? null,
+      missionFeedBanner.phase,
+    );
+    return merged.slice(-5);
+  }, [missionFeed?.events, missionFeed?.lifecycle, missionFeedBanner.phase]);
+
   const [messages, setMessages] = React.useState<HwwMsgRow[]>([]);
   const [sessionId, setSessionId] = React.useState<string | null>(null);
   const [input, setInput] = React.useState("");
@@ -1657,16 +1780,12 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
                     Mission feed: REST refresh only (not a live provider stream).
                   </p>
                 ) : null}
-                <div className="space-y-1">
+                <div className="space-y-1.5">
                   {(missionFeed?.events || []).length > 0 ? (
-                    <>
-                      {(missionFeed?.events || []).slice(-3).map((ev) => (
-                        <p key={`${ev.id}-${ev.time}`} className="text-[11px] text-white/60">
-                          {ev.message}
-                        </p>
-                      ))}
-                      <div ref={missionFeedScrollAnchorRef} className="h-px w-full" aria-hidden />
-                    </>
+                    <ChatMissionFeedTranscript
+                      items={displayedMissionFeedTranscript}
+                      anchorRef={missionFeedScrollAnchorRef}
+                    />
                   ) : missionFeedInitialLoading ? (
                     <p className="text-[11px] text-white/45">Loading mission feed…</p>
                   ) : (
