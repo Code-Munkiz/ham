@@ -5,11 +5,18 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
   cancelManagedMission,
+  fetchManagedMissionCorrelation,
   fetchManagedMissionDetail,
   fetchManagedMissions,
+  fetchManagedMissionTruth,
+  patchManagedMissionBoard,
+  postManagedMissionHermesAdvisory,
   syncManagedMissionByAgentId,
+  type ManagedMissionBoardState,
+  type ManagedMissionCorrelationPayload,
   type ManagedMissionLifecycle,
   type ManagedMissionSnapshot,
+  type ManagedMissionTruthPayload,
 } from "../adapters/managedMissionsAdapter";
 import { useManagedMissionFeedLiveStream } from "../hooks/useManagedMissionFeedLiveStream";
 import {
@@ -56,6 +63,37 @@ function missionCheckpointLabel(m: ManagedMissionSnapshot) {
 
 function providerLabel(m: ManagedMissionSnapshot) {
   return m.provider === "cursor" ? "Cursor" : "Cloud Agent";
+}
+
+const MANAGED_MISSION_WRITE_TOKEN_KEY = "ham_managed_mission_write_token";
+
+function boardLanePill(bs: ManagedMissionBoardState | undefined) {
+  const lane = bs ?? "active";
+  const map: Record<ManagedMissionBoardState, { cls: string; label: string }> = {
+    backlog: {
+      cls: "border-amber-400/35 bg-amber-500/10 text-amber-200",
+      label: "Backlog",
+    },
+    active: {
+      cls: "border-violet-400/35 bg-violet-500/10 text-violet-200",
+      label: "Active",
+    },
+    archive: {
+      cls: "border-[var(--theme-border)] bg-[var(--theme-card2)] text-[var(--theme-muted)]",
+      label: "Archive",
+    },
+  };
+  const m = map[lane] ?? map.active;
+  return (
+    <span
+      className={cn(
+        "inline-flex shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]",
+        m.cls,
+      )}
+    >
+      {m.label}
+    </span>
+  );
 }
 
 function lifecyclePill(lc: ManagedMissionLifecycle) {
@@ -233,6 +271,11 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, variant, onMi
   const [detailMission, setDetailMission] = React.useState<ManagedMissionSnapshot | null>(null);
   const [detailLoading, setDetailLoading] = React.useState(false);
   const [detailError, setDetailError] = React.useState<string | null>(null);
+  const [truthPayload, setTruthPayload] = React.useState<ManagedMissionTruthPayload | null>(null);
+  const [correlationPayload, setCorrelationPayload] = React.useState<ManagedMissionCorrelationPayload | null>(null);
+  const [missionWriteToken, setMissionWriteToken] = React.useState("");
+  const [hermesBusy, setHermesBusy] = React.useState(false);
+  const [boardBusy, setBoardBusy] = React.useState(false);
 
   const [syncAgentId, setSyncAgentId] = React.useState<string | null>(null);
   const [cancelMissionId, setCancelMissionId] = React.useState<string | null>(null);
@@ -295,19 +338,46 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, variant, onMi
     return () => window.clearInterval(t);
   }, []);
 
+  React.useEffect(() => {
+    try {
+      const v = window.sessionStorage.getItem(MANAGED_MISSION_WRITE_TOKEN_KEY);
+      if (v) setMissionWriteToken(v);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const persistMissionWriteToken = React.useCallback((next: string) => {
+    setMissionWriteToken(next);
+    try {
+      if (next.trim()) window.sessionStorage.setItem(MANAGED_MISSION_WRITE_TOKEN_KEY, next.trim());
+      else window.sessionStorage.removeItem(MANAGED_MISSION_WRITE_TOKEN_KEY);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   const openDetail = async (missionRegistryId: string) => {
     setActionError(null);
     setDetailOpen(true);
     setDetailLoading(true);
     setDetailError(null);
     setDetailMission(null);
-    const r = await fetchManagedMissionDetail(missionRegistryId);
+    setTruthPayload(null);
+    setCorrelationPayload(null);
+    const [r, t, c] = await Promise.all([
+      fetchManagedMissionDetail(missionRegistryId),
+      fetchManagedMissionTruth(missionRegistryId),
+      fetchManagedMissionCorrelation(missionRegistryId),
+    ]);
     setDetailLoading(false);
     if (r.mission) {
       setDetailMission(r.mission);
     } else {
       setDetailError(r.error ?? "Could not load mission");
     }
+    if (t.truth) setTruthPayload(t.truth);
+    if (c.correlation) setCorrelationPayload(c.correlation);
   };
 
   const closeDetail = () => {
@@ -315,6 +385,8 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, variant, onMi
     setDetailMission(null);
     setDetailError(null);
     setDetailLoading(false);
+    setTruthPayload(null);
+    setCorrelationPayload(null);
   };
 
   const runSync = async (agentId: string) => {
@@ -338,6 +410,37 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, variant, onMi
     }
   };
 
+  const runHermesAdvisory = async (missionRegistryId: string) => {
+    const mid = missionRegistryId.trim();
+    if (!mid) return;
+    setActionError(null);
+    setHermesBusy(true);
+    const r = await postManagedMissionHermesAdvisory(mid, missionWriteToken);
+    setHermesBusy(false);
+    if (!r.ok || r.error) {
+      setActionError(r.error ?? "Hermes advisory failed");
+      return;
+    }
+    const d = await fetchManagedMissionDetail(mid);
+    if (d.mission) setDetailMission(d.mission);
+    await load();
+  };
+
+  const runBoardLane = async (missionRegistryId: string, lane: ManagedMissionBoardState) => {
+    const mid = missionRegistryId.trim();
+    if (!mid) return;
+    setActionError(null);
+    setBoardBusy(true);
+    const r = await patchManagedMissionBoard(mid, lane, missionWriteToken);
+    setBoardBusy(false);
+    if (!r.ok || r.error) {
+      setActionError(r.error ?? "Could not update board lane");
+      return;
+    }
+    if (r.mission) setDetailMission(r.mission);
+    await load();
+  };
+
   const runCancel = async (missionRegistryId: string) => {
     const mid = missionRegistryId.trim();
     if (!mid) return;
@@ -359,8 +462,8 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, variant, onMi
   const title = "Live Cloud Agent missions";
   const subtitle =
     variant === "operations"
-      ? "Mission control for work HAM launched. Track progress, outputs, and next actions."
-      : "Live mission control for Cloud Agent runs launched by HAM.";
+      ? "HAM owns the managed record, feed, and policy edges; Cursor owns execution upstream. See mission details for the full truth table."
+      : "HAM stores mission history and feed; Cursor runs the agent. Open details for correlation with control-plane runs.";
 
   const d = detailMission;
 
@@ -424,10 +527,11 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, variant, onMi
 
       {!error && missions.length > 0 ? (
         <div className="mt-4 hww-scroll max-h-[min(420px,50vh)] overflow-auto rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)]">
-          <table className="w-full min-w-[760px] border-collapse text-left text-sm">
+          <table className="w-full min-w-[820px] border-collapse text-left text-sm">
             <thead className="sticky top-0 z-[1] border-b border-[var(--theme-border)] bg-[var(--theme-card)]">
               <tr className="text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-muted)]">
                 <th className="px-3 py-2">Status</th>
+                <th className="px-3 py-2">Lane</th>
                 <th className="px-3 py-2">Mission</th>
                 <th className="px-3 py-2">Repo / ref</th>
                 <th className="px-3 py-2">Agent</th>
@@ -451,6 +555,7 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, variant, onMi
                     onClick={() => setSelectedMissionId(m.mission_registry_id)}
                   >
                     <td className="px-3 py-2 align-top">{lifecyclePill(m.mission_lifecycle)}</td>
+                    <td className="px-3 py-2 align-top">{boardLanePill(m.mission_board_state)}</td>
                     <td className="max-w-[240px] px-3 py-2 align-top">
                       <p className="line-clamp-1 text-sm font-medium text-[var(--theme-text)]">{missionTitle(m)}</p>
                       <p className="mt-1 line-clamp-1 text-xs text-[var(--theme-muted)]">
@@ -462,7 +567,9 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, variant, onMi
                     </td>
                     <td className="px-3 py-2 align-top">
                       <p className="font-mono text-[11px] text-[var(--theme-text)]">{shortId(m.cursor_agent_id)}</p>
-                      <p className="mt-1 font-mono text-[10px] text-[var(--theme-muted)]">{shortId(m.mission_registry_id)}</p>
+                      <p className="mt-1 font-mono text-[10px] text-[var(--theme-muted)]" title={m.mission_registry_id}>
+                        {shortId(m.mission_registry_id)}
+                      </p>
                     </td>
                     <td className="whitespace-nowrap px-3 py-2 align-top text-right text-xs text-[var(--theme-muted-2)]">
                       {formatRelativeIso(m.last_server_observed_at || m.updated_at, now)}
@@ -595,10 +702,142 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, variant, onMi
 
             {d && !detailLoading ? (
               <div className="mt-4 space-y-4">
+                {truthPayload?.rows?.length ? (
+                  <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-muted)]">
+                      Who owns what (HAM vs Cursor)
+                    </p>
+                    <div className="mt-2 overflow-x-auto">
+                      <table className="w-full min-w-[560px] border-collapse text-left text-xs">
+                        <thead>
+                          <tr className="border-b border-[var(--theme-border)] text-[10px] uppercase tracking-wider text-[var(--theme-muted)]">
+                            <th className="py-2 pr-2 font-semibold">Topic</th>
+                            <th className="py-2 pr-2 font-semibold">Cursor</th>
+                            <th className="py-2 font-semibold">HAM</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {truthPayload.rows.map((row) => (
+                            <tr key={row.topic} className="border-b border-[var(--theme-border)]/60 align-top last:border-b-0">
+                              <td className="py-2 pr-2 font-medium text-[var(--theme-text)]">{row.topic}</td>
+                              <td className="py-2 pr-2 text-[var(--theme-muted-2)]">{row.cursor_owns}</td>
+                              <td className="py-2 text-[var(--theme-muted-2)]">{row.ham_owns}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {truthPayload.footnotes?.length ? (
+                      <ul className="mt-2 list-disc space-y-1 pl-4 text-[11px] text-[var(--theme-muted)]">
+                        {truthPayload.footnotes.map((fn) => (
+                          <li key={fn}>{fn}</li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {correlationPayload ? (
+                  <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-muted)]">
+                      Control plane correlation
+                    </p>
+                    <p className="mt-2 text-sm text-[var(--theme-muted-2)]">{correlationPayload.hint}</p>
+                    {correlationPayload.control_plane_run ? (
+                      <div className="mt-3 grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
+                        <DetailField
+                          label="Run status"
+                          value={String((correlationPayload.control_plane_run as { status?: string }).status ?? "—")}
+                        />
+                        <DetailField
+                          label="Summary"
+                          value={String((correlationPayload.control_plane_run as { summary?: string | null }).summary ?? "—")}
+                        />
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-muted)]">
+                    Operator tools (server token)
+                  </p>
+                  <p className="mt-1 text-xs text-[var(--theme-muted-2)]">
+                    Paste the same value as <span className="font-mono">HAM_MANAGED_MISSION_WRITE_TOKEN</span> on the API
+                    host. Stored in this browser tab only (sessionStorage).
+                  </p>
+                  <input
+                    className="mt-2 w-full rounded-lg border border-[var(--theme-border)] bg-[var(--theme-card)] px-3 py-2 text-sm text-[var(--theme-text)]"
+                    type="password"
+                    autoComplete="off"
+                    placeholder="HAM_MANAGED_MISSION_WRITE_TOKEN"
+                    value={missionWriteToken}
+                    onChange={(e) => persistMissionWriteToken(e.target.value)}
+                  />
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      className="border border-[var(--theme-border)]"
+                      disabled={hermesBusy || !missionWriteToken.trim()}
+                      onClick={() => void runHermesAdvisory(d.mission_registry_id)}
+                    >
+                      {hermesBusy ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
+                      Run Hermes advisory
+                    </Button>
+                  </div>
+                  <p className="mt-2 text-[11px] text-[var(--theme-muted)]">
+                    Advisory only — stored on the mission row; does not change Cursor lifecycle or provider status.
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-muted)]">Board lane</p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    {boardLanePill(d.mission_board_state)}
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      className="h-7 border border-[var(--theme-border)] px-2 text-[11px]"
+                      disabled={boardBusy || !missionWriteToken.trim()}
+                      onClick={() => void runBoardLane(d.mission_registry_id, "backlog")}
+                    >
+                      Backlog
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      className="h-7 border border-[var(--theme-border)] px-2 text-[11px]"
+                      disabled={boardBusy || !missionWriteToken.trim()}
+                      onClick={() => void runBoardLane(d.mission_registry_id, "active")}
+                    >
+                      Active
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      className="h-7 border border-[var(--theme-border)] px-2 text-[11px]"
+                      disabled={boardBusy || !missionWriteToken.trim()}
+                      onClick={() => void runBoardLane(d.mission_registry_id, "archive")}
+                    >
+                      Archive
+                    </Button>
+                  </div>
+                  <p className="mt-2 text-[11px] text-[var(--theme-muted)]">
+                    Operator labels only — not a mission queue graph. Terminal lifecycle moves Active → Archive
+                    automatically when observed.
+                  </p>
+                </div>
+
                 <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-3">
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-muted)]">Summary</p>
                   <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <DetailField label="Status" value={lifecyclePill(d.mission_lifecycle)} />
+                    <DetailField label="Board lane" value={boardLanePill(d.mission_board_state)} />
                     <DetailField label="Provider" value={providerLabel(d)} />
                     <DetailField label="Mission" value={missionTitle(d)} />
                     <DetailField label="Latest checkpoint" value={missionCheckpointLabel(d)} />
@@ -608,6 +847,20 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, variant, onMi
                     <DetailField label="Agent id" value={d.cursor_agent_id} mono />
                   </div>
                 </div>
+
+                {d.hermes_advisory_triggered_at || d.hermes_advisory_notes ? (
+                  <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-muted)]">
+                      Last Hermes advisory
+                    </p>
+                    <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <DetailField label="Triggered" value={fmtIsoLocal(d.hermes_advisory_triggered_at)} />
+                      <DetailField label="Ok (advisory)" value={d.hermes_advisory_ok == null ? "—" : d.hermes_advisory_ok ? "true" : "false"} />
+                      <DetailField label="Stale hint" value={d.hermes_advisory_stale ? "Consider re-running advisory." : "—"} />
+                      <DetailField label="Notes" value={d.hermes_advisory_notes ?? "—"} />
+                    </div>
+                  </div>
+                ) : null}
 
                 <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-3">
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-muted)]">Progress</p>

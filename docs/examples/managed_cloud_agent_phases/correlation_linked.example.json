@@ -1,0 +1,20 @@
+{
+  "control_plane_ham_run_id": "11111111-1111-4111-8111-111111111111",
+  "control_plane_linked": true,
+  "hint": "GET /api/control-plane-runs/{ham_run_id} for launch-time summary when linked.",
+  "control_plane_run": {
+    "ham_run_id": "11111111-1111-4111-8111-111111111111",
+    "provider": "cursor_cloud_agent",
+    "action_kind": "launch",
+    "project_id": "p-demo",
+    "status": "running",
+    "status_reason": "mapped:RUNNING",
+    "external_id": "bc-demo-agent-id",
+    "summary": "Example launch summary",
+    "error_summary": null,
+    "created_at": "2026-04-30T12:00:00Z",
+    "updated_at": "2026-04-30T12:05:00Z",
+    "last_observed_at": "2026-04-30T12:05:00Z",
+    "last_provider_status": "RUNNING"
+  }
+}

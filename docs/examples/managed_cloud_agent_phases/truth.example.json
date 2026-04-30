@@ -1,0 +1,19 @@
+{
+  "kind": "managed_mission_truth_table",
+  "mission_registry_id": "00000000-0000-4000-8000-000000000001",
+  "rows": [
+    {
+      "topic": "Agent execution",
+      "cursor_owns": "Runs the Cloud Agent, tools, and repo work in Cursor's environment.",
+      "ham_owns": "Does not execute the agent; proxies launch/follow-up/cancel when configured."
+    },
+    {
+      "topic": "Mission record & feed",
+      "cursor_owns": "Status strings and conversation payloads returned by Cursor APIs.",
+      "ham_owns": "Persists ManagedMission JSON, checkpoint history, and bounded feed events (HAM-side view)."
+    }
+  ],
+  "footnotes": [
+    "Feed merge uses SDK bridge when enabled, else REST projection; see provider_projection on GET …/feed."
+  ]
+}

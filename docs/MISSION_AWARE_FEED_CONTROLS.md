@@ -14,6 +14,10 @@ In Ham, **mission-aware** means the **live mission feed** and **operator control
 |-------|------|
 | `GET /api/cursor/managed/missions` | List missions; pick one `mission_registry_id` for detail/feed. |
 | `GET /api/cursor/managed/missions/{mission_registry_id}` | Detail for one mission. |
+| `GET /api/cursor/managed/missions/{mission_registry_id}/truth` | **Phase A:** screen-level HAM vs Cursor ownership table (JSON; not persisted). |
+| `GET /api/cursor/managed/missions/{mission_registry_id}/correlation` | **Phase B:** optional `control_plane_ham_run_id` hint + embedded public control-plane run when linked. |
+| `POST /api/cursor/managed/missions/{mission_registry_id}/hermes-advisory` | **Phase C:** operator-triggered `HermesReviewer` snapshot onto advisory fields (`HAM_MANAGED_MISSION_WRITE_TOKEN` + Bearer). |
+| `PATCH /api/cursor/managed/missions/{mission_registry_id}/board` | **Phase D:** operator board lane `mission_board_state` ∈ `{backlog,active,archive}` (not a mission graph; token-gated). |
 | `GET /api/cursor/managed/missions/{mission_registry_id}/feed` | **Feed** for that mission only (capped event list). |
 | `POST /api/cursor/managed/missions/{mission_registry_id}/messages` | Follow-up instruction for **that** mission (when supported). |
 | `POST /api/cursor/managed/missions/{mission_registry_id}/cancel` | Stop request for **that** mission (when supported). |
@@ -30,3 +34,4 @@ Automated checks for **`POST .../messages`** and the resulting **feed** timeline
 
 - `docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md` — shipped vs partial managed mission behavior.
 - `docs/CONTROL_PLANE_RUN.md` — control-plane runs vs managed mission records (separate substrates).
+- `docs/examples/managed_cloud_agent_phases/README.md` — curl examples for truth, correlation, board, and Hermes advisory routes.
