@@ -4,6 +4,7 @@ This document is the **authoritative** description of what it means for a **harn
 
 | Concern | Document |
 |--------|----------|
+| **Operator runbook** (curl / CI vs chat preview+launch) | [`CURSOR_CLOUD_AGENT_LAUNCH.md`](CURSOR_CLOUD_AGENT_LAUNCH.md) |
 | **Durable run record** (fields, commit boundary, schema) | [`CONTROL_PLANE_RUN.md`](CONTROL_PLANE_RUN.md) |
 | **Chat operator** phases, tokens, product UX | [`HAM_CHAT_CONTROL_PLANE.md`](HAM_CHAT_CONTROL_PLANE.md) |
 | **OpenCode** real-host verification (before any implementation) | [`OPENCODE_VERIFICATION.md`](OPENCODE_VERIFICATION.md) |

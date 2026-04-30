@@ -122,6 +122,8 @@ gcloud builds submit --tag "${IMAGE}" . --project="${PROJECT_ID}"
 
 ## Cloud Agent launch token (`HAM_CURSOR_AGENT_LAUNCH_TOKEN`)
 
+**Operator runbook** (direct `POST /api/cursor/agents/launch` vs chat preview/launch): [`CURSOR_CLOUD_AGENT_LAUNCH.md`](CURSOR_CLOUD_AGENT_LAUNCH.md).
+
 Chat **`cursor_agent_launch`** requires a Ham **operator bearer** separate from **`CURSOR_API_KEY`**. On Cloud Run, store it in **Secret Manager** (not `.gcloud/ham-api-env.yaml`) so it is never committed.
 
 1. **Create** the secret (skip if it already exists):

@@ -47,11 +47,13 @@ From repo root:
   - `POST /api/cursor/credentials` with `{ "api_key": "..." }`
 - Verify key identity:
   - `GET /api/cursor/credentials-status`
+- End-to-end launch paths (curl / CI vs chat operator): **`docs/CURSOR_CLOUD_AGENT_LAUNCH.md`**
 
 ### Write-protected routes (set only when needed)
 
 - `HAM_SETTINGS_WRITE_TOKEN` for project settings apply/rollback
 - `HAM_RUN_LAUNCH_TOKEN` for operator launch_run turns
+- `HAM_CURSOR_AGENT_LAUNCH_TOKEN` for chat **`cursor_agent_launch`** (digest commit path; separate from `CURSOR_API_KEY`)
 - `HAM_SKILLS_WRITE_TOKEN` for Hermes skills install apply
 
 ## 3) Start the app (backend + frontend)
