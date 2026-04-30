@@ -19,9 +19,16 @@ Open-source multi-agent autonomous developer swarm: Hermes supervisory orchestra
 
 ```bash
 pip install -r requirements.txt
-cp .env.example .env   # add OPENROUTER_API_KEY
+cp .env.example .env
+```
+
+For **`python main.py`** with a real model, set `OPENROUTER_API_KEY` (and the defaults in `.env.example` for gateway mode). For a quick local API + dashboard smoke path, `scripts/run_local_api.py` loads `.env`, defaults `HERMES_GATEWAY_MODE=mock` when unset, and matches the setup in [AGENTS.md](AGENTS.md).
+
+```bash
 python main.py "your task"
 ```
+
+**Local API (FastAPI) for UI / Vite:** from repo root, `python3 scripts/run_local_api.py` (port via `PORT`, default 8000). See [AGENTS.md](AGENTS.md) for `uvicorn` alternatives and Clerk dev flags.
 
 **Playwright browser runtime (`/api/browser/*`):** the API must have Chromium when you use in-process Playwright. One-shot (creates **`./.venv`** on PEP 668 distros if needed, e.g. Pop!_OS/Ubuntu):
 
@@ -44,8 +51,14 @@ Frontend typecheck: `npm run lint` in `frontend/` (`tsc --noEmit`). See [`AGENTS
 
 ## Project layout
 
+- `main.py` — CLI entry (orchestration assembly, bridge / Hermes one-shot flows)
+- `src/api/server.py` — FastAPI app (status, runs, chat, skills, project settings; see [AGENTS.md](AGENTS.md))
 - `src/hermes_feedback.py` — Hermes supervisory/critic MVP surface (reviewer implemented)
 - `src/tools/droid_executor.py` — Droid execution backend (bounded `subprocess.run`, timeout, stdout/stderr caps; profile argv + policy gate what actually runs)
 - `src/memory_heist.py` — repo context, instructions, git, sessions
 - `src/llm_client.py` — LiteLLM / OpenRouter
 - `src/swarm_agency.py` — Hermes-supervised role context assembly (no CrewAI; orchestration is Hermes-led)
+- `src/ham_cli/` — operator CLI (`python -m src.ham_cli` or `./scripts/ham`: doctor, status, desktop packaging helpers)
+- `scripts/run_local_api.py` — local API runner with dev-friendly defaults
+- `frontend/` — Vite + React workspace UI (`npm run dev`, proxies `/api` to backend)
+- `desktop/` — Electron shell (see `desktop/README.md`)
