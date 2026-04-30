@@ -10,7 +10,7 @@ This document states **what works today**, what is **stub / partial / explicitly
 
 - Decision: `SDK_BRIDGE_ENABLED_LIVE`
 - Deploy evidence:
-  - commit `88e2fd3`
+  - commit `88e2fd3` (runtime repair); follow-up `8d7cefd` (SDK bridge diagnostics stabilization)
   - revision `ham-api-00067-fgs`
   - service `https://ham-api-vlryahjzwa-uc.a.run.app`
   - env `HAM_CURSOR_SDK_BRIDGE_ENABLED=true`
