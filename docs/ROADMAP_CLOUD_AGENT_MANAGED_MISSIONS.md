@@ -4,6 +4,18 @@ This document states **what works today**, what is **stub / partial / explicitly
 
 **Related:** `GAPS.md`, `VISION.md` (transitional state table), `docs/CONTROL_PLANE_RUN.md` (factual run records vs. mission graph).
 
+## Explicit launch
+
+In Ham, **explicit launch** is not one magic flag; it is shorthand for **operator-visible, HAM-gated** steps on the Cursor Cloud Agent path. Three meanings show up together in issues and UI copy:
+
+1. **Commit-after-preview (control plane)** — A Cursor agent launch is **explicit** in the sense of `docs/CONTROL_PLANE_RUN.md`: the durable `ControlPlaneRun` row is written **after** preview and digest verification, when the operator crosses the **irreversible launch** boundary (not for preview alone). Status polling then updates that same record.
+
+2. **Explicit repository URL** — The GitHub URL sent to Cursor is resolved in priority order in `resolve_cursor_repository_url` (`src/ham/cursor_agent_workflow.py`): operator **`cursor_repository`** first, then `ProjectRecord.metadata["cursor_cloud_repository"]`, then optional **`HAM_CURSOR_DEFAULT_REPOSITORY`**. Chat operator phases and `docs/HAM_CHAT_CONTROL_PLANE.md` describe the same resolution for **`cursor_agent_preview`** / **`cursor_agent_launch`**.
+
+3. **Managed mission handling** — **`mission_handling: managed`** on `POST /api/cursor/agents/launch` (HAM-only; stripped before Cursor) or **`cursor_mission_handling: managed`** on chat `operator` payloads selects the deterministic **“[HAM] Managed Cloud Agent mission”** prompt built in `build_managed_cloud_agent_prompt_py`. On a successful managed launch, Ham may create a **`ManagedMission`** row; **`control_plane_ham_run_id`** is set when the new agent id matches a **`ControlPlaneRun`** in the store (see `src/ham/managed_mission_wiring.py`). **`mission_handling: direct`** (default) sends the operator’s task text without that template and does **not** create a managed mission from that path.
+
+For correlation gaps when `control_plane_ham_run_id` is null (for example launches that never went through the linked control-plane store), see Phase B in this file and `docs/CONTROL_PLANE_RUN.md`.
+
 ---
 
 ## 1. What works today (shipped)
