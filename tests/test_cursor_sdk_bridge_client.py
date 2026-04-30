@@ -58,3 +58,18 @@ def test_stream_parses_jsonl(monkeypatch, tmp_path: Path) -> None:
     assert err is None
     assert len(rows) == 2
     assert rows[0]["event_id"] == "e1"
+
+
+def test_parse_jsonl_counts_malformed_rows() -> None:
+    rows, malformed = bridge._parse_jsonl(  # pylint: disable=protected-access
+        '{"event_id":"e1"}\nnot-json\n[1,2,3]\n{"event_id":"e2"}\n'
+    )
+    assert len(rows) == 2
+    assert malformed == 2
+
+
+def test_safe_text_redacts_cursor_api_key() -> None:
+    raw = "fatal: token crsr_abcdefghijklmnopqrstuvwxyz123456 leaked"
+    out = bridge._safe_text(raw, limit=500)  # pylint: disable=protected-access
+    assert "crsr_" not in out
+    assert "[REDACTED]" in out

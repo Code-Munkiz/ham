@@ -6,6 +6,28 @@ This document states **what works today**, what is **stub / partial / explicitly
 
 ---
 
+## Live SDK bridge stabilization snapshot (2026-04-30)
+
+- Decision: `SDK_BRIDGE_ENABLED_LIVE`
+- Deploy evidence:
+  - commit `88e2fd3`
+  - revision `ham-api-00067-fgs`
+  - service `https://ham-api-vlryahjzwa-uc.a.run.app`
+  - env `HAM_CURSOR_SDK_BRIDGE_ENABLED=true`
+- Production smoke evidence:
+  - mission `eded524a-f6fa-47ea-a51e-d02f9fe79dfb`
+  - agent `bc-de421c9e-b067-4bf8-b91d-937505c1b7ac`
+  - `/feed` returned `provider_projection.mode=sdk_stream_bridge`, `native_realtime_stream=true`, `status=ok`
+  - observed event kinds: `status`, `assistant_message`, `completed`
+- Boundaries and fallback:
+  - SDK bridge is backend-only (`src/integrations/cursor_sdk_bridge_client.py` + `bridge.mjs`)
+  - browser path remains HAM-only (`/api/cursor/managed/missions/{id}/feed`), no direct browser calls to Cursor APIs
+  - REST projection fallback remains active when bridge is unavailable/erroring (`provider_projection.mode=rest_projection` with reason)
+- Rollback control:
+  - set `HAM_CURSOR_SDK_BRIDGE_ENABLED=false` to force REST projection only without changing launch path or frontend flow
+
+---
+
 ## 1. What works today (shipped)
 
 | Area | What you get |

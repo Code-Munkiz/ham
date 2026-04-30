@@ -54,10 +54,12 @@ def test_managed_mission_feed_surfaces_use_shared_poll_hook_not_direct_feed_fetc
 def test_rest_refresh_disclaimer_copy_still_present() -> None:
     chat = Path("frontend/src/features/hermes-workspace/screens/chat/WorkspaceChatScreen.tsx").read_text(encoding="utf-8")
     assert "REST refresh" in chat
+    assert 'provider_projection?.mode === "rest_projection"' in chat
     panel = Path("frontend/src/features/hermes-workspace/components/WorkspaceManagedMissionsLivePanel.tsx").read_text(
         encoding="utf-8"
     )
     assert "REST refresh" in panel
+    assert 'provider_projection?.mode === "rest_projection"' in panel
 
 
 def test_managed_mission_feed_poll_delay_contract() -> None:
