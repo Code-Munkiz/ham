@@ -6,7 +6,7 @@ working on this repo should read these before proposing changes.
 ## Read order (recommended)
 
 1. `VISION.md` — pillars, boundaries, and how components connect
-2. This file — where implementation lives
+2. This file — where implementation lives (see § *Git workflow* for direct-main testing; Cursor: `ham-direct-main-workflow.mdc`)
 3. `SWARM.md` — repo coding instructions (loaded by `memory_heist`)
 4. `PRODUCT_DIRECTION.md` — product lens: HAM-native model vs reference ecosystems
 5. `docs/TEAM_HERMES_STATUS.md` (when changing Command Center, Activity, Capabilities, or desktop Hermes copy) — **API-side** vs **desktop-side** operator story, boundaries, troubleshooting
@@ -79,6 +79,66 @@ Shipped muscle today centers on **Bridge + Droid executor** (`src/tools/droid_ex
 ## Hardening & remediation
 
 - `docs/HAM_HARDENING_REMEDIATION.md` — audit summary, continuation/parser coupling, remediation order, deferred work
+
+## Git workflow (testing / direct-main)
+
+For HAM testing work in this environment, prefer **`main` directly** — not feature branches or automatic PRs.
+
+**Standing rule:** Do not create draft PRs by default. Do not run `gh pr create`, `gh pr ready`, `gh pr edit`, or suggest opening a PR / pushing a feature branch for review **unless** the user explicitly asks for a PR.
+
+**Procedure:**
+
+1. `git status --short --branch` and `git branch --show-current`.
+2. If not on `main`: `git checkout main`, then `git pull origin main`.
+3. Apply the requested change. Stage **only** intended files.
+4. **Do not stage:** `.cursor/settings.json`, `desktop/live-smoke/`, repomix outputs, build artifacts, temp scripts, unrelated dirty files.
+5. Run **scoped** tests for the touched area.
+6. Commit on `main`: `git commit -m "<clear commit message>"`.
+7. Push: `git push origin main`.
+
+**Report:** commit hash, files changed, tests run, pushed yes/no, deploy/smoke status if applicable.
+
+**If direct push to `main` is blocked** (branch protection, permissions): do **not** create a PR automatically. Stop and report `DIRECT_MAIN_PUSH_BLOCKED` with reason and required action.
+
+**PR exception** — only when the user explicitly says e.g. “open a PR”, “make a draft PR”, “use feature branch”, or “do this as PR review”.
+
+**Draft PRs:** Do not add PR clutter. Before substantial work, you may list and **classify** open draft PRs (superseded, docs-only safe to close, contains useful unmerged work, unknown); do **not** close or merge automatically until classified and the user approves a batch plan. Cursor enforces the short form of these rules in `.cursor/rules/ham-direct-main-workflow.mdc`.
+
+**Separate cleanup run** — paste when you want a dedicated draft-PR audit (agents classify only; no auto-close/merge unless clearly safe):
+
+```md
+Clean up HAM draft PR clutter safely.
+
+## Goal
+
+There are many draft PRs for small docs notes. I want to stop accumulating PR clutter.
+
+## Instructions
+
+1. List all open draft PRs.
+
+2. For each draft PR, classify:
+
+- `SUPERSEDED_BY_MAIN`
+- `DOCS_ONLY_SAFE_TO_CLOSE`
+- `CONTAINS_UNMERGED_USEFUL_WORK`
+- `UNKNOWN_REVIEW_NEEDED`
+
+3. For each PR, report:
+- PR number
+- title
+- branch
+- changed files
+- whether its commits are already in `main`
+- recommended action
+
+4. Do not close or merge anything yet unless clearly safe.
+
+5. After classification, ask for approval with a batch plan:
+- close these PRs
+- merge these PRs
+- leave these open
+```
 
 ## Guidance
 

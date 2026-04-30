@@ -1,0 +1,44 @@
+---
+description: HAM testing workflow — direct-main, no automatic PRs. Apply always.
+alwaysApply: true
+---
+
+# HAM git workflow (testing / direct-main)
+
+## Standing rule
+
+- Do **not** create draft PRs by default.
+- Do **not** run unless the user **explicitly** asks for a PR:
+  - `gh pr create`
+  - `gh pr ready`
+  - `gh pr edit`
+  - Suggestions to “open a PR”, “create draft PR”, or “push feature branch for review”
+
+## Default: work on `main`
+
+1. `git status --short --branch` and `git branch --show-current`.
+2. If not on `main`: `git checkout main` then `git pull origin main`.
+3. Make the change; **stage only intended files**.
+4. **Never stage**: `.cursor/settings.json`, `desktop/live-smoke/`, repomix outputs, build artifacts, temp scripts, unrelated dirty files.
+5. Run **scoped** tests for the change.
+6. Commit on `main`: `git commit -m "<clear message>"`.
+7. Push: `git push origin main`.
+
+Report after push: commit hash, files changed, tests run, pushed yes/no, deploy/smoke if applicable.
+
+## If `git push origin main` is blocked
+
+Do **not** open a PR automatically. Stop and report:
+
+- `DIRECT_MAIN_PUSH_BLOCKED`
+- `reason:`
+- `required action:`
+
+## PR exception — only when the user says one of
+
+- “open a PR” / “make a draft PR” / “use feature branch” / “do this as PR review”
+
+## Draft PR clutter
+
+- Do **not** create more draft PRs for routine work.
+- Before large or messy work, optionally **list** draft PRs (`gh pr list --draft` if available) and **classify** (merged/superseded, docs-only safe to close, contains useful unmerged work, unknown) — **do not close or merge** until the user approves a batch plan.
