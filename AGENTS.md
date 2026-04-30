@@ -196,3 +196,21 @@ There are many draft PRs for small docs notes. I want to stop accumulating PR cl
 - Feed mode `sdk_stream_bridge`: native provider stream through backend bridge; frontend still talks only to HAM.
 - Feed mode `rest_projection`: fallback REST refresh/projection (not provider-native streaming).
 - Rollback: set `HAM_CURSOR_SDK_BRIDGE_ENABLED=false` — forces REST projection without changing launch path or frontend flow.
+
+### Cloud Agent PR hygiene (prevent PR spam)
+
+HAM appends deterministic PR/docs guardrails to **Cursor Cloud Agent** launch prompts (`src/ham/cursor_agent_workflow.py`, `CURSOR_AGENT_BASE_REVISION=cursor-agent-v2`). Humans and Cursor agents collaborating on Ham should behave the same way:
+
+- **Default:** report or push commits to a branch **without** opening a PR unless the user explicitly requests one (`gh pr create` / “open a PR”).
+- Do **not** open docs-only PRs unless explicitly requested. Prefer edits to **canonical** docs: `README.md`, `AGENTS.md`, `VISION.md`, `docs/README.md`, `docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md`, `docs/MISSION_AWARE_FEED_CONTROLS.md`, `docs/HAM_HARDENING_REMEDIATION.md`, `GAPS.md`, `.cursor/skills/**/SKILL.md`. **`CURSOR_EXACT_SETUP_EXPORT.md`** is regenerated via `python scripts/build_cursor_export.py` — not a hand-maintained prose source.
+- Avoid duplicating identical “Cloud Agent truth” bullets across unrelated files when one canonical paragraph suffices.
+- **One mission ↔ at most one GitHub PR** when a PR is explicitly allowed for that mission work.
+- **Before opening a docs PR:** run  
+  `gh pr list --repo <org>/<repo> --state open --limit 50`  
+  and scan titles/branches (`gh pr view <n> --json files` helps). If overlapping docs intent exists → report **`OVERLAPPING_DOCS_PR_FOUND`** and extend the existing PR/list it — do **not** open parallel duplicates from the same automation.
+- **Code vs docs cleanup:** do not lump unrelated observability/UI fixes together with unrelated doc sweeps unless the operator asked — separate PR scopes reduce reviewer noise.
+
+When opening a permitted PR:
+
+- Prefer titles like `docs(agent): …`, `fix(missions): …`, `feat(missions): …`, `chore(agent): …`.
+- Mention **mission_registry_id / agent id** when known; list files touched; say **docs-only vs code-bearing**; list tests/commands run — see also direct-main discipline in `.cursor/rules/ham-direct-main-workflow.mdc` where applicable.

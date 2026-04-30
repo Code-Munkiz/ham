@@ -188,7 +188,7 @@ def test_digest_mismatch_blocks_launch(
         project_id=rec.id,
         cursor_task_prompt="task",
         cursor_proposal_digest="0" * 64,
-        cursor_base_revision="cursor-agent-v1",
+        cursor_base_revision="cursor-agent-v2",
         cursor_auto_create_pr=False,
     )
     out = process_operator_turn(
@@ -220,7 +220,7 @@ def test_launch_blocked_without_ham_bearer(
         project_id=rec.id,
         cursor_task_prompt="task",
         cursor_proposal_digest="a" * 64,
-        cursor_base_revision="cursor-agent-v1",
+        cursor_base_revision="cursor-agent-v2",
     )
     with pytest.raises(HTTPException) as ei:
         process_operator_turn(
@@ -257,7 +257,13 @@ def test_successful_launch_writes_central_audit_and_normalizes_summary(
         auto_create_pr=False,
         branch_name=None,
         expected_deliverable=None,
-        task_prompt="fix tests",
+        task_prompt=caw.effective_cursor_launch_task_prompt(
+            task_prompt="fix tests",
+            expected_deliverable=None,
+            repository="https://github.com/o/r",
+            ref=None,
+            mission_handling=None,
+        ),
     )
     fake = {"id": "bc_xyz", "status": "CREATING", "summary": "started", "source": {"repository": "https://github.com/o/r"}}
     with patch.object(caw, "cursor_api_launch_agent", return_value=fake):
@@ -267,7 +273,7 @@ def test_successful_launch_writes_central_audit_and_normalizes_summary(
             project_id=rec.id,
             cursor_task_prompt="fix tests",
             cursor_proposal_digest=digest,
-            cursor_base_revision="cursor-agent-v1",
+            cursor_base_revision="cursor-agent-v2",
             cursor_auto_create_pr=False,
         )
         out = process_operator_turn(
@@ -391,7 +397,7 @@ def test_managed_launch_calls_mission_registry(
             project_id=rec.id,
             cursor_task_prompt="fix tests",
             cursor_proposal_digest=digest,
-            cursor_base_revision="cursor-agent-v1",
+            cursor_base_revision="cursor-agent-v2",
             cursor_auto_create_pr=False,
             cursor_mission_handling="managed",
         )
@@ -470,7 +476,13 @@ def test_launch_succeeds_central_audit_when_project_root_missing(
         auto_create_pr=False,
         branch_name=None,
         expected_deliverable=None,
-        task_prompt="x",
+        task_prompt=caw.effective_cursor_launch_task_prompt(
+            task_prompt="x",
+            expected_deliverable=None,
+            repository="https://github.com/o/r",
+            ref=None,
+            mission_handling=None,
+        ),
     )
     fake = {"id": "bc_1", "status": "CREATING"}
     with patch.object(caw, "cursor_api_launch_agent", return_value=fake):
@@ -480,7 +492,7 @@ def test_launch_succeeds_central_audit_when_project_root_missing(
             project_id=rec.id,
             cursor_task_prompt="x",
             cursor_proposal_digest=digest,
-            cursor_base_revision="cursor-agent-v1",
+            cursor_base_revision="cursor-agent-v2",
         )
         out = process_operator_turn(
             user_text="",
@@ -516,7 +528,13 @@ def test_project_mirror_skipped_when_root_not_dir(
         auto_create_pr=False,
         branch_name=None,
         expected_deliverable=None,
-        task_prompt="x",
+        task_prompt=caw.effective_cursor_launch_task_prompt(
+            task_prompt="x",
+            expected_deliverable=None,
+            repository="https://github.com/o/r",
+            ref=None,
+            mission_handling=None,
+        ),
     )
     fake = {"id": "bc_2", "status": "CREATING"}
     with patch.object(caw, "cursor_api_launch_agent", return_value=fake):
@@ -526,7 +544,7 @@ def test_project_mirror_skipped_when_root_not_dir(
             project_id=rec.id,
             cursor_task_prompt="x",
             cursor_proposal_digest=digest,
-            cursor_base_revision="cursor-agent-v1",
+            cursor_base_revision="cursor-agent-v2",
         )
         process_operator_turn(
             user_text="",
