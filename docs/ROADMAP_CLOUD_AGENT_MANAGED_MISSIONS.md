@@ -41,7 +41,7 @@ This document states **what works today**, what is **stub / partial / explicitly
 | **Control plane runs (separate)** | Durable `ControlPlaneRun` for operator/chat-committed launches + status; **read** APIs — **factual**, not a queue or graph. |
 | **Read API: missions** | `GET /api/cursor/managed/missions` (list, optional filter by `cursor_agent_id`) and by `mission_registry_id` — full JSON includes `mission_deploy_approval_mode`. |
 | **Mission feed projection** | Persisted `mission_feed_events` are merged on read-path sync from Cursor when a key is available: **optional** `@cursor/sdk` JSONL bridge when `HAM_CURSOR_SDK_BRIDGE_ENABLED=true` (Node on PATH, script at `src/integrations/cursor_sdk_bridge/bridge.mjs`); otherwise **REST** agent status + conversation mapping. Bridge is best-effort; errors fall back to REST. |
-| **UI** | **Partial:** managed mission APIs and operator/chat flows remain; dedicated Cloud Agent / War Room panels were removed with legacy workbench (Batch 2A). Re-home mission UX in Hermes Workspace or Command Center as needed. |
+| **UI** | **Partial:** managed mission APIs and operator/chat flows remain; dedicated Cloud Agent / War Room panels were removed with legacy workbench (Batch 2A). Hermes Workspace **Live Cloud Agent missions** renders a **merged live feed transcript** (assistant / thinking / user / tool/status) from bounded feed events—see `docs/MISSION_AWARE_FEED_CONTROLS.md`. Re-home any further mission UX in Hermes Workspace or Command Center as needed. |
 | **Project registry** | `ProjectStore` + `PATCH` metadata for `default_deploy_approval_mode` (validated). |
 
 ---

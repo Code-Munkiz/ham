@@ -58,8 +58,10 @@ From repo root:
 
 Use two terminals/tmux panes:
 
-- Backend (repo root):
-  - `python3 -m uvicorn src.api.server:app --host 0.0.0.0 --port 8000`
+- Backend (repo root), **recommended for dashboard + Vite smoke:**
+  - `python3 scripts/run_local_api.py` — loads optional `.env`, defaults `HERMES_GATEWAY_MODE=mock`, keeps API-side Clerk enforcement off via `HAM_LOCAL_DEV_LOOSE_CLERK` (default `1`; set `HAM_LOCAL_DEV_LOOSE_CLERK=0` to tighten).
+- Backend (alternate, bare uvicorn):
+  - `python3 -m uvicorn src.api.server:app --host 0.0.0.0 --port 8000` — set gateway + Clerk variables yourself when hitting authenticated workspace routes with a strict policy.
 - Frontend (`frontend/`):
   - `npm run dev`
 
