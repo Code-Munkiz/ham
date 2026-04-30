@@ -77,6 +77,7 @@ export type XCapabilities = {
   live_model_available: boolean;
   broadcast_dry_run_available: boolean;
   broadcast_live_available: boolean;
+  broadcast_apply_available: boolean;
   reactive_inbox_discovery_available: boolean;
   reactive_dry_run_available: boolean;
   reactive_reply_canary_available: boolean;
@@ -175,6 +176,24 @@ export type SocialReactiveBatchApplyResponse = {
   failed_count: number;
   blocked_count: number;
   provider_post_ids: string[];
+  execution_kind: string;
+  audit_ids: string[];
+  journal_path: string;
+  audit_path: string;
+  reasons: string[];
+  warnings: string[];
+  result: Record<string, unknown>;
+};
+
+export type SocialBroadcastApplyResponse = {
+  provider_id: "x";
+  apply_kind: "broadcast_post";
+  status: "blocked" | "executed" | "failed";
+  execution_allowed: boolean;
+  mutation_attempted: boolean;
+  live_apply_available: boolean;
+  provider_status_code: number | null;
+  provider_post_id: string | null;
   execution_kind: string;
   audit_ids: string[];
   journal_path: string;
@@ -369,6 +388,47 @@ export const socialAdapter = {
         throw new Error(detail);
       }
       return { apply: (await res.json()) as SocialReactiveBatchApplyResponse, bridge: { status: "ready" } };
+    } catch (e) {
+      return {
+        apply: null,
+        bridge: workspaceApiPending("social", null, e),
+        error: e instanceof Error ? e.message : String(e),
+      };
+    }
+  },
+
+  async sendOneLivePost(input: {
+    proposalDigest: string;
+    confirmationPhrase: string;
+    operatorToken: string;
+    clientRequestId?: string;
+  }): Promise<{ apply: SocialBroadcastApplyResponse | null; bridge: SocialBridge; error?: string }> {
+    try {
+      const res = await hamApiFetch(`${BASE}/providers/x/broadcast/apply`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Ham-Operator-Authorization": `Bearer ${input.operatorToken}`,
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          proposal_digest: input.proposalDigest,
+          confirmation_phrase: input.confirmationPhrase,
+          client_request_id: input.clientRequestId,
+        }),
+      });
+      if (!res.ok) {
+        let detail = `HTTP ${res.status}`;
+        try {
+          const body = (await res.json()) as { detail?: { error?: { message?: string } } | string };
+          if (typeof body.detail === "string") detail = body.detail;
+          else if (body.detail?.error?.message) detail = body.detail.error.message;
+        } catch {
+          /* ignore */
+        }
+        throw new Error(detail);
+      }
+      return { apply: (await res.json()) as SocialBroadcastApplyResponse, bridge: { status: "ready" } };
     } catch (e) {
       return {
         apply: null,

@@ -33,6 +33,8 @@ from src.ham.clerk_auth import HamActor, resolve_ham_operator_authorization_head
 from src.ham.ham_x.autonomy import AutonomyDecisionResult
 from src.ham.ham_x.config import HamXConfig, load_ham_x_config
 from src.ham.ham_x.execution_journal import ExecutionJournal
+from src.ham.ham_x.goham_governor import GohamGovernorCandidate, evaluate_goham_governor
+from src.ham.ham_x.goham_live_controller import run_live_controller_once
 from src.ham.ham_x.goham_ops import dry_preflight_goham_candidate, show_goham_status
 from src.ham.ham_x.goham_policy import GOHAM_EXECUTION_KIND
 from src.ham.ham_x.goham_reactive_batch import run_reactive_batch_once
@@ -66,9 +68,10 @@ OverallReadiness = Literal["ready", "limited", "blocked", "setup_required"]
 PreviewStatus = Literal["completed", "blocked", "failed"]
 PreviewKind = Literal["reactive_inbox", "reactive_batch_dry_run", "broadcast_preflight"]
 SocialApplyStatus = Literal["blocked", "executed", "failed"]
-SocialApplyKind = Literal["reactive_reply", "reactive_batch"]
+SocialApplyKind = Literal["reactive_reply", "reactive_batch", "broadcast_post"]
 LIVE_REPLY_CONFIRMATION_PHRASE = "SEND ONE LIVE REPLY"
 LIVE_BATCH_CONFIRMATION_PHRASE = "SEND LIVE REACTIVE BATCH"
+LIVE_BROADCAST_CONFIRMATION_PHRASE = "SEND ONE LIVE POST"
 
 
 # ---------------------------------------------------------------------------
@@ -181,6 +184,7 @@ class XCapabilitiesResponse(BaseModel):
     live_model_available: bool
     broadcast_dry_run_available: bool
     broadcast_live_available: bool
+    broadcast_apply_available: bool = False
     reactive_inbox_discovery_available: bool
     reactive_dry_run_available: bool
     reactive_reply_canary_available: bool
@@ -331,6 +335,34 @@ class SocialReactiveBatchApplyResponse(BaseModel):
     blocked_count: int = 0
     provider_post_ids: list[str] = Field(default_factory=list)
     execution_kind: str = GOHAM_REACTIVE_EXECUTION_KIND
+    audit_ids: list[str] = Field(default_factory=list)
+    journal_path: str
+    audit_path: str
+    reasons: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    result: dict[str, Any] = Field(default_factory=dict)
+
+
+class SocialBroadcastApplyRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    proposal_digest: str | None = Field(default=None, min_length=64, max_length=64, pattern=r"^[a-f0-9]{64}$")
+    confirmation_phrase: str = Field(min_length=1, max_length=64)
+    client_request_id: str | None = Field(default=None, max_length=128)
+
+
+class SocialBroadcastApplyResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    provider_id: Literal["x"] = "x"
+    apply_kind: SocialApplyKind = "broadcast_post"
+    status: Literal["blocked", "executed", "failed"]
+    execution_allowed: bool = False
+    mutation_attempted: bool = False
+    live_apply_available: bool = False
+    provider_status_code: int | None = None
+    provider_post_id: str | None = None
+    execution_kind: str = GOHAM_EXECUTION_KIND
     audit_ids: list[str] = Field(default_factory=list)
     journal_path: str
     audit_path: str
@@ -576,6 +608,35 @@ def _reactive_batch_apply_reasons(cfg: HamXConfig) -> list[str]:
     return _dedupe(reasons)
 
 
+def _broadcast_apply_reasons(cfg: HamXConfig) -> list[str]:
+    reasons: list[str] = []
+    if not _social_live_token_enabled():
+        reasons.append("social_live_apply_token_missing")
+    if cfg.emergency_stop:
+        reasons.append("emergency_stop")
+    if not cfg.enable_goham_execution:
+        reasons.append("goham_execution_disabled")
+    if not cfg.enable_goham_controller:
+        reasons.append("goham_controller_disabled")
+    if not cfg.enable_goham_live_controller:
+        reasons.append("goham_live_controller_disabled")
+    if not cfg.autonomy_enabled:
+        reasons.append("autonomy_disabled")
+    if cfg.dry_run:
+        reasons.append("dry_run_enabled")
+    if not cfg.enable_live_execution:
+        reasons.append("live_execution_disabled")
+    if cfg.goham_live_max_actions_per_run != 1:
+        reasons.append("goham_live_max_actions_per_run_must_equal_one")
+    if not cfg.goham_block_links:
+        reasons.append("goham_link_blocking_required")
+    if "post" not in {item.strip() for item in (cfg.goham_allowed_actions or "").split(",") if item.strip()}:
+        reasons.append("original_post_disabled")
+    if not _x_write_credential_present(cfg):
+        reasons.append("x_write_credential_missing")
+    return _dedupe(reasons)
+
+
 def _broadcast_lane_reasons(cfg: HamXConfig) -> list[str]:
     reasons: list[str] = []
     if cfg.emergency_stop:
@@ -673,8 +734,12 @@ def _batch_apply_available(config: HamXConfig) -> bool:
     )
 
 
+def _broadcast_apply_available(config: HamXConfig) -> bool:
+    return bool(_social_live_token_enabled() and _broadcast_live_configured(config))
+
+
 def _apply_available(config: HamXConfig) -> bool:
-    return _reply_apply_available(config) or _batch_apply_available(config)
+    return _reply_apply_available(config) or _batch_apply_available(config) or _broadcast_apply_available(config)
 
 
 def _blocked_apply_response(
@@ -705,6 +770,24 @@ def _blocked_batch_apply_response(
     return SocialReactiveBatchApplyResponse(
         status="blocked",
         live_apply_available=_batch_apply_available(config),
+        journal_path=_display_path(config.execution_journal_path),
+        audit_path=_display_path(config.audit_log_path),
+        reasons=_dedupe(reasons),
+        warnings=warnings or [],
+        result=_safe_dict(result or {}),
+    )
+
+
+def _blocked_broadcast_apply_response(
+    config: HamXConfig,
+    *,
+    reasons: list[str],
+    warnings: list[str] | None = None,
+    result: dict[str, Any] | None = None,
+) -> SocialBroadcastApplyResponse:
+    return SocialBroadcastApplyResponse(
+        status="blocked",
+        live_apply_available=_broadcast_apply_available(config),
         journal_path=_display_path(config.execution_journal_path),
         audit_path=_display_path(config.audit_log_path),
         reasons=_dedupe(reasons),
@@ -1091,6 +1174,114 @@ def _preflight_request_from_body(body: SocialPreviewRequest, config: HamXConfig)
     )
 
 
+def _server_broadcast_candidate(config: HamXConfig) -> GohamGovernorCandidate:
+    text = "Ham is live-checking governed social automation with one capped, audited original post."
+    digest = hashlib.sha256(f"{config.campaign_id}:{text}".encode("utf-8")).hexdigest()[:24]
+    return GohamGovernorCandidate(
+        action_id="social-broadcast-preview",
+        source_action_id="social-broadcast-preview",
+        idempotency_key=f"social-broadcast-{digest}",
+        action_type="post",
+        text=text,
+        topic="social",
+        score=1.0,
+        metadata={"source": "social_broadcast_preflight"},
+    )
+
+
+def _server_broadcast_preflight(config: HamXConfig) -> tuple[dict[str, Any], GohamGovernorCandidate, list[str]]:
+    cfg = _preview_config(config)
+    journal = ExecutionJournal(config=cfg)
+    candidate = _server_broadcast_candidate(cfg)
+    decision = evaluate_goham_governor(candidate, config=cfg, journal=journal)
+    request = SimpleNamespace(
+        tenant_id=cfg.tenant_id,
+        agent_id=cfg.agent_id,
+        campaign_id=cfg.campaign_id,
+        account_id=cfg.account_id,
+        action_type=candidate.action_type,
+        text=candidate.text,
+        action_id=candidate.action_id,
+        source_action_id=candidate.source_action_id,
+        idempotency_key=candidate.idempotency_key,
+        target_post_id=candidate.target_post_id,
+        quote_target_id=candidate.quote_target_id,
+        reply_target_id=None,
+    )
+    autonomy = _preflight_decision(request, cfg)
+    eligibility = dry_preflight_goham_candidate(request, autonomy, config=cfg, journal=journal)
+    result = _force_preview_flags(
+        {
+            "candidate": _safe_payload(candidate),
+            "governor_decision": _safe_payload(decision),
+            "eligibility": _safe_payload(eligibility),
+            "journal_path": _display_path(journal.path),
+            "audit_path": _display_path(cfg.audit_log_path),
+            "diagnostic": "Broadcast preflight preview is eligibility-only and does not call GoHAM bridge or X providers.",
+        }
+    )
+    reasons = _dedupe([*decision.reasons, *decision.provider_block_reasons, *eligibility.reasons])
+    return result, candidate, reasons
+
+
+def _broadcast_proposal_payload(result: dict[str, Any], config: HamXConfig) -> dict[str, Any] | None:
+    candidate = result.get("candidate") if isinstance(result.get("candidate"), dict) else {}
+    governor = result.get("governor_decision") if isinstance(result.get("governor_decision"), dict) else {}
+    eligibility = result.get("eligibility") if isinstance(result.get("eligibility"), dict) else {}
+    if candidate.get("action_type") != "post":
+        return None
+    if not candidate.get("action_id") or not candidate.get("text"):
+        return None
+    return _safe_dict(
+        {
+            "provider_id": "x",
+            "preview_kind": "broadcast_preflight",
+            "candidate": {
+                "action_id": candidate.get("action_id"),
+                "source_action_id": candidate.get("source_action_id"),
+                "idempotency_key": candidate.get("idempotency_key"),
+                "action_type": candidate.get("action_type"),
+                "text": candidate.get("text"),
+                "topic": candidate.get("topic"),
+            },
+            "campaign": {
+                "campaign_id": config.campaign_id,
+                "account_id": config.account_id,
+                "tenant_id": config.tenant_id,
+                "agent_id": config.agent_id,
+            },
+            "governor": {
+                "allowed": governor.get("allowed"),
+                "action_tier": governor.get("action_tier"),
+                "reasons": governor.get("reasons"),
+                "provider_call_allowed": governor.get("provider_call_allowed"),
+                "provider_block_reasons": governor.get("provider_block_reasons"),
+                "budget": governor.get("budget"),
+            },
+            "eligibility": {
+                "allowed": eligibility.get("allowed"),
+                "reasons": eligibility.get("reasons"),
+            },
+            "safety_gates": {
+                "emergency_stop": bool(config.emergency_stop),
+                "enable_goham_execution": bool(config.enable_goham_execution),
+                "enable_goham_controller": bool(config.enable_goham_controller),
+                "enable_goham_live_controller": bool(config.enable_goham_live_controller),
+                "autonomy_enabled": bool(config.autonomy_enabled),
+                "dry_run": bool(config.dry_run),
+                "enable_live_execution": bool(config.enable_live_execution),
+                "goham_live_max_actions_per_run": int(config.goham_live_max_actions_per_run),
+                "goham_block_links": bool(config.goham_block_links),
+            },
+        }
+    )
+
+
+def _broadcast_proposal_digest(result: dict[str, Any], config: HamXConfig) -> str | None:
+    payload = _broadcast_proposal_payload(result, config)
+    return _proposal_digest("broadcast_preflight", payload) if payload else None
+
+
 def _preflight_decision(request: SimpleNamespace, config: HamXConfig) -> AutonomyDecisionResult:
     return AutonomyDecisionResult(
         decision="auto_approve",
@@ -1284,6 +1475,7 @@ def x_capabilities(
         live_model_available=_xai_key_present(cfg),
         broadcast_dry_run_available=_broadcast_dry_run_available(cfg),
         broadcast_live_available=_broadcast_live_configured(cfg),
+        broadcast_apply_available=_broadcast_apply_available(cfg),
         reactive_inbox_discovery_available=_reactive_inbox_discovery_available(cfg),
         reactive_dry_run_available=cfg.enable_goham_reactive and cfg.goham_reactive_dry_run,
         reactive_reply_canary_available=_reactive_reply_canary_available(cfg),
@@ -1451,31 +1643,37 @@ def x_broadcast_preflight(
 ) -> SocialPreviewResponse:
     del _actor
     request = body or SocialPreviewRequest()
-    cfg = _preview_config(load_ham_x_config())
-    journal = ExecutionJournal(config=cfg)
-    preflight_request = _preflight_request_from_body(request, cfg)
-    decision = _preflight_decision(preflight_request, cfg)
-    result = dry_preflight_goham_candidate(preflight_request, decision, config=cfg, journal=journal)
-    payload = _force_preview_flags(
-        {
-            "request": _safe_preflight_request(preflight_request),
-            "decision": _safe_payload(decision),
-            "eligibility": _safe_payload(result),
-            "journal_path": _display_path(journal.path),
-            "audit_path": _display_path(cfg.audit_log_path),
-            "diagnostic": "Broadcast preflight preview is eligibility-only and does not call GoHAM bridge or X providers.",
-        }
-    )
+    actual_cfg = load_ham_x_config()
+    if request.preflight_candidate:
+        cfg = _preview_config(actual_cfg)
+        journal = ExecutionJournal(config=cfg)
+        preflight_request = _preflight_request_from_body(request, cfg)
+        decision = _preflight_decision(preflight_request, cfg)
+        result = dry_preflight_goham_candidate(preflight_request, decision, config=cfg, journal=journal)
+        payload = _force_preview_flags(
+            {
+                "request": _safe_preflight_request(preflight_request),
+                "decision": _safe_payload(decision),
+                "eligibility": _safe_payload(result),
+                "journal_path": _display_path(journal.path),
+                "audit_path": _display_path(cfg.audit_log_path),
+                "diagnostic": "Broadcast preflight preview is eligibility-only and does not call GoHAM bridge or X providers.",
+            }
+        )
+        proposal_digest = None
+        status = "completed" if result.allowed else "blocked"
+        reasons = list(result.reasons)
+    else:
+        payload, _candidate, reasons = _server_broadcast_preflight(actual_cfg)
+        proposal_digest = _broadcast_proposal_digest(payload, actual_cfg)
+        status = "completed" if proposal_digest else "blocked"
     return SocialPreviewResponse(
         preview_kind="broadcast_preflight",
-        status="completed" if result.allowed else "blocked",
-        reasons=list(result.reasons),
+        status=status,
+        reasons=reasons,
         warnings=[],
         result=payload,
-        proposal_digest=_proposal_digest(
-            "broadcast_preflight",
-            {"client_request_id": request.client_request_id, "result": payload},
-        ),
+        proposal_digest=proposal_digest,
     )
 
 
@@ -1629,6 +1827,65 @@ def x_reactive_batch_apply(
     )
 
 
+@router.post("/providers/x/broadcast/apply", response_model=SocialBroadcastApplyResponse)
+def x_broadcast_apply(
+    body: SocialBroadcastApplyRequest,
+    _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)] = None,
+    authorization: str | None = Header(None, alias="Authorization"),
+    x_ham_operator_authorization: str | None = Header(None, alias="X-Ham-Operator-Authorization"),
+) -> SocialBroadcastApplyResponse:
+    del _actor
+    cfg = load_ham_x_config()
+    if not body.proposal_digest:
+        return _blocked_broadcast_apply_response(cfg, reasons=["proposal_digest_required"])
+    if body.confirmation_phrase.strip() != LIVE_BROADCAST_CONFIRMATION_PHRASE:
+        return _blocked_broadcast_apply_response(cfg, reasons=["confirmation_phrase_required"])
+
+    ham_bearer = resolve_ham_operator_authorization_header(
+        authorization=authorization,
+        x_ham_operator_authorization=x_ham_operator_authorization,
+    )
+    _require_social_live_token(ham_bearer)
+
+    gate_reasons = _broadcast_apply_reasons(cfg)
+    if gate_reasons:
+        return _blocked_broadcast_apply_response(cfg, reasons=gate_reasons)
+
+    preview_payload, candidate, preview_reasons = _server_broadcast_preflight(cfg)
+    expected_digest = _broadcast_proposal_digest(preview_payload, cfg)
+    if expected_digest is None:
+        return _blocked_broadcast_apply_response(
+            cfg,
+            reasons=["no_current_broadcast_preview_candidate", *preview_reasons],
+            result=preview_payload,
+        )
+    if body.proposal_digest != expected_digest:
+        return _blocked_broadcast_apply_response(
+            cfg,
+            reasons=["proposal_digest_mismatch"],
+            result={"expected_preview": preview_payload},
+        )
+
+    live_result = run_live_controller_once([candidate], config=cfg)
+    result_payload = _safe_payload(live_result)
+    provider_post_id = getattr(live_result, "provider_post_id", None)
+    safe_provider_post_id = redact(provider_post_id) if isinstance(provider_post_id, str) else provider_post_id
+    return SocialBroadcastApplyResponse(
+        status=live_result.status,
+        execution_allowed=bool(live_result.execution_allowed),
+        mutation_attempted=bool(live_result.mutation_attempted),
+        live_apply_available=_broadcast_apply_available(cfg),
+        provider_status_code=getattr(live_result, "provider_status_code", None),
+        provider_post_id=safe_provider_post_id,
+        audit_ids=list(getattr(live_result, "audit_ids", []) or []),
+        journal_path=_display_path(getattr(live_result, "journal_path", cfg.execution_journal_path)),
+        audit_path=_display_path(getattr(live_result, "audit_path", cfg.audit_log_path)),
+        reasons=_dedupe(list(getattr(live_result, "reasons", []) or [])),
+        warnings=[],
+        result=result_payload,
+    )
+
+
 __all__ = [
     "router",
     "SocialProvidersResponse",
@@ -1643,4 +1900,6 @@ __all__ = [
     "SocialReactiveReplyApplyResponse",
     "SocialReactiveBatchApplyRequest",
     "SocialReactiveBatchApplyResponse",
+    "SocialBroadcastApplyRequest",
+    "SocialBroadcastApplyResponse",
 ]

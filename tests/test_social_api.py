@@ -272,6 +272,36 @@ def _fake_batch_result(
     )
 
 
+def _fake_broadcast_result(
+    *,
+    status: str = "executed",
+    provider_status_code: int | None = 201,
+    provider_post_id: str | None = "broadcast-post-1",
+):
+    return SimpleNamespace(
+        status=status,
+        execution_allowed=status != "blocked",
+        mutation_attempted=status != "blocked",
+        provider_status_code=provider_status_code,
+        provider_post_id=provider_post_id,
+        audit_ids=["audit-post-1"],
+        journal_path=".data/ham-x/execution_journal.jsonl",
+        audit_path=".data/ham-x/audit.jsonl",
+        reasons=[] if status == "executed" else ["provider_failed"],
+        redacted_dump=lambda: {
+            "status": status,
+            "execution_allowed": status != "blocked",
+            "mutation_attempted": status != "blocked",
+            "provider_status_code": provider_status_code,
+            "provider_post_id": provider_post_id,
+            "audit_ids": ["audit-post-1"],
+            "journal_path": ".data/ham-x/execution_journal.jsonl",
+            "audit_path": ".data/ham-x/audit.jsonl",
+            "reasons": [] if status == "executed" else ["provider_failed"],
+        },
+    )
+
+
 def _enable_apply_env(monkeypatch: pytest.MonkeyPatch) -> None:
     _set_x_creds(monkeypatch)
     monkeypatch.setenv("HAM_SOCIAL_LIVE_APPLY_TOKEN", _SOCIAL_TOKEN)
@@ -294,6 +324,22 @@ def _enable_batch_apply_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HAM_X_EMERGENCY_STOP", "false")
 
 
+def _enable_broadcast_apply_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    _set_x_creds(monkeypatch)
+    monkeypatch.setenv("HAM_SOCIAL_LIVE_APPLY_TOKEN", _SOCIAL_TOKEN)
+    monkeypatch.setenv("HAM_X_ENABLE_GOHAM_EXECUTION", "true")
+    monkeypatch.setenv("HAM_X_ENABLE_GOHAM_CONTROLLER", "true")
+    monkeypatch.setenv("HAM_X_ENABLE_GOHAM_LIVE_CONTROLLER", "true")
+    monkeypatch.setenv("HAM_X_AUTONOMY_ENABLED", "true")
+    monkeypatch.setenv("HAM_X_DRY_RUN", "false")
+    monkeypatch.setenv("HAM_X_ENABLE_LIVE_EXECUTION", "true")
+    monkeypatch.setenv("HAM_X_GOHAM_LIVE_MAX_ACTIONS_PER_RUN", "1")
+    monkeypatch.setenv("HAM_X_GOHAM_MAX_ACTIONS_PER_RUN", "1")
+    monkeypatch.setenv("HAM_X_GOHAM_BLOCK_LINKS", "true")
+    monkeypatch.setenv("HAM_X_GOHAM_ALLOWED_ACTIONS", "post")
+    monkeypatch.setenv("HAM_X_EMERGENCY_STOP", "false")
+
+
 def _preview_digest(headers: dict[str, str] | None = None) -> str:
     res = client.post("/api/social/providers/x/reactive/inbox/preview", headers=headers or {}, json={})
     assert res.status_code == 200
@@ -304,6 +350,14 @@ def _preview_digest(headers: dict[str, str] | None = None) -> str:
 
 def _batch_preview_digest(headers: dict[str, str] | None = None) -> str:
     res = client.post("/api/social/providers/x/reactive/batch/dry-run", headers=headers or {}, json={})
+    assert res.status_code == 200
+    digest = res.json().get("proposal_digest")
+    assert isinstance(digest, str)
+    return digest
+
+
+def _broadcast_preview_digest(headers: dict[str, str] | None = None) -> str:
+    res = client.post("/api/social/providers/x/broadcast/preflight", headers=headers or {}, json={})
     assert res.status_code == 200
     digest = res.json().get("proposal_digest")
     assert isinstance(digest, str)
@@ -332,9 +386,11 @@ _PREVIEW_ROUTES = (
 
 _APPLY_ROUTE = "/api/social/providers/x/reactive/reply/apply"
 _BATCH_APPLY_ROUTE = "/api/social/providers/x/reactive/batch/apply"
+_BROADCAST_APPLY_ROUTE = "/api/social/providers/x/broadcast/apply"
 _SOCIAL_TOKEN = "social-live-apply-token-1234567890"
 _CONFIRM = "SEND ONE LIVE REPLY"
 _BATCH_CONFIRM = "SEND LIVE REACTIVE BATCH"
+_BROADCAST_CONFIRM = "SEND ONE LIVE POST"
 
 
 def test_routes_require_clerk_session_when_required(
@@ -542,6 +598,19 @@ def test_capabilities_broadcast_dry_run_requires_full_dry_run_gate_set(
     monkeypatch.setenv("HAM_X_READONLY_TRANSPORT", "direct")
     res = client.get("/api/social/providers/x/capabilities")
     assert res.json()["broadcast_dry_run_available"] is True
+
+
+def test_capabilities_reports_broadcast_apply_available_when_gated(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _enable_broadcast_apply_env(monkeypatch)
+    body = client.get("/api/social/providers/x/capabilities").json()
+    assert body["broadcast_live_available"] is True
+    assert body["broadcast_apply_available"] is True
+    assert body["live_apply_available"] is True
 
 
 def test_capabilities_reactive_inbox_discovery_requires_handle_or_query(
@@ -1005,6 +1074,20 @@ def test_broadcast_preflight_preview_does_not_write_or_execute(
     assert audit.exists() is False
 
 
+def test_broadcast_preflight_server_candidate_returns_digest(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _enable_broadcast_apply_env(monkeypatch)
+    body = client.post("/api/social/providers/x/broadcast/preflight", json={}).json()
+    _assert_preview_invariants(body)
+    assert body["preview_kind"] == "broadcast_preflight"
+    assert body["proposal_digest"]
+    assert body["result"]["candidate"]["action_type"] == "post"
+
+
 def test_preview_payloads_do_not_expose_secrets(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -1030,7 +1113,7 @@ def test_preview_payloads_do_not_expose_secrets(
 # ---------------------------------------------------------------------------
 
 
-def test_apply_route_exists_only_for_reactive_reply(
+def test_apply_routes_exist_only_for_supported_live_controls(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -1038,7 +1121,11 @@ def test_apply_route_exists_only_for_reactive_reply(
     _disable_clerk(monkeypatch)
     assert client.post(_APPLY_ROUTE, json={}).status_code in {200, 422}
     assert client.post(_BATCH_APPLY_ROUTE, json={}).status_code in {200, 422}
-    assert client.post("/api/social/providers/x/broadcast/apply", json={}).status_code == 404
+    assert client.post(_BROADCAST_APPLY_ROUTE, json={}).status_code in {200, 422}
+    assert client.post("/api/social/providers/x/quote/apply", json={}).status_code == 404
+    assert client.post("/api/social/providers/x/like/apply", json={}).status_code == 404
+    assert client.post("/api/social/providers/x/follow/apply", json={}).status_code == 404
+    assert client.post("/api/social/providers/x/dm/apply", json={}).status_code == 404
 
 
 def test_apply_blocked_without_digest(
@@ -1465,6 +1552,211 @@ def test_batch_apply_response_redacted_and_bounded(
     assert "[REDACTED" in text
 
 
+def test_broadcast_apply_blocked_without_digest(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _enable_broadcast_apply_env(monkeypatch)
+    body = client.post(
+        _BROADCAST_APPLY_ROUTE,
+        headers={"Authorization": f"Bearer {_SOCIAL_TOKEN}"},
+        json={"confirmation_phrase": _BROADCAST_CONFIRM},
+    ).json()
+    assert body["status"] == "blocked"
+    assert body["execution_allowed"] is False
+    assert body["mutation_attempted"] is False
+    assert "proposal_digest_required" in body["reasons"]
+
+
+def test_broadcast_apply_blocked_with_stale_or_wrong_digest(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _enable_broadcast_apply_env(monkeypatch)
+    body = client.post(
+        _BROADCAST_APPLY_ROUTE,
+        headers={"Authorization": f"Bearer {_SOCIAL_TOKEN}"},
+        json={"proposal_digest": "0" * 64, "confirmation_phrase": _BROADCAST_CONFIRM},
+    ).json()
+    assert body["status"] == "blocked"
+    assert "proposal_digest_mismatch" in body["reasons"]
+
+
+def test_broadcast_apply_blocked_without_operator_auth(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _enable_broadcast_apply_env(monkeypatch)
+    digest = _broadcast_preview_digest()
+    res = client.post(_BROADCAST_APPLY_ROUTE, json={"proposal_digest": digest, "confirmation_phrase": _BROADCAST_CONFIRM})
+    assert res.status_code == 401
+    assert res.json()["detail"]["error"]["code"] == "SOCIAL_LIVE_APPLY_AUTH_REQUIRED"
+
+
+def test_broadcast_apply_blocked_with_wrong_token(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _enable_broadcast_apply_env(monkeypatch)
+    digest = _broadcast_preview_digest()
+    res = client.post(
+        _BROADCAST_APPLY_ROUTE,
+        headers={"Authorization": "Bearer wrong-token"},
+        json={"proposal_digest": digest, "confirmation_phrase": _BROADCAST_CONFIRM},
+    )
+    assert res.status_code == 403
+    assert res.json()["detail"]["error"]["code"] == "SOCIAL_LIVE_APPLY_AUTH_INVALID"
+
+
+def test_broadcast_apply_blocked_without_exact_confirmation_phrase(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _enable_broadcast_apply_env(monkeypatch)
+    digest = _broadcast_preview_digest()
+    body = client.post(
+        _BROADCAST_APPLY_ROUTE,
+        headers={"Authorization": f"Bearer {_SOCIAL_TOKEN}"},
+        json={"proposal_digest": digest, "confirmation_phrase": "send one live post"},
+    ).json()
+    assert body["status"] == "blocked"
+    assert "confirmation_phrase_required" in body["reasons"]
+
+
+def test_broadcast_apply_blocked_by_emergency_stop(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _enable_broadcast_apply_env(monkeypatch)
+    digest = _broadcast_preview_digest()
+    monkeypatch.setenv("HAM_X_EMERGENCY_STOP", "true")
+    body = client.post(
+        _BROADCAST_APPLY_ROUTE,
+        headers={"Authorization": f"Bearer {_SOCIAL_TOKEN}"},
+        json={"proposal_digest": digest, "confirmation_phrase": _BROADCAST_CONFIRM},
+    ).json()
+    assert body["status"] == "blocked"
+    assert "emergency_stop" in body["reasons"]
+
+
+def test_broadcast_apply_blocked_when_preflight_candidate_changes(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _enable_broadcast_apply_env(monkeypatch)
+    digest = _broadcast_preview_digest()
+    monkeypatch.setenv("HAM_X_CAMPAIGN_ID", "changed-campaign")
+    body = client.post(
+        _BROADCAST_APPLY_ROUTE,
+        headers={"Authorization": f"Bearer {_SOCIAL_TOKEN}"},
+        json={"proposal_digest": digest, "confirmation_phrase": _BROADCAST_CONFIRM},
+    ).json()
+    assert body["status"] == "blocked"
+    assert "proposal_digest_mismatch" in body["reasons"]
+
+
+def test_broadcast_apply_calls_governed_controller_once_and_returns_journal_audit_ids(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _enable_broadcast_apply_env(monkeypatch)
+    digest = _broadcast_preview_digest()
+    with patch("src.api.social.run_live_controller_once", return_value=_fake_broadcast_result()) as live:
+        body = client.post(
+            _BROADCAST_APPLY_ROUTE,
+            headers={"Authorization": f"Bearer {_SOCIAL_TOKEN}"},
+            json={"proposal_digest": digest, "confirmation_phrase": _BROADCAST_CONFIRM},
+        ).json()
+    assert live.call_count == 1
+    assert body["status"] == "executed"
+    assert body["execution_allowed"] is True
+    assert body["mutation_attempted"] is True
+    assert body["provider_status_code"] == 201
+    assert body["provider_post_id"] == "broadcast-post-1"
+    assert body["execution_kind"] == "goham_autonomous"
+    assert body["audit_ids"] == ["audit-post-1"]
+
+
+def test_broadcast_apply_does_not_accept_arbitrary_post_text_or_candidate_body(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _enable_broadcast_apply_env(monkeypatch)
+    digest = _broadcast_preview_digest()
+    res = client.post(
+        _BROADCAST_APPLY_ROUTE,
+        headers={"Authorization": f"Bearer {_SOCIAL_TOKEN}"},
+        json={
+            "proposal_digest": digest,
+            "confirmation_phrase": _BROADCAST_CONFIRM,
+            "post_text": "client supplied",
+            "candidate": {"text": "client supplied"},
+        },
+    )
+    assert res.status_code == 422
+
+
+def test_broadcast_apply_provider_failure_does_not_retry(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _enable_broadcast_apply_env(monkeypatch)
+    digest = _broadcast_preview_digest()
+    with patch(
+        "src.api.social.run_live_controller_once",
+        return_value=_fake_broadcast_result(status="failed", provider_status_code=500, provider_post_id=None),
+    ) as live:
+        body = client.post(
+            _BROADCAST_APPLY_ROUTE,
+            headers={"Authorization": f"Bearer {_SOCIAL_TOKEN}"},
+            json={"proposal_digest": digest, "confirmation_phrase": _BROADCAST_CONFIRM},
+        ).json()
+    assert live.call_count == 1
+    assert body["status"] == "failed"
+    assert body["provider_status_code"] == 500
+    assert body["provider_post_id"] is None
+
+
+def test_broadcast_apply_response_redacted_and_bounded(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _enable_broadcast_apply_env(monkeypatch)
+    secret = "tok_abcdefghijklmnopqrstuvwxyz1234567890XYZ"
+    digest = _broadcast_preview_digest()
+    with patch("src.api.social.run_live_controller_once", return_value=_fake_broadcast_result(provider_post_id=secret)):
+        body = client.post(
+            _BROADCAST_APPLY_ROUTE,
+            headers={"Authorization": f"Bearer {_SOCIAL_TOKEN}"},
+            json={"proposal_digest": digest, "confirmation_phrase": _BROADCAST_CONFIRM},
+        ).json()
+    text = json.dumps(body, sort_keys=True)
+    assert secret not in text
+    assert "[REDACTED" in text
+
+
 # ---------------------------------------------------------------------------
 # Static safety: import isolation
 # ---------------------------------------------------------------------------
@@ -1490,9 +1782,7 @@ def test_social_api_does_not_import_write_or_execution_modules() -> None:
     forbidden_modules = {
         "src.ham.ham_x.x_executor",
         "src.ham.ham_x.manual_canary",
-        "src.ham.ham_x.goham_bridge",
         "src.ham.ham_x.goham_controller",
-        "src.ham.ham_x.goham_live_controller",
         "src.ham.ham_x.reactive_reply_executor",
         "src.ham.ham_x.goham_reactive",
         "src.ham.ham_x.live_dry_run",
@@ -1506,7 +1796,6 @@ def test_social_api_does_not_import_write_or_execution_modules() -> None:
     forbidden_names = {
         "append_audit_event",
         "run_goham_guarded_post",
-        "run_live_controller_once",
         "run_controller_once",
         "ReactiveReplyExecutor",
         "XExecutor",

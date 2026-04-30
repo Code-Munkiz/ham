@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
   socialAdapter,
+  type SocialBroadcastApplyResponse,
   type SocialReactiveBatchApplyResponse,
   type SocialReactiveReplyApplyResponse,
   type SocialPreviewKind,
@@ -142,6 +143,7 @@ const PREVIEW_LABELS: Record<SocialPreviewKind, string> = {
 
 const LIVE_REPLY_CONFIRMATION_PHRASE = "SEND ONE LIVE REPLY";
 const LIVE_BATCH_CONFIRMATION_PHRASE = "SEND LIVE REACTIVE BATCH";
+const LIVE_BROADCAST_CONFIRMATION_PHRASE = "SEND ONE LIVE POST";
 
 function PreviewResultCard({ preview }: { preview: SocialPreviewResponse }) {
   return (
@@ -193,6 +195,12 @@ export function WorkspaceSocialScreen() {
   const [batchBusy, setBatchBusy] = React.useState(false);
   const [batchError, setBatchError] = React.useState<string | null>(null);
   const [batchResult, setBatchResult] = React.useState<SocialReactiveBatchApplyResponse | null>(null);
+  const [broadcastConfirmOpen, setBroadcastConfirmOpen] = React.useState(false);
+  const [broadcastConfirmText, setBroadcastConfirmText] = React.useState("");
+  const [broadcastOperatorToken, setBroadcastOperatorToken] = React.useState("");
+  const [broadcastBusy, setBroadcastBusy] = React.useState(false);
+  const [broadcastError, setBroadcastError] = React.useState<string | null>(null);
+  const [broadcastResult, setBroadcastResult] = React.useState<SocialBroadcastApplyResponse | null>(null);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -233,8 +241,10 @@ export function WorkspaceSocialScreen() {
   const caps = snapshot?.xCapabilities;
   const inboxPreview = previews.reactive_inbox;
   const batchPreview = previews.reactive_batch_dry_run;
+  const broadcastPreview = previews.broadcast_preflight;
   const canSendOneLiveReply = Boolean(inboxPreview?.proposal_digest && caps?.reactive_reply_apply_available);
   const canSendLiveReactiveBatch = Boolean(batchPreview?.proposal_digest && caps?.reactive_batch_apply_available);
+  const canSendOneLivePost = Boolean(broadcastPreview?.proposal_digest && caps?.broadcast_apply_available);
 
   const sendOneLiveReply = async () => {
     if (!inboxPreview?.proposal_digest) return;
@@ -279,6 +289,29 @@ export function WorkspaceSocialScreen() {
     setBatchConfirmOpen(false);
     setBatchConfirmText("");
     setBatchOperatorToken("");
+    void load();
+  };
+
+  const sendOneLivePost = async () => {
+    if (!broadcastPreview?.proposal_digest) return;
+    setBroadcastBusy(true);
+    setBroadcastError(null);
+    const result = await socialAdapter.sendOneLivePost({
+      proposalDigest: broadcastPreview.proposal_digest,
+      confirmationPhrase: broadcastConfirmText,
+      operatorToken: broadcastOperatorToken,
+      clientRequestId: `social-ui-broadcast-${Date.now()}`,
+    });
+    setBroadcastBusy(false);
+    if (result.bridge.status === "pending" || !result.apply) {
+      const detail = result.bridge.status === "pending" ? result.bridge.detail : result.error;
+      setBroadcastError(detail || "Live post request failed.");
+      return;
+    }
+    setBroadcastResult(result.apply);
+    setBroadcastConfirmOpen(false);
+    setBroadcastConfirmText("");
+    setBroadcastOperatorToken("");
     void load();
   };
 
@@ -488,6 +521,56 @@ export function WorkspaceSocialScreen() {
               {batchResult ? (
                 <Panel title="Confirmed live reactive batch result">
                   <RecordPreview record={batchResult as unknown as Record<string, unknown>} emptyLabel="No live batch result payload." />
+                </Panel>
+              ) : null}
+
+              <Panel title="Confirmed live broadcast post">
+                <div className="space-y-3">
+                  <p className="text-sm leading-relaxed text-white/58">
+                    Confirmed live action. This sends exactly one live original post. No batch. No retry. No replies.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <StatusPill
+                      label={broadcastPreview?.proposal_digest ? "Broadcast preview digest present" : "Broadcast preview digest required"}
+                      tone={broadcastPreview?.proposal_digest ? "ok" : "warn"}
+                    />
+                    <StatusPill
+                      label={caps.broadcast_apply_available ? "Broadcast apply available" : "Broadcast apply unavailable"}
+                      tone={caps.broadcast_apply_available ? "ok" : "muted"}
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="bg-red-800 text-white hover:bg-red-700"
+                    disabled={!canSendOneLivePost}
+                    onClick={() => {
+                      setBroadcastConfirmOpen(true);
+                      setBroadcastError(null);
+                    }}
+                  >
+                    Send one live post
+                  </Button>
+                  {!canSendOneLivePost ? (
+                    <p className="text-xs text-white/42">
+                      Run broadcast preflight preview first, and ensure the API reports broadcast apply availability.
+                    </p>
+                  ) : null}
+                </div>
+              </Panel>
+
+              {broadcastError ? (
+                <WorkspaceSurfaceStateCard
+                  title="Live broadcast request blocked"
+                  description="The confirmed one-shot live post did not run."
+                  tone="amber"
+                  technicalDetail={broadcastError}
+                />
+              ) : null}
+
+              {broadcastResult ? (
+                <Panel title="Confirmed live broadcast result">
+                  <RecordPreview record={broadcastResult as unknown as Record<string, unknown>} emptyLabel="No live broadcast result payload." />
                 </Panel>
               ) : null}
 
@@ -803,6 +886,70 @@ export function WorkspaceSocialScreen() {
                 disabled={batchBusy || batchConfirmText !== LIVE_BATCH_CONFIRMATION_PHRASE || !batchOperatorToken.trim()}
               >
                 {batchBusy ? "Sending live reactive batch..." : "Send live reactive batch"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {broadcastConfirmOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="social-live-broadcast-title"
+            className="w-full max-w-lg rounded-2xl border border-red-400/30 bg-[#071016] p-5 text-white shadow-2xl"
+          >
+            <h2 id="social-live-broadcast-title" className="text-lg font-semibold">
+              Confirmed live X post
+            </h2>
+            <p className="mt-2 text-sm leading-relaxed text-white/65">
+              This sends exactly one live original post. No batch. No retry. No replies.
+            </p>
+            <div className="mt-4 space-y-3">
+              <label className="block text-xs font-semibold uppercase tracking-[0.12em] text-white/50">
+                Type confirmation phrase
+                <input
+                  className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-red-300/50"
+                  value={broadcastConfirmText}
+                  onChange={(event) => setBroadcastConfirmText(event.target.value)}
+                  placeholder={LIVE_BROADCAST_CONFIRMATION_PHRASE}
+                />
+              </label>
+              <label className="block text-xs font-semibold uppercase tracking-[0.12em] text-white/50">
+                Operator token
+                <input
+                  className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-red-300/50"
+                  type="password"
+                  value={broadcastOperatorToken}
+                  onChange={(event) => setBroadcastOperatorToken(event.target.value)}
+                  placeholder="HAM_SOCIAL_LIVE_APPLY_TOKEN"
+                />
+              </label>
+              <p className="text-xs text-white/40">
+                The frontend sends only the broadcast proposal digest, confirmation phrase, and operator token. It never sends post text or candidate bodies.
+              </p>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  setBroadcastConfirmOpen(false);
+                  setBroadcastConfirmText("");
+                  setBroadcastOperatorToken("");
+                }}
+                disabled={broadcastBusy}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                className="bg-red-800 text-white hover:bg-red-700"
+                onClick={() => void sendOneLivePost()}
+                disabled={broadcastBusy || broadcastConfirmText !== LIVE_BROADCAST_CONFIRMATION_PHRASE || !broadcastOperatorToken.trim()}
+              >
+                {broadcastBusy ? "Sending one live post..." : "Send one live post"}
               </Button>
             </div>
           </div>
