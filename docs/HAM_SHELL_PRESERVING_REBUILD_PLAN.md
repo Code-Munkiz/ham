@@ -197,7 +197,7 @@ Use adapters to decouple new UI from existing backend contracts:
 
 ### `/chat` (redirect) + `/workspace/chat`
 
-- **Product chat:** `frontend/src/features/hermes-workspace/screens/chat/WorkspaceChatScreen.tsx` at **`/workspace/chat`**; **`/chat`** redirects (preserve query e.g. `?session=`).
+- **Product chat:** `frontend/src/features/hermes-workspace/screens/chat/WorkspaceChatScreen.tsx` at **`/workspace/chat`**; **`/chat`** redirects (preserve query e.g. `?session=` or managed-mission deep link `?mission_id=<mission_registry_id>`). When `mission_id` is set, initial load does **not** substitute the browser’s last saved chat session for that URL (mission context wins).
 - **Current API dependencies:** `postChatStream`, `postChatTranscribe`, `fetchModelsCatalog`, workspace session adapters, project metadata APIs (managed Cloud Agent dedicated UI removed Batch 2A — APIs remain on server).
 - **Must-preserve behavior:** redirect, stream completion UX, typed chat send, auth-gated API calls via HAM.
 - **Manual smoke test:** send prompt from Workspace chat and verify stream completes; voice/attachments follow Workspace composer rules.
