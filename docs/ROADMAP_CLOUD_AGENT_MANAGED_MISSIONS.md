@@ -81,6 +81,21 @@ Phases are **sequenced**: earlier items unblock honesty and operability; later i
 
 **Exit:** Operators can answer “what does HAM know vs. what Cursor knows?” without reading source.
 
+#### Phase A — screen-level truth table (reference)
+
+Use this table in operator docs and Workspace copy so expectations stay aligned with architecture (Hermes supervises; Cursor remains upstream execution).
+
+| Concern | **Cursor (Cloud Agent)** | **HAM** |
+|--------|--------------------------|---------|
+| Runs code, edits repo, uses tools in the agent VM | Yes | No — HAM does not replace Cursor execution |
+| Source of truth for agent lifecycle / conversation | Cursor APIs | HAM stores an **observed** `ManagedMission` snapshot (poll + mapping), not a second executor |
+| `mission_registry_id` | Opaque to Cursor; HAM-generated stable id for our record | Yes — use this in Workspace, chat deep links, and support |
+| Deploy approval default (`mission_deploy_approval_mode`) | N/A | **Create-time snapshot** from project when `project_id` was set at launch; **not** live-synced if the project default changes later |
+| Mission feed in browser | Browser talks to **HAM only** (`GET …/missions/{id}/feed`); HAM may use REST projection or SDK bridge server-side | Yes — policy boundary; no direct browser → Cursor agent API for feed |
+| Hermes critic (`HermesReviewer`) on every agent turn | No | **Not automatic** — bridge/`main.py` critique path is separate; optional bounded mission critique is roadmap Phase C |
+
+**Kickoff (7A / Cloud Agent track):** Phase A is the default first slice for managed missions: honesty copy + consistent ids in UI, then keep regression tests green while iterating Phases B–D.
+
 ### Phase B — **Tighter correlation** (medium)
 
 - **ControlPlaneRun ⟷ ManagedMission:** Clearer join story in UI/docs when `control_plane_ham_run_id` is set vs null (UI-only launch).

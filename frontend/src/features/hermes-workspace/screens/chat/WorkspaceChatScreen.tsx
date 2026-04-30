@@ -36,6 +36,7 @@ import {
   type ManagedMissionSnapshot,
 } from "../../adapters/managedMissionsAdapter";
 import { useManagedMissionFeedPoll } from "../../hooks/useManagedMissionFeedPoll";
+import { MANAGED_MISSION_CHAT_BANNER_NOTE } from "../../lib/managedMissionOwnershipCopy";
 import { useVoiceWorkspaceSettingsOptional } from "../../voice/VoiceWorkspaceSettingsContext";
 import { WorkspaceChatEmptyState } from "./WorkspaceChatEmptyState";
 import { WorkspaceChatMessageList, type HwwMsgRow } from "./WorkspaceChatMessageList";
@@ -1641,9 +1642,13 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
                 </div>
                 <p className="text-[11px] text-white/55">
                   {missionContext.repository_observed || "—"} @ {missionContext.ref_observed || "default"} · mission{" "}
-                  <span className="font-mono">{shortId(missionContext.mission_registry_id)}</span> · agent{" "}
+                  <span className="font-mono" title={missionContext.mission_registry_id}>
+                    {shortId(missionContext.mission_registry_id)}
+                  </span>{" "}
+                  · agent{" "}
                   <span className="font-mono">{shortId(missionContext.cursor_agent_id)}</span>
                 </p>
+                <p className="text-[10px] leading-relaxed text-white/45">{MANAGED_MISSION_CHAT_BANNER_NOTE}</p>
                 {missionFeed?.provider_projection?.mode === "rest_projection" ? (
                   <p className="text-[10px] text-white/45">
                     Mission feed: REST refresh only (not a live provider stream).

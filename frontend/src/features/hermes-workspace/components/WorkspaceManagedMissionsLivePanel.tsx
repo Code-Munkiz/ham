@@ -12,6 +12,7 @@ import {
   type ManagedMissionSnapshot,
 } from "../adapters/managedMissionsAdapter";
 import { useManagedMissionFeedPoll } from "../hooks/useManagedMissionFeedPoll";
+import { MANAGED_MISSION_TRUTH_TABLE_ROWS } from "../lib/managedMissionOwnershipCopy";
 import { WorkspaceSurfaceStateCard } from "./workspaceSurfaceChrome";
 
 function formatRelativeIso(iso: string | null | undefined, nowMs: number) {
@@ -260,6 +261,37 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, variant }: Pr
           {actionError}
         </p>
       ) : null}
+
+      <details className="mt-4 rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2">
+        <summary className="cursor-pointer list-none text-xs font-medium text-[var(--theme-text)] [&::-webkit-details-marker]:hidden">
+          <span className="text-[var(--theme-muted)]">Who owns what — </span>
+          Cursor vs HAM (managed Cloud Agent)
+        </summary>
+        <p className="mt-2 text-[11px] leading-relaxed text-[var(--theme-muted-2)]">
+          Cursor owns execution in the agent environment. HAM owns the durable mission record, feed boundary, and
+          create-time deploy-approval snapshot when a project was linked at launch.
+        </p>
+        <div className="mt-2 hww-scroll max-h-[min(280px,40vh)] overflow-auto rounded-xl border border-[var(--theme-border)]/80">
+          <table className="w-full min-w-[520px] border-collapse text-left text-[11px]">
+            <thead className="sticky top-0 border-b border-[var(--theme-border)] bg-[var(--theme-card)]">
+              <tr className="text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-muted)]">
+                <th className="px-2 py-2">Concern</th>
+                <th className="px-2 py-2">Cursor</th>
+                <th className="px-2 py-2">HAM</th>
+              </tr>
+            </thead>
+            <tbody>
+              {MANAGED_MISSION_TRUTH_TABLE_ROWS.map((row) => (
+                <tr key={row.concern} className="border-b border-[var(--theme-border)]/60 last:border-b-0 align-top">
+                  <td className="px-2 py-2 font-medium text-[var(--theme-text)]">{row.concern}</td>
+                  <td className="px-2 py-2 text-[var(--theme-muted)]">{row.cursor}</td>
+                  <td className="px-2 py-2 text-[var(--theme-muted)]">{row.ham}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </details>
 
       {error ? (
         <div className="mt-4">
