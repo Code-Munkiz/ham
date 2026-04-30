@@ -4,6 +4,7 @@ This document is the **authoritative** description of what it means for a **harn
 
 | Concern | Document |
 |--------|----------|
+| **Explicit launch** (preview + digest + operator commit vs direct proxy) | [`EXPLICIT_LAUNCH.md`](EXPLICIT_LAUNCH.md) |
 | **Durable run record** (fields, commit boundary, schema) | [`CONTROL_PLANE_RUN.md`](CONTROL_PLANE_RUN.md) |
 | **Chat operator** phases, tokens, product UX | [`HAM_CHAT_CONTROL_PLANE.md`](HAM_CHAT_CONTROL_PLANE.md) |
 | **OpenCode** real-host verification (before any implementation) | [`OPENCODE_VERIFICATION.md`](OPENCODE_VERIFICATION.md) |
@@ -48,7 +49,7 @@ This document is the **authoritative** description of what it means for a **harn
 
 **Plain English:** The user (via chat/operator) requests a **preview** of a proposed Cursor run: HAM computes a **cryptographic `proposal_digest`** and constant **`base_revision`** from a **canonical** description of the task (GitHub **repository**, ref, model, optional PR/branch options, task text, etc.). That preview is **not** a `ControlPlaneRun` row. When the user **confirms** and sends **`cursor_agent_launch`**, HAM **verifies** the digest matches the preview, requires a **HAM operator bearer** (`HAM_CURSOR_AGENT_LAUNCH_TOKEN`) separate from the **Cursor API key**, then calls Cursor’s `POST /v0/agents`. HAM writes a **`ControlPlaneRun`** and append-only **JSONL** audit. **Status** is observed via `GET /v0/agents/{id}`; HAM may **update** the same run when correlating on `(project_id, provider, external_id)` with the Cursor **agent id**.
 
-A **second** path exists: dashboard/CI **HTTP proxies** under `/api/cursor/...` (e.g. launch, follow-up, conversation) that **do not** go through the same **digest + operator commit** path. Those surfaces must stay **documented** as **distinct**; they are not interchangeable with the operator contract without extra policy.
+A **second** path exists: dashboard/CI **HTTP proxies** under `/api/cursor/...` (e.g. launch, follow-up, conversation) that **do not** go through the same **digest + operator commit** path. Those surfaces must stay **documented** as **distinct**; they are not interchangeable with the operator contract without extra policy. Ham calls the digest-gated operator path **explicit launch**; see [`EXPLICIT_LAUNCH.md`](EXPLICIT_LAUNCH.md).
 
 **Non-negotiables to preserve**
 

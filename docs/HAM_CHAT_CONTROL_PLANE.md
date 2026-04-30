@@ -10,6 +10,8 @@ Hermes remains the **sole supervisory orchestrator** for the Ham *runtime*; this
 
 **Harness contract (Cursor + Droid):** [`docs/HARNESS_PROVIDER_CONTRACT.md`](HARNESS_PROVIDER_CONTRACT.md) defines provider **capabilities**, **preservation** rules, and how they relate to `ControlPlaneRun` (Hermes is not the harness anchor there).
 
+**Explicit launch:** [`docs/EXPLICIT_LAUNCH.md`](EXPLICIT_LAUNCH.md) — operator **preview → digest-verified launch** with a HAM **commit** secret; contrast with direct **`/api/cursor/...`** proxy launches.
+
 ## Shipped (Phase A)
 
 | Piece | Role |
