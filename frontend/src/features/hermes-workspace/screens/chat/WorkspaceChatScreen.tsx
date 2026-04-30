@@ -713,6 +713,8 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     if (initialSessionRestoreAttemptedRef.current) return;
     initialSessionRestoreAttemptedRef.current = true;
     if (sessionId) return;
+    // Mission-mode deep links must remain mission-scoped and should not be replaced by saved session URLs.
+    if (missionIdFromQuery) return;
     const saved = readLastChatSessionId();
     if (!saved) return;
     const fromQuery = embedMode ? null : searchParams.get("session");
@@ -724,7 +726,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     }
     // Always attempt load from durable key so packaged restarts are not blocked by URL lag.
     void loadFromApi(saved);
-  }, [embedMode, loadFromApi, navigate, searchParams, sessionId]);
+  }, [embedMode, loadFromApi, missionIdFromQuery, navigate, searchParams, sessionId]);
 
   React.useEffect(() => {
     if (sessionId) {
