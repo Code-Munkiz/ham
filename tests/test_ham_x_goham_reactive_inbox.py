@@ -48,8 +48,12 @@ def _tweet(
     username: str | None = None,
     conversation_id: str | None = None,
     replied_to: str | None = None,
-    created_at: str = "2026-04-29T08:00:00Z",
+    created_at: str | None = None,
 ) -> dict[str, Any]:
+    if created_at is None:
+        created_at = (
+            datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+        )
     tweet_id = f"tweet-{idx}"
     user_id = author_id or f"user-{idx}"
     tweet: dict[str, Any] = {
