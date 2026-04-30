@@ -12,6 +12,9 @@ export type ManagedMissionLifecycle = "open" | "succeeded" | "failed" | "archive
 /** Public mission shape from GET list/detail and POST .../sync (exclude_none=false on server may include nulls). */
 export type ManagedMissionSnapshot = {
   kind: "managed_mission";
+  provider?: "cursor";
+  title?: string | null;
+  task_summary?: string | null;
   mission_registry_id: string;
   cursor_agent_id: string;
   mission_handling?: "managed";
@@ -35,6 +38,23 @@ export type ManagedMissionSnapshot = {
   last_hook_outcome?: string | null;
   last_post_deploy_state?: string | null;
   last_post_deploy_reason_code?: string | null;
+  latest_checkpoint?: string | null;
+  latest_checkpoint_at?: string | null;
+  latest_checkpoint_reason?: string | null;
+  progress_events?: {
+    kind?: string;
+    label?: string;
+    at?: string;
+    value?: string | null;
+  }[];
+  artifacts?: {
+    kind?: string;
+    title?: string;
+    url?: string;
+  }[];
+  outputs_available?: boolean;
+  cancel_supported?: boolean;
+  error_summary?: string | null;
 };
 
 export type ManagedMissionListPayload = {

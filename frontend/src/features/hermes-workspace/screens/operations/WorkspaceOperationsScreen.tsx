@@ -273,9 +273,7 @@ export function WorkspaceOperationsScreen() {
             <div>
               <h1 className="text-base font-semibold text-[var(--theme-text)]">Operations</h1>
               <p className="mt-1 text-sm text-[var(--theme-muted)]">
-                Local agent roster from <span className="font-mono text-xs">/api/workspace/operations</span> (HAM JSON
-                v0). Live Cloud Agent missions load separately below from{" "}
-                <span className="font-mono text-xs">/api/cursor/managed/missions</span>.
+                Mission control for launched work: monitor active agents, review outputs, and coordinate next actions.
               </p>
             </div>
           </div>
@@ -467,7 +465,7 @@ export function WorkspaceOperationsScreen() {
                     </Link>
                   </Button>
                   <p className="mt-3 text-xs text-[var(--theme-muted-2)]">
-                    Roster and outputs use <code className="rounded bg-[var(--theme-card)] px-1">/api/workspace/operations</code> (HAM v0, no upstream proxy).
+                    Use Chat to steer missions, ask for status updates, or request follow-up tasks.
                   </p>
                 </div>
               </article>
