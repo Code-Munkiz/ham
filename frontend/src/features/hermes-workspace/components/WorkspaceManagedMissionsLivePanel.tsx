@@ -281,6 +281,23 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, variant, onMi
   const [cancelMissionId, setCancelMissionId] = React.useState<string | null>(null);
   const [actionError, setActionError] = React.useState<string | null>(null);
   const [selectedMissionId, setSelectedMissionId] = React.useState<string | null>(null);
+  /** /truth for the list-selected mission (same payload as detail dialog; no static copy). */
+  const [overviewTruthPayload, setOverviewTruthPayload] = React.useState<ManagedMissionTruthPayload | null>(null);
+
+  React.useEffect(() => {
+    if (!selectedMissionId) {
+      setOverviewTruthPayload(null);
+      return;
+    }
+    let cancelled = false;
+    void fetchManagedMissionTruth(selectedMissionId).then(({ truth }) => {
+      if (cancelled) return;
+      setOverviewTruthPayload(truth?.rows?.length ? truth : null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedMissionId]);
 
   const {
     feed: selectedFeed,
@@ -646,6 +663,40 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, variant, onMi
             <p className="mt-2 text-[10px] text-[var(--theme-muted-2)]">
               Provider updates via REST refresh. Native provider realtime stream is unavailable in this integration.
             </p>
+          ) : null}
+          {overviewTruthPayload?.rows?.length ? (
+            <details className="mt-2 rounded-xl border border-[var(--theme-border)]/70 bg-[var(--theme-card)]/35 px-2.5 py-1.5">
+              <summary className="cursor-pointer list-none text-[10px] font-medium text-[var(--theme-muted)] [&::-webkit-details-marker]:hidden">
+                Who owns what <span className="font-normal text-[var(--theme-muted-2)]">(HAM /truth)</span>
+              </summary>
+              <div className="mt-2 max-h-[min(200px,28vh)] overflow-auto rounded-lg border border-[var(--theme-border)]/50">
+                <table className="w-full min-w-[480px] border-collapse text-left text-[10px]">
+                  <thead className="sticky top-0 border-b border-[var(--theme-border)] bg-[var(--theme-bg)]">
+                    <tr className="text-[9px] font-semibold uppercase tracking-wider text-[var(--theme-muted)]">
+                      <th className="px-2 py-1.5 text-left">Topic</th>
+                      <th className="px-2 py-1.5 text-left">Cursor</th>
+                      <th className="px-2 py-1.5 text-left">HAM</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {overviewTruthPayload.rows.map((row) => (
+                      <tr key={row.topic} className="border-b border-[var(--theme-border)]/50 align-top last:border-b-0">
+                        <td className="px-2 py-1.5 font-medium text-[var(--theme-text)]">{row.topic}</td>
+                        <td className="px-2 py-1.5 text-[var(--theme-muted-2)]">{row.cursor_owns}</td>
+                        <td className="px-2 py-1.5 text-[var(--theme-muted-2)]">{row.ham_owns}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {overviewTruthPayload.footnotes?.length ? (
+                <ul className="mt-1.5 list-disc space-y-0.5 pl-4 text-[10px] text-[var(--theme-muted-2)]">
+                  {overviewTruthPayload.footnotes.map((fn) => (
+                    <li key={fn}>{fn}</li>
+                  ))}
+                </ul>
+              ) : null}
+            </details>
           ) : null}
           <div className="mt-2 max-h-[min(320px,40vh)] space-y-2 overflow-auto">
             {selectedFeedInitialLoading && !(selectedFeed?.events || []).length ? (
