@@ -8,8 +8,9 @@ Wire formats (persisted in chat session ``content`` string)::
     {"h": "ham_chat_user_v2", "text": "...", "attachments": [{"id", "name", "mime", "kind"}]}
 
 v2 uses opaque ``attachment`` ids and server-side blob storage; v1 embeds
-base64 in Firestore. OpenRouter receives OpenAI-style ``content`` parts;
-HTTP/mock gateways may not forward image bytes (see ``to_llm_message_content``).
+base64 in Firestore. OpenRouter and HTTP Hermes receive OpenAI-style ``content`` parts (including
+``image_url`` data URLs resolved server-side for v2). Vision forwarding honors
+``HAM_CHAT_VISION_FORWARD`` (default on for ``openrouter`` and ``http``); mock mode does not forward.
 """
 from __future__ import annotations
 
@@ -36,7 +37,7 @@ _RE_DATA_URL = re.compile(
     r"^data:(image/(?:png|jpeg|jpg|webp));base64,([A-Za-z0-9+/=\s]+)\s*$",
     re.IGNORECASE,
 )
-_CANON_MIME = {"image/png", "image/jpeg", "image/webp"}
+_CANON_MIME = {"image/png", "image/jpeg", "image/webp", "image/gif"}
 
 # Normalize mime variants
 def _norm_mime(m: str) -> str:
@@ -286,12 +287,14 @@ def _gateway_mode() -> str:
     return "http" if base else "mock"
 
 
-def _http_vision_flag() -> bool:
-    v = (os.environ.get("HAM_CHAT_HTTP_VISION", "") or "").strip().lower()
-    return v in {"1", "true", "yes"}
+def _gateway_vision_forward_enabled() -> bool:
+    """
+    Emit multimodal ``image_url`` parts toward OpenRouter or the HTTP Hermes gateway.
 
-
-def _openrouter_vision_default() -> bool:
+    Default: enabled (same as legacy OpenRouter behavior). Disable with
+    ``HAM_CHAT_VISION_FORWARD`` = ``0`` / ``false`` / ``no`` for gateways that
+    reject multimodal payloads.
+    """
     v = (os.environ.get("HAM_CHAT_VISION_FORWARD", "1") or "").strip().lower()
     return v not in {"0", "false", "no"}
 
@@ -301,15 +304,14 @@ def _llm_vision_honest_no_forward(*, has_images: bool, text: str) -> str:
         return ""
     if has_images and not text:
         return (
-            "[User attached a screenshot in Ham Workspace Chat, but this chat runtime does not forward "
-            "image bytes to the model. Enable OpenRouter (HERMES_GATEWAY_MODE=openrouter) with "
-            "HAM_CHAT_VISION_FORWARD=1, or for HTTP gateways set HAM_CHAT_HTTP_VISION=1 if the upstream "
-            "supports vision.]"
+            "[User attached image(s). Vision forwarding is off (HAM_CHAT_VISION_FORWARD=0), so image "
+            "pixels are not sent to the model — answer only from visible text markers.]"
         )
     if has_images:
         return (
-            f"{text}\n\n[User attached a screenshot. This deployment is not currently forwarding image "
-            f"bytes to the model; describe limitations honestly — you cannot see the image pixels.]"
+            f"{text}\n\n[User attached image(s). Vision forwarding is disabled on this deployment "
+            f"(HAM_CHAT_VISION_FORWARD=0); image pixels are not sent — you cannot see the image. Answer "
+            f"honestly and suggest enabling vision forwarding or switching to a vision-capable gateway path.]"
         ).strip()
     return text
 
@@ -330,9 +332,7 @@ def to_llm_message_content(stored: str) -> str | list[dict[str, Any]]:
     images: list[dict[str, str]] = [x for x in (v.get("images") or []) if isinstance(x, dict)]
 
     mode = _gateway_mode()
-    forward_vision = (mode == "openrouter" and _openrouter_vision_default()) or (
-        mode == "http" and _http_vision_flag()
-    )
+    forward_vision = mode in {"openrouter", "http"} and _gateway_vision_forward_enabled()
 
     if not forward_vision or not images:
         return _llm_vision_honest_no_forward(has_images=bool(images), text=text)
@@ -392,9 +392,7 @@ def _to_llm_message_content_v2(v2: dict[str, Any]) -> str | list[dict[str, Any]]
         text = f"{text}\n\n{merged}".strip() if text else merged
 
     mode = _gateway_mode()
-    forward_vision = (mode == "openrouter" and _openrouter_vision_default()) or (
-        mode == "http" and _http_vision_flag()
-    )
+    forward_vision = mode in {"openrouter", "http"} and _gateway_vision_forward_enabled()
 
     if not image_data_urls:
         return text or ""
