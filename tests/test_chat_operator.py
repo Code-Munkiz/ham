@@ -238,7 +238,10 @@ def test_process_operator_cursor_launch_backfills_cursor_metadata_from_git(
         return next(responses)
 
     monkeypatch.setattr("src.ham.chat_operator.subprocess.run", _fake_run)
-    with patch("src.ham.chat_operator.build_cursor_agent_preview") as mock_preview:
+    with (
+        patch("src.ham.chat_operator.build_cursor_agent_preview") as mock_preview,
+        patch("src.ham.chat_operator.run_cursor_agent_launch") as mock_launch,
+    ):
         from src.ham.cursor_agent_workflow import CursorAgentPreviewResult
 
         mock_preview.return_value = CursorAgentPreviewResult(
@@ -250,6 +253,17 @@ def test_process_operator_cursor_launch_backfills_cursor_metadata_from_git(
             mutates=False,
             summary_preview="ok",
             project_id=rec.id,
+        )
+        mock_launch.return_value = (
+            True,
+            {
+                "agent_id": "cursor-agent-test",
+                "status": "running",
+                "repository": "Code-Munkiz/ham",
+                "ref": "main",
+            },
+            None,
+            "ham-run-test",
         )
         op = process_operator_turn(
             user_text="fire up an agent to update docs",

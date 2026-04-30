@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import uuid
 from pathlib import Path
 
@@ -26,6 +27,7 @@ from src.persistence.managed_mission import (
     derive_mission_checkpoint,
     map_cursor_to_mission_lifecycle,
     new_mission_registry_id,
+    sync_mission_board_state_with_lifecycle,
 )
 from src.persistence.project_store import ProjectStore, set_project_store_for_tests
 from src.integrations.cursor_cloud_client import CursorCloudApiError
@@ -997,5 +999,233 @@ def test_managed_mission_feed_stream_content_type_and_snapshot_frame(
 
 @pytest.fixture
 def client(tmp_path: Path) -> TestClient:
-    cmm._store = ManagedMissionStore(base_dir=tmp_path)
-    return TestClient(app)
+    cmm._store = ManagedMissionStore(base_dir=tmp_path / "missions")
+    cmm.set_control_plane_run_store_for_tests(
+        ControlPlaneRunStore(base_dir=tmp_path / "control_plane_runs")
+    )
+    with TestClient(app) as tc:
+        yield tc
+    cmm.set_control_plane_run_store_for_tests(None)
+
+
+def test_sync_board_lane_archive_when_lifecycle_terminal() -> None:
+    n = utc_now_iso()
+    m = ManagedMission(
+        mission_registry_id=new_mission_registry_id(),
+        cursor_agent_id="x",
+        control_plane_ham_run_id=None,
+        mission_handling="managed",
+        uplink_id=None,
+        repo_key=None,
+        mission_lifecycle="succeeded",
+        mission_board_state="active",
+        cursor_status_last_observed=None,
+        status_reason_last_observed="r",
+        created_at=n,
+        updated_at=n,
+        last_server_observed_at=n,
+    )
+    out = sync_mission_board_state_with_lifecycle(m)
+    assert out.mission_board_state == "archive"
+
+
+def test_sync_board_lane_preserves_backlog_on_terminal() -> None:
+    n = utc_now_iso()
+    m = ManagedMission(
+        mission_registry_id=new_mission_registry_id(),
+        cursor_agent_id="y",
+        control_plane_ham_run_id=None,
+        mission_handling="managed",
+        uplink_id=None,
+        repo_key=None,
+        mission_lifecycle="succeeded",
+        mission_board_state="backlog",
+        cursor_status_last_observed=None,
+        status_reason_last_observed="r",
+        created_at=n,
+        updated_at=n,
+        last_server_observed_at=n,
+    )
+    out = sync_mission_board_state_with_lifecycle(m)
+    assert out.mission_board_state == "backlog"
+
+
+def test_managed_mission_truth_endpoint(client: TestClient) -> None:
+    st = cmm._store
+    assert st is not None
+    mid = new_mission_registry_id()
+    n = utc_now_iso()
+    st.save(
+        ManagedMission(
+            mission_registry_id=mid,
+            cursor_agent_id="truth-agent",
+            control_plane_ham_run_id=None,
+            mission_handling="managed",
+            uplink_id=None,
+            repo_key="a/b",
+            mission_lifecycle="open",
+            cursor_status_last_observed=None,
+            status_reason_last_observed="s",
+            created_at=n,
+            updated_at=n,
+            last_server_observed_at=n,
+        )
+    )
+    r = client.get(f"/api/cursor/managed/missions/{mid}/truth")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["kind"] == "managed_mission_truth_table"
+    assert body["mission_registry_id"] == mid
+    topics = [row["topic"] for row in body["rows"]]
+    assert "Agent execution" in topics
+    assert "Mission record & feed" in topics
+
+
+def test_managed_mission_correlation_embeds_control_plane_run(
+    client: TestClient,
+) -> None:
+    st = cmm._store
+    cp = cmm._control_plane_store()
+    assert st is not None
+    mid = new_mission_registry_id()
+    hid, run = _cp_run(eid="corr-ext-1")
+    cp.save(run, project_root_for_mirror=None)
+    n = utc_now_iso()
+    st.save(
+        ManagedMission(
+            mission_registry_id=mid,
+            cursor_agent_id="corr-agent-1",
+            control_plane_ham_run_id=hid,
+            mission_handling="managed",
+            uplink_id=None,
+            repo_key="a/b",
+            mission_lifecycle="open",
+            cursor_status_last_observed=None,
+            status_reason_last_observed="s",
+            created_at=n,
+            updated_at=n,
+            last_server_observed_at=n,
+        )
+    )
+    r = client.get(f"/api/cursor/managed/missions/{mid}/correlation")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["control_plane_linked"] is True
+    assert body.get("control_plane_run") is not None
+    assert body["control_plane_run"]["ham_run_id"] == hid
+    assert body["control_plane_run"]["external_id"] == "corr-ext-1"
+
+
+def test_patch_mission_board_requires_write_token(client: TestClient) -> None:
+    st = cmm._store
+    assert st is not None
+    mid = new_mission_registry_id()
+    n = utc_now_iso()
+    st.save(
+        ManagedMission(
+            mission_registry_id=mid,
+            cursor_agent_id="board-agent",
+            control_plane_ham_run_id=None,
+            mission_handling="managed",
+            uplink_id=None,
+            repo_key="a/b",
+            mission_lifecycle="open",
+            cursor_status_last_observed=None,
+            status_reason_last_observed="s",
+            created_at=n,
+            updated_at=n,
+            last_server_observed_at=n,
+        )
+    )
+    prev = os.environ.pop("HAM_MANAGED_MISSION_WRITE_TOKEN", None)
+    try:
+        r = client.patch(
+            f"/api/cursor/managed/missions/{mid}/board",
+            json={"mission_board_state": "backlog"},
+            headers={"Authorization": "Bearer nope"},
+        )
+        assert r.status_code == 403
+    finally:
+        if prev is not None:
+            os.environ["HAM_MANAGED_MISSION_WRITE_TOKEN"] = prev
+
+
+def test_patch_mission_board_with_token(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HAM_MANAGED_MISSION_WRITE_TOKEN", "test-board-token")
+    st = cmm._store
+    assert st is not None
+    mid = new_mission_registry_id()
+    n = utc_now_iso()
+    st.save(
+        ManagedMission(
+            mission_registry_id=mid,
+            cursor_agent_id="board-agent-2",
+            control_plane_ham_run_id=None,
+            mission_handling="managed",
+            uplink_id=None,
+            repo_key="a/b",
+            mission_lifecycle="open",
+            cursor_status_last_observed=None,
+            status_reason_last_observed="s",
+            created_at=n,
+            updated_at=n,
+            last_server_observed_at=n,
+        )
+    )
+    r = client.patch(
+        f"/api/cursor/managed/missions/{mid}/board",
+        json={"mission_board_state": "backlog"},
+        headers={"Authorization": "Bearer test-board-token"},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["ok"] is True
+    assert body["mission"]["mission_board_state"] == "backlog"
+    kinds = [e.get("kind") for e in body["mission"].get("mission_feed_events", [])]
+    assert "board_state" in kinds
+
+
+def test_hermes_advisory_endpoint_records_advisory(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HAM_MANAGED_MISSION_WRITE_TOKEN", "test-hermes-token")
+
+    class _StubLLM:
+        def call(self, _prompt: str) -> dict:
+            # HermesReviewer: ok=True in output requires high confidence and empty notes after normalize.
+            return {"ok": True, "confidence": "high", "notes": []}
+
+    monkeypatch.setattr("src.llm_client.get_llm_client", lambda: _StubLLM())
+
+    st = cmm._store
+    assert st is not None
+    mid = new_mission_registry_id()
+    n = utc_now_iso()
+    st.save(
+        ManagedMission(
+            mission_registry_id=mid,
+            cursor_agent_id="hermes-agent-1",
+            control_plane_ham_run_id=None,
+            mission_handling="managed",
+            uplink_id=None,
+            repo_key="a/b",
+            mission_lifecycle="open",
+            cursor_status_last_observed=None,
+            status_reason_last_observed="s",
+            created_at=n,
+            updated_at=n,
+            last_server_observed_at=n,
+        )
+    )
+    r = client.post(
+        f"/api/cursor/managed/missions/{mid}/hermes-advisory",
+        headers={"Authorization": "Bearer test-hermes-token"},
+    )
+    assert r.status_code == 200, r.text
+    payload = r.json()
+    assert payload["ok"] is True
+    d = client.get(f"/api/cursor/managed/missions/{mid}")
+    assert d.status_code == 200
+    row = d.json()
+    assert row.get("hermes_advisory_triggered_at")
+    assert row.get("hermes_advisory_ok") is True

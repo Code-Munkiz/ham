@@ -76,32 +76,32 @@ Phases are **sequenced**: earlier items unblock honesty and operability; later i
 
 ### Phase A — **Observability & honesty** (near-term, low risk)
 
-- **Docs + UI copy:** One screen-level truth table: *Cursor owns execution* vs *HAM owns record + policy edges* (deploy snapshot is create-time, etc.).
-- **Optional:** Expose `mission_registry_id` consistently in Workspace or Command Center when available (reduces “where is my mission?” confusion).
-- **Tests:** Keep mission + API regression tests green when touching cursor routes.
+- **Shipped:** `GET /api/cursor/managed/missions/{id}/truth` returns a stable JSON truth table (HAM vs Cursor). Hermes Workspace **Live Cloud Agent missions** panel loads this in the mission detail dialog and states HAM vs Cursor in the subtitle.
+- **Optional:** Expose full `mission_registry_id` in list rows via tooltip (short id remains primary in dense tables).
+- **Tests:** `tests/test_managed_mission.py` covers the truth endpoint.
 
 **Exit:** Operators can answer “what does HAM know vs. what Cursor knows?” without reading source.
 
 ### Phase B — **Tighter correlation** (medium)
 
-- **ControlPlaneRun ⟷ ManagedMission:** Clearer join story in UI/docs when `control_plane_ham_run_id` is set vs null (UI-only launch).
+- **Shipped:** `GET /api/cursor/managed/missions/{id}/correlation` returns join hints and, when `control_plane_ham_run_id` is set, a bounded embed of the linked `ControlPlaneRun` public fields. Workspace mission detail shows the same block.
 - **Performance (optional):** Index or small sidecar for `cursor_agent_id → mission_registry_id` if file scan becomes painful.
 
 **Exit:** Less ambiguity between control-plane list and mission list.
 
 ### Phase C — **Supervisory value on the Cursor path (bounded)**
 
-- **Hermes:** Optional, explicit hook: e.g. run `HermesReviewer` on **capped** mission artifacts (summary + diffs) on **operator trigger** or **terminal transition**, with results stored as **advisory** fields (not overwriting provider truth). Must align with `CONTROL_PLANE_RUN` separation: judgment ≠ run lifecycle driver by default.
-- **GAPS #1:** Incremental “Hermes-owned routing” that still **defaults execution-heavy** work to Droid, not Cursor-in-HAM for repo mutation.
+- **Shipped:** `POST /api/cursor/managed/missions/{id}/hermes-advisory` runs `HermesReviewer.evaluate()` on **capped** feed-derived text + mission context; persists **advisory-only** fields (`hermes_advisory_*`, `last_review_*` headline) and a feed event. Requires `HAM_MANAGED_MISSION_WRITE_TOKEN` (Bearer). Optional `HAM_MANAGED_MISSION_HERMES_STALE_SECONDS` (default 900) drives UI `hermes_advisory_stale` hint on GET detail.
+- **GAPS #1:** Incremental “Hermes-owned routing” that still **defaults execution-heavy** work to Droid, not Cursor-in-HAM for repo mutation — unchanged scope item.
 
-**Exit:** “Managed” means measurably more than polling + heuristics, without faking full orchestration.
+**Exit:** “Managed” includes an explicit operator-triggered Hermes signal path without overwriting provider truth.
 
 ### Phase D — **Product E2E (only if product commits)**
 
-- **Mission workspace:** Explicit states (backlog / active / archive), **if** a mission graph is approved — would be **new** substrate; contradicts current “no graph” v1 **unless** spec expands.
-- **Learning persistence (FTS5 or equivalent)** when Hermes wiring is stable (`GAPS.md`).
+- **Shipped (narrow):** Operator-facing **board lane** only — `mission_board_state` ∈ `{backlog, active, archive}` on `ManagedMission`, `PATCH .../board` (token-gated), automatic **active → archive** when server-observed lifecycle hits a terminal mapping (does not move `backlog`). **Not** a mission graph, queue, or orchestrator.
+- **Learning persistence (FTS5 or equivalent)** when Hermes wiring is stable (`GAPS.md`) — still deferred.
 
-**Exit:** E2E story is **an explicit product decision**, not an accidental accretion.
+**Exit:** Lightweight E2E labeling for operators without implying a mission graph substrate.
 
 ---
 
