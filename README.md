@@ -6,7 +6,7 @@ Open-source multi-agent autonomous developer swarm: Hermes supervisory orchestra
 
 - **Architecture**: see [VISION.md](VISION.md)
 - **Agent / IDE context index**: [AGENTS.md](AGENTS.md)
-- **Gaps vs vision**: [GAPS.md](GAPS.md)
+- **Gaps vs vision**: [GAPS.md](GAPS.md) (Cloud Agent + managed missions: [docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md](docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md))
 - **Product direction (non-binding)**: [PRODUCT_DIRECTION.md](PRODUCT_DIRECTION.md)
 - **Context Engine hardening plan**: [docs/HAM_HARDENING_REMEDIATION.md](docs/HAM_HARDENING_REMEDIATION.md)
 - **Chat control plane (skills + roadmap)**: [docs/HAM_CHAT_CONTROL_PLANE.md](docs/HAM_CHAT_CONTROL_PLANE.md)
@@ -33,7 +33,7 @@ Activate that venv when you run the API, or use `.venv/bin/python -m uvicorn ...
 ## Project layout
 
 - `src/hermes_feedback.py` — Hermes supervisory/critic MVP surface (reviewer implemented)
-- `src/tools/droid_executor.py` — Droid execution engine stub (runtime migration still pending)
+- `src/tools/droid_executor.py` — Droid execution backend (bounded `subprocess.run`, timeout, capped stdout/stderr; Bridge policy gates argv)
 - `src/memory_heist.py` — repo context, instructions, git, sessions
 - `src/llm_client.py` — LiteLLM / OpenRouter
 - `src/swarm_agency.py` — Hermes-supervised role context assembly (no CrewAI; orchestration is Hermes-led)
