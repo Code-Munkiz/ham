@@ -262,10 +262,10 @@ pytest tests/test_budget_parser*.py tests/test_observability*.py tests/test_meta
 
 ## Credits
 
-**Implementation by:** Claude Code (via Hermes `delegate_task`)  
+**Implementation by:** Factory Droid–style execution (via Hermes `delegate_task`)  
 **Code Review by:** Hermes Agent  
 **Final Merge & Push:** Done ✅
 
 ---
 
-**Last Updated:** 2025-06-01
+**Last Updated:** 2026-04-30
