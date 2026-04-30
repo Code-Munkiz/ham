@@ -22,7 +22,16 @@ Implementation references: `_sync_provider_projection` and `get_managed_mission_
 - **Truncation:** Per-event message text is capped (short preview, not full thread).
 - **Volume:** Projection keeps only the **tail** of mapped events from a single conversation fetch; the feed response also caps how many events are returned. These limits are **defense in depth** against oversized provider responses.
 
-If the Cursor API key is missing or Cursor returns an error, the feed still returns **HAM-synthesized** events from checkpoints (and similar) when available. The JSON body includes **`provider_projection_state`** (`ok` vs `fallback`) and **`provider_projection_reason`** so clients can tell enrichment failed without pretending the provider stream is complete.
+## Fallback when provider conversation is unavailable
+
+The feed endpoint **always** returns a normal response body when the mission exists; projection is **best-effort**. If the Cursor **conversation** call fails (HTTP error from Cursor, network, etc.), the server skips merging new projected events and sets **`provider_projection_state`** to **`fallback`** with **`provider_projection_reason`** like `provider_conversation_unavailable:<status>`.
+
+In that case:
+
+- **Persisted feed rows** (`mission_feed_events` already on disk) are still returned unchanged.
+- If there are **no** persisted rows, **`events`** falls back to **HAM-built** lines: mission started, then checkpoint entries from the managed mission record (same path as when projection never ran).
+
+Related fallbacks from the same sync: missing API key → `provider_key_missing`; failure on the **agent status** GET before conversation is attempted → `provider_status_unavailable:...` (conversation is not fetched). When projection completes with no error, **`provider_projection_state`** is **`ok`** and **`provider_projection_reason`** is null.
 
 ## Capability matrix
 
