@@ -27,7 +27,7 @@ This document states **what works today**, what is **stub / partial / explicitly
 
 | Limitation | Detail |
 |------------|--------|
-| **No repo URL → project mapping** | Only optional `project_id` on launch links registry defaults. GitHub URL alone does not resolve a project. |
+| **Project ↔ mission binding is partial** | **Launch:** optional `project_id` only; there is no automatic “bare GitHub URL → `ProjectStore` row” resolver at launch. **Chat / managed status:** `chat_operator` scopes the “latest” mission for a request using, in order: missions whose `control_plane_ham_run_id` points at a `ControlPlaneRun` with the same `project_id` as the chat context; else missions whose observed repository/ref matches the bound project’s metadata `cursor_cloud_repository` (when that hint exists). Without `project_id` (or metadata/repo alignment), selection falls back to any open mission or the newest row—operators should still prefer explicit `project_id` when multiple missions exist. |
 | **O(n) mission lookup** | `find_by_cursor_agent_id` scans JSON files (documented v1). |
 | **Mission row only when new** | `create_mission_after_managed_launch` skips if a row already exists for that agent id (no duplicate). |
 | **Managed “review” heuristics** | Server-side rules on polled Cursor payload (`src/ham/cursor_agent_workflow.py` and related) — **not** the same as `HermesReviewer.evaluate()` on bridge runs. Legacy client helpers were removed in Batch 2A. |
