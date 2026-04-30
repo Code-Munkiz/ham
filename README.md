@@ -12,6 +12,20 @@ Open-source multi-agent autonomous developer swarm: Hermes supervisory orchestra
 - **Chat control plane (skills + roadmap)**: [docs/HAM_CHAT_CONTROL_PLANE.md](docs/HAM_CHAT_CONTROL_PLANE.md)
 - **Browser Runtime (Playwright) setup/caveats**: [docs/BROWSER_RUNTIME_PLAYWRIGHT.md](docs/BROWSER_RUNTIME_PLAYWRIGHT.md)
 
+## Documentation
+
+- **Architecture & gaps:** [VISION.md](VISION.md), [GAPS.md](GAPS.md), [PRODUCT_DIRECTION.md](PRODUCT_DIRECTION.md)
+- **Agent context & repo coding rules:** [AGENTS.md](AGENTS.md), [SWARM.md](SWARM.md)
+- **Deploy (Vercel / Cloud Run):** [docs/DEPLOY_HANDOFF.md](docs/DEPLOY_HANDOFF.md), [docs/DEPLOY_CLOUD_RUN.md](docs/DEPLOY_CLOUD_RUN.md)
+- **Control plane runs (durable launch records):** [docs/CONTROL_PLANE_RUN.md](docs/CONTROL_PLANE_RUN.md)
+- **Dashboard chat & Hermes gateway:** [docs/HERMES_GATEWAY_CONTRACT.md](docs/HERMES_GATEWAY_CONTRACT.md), [docs/HAM_CHAT_CONTROL_PLANE.md](docs/HAM_CHAT_CONTROL_PLANE.md)
+- **Cursor Cloud Agent & managed missions:** [docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md](docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md)
+- **Context Engine hardening:** [docs/HAM_HARDENING_REMEDIATION.md](docs/HAM_HARDENING_REMEDIATION.md)
+- **Browser runtime (Playwright):** [docs/BROWSER_RUNTIME_PLAYWRIGHT.md](docs/BROWSER_RUNTIME_PLAYWRIGHT.md)
+- **Cursor / IDE setup:** [CURSOR_SETUP_HANDOFF.md](CURSOR_SETUP_HANDOFF.md)
+- **Operator story (API vs desktop Hermes):** [docs/TEAM_HERMES_STATUS.md](docs/TEAM_HERMES_STATUS.md)
+- **Desktop (Electron) & local control:** [desktop/README.md](desktop/README.md), [docs/desktop/local_control_v1.md](docs/desktop/local_control_v1.md)
+
 ## Quick start
 
 ```bash
