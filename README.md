@@ -6,7 +6,7 @@ Open-source multi-agent autonomous developer swarm: Hermes supervisory orchestra
 
 - **Architecture**: see [VISION.md](VISION.md)
 - **Agent / IDE context index**: [AGENTS.md](AGENTS.md)
-- **Gaps vs vision**: [GAPS.md](GAPS.md) (Cloud Agent + managed missions: [docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md](docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md))
+- **Gaps vs vision**: [GAPS.md](GAPS.md) (Cloud Agent + managed missions: [docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md](docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md); Workspace Chat routing smoke: [docs/HAM_CLOUD_AGENT_ROUTING_SMOKE.md](docs/HAM_CLOUD_AGENT_ROUTING_SMOKE.md))
 - **Product direction (non-binding)**: [PRODUCT_DIRECTION.md](PRODUCT_DIRECTION.md)
 - **Context Engine hardening plan**: [docs/HAM_HARDENING_REMEDIATION.md](docs/HAM_HARDENING_REMEDIATION.md)
 - **Chat control plane (skills + roadmap)**: [docs/HAM_CHAT_CONTROL_PLANE.md](docs/HAM_CHAT_CONTROL_PLANE.md)

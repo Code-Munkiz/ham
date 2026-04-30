@@ -1,5 +1,7 @@
 # Cloud Agent routing smoke note (Workspace Chat)
 
+**See also:** [`docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md`](ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md) (what is shipped vs partial), [`docs/HAM_CHAT_CONTROL_PLANE.md`](HAM_CHAT_CONTROL_PLANE.md) (chat operator + preview/confirm contract).
+
 This note is for **manual smoke** and orientation: how **Hermes Workspace Chat** gets **Cursor Cloud Agent** preview/launch/status intents to the server **through the same stream** the UI already uses for chat.
 
 ## Transport
