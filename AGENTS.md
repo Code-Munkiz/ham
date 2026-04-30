@@ -161,3 +161,16 @@ There are many draft PRs for small docs notes. I want to stop accumulating PR cl
 - `tests/test_droid_registry.py` — Droid registry conventions (10 cases)
 - Run: `python -m pytest` — full suite (`pytest.ini` sets `pythonpath = .`; 158+ cases as of UI actions)
 - Other tests under `tests/` as added; bootstrap with `/test-context-regressions` for Context Engine focus
+
+## Cursor Cloud specific instructions
+
+The update script installs Python and frontend deps automatically. After it runs:
+
+- **Backend**: `python3 -m uvicorn src.api.server:app --host 0.0.0.0 --port 8000` (from repo root)
+- **Frontend**: `npm run dev` (in `frontend/`, serves on port 3000)
+- **Tests**: `python3 -m pytest` (full suite, 1140+ cases); `npm run lint --prefix frontend` (`tsc --noEmit`)
+- **Chat mode**: defaults to `HERMES_GATEWAY_MODE=mock` in `.env` — no API keys needed for local dev
+- `pytest` is not in `requirements.txt`; the update script installs it separately
+- `uvicorn` installs to `~/.local/bin`; use `python3 -m uvicorn` to avoid PATH issues
+- 7 pre-existing test failures in `test_chat_operator.py`, `test_chat_stream.py`, and `test_chat_openrouter_mode.py` are known (test expectations out of sync with code); do not treat these as regressions from your changes
+- See the cloud-agent-starter skill (`.cursor/skills/cloud-agent-starter/SKILL.md`) for detailed per-area testing workflows and smoke checks
