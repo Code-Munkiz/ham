@@ -1,0 +1,12 @@
+{
+  "name": "ham-cursor-sdk-bridge",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@cursor/sdk": "^1.0.7"
+  }
+}

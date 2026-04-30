@@ -641,6 +641,215 @@ def test_mission_feed_falls_back_when_provider_conversation_unavailable(
     assert len(body["events"]) >= 1
 
 
+def test_mission_feed_uses_sdk_bridge_when_enabled(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    st = cmm._store
+    assert st is not None
+    mid = new_mission_registry_id()
+    n = utc_now_iso()
+    st.save(
+        ManagedMission(
+            mission_registry_id=mid,
+            cursor_agent_id="bc-sdk-1",
+            control_plane_ham_run_id=None,
+            mission_handling="managed",
+            uplink_id=None,
+            repo_key="a/b",
+            mission_lifecycle="open",
+            cursor_status_last_observed="RUNNING",
+            status_reason_last_observed="mapped:RUNNING",
+            created_at=n,
+            updated_at=n,
+            last_server_observed_at=n,
+        )
+    )
+    monkeypatch.setattr(cmm, "get_effective_cursor_api_key", lambda: "crsr_test_value_123456")
+    monkeypatch.setattr(cmm, "cursor_sdk_bridge_enabled", lambda: True)
+    monkeypatch.setattr(
+        cmm,
+        "stream_cursor_sdk_bridge_events",
+        lambda **_: (
+            [
+                {
+                    "provider": "cursor",
+                    "agent_id": "bc-sdk-1",
+                    "run_id": "run-1",
+                    "event_id": "sdk_evt_1",
+                    "kind": "thinking",
+                    "message": "reasoning",
+                    "time": "2026-01-01T00:00:00Z",
+                    "metadata": {"a": "b"},
+                }
+            ],
+            None,
+        ),
+    )
+    r = client.get(f"/api/cursor/managed/missions/{mid}/feed")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    pp = body.get("provider_projection") or {}
+    assert pp.get("mode") == "sdk_stream_bridge"
+    assert pp.get("native_realtime_stream") is True
+    assert body.get("provider_projection_reason") is None
+    assert any(e.get("kind") == "thinking" for e in body.get("events") or [])
+
+
+def test_mission_feed_sdk_bridge_repeated_get_dedupes_by_event_id(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    st = cmm._store
+    assert st is not None
+    mid = new_mission_registry_id()
+    n = utc_now_iso()
+    st.save(
+        ManagedMission(
+            mission_registry_id=mid,
+            cursor_agent_id="bc-sdk-dedupe-1",
+            control_plane_ham_run_id=None,
+            mission_handling="managed",
+            uplink_id=None,
+            repo_key="a/b",
+            mission_lifecycle="open",
+            cursor_status_last_observed="RUNNING",
+            status_reason_last_observed="mapped:RUNNING",
+            created_at=n,
+            updated_at=n,
+            last_server_observed_at=n,
+        )
+    )
+    monkeypatch.setattr(cmm, "get_effective_cursor_api_key", lambda: "crsr_test_value_123456")
+    monkeypatch.setattr(cmm, "cursor_sdk_bridge_enabled", lambda: True)
+    monkeypatch.setattr(
+        cmm,
+        "stream_cursor_sdk_bridge_events",
+        lambda **_: (
+            [
+                {
+                    "provider": "cursor",
+                    "agent_id": "bc-sdk-dedupe-1",
+                    "run_id": "run-1",
+                    "event_id": "sdk_dup_evt_1",
+                    "kind": "assistant_message",
+                    "message": "hello",
+                    "time": "2026-01-01T00:00:00Z",
+                }
+            ],
+            None,
+        ),
+    )
+    url = f"/api/cursor/managed/missions/{mid}/feed"
+    r1 = client.get(url)
+    r2 = client.get(url)
+    assert r1.status_code == 200 and r2.status_code == 200
+    events2 = r2.json().get("events") or []
+    assert sum(1 for e in events2 if e.get("message") == "hello") == 1
+
+
+def test_mission_feed_sdk_bridge_timeout_falls_back_to_rest(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    st = cmm._store
+    assert st is not None
+    mid = new_mission_registry_id()
+    n = utc_now_iso()
+    st.save(
+        ManagedMission(
+            mission_registry_id=mid,
+            cursor_agent_id="bc-sdk-fallback-1",
+            control_plane_ham_run_id=None,
+            mission_handling="managed",
+            uplink_id=None,
+            repo_key="a/b",
+            mission_lifecycle="open",
+            cursor_status_last_observed="RUNNING",
+            status_reason_last_observed="mapped:RUNNING",
+            created_at=n,
+            updated_at=n,
+            last_server_observed_at=n,
+        )
+    )
+    monkeypatch.setattr(cmm, "get_effective_cursor_api_key", lambda: "crsr_test_value_123456")
+    monkeypatch.setattr(cmm, "cursor_sdk_bridge_enabled", lambda: True)
+    monkeypatch.setattr(cmm, "stream_cursor_sdk_bridge_events", lambda **_: ([], "provider_sdk_bridge_timeout"))
+    monkeypatch.setattr(cmm, "cursor_api_get_agent", lambda **_: {"id": "bc-sdk-fallback-1", "status": "RUNNING"})
+    monkeypatch.setattr(
+        cmm,
+        "cursor_api_get_agent_conversation",
+        lambda **_: {
+            "events": [
+                {
+                    "id": "fallback-evt",
+                    "createdAt": "2026-01-01T00:00:00Z",
+                    "type": "message",
+                    "role": "assistant",
+                    "message": "fallback event",
+                }
+            ]
+        },
+    )
+    r = client.get(f"/api/cursor/managed/missions/{mid}/feed")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body.get("provider_projection_state") == "fallback"
+    assert body.get("provider_projection_reason") == "provider_sdk_bridge_timeout"
+    pp = body.get("provider_projection") or {}
+    assert pp.get("mode") == "rest_projection"
+    assert pp.get("native_realtime_stream") is False
+    assert any("fallback event" in str(e.get("message")) for e in body.get("events") or [])
+
+
+def test_mission_feed_sdk_bridge_malformed_output_falls_back_to_rest(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    st = cmm._store
+    assert st is not None
+    mid = new_mission_registry_id()
+    n = utc_now_iso()
+    st.save(
+        ManagedMission(
+            mission_registry_id=mid,
+            cursor_agent_id="bc-sdk-malformed-1",
+            control_plane_ham_run_id=None,
+            mission_handling="managed",
+            uplink_id=None,
+            repo_key="a/b",
+            mission_lifecycle="open",
+            cursor_status_last_observed="RUNNING",
+            status_reason_last_observed="mapped:RUNNING",
+            created_at=n,
+            updated_at=n,
+            last_server_observed_at=n,
+        )
+    )
+    monkeypatch.setattr(cmm, "get_effective_cursor_api_key", lambda: "crsr_test_value_123456")
+    monkeypatch.setattr(cmm, "cursor_sdk_bridge_enabled", lambda: True)
+    monkeypatch.setattr(cmm, "stream_cursor_sdk_bridge_events", lambda **_: ([{"bad": "shape"}], None))
+    monkeypatch.setattr(cmm, "cursor_api_get_agent", lambda **_: {"id": "bc-sdk-malformed-1", "status": "RUNNING"})
+    monkeypatch.setattr(
+        cmm,
+        "cursor_api_get_agent_conversation",
+        lambda **_: {
+            "events": [
+                {
+                    "id": "fallback-malformed-evt",
+                    "createdAt": "2026-01-01T00:00:00Z",
+                    "type": "message",
+                    "role": "assistant",
+                    "message": "rest fallback from malformed bridge",
+                }
+            ]
+        },
+    )
+    r = client.get(f"/api/cursor/managed/missions/{mid}/feed")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body.get("provider_projection_reason") == "provider_sdk_bridge_malformed_output"
+    pp = body.get("provider_projection") or {}
+    assert pp.get("mode") == "rest_projection"
+    assert any("rest fallback from malformed bridge" in str(e.get("message")) for e in body.get("events") or [])
+
+
 @pytest.fixture
 def client(tmp_path: Path) -> TestClient:
     cmm._store = ManagedMissionStore(base_dir=tmp_path)

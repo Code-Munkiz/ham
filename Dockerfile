@@ -8,11 +8,27 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app
 
+# Backend-only Cursor SDK bridge runtime (Node 22).
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
+    && mkdir -p /etc/apt/keyrings \
+    && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
+      | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
+    && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_22.x nodistro main" \
+      > /etc/apt/sources.list.d/nodesource.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt .
 # Browser runtime: pip installs `playwright` but browsers are a separate download.
 # --with-deps pulls Debian packages Chromium needs in slim images.
 RUN pip install --no-cache-dir -r requirements.txt \
     && python -m playwright install --with-deps chromium
+
+# Install backend-only Node bridge dependencies (kept isolated from frontend).
+COPY src/integrations/cursor_sdk_bridge/package.json src/integrations/cursor_sdk_bridge/package-lock.json src/integrations/cursor_sdk_bridge/
+RUN npm --prefix src/integrations/cursor_sdk_bridge ci --omit=dev
 
 # TTS and other top-level `models.*` imports (src.api.tts_endpoint, src.api.audio_upload)
 COPY models/ models/

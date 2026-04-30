@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from src.ham.cursor_provider_adapter import (
     map_cursor_conversation_to_feed_events,
+    map_cursor_sdk_bridge_to_feed_events,
     provider_projection_envelope,
 )
 
@@ -75,6 +76,14 @@ def test_provider_projection_envelope_ok_and_unavailable() -> None:
     e500 = provider_projection_envelope(provider_error="provider_conversation_unavailable:502")
     assert e500["status"] == "error"
 
+    sdk_ok = provider_projection_envelope(
+        provider_error=None,
+        mode="sdk_stream_bridge",
+        native_realtime_stream=True,
+    )
+    assert sdk_ok["mode"] == "sdk_stream_bridge"
+    assert sdk_ok["native_realtime_stream"] is True
+
 
 def test_map_cursor_normalizes_tool_progress_to_status_kind() -> None:
     payload = {
@@ -90,3 +99,33 @@ def test_map_cursor_normalizes_tool_progress_to_status_kind() -> None:
     out = map_cursor_conversation_to_feed_events(agent_id="ag_test", payload=payload)
     assert out[0]["kind"] == "status"
     assert "tool_progress" in (out[0].get("reason_code") or "")
+
+
+def test_map_cursor_sdk_bridge_rows_to_feed_events() -> None:
+    rows = [
+        {
+            "provider": "cursor",
+            "agent_id": "bc-x",
+            "run_id": "run-1",
+            "event_id": "sdk_evt_1",
+            "kind": "assistant_message",
+            "message": "hello crsr_ABCDEF1234567890",
+            "time": "2026-01-01T00:00:00Z",
+            "metadata": {"k": "v"},
+        },
+        {
+            "provider": "cursor",
+            "agent_id": "bc-x",
+            "run_id": "run-1",
+            "event_id": "sdk_evt_2",
+            "kind": "tool_event",
+            "message": "grep_search",
+            "time": "2026-01-01T00:00:01Z",
+        },
+    ]
+    out = map_cursor_sdk_bridge_to_feed_events(agent_id="bc-x", rows=rows)
+    assert len(out) == 2
+    assert out[0]["kind"] == "assistant_message"
+    assert "[REDACTED]" in out[0]["message"]
+    assert out[0]["metadata"]["run_id"] == "run-1"
+    assert out[1]["kind"] == "tool_event"

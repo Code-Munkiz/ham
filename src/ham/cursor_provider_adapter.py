@@ -42,7 +42,12 @@ def provider_capability_matrix() -> dict[str, dict[str, Any]]:
     }
 
 
-def provider_projection_envelope(*, provider_error: str | None) -> dict[str, Any]:
+def provider_projection_envelope(
+    *,
+    provider_error: str | None,
+    mode: str = "rest_projection",
+    native_realtime_stream: bool = False,
+) -> dict[str, Any]:
     """
     Declares REST-only projection semantics for managed-mission feeds.
     ``native_realtime_stream`` is always false for the current HTTP client.
@@ -50,8 +55,8 @@ def provider_projection_envelope(*, provider_error: str | None) -> dict[str, Any
     if not provider_error:
         return {
             "provider": "cursor",
-            "mode": "rest_projection",
-            "native_realtime_stream": False,
+            "mode": mode,
+            "native_realtime_stream": native_realtime_stream,
             "status": "ok",
             "reason": None,
         }
@@ -69,8 +74,8 @@ def provider_projection_envelope(*, provider_error: str | None) -> dict[str, Any
         status = "error"
     return {
         "provider": "cursor",
-        "mode": "rest_projection",
-        "native_realtime_stream": False,
+        "mode": mode,
+        "native_realtime_stream": native_realtime_stream,
         "status": status,
         "reason": provider_error,
     }
@@ -245,3 +250,66 @@ def map_cursor_conversation_to_feed_events(
         }
     ordered = sorted(by_id.values(), key=lambda e: _sort_key_time_id(str(e["observed_at"]), str(e["event_id"])))
     return ordered[-40:]
+
+
+def map_cursor_sdk_bridge_to_feed_events(
+    *,
+    agent_id: str,
+    rows: list[dict[str, Any]] | None,
+) -> list[dict[str, Any]]:
+    """
+    Convert normalized SDK bridge JSONL rows into bounded safe feed events.
+    """
+    if not isinstance(rows, list):
+        return []
+    by_id: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        observed_at = _safe_text(row.get("time") or row.get("observed_at") or "", limit=64)
+        if not observed_at:
+            continue
+        kind = _safe_text(row.get("kind") or "", limit=32).lower()
+        if not kind:
+            continue
+        if kind not in {
+            "assistant_message",
+            "tool_event",
+            "thinking",
+            "status",
+            "artifact",
+            "pr_url",
+            "error",
+            "completed",
+        }:
+            kind = "status"
+        message = _safe_text(row.get("message") or "", limit=260)
+        if not message:
+            continue
+        provider_id = _safe_text(row.get("event_id"), limit=128) or None
+        eid = _event_id_for(
+            agent_id,
+            observed_at,
+            kind,
+            "cursor",
+            message,
+            provider_stable_id=provider_id,
+        )
+        raw_meta = row.get("metadata")
+        if not isinstance(raw_meta, dict):
+            raw_meta = {}
+        run_id = _safe_text(row.get("run_id"), limit=80)
+        if run_id:
+            raw_meta = {**raw_meta, "run_id": run_id}
+        meta = _redact_shallow_metadata(raw_meta)
+        by_id[eid] = {
+            "event_id": eid,
+            "observed_at": observed_at,
+            "kind": kind,
+            "source": "cursor",
+            "message": message,
+            "reason_code": _safe_text(f"cursor_sdk:{kind}", limit=120),
+            "metadata": meta or None,
+        }
+    ordered = sorted(by_id.values(), key=lambda e: _sort_key_time_id(str(e["observed_at"]), str(e["event_id"])))
+    return ordered[-60:]

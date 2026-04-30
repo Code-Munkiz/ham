@@ -12,6 +12,7 @@ from src.api.clerk_gate import get_ham_clerk_actor
 from src.ham.clerk_auth import HamActor
 from src.ham.cursor_provider_adapter import (
     map_cursor_conversation_to_feed_events,
+    map_cursor_sdk_bridge_to_feed_events,
     provider_capability_matrix,
     provider_projection_envelope,
 )
@@ -25,6 +26,10 @@ from src.integrations.cursor_cloud_client import (
     cursor_api_followup_agent,
     cursor_api_get_agent,
     cursor_api_get_agent_conversation,
+)
+from src.integrations.cursor_sdk_bridge_client import (
+    cursor_sdk_bridge_enabled,
+    stream_cursor_sdk_bridge_events,
 )
 from src.persistence.cursor_credentials import get_effective_cursor_api_key
 from src.persistence.managed_mission import (
@@ -150,7 +155,7 @@ def _merge_provider_events(m: ManagedMission, events: list[dict[str, Any]]) -> M
     )
 
 
-def _sync_provider_projection(m: ManagedMission) -> tuple[ManagedMission, str | None]:
+def _sync_provider_projection(m: ManagedMission) -> tuple[ManagedMission, str | None, str]:
     """
     Best-effort provider enrichment:
     - Refresh latest agent status payload
@@ -158,20 +163,42 @@ def _sync_provider_projection(m: ManagedMission) -> tuple[ManagedMission, str | 
     """
     api_key = get_effective_cursor_api_key()
     if not api_key:
-        return m, "provider_key_missing"
+        return m, "provider_key_missing", "rest_projection"
+    sdk_bridge_error: str | None = None
+    if cursor_sdk_bridge_enabled():
+        rows, sdk_err = stream_cursor_sdk_bridge_events(
+            api_key=api_key,
+            agent_id=m.cursor_agent_id,
+            run_id=None,
+            max_seconds=30,
+        )
+        if sdk_err is None:
+            projected_sdk = map_cursor_sdk_bridge_to_feed_events(agent_id=m.cursor_agent_id, rows=rows)
+            if projected_sdk:
+                merged_sdk = _merge_provider_events(m, projected_sdk)
+                if merged_sdk != m:
+                    _store.save(merged_sdk)
+                return merged_sdk, None, "sdk_stream_bridge"
+            sdk_bridge_error = "provider_sdk_bridge_malformed_output"
+        else:
+            sdk_bridge_error = sdk_err
     try:
         raw_agent = cursor_api_get_agent(api_key=api_key, agent_id=m.cursor_agent_id)
         observe_mission_from_cursor_payload(raw=raw_agent)
         refreshed = get_managed_mission_store().get(m.mission_registry_id) or m
     except CursorCloudApiError as exc:
-        return m, f"provider_status_unavailable:{exc.status_code or 'unknown'}"
+        if sdk_bridge_error:
+            return m, sdk_bridge_error, "rest_projection"
+        return m, f"provider_status_unavailable:{exc.status_code or 'unknown'}", "rest_projection"
     try:
         raw_conv = cursor_api_get_agent_conversation(
             api_key=api_key,
             agent_id=refreshed.cursor_agent_id,
         )
     except CursorCloudApiError as exc:
-        return refreshed, f"provider_conversation_unavailable:{exc.status_code or 'unknown'}"
+        if sdk_bridge_error:
+            return refreshed, sdk_bridge_error, "rest_projection"
+        return refreshed, f"provider_conversation_unavailable:{exc.status_code or 'unknown'}", "rest_projection"
     projected = map_cursor_conversation_to_feed_events(
         agent_id=refreshed.cursor_agent_id,
         payload=raw_conv if isinstance(raw_conv, dict) else None,
@@ -179,7 +206,7 @@ def _sync_provider_projection(m: ManagedMission) -> tuple[ManagedMission, str | 
     merged = _merge_provider_events(refreshed, projected)
     if merged != refreshed:
         _store.save(merged)
-    return merged, None
+    return merged, sdk_bridge_error, "rest_projection"
 
 
 def _public_mission(m: ManagedMission) -> dict[str, Any]:
@@ -285,7 +312,8 @@ async def get_managed_mission_feed(
     _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
 ) -> dict[str, Any]:
     m = _get_mission_or_404(mission_registry_id)
-    m, provider_error = _sync_provider_projection(m)
+    m, provider_error, provider_mode = _sync_provider_projection(m)
+    native_stream = provider_mode == "sdk_stream_bridge" and provider_error is None
     artifacts: list[dict[str, str]] = []
     if m.pr_url_last_observed:
         artifacts.append(
@@ -311,7 +339,11 @@ async def get_managed_mission_feed(
         "provider_capabilities": provider_capability_matrix(),
         "provider_projection_state": "ok" if provider_error is None else "fallback",
         "provider_projection_reason": provider_error,
-        "provider_projection": provider_projection_envelope(provider_error=provider_error),
+        "provider_projection": provider_projection_envelope(
+            provider_error=provider_error,
+            mode=provider_mode,
+            native_realtime_stream=native_stream,
+        ),
     }
 
 
