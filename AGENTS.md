@@ -32,6 +32,7 @@ Shipped muscle today centers on **Bridge + Droid executor** (`src/tools/droid_ex
 - **`src/ham_cli/`** — HAM operator CLI v1 (`python -m src.ham_cli` or `./scripts/ham`): `doctor`, `status`, `api status`, **`desktop package win`** — diagnostics + **Windows** desktop packaging helpers; not chat/missions (see `main.py` for bridge/Hermes one-shot CLI)
 - `docs/CONTROL_PLANE_RUN.md` — `ControlPlaneRun` substrate (v1 file-backed: `src/persistence/control_plane_run.py`): durable provider-neutral launch record (Cursor/Droid) + Cursor status updates, separate from bridge runs and audit JSONL; read API: `src/api/control_plane_runs.py` (`GET /api/control-plane-runs`, `GET /api/control-plane-runs/{ham_run_id}`) — not orchestration, queues, or mission graphs
 - `docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md` — what’s shipped vs partial vs out of scope for Cursor Cloud Agent + `ManagedMission`, and phased gap closure (correlation, optional Hermes-on-mission, honest E2E scope)
+- `docs/MISSION_AWARE_FEED_CONTROLS.md` — mission-scoped live feed + operator controls (`mission_registry_id`); client transcript rendering over bounded feed `events`
 
 ## Pillar modules
 
@@ -156,10 +157,10 @@ There are many draft PRs for small docs notes. I want to stop accumulating PR cl
 
 ## Tests
 
-- `tests/test_memory_heist.py` — Context Engine + Phase 1/3 guardrails (18 cases)
+- `tests/test_memory_heist.py` — Context Engine + Phase 1/3 guardrails (23 cases)
 - `tests/test_hermes_feedback.py` — Critic MVP + Phase 3 guardrails (7 cases)
 - `tests/test_droid_registry.py` — Droid registry conventions (10 cases)
-- Run: `python -m pytest` — full suite (`pytest.ini` sets `pythonpath = .`; 158+ cases as of UI actions)
+- Run: `python -m pytest` — full suite (`pytest.ini` sets `pythonpath = .`; run `pytest tests/ --collect-only -q` for current count — on the order of 1200+ tests)
 - Other tests under `tests/` as added; bootstrap with `/test-context-regressions` for Context Engine focus
 
 ## Cursor Cloud specific instructions
@@ -191,7 +192,7 @@ There are many draft PRs for small docs notes. I want to stop accumulating PR cl
 
 - SDK bridge is **live** (`HAM_CURSOR_SDK_BRIDGE_ENABLED=true`).
 - It attaches to existing `bc-*` Cursor agents/runs via `src/integrations/cursor_sdk_bridge_client.py` + `bridge.mjs`.
-- It streams provider-native events (`status`, `thinking`, `assistant_message`, `completed`) into HAM feed.
+- It streams provider-native events (`status`, `thinking`, `assistant_message`, `completed`) into HAM feed (backend bridge + SSE path to ingest; operators still poll `/feed` via HAM; no Cursor calls from the browser).
 - Feed mode `sdk_stream_bridge`: native provider stream through backend bridge; frontend still talks only to HAM.
 - Feed mode `rest_projection`: fallback REST refresh/projection (not provider-native streaming).
 - Rollback: set `HAM_CURSOR_SDK_BRIDGE_ENABLED=false` — forces REST projection without changing launch path or frontend flow.

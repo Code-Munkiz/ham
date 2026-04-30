@@ -6,22 +6,30 @@ Open-source multi-agent autonomous developer swarm: Hermes supervisory orchestra
 
 - **Architecture**: see [VISION.md](VISION.md)
 - **Agent / IDE context index**: [AGENTS.md](AGENTS.md)
-- **Gaps vs vision**: [GAPS.md](GAPS.md) (Cloud Agent + managed missions: [docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md](docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md))
+- **Gaps vs vision**: [GAPS.md](GAPS.md)
 - **Product direction (non-binding)**: [PRODUCT_DIRECTION.md](PRODUCT_DIRECTION.md)
 - **Context Engine hardening plan**: [docs/HAM_HARDENING_REMEDIATION.md](docs/HAM_HARDENING_REMEDIATION.md)
 - **Chat control plane (skills + roadmap)**: [docs/HAM_CHAT_CONTROL_PLANE.md](docs/HAM_CHAT_CONTROL_PLANE.md)
 - **Browser Runtime (Playwright) setup/caveats**: [docs/BROWSER_RUNTIME_PLAYWRIGHT.md](docs/BROWSER_RUNTIME_PLAYWRIGHT.md)
-- **Cloud Agent managed missions**: [docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md](docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md) (SDK bridge, feed projection, deployment)
+- **Cloud Agent + managed missions** (roadmap, SDK bridge, feed): [docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md](docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md); mission-scoped feed and controls: [docs/MISSION_AWARE_FEED_CONTROLS.md](docs/MISSION_AWARE_FEED_CONTROLS.md)
 - **Deploy (Cloud Run)**: [docs/DEPLOY_CLOUD_RUN.md](docs/DEPLOY_CLOUD_RUN.md) | **Handoff**: [docs/DEPLOY_HANDOFF.md](docs/DEPLOY_HANDOFF.md)
 - **Control plane runs**: [docs/CONTROL_PLANE_RUN.md](docs/CONTROL_PLANE_RUN.md)
+- **Documentation index**: [docs/README.md](docs/README.md)
 
 ## Quick start
 
 ```bash
 pip install -r requirements.txt
-cp .env.example .env   # add OPENROUTER_API_KEY
+cp .env.example .env
+```
+
+For **`python main.py`** with a real model, set `OPENROUTER_API_KEY` (see `.env.example` for gateway defaults). For a quick local dashboard + API smoke path, `scripts/run_local_api.py` loads `.env`, defaults `HERMES_GATEWAY_MODE=mock` when unset, and aligns with [AGENTS.md](AGENTS.md).
+
+```bash
 python main.py "your task"
 ```
+
+**Local API (FastAPI, dashboard + Workspace UI):** from repo root run `python3 scripts/run_local_api.py` (`PORT`, default `8000`). In another terminal: `npm run dev` in [`frontend/`](frontend/) (Vite proxies `/api/*` to the backend; OpenAPI at `http://127.0.0.1:8000/docs`). See [AGENTS.md](AGENTS.md) and [`.cursor/skills/cloud-agent-starter/SKILL.md`](.cursor/skills/cloud-agent-starter/SKILL.md) for Clerk env overrides and uvicorn alternatives.
 
 **Playwright browser runtime (`/api/browser/*`):** the API must have Chromium when you use in-process Playwright. One-shot (creates **`./.venv`** on PEP 668 distros if needed, e.g. Pop!_OS/Ubuntu):
 
@@ -44,8 +52,14 @@ Frontend typecheck: `npm run lint` in `frontend/` (`tsc --noEmit`). See [`AGENTS
 
 ## Project layout
 
+- `main.py` — CLI entry (bridge / Hermes one-shot orchestration wiring)
+- `src/api/server.py` — FastAPI app (runs, chat, Cursor/managed missions routes; see [AGENTS.md](AGENTS.md))
 - `src/hermes_feedback.py` — Hermes supervisory/critic MVP surface (reviewer implemented)
 - `src/tools/droid_executor.py` — Droid execution backend (bounded `subprocess.run`, timeout, stdout/stderr caps; profile argv + policy gate what actually runs)
 - `src/memory_heist.py` — repo context, instructions, git, sessions
 - `src/llm_client.py` — LiteLLM / OpenRouter
 - `src/swarm_agency.py` — Hermes-supervised role context assembly (no CrewAI; orchestration is Hermes-led)
+- `src/ham_cli/` — operator CLI (`python -m src.ham_cli` or `./scripts/ham`)
+- `scripts/run_local_api.py` — local API runner with dev-friendly defaults
+- [`frontend/`](frontend/) — Vite + React workspace (`npm run dev`; proxies `/api`)
+- [`desktop/`](desktop/) — Electron shell (see `desktop/README.md`)
