@@ -156,8 +156,8 @@ There are many draft PRs for small docs notes. I want to stop accumulating PR cl
 
 ## Tests
 
-- `tests/test_memory_heist.py` — Context Engine + Phase 1/3 guardrails (18 cases)
-- `tests/test_hermes_feedback.py` — Critic MVP + Phase 3 guardrails (7 cases)
-- `tests/test_droid_registry.py` — Droid registry conventions (10 cases)
-- Run: `python -m pytest` — full suite (`pytest.ini` sets `pythonpath = .`; 158+ cases as of UI actions)
+- `tests/test_memory_heist.py` — Context Engine + Phase 1/3 guardrails (23 test functions)
+- `tests/test_hermes_feedback.py` — Critic MVP + Phase 3 guardrails (7 test functions)
+- `tests/test_droid_registry.py` — Droid registry conventions (10 test functions)
+- Run: `python -m pytest` — full suite (`pytest.ini` sets `pythonpath = .`; about 1200 cases as of Apr 2026)
 - Other tests under `tests/` as added; bootstrap with `/test-context-regressions` for Context Engine focus

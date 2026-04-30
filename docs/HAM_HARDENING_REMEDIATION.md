@@ -28,7 +28,7 @@ The hardening plan correctly targets: cross-platform `_extract_key_files`, agent
 - **VISION.md**: Update the "Current State" table and "Next milestone" after each milestone that changes repo reality (see `.cursor/rules/vision-sync.mdc`).
 - **Single discover**: Avoid multiple `ContextBuilder()` / `ProjectContext.discover()` calls per run assembly; share one snapshot and vary render budgets only (see Agent Context Wiring skill).
 - **Config-driven budgets**: Prefer `.ham.json` / merged config for per-agent caps; avoid permanent magic numbers only in `swarm_agency.py`.
-- **Tests**: `tests/test_memory_heist.py` — 18 cases (hardening + Phase 1 + Phase 3 guardrails). `tests/test_hermes_feedback.py` — 7 cases (Phase 2 critic MVP + Phase 3). Together **25 passed** with `python -m pytest tests/test_memory_heist.py tests/test_hermes_feedback.py` (re-run after changes to confirm).
+- **Tests**: `tests/test_memory_heist.py` — 23 test functions (hardening + Phase 1 + Phase 3 guardrails). `tests/test_hermes_feedback.py` — 7 test functions (Phase 2 critic MVP + Phase 3). Together **30 passed** with `python -m pytest tests/test_memory_heist.py tests/test_hermes_feedback.py` (re-run after changes to confirm).
 
 ## Remediation order executed (record)
 

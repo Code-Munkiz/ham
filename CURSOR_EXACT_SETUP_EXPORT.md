@@ -6,10 +6,10 @@ Generated snapshot of `.cursor/` rules and skills, plus first-class context docu
 
 | Category | Count |
 |----------|-------|
-| Rules (`.mdc`) | 15 |
+| Rules (`.mdc`) | 16 |
 | Skills (`SKILL.md`) | 8 |
 | First-class context | 4 |
-| **Total embedded files** | **27** |
+| **Total embedded files** | **28** |
 
 **Subagents** (4): `subagent-*.mdc`. **Commands**: embedded in `commands.mdc`.
 
@@ -150,6 +150,57 @@ The architecture is fixed unless the user explicitly approves a change.
 - Do not bypass memory_heist for repo context -- agents must consume `ContextBuilder.build()`.
 - Do not hardcode model names outside `llm_client.py`.
 - Reference `VISION.md` for the canonical architecture diagram.
+```
+
+---
+
+## `.cursor/rules/ham-direct-main-workflow.mdc`
+
+```
+---
+description: HAM testing workflow — direct-main, no automatic PRs. Apply always.
+alwaysApply: true
+---
+
+# HAM git workflow (testing / direct-main)
+
+## Standing rule
+
+- Do **not** create draft PRs by default.
+- Do **not** run unless the user **explicitly** asks for a PR:
+  - `gh pr create`
+  - `gh pr ready`
+  - `gh pr edit`
+  - Suggestions to “open a PR”, “create draft PR”, or “push feature branch for review”
+
+## Default: work on `main`
+
+1. `git status --short --branch` and `git branch --show-current`.
+2. If not on `main`: `git checkout main` then `git pull origin main`.
+3. Make the change; **stage only intended files**.
+4. **Never stage**: `.cursor/settings.json`, `desktop/live-smoke/`, repomix outputs, build artifacts, temp scripts, unrelated dirty files.
+5. Run **scoped** tests for the change.
+6. Commit on `main`: `git commit -m "<clear message>"`.
+7. Push: `git push origin main`.
+
+Report after push: commit hash, files changed, tests run, pushed yes/no, deploy/smoke if applicable.
+
+## If `git push origin main` is blocked
+
+Do **not** open a PR automatically. Stop and report:
+
+- `DIRECT_MAIN_PUSH_BLOCKED`
+- `reason:`
+- `required action:`
+
+## PR exception — only when the user says one of
+
+- “open a PR” / “make a draft PR” / “use feature branch” / “do this as PR review”
+
+## Draft PR clutter
+
+- Do **not** create more draft PRs for routine work.
+- Before large or messy work, optionally **list** draft PRs (`gh pr list --draft` if available) and **classify** (merged/superseded, docs-only safe to close, contains useful unmerged work, unknown) — **do not close or merge** until the user approves a batch plan.
 ```
 
 ---
@@ -1143,7 +1194,7 @@ working on this repo should read these before proposing changes.
 ## Read order (recommended)
 
 1. `VISION.md` — pillars, boundaries, and how components connect
-2. This file — where implementation lives
+2. This file — where implementation lives (see § *Git workflow* for direct-main testing; Cursor: `ham-direct-main-workflow.mdc`)
 3. `SWARM.md` — repo coding instructions (loaded by `memory_heist`)
 4. `PRODUCT_DIRECTION.md` — product lens: HAM-native model vs reference ecosystems
 5. `docs/TEAM_HERMES_STATUS.md` (when changing Command Center, Activity, Capabilities, or desktop Hermes copy) — **API-side** vs **desktop-side** operator story, boundaries, troubleshooting
@@ -1217,6 +1268,66 @@ Shipped muscle today centers on **Bridge + Droid executor** (`src/tools/droid_ex
 
 - `docs/HAM_HARDENING_REMEDIATION.md` — audit summary, continuation/parser coupling, remediation order, deferred work
 
+## Git workflow (testing / direct-main)
+
+For HAM testing work in this environment, prefer **`main` directly** — not feature branches or automatic PRs.
+
+**Standing rule:** Do not create draft PRs by default. Do not run `gh pr create`, `gh pr ready`, `gh pr edit`, or suggest opening a PR / pushing a feature branch for review **unless** the user explicitly asks for a PR.
+
+**Procedure:**
+
+1. `git status --short --branch` and `git branch --show-current`.
+2. If not on `main`: `git checkout main`, then `git pull origin main`.
+3. Apply the requested change. Stage **only** intended files.
+4. **Do not stage:** `.cursor/settings.json`, `desktop/live-smoke/`, repomix outputs, build artifacts, temp scripts, unrelated dirty files.
+5. Run **scoped** tests for the touched area.
+6. Commit on `main`: `git commit -m "<clear commit message>"`.
+7. Push: `git push origin main`.
+
+**Report:** commit hash, files changed, tests run, pushed yes/no, deploy/smoke status if applicable.
+
+**If direct push to `main` is blocked** (branch protection, permissions): do **not** create a PR automatically. Stop and report `DIRECT_MAIN_PUSH_BLOCKED` with reason and required action.
+
+**PR exception** — only when the user explicitly says e.g. “open a PR”, “make a draft PR”, “use feature branch”, or “do this as PR review”.
+
+**Draft PRs:** Do not add PR clutter. Before substantial work, you may list and **classify** open draft PRs (superseded, docs-only safe to close, contains useful unmerged work, unknown); do **not** close or merge automatically until classified and the user approves a batch plan. Cursor enforces the short form of these rules in `.cursor/rules/ham-direct-main-workflow.mdc`.
+
+**Separate cleanup run** — paste when you want a dedicated draft-PR audit (agents classify only; no auto-close/merge unless clearly safe):
+
+```md
+Clean up HAM draft PR clutter safely.
+
+## Goal
+
+There are many draft PRs for small docs notes. I want to stop accumulating PR clutter.
+
+## Instructions
+
+1. List all open draft PRs.
+
+2. For each draft PR, classify:
+
+- `SUPERSEDED_BY_MAIN`
+- `DOCS_ONLY_SAFE_TO_CLOSE`
+- `CONTAINS_UNMERGED_USEFUL_WORK`
+- `UNKNOWN_REVIEW_NEEDED`
+
+3. For each PR, report:
+- PR number
+- title
+- branch
+- changed files
+- whether its commits are already in `main`
+- recommended action
+
+4. Do not close or merge anything yet unless clearly safe.
+
+5. After classification, ask for approval with a batch plan:
+- close these PRs
+- merge these PRs
+- leave these open
+```
+
 ## Guidance
 
 - `.cursor/rules/` — Cursor project rules (architecture, diffs, roles, vision sync)
@@ -1233,10 +1344,10 @@ Shipped muscle today centers on **Bridge + Droid executor** (`src/tools/droid_ex
 
 ## Tests
 
-- `tests/test_memory_heist.py` — Context Engine + Phase 1/3 guardrails (18 cases)
-- `tests/test_hermes_feedback.py` — Critic MVP + Phase 3 guardrails (7 cases)
-- `tests/test_droid_registry.py` — Droid registry conventions (10 cases)
-- Run: `python -m pytest` — full suite (`pytest.ini` sets `pythonpath = .`; 158+ cases as of UI actions)
+- `tests/test_memory_heist.py` — Context Engine + Phase 1/3 guardrails (23 test functions)
+- `tests/test_hermes_feedback.py` — Critic MVP + Phase 3 guardrails (7 test functions)
+- `tests/test_droid_registry.py` — Droid registry conventions (10 test functions)
+- Run: `python -m pytest` — full suite (`pytest.ini` sets `pythonpath = .`; about 1200 cases as of Apr 2026)
 - Other tests under `tests/` as added; bootstrap with `/test-context-regressions` for Context Engine focus
 ```
 
@@ -1449,8 +1560,8 @@ Each item tracks what is missing, why it matters, and what blocks it.
 
 ## Active implementation notes (Cursor / hardening)
 
-- Context Engine hardening and **Phase 1** (Hermes-aligned scanning, tool-output pruning, config-driven compaction thresholds) are **complete** in `src/memory_heist.py`; **Phase 3** guardrail tests are in `tests/test_memory_heist.py` (18 cases).
-- **Phase 2** Critic MVP is **complete** in `src/hermes_feedback.py` (LLM-backed `HermesReviewer.evaluate()`, stable schema, conservative fallback); **Phase 3** tests in `tests/test_hermes_feedback.py` (7 cases). **`python -m pytest tests/test_memory_heist.py tests/test_hermes_feedback.py` — 25 passed** (verify locally after edits).
+- Context Engine hardening and **Phase 1** (Hermes-aligned scanning, tool-output pruning, config-driven compaction thresholds) are **complete** in `src/memory_heist.py`; **Phase 3** guardrail tests are in `tests/test_memory_heist.py` (23 test functions).
+- **Phase 2** Critic MVP is **complete** in `src/hermes_feedback.py` (LLM-backed `HermesReviewer.evaluate()`, stable schema, conservative fallback); **Phase 3** tests in `tests/test_hermes_feedback.py` (7 test functions). **`python -m pytest tests/test_memory_heist.py tests/test_hermes_feedback.py` — 30 passed** (verify locally after edits).
 - Keep `_extract_prior_summary` marker parsing coupled with `_format_continuation` wording on future edits (see `docs/HAM_HARDENING_REMEDIATION.md`).
 - **`VISION.md` must stay in sync** with real module status after each milestone (see `.cursor/rules/vision-sync.mdc`).
 - **Avoid** multiple `ProjectContext.discover()` passes for one run; prefer one shared snapshot and role-appropriate render budgets.
@@ -1601,7 +1712,7 @@ The hardening plan correctly targets: cross-platform `_extract_key_files`, agent
 - **VISION.md**: Update the "Current State" table and "Next milestone" after each milestone that changes repo reality (see `.cursor/rules/vision-sync.mdc`).
 - **Single discover**: Avoid multiple `ContextBuilder()` / `ProjectContext.discover()` calls per run assembly; share one snapshot and vary render budgets only (see Agent Context Wiring skill).
 - **Config-driven budgets**: Prefer `.ham.json` / merged config for per-agent caps; avoid permanent magic numbers only in `swarm_agency.py`.
-- **Tests**: `tests/test_memory_heist.py` — 18 cases (hardening + Phase 1 + Phase 3 guardrails). `tests/test_hermes_feedback.py` — 7 cases (Phase 2 critic MVP + Phase 3). Together **25 passed** with `python -m pytest tests/test_memory_heist.py tests/test_hermes_feedback.py` (re-run after changes to confirm).
+- **Tests**: `tests/test_memory_heist.py` — 23 test functions (hardening + Phase 1 + Phase 3 guardrails). `tests/test_hermes_feedback.py` — 7 test functions (Phase 2 critic MVP + Phase 3). Together **30 passed** with `python -m pytest tests/test_memory_heist.py tests/test_hermes_feedback.py` (re-run after changes to confirm).
 
 ## Remediation order executed (record)
 
