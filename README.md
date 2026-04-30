@@ -10,6 +10,7 @@ Open-source multi-agent autonomous developer swarm: Hermes supervisory orchestra
 - **Product direction (non-binding)**: [PRODUCT_DIRECTION.md](PRODUCT_DIRECTION.md)
 - **Context Engine hardening plan**: [docs/HAM_HARDENING_REMEDIATION.md](docs/HAM_HARDENING_REMEDIATION.md)
 - **Chat control plane (skills + roadmap)**: [docs/HAM_CHAT_CONTROL_PLANE.md](docs/HAM_CHAT_CONTROL_PLANE.md)
+- **Workspace Chat → Cloud Agent routing (NDJSON stream smoke)**: [docs/HAM_CLOUD_AGENT_ROUTING_SMOKE.md](docs/HAM_CLOUD_AGENT_ROUTING_SMOKE.md)
 - **Browser Runtime (Playwright) setup/caveats**: [docs/BROWSER_RUNTIME_PLAYWRIGHT.md](docs/BROWSER_RUNTIME_PLAYWRIGHT.md)
 
 ## Quick start
@@ -33,7 +34,7 @@ Activate that venv when you run the API, or use `.venv/bin/python -m uvicorn ...
 ## Project layout
 
 - `src/hermes_feedback.py` — Hermes supervisory/critic MVP surface (reviewer implemented)
-- `src/tools/droid_executor.py` — Droid execution engine stub (runtime migration still pending)
+- `src/tools/droid_executor.py` — Droid execution backend: bounded subprocess for Bridge v0 (`shell=False`, timeout, capped stdout/stderr; Bridge policy owns allowlists)
 - `src/memory_heist.py` — repo context, instructions, git, sessions
 - `src/llm_client.py` — LiteLLM / OpenRouter
 - `src/swarm_agency.py` — Hermes-supervised role context assembly (no CrewAI; orchestration is Hermes-led)
