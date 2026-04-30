@@ -21,3 +21,7 @@ Structured **preview → confirm → launch** uses the **`operator`** field on t
 ## Optional curl smoke
 
 Send a user message that matches an agent intent (with `project_id` set if needed) to **`POST /api/chat/stream`** with `Content-Type: application/json` and `Accept: application/x-ndjson`. Inspect the final **`done`** line for **`operator_result`** when the operator path fires.
+
+## Managed mission feed (after launch)
+
+When you have a `mission_registry_id` from a managed launch, **`GET /api/cursor/managed/missions/{mission_registry_id}/feed`** pulls the latest Cursor agent + conversation (with API key), merges **bounded** feed events, and returns `events` plus `provider_projection_*` metadata. See **`docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md`** for the full managed-mission API surface.

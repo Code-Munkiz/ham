@@ -17,7 +17,8 @@ This document states **what works today**, what is **stub / partial / explicitly
 | **Deploy hook / approval API** | Managed deploy-approval status + decisions + hook path (`hard` enforces on server) — see `cursor_managed_deploy*`. |
 | **Vercel / post-deploy (bounded)** | Server poll + mapping tiers; post-deploy check — API + future UI surfaces (legacy War Room UI removed Batch 2A). |
 | **Control plane runs (separate)** | Durable `ControlPlaneRun` for operator/chat-committed launches + status; **read** APIs — **factual**, not a queue or graph. |
-| **Read API: missions** | `GET /api/cursor/managed/missions` (list, optional filter by `cursor_agent_id`) and by `mission_registry_id` — full JSON includes `mission_deploy_approval_mode`. |
+| **Read API: missions** | `GET /api/cursor/managed/missions` (list, optional filter by `cursor_agent_id`) and `GET /api/cursor/managed/missions/{mission_registry_id}` — full JSON includes `mission_deploy_approval_mode`. |
+| **Mission activity feed** | `GET /api/cursor/managed/missions/{mission_registry_id}/feed` **refreshes** the latest Cursor agent status and conversation (when `CURSOR_API_KEY` is available), merges **bounded** `mission_feed_events` from REST-only projection (`src/ham/cursor_provider_adapter.py`), persists new provider events, and returns the last **80** events in the JSON envelope (store retains up to **120**). Response includes `provider_projection_*` when projection is degraded (missing key, provider errors). `POST .../messages` and `POST .../cancel` append HAM/user feed rows and call Cursor follow-up/cancel when applicable. |
 | **UI** | **Partial:** managed mission APIs and operator/chat flows remain; dedicated Cloud Agent / War Room panels were removed with legacy workbench (Batch 2A). Re-home mission UX in Hermes Workspace or Command Center as needed. |
 | **Project registry** | `ProjectStore` + `PATCH` metadata for `default_deploy_approval_mode` (validated). |
 
