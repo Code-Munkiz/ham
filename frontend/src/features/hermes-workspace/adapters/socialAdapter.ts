@@ -81,6 +81,7 @@ export type XCapabilities = {
   reactive_dry_run_available: boolean;
   reactive_reply_canary_available: boolean;
   reactive_batch_available: boolean;
+  reactive_reply_apply_available: boolean;
   live_apply_available: boolean;
   read_only: boolean;
 };
@@ -141,6 +142,24 @@ export type SocialPreviewResponse = {
   result: Record<string, unknown>;
   proposal_digest: string | null;
   read_only: boolean;
+};
+
+export type SocialReactiveReplyApplyResponse = {
+  provider_id: "x";
+  apply_kind: "reactive_reply";
+  status: "blocked" | "executed" | "failed";
+  execution_allowed: boolean;
+  mutation_attempted: boolean;
+  live_apply_available: boolean;
+  provider_status_code: number | null;
+  provider_post_id: string | null;
+  execution_kind: string;
+  audit_ids: string[];
+  journal_path: string;
+  audit_path: string;
+  reasons: string[];
+  warnings: string[];
+  result: Record<string, unknown>;
 };
 
 export type SocialSnapshot = {
@@ -249,6 +268,47 @@ export const socialAdapter = {
     } catch (e) {
       return {
         preview: null,
+        bridge: workspaceApiPending("social", null, e),
+        error: e instanceof Error ? e.message : String(e),
+      };
+    }
+  },
+
+  async sendOneLiveReply(input: {
+    proposalDigest: string;
+    confirmationPhrase: string;
+    operatorToken: string;
+    clientRequestId?: string;
+  }): Promise<{ apply: SocialReactiveReplyApplyResponse | null; bridge: SocialBridge; error?: string }> {
+    try {
+      const res = await hamApiFetch(`${BASE}/providers/x/reactive/reply/apply`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Ham-Operator-Authorization": `Bearer ${input.operatorToken}`,
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          proposal_digest: input.proposalDigest,
+          confirmation_phrase: input.confirmationPhrase,
+          client_request_id: input.clientRequestId,
+        }),
+      });
+      if (!res.ok) {
+        let detail = `HTTP ${res.status}`;
+        try {
+          const body = (await res.json()) as { detail?: { error?: { message?: string } } | string };
+          if (typeof body.detail === "string") detail = body.detail;
+          else if (body.detail?.error?.message) detail = body.detail.error.message;
+        } catch {
+          /* ignore */
+        }
+        throw new Error(detail);
+      }
+      return { apply: (await res.json()) as SocialReactiveReplyApplyResponse, bridge: { status: "ready" } };
+    } catch (e) {
+      return {
+        apply: null,
         bridge: workspaceApiPending("social", null, e),
         error: e instanceof Error ? e.message : String(e),
       };

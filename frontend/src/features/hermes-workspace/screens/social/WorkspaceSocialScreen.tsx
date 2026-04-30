@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
   socialAdapter,
+  type SocialReactiveReplyApplyResponse,
   type SocialPreviewKind,
   type SocialPreviewResponse,
   type SocialProvider,
@@ -138,6 +139,8 @@ const PREVIEW_LABELS: Record<SocialPreviewKind, string> = {
   broadcast_preflight: "Broadcast preflight preview",
 };
 
+const LIVE_REPLY_CONFIRMATION_PHRASE = "SEND ONE LIVE REPLY";
+
 function PreviewResultCard({ preview }: { preview: SocialPreviewResponse }) {
   return (
     <section className="rounded-2xl border border-emerald-400/20 bg-emerald-500/5 p-4 shadow-sm">
@@ -176,6 +179,12 @@ export function WorkspaceSocialScreen() {
   const [previewBusy, setPreviewBusy] = React.useState<SocialPreviewKind | null>(null);
   const [previewError, setPreviewError] = React.useState<string | null>(null);
   const [previews, setPreviews] = React.useState<Partial<Record<SocialPreviewKind, SocialPreviewResponse>>>({});
+  const [confirmOpen, setConfirmOpen] = React.useState(false);
+  const [confirmText, setConfirmText] = React.useState("");
+  const [operatorToken, setOperatorToken] = React.useState("");
+  const [liveBusy, setLiveBusy] = React.useState(false);
+  const [liveError, setLiveError] = React.useState<string | null>(null);
+  const [liveResult, setLiveResult] = React.useState<SocialReactiveReplyApplyResponse | null>(null);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -214,6 +223,31 @@ export function WorkspaceSocialScreen() {
 
   const x = snapshot?.xStatus;
   const caps = snapshot?.xCapabilities;
+  const inboxPreview = previews.reactive_inbox;
+  const canSendOneLiveReply = Boolean(inboxPreview?.proposal_digest && caps?.reactive_reply_apply_available);
+
+  const sendOneLiveReply = async () => {
+    if (!inboxPreview?.proposal_digest) return;
+    setLiveBusy(true);
+    setLiveError(null);
+    const result = await socialAdapter.sendOneLiveReply({
+      proposalDigest: inboxPreview.proposal_digest,
+      confirmationPhrase: confirmText,
+      operatorToken,
+      clientRequestId: `social-ui-${Date.now()}`,
+    });
+    setLiveBusy(false);
+    if (result.bridge.status === "pending" || !result.apply) {
+      const detail = result.bridge.status === "pending" ? result.bridge.detail : result.error;
+      setLiveError(detail || "Live reply request failed.");
+      return;
+    }
+    setLiveResult(result.apply);
+    setConfirmOpen(false);
+    setConfirmText("");
+    setOperatorToken("");
+    void load();
+  };
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col gap-4 overflow-y-auto p-3 md:p-4">
@@ -323,6 +357,56 @@ export function WorkspaceSocialScreen() {
               {Object.entries(previews).map(([kind, preview]) =>
                 preview ? <PreviewResultCard key={kind} preview={preview} /> : null,
               )}
+
+              <Panel title="Confirmed live reply">
+                <div className="space-y-3">
+                  <p className="text-sm leading-relaxed text-white/58">
+                    Confirmed live action. This sends exactly one live X reply from the latest inbox preview. No batch. No retry.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <StatusPill
+                      label={inboxPreview?.proposal_digest ? "Preview digest present" : "Preview digest required"}
+                      tone={inboxPreview?.proposal_digest ? "ok" : "warn"}
+                    />
+                    <StatusPill
+                      label={caps.reactive_reply_apply_available ? "Operator apply available" : "Operator apply unavailable"}
+                      tone={caps.reactive_reply_apply_available ? "ok" : "muted"}
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="bg-red-600 text-white hover:bg-red-500"
+                    disabled={!canSendOneLiveReply}
+                    onClick={() => {
+                      setConfirmOpen(true);
+                      setLiveError(null);
+                    }}
+                  >
+                    Send one live reply
+                  </Button>
+                  {!canSendOneLiveReply ? (
+                    <p className="text-xs text-white/42">
+                      Run inbox discovery preview first, and ensure the API reports reactive reply apply availability.
+                    </p>
+                  ) : null}
+                </div>
+              </Panel>
+
+              {liveError ? (
+                <WorkspaceSurfaceStateCard
+                  title="Live reply request blocked"
+                  description="The confirmed one-shot live reply did not run."
+                  tone="amber"
+                  technicalDetail={liveError}
+                />
+              ) : null}
+
+              {liveResult ? (
+                <Panel title="Confirmed live reply result">
+                  <RecordPreview record={liveResult as unknown as Record<string, unknown>} emptyLabel="No live result payload." />
+                </Panel>
+              ) : null}
 
               <Panel title="X readiness">
                 <div className="mb-3 flex flex-wrap gap-2">
@@ -512,6 +596,70 @@ export function WorkspaceSocialScreen() {
             </div>
           ) : null}
         </>
+      ) : null}
+
+      {confirmOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="social-live-reply-title"
+            className="w-full max-w-lg rounded-2xl border border-red-400/30 bg-[#071016] p-5 text-white shadow-2xl"
+          >
+            <h2 id="social-live-reply-title" className="text-lg font-semibold">
+              Confirmed live X reply
+            </h2>
+            <p className="mt-2 text-sm leading-relaxed text-white/65">
+              This sends exactly one live reply. No batch. No retry.
+            </p>
+            <div className="mt-4 space-y-3">
+              <label className="block text-xs font-semibold uppercase tracking-[0.12em] text-white/50">
+                Type confirmation phrase
+                <input
+                  className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-red-300/50"
+                  value={confirmText}
+                  onChange={(event) => setConfirmText(event.target.value)}
+                  placeholder={LIVE_REPLY_CONFIRMATION_PHRASE}
+                />
+              </label>
+              <label className="block text-xs font-semibold uppercase tracking-[0.12em] text-white/50">
+                Operator token
+                <input
+                  className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-red-300/50"
+                  type="password"
+                  value={operatorToken}
+                  onChange={(event) => setOperatorToken(event.target.value)}
+                  placeholder="HAM_SOCIAL_LIVE_APPLY_TOKEN"
+                />
+              </label>
+              <p className="text-xs text-white/40">
+                The frontend sends only the proposal digest, confirmation phrase, and operator token. It never sends reply text.
+              </p>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  setConfirmOpen(false);
+                  setConfirmText("");
+                  setOperatorToken("");
+                }}
+                disabled={liveBusy}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                className="bg-red-600 text-white hover:bg-red-500"
+                onClick={() => void sendOneLiveReply()}
+                disabled={liveBusy || confirmText !== LIVE_REPLY_CONFIRMATION_PHRASE || !operatorToken.trim()}
+              >
+                {liveBusy ? "Sending one live reply..." : "Send one live reply"}
+              </Button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </div>
   );

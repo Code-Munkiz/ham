@@ -18,23 +18,25 @@ from __future__ import annotations
 
 import json
 import hashlib
+import os
 from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from src.api.clerk_gate import get_ham_clerk_actor
-from src.ham.clerk_auth import HamActor
+from src.ham.clerk_auth import HamActor, resolve_ham_operator_authorization_header
 from src.ham.ham_x.autonomy import AutonomyDecisionResult
 from src.ham.ham_x.config import HamXConfig, load_ham_x_config
 from src.ham.ham_x.execution_journal import ExecutionJournal
 from src.ham.ham_x.goham_ops import dry_preflight_goham_candidate, show_goham_status
 from src.ham.ham_x.goham_policy import GOHAM_EXECUTION_KIND
 from src.ham.ham_x.goham_reactive_inbox import discover_reactive_inbox_once, state_from_journal
+from src.ham.ham_x.goham_reactive_live import run_reactive_live_once
 from src.ham.ham_x.inbound_client import ReactiveInboundItem
 from src.ham.ham_x.reactive_governor import (
     GOHAM_REACTIVE_EXECUTION_KIND,
@@ -62,6 +64,9 @@ ProviderStatus = Literal["active", "setup_required", "blocked", "coming_soon"]
 OverallReadiness = Literal["ready", "limited", "blocked", "setup_required"]
 PreviewStatus = Literal["completed", "blocked", "failed"]
 PreviewKind = Literal["reactive_inbox", "reactive_batch_dry_run", "broadcast_preflight"]
+SocialApplyStatus = Literal["blocked", "executed", "failed"]
+SocialApplyKind = Literal["reactive_reply"]
+LIVE_REPLY_CONFIRMATION_PHRASE = "SEND ONE LIVE REPLY"
 
 
 # ---------------------------------------------------------------------------
@@ -178,6 +183,7 @@ class XCapabilitiesResponse(BaseModel):
     reactive_dry_run_available: bool
     reactive_reply_canary_available: bool
     reactive_batch_available: bool
+    reactive_reply_apply_available: bool = False
     live_apply_available: bool = False
     read_only: bool = True
 
@@ -271,6 +277,34 @@ class SocialPreviewResponse(BaseModel):
     read_only: bool = True
 
 
+class SocialReactiveReplyApplyRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    proposal_digest: str | None = Field(default=None, min_length=64, max_length=64, pattern=r"^[a-f0-9]{64}$")
+    confirmation_phrase: str = Field(min_length=1, max_length=64)
+    client_request_id: str | None = Field(default=None, max_length=128)
+
+
+class SocialReactiveReplyApplyResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    provider_id: Literal["x"] = "x"
+    apply_kind: SocialApplyKind = "reactive_reply"
+    status: SocialApplyStatus
+    execution_allowed: bool = False
+    mutation_attempted: bool = False
+    live_apply_available: bool = False
+    provider_status_code: int | None = None
+    provider_post_id: str | None = None
+    execution_kind: str = GOHAM_REACTIVE_EXECUTION_KIND
+    audit_ids: list[str] = Field(default_factory=list)
+    journal_path: str
+    audit_path: str
+    reasons: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    result: dict[str, Any] = Field(default_factory=dict)
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -332,6 +366,45 @@ def _dedupe(items: list[str]) -> list[str]:
 def _proposal_digest(kind: str, payload: dict[str, Any]) -> str:
     raw = json.dumps(_safe_dict(payload), sort_keys=True, default=str)
     return hashlib.sha256(f"{kind}:{raw}".encode("utf-8")).hexdigest()
+
+
+def _social_live_token_enabled() -> bool:
+    return bool((os.environ.get("HAM_SOCIAL_LIVE_APPLY_TOKEN") or "").strip())
+
+
+def _require_social_live_token(authorization: str | None) -> None:
+    expected = (os.environ.get("HAM_SOCIAL_LIVE_APPLY_TOKEN") or "").strip()
+    if not expected:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": {
+                    "code": "SOCIAL_LIVE_APPLY_DISABLED",
+                    "message": "HAM_SOCIAL_LIVE_APPLY_TOKEN is not set; live Social apply is disabled.",
+                }
+            },
+        )
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=401,
+            detail={
+                "error": {
+                    "code": "SOCIAL_LIVE_APPLY_AUTH_REQUIRED",
+                    "message": "Authorization: Bearer <HAM_SOCIAL_LIVE_APPLY_TOKEN> required.",
+                }
+            },
+        )
+    got = authorization[7:].strip()
+    if got != expected:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": {
+                    "code": "SOCIAL_LIVE_APPLY_AUTH_INVALID",
+                    "message": "Invalid Social live apply token.",
+                }
+            },
+        )
 
 
 def _display_path(path: Path | str) -> str:
@@ -427,6 +500,27 @@ def _reactive_reply_canary_available(cfg: HamXConfig) -> bool:
     )
 
 
+def _reactive_apply_reasons(cfg: HamXConfig) -> list[str]:
+    reasons: list[str] = []
+    if not _social_live_token_enabled():
+        reasons.append("social_live_apply_token_missing")
+    if cfg.emergency_stop:
+        reasons.append("emergency_stop")
+    if not cfg.enable_goham_reactive:
+        reasons.append("reactive_disabled")
+    if cfg.goham_reactive_dry_run:
+        reasons.append("reactive_dry_run_enabled")
+    if not cfg.goham_reactive_live_canary:
+        reasons.append("reactive_live_canary_required")
+    if cfg.goham_reactive_max_replies_per_run != 1:
+        reasons.append("reactive_max_replies_per_run_must_equal_one")
+    if not cfg.goham_reactive_block_links:
+        reasons.append("reactive_link_blocking_required")
+    if not _x_write_credential_present(cfg):
+        reasons.append("x_write_credential_missing")
+    return _dedupe(reasons)
+
+
 def _broadcast_lane_reasons(cfg: HamXConfig) -> list[str]:
     reasons: list[str] = []
     if cfg.emergency_stop:
@@ -507,6 +601,28 @@ def _force_preview_flags(payload: dict[str, Any]) -> dict[str, Any]:
     out["mutation_attempted"] = False
     out["live_apply_available"] = False
     return out
+
+
+def _apply_available(config: HamXConfig) -> bool:
+    return bool(_social_live_token_enabled() and _reactive_reply_canary_available(config))
+
+
+def _blocked_apply_response(
+    config: HamXConfig,
+    *,
+    reasons: list[str],
+    warnings: list[str] | None = None,
+    result: dict[str, Any] | None = None,
+) -> SocialReactiveReplyApplyResponse:
+    return SocialReactiveReplyApplyResponse(
+        status="blocked",
+        live_apply_available=_apply_available(config),
+        journal_path=_display_path(config.execution_journal_path),
+        audit_path=_display_path(config.audit_log_path),
+        reasons=_dedupe(reasons),
+        warnings=warnings or [],
+        result=_safe_dict(result or {}),
+    )
 
 
 def _safe_journal_item(row: dict[str, Any]) -> dict[str, Any]:
@@ -599,6 +715,61 @@ def _last_reactive_reply(cfg: HamXConfig) -> dict[str, Any] | None:
         if latest is None or str(row.get("executed_at", "")) > str(latest.get("executed_at", "")):
             latest = row
     return _safe_journal_item(latest) if latest else None
+
+
+def _inbox_selected_count(discovery: Any) -> int:
+    candidates = getattr(discovery, "candidates", None)
+    if not isinstance(candidates, list):
+        return 1 if getattr(discovery, "selected_candidate", None) is not None else 0
+    return sum(1 for candidate in candidates if getattr(candidate, "status", "") == "selected")
+
+
+def _inbox_proposal_payload(discovery: Any, config: HamXConfig) -> dict[str, Any] | None:
+    selected = getattr(discovery, "selected_candidate", None)
+    if selected is None or _inbox_selected_count(discovery) != 1:
+        return None
+    inbound = getattr(selected, "inbound", None)
+    policy = getattr(selected, "policy_decision", None)
+    governor = getattr(selected, "governor_decision", None)
+    inbound_id = str(getattr(inbound, "inbound_id", "") or "").strip()
+    reply_target_id = str(getattr(selected, "reply_target_id", "") or "").strip()
+    classification = str(getattr(policy, "classification", "") or "").strip()
+    reply_text = str(getattr(policy, "reply_text", "") or "").strip()
+    if not inbound_id or not reply_target_id or not reply_text:
+        return None
+    return _safe_dict(
+        {
+            "provider_id": "x",
+            "preview_kind": "reactive_inbox",
+            "selected_inbound_id": inbound_id,
+            "selected_reply_target_id": reply_target_id,
+            "selected_classification": classification,
+            "reply_text": reply_text,
+            "governor": {
+                "allowed": bool(getattr(governor, "allowed", False)),
+                "action_tier": str(getattr(governor, "action_tier", "") or ""),
+                "reasons": list(getattr(governor, "reasons", []) or []),
+                "response_fingerprint": getattr(governor, "response_fingerprint", None),
+            },
+            "safety_gates": {
+                "emergency_stop": bool(config.emergency_stop),
+                "enable_goham_reactive": bool(config.enable_goham_reactive),
+                "goham_reactive_dry_run": bool(config.goham_reactive_dry_run),
+                "goham_reactive_live_canary": bool(config.goham_reactive_live_canary),
+                "goham_reactive_max_replies_per_run": int(config.goham_reactive_max_replies_per_run),
+                "goham_reactive_block_links": bool(config.goham_reactive_block_links),
+            },
+        }
+    )
+
+
+def _inbox_proposal_digest(discovery: Any, config: HamXConfig) -> str | None:
+    payload = _inbox_proposal_payload(discovery, config)
+    return _proposal_digest("reactive_inbox", payload) if payload else None
+
+
+def _discover_for_reactive_apply(config: HamXConfig) -> Any:
+    return discover_reactive_inbox_once(config=_preview_config(config))
 
 
 def _preview_config(config: HamXConfig) -> HamXConfig:
@@ -950,7 +1121,8 @@ def x_capabilities(
         reactive_dry_run_available=cfg.enable_goham_reactive and cfg.goham_reactive_dry_run,
         reactive_reply_canary_available=_reactive_reply_canary_available(cfg),
         reactive_batch_available=cfg.enable_goham_reactive and cfg.enable_goham_reactive_batch,
-        live_apply_available=False,
+        reactive_reply_apply_available=_apply_available(cfg),
+        live_apply_available=_apply_available(cfg),
     )
 
 
@@ -1067,9 +1239,10 @@ def x_reactive_inbox_preview(
 ) -> SocialPreviewResponse:
     del _actor
     request = body or SocialPreviewRequest()
-    cfg = _preview_config(load_ham_x_config())
-    result = discover_reactive_inbox_once(config=cfg)
+    actual_cfg = load_ham_x_config()
+    result = discover_reactive_inbox_once(config=_preview_config(actual_cfg))
     payload = _force_preview_flags(_safe_payload(result))
+    proposal_digest = _inbox_proposal_digest(result, actual_cfg)
     reasons = _dedupe(list(result.reasons))
     status: PreviewStatus = "completed" if result.status == "completed" else "blocked"
     return SocialPreviewResponse(
@@ -1078,7 +1251,7 @@ def x_reactive_inbox_preview(
         reasons=reasons,
         warnings=[],
         result=payload,
-        proposal_digest=_proposal_digest("reactive_inbox", {"client_request_id": request.client_request_id, "result": payload}),
+        proposal_digest=proposal_digest,
     )
 
 
@@ -1139,6 +1312,71 @@ def x_broadcast_preflight(
     )
 
 
+@router.post("/providers/x/reactive/reply/apply", response_model=SocialReactiveReplyApplyResponse)
+def x_reactive_reply_apply(
+    body: SocialReactiveReplyApplyRequest,
+    _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)] = None,
+    authorization: str | None = Header(None, alias="Authorization"),
+    x_ham_operator_authorization: str | None = Header(None, alias="X-Ham-Operator-Authorization"),
+) -> SocialReactiveReplyApplyResponse:
+    del _actor
+    cfg = load_ham_x_config()
+    if not body.proposal_digest:
+        return _blocked_apply_response(cfg, reasons=["proposal_digest_required"])
+    if body.confirmation_phrase.strip() != LIVE_REPLY_CONFIRMATION_PHRASE:
+        return _blocked_apply_response(cfg, reasons=["confirmation_phrase_required"])
+
+    ham_bearer = resolve_ham_operator_authorization_header(
+        authorization=authorization,
+        x_ham_operator_authorization=x_ham_operator_authorization,
+    )
+    _require_social_live_token(ham_bearer)
+
+    gate_reasons = _reactive_apply_reasons(cfg)
+    if gate_reasons:
+        return _blocked_apply_response(cfg, reasons=gate_reasons)
+
+    discovery = _discover_for_reactive_apply(cfg)
+    expected_digest = _inbox_proposal_digest(discovery, cfg)
+    if expected_digest is None:
+        return _blocked_apply_response(
+            cfg,
+            reasons=["no_current_preview_candidate"],
+            result={"discovery": _safe_payload(discovery)},
+        )
+    if body.proposal_digest != expected_digest:
+        return _blocked_apply_response(
+            cfg,
+            reasons=["proposal_digest_mismatch"],
+            result={"expected_preview": _safe_payload(discovery)},
+        )
+
+    selected = getattr(discovery, "selected_candidate", None)
+    inbound = getattr(selected, "inbound", None)
+    if inbound is None:
+        return _blocked_apply_response(cfg, reasons=["selected_inbound_missing"])
+
+    live_result = run_reactive_live_once(inbound, config=cfg)
+    result_payload = _safe_payload(live_result)
+    provider_status_code = getattr(live_result.execution_result, "provider_status_code", None)
+    provider_post_id = getattr(live_result.execution_result, "provider_post_id", None)
+    safe_provider_post_id = redact(provider_post_id) if isinstance(provider_post_id, str) else provider_post_id
+    return SocialReactiveReplyApplyResponse(
+        status=live_result.status,
+        execution_allowed=bool(live_result.execution_allowed),
+        mutation_attempted=bool(live_result.mutation_attempted),
+        live_apply_available=_apply_available(cfg),
+        provider_status_code=provider_status_code,
+        provider_post_id=safe_provider_post_id,
+        audit_ids=list(getattr(live_result, "audit_ids", []) or []),
+        journal_path=_display_path(getattr(live_result, "journal_path", cfg.execution_journal_path)),
+        audit_path=_display_path(getattr(live_result, "audit_path", cfg.audit_log_path)),
+        reasons=_dedupe(list(getattr(live_result, "reasons", []) or [])),
+        warnings=[],
+        result=result_payload,
+    )
+
+
 __all__ = [
     "router",
     "SocialProvidersResponse",
@@ -1149,4 +1387,6 @@ __all__ = [
     "XAuditSummaryResponse",
     "SocialPreviewRequest",
     "SocialPreviewResponse",
+    "SocialReactiveReplyApplyRequest",
+    "SocialReactiveReplyApplyResponse",
 ]
