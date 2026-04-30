@@ -34,10 +34,9 @@ export function WorkspaceChatAttachmentButton({
         multiple
         aria-hidden
         onChange={(e) => {
-          const list = e.target.files;
+          const files = Array.from(e.target.files ?? []);
           e.target.value = "";
-          if (!list?.length) return;
-          onFiles(Array.from(list));
+          if (files.length) onFiles(files);
         }}
       />
       <Button
