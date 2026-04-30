@@ -36,7 +36,7 @@ to Droid.
 
 ### 3. Context Engine — memory_heist.py
 
-Adapted from Claude Code's context-awareness runtime. This module gives every
+Adapted from upstream “code agent” context-awareness patterns (HAM-native config and naming). This module gives every
 agent in the swarm a grounded understanding of the local repository:
 
 - **Workspace scanning**: filesystem tree, file inventory, ignore rules.

@@ -6,14 +6,15 @@ Open-source multi-agent autonomous developer swarm: Hermes supervisory orchestra
 
 - **Architecture**: see [VISION.md](VISION.md)
 - **Agent / IDE context index**: [AGENTS.md](AGENTS.md)
-- **Gaps vs vision**: [GAPS.md](GAPS.md) (Cloud Agent + managed missions: [docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md](docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md))
+- **Gaps vs vision**: [GAPS.md](GAPS.md)
 - **Product direction (non-binding)**: [PRODUCT_DIRECTION.md](PRODUCT_DIRECTION.md)
 - **Context Engine hardening plan**: [docs/HAM_HARDENING_REMEDIATION.md](docs/HAM_HARDENING_REMEDIATION.md)
 - **Chat control plane (skills + roadmap)**: [docs/HAM_CHAT_CONTROL_PLANE.md](docs/HAM_CHAT_CONTROL_PLANE.md)
 - **Browser Runtime (Playwright) setup/caveats**: [docs/BROWSER_RUNTIME_PLAYWRIGHT.md](docs/BROWSER_RUNTIME_PLAYWRIGHT.md)
-- **Cloud Agent managed missions**: [docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md](docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md) (SDK bridge, feed projection, deployment)
+- **Cloud Agent + managed missions** (roadmap, SDK bridge, feed): [docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md](docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md) · mission feed scope: [docs/MISSION_AWARE_FEED_CONTROLS.md](docs/MISSION_AWARE_FEED_CONTROLS.md)
 - **Deploy (Cloud Run)**: [docs/DEPLOY_CLOUD_RUN.md](docs/DEPLOY_CLOUD_RUN.md) | **Handoff**: [docs/DEPLOY_HANDOFF.md](docs/DEPLOY_HANDOFF.md)
 - **Control plane runs**: [docs/CONTROL_PLANE_RUN.md](docs/CONTROL_PLANE_RUN.md)
+- **Doc index**: [docs/README.md](docs/README.md)
 
 ## Quick start
 
@@ -30,6 +31,8 @@ python main.py "your task"
 ```
 
 Activate that venv when you run the API, or use `.venv/bin/python -m uvicorn ...`. Or manually: `python -m playwright install chromium` inside your venv (on Linux, if the browser will not start: `python -m playwright install-deps chromium`). See [`docs/BROWSER_RUNTIME_PLAYWRIGHT.md`](docs/BROWSER_RUNTIME_PLAYWRIGHT.md).
+
+**Local dashboard + API (dev):** from repo root, `python3 scripts/run_local_api.py` (port 8000 by default; loads `.env`, mock gateway unless overridden). Frontend: `npm run dev` in `frontend/` (Vite proxies `/api/*`). Details: [`AGENTS.md`](AGENTS.md) (Cursor Cloud section).
 
 **Dashboard + API on Vercel / Cloud Run:** see [`docs/DEPLOY_HANDOFF.md`](docs/DEPLOY_HANDOFF.md) (env vars, CORS, verify script). GCP commands: [`docs/DEPLOY_CLOUD_RUN.md`](docs/DEPLOY_CLOUD_RUN.md).
 
