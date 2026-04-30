@@ -18,6 +18,8 @@ If the turn is **not** handled by the operator/router, the handler continues int
 
 Structured **preview → confirm → launch** uses the **`operator`** field on the chat body (e.g. `phase=cursor_agent_launch`, `confirmed=true`, digest fields) plus the **HAM operator** bearer where required. See **`docs/HAM_CHAT_CONTROL_PLANE.md`** and **`docs/HARNESS_PROVIDER_CONTRACT.md`** for the full contract; direct **`POST /api/cursor/agents/launch`** remains available for CI/scripts outside chat.
 
+After a managed mission exists, **`GET /api/cursor/managed/missions/{mission_registry_id}/feed`** is the dedicated **REST feed** (provider sync + bounded events). See **`docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md`** for the full managed API table.
+
 ## Optional curl smoke
 
 Send a user message that matches an agent intent (with `project_id` set if needed) to **`POST /api/chat/stream`** with `Content-Type: application/json` and `Accept: application/x-ndjson`. Inspect the final **`done`** line for **`operator_result`** when the operator path fires.

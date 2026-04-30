@@ -50,6 +50,8 @@ This document is the **authoritative** description of what it means for a **harn
 
 A **second** path exists: dashboard/CI **HTTP proxies** under `/api/cursor/...` (e.g. launch, follow-up, conversation) that **do not** go through the same **digest + operator commit** path. Those surfaces must stay **documented** as **distinct**; they are not interchangeable with the operator contract without extra policy.
 
+**Managed mission record (file-backed):** HAM also persists a **`ManagedMission`** per launch (`mission_registry_id`, optional `control_plane_ham_run_id`, observed repo/ref, lifecycle, bounded deploy fields, **`mission_feed_events`**). Read and mutate routes are under **`/api/cursor/managed/missions`** — list/get, **`GET .../{id}/feed`** (REST snapshot projection from Cursor conversation with explicit **`provider_projection`** envelope; see `src/api/cursor_managed_missions.py`, `src/ham/cursor_provider_adapter.py`), plus **`POST .../{id}/messages`** and **`POST .../{id}/cancel`**. This is **HAM’s audit and UX substrate**, not Cursor’s execution queue; see **`docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md`**.
+
 **Non-negotiables to preserve**
 
 | Rule | Rationale |

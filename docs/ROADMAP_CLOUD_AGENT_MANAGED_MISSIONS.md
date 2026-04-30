@@ -17,9 +17,25 @@ This document states **what works today**, what is **stub / partial / explicitly
 | **Deploy hook / approval API** | Managed deploy-approval status + decisions + hook path (`hard` enforces on server) — see `cursor_managed_deploy*`. |
 | **Vercel / post-deploy (bounded)** | Server poll + mapping tiers; post-deploy check — API + future UI surfaces (legacy War Room UI removed Batch 2A). |
 | **Control plane runs (separate)** | Durable `ControlPlaneRun` for operator/chat-committed launches + status; **read** APIs — **factual**, not a queue or graph. |
-| **Read API: missions** | `GET /api/cursor/managed/missions` (list, optional filter by `cursor_agent_id`) and by `mission_registry_id` — full JSON includes `mission_deploy_approval_mode`. |
+| **Read API: missions** | `GET /api/cursor/managed/missions` (list, optional filter by `cursor_agent_id`) and `GET /api/cursor/managed/missions/{mission_registry_id}` — full JSON includes `mission_deploy_approval_mode`. |
+| **Mission feed (REST)** | `GET .../missions/{id}/feed` best-effort refreshes agent status + conversation, projects Cursor payloads into **bounded** `mission_feed_events` via `map_cursor_conversation_to_feed_events` (`src/ham/cursor_provider_adapter.py`). Response includes `provider_capabilities`, `provider_projection_state` / `reason`, and `provider_projection` (REST-only; no native provider stream in-process). |
+| **Follow-up / cancel** | `POST .../missions/{id}/messages` (forward instruction when lifecycle is `open` + key present) and `POST .../missions/{id}/cancel` (best-effort Cursor cancel); outcomes append to the same feed with explicit `reason_code`s when rejected. |
 | **UI** | **Partial:** managed mission APIs and operator/chat flows remain; dedicated Cloud Agent / War Room panels were removed with legacy workbench (Batch 2A). Re-home mission UX in Hermes Workspace or Command Center as needed. |
 | **Project registry** | `ProjectStore` + `PATCH` metadata for `default_deploy_approval_mode` (validated). |
+
+### Managed mission API surface (reference)
+
+All routes live under **`/api/cursor/managed`** (`src/api/cursor_managed_missions.py`). UUID `mission_registry_id` is required for single-mission routes.
+
+| Route | Role |
+|-------|------|
+| `GET /missions` | Newest-first list (optional `cursor_agent_id` filter). |
+| `GET /missions/{id}` | One mission JSON (`_public_mission`). |
+| `GET /missions/{id}/feed` | Timeline + **on-request** provider sync; returns capped `events` (last **80** for display merge), `artifacts` (PR when known), projection envelope. |
+| `POST /missions/{id}/messages` | User follow-up; appends feed rows and may call Cursor follow-up API. |
+| `POST /missions/{id}/cancel` | Stop request; may call Cursor cancel API when lifecycle is `open`. |
+
+**Persistence caps (v1):** stored `mission_feed_events` are trimmed to the last **120** entries (`_FEED_HISTORY_CAP` in `src/persistence/managed_mission.py`); checkpoint history is capped at **24**. Feed projection redacts secrets and caps message/metadata sizes in the adapter — not a verbatim copy of provider payloads.
 
 ---
 
