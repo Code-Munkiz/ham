@@ -8,6 +8,15 @@ In Ham, **mission-aware** means the **live mission feed** and **operator control
 - **Controls apply to the selected mission** — Sync-by-agent, cancel, and follow-up instructions are issued against the **currently selected** `mission_registry_id` (or the agent id derived from that row for sync). Changing the selection changes which feed and which mission receive the next action.
 - **HAM vs Cursor** — Ham stores the managed record and feed events on the server; Cursor remains **upstream** for actual agent execution. The feed is a **HAM-side** view (persisted events plus synthesis when no stored feed exists yet — see `src/api/cursor_managed_missions.py`).
 
+## Live feed transcript (client)
+
+The raw feed is a **bounded, time-ordered list of events** (`assistant_message`, `thinking`, `user_message`, `tool_event`, `status`, and other kinds). Hermes Workspace does **not** render that list verbatim as the primary narrative: it reduces events into a **transcript** of blocks (assistant, thinking, user, tool, status, raw) so the live panel reads like a thread.
+
+- **Builder:** `buildMissionFeedTranscript()` in `frontend/src/features/hermes-workspace/utils/missionFeedTranscript.ts` — sorts by `time` + id, merges consecutive Cursor `assistant_message` chunks that share the same `source`, merges consecutive `thinking` and `user_message` runs, and maps `tool_event` / status-like rows into compact rows. Pass the **full** bounded `events` array from the feed response; apply display caps on the **returned** transcript items, not by pre-slicing `events` (see module docstring).
+- **Surfaces:** `WorkspaceManagedMissionsLivePanel` (Operations / Conductor **Live Cloud Agent missions**) and chat-side digest UI that imports the same helpers (`WorkspaceChatScreen.tsx`).
+
+This layer is **presentation only**; authority and persistence remain on the mission feed API and server-side projection (`docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md`).
+
 ## API surface (scoped by mission)
 
 | Route | Role |
@@ -18,7 +27,7 @@ In Ham, **mission-aware** means the **live mission feed** and **operator control
 | `POST /api/cursor/managed/missions/{mission_registry_id}/messages` | Follow-up instruction for **that** mission (when supported). |
 | `POST /api/cursor/managed/missions/{mission_registry_id}/cancel` | Stop request for **that** mission (when supported). |
 
-Frontend wiring lives in `frontend/src/features/hermes-workspace/adapters/managedMissionsAdapter.ts` and **`WorkspaceManagedMissionsLivePanel`**.
+Frontend wiring lives in `frontend/src/features/hermes-workspace/adapters/managedMissionsAdapter.ts`, **`WorkspaceManagedMissionsLivePanel`**, and **`missionFeedTranscript.ts`** (transcript builder above).
 
 ## Backend smoke (follow-up events)
 
