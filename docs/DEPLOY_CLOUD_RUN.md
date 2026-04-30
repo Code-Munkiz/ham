@@ -1,6 +1,6 @@
 # Deploy Ham API to Google Cloud Run
 
-This repo ships a **`Dockerfile`** that runs **`uvicorn src.api.server:app`**. The browser never talks to Cloud Run with vendor gateway paths; only Ham routes like **`POST /api/chat`**.
+This repo ships a **`Dockerfile`** that runs **`uvicorn src.api.server:app`**. The browser never talks to Cloud Run with vendor gateway paths; only Ham routes like **`POST /api/chat`** or **`POST /api/chat/stream`** (NDJSON; Hermes Workspace Chat uses the stream endpoint).
 
 **End-to-end checklist (Vercel + GCP):** [`docs/DEPLOY_HANDOFF.md`](DEPLOY_HANDOFF.md). After deploy, run **`scripts/verify_ham_api_deploy.sh`** with your API URL and the **exact** Vercel `Origin` you use in the browser.
 
@@ -236,14 +236,14 @@ In **http** mode Ham sends **`Authorization: Bearer <key>`** to Hermes. If **`HE
 
    If the Hermes secret is not created yet, either run **`scripts/seed_hermes_gateway_api_key.sh`** first, or set **`SET_SECRETS`** to only the secrets that exist, then add the Hermes pair after the secret exists.
 
-3. Re-test **`POST /api/chat`** or the in-app chat: NDJSON and UI should no longer show **`Gateway HTTP 401`** when the key matches Hermes.
+3. Re-test **`POST /api/chat`** / **`POST /api/chat/stream`** or the in-app chat: NDJSON and UI should no longer show **`Gateway HTTP 401`** when the key matches Hermes.
 
 After deploy, Cloud Run prints the **service URL**.
 
 ## OpenRouter key (`OPENROUTER_API_KEY`)
 
 - **Mount via Secret Manager** as **`OPENROUTER_API_KEY`** (see **`--set-secrets`** / **`--update-secrets`** above). The value must be **only** the raw key (**one line**, no `Bearer ` prefix, no shell commands). Pasting a whole terminal snippet into the secret produces **`UPSTREAM_REJECTED`** from OpenRouter; Ham also treats malformed values as **not chat-ready** in **`GET /api/models`** (see `openrouter_api_key_is_plausible` in `src/llm_client.py`).
-- **`GET /api/models` with `openrouter_chat_ready: true`** means the key **looks** usable, not that billing/upstream is healthy—always smoke-test **`POST /api/chat`** after rotation.
+- **`GET /api/models` with `openrouter_chat_ready: true`** means the key **looks** usable, not that billing/upstream is healthy—always smoke-test **`POST /api/chat`** or the in-app **`POST /api/chat/stream`** path after rotation.
 - **Safe upload (no key on the shell command line):** create a file that contains **only** the key, then:
 
   ```bash
@@ -294,6 +294,8 @@ See commented template in [`docs/examples/ham-api-cloud-run-env.yaml`](examples/
 **Incident recovery:** if dashboard chat hangs or shows blank replies after model or gateway changes, align Cloud Run env with Hermes `config.yaml` using [`docs/RUNBOOK_HAM_MODEL_RECOVERY.md`](RUNBOOK_HAM_MODEL_RECOVERY.md).
 
 ## Smoke tests
+
+Hermes Workspace Chat uses **`POST /api/chat/stream`** (NDJSON); a simple **`POST /api/chat`** round-trip is enough to prove the gateway from the shell.
 
 ```bash
 curl -sS "${SERVICE_URL}/api/status"

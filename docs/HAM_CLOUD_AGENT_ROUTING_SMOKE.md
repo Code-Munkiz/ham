@@ -2,6 +2,8 @@
 
 This note is for **manual smoke** and orientation: how **Hermes Workspace Chat** gets **Cursor Cloud Agent** preview/launch/status intents to the server **through the same stream** the UI already uses for chat.
 
+**Related:** `docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md` (managed mission store vs control plane; phased roadmap), `docs/HAM_CHAT_CONTROL_PLANE.md` (chat operator + UI actions).
+
 ## Transport
 
 - **Workspace Chat** (`WorkspaceChatScreen`) talks to the API **only** via **`POST /api/chat/stream`** (NDJSON: `session` → optional `delta` lines → `done` or `error`). The browser helper defaults `enable_operator: true` on that request so the server may run the chat **operator** path before calling the LLM.

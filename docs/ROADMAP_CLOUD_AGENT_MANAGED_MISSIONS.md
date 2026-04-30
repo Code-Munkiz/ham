@@ -2,7 +2,7 @@
 
 This document states **what works today**, what is **stub / partial / explicitly out of scope**, and a **phased roadmap** to close product gaps without collapsing architecture boundaries (Hermes supervises; Cursor remains upstream execution; no second orchestration framework).
 
-**Related:** `GAPS.md`, `VISION.md` (transitional state table), `docs/CONTROL_PLANE_RUN.md` (factual run records vs. mission graph).
+**Related:** `GAPS.md`, `VISION.md` (transitional state table), `docs/CONTROL_PLANE_RUN.md` (factual run records vs. mission graph), `docs/HAM_CLOUD_AGENT_ROUTING_SMOKE.md` (Workspace Chat stream + operator/router short-circuit).
 
 ---
 
@@ -32,7 +32,7 @@ This document states **what works today**, what is **stub / partial / explicitly
 | **Mission row only when new** | `create_mission_after_managed_launch` skips if a row already exists for that agent id (no duplicate). |
 | **Managed “review” heuristics** | Server-side rules on polled Cursor payload (`src/ham/cursor_agent_workflow.py` and related) — **not** the same as `HermesReviewer.evaluate()` on bridge runs. Legacy client helpers were removed in Batch 2A. |
 | **Hermes ↔ Cursor path** | `HermesReviewer` is strong on **bridge / `main.py`-style** flows; **not** a single automatic closed loop over every Cloud Agent turn. |
-| **Chat** | `POST /api/chat` is **not** the Hermes reviewer; system prompt is explicit about that (`chat.py`). |
+| **Chat** | **`POST /api/chat`** and **`POST /api/chat/stream`** (NDJSON; Hermes Workspace Chat uses the stream route) are **not** the Hermes reviewer; the system prompt is explicit about that (`chat.py`). |
 
 ---
 
