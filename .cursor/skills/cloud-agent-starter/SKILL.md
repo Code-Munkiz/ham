@@ -128,6 +128,16 @@ Useful env flags:
 - `HAM_BROWSER_BLOCKED_DOMAINS=...`
 - `HAM_BROWSER_SESSION_TTL_SECONDS=...`
 
+## G) Managed Cursor missions (Cloud Agent feed)
+
+Use when you need **managed mission** APIs or the **mission feed** path (not the same as Bridge `RunStore` or `ControlPlaneRun`).
+
+- **Roadmap + shipped vs partial:** `docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md`
+- **Workspace chat → operator launch routing (smoke):** `docs/HAM_CLOUD_AGENT_ROUTING_SMOKE.md`
+- **Feed projection (SDK bridge vs REST):** env `HAM_CURSOR_SDK_BRIDGE_ENABLED` (`true` / `1` / `yes` → live bridge in `src/integrations/cursor_sdk_bridge_client.py` + `bridge.mjs`; otherwise REST projection). Rollback in prod: set to `false` without changing launch URLs — see roadmap § "Rollback control".
+- **Launch token (deploy / browser):** `HAM_CURSOR_AGENT_LAUNCH_TOKEN` — see `docs/DEPLOY_CLOUD_RUN.md` § "Cloud Agent launch token".
+- **List missions (read):** `curl -sS http://127.0.0.1:8000/api/cursor/managed/missions` (requires working Cursor credentials when exercising live Cursor-backed rows).
+
 ## 5) Common quick fixes
 
 - `python3 -m pytest ...` fails with `No module named pytest`:
