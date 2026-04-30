@@ -1119,8 +1119,9 @@ Each item tracks what is missing, why it matters, and what blocks it.
 **Impact**: After Droid modifies the repo (creates/deletes files), any previously
 captured `ProjectContext` snapshot is stale. Agents making decisions after Droid
 runs may reference files that no longer exist or miss newly created ones.
-**Blocked by**: Droid executor is still a stub. Address when real subprocess
-execution lands.
+**Blocked by**: Hermes/supervisory paths do not yet rebuild context after every
+Bridge step; treat as integration work alongside mission expansion (executor
+backend is implemented — see gap §6).
 **Fix**: Add a `ProjectContext.refresh()` method or rebuild `ContextBuilder` after
 each Droid execution step.
 
@@ -1259,10 +1260,10 @@ The hardening plan correctly targets: cross-platform `_extract_key_files`, agent
 ## Deferred (not in this milestone)
 
 - LLM-backed session summarization (`SessionMemory._summarize()` remains string-based).
-- Context refresh immediately after Droid writes (until Droid is real).
+- Context refresh immediately after Droid writes (supervisory integration follow-up).
 - Supervisory-flow callbacks/hooks for `SessionMemory` (separate integration task).
 - Critic **learning** persistence (FTS5 / durable review store) — not started; no second harness layer.
-- Phase 4 Droid execution-safety hardening — deferred until `droid_executor` is real.
+- Phase 4 Droid execution-safety hardening — deferred until policy/mission surfaces need deeper mutating-command coverage beyond Bridge v0 defaults.
 ```
 
 ---
