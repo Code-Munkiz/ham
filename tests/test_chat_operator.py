@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -61,6 +62,17 @@ def test_heuristic_cloud_agent_launch_routing() -> None:
     assert "flaky tests" in h[1]["cursor_task_prompt"]
 
 
+def test_heuristic_cloud_agent_launch_extracts_repo_and_branch() -> None:
+    h = try_heuristic_intent(
+        "launch a cursor cloud agent for repo Code-Munkiz/ham on branch main to update docs",
+        default_project_id=None,
+    )
+    assert h is not None
+    assert h[0] == "cursor_agent_launch"
+    assert h[1]["cursor_repository"] == "Code-Munkiz/ham"
+    assert h[1]["cursor_ref"] == "main"
+
+
 def test_process_operator_cursor_launch_missing_project_uses_stable_reason_code(tmp_path: Path) -> None:
     store = ProjectStore(store_path=tmp_path / "projects.json")
     op = process_operator_turn(
@@ -73,8 +85,183 @@ def test_process_operator_cursor_launch_missing_project_uses_stable_reason_code(
     assert op is not None and op.handled
     assert op.intent == "cursor_agent_launch"
     assert not op.ok
-    assert op.data.get("reason_code") == "missing_project_ref"
-    assert (op.blocking_reason or "").startswith("missing_project_ref:")
+    assert op.data.get("reason_code") == "missing_project_context"
+    assert (op.blocking_reason or "").startswith("missing_project_context:")
+
+
+def test_process_operator_cursor_launch_unknown_default_project_returns_project_context_reason(
+    tmp_path: Path,
+) -> None:
+    store = ProjectStore(store_path=tmp_path / "projects.json")
+    op = process_operator_turn(
+        user_text="fire up an agent to update the SDK adapter",
+        project_store=store,
+        default_project_id="project.ghost-123456",
+        operator_payload=None,
+        ham_operator_authorization=None,
+    )
+    assert op is not None and op.handled
+    assert op.intent == "cursor_agent_launch"
+    assert not op.ok
+    assert op.data.get("reason_code") == "missing_project_context"
+    assert (op.blocking_reason or "").startswith("missing_project_context:")
+
+
+def test_process_operator_cursor_launch_explicit_repo_without_mapping_uses_mapping_reason(tmp_path: Path) -> None:
+    store = ProjectStore(store_path=tmp_path / "projects.json")
+    op = process_operator_turn(
+        user_text="launch a cursor cloud agent for repo Code-Munkiz/ham on branch main to update docs",
+        project_store=store,
+        default_project_id=None,
+        operator_payload=None,
+        ham_operator_authorization=None,
+    )
+    assert op is not None and op.handled
+    assert op.intent == "cursor_agent_launch"
+    assert not op.ok
+    assert op.data.get("reason_code") == "missing_project_mapping"
+    assert (op.blocking_reason or "").startswith("missing_project_mapping:")
+
+
+def test_process_operator_cursor_launch_passes_repo_and_ref_into_preview(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CURSOR_API_KEY", "k")
+    store = ProjectStore(store_path=tmp_path / "projects.json")
+    rec = store.make_record(
+        name="ham",
+        root=str(tmp_path),
+        description="",
+        metadata={"cursor_cloud_repository": "https://github.com/Code-Munkiz/ham"},
+    )
+    store.register(rec)
+    with patch("src.ham.chat_operator.build_cursor_agent_preview") as mock_preview:
+        from src.ham.cursor_agent_workflow import CursorAgentPreviewResult
+
+        mock_preview.return_value = CursorAgentPreviewResult(
+            ok=True,
+            blocking_reason=None,
+            proposal_digest="d" * 64,
+            base_revision="cursor-agent-v1",
+            repository="Code-Munkiz/ham",
+            mutates=False,
+            summary_preview="ok",
+            project_id=rec.id,
+        )
+        op = process_operator_turn(
+            user_text="launch a cursor cloud agent for repo Code-Munkiz/ham on branch main to update docs",
+            project_store=store,
+            default_project_id=None,
+            operator_payload=None,
+            ham_operator_authorization=None,
+        )
+    assert op is not None and op.handled
+    assert mock_preview.call_count == 1
+    kwargs = mock_preview.call_args.kwargs
+    assert kwargs["cursor_repository"] == "Code-Munkiz/ham"
+    assert kwargs["cursor_ref"] == "main"
+
+
+def test_process_operator_cursor_launch_uses_project_default_ref_when_missing_explicit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CURSOR_API_KEY", "k")
+    store = ProjectStore(store_path=tmp_path / "projects.json")
+    rec = store.make_record(
+        name="ham",
+        root=str(tmp_path),
+        description="",
+        metadata={
+            "cursor_cloud_repository": "https://github.com/Code-Munkiz/ham",
+            "default_branch": "release/2026",
+        },
+    )
+    store.register(rec)
+    with patch("src.ham.chat_operator.build_cursor_agent_preview") as mock_preview:
+        from src.ham.cursor_agent_workflow import CursorAgentPreviewResult
+
+        mock_preview.return_value = CursorAgentPreviewResult(
+            ok=True,
+            blocking_reason=None,
+            proposal_digest="d" * 64,
+            base_revision="cursor-agent-v1",
+            repository="Code-Munkiz/ham",
+            mutates=False,
+            summary_preview="ok",
+            project_id=rec.id,
+        )
+        op = process_operator_turn(
+            user_text="fire up an agent to update the sdk adapter",
+            project_store=store,
+            default_project_id=rec.id,
+            operator_payload=None,
+            ham_operator_authorization=None,
+        )
+    assert op is not None and op.handled
+    kwargs = mock_preview.call_args.kwargs
+    assert kwargs["cursor_repository"] is None
+    assert kwargs["cursor_ref"] == "release/2026"
+
+
+def test_process_operator_cursor_launch_backfills_cursor_metadata_from_git(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CURSOR_API_KEY", "k")
+    store = ProjectStore(store_path=tmp_path / "projects.json")
+    rec = store.make_record(
+        name="ham",
+        root=str(tmp_path),
+        description="",
+        metadata={},
+    )
+    store.register(rec)
+
+    class _Done:
+        def __init__(self, stdout: str, returncode: int = 0) -> None:
+            self.stdout = stdout
+            self.returncode = returncode
+
+    responses = iter(
+        [
+            _Done("git@github.com:Code-Munkiz/ham.git\n"),
+            _Done("origin/main\n"),
+        ]
+    )
+
+    def _fake_run(*_args, **_kwargs):
+        return next(responses)
+
+    monkeypatch.setattr("src.ham.chat_operator.subprocess.run", _fake_run)
+    with patch("src.ham.chat_operator.build_cursor_agent_preview") as mock_preview:
+        from src.ham.cursor_agent_workflow import CursorAgentPreviewResult
+
+        mock_preview.return_value = CursorAgentPreviewResult(
+            ok=True,
+            blocking_reason=None,
+            proposal_digest="d" * 64,
+            base_revision="cursor-agent-v1",
+            repository="Code-Munkiz/ham",
+            mutates=False,
+            summary_preview="ok",
+            project_id=rec.id,
+        )
+        op = process_operator_turn(
+            user_text="fire up an agent to update docs",
+            project_store=store,
+            default_project_id=rec.id,
+            operator_payload=None,
+            ham_operator_authorization=None,
+        )
+    assert op is not None and op.handled and op.ok
+    kwargs = mock_preview.call_args.kwargs
+    assert kwargs["cursor_ref"] == "main"
+    updated = store.get_project(rec.id)
+    assert updated is not None
+    assert dict(updated.metadata).get("cursor_cloud_repository") == "Code-Munkiz/ham"
+    assert dict(updated.metadata).get("cursor_cloud_ref") == "main"
 
 
 def test_heuristic_factory_route_blocks_with_stable_reason() -> None:

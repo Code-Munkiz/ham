@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import os
 import re
+import subprocess
 from pathlib import Path
 from typing import Any, Literal
+from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -301,7 +303,7 @@ def _summarize_run(rec: RunRecord, *, max_lines: int = 24, max_chars: int = 6000
             lines.append("hermes_review.notes: " + "; ".join(str(n) for n in notes[:12]))
     text = "\n".join(lines)
     if len(text) > max_chars:
-        text = text[:max_chars] + f"\n… [truncated; full record in .ham/runs/]"
+        text = text[:max_chars] + "\n… [truncated; full record in .ham/runs/]"
     return {
         "run_id": rec.run_id,
         "status": status,
@@ -355,13 +357,144 @@ def _extract_cursor_agent_id(text: str) -> str | None:
     return m.group(1) if m else None
 
 
+def _normalize_repo_hint(repo: str | None) -> str:
+    raw = str(repo or "").strip().rstrip("/")
+    if not raw:
+        return ""
+    lowered = raw.lower()
+    if lowered.startswith("https://github.com/"):
+        return lowered.removeprefix("https://github.com/").strip("/")
+    if lowered.startswith("http://github.com/"):
+        return lowered.removeprefix("http://github.com/").strip("/")
+    return lowered
+
+
+def _project_matches_repo_hint(project_metadata: dict[str, Any], repo_hint: str) -> bool:
+    expected = _normalize_repo_hint(repo_hint)
+    if not expected:
+        return False
+    meta_repo = project_metadata.get("cursor_cloud_repository")
+    if not isinstance(meta_repo, str) or not meta_repo.strip():
+        return False
+    return _normalize_repo_hint(meta_repo) == expected
+
+
+def _resolve_project_id_from_repo_hint(
+    *,
+    project_store: ProjectStore,
+    repo_hint: str | None,
+) -> str | None:
+    normalized = _normalize_repo_hint(repo_hint)
+    if not normalized:
+        return None
+    for record in project_store.list_projects():
+        if _project_matches_repo_hint(dict(record.metadata or {}), normalized):
+            return record.id
+    return None
+
+
+def _project_default_cursor_ref(project_metadata: dict[str, Any]) -> str | None:
+    for key in ("cursor_cloud_ref", "cursor_ref", "default_branch", "branch", "git_branch"):
+        raw = project_metadata.get(key)
+        if not isinstance(raw, str):
+            continue
+        val = raw.strip()
+        if val:
+            return val
+    return None
+
+
+def _normalize_cursor_repository(value: str | None) -> str | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    ssh = re.match(r"^git@github\.com:(?P<owner>[^/\s]+)/(?P<repo>[^/\s]+?)(?:\.git)?$", raw, re.I)
+    if ssh:
+        return f"{ssh.group('owner')}/{ssh.group('repo')}"
+    if raw.lower().startswith(("http://", "https://")):
+        try:
+            u = urlparse(raw)
+            if u.netloc.lower() != "github.com":
+                return raw.rstrip("/")
+            parts = [p for p in u.path.split("/") if p]
+            if len(parts) >= 2:
+                repo = parts[1]
+                if repo.lower().endswith(".git"):
+                    repo = repo[:-4]
+                return f"{parts[0]}/{repo}"
+        except ValueError:
+            return raw.rstrip("/")
+    return raw.rstrip("/")
+
+
+def _infer_project_cursor_metadata_from_git(project_root: str | Path) -> dict[str, str]:
+    root = Path(project_root).expanduser().resolve()
+    if not root.is_dir():
+        return {}
+    try:
+        repo_cmd = subprocess.run(
+            ["git", "-C", str(root), "config", "--get", "remote.origin.url"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=2.0,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return {}
+    repo = _normalize_cursor_repository(repo_cmd.stdout.strip() if repo_cmd.returncode == 0 else "")
+    if not repo:
+        return {}
+    ref: str | None = None
+    for argv in (
+        ["git", "-C", str(root), "symbolic-ref", "--short", "refs/remotes/origin/HEAD"],
+        ["git", "-C", str(root), "rev-parse", "--abbrev-ref", "HEAD"],
+    ):
+        try:
+            ref_cmd = subprocess.run(
+                argv,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=2.0,
+            )
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if ref_cmd.returncode != 0:
+            continue
+        candidate = ref_cmd.stdout.strip()
+        if candidate.startswith("origin/"):
+            candidate = candidate[len("origin/") :]
+        if candidate and candidate.upper() != "HEAD":
+            ref = candidate
+            break
+    updates = {"cursor_cloud_repository": repo}
+    if ref:
+        updates["cursor_cloud_ref"] = ref
+    return updates
+
+
+def _ensure_project_cursor_metadata(project_store: ProjectStore, record: Any) -> Any:
+    metadata = dict(record.metadata or {})
+    if metadata.get("cursor_cloud_repository"):
+        return record
+    inferred = _infer_project_cursor_metadata_from_git(record.root)
+    if not inferred:
+        return record
+    updated = record.model_copy(update={"metadata": {**metadata, **inferred}})
+    project_store.register(updated)
+    return updated
+
+
 def _map_agent_router_result(
     *,
     routed: AgentRouteResult,
     user_text: str,
     default_project_id: str | None,
 ) -> tuple[str, dict[str, Any]] | None:
-    resolved_pid = _extract_project_id(user_text) or default_project_id
+    explicit_pid = _extract_project_id(user_text)
+    resolved_pid = explicit_pid or default_project_id
+    repo_ref = routed.repo_ref.strip() if routed.repo_ref else None
+    branch_ref = routed.branch.strip() if routed.branch else None
     if routed.intent == "normal_chat":
         return None
     if routed.provider not in ("cursor",):
@@ -374,27 +507,41 @@ def _map_agent_router_result(
         )
     if routed.intent == "agent_preview":
         params: dict[str, Any] = {}
-        if "project" in routed.missing:
-            params["missing"] = "project_id"
-            return "cursor_agent_preview", params
         if "task" in routed.missing:
             params["missing"] = "task_prompt"
             return "cursor_agent_preview", params
+        if "project" in routed.missing and not repo_ref:
+            params["missing"] = "project_id"
+            return "cursor_agent_preview", params
+        if repo_ref:
+            params["cursor_repository"] = repo_ref
+        if branch_ref:
+            params["cursor_ref"] = branch_ref
+        if resolved_pid:
+            params["project_id"] = resolved_pid
+            params["project_context_source"] = "explicit" if explicit_pid else "default"
         return (
             "cursor_agent_preview",
-            {"project_id": resolved_pid, "cursor_task_prompt": routed.task or ""},
+            {**params, "cursor_task_prompt": routed.task or ""},
         )
     if routed.intent == "agent_launch":
         params = {}
-        if "project" in routed.missing:
-            params["missing"] = "project_id"
-            return "cursor_agent_launch", params
         if "task" in routed.missing:
             params["missing"] = "task_prompt"
             return "cursor_agent_launch", params
+        if "project" in routed.missing and not repo_ref:
+            params["missing"] = "project_id"
+            return "cursor_agent_launch", params
+        if repo_ref:
+            params["cursor_repository"] = repo_ref
+        if branch_ref:
+            params["cursor_ref"] = branch_ref
+        if resolved_pid:
+            params["project_id"] = resolved_pid
+            params["project_context_source"] = "explicit" if explicit_pid else "default"
         return (
             "cursor_agent_launch",
-            {"project_id": resolved_pid, "cursor_task_prompt": routed.task or ""},
+            {**params, "cursor_task_prompt": routed.task or ""},
         )
     if routed.intent == "agent_status":
         aid = _extract_cursor_agent_id(user_text)
@@ -402,7 +549,11 @@ def _map_agent_router_result(
             return "cursor_agent_status", {"missing": "agent_id"}
         return (
             "cursor_agent_status",
-            {"project_id": resolved_pid, "cursor_agent_id": aid},
+            {
+                "project_id": resolved_pid,
+                "cursor_agent_id": aid,
+                "project_context_source": "explicit" if explicit_pid else "default",
+            },
         )
     if routed.intent == "agent_cancel":
         aid = _extract_cursor_agent_id(user_text)
@@ -410,7 +561,11 @@ def _map_agent_router_result(
             return "cursor_agent_cancel", {"missing": "agent_id"}
         return (
             "cursor_agent_cancel",
-            {"project_id": resolved_pid, "cursor_agent_id": aid},
+            {
+                "project_id": resolved_pid,
+                "cursor_agent_id": aid,
+                "project_context_source": "explicit" if explicit_pid else "default",
+            },
         )
     if routed.intent == "agent_continue":
         return (
@@ -1570,8 +1725,8 @@ def _dispatch_intent(
         if params.get("missing") == "project_id":
             return _reasoned_block(
                 intent,
-                "missing_project_ref",
-                "No active project is selected for this workspace chat.",
+                "missing_project_context",
+                "I can start an agent, but I need an active project or repo first.",
             )
         if params.get("missing") == "task_prompt":
             return _reasoned_block(
@@ -1579,21 +1734,57 @@ def _dispatch_intent(
                 "missing_task_prompt",
                 "I need one task sentence to build a Cloud Agent preview.",
             )
-        pid = str(params["project_id"])
+        pid_raw = params.get("project_id")
+        repo_hint = params.get("cursor_repository")
+        explicit_cursor_ref = str(params.get("cursor_ref") or "").strip() or None
+        resolved_pid: str | None
+        if pid_raw:
+            resolved_pid = str(pid_raw)
+        else:
+            resolved_pid = _resolve_project_id_from_repo_hint(
+                project_store=project_store,
+                repo_hint=str(repo_hint or ""),
+            )
+            if not resolved_pid:
+                if repo_hint:
+                    return _reasoned_block(
+                        intent,
+                        "missing_project_mapping",
+                        (
+                            "No registered project maps to repository "
+                            f"{str(repo_hint)!r}. Add `metadata.cursor_cloud_repository` to a project."
+                        ),
+                    )
+                return _reasoned_block(
+                    intent,
+                    "missing_project_ref",
+                    "No active project is selected for this workspace chat.",
+                )
+        pid = resolved_pid
         task_prompt = str(params.get("cursor_task_prompt") or "").strip()
+        project_context_source = str(params.get("project_context_source") or "").strip().lower()
         prec = project_store.get_project(pid)
         if prec is None:
+            if project_context_source == "default":
+                return _reasoned_block(
+                    intent,
+                    "missing_project_context",
+                    "I can start an agent, but I need an active project or repo first.",
+                )
             return _reasoned_block(
                 intent,
                 "missing_project_ref",
                 f"Unknown project_id {pid!r}.",
             )
+        prec = _ensure_project_cursor_metadata(project_store, prec)
+        default_cursor_ref = _project_default_cursor_ref(dict(prec.metadata or {}))
+        cursor_ref = explicit_cursor_ref or default_cursor_ref
         prev = build_cursor_agent_preview(
             project_id=prec.id,
             project_metadata=dict(prec.metadata or {}),
-            cursor_repository=None,
+            cursor_repository=str(repo_hint).strip() if repo_hint else None,
             cursor_task_prompt=task_prompt,
-            cursor_ref=None,
+            cursor_ref=cursor_ref,
             cursor_model="default",
             cursor_auto_create_pr=False,
             cursor_branch_name=None,
@@ -1624,7 +1815,7 @@ def _dispatch_intent(
             "cursor_repository": None,
             "cursor_mission_handling": "managed",
             "cursor_task_prompt": task_prompt,
-            "cursor_ref": None,
+            "cursor_ref": cursor_ref,
             "cursor_model": "default",
             "cursor_auto_create_pr": False,
             "cursor_branch_name": None,
@@ -1649,8 +1840,8 @@ def _dispatch_intent(
         if params.get("missing") == "project_id":
             return _reasoned_block(
                 intent,
-                "missing_project_ref",
-                "No active project is selected for this workspace chat.",
+                "missing_project_context",
+                "I can start an agent, but I need an active project or repo first.",
             )
         if params.get("missing") == "task_prompt":
             return _reasoned_block(
@@ -1658,21 +1849,57 @@ def _dispatch_intent(
                 "missing_task_prompt",
                 "I need one task sentence before launching a Cloud Agent mission.",
             )
-        pid = str(params["project_id"])
+        pid_raw = params.get("project_id")
+        repo_hint = params.get("cursor_repository")
+        explicit_cursor_ref = str(params.get("cursor_ref") or "").strip() or None
+        resolved_pid: str | None
+        if pid_raw:
+            resolved_pid = str(pid_raw)
+        else:
+            resolved_pid = _resolve_project_id_from_repo_hint(
+                project_store=project_store,
+                repo_hint=str(repo_hint or ""),
+            )
+            if not resolved_pid:
+                if repo_hint:
+                    return _reasoned_block(
+                        intent,
+                        "missing_project_mapping",
+                        (
+                            "No registered project maps to repository "
+                            f"{str(repo_hint)!r}. Add `metadata.cursor_cloud_repository` to a project."
+                        ),
+                    )
+                return _reasoned_block(
+                    intent,
+                    "missing_project_ref",
+                    "No active project is selected for this workspace chat.",
+                )
+        pid = resolved_pid
         task_prompt = str(params.get("cursor_task_prompt") or "").strip()
+        project_context_source = str(params.get("project_context_source") or "").strip().lower()
         prec = project_store.get_project(pid)
         if prec is None:
+            if project_context_source == "default":
+                return _reasoned_block(
+                    intent,
+                    "missing_project_context",
+                    "I can start an agent, but I need an active project or repo first.",
+                )
             return _reasoned_block(
                 intent,
                 "missing_project_ref",
                 f"Unknown project_id {pid!r}.",
             )
+        prec = _ensure_project_cursor_metadata(project_store, prec)
+        default_cursor_ref = _project_default_cursor_ref(dict(prec.metadata or {}))
+        cursor_ref = explicit_cursor_ref or default_cursor_ref
         prev = build_cursor_agent_preview(
             project_id=prec.id,
             project_metadata=dict(prec.metadata or {}),
-            cursor_repository=None,
+            cursor_repository=str(repo_hint).strip() if repo_hint else None,
             cursor_task_prompt=task_prompt,
-            cursor_ref=None,
+            cursor_ref=cursor_ref,
             cursor_model="default",
             cursor_auto_create_pr=False,
             cursor_branch_name=None,
@@ -1697,7 +1924,7 @@ def _dispatch_intent(
             api_key=api_key,
             project_id=prec.id,
             repository=str(prev.repository or ""),
-            ref=None,
+            ref=cursor_ref,
             model="default",
             auto_create_pr=False,
             branch_name=None,
