@@ -148,6 +148,25 @@ Chat **`cursor_agent_launch`** requires a Ham **operator bearer** separate from 
 
 5. **Browser:** paste the **same** secret value in the Cloud Agent launch field (or retrieve the current version locally with `gcloud secrets versions access latest --secret=ham-cursor-agent-launch-token --project="${PROJECT_ID}"`).
 
+## Project metadata survives deploy (Managed Cloud Agent)
+
+The dashboard **project registry** persists records (including **`metadata`**, e.g. `cursor_cloud_repository` / `cursor_cloud_ref`) in **`~/.ham/projects.json`** on the API host. On Cloud Run that file is **container-local**: a new revision or a cold instance can start with an **empty** store unless you use **minimum instances = 1**, a mounted volume, or another shared backend.
+
+For **Managed Cloud Agent** flows, Ham can **re-seed** the default project’s Cursor repo/ref **from environment variables** on every process start (same revision or a new one). Set on the Cloud Run service (plain env, not secrets unless you wrap them yourself):
+
+| Variable | Role |
+|----------|------|
+| `HAM_DEFAULT_PROJECT_ID` | Project id that must match the UI’s active project (e.g. `project.app-f53b52`). |
+| `HAM_DEFAULT_CURSOR_REPOSITORY` | GitHub repo slug for **`metadata.cursor_cloud_repository`**. |
+| `HAM_DEFAULT_CURSOR_REF` | Git ref for **`metadata.cursor_cloud_ref`** (often `main`). |
+| `HAM_DEFAULT_PROJECT_ROOT` | Optional; default record root when the store is created from env only (defaults to `/app`). |
+
+On startup, `ProjectStore.ensure_default_cursor_metadata()` merges these into the matching **`ProjectRecord`** when repo/ref metadata is missing—so **project metadata needed for launch survives redeploy** as long as the service definition keeps the vars.
+
+**Proof in-repo:** `tests/test_project_store.py` exercises this path explicitly, including a **fresh `ProjectStore`** after writing JSON to disk (simulating a new container reading persisted file + env) in **`test_ensure_default_cursor_metadata_backfills_existing_project`**, plus registration and create-from-empty cases (**`test_register_applies_default_cursor_metadata_from_env`**, **`test_ensure_default_cursor_metadata_creates_default_project_when_missing`**). Implementation: `src/persistence/project_store.py`.
+
+For multi-instance behavior when projects are created only via the browser API, see **`docs/DEPLOY_HANDOFF.md`** (Dashboard project registry).
+
 ## Transcription key (`HAM_TRANSCRIPTION_API_KEY`)
 
 `POST /api/chat/transcribe` requires:
