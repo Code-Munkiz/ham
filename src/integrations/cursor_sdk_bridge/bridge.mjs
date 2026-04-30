@@ -71,7 +71,7 @@ async function main() {
   const started = Date.now();
   let idx = 0;
 
-  await using agent = await Agent.resume(agentId, { apiKey });
+  const agent = await Agent.resume(agentId, { apiKey });
   if (!runId) {
     const runs = await Agent.listRuns(agentId, { runtime: "cloud", apiKey, limit: 1 });
     const first = Array.isArray(runs?.items) ? runs.items[0] : null;
