@@ -62,6 +62,8 @@ from src.ham.settings_write import (
     settings_writes_enabled,
 )
 from src.memory_heist import discover_config
+from src.persistence.control_plane_run import ControlPlaneRunStore
+from src.persistence.managed_mission import ManagedMission
 from src.persistence.project_store import ProjectStore
 from src.persistence.run_store import RunRecord, RunStore
 
@@ -485,6 +487,87 @@ def _ensure_project_cursor_metadata(project_store: ProjectStore, record: Any) ->
     return updated
 
 
+def _mission_project_id(mission: ManagedMission) -> str | None:
+    hid = str(mission.control_plane_ham_run_id or "").strip()
+    if not hid:
+        return None
+    try:
+        run = ControlPlaneRunStore().get(hid)
+    except ValueError:
+        return None
+    if run is None:
+        return None
+    pid = str(run.project_id or "").strip()
+    return pid or None
+
+
+def _latest_managed_mission(
+    *,
+    project_store: ProjectStore,
+    project_id: str | None,
+) -> ManagedMission | None:
+    rows = get_managed_mission_store().list_newest_first(limit=80)
+    if not rows:
+        return None
+    pid = str(project_id or "").strip()
+    if not pid:
+        open_any = next((m for m in rows if m.mission_lifecycle == "open"), None)
+        return open_any or rows[0]
+    rec = project_store.get_project(pid)
+    project_repo = None
+    if rec is not None:
+        project_repo = _normalize_repo_hint(dict(rec.metadata or {}).get("cursor_cloud_repository"))
+    scoped: list[ManagedMission] = []
+    for m in rows:
+        mid = _mission_project_id(m)
+        if mid and mid == pid:
+            scoped.append(m)
+            continue
+        if project_repo:
+            observed = _normalize_repo_hint(m.repository_observed or m.repo_key)
+            if observed and observed == project_repo:
+                scoped.append(m)
+    if not scoped:
+        open_any = next((m for m in rows if m.mission_lifecycle == "open"), None)
+        return open_any or rows[0]
+    open_scoped = next((m for m in scoped if m.mission_lifecycle == "open"), None)
+    return open_scoped or scoped[0]
+
+
+def _managed_mission_payload(
+    mission: ManagedMission,
+    *,
+    include_events: bool = False,
+    max_events: int = 6,
+) -> dict[str, Any]:
+    out: dict[str, Any] = {
+        "provider": "cursor_cloud_agent",
+        "reason_code": "mission_state_ready",
+        "mission_registry_id": mission.mission_registry_id,
+        "agent_id": mission.cursor_agent_id,
+        "cursor_agent_id": mission.cursor_agent_id,
+        "repository": mission.repository_observed,
+        "ref": mission.ref_observed,
+        "status": mission.cursor_status_last_observed,
+        "mission_checkpoint": mission.mission_checkpoint_latest,
+        "mission_lifecycle": mission.mission_lifecycle,
+        "mission_status_reason": mission.status_reason_last_observed,
+        "pr_url": mission.pr_url_last_observed,
+        "last_server_observed_at": mission.last_server_observed_at,
+    }
+    if include_events:
+        events = list(mission.mission_checkpoint_events)[-max_events:]
+        out["checkpoint_events"] = [
+            {
+                "checkpoint": e.checkpoint,
+                "observed_at": e.observed_at,
+                "reason": e.reason,
+            }
+            for e in events
+        ]
+    return out
+
+
 def _map_agent_router_result(
     *,
     routed: AgentRouteResult,
@@ -546,7 +629,13 @@ def _map_agent_router_result(
     if routed.intent == "agent_status":
         aid = _extract_cursor_agent_id(user_text)
         if not aid:
-            return "cursor_agent_status", {"missing": "agent_id"}
+            return (
+                "cursor_agent_status",
+                {
+                    "project_id": resolved_pid,
+                    "project_context_source": "explicit" if explicit_pid else "default",
+                },
+            )
         return (
             "cursor_agent_status",
             {
@@ -558,7 +647,13 @@ def _map_agent_router_result(
     if routed.intent == "agent_cancel":
         aid = _extract_cursor_agent_id(user_text)
         if not aid:
-            return "cursor_agent_cancel", {"missing": "agent_id"}
+            return (
+                "cursor_agent_cancel",
+                {
+                    "project_id": resolved_pid,
+                    "project_context_source": "explicit" if explicit_pid else "default",
+                },
+            )
         return (
             "cursor_agent_cancel",
             {
@@ -674,6 +769,18 @@ def try_heuristic_intent(
     if rid and re.search(r"\b(inspect|show|describe)\s+run\b", low):
         pid = _extract_project_id(t) or default_project_id
         return "inspect_run", {"run_id": rid, "project_id": pid}
+    if re.search(r"\b(status|what happened|show mission status|how is the agent doing)\b", low):
+        pid = _extract_project_id(t) or default_project_id
+        aid = _extract_cursor_agent_id(t)
+        return "cursor_agent_status", {"project_id": pid, "cursor_agent_id": aid}
+    if re.search(r"\b(show logs|show checkpoints|what has it done)\b", low):
+        pid = _extract_project_id(t) or default_project_id
+        aid = _extract_cursor_agent_id(t)
+        return "cursor_agent_logs", {"project_id": pid, "cursor_agent_id": aid}
+    if re.search(r"\b(stop the agent|cancel the mission|cancel agent|stop agent)\b", low):
+        pid = _extract_project_id(t) or default_project_id
+        aid = _extract_cursor_agent_id(t)
+        return "cursor_agent_cancel", {"project_id": pid, "cursor_agent_id": aid}
 
     prof, add_s, rem, kind = _parse_skill_mutation(t)
     if kind and prof:
@@ -788,6 +895,7 @@ _AGENT_ROUTER_ONLY_INTENTS = {
     "cursor_agent_preview",
     "cursor_agent_launch",
     "cursor_agent_status",
+    "cursor_agent_logs",
     "cursor_agent_cancel",
     "agent_router_blocked",
 }
@@ -1965,27 +2073,25 @@ def _dispatch_intent(
         )
 
     if intent == "cursor_agent_status":
-        if params.get("missing") == "agent_id":
+        pid = str(params.get("project_id") or "").strip() or None
+        aid_raw = str(params.get("cursor_agent_id") or "").strip() or None
+        mission: ManagedMission | None = None
+        if aid_raw:
+            mission = get_managed_mission_store().find_by_cursor_agent_id(aid_raw)
+        if mission is None:
+            mission = _latest_managed_mission(
+                project_store=project_store,
+                project_id=pid,
+            )
+        if mission is None:
             return _reasoned_block(
                 intent,
-                "missing_cursor_agent_id",
-                "Include a Cursor agent id (e.g. `bc_…`) in your message.",
+                "missing_mission_context",
+                "I could not find a recent managed mission for this workspace yet.",
             )
-        if params.get("missing") == "project_id":
-            return _reasoned_block(
-                intent,
-                "missing_project_ref",
-                "Mention a registered `project.…` id or set workspace project context.",
-            )
-        pid = str(params["project_id"])
-        aid_raw = str(params["cursor_agent_id"])
-        prec = project_store.get_project(pid)
-        if prec is None:
-            return _reasoned_block(
-                intent,
-                "missing_project_ref",
-                f"Unknown project_id {pid!r}.",
-            )
+        aid_raw = mission.cursor_agent_id
+        project_for_status = _mission_project_id(mission) or pid
+        prec = project_store.get_project(project_for_status) if project_for_status else None
         try:
             aid = sanitize_cursor_agent_id(aid_raw)
         except ValueError as exc:
@@ -1995,24 +2101,27 @@ def _dispatch_intent(
                 ok=False,
                 blocking_reason=str(exc),
             )
+        st_d = _managed_mission_payload(mission)
         api_key = get_effective_cursor_api_key()
-        if not api_key:
-            return _reasoned_block(
-                intent,
-                "missing_cursor_api_key",
-                "No Cursor API key configured on this API host.",
+        ok_st = True
+        blocking = None
+        if api_key and prec is not None:
+            ok_poll, payload, blocking_poll, _cp_hid = run_cursor_agent_status(
+                api_key=api_key,
+                project_id=prec.id,
+                agent_id=aid,
+                project_root_for_mirror=str(prec.root),
             )
-        ok_st, payload, blocking, _cp_hid = run_cursor_agent_status(
-            api_key=api_key,
-            project_id=prec.id,
-            agent_id=aid,
-            project_root_for_mirror=str(prec.root),
-        )
-        st_d: dict[str, Any] = {**payload}
-        st_d.setdefault("provider", "cursor_cloud_agent")
-        st_d["external_id"] = aid
-        if not ok_st:
-            st_d["reason_code"] = _map_cursor_launch_failure_code(payload, blocking)
+            if ok_poll:
+                refreshed = get_managed_mission_store().find_by_cursor_agent_id(aid)
+                if refreshed is not None:
+                    st_d = _managed_mission_payload(refreshed)
+                    mission = refreshed
+                else:
+                    st_d.update(payload)
+            else:
+                st_d["reason_code"] = "status_poll_failed"
+                st_d["poll_error"] = blocking_poll
         return OperatorTurnResult(
             handled=True,
             intent=intent,
@@ -2021,17 +2130,60 @@ def _dispatch_intent(
             data=st_d,
         )
 
-    if intent == "cursor_agent_cancel":
-        if params.get("missing") == "agent_id":
+    if intent == "cursor_agent_logs":
+        pid = str(params.get("project_id") or "").strip() or None
+        aid_raw = str(params.get("cursor_agent_id") or "").strip() or None
+        mission: ManagedMission | None = None
+        if aid_raw:
+            mission = get_managed_mission_store().find_by_cursor_agent_id(aid_raw)
+        if mission is None:
+            mission = _latest_managed_mission(
+                project_store=project_store,
+                project_id=pid,
+            )
+        if mission is None:
             return _reasoned_block(
                 intent,
-                "missing_cursor_agent_id",
-                "Include a Cursor agent id (e.g. `bc_…`) to cancel.",
+                "missing_mission_context",
+                "I could not find a recent managed mission for this workspace yet.",
             )
-        return _reasoned_block(
-            intent,
-            "cancel_not_supported",
-            "Cloud Agent cancel is not available in this chat flow yet.",
+        return OperatorTurnResult(
+            handled=True,
+            intent=intent,
+            ok=True,
+            data={
+                **_managed_mission_payload(mission, include_events=True),
+                "reason_code": "checkpoint_summary_ready",
+            },
+        )
+
+    if intent == "cursor_agent_cancel":
+        pid = str(params.get("project_id") or "").strip() or None
+        aid_raw = str(params.get("cursor_agent_id") or "").strip() or None
+        mission: ManagedMission | None = None
+        if aid_raw:
+            mission = get_managed_mission_store().find_by_cursor_agent_id(aid_raw)
+        if mission is None:
+            mission = _latest_managed_mission(
+                project_store=project_store,
+                project_id=pid,
+            )
+        if mission is None:
+            return _reasoned_block(
+                intent,
+                "missing_mission_context",
+                "I could not find a managed mission to cancel for this workspace.",
+            )
+        return OperatorTurnResult(
+            handled=True,
+            intent=intent,
+            ok=True,
+            data={
+                **_managed_mission_payload(mission),
+                "reason_code": "cancel_not_supported",
+                "cancel_supported": False,
+                "cancel_message": "Cloud Agent cancel is not available in this chat flow yet.",
+            },
         )
 
     if intent == "agent_router_blocked":
@@ -2197,23 +2349,63 @@ def format_operator_assistant_message(op: OperatorTurnResult) -> str:
         data = op.data or {}
         return (
             f"**Cloud Agent mission launched**\n\n"
+            f"- **provider:** `Cursor`\n"
             f"- **managed_mission_id:** `{data.get('mission_registry_id') or '(pending sync)'}`\n"
             f"- **cursor_agent_id:** `{data.get('agent_id') or data.get('external_id')}`\n"
+            f"- **repo/ref:** `{data.get('repository')}` @ `{data.get('ref') or '(default)'}`\n"
             f"- **status:** `{data.get('status')}`\n"
             f"- **checkpoint:** `{data.get('mission_checkpoint') or '(pending sync)'}`\n"
-            f"- **repository:** `{data.get('repository')}`\n\n"
-            f"Open `/workspace/conductor` for live mission state and `/workspace/operations` for history."
+            f"\nOpen `/workspace/conductor` for live mission state and `/workspace/operations` for history.\n\n"
+            "Try next: `status`, `show logs`, `stop`, `what changed?`"
         )
     if intent == "cursor_agent_status":
         data = op.data or {}
+        terminal = str(data.get("mission_lifecycle") or "") in ("succeeded", "failed")
+        final_hint = (
+            f"\n\nFinal artifacts: PR `{data.get('pr_url')}`"
+            if terminal and data.get("pr_url")
+            else ""
+        )
         return (
-            f"**Operator — cursor_agent_status** ({'ok' if op.ok else 'failed'})\n\n"
-            f"- **agent_id:** `{data.get('agent_id')}`\n"
+            f"**Cloud Agent mission status**\n\n"
+            f"- **provider:** `Cursor`\n"
+            f"- **managed_mission_id:** `{data.get('mission_registry_id')}`\n"
+            f"- **agent_id:** `{data.get('agent_id') or data.get('cursor_agent_id')}`\n"
+            f"- **lifecycle/checkpoint:** `{data.get('mission_lifecycle')}` / `{data.get('mission_checkpoint')}`\n"
             f"- **status:** `{data.get('status')}`\n"
-            f"- **repository:** `{data.get('repository')}`\n"
-            f"- **ref:** `{data.get('ref')}`\n"
+            f"- **repo/ref:** `{data.get('repository')}` @ `{data.get('ref')}`\n"
             f"- **pr_url:** `{data.get('pr_url')}`\n\n"
-            f"**Summary:** {data.get('summary') or '(none)'}"
+            f"Open `/workspace/conductor` and `/workspace/operations` for synchronized mission state."
+            f"{final_hint}"
+        )
+    if intent == "cursor_agent_logs":
+        data = op.data or {}
+        events = data.get("checkpoint_events") if isinstance(data.get("checkpoint_events"), list) else []
+        lines = []
+        for ev in events:
+            if not isinstance(ev, dict):
+                continue
+            lines.append(
+                f"- `{ev.get('observed_at')}` · `{ev.get('checkpoint')}` · `{ev.get('reason') or 'observed'}`"
+            )
+        if not lines:
+            lines = ["- No checkpoint events recorded yet."]
+        return (
+            f"**Cloud Agent mission checkpoints**\n\n"
+            f"- **managed_mission_id:** `{data.get('mission_registry_id')}`\n"
+            f"- **agent_id:** `{data.get('agent_id') or data.get('cursor_agent_id')}`\n"
+            f"- **latest:** `{data.get('mission_checkpoint')}` ({data.get('last_server_observed_at')})\n\n"
+            + "\n".join(lines)
+        )
+    if intent == "cursor_agent_cancel":
+        data = op.data or {}
+        return (
+            f"**Cloud Agent cancel**\n\n"
+            f"- **result:** `{data.get('reason_code')}`\n"
+            f"- **managed_mission_id:** `{data.get('mission_registry_id')}`\n"
+            f"- **agent_id:** `{data.get('agent_id') or data.get('cursor_agent_id')}`\n"
+            f"- **message:** {data.get('cancel_message') or 'Cancel is not currently available.'}\n\n"
+            "Mission status remains available via `status` and `show logs`."
         )
     if op.data.get("message"):
         return f"**Operator — {intent}**\n\n{op.data['message']}"

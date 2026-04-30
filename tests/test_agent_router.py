@@ -44,6 +44,21 @@ def test_router_uses_project_mentioned_in_text() -> None:
     assert "project" not in out.missing
 
 
+def test_router_extracts_explicit_repo_ref_and_task() -> None:
+    out = route_agent_intent(
+        (
+            "Launch a Cursor Cloud Agent for repo Code-Munkiz/ham on branch main. "
+            "Task: update docs only."
+        ),
+        default_project_id=None,
+    )
+    assert out.intent == "agent_launch"
+    assert out.provider == "cursor"
+    assert out.repo_ref == "Code-Munkiz/ham"
+    assert out.branch == "main"
+    assert out.task and "update docs only" in out.task.lower()
+
+
 def test_router_normal_chat_not_over_triggered() -> None:
     out = route_agent_intent("explain what a cloud is")
     assert out.intent == "normal_chat"

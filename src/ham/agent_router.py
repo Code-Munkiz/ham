@@ -42,6 +42,14 @@ _PROVIDER_CODEX_RE = re.compile(r"\bcodex\b", re.I)
 _PROVIDER_FACTORY_RE = re.compile(r"\b(factory|factory\s+droid|droid)\b", re.I)
 _PROVIDER_LOCAL_RE = re.compile(r"\b(ham\s+local|local\s+worker|desktop\s+executor)\b", re.I)
 _PROJECT_HINT_RE = re.compile(r"\bproject\.[a-z0-9._-]+\b", re.I)
+_REPO_HINT_RE = re.compile(
+    r"\b(?:repo|repository)\s+(?P<repo>(?:https?://github\.com/)?[a-z0-9._-]+/[a-z0-9._-]+)\b",
+    re.I,
+)
+_BRANCH_HINT_RE = re.compile(
+    r"\b(?:on\s+branch|branch|ref|from)\s+(?P<branch>[a-z0-9._/\-]+)\b",
+    re.I,
+)
 
 
 class AgentRouteResult(BaseModel):
@@ -77,14 +85,50 @@ def _extract_task(text: str) -> str:
     patterns = (
         r"^\s*(?:please\s+)?(?:create|make)\s+(?:an?\s+)?agent\s+preview(?:\s+to|\s+for)?\s*",
         r"^\s*(?:please\s+)?(?:create|make)\s+(?:an?\s+)?cloud\s+agent\s+preview(?:\s+to|\s+for)?\s*",
+        r"^\s*(?:please\s+)?(?:create|make)\s+(?:an?\s+)?cursor\s+cloud\s+agent\s+preview(?:\s+to|\s+for)?\s*",
         r"^\s*(?:please\s+)?(?:launch|start|fire\s+up|run|execute|kick\s*off)\s+(?:an?\s+)?(?:cloud\s+)?agent(?:\s+to|\s+for)?\s*",
+        r"^\s*(?:please\s+)?(?:launch|start|fire\s+up|run|execute|kick\s*off)\s+(?:an?\s+)?cursor\s+cloud\s+agent(?:\s+to|\s+for)?\s*",
         r"^\s*(?:please\s+)?(?:have|use|send)\s+(?:cursor|claude|codex|factory(?:\s+droid)?|ham\s+local)\s+(?:do|to|for)?\s*",
         r"^\s*(?:please\s+)?spin\s+up\s+(?:the\s+)?best\s+agent(?:\s+for|\s+to)?\s*",
     )
     for pat in patterns:
         out = re.sub(pat, "", out, flags=re.I).strip()
+    out = re.sub(
+        r"\b(?:(?:for|on)\s+)?(?:repo|repository)\s+(?:https?://github\.com/)?[a-z0-9._-]+/[a-z0-9._-]+\b",
+        "",
+        out,
+        flags=re.I,
+    ).strip()
+    out = re.sub(
+        r"\b(?:on\s+branch|branch|ref|from)\s+[a-z0-9._/\-]+\b",
+        "",
+        out,
+        flags=re.I,
+    ).strip()
+    out = re.sub(r"^\s*[.:\-–—]+\s*", "", out, flags=re.I).strip()
+    out = re.sub(r"^\s*task\s*:\s*", "", out, flags=re.I).strip()
     out = re.sub(r"^\s*(?:to|for|on)\s+", "", out, flags=re.I).strip()
     return out
+
+
+def _extract_repo_ref(text: str) -> str | None:
+    m = _REPO_HINT_RE.search(text)
+    if not m:
+        return None
+    repo = (m.group("repo") or "").strip()
+    if not repo:
+        return None
+    return repo.rstrip(".,;:)")
+
+
+def _extract_branch_ref(text: str) -> str | None:
+    m = _BRANCH_HINT_RE.search(text)
+    if not m:
+        return None
+    ref = (m.group("branch") or "").strip()
+    if not ref:
+        return None
+    return ref.rstrip(".,;:)")
 
 
 def route_agent_intent(
@@ -101,7 +145,9 @@ def route_agent_intent(
     has_work_verb = bool(_WORK_VERB_RE.search(low))
     has_agent_hint = bool(_AGENT_HINT_RE.search(low))
     provider_explicit = _extract_provider(low)
-    has_project_context = bool(default_project_id or _PROJECT_HINT_RE.search(low))
+    repo_ref = _extract_repo_ref(text)
+    branch_ref = _extract_branch_ref(text)
+    has_project_context = bool(default_project_id or _PROJECT_HINT_RE.search(low) or repo_ref)
 
     if _INFO_ONLY_RE.search(low) and not has_work_verb:
         return AgentRouteResult(intent="normal_chat", mode="chat", provider="auto", confidence=0.0)
@@ -123,6 +169,8 @@ def route_agent_intent(
             intent="agent_cancel",
             mode="cancel",
             provider=provider,
+            repo_ref=repo_ref,
+            branch=branch_ref,
             confidence=0.9,
             missing=missing,
             reason_code="provider_not_implemented" if provider != "cursor" else None,
@@ -135,6 +183,8 @@ def route_agent_intent(
             intent="agent_status",
             mode="status",
             provider=provider,
+            repo_ref=repo_ref,
+            branch=branch_ref,
             confidence=0.9,
             missing=missing,
             reason_code="provider_not_implemented" if provider != "cursor" else None,
@@ -144,6 +194,8 @@ def route_agent_intent(
             intent="agent_continue",
             mode="continue",
             provider=provider,
+            repo_ref=repo_ref,
+            branch=branch_ref,
             confidence=0.85,
             reason_code="provider_not_implemented" if provider != "cursor" else None,
         )
@@ -166,6 +218,8 @@ def route_agent_intent(
         mode=mode,
         provider=provider,
         task=task or None,
+        repo_ref=repo_ref,
+        branch=branch_ref,
         confidence=0.94 if provider_explicit else 0.88,
         missing=missing,
         reason_code=reason_code,

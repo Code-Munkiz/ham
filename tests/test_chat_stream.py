@@ -63,14 +63,19 @@ def test_chat_stream_mock_yields_session_delta_done(mock_mode: None) -> None:
     ("prompt", "expected_intent", "expected_reason_code"),
     [
         (
+            "Launch a Cursor Cloud Agent for repo Unmapped-Org/unmapped-repo on branch main. Task: update docs only.",
+            "cursor_agent_launch",
+            "missing_project_mapping",
+        ),
+        (
             "have Cursor implement the SDK adapter fix",
             "cursor_agent_launch",
-            "missing_project_ref",
+            "missing_project_context",
         ),
         (
             "fire up an agent to update the SDK adapter",
             "cursor_agent_launch",
-            "missing_project_ref",
+            "missing_project_context",
         ),
         (
             "send this to Factory Droid to update the SDK adapter",

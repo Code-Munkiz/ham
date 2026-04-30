@@ -15,7 +15,10 @@ from src.ham.chat_operator import (
     project_root_accessible,
     try_heuristic_intent,
 )
+from src.ham.managed_mission_wiring import set_managed_mission_store_for_tests
 from src.ham.settings_write import SettingsChanges
+from src.persistence.control_plane_run import utc_now_iso
+from src.persistence.managed_mission import ManagedMission, ManagedMissionStore, new_mission_registry_id
 from src.persistence.project_store import ProjectStore
 
 
@@ -439,3 +442,136 @@ def test_launch_blocked_without_token(
     assert op is not None and op.handled
     assert not op.ok
     assert "HAM_RUN_LAUNCH_TOKEN" in (op.blocking_reason or "")
+
+
+def test_heuristic_status_phrase_maps_to_cursor_agent_status() -> None:
+    h = try_heuristic_intent("how is the agent doing", default_project_id="project.demo-abc123")
+    assert h is not None
+    assert h[0] == "cursor_agent_status"
+    assert h[1]["project_id"] == "project.demo-abc123"
+
+
+def test_heuristic_logs_phrase_maps_to_cursor_agent_logs() -> None:
+    h = try_heuristic_intent("show checkpoints", default_project_id="project.demo-abc123")
+    assert h is not None
+    assert h[0] == "cursor_agent_logs"
+    assert h[1]["project_id"] == "project.demo-abc123"
+
+
+def test_status_resolves_latest_managed_mission_without_agent_id(tmp_path: Path) -> None:
+    store = ProjectStore(store_path=tmp_path / "projects.json")
+    rec = store.make_record(
+        name="ham",
+        root=str(tmp_path),
+        description="",
+        metadata={"cursor_cloud_repository": "Code-Munkiz/ham"},
+    )
+    store.register(rec)
+    missions = ManagedMissionStore(base_dir=tmp_path / "missions")
+    set_managed_mission_store_for_tests(missions)
+    try:
+        now = utc_now_iso()
+        row = ManagedMission(
+            mission_registry_id=new_mission_registry_id(),
+            cursor_agent_id="bc_latest_1",
+            mission_handling="managed",
+            repository_observed="Code-Munkiz/ham",
+            ref_observed="main",
+            mission_lifecycle="open",
+            cursor_status_last_observed="RUNNING",
+            status_reason_last_observed="mapped:RUNNING",
+            mission_checkpoint_latest="running",
+            mission_checkpoint_updated_at=now,
+            created_at=now,
+            updated_at=now,
+            last_server_observed_at=now,
+        )
+        missions.save(row)
+        op = process_operator_turn(
+            user_text="status",
+            project_store=store,
+            default_project_id=rec.id,
+            operator_payload=None,
+            ham_operator_authorization=None,
+        )
+    finally:
+        set_managed_mission_store_for_tests(None)
+    assert op is not None and op.handled and op.ok
+    assert op.intent == "cursor_agent_status"
+    assert (op.data or {}).get("mission_registry_id") == row.mission_registry_id
+    assert (op.data or {}).get("mission_checkpoint") == "running"
+
+
+def test_logs_returns_recent_checkpoint_events(tmp_path: Path) -> None:
+    store = ProjectStore(store_path=tmp_path / "projects.json")
+    rec = store.make_record(name="ham", root=str(tmp_path), description="", metadata={})
+    store.register(rec)
+    missions = ManagedMissionStore(base_dir=tmp_path / "missions")
+    set_managed_mission_store_for_tests(missions)
+    try:
+        now = utc_now_iso()
+        row = ManagedMission(
+            mission_registry_id=new_mission_registry_id(),
+            cursor_agent_id="bc_logs_1",
+            mission_handling="managed",
+            mission_lifecycle="open",
+            cursor_status_last_observed="RUNNING",
+            status_reason_last_observed="mapped:RUNNING",
+            mission_checkpoint_latest="running",
+            mission_checkpoint_updated_at=now,
+            mission_checkpoint_events=[
+                {"checkpoint": "launched", "observed_at": now, "reason": "managed_launch_created"},
+                {"checkpoint": "running", "observed_at": now, "reason": "cursor_status:RUNNING"},
+            ],
+            created_at=now,
+            updated_at=now,
+            last_server_observed_at=now,
+        )
+        missions.save(row)
+        op = process_operator_turn(
+            user_text="show logs",
+            project_store=store,
+            default_project_id=rec.id,
+            operator_payload=None,
+            ham_operator_authorization=None,
+        )
+    finally:
+        set_managed_mission_store_for_tests(None)
+    assert op is not None and op.handled and op.ok
+    assert op.intent == "cursor_agent_logs"
+    events = (op.data or {}).get("checkpoint_events")
+    assert isinstance(events, list)
+    assert len(events) == 2
+
+
+def test_cancel_returns_stable_cancel_not_supported_with_mission(tmp_path: Path) -> None:
+    store = ProjectStore(store_path=tmp_path / "projects.json")
+    rec = store.make_record(name="ham", root=str(tmp_path), description="", metadata={})
+    store.register(rec)
+    missions = ManagedMissionStore(base_dir=tmp_path / "missions")
+    set_managed_mission_store_for_tests(missions)
+    try:
+        now = utc_now_iso()
+        row = ManagedMission(
+            mission_registry_id=new_mission_registry_id(),
+            cursor_agent_id="bc_cancel_1",
+            mission_handling="managed",
+            mission_lifecycle="open",
+            created_at=now,
+            updated_at=now,
+            last_server_observed_at=now,
+        )
+        missions.save(row)
+        op = process_operator_turn(
+            user_text="stop the agent",
+            project_store=store,
+            default_project_id=rec.id,
+            operator_payload=None,
+            ham_operator_authorization=None,
+        )
+    finally:
+        set_managed_mission_store_for_tests(None)
+    assert op is not None and op.handled and op.ok
+    assert op.intent == "cursor_agent_cancel"
+    assert (op.data or {}).get("reason_code") == "cancel_not_supported"
+    assert (op.data or {}).get("mission_registry_id") == row.mission_registry_id

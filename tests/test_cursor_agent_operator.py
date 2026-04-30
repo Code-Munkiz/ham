@@ -319,6 +319,37 @@ def test_cloud_launch_heuristic_creates_managed_mission_id_without_launch_token(
     assert (out.data or {}).get("reason_code") == "mission_launched"
 
 
+def test_cloud_launch_heuristic_uses_project_default_branch_ref(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CURSOR_API_KEY", "k")
+    monkeypatch.delenv("HAM_CURSOR_AGENT_LAUNCH_TOKEN", raising=False)
+    store, rec = _make_store(
+        tmp_path,
+        root=str(tmp_path / "repo"),
+        metadata={
+            "cursor_cloud_repository": "https://github.com/o/r",
+            "default_branch": "develop",
+        },
+    )
+    (tmp_path / "repo").mkdir()
+    from src.ham import cursor_agent_workflow as caw
+
+    fake = {"id": "bc_ref_default", "status": "CREATING", "summary": "started"}
+    with patch.object(caw, "cursor_api_launch_agent", return_value=fake) as launch_mock:
+        out = process_operator_turn(
+            user_text="launch a cloud agent to update docs",
+            project_store=store,
+            default_project_id=rec.id,
+            operator_payload=None,
+            ham_operator_authorization=None,
+        )
+    assert out is not None and out.handled and out.ok
+    assert launch_mock.call_count == 1
+    assert launch_mock.call_args.kwargs.get("ref") == "develop"
+
+
 def test_managed_launch_calls_mission_registry(
     central_audit: Path,
     tmp_path: Path,
