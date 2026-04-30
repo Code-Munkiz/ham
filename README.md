@@ -11,6 +11,8 @@ Open-source multi-agent autonomous developer swarm: Hermes supervisory orchestra
 - **Context Engine hardening plan**: [docs/HAM_HARDENING_REMEDIATION.md](docs/HAM_HARDENING_REMEDIATION.md)
 - **Chat control plane (skills + roadmap)**: [docs/HAM_CHAT_CONTROL_PLANE.md](docs/HAM_CHAT_CONTROL_PLANE.md)
 - **Browser Runtime (Playwright) setup/caveats**: [docs/BROWSER_RUNTIME_PLAYWRIGHT.md](docs/BROWSER_RUNTIME_PLAYWRIGHT.md)
+- **Managed Cloud Agent missions (roadmap + shipped vs gaps)**: [docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md](docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md)
+- **Workspace Chat → Cursor Cloud Agent via stream (smoke / orientation)**: [docs/HAM_CLOUD_AGENT_ROUTING_SMOKE.md](docs/HAM_CLOUD_AGENT_ROUTING_SMOKE.md)
 
 ## Quick start
 

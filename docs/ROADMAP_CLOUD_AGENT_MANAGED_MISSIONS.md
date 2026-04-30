@@ -2,7 +2,7 @@
 
 This document states **what works today**, what is **stub / partial / explicitly out of scope**, and a **phased roadmap** to close product gaps without collapsing architecture boundaries (Hermes supervises; Cursor remains upstream execution; no second orchestration framework).
 
-**Related:** `GAPS.md`, `VISION.md` (transitional state table), `docs/CONTROL_PLANE_RUN.md` (factual run records vs. mission graph).
+**Related:** `GAPS.md`, `VISION.md` (transitional state table), `docs/CONTROL_PLANE_RUN.md` (factual run records vs. mission graph), `docs/HAM_CLOUD_AGENT_ROUTING_SMOKE.md` (Workspace Chat uses **`POST /api/chat/stream`** for operator/router intents including Cloud Agent preview/launch/status).
 
 ---
 
@@ -10,7 +10,7 @@ This document states **what works today**, what is **stub / partial / explicitly
 
 | Area | What you get |
 |------|----------------|
-| **Launch** | `POST /api/cursor/agents/launch` proxies to Cursor; HAM-only fields (`mission_handling`, `uplink_id`, `project_id`) are **not** sent to Cursor. |
+| **Launch** | `POST /api/cursor/agents/launch` proxies to Cursor; HAM-only fields (`mission_handling`, `uplink_id`, `project_id`) are **not** sent to Cursor. **Workspace Chat** also reaches preview/launch/status through **`POST /api/chat/stream`** (operator/router short-circuit before LLM tokens); see `docs/HAM_CLOUD_AGENT_ROUTING_SMOKE.md`. |
 | **Poll / read** | Agent GET, conversation, models list — proxied; managed mission row updated on observe (`observe_mission_from_cursor_payload`). |
 | **Managed mission record** | File-backed `ManagedMission` per `mission_registry_id`: cursor id, optional `control_plane_ham_run_id`, observed repo/ref, **server-mapped** lifecycle, bounded last-seen deploy/Vercel/post-deploy fields. |
 | **Deploy approval snapshot** | `mission_deploy_approval_mode` set **once at managed create** from bound project’s valid `default_deploy_approval_mode` if `project_id` is provided; else `off`. **Not** live-synced to project after create. |

@@ -10,6 +10,8 @@ Hermes remains the **sole supervisory orchestrator** for the Ham *runtime*; this
 
 **Harness contract (Cursor + Droid):** [`docs/HARNESS_PROVIDER_CONTRACT.md`](HARNESS_PROVIDER_CONTRACT.md) defines provider **capabilities**, **preservation** rules, and how they relate to `ControlPlaneRun` (Hermes is not the harness anchor there).
 
+**Workspace Chat stream routing (manual smoke):** [`docs/HAM_CLOUD_AGENT_ROUTING_SMOKE.md`](HAM_CLOUD_AGENT_ROUTING_SMOKE.md) — how Hermes Workspace Chat uses **`POST /api/chat/stream`** for Cloud Agent operator/router intents vs LLM token streaming.
+
 ## Shipped (Phase A)
 
 | Piece | Role |
