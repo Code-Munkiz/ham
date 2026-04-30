@@ -420,7 +420,10 @@ export function WorkspaceOperationsScreen() {
             <p className="text-xs font-semibold uppercase tracking-wider text-[var(--theme-muted)]">Full outputs (newest first)</p>
             <div className="mt-3 space-y-2">
               {allOutputLines.length === 0 ? (
-                <p className="text-sm text-[var(--theme-muted)]">—</p>
+                <p className="text-sm text-[var(--theme-muted)]">
+                  No orchestrator output lines yet. Managed Cloud Agent missions show live activity above; open a mission in chat for
+                  feed details.
+                </p>
               ) : (
                 allOutputLines.map((l) => (
                   <div key={`${l.id}-${l.at}-${l.line.slice(0, 20)}`} className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] p-3">

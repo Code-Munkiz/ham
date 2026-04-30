@@ -11,7 +11,7 @@ import {
   type ManagedMissionLifecycle,
   type ManagedMissionSnapshot,
 } from "../adapters/managedMissionsAdapter";
-import { useManagedMissionFeedPoll } from "../hooks/useManagedMissionFeedPoll";
+import { useManagedMissionFeedLiveStream } from "../hooks/useManagedMissionFeedLiveStream";
 import { WorkspaceSurfaceStateCard } from "./workspaceSurfaceChrome";
 
 function formatRelativeIso(iso: string | null | undefined, nowMs: number) {
@@ -128,9 +128,11 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, variant }: Pr
 
   const {
     feed: selectedFeed,
-    loading: selectedFeedLoading,
+    initialLoading: selectedFeedInitialLoading,
     refetch: refetchSelectedFeed,
-  } = useManagedMissionFeedPoll(selectedMissionId, { refreshSignal });
+    banner: selectedFeedBanner,
+    feedScrollAnchorRef,
+  } = useManagedMissionFeedLiveStream(selectedMissionId, { refreshSignal });
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -399,24 +401,29 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, variant }: Pr
               <span className="font-mono text-[10px] text-[var(--theme-muted-2)]">{shortId(selectedMissionId)}</span>
             ) : null}
           </div>
-          {selectedFeed?.provider_projection?.mode === "rest_projection" ? (
-            <p className="text-[10px] text-[var(--theme-muted-2)]">
+          {selectedFeedBanner.phase !== "idle" && selectedFeedBanner.label ? (
+            <p className="mt-2 text-[10px] leading-snug text-[var(--theme-muted-2)]">{selectedFeedBanner.label}</p>
+          ) : selectedFeed?.provider_projection?.mode === "rest_projection" ? (
+            <p className="mt-2 text-[10px] text-[var(--theme-muted-2)]">
               Provider updates via REST refresh. Native provider realtime stream is unavailable in this integration.
             </p>
           ) : null}
-          <div className="mt-2 space-y-2">
-            {selectedFeedLoading ? (
+          <div className="mt-2 max-h-[min(320px,40vh)] space-y-2 overflow-auto">
+            {selectedFeedInitialLoading && !(selectedFeed?.events || []).length ? (
               <p className="text-sm text-[var(--theme-muted)]">Loading mission feed…</p>
             ) : (selectedFeed?.events || []).length > 0 ? (
-              (selectedFeed?.events || []).slice(-8).map((ev) => (
-                <div key={`${ev.id}-${ev.time}`} className="rounded-lg border border-[var(--theme-border)]/80 bg-[var(--theme-card)] px-3 py-2">
-                  <p className="text-sm text-[var(--theme-text)]">{ev.message}</p>
-                  <p className="mt-1 text-xs text-[var(--theme-muted)]">
-                    {fmtIsoLocal(ev.time)} · {ev.source}
-                    {ev.reason_code ? ` · ${ev.reason_code}` : ""}
-                  </p>
-                </div>
-              ))
+              <>
+                {(selectedFeed?.events || []).slice(-8).map((ev) => (
+                  <div key={`${ev.id}-${ev.time}`} className="rounded-lg border border-[var(--theme-border)]/80 bg-[var(--theme-card)] px-3 py-2">
+                    <p className="text-sm text-[var(--theme-text)]">{ev.message}</p>
+                    <p className="mt-1 text-xs text-[var(--theme-muted)]">
+                      {fmtIsoLocal(ev.time)} · {ev.source}
+                      {ev.reason_code ? ` · ${ev.reason_code}` : ""}
+                    </p>
+                  </div>
+                ))}
+                <div ref={feedScrollAnchorRef} className="h-px w-full shrink-0" aria-hidden />
+              </>
             ) : (
               <p className="text-sm text-[var(--theme-muted-2)]">Waiting for agent progress…</p>
             )}

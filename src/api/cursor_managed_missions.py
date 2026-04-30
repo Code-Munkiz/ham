@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
+import os
 import re
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from src.api.clerk_gate import get_ham_clerk_actor
@@ -29,6 +33,7 @@ from src.integrations.cursor_cloud_client import (
 )
 from src.integrations.cursor_sdk_bridge_client import (
     cursor_sdk_bridge_enabled,
+    iter_cursor_sdk_bridge_stdout_rows,
     stream_cursor_sdk_bridge_events,
 )
 from src.persistence.cursor_credentials import get_effective_cursor_api_key
@@ -73,21 +78,22 @@ def _get_mission_or_404(mission_registry_id: str) -> ManagedMission:
     return m
 
 
-def _mission_feed_events(m: ManagedMission) -> list[dict[str, Any]]:
-    def _row(e: MissionFeedEvent) -> dict[str, Any]:
-        d: dict[str, Any] = {
-            "id": e.event_id,
-            "time": e.observed_at,
-            "kind": e.kind,
-            "source": e.source,
-            "message": e.message,
-            "reason_code": e.reason_code,
-        }
-        if e.metadata:
-            d["metadata"] = e.metadata
-        return d
+def _mission_feed_row_from_event(e: MissionFeedEvent) -> dict[str, Any]:
+    d: dict[str, Any] = {
+        "id": e.event_id,
+        "time": e.observed_at,
+        "kind": e.kind,
+        "source": e.source,
+        "message": e.message,
+        "reason_code": e.reason_code,
+    }
+    if e.metadata:
+        d["metadata"] = e.metadata
+    return d
 
-    events = [_row(e) for e in m.mission_feed_events]
+
+def _mission_feed_events(m: ManagedMission) -> list[dict[str, Any]]:
+    events = [_mission_feed_row_from_event(e) for e in m.mission_feed_events]
     if events:
         events_sorted = sorted(events, key=lambda x: (x.get("time") or "", x.get("id") or ""))
         return events_sorted[-80:]
@@ -273,6 +279,68 @@ def _public_mission(m: ManagedMission) -> dict[str, Any]:
     return d
 
 
+def _compose_managed_mission_feed_bundle(m: ManagedMission) -> tuple[ManagedMission, dict[str, Any]]:
+    """Single source of truth for GET /feed and SSE snapshot payloads."""
+    m_syn, provider_error, provider_mode = _sync_provider_projection(m)
+    native_stream = provider_mode == "sdk_stream_bridge" and provider_error is None
+    artifacts: list[dict[str, str]] = []
+    if m_syn.pr_url_last_observed:
+        artifacts.append(
+            {
+                "kind": "pull_request",
+                "title": "Pull request",
+                "url": m_syn.pr_url_last_observed,
+            }
+        )
+    bundle = {
+        "mission_id": m_syn.mission_registry_id,
+        "provider": "cursor",
+        "status": m_syn.cursor_status_last_observed or m_syn.mission_lifecycle,
+        "lifecycle": m_syn.mission_lifecycle,
+        "repo": m_syn.repository_observed,
+        "ref": m_syn.ref_observed,
+        "latest_checkpoint": m_syn.mission_checkpoint_latest,
+        "updated_at": m_syn.last_server_observed_at,
+        "events": _mission_feed_events(m_syn),
+        "artifacts": artifacts,
+        "pr_url": m_syn.pr_url_last_observed,
+        "cancel_supported": True,
+        "provider_capabilities": provider_capability_matrix(),
+        "provider_projection_state": "ok" if provider_error is None else "fallback",
+        "provider_projection_reason": provider_error,
+        "provider_projection": provider_projection_envelope(
+            provider_error=provider_error,
+            mode=provider_mode,
+            native_realtime_stream=native_stream,
+        ),
+    }
+    return m_syn, bundle
+
+
+def _replay_persisted_event_rows_after(m: ManagedMission, after_event_id: str | None) -> list[dict[str, Any]]:
+    rows = [_mission_feed_row_from_event(e) for e in m.mission_feed_events]
+    rows.sort(key=lambda r: (r.get("time") or "", r.get("id") or ""))
+    aid = str(after_event_id or "").strip()
+    if not aid:
+        return []
+    idx = next((i for i, row in enumerate(rows) if row.get("id") == aid), None)
+    if idx is None:
+        return rows
+    return rows[idx + 1 :]
+
+
+def _is_managed_mission_terminal(m: ManagedMission) -> bool:
+    return m.mission_lifecycle in ("succeeded", "failed", "archived")
+
+
+def _sse_pack(event_name: str, payload: dict[str, Any]) -> bytes:
+    return (
+        f"event: {event_name}\ndata: "
+        + json.dumps(payload, separators=(",", ":"), default=str)
+        + "\n\n"
+    ).encode("utf-8")
+
+
 @router.get("/missions")
 async def list_managed_missions(
     _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
@@ -312,39 +380,214 @@ async def get_managed_mission_feed(
     _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
 ) -> dict[str, Any]:
     m = _get_mission_or_404(mission_registry_id)
-    m, provider_error, provider_mode = _sync_provider_projection(m)
-    native_stream = provider_mode == "sdk_stream_bridge" and provider_error is None
-    artifacts: list[dict[str, str]] = []
-    if m.pr_url_last_observed:
-        artifacts.append(
-            {
-                "kind": "pull_request",
-                "title": "Pull request",
-                "url": m.pr_url_last_observed,
-            }
-        )
-    return {
-        "mission_id": m.mission_registry_id,
-        "provider": "cursor",
-        "status": m.cursor_status_last_observed or m.mission_lifecycle,
-        "lifecycle": m.mission_lifecycle,
-        "repo": m.repository_observed,
-        "ref": m.ref_observed,
-        "latest_checkpoint": m.mission_checkpoint_latest,
-        "updated_at": m.last_server_observed_at,
-        "events": _mission_feed_events(m),
-        "artifacts": artifacts,
-        "pr_url": m.pr_url_last_observed,
-        "cancel_supported": True,
-        "provider_capabilities": provider_capability_matrix(),
-        "provider_projection_state": "ok" if provider_error is None else "fallback",
-        "provider_projection_reason": provider_error,
-        "provider_projection": provider_projection_envelope(
-            provider_error=provider_error,
-            mode=provider_mode,
-            native_realtime_stream=native_stream,
-        ),
-    }
+    _m2, bundle = _compose_managed_mission_feed_bundle(m)
+    return bundle
+
+
+@router.get("/missions/{mission_registry_id}/feed/stream")
+async def stream_managed_mission_feed(
+    mission_registry_id: str,
+    request: Request,
+    _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
+    after_event_id: str | None = Query(default=None),
+    last_event_id_hdr: str | None = Header(default=None, alias="Last-Event-ID"),
+) -> StreamingResponse:
+    """
+    SSE stream: snapshot + persisted replay + chunked SDK bridge events (HAM backend only).
+
+    Consumers should prefer fetch + readable stream parsing so Clerk ``Authorization``
+    behaves like REST ``/feed`` (cookies + bearer).
+    """
+
+    mid = mission_registry_id.strip()
+    mission_base = _get_mission_or_404(mid)
+    effective_after = (
+        str(after_event_id or "").strip()
+        or str(last_event_id_hdr or "").strip()
+        or None
+    )
+
+    async def event_iter():  # noqa: ANN202
+        """Async generator yielding ``text/event-stream`` frames as UTF-8 bytes."""
+        m_live, snapshot = _compose_managed_mission_feed_bundle(mission_base)
+        yield _sse_pack("snapshot", snapshot)
+        for row in _replay_persisted_event_rows_after(m_live, effective_after):
+            yield _sse_pack("mission_event", row)
+
+        loop_tm = asyncio.get_running_loop()
+        _max_sess = float(os.environ.get("HAM_MANAGED_FEED_SSE_SESSION_MAX_SECONDS") or "2700")
+        session_deadline = loop_tm.time() + max(3.0, _max_sess)
+        heartbeat_every = 15.0
+        last_emit = loop_tm.time()
+        last_slow_pull = 0.0
+        slow_pull_interval = 30.0 if cursor_sdk_bridge_enabled() else 10.0
+        notified_rest_fallback = False
+        sdk_chunk_fail_logged = False
+
+        while loop_tm.time() < session_deadline:
+            if await request.is_disconnected():
+                return
+
+            cur = _store.get(mid)
+            if cur is None:
+                yield _sse_pack("error", {"code": "mission_missing"})
+                return
+
+            now = loop_tm.time()
+            if now - last_emit >= heartbeat_every:
+                yield _sse_pack(
+                    "heartbeat",
+                    {"t": utc_now_iso(), "lifecycle": cur.mission_lifecycle},
+                )
+                last_emit = now
+
+            if _is_managed_mission_terminal(cur):
+                yield _sse_pack(
+                    "completed",
+                    {"mission_id": mid, "lifecycle": cur.mission_lifecycle},
+                )
+                return
+
+            api_key = get_effective_cursor_api_key()
+            can_sdk = cursor_sdk_bridge_enabled() and bool(api_key)
+
+            if now - last_slow_pull >= slow_pull_interval:
+                def _pull_slow() -> tuple[ManagedMission, str | None, str]:
+                    b = _store.get(mid)
+                    if b is None:
+                        raise LookupError(mid)
+                    return _sync_provider_projection(b)
+
+                try:
+                    m_slow, sdk_err_slow, mode_slow = await asyncio.to_thread(_pull_slow)
+                    last_slow_pull = now
+                    before_ids_slow = {e.event_id for e in cur.mission_feed_events}
+                    for ev in sorted(
+                        m_slow.mission_feed_events,
+                        key=lambda e: (e.observed_at, e.event_id),
+                    ):
+                        if ev.event_id not in before_ids_slow:
+                            yield _sse_pack(
+                                "mission_event",
+                                _mission_feed_row_from_event(ev),
+                            )
+                            last_emit = loop_tm.time()
+                    prov_err_env = sdk_err_slow if mode_slow != "sdk_stream_bridge" else None
+                    enveloped = provider_projection_envelope(
+                        provider_error=prov_err_env,
+                        mode=mode_slow,
+                        native_realtime_stream=mode_slow == "sdk_stream_bridge" and sdk_err_slow is None,
+                    )
+                    yield _sse_pack("provider_projection", enveloped)
+
+                    cur = _store.get(mid) or m_slow
+
+                    if not can_sdk and not notified_rest_fallback:
+                        notified_rest_fallback = True
+                        yield _sse_pack(
+                            "fallback",
+                            {
+                                "mode": "rest_projection",
+                                "reason": sdk_err_slow or "provider_key_missing_or_bridge_disabled",
+                            },
+                        )
+                    elif can_sdk and (mode_slow != "sdk_stream_bridge" or sdk_err_slow) and not notified_rest_fallback:
+                        notified_rest_fallback = True
+                        yield _sse_pack(
+                            "fallback",
+                            {
+                                "mode": "rest_projection",
+                                "hint": sdk_err_slow or "sdk_projection_unavailable",
+                            },
+                        )
+                except LookupError:
+                    yield _sse_pack("error", {"code": "mission_missing"})
+                    return
+
+                if await request.is_disconnected():
+                    return
+
+            if can_sdk and cur is not None and not _is_managed_mission_terminal(cur):
+                bridge_rows_seen = False
+                try:
+                    async for bridge_row in iter_cursor_sdk_bridge_stdout_rows(
+                        api_key=api_key or "",
+                        agent_id=cur.cursor_agent_id,
+                        run_id=None,
+                        max_seconds=25,
+                    ):
+                        inner = _store.get(mid)
+                        if inner is None:
+                            yield _sse_pack("error", {"code": "mission_missing"})
+                            return
+                        before_bridge = {e.event_id for e in inner.mission_feed_events}
+                        projected_rows = map_cursor_sdk_bridge_to_feed_events(
+                            agent_id=inner.cursor_agent_id,
+                            rows=[bridge_row],
+                        )
+                        merged_b = _merge_provider_events(inner, projected_rows)
+                        if merged_b != inner:
+                            _store.save(merged_b)
+                        refreshed = _store.get(mid)
+                        if refreshed is None:
+                            yield _sse_pack("error", {"code": "mission_missing"})
+                            return
+
+                        terminal_hit = False
+                        for ev in refreshed.mission_feed_events:
+                            if ev.event_id not in before_bridge:
+                                yield _sse_pack(
+                                    "mission_event",
+                                    _mission_feed_row_from_event(ev),
+                                )
+                                terminal_hit |= ev.kind == "completed"
+                                last_emit = loop_tm.time()
+                        cur = refreshed
+                        if terminal_hit:
+                            yield _sse_pack(
+                                "completed",
+                                {
+                                    "mission_id": mid,
+                                    "lifecycle": refreshed.mission_lifecycle,
+                                },
+                            )
+                            return
+                        if _is_managed_mission_terminal(refreshed):
+                            yield _sse_pack(
+                                "completed",
+                                {
+                                    "mission_id": mid,
+                                    "lifecycle": refreshed.mission_lifecycle,
+                                },
+                            )
+                            return
+                        if await request.is_disconnected():
+                            return
+                        bridge_rows_seen = True
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    if not sdk_chunk_fail_logged:
+                        yield _sse_pack("error", {"code": "sdk_stream_chunk_failed"})
+                        sdk_chunk_fail_logged = True
+                    bridge_rows_seen = True
+                if not bridge_rows_seen:
+                    await asyncio.sleep(2.0)
+                await asyncio.sleep(0.06)
+            elif not can_sdk and not notified_rest_fallback:
+                await asyncio.sleep(min(12.0, heartbeat_every))
+
+            await asyncio.sleep(0.08)
+
+    return StreamingResponse(
+        event_iter(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.post("/missions/{mission_registry_id}/messages")

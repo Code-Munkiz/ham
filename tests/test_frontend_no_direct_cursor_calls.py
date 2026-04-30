@@ -40,14 +40,23 @@ def test_managed_mission_feed_bounded_poll_single_hook_no_interval() -> None:
     assert "managedMissionFeedPollDelayMs" in hook
 
 
-def test_managed_mission_feed_surfaces_use_shared_poll_hook_not_direct_feed_fetch() -> None:
+def test_managed_mission_feed_live_stream_hook_uses_fetch_sse_not_event_source() -> None:
+    hook = Path("frontend/src/features/hermes-workspace/hooks/useManagedMissionFeedLiveStream.ts").read_text(encoding="utf-8")
+    assert "setInterval" not in hook
+    assert "/feed/stream" in hook
+    assert "text/event-stream" in hook
+    assert "EventSource" not in hook
+    assert "fetchManagedMissionFeed" in hook
+
+
+def test_managed_mission_feed_surfaces_use_live_stream_hook_not_direct_feed_fetch() -> None:
     chat = Path("frontend/src/features/hermes-workspace/screens/chat/WorkspaceChatScreen.tsx").read_text(encoding="utf-8")
-    assert "useManagedMissionFeedPoll" in chat
+    assert "useManagedMissionFeedLiveStream" in chat
     assert "fetchManagedMissionFeed" not in chat
     panel = Path("frontend/src/features/hermes-workspace/components/WorkspaceManagedMissionsLivePanel.tsx").read_text(
         encoding="utf-8"
     )
-    assert "useManagedMissionFeedPoll" in panel
+    assert "useManagedMissionFeedLiveStream" in panel
     assert "fetchManagedMissionFeed" not in panel
 
 

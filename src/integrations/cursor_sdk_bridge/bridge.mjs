@@ -70,6 +70,7 @@ async function main() {
   const maxSeconds = Number(payload.max_seconds || 30);
   const started = Date.now();
   let idx = 0;
+  let timedOut = false;
 
   const agent = await Agent.resume(agentId, { apiKey });
   if (!runId) {
@@ -84,6 +85,7 @@ async function main() {
   const run = await Agent.getRun(runId, { runtime: "cloud", apiKey, agentId });
   for await (const ev of run.stream()) {
     if ((Date.now() - started) / 1000 > maxSeconds) {
+      timedOut = true;
       emit({
         provider: "cursor",
         agent_id: agentId,
@@ -109,6 +111,12 @@ async function main() {
       time: nowIso(),
       metadata: { sdk_type: t },
     });
+  }
+
+  if (timedOut) {
+    // Bounded chunk complete: exit without waiting for the run — Python may reconnect.
+    process.exitCode = 0;
+    return;
   }
 
   const result = await run.wait();

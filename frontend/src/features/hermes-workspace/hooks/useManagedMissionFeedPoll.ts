@@ -20,6 +20,7 @@ export function useManagedMissionFeedPoll(
 ): {
   feed: ManagedMissionFeedPayload | null;
   error: string | null;
+  /** Only true until the first feed response for this mission id (subsequent polls do not show this). */
   loading: boolean;
   refetch: () => Promise<ManagedMissionFeedPayload | null>;
 } {
@@ -28,7 +29,7 @@ export function useManagedMissionFeedPoll(
 
   const [feed, setFeed] = React.useState<ManagedMissionFeedPayload | null>(null);
   const [error, setError] = React.useState<string | null>(null);
-  const [loading, setLoading] = React.useState(false);
+  const [firstPollDone, setFirstPollDone] = React.useState(false);
 
   const latestFeedRef = React.useRef<ManagedMissionFeedPayload | null>(null);
   const inFlightRef = React.useRef(false);
@@ -40,9 +41,11 @@ export function useManagedMissionFeedPoll(
       latestFeedRef.current = null;
       setFeed(null);
       setError(null);
-      setLoading(false);
+      setFirstPollDone(false);
       return;
     }
+
+    setFirstPollDone(false);
 
     let cancelled = false;
     let tid: number | undefined;
@@ -66,7 +69,6 @@ export function useManagedMissionFeedPoll(
     const runPoll = async () => {
       if (cancelled || !trimmed || inFlightRef.current) return;
       inFlightRef.current = true;
-      setLoading(true);
       try {
         const r = await fetchManagedMissionFeed(trimmed);
         if (cancelled) return;
@@ -76,7 +78,7 @@ export function useManagedMissionFeedPoll(
         setError(r.error);
       } finally {
         inFlightRef.current = false;
-        setLoading(false);
+        setFirstPollDone(true);
         if (!cancelled) schedule();
       }
     };
@@ -86,7 +88,6 @@ export function useManagedMissionFeedPoll(
     const kick = async () => {
       if (cancelled || !trimmed || inFlightRef.current) return;
       inFlightRef.current = true;
-      setLoading(true);
       try {
         const r = await fetchManagedMissionFeed(trimmed);
         if (cancelled) return;
@@ -96,7 +97,7 @@ export function useManagedMissionFeedPoll(
         setError(r.error);
       } finally {
         inFlightRef.current = false;
-        setLoading(false);
+        setFirstPollDone(true);
         if (!cancelled) schedule();
       }
     };
@@ -118,19 +119,17 @@ export function useManagedMissionFeedPoll(
 
   const refetch = React.useCallback(async (): Promise<ManagedMissionFeedPayload | null> => {
     if (!trimmed) return null;
-    setLoading(true);
-    try {
-      const r = await fetchManagedMissionFeed(trimmed);
-      const next = r.feed ?? null;
-      latestFeedRef.current = next;
-      setFeed(next);
-      setError(r.error);
-      return next;
-    } finally {
-      setLoading(false);
-      rescheduleRef.current?.();
-    }
+    const r = await fetchManagedMissionFeed(trimmed);
+    const next = r.feed ?? null;
+    latestFeedRef.current = next;
+    setFeed(next);
+    setError(r.error);
+    rescheduleRef.current?.();
+    setFirstPollDone(true);
+    return next;
   }, [trimmed]);
+
+  const loading = Boolean(trimmed) && !firstPollDone;
 
   return { feed, error, loading, refetch };
 }

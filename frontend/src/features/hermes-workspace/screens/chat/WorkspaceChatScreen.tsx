@@ -35,7 +35,7 @@ import {
   postManagedMissionMessage,
   type ManagedMissionSnapshot,
 } from "../../adapters/managedMissionsAdapter";
-import { useManagedMissionFeedPoll } from "../../hooks/useManagedMissionFeedPoll";
+import { useManagedMissionFeedLiveStream } from "../../hooks/useManagedMissionFeedLiveStream";
 import { useVoiceWorkspaceSettingsOptional } from "../../voice/VoiceWorkspaceSettingsContext";
 import { WorkspaceChatEmptyState } from "./WorkspaceChatEmptyState";
 import { WorkspaceChatMessageList, type HwwMsgRow } from "./WorkspaceChatMessageList";
@@ -329,7 +329,13 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   const chatScreenInstanceId = React.useRef(`chat-screen-${Math.random().toString(36).slice(2, 9)}`);
   const [searchParams] = useSearchParams();
   const missionIdFromQuery = embedMode ? null : (searchParams.get("mission_id") || "").trim() || null;
-  const { feed: missionFeed, refetch: refetchMissionFeed } = useManagedMissionFeedPoll(missionIdFromQuery);
+  const {
+    feed: missionFeed,
+    refetch: refetchMissionFeed,
+    banner: missionFeedBanner,
+    initialLoading: missionFeedInitialLoading,
+    feedScrollAnchorRef: missionFeedScrollAnchorRef,
+  } = useManagedMissionFeedLiveStream(missionIdFromQuery);
   const [messages, setMessages] = React.useState<HwwMsgRow[]>([]);
   const [sessionId, setSessionId] = React.useState<string | null>(null);
   const [input, setInput] = React.useState("");
@@ -1644,18 +1650,25 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
                   <span className="font-mono">{shortId(missionContext.mission_registry_id)}</span> · agent{" "}
                   <span className="font-mono">{shortId(missionContext.cursor_agent_id)}</span>
                 </p>
-                {missionFeed?.provider_projection?.mode === "rest_projection" ? (
+                {missionFeedBanner.phase !== "idle" && missionFeedBanner.label ? (
+                  <p className="text-[10px] text-emerald-200/80">{missionFeedBanner.label}</p>
+                ) : missionFeed?.provider_projection?.mode === "rest_projection" ? (
                   <p className="text-[10px] text-white/45">
                     Mission feed: REST refresh only (not a live provider stream).
                   </p>
                 ) : null}
                 <div className="space-y-1">
                   {(missionFeed?.events || []).length > 0 ? (
-                    (missionFeed?.events || []).slice(-3).map((ev) => (
-                      <p key={`${ev.id}-${ev.time}`} className="text-[11px] text-white/60">
-                        {ev.message}
-                      </p>
-                    ))
+                    <>
+                      {(missionFeed?.events || []).slice(-3).map((ev) => (
+                        <p key={`${ev.id}-${ev.time}`} className="text-[11px] text-white/60">
+                          {ev.message}
+                        </p>
+                      ))}
+                      <div ref={missionFeedScrollAnchorRef} className="h-px w-full" aria-hidden />
+                    </>
+                  ) : missionFeedInitialLoading ? (
+                    <p className="text-[11px] text-white/45">Loading mission feed…</p>
                   ) : (
                     <p className="text-[11px] text-white/55">Waiting for mission feed updates…</p>
                   )}

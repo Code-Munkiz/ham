@@ -850,6 +850,56 @@ def test_mission_feed_sdk_bridge_malformed_output_falls_back_to_rest(
     assert any("rest fallback from malformed bridge" in str(e.get("message")) for e in body.get("events") or [])
 
 
+def test_managed_mission_feed_stream_404_unknown_mission(client: TestClient) -> None:
+    bogus = str(uuid.uuid4())
+    r = client.get(f"/api/cursor/managed/missions/{bogus}/feed/stream")
+    assert r.status_code == 404
+
+
+def test_managed_mission_feed_stream_content_type_and_snapshot_frame(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("HAM_MANAGED_FEED_SSE_SESSION_MAX_SECONDS", "2")
+    monkeypatch.setattr(cmm, "get_effective_cursor_api_key", lambda: None)
+    st = cmm._store
+    assert st is not None
+    mid = new_mission_registry_id()
+    n = utc_now_iso()
+    st.save(
+        ManagedMission(
+            mission_registry_id=mid,
+            cursor_agent_id="c-agent-sse-1",
+            control_plane_ham_run_id=None,
+            mission_handling="managed",
+            uplink_id=None,
+            repo_key="a/b",
+            mission_lifecycle="open",
+            cursor_status_last_observed="RUNNING",
+            status_reason_last_observed="mapped:RUNNING",
+            created_at=n,
+            updated_at=n,
+            last_server_observed_at=n,
+        )
+    )
+    buf = b""
+    with client.stream(
+        "GET",
+        f"/api/cursor/managed/missions/{mid}/feed/stream",
+    ) as resp:
+        assert resp.status_code == 200
+        ct = resp.headers.get("content-type") or ""
+        assert "text/event-stream" in ct.lower()
+        for chunk in resp.iter_bytes(chunk_size=1024):
+            buf += chunk
+            if buf.find(b"snapshot") != -1 and buf.find(mid.encode()) != -1:
+                break
+            if len(buf) > 8192:
+                break
+    assert b"event:" in buf
+    assert b"snapshot" in buf
+
+
 @pytest.fixture
 def client(tmp_path: Path) -> TestClient:
     cmm._store = ManagedMissionStore(base_dir=tmp_path)
