@@ -93,6 +93,7 @@ class BridgeResult(BaseModel):
     pre_exec_git_status: str | None = None
     post_exec_git_status: str | None = None
     mutation_detected: bool | None = None
+    mutation_diff: str | None = None
     artifacts: list[str] = Field(default_factory=list)
 
 

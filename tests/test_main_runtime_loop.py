@@ -31,7 +31,11 @@ def _parse_runtime_stdout(stdout: str) -> dict:
     return json.loads(rest)
 
 
-def _bridge_result(*, mutation_detected: bool | None = False) -> BridgeResult:
+def _bridge_result(
+    *,
+    mutation_detected: bool | None = False,
+    mutation_diff: str | None = None,
+) -> BridgeResult:
     return BridgeResult(
         intent_id="intent-1",
         request_id="request-1",
@@ -64,6 +68,7 @@ def _bridge_result(*, mutation_detected: bool | None = False) -> BridgeResult:
         ],
         summary="ok",
         mutation_detected=mutation_detected,
+        mutation_diff=mutation_diff,
     )
 
 
@@ -228,6 +233,68 @@ def test_main_confident_mutation_refreshes_exactly_once_and_reviewer_uses_refres
     assert rc == 0
     assert calls["assemble"] == 2
     assert seen["context"] == "critic-context-refreshed"
+
+
+def test_main_reviewer_receives_mutation_diff_when_present(monkeypatch):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-v1-hamtests-only-fake-key-000000000")
+    seen: dict[str, object] = {}
+    diff_payload = "diff --git a/src/foo.py b/src/foo.py\n+added\n"
+
+    monkeypatch.setattr(
+        main_mod,
+        "assemble_ham_run",
+        lambda prompt, project_root=None: _FakeAssembly(user_prompt=prompt),
+    )
+    monkeypatch.setattr(
+        main_mod,
+        "run_bridge_v0",
+        lambda _assembly, _intent: _bridge_result(
+            mutation_detected=True,
+            mutation_diff=diff_payload,
+        ),
+    )
+
+    class _FakeReviewer:
+        def evaluate(self, code: str, _context: str | None = None):
+            seen["review_code"] = code
+            return {"ok": True, "notes": [], "code": code[:200], "context": "c"}
+
+    monkeypatch.setattr(main_mod, "HermesReviewer", _FakeReviewer)
+
+    rc = main_mod.main(["mutate"])
+    assert rc == 0
+    assert seen["review_code"] == diff_payload
+
+
+def test_main_reviewer_falls_back_to_bridge_json_when_no_mutation_diff(monkeypatch):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-v1-hamtests-only-fake-key-000000000")
+    seen: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        main_mod,
+        "assemble_ham_run",
+        lambda prompt, project_root=None: _FakeAssembly(user_prompt=prompt),
+    )
+    monkeypatch.setattr(
+        main_mod,
+        "run_bridge_v0",
+        lambda _assembly, _intent: _bridge_result(mutation_diff=None),
+    )
+
+    class _FakeReviewer:
+        def evaluate(self, code: str, _context: str | None = None):
+            seen["review_code"] = code
+            return {"ok": True, "notes": [], "code": code[:200], "context": "c"}
+
+    monkeypatch.setattr(main_mod, "HermesReviewer", _FakeReviewer)
+
+    rc = main_mod.main(["no-mutate"])
+    assert rc == 0
+    review_code = seen["review_code"]
+    assert isinstance(review_code, str)
+    # Fallback path is the serialized BridgeResult envelope.
+    assert '"intent_id":"intent-1"' in review_code
+    assert review_code.startswith("{")
 
 
 def test_selector_chooses_git_status_profile(monkeypatch):

@@ -348,3 +348,125 @@ def test_mutation_detected_none_when_git_status_unavailable(tmp_path, monkeypatc
     result = run_bridge_v0(assembly, intent)
     assert result.mutation_detected is None
 
+
+def test_mutation_diff_captured_when_diff_changes(tmp_path, monkeypatch):
+    assembly = _FakeAssembly(droid_executor=lambda *_a, **_k: _record(["python"], exit_code=0))
+    intent = _intent(
+        tmp_path,
+        [CommandSpec(command_id="c1", argv=["python", "-c", "print('ok')"], working_dir=str(tmp_path))],
+    )
+    monkeypatch.setattr("src.bridge.runtime.git_status", lambda _cwd: "clean")
+    diffs = {"n": 0}
+
+    def fake_git_diff(_cwd, **_kwargs):
+        diffs["n"] += 1
+        if diffs["n"] == 1:
+            return None
+        return "diff --git a/foo.py b/foo.py\n+added line\n"
+
+    monkeypatch.setattr("src.bridge.runtime.git_diff", fake_git_diff)
+    result = run_bridge_v0(assembly, intent)
+    assert result.mutation_diff is not None
+    assert "diff --git a/foo.py b/foo.py" in result.mutation_diff
+    assert "+added line" in result.mutation_diff
+
+
+def test_mutation_diff_none_when_diff_unchanged(tmp_path, monkeypatch):
+    assembly = _FakeAssembly(droid_executor=lambda *_a, **_k: _record(["python"], exit_code=0))
+    intent = _intent(
+        tmp_path,
+        [CommandSpec(command_id="c1", argv=["python", "-c", "print('ok')"], working_dir=str(tmp_path))],
+    )
+    monkeypatch.setattr("src.bridge.runtime.git_status", lambda _cwd: "clean")
+    monkeypatch.setattr(
+        "src.bridge.runtime.git_diff",
+        lambda _cwd, **_kwargs: "existing unstaged diff\n",
+    )
+    result = run_bridge_v0(assembly, intent)
+    assert result.mutation_diff is None
+
+
+def test_mutation_diff_none_when_git_unavailable(tmp_path, monkeypatch):
+    assembly = _FakeAssembly(droid_executor=lambda *_a, **_k: _record(["python"], exit_code=0))
+    intent = _intent(
+        tmp_path,
+        [CommandSpec(command_id="c1", argv=["python", "-c", "print('ok')"], working_dir=str(tmp_path))],
+    )
+    monkeypatch.setattr("src.bridge.runtime.git_status", lambda _cwd: None)
+    monkeypatch.setattr("src.bridge.runtime.git_diff", lambda _cwd, **_kwargs: None)
+    result = run_bridge_v0(assembly, intent)
+    assert result.mutation_diff is None
+    assert result.mutation_detected is None
+
+
+def test_mutation_diff_capped_at_max_chars(tmp_path, monkeypatch):
+    from src.memory_heist import MAX_DIFF_CHARS
+
+    assembly = _FakeAssembly(droid_executor=lambda *_a, **_k: _record(["python"], exit_code=0))
+    intent = _intent(
+        tmp_path,
+        [CommandSpec(command_id="c1", argv=["python", "-c", "print('ok')"], working_dir=str(tmp_path))],
+    )
+    monkeypatch.setattr("src.bridge.runtime.git_status", lambda _cwd: "clean")
+    huge = "+" * (MAX_DIFF_CHARS * 2)
+    diffs = {"n": 0}
+
+    def fake_git_diff(_cwd, **_kwargs):
+        diffs["n"] += 1
+        return None if diffs["n"] == 1 else huge
+
+    monkeypatch.setattr("src.bridge.runtime.git_diff", fake_git_diff)
+    result = run_bridge_v0(assembly, intent)
+    assert result.mutation_diff is not None
+    assert len(result.mutation_diff) <= MAX_DIFF_CHARS
+
+
+def test_mutation_diff_none_when_intent_rejected_by_policy(tmp_path, monkeypatch):
+    called = {"diff_calls": 0, "status_calls": 0}
+
+    def fake_exec(*_a, **_k):
+        return _record(["python"])
+
+    assembly = _FakeAssembly(droid_executor=fake_exec)
+    bad = _intent(
+        tmp_path,
+        [CommandSpec(command_id="c1", argv=["curl", "https://x"], working_dir=str(tmp_path))],
+    )
+
+    def fake_git_status(_cwd):
+        called["status_calls"] += 1
+        return "clean"
+
+    def fake_git_diff(_cwd, **_kwargs):
+        called["diff_calls"] += 1
+        return "some diff"
+
+    monkeypatch.setattr("src.bridge.runtime.git_status", fake_git_status)
+    monkeypatch.setattr("src.bridge.runtime.git_diff", fake_git_diff)
+    result = run_bridge_v0(assembly, bad)
+    assert result.status == BridgeStatus.REJECTED
+    # Rejected intents short-circuit before any git capture runs.
+    assert called["status_calls"] == 0
+    assert called["diff_calls"] == 0
+    assert result.mutation_diff is None
+    assert result.mutation_detected is None
+
+
+def test_mutation_diff_captured_when_pre_diff_is_none(tmp_path, monkeypatch):
+    """First-time diff (pre was None) still captures post."""
+    assembly = _FakeAssembly(droid_executor=lambda *_a, **_k: _record(["python"], exit_code=0))
+    intent = _intent(
+        tmp_path,
+        [CommandSpec(command_id="c1", argv=["python", "-c", "print('ok')"], working_dir=str(tmp_path))],
+    )
+    monkeypatch.setattr("src.bridge.runtime.git_status", lambda _cwd: "clean")
+    diffs = {"n": 0}
+
+    def fake_git_diff(_cwd, **_kwargs):
+        diffs["n"] += 1
+        return None if diffs["n"] == 1 else "+new content\n"
+
+    monkeypatch.setattr("src.bridge.runtime.git_diff", fake_git_diff)
+    result = run_bridge_v0(assembly, intent)
+    assert result.mutation_diff == "+new content\n"
+

@@ -115,7 +115,7 @@ def run_ham_one_shot(
     review_assembly = assembly
     if bridge_result.mutation_detected is True:
         review_assembly = assemble_ham_run(prompt, project_root=root)
-    review_context = review_assembly.critic_backstory[:MAX_REVIEW_CONTEXT_CHARS]
+    review_context = review_assembly.critic_backstory[:_MAX_REVIEW_CONTEXT_CHARS]
 
     if hasattr(bridge_result, "model_dump"):
         bridge_json = json.dumps(
@@ -132,13 +132,18 @@ def run_ham_one_shot(
     else:
         bridge_json = str(bridge_result)
 
+    # Prefer the actual workspace mutation over the bridge metadata envelope so
+    # Hermes reviews the code Droid changed rather than the command evidence.
+    mutation_diff = getattr(bridge_result, "mutation_diff", None)
+    review_code = mutation_diff if isinstance(mutation_diff, str) and mutation_diff else bridge_json
+
     try:
-        review: dict[str, Any] = HermesReviewer().evaluate(bridge_json, review_context)
+        review: dict[str, Any] = HermesReviewer().evaluate(review_code, review_context)
     except Exception as exc:  # pylint: disable=broad-exception-caught
         review = {
             "ok": False,
             "notes": [f"Hermes review handoff failed ({type(exc).__name__})."],
-            "code": bridge_json[:1000],
+            "code": review_code[:1000],
             "context": review_context[:1000],
         }
 
