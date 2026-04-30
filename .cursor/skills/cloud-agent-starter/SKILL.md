@@ -14,6 +14,18 @@ description: >-
 - Any task that needs local app startup and quick health checks
 - Any task that touches chat/gateway modes, browser runtime, or Cursor API wiring
 
+## Git writes (Cloud / HAM VM / ephemeral workspaces)
+
+Ephemeral workspaces are **not** the owner’s canonical checkout. **Treat `main` as read-only for Git writes from here.**
+
+- **Do not** `git push` to `origin main` / `upstream main`.
+- **Do not** `--force`, `--force-with-lease`, or otherwise rewrite **`refs/heads/main`** remotely.
+- **Do** branch off `main`, commit on that branch, `git push -u origin <branch>` (or fork remote), then **`gh pr create`** targeting `main` when the implementation is ready to land — unless the user explicitly said **no PR** / **dry run only**.
+- Unsure whether you’re in an ephemeral workspace? Prefer **branch + PR**; push only with safe defaults (**never** `--force`).
+- Owner wants a direct **`main`** push **from Cloud/VM**: stop → **`MAIN_PUSH_REQUIRES_OWNER_APPROVAL`** (canonical owner merges or pushes).
+
+See **`AGENTS.md`** → **Git workflow (testing / direct-main)** for the distinction vs **owner-local** direct-main policy.
+
 ## 1) Fast setup (do this first)
 
 From repo root:
@@ -142,9 +154,11 @@ Use when you need **managed mission** APIs or the **mission feed** path (not the
 
 ### PR / docs checklist (prevent duplicate Cloud Agent PR churn)
 
-HAM launch prompts inject **cursor-agent-v2** PR hygiene; match it in Cursor Cloud agent behavior:
+HAM launch prompts inject **cursor-agent-v2** PR hygiene; match it in Cursor Cloud agent behavior.
 
-1. **Plan/report first.** Do **not** run `gh pr create` unless the user explicitly asks for a PR.
+**Ephemeral / VM:** default to **branch + PR** (see **Git writes** above). **Owner-local** workflows in `AGENTS.md` may still avoid PRs when the **owner** is driving from a known canonical path.
+
+1. **Plan/report first.** For **code/product** landings from Cloud/VM, **open a PR** when work is complete. **Do not** avoid `gh pr create` just to stay on `main` remotely.
 2. **No unsolicited docs-only PRs** — edit canonical Markdown in-place where possible (`AGENTS.md`, `README.md`, roadmap/mission-aware docs).
 3. **Before a docs PR:** `gh pr list --repo OWNER/REPO --state open --limit 50` — if overlaps exist → report `OVERLAPPING_DOCS_PR_FOUND` instead of spawning another duplicate.
 4. **One mission ⇒ at most one PR** when PRs were explicitly authorized.

@@ -83,11 +83,23 @@ Shipped muscle today centers on **Bridge + Droid executor** (`src/tools/droid_ex
 
 ## Git workflow (testing / direct-main)
 
-For HAM testing work in this environment, prefer **`main` directly** — not feature branches or automatic PRs.
+### Scope: owner-local canonical repo vs Cloud / HAM VM
 
-**Standing rule:** Do not create draft PRs by default. Do not run `gh pr create`, `gh pr ready`, `gh pr edit`, or suggest opening a PR / pushing a feature branch for review **unless** the user explicitly asks for a PR.
+**Owner-local canonical** (known workstation you control, e.g. `C:\Projects\GoHam\ham`): the **direct-`main`** flow below is for **that** context when you are driving the work.
 
-**Procedure:**
+**Cloud Agent, HAM VM, or other ephemeral automation clones** (e.g. Linux paths under `~/.hermes/…`): **must not** push directly to `main` and **must not** use `git push --force` / `--force-with-lease` (or any forced ref update) against `main`. Push to a **feature branch only** and open a **PR** into `main` for human review.
+
+If something requests a direct **`main`** push or a **force-push** from a Cloud/VM agent, stop and return **`MAIN_PUSH_REQUIRES_OWNER_APPROVAL`** (owner lands changes from their canonical repo or merges the PR).
+
+**Incident note (2026-04):** a VM force-push overwrote GitHub `main`; until access is productized (prefer **GitHub App** installation tokens + **branch protection**), treat VM write credentials as high risk.
+
+---
+
+For **owner-local canonical** HAM testing work in that environment, prefer **`main` directly** — not feature branches or automatic PRs.
+
+**Standing rule (owner-local):** Do not create draft PRs by default. Do not run `gh pr create`, `gh pr ready`, `gh pr edit`, or suggest opening a PR / pushing a feature branch for review **unless** the user explicitly asks for a PR.
+
+**Procedure (owner-local canonical only):**
 
 1. `git status --short --branch` and `git branch --show-current`.
 2. If not on `main`: `git checkout main`, then `git pull origin main`.

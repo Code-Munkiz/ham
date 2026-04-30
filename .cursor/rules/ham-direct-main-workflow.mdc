@@ -1,9 +1,15 @@
 ---
-description: HAM testing workflow — direct-main, no automatic PRs. Apply always.
+description: Owner-local HAM workflow — direct-main, no automatic PRs. Ephemeral/Cloud/VM must follow AGENTS.md + cloud-agent-starter (branch + PR, no main force-push).
 alwaysApply: true
 ---
 
 # HAM git workflow (testing / direct-main)
+
+## Scope
+
+**Owner-local canonical repo** (you control the workstation and path, e.g. `C:\Projects\GoHam\ham`): use this direct-`main` flow.
+
+**Cursor Cloud, HAM VM, or other ephemeral automation clones** (e.g. `~/.hermes/...`): **do not** follow this file for Git writes. Use **`AGENTS.md`** → *Git workflow* (Cloud / HAM VM section) and **`.cursor/skills/cloud-agent-starter/SKILL.md`** → *Git writes*: treat **`main` as read-only** for pushes, **branch + PR** only, **never** force-push `main`.
 
 ## Standing rule
 
