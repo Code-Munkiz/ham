@@ -4,13 +4,17 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
   socialAdapter,
+  type DiscordCapabilities,
   type SocialBroadcastApplyResponse,
+  type SocialMessagingProviderStatus,
+  type SocialMessagingSetupChecklist,
   type SocialReactiveBatchApplyResponse,
   type SocialReactiveReplyApplyResponse,
   type SocialPreviewKind,
   type SocialPreviewResponse,
   type SocialProvider,
   type SocialSnapshot,
+  type TelegramCapabilities,
   type XCapabilities,
 } from "../../adapters/socialAdapter";
 import { WorkspaceSurfaceHeader, WorkspaceSurfaceStateCard } from "../../components/workspaceSurfaceChrome";
@@ -51,15 +55,34 @@ function BoolRow({ label, value }: { label: string; value: boolean }) {
   );
 }
 
-function ProviderCard({ provider }: { provider: SocialProvider }) {
+function ProviderCard({
+  provider,
+  selected = false,
+  onSelect,
+}: {
+  provider: SocialProvider;
+  selected?: boolean;
+  onSelect?: () => void;
+}) {
   const tone = statusTone(provider.status);
   return (
-    <article className="rounded-2xl border border-white/10 bg-black/25 p-4 shadow-sm">
+    <button
+      type="button"
+      onClick={onSelect}
+      className={cn(
+        "rounded-2xl border bg-black/25 p-4 text-left shadow-sm transition hover:border-white/25",
+        selected ? "border-emerald-300/35" : "border-white/10",
+      )}
+    >
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="text-base font-semibold text-white/92">{provider.label}</div>
           <div className="mt-1 text-xs text-white/45">
-            {provider.id === "x" ? "First provider, powered by the existing HAM-on-X engine." : "Future provider slot."}
+            {provider.id === "x"
+              ? "First provider, powered by the existing HAM-on-X engine."
+              : provider.id === "telegram" || provider.id === "discord"
+                ? "Hermes gateway readiness only. No Social messaging controls."
+                : "Future provider slot."}
           </div>
         </div>
         <StatusPill label={titleCase(provider.status)} tone={tone} />
@@ -71,7 +94,7 @@ function ProviderCard({ provider }: { provider: SocialProvider }) {
           <StatusPill key={lane} label={titleCase(lane)} tone="warn" />
         ))}
       </div>
-    </article>
+    </button>
   );
 }
 
@@ -121,6 +144,145 @@ function CapabilityRows({ capabilities }: { capabilities: XCapabilities }) {
       <BoolRow label="Reactive batch available" value={capabilities.reactive_batch_available} />
       <BoolRow label="Live apply available" value={capabilities.live_apply_available} />
       <BoolRow label="Read-only API" value={capabilities.read_only} />
+    </div>
+  );
+}
+
+function MessagingCapabilityRows({ capabilities }: { capabilities: TelegramCapabilities | DiscordCapabilities }) {
+  const sharedRows = [
+    { label: "Bot token present", value: capabilities.bot_token_present },
+    { label: "Inbound available", value: capabilities.inbound_available },
+    { label: "Preview available", value: capabilities.preview_available },
+    { label: "Live message available", value: capabilities.live_message_available },
+    { label: "Live apply available", value: capabilities.live_apply_available },
+    { label: "Read-only API", value: capabilities.read_only },
+  ];
+  const providerRows =
+    capabilities.provider_id === "telegram"
+      ? [
+          { label: "Allowed users configured", value: capabilities.allowed_users_configured },
+          { label: "Home channel configured", value: capabilities.home_channel_configured },
+          { label: "Polling supported", value: capabilities.polling_supported },
+          { label: "Webhook supported", value: capabilities.webhook_supported },
+          { label: "Groups supported", value: capabilities.groups_supported },
+          { label: "Topics supported", value: capabilities.topics_supported },
+          { label: "Media supported", value: capabilities.media_supported },
+          { label: "Voice supported", value: capabilities.voice_supported },
+        ]
+      : [
+          { label: "Allowed users or roles configured", value: capabilities.allowed_users_or_roles_configured },
+          { label: "Guild or channel configured", value: capabilities.guild_or_channel_configured },
+          { label: "DMs supported", value: capabilities.dms_supported },
+          { label: "Channels supported", value: capabilities.channels_supported },
+          { label: "Threads supported", value: capabilities.threads_supported },
+          { label: "Slash commands supported", value: capabilities.slash_commands_supported },
+          { label: "Media supported", value: capabilities.media_supported },
+          { label: "Voice supported", value: capabilities.voice_supported },
+        ];
+  return (
+    <div className="grid gap-2 sm:grid-cols-2">
+      {[...providerRows, ...sharedRows].map((row) => (
+        <BoolRow key={row.label} label={row.label} value={row.value} />
+      ))}
+    </div>
+  );
+}
+
+function MessagingProviderPanel({
+  status,
+  capabilities,
+  setup,
+}: {
+  status: SocialMessagingProviderStatus;
+  capabilities: TelegramCapabilities | DiscordCapabilities;
+  setup: SocialMessagingSetupChecklist;
+}) {
+  return (
+    <div className="grid gap-4 xl:grid-cols-2">
+      <Panel title={`${status.label} readiness`}>
+        <div className="space-y-3">
+          <div className="flex flex-wrap gap-2">
+            <StatusPill label={titleCase(status.overall_readiness)} tone={statusTone(status.overall_readiness)} />
+            <StatusPill label={status.read_only ? "Read-only readiness" : "Writable"} tone={status.read_only ? "ok" : "danger"} />
+            <StatusPill label={status.live_apply_available ? "Live apply available" : "Live apply disabled"} tone={status.live_apply_available ? "danger" : "ok"} />
+            <StatusPill
+              label={status.mutation_attempted ? "Mutation attempted" : "No mutation attempted"}
+              tone={status.mutation_attempted ? "danger" : "ok"}
+            />
+          </div>
+          {status.readiness_reasons.length ? (
+            <div className="flex flex-wrap gap-2">
+              {status.readiness_reasons.map((reason) => (
+                <StatusPill key={reason} label={titleCase(reason)} tone="warn" />
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-white/55">No readiness blockers reported.</p>
+          )}
+          <p className="text-sm text-white/55">
+            This panel only checks Hermes gateway readiness for {status.label}. It does not send messages, run previews, start bots,
+            or collect credentials.
+          </p>
+        </div>
+      </Panel>
+
+      <Panel title="Hermes gateway runtime">
+        <KeyValueGrid
+          rows={[
+            { label: "Runtime source", value: titleCase(status.hermes_gateway.source) },
+            { label: "Gateway state", value: titleCase(status.hermes_gateway.gateway_state) },
+            { label: "Provider runtime", value: titleCase(status.hermes_gateway.provider_runtime_state) },
+            { label: "Status file available", value: status.hermes_gateway.status_file_available ? "Yes" : "No" },
+            { label: "Gateway base configured", value: status.hermes_gateway.base_url_configured ? "Yes" : "No" },
+            { label: "Active agents", value: status.hermes_gateway.active_agents ?? "Unknown" },
+          ]}
+        />
+        {status.hermes_gateway.error_message ? (
+          <p className="mt-3 rounded-lg border border-amber-400/20 bg-amber-500/5 p-3 text-sm text-amber-100/80">
+            {status.hermes_gateway.error_message}
+          </p>
+        ) : null}
+      </Panel>
+
+      <Panel title="Setup checklist">
+        <div className="space-y-2">
+          {setup.items.map((item) => (
+            <div key={item.id} className="flex items-center justify-between rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+              <div className="flex items-center gap-2 text-sm text-white/70">
+                {item.ok ? <CheckCircle2 className="h-4 w-4 text-emerald-300" /> : <AlertTriangle className="h-4 w-4 text-amber-300" />}
+                {item.label}
+              </div>
+              <StatusPill label={item.ok ? "OK" : "Missing"} tone={item.ok ? "ok" : "warn"} />
+            </div>
+          ))}
+        </div>
+        {setup.recommended_next_steps.length ? (
+          <div className="mt-4 space-y-2">
+            {setup.recommended_next_steps.map((step) => (
+              <div key={step} className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm text-white/62">
+                {step}
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </Panel>
+
+      <Panel title="Capabilities">
+        <MessagingCapabilityRows capabilities={capabilities} />
+      </Panel>
+
+      <Panel title="Safety boundary">
+        <div className="space-y-2 text-sm text-white/62">
+          <p className="flex gap-2">
+            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" />
+            No Telegram or Discord preview, send, apply, bot startup, or gateway process controls are exposed.
+          </p>
+          <p className="flex gap-2">
+            <Circle className="mt-1 h-3 w-3 shrink-0 text-white/40" />
+            Bot tokens, allowlists, raw channel IDs, and Hermes local paths are never displayed here.
+          </p>
+        </div>
+      </Panel>
     </div>
   );
 }
@@ -200,6 +362,7 @@ function PreviewResultCard({ preview }: { preview: SocialPreviewResponse }) {
 
 export function WorkspaceSocialScreen() {
   const [snapshot, setSnapshot] = React.useState<SocialSnapshot | null>(null);
+  const [selectedProvider, setSelectedProvider] = React.useState<"x" | "telegram" | "discord">("x");
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [previewBusy, setPreviewBusy] = React.useState<SocialPreviewKind | null>(null);
@@ -262,6 +425,20 @@ export function WorkspaceSocialScreen() {
   const x = snapshot?.xStatus;
   const caps = snapshot?.xCapabilities;
   const setup = snapshot?.xSetupSummary;
+  const selectedMessaging =
+    selectedProvider === "telegram" && snapshot
+      ? {
+          status: snapshot.telegramStatus,
+          capabilities: snapshot.telegramCapabilities,
+          setup: snapshot.telegramSetup,
+        }
+      : selectedProvider === "discord" && snapshot
+        ? {
+            status: snapshot.discordStatus,
+            capabilities: snapshot.discordCapabilities,
+            setup: snapshot.discordSetup,
+          }
+        : null;
   const inboxPreview = previews.reactive_inbox;
   const batchPreview = previews.reactive_batch_dry_run;
   const broadcastPreview = previews.broadcast_preflight;
@@ -344,7 +521,7 @@ export function WorkspaceSocialScreen() {
         variant="dark"
         eyebrow="Social"
         title="Social Command Center"
-        subtitle="Read-only provider status for autonomous social agents. X is the first provider; future providers are placeholders."
+        subtitle="Provider status for autonomous social agents. X has governed controls; Telegram and Discord are read-only Hermes gateway readiness."
         actions={
           <Button
             type="button"
@@ -362,7 +539,7 @@ export function WorkspaceSocialScreen() {
 
       <WorkspaceSurfaceStateCard
         title="Read-only surface"
-        description="Status panels call read-only GET /api/social endpoints. Preview controls call POST preview endpoints only; they do not run live X writes or reply/post execution."
+        description="Telegram and Discord panels call read-only GET endpoints only. They do not send messages, run previews, start bots, or expose credential inputs."
         tone="neutral"
       />
 
@@ -386,11 +563,28 @@ export function WorkspaceSocialScreen() {
         <>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {snapshot.providers.map((provider) => (
-              <ProviderCard key={provider.id} provider={provider} />
+              <ProviderCard
+                key={provider.id}
+                provider={provider}
+                selected={provider.id === selectedProvider}
+                onSelect={() => {
+                  if (provider.id === "x" || provider.id === "telegram" || provider.id === "discord") {
+                    setSelectedProvider(provider.id);
+                  }
+                }}
+              />
             ))}
           </div>
 
-          {x && caps ? (
+          {selectedMessaging ? (
+            <MessagingProviderPanel
+              status={selectedMessaging.status}
+              capabilities={selectedMessaging.capabilities}
+              setup={selectedMessaging.setup}
+            />
+          ) : null}
+
+          {selectedProvider === "x" && x && caps ? (
             <div className="grid gap-4 xl:grid-cols-2">
               <Panel title="Preview controls">
                 <div className="space-y-3">

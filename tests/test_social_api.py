@@ -71,6 +71,26 @@ def _isolate_journal(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> tuple[P
     monkeypatch.setenv("HAM_X_AUDIT_LOG_PATH", str(audit))
     monkeypatch.setenv("HAM_X_REVIEW_QUEUE_PATH", str(tmp_path / "review.jsonl"))
     monkeypatch.setenv("HAM_X_EXCEPTION_QUEUE_PATH", str(tmp_path / "exceptions.jsonl"))
+    monkeypatch.setenv("HAM_HERMES_HOME", str(tmp_path / "hermes-home"))
+    monkeypatch.delenv("HERMES_HOME", raising=False)
+    monkeypatch.delenv("HAM_HERMES_GATEWAY_STATUS_PATH", raising=False)
+    monkeypatch.delenv("HERMES_GATEWAY_BASE_URL", raising=False)
+    for var in (
+        "TELEGRAM_BOT_TOKEN",
+        "TELEGRAM_ALLOWED_USERS",
+        "TELEGRAM_ALLOW_ALL_USERS",
+        "TELEGRAM_HOME_CHANNEL",
+        "GATEWAY_ALLOWED_USERS",
+        "GATEWAY_ALLOW_ALL_USERS",
+        "DISCORD_BOT_TOKEN",
+        "DISCORD_ALLOWED_USERS",
+        "DISCORD_ALLOWED_ROLES",
+        "DISCORD_ALLOW_ALL_USERS",
+        "DISCORD_HOME_CHANNEL",
+        "DISCORD_ALLOWED_CHANNELS",
+        "DISCORD_FREE_RESPONSE_CHANNELS",
+    ):
+        monkeypatch.delenv(var, raising=False)
     return journal, audit
 
 
@@ -123,6 +143,17 @@ def _write_audit_row(path: Path, **fields: object) -> None:
     row.update(fields)
     with path.open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(row, sort_keys=True) + "\n")
+
+
+def _write_hermes_gateway_state(path: Path, **fields: object) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    row = {
+        "gateway_state": "running",
+        "active_agents": 0,
+        "platforms": {},
+    }
+    row.update(fields)
+    path.write_text(json.dumps(row, sort_keys=True), encoding="utf-8")
 
 
 def _fake_discovery(
@@ -371,6 +402,12 @@ def _broadcast_preview_digest(headers: dict[str, str] | None = None) -> str:
 
 _PROTECTED_ROUTES = (
     "/api/social/providers",
+    "/api/social/providers/telegram/status",
+    "/api/social/providers/telegram/capabilities",
+    "/api/social/providers/telegram/setup/checklist",
+    "/api/social/providers/discord/status",
+    "/api/social/providers/discord/capabilities",
+    "/api/social/providers/discord/setup/checklist",
     "/api/social/providers/x/status",
     "/api/social/providers/x/capabilities",
     "/api/social/providers/x/setup/checklist",
@@ -474,7 +511,7 @@ def test_routes_ok_when_clerk_disabled(
 # ---------------------------------------------------------------------------
 
 
-def test_provider_list_includes_x_first_and_future_providers_coming_soon(
+def test_provider_list_includes_x_first_td_providers_setup_and_future_providers_coming_soon(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -489,13 +526,47 @@ def test_provider_list_includes_x_first_and_future_providers_coming_soon(
     assert providers[0]["coming_soon"] is False
     assert providers[0]["configured"] is True
     assert providers[0]["status"] == "active"
-    other = {p["id"]: p for p in providers[1:]}
-    for pid in ("telegram", "discord", "bluesky", "farcaster", "linkedin"):
+    telegram = providers[1]
+    discord = providers[2]
+    assert telegram["id"] == "telegram"
+    assert telegram["coming_soon"] is False
+    assert telegram["configured"] is False
+    assert telegram["status"] == "setup_required"
+    assert telegram["enabled_lanes"] == ["readiness"]
+    assert discord["id"] == "discord"
+    assert discord["coming_soon"] is False
+    assert discord["configured"] is False
+    assert discord["status"] == "setup_required"
+    assert discord["enabled_lanes"] == ["readiness"]
+    other = {p["id"]: p for p in providers[3:]}
+    for pid in ("bluesky", "farcaster", "linkedin"):
         assert pid in other
         assert other[pid]["coming_soon"] is True
         assert other[pid]["configured"] is False
         assert other[pid]["status"] == "coming_soon"
         assert other[pid]["enabled_lanes"] == []
+
+
+def test_provider_list_marks_td_provider_active_when_gateway_reports_connected(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _set_x_creds(monkeypatch)
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "telegram-token-1234567890")
+    monkeypatch.setenv("TELEGRAM_ALLOWED_USERS", "123456789")
+    monkeypatch.setenv("TELEGRAM_HOME_CHANNEL", "-1001234567890")
+    status_path = tmp_path / "hermes-home" / "gateway_state.json"
+    _write_hermes_gateway_state(
+        status_path,
+        platforms={"telegram": {"state": "connected"}},
+    )
+    providers = client.get("/api/social/providers").json()["providers"]
+    telegram = next(provider for provider in providers if provider["id"] == "telegram")
+    assert telegram["coming_soon"] is False
+    assert telegram["configured"] is True
+    assert telegram["status"] == "active"
 
 
 def test_provider_status_setup_required_when_no_credentials(
@@ -627,6 +698,191 @@ def test_capabilities_reactive_inbox_discovery_requires_handle_or_query(
     assert client.get("/api/social/providers/x/capabilities").json()["reactive_inbox_discovery_available"] is False
     monkeypatch.setenv("HAM_X_REACTIVE_HANDLE", "@HamOfficial")
     assert client.get("/api/social/providers/x/capabilities").json()["reactive_inbox_discovery_available"] is True
+
+
+def test_telegram_status_capabilities_and_checklist_are_read_only_and_safe(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    token = "telegram-token-secret-1234567890"
+    allowed = "123456789"
+    channel = "-1001234567890"
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", token)
+    monkeypatch.setenv("TELEGRAM_ALLOWED_USERS", allowed)
+    monkeypatch.setenv("TELEGRAM_HOME_CHANNEL", channel)
+    _write_hermes_gateway_state(
+        tmp_path / "hermes-home" / "gateway_state.json",
+        active_agents=1,
+        platforms={"telegram": {"state": "connected"}},
+    )
+
+    status = client.get("/api/social/providers/telegram/status")
+    assert status.status_code == 200
+    body = status.json()
+    assert body["provider_id"] == "telegram"
+    assert body["overall_readiness"] == "ready"
+    assert body["required_connections"] == {
+        "bot_token_present": True,
+        "allowed_users_configured": True,
+        "home_channel_configured": True,
+    }
+    assert body["hermes_gateway"]["provider_runtime_state"] == "connected"
+    assert body["hermes_gateway"]["active_agents"] == 1
+    assert body["read_only"] is True
+    assert body["mutation_attempted"] is False
+    assert body["live_apply_available"] is False
+    assert body["safe_identifiers"]["home_channel"].startswith("configured:")
+
+    caps = client.get("/api/social/providers/telegram/capabilities").json()
+    assert caps["bot_token_present"] is True
+    assert caps["allowed_users_configured"] is True
+    assert caps["home_channel_configured"] is True
+    assert caps["polling_supported"] is True
+    assert caps["webhook_supported"] is True
+    assert caps["groups_supported"] is True
+    assert caps["topics_supported"] is True
+    assert caps["media_supported"] is True
+    assert caps["voice_supported"] is True
+    assert caps["inbound_available"] is True
+    assert caps["preview_available"] is False
+    assert caps["live_message_available"] is False
+    assert caps["live_apply_available"] is False
+    assert caps["read_only"] is True
+    assert caps["mutation_attempted"] is False
+
+    checklist = client.get("/api/social/providers/telegram/setup/checklist").json()
+    assert checklist["provider_id"] == "telegram"
+    assert checklist["read_only"] is True
+    assert checklist["mutation_attempted"] is False
+    assert {item["id"] for item in checklist["items"]} == {
+        "telegram_bot_token",
+        "telegram_allowed_users",
+        "telegram_home_channel",
+        "hermes_gateway_runtime",
+    }
+    assert all(isinstance(item["ok"], bool) for item in checklist["items"])
+
+    text = status.text + json.dumps(caps, sort_keys=True) + json.dumps(checklist, sort_keys=True)
+    for raw in (token, allowed, channel):
+        assert raw not in text
+
+
+def test_discord_status_capabilities_and_checklist_are_read_only_and_safe(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    token = "discord-token-secret-1234567890"
+    allowed = "284102345871466496"
+    channel = "123456789012345678"
+    monkeypatch.setenv("DISCORD_BOT_TOKEN", token)
+    monkeypatch.setenv("DISCORD_ALLOWED_USERS", allowed)
+    monkeypatch.setenv("DISCORD_HOME_CHANNEL", channel)
+    _write_hermes_gateway_state(
+        tmp_path / "hermes-home" / "gateway_state.json",
+        platforms={"discord": {"state": "connected"}},
+    )
+
+    status = client.get("/api/social/providers/discord/status")
+    assert status.status_code == 200
+    body = status.json()
+    assert body["provider_id"] == "discord"
+    assert body["overall_readiness"] == "ready"
+    assert body["required_connections"] == {
+        "bot_token_present": True,
+        "allowed_users_or_roles_configured": True,
+        "guild_or_channel_configured": True,
+    }
+    assert body["hermes_gateway"]["provider_runtime_state"] == "connected"
+    assert body["read_only"] is True
+    assert body["mutation_attempted"] is False
+    assert body["live_apply_available"] is False
+    assert body["safe_identifiers"]["home_channel"].startswith("configured:")
+
+    caps = client.get("/api/social/providers/discord/capabilities").json()
+    assert caps["bot_token_present"] is True
+    assert caps["allowed_users_or_roles_configured"] is True
+    assert caps["guild_or_channel_configured"] is True
+    assert caps["dms_supported"] is True
+    assert caps["channels_supported"] is True
+    assert caps["threads_supported"] is True
+    assert caps["slash_commands_supported"] is True
+    assert caps["media_supported"] is True
+    assert caps["voice_supported"] is True
+    assert caps["inbound_available"] is True
+    assert caps["preview_available"] is False
+    assert caps["live_message_available"] is False
+    assert caps["live_apply_available"] is False
+    assert caps["read_only"] is True
+    assert caps["mutation_attempted"] is False
+
+    checklist = client.get("/api/social/providers/discord/setup/checklist").json()
+    assert checklist["provider_id"] == "discord"
+    assert checklist["read_only"] is True
+    assert checklist["mutation_attempted"] is False
+    assert {item["id"] for item in checklist["items"]} == {
+        "discord_bot_token",
+        "discord_allowed_users_or_roles",
+        "discord_guild_or_channel",
+        "hermes_gateway_runtime",
+    }
+    assert all(isinstance(item["ok"], bool) for item in checklist["items"])
+
+    text = status.text + json.dumps(caps, sort_keys=True) + json.dumps(checklist, sort_keys=True)
+    for raw in (token, allowed, channel):
+        assert raw not in text
+
+
+def test_td_missing_or_unknown_gateway_status_is_limited_safely(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "telegram-token-secret-1234567890")
+    monkeypatch.setenv("TELEGRAM_ALLOWED_USERS", "123456789")
+    body = client.get("/api/social/providers/telegram/status").json()
+    assert body["overall_readiness"] == "limited"
+    assert "home_channel_not_configured" in body["readiness_reasons"]
+    assert "hermes_gateway_runtime_unknown" in body["readiness_reasons"]
+    assert body["hermes_gateway"]["source"] == "unknown"
+    assert body["hermes_gateway"]["status_file_available"] is False
+    assert body["hermes_gateway"]["provider_runtime_state"] == "unknown"
+    assert body["live_apply_available"] is False
+
+
+def test_td_runtime_status_redacts_provider_errors(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    secret = "tok_abcdefghijklmnopqrstuvwxyz1234567890XYZ"
+    _write_hermes_gateway_state(
+        tmp_path / "hermes-home" / "gateway_state.json",
+        platforms={"discord": {"state": "fatal", "error_code": "auth", "error_message": f"Authorization: Bearer {secret}"}},
+    )
+    body = client.get("/api/social/providers/discord/status").json()
+    text = json.dumps(body, sort_keys=True)
+    assert body["overall_readiness"] == "blocked"
+    assert body["hermes_gateway"]["provider_runtime_state"] == "fatal"
+    assert secret not in text
+    assert "[REDACTED]" in text
+
+
+def test_td_has_no_preview_or_apply_routes(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    for provider in ("telegram", "discord"):
+        assert client.post(f"/api/social/providers/{provider}/messages/preview", json={}).status_code == 404
+        assert client.post(f"/api/social/providers/{provider}/messages/apply", json={}).status_code == 404
+        assert client.post(f"/api/social/providers/{provider}/reactive/reply/apply", json={}).status_code == 404
 
 
 # ---------------------------------------------------------------------------
@@ -1880,3 +2136,19 @@ def test_social_api_text_does_not_call_planner_route() -> None:
     text = _SOCIAL_API_PATH.read_text(encoding="utf-8")
     assert "/api/goham/planner" not in text
     assert "goham_planner" not in text
+
+
+def test_social_api_text_does_not_import_send_message_or_gateway_controls() -> None:
+    text = _SOCIAL_API_PATH.read_text(encoding="utf-8")
+    forbidden = (
+        "send_message_tool",
+        "start_gateway",
+        "stop_gateway",
+        "restart_gateway",
+        "terminate_pid",
+        "gateway start",
+        "gateway stop",
+        "gateway restart",
+    )
+    for value in forbidden:
+        assert value not in text

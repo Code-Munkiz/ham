@@ -392,6 +392,91 @@ class XSetupSummaryResponse(BaseModel):
     mutation_attempted: bool = False
 
 
+SocialMessagingProviderId = Literal["telegram", "discord"]
+HermesRuntimeState = Literal["connected", "connecting", "retrying", "fatal", "stopped", "unknown"]
+
+
+class HermesGatewayRuntimeStatusDto(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    configured: bool
+    base_url_configured: bool
+    status_file_available: bool
+    source: Literal["status_file", "env", "unknown"]
+    gateway_state: str = "unknown"
+    provider_runtime_state: HermesRuntimeState = "unknown"
+    active_agents: int | None = None
+    error_code: str | None = None
+    error_message: str | None = None
+
+
+class SocialMessagingProviderStatusResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    provider_id: SocialMessagingProviderId
+    label: Literal["Telegram", "Discord"]
+    overall_readiness: OverallReadiness
+    readiness_reasons: list[str] = Field(default_factory=list)
+    hermes_gateway: HermesGatewayRuntimeStatusDto
+    required_connections: dict[str, bool]
+    safe_identifiers: dict[str, str] = Field(default_factory=dict)
+    read_only: bool = True
+    mutation_attempted: bool = False
+    live_apply_available: bool = False
+
+
+class TelegramCapabilitiesResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    provider_id: Literal["telegram"] = "telegram"
+    bot_token_present: bool
+    allowed_users_configured: bool
+    home_channel_configured: bool
+    polling_supported: bool = True
+    webhook_supported: bool = True
+    groups_supported: bool = True
+    topics_supported: bool = True
+    media_supported: bool = True
+    voice_supported: bool = True
+    inbound_available: bool = False
+    preview_available: bool = False
+    live_message_available: bool = False
+    live_apply_available: bool = False
+    read_only: bool = True
+    mutation_attempted: bool = False
+
+
+class DiscordCapabilitiesResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    provider_id: Literal["discord"] = "discord"
+    bot_token_present: bool
+    allowed_users_or_roles_configured: bool
+    guild_or_channel_configured: bool
+    dms_supported: bool = True
+    channels_supported: bool = True
+    threads_supported: bool = True
+    slash_commands_supported: bool = True
+    media_supported: bool = True
+    voice_supported: bool = True
+    inbound_available: bool = False
+    preview_available: bool = False
+    live_message_available: bool = False
+    live_apply_available: bool = False
+    read_only: bool = True
+    mutation_attempted: bool = False
+
+
+class SocialMessagingSetupChecklistResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    provider_id: SocialMessagingProviderId
+    items: list[SetupChecklistItemDto]
+    recommended_next_steps: list[str] = Field(default_factory=list)
+    read_only: bool = True
+    mutation_attempted: bool = False
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -441,6 +526,226 @@ def _safe_payload(value: Any) -> dict[str, Any]:
 
 def _safe_id(value: str) -> str:
     return str(redact((value or "").strip()))[:128]
+
+
+def _env_present(*names: str) -> bool:
+    return any((os.environ.get(name) or "").strip() for name in names)
+
+
+def _env_bool(name: str) -> bool:
+    return (os.environ.get(name) or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _safe_config_ref(value: str) -> str:
+    raw = (value or "").strip()
+    if not raw:
+        return ""
+    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:12]
+    return f"configured:{digest}"
+
+
+def _hermes_gateway_status_path() -> Path | None:
+    explicit = (os.environ.get("HAM_HERMES_GATEWAY_STATUS_PATH") or "").strip()
+    if explicit:
+        return Path(explicit).expanduser()
+    home = (os.environ.get("HAM_HERMES_HOME") or os.environ.get("HERMES_HOME") or "").strip()
+    if not home:
+        return None
+    return Path(home).expanduser() / "gateway_state.json"
+
+
+def _runtime_state(value: Any) -> HermesRuntimeState:
+    raw = str(value or "").strip().lower()
+    if raw in {"connected", "connecting", "retrying", "fatal", "stopped"}:
+        return raw  # type: ignore[return-value]
+    if raw in {"healthy", "running", "ready", "active"}:
+        return "connected"
+    if raw in {"startup_failed", "failed", "error"}:
+        return "fatal"
+    return "unknown"
+
+
+def _bounded_json_file(path: Path) -> dict[str, Any] | None:
+    try:
+        size = path.stat().st_size
+    except OSError:
+        return None
+    if size > MAX_BYTES_SCANNED:
+        return None
+    try:
+        raw = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _hermes_runtime_status(provider_id: SocialMessagingProviderId) -> HermesGatewayRuntimeStatusDto:
+    base_url_configured = bool((os.environ.get("HERMES_GATEWAY_BASE_URL") or "").strip())
+    path = _hermes_gateway_status_path()
+    if path is not None and path.is_file():
+        payload = _safe_dict(_bounded_json_file(path) or {})
+        platforms = payload.get("platforms")
+        provider_payload = platforms.get(provider_id) if isinstance(platforms, dict) else {}
+        provider_payload = provider_payload if isinstance(provider_payload, dict) else {}
+        return HermesGatewayRuntimeStatusDto(
+            configured=True,
+            base_url_configured=base_url_configured,
+            status_file_available=True,
+            source="status_file",
+            gateway_state=str(payload.get("gateway_state") or "unknown")[:64],
+            provider_runtime_state=_runtime_state(provider_payload.get("state")),
+            active_agents=int(payload["active_agents"]) if isinstance(payload.get("active_agents"), int) else None,
+            error_code=str(provider_payload.get("error_code"))[:128] if provider_payload.get("error_code") else None,
+            error_message=str(redact(str(provider_payload.get("error_message"))))[:300]
+            if provider_payload.get("error_message")
+            else None,
+        )
+    return HermesGatewayRuntimeStatusDto(
+        configured=base_url_configured,
+        base_url_configured=base_url_configured,
+        status_file_available=False,
+        source="env" if base_url_configured else "unknown",
+        gateway_state="unknown",
+        provider_runtime_state="unknown",
+    )
+
+
+def _telegram_connections() -> dict[str, bool]:
+    return {
+        "bot_token_present": _env_present("TELEGRAM_BOT_TOKEN"),
+        "allowed_users_configured": _env_present("TELEGRAM_ALLOWED_USERS", "GATEWAY_ALLOWED_USERS")
+        or _env_bool("TELEGRAM_ALLOW_ALL_USERS")
+        or _env_bool("GATEWAY_ALLOW_ALL_USERS"),
+        "home_channel_configured": _env_present("TELEGRAM_HOME_CHANNEL"),
+    }
+
+
+def _discord_connections() -> dict[str, bool]:
+    return {
+        "bot_token_present": _env_present("DISCORD_BOT_TOKEN"),
+        "allowed_users_or_roles_configured": _env_present(
+            "DISCORD_ALLOWED_USERS",
+            "DISCORD_ALLOWED_ROLES",
+            "GATEWAY_ALLOWED_USERS",
+        )
+        or _env_bool("DISCORD_ALLOW_ALL_USERS")
+        or _env_bool("GATEWAY_ALLOW_ALL_USERS"),
+        "guild_or_channel_configured": _env_present(
+            "DISCORD_HOME_CHANNEL",
+            "DISCORD_ALLOWED_CHANNELS",
+            "DISCORD_FREE_RESPONSE_CHANNELS",
+        ),
+    }
+
+
+def _messaging_readiness(
+    provider_id: SocialMessagingProviderId,
+    connections: dict[str, bool],
+    runtime: HermesGatewayRuntimeStatusDto,
+) -> tuple[OverallReadiness, list[str]]:
+    reasons: list[str] = []
+    if runtime.provider_runtime_state == "fatal":
+        reasons.append("hermes_gateway_provider_fatal")
+        return "blocked", reasons
+    for key, ok in connections.items():
+        if not ok and key != "home_channel_configured" and key != "guild_or_channel_configured":
+            reasons.append(f"{key}_missing")
+    if provider_id == "discord" and not connections.get("guild_or_channel_configured", False):
+        reasons.append("guild_or_channel_not_configured")
+    if provider_id == "telegram" and not connections.get("home_channel_configured", False):
+        reasons.append("home_channel_not_configured")
+    if runtime.provider_runtime_state == "connected":
+        return ("ready" if not reasons else "limited"), reasons
+    reasons.append("hermes_gateway_runtime_unknown" if runtime.provider_runtime_state == "unknown" else "hermes_gateway_not_connected")
+    return ("limited" if connections.get("bot_token_present") else "setup_required"), _dedupe(reasons)
+
+
+def _telegram_status_response() -> SocialMessagingProviderStatusResponse:
+    runtime = _hermes_runtime_status("telegram")
+    connections = _telegram_connections()
+    readiness, reasons = _messaging_readiness("telegram", connections, runtime)
+    safe_identifiers = {
+        "home_channel": _safe_config_ref(os.environ.get("TELEGRAM_HOME_CHANNEL") or ""),
+    }
+    return SocialMessagingProviderStatusResponse(
+        provider_id="telegram",
+        label="Telegram",
+        overall_readiness=readiness,
+        readiness_reasons=reasons,
+        hermes_gateway=runtime,
+        required_connections=connections,
+        safe_identifiers={key: value for key, value in safe_identifiers.items() if value},
+    )
+
+
+def _discord_status_response() -> SocialMessagingProviderStatusResponse:
+    runtime = _hermes_runtime_status("discord")
+    connections = _discord_connections()
+    readiness, reasons = _messaging_readiness("discord", connections, runtime)
+    safe_identifiers = {
+        "home_channel": _safe_config_ref(os.environ.get("DISCORD_HOME_CHANNEL") or ""),
+    }
+    return SocialMessagingProviderStatusResponse(
+        provider_id="discord",
+        label="Discord",
+        overall_readiness=readiness,
+        readiness_reasons=reasons,
+        hermes_gateway=runtime,
+        required_connections=connections,
+        safe_identifiers={key: value for key, value in safe_identifiers.items() if value},
+    )
+
+
+def _messaging_provider_dto(provider_id: SocialMessagingProviderId) -> SocialProviderDto:
+    status_response = _telegram_status_response() if provider_id == "telegram" else _discord_status_response()
+    if status_response.overall_readiness == "blocked":
+        status: ProviderStatus = "blocked"
+    elif status_response.overall_readiness == "ready":
+        status = "active"
+    else:
+        status = "setup_required"
+    return SocialProviderDto(
+        id=provider_id,
+        label=status_response.label,
+        status=status,
+        configured=bool(status_response.required_connections.get("bot_token_present")),
+        coming_soon=False,
+        enabled_lanes=["readiness"],
+    )
+
+
+def _telegram_setup_steps(connections: dict[str, bool], runtime: HermesGatewayRuntimeStatusDto) -> list[str]:
+    steps: list[str] = []
+    if not connections["bot_token_present"]:
+        steps.append("Configure TELEGRAM_BOT_TOKEN on the Hermes gateway host using `hermes gateway setup`.")
+    if not connections["allowed_users_configured"]:
+        steps.append("Configure TELEGRAM_ALLOWED_USERS or Hermes pairing before enabling Telegram access.")
+    if not connections["home_channel_configured"]:
+        steps.append("Set the Telegram home channel with `/sethome` or TELEGRAM_HOME_CHANNEL for proactive delivery.")
+    if runtime.provider_runtime_state != "connected":
+        steps.append("Start or verify the Hermes gateway outside HAM; this Social surface is read-only.")
+    if not steps:
+        steps.append("Telegram readiness looks configured. Keep using this panel as read-only status until Social live controls are added.")
+    return steps
+
+
+def _discord_setup_steps(connections: dict[str, bool], runtime: HermesGatewayRuntimeStatusDto) -> list[str]:
+    steps: list[str] = []
+    if not connections["bot_token_present"]:
+        steps.append("Configure DISCORD_BOT_TOKEN on the Hermes gateway host using `hermes gateway setup`.")
+    if not connections["allowed_users_or_roles_configured"]:
+        steps.append("Configure DISCORD_ALLOWED_USERS or DISCORD_ALLOWED_ROLES before enabling Discord access.")
+    if not connections["guild_or_channel_configured"]:
+        steps.append("Configure a Discord home, allowed, or free-response channel for controlled routing.")
+    if runtime.provider_runtime_state != "connected":
+        steps.append("Verify the Hermes gateway service outside HAM; this Social surface does not start or stop it.")
+    if not steps:
+        steps.append("Discord readiness looks configured. Keep using this panel as read-only status until Social live controls are added.")
+    return steps
 
 
 def _dedupe(items: list[str]) -> list[str]:
@@ -1441,8 +1746,6 @@ def _x_provider_dto(cfg: HamXConfig) -> SocialProviderDto:
 
 
 _FUTURE_PROVIDERS: tuple[tuple[str, str], ...] = (
-    ("telegram", "Telegram"),
-    ("discord", "Discord"),
     ("bluesky", "Bluesky"),
     ("farcaster", "Farcaster"),
     ("linkedin", "LinkedIn"),
@@ -1459,7 +1762,11 @@ def list_social_providers(
     _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
 ) -> SocialProvidersResponse:
     cfg = load_ham_x_config()
-    providers: list[SocialProviderDto] = [_x_provider_dto(cfg)]
+    providers: list[SocialProviderDto] = [
+        _x_provider_dto(cfg),
+        _messaging_provider_dto("telegram"),
+        _messaging_provider_dto("discord"),
+    ]
     for pid, label in _FUTURE_PROVIDERS:
         providers.append(
             SocialProviderDto(
@@ -1472,6 +1779,116 @@ def list_social_providers(
             )
         )
     return SocialProvidersResponse(providers=providers)
+
+
+@router.get("/providers/telegram/status", response_model=SocialMessagingProviderStatusResponse)
+def telegram_provider_status(
+    _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
+) -> SocialMessagingProviderStatusResponse:
+    return _telegram_status_response()
+
+
+@router.get("/providers/telegram/capabilities", response_model=TelegramCapabilitiesResponse)
+def telegram_capabilities(
+    _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
+) -> TelegramCapabilitiesResponse:
+    connections = _telegram_connections()
+    runtime = _hermes_runtime_status("telegram")
+    return TelegramCapabilitiesResponse(
+        bot_token_present=connections["bot_token_present"],
+        allowed_users_configured=connections["allowed_users_configured"],
+        home_channel_configured=connections["home_channel_configured"],
+        inbound_available=runtime.provider_runtime_state == "connected",
+    )
+
+
+@router.get("/providers/telegram/setup/checklist", response_model=SocialMessagingSetupChecklistResponse)
+def telegram_setup_checklist(
+    _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
+) -> SocialMessagingSetupChecklistResponse:
+    connections = _telegram_connections()
+    runtime = _hermes_runtime_status("telegram")
+    return SocialMessagingSetupChecklistResponse(
+        provider_id="telegram",
+        items=[
+            SetupChecklistItemDto(
+                id="telegram_bot_token",
+                label="Telegram bot token present",
+                ok=connections["bot_token_present"],
+            ),
+            SetupChecklistItemDto(
+                id="telegram_allowed_users",
+                label="Telegram allowlist or pairing gate configured",
+                ok=connections["allowed_users_configured"],
+            ),
+            SetupChecklistItemDto(
+                id="telegram_home_channel",
+                label="Telegram home channel configured",
+                ok=connections["home_channel_configured"],
+            ),
+            SetupChecklistItemDto(
+                id="hermes_gateway_runtime",
+                label="Hermes gateway reports Telegram connected",
+                ok=runtime.provider_runtime_state == "connected",
+            ),
+        ],
+        recommended_next_steps=_telegram_setup_steps(connections, runtime),
+    )
+
+
+@router.get("/providers/discord/status", response_model=SocialMessagingProviderStatusResponse)
+def discord_provider_status(
+    _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
+) -> SocialMessagingProviderStatusResponse:
+    return _discord_status_response()
+
+
+@router.get("/providers/discord/capabilities", response_model=DiscordCapabilitiesResponse)
+def discord_capabilities(
+    _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
+) -> DiscordCapabilitiesResponse:
+    connections = _discord_connections()
+    runtime = _hermes_runtime_status("discord")
+    return DiscordCapabilitiesResponse(
+        bot_token_present=connections["bot_token_present"],
+        allowed_users_or_roles_configured=connections["allowed_users_or_roles_configured"],
+        guild_or_channel_configured=connections["guild_or_channel_configured"],
+        inbound_available=runtime.provider_runtime_state == "connected",
+    )
+
+
+@router.get("/providers/discord/setup/checklist", response_model=SocialMessagingSetupChecklistResponse)
+def discord_setup_checklist(
+    _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
+) -> SocialMessagingSetupChecklistResponse:
+    connections = _discord_connections()
+    runtime = _hermes_runtime_status("discord")
+    return SocialMessagingSetupChecklistResponse(
+        provider_id="discord",
+        items=[
+            SetupChecklistItemDto(
+                id="discord_bot_token",
+                label="Discord bot token present",
+                ok=connections["bot_token_present"],
+            ),
+            SetupChecklistItemDto(
+                id="discord_allowed_users_or_roles",
+                label="Discord allowlist or role gate configured",
+                ok=connections["allowed_users_or_roles_configured"],
+            ),
+            SetupChecklistItemDto(
+                id="discord_guild_or_channel",
+                label="Discord guild/channel routing configured",
+                ok=connections["guild_or_channel_configured"],
+            ),
+            SetupChecklistItemDto(
+                id="hermes_gateway_runtime",
+                label="Hermes gateway reports Discord connected",
+                ok=runtime.provider_runtime_state == "connected",
+            ),
+        ],
+        recommended_next_steps=_discord_setup_steps(connections, runtime),
+    )
 
 
 @router.get("/providers/x/status", response_model=XProviderStatusResponse)
@@ -2054,6 +2471,10 @@ __all__ = [
     "XCapabilitiesResponse",
     "XSetupChecklistResponse",
     "XSetupSummaryResponse",
+    "SocialMessagingProviderStatusResponse",
+    "TelegramCapabilitiesResponse",
+    "DiscordCapabilitiesResponse",
+    "SocialMessagingSetupChecklistResponse",
     "XJournalSummaryResponse",
     "XAuditSummaryResponse",
     "SocialPreviewRequest",

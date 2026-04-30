@@ -149,6 +149,79 @@ export type XAuditSummary = {
   mutation_attempted: boolean;
 };
 
+export type SocialMessagingRuntimeState = "connected" | "connecting" | "retrying" | "fatal" | "stopped" | "unknown";
+
+export type SocialMessagingRuntimeStatus = {
+  configured: boolean;
+  base_url_configured: boolean;
+  status_file_available: boolean;
+  source: "status_file" | "env" | "unknown";
+  gateway_state: string;
+  provider_runtime_state: SocialMessagingRuntimeState;
+  active_agents: number | null;
+  error_code: string | null;
+  error_message: string | null;
+};
+
+export type SocialMessagingProviderStatus = {
+  provider_id: "telegram" | "discord";
+  label: "Telegram" | "Discord";
+  overall_readiness: "ready" | "limited" | "blocked" | "setup_required";
+  readiness_reasons: string[];
+  hermes_gateway: SocialMessagingRuntimeStatus;
+  required_connections: Record<string, boolean>;
+  safe_identifiers: Record<string, string>;
+  read_only: boolean;
+  mutation_attempted: boolean;
+  live_apply_available: false;
+};
+
+export type TelegramCapabilities = {
+  provider_id: "telegram";
+  bot_token_present: boolean;
+  allowed_users_configured: boolean;
+  home_channel_configured: boolean;
+  polling_supported: boolean;
+  webhook_supported: boolean;
+  groups_supported: boolean;
+  topics_supported: boolean;
+  media_supported: boolean;
+  voice_supported: boolean;
+  inbound_available: boolean;
+  preview_available: false;
+  live_message_available: false;
+  live_apply_available: false;
+  read_only: boolean;
+  mutation_attempted: boolean;
+};
+
+export type DiscordCapabilities = {
+  provider_id: "discord";
+  bot_token_present: boolean;
+  allowed_users_or_roles_configured: boolean;
+  guild_or_channel_configured: boolean;
+  dms_supported: boolean;
+  channels_supported: boolean;
+  threads_supported: boolean;
+  slash_commands_supported: boolean;
+  media_supported: boolean;
+  voice_supported: boolean;
+  inbound_available: boolean;
+  preview_available: false;
+  live_message_available: false;
+  live_apply_available: false;
+  read_only: boolean;
+  mutation_attempted: boolean;
+};
+
+export type SocialMessagingSetupChecklist = {
+  provider_id: "telegram" | "discord";
+  items: { id: string; label: string; ok: boolean }[];
+  recommended_next_steps: string[];
+  read_only: boolean;
+  mutation_attempted: boolean;
+};
+
 export type SocialPreviewKind = "reactive_inbox" | "reactive_batch_dry_run" | "broadcast_preflight";
 
 export type SocialPreviewResponse = {
@@ -230,6 +303,12 @@ export type SocialSnapshot = {
   xSetupSummary: XSetupSummary;
   xJournal: XJournalSummary;
   xAudit: XAuditSummary;
+  telegramStatus: SocialMessagingProviderStatus;
+  telegramCapabilities: TelegramCapabilities;
+  telegramSetup: SocialMessagingSetupChecklist;
+  discordStatus: SocialMessagingProviderStatus;
+  discordCapabilities: DiscordCapabilities;
+  discordSetup: SocialMessagingSetupChecklist;
 };
 
 async function getJson<T>(path: string): Promise<T> {
@@ -258,7 +337,21 @@ export const socialAdapter = {
 
   async loadSnapshot(): Promise<{ snapshot: SocialSnapshot | null; bridge: SocialBridge; error?: string }> {
     try {
-      const [providers, xStatus, xCapabilities, xSetup, xSetupSummary, xJournal, xAudit] = await Promise.all([
+      const [
+        providers,
+        xStatus,
+        xCapabilities,
+        xSetup,
+        xSetupSummary,
+        xJournal,
+        xAudit,
+        telegramStatus,
+        telegramCapabilities,
+        telegramSetup,
+        discordStatus,
+        discordCapabilities,
+        discordSetup,
+      ] = await Promise.all([
         getJson<{ providers?: SocialProvider[] }>(`${BASE}/providers`),
         getJson<XProviderStatus>(`${BASE}/providers/x/status`),
         getJson<XCapabilities>(`${BASE}/providers/x/capabilities`),
@@ -266,6 +359,12 @@ export const socialAdapter = {
         getJson<XSetupSummary>(`${BASE}/providers/x/setup/summary`),
         getJson<XJournalSummary>(`${BASE}/providers/x/journal/summary`),
         getJson<XAuditSummary>(`${BASE}/providers/x/audit/summary`),
+        getJson<SocialMessagingProviderStatus>(`${BASE}/providers/telegram/status`),
+        getJson<TelegramCapabilities>(`${BASE}/providers/telegram/capabilities`),
+        getJson<SocialMessagingSetupChecklist>(`${BASE}/providers/telegram/setup/checklist`),
+        getJson<SocialMessagingProviderStatus>(`${BASE}/providers/discord/status`),
+        getJson<DiscordCapabilities>(`${BASE}/providers/discord/capabilities`),
+        getJson<SocialMessagingSetupChecklist>(`${BASE}/providers/discord/setup/checklist`),
       ]);
       return {
         snapshot: {
@@ -276,6 +375,12 @@ export const socialAdapter = {
           xSetupSummary,
           xJournal,
           xAudit,
+          telegramStatus,
+          telegramCapabilities,
+          telegramSetup,
+          discordStatus,
+          discordCapabilities,
+          discordSetup,
         },
         bridge: { status: "ready" },
       };
