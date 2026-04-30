@@ -609,8 +609,8 @@ export function WorkspaceConductorScreen() {
           {error && (
             <div className="mb-4">
               <WorkspaceSurfaceStateCard
-                title="Conductor API is not available from this HAM runtime."
-                description="Missions and outputs are served from /api/workspace/conductor on the API host — not the local machine bridge."
+                title="Conductor is temporarily unavailable"
+                description="Mission supervision is unavailable right now. Retry to reconnect."
                 tone="amber"
                 technicalDetail={error}
                 primaryAction={
@@ -663,18 +663,40 @@ export function WorkspaceConductorScreen() {
                   </button>
                 </div>
               </div>
-              <p className="text-sm text-[var(--theme-muted-2)]">Launch a mission and watch your agent team build it live.</p>
+              <p className="text-sm text-[var(--theme-muted-2)]">
+                Supervise active Cloud Agent missions, then coordinate local agents for follow-up work.
+              </p>
             </div>
 
-            <ConductorOfficeStrip
-              rows={homeOfficeRows}
-              height={520}
-              missionRunning={homeOfficeRows.some((r) => r.status === "active")}
-            />
+            <section className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-card)] px-4 py-3">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--theme-muted)]">Mission surfaces</p>
+              <div className="mt-2 grid gap-2 text-sm text-[var(--theme-muted-2)] sm:grid-cols-2">
+                <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2">
+                  <p className="font-medium text-[var(--theme-text)]">Cloud Agent missions</p>
+                  <p className="mt-1 text-xs">Live mission status, checkpoints, outputs, and controls.</p>
+                </div>
+                <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2">
+                  <p className="font-medium text-[var(--theme-text)]">Local agents</p>
+                  <p className="mt-1 text-xs">Conductor worker activity and local execution progress.</p>
+                </div>
+              </div>
+            </section>
+
+            <section className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--theme-muted)]">Local agent activity</h2>
+                <span className="text-[10px] text-[var(--theme-muted-2)]">Local Conductor workers</span>
+              </div>
+              <ConductorOfficeStrip
+                rows={homeOfficeRows}
+                height={520}
+                missionRunning={homeOfficeRows.some((r) => r.status === "active")}
+              />
+            </section>
 
             <section className="mt-6 w-full space-y-3">
                 <div className="flex items-center gap-3">
-                  <h2 className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--theme-muted)]">Recent Missions</h2>
+                  <h2 className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--theme-muted)]">Local mission history</h2>
                   {activityTotalPages > 1 && (
                     <div className="ml-auto flex items-center gap-1.5">
                       <span className="text-[10px] text-[var(--theme-muted-2)]">
@@ -755,7 +777,7 @@ export function WorkspaceConductorScreen() {
                     <p className="font-medium text-[var(--theme-text)]">No active mission</p>
                     <p className="mt-2 text-[var(--theme-muted)]">
                       {activityFilter === "all"
-                        ? "No missions yet. Launch a mission to watch your agent team build live."
+                        ? "No active Cloud Agent missions. Launch a mission from Chat or start one here."
                         : `No ${activityFilter} missions. Try another filter or create a mission.`}
                     </p>
                   </div>
