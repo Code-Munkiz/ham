@@ -4,6 +4,8 @@ Canonical architecture and agent context live at the repo root: [`VISION.md`](..
 
 **Not source of truth:** generated exports and tool-local settings (for example [`CURSOR_EXACT_SETUP_EXPORT.md`](../CURSOR_EXACT_SETUP_EXPORT.md), `.cursor/settings.json`) are snapshots or editor config—defer to git-tracked canonical docs unless you deliberately refresh an export script.
 
+**Cursor / contributor setup:** rules, skills, subagents, and slash-command workflows are summarized in [`CURSOR_SETUP_HANDOFF.md`](../CURSOR_SETUP_HANDOFF.md) (canonical copies live under `.cursor/rules/` and `.cursor/skills/`).
+
 ### Suggested read order (Cloud Agent + missions)
 
 1. [`ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md`](ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md) — shipped capabilities, SDK bridge rollback, SSE/projection semantics.

@@ -144,7 +144,7 @@ There are many draft PRs for small docs notes. I want to stop accumulating PR cl
 ## Guidance
 
 - `.cursor/rules/` — Cursor project rules (architecture, diffs, roles, vision sync)
-- `.cursor/skills/` — reusable agent skills (hardening, wiring, auditing, testing)
+- `.cursor/skills/` — eight reusable operator skills (see skills table in [`CURSOR_SETUP_HANDOFF.md`](CURSOR_SETUP_HANDOFF.md))
 - `CURSOR_SETUP_HANDOFF.md` — human guide to rules, skills, subagents, commands
 - `CURSOR_EXACT_SETUP_EXPORT.md` — verbatim snapshot of Cursor setup + first-class docs (regenerate via `python scripts/build_cursor_export.py`)
 - `GAPS.md` — tracked gaps and active implementation notes

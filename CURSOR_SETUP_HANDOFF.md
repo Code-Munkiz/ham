@@ -30,11 +30,14 @@ This document explains the project’s Cursor rules, skills, subagents, and comm
 
 | Skill | When it applies (from description / body) |
 |-------|-----------------------------------------------|
-| `context-engine-hardening` | Checklist for hardening `memory_heist.py`: ignores, Ham config, caps, cross-platform key files, **continuation/parser marker coupling**, tests. |
-| `agent-context-wiring` | Wire repo context into the active orchestration path: **one** `ProjectContext.discover`, per-role render budgets only; avoid N full scans; prefer config-driven budgets. |
+| `agent-context-wiring` | Wire `ContextBuilder` / `memory_heist` into Hermes-supervised prompts in `swarm_agency.py`: **one** shared `ProjectContext`, per-role render budgets only; SessionMemory; no CrewAI. |
+| `cloud-agent-starter` | Fresh Cloud workspace; install deps, run API + frontend, gateway modes, Cursor key, smoke checks; per-area pytest entry points. |
+| `context-engine-hardening` | Checklist for hardening `memory_heist.py`: ignores, Ham config, caps, cross-platform paths, stale vendor-name cleanup, **continuation/parser marker coupling**, tests. |
+| `factory-droid-workflows` | Allowlisted Factory `droid exec` preview → confirm → launch from chat (readonly vs low-risk edit); vocabulary and limits—**policy source of truth is code** (`registry.py`, `docs/FACTORY_DROID_CONTRACT.md`). |
+| `goham` | Conversational map of the dashboard: settings, projects, Droids, runs, APIs; Hermes vs Droid roles; pairing chat with the workspace UI. |
+| `hermes-review-loop-validation` | Hermes supervisory review path → `HermesReviewer.evaluate()` → learning signal contract; do not collapse Droid execution into review flow; `.hermes/` ignored. |
 | `prompt-budget-audit` | Estimate prompts vs context window; audit `MAX_*`; flag red flags (diff size, timeline, merge caps). |
 | `repo-context-regression-testing` | Six test categories for `memory_heist.py`; `pytest` + `tmp_path`; marker parsing old + new. |
-| `hermes-review-loop-validation` | Hermes supervisory review path → `evaluate()` → learning signal contract; do not collapse Droid execution into review flow; `.hermes/` ignored. |
 
 ## Subagents (charter files)
 
