@@ -59,6 +59,79 @@ def test_chat_stream_mock_yields_session_delta_done(mock_mode: None) -> None:
     assert "Mock assistant reply" in msgs[-1]["content"]
 
 
+@pytest.mark.parametrize(
+    ("prompt", "expected_intent", "expected_reason_code"),
+    [
+        (
+            "have Cursor implement the SDK adapter fix",
+            "cursor_agent_launch",
+            "missing_project_ref",
+        ),
+        (
+            "fire up an agent to update the SDK adapter",
+            "cursor_agent_launch",
+            "missing_project_ref",
+        ),
+        (
+            "send this to Factory Droid to update the SDK adapter",
+            "agent_router_blocked",
+            "provider_not_implemented",
+        ),
+        (
+            "use Claude to implement this change",
+            "agent_router_blocked",
+            "provider_not_implemented",
+        ),
+    ],
+)
+def test_chat_stream_routes_agent_intents_when_operator_disabled(
+    mock_mode: None,
+    monkeypatch: pytest.MonkeyPatch,
+    prompt: str,
+    expected_intent: str,
+    expected_reason_code: str,
+) -> None:
+    monkeypatch.setenv("HAM_CHAT_OPERATOR", "false")
+    res = client.post(
+        "/api/chat/stream",
+        json={"messages": [{"role": "user", "content": prompt}]},
+    )
+    assert res.status_code == 200, res.text
+    events = _parse_ndjson(res.text)
+    assert events[0]["type"] == "session"
+    # Routed intents should short-circuit before model streaming.
+    assert [e for e in events if e["type"] == "delta"] == []
+    done = [e for e in events if e["type"] == "done"][0]
+    operator_result = done.get("operator_result")
+    assert isinstance(operator_result, dict)
+    assert operator_result.get("intent") == expected_intent
+    assert operator_result.get("handled") is True
+    assert operator_result.get("data", {}).get("reason_code") == expected_reason_code
+
+
+def test_chat_stream_agent_routed_turn_persists_in_session_when_operator_disabled(
+    mock_mode: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("HAM_CHAT_OPERATOR", "false")
+    res = client.post(
+        "/api/chat/stream",
+        json={
+            "messages": [
+                {"role": "user", "content": "send this to Factory Droid to update the SDK adapter"},
+            ],
+        },
+    )
+    assert res.status_code == 200, res.text
+    done = [e for e in _parse_ndjson(res.text) if e["type"] == "done"][0]
+    sid = str(done["session_id"])
+    detail = client.get(f"/api/chat/sessions/{sid}")
+    assert detail.status_code == 200
+    msgs = detail.json()["messages"]
+    assert msgs[-1]["role"] == "assistant"
+    assert "provider_not_implemented" in msgs[-1]["content"]
+
+
 def test_chat_stream_gateway_failure_done_with_safe_assistant_and_signal(
     mock_mode: None, monkeypatch: pytest.MonkeyPatch,
 ) -> None:

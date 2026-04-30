@@ -46,6 +46,7 @@ from src.ham.chat_operator import (
     OperatorTurnResult,
     format_operator_assistant_message,
     operator_enabled,
+    process_agent_router_turn,
     process_operator_turn,
 )
 from src.api.clerk_gate import enforce_clerk_session_and_email_for_request
@@ -831,16 +832,27 @@ async def post_chat(
         body=body,
         last_user_plain=last_user_plain,
     )
-    if body.enable_operator and operator_enabled() and body.messages[-1].role == "user":
+    if body.enable_operator and body.messages[-1].role == "user":
         from src.persistence.project_store import get_project_store
 
-        op = process_operator_turn(
-            user_text=last_user_plain,
-            project_store=get_project_store(),
-            default_project_id=body.project_id,
-            operator_payload=body.operator,
-            ham_operator_authorization=ham_op_hdr,
-            ham_actor=ham_actor,
+        project_store = get_project_store()
+        op = (
+            process_operator_turn(
+                user_text=last_user_plain,
+                project_store=project_store,
+                default_project_id=body.project_id,
+                operator_payload=body.operator,
+                ham_operator_authorization=ham_op_hdr,
+                ham_actor=ham_actor,
+            )
+            if operator_enabled()
+            else process_agent_router_turn(
+                user_text=last_user_plain,
+                project_store=project_store,
+                default_project_id=body.project_id,
+                ham_operator_authorization=ham_op_hdr,
+                ham_actor=ham_actor,
+            )
         )
         if op is not None and op.handled:
             _record_operator_audit(body=body, op=op, ham_actor=ham_actor, route="post_chat")
@@ -925,16 +937,27 @@ def post_chat_stream(
     )
 
     try:
-        if body.enable_operator and operator_enabled() and body.messages[-1].role == "user":
+        if body.enable_operator and body.messages[-1].role == "user":
             from src.persistence.project_store import get_project_store
 
-            op = process_operator_turn(
-                user_text=last_user_plain,
-                project_store=get_project_store(),
-                default_project_id=body.project_id,
-                operator_payload=body.operator,
-                ham_operator_authorization=ham_op_hdr,
-                ham_actor=ham_actor,
+            project_store = get_project_store()
+            op = (
+                process_operator_turn(
+                    user_text=last_user_plain,
+                    project_store=project_store,
+                    default_project_id=body.project_id,
+                    operator_payload=body.operator,
+                    ham_operator_authorization=ham_op_hdr,
+                    ham_actor=ham_actor,
+                )
+                if operator_enabled()
+                else process_agent_router_turn(
+                    user_text=last_user_plain,
+                    project_store=project_store,
+                    default_project_id=body.project_id,
+                    ham_operator_authorization=ham_op_hdr,
+                    ham_actor=ham_actor,
+                )
             )
             if op is not None and op.handled:
                 _record_operator_audit(body=body, op=op, ham_actor=ham_actor, route="post_chat_stream")

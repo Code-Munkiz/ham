@@ -629,6 +629,44 @@ def process_operator_turn(
     return out
 
 
+_AGENT_ROUTER_ONLY_INTENTS = {
+    "cursor_agent_preview",
+    "cursor_agent_launch",
+    "cursor_agent_status",
+    "cursor_agent_cancel",
+    "agent_router_blocked",
+}
+
+
+def process_agent_router_turn(
+    *,
+    user_text: str,
+    project_store: ProjectStore,
+    default_project_id: str | None,
+    ham_operator_authorization: str | None,
+    ham_actor: HamActor | None = None,
+) -> OperatorTurnResult | None:
+    """Route only provider-agent intents when full operator mode is disabled."""
+    parsed = try_heuristic_intent(user_text, default_project_id=default_project_id)
+    if not parsed:
+        return None
+    intent, params = parsed
+    if intent not in _AGENT_ROUTER_ONLY_INTENTS:
+        return None
+    enforce_operator_permission(ham_actor, permission_for_intent(intent))
+    out = _dispatch_intent(
+        intent,
+        params,
+        project_store=project_store,
+        ham_operator_authorization=ham_operator_authorization,
+        confirmed=False,
+        ham_actor=ham_actor,
+    )
+    if not out.handled:
+        return None
+    return out
+
+
 def _execute_explicit_phase(
     op: ChatOperatorPayload,
     *,
