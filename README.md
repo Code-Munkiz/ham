@@ -12,6 +12,16 @@ Open-source multi-agent autonomous developer swarm: Hermes supervisory orchestra
 - **Chat control plane (skills + roadmap)**: [docs/HAM_CHAT_CONTROL_PLANE.md](docs/HAM_CHAT_CONTROL_PLANE.md)
 - **Browser Runtime (Playwright) setup/caveats**: [docs/BROWSER_RUNTIME_PLAYWRIGHT.md](docs/BROWSER_RUNTIME_PLAYWRIGHT.md)
 
+## Documentation map
+
+| Topic | Where to read |
+|-------|----------------|
+| Control plane runs (Cursor/Droid launch records, read API) | [docs/CONTROL_PLANE_RUN.md](docs/CONTROL_PLANE_RUN.md) |
+| Hermes gateway / dashboard chat adapter | [docs/HERMES_GATEWAY_CONTRACT.md](docs/HERMES_GATEWAY_CONTRACT.md), [docs/HERMES_GATEWAY_BROKER.md](docs/HERMES_GATEWAY_BROKER.md) |
+| Desktop local control (Windows bridge, policy) | [docs/desktop/local_control_v1.md](docs/desktop/local_control_v1.md) |
+| Cursor rules, skills, and operator setup | [CURSOR_SETUP_HANDOFF.md](CURSOR_SETUP_HANDOFF.md), [CURSOR_EXACT_SETUP_EXPORT.md](CURSOR_EXACT_SETUP_EXPORT.md) (regenerate: `python scripts/build_cursor_export.py`) |
+| Global coding instructions (loaded by Context Engine) | [SWARM.md](SWARM.md) |
+
 ## Quick start
 
 ```bash

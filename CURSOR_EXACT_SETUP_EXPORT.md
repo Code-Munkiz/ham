@@ -6,10 +6,10 @@ Generated snapshot of `.cursor/` rules and skills, plus first-class context docu
 
 | Category | Count |
 |----------|-------|
-| Rules (`.mdc`) | 15 |
+| Rules (`.mdc`) | 16 |
 | Skills (`SKILL.md`) | 8 |
 | First-class context | 4 |
-| **Total embedded files** | **27** |
+| **Total embedded files** | **28** |
 
 **Subagents** (4): `subagent-*.mdc`. **Commands**: embedded in `commands.mdc`.
 
@@ -150,6 +150,57 @@ The architecture is fixed unless the user explicitly approves a change.
 - Do not bypass memory_heist for repo context -- agents must consume `ContextBuilder.build()`.
 - Do not hardcode model names outside `llm_client.py`.
 - Reference `VISION.md` for the canonical architecture diagram.
+```
+
+---
+
+## `.cursor/rules/ham-direct-main-workflow.mdc`
+
+```
+---
+description: HAM testing workflow — direct-main, no automatic PRs. Apply always.
+alwaysApply: true
+---
+
+# HAM git workflow (testing / direct-main)
+
+## Standing rule
+
+- Do **not** create draft PRs by default.
+- Do **not** run unless the user **explicitly** asks for a PR:
+  - `gh pr create`
+  - `gh pr ready`
+  - `gh pr edit`
+  - Suggestions to “open a PR”, “create draft PR”, or “push feature branch for review”
+
+## Default: work on `main`
+
+1. `git status --short --branch` and `git branch --show-current`.
+2. If not on `main`: `git checkout main` then `git pull origin main`.
+3. Make the change; **stage only intended files**.
+4. **Never stage**: `.cursor/settings.json`, `desktop/live-smoke/`, repomix outputs, build artifacts, temp scripts, unrelated dirty files.
+5. Run **scoped** tests for the change.
+6. Commit on `main`: `git commit -m "<clear message>"`.
+7. Push: `git push origin main`.
+
+Report after push: commit hash, files changed, tests run, pushed yes/no, deploy/smoke if applicable.
+
+## If `git push origin main` is blocked
+
+Do **not** open a PR automatically. Stop and report:
+
+- `DIRECT_MAIN_PUSH_BLOCKED`
+- `reason:`
+- `required action:`
+
+## PR exception — only when the user says one of
+
+- “open a PR” / “make a draft PR” / “use feature branch” / “do this as PR review”
+
+## Draft PR clutter
+
+- Do **not** create more draft PRs for routine work.
+- Before large or messy work, optionally **list** draft PRs (`gh pr list --draft` if available) and **classify** (merged/superseded, docs-only safe to close, contains useful unmerged work, unknown) — **do not close or merge** until the user approves a batch plan.
 ```
 
 ---
@@ -1143,7 +1194,7 @@ working on this repo should read these before proposing changes.
 ## Read order (recommended)
 
 1. `VISION.md` — pillars, boundaries, and how components connect
-2. This file — where implementation lives
+2. This file — where implementation lives (see § *Git workflow* for direct-main testing; Cursor: `ham-direct-main-workflow.mdc`)
 3. `SWARM.md` — repo coding instructions (loaded by `memory_heist`)
 4. `PRODUCT_DIRECTION.md` — product lens: HAM-native model vs reference ecosystems
 5. `docs/TEAM_HERMES_STATUS.md` (when changing Command Center, Activity, Capabilities, or desktop Hermes copy) — **API-side** vs **desktop-side** operator story, boundaries, troubleshooting
@@ -1217,6 +1268,66 @@ Shipped muscle today centers on **Bridge + Droid executor** (`src/tools/droid_ex
 
 - `docs/HAM_HARDENING_REMEDIATION.md` — audit summary, continuation/parser coupling, remediation order, deferred work
 
+## Git workflow (testing / direct-main)
+
+For HAM testing work in this environment, prefer **`main` directly** — not feature branches or automatic PRs.
+
+**Standing rule:** Do not create draft PRs by default. Do not run `gh pr create`, `gh pr ready`, `gh pr edit`, or suggest opening a PR / pushing a feature branch for review **unless** the user explicitly asks for a PR.
+
+**Procedure:**
+
+1. `git status --short --branch` and `git branch --show-current`.
+2. If not on `main`: `git checkout main`, then `git pull origin main`.
+3. Apply the requested change. Stage **only** intended files.
+4. **Do not stage:** `.cursor/settings.json`, `desktop/live-smoke/`, repomix outputs, build artifacts, temp scripts, unrelated dirty files.
+5. Run **scoped** tests for the touched area.
+6. Commit on `main`: `git commit -m "<clear commit message>"`.
+7. Push: `git push origin main`.
+
+**Report:** commit hash, files changed, tests run, pushed yes/no, deploy/smoke status if applicable.
+
+**If direct push to `main` is blocked** (branch protection, permissions): do **not** create a PR automatically. Stop and report `DIRECT_MAIN_PUSH_BLOCKED` with reason and required action.
+
+**PR exception** — only when the user explicitly says e.g. “open a PR”, “make a draft PR”, “use feature branch”, or “do this as PR review”.
+
+**Draft PRs:** Do not add PR clutter. Before substantial work, you may list and **classify** open draft PRs (superseded, docs-only safe to close, contains useful unmerged work, unknown); do **not** close or merge automatically until classified and the user approves a batch plan. Cursor enforces the short form of these rules in `.cursor/rules/ham-direct-main-workflow.mdc`.
+
+**Separate cleanup run** — paste when you want a dedicated draft-PR audit (agents classify only; no auto-close/merge unless clearly safe):
+
+```md
+Clean up HAM draft PR clutter safely.
+
+## Goal
+
+There are many draft PRs for small docs notes. I want to stop accumulating PR clutter.
+
+## Instructions
+
+1. List all open draft PRs.
+
+2. For each draft PR, classify:
+
+- `SUPERSEDED_BY_MAIN`
+- `DOCS_ONLY_SAFE_TO_CLOSE`
+- `CONTAINS_UNMERGED_USEFUL_WORK`
+- `UNKNOWN_REVIEW_NEEDED`
+
+3. For each PR, report:
+- PR number
+- title
+- branch
+- changed files
+- whether its commits are already in `main`
+- recommended action
+
+4. Do not close or merge anything yet unless clearly safe.
+
+5. After classification, ask for approval with a batch plan:
+- close these PRs
+- merge these PRs
+- leave these open
+```
+
 ## Guidance
 
 - `.cursor/rules/` — Cursor project rules (architecture, diffs, roles, vision sync)
@@ -1283,8 +1394,10 @@ to Droid.
 
 ### 3. Context Engine — memory_heist.py
 
-Adapted from Claude Code's context-awareness runtime. This module gives every
-agent in the swarm a grounded understanding of the local repository:
+HAM-native repo and workspace context layer (design patterns overlap with
+IDE-integrated coding-agent context runtimes; implementation and contracts are
+HAM-specific). This module gives every agent in the swarm a grounded
+understanding of the local repository:
 
 - **Workspace scanning**: filesystem tree, file inventory, ignore rules.
 - **Instruction file discovery**: hierarchical SWARM.md / AGENTS.md loading
@@ -1395,7 +1508,7 @@ User Prompt
 | Hermes gateway broker (dashboard) | `src/ham/hermes_gateway/`, `src/api/hermes_gateway.py`, `docs/HERMES_GATEWAY_BROKER.md` | **Path B:** `GET /api/hermes-gateway/snapshot` (+ capabilities, optional SSE stream) aggregates hub, allowlisted CLI inventory, skills overlay, Hermes HTTP `/health` probe, run-store + control-plane summaries, external-runner cards; snapshot includes **operator_connection** (derived CLI + HTTP + chat `gateway_mode` + freshness guidance; no new `hermes` argv); **Path C** placeholders for JSON-RPC/WebSocket/live-menu REST until upstream exists; raw CLI captures redacted; UI: `/command-center` + desktop **Settings → HAM + Hermes setup** strip; team operator story: `docs/TEAM_HERMES_STATUS.md` |
 | Workspace UI | `frontend/` (Vite + React), `desktop/` (Electron shell) | Extracted workspace; TypeScript types aligned with persisted run / bridge shapes; optional **Clerk** for chat JWT; **execution mode** routing + Bridge browser adapters (`src/ham/execution_mode.py`, `src/bridge/browser_*.py`). **Desktop** (`desktop/README.md`): **Windows** installers via `npm run pack:win*`; **Linux `.deb`/AppImage packaging targets were removed** (dev: `npm start`). `window.hamDesktop.localControl` exposes Local Control policy/audit/kill-switch, sidecar lifecycle, and **main-process** managed-browser IPC (MVP/real CDP) where enabled — separate from Ham API **`/api/browser*`.** **Workspace chat** does not run the removed **GoHAM-mode** managed-browser/chat loop (`POST /api/goham/planner` stays API-only). See `docs/desktop/local_control_v1.md`; `docs/goham/browser_smoke.md` for historical/future notes. |
 | Chat operator + identity gate | `src/api/chat.py`, `src/ham/chat_operator.py`, `src/ham/clerk_auth.py`, `src/ham/clerk_policy.py`, `src/ham/clerk_email_access.py`, `src/ham/operator_audit.py` | Server-side operator before LLM; optional Clerk JWT (`HAM_CLERK_REQUIRE_AUTH` or `HAM_CLERK_ENFORCE_EMAIL_RESTRICTIONS`, `CLERK_JWT_ISSUER`), `ham:*` permission checks, optional HAM allowlist email/domain defense-in-depth; append-only audit in HAM JSONL — **not** Clerk metadata; Cursor API key unchanged |
-| HAM-on-X social agent | `src/ham/ham_x/`, `docs/ham-x-agent/` | **Phase 4C Reactive Batch Mode:** Phase 2B remains execution-disconnected, Phase 3A `goham_controller.py` remains dry-run-only, and Phase 3B `goham_live_controller.py` remains original-post-only. Phase 4A `goham_reactive.py` still classifies prepared/read-only inbound mentions/comments into dry-run review/exception records. Phase 4B `reactive_reply_executor.py` / `goham_reactive_live.py` remain a separate one-shot reply canary. Phase 4B.1 `goham_reactive_inbox.py` discovers mentions/comments and returns automatic reply targets without executing. Phase 4C adds opt-in, dry-run-first `goham_reactive_batch.py` for bounded multi-candidate processing with per-item policy/governor rechecks, existing reactive rolling caps/cooldowns, per-reply journal rows, provider failure stops, and no retries. Reactive budgets remain separate from broadcast caps; no scheduler, daemon, infinite loop, original posts, quotes, DMs, likes/follows, xurl mutation, manual canary, broadcast executor, or Phase 2B execution |
+| HAM-on-X social agent | `src/ham/ham_x/`, `docs/ham-x-agent/`, `src/api/social.py`, `frontend/src/features/hermes-workspace/screens/social/` | **Phase 4C Reactive Batch Mode + Social TD-1:** Phase 2B remains execution-disconnected, Phase 3A `goham_controller.py` remains dry-run-only, and Phase 3B `goham_live_controller.py` remains original-post-only. Phase 4A `goham_reactive.py` still classifies prepared/read-only inbound mentions/comments into dry-run review/exception records. Phase 4B `reactive_reply_executor.py` / `goham_reactive_live.py` remain a separate one-shot reply canary. Phase 4B.1 `goham_reactive_inbox.py` discovers mentions/comments and returns automatic reply targets without executing. Phase 4C adds opt-in, dry-run-first `goham_reactive_batch.py` for bounded multi-candidate processing with per-item policy/governor rechecks, existing reactive rolling caps/cooldowns, per-reply journal rows, provider failure stops, and no retries. Social TD-1 adds read-only Telegram/Discord readiness, capabilities, and setup checklist endpoints backed by safe Hermes gateway env/status-file signals, plus read-only workspace panels; no Telegram/Discord preview, send, apply, bot startup, scheduler, daemon, or gateway process control. Reactive budgets remain separate from broadcast caps; no scheduler, daemon, infinite loop, original posts, quotes, DMs, likes/follows, xurl mutation, manual canary, broadcast executor, or Phase 2B execution |
 | Control plane runs (v1) | `src/persistence/control_plane_run.py`, `src/ham/cursor_agent_workflow.py`, `src/ham/droid_workflows/preview_launch.py`, `src/api/control_plane_runs.py` | **Durable** JSON per `ham_run_id` under `HAM_CONTROL_PLANE_RUNS_DIR` (default `~/.ham/control_plane_runs`): committed Cursor Cloud Agent + Factory Droid launches and Cursor status updates; **read** list/detail API (`/api/control-plane-runs*`) is factual only; **not** a mission graph, queue, or bridge `RunStore` |
 | Managed Cloud Agent + mission record | `src/persistence/managed_mission.py`, `src/ham/managed_mission_wiring.py`, `src/api/cursor_settings.py`, `src/api/cursor_managed_*.py`, `src/ham/cursor_agent_workflow.py`, `src/ham/chat_operator.py`, Hermes Workspace chat (`/workspace/chat`) | Durable per-agent mission JSON + API read (observed lifecycle, deploy/Vercel last-seen); optional `project_id` on HAM launch for create-time `mission_deploy_approval_mode` snapshot; **Chat operator** can preview/launch Cursor Cloud Agent with `cursor_mission_handling: managed` — same managed prompt for digest/launch, `ManagedMission` row on successful API launch; dashboard chat uses structured `operator` via `/api/chat`; **not** a mission graph or Hermes-to-Cursor action loop; gap roadmap: `docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md` |
 | Context engine | `src/memory_heist.py` | Hardened + tested (Phase 1/3 guardrails complete) |

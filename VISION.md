@@ -36,8 +36,10 @@ to Droid.
 
 ### 3. Context Engine — memory_heist.py
 
-Adapted from Claude Code's context-awareness runtime. This module gives every
-agent in the swarm a grounded understanding of the local repository:
+HAM-native repo and workspace context layer (design patterns overlap with
+IDE-integrated coding-agent context runtimes; implementation and contracts are
+HAM-specific). This module gives every agent in the swarm a grounded
+understanding of the local repository:
 
 - **Workspace scanning**: filesystem tree, file inventory, ignore rules.
 - **Instruction file discovery**: hierarchical SWARM.md / AGENTS.md loading
