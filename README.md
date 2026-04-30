@@ -37,3 +37,11 @@ Activate that venv when you run the API, or use `.venv/bin/python -m uvicorn ...
 - `src/memory_heist.py` — repo context, instructions, git, sessions
 - `src/llm_client.py` — LiteLLM / OpenRouter
 - `src/swarm_agency.py` — Hermes-supervised role context assembly (no CrewAI; orchestration is Hermes-led)
+
+## Tests
+
+From the repo root (after `pip install -r requirements.txt`): `python -m pytest` — `pytest.ini` sets `pythonpath = .`. For a quick count: `python -m pytest --collect-only -q`.
+
+## Further documentation
+
+Topic guides live under [`docs/`](docs/): deployment ([`DEPLOY_CLOUD_RUN.md`](docs/DEPLOY_CLOUD_RUN.md), [`DEPLOY_HANDOFF.md`](docs/DEPLOY_HANDOFF.md)), Windows local control ([`desktop/local_control_v1.md`](docs/desktop/local_control_v1.md)), chat and skills ([`HAM_CHAT_CONTROL_PLANE.md`](docs/HAM_CHAT_CONTROL_PLANE.md)), managed Cloud Agent missions ([`ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md`](docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md)), and Playwright browser runtime ([`BROWSER_RUNTIME_PLAYWRIGHT.md`](docs/BROWSER_RUNTIME_PLAYWRIGHT.md)).
