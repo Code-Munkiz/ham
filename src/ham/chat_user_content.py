@@ -20,6 +20,7 @@ import re
 from typing import Any, Literal
 
 from src.ham.chat_attachment_store import (
+    CHAT_UPLOAD_ALLOWED_MIME,
     get_chat_attachment_store,
     is_safe_attachment_id,
 )
@@ -28,19 +29,9 @@ HAM_CHAT_USER_V1 = "ham_chat_user_v1"
 HAM_CHAT_USER_V2 = "ham_chat_user_v2"
 
 _MAX_MESSAGE_JSON_BYTES = 1_200_000
-_MAX_IMAGES = 8
+_MAX_IMAGES = 5
 
 _ALLOWED_MIME = frozenset({"image/png", "image/jpeg", "image/jpg", "image/webp"})
-_ALLOWED_MIME_V2 = frozenset(
-    {
-        "image/png",
-        "image/jpeg",
-        "image/jpg",
-        "image/webp",
-        "text/plain",
-        "text/markdown",
-    },
-)
 _RE_DATA_URL = re.compile(
     r"^data:(image/(?:png|jpeg|jpg|webp));base64,([A-Za-z0-9+/=\s]+)\s*$",
     re.IGNORECASE,
@@ -164,9 +155,9 @@ def _validate_v2(
         if not _check_attachment_owner(rec.owner_key, attachment_user_id):
             raise ValueError("Attachment is not available for this user.")
         filed = _norm_mime(str(it.get("mime") or rec.mime))
-        if filed not in _ALLOWED_MIME_V2:
+        if filed not in CHAT_UPLOAD_ALLOWED_MIME:
             raise ValueError(
-                f"Unsupported attachment type: {filed!r} (use image/png, image/jpeg, image/webp, text/plain, text/markdown).",
+                f"Unsupported attachment type: {filed!r} (allowed types are workspace upload MIME set).",
             )
         if _norm_mime(rec.mime) != filed:
             raise ValueError("Attachment `mime` does not match the uploaded file.")

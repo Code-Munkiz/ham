@@ -1279,6 +1279,9 @@ async def post_chat_transcribe(
     return TranscribeResponse(text=text)
 
 
+_CHAT_ATTACHMENT_IMAGE_MAX_BYTES = 10 * 1024 * 1024
+
+
 def _coerce_request_mime(content_type: str | None, filename: str) -> str | None:
     raw = (content_type or "").split(";")[0].strip().lower()
     if raw == "image/jpg":
@@ -1292,6 +1295,14 @@ def _coerce_request_mime(content_type: str | None, filename: str) -> str | None:
         return "image/jpeg"
     if name.endswith(".webp"):
         return "image/webp"
+    if name.endswith(".gif"):
+        return "image/gif"
+    if name.endswith(".pdf"):
+        return "application/pdf"
+    if name.endswith(".doc"):
+        return "application/msword"
+    if name.endswith(".docx"):
+        return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     if name.endswith(".md") or name.endswith(".markdown"):
         return "text/markdown"
     if name.endswith(".txt"):
@@ -1300,12 +1311,34 @@ def _coerce_request_mime(content_type: str | None, filename: str) -> str | None:
 
 
 def _sniff_image_mime(head: bytes) -> str | None:
+    if len(head) >= 6 and head[:6] in (b"GIF87a", b"GIF89a"):
+        return "image/gif"
     if len(head) >= 8 and head[:8] == b"\x89PNG\r\n\x1a\n":
         return "image/png"
     if len(head) >= 3 and head[:3] == b"\xff\xd8\xff":
         return "image/jpeg"
     if len(head) >= 12 and head[:4] == b"RIFF" and head[8:12] == b"WEBP":
         return "image/webp"
+    return None
+
+
+def _sniff_pdf_mime(head: bytes) -> str | None:
+    if len(head) >= 5 and head[:5] == b"%PDF-":
+        return "application/pdf"
+    return None
+
+
+def _sniff_oledoc_mime(head: bytes) -> str | None:
+    if len(head) >= 8 and head[:8] == b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1":
+        return "application/msword"
+    return None
+
+
+def _sniff_docx_mime(head: bytes, filename: str) -> str | None:
+    if not filename.lower().endswith(".docx"):
+        return None
+    if len(head) >= 4 and head[:2] == b"PK":
+        return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     return None
 
 
@@ -1338,10 +1371,15 @@ async def post_chat_attachment(
             detail={"error": {"code": "ATTACHMENT_EMPTY", "message": "Empty upload."}},
         )
     name = safe_upload_filename(file.filename or "attachment")
-    sniffed = _sniff_image_mime(data[:64])
-    if sniffed:
-        mime = sniffed
-    else:
+    head = data[:64]
+    mime: str | None = _sniff_image_mime(head)
+    if mime is None:
+        mime = _sniff_pdf_mime(head)
+    if mime is None:
+        mime = _sniff_oledoc_mime(head)
+    if mime is None:
+        mime = _sniff_docx_mime(head, name)
+    if mime is None:
         mime = _coerce_request_mime(file.content_type, name)
         if mime in ("text/plain", "text/markdown"):
             try:
@@ -1356,13 +1394,39 @@ async def post_chat_attachment(
                         },
                     },
                 ) from exc
+    elif mime in ("text/plain", "text/markdown"):
+        try:
+            data.decode("utf-8")
+        except UnicodeError as exc:
+            raise HTTPException(
+                status_code=415,
+                detail={
+                    "error": {
+                        "code": "ATTACHMENT_TEXT_NOT_UTF8",
+                        "message": "Text attachment must be valid UTF-8.",
+                    },
+                },
+            ) from exc
     if mime is None or mime not in CHAT_UPLOAD_ALLOWED_MIME:
         raise HTTPException(
             status_code=415,
             detail={
                 "error": {
                     "code": "ATTACHMENT_UNSUPPORTED_TYPE",
-                    "message": "Unsupported file type. Use png, jpeg, webp, plain text, or markdown.",
+                    "message": (
+                        "Unsupported file type. Use PNG, JPEG, GIF, WebP, PDF, plain text, "
+                        "markdown, DOC, or DOCX."
+                    ),
+                },
+            },
+        )
+    if mime.startswith("image/") and len(data) > _CHAT_ATTACHMENT_IMAGE_MAX_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail={
+                "error": {
+                    "code": "ATTACHMENT_TOO_LARGE",
+                    "message": f"Image exceeds maximum size ({_CHAT_ATTACHMENT_IMAGE_MAX_BYTES} bytes).",
                 },
             },
         )

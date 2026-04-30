@@ -51,7 +51,7 @@ export function WorkspaceChatAttachmentButton({
         disabled={disabled}
         onClick={() => inputRef.current?.click()}
         aria-label={ariaLabel}
-        title="Add attachments — text and images are inlined into the message (max 500 KB each, up to 8 files)."
+        title="Add attachments — upload to Ham (images max 10 MB, documents max 20 MB, up to 5 files)."
       >
         <Plus className="h-5 w-5" strokeWidth={1.5} />
       </Button>

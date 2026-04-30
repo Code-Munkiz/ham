@@ -25,6 +25,10 @@ CHAT_UPLOAD_ALLOWED_MIME = frozenset(
         "image/jpeg",
         "image/jpg",
         "image/webp",
+        "image/gif",
+        "application/pdf",
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         "text/plain",
         "text/markdown",
     }
@@ -100,7 +104,7 @@ def default_attachment_max_bytes() -> int:
             return max(1, int(raw_img))
         except ValueError:
             pass
-    return 500 * 1024
+    return 20 * 1024 * 1024
 
 
 def default_attachment_dir() -> Path:

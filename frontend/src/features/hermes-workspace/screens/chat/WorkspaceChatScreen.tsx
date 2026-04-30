@@ -58,8 +58,10 @@ import {
   buildFileForServerUpload,
   fileToWorkspaceAttachment,
   formatAttachmentByteSize,
-  MAX_WORKSPACE_ATTACHMENT_BYTES,
   MAX_WORKSPACE_ATTACHMENT_COUNT,
+  MAX_WORKSPACE_DOCUMENT_BYTES,
+  MAX_WORKSPACE_IMAGE_BYTES,
+  revokeWorkspaceComposerAttachmentPreviews,
   type WorkspaceComposerAttachment,
 } from "./composerAttachmentHelpers";
 import { Button } from "@/components/ui/button";
@@ -880,7 +882,10 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     setInspectorEvents([]);
     setArtifactRows([]);
     setInput("");
-    setAttachments([]);
+    setAttachments((prev) => {
+      revokeWorkspaceComposerAttachmentPreviews(prev);
+      return [];
+    });
     setLoadErr(null);
     if (!embedMode) {
       navigate({ pathname: "/workspace/chat", search: "" }, { replace: true });
@@ -908,8 +913,10 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       try {
         const a = await fileToWorkspaceAttachment(f);
         if (a == null) {
+          const isImgGuess = /^image\//i.test(f.type || "") || /\.(jpe?g|png|gif|webp)$/i.test(f.name || "");
+          const cap = isImgGuess ? MAX_WORKSPACE_IMAGE_BYTES : MAX_WORKSPACE_DOCUMENT_BYTES;
           toast.error(
-            `“${f.name || "file"}” is too large (max ${formatAttachmentByteSize(MAX_WORKSPACE_ATTACHMENT_BYTES)} per file, after compression for images).`,
+            `“${f.name || "file"}” is too large (max ${formatAttachmentByteSize(cap)} for ${isImgGuess ? "images" : "documents"}).`,
           );
           continue;
         }
@@ -1013,7 +1020,10 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         const plain = String(outboundUser || "").trim();
         if (!plain) return;
         setInput("");
-        setAttachments([]);
+        setAttachments((prev) => {
+          revokeWorkspaceComposerAttachmentPreviews(prev);
+          return [];
+        });
         setLoadErr(null);
         setSending(true);
         const userRow: HwwMsgRow = {
@@ -1060,7 +1070,10 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         return;
       }
       setInput("");
-      setAttachments([]);
+      setAttachments((prev) => {
+        revokeWorkspaceComposerAttachmentPreviews(prev);
+        return [];
+      });
       setLoadErr(null);
       setSending(true);
       streamTurnSessionRef.current = null;
@@ -1877,7 +1890,11 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
             attachments={attachments}
             onAddAttachments={handleAddAttachments}
             onRemoveAttachment={(id) => {
-              setAttachments((p) => p.filter((a) => a.id !== id));
+              setAttachments((p) => {
+                const dying = p.find((a) => a.id === id);
+                if (dying) revokeWorkspaceComposerAttachmentPreviews([dying]);
+                return p.filter((a) => a.id !== id);
+              });
             }}
             catalog={catalog}
             modelId={modelId}

@@ -23,7 +23,10 @@ function fileExt(name: string): string {
 
 export function WorkspaceChatAttachmentPreview({ attachment, onRemove }: WorkspaceChatAttachmentPreviewProps) {
   const hasError = Boolean(attachment.error);
-  const showImg = !hasError && attachment.kind === "image" && attachment.payload.startsWith("data:");
+  const showImg =
+    !hasError &&
+    attachment.kind === "image" &&
+    (attachment.payload.startsWith("data:") || attachment.payload.startsWith("blob:"));
 
   return (
     <div
