@@ -32,6 +32,7 @@ _RE_UUID = re.compile(
 )
 
 MissionLifecycle = Literal["open", "succeeded", "failed", "archived"]
+MissionBoardState = Literal["backlog", "active", "archive"]
 MissionCheckpoint = Literal[
     "queued",
     "launched",
@@ -45,6 +46,7 @@ MissionCheckpoint = Literal[
 _MAX_CHECKPOINT_REASON = 160
 _CHECKPOINT_HISTORY_CAP = 24
 _FEED_HISTORY_CAP = 120
+_MAX_HERMES_ADVISORY_NOTES = 1_800
 _QUEUED_TOKENS = {
     "QUEUED",
     "PENDING",
@@ -284,6 +286,17 @@ def append_mission_feed_event(
     return nxt
 
 
+def sync_mission_board_state_with_lifecycle(m: ManagedMission) -> ManagedMission:
+    """
+    When lifecycle reaches a terminal provider mapping, move ``active`` board lane to ``archive``.
+
+    Does not change ``backlog`` (operator backlog) automatically.
+    """
+    if m.mission_lifecycle in ("succeeded", "failed", "archived") and m.mission_board_state == "active":
+        return m.model_copy(update={"mission_board_state": "archive"})
+    return m
+
+
 def map_cursor_to_mission_lifecycle(
     *,
     current: MissionLifecycle,
@@ -352,6 +365,15 @@ class ManagedMission(BaseModel):
     last_post_deploy_state: str | None = None
     last_post_deploy_reason_code: str | None = None
 
+    # Phase D: explicit operator-facing board lane (not a mission graph / queue).
+    mission_board_state: MissionBoardState = "active"
+
+    # Phase C: optional HermesReviewer advisory (operator-triggered; does not drive lifecycle).
+    hermes_advisory_triggered_at: str | None = None
+    hermes_advisory_ok: bool | None = None
+    hermes_advisory_notes: str | None = None
+    hermes_advisory_truncated: bool = False
+
     @field_validator(
         "cursor_status_last_observed",
         "status_reason_last_observed",
@@ -400,6 +422,26 @@ class ManagedMission(BaseModel):
         if s in ("open", "succeeded", "failed", "archived"):
             return cast(MissionLifecycle, s)
         return "open"
+
+    @field_validator("mission_board_state", mode="before")
+    @classmethod
+    def _v_board(cls, v: object) -> MissionBoardState:
+        s = str(v or "").strip().lower()
+        if s in ("backlog", "active", "archive"):
+            return cast(MissionBoardState, s)
+        return "active"
+
+    @field_validator("hermes_advisory_notes", mode="before")
+    @classmethod
+    def _v_hermes_notes(cls, v: object) -> str | None:
+        if v is None:
+            return None
+        t = str(v).strip()
+        if not t:
+            return None
+        if len(t) > _MAX_HERMES_ADVISORY_NOTES:
+            return t[: _MAX_HERMES_ADVISORY_NOTES - 1] + "…"
+        return t
 
     @field_validator("mission_deploy_approval_mode", mode="before")
     @classmethod

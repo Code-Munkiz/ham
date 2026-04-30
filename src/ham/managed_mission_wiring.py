@@ -20,6 +20,7 @@ from src.persistence.managed_mission import (
     derive_mission_checkpoint,
     map_cursor_to_mission_lifecycle,
     new_mission_registry_id,
+    sync_mission_board_state_with_lifecycle,
 )
 from src.persistence.project_store import get_project_store
 
@@ -254,6 +255,7 @@ def observe_mission_from_cursor_payload(*, raw: Mapping[str, Any] | None) -> Non
         }
     )
     m2 = _with_derived_checkpoint(m2, observed_at=n)
+    m2 = sync_mission_board_state_with_lifecycle(m2)
     st.save(m2)
 
 
@@ -297,6 +299,7 @@ def maybe_patch_mission_from_vercel_managed_response(
         }
     )
     m2 = _with_derived_checkpoint(m2, observed_at=n)
+    m2 = sync_mission_board_state_with_lifecycle(m2)
     get_managed_mission_store().save(m2)
 
 
@@ -331,4 +334,5 @@ def maybe_patch_mission_from_post_deploy_response(
         }
     )
     m2 = _with_derived_checkpoint(m2, observed_at=n)
+    m2 = sync_mission_board_state_with_lifecycle(m2)
     get_managed_mission_store().save(m2)

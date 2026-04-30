@@ -6,24 +6,31 @@ import asyncio
 import json
 import os
 import re
-from typing import Annotated, Any
+import time
+from datetime import datetime
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from src.api.clerk_gate import get_ham_clerk_actor
-from src.ham.clerk_auth import HamActor
+from src.ham.clerk_auth import HamActor, resolve_ham_operator_authorization_header
 from src.ham.cursor_provider_adapter import (
     map_cursor_conversation_to_feed_events,
     map_cursor_sdk_bridge_to_feed_events,
     provider_capability_matrix,
     provider_projection_envelope,
 )
+from src.ham.managed_mission_truth import (
+    managed_mission_correlation,
+    managed_mission_truth_table,
+)
 from src.ham.managed_mission_wiring import (
     get_managed_mission_store,
     observe_mission_from_cursor_payload,
 )
+from src.hermes_feedback import HermesReviewer
 from src.integrations.cursor_cloud_client import (
     CursorCloudApiError,
     cursor_api_cancel_agent,
@@ -37,20 +44,128 @@ from src.integrations.cursor_sdk_bridge_client import (
     stream_cursor_sdk_bridge_events,
 )
 from src.persistence.cursor_credentials import get_effective_cursor_api_key
+from src.persistence.control_plane_run import ControlPlaneRunStore, utc_now_iso
 from src.persistence.managed_mission import (
     ManagedMission,
     ManagedMissionStore,
     MissionFeedEvent,
     append_mission_feed_event,
 )
-from src.persistence.control_plane_run import utc_now_iso
 
 _UUID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
     re.I,
 )
 
+_MAX_MISSION_REVIEW_FEED_LINES = 40
+_MAX_MISSION_REVIEW_CODE_CHARS = 2_000
+_MAX_MISSION_REVIEW_CONTEXT_CHARS = 6_000
+_MISSION_HERMES_STALE_SECONDS_DEFAULT = 900
+
 _store = ManagedMissionStore()
+_cp_store_singleton: ControlPlaneRunStore | None = None
+
+
+def set_control_plane_run_store_for_tests(store: ControlPlaneRunStore | None) -> None:
+    """Test hook: replace process-global control-plane store used by managed mission correlation."""
+    global _cp_store_singleton
+    _cp_store_singleton = store
+
+
+def _control_plane_store() -> ControlPlaneRunStore:
+    global _cp_store_singleton
+    if _cp_store_singleton is None:
+        _cp_store_singleton = ControlPlaneRunStore()
+    return _cp_store_singleton
+
+
+def _require_managed_mission_write_token(authorization: str | None) -> None:
+    expected = (os.environ.get("HAM_MANAGED_MISSION_WRITE_TOKEN") or "").strip()
+    if not expected:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": {
+                    "code": "MANAGED_MISSION_WRITES_DISABLED",
+                    "message": "Set HAM_MANAGED_MISSION_WRITE_TOKEN to enable board-state and Hermes advisory writes.",
+                }
+            },
+        )
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=401,
+            detail={
+                "error": {
+                    "code": "MANAGED_MISSION_AUTH_REQUIRED",
+                    "message": "Authorization: Bearer <HAM_MANAGED_MISSION_WRITE_TOKEN> required.",
+                }
+            },
+        )
+    got = authorization[7:].strip()
+    if got != expected:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": {
+                    "code": "MANAGED_MISSION_AUTH_INVALID",
+                    "message": "Invalid managed mission write token.",
+                }
+            },
+        )
+
+
+def _hermes_advisory_stale_seconds() -> int:
+    raw = (os.environ.get("HAM_MANAGED_MISSION_HERMES_STALE_SECONDS") or "").strip()
+    try:
+        n = int(raw) if raw else _MISSION_HERMES_STALE_SECONDS_DEFAULT
+    except ValueError:
+        n = _MISSION_HERMES_STALE_SECONDS_DEFAULT
+    return max(60, min(n, 86400))
+
+
+def _iso_to_epoch_seconds(iso: str | None) -> float | None:
+    if not iso or not str(iso).strip():
+        return None
+    s = str(iso).strip()
+    try:
+        if s.endswith("Z"):
+            s2 = s[:-1] + "+00:00"
+        else:
+            s2 = s
+        return datetime.fromisoformat(s2).timestamp()
+    except ValueError:
+        return None
+
+
+def _hermes_advisory_is_stale(m: ManagedMission) -> bool:
+    ts = _iso_to_epoch_seconds(m.hermes_advisory_triggered_at)
+    if ts is None:
+        return False
+    return (time.time() - ts) >= float(_hermes_advisory_stale_seconds())
+
+
+def _build_mission_review_artifact(m: ManagedMission) -> tuple[str, str]:
+    lines: list[str] = []
+    tail = m.mission_feed_events[-_MAX_MISSION_REVIEW_FEED_LINES:]
+    for ev in tail:
+        lines.append(f"[{ev.kind}] {ev.message}")
+    code = "\n".join(lines).strip() or "(no feed lines)"
+    if len(code) > _MAX_MISSION_REVIEW_CODE_CHARS:
+        code = code[: _MAX_MISSION_REVIEW_CODE_CHARS - 1] + "…"
+    ctx_parts = [
+        f"mission_registry_id={m.mission_registry_id}",
+        f"cursor_agent_id={m.cursor_agent_id}",
+        f"mission_lifecycle={m.mission_lifecycle}",
+        f"cursor_status_last_observed={m.cursor_status_last_observed}",
+        f"mission_checkpoint_latest={m.mission_checkpoint_latest}",
+        f"repository_observed={m.repository_observed}",
+        f"ref_observed={m.ref_observed}",
+        f"pr_url_last_observed={m.pr_url_last_observed}",
+    ]
+    context = "\n".join(ctx_parts)
+    if len(context) > _MAX_MISSION_REVIEW_CONTEXT_CHARS:
+        context = context[: _MAX_MISSION_REVIEW_CONTEXT_CHARS - 1] + "…"
+    return code, context
 
 router = APIRouter(
     prefix="/api/cursor/managed",
@@ -60,6 +175,10 @@ router = APIRouter(
 
 class MissionMessageBody(BaseModel):
     message: str = Field(min_length=1, max_length=4000)
+
+
+class MissionBoardStateBody(BaseModel):
+    mission_board_state: Literal["backlog", "active", "archive"]
 
 
 def _get_mission_or_404(mission_registry_id: str) -> ManagedMission:
@@ -276,7 +395,29 @@ def _public_mission(m: ManagedMission) -> dict[str, Any]:
     d["checkpoint_events"] = [
         e.model_dump(mode="json", exclude_none=False) for e in m.mission_checkpoint_events
     ]
+    d["hermes_advisory_stale"] = _hermes_advisory_is_stale(m)
     return d
+
+
+def _control_plane_public_subset(ham_run_id: str) -> dict[str, Any] | None:
+    r = _control_plane_store().get(ham_run_id.strip())
+    if r is None:
+        return None
+    return {
+        "ham_run_id": r.ham_run_id,
+        "provider": r.provider,
+        "action_kind": r.action_kind,
+        "project_id": r.project_id,
+        "status": r.status,
+        "status_reason": r.status_reason,
+        "external_id": r.external_id,
+        "summary": r.summary,
+        "error_summary": r.error_summary,
+        "created_at": r.created_at,
+        "updated_at": r.updated_at,
+        "last_observed_at": r.last_observed_at,
+        "last_provider_status": r.last_provider_status,
+    }
 
 
 def _compose_managed_mission_feed_bundle(m: ManagedMission) -> tuple[ManagedMission, dict[str, Any]]:
@@ -372,6 +513,125 @@ async def get_managed_mission(
 ) -> dict[str, Any]:
     m = _get_mission_or_404(mission_registry_id)
     return _public_mission(m)
+
+
+@router.get("/missions/{mission_registry_id}/truth")
+async def get_managed_mission_truth(
+    mission_registry_id: str,
+    _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
+) -> dict[str, Any]:
+    m = _get_mission_or_404(mission_registry_id)
+    return managed_mission_truth_table(m=m)
+
+
+@router.get("/missions/{mission_registry_id}/correlation")
+async def get_managed_mission_correlation(
+    mission_registry_id: str,
+    _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
+) -> dict[str, Any]:
+    m = _get_mission_or_404(mission_registry_id)
+    base = managed_mission_correlation(m=m)
+    hid = m.control_plane_ham_run_id
+    if hid and str(hid).strip():
+        run = _control_plane_public_subset(str(hid))
+        if run:
+            base["control_plane_run"] = run
+    return base
+
+
+@router.patch("/missions/{mission_registry_id}/board")
+async def patch_managed_mission_board(
+    mission_registry_id: str,
+    body: MissionBoardStateBody,
+    _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
+    authorization: Annotated[str | None, Header()] = None,
+    x_ham_operator_authorization: Annotated[str | None, Header()] = None,
+) -> dict[str, Any]:
+    ham_bearer = resolve_ham_operator_authorization_header(
+        authorization=authorization,
+        x_ham_operator_authorization=x_ham_operator_authorization,
+    )
+    _require_managed_mission_write_token(ham_bearer)
+    m = _get_mission_or_404(mission_registry_id)
+    n = utc_now_iso()
+    m2 = m.model_copy(
+        update={
+            "mission_board_state": body.mission_board_state,
+            "updated_at": n,
+            "last_server_observed_at": n,
+            "mission_feed_events": append_mission_feed_event(
+                existing=m.mission_feed_events,
+                observed_at=n,
+                kind="board_state",
+                source="ham",
+                message=f"Board lane set to {body.mission_board_state}.",
+                reason_code="mission_board_state_updated",
+            ),
+        }
+    )
+    _store.save(m2)
+    return {"ok": True, "mission": _public_mission(m2)}
+
+
+@router.post("/missions/{mission_registry_id}/hermes-advisory")
+async def post_managed_mission_hermes_advisory(
+    mission_registry_id: str,
+    _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
+    authorization: Annotated[str | None, Header()] = None,
+    x_ham_operator_authorization: Annotated[str | None, Header()] = None,
+) -> dict[str, Any]:
+    ham_bearer = resolve_ham_operator_authorization_header(
+        authorization=authorization,
+        x_ham_operator_authorization=x_ham_operator_authorization,
+    )
+    _require_managed_mission_write_token(ham_bearer)
+    m = _get_mission_or_404(mission_registry_id)
+    n = utc_now_iso()
+    code, context = _build_mission_review_artifact(m)
+    reviewer = HermesReviewer()
+    result = reviewer.evaluate(code, context)
+    notes_list = result.get("notes") if isinstance(result.get("notes"), list) else []
+    notes_join = "; ".join(str(x).strip() for x in notes_list if str(x).strip())
+    truncated = len(notes_join) > 1700
+    notes_capped = (notes_join[:1700] + "…") if truncated else (notes_join or None)
+    ok_val = result.get("ok")
+    advisory_ok: bool | None
+    if isinstance(ok_val, bool):
+        advisory_ok = ok_val
+    else:
+        advisory_ok = None
+    m2 = m.model_copy(
+        update={
+            "hermes_advisory_triggered_at": n,
+            "hermes_advisory_ok": advisory_ok,
+            "hermes_advisory_notes": notes_capped,
+            "hermes_advisory_truncated": truncated,
+            "last_review_headline": notes_capped[:400] if notes_capped else m.last_review_headline,
+            "last_review_severity": ("advisory" if advisory_ok is not None else m.last_review_severity),
+            "updated_at": n,
+            "last_server_observed_at": n,
+            "mission_feed_events": append_mission_feed_event(
+                existing=m.mission_feed_events,
+                observed_at=n,
+                kind="hermes_advisory",
+                source="ham",
+                message="Hermes advisory review recorded (does not change provider lifecycle).",
+                reason_code="hermes_advisory_recorded",
+            ),
+        }
+    )
+    _store.save(m2)
+    return {
+        "ok": True,
+        "mission_id": m2.mission_registry_id,
+        "hermes_advisory": {
+            "triggered_at": m2.hermes_advisory_triggered_at,
+            "ok": m2.hermes_advisory_ok,
+            "notes": m2.hermes_advisory_notes,
+            "truncated": m2.hermes_advisory_truncated,
+        },
+        "reviewer_result_keys": sorted(str(k) for k in result.keys()) if isinstance(result, dict) else [],
+    }
 
 
 @router.get("/missions/{mission_registry_id}/feed")
