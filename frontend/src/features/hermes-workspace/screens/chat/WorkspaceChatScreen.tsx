@@ -32,11 +32,10 @@ import {
 import { workspaceChatAdapter, workspaceSessionAdapter } from "../../workspaceAdapters";
 import {
   fetchManagedMissionDetail,
-  fetchManagedMissionFeed,
   postManagedMissionMessage,
-  type ManagedMissionFeedPayload,
   type ManagedMissionSnapshot,
 } from "../../adapters/managedMissionsAdapter";
+import { useManagedMissionFeedPoll } from "../../hooks/useManagedMissionFeedPoll";
 import { useVoiceWorkspaceSettingsOptional } from "../../voice/VoiceWorkspaceSettingsContext";
 import { WorkspaceChatEmptyState } from "./WorkspaceChatEmptyState";
 import { WorkspaceChatMessageList, type HwwMsgRow } from "./WorkspaceChatMessageList";
@@ -330,6 +329,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   const chatScreenInstanceId = React.useRef(`chat-screen-${Math.random().toString(36).slice(2, 9)}`);
   const [searchParams] = useSearchParams();
   const missionIdFromQuery = embedMode ? null : (searchParams.get("mission_id") || "").trim() || null;
+  const { feed: missionFeed, refetch: refetchMissionFeed } = useManagedMissionFeedPoll(missionIdFromQuery);
   const [messages, setMessages] = React.useState<HwwMsgRow[]>([]);
   const [sessionId, setSessionId] = React.useState<string | null>(null);
   const [input, setInput] = React.useState("");
@@ -339,7 +339,6 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   const [catalog, setCatalog] = React.useState<ModelCatalogPayload | null>(null);
   const [catalogLoading, setCatalogLoading] = React.useState(true);
   const [missionContext, setMissionContext] = React.useState<ManagedMissionSnapshot | null>(null);
-  const [missionFeed, setMissionFeed] = React.useState<ManagedMissionFeedPayload | null>(null);
   const [missionLoading, setMissionLoading] = React.useState(false);
   const [missionError, setMissionError] = React.useState<string | null>(null);
   const [modelId, setModelId] = React.useState<string | null>(null);
@@ -624,7 +623,6 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     const missionId = String(missionIdFromQuery || "").trim();
     if (!missionId) {
       setMissionContext(null);
-      setMissionFeed(null);
       setMissionError(null);
       setMissionLoading(false);
       return;
@@ -632,10 +630,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     setMissionLoading(true);
     setMissionError(null);
     void (async () => {
-      const [m, f] = await Promise.all([
-        fetchManagedMissionDetail(missionId),
-        fetchManagedMissionFeed(missionId),
-      ]);
+      const m = await fetchManagedMissionDetail(missionId);
       if (cancelled) return;
       setMissionLoading(false);
       if (m.mission) {
@@ -644,7 +639,6 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         setMissionContext(null);
         setMissionError(m.error ?? "Could not load mission context.");
       }
-      setMissionFeed(f.feed ?? null);
     })();
     return () => {
       cancelled = true;
@@ -926,12 +920,11 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
               : m,
           ),
         );
-        const [mFresh, fFresh] = await Promise.all([
+        const [mFresh] = await Promise.all([
           fetchManagedMissionDetail(missionModeId),
-          fetchManagedMissionFeed(missionModeId),
+          refetchMissionFeed(),
         ]);
         setMissionContext(mFresh.mission);
-        setMissionFeed(fFresh.feed);
         if (!mFresh.mission) {
           setMissionError(mFresh.error ?? "Could not refresh mission context.");
         }
@@ -1501,6 +1494,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       chatModelIdForApi,
       projectId,
       missionIdFromQuery,
+      refetchMissionFeed,
       navigate,
       executionModePreference,
       executionEnvironment,
@@ -1560,6 +1554,12 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   const staleSessionParam = embedMode ? null : searchParams.get("session");
   const missionModeActive = Boolean(missionIdFromQuery);
   const missionTitle = missionContext?.title || missionContext?.task_summary || "Mission";
+  const missionBannerLifecycle = missionFeed?.lifecycle ?? missionContext?.mission_lifecycle;
+  const missionBannerCheckpoint =
+    missionFeed?.latest_checkpoint ??
+    missionContext?.latest_checkpoint ??
+    missionContext?.cursor_status_last_observed ??
+    "waiting";
   const headerTitle = sessionLoadFailed
     ? "Session unavailable"
     : missionModeActive
@@ -1635,9 +1635,9 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
                   </span>
                   <span className="font-medium text-white/90">{missionTitle}</span>
                   <span className="text-white/40">·</span>
-                  <span>{missionContext.mission_lifecycle}</span>
+                  <span>{missionBannerLifecycle}</span>
                   <span className="text-white/40">·</span>
-                  <span>{missionContext.latest_checkpoint || missionContext.cursor_status_last_observed || "waiting"}</span>
+                  <span>{missionBannerCheckpoint}</span>
                 </div>
                 <p className="text-[11px] text-white/55">
                   {missionContext.repository_observed || "—"} @ {missionContext.ref_observed || "default"} · mission{" "}

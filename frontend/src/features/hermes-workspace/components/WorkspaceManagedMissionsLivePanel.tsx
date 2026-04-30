@@ -6,13 +6,12 @@ import { cn } from "@/lib/utils";
 import {
   cancelManagedMission,
   fetchManagedMissionDetail,
-  fetchManagedMissionFeed,
   fetchManagedMissions,
-  type ManagedMissionFeedPayload,
   syncManagedMissionByAgentId,
   type ManagedMissionLifecycle,
   type ManagedMissionSnapshot,
 } from "../adapters/managedMissionsAdapter";
+import { useManagedMissionFeedPoll } from "../hooks/useManagedMissionFeedPoll";
 import { WorkspaceSurfaceStateCard } from "./workspaceSurfaceChrome";
 
 function formatRelativeIso(iso: string | null | undefined, nowMs: number) {
@@ -126,8 +125,12 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, variant }: Pr
   const [cancelMissionId, setCancelMissionId] = React.useState<string | null>(null);
   const [actionError, setActionError] = React.useState<string | null>(null);
   const [selectedMissionId, setSelectedMissionId] = React.useState<string | null>(null);
-  const [selectedFeed, setSelectedFeed] = React.useState<ManagedMissionFeedPayload | null>(null);
-  const [selectedFeedLoading, setSelectedFeedLoading] = React.useState(false);
+
+  const {
+    feed: selectedFeed,
+    loading: selectedFeedLoading,
+    refetch: refetchSelectedFeed,
+  } = useManagedMissionFeedPoll(selectedMissionId, { refreshSignal });
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -146,32 +149,12 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, variant }: Pr
   React.useEffect(() => {
     if (!missions.length) {
       setSelectedMissionId(null);
-      setSelectedFeed(null);
       return;
     }
     if (!selectedMissionId || !missions.some((m) => m.mission_registry_id === selectedMissionId)) {
       setSelectedMissionId(missions[0].mission_registry_id);
     }
   }, [missions, selectedMissionId]);
-
-  React.useEffect(() => {
-    let cancelled = false;
-    const missionId = String(selectedMissionId || "").trim();
-    if (!missionId) return;
-    setSelectedFeedLoading(true);
-    void fetchManagedMissionFeed(missionId).then((r) => {
-      if (cancelled) return;
-      setSelectedFeedLoading(false);
-      if (r.feed) {
-        setSelectedFeed(r.feed);
-      } else {
-        setSelectedFeed(null);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedMissionId, missions, refreshSignal]);
 
   React.useEffect(() => {
     const t = window.setInterval(() => setNow(Date.now()), 30_000);
@@ -212,10 +195,7 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, variant }: Pr
       return;
     }
     await load();
-    if (selectedMissionId) {
-      const feed = await fetchManagedMissionFeed(selectedMissionId);
-      if (feed.feed) setSelectedFeed(feed.feed);
-    }
+    await refetchSelectedFeed();
     if (r.mission) {
       setDetailMission((cur) => {
         if (!cur) return cur;
@@ -239,10 +219,7 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, variant }: Pr
       setActionError(r.reasonCode === "cancel_not_supported" ? "Stop is not supported for this provider yet." : (r.reasonCode || "Stop request was not accepted."));
     }
     await load();
-    if (selectedMissionId) {
-      const feed = await fetchManagedMissionFeed(selectedMissionId);
-      if (feed.feed) setSelectedFeed(feed.feed);
-    }
+    await refetchSelectedFeed();
   };
 
   const title = "Live Cloud Agent missions";

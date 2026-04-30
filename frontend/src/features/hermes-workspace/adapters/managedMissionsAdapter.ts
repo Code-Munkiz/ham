@@ -9,6 +9,31 @@ const CURSOR_BASE = "/api/cursor";
 
 export type ManagedMissionLifecycle = "open" | "succeeded" | "failed" | "archived";
 
+/** Bounded REST poll: active tab, non-terminal mission. */
+export const MANAGED_MISSION_FEED_POLL_MS_ACTIVE = 12_000;
+/** Slow when tab hidden (still REST polling, not streaming). */
+export const MANAGED_MISSION_FEED_POLL_MS_HIDDEN = 60_000;
+/** Terminal mission: rare check while tab visible. */
+export const MANAGED_MISSION_FEED_POLL_MS_TERMINAL_VISIBLE = 120_000;
+/** Terminal + hidden: minimal wake-ups. */
+export const MANAGED_MISSION_FEED_POLL_MS_TERMINAL_HIDDEN = 300_000;
+
+export function isManagedMissionLifecycleTerminal(lifecycle: ManagedMissionLifecycle): boolean {
+  return lifecycle === "succeeded" || lifecycle === "failed" || lifecycle === "archived";
+}
+
+/** Next REST poll delay (ms) from last feed lifecycle and tab visibility — exported for tests/scheduling. */
+export function managedMissionFeedPollDelayMs(
+  lifecycle: ManagedMissionLifecycle | null | undefined,
+  documentHidden: boolean,
+): number {
+  const terminal = lifecycle ? isManagedMissionLifecycleTerminal(lifecycle) : false;
+  if (terminal) {
+    return documentHidden ? MANAGED_MISSION_FEED_POLL_MS_TERMINAL_HIDDEN : MANAGED_MISSION_FEED_POLL_MS_TERMINAL_VISIBLE;
+  }
+  return documentHidden ? MANAGED_MISSION_FEED_POLL_MS_HIDDEN : MANAGED_MISSION_FEED_POLL_MS_ACTIVE;
+}
+
 /** Public mission shape from GET list/detail and POST .../sync (exclude_none=false on server may include nulls). */
 export type ManagedMissionSnapshot = {
   kind: "managed_mission";
