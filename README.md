@@ -30,6 +30,8 @@ Activate that venv when you run the API, or use `.venv/bin/python -m uvicorn ...
 
 **Dashboard + API on Vercel / Cloud Run:** see [`docs/DEPLOY_HANDOFF.md`](docs/DEPLOY_HANDOFF.md) (env vars, CORS, verify script). GCP commands: [`docs/DEPLOY_CLOUD_RUN.md`](docs/DEPLOY_CLOUD_RUN.md).
 
+**Cursor Cloud Agent from Ham** (preview → launch token → managed mission pointers): [`docs/CURSOR_CLOUD_AGENT_LAUNCH.md`](docs/CURSOR_CLOUD_AGENT_LAUNCH.md).
+
 ## Project layout
 
 - `src/hermes_feedback.py` — Hermes supervisory/critic MVP surface (reviewer implemented)

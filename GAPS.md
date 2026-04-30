@@ -5,6 +5,8 @@ Each item tracks what is missing, why it matters, and what blocks it.
 
 **Cloud Agent + managed missions (what works vs stub + phased roadmap):** see [`docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md`](docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md).
 
+**Launch a Cursor Cloud Agent from Ham (keys, preview, confirm, verify):** see [`docs/CURSOR_CLOUD_AGENT_LAUNCH.md`](docs/CURSOR_CLOUD_AGENT_LAUNCH.md).
+
 ## Active implementation notes (Cursor / hardening)
 
 - Context Engine hardening and **Phase 1** (Hermes-aligned scanning, tool-output pruning, config-driven compaction thresholds) are **complete** in `src/memory_heist.py`; **Phase 3** guardrail tests are in `tests/test_memory_heist.py` (18 cases).

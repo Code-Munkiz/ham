@@ -8,6 +8,8 @@ description: >-
 
 # Cloud Agent Starter — run + test Ham fast
 
+**Launching a Cursor Cloud Agent against a repo from a deployed Ham API** (managed mission, launch token, chat `operator` phases) is documented in-repo at **`docs/CURSOR_CLOUD_AGENT_LAUNCH.md`** — this skill stays focused on **local install + smoke tests**.
+
 ## When to use
 
 - First run in a fresh Cloud workspace
