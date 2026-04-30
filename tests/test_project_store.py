@@ -197,3 +197,21 @@ def test_ensure_default_cursor_metadata_backfills_existing_project(
     assert updated is not None
     assert updated.metadata.get("cursor_cloud_repository") == "Code-Munkiz/ham"
     assert updated.metadata.get("cursor_cloud_ref") == "main"
+
+
+def test_ensure_default_cursor_metadata_creates_default_project_when_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setenv("HAM_DEFAULT_PROJECT_ID", "project.app-f53b52")
+    monkeypatch.setenv("HAM_DEFAULT_CURSOR_REPOSITORY", "Code-Munkiz/ham")
+    monkeypatch.setenv("HAM_DEFAULT_CURSOR_REF", "main")
+    monkeypatch.setenv("HAM_DEFAULT_PROJECT_ROOT", "/app")
+    store = ProjectStore(store_path=tmp_path / "projects.json")
+    assert store.list_projects() == []
+    assert store.ensure_default_cursor_metadata() is True
+    created = store.get_project("project.app-f53b52")
+    assert created is not None
+    assert created.name == "app"
+    assert created.root == "/app"
+    assert created.metadata.get("cursor_cloud_repository") == "Code-Munkiz/ham"
+    assert created.metadata.get("cursor_cloud_ref") == "main"

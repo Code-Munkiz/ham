@@ -14,6 +14,7 @@ from src.registry.projects import ProjectRecord
 
 _DEFAULT_STORE_PATH = Path.home() / ".ham" / "projects.json"
 _DEFAULT_PROJECT_ID_ENV = "HAM_DEFAULT_PROJECT_ID"
+_DEFAULT_PROJECT_ROOT_ENV = "HAM_DEFAULT_PROJECT_ROOT"
 _DEFAULT_CURSOR_REPOSITORY_ENV = "HAM_DEFAULT_CURSOR_REPOSITORY"
 _DEFAULT_CURSOR_REF_ENV = "HAM_DEFAULT_CURSOR_REF"
 
@@ -123,7 +124,11 @@ class ProjectStore:
             return False
         project = self.get_project(project_id)
         if project is None:
-            return False
+            project = self._create_default_project_record(defaults)
+            if project is None:
+                return False
+            self.register(project)
+            return True
         updated = self._apply_default_cursor_metadata(project)
         if updated == project:
             return False
@@ -149,6 +154,25 @@ class ProjectStore:
             return record
         return record.model_copy(update={"metadata": merged})
 
+    def _create_default_project_record(self, defaults: dict[str, str]) -> ProjectRecord | None:
+        project_id = str(defaults.get("project_id") or "").strip()
+        repo = str(defaults.get("cursor_cloud_repository") or "").strip()
+        if not project_id or not repo:
+            return None
+        root = (os.environ.get(_DEFAULT_PROJECT_ROOT_ENV) or "/app").strip() or "/app"
+        name = _project_name_from_id(project_id)
+        metadata: dict[str, str] = {"cursor_cloud_repository": repo}
+        ref = str(defaults.get("cursor_cloud_ref") or "").strip()
+        if ref:
+            metadata["cursor_cloud_ref"] = ref
+        return ProjectRecord(
+            id=project_id[:180],
+            name=name,
+            root=root[:1000],
+            description="Default project seeded from environment.",
+            metadata=metadata,
+        )
+
 
 def _default_cursor_metadata_from_env() -> dict[str, str]:
     project_id = (os.environ.get(_DEFAULT_PROJECT_ID_ENV) or "").strip()
@@ -162,6 +186,16 @@ def _default_cursor_metadata_from_env() -> dict[str, str]:
     if ref:
         out["cursor_cloud_ref"] = ref[:500]
     return out
+
+
+def _project_name_from_id(project_id: str) -> str:
+    if project_id.startswith("project."):
+        body = project_id[len("project.") :]
+        if "-" in body:
+            name = body.rsplit("-", 1)[0]
+            if name:
+                return name
+    return "app"
 
 
 # Process-wide registry (tests may replace via :func:`set_project_store_for_tests`).
