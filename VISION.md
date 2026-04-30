@@ -36,8 +36,8 @@ to Droid.
 
 ### 3. Context Engine — memory_heist.py
 
-Adapted from Claude Code's context-awareness runtime. This module gives every
-agent in the swarm a grounded understanding of the local repository:
+Repo-grounded context assembly for the swarm. This module gives every agent a
+grounded understanding of the local repository:
 
 - **Workspace scanning**: filesystem tree, file inventory, ignore rules.
 - **Instruction file discovery**: hierarchical SWARM.md / AGENTS.md loading

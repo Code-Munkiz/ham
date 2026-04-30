@@ -11,6 +11,8 @@ Open-source multi-agent autonomous developer swarm: Hermes supervisory orchestra
 - **Context Engine hardening plan**: [docs/HAM_HARDENING_REMEDIATION.md](docs/HAM_HARDENING_REMEDIATION.md)
 - **Chat control plane (skills + roadmap)**: [docs/HAM_CHAT_CONTROL_PLANE.md](docs/HAM_CHAT_CONTROL_PLANE.md)
 - **Browser Runtime (Playwright) setup/caveats**: [docs/BROWSER_RUNTIME_PLAYWRIGHT.md](docs/BROWSER_RUNTIME_PLAYWRIGHT.md)
+- **Control plane runs (Cursor/Droid launch records)**: [docs/CONTROL_PLANE_RUN.md](docs/CONTROL_PLANE_RUN.md)
+- **Cursor setup (rules, skills, subagents)**: [CURSOR_SETUP_HANDOFF.md](CURSOR_SETUP_HANDOFF.md)
 
 ## Quick start
 
@@ -32,8 +34,23 @@ Activate that venv when you run the API, or use `.venv/bin/python -m uvicorn ...
 
 ## Project layout
 
+- `main.py` — CLI entry: env load, bridge run, Hermes review envelope (see [AGENTS.md](AGENTS.md) for full API vs CLI split)
 - `src/hermes_feedback.py` — Hermes supervisory/critic MVP surface (reviewer implemented)
 - `src/tools/droid_executor.py` — Droid execution backend (bounded `subprocess.run`, timeout, stdout/stderr caps; profile argv + policy gate what actually runs)
 - `src/memory_heist.py` — repo context, instructions, git, sessions
 - `src/llm_client.py` — LiteLLM / OpenRouter
 - `src/swarm_agency.py` — Hermes-supervised role context assembly (no CrewAI; orchestration is Hermes-led)
+- `src/api/server.py` — FastAPI app for the workspace dashboard (chat, runs, settings, skills — index in [AGENTS.md](AGENTS.md))
+- `src/ham_cli/` — operator CLI (`python -m src.ham_cli` or `./scripts/ham`): doctor, status, desktop packaging helpers
+
+## Tests
+
+```bash
+python -m pytest
+```
+
+`pytest.ini` sets `pythonpath = .` (same as CI: `pytest` + frontend `tsc`).
+
+## Coding conventions
+
+Repo-level instructions for agents and contributors: [SWARM.md](SWARM.md).
