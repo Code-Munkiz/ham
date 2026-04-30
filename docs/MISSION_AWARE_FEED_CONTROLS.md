@@ -20,6 +20,12 @@ In Ham, **mission-aware** means the **live mission feed** and **operator control
 
 Frontend wiring lives in `frontend/src/features/hermes-workspace/adapters/managedMissionsAdapter.ts` and **`WorkspaceManagedMissionsLivePanel`**.
 
+## Backend smoke (follow-up events)
+
+Automated checks for **`POST .../messages`** and the resulting **feed** timeline live in `tests/test_managed_mission.py`:
+
+- **`pytest tests/test_managed_mission.py -k followup -v`** — runs cases that assert `followup_instruction` is persisted, plus **`followup_forwarded`** when the Cursor client succeeds (mocked) and **`followup_rejected`** with `mission_followup_not_supported` when the provider returns 404-class errors (mocked).
+
 ## Related docs
 
 - `docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md` — shipped vs partial managed mission behavior.

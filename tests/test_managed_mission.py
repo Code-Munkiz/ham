@@ -28,6 +28,7 @@ from src.persistence.managed_mission import (
     new_mission_registry_id,
 )
 from src.persistence.project_store import ProjectStore, set_project_store_for_tests
+from src.integrations.cursor_cloud_client import CursorCloudApiError
 
 
 def _cp_run(*, eid: str) -> str:
@@ -448,6 +449,100 @@ def test_mission_message_endpoint_records_followup_when_provider_unsupported(
     assert feed.status_code == 200
     events = feed.json()["events"]
     assert any(e.get("kind") == "followup_instruction" for e in events)
+
+
+def test_mission_message_smoke_followup_success_appends_forwarded_event(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When Cursor follow-up succeeds, feed shows instruction then forwarded (smoke for event chain)."""
+    st = cmm._store
+    assert st is not None
+    mid = new_mission_registry_id()
+    n = utc_now_iso()
+    st.save(
+        ManagedMission(
+            mission_registry_id=mid,
+            cursor_agent_id="c-agent-followup-ok",
+            control_plane_ham_run_id=None,
+            mission_handling="managed",
+            uplink_id=None,
+            repo_key="a/b",
+            mission_lifecycle="open",
+            cursor_status_last_observed="RUNNING",
+            status_reason_last_observed="mapped:RUNNING",
+            created_at=n,
+            updated_at=n,
+            last_server_observed_at=n,
+        )
+    )
+    monkeypatch.setattr(cmm, "get_effective_cursor_api_key", lambda: "test-key")
+    monkeypatch.setattr(
+        cmm,
+        "cursor_api_followup_agent",
+        lambda **kwargs: {"status": "ok"},
+    )
+    r = client.post(
+        f"/api/cursor/managed/missions/{mid}/messages",
+        json={"message": "Run the linter."},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["ok"] is True
+    assert body["reason_code"] == "followup_forwarded"
+    feed = client.get(f"/api/cursor/managed/missions/{mid}/feed")
+    assert feed.status_code == 200
+    kinds = [e.get("kind") for e in feed.json()["events"]]
+    assert "followup_instruction" in kinds
+    assert "followup_forwarded" in kinds
+    assert "followup_rejected" not in kinds
+
+
+def test_mission_message_smoke_followup_404_appends_rejected_event(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When Cursor returns 404/405/409/422, feed records followup_rejected with mission_followup_not_supported."""
+    st = cmm._store
+    assert st is not None
+    mid = new_mission_registry_id()
+    n = utc_now_iso()
+    st.save(
+        ManagedMission(
+            mission_registry_id=mid,
+            cursor_agent_id="c-agent-followup-404",
+            control_plane_ham_run_id=None,
+            mission_handling="managed",
+            uplink_id=None,
+            repo_key="a/b",
+            mission_lifecycle="open",
+            cursor_status_last_observed="RUNNING",
+            status_reason_last_observed="mapped:RUNNING",
+            created_at=n,
+            updated_at=n,
+            last_server_observed_at=n,
+        )
+    )
+    monkeypatch.setattr(cmm, "get_effective_cursor_api_key", lambda: "test-key")
+
+    def _boom(**kwargs):
+        raise CursorCloudApiError("not found", status_code=404, body_excerpt="{}")
+
+    monkeypatch.setattr(cmm, "cursor_api_followup_agent", _boom)
+    r = client.post(
+        f"/api/cursor/managed/missions/{mid}/messages",
+        json={"message": "Ping."},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["ok"] is False
+    assert body["reason_code"] == "mission_followup_not_supported"
+    feed = client.get(f"/api/cursor/managed/missions/{mid}/feed")
+    assert feed.status_code == 200
+    events = feed.json()["events"]
+    kinds = [e.get("kind") for e in events]
+    assert "followup_instruction" in kinds
+    assert "followup_rejected" in kinds
+    rejected = [e for e in events if e.get("kind") == "followup_rejected"]
+    assert rejected and rejected[-1].get("reason_code") == "mission_followup_not_supported"
 
 
 def test_mission_cancel_endpoint_returns_stable_unsupported_reason(
