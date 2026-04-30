@@ -58,7 +58,9 @@ From repo root:
 
 Use two terminals/tmux panes:
 
-- Backend (repo root):
+- Backend (repo root, recommended — loads `.env`, default `HERMES_GATEWAY_MODE=mock`, loose Clerk for Vite smoke):
+  - `python3 scripts/run_local_api.py`
+- Alternative (bare uvicorn; set gateway mode yourself if chat should not error):
   - `python3 -m uvicorn src.api.server:app --host 0.0.0.0 --port 8000`
 - Frontend (`frontend/`):
   - `npm run dev`

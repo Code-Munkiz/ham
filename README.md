@@ -23,6 +23,8 @@ cp .env.example .env   # add OPENROUTER_API_KEY
 python main.py "your task"
 ```
 
+**Local dashboard API** (mock chat gateway, dev-friendly Clerk defaults): from repo root run `python3 scripts/run_local_api.py` (see `AGENTS.md` / `.cursor/skills/cloud-agent-starter/SKILL.md` for full stack).
+
 **Playwright browser runtime (`/api/browser/*`):** the API must have Chromium when you use in-process Playwright. One-shot (creates **`./.venv`** on PEP 668 distros if needed, e.g. Pop!_OS/Ubuntu):
 
 ```bash
