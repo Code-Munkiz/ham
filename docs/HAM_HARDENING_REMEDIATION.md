@@ -40,7 +40,7 @@ The hardening plan correctly targets: cross-platform `_extract_key_files`, agent
 ## Deferred (not in this milestone)
 
 - LLM-backed session summarization (`SessionMemory._summarize()` remains string-based).
-- Context refresh immediately after Droid writes (until Droid is real).
+- Context refresh immediately after Droid writes (not wired yet; subprocess backend exists — see `GAPS.md` gap 2).
 - Supervisory-flow callbacks/hooks for `SessionMemory` (separate integration task).
 - Critic **learning** persistence (FTS5 / durable review store) — not started; no second harness layer.
-- Phase 4 Droid execution-safety hardening — deferred until `droid_executor` is real.
+- Phase 4 Droid execution-safety hardening — deferred until mutating mission scope and policy milestones (bounded executor already ships; see `GAPS.md` gap 6).

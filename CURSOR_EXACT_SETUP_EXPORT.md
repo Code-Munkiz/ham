@@ -6,10 +6,10 @@ Generated snapshot of `.cursor/` rules and skills, plus first-class context docu
 
 | Category | Count |
 |----------|-------|
-| Rules (`.mdc`) | 13 |
-| Skills (`SKILL.md`) | 6 |
+| Rules (`.mdc`) | 15 |
+| Skills (`SKILL.md`) | 8 |
 | First-class context | 4 |
-| **Total embedded files** | **23** |
+| **Total embedded files** | **27** |
 
 **Subagents** (4): `subagent-*.mdc`. **Commands**: embedded in `commands.mdc`.
 
@@ -150,6 +150,110 @@ The architecture is fixed unless the user explicitly approves a change.
 - Do not bypass memory_heist for repo context -- agents must consume `ContextBuilder.build()`.
 - Do not hardcode model names outside `llm_client.py`.
 - Reference `VISION.md` for the canonical architecture diagram.
+```
+
+---
+
+## `.cursor/rules/ham-local-control-boundary.mdc`
+
+```
+---
+description: HAM local control must target the user’s local Windows runtime with a mandatory desktop lane; escalation chat → browser-real → machine; cloud browser is ancillary. Agents must verify before patching and preserve Linux behavior.
+alwaysApply: true
+---
+
+# HAM Local Control Boundary Rule
+
+HAM local browser/machine control must target the end user’s local Windows runtime, not a hosted VM/browser as the primary product path.
+
+## Required product lanes
+
+HAM must support both:
+
+1. **Web app lane**
+   - HAM Web App acts as the command UI.
+   - It must pair with a trusted local Windows runtime/bridge.
+   - The local runtime performs browser and machine control.
+   - The web app must not pretend it can directly control the user’s machine without the local bridge.
+
+2. **Desktop / IDE lane**
+   - HAM Desktop/IDE app must include, launch, or connect to the same local Windows control runtime.
+   - This lane is mandatory, not optional.
+
+## Control sequence
+
+Escalation model:
+
+`chat → local browser-real → local machine control`
+
+- **Browser-real** is the first control rung for web/navigation tasks.
+- **Machine control** is an escalation path when browser-real is blocked, partial, or insufficient.
+
+## Cloud/hosted browser runtime
+
+Cloud Run or VM browser runtime may be used for hosted web-task support, API metadata validation, or non-local automation, but **it is not the primary end-user control plane**.
+
+Do not optimize Phase 3 around Cloud Run controlling a browser unless explicitly requested.
+
+## Safety invariants
+
+Never weaken:
+
+- Kill switch.
+- Armed Local Control requirement.
+- Browser-real permission requirement.
+- URL policy from `desktop/local_control_browser_url.cjs`.
+- Dedicated HAM browser profile.
+- localhost-only CDP.
+- Bounded screenshots.
+- IPC channel compatibility.
+- Deny-by-default behavior.
+
+Never use the user’s default browser profile.
+
+Never expose raw profile paths to renderer payloads.
+
+Never add broad inbound network listeners for local control.
+
+## Implementation rule
+
+Verify first; patch only confirmed gaps; preserve Windows/shared Electron local-control parity; keep changes minimal-diff. (Linux desktop **installer** artifacts are not shipped from the repo; workspace **GoHAM chat/browser execution** was removed—see `VISION.md`.)
+```
+
+---
+
+## `.cursor/rules/hermes-workspace-repomix-ssot.mdc`
+
+```
+---
+description: Hermes Workspace UI/UX parity — repomix SSOT must exist before parity implementation.
+globs: frontend/src/features/hermes-workspace/**/*, docs/**/*
+alwaysApply: false
+---
+
+# Hermes Workspace repomix (UI/UX SSOT)
+
+**Required reference file (exact name):**
+
+`repomix-output-outsourc-e-hermes-workspace.git.txt`
+
+**Expected locations (in order):**
+
+1. Repository root: `repomix-output-outsourc-e-hermes-workspace.git.txt`
+2. Or under `docs/` if your team stores it there (note: `docs/repomix-*` is gitignored — keep a local copy or team-approved tracked path)
+
+## Rule
+
+For **Workspace UI/UX parity** work (Inspector, workspace shell, Hermes-lifted screens, IA/layout/tone vs upstream Hermes Workspace):
+
+1. **Confirm the repomix file is present** (search the repo and parent workspace folders if needed).
+2. **If missing:** **stop and report** — do not implement parity from in-repo screens alone. Locate the file from the team, or regenerate via repomix from the upstream Hermes Workspace export, then proceed.
+3. **Do not** silently fall back to “use existing HAM components as SSOT” for **UI/UX parity** slices. Runtime wiring may still use HAM APIs/adapters after UX intent is taken from the repomix.
+4. **Do not commit** the repomix unless the user explicitly approves (large file / vendor dump). `.gitignore` may already exclude `docs/repomix-*`.
+
+## Exception (narrow)
+
+Purely **runtime/data** slices that do not change layout/IA/tone (e.g. read-only summaries using existing HAM APIs only) may proceed **only when the user explicitly scopes the task that way** — and the report must state that repomix was not used and why.
 ```
 
 ---
@@ -530,6 +634,161 @@ Prefer reading per-role budgets from merged project config (`discover_config` / 
 
 ---
 
+## `.cursor/skills/cloud-agent-starter/SKILL.md`
+
+```
+---
+name: cloud-agent-starter
+description: >-
+  Minimal starter runbook for Cloud agents to install, run, and test Ham quickly.
+  Covers backend/frontend startup, chat gateway modes, Cursor key setup, browser
+  runtime checks, and how to keep this skill current as new runbook knowledge is found.
+---
+
+# Cloud Agent Starter — run + test Ham fast
+
+## When to use
+
+- First run in a fresh Cloud workspace
+- Any task that needs local app startup and quick health checks
+- Any task that touches chat/gateway modes, browser runtime, or Cursor API wiring
+
+## 1) Fast setup (do this first)
+
+From repo root:
+
+1. Install backend deps:
+   - `python3 -m pip install -r requirements.txt`
+2. Install pytest (not in `requirements.txt`):
+   - `python3 -m pip install pytest`
+3. Install frontend deps:
+   - `npm install --prefix frontend`
+4. Create local env file:
+   - `cp .env.example .env`
+
+## 2) Authentication + mode defaults (practical)
+
+### Chat mode (feature flag you usually set first)
+
+- `HERMES_GATEWAY_MODE=mock` (default safe local mode; no external key needed)
+- Real model calls:
+  - Set `HERMES_GATEWAY_MODE=openrouter`
+  - Set `OPENROUTER_API_KEY=...`
+- External OpenAI-compatible gateway:
+  - Set `HERMES_GATEWAY_MODE=http`
+  - Set `HERMES_GATEWAY_BASE_URL=...`
+  - Optional: `HERMES_GATEWAY_API_KEY=...`
+
+### Cursor Cloud API key ("login")
+
+- Option A (env): set `CURSOR_API_KEY` in `.env`.
+- Option B (API, persists server-side):
+  - `POST /api/cursor/credentials` with `{ "api_key": "..." }`
+- Verify key identity:
+  - `GET /api/cursor/credentials-status`
+
+### Write-protected routes (set only when needed)
+
+- `HAM_SETTINGS_WRITE_TOKEN` for project settings apply/rollback
+- `HAM_RUN_LAUNCH_TOKEN` for operator launch_run turns
+- `HAM_SKILLS_WRITE_TOKEN` for Hermes skills install apply
+
+## 3) Start the app (backend + frontend)
+
+Use two terminals/tmux panes:
+
+- Backend (repo root):
+  - `python3 -m uvicorn src.api.server:app --host 0.0.0.0 --port 8000`
+- Frontend (`frontend/`):
+  - `npm run dev`
+
+Quick smoke checks:
+
+- `curl -sS http://127.0.0.1:8000/api/status`
+- `curl -sS -I http://127.0.0.1:3000`
+- Open `http://127.0.0.1:8000/docs`
+
+## 4) Testing workflows by codebase area
+
+## A) Context Engine (`src/memory_heist.py`)
+
+- Run focused suite:
+  - `python3 -m pytest tests/test_memory_heist.py -q`
+- Use when touching repo scan, config discovery, git diff capture, or session compaction.
+
+## B) Hermes reviewer/supervision (`src/hermes_feedback.py`)
+
+- Run focused suite:
+  - `python3 -m pytest tests/test_hermes_feedback.py -q`
+- Use when touching review loop, critique prompts, or learning-signal shaping.
+
+## C) Droid registry/execution metadata (`src/registry`, `src/tools`)
+
+- Run focused suite:
+  - `python3 -m pytest tests/test_droid_registry.py -q`
+- Use when changing droid records, defaults, or registry behavior.
+
+## D) API surface (`src/api/*`)
+
+Run backend, then smoke test key routes:
+
+- `curl -sS http://127.0.0.1:8000/api/status`
+- `curl -sS -X POST http://127.0.0.1:8000/api/chat -H 'content-type: application/json' -d '{"messages":[{"role":"user","content":"hello"}]}'`
+- `curl -sS http://127.0.0.1:8000/api/context-engine`
+
+Mode-specific check:
+
+- In mock mode, `/api/chat` should return a "Mock assistant reply..." response.
+
+## E) Frontend (`frontend/`)
+
+- Type/lint gate:
+  - `npm run lint --prefix frontend`
+- Manual check:
+  - Open `http://127.0.0.1:3000`
+  - Confirm dashboard loads and can call backend (`/api/status`, chat UI flows)
+
+## F) Browser runtime (`src/api/browser_runtime.py`)
+
+Prereq for full runtime behavior:
+
+- `python3 -m playwright install chromium`
+
+Minimal checks:
+
+- `curl -sS http://127.0.0.1:8000/api/browser/policy`
+- Create a session:
+  - `curl -sS -X POST http://127.0.0.1:8000/api/browser/sessions -H 'content-type: application/json' -d '{"owner_key":"local-dev"}'`
+
+Useful env flags:
+
+- `HAM_BROWSER_ALLOW_PRIVATE_NETWORK=true|false`
+- `HAM_BROWSER_ALLOWED_DOMAINS=...`
+- `HAM_BROWSER_BLOCKED_DOMAINS=...`
+- `HAM_BROWSER_SESSION_TTL_SECONDS=...`
+
+## 5) Common quick fixes
+
+- `python3 -m pytest ...` fails with `No module named pytest`:
+  - Run `python3 -m pip install pytest`
+- `uvicorn` not found in PATH:
+  - Use `python3 -m uvicorn ...` instead of bare `uvicorn`.
+- Chat endpoint errors in non-mock mode:
+  - Re-check `HERMES_GATEWAY_MODE` and matching credentials in `.env`.
+
+## 6) Keep this skill updated
+
+When you discover a new reliable runbook trick:
+
+1. Add it under the correct codebase area above (do not add a generic dump section).
+2. Include one concrete command and one expected result.
+3. Prefer focused tests (`tests/test_*.py`) over full-suite runs.
+4. Remove stale steps immediately when routes/env names change.
+5. Keep this file minimal; move deep architecture details to `AGENTS.md`/`VISION.md`.
+```
+
+---
+
 ## `.cursor/skills/context-engine-hardening/SKILL.md`
 
 ```
@@ -577,6 +836,76 @@ description: >-
 | `MAX_SUMMARY_CHARS` | 4,000 | Compaction summary cap |
 
 All of these should be overridable via `ContextBuilder` constructor params once wiring is complete.
+```
+
+---
+
+## `.cursor/skills/factory-droid-workflows/SKILL.md`
+
+```
+---
+name: factory-droid-workflows
+description: How Ham previews and launches allowlisted Factory droid exec workflows from chat (readonly audit vs low-risk edit), runner assumptions, and hard security limits. Instructional only — policy lives in code.
+---
+
+# Factory Droid workflows (Ham chat)
+
+## What this is
+
+Ham can drive **two allowlisted** Factory **`droid exec`** workflows from the **server-side chat operator**, using **preview → confirm → launch**. This skill explains vocabulary and process for humans and agents. **It is not the policy source of truth** — see `src/ham/droid_workflows/registry.py` and `docs/FACTORY_DROID_CONTRACT.md`.
+
+## Workflows (Phase 1)
+
+| `workflow_id` | Tier | Mutates | Launch token |
+|-----------------|------|---------|--------------|
+| `readonly_repo_audit` | `readonly` | No | Not required |
+| `safe_edit_low` | `low_edit` | Yes (`--auto low`) | **`HAM_DROID_EXEC_TOKEN`** bearer required |
+
+## How to use from chat
+
+1. **Preview** (natural language example):
+
+   `preview factory droid readonly_repo_audit: focus on API security and tests`
+
+   Include a registered project id in the message (e.g. `project.foo-bar`) or send chat with `project_id` set.
+
+2. Read **`operator_result.pending_droid`**: `proposal_digest`, `base_revision`, `droid_user_prompt`, `mutates`, `summary_preview`.
+
+3. **Launch** — send `operator` JSON with:
+
+   - `phase`: `droid_launch`
+   - `confirmed`: `true`
+   - `project_id`, `droid_workflow_id`, `droid_user_prompt` (same as preview)
+   - `droid_proposal_digest`, `droid_base_revision` from `pending_droid`
+   - For **`safe_edit_low`**: `Authorization: Bearer <HAM_DROID_EXEC_TOKEN>`
+
+Structured preview without NL: `phase: droid_preview` with `droid_workflow_id` + `droid_user_prompt`.
+
+## Prerequisites
+
+- **Runner host** has `droid` installed, Factory auth (e.g. `FACTORY_API_KEY`), and filesystem access to the **registered project root** the API uses.
+- **Phase 1** assumes **co-location** (API runs `droid` locally) unless you deploy the documented **remote runner** HTTP seam (`HAM_DROID_RUNNER_URL`).
+- Custom Droid names in a workflow must exist under **`.factory/droids/*.md`** on that repo; otherwise preview **blocks** (fail closed).
+
+## Tier meanings
+
+- **`readonly`:** no `--auto`; intended for audits and read-only analysis.
+- **`low_edit`:** `droid exec --auto low` — tightly scoped doc/comment/typo class edits per registry template; not a general coding agent.
+
+## What is explicitly not allowed
+
+- **No arbitrary shell** from chat — only registry-built argv and templated prompts.
+- **No** `--skip-permissions-unsafe` (forbidden in code).
+- **No** `FACTORY_API_KEY` in the browser, chat prompts, or Ham logs.
+- **No** mutating launch without **preview**, **confirm** (`confirmed=true`), and **bearer** where required.
+- **No** launching on unknown `workflow_id`, bad digest, stale registry revision, or inaccessible project root.
+- **No** Custom Droid authoring from chat in Phase 1.
+
+## Where to read more
+
+- Contract: `docs/FACTORY_DROID_CONTRACT.md`
+- Control plane: `docs/HAM_CHAT_CONTROL_PLANE.md`
+- Code: `src/ham/droid_workflows/`, `src/integrations/droid_runner_client.py`, `src/ham/chat_operator.py`
 ```
 
 ---
@@ -817,6 +1146,7 @@ working on this repo should read these before proposing changes.
 2. This file — where implementation lives
 3. `SWARM.md` — repo coding instructions (loaded by `memory_heist`)
 4. `PRODUCT_DIRECTION.md` — product lens: HAM-native model vs reference ecosystems
+5. `docs/TEAM_HERMES_STATUS.md` (when changing Command Center, Activity, Capabilities, or desktop Hermes copy) — **API-side** vs **desktop-side** operator story, boundaries, troubleshooting
 
 ## Ham bet: memory, Hermes, and CLI-native muscle
 
@@ -834,7 +1164,11 @@ Shipped muscle today centers on **Bridge + Droid executor** (`src/tools/droid_ex
 
 ## Architecture
 
+- `.cursor/rules/ham-local-control-boundary.mdc` — local control boundary (web UI + Windows bridge, mandatory desktop/IDE lane, escalation patterns, ancillary cloud **`/api/browser`**, verify-first/minimal-diff; Linux **installers removed** — see rule file)
 - `VISION.md` — canonical architecture, core pillars, design principles
+- **`src/ham_cli/`** — HAM operator CLI v1 (`python -m src.ham_cli` or `./scripts/ham`): `doctor`, `status`, `api status`, **`desktop package win`** — diagnostics + **Windows** desktop packaging helpers; not chat/missions (see `main.py` for bridge/Hermes one-shot CLI)
+- `docs/CONTROL_PLANE_RUN.md` — `ControlPlaneRun` substrate (v1 file-backed: `src/persistence/control_plane_run.py`): durable provider-neutral launch record (Cursor/Droid) + Cursor status updates, separate from bridge runs and audit JSONL; read API: `src/api/control_plane_runs.py` (`GET /api/control-plane-runs`, `GET /api/control-plane-runs/{ham_run_id}`) — not orchestration, queues, or mission graphs
+- `docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md` — what’s shipped vs partial vs out of scope for Cursor Cloud Agent + `ManagedMission`, and phased gap closure (correlation, optional Hermes-on-mission, honest E2E scope)
 
 ## Pillar modules
 
@@ -845,19 +1179,29 @@ Shipped muscle today centers on **Bridge + Droid executor** (`src/tools/droid_ex
 - `src/swarm_agency.py` — Hermes-supervised **context assembly** (shared `ProjectContext` + per-role render budgets for Architect / routing / critic prompts); **not** a separate orchestration framework (no CrewAI)
 - `src/registry/droids.py` — `DroidRecord` + `DroidRegistry` + `DEFAULT_DROID_REGISTRY` (builder, reviewer)
 - `src/persistence/run_store.py` — read-side `RunStore` over `.ham/runs/*.json`
-- `src/api/server.py` — FastAPI app: read API (`/api/status`, `/api/runs`, …) plus **`POST /api/chat`** (see `src/api/chat.py`) and **`GET /api/cursor-skills`**
-- `src/ham/cursor_skills_catalog.py` — loads `.cursor/skills` for chat control plane + API index
+- `src/api/server.py` — FastAPI app: read API (`/api/status`, `/api/runs`, …) plus **`POST /api/chat`**, **`POST /api/chat/stream`** (see `src/api/chat.py` — optional `project_id` + **HAM active agent guidance** from Agent Builder; distinct from Cursor operator skills and Hermes CLI profiles), **`GET /api/cursor-skills`** (Cursor operator skills), **`GET /api/hermes-skills/*`** (Hermes **runtime** skills catalog + host probe + **Phase 2a** shared install preview/apply; see `src/api/hermes_skills.py`, `src/ham/hermes_skills_install.py`), **`GET /api/capability-library/*`** and **`POST .../save|remove|reorder`** (per-project **My library** of saved `hermes:` / `capdir:` catalog refs; `HAM_CAPABILITY_LIBRARY_WRITE_TOKEN`; see `src/api/capability_library.py`, `src/ham/capability_library/`), **`GET /api/cursor-subagents`**, **`GET /api/projects/{id}/agents`** (HAM agent builder profiles; on `app` in `src/api/server.py`), and **project settings** preview/apply (`src/api/project_settings.py`, `HAM_SETTINGS_WRITE_TOKEN` for mutating routes)
+- `src/ham/cursor_skills_catalog.py` — loads `.cursor/skills` for chat control plane + API index (operator docs; **not** Hermes runtime skills)
+- `src/ham/hermes_skills_catalog.py` — vendored Hermes-runtime catalog manifest (`src/ham/data/hermes_skills_catalog.json`)
+- `scripts/build_hermes_skills_catalog.py` — regenerate catalog from pinned **NousResearch/hermes-agent** (`skills/` + `optional-skills/`); requires network unless `--repo-root` points at a checkout
+- `src/ham/hermes_skills_probe.py` — read-only Hermes home / profile discovery (`HAM_HERMES_SKILLS_MODE=remote_only` for non-co-located APIs)
+- `src/ham/hermes_skills_install.py` — Phase 2a shared-target install: HAM-managed bundles under `~/.hermes/ham-runtime-bundles/`, merge `skills.external_dirs` in Hermes `config.yaml`, atomic write, lock, backup + audit (`HAM_HERMES_SKILLS_SOURCE_ROOT` + `.ham-hermes-agent-commit` pin, `HAM_SKILLS_WRITE_TOKEN` for apply)
+- `src/ham/cursor_subagents_catalog.py` — loads `.cursor/rules/subagent-*.mdc` for chat + **`GET /api/cursor-subagents`**
 - `src/ham/ui_actions.py` — parse/validate `HAM_UI_ACTIONS_JSON` for chat → UI
+- `src/ham/settings_write.py` — allowlisted writes to `.ham/settings.json` (backup + audit); includes **`agents`** subtree (HAM agent profiles + `primary_agent_id`)
+- `src/ham/agent_profiles.py` — Pydantic models + validation for HAM agent profiles (Hermes runtime skill catalog ids on `skills: string[]`; not Hermes CLI profiles)
+- `src/ham/active_agent_context.py` — compact **guidance** block from primary HAM agent profile + vendored Hermes catalog entries for `/api/chat` (context only; no install/execution)
 - `docs/HAM_CHAT_CONTROL_PLANE.md` — chat + skills intent mapping roadmap
 
 ## Deploy (API on GCP)
 
+- **Staging SOT:** GCP project **`clarity-staging-488201`**, region **`us-central1`**, Cloud Run **`ham-api`** — see `docs/DEPLOY_CLOUD_RUN.md` (Cursor key via **Secret Manager** `ham-cursor-api-key` → env `CURSOR_API_KEY`).
 - `Dockerfile` — Cloud Run–style image (`uvicorn src.api.server:app`, `PORT` aware)
-- `docs/DEPLOY_CLOUD_RUN.md` — Artifact Registry + `gcloud builds submit` + `gcloud run deploy` + env vars
+- `docs/DEPLOY_CLOUD_RUN.md` — Artifact Registry + `gcloud builds submit` + `gcloud run deploy` + env vars + **private Hermes on GCE** (Direct VPC egress preferred, Serverless VPC connector fallback)
 - `docs/DEPLOY_HANDOFF.md` — Vercel + Cloud Run checklist (what to set in each host)
 - `docs/examples/ham-api-cloud-run-env.yaml` — copy to `.gcloud/ham-api-env.yaml` for `--env-vars-file`
-- `scripts/verify_ham_api_deploy.sh` — CORS + `/api/chat` smoke test against a deployed API
-- `scripts/render_cloud_run_env.py` — merge `.env` into `.gcloud/ham-api-env.yaml` for `gcloud run deploy --env-vars-file` (avoids committing OpenRouter keys)
+- `docs/HERMES_GATEWAY_CONTRACT.md` — server-side adapter to Hermes/OpenAI-compatible chat (streaming `http` mode)
+- `scripts/verify_ham_api_deploy.sh` — CORS + `/api/chat` + stream smoke test; **fails if responses look like `mock`** unless `HAM_VERIFY_ALLOW_MOCK=1`
+- `scripts/render_cloud_run_env.py` — merge `.env` secrets into env YAML for deploy (`OPENROUTER_API_KEY` for openrouter; **`HERMES_GATEWAY_API_KEY`** for `http` when set in `.env`)
 
 ## Configuration & entry
 
@@ -883,7 +1227,9 @@ Shipped muscle today centers on **Bridge + Droid executor** (`src/tools/droid_ex
 
 ## Frontend (workspace UI)
 
+- `desktop/` — Milestone 1 Electron shell (thin wrapper; see `desktop/README.md`); `npm start` after `npm run dev` in `frontend/`
 - `frontend/` — Vite + React workspace; `npm run dev` (port 3000), `npm run lint` (`tsc --noEmit`)
+- `frontend/src/pages/HermesSkills.tsx` — **Skills** catalog UI (`/skills`, redirect from `/hermes-skills`); distinct from Cursor operator skills; API remains `/api/hermes-skills/*`
 
 ## Tests
 
@@ -1044,8 +1390,14 @@ User Prompt
 | Supervisory orchestration | `src/hermes_feedback.py`, `main.py`, `src/swarm_agency.py` (context only) | **Hermes-led:** primary path uses profile selection, Bridge execution, and Hermes (`HermesReviewer`) review; `swarm_agency.py` provides shared `ProjectContext` render budgets for Architect / routing / critic prompts—**not** a separate orchestration engine |
 | Execution engine | `src/tools/droid_executor.py` | Bridge v0 bounded backend implemented (`shell=False`, timeout, deterministic capture, capped output) |
 | Bridge runtime/policy | `src/bridge/contracts.py`, `src/bridge/policy.py`, `src/bridge/runtime.py`, `src/registry/profiles.py`, `src/registry/backends.py`, `src/registry/droids.py` | Bridge v0 hardened: fail-closed policy gate with command-profile checks, env override restrictions, total-output cap enforcement, deterministic status mapping, mutation-aware refresh gating, and registry-backed profile selection seam with backend-registry executor resolution, plus structured run persistence to `.ham/runs/`; droid registry records for UI/API |
-| Read API + run store | `src/api/server.py`, `src/persistence/run_store.py` | Thin FastAPI layer over `RunStore` (`.ham/runs/`): status, runs list/detail, profiles, droids; read-only Context Engine snapshot (`/api/context-engine`, `/api/projects/{id}/context-engine`) for dashboard wiring |
-| Workspace UI | `frontend/` (Vite + React) | Extracted workspace; TypeScript types aligned with persisted run / bridge shapes |
+| Read API + run store | `src/api/server.py`, `src/persistence/run_store.py` | Thin FastAPI layer over `RunStore` (`.ham/runs/`): status, runs list/detail, profiles, droids; read-only Context Engine snapshot (`/api/context-engine`, `/api/projects/{id}/context-engine`) for dashboard wiring; **Hermes runtime skills** catalog + host probe + **Phase 2a** shared-target install preview/apply (`/api/hermes-skills/*`, `src/ham/hermes_skills_install.py`, local/co-located only); **v1 allowlisted settings** preview/apply/rollback (`src/ham/settings_write.py`, `src/api/project_settings.py`) writes only `{root}/.ham/settings.json` with backup + audit under `.ham/_backups/settings` and `.ham/_audit/settings` (`HAM_SETTINGS_WRITE_TOKEN` for mutating routes) |
+| Capability library (My library) | `src/ham/capability_library/`, `src/api/capability_library.py` | **Phase 1:** per-project **saved** Hermes + capability-directory **refs** in `.ham/capability-library/v1/index.json` (separate from settings); `GET` library + aggregate; **mutations** save/remove/reorder with `HAM_CAPABILITY_LIBRARY_WRITE_TOKEN` and audit under `.ham/_audit/capability-library/`; **no** auto-install, **no** shell; dashboard **Capabilities** page **My library** tab + **Skills** “Save to My Library” (requires `?project_id=`) — installed/active truth remains Hermes/inventory, not the library file |
+| Hermes gateway broker (dashboard) | `src/ham/hermes_gateway/`, `src/api/hermes_gateway.py`, `docs/HERMES_GATEWAY_BROKER.md` | **Path B:** `GET /api/hermes-gateway/snapshot` (+ capabilities, optional SSE stream) aggregates hub, allowlisted CLI inventory, skills overlay, Hermes HTTP `/health` probe, run-store + control-plane summaries, external-runner cards; snapshot includes **operator_connection** (derived CLI + HTTP + chat `gateway_mode` + freshness guidance; no new `hermes` argv); **Path C** placeholders for JSON-RPC/WebSocket/live-menu REST until upstream exists; raw CLI captures redacted; UI: `/command-center` + desktop **Settings → HAM + Hermes setup** strip; team operator story: `docs/TEAM_HERMES_STATUS.md` |
+| Workspace UI | `frontend/` (Vite + React), `desktop/` (Electron shell) | Extracted workspace; TypeScript types aligned with persisted run / bridge shapes; optional **Clerk** for chat JWT; **execution mode** routing + Bridge browser adapters (`src/ham/execution_mode.py`, `src/bridge/browser_*.py`). **Desktop** (`desktop/README.md`): **Windows** installers via `npm run pack:win*`; **Linux `.deb`/AppImage packaging targets were removed** (dev: `npm start`). `window.hamDesktop.localControl` exposes Local Control policy/audit/kill-switch, sidecar lifecycle, and **main-process** managed-browser IPC (MVP/real CDP) where enabled — separate from Ham API **`/api/browser*`.** **Workspace chat** does not run the removed **GoHAM-mode** managed-browser/chat loop (`POST /api/goham/planner` stays API-only). See `docs/desktop/local_control_v1.md`; `docs/goham/browser_smoke.md` for historical/future notes. |
+| Chat operator + identity gate | `src/api/chat.py`, `src/ham/chat_operator.py`, `src/ham/clerk_auth.py`, `src/ham/clerk_policy.py`, `src/ham/clerk_email_access.py`, `src/ham/operator_audit.py` | Server-side operator before LLM; optional Clerk JWT (`HAM_CLERK_REQUIRE_AUTH` or `HAM_CLERK_ENFORCE_EMAIL_RESTRICTIONS`, `CLERK_JWT_ISSUER`), `ham:*` permission checks, optional HAM allowlist email/domain defense-in-depth; append-only audit in HAM JSONL — **not** Clerk metadata; Cursor API key unchanged |
+| HAM-on-X social agent | `src/ham/ham_x/`, `docs/ham-x-agent/` | **Phase 4C Reactive Batch Mode:** Phase 2B remains execution-disconnected, Phase 3A `goham_controller.py` remains dry-run-only, and Phase 3B `goham_live_controller.py` remains original-post-only. Phase 4A `goham_reactive.py` still classifies prepared/read-only inbound mentions/comments into dry-run review/exception records. Phase 4B `reactive_reply_executor.py` / `goham_reactive_live.py` remain a separate one-shot reply canary. Phase 4B.1 `goham_reactive_inbox.py` discovers mentions/comments and returns automatic reply targets without executing. Phase 4C adds opt-in, dry-run-first `goham_reactive_batch.py` for bounded multi-candidate processing with per-item policy/governor rechecks, existing reactive rolling caps/cooldowns, per-reply journal rows, provider failure stops, and no retries. Reactive budgets remain separate from broadcast caps; no scheduler, daemon, infinite loop, original posts, quotes, DMs, likes/follows, xurl mutation, manual canary, broadcast executor, or Phase 2B execution |
+| Control plane runs (v1) | `src/persistence/control_plane_run.py`, `src/ham/cursor_agent_workflow.py`, `src/ham/droid_workflows/preview_launch.py`, `src/api/control_plane_runs.py` | **Durable** JSON per `ham_run_id` under `HAM_CONTROL_PLANE_RUNS_DIR` (default `~/.ham/control_plane_runs`): committed Cursor Cloud Agent + Factory Droid launches and Cursor status updates; **read** list/detail API (`/api/control-plane-runs*`) is factual only; **not** a mission graph, queue, or bridge `RunStore` |
+| Managed Cloud Agent + mission record | `src/persistence/managed_mission.py`, `src/ham/managed_mission_wiring.py`, `src/api/cursor_settings.py`, `src/api/cursor_managed_*.py`, `src/ham/cursor_agent_workflow.py`, `src/ham/chat_operator.py`, Hermes Workspace chat (`/workspace/chat`) | Durable per-agent mission JSON + API read (observed lifecycle, deploy/Vercel last-seen); optional `project_id` on HAM launch for create-time `mission_deploy_approval_mode` snapshot; **Chat operator** can preview/launch Cursor Cloud Agent with `cursor_mission_handling: managed` — same managed prompt for digest/launch, `ManagedMission` row on successful API launch; dashboard chat uses structured `operator` via **`POST /api/chat`** and **`POST /api/chat/stream`** (NDJSON); **not** a mission graph or Hermes-to-Cursor action loop; gap roadmap: `docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md` |
 | Context engine | `src/memory_heist.py` | Hardened + tested (Phase 1/3 guardrails complete) |
 | LLM routing | `src/llm_client.py` | Working |
 | Critique MVP | `src/hermes_feedback.py` | Implemented (`HermesReviewer.evaluate()`), conservative fallback, tested |
@@ -1062,9 +1414,9 @@ The shipped backend registry surface is `ExecutionBackend`, `LocalDroidBackend`,
 
 Completed runs are now persisted as structured JSON at `.ham/runs/<timestamp>-<run_id>.json`. Persisted records include `run_id`, `created_at`, `profile_id`, `profile_version`, `backend_id`, `backend_version`, `prompt_summary`, `bridge_result`, and `hermes_review`. `run_id` is canonical from `bridge_result.run_id` (never regenerated); the timestamp in the filename is metadata for sort/collision only. The stdout `RUNTIME_RESULT` envelope shape remains unchanged, and persistence is additive. `BackendRegistry.get_record()` is now the first public backend-record accessor.
 
-**Tests**: full `pytest` suite including registry, bridge, main loop, droid registry, API/CORS, control-plane catalog + UI action parsing, and persistence tests — **158 passed** regression/guardrail cases (`pytest.ini` sets `pythonpath = .`; GitHub Actions runs `pytest` + frontend `tsc`).
+**Tests**: full `pytest` suite including registry, bridge, main loop, droid registry, API/CORS, control-plane catalog (skills + subagents + Hermes runtime skills Phase 1/2a) + UI action parsing, chat streaming + SQLite session store, project settings preview/apply/rollback (including **HAM agent profiles** / `agents` in `.ham/settings.json`), and persistence tests — run `pytest` for current counts (`pytest.ini` sets `pythonpath = .`; GitHub Actions runs `pytest` + frontend `tsc`).
 
-**Next milestone**: **safe settings mutations** from chat/API (audited config writes) on top of structured UI actions + **`/api/cursor-skills`**; continue Bridge-profile hardening.
+**Next milestone**: stronger **UI-actions** marker recovery; continue Bridge-profile hardening. **Capability library** Phase 1 is shipped (saved `hermes:` / `capdir:` refs, token + audit, **Capabilities → My library** + **Skills** save — no install). Optional follow-on: **Phase 2** wire save UI to **Hermes skills** install (delegate to existing preview/apply). **Hermes gateway broker** Path B is shipped (`/command-center`, broker docs); optional follow-on: consume official Hermes **run** SSE from HAM-orchestrated runs only, and widen HTTP probes when `/health/detailed` is verified on target Hermes builds. **HAM agent builder** Slices 1–2 (persisted profiles) and **Slice 3** (compact **active agent guidance** injected into `/api/chat` / stream when `project_id` is sent — catalog descriptors only, no install/execution) are shipped. Expand allowlisted settings keys only with explicit review. (Context & Memory **settings preview/apply** UI is shipped; **`GET /api/cursor-subagents`** + chat prompt injection for review charters is shipped; **Hermes runtime skills** Phase 2a shared local install is shipped — profile-target install and broader topologies deferred.)
 
 **Deferred:** FTS5 durable learning persistence, second orchestration harness,
 architecture sprawl.
@@ -1093,6 +1445,8 @@ architecture sprawl.
 Gaps between the current codebase and the VISION.md architecture target.
 Each item tracks what is missing, why it matters, and what blocks it.
 
+**Cloud Agent + managed missions (what works vs stub + phased roadmap):** see [`docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md`](docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md).
+
 ## Active implementation notes (Cursor / hardening)
 
 - Context Engine hardening and **Phase 1** (Hermes-aligned scanning, tool-output pruning, config-driven compaction thresholds) are **complete** in `src/memory_heist.py`; **Phase 3** guardrail tests are in `tests/test_memory_heist.py` (18 cases).
@@ -1101,8 +1455,10 @@ Each item tracks what is missing, why it matters, and what blocks it.
 - **`VISION.md` must stay in sync** with real module status after each milestone (see `.cursor/rules/vision-sync.mdc`).
 - **Avoid** multiple `ProjectContext.discover()` passes for one run; prefer one shared snapshot and role-appropriate render budgets.
 - **Prefer config-driven** context budgets (`.ham.json` / merged config) over long-term hardcoded magic numbers.
-- **Deferred (unchanged direction):** no second orchestration harness, no FTS5 durable learning persistence yet, no Phase 4 Droid execution-safety work until Droid is real.
-- **Dashboard chat (Phase A):** `POST /api/chat` is **shipped** with HAM-native DTOs, in-memory `ChatSessionStore`, and `src/integrations/nous_gateway_client.py` (**mock** or **http** per env). Streaming, SQLite session persistence, and mission/walking APIs are **not** started here.
+- **Deferred (unchanged direction):** no second orchestration harness, no FTS5 durable learning persistence yet, no Phase 4 Droid execution-safety hardening until mutating mission scope and policy reviews catch up (subprocess backend is already bounded; see gap 6).
+- **Dashboard chat (Phase A+):** `POST /api/chat` and **`POST /api/chat/stream`** (NDJSON deltas) are **shipped** with HAM-native DTOs and `src/integrations/nous_gateway_client.py` (**mock**, **openrouter**, or **http**; streaming uses upstream `stream: true` where supported). **`GET /api/cursor-subagents`** indexes `.cursor/rules/subagent-*.mdc` (review charters); chat can inject them via **`include_operator_subagents`** (default true). Session store defaults to **memory**; opt-in **`HAM_CHAT_SESSION_STORE=sqlite`** (`src/persistence/sqlite_chat_session_store.py`). Mission/walking APIs are **not** started here.
+- **Dashboard settings (Phase C v1):** `POST /api/projects/{id}/settings/preview|apply|rollback` and `GET /api/settings/write-status` are **shipped** (`src/ham/settings_write.py`, `src/api/project_settings.py`). **Context & Memory** settings tab includes **Preview / Apply** for the allowlisted keys (`UnifiedSettings.tsx`): resolves or auto-registers an API project for the context-engine `cwd`, preview without auth, apply with **session-only pasted** `HAM_SETTINGS_WRITE_TOKEN` (not baked into the frontend build).
+- **Hermes runtime skills (Phase 1 + 2a shared install):** Read-only catalog **`GET /api/hermes-skills/catalog`**, **`.../catalog/{id}`**, **`.../capabilities`**, **`.../targets`**; **Phase 2a** **`POST /api/hermes-skills/install/preview`** and **`.../install/apply`** (shared target only, local/co-located API, curated catalog, `HAM_SKILLS_WRITE_TOKEN`, bundle + `skills.external_dirs` — see `src/ham/hermes_skills_install.py`). **`/skills`** UI (`src/api/hermes_skills.py`). Catalog JSON: **`scripts/build_hermes_skills_catalog.py`**. **Deferred:** profile-target install, uninstall, rollback endpoint, Hermes CLI install path, arbitrary sources — see `docs/HAM_CHAT_CONTROL_PLANE.md`.
 
 ## Active Gaps
 
@@ -1119,8 +1475,8 @@ Each item tracks what is missing, why it matters, and what blocks it.
 **Impact**: After Droid modifies the repo (creates/deletes files), any previously
 captured `ProjectContext` snapshot is stale. Agents making decisions after Droid
 runs may reference files that no longer exist or miss newly created ones.
-**Blocked by**: Droid executor is still a stub. Address when real subprocess
-execution lands.
+**Blocked by**: No automatic `ProjectContext` rebuild after subprocess runs yet
+(`ContextBuilder` / discover is not re-run per Droid step).
 **Fix**: Add a `ProjectContext.refresh()` method or rebuild `ContextBuilder` after
 each Droid execution step.
 
@@ -1259,10 +1615,10 @@ The hardening plan correctly targets: cross-platform `_extract_key_files`, agent
 ## Deferred (not in this milestone)
 
 - LLM-backed session summarization (`SessionMemory._summarize()` remains string-based).
-- Context refresh immediately after Droid writes (until Droid is real).
+- Context refresh immediately after Droid writes (not wired yet; subprocess backend exists — see `GAPS.md` gap 2).
 - Supervisory-flow callbacks/hooks for `SessionMemory` (separate integration task).
 - Critic **learning** persistence (FTS5 / durable review store) — not started; no second harness layer.
-- Phase 4 Droid execution-safety hardening — deferred until `droid_executor` is real.
+- Phase 4 Droid execution-safety hardening — deferred until mutating mission scope and policy milestones (bounded executor already ships; see `GAPS.md` gap 6).
 ```
 
 ---

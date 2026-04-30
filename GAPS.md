@@ -13,7 +13,7 @@ Each item tracks what is missing, why it matters, and what blocks it.
 - **`VISION.md` must stay in sync** with real module status after each milestone (see `.cursor/rules/vision-sync.mdc`).
 - **Avoid** multiple `ProjectContext.discover()` passes for one run; prefer one shared snapshot and role-appropriate render budgets.
 - **Prefer config-driven** context budgets (`.ham.json` / merged config) over long-term hardcoded magic numbers.
-- **Deferred (unchanged direction):** no second orchestration harness, no FTS5 durable learning persistence yet, no Phase 4 Droid execution-safety work until Droid is real.
+- **Deferred (unchanged direction):** no second orchestration harness, no FTS5 durable learning persistence yet, no Phase 4 Droid execution-safety hardening until mutating mission scope and policy reviews catch up (subprocess backend is already bounded; see gap 6).
 - **Dashboard chat (Phase A+):** `POST /api/chat` and **`POST /api/chat/stream`** (NDJSON deltas) are **shipped** with HAM-native DTOs and `src/integrations/nous_gateway_client.py` (**mock**, **openrouter**, or **http**; streaming uses upstream `stream: true` where supported). **`GET /api/cursor-subagents`** indexes `.cursor/rules/subagent-*.mdc` (review charters); chat can inject them via **`include_operator_subagents`** (default true). Session store defaults to **memory**; opt-in **`HAM_CHAT_SESSION_STORE=sqlite`** (`src/persistence/sqlite_chat_session_store.py`). Mission/walking APIs are **not** started here.
 - **Dashboard settings (Phase C v1):** `POST /api/projects/{id}/settings/preview|apply|rollback` and `GET /api/settings/write-status` are **shipped** (`src/ham/settings_write.py`, `src/api/project_settings.py`). **Context & Memory** settings tab includes **Preview / Apply** for the allowlisted keys (`UnifiedSettings.tsx`): resolves or auto-registers an API project for the context-engine `cwd`, preview without auth, apply with **session-only pasted** `HAM_SETTINGS_WRITE_TOKEN` (not baked into the frontend build).
 - **Hermes runtime skills (Phase 1 + 2a shared install):** Read-only catalog **`GET /api/hermes-skills/catalog`**, **`.../catalog/{id}`**, **`.../capabilities`**, **`.../targets`**; **Phase 2a** **`POST /api/hermes-skills/install/preview`** and **`.../install/apply`** (shared target only, local/co-located API, curated catalog, `HAM_SKILLS_WRITE_TOKEN`, bundle + `skills.external_dirs` — see `src/ham/hermes_skills_install.py`). **`/skills`** UI (`src/api/hermes_skills.py`). Catalog JSON: **`scripts/build_hermes_skills_catalog.py`**. **Deferred:** profile-target install, uninstall, rollback endpoint, Hermes CLI install path, arbitrary sources — see `docs/HAM_CHAT_CONTROL_PLANE.md`.
@@ -33,8 +33,8 @@ Each item tracks what is missing, why it matters, and what blocks it.
 **Impact**: After Droid modifies the repo (creates/deletes files), any previously
 captured `ProjectContext` snapshot is stale. Agents making decisions after Droid
 runs may reference files that no longer exist or miss newly created ones.
-**Blocked by**: Droid executor is still a stub. Address when real subprocess
-execution lands.
+**Blocked by**: No automatic `ProjectContext` rebuild after subprocess runs yet
+(`ContextBuilder` / discover is not re-run per Droid step).
 **Fix**: Add a `ProjectContext.refresh()` method or rebuild `ContextBuilder` after
 each Droid execution step.
 
