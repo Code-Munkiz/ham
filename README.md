@@ -32,8 +32,10 @@ Activate that venv when you run the API, or use `.venv/bin/python -m uvicorn ...
 
 ## Project layout
 
-- `src/hermes_feedback.py` — Hermes supervisory/critic MVP surface (reviewer implemented)
-- `src/tools/droid_executor.py` — Droid execution engine stub (runtime migration still pending)
+- `src/hermes_feedback.py` — Hermes supervisory core + critic (`HermesReviewer` MVP)
+- `src/tools/droid_executor.py` — Bridge v0 bounded subprocess backend (timeout, capped capture; allowlist/policy in Bridge)
 - `src/memory_heist.py` — repo context, instructions, git, sessions
 - `src/llm_client.py` — LiteLLM / OpenRouter
 - `src/swarm_agency.py` — Hermes-supervised role context assembly (no CrewAI; orchestration is Hermes-led)
+- `src/api/server.py` — FastAPI app: status/runs, `POST /api/chat` and **`/api/chat/stream`**, project settings, skills catalogs — see [AGENTS.md](AGENTS.md)
+- `frontend/` — Vite + React workspace UI; `desktop/` — Electron shell ([`frontend/README.md`](frontend/README.md), [`desktop/README.md`](desktop/README.md))
