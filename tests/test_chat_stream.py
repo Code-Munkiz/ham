@@ -265,6 +265,37 @@ def test_chat_stream_disconnect_checkpoint_persists_partial(mock_mode: None, mon
     assert "Connection interrupted. Ask me to continue." in assistants[0]
 
 
+def test_chat_stream_after_disconnect_allows_new_stream(mock_mode: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Closing the client mid-stream must release the per-session lock (no stuck 409)."""
+
+    def slow_stream(_msgs: list, **_kwargs):
+        yield "hold "
+        yield "more"
+
+    monkeypatch.setattr("src.api.chat.stream_chat_turn", slow_stream)
+
+    create = client.post("/api/chat/sessions")
+    assert create.status_code == 200
+    sid = create.json()["session_id"]
+    tolerant_client = TestClient(app, raise_server_exceptions=False)
+    with tolerant_client.stream(
+        "POST",
+        "/api/chat/stream",
+        json={"session_id": sid, "messages": [{"role": "user", "content": "first"}]},
+    ) as res:
+        assert res.status_code == 200
+        _ = list(res.iter_lines())
+
+    time.sleep(0.05)
+    follow = client.post(
+        "/api/chat/stream",
+        json={"session_id": sid, "messages": [{"role": "user", "content": "second"}]},
+    )
+    assert follow.status_code == 200, follow.text
+    events = _parse_ndjson(follow.text)
+    assert any(e.get("type") == "done" for e in events)
+
+
 def test_chat_stream_rejects_concurrent_same_session_streams(
     mock_mode: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
