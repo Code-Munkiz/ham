@@ -4,6 +4,8 @@ This document states **what works today**, what is **stub / partial / explicitly
 
 **Related:** `GAPS.md`, `VISION.md` (transitional state table), `docs/CONTROL_PLANE_RUN.md` (factual run records vs. mission graph).
 
+**Contributor note:** When HAM coordinates a managed Cloud Agent mission in this repository, follow the usual workflow: develop on the assigned feature branch, keep changes scoped to the task, use clear commit messages, and open or update a pull request for review. Start with [`AGENTS.md`](../AGENTS.md) for read order and module pointers; use this roadmap plus [`CONTROL_PLANE_RUN.md`](CONTROL_PLANE_RUN.md) to separate mission metadata from control-plane run records.
+
 ---
 
 ## 1. What works today (shipped)
