@@ -3,7 +3,7 @@
 Gaps between the current codebase and the VISION.md architecture target.
 Each item tracks what is missing, why it matters, and what blocks it.
 
-**Cloud Agent + managed missions (what works vs stub + phased roadmap):** see [`docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md`](docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md).
+**Cloud Agent + managed missions (what works vs stub + phased roadmap):** see [`docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md`](docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md). **Workspace Chat routing smoke:** [`docs/HAM_CLOUD_AGENT_ROUTING_SMOKE.md`](docs/HAM_CLOUD_AGENT_ROUTING_SMOKE.md). **Full docs index:** [`docs/README.md`](docs/README.md).
 
 ## Active implementation notes (Cursor / hardening)
 
