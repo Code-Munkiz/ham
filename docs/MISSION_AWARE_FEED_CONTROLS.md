@@ -7,6 +7,7 @@ In Ham, **mission-aware** means the **live mission feed** and **operator control
 - **Selection drives the feed** — After you pick a mission (for example in **Live Cloud Agent missions** on Operations or Conductor), the client loads **`GET /api/cursor/managed/missions/{mission_registry_id}/feed`**. That response is scoped to that mission only: bounded `events`, lifecycle, checkpoint summary, and optional artifacts (such as a PR link when observed).
 - **Controls apply to the selected mission** — Sync-by-agent, cancel, and follow-up instructions are issued against the **currently selected** `mission_registry_id` (or the agent id derived from that row for sync). Changing the selection changes which feed and which mission receive the next action.
 - **HAM vs Cursor** — Ham stores the managed record and feed events on the server; Cursor remains **upstream** for actual agent execution. The feed is a **HAM-side** view (persisted events plus synthesis when no stored feed exists yet — see `src/api/cursor_managed_missions.py`).
+- **Transcript presentation** — The Hermes Workspace live panel turns the **bounded** feed event list into **transcript blocks** (status/thinking/assistant-style chunks) for reading, not a raw JSON dump. Builder: `buildMissionFeedTranscript` in `frontend/src/features/hermes-workspace/utils/missionFeedTranscript.ts`; panel: `WorkspaceManagedMissionsLivePanel` (and chat reuses the same helpers where a mission feed is shown inline).
 
 ## API surface (scoped by mission)
 
