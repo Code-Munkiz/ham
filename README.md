@@ -12,6 +12,17 @@ Open-source multi-agent autonomous developer swarm: Hermes supervisory orchestra
 - **Chat control plane (skills + roadmap)**: [docs/HAM_CHAT_CONTROL_PLANE.md](docs/HAM_CHAT_CONTROL_PLANE.md)
 - **Browser Runtime (Playwright) setup/caveats**: [docs/BROWSER_RUNTIME_PLAYWRIGHT.md](docs/BROWSER_RUNTIME_PLAYWRIGHT.md)
 
+## Documentation
+
+| Topic | Doc |
+|-------|-----|
+| Deploy (Vercel + Cloud Run, env, smoke) | [docs/DEPLOY_HANDOFF.md](docs/DEPLOY_HANDOFF.md), [docs/DEPLOY_CLOUD_RUN.md](docs/DEPLOY_CLOUD_RUN.md) |
+| Chat API + skills roadmap | [docs/HAM_CHAT_CONTROL_PLANE.md](docs/HAM_CHAT_CONTROL_PLANE.md), [docs/HERMES_GATEWAY_CONTRACT.md](docs/HERMES_GATEWAY_CONTRACT.md) |
+| Control plane runs (durable launch records) | [docs/CONTROL_PLANE_RUN.md](docs/CONTROL_PLANE_RUN.md) |
+| Cloud Agent + managed missions | [docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md](docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md) |
+| Cursor rules, skills, slash commands | [CURSOR_SETUP_HANDOFF.md](CURSOR_SETUP_HANDOFF.md), [.cursor/rules/commands.mdc](.cursor/rules/commands.mdc) |
+| Operator / Hermes workspace story | [docs/TEAM_HERMES_STATUS.md](docs/TEAM_HERMES_STATUS.md) |
+
 ## Quick start
 
 ```bash
