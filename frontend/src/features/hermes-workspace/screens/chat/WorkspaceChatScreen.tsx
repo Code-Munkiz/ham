@@ -1644,6 +1644,11 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
                   <span className="font-mono">{shortId(missionContext.mission_registry_id)}</span> · agent{" "}
                   <span className="font-mono">{shortId(missionContext.cursor_agent_id)}</span>
                 </p>
+                {missionFeed?.provider_projection?.mode === "rest_projection" ? (
+                  <p className="text-[10px] text-white/45">
+                    Mission feed: REST refresh only (not a live provider stream).
+                  </p>
+                ) : null}
                 <div className="space-y-1">
                   {(missionFeed?.events || []).length > 0 ? (
                     (missionFeed?.events || []).slice(-3).map((ev) => (

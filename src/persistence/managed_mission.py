@@ -187,6 +187,7 @@ class MissionFeedEvent(BaseModel):
     source: str
     message: str
     reason_code: str | None = None
+    metadata: dict[str, Any] | None = None
 
     @field_validator("event_id", mode="before")
     @classmethod
@@ -210,6 +211,29 @@ class MissionFeedEvent(BaseModel):
     @classmethod
     def _norm_reason_code(cls, v: object) -> str | None:
         return _cap(v if v is None else str(v), 120)
+
+    @field_validator("metadata", mode="before")
+    @classmethod
+    def _norm_metadata(cls, v: object) -> dict[str, Any] | None:
+        if v is None:
+            return None
+        if not isinstance(v, dict):
+            return None
+        out: dict[str, Any] = {}
+        for i, (k, val) in enumerate(v.items()):
+            if i >= 8:
+                break
+            ks = str(k or "").strip()[:64]
+            if not ks:
+                continue
+            if isinstance(val, str):
+                out[ks] = val[:200] + ("…" if len(val) > 200 else "")
+            elif isinstance(val, (int, float, bool)) or val is None:
+                out[ks] = val
+            else:
+                s = str(val)
+                out[ks] = s[:200] + ("…" if len(s) > 200 else "")
+        return out or None
 
 
 def append_mission_checkpoint_event(
@@ -241,6 +265,7 @@ def append_mission_feed_event(
     message: str,
     reason_code: str | None = None,
     event_id: str | None = None,
+    metadata: dict[str, Any] | None = None,
 ) -> list[MissionFeedEvent]:
     nxt = list(existing)
     nxt.append(
@@ -251,6 +276,7 @@ def append_mission_feed_event(
             source=source,
             message=message,
             reason_code=reason_code,
+            metadata=metadata,
         )
     )
     if len(nxt) > _FEED_HISTORY_CAP:

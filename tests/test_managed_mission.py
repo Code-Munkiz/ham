@@ -409,6 +409,65 @@ def test_mission_feed_endpoint_returns_events(client: TestClient) -> None:
     assert isinstance(body["events"], list)
     assert len(body["events"]) >= 1
     assert body["events"][0]["kind"] in ("mission_started", "checkpoint")
+    pp = body.get("provider_projection") or {}
+    assert pp.get("mode") == "rest_projection"
+    assert pp.get("native_realtime_stream") is False
+    assert pp.get("status") in ("ok", "unavailable", "error")
+
+
+def test_mission_feed_repeated_get_does_not_duplicate_provider_events(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    st = cmm._store
+    assert st is not None
+    mid = new_mission_registry_id()
+    n = utc_now_iso()
+    st.save(
+        ManagedMission(
+            mission_registry_id=mid,
+            cursor_agent_id="c-agent-dedupe-1",
+            control_plane_ham_run_id=None,
+            mission_handling="managed",
+            uplink_id=None,
+            repo_key="a/b",
+            mission_lifecycle="open",
+            cursor_status_last_observed="RUNNING",
+            status_reason_last_observed="mapped:RUNNING",
+            created_at=n,
+            updated_at=n,
+            last_server_observed_at=n,
+        )
+    )
+    monkeypatch.setattr(cmm, "get_effective_cursor_api_key", lambda: "crsr_test_value_123456")
+    monkeypatch.setattr(
+        cmm,
+        "cursor_api_get_agent",
+        lambda **_: {"id": "c-agent-dedupe-1", "status": "RUNNING"},
+    )
+
+    def _conv(**_: object) -> dict:
+        return {
+            "events": [
+                {
+                    "id": "stable-proj-1",
+                    "createdAt": "2026-01-01T00:00:00Z",
+                    "type": "message",
+                    "role": "assistant",
+                    "message": "hello from provider",
+                }
+            ]
+        }
+
+    monkeypatch.setattr(cmm, "cursor_api_get_agent_conversation", _conv)
+    url = f"/api/cursor/managed/missions/{mid}/feed"
+    r1 = client.get(url)
+    r2 = client.get(url)
+    assert r1.status_code == 200 and r2.status_code == 200
+    e1 = r1.json()["events"]
+    e2 = r2.json()["events"]
+    assert len(e1) == len(e2)
+    cursor_evts = [e for e in e2 if e.get("source") == "cursor"]
+    assert sum(1 for e in cursor_evts if "hello from provider" in str(e.get("message"))) == 1
 
 
 def test_mission_message_endpoint_records_followup_when_provider_unsupported(
@@ -528,8 +587,11 @@ def test_mission_feed_projects_provider_conversation_events_safely(
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["provider_projection_state"] == "ok"
+    pp = body.get("provider_projection") or {}
+    assert pp.get("native_realtime_stream") is False
+    assert pp.get("status") == "ok"
     events = body["events"]
-    assert any(e.get("kind") == "tool_progress" for e in events)
+    assert any(e.get("kind") == "status" for e in events)
     assert all("crsr_ABCDEF1234567890" not in str(e.get("message")) for e in events)
 
 
@@ -572,6 +634,9 @@ def test_mission_feed_falls_back_when_provider_conversation_unavailable(
     body = r.json()
     assert body["provider_projection_state"] == "fallback"
     assert str(body.get("provider_projection_reason", "")).startswith("provider_conversation_unavailable")
+    pp = body.get("provider_projection") or {}
+    assert pp.get("status") == "unavailable"
+    assert pp.get("native_realtime_stream") is False
     assert isinstance(body.get("events"), list)
     assert len(body["events"]) >= 1
 

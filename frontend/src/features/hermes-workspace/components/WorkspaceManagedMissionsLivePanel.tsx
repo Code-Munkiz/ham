@@ -422,6 +422,11 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, variant }: Pr
               <span className="font-mono text-[10px] text-[var(--theme-muted-2)]">{shortId(selectedMissionId)}</span>
             ) : null}
           </div>
+          {selectedFeed?.provider_projection?.mode === "rest_projection" ? (
+            <p className="text-[10px] text-[var(--theme-muted-2)]">
+              Provider updates via REST refresh. Native provider realtime stream is unavailable in this integration.
+            </p>
+          ) : null}
           <div className="mt-2 space-y-2">
             {selectedFeedLoading ? (
               <p className="text-sm text-[var(--theme-muted)]">Loading mission feed…</p>

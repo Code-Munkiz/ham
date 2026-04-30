@@ -13,6 +13,7 @@ from src.ham.clerk_auth import HamActor
 from src.ham.cursor_provider_adapter import (
     map_cursor_conversation_to_feed_events,
     provider_capability_matrix,
+    provider_projection_envelope,
 )
 from src.ham.managed_mission_wiring import (
     get_managed_mission_store,
@@ -26,9 +27,13 @@ from src.integrations.cursor_cloud_client import (
     cursor_api_get_agent_conversation,
 )
 from src.persistence.cursor_credentials import get_effective_cursor_api_key
-from src.persistence.managed_mission import ManagedMission, ManagedMissionStore
+from src.persistence.managed_mission import (
+    ManagedMission,
+    ManagedMissionStore,
+    MissionFeedEvent,
+    append_mission_feed_event,
+)
 from src.persistence.control_plane_run import utc_now_iso
-from src.persistence.managed_mission import append_mission_feed_event
 
 _UUID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
@@ -64,8 +69,8 @@ def _get_mission_or_404(mission_registry_id: str) -> ManagedMission:
 
 
 def _mission_feed_events(m: ManagedMission) -> list[dict[str, Any]]:
-    events = [
-        {
+    def _row(e: MissionFeedEvent) -> dict[str, Any]:
+        d: dict[str, Any] = {
             "id": e.event_id,
             "time": e.observed_at,
             "kind": e.kind,
@@ -73,10 +78,14 @@ def _mission_feed_events(m: ManagedMission) -> list[dict[str, Any]]:
             "message": e.message,
             "reason_code": e.reason_code,
         }
-        for e in m.mission_feed_events
-    ]
+        if e.metadata:
+            d["metadata"] = e.metadata
+        return d
+
+    events = [_row(e) for e in m.mission_feed_events]
     if events:
-        return events[-80:]
+        events_sorted = sorted(events, key=lambda x: (x.get("time") or "", x.get("id") or ""))
+        return events_sorted[-80:]
     synth: list[dict[str, Any]] = [
         {
             "id": f"evt_{m.mission_registry_id[:8]}_created",
@@ -98,7 +107,8 @@ def _mission_feed_events(m: ManagedMission) -> list[dict[str, Any]]:
                 "reason_code": ev.reason,
             }
         )
-    return synth[-80:]
+    synth_sorted = sorted(synth, key=lambda x: (x.get("time") or "", x.get("id") or ""))
+    return synth_sorted[-80:]
 
 
 def _merge_provider_events(m: ManagedMission, events: list[dict[str, Any]]) -> ManagedMission:
@@ -110,6 +120,9 @@ def _merge_provider_events(m: ManagedMission, events: list[dict[str, Any]]) -> M
         eid = str(ev.get("event_id") or "").strip()
         if not eid or eid in existing_ids:
             continue
+        meta = ev.get("metadata")
+        if meta is not None and not isinstance(meta, dict):
+            meta = None
         merged = append_mission_feed_event(
             existing=merged,
             observed_at=str(ev.get("observed_at") or utc_now_iso()),
@@ -122,6 +135,7 @@ def _merge_provider_events(m: ManagedMission, events: list[dict[str, Any]]) -> M
                 else None
             ),
             event_id=eid,
+            metadata=meta,
         )
         existing_ids.add(eid)
     if len(merged) == len(m.mission_feed_events):
@@ -297,6 +311,7 @@ async def get_managed_mission_feed(
         "provider_capabilities": provider_capability_matrix(),
         "provider_projection_state": "ok" if provider_error is None else "fallback",
         "provider_projection_reason": provider_error,
+        "provider_projection": provider_projection_envelope(provider_error=provider_error),
     }
 
 

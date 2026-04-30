@@ -70,6 +70,16 @@ export type ManagedMissionFeedEvent = {
   source: string;
   message: string;
   reason_code?: string | null;
+  metadata?: Record<string, unknown> | null;
+};
+
+/** Server-declared REST projection semantics (not provider-native streaming). */
+export type ProviderProjectionInfo = {
+  provider?: string;
+  mode?: string;
+  native_realtime_stream?: boolean;
+  status?: string;
+  reason?: string | null;
 };
 
 export type ManagedMissionFeedPayload = {
@@ -85,6 +95,10 @@ export type ManagedMissionFeedPayload = {
   artifacts?: { kind?: string; title?: string; url?: string }[];
   pr_url?: string | null;
   cancel_supported?: boolean;
+  provider_capabilities?: Record<string, unknown>;
+  provider_projection_state?: string;
+  provider_projection_reason?: string | null;
+  provider_projection?: ProviderProjectionInfo | null;
 };
 
 function parseErrorBody(status: number, text: string): string {
