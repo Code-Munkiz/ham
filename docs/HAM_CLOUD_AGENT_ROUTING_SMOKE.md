@@ -18,6 +18,10 @@ If the turn is **not** handled by the operator/router, the handler continues int
 
 Structured **preview → confirm → launch** uses the **`operator`** field on the chat body (e.g. `phase=cursor_agent_launch`, `confirmed=true`, digest fields) plus the **HAM operator** bearer where required. See **`docs/HAM_CHAT_CONTROL_PLANE.md`** and **`docs/HARNESS_PROVIDER_CONTRACT.md`** for the full contract; direct **`POST /api/cursor/agents/launch`** remains available for CI/scripts outside chat.
 
+## Mission-scoped Workspace Chat
+
+From **Hermes Workspace** managed-mission rows, the UI links to **`/workspace/chat?mission_id=<mission_registry_id>`** (UUID). That query parameter keeps the chat surface tied to the selected managed mission (deep links and panel actions use the same shape). Read-only mission timeline and operator actions use **`GET /api/cursor/managed/missions/{id}/feed`** and related routes under **`/api/cursor/managed/missions/*`** — see **`docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md`**.
+
 ## Optional curl smoke
 
 Send a user message that matches an agent intent (with `project_id` set if needed) to **`POST /api/chat/stream`** with `Content-Type: application/json` and `Accept: application/x-ndjson`. Inspect the final **`done`** line for **`operator_result`** when the operator path fires.

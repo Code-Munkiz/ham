@@ -17,8 +17,9 @@ This document states **what works today**, what is **stub / partial / explicitly
 | **Deploy hook / approval API** | Managed deploy-approval status + decisions + hook path (`hard` enforces on server) — see `cursor_managed_deploy*`. |
 | **Vercel / post-deploy (bounded)** | Server poll + mapping tiers; post-deploy check — API + future UI surfaces (legacy War Room UI removed Batch 2A). |
 | **Control plane runs (separate)** | Durable `ControlPlaneRun` for operator/chat-committed launches + status; **read** APIs — **factual**, not a queue or graph. |
-| **Read API: missions** | `GET /api/cursor/managed/missions` (list, optional filter by `cursor_agent_id`) and by `mission_registry_id` — full JSON includes `mission_deploy_approval_mode`. |
-| **UI** | **Partial:** managed mission APIs and operator/chat flows remain; dedicated Cloud Agent / War Room panels were removed with legacy workbench (Batch 2A). Re-home mission UX in Hermes Workspace or Command Center as needed. |
+| **Read API: missions** | `GET /api/cursor/managed/missions` (list, optional filter by `cursor_agent_id`); `GET /api/cursor/managed/missions/{mission_registry_id}` — full JSON includes `mission_deploy_approval_mode`. |
+| **Mission feed + controls** | `GET .../missions/{mission_registry_id}/feed` — bounded timeline (`events` capped server-side). `POST .../messages` — append instruction + forward follow-up to Cursor when lifecycle is `open` and API key present (otherwise `reason_code` on response). `POST .../cancel` — request provider cancellation with feed audit trail. |
+| **UI** | **Partial:** Hermes Workspace lists managed missions and links to **`/workspace/chat?mission_id=<mission_registry_id>`** so chat stays mission-scoped; operator/chat flows remain; dedicated Cloud Agent / War Room panels were removed with legacy workbench (Batch 2A). |
 | **Project registry** | `ProjectStore` + `PATCH` metadata for `default_deploy_approval_mode` (validated). |
 
 ---
