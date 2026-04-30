@@ -4,6 +4,7 @@ Thin HTTP client for Cursor Cloud Agents API (Bearer auth only).
 Endpoints used in slice 1:
 - POST https://api.cursor.com/v0/agents
 - GET  https://api.cursor.com/v0/agents/{id}
+- GET  https://api.cursor.com/v0/agents/{id}/conversation
 - POST https://api.cursor.com/v0/agents/{id}/followup
 - POST https://api.cursor.com/v0/agents/{id}/cancel (best-effort; provider capability may vary)
 
@@ -143,6 +144,37 @@ def cursor_api_followup_agent(*, api_key: str, agent_id: str, prompt_text: str) 
     if resp.status_code >= 400:
         raise CursorCloudApiError(
             f"Cursor followup error: HTTP {resp.status_code}",
+            status_code=resp.status_code,
+            body_excerpt=_excerpt(resp.text),
+        )
+    try:
+        return resp.json()
+    except ValueError as exc:
+        raise CursorCloudApiError("Cursor returned non-JSON", status_code=resp.status_code) from exc
+
+
+def cursor_api_get_agent_conversation(*, api_key: str, agent_id: str) -> dict[str, Any]:
+    """GET /v0/agents/{id}/conversation. Returns parsed JSON on success."""
+    aid = agent_id.strip()
+    if not aid:
+        raise CursorCloudApiError("agent_id required", status_code=None)
+    with httpx.Client(timeout=60.0) as client:
+        resp = client.get(
+            f"{CURSOR_API_BASE}/v0/agents/{aid}/conversation",
+            headers={
+                "Authorization": f"Bearer {api_key.strip()}",
+                "Content-Type": "application/json",
+            },
+        )
+    if resp.status_code == 401:
+        raise CursorCloudApiError(
+            "Cursor rejected this API key (401).",
+            status_code=401,
+            body_excerpt=_excerpt(resp.text),
+        )
+    if resp.status_code >= 400:
+        raise CursorCloudApiError(
+            f"Cursor conversation error: HTTP {resp.status_code}",
             status_code=resp.status_code,
             body_excerpt=_excerpt(resp.text),
         )

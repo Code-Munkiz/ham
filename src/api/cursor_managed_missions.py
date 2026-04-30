@@ -10,10 +10,20 @@ from pydantic import BaseModel, Field
 
 from src.api.clerk_gate import get_ham_clerk_actor
 from src.ham.clerk_auth import HamActor
+from src.ham.cursor_provider_adapter import (
+    map_cursor_conversation_to_feed_events,
+    provider_capability_matrix,
+)
+from src.ham.managed_mission_wiring import (
+    get_managed_mission_store,
+    observe_mission_from_cursor_payload,
+)
 from src.integrations.cursor_cloud_client import (
     CursorCloudApiError,
     cursor_api_cancel_agent,
     cursor_api_followup_agent,
+    cursor_api_get_agent,
+    cursor_api_get_agent_conversation,
 )
 from src.persistence.cursor_credentials import get_effective_cursor_api_key
 from src.persistence.managed_mission import ManagedMission, ManagedMissionStore
@@ -89,6 +99,73 @@ def _mission_feed_events(m: ManagedMission) -> list[dict[str, Any]]:
             }
         )
     return synth[-80:]
+
+
+def _merge_provider_events(m: ManagedMission, events: list[dict[str, Any]]) -> ManagedMission:
+    if not events:
+        return m
+    existing_ids = {e.event_id for e in m.mission_feed_events}
+    merged = list(m.mission_feed_events)
+    for ev in events:
+        eid = str(ev.get("event_id") or "").strip()
+        if not eid or eid in existing_ids:
+            continue
+        merged = append_mission_feed_event(
+            existing=merged,
+            observed_at=str(ev.get("observed_at") or utc_now_iso()),
+            kind=str(ev.get("kind") or "provider_event"),
+            source=str(ev.get("source") or "cursor"),
+            message=str(ev.get("message") or "Provider event"),
+            reason_code=(
+                str(ev.get("reason_code"))
+                if ev.get("reason_code") not in (None, "")
+                else None
+            ),
+            event_id=eid,
+        )
+        existing_ids.add(eid)
+    if len(merged) == len(m.mission_feed_events):
+        return m
+    n = utc_now_iso()
+    return m.model_copy(
+        update={
+            "mission_feed_events": merged,
+            "updated_at": n,
+            "last_server_observed_at": n,
+        }
+    )
+
+
+def _sync_provider_projection(m: ManagedMission) -> tuple[ManagedMission, str | None]:
+    """
+    Best-effort provider enrichment:
+    - Refresh latest agent status payload
+    - Project conversation/events into HAM feed
+    """
+    api_key = get_effective_cursor_api_key()
+    if not api_key:
+        return m, "provider_key_missing"
+    try:
+        raw_agent = cursor_api_get_agent(api_key=api_key, agent_id=m.cursor_agent_id)
+        observe_mission_from_cursor_payload(raw=raw_agent)
+        refreshed = get_managed_mission_store().get(m.mission_registry_id) or m
+    except CursorCloudApiError as exc:
+        return m, f"provider_status_unavailable:{exc.status_code or 'unknown'}"
+    try:
+        raw_conv = cursor_api_get_agent_conversation(
+            api_key=api_key,
+            agent_id=refreshed.cursor_agent_id,
+        )
+    except CursorCloudApiError as exc:
+        return refreshed, f"provider_conversation_unavailable:{exc.status_code or 'unknown'}"
+    projected = map_cursor_conversation_to_feed_events(
+        agent_id=refreshed.cursor_agent_id,
+        payload=raw_conv if isinstance(raw_conv, dict) else None,
+    )
+    merged = _merge_provider_events(refreshed, projected)
+    if merged != refreshed:
+        _store.save(merged)
+    return merged, None
 
 
 def _public_mission(m: ManagedMission) -> dict[str, Any]:
@@ -194,6 +271,7 @@ async def get_managed_mission_feed(
     _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
 ) -> dict[str, Any]:
     m = _get_mission_or_404(mission_registry_id)
+    m, provider_error = _sync_provider_projection(m)
     artifacts: list[dict[str, str]] = []
     if m.pr_url_last_observed:
         artifacts.append(
@@ -215,7 +293,10 @@ async def get_managed_mission_feed(
         "events": _mission_feed_events(m),
         "artifacts": artifacts,
         "pr_url": m.pr_url_last_observed,
-        "cancel_supported": False,
+        "cancel_supported": True,
+        "provider_capabilities": provider_capability_matrix(),
+        "provider_projection_state": "ok" if provider_error is None else "fallback",
+        "provider_projection_reason": provider_error,
     }
 
 

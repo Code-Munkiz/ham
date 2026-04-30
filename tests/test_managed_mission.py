@@ -482,6 +482,100 @@ def test_mission_cancel_endpoint_returns_stable_unsupported_reason(
     assert body["reason_code"] == "cancel_not_supported"
 
 
+def test_mission_feed_projects_provider_conversation_events_safely(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    st = cmm._store
+    assert st is not None
+    mid = new_mission_registry_id()
+    n = utc_now_iso()
+    st.save(
+        ManagedMission(
+            mission_registry_id=mid,
+            cursor_agent_id="c-agent-provider-1",
+            control_plane_ham_run_id=None,
+            mission_handling="managed",
+            uplink_id=None,
+            repo_key="a/b",
+            mission_lifecycle="open",
+            cursor_status_last_observed="RUNNING",
+            status_reason_last_observed="mapped:RUNNING",
+            created_at=n,
+            updated_at=n,
+            last_server_observed_at=n,
+        )
+    )
+    monkeypatch.setattr(cmm, "get_effective_cursor_api_key", lambda: "crsr_test_value_123456")
+    monkeypatch.setattr(
+        cmm,
+        "cursor_api_get_agent",
+        lambda **_: {"id": "c-agent-provider-1", "status": "RUNNING"},
+    )
+    monkeypatch.setattr(
+        cmm,
+        "cursor_api_get_agent_conversation",
+        lambda **_: {
+            "events": [
+                {
+                    "createdAt": "2026-01-01T00:00:00Z",
+                    "type": "tool_progress",
+                    "message": "Running checks with token crsr_ABCDEF1234567890",
+                }
+            ]
+        },
+    )
+    r = client.get(f"/api/cursor/managed/missions/{mid}/feed")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["provider_projection_state"] == "ok"
+    events = body["events"]
+    assert any(e.get("kind") == "tool_progress" for e in events)
+    assert all("crsr_ABCDEF1234567890" not in str(e.get("message")) for e in events)
+
+
+def test_mission_feed_falls_back_when_provider_conversation_unavailable(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    st = cmm._store
+    assert st is not None
+    mid = new_mission_registry_id()
+    n = utc_now_iso()
+    st.save(
+        ManagedMission(
+            mission_registry_id=mid,
+            cursor_agent_id="c-agent-provider-2",
+            control_plane_ham_run_id=None,
+            mission_handling="managed",
+            uplink_id=None,
+            repo_key="a/b",
+            mission_lifecycle="open",
+            cursor_status_last_observed="RUNNING",
+            status_reason_last_observed="mapped:RUNNING",
+            created_at=n,
+            updated_at=n,
+            last_server_observed_at=n,
+        )
+    )
+    monkeypatch.setattr(cmm, "get_effective_cursor_api_key", lambda: "crsr_test_value_123456")
+    monkeypatch.setattr(
+        cmm,
+        "cursor_api_get_agent",
+        lambda **_: {"id": "c-agent-provider-2", "status": "RUNNING"},
+    )
+
+    def _raise_conv(**_: object) -> dict:
+        raise cmm.CursorCloudApiError("conversation unavailable", status_code=404)
+
+    monkeypatch.setattr(cmm, "cursor_api_get_agent_conversation", _raise_conv)
+    r = client.get(f"/api/cursor/managed/missions/{mid}/feed")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["provider_projection_state"] == "fallback"
+    assert str(body.get("provider_projection_reason", "")).startswith("provider_conversation_unavailable")
+    assert isinstance(body.get("events"), list)
+    assert len(body["events"]) >= 1
+
+
 @pytest.fixture
 def client(tmp_path: Path) -> TestClient:
     cmm._store = ManagedMissionStore(base_dir=tmp_path)
