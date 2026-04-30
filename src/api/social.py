@@ -17,7 +17,11 @@ Safety rules enforced by this module:
 from __future__ import annotations
 
 import json
+import hashlib
+from dataclasses import replace
+from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends
@@ -25,10 +29,19 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from src.api.clerk_gate import get_ham_clerk_actor
 from src.ham.clerk_auth import HamActor
+from src.ham.ham_x.autonomy import AutonomyDecisionResult
 from src.ham.ham_x.config import HamXConfig, load_ham_x_config
-from src.ham.ham_x.goham_ops import show_goham_status
+from src.ham.ham_x.execution_journal import ExecutionJournal
+from src.ham.ham_x.goham_ops import dry_preflight_goham_candidate, show_goham_status
 from src.ham.ham_x.goham_policy import GOHAM_EXECUTION_KIND
-from src.ham.ham_x.reactive_governor import GOHAM_REACTIVE_EXECUTION_KIND
+from src.ham.ham_x.goham_reactive_inbox import discover_reactive_inbox_once, state_from_journal
+from src.ham.ham_x.inbound_client import ReactiveInboundItem
+from src.ham.ham_x.reactive_governor import (
+    GOHAM_REACTIVE_EXECUTION_KIND,
+    ReactiveGovernorState,
+    evaluate_reactive_governor,
+)
+from src.ham.ham_x.reactive_policy import evaluate_reactive_policy
 from src.ham.ham_x.redaction import redact
 
 router = APIRouter(prefix="/api/social", tags=["social"])
@@ -47,6 +60,8 @@ MAX_LIST_ITEMS = 25
 
 ProviderStatus = Literal["active", "setup_required", "blocked", "coming_soon"]
 OverallReadiness = Literal["ready", "limited", "blocked", "setup_required"]
+PreviewStatus = Literal["completed", "blocked", "failed"]
+PreviewKind = Literal["reactive_inbox", "reactive_batch_dry_run", "broadcast_preflight"]
 
 
 # ---------------------------------------------------------------------------
@@ -231,6 +246,31 @@ class XAuditSummaryResponse(BaseModel):
     mutation_attempted: bool = False
 
 
+class SocialPreviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    client_request_id: str | None = Field(default=None, max_length=128)
+    max_candidates: int | None = Field(default=None, ge=1, le=25)
+    candidates: list[dict[str, Any]] = Field(default_factory=list, max_length=25)
+    preflight_candidate: dict[str, Any] | None = None
+
+
+class SocialPreviewResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    provider_id: Literal["x"] = "x"
+    preview_kind: PreviewKind
+    status: PreviewStatus
+    execution_allowed: bool = False
+    mutation_attempted: bool = False
+    live_apply_available: bool = False
+    reasons: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    result: dict[str, Any] = Field(default_factory=dict)
+    proposal_digest: str | None = None
+    read_only: bool = True
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -260,6 +300,38 @@ def _safe_dict(value: Any) -> dict[str, Any]:
     if not isinstance(value, dict):
         return {}
     return redact(_bound_value(value))
+
+
+def _safe_payload(value: Any) -> dict[str, Any]:
+    if hasattr(value, "redacted_dump"):
+        try:
+            dumped = value.redacted_dump()
+        except Exception:
+            dumped = {}
+        return _safe_dict(dumped)
+    if hasattr(value, "model_dump"):
+        try:
+            dumped = value.model_dump(mode="json")
+        except Exception:
+            dumped = {}
+        return _safe_dict(dumped)
+    return _safe_dict(value)
+
+
+def _dedupe(items: list[str]) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    for item in items:
+        value = str(item or "").strip()
+        if value and value not in seen:
+            seen.add(value)
+            out.append(value)
+    return out
+
+
+def _proposal_digest(kind: str, payload: dict[str, Any]) -> str:
+    raw = json.dumps(_safe_dict(payload), sort_keys=True, default=str)
+    return hashlib.sha256(f"{kind}:{raw}".encode("utf-8")).hexdigest()
 
 
 def _display_path(path: Path | str) -> str:
@@ -429,6 +501,14 @@ def _bounded_jsonl_tail(path: Path) -> tuple[list[dict[str, Any]], int]:
     return rows, malformed
 
 
+def _force_preview_flags(payload: dict[str, Any]) -> dict[str, Any]:
+    out = _safe_dict(payload)
+    out["execution_allowed"] = False
+    out["mutation_attempted"] = False
+    out["live_apply_available"] = False
+    return out
+
+
 def _safe_journal_item(row: dict[str, Any]) -> dict[str, Any]:
     """Return a redacted/bounded subset of a journal row."""
     keys = (
@@ -519,6 +599,197 @@ def _last_reactive_reply(cfg: HamXConfig) -> dict[str, Any] | None:
         if latest is None or str(row.get("executed_at", "")) > str(latest.get("executed_at", "")):
             latest = row
     return _safe_journal_item(latest) if latest else None
+
+
+def _preview_config(config: HamXConfig) -> HamXConfig:
+    """Force dry-run-oriented flags for preview evaluation only."""
+    return replace(
+        config,
+        dry_run=True,
+        enable_live_execution=False,
+        enable_live_smoke=False,
+        autonomy_enabled=False,
+        goham_controller_dry_run=True,
+        goham_reactive_dry_run=True,
+        goham_reactive_live_canary=False,
+        goham_reactive_batch_dry_run=True,
+    )
+
+
+def _reactive_preview_state(config: HamXConfig) -> tuple[ExecutionJournal, ReactiveGovernorState]:
+    journal = ExecutionJournal(config=config)
+    return journal, state_from_journal(journal)
+
+
+def _record_preview_reactive_state(
+    item: ReactiveInboundItem,
+    fingerprint: str | None,
+    state: ReactiveGovernorState,
+    *,
+    now: datetime,
+) -> None:
+    stamp = now.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    user_key = item.author_id or item.author_handle or "unknown_user"
+    thread_key = item.thread_id or item.conversation_id or item.post_id or item.inbound_id
+    state.handled_inbound_ids.add(item.inbound_id)
+    if fingerprint:
+        state.response_fingerprints.add(fingerprint)
+    state.per_user_last_reply_at[user_key] = stamp
+    state.per_thread_last_reply_at[thread_key] = stamp
+    state.recent_reply_times.append(stamp)
+    state.user_reply_counts_today[user_key] = state.user_reply_counts_today.get(user_key, 0) + 1
+    state.thread_reply_counts_today[thread_key] = state.thread_reply_counts_today.get(thread_key, 0) + 1
+
+
+def _reactive_batch_preview(
+    body: SocialPreviewRequest,
+    config: HamXConfig,
+) -> tuple[PreviewStatus, dict[str, Any], list[str], list[str]]:
+    cfg = _preview_config(config)
+    journal, state = _reactive_preview_state(cfg)
+    warnings: list[str] = []
+    reasons: list[str] = []
+    candidates = body.candidates[: body.max_candidates or len(body.candidates) or 25]
+    if not candidates:
+        warnings.append("no_candidates_provided")
+    if not cfg.enable_goham_reactive:
+        reasons.append("reactive_disabled")
+    if not cfg.enable_goham_reactive_batch:
+        reasons.append("reactive_batch_disabled")
+    if cfg.emergency_stop:
+        reasons.append("emergency_stop")
+
+    items: list[dict[str, Any]] = []
+    attempted_count = 0
+    blocked_count = 0
+    now = datetime.now(timezone.utc)
+    for idx, raw in enumerate(candidates):
+        try:
+            inbound = ReactiveInboundItem.model_validate(raw)
+        except Exception as exc:
+            blocked_count += 1
+            items.append(
+                {
+                    "status": "blocked",
+                    "reasons": ["invalid_inbound_candidate"],
+                    "diagnostic": str(exc),
+                    "execution_allowed": False,
+                    "mutation_attempted": False,
+                }
+            )
+            continue
+        policy = evaluate_reactive_policy(inbound, config=cfg)
+        governor = evaluate_reactive_governor(
+            inbound,
+            policy,
+            config=cfg,
+            state=state,
+            actions_this_run=attempted_count,
+            now=now,
+            live_canary=False,
+        )
+        item_reasons = _dedupe([*policy.reasons, *governor.reasons])
+        if policy.route != "reply_candidate" or not policy.allowed:
+            item_reasons.append(f"policy_route_{policy.route}")
+        if not governor.allowed:
+            item_reasons.append("governor_not_allowed")
+        if attempted_count >= cfg.goham_reactive_batch_max_replies_per_run:
+            item_reasons.append("max_replies_per_run_reached")
+        status = "blocked" if item_reasons else "dry_run"
+        if status == "dry_run":
+            attempted_count += 1
+            _record_preview_reactive_state(inbound, governor.response_fingerprint, state, now=now)
+        else:
+            blocked_count += 1
+        items.append(
+            _safe_dict(
+                {
+                    "index": idx,
+                    "status": status,
+                    "inbound": inbound.redacted_dump(),
+                    "policy_decision": policy.redacted_dump(),
+                    "governor_decision": governor.redacted_dump(),
+                    "reasons": _dedupe(item_reasons),
+                    "execution_allowed": False,
+                    "mutation_attempted": False,
+                }
+            )
+        )
+
+    result = {
+        "status": "completed" if not reasons else "blocked",
+        "candidate_count": len(candidates),
+        "processed_count": len(items),
+        "attempted_count": attempted_count,
+        "blocked_count": blocked_count,
+        "items": items,
+        "journal_path": _display_path(journal.path),
+        "audit_path": _display_path(cfg.audit_log_path),
+        "diagnostic": "Reactive batch preview is dry-run-only and does not call providers.",
+    }
+    status_out: PreviewStatus = "blocked" if reasons else "completed"
+    return status_out, result, _dedupe(reasons), warnings
+
+
+def _preflight_request_from_body(body: SocialPreviewRequest, config: HamXConfig) -> SimpleNamespace:
+    raw = dict(body.preflight_candidate or {})
+    text = str(raw.get("text") or "Ham preview-only broadcast preflight: governed autonomy stays capped, audited, and dry-run by default.")
+    action_id = str(raw.get("action_id") or "social-preview-broadcast-preflight")
+    source_action_id = str(raw.get("source_action_id") or action_id)
+    idem = str(raw.get("idempotency_key") or f"social-preview-{hashlib.sha256(text.encode('utf-8')).hexdigest()[:24]}")
+    return SimpleNamespace(
+        tenant_id=config.tenant_id,
+        agent_id=config.agent_id,
+        campaign_id=config.campaign_id,
+        account_id=config.account_id,
+        action_type=str(raw.get("action_type") or "post"),
+        text=text,
+        action_id=action_id,
+        source_action_id=source_action_id,
+        idempotency_key=idem,
+        target_post_id=raw.get("target_post_id"),
+        quote_target_id=raw.get("quote_target_id"),
+        reply_target_id=raw.get("reply_target_id"),
+    )
+
+
+def _preflight_decision(request: SimpleNamespace, config: HamXConfig) -> AutonomyDecisionResult:
+    return AutonomyDecisionResult(
+        decision="auto_approve",
+        execution_state="candidate_only",
+        execution_allowed=False,
+        confidence=1.0,
+        risk_level="low",
+        reasons=["social_preview_only"],
+        requires_human_review=False,
+        score_100=100,
+        raw_score=1.0,
+        safety_severity="low",
+        tenant_id=config.tenant_id,
+        agent_id=config.agent_id,
+        campaign_id=config.campaign_id,
+        account_id=config.account_id,
+        profile_id=config.profile_id,
+        policy_profile_id=config.policy_profile_id,
+        brand_voice_id=config.brand_voice_id,
+        autonomy_mode="goham",
+        catalog_skill_id=config.catalog_skill_id,
+        action_id=str(request.action_id),
+    )
+
+
+def _safe_preflight_request(request: SimpleNamespace) -> dict[str, Any]:
+    return _safe_dict(
+        {
+            "action_id": request.action_id,
+            "source_action_id": request.source_action_id,
+            "action_type": request.action_type,
+            "text": request.text,
+            "target_post_id": request.target_post_id,
+            "quote_target_id": request.quote_target_id,
+            "reply_target_id": request.reply_target_id,
+        }
+    )
 
 
 def _overall_readiness(cfg: HamXConfig) -> tuple[OverallReadiness, list[str]]:
@@ -789,6 +1060,85 @@ def x_audit_summary(
     )
 
 
+@router.post("/providers/x/reactive/inbox/preview", response_model=SocialPreviewResponse)
+def x_reactive_inbox_preview(
+    body: SocialPreviewRequest | None = None,
+    _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)] = None,
+) -> SocialPreviewResponse:
+    del _actor
+    request = body or SocialPreviewRequest()
+    cfg = _preview_config(load_ham_x_config())
+    result = discover_reactive_inbox_once(config=cfg)
+    payload = _force_preview_flags(_safe_payload(result))
+    reasons = _dedupe(list(result.reasons))
+    status: PreviewStatus = "completed" if result.status == "completed" else "blocked"
+    return SocialPreviewResponse(
+        preview_kind="reactive_inbox",
+        status=status,
+        reasons=reasons,
+        warnings=[],
+        result=payload,
+        proposal_digest=_proposal_digest("reactive_inbox", {"client_request_id": request.client_request_id, "result": payload}),
+    )
+
+
+@router.post("/providers/x/reactive/batch/dry-run", response_model=SocialPreviewResponse)
+def x_reactive_batch_dry_run(
+    body: SocialPreviewRequest | None = None,
+    _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)] = None,
+) -> SocialPreviewResponse:
+    del _actor
+    request = body or SocialPreviewRequest()
+    status, result, reasons, warnings = _reactive_batch_preview(request, load_ham_x_config())
+    payload = _force_preview_flags(result)
+    return SocialPreviewResponse(
+        preview_kind="reactive_batch_dry_run",
+        status=status,
+        reasons=reasons,
+        warnings=warnings,
+        result=payload,
+        proposal_digest=_proposal_digest(
+            "reactive_batch_dry_run",
+            {"client_request_id": request.client_request_id, "result": payload},
+        ),
+    )
+
+
+@router.post("/providers/x/broadcast/preflight", response_model=SocialPreviewResponse)
+def x_broadcast_preflight(
+    body: SocialPreviewRequest | None = None,
+    _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)] = None,
+) -> SocialPreviewResponse:
+    del _actor
+    request = body or SocialPreviewRequest()
+    cfg = _preview_config(load_ham_x_config())
+    journal = ExecutionJournal(config=cfg)
+    preflight_request = _preflight_request_from_body(request, cfg)
+    decision = _preflight_decision(preflight_request, cfg)
+    result = dry_preflight_goham_candidate(preflight_request, decision, config=cfg, journal=journal)
+    payload = _force_preview_flags(
+        {
+            "request": _safe_preflight_request(preflight_request),
+            "decision": _safe_payload(decision),
+            "eligibility": _safe_payload(result),
+            "journal_path": _display_path(journal.path),
+            "audit_path": _display_path(cfg.audit_log_path),
+            "diagnostic": "Broadcast preflight preview is eligibility-only and does not call GoHAM bridge or X providers.",
+        }
+    )
+    return SocialPreviewResponse(
+        preview_kind="broadcast_preflight",
+        status="completed" if result.allowed else "blocked",
+        reasons=list(result.reasons),
+        warnings=[],
+        result=payload,
+        proposal_digest=_proposal_digest(
+            "broadcast_preflight",
+            {"client_request_id": request.client_request_id, "result": payload},
+        ),
+    )
+
+
 __all__ = [
     "router",
     "SocialProvidersResponse",
@@ -797,4 +1147,6 @@ __all__ = [
     "XSetupChecklistResponse",
     "XJournalSummaryResponse",
     "XAuditSummaryResponse",
+    "SocialPreviewRequest",
+    "SocialPreviewResponse",
 ]

@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
   socialAdapter,
+  type SocialPreviewKind,
+  type SocialPreviewResponse,
   type SocialProvider,
   type SocialSnapshot,
   type XCapabilities,
@@ -130,10 +132,50 @@ function LoadingCards() {
   );
 }
 
+const PREVIEW_LABELS: Record<SocialPreviewKind, string> = {
+  reactive_inbox: "Reactive inbox discovery preview",
+  reactive_batch_dry_run: "Reactive batch dry-run preview",
+  broadcast_preflight: "Broadcast preflight preview",
+};
+
+function PreviewResultCard({ preview }: { preview: SocialPreviewResponse }) {
+  return (
+    <section className="rounded-2xl border border-emerald-400/20 bg-emerald-500/5 p-4 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold text-white/85">{PREVIEW_LABELS[preview.preview_kind]}</h2>
+          <p className="mt-1 text-xs text-white/48">Preview only. No live X write. No reply/post execution.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <StatusPill label={titleCase(preview.status)} tone={preview.status === "completed" ? "ok" : "warn"} />
+          <StatusPill label={preview.live_apply_available ? "Live apply available" : "Live apply unavailable"} tone={preview.live_apply_available ? "danger" : "ok"} />
+          <StatusPill label={preview.execution_allowed ? "Execution allowed" : "Execution blocked"} tone={preview.execution_allowed ? "danger" : "ok"} />
+        </div>
+      </div>
+      {preview.reasons.length || preview.warnings.length ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {preview.reasons.map((reason) => (
+            <StatusPill key={`reason-${reason}`} label={titleCase(reason)} tone="warn" />
+          ))}
+          {preview.warnings.map((warning) => (
+            <StatusPill key={`warning-${warning}`} label={titleCase(warning)} tone="muted" />
+          ))}
+        </div>
+      ) : null}
+      <div className="mt-3">
+        <RecordPreview record={preview.result} emptyLabel="No preview result payload." />
+      </div>
+    </section>
+  );
+}
+
 export function WorkspaceSocialScreen() {
   const [snapshot, setSnapshot] = React.useState<SocialSnapshot | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
+  const [previewBusy, setPreviewBusy] = React.useState<SocialPreviewKind | null>(null);
+  const [previewError, setPreviewError] = React.useState<string | null>(null);
+  const [previews, setPreviews] = React.useState<Partial<Record<SocialPreviewKind, SocialPreviewResponse>>>({});
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -151,6 +193,24 @@ export function WorkspaceSocialScreen() {
   React.useEffect(() => {
     void load();
   }, [load]);
+
+  const runPreview = async (kind: SocialPreviewKind) => {
+    setPreviewBusy(kind);
+    setPreviewError(null);
+    const result =
+      kind === "reactive_inbox"
+        ? await socialAdapter.previewInboxDiscovery()
+        : kind === "reactive_batch_dry_run"
+          ? await socialAdapter.previewReactiveBatchDryRun()
+          : await socialAdapter.previewBroadcastPreflight();
+    setPreviewBusy(null);
+    if (result.bridge.status === "pending" || !result.preview) {
+      const detail = result.bridge.status === "pending" ? result.bridge.detail : result.error;
+      setPreviewError(detail || "Preview API unavailable.");
+      return;
+    }
+    setPreviews((prev) => ({ ...prev, [kind]: result.preview ?? undefined }));
+  };
 
   const x = snapshot?.xStatus;
   const caps = snapshot?.xCapabilities;
@@ -179,7 +239,7 @@ export function WorkspaceSocialScreen() {
 
       <WorkspaceSurfaceStateCard
         title="Read-only surface"
-        description="This page only calls GET /api/social endpoints. It does not expose secrets, does not run shell commands, and does not include live apply controls."
+        description="Status panels call read-only GET /api/social endpoints. Preview controls call POST preview endpoints only; they do not run live X writes or reply/post execution."
         tone="neutral"
       />
 
@@ -209,6 +269,61 @@ export function WorkspaceSocialScreen() {
 
           {x && caps ? (
             <div className="grid gap-4 xl:grid-cols-2">
+              <Panel title="Preview controls">
+                <div className="space-y-3">
+                  <p className="text-sm leading-relaxed text-white/58">
+                    Preview only. These controls produce dry-run result payloads and keep `execution_allowed=false`,
+                    `mutation_attempted=false`, and `live_apply_available=false`.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      className="border-white/15 bg-white/5 text-white/90"
+                      onClick={() => void runPreview("reactive_inbox")}
+                      disabled={previewBusy !== null}
+                    >
+                      {previewBusy === "reactive_inbox" ? "Previewing..." : "Preview inbox discovery"}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      className="border-white/15 bg-white/5 text-white/90"
+                      onClick={() => void runPreview("reactive_batch_dry_run")}
+                      disabled={previewBusy !== null}
+                    >
+                      {previewBusy === "reactive_batch_dry_run" ? "Previewing..." : "Preview reactive batch dry-run"}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      className="border-white/15 bg-white/5 text-white/90"
+                      onClick={() => void runPreview("broadcast_preflight")}
+                      disabled={previewBusy !== null}
+                    >
+                      {previewBusy === "broadcast_preflight" ? "Previewing..." : "Preview broadcast preflight"}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-white/42">No live X write. No reply/post execution. Dry-run result only.</p>
+                </div>
+              </Panel>
+
+              {previewError ? (
+                <WorkspaceSurfaceStateCard
+                  title="Preview API unavailable"
+                  description="A preview request failed. Status panels may still be available."
+                  tone="amber"
+                  technicalDetail={previewError}
+                />
+              ) : null}
+
+              {Object.entries(previews).map(([kind, preview]) =>
+                preview ? <PreviewResultCard key={kind} preview={preview} /> : null,
+              )}
+
               <Panel title="X readiness">
                 <div className="mb-3 flex flex-wrap gap-2">
                   <StatusPill label={titleCase(x.overall_readiness)} tone={statusTone(x.overall_readiness)} />

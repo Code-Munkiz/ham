@@ -127,6 +127,22 @@ export type XAuditSummary = {
   mutation_attempted: boolean;
 };
 
+export type SocialPreviewKind = "reactive_inbox" | "reactive_batch_dry_run" | "broadcast_preflight";
+
+export type SocialPreviewResponse = {
+  provider_id: "x";
+  preview_kind: SocialPreviewKind;
+  status: "completed" | "blocked" | "failed";
+  execution_allowed: false;
+  mutation_attempted: false;
+  live_apply_available: false;
+  reasons: string[];
+  warnings: string[];
+  result: Record<string, unknown>;
+  proposal_digest: string | null;
+  read_only: boolean;
+};
+
 export type SocialSnapshot = {
   providers: SocialProvider[];
   xStatus: XProviderStatus;
@@ -138,6 +154,19 @@ export type SocialSnapshot = {
 
 async function getJson<T>(path: string): Promise<T> {
   const res = await hamApiFetch(path, { credentials: "include" });
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}`);
+  }
+  return (await res.json()) as T;
+}
+
+async function postPreview<T>(path: string, body: Record<string, unknown> = {}): Promise<T> {
+  const res = await hamApiFetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(body),
+  });
   if (!res.ok) {
     throw new Error(`HTTP ${res.status}`);
   }
@@ -171,6 +200,55 @@ export const socialAdapter = {
     } catch (e) {
       return {
         snapshot: null,
+        bridge: workspaceApiPending("social", null, e),
+        error: e instanceof Error ? e.message : String(e),
+      };
+    }
+  },
+
+  async previewInboxDiscovery(): Promise<{ preview: SocialPreviewResponse | null; bridge: SocialBridge; error?: string }> {
+    try {
+      return {
+        preview: await postPreview<SocialPreviewResponse>(`${BASE}/providers/x/reactive/inbox/preview`),
+        bridge: { status: "ready" },
+      };
+    } catch (e) {
+      return {
+        preview: null,
+        bridge: workspaceApiPending("social", null, e),
+        error: e instanceof Error ? e.message : String(e),
+      };
+    }
+  },
+
+  async previewReactiveBatchDryRun(
+    candidates: Record<string, unknown>[] = [],
+  ): Promise<{ preview: SocialPreviewResponse | null; bridge: SocialBridge; error?: string }> {
+    try {
+      return {
+        preview: await postPreview<SocialPreviewResponse>(`${BASE}/providers/x/reactive/batch/dry-run`, {
+          candidates,
+        }),
+        bridge: { status: "ready" },
+      };
+    } catch (e) {
+      return {
+        preview: null,
+        bridge: workspaceApiPending("social", null, e),
+        error: e instanceof Error ? e.message : String(e),
+      };
+    }
+  },
+
+  async previewBroadcastPreflight(): Promise<{ preview: SocialPreviewResponse | null; bridge: SocialBridge; error?: string }> {
+    try {
+      return {
+        preview: await postPreview<SocialPreviewResponse>(`${BASE}/providers/x/broadcast/preflight`),
+        bridge: { status: "ready" },
+      };
+    } catch (e) {
+      return {
+        preview: null,
         bridge: workspaceApiPending("social", null, e),
         error: e instanceof Error ? e.message : String(e),
       };

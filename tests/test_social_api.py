@@ -138,6 +138,12 @@ _PROTECTED_ROUTES = (
     "/api/social/providers/x/audit/summary",
 )
 
+_PREVIEW_ROUTES = (
+    "/api/social/providers/x/reactive/inbox/preview",
+    "/api/social/providers/x/reactive/batch/dry-run",
+    "/api/social/providers/x/broadcast/preflight",
+)
+
 
 def test_routes_require_clerk_session_when_required(
     monkeypatch: pytest.MonkeyPatch,
@@ -148,6 +154,10 @@ def test_routes_require_clerk_session_when_required(
     monkeypatch.setenv("CLERK_JWT_ISSUER", "https://clerk.example.com")
     for route in _PROTECTED_ROUTES:
         res = client.get(route)
+        assert res.status_code == 401, f"{route} expected 401, got {res.status_code}"
+        assert res.json()["detail"]["error"]["code"] == "CLERK_SESSION_REQUIRED"
+    for route in _PREVIEW_ROUTES:
+        res = client.post(route, json={})
         assert res.status_code == 401, f"{route} expected 401, got {res.status_code}"
         assert res.json()["detail"]["error"]["code"] == "CLERK_SESSION_REQUIRED"
 
@@ -168,6 +178,14 @@ def test_routes_403_when_email_not_allowed(
         )
     assert res.status_code == 403
     assert res.json()["detail"]["error"]["code"] == "HAM_EMAIL_RESTRICTION"
+    with patch("src.api.clerk_gate.verify_clerk_session_jwt", return_value=actor):
+        res = client.post(
+            "/api/social/providers/x/broadcast/preflight",
+            headers={"Authorization": "Bearer fake.jwt"},
+            json={},
+        )
+    assert res.status_code == 403
+    assert res.json()["detail"]["error"]["code"] == "HAM_EMAIL_RESTRICTION"
 
 
 def test_routes_ok_when_email_allowed(
@@ -183,6 +201,9 @@ def test_routes_ok_when_email_allowed(
         for route in _PROTECTED_ROUTES:
             res = client.get(route, headers={"Authorization": "Bearer fake.jwt"})
             assert res.status_code == 200, f"{route} expected 200, got {res.status_code}"
+        for route in _PREVIEW_ROUTES:
+            res = client.post(route, headers={"Authorization": "Bearer fake.jwt"}, json={})
+            assert res.status_code == 200, f"{route} expected 200, got {res.status_code}"
 
 
 def test_routes_ok_when_clerk_disabled(
@@ -193,6 +214,9 @@ def test_routes_ok_when_clerk_disabled(
     _disable_clerk(monkeypatch)
     for route in _PROTECTED_ROUTES:
         res = client.get(route)
+        assert res.status_code == 200, f"{route} expected 200, got {res.status_code}"
+    for route in _PREVIEW_ROUTES:
+        res = client.post(route, json={})
         assert res.status_code == 200, f"{route} expected 200, got {res.status_code}"
 
 
@@ -645,6 +669,157 @@ def test_audit_summary_does_not_append_audit_event(
 
 
 # ---------------------------------------------------------------------------
+# Preview routes
+# ---------------------------------------------------------------------------
+
+
+def _assert_preview_invariants(body: dict[str, object]) -> None:
+    assert body["provider_id"] == "x"
+    assert body["execution_allowed"] is False
+    assert body["mutation_attempted"] is False
+    assert body["live_apply_available"] is False
+    assert body["read_only"] is True
+    assert isinstance(body["result"], dict)
+
+
+def test_preview_routes_are_post_only(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    for route in _PREVIEW_ROUTES:
+        assert client.post(route, json={}).status_code == 200
+        assert client.get(route).status_code == 405
+
+
+def test_reactive_inbox_preview_is_bounded_redacted_and_non_mutating(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    journal, audit = _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _set_x_creds(monkeypatch)
+    monkeypatch.setenv("HAM_X_ENABLE_REACTIVE_INBOX_DISCOVERY", "false")
+    res = client.post("/api/social/providers/x/reactive/inbox/preview", json={"client_request_id": "abc"})
+    body = res.json()
+    _assert_preview_invariants(body)
+    assert body["preview_kind"] == "reactive_inbox"
+    assert body["status"] == "blocked"
+    assert "reactive_inbox_discovery_disabled" in body["reasons"]
+    assert journal.exists() is False
+    assert audit.exists() is False
+    text = json.dumps(body, sort_keys=True)
+    for raw in (_BEARER, _API_KEY, _API_SECRET, _ACCESS_TOKEN, _ACCESS_TOKEN_SECRET, _XAI_KEY):
+        assert raw not in text
+
+
+def test_reactive_batch_dry_run_forces_no_provider_call_and_no_audit(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    journal, audit = _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _set_x_creds(monkeypatch)
+    monkeypatch.setenv("HAM_X_ENABLE_GOHAM_REACTIVE", "true")
+    monkeypatch.setenv("HAM_X_ENABLE_GOHAM_REACTIVE_BATCH", "true")
+    monkeypatch.setenv("HAM_X_GOHAM_REACTIVE_BATCH_DRY_RUN", "false")
+    payload = {
+        "candidates": [
+            {
+                "inbound_id": "inbound-1",
+                "inbound_type": "mention",
+                "text": "Question for Ham: how does governed autonomy stay audited?",
+                "author_id": "user-1",
+                "author_handle": "user1",
+                "post_id": "post-1",
+                "thread_id": "thread-1",
+                "conversation_id": "thread-1",
+                "relevance_score": 0.95,
+            }
+        ]
+    }
+    res = client.post("/api/social/providers/x/reactive/batch/dry-run", json=payload)
+    body = res.json()
+    _assert_preview_invariants(body)
+    assert body["preview_kind"] == "reactive_batch_dry_run"
+    assert body["status"] == "completed"
+    assert body["result"]["attempted_count"] == 1
+    assert body["result"]["items"][0]["status"] == "dry_run"
+    assert body["result"]["items"][0]["execution_allowed"] is False
+    assert body["result"]["items"][0]["mutation_attempted"] is False
+    assert journal.exists() is False
+    assert audit.exists() is False
+
+
+def test_reactive_batch_dry_run_blocks_when_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _set_x_creds(monkeypatch)
+    res = client.post("/api/social/providers/x/reactive/batch/dry-run", json={"candidates": []})
+    body = res.json()
+    _assert_preview_invariants(body)
+    assert body["status"] == "blocked"
+    assert "reactive_disabled" in body["reasons"]
+    assert "reactive_batch_disabled" in body["reasons"]
+    assert "no_candidates_provided" in body["warnings"]
+
+
+def test_broadcast_preflight_preview_does_not_write_or_execute(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    journal, audit = _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _set_x_creds(monkeypatch)
+    monkeypatch.setenv("HAM_X_ENABLE_GOHAM_EXECUTION", "true")
+    monkeypatch.setenv("HAM_X_AUTONOMY_ENABLED", "true")
+    monkeypatch.setenv("HAM_X_DRY_RUN", "false")
+    monkeypatch.setenv("HAM_X_ENABLE_LIVE_EXECUTION", "true")
+    res = client.post(
+        "/api/social/providers/x/broadcast/preflight",
+        json={
+            "preflight_candidate": {
+                "text": "Ham preview-only check: governed social automation stays capped and audited.",
+                "action_id": "preview-action-1",
+                "source_action_id": "preview-source-1",
+                "idempotency_key": "preview-idem-1",
+            }
+        },
+    )
+    body = res.json()
+    _assert_preview_invariants(body)
+    assert body["preview_kind"] == "broadcast_preflight"
+    assert body["result"]["eligibility"]["execution_allowed"] is False
+    assert body["result"]["eligibility"]["mutation_attempted"] is False
+    assert journal.exists() is False
+    assert audit.exists() is False
+
+
+def test_preview_payloads_do_not_expose_secrets(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _set_x_creds(monkeypatch)
+    payload = {
+        "preflight_candidate": {
+            "text": f"Safe preview text with Authorization: Bearer {_ACCESS_TOKEN}",
+            "idempotency_key": _ACCESS_TOKEN_SECRET,
+        }
+    }
+    body = client.post("/api/social/providers/x/broadcast/preflight", json=payload).json()
+    text = json.dumps(body, sort_keys=True)
+    for raw in (_BEARER, _API_KEY, _API_SECRET, _ACCESS_TOKEN, _ACCESS_TOKEN_SECRET, _XAI_KEY):
+        assert raw not in text
+    assert "[REDACTED" in text
+
+
+# ---------------------------------------------------------------------------
 # Static safety: import isolation
 # ---------------------------------------------------------------------------
 
@@ -691,7 +866,6 @@ def test_social_api_does_not_import_write_or_execution_modules() -> None:
         "run_goham_guarded_post",
         "run_live_controller_once",
         "run_controller_once",
-        "discover_reactive_inbox_once",
         "ReactiveReplyExecutor",
         "XExecutor",
     }
