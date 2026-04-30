@@ -14,17 +14,24 @@ description: >-
 - Any task that needs local app startup and quick health checks
 - Any task that touches chat/gateway modes, browser runtime, or Cursor API wiring
 
-## Git writes (Cloud / HAM VM / ephemeral workspaces)
+## Cloud Agent / HAM VM Git policy
 
-Ephemeral workspaces are **not** the owner’s canonical checkout. **Treat `main` as read-only for Git writes from here.**
+HAM VM **and** Cursor Cloud / ephemeral workspaces are **not** the owner’s canonical checkout. **`main` is read-only here for pushes** — but you **are expected to push feature branches** and **open PRs** when landing work.
 
-- **Do not** `git push` to `origin main` / `upstream main`.
-- **Do not** `--force`, `--force-with-lease`, or otherwise rewrite **`refs/heads/main`** remotely.
-- **Do** branch off `main`, commit on that branch, `git push -u origin <branch>` (or fork remote), then **`gh pr create`** targeting `main` when the implementation is ready to land — unless the user explicitly said **no PR** / **dry run only**.
-- Unsure whether you’re in an ephemeral workspace? Prefer **branch + PR**; push only with safe defaults (**never** `--force`).
-- Owner wants a direct **`main`** push **from Cloud/VM**: stop → **`MAIN_PUSH_REQUIRES_OWNER_APPROVAL`** (canonical owner merges or pushes).
+You **may**:
 
-See **`AGENTS.md`** → **Git workflow (testing / direct-main)** for the distinction vs **owner-local** direct-main policy.
+- create a branch, commit scoped changes, `git push -u origin <branch>`, **`gh pr create`** into **`main`** for code/product changes.
+- skip `gh pr create` only when the mission is **report-only/read-only**, or when the operator said **no PR** / dry run only.
+
+You **must not**:
+
+- **`git push origin main`** (`upstream main` included).
+- `--force`, `--force-with-lease`, or any rewrite of **`refs/heads/main`** on the remote.
+- treat this clone as **SSOT for `main`** or “repair **`main`**” from here.
+
+If asked to **`push main`**, return **`MAIN_PUSH_REQUIRES_OWNER_LOCAL_CONTEXT`**, **`I can push this to a branch and open a PR instead.`**, then **create branch + PR** per **`AGENTS.md`** → **Cloud Agent / HAM VM Git policy**.
+
+Never use **`git push --force*`** targeting remote **`main`**.
 
 ## 1) Fast setup (do this first)
 

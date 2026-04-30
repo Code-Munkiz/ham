@@ -83,19 +83,55 @@ Shipped muscle today centers on **Bridge + Droid executor** (`src/tools/droid_ex
 
 ## Git workflow (testing / direct-main)
 
-### Scope: owner-local canonical repo vs Cloud / HAM VM
+Two audiences: **owner/local canonical** vs **HAM VM / Cloud Agent / ephemeral remotes**.
 
-**Owner-local canonical** (known workstation you control, e.g. `C:\Projects\GoHam\ham`): the **direct-`main`** flow below is for **that** context when you are driving the work.
+### Cloud Agent / HAM VM Git policy
 
-**Cloud Agent, HAM VM, or other ephemeral automation clones** (e.g. Linux paths under `~/.hermes/…`): **must not** push directly to `main` and **must not** use `git push --force` / `--force-with-lease` (or any forced ref update) against `main`. Push to a **feature branch only** and open a **PR** into `main` for human review.
+**HAM VM, Cursor Cloud Agents, and other ephemeral/remote automation environments** — **branch + PR only**:
 
-If something requests a direct **`main`** push or a **force-push** from a Cloud/VM agent, stop and return **`MAIN_PUSH_REQUIRES_OWNER_APPROVAL`** (owner lands changes from their canonical repo or merges the PR).
+**They may:**
 
-**Incident note (2026-04):** a VM force-push overwrote GitHub `main`; until access is productized (prefer **GitHub App** installation tokens + **branch protection**), treat VM write credentials as high risk.
+- create a **feature branch** from `main` (use a descriptive, collision-safe branch name such as `cursor/<topic>-<shortid>`).
+- commit **scoped** changes only.
+- **`git push origin <that-branch>`** (or `-u origin <branch>` on first push).
+- **`gh pr create`** targeting **`main`** when landing **product or code changes**.
+
+**Typical landing sequence:**
+
+```txt
+git checkout -b <safe-branch-name>
+git add <exact files>
+git commit -m "<message>"
+git push -u origin <safe-branch-name>
+gh pr create --title "<title>" --body "<body>"
+```
+
+**They must not:**
+
+- **`git push origin main`** (or any variant that advances remote `refs/heads/main` directly).
+- **force-push** `main`: no `git push --force*` to `origin main` / upstream `main`.
+- **repair or overwrite remote `main`** from this clone.
+- Treat this workspace as **canonical source of truth** for **`main`** ( **`MAIN_PUSH_REQUIRES_OWNER_LOCAL_CONTEXT`** applies).
+
+If asked to push to **`main`**:
+
+1. Respond with **`MAIN_PUSH_REQUIRES_OWNER_LOCAL_CONTEXT`** and plain language:
+   **`I can push this to a branch and open a PR instead.`**
+2. Then carry out **`git checkout -b …` → push branch → `gh pr create`** as above.
+
+**Read-only / report-only missions:** if the mission is strictly investigation with **no landed code/doc commits**, summarize without `gh pr create` unless the operator asked you to ship a change.
+
+**Docs-only churn:** Prefer **in-place edits** per *Cloud Agent PR hygiene* later in this section. Use `gh pr list` overlap checks before any docs-only PR.
+
+**Incident note (2026-04):** a VM force-push overwrote GitHub `main`; combine this policy with **branch protection** and tight VM credentials until access is productized (prefer **GitHub App** tokens).
 
 ---
 
-For **owner-local canonical** HAM testing work in that environment, prefer **`main` directly** — not feature branches or automatic PRs.
+### Owner-local canonical (direct `main`)
+
+**Owner/local canonical repo** is a workstation **you control** with a trusted path (e.g. `C:\Projects\GoHam\ham`). **Nothing here blocks you** from pushing to **`main`** when **you intend to**. The **direct-`main`** flow below applies **only** in that environment.
+
+For **that** workflow, prefer **`main` directly** — not feature branches or automatic PRs.
 
 **Standing rule (owner-local):** Do not create draft PRs by default. Do not run `gh pr create`, `gh pr ready`, `gh pr edit`, or suggest opening a PR / pushing a feature branch for review **unless** the user explicitly asks for a PR.
 
@@ -209,15 +245,17 @@ There are many draft PRs for small docs notes. I want to stop accumulating PR cl
 - Feed mode `rest_projection`: fallback REST refresh/projection (not provider-native streaming).
 - Rollback: set `HAM_CURSOR_SDK_BRIDGE_ENABLED=false` — forces REST projection without changing launch path or frontend flow.
 
-### Cloud Agent PR hygiene (prevent PR spam)
+### Cloud Agent PR hygiene (prevent spam; Git lands branch + PR)
 
-HAM appends deterministic PR/docs guardrails to **Cursor Cloud Agent** launch prompts (`src/ham/cursor_agent_workflow.py`, `CURSOR_AGENT_BASE_REVISION=cursor-agent-v2`). Humans and Cursor agents collaborating on Ham should behave the same way:
+HAM appends deterministic guardrails to **Cursor Cloud Agent** launch prompts (`src/ham/cursor_agent_workflow.py`, `CURSOR_AGENT_BASE_REVISION=cursor-agent-v2`). See also **§ Cloud Agent / HAM VM Git policy** above for **`main`** vs **`branch → PR`** ( **`MAIN_PUSH_REQUIRES_OWNER_LOCAL_CONTEXT`** ).
 
-- **Default:** report or push commits to a branch **without** opening a PR unless the user explicitly requests one (`gh pr create` / “open a PR”).
-- Do **not** open docs-only PRs unless explicitly requested. Prefer edits to **canonical** docs: `README.md`, `AGENTS.md`, `VISION.md`, `docs/README.md`, `docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md`, `docs/MISSION_AWARE_FEED_CONTROLS.md`, `docs/HAM_HARDENING_REMEDIATION.md`, `GAPS.md`, `.cursor/skills/**/SKILL.md`. **`CURSOR_EXACT_SETUP_EXPORT.md`** is regenerated via `python scripts/build_cursor_export.py` — not a hand-maintained prose source.
+From **HAM VM / Cursor Cloud**:
+
+- **Code or doc edits you ship:** use **branch → push branch → `gh pr create`** into **`main`** (never **`git push origin main`** or **force-push `main`** from that environment).
+- **Plan/report-only missions:** summarize without **`gh pr create`** unless the operator asked you to land commits.
+- **Docs-only churn:** Prefer in-place edits to **canonical** paths: `README.md`, `AGENTS.md`, `VISION.md`, `docs/README.md`, `docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md`, `docs/MISSION_AWARE_FEED_CONTROLS.md`, `docs/HAM_HARDENING_REMEDIATION.md`, `GAPS.md`, `.cursor/skills/**/SKILL.md`. **`CURSOR_EXACT_SETUP_EXPORT.md`** is regenerated via `python scripts/build_cursor_export.py`.
 - Avoid duplicating identical “Cloud Agent truth” bullets across unrelated files when one canonical paragraph suffices.
-- **One mission ↔ at most one GitHub PR** when a PR is explicitly allowed for that mission work.
-- **Before opening a docs PR:** run  
+- **Before opening a docs-only PR:** run  
   `gh pr list --repo <org>/<repo> --state open --limit 50`  
   and scan titles/branches (`gh pr view <n> --json files` helps). If overlapping docs intent exists → report **`OVERLAPPING_DOCS_PR_FOUND`** and extend the existing PR/list it — do **not** open parallel duplicates from the same automation.
 - **Code vs docs cleanup:** do not lump unrelated observability/UI fixes together with unrelated doc sweeps unless the operator asked — separate PR scopes reduce reviewer noise.

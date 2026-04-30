@@ -1,17 +1,17 @@
 ---
-description: Owner-local HAM workflow — direct-main, no automatic PRs. Ephemeral/Cloud/VM must follow AGENTS.md + cloud-agent-starter (branch + PR, no main force-push).
+description: Owner-local HAM workflow — direct-main, no automatic PRs. Does not restrict owner local main pushes; Cloud/HAM VM/Git lives in AGENTS + cloud-agent-starter only.
 alwaysApply: true
 ---
 
 # HAM git workflow (testing / direct-main)
 
-## Scope
+## Scope (owner-local canonical only)
 
-**Owner-local canonical repo** (you control the workstation and path, e.g. `C:\Projects\GoHam\ham`): use this direct-`main` flow.
+**Everything below applies only** when you are the **human owner** working from a **trusted local canonical repo**. It does **not** apply to Cloud Agents, **HAM VM**, or other ephemeral workspaces.
 
-**Cursor Cloud, HAM VM, or other ephemeral automation clones** (e.g. `~/.hermes/...`): **do not** follow this file for Git writes. Use **`AGENTS.md`** → *Git workflow* (Cloud / HAM VM section) and **`.cursor/skills/cloud-agent-starter/SKILL.md`** → *Git writes*: treat **`main` as read-only** for pushes, **branch + PR** only, **never** force-push `main`.
+**HAM VM / Cloud Agent / ephemeral remotes:** do **not** use this workflow for lands. Follow **`AGENTS.md`** (**Cloud Agent / HAM VM Git policy**) and **`cloud-agent-starter`**: **branch → push branch → PR**; **never** **`git push origin main`** or **force-push `main`**.
 
-## Standing rule
+## Standing rule (owner-local)
 
 - Do **not** create draft PRs by default.
 - Do **not** run unless the user **explicitly** asks for a PR:

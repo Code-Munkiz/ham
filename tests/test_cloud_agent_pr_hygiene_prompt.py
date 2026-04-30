@@ -19,7 +19,8 @@ def test_managed_launch_prompt_contains_pr_hygiene_phrases() -> None:
         repository="https://github.com/org/ham",
         ref="main",
     )
-    assert "Do not open a PR unless the user explicitly requests it." in p
+    assert "branch + PR" in p or "`gh pr create`" in p
+    assert "MAIN_PUSH_REQUIRES_OWNER_LOCAL_CONTEXT" in p
     assert "OVERLAPPING_DOCS_PR_FOUND" in p
     assert "gh pr list --repo" in p
     assert "cursor-agent-v2" not in p  # base revision metadata is UI-side digest, not echo'd in prose
@@ -35,4 +36,4 @@ def test_direct_prompt_appended_hygiene() -> None:
     core = compose_prompt_for_cursor(task_prompt="hello", expected_deliverable=None)
     out = append_cloud_agent_pr_hygiene(core, repository="https://github.com/o/r", ref="develop")
     assert core.strip() in out
-    assert "Do not open a PR unless the user explicitly requests it." in out
+    assert "MAIN_PUSH_REQUIRES_OWNER_LOCAL_CONTEXT" in out
