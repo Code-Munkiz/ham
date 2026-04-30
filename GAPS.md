@@ -33,8 +33,8 @@ Each item tracks what is missing, why it matters, and what blocks it.
 **Impact**: After Droid modifies the repo (creates/deletes files), any previously
 captured `ProjectContext` snapshot is stale. Agents making decisions after Droid
 runs may reference files that no longer exist or miss newly created ones.
-**Blocked by**: Droid executor is still a stub. Address when real subprocess
-execution lands.
+**Blocked by**: Post-run context rebuild is not wired uniformly after mutating
+Bridge/Droid steps; tighten alongside execution lifecycle as missions expand.
 **Fix**: Add a `ProjectContext.refresh()` method or rebuild `ContextBuilder` after
 each Droid execution step.
 
