@@ -123,3 +123,77 @@ def test_corrupt_file_returns_empty(tmp_path: Path):
     path.write_text("not json", encoding="utf-8")
     store = ProjectStore(store_path=path)
     assert store.list_projects() == []
+
+
+def test_register_applies_default_cursor_metadata_from_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setenv("HAM_DEFAULT_PROJECT_ID", "project.app-f53b52")
+    monkeypatch.setenv("HAM_DEFAULT_CURSOR_REPOSITORY", "Code-Munkiz/ham")
+    monkeypatch.setenv("HAM_DEFAULT_CURSOR_REF", "main")
+    store = ProjectStore(store_path=tmp_path / "projects.json")
+    record = ProjectRecord(
+        id="project.app-f53b52",
+        name="app",
+        root="/app",
+        description="",
+        metadata={},
+    )
+    store.register(record)
+    updated = store.get_project("project.app-f53b52")
+    assert updated is not None
+    assert updated.metadata.get("cursor_cloud_repository") == "Code-Munkiz/ham"
+    assert updated.metadata.get("cursor_cloud_ref") == "main"
+    assert "api_key" not in updated.metadata
+
+
+def test_register_keeps_explicit_metadata_over_default_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setenv("HAM_DEFAULT_PROJECT_ID", "project.app-f53b52")
+    monkeypatch.setenv("HAM_DEFAULT_CURSOR_REPOSITORY", "Code-Munkiz/ham")
+    monkeypatch.setenv("HAM_DEFAULT_CURSOR_REF", "main")
+    store = ProjectStore(store_path=tmp_path / "projects.json")
+    record = ProjectRecord(
+        id="project.app-f53b52",
+        name="app",
+        root="/app",
+        description="",
+        metadata={
+            "cursor_cloud_repository": "Code-Munkiz/custom-repo",
+            "cursor_cloud_ref": "release",
+        },
+    )
+    store.register(record)
+    updated = store.get_project("project.app-f53b52")
+    assert updated is not None
+    assert updated.metadata.get("cursor_cloud_repository") == "Code-Munkiz/custom-repo"
+    assert updated.metadata.get("cursor_cloud_ref") == "release"
+
+
+def test_ensure_default_cursor_metadata_backfills_existing_project(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setenv("HAM_DEFAULT_PROJECT_ID", "project.app-f53b52")
+    monkeypatch.setenv("HAM_DEFAULT_CURSOR_REPOSITORY", "Code-Munkiz/ham")
+    monkeypatch.setenv("HAM_DEFAULT_CURSOR_REF", "main")
+    store = ProjectStore(store_path=tmp_path / "projects.json")
+    record = ProjectRecord(
+        id="project.app-f53b52",
+        name="app",
+        root="/app",
+        description="",
+        metadata={},
+    )
+    store.register(record.model_copy(update={"metadata": {}}))
+    path = tmp_path / "projects.json"
+    path.write_text(
+        json.dumps({"projects": [record.model_dump()]}),
+        encoding="utf-8",
+    )
+    fresh = ProjectStore(store_path=path)
+    assert fresh.ensure_default_cursor_metadata() is True
+    updated = fresh.get_project("project.app-f53b52")
+    assert updated is not None
+    assert updated.metadata.get("cursor_cloud_repository") == "Code-Munkiz/ham"
+    assert updated.metadata.get("cursor_cloud_ref") == "main"
