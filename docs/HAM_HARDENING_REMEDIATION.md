@@ -43,4 +43,4 @@ The hardening plan correctly targets: cross-platform `_extract_key_files`, agent
 - Context refresh immediately after Droid writes (until Droid is real).
 - Supervisory-flow callbacks/hooks for `SessionMemory` (separate integration task).
 - Critic **learning** persistence (FTS5 / durable review store) — not started; no second harness layer.
-- Phase 4 Droid execution-safety hardening — deferred until `droid_executor` is real.
+- Phase 4 Droid execution-safety hardening — deferred until mutating-command policy and executor-backed mission flows justify that pass (bounded subprocess backend is already in `droid_executor`).

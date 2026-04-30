@@ -33,7 +33,7 @@ Activate that venv when you run the API, or use `.venv/bin/python -m uvicorn ...
 ## Project layout
 
 - `src/hermes_feedback.py` — Hermes supervisory/critic MVP surface (reviewer implemented)
-- `src/tools/droid_executor.py` — Droid execution engine stub (runtime migration still pending)
+- `src/tools/droid_executor.py` — Droid execution engine (bounded `subprocess` backend for Bridge; Factory runs need installed CLI + policy)
 - `src/memory_heist.py` — repo context, instructions, git, sessions
 - `src/llm_client.py` — LiteLLM / OpenRouter
 - `src/swarm_agency.py` — Hermes-supervised role context assembly (no CrewAI; orchestration is Hermes-led)
