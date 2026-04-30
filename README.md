@@ -11,6 +11,7 @@ Open-source multi-agent autonomous developer swarm: Hermes supervisory orchestra
 - **Context Engine hardening plan**: [docs/HAM_HARDENING_REMEDIATION.md](docs/HAM_HARDENING_REMEDIATION.md)
 - **Chat control plane (skills + roadmap)**: [docs/HAM_CHAT_CONTROL_PLANE.md](docs/HAM_CHAT_CONTROL_PLANE.md)
 - **Browser Runtime (Playwright) setup/caveats**: [docs/BROWSER_RUNTIME_PLAYWRIGHT.md](docs/BROWSER_RUNTIME_PLAYWRIGHT.md)
+- **Documentation index (by topic)**: [docs/README.md](docs/README.md)
 
 ## Quick start
 
@@ -37,3 +38,7 @@ Activate that venv when you run the API, or use `.venv/bin/python -m uvicorn ...
 - `src/memory_heist.py` — repo context, instructions, git, sessions
 - `src/llm_client.py` — LiteLLM / OpenRouter
 - `src/swarm_agency.py` — Hermes-supervised role context assembly (no CrewAI; orchestration is Hermes-led)
+- `src/api/server.py` — FastAPI app (status, runs, chat, skills, settings, and related routes)
+- `main.py` — CLI entrypoint (orchestration assembly, bridge + Hermes paths)
+
+For APIs, desktop lanes, deploy commands, and the rest of the tree, see [AGENTS.md](AGENTS.md) and the topic index in [docs/README.md](docs/README.md).
