@@ -30,6 +30,7 @@ def test_openrouter_mode_calls_litellm(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HERMES_GATEWAY_MODE", "openrouter")
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-v1-hamtests-only-fake-key-000000000")
     monkeypatch.setenv("DEFAULT_MODEL", "openai/gpt-4o-mini")
+    monkeypatch.delenv("HERMES_GATEWAY_MODEL", raising=False)
 
     def mock_completion(*args, **kwargs):
         assert kwargs.get("stream") is True
