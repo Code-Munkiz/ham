@@ -164,6 +164,26 @@ def _write_hermes_gateway_state(path: Path, **fields: object) -> None:
     path.write_text(json.dumps(row, sort_keys=True), encoding="utf-8")
 
 
+def _set_telegram_ready(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    *,
+    token: str = "telegram-token-secret-1234567890",
+    allowed: str = "123456789",
+    home_channel: str = "-1001234567890",
+    test_group: str = "-1009876543210",
+) -> tuple[str, str, str, str]:
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", token)
+    monkeypatch.setenv("TELEGRAM_ALLOWED_USERS", allowed)
+    monkeypatch.setenv("TELEGRAM_HOME_CHANNEL", home_channel)
+    monkeypatch.setenv("TELEGRAM_TEST_GROUP_ID", test_group)
+    _write_hermes_gateway_state(
+        tmp_path / "hermes-home" / "gateway_state.json",
+        platforms={"telegram": {"state": "connected"}},
+    )
+    return token, allowed, home_channel, test_group
+
+
 def _fake_discovery(
     *,
     inbound_id: str = "inbound-1",
@@ -786,7 +806,7 @@ def test_telegram_status_capabilities_and_checklist_are_read_only_and_safe(
     assert caps["media_supported"] is True
     assert caps["voice_supported"] is True
     assert caps["inbound_available"] is True
-    assert caps["preview_available"] is False
+    assert caps["preview_available"] is True
     assert caps["live_message_available"] is False
     assert caps["live_apply_available"] is False
     assert caps["read_only"] is True
@@ -1074,8 +1094,10 @@ def test_td_has_no_preview_or_apply_routes(
 ) -> None:
     _isolate_journal(monkeypatch, tmp_path)
     _disable_clerk(monkeypatch)
+    assert client.post("/api/social/providers/telegram/messages/preview", json={}).status_code == 200
+    assert client.get("/api/social/providers/telegram/messages/preview").status_code == 405
+    assert client.post("/api/social/providers/discord/messages/preview", json={}).status_code == 404
     for provider in ("telegram", "discord"):
-        assert client.post(f"/api/social/providers/{provider}/messages/preview", json={}).status_code == 404
         assert client.post(f"/api/social/providers/{provider}/messages/apply", json={}).status_code == 404
         assert client.post(f"/api/social/providers/{provider}/reactive/reply/apply", json={}).status_code == 404
 
@@ -1517,6 +1539,21 @@ def test_audit_summary_does_not_append_audit_event(
 # ---------------------------------------------------------------------------
 
 
+def _assert_telegram_preview_invariants(body: dict[str, object]) -> None:
+    assert body["provider_id"] == "telegram"
+    assert body["preview_kind"] == "telegram_message"
+    assert body["execution_allowed"] is False
+    assert body["mutation_attempted"] is False
+    assert body["live_apply_available"] is False
+    assert body["read_only"] is True
+    assert body["persona_id"] == "ham-canonical"
+    assert body["persona_version"] == 1
+    assert isinstance(body["persona_digest"], str)
+    assert len(str(body["persona_digest"])) == 64
+    assert isinstance(body["target"], dict)
+    assert isinstance(body["message_preview"], dict)
+
+
 def _assert_preview_invariants(body: dict[str, object]) -> None:
     assert body["provider_id"] == "x"
     assert body["persona_id"] == "ham-canonical"
@@ -1528,6 +1565,113 @@ def _assert_preview_invariants(body: dict[str, object]) -> None:
     assert body["live_apply_available"] is False
     assert body["read_only"] is True
     assert isinstance(body["result"], dict)
+
+
+def test_telegram_message_preview_succeeds_without_mutation_or_raw_ids(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    journal, audit = _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    token, allowed, home_channel, test_group = _set_telegram_ready(monkeypatch, tmp_path)
+
+    res = client.post(
+        "/api/social/providers/telegram/messages/preview",
+        json={"client_request_id": "ui-1", "message_intent": "test_message"},
+    )
+    assert res.status_code == 200
+    body = res.json()
+    _assert_telegram_preview_invariants(body)
+    assert body["status"] == "completed"
+    assert body["proposal_digest"]
+    assert len(body["proposal_digest"]) == 64
+    assert body["target"] == {
+        "kind": "test_group",
+        "configured": True,
+        "masked_id": body["target"]["masked_id"],
+    }
+    assert body["target"]["masked_id"].startswith("configured:")
+    assert body["message_preview"]["text"]
+    assert body["message_preview"]["char_count"] == len(body["message_preview"]["text"])
+    assert "No Telegram message was sent" in " ".join(body["recommended_next_steps"])
+    assert journal.exists() is False
+    assert audit.exists() is False
+    text = res.text
+    for raw in (token, allowed, home_channel, test_group):
+        assert raw not in text
+
+
+def test_telegram_message_preview_blocks_when_gateway_not_connected(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _set_telegram_ready(monkeypatch, tmp_path)
+    _write_hermes_gateway_state(
+        tmp_path / "hermes-home" / "gateway_state.json",
+        platforms={"telegram": {"state": "retrying"}},
+    )
+
+    body = client.post("/api/social/providers/telegram/messages/preview", json={}).json()
+    _assert_telegram_preview_invariants(body)
+    assert body["status"] == "blocked"
+    assert body["proposal_digest"] is None
+    assert "telegram_gateway_not_connected" in body["reasons"]
+    assert body["message_preview"]["text"] == ""
+    assert body["message_preview"]["char_count"] == 0
+
+
+def test_telegram_message_preview_digest_changes_with_persona_digest(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _set_telegram_ready(monkeypatch, tmp_path)
+
+    original = client.post("/api/social/providers/telegram/messages/preview", json={}).json()
+    changed_ref = {"persona_id": "ham-canonical", "persona_version": 1, "persona_digest": "d" * 64}
+    with patch("src.api.social._persona_ref_fields", return_value=changed_ref):
+        changed = client.post("/api/social/providers/telegram/messages/preview", json={}).json()
+    assert original["proposal_digest"]
+    assert changed["proposal_digest"]
+    assert original["proposal_digest"] != changed["proposal_digest"]
+    assert changed["persona_digest"] == "d" * 64
+
+
+def test_telegram_message_preview_rejects_client_target_and_final_text(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _set_telegram_ready(monkeypatch, tmp_path)
+    assert client.post(
+        "/api/social/providers/telegram/messages/preview",
+        json={"target_id": "-1001234567890"},
+    ).status_code == 422
+    assert client.post(
+        "/api/social/providers/telegram/messages/preview",
+        json={"message_text": "client supplied final text"},
+    ).status_code == 422
+    assert client.post(
+        "/api/social/providers/telegram/messages/preview",
+        json={"message_intent": "client supplied final text"},
+    ).status_code == 422
+
+
+def test_telegram_has_preview_but_no_live_apply_route(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _set_telegram_ready(monkeypatch, tmp_path)
+    assert client.post("/api/social/providers/telegram/messages/preview", json={}).status_code == 200
+    assert client.get("/api/social/providers/telegram/messages/preview").status_code == 405
+    assert client.post("/api/social/providers/telegram/messages/apply", json={}).status_code == 404
+    assert client.post("/api/social/providers/telegram/messages/send", json={}).status_code == 404
 
 
 def test_preview_routes_are_post_only(

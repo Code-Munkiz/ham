@@ -16,6 +16,7 @@ import {
   type SocialProvider,
   type SocialSnapshot,
   type TelegramCapabilities,
+  type TelegramMessagePreviewResponse,
   type XCapabilities,
 } from "../../adapters/socialAdapter";
 import { WorkspaceSurfaceHeader, WorkspaceSurfaceStateCard } from "../../components/workspaceSurfaceChrome";
@@ -83,9 +84,11 @@ function ProviderCard({
           <div className="mt-1 text-xs text-white/45">
             {provider.id === "x"
               ? "First provider, powered by the existing HAM-on-X engine."
-              : provider.id === "telegram" || provider.id === "discord"
-                ? "Hermes gateway readiness only. No Social messaging controls."
-                : "Future provider slot."}
+              : provider.id === "telegram"
+                ? "Hermes gateway readiness plus preview-only Telegram drafts."
+                : provider.id === "discord"
+                  ? "Hermes gateway readiness only. No Social messaging controls."
+                  : "Future provider slot."}
           </div>
         </div>
         <StatusPill label={titleCase(provider.status)} tone={tone} />
@@ -195,10 +198,18 @@ function MessagingProviderPanel({
   status,
   capabilities,
   setup,
+  telegramPreview,
+  telegramPreviewBusy = false,
+  telegramPreviewError,
+  onPreviewTelegram,
 }: {
   status: SocialMessagingProviderStatus;
   capabilities: TelegramCapabilities | DiscordCapabilities;
   setup: SocialMessagingSetupChecklist;
+  telegramPreview?: TelegramMessagePreviewResponse | null;
+  telegramPreviewBusy?: boolean;
+  telegramPreviewError?: string | null;
+  onPreviewTelegram?: () => void;
 }) {
   const isTelegram = status.provider_id === "telegram";
   const telegramCapabilities = capabilities.provider_id === "telegram" ? capabilities : null;
@@ -346,6 +357,41 @@ function MessagingProviderPanel({
         </Panel>
       ) : null}
 
+      {telegramCapabilities ? (
+        <Panel title="Telegram message preview">
+          <div className="space-y-4">
+            <div className="space-y-2 text-sm leading-relaxed text-white/62">
+              <p>Preview only. No Telegram message will be sent.</p>
+              <p>Uses connected Hermes Telegram gateway readiness, masked targets, and canonical HAM persona protection.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <StatusPill
+                label={telegramCapabilities.readiness === "ready" ? "Readiness ready" : "Readiness limited"}
+                tone={telegramCapabilities.readiness === "ready" ? "ok" : "warn"}
+              />
+              <StatusPill label={telegramCapabilities.preview_available ? "Preview available" : "Preview unavailable"} tone={telegramCapabilities.preview_available ? "ok" : "warn"} />
+              <StatusPill label="No send/apply control" tone="ok" />
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              className="border-white/15 bg-white/5 text-white/90"
+              onClick={onPreviewTelegram}
+              disabled={telegramPreviewBusy || !onPreviewTelegram}
+            >
+              {telegramPreviewBusy ? "Previewing..." : "Preview Telegram message"}
+            </Button>
+            {telegramPreviewError ? (
+              <p className="rounded-lg border border-amber-400/20 bg-amber-500/5 p-3 text-sm text-amber-100/80">
+                {telegramPreviewError}
+              </p>
+            ) : null}
+            {telegramPreview ? <TelegramMessagePreviewCard preview={telegramPreview} /> : null}
+          </div>
+        </Panel>
+      ) : null}
+
       <Panel title="Setup checklist">
         <div className="space-y-2">
           {setup.items.map((item) => (
@@ -405,7 +451,7 @@ function MessagingProviderPanel({
         <div className="space-y-2 text-sm text-white/62">
           <p className="flex gap-2">
             <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" />
-            No Telegram or Discord preview, send, apply, bot startup, or gateway process controls are exposed.
+            Telegram exposes preview-only drafts. No Telegram or Discord send, apply, bot startup, or gateway process controls are exposed.
           </p>
           <p className="flex gap-2">
             <Circle className="mt-1 h-3 w-3 shrink-0 text-white/40" />
@@ -583,6 +629,67 @@ const LIVE_REPLY_CONFIRMATION_PHRASE = "SEND ONE LIVE REPLY";
 const LIVE_BATCH_CONFIRMATION_PHRASE = "SEND LIVE REACTIVE BATCH";
 const LIVE_BROADCAST_CONFIRMATION_PHRASE = "SEND ONE LIVE POST";
 
+function TelegramMessagePreviewCard({ preview }: { preview: TelegramMessagePreviewResponse }) {
+  return (
+    <section className="rounded-2xl border border-emerald-400/20 bg-emerald-500/5 p-4 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold text-white/85">Telegram message preview</h3>
+          <p className="mt-1 text-xs text-white/48">Preview only. No Telegram message will be sent.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <StatusPill label={titleCase(preview.status)} tone={preview.status === "completed" ? "ok" : "warn"} />
+          <StatusPill label={preview.execution_allowed ? "Execution allowed" : "Execution blocked"} tone={preview.execution_allowed ? "danger" : "ok"} />
+          <StatusPill label="Persona protected" tone="ok" />
+          <StatusPill label={preview.proposal_digest ? "Proposal digest present" : "Proposal digest missing"} tone={preview.proposal_digest ? "ok" : "warn"} />
+        </div>
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-3">
+        <div className="rounded-lg border border-white/10 bg-black/20 p-3">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">Target</div>
+          <div className="mt-1 text-sm text-white/82">{titleCase(preview.target.kind)}</div>
+          <div className="mt-1 font-mono text-xs text-white/55">{preview.target.masked_id || "Not configured"}</div>
+        </div>
+        <div className="rounded-lg border border-white/10 bg-black/20 p-3">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">Persona</div>
+          <div className="mt-1 text-sm text-white/82">
+            {preview.persona_id} v{preview.persona_version}
+          </div>
+          <div className="mt-1 font-mono text-xs text-white/55">{preview.persona_digest ? `${preview.persona_digest.slice(0, 12)}...` : "Missing"}</div>
+        </div>
+        <div className="rounded-lg border border-white/10 bg-black/20 p-3">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">Characters</div>
+          <div className="mt-1 text-sm text-white/82">{preview.message_preview.char_count}</div>
+        </div>
+      </div>
+      {preview.message_preview.text ? (
+        <div className="mt-3 rounded-lg border border-white/10 bg-black/30 p-3 text-sm leading-relaxed text-white/75">
+          {preview.message_preview.text}
+        </div>
+      ) : null}
+      {preview.reasons.length || preview.warnings.length ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {preview.reasons.map((reason) => (
+            <StatusPill key={`reason-${reason}`} label={titleCase(reason)} tone="warn" />
+          ))}
+          {preview.warnings.map((warning) => (
+            <StatusPill key={`warning-${warning}`} label={titleCase(warning)} tone="muted" />
+          ))}
+        </div>
+      ) : null}
+      {preview.recommended_next_steps.length ? (
+        <div className="mt-3 space-y-2">
+          {preview.recommended_next_steps.map((step) => (
+            <div key={step} className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm text-white/62">
+              {step}
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 function PreviewResultCard({ preview }: { preview: SocialPreviewResponse }) {
   return (
     <section className="rounded-2xl border border-emerald-400/20 bg-emerald-500/5 p-4 shadow-sm">
@@ -656,6 +763,9 @@ export function WorkspaceSocialScreen() {
   const [broadcastBusy, setBroadcastBusy] = React.useState(false);
   const [broadcastError, setBroadcastError] = React.useState<string | null>(null);
   const [broadcastResult, setBroadcastResult] = React.useState<SocialBroadcastApplyResponse | null>(null);
+  const [telegramPreviewBusy, setTelegramPreviewBusy] = React.useState(false);
+  const [telegramPreviewError, setTelegramPreviewError] = React.useState<string | null>(null);
+  const [telegramPreview, setTelegramPreview] = React.useState<TelegramMessagePreviewResponse | null>(null);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -690,6 +800,19 @@ export function WorkspaceSocialScreen() {
       return;
     }
     setPreviews((prev) => ({ ...prev, [kind]: result.preview ?? undefined }));
+  };
+
+  const runTelegramPreview = async () => {
+    setTelegramPreviewBusy(true);
+    setTelegramPreviewError(null);
+    const result = await socialAdapter.previewTelegramMessage();
+    setTelegramPreviewBusy(false);
+    if (result.bridge.status === "pending" || !result.preview) {
+      const detail = result.bridge.status === "pending" ? result.bridge.detail : result.error;
+      setTelegramPreviewError(detail || "Telegram preview API unavailable.");
+      return;
+    }
+    setTelegramPreview(result.preview);
   };
 
   const x = snapshot?.xStatus;
@@ -791,7 +914,7 @@ export function WorkspaceSocialScreen() {
         variant="dark"
         eyebrow="Social"
         title="Social Command Center"
-        subtitle="Provider status for autonomous social agents. X has governed controls; Telegram and Discord are read-only Hermes gateway readiness."
+        subtitle="Provider status for autonomous social agents. X has governed controls; Telegram has preview-only drafts; Discord remains read-only Hermes gateway readiness."
         actions={
           <Button
             type="button"
@@ -873,6 +996,10 @@ export function WorkspaceSocialScreen() {
               status={selectedMessaging.status}
               capabilities={selectedMessaging.capabilities}
               setup={selectedMessaging.setup}
+              telegramPreview={selectedProvider === "telegram" ? telegramPreview : null}
+              telegramPreviewBusy={telegramPreviewBusy}
+              telegramPreviewError={selectedProvider === "telegram" ? telegramPreviewError : null}
+              onPreviewTelegram={selectedProvider === "telegram" ? () => void runTelegramPreview() : undefined}
             />
           ) : null}
 

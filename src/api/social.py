@@ -68,6 +68,7 @@ ProviderStatus = Literal["active", "setup_required", "blocked", "coming_soon"]
 OverallReadiness = Literal["ready", "limited", "blocked", "setup_required"]
 PreviewStatus = Literal["completed", "blocked", "failed"]
 PreviewKind = Literal["reactive_inbox", "reactive_batch_dry_run", "broadcast_preflight"]
+TelegramMessageIntent = Literal["greeting", "announcement", "test_message"]
 SocialApplyStatus = Literal["blocked", "executed", "failed"]
 SocialApplyKind = Literal["reactive_reply", "reactive_batch", "broadcast_post"]
 LIVE_REPLY_CONFIRMATION_PHRASE = "SEND ONE LIVE REPLY"
@@ -285,6 +286,49 @@ class SocialPreviewResponse(BaseModel):
     warnings: list[str] = Field(default_factory=list)
     result: dict[str, Any] = Field(default_factory=dict)
     proposal_digest: str | None = None
+    read_only: bool = True
+
+
+class TelegramMessagePreviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    client_request_id: str | None = Field(default=None, max_length=128)
+    message_intent: TelegramMessageIntent = "test_message"
+
+
+class TelegramPreviewTargetDto(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["home_channel", "test_group"]
+    configured: bool
+    masked_id: str
+
+
+class TelegramMessagePreviewDto(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text: str
+    char_count: int
+
+
+class TelegramMessagePreviewResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    provider_id: Literal["telegram"] = "telegram"
+    preview_kind: Literal["telegram_message"] = "telegram_message"
+    status: PreviewStatus
+    execution_allowed: bool = False
+    mutation_attempted: bool = False
+    live_apply_available: bool = False
+    persona_id: str
+    persona_version: int
+    persona_digest: str
+    proposal_digest: str | None = None
+    target: TelegramPreviewTargetDto
+    message_preview: TelegramMessagePreviewDto
+    reasons: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    recommended_next_steps: list[str] = Field(default_factory=list)
     read_only: bool = True
 
 
@@ -896,13 +940,16 @@ def _messaging_provider_dto(provider_id: SocialMessagingProviderId) -> SocialPro
         status = "active"
     else:
         status = "setup_required"
+    enabled_lanes = ["readiness"]
+    if provider_id == "telegram" and status_response.hermes_gateway.provider_runtime_state == "connected":
+        enabled_lanes.append("preview")
     return SocialProviderDto(
         id=provider_id,
         label=status_response.label,
         status=status,
         configured=bool(status_response.required_connections.get("bot_token_present")),
         coming_soon=False,
-        enabled_lanes=["readiness"],
+        enabled_lanes=enabled_lanes,
     )
 
 
@@ -985,6 +1032,110 @@ def _proposal_payload_with_persona(payload: dict[str, Any] | None) -> dict[str, 
     out = _safe_dict(payload)
     out["persona"] = _persona_ref_fields()
     return out
+
+
+def _telegram_preview_target() -> TelegramPreviewTargetDto:
+    test_group = (
+        os.environ.get("TELEGRAM_TEST_GROUP")
+        or os.environ.get("TELEGRAM_TEST_GROUP_ID")
+        or os.environ.get("TELEGRAM_TEST_CHAT_ID")
+        or ""
+    )
+    if (test_group or "").strip():
+        return TelegramPreviewTargetDto(
+            kind="test_group",
+            configured=True,
+            masked_id=_safe_config_ref(test_group),
+        )
+    home_channel = os.environ.get("TELEGRAM_HOME_CHANNEL") or ""
+    return TelegramPreviewTargetDto(
+        kind="home_channel",
+        configured=bool(home_channel.strip()),
+        masked_id=_safe_config_ref(home_channel),
+    )
+
+
+def _telegram_preview_text(intent: TelegramMessageIntent) -> str:
+    persona = load_social_persona("ham-canonical", 1)
+    if intent == "greeting":
+        text = (
+            f"Hey, this is {persona.display_name}. Telegram preview is connected, persona-protected, "
+            "and still dry-run only from HAM Social."
+        )
+    elif intent == "announcement":
+        text = (
+            f"{persona.display_name} Telegram readiness is connected. Next step: keep previews bounded, "
+            "masked, and confirmation-gated before any live send exists."
+        )
+    else:
+        text = (
+            f"{persona.display_name} Telegram preview check: persona is locked, target is masked, "
+            "and no Telegram message will be sent."
+        )
+    return str(redact(text)).strip()[:700]
+
+
+def _telegram_preview_response(body: TelegramMessagePreviewRequest) -> TelegramMessagePreviewResponse:
+    runtime = _hermes_runtime_status("telegram")
+    connections = _telegram_connections()
+    readiness, readiness_reasons = _messaging_readiness("telegram", connections, runtime)
+    missing = _telegram_missing_requirements(connections, runtime)
+    persona = _persona_ref_fields()
+    target = _telegram_preview_target()
+    reasons: list[str] = []
+    warnings: list[str] = []
+    status: PreviewStatus = "completed"
+    text = _telegram_preview_text(body.message_intent)
+    proposal_digest: str | None = None
+
+    if runtime.provider_runtime_state != "connected":
+        reasons.append("telegram_gateway_not_connected")
+    if not target.configured:
+        reasons.append("telegram_target_not_configured")
+    if readiness == "blocked":
+        reasons.append("telegram_readiness_blocked")
+    elif readiness != "ready":
+        warnings.extend(missing)
+        warnings.extend(readiness_reasons)
+
+    if reasons:
+        status = "blocked"
+    else:
+        payload = {
+            "provider_id": "telegram",
+            "preview_kind": "telegram_message",
+            "target": target.model_dump(),
+            "message_preview": {"text": text, "char_count": len(text)},
+            "readiness": {
+                "overall_readiness": readiness,
+                "telegram_mode": _telegram_mode(),
+                "hermes_gateway_runtime_state": runtime.provider_runtime_state,
+                "telegram_platform_state": _telegram_platform_state(runtime),
+            },
+            "safety_gates": {
+                "execution_allowed": False,
+                "mutation_attempted": False,
+                "live_apply_available": False,
+            },
+        }
+        proposal_digest = _proposal_digest("telegram_message", _proposal_payload_with_persona(payload) or payload)
+
+    return TelegramMessagePreviewResponse(
+        status=status,
+        persona_id=str(persona["persona_id"]),
+        persona_version=int(persona["persona_version"]),
+        persona_digest=str(persona["persona_digest"]),
+        proposal_digest=proposal_digest,
+        target=target,
+        message_preview=TelegramMessagePreviewDto(text=text if not reasons else "", char_count=len(text) if not reasons else 0),
+        reasons=_dedupe(reasons),
+        warnings=_dedupe(warnings),
+        recommended_next_steps=(
+            ["Preview generated only. No Telegram message was sent. Keep this digest for a future confirmed send flow."]
+            if status == "completed"
+            else _telegram_setup_steps(connections, runtime)
+        ),
+    )
 
 
 def _persona_digest_mismatch_response(
@@ -2068,6 +2219,7 @@ def telegram_capabilities(
         missing_requirements=_telegram_missing_requirements(connections, runtime),
         recommended_next_steps=_telegram_setup_steps(connections, runtime),
         inbound_available=runtime.provider_runtime_state == "connected",
+        preview_available=runtime.provider_runtime_state == "connected",
     )
 
 
@@ -2118,6 +2270,14 @@ def telegram_setup_checklist(
         ],
         recommended_next_steps=_telegram_setup_steps(connections, runtime),
     )
+
+
+@router.post("/providers/telegram/messages/preview", response_model=TelegramMessagePreviewResponse)
+def telegram_message_preview(
+    body: TelegramMessagePreviewRequest | None = None,
+    _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)] = None,
+) -> TelegramMessagePreviewResponse:
+    return _telegram_preview_response(body or TelegramMessagePreviewRequest())
 
 
 @router.get("/providers/discord/status", response_model=SocialMessagingProviderStatusResponse)

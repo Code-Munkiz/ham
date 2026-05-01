@@ -212,7 +212,7 @@ export type TelegramCapabilities = {
   media_supported: boolean;
   voice_supported: boolean;
   inbound_available: boolean;
-  preview_available: false;
+  preview_available: boolean;
   live_message_available: false;
   live_apply_available: false;
   read_only: boolean;
@@ -289,6 +289,32 @@ export type SocialPreviewResponse = {
   warnings: string[];
   result: Record<string, unknown>;
   proposal_digest: string | null;
+  read_only: boolean;
+};
+
+export type TelegramMessagePreviewResponse = {
+  provider_id: "telegram";
+  preview_kind: "telegram_message";
+  status: "completed" | "blocked" | "failed";
+  execution_allowed: false;
+  mutation_attempted: false;
+  live_apply_available: false;
+  persona_id: string;
+  persona_version: number;
+  persona_digest: string;
+  proposal_digest: string | null;
+  target: {
+    kind: "home_channel" | "test_group";
+    configured: boolean;
+    masked_id: string;
+  };
+  message_preview: {
+    text: string;
+    char_count: number;
+  };
+  reasons: string[];
+  warnings: string[];
+  recommended_next_steps: string[];
   read_only: boolean;
 };
 
@@ -498,6 +524,21 @@ export const socialAdapter = {
     try {
       return {
         preview: await postPreview<SocialPreviewResponse>(`${BASE}/providers/x/broadcast/preflight`),
+        bridge: { status: "ready" },
+      };
+    } catch (e) {
+      return {
+        preview: null,
+        bridge: workspaceApiPending("social", null, e),
+        error: e instanceof Error ? e.message : String(e),
+      };
+    }
+  },
+
+  async previewTelegramMessage(): Promise<{ preview: TelegramMessagePreviewResponse | null; bridge: SocialBridge; error?: string }> {
+    try {
+      return {
+        preview: await postPreview<TelegramMessagePreviewResponse>(`${BASE}/providers/telegram/messages/preview`),
         bridge: { status: "ready" },
       };
     } catch (e) {
