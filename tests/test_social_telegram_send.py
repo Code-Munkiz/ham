@@ -222,6 +222,25 @@ def test_result_and_delivery_log_never_contain_secret_values(monkeypatch: pytest
     row = json.loads(log.read_text(encoding="utf-8").splitlines()[-1])
     assert row["target_ref"].startswith("configured:")
     assert row["status"] == "sent"
+    assert row["execution_kind"] == "social_telegram_message"
+
+
+def test_custom_execution_kind_is_applied_to_delivery_log(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    _ready_env(monkeypatch)
+    log = tmp_path / "delivery.jsonl"
+
+    result = send_confirmed_telegram_message(
+        _request(),
+        transport=MockTransport(),
+        delivery_log_path=log,
+        execution_kind="social_telegram_activity",
+        action_type="activity",
+    )
+
+    assert result.status == "sent"
+    row = json.loads(log.read_text(encoding="utf-8").splitlines()[-1])
+    assert row["execution_kind"] == "social_telegram_activity"
+    assert row["action_type"] == "activity"
 
 
 def test_duplicate_idempotency_key_blocks_before_transport(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

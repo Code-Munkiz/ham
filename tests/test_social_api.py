@@ -2011,9 +2011,40 @@ def test_telegram_activity_apply_calls_send_adapter_once_and_no_retry(
     assert body["execution_allowed"] is True
     assert body["mutation_attempted"] is True
     assert body["provider_message_id"] == "telegram-activity-message-1"
+    assert body["result"]["execution_kind"] == "social_telegram_activity"
     text = json.dumps(body, sort_keys=True)
     for raw in (token, allowed, home_channel, test_group, _SOCIAL_TOKEN):
         assert raw not in text
+
+
+def test_telegram_activity_apply_logs_activity_execution_kind_consistently(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _enable_telegram_apply_env(monkeypatch, tmp_path)
+    digest = _telegram_activity_preview_digest()
+    with patch(
+        "src.ham.social_telegram_send.TelegramBotApiTransport.send_message",
+        return_value=TelegramSendResult(
+            status="sent",
+            execution_allowed=True,
+            mutation_attempted=True,
+            provider_message_id="telegram-activity-message-2",
+        ),
+    ):
+        body = client.post(
+            _TELEGRAM_ACTIVITY_APPLY_ROUTE,
+            headers={"X-Ham-Operator-Authorization": f"Bearer {_SOCIAL_TOKEN}"},
+            json={"proposal_digest": digest, "confirmation_phrase": _TELEGRAM_ACTIVITY_CONFIRM},
+        ).json()
+    assert body["status"] == "sent"
+    assert body["result"]["execution_kind"] == "social_telegram_activity"
+    delivery_path = Path(os.environ["HAM_SOCIAL_DELIVERY_LOG_PATH"])
+    row = json.loads(delivery_path.read_text(encoding="utf-8").splitlines()[-1])
+    assert row["execution_kind"] == "social_telegram_activity"
+    assert row["action_type"] == "activity"
 
 
 def test_telegram_activity_apply_provider_failure_does_not_retry(
@@ -2259,6 +2290,7 @@ def test_telegram_apply_calls_adapter_once_and_returns_redacted_result(
     assert body["execution_allowed"] is True
     assert body["mutation_attempted"] is True
     assert body["provider_message_id"] == "telegram-provider-message-1"
+    assert body["result"]["execution_kind"] == "social_telegram_message"
     text = json.dumps(body, sort_keys=True)
     for raw in (token, allowed, home_channel, test_group, _SOCIAL_TOKEN):
         assert raw not in text

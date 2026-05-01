@@ -162,6 +162,8 @@ def send_confirmed_telegram_message(
     transport: TelegramTransport | None = None,
     delivery_log_path: Path | None = None,
     timeout_seconds: float = 10.0,
+    execution_kind: str = TELEGRAM_EXECUTION_KIND,
+    action_type: str = TELEGRAM_ACTION_TYPE,
 ) -> TelegramSendResult:
     token = (os.environ.get("TELEGRAM_BOT_TOKEN") or "").strip()
     chat_id, target_ref = resolve_telegram_target(request.target_kind)
@@ -202,8 +204,8 @@ def send_confirmed_telegram_message(
     append_delivery_record(
         {
             "provider_id": "telegram",
-            "execution_kind": TELEGRAM_EXECUTION_KIND,
-            "action_type": TELEGRAM_ACTION_TYPE,
+            "execution_kind": str(redact(execution_kind))[:128],
+            "action_type": str(redact(action_type))[:64],
             "target_kind": request.target_kind,
             "target_ref": target_ref,
             "proposal_digest": request.proposal_digest,

@@ -2563,7 +2563,11 @@ def telegram_activity_apply(
         idempotency_key=_telegram_activity_apply_idempotency_key(preview.proposal_digest),
         telegram_connected=True,
     )
-    send_result = send_confirmed_telegram_message(request)
+    send_result = send_confirmed_telegram_message(
+        request,
+        execution_kind=TELEGRAM_ACTIVITY_EXECUTION_KIND,
+        action_type="activity",
+    )
     return TelegramActivityApplyResponse(
         **_persona_ref_fields(),
         status=send_result.status,
