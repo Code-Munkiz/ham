@@ -837,7 +837,16 @@ async def export_chat_session_pdf(
     session_id: str,
     authorization: str | None = Header(None, alias="Authorization"),
 ) -> Response:
-    """Export persisted chat transcript as PDF (sanitized; no attachment re-fetch)."""
+    """Export persisted chat transcript as PDF (sanitized; no attachment re-fetch).
+
+    **Authorization:** Same as :func:`get_chat_session` — ``enforce_clerk_session_and_email_for_request``
+    when Clerk auth is enabled; no separate export policy.
+
+    **Session scope:** Chat persistence (Firestore/SQLite/memory) does **not** record a per-user
+    owner on the session document. Any principal who may call ``GET /api/chat/sessions/{id}``
+    (including with a guessed or leaked ``session_id``) can export the same transcript. Mitigate
+    by treating ``session_id`` as secret; per-user session isolation requires store/API changes.
+    """
     from src.ham.chat_pdf_export import render_chat_transcript_pdf_bytes
     from src.ham.pdf_export_sanitizer import safe_export_filename_fragment
 
@@ -860,6 +869,8 @@ async def export_chat_session_pdf(
         media_type="application/pdf",
         headers={
             "Content-Disposition": f'attachment; filename="{fn}"',
+            "Cache-Control": "no-store, no-cache, must-revalidate, private",
+            "Pragma": "no-cache",
         },
     )
 

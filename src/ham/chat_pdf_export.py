@@ -32,7 +32,8 @@ def _format_user_message_for_pdf(raw_content: str) -> str:
                 names.append(n)
     if not names:
         return base
-    extra = "Attachments referenced (names only): " + ", ".join(names)
+    safe_names = [redact_for_pdf_export(n) for n in names]
+    extra = "Attachments referenced (names only): " + ", ".join(safe_names)
     if base.strip():
         return f"{base}\n{extra}"
     return extra

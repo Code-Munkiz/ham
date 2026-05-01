@@ -50,14 +50,56 @@ def test_export_pdf_returns_pdf_and_redacts() -> None:
     ex = client.get(f"/api/chat/sessions/{sid}/export.pdf")
     assert ex.status_code == 200
     assert ex.headers.get("content-type") == "application/pdf"
+    assert (ex.headers.get("pragma") or "").lower() == "no-cache"
     cd = ex.headers.get("content-disposition") or ""
     assert "attachment" in cd.lower()
     assert ".pdf" in cd.lower()
+    assert 'filename="ham-chat-' in cd.lower() or "filename=ham-chat-" in cd.lower()
     body = ex.content
     assert body[:4] == b"%PDF"
     assert b"gs://b" not in body
     assert b"C:\\\\Users" not in body and b"C:\\Users" not in body
     assert b"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9" not in body
+
+
+def test_export_pdf_redacts_v2_attachment_file_names() -> None:
+    import json as json_mod
+
+    v2 = {
+        "h": "ham_chat_user_v2",
+        "text": "see files",
+        "attachments": [
+            {
+                "id": "hamatt_testfile12",
+                "name": r"C:\Secret\evil.pdf",
+                "mime": "application/pdf",
+                "kind": "file",
+            },
+        ],
+    }
+    c = client.post("/api/chat/sessions")
+    assert c.status_code == 200
+    sid = c.json()["session_id"]
+    up = client.post(
+        f"/api/chat/sessions/{sid}/turns",
+        json={"turns": [{"role": "user", "content": json_mod.dumps(v2)}]},
+    )
+    assert up.status_code == 200
+    ex = client.get(f"/api/chat/sessions/{sid}/export.pdf")
+    assert ex.status_code == 200
+    body = ex.content
+    assert b"C:\\\\Secret" not in body and b"C:Secret" not in body
+
+
+def test_chat_session_record_has_no_owner_field() -> None:
+    """Documents authz: no per-user row ownership — export inherits GET session scope."""
+    from dataclasses import fields
+
+    from src.persistence.chat_session_store import ChatSessionRecord
+
+    field_names = {f.name for f in fields(ChatSessionRecord)}
+    assert "owner_key" not in field_names
+    assert "owner_clerk_user_id" not in field_names
 
 
 def test_export_pdf_401_when_clerk_required(monkeypatch: pytest.MonkeyPatch) -> None:

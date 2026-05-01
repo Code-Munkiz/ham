@@ -111,7 +111,9 @@ Snapshot accepted after Document Intelligence Phase 2A and backend deploy:
 
 **MVP shipped:** **ReportLab** — `GET /api/chat/sessions/{session_id}/export.pdf` (sanitized transcript; no attachment re-fetch) and workspace **Export PDF** button. Evolve to Playwright/HTML layout in a later iteration if needed.
 
-**Security rules (Phase 2B):**
+**Authorization note:** Export uses the **same Clerk gate** as `GET /api/chat/sessions/{id}`. The session store **does not** attach an owner/user id to each session; **session_id secrecy** is the practical access control (same as fetching JSON history). Per-user session isolation is a separate persistence effort.
+
+### Security rules (Phase 2B)
 
 - Sanitize Markdown/HTML; strip script, remote assets, and opaque metadata where applicable.
 - Do not include provider tokens, env dumps, local paths, `gs://` URIs, raw storage keys, or hidden chain/tool payloads.
