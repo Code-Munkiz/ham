@@ -70,6 +70,8 @@ Snapshot accepted after Document Intelligence Phase 2A and backend deploy:
 
 **Spreadsheet attachments (Phase 2D.1):** `.xlsx` and `.csv` are accepted on `POST /api/chat/attachments` and **text-extracted with bounds** (sheet/row/column/character caps) for model context — values only via `data_only` / stored cell values; no formula or macro execution. **Legacy `.xls`** is **upload-only / store-only** (`application/vnd.ms-excel`) with an explicit placeholder in extracted context until a safe parser is added.
 
+**Phase 2D.2 (composer polish):** The **+** action menu closes as soon as **Add files** is chosen (before the native picker opens, including when the user cancels the picker); hidden input + upload path unchanged.
+
 ---
 
 ## 5. Phase 2B — Export-to-PDF MVP (definition only)

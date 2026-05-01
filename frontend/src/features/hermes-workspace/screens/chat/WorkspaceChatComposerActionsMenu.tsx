@@ -160,7 +160,10 @@ export function WorkspaceChatComposerActionsMenu({
                 )}
                 onClick={() => {
                   if (attachDisabled) return;
-                  inputRef.current?.click();
+                  setOpen(false);
+                  window.setTimeout(() => {
+                    inputRef.current?.click();
+                  }, 0);
                 }}
               >
                 <span className="flex w-full items-center justify-between gap-1.5 font-medium leading-tight text-white/92">
