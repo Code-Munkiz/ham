@@ -79,17 +79,15 @@ type WorkspaceChatComposerProps = {
   exportPdf: ComposerExportPdfState;
 };
 
-function attachFooterNoteFromCapabilities(caps: ChatCapabilitiesPayload | null | undefined): string | undefined {
-  if (!caps) return undefined;
-  const bits: string[] = [
-    "Documents are text-extracted by HAM and added as bounded context. Scanned PDFs are not OCRed yet.",
-  ];
-  if (caps.capabilities.image_input) {
-    bits.push("Images may be sent to the model when vision routing is available.");
-  } else {
-    bits.push("This model is not marked as vision-capable in HAM.");
-  }
-  return bits.join(" ");
+const COMPOSER_MENU_FOOTER_HINT = "Docs are text-extracted. OCR/video not yet supported.";
+
+/** Tooltip-only: full honesty without bloating the menu panel. */
+function attachMenuCapabilityTitle(caps: ChatCapabilitiesPayload | null | undefined): string | null {
+  if (!caps) return null;
+  const lines = [...(caps.limitations ?? [])];
+  if (caps.notes?.trim()) lines.push(caps.notes.trim());
+  const text = lines.join(" ");
+  return text.length ? text : null;
 }
 
 function modelDetailTitle(
@@ -99,8 +97,21 @@ function modelDetailTitle(
 ): string | null {
   const pill = primaryModelPillText(catalog, modelId);
   if (!caps?.limitations?.length) return pill;
-  const extra = caps.limitations.slice(0, 4).join(" ");
+  const extra = caps.limitations.slice(0, 2).join(" ");
   return pill ? `${pill} — ${extra}` : extra;
+}
+
+function attachMenuDisabledReason(
+  uploadsPending: boolean,
+  voiceBusy: boolean,
+  sending: boolean,
+  composerDisabled: boolean,
+): string | null {
+  if (uploadsPending) return "Wait for uploads";
+  if (voiceBusy) return "Finish voice first";
+  if (sending) return "Sending…";
+  if (composerDisabled) return "Composer locked";
+  return null;
 }
 
 type VoiceUiState = "idle" | "recording" | "live" | "stopping" | "transcribing" | "error";
@@ -356,7 +367,7 @@ export function WorkspaceChatComposer({
   const gatewayOk = isDashboardChatGatewayReady(catalog);
   const modelPill = primaryModelPillText(catalog, modelId);
   const modelDetail = modelDetailTitle(catalog, modelId, chatCapabilities);
-  const attachFooter = attachFooterNoteFromCapabilities(chatCapabilities);
+  const attachDetailsTitle = attachMenuCapabilityTitle(chatCapabilities);
   const uploadsPending = attachments.some((a) => a.uploadPhase === "uploading");
   const hasAttachErrOnly =
     attachments.length > 0 &&
@@ -373,6 +384,37 @@ export function WorkspaceChatComposer({
     normalSendReady &&
     !sending &&
     !voiceBusy;
+
+  const sendButtonTitle = React.useMemo(() => {
+    if (canSend) return "Send message (Enter)";
+    if (voiceTranscribing) return "Wait for transcription to finish";
+    if (voiceLive) return "Stop live dictation before sending";
+    if (voiceRecording || voiceStopping) return "Stop recording before sending";
+    if (uploadsPending) return "Wait for uploads to finish";
+    if (allAttachmentsFailed) return "Fix or remove failed attachments";
+    if (!normalSendReady && gatewayOk) return "Type a message or add attachments";
+    if (!gatewayOk) return "Chat gateway not ready";
+    if (sending) return "Sending…";
+    return "Cannot send yet";
+  }, [
+    allAttachmentsFailed,
+    canSend,
+    gatewayOk,
+    normalSendReady,
+    sending,
+    uploadsPending,
+    voiceLive,
+    voiceRecording,
+    voiceStopping,
+    voiceTranscribing,
+  ]);
+
+  const micColumnTitle = React.useMemo(() => {
+    if (voiceTranscribing) return "Transcribing… — microphone unavailable until done";
+    if (sttMode === "record") return "Record then transcribe (right-click for mode)";
+    if (sttMode === "live") return "Live dictation (right-click for mode)";
+    return "Auto dictation (right-click for mode)";
+  }, [sttMode, voiceTranscribing]);
 
   const placeholder = React.useMemo(() => {
     if (voiceTranscribing) return "Transcribing…";
@@ -620,7 +662,7 @@ export function WorkspaceChatComposer({
                     data-hww-voice-button="recording-banner-stop"
                     data-hww-voice-state="recording"
                   >
-                    Recording - click to stop
+                    Recording — tap here or the mic to stop
                   </button>
                 </>
               )}
@@ -706,8 +748,15 @@ export function WorkspaceChatComposer({
               <WorkspaceChatComposerActionsMenu
                 onFiles={handleAddFiles}
                 attachDisabled={sending || voiceBusy || disabled || uploadsPending}
+                attachDisabledReason={attachMenuDisabledReason(
+                  uploadsPending,
+                  voiceBusy,
+                  sending,
+                  disabled,
+                )}
+                attachDetailsTitle={attachDetailsTitle}
+                menuFooterHint={COMPOSER_MENU_FOOTER_HINT}
                 exportPdf={exportPdf}
-                attachFooterNote={attachFooter}
               />
               {value.length >= 100 ? (
                 <span
@@ -744,19 +793,13 @@ export function WorkspaceChatComposer({
               ) : null}
             </div>
 
-            <div className="relative z-[5] flex shrink-0 items-center gap-0.5 md:gap-1">
+            <div className="relative z-[5] flex h-10 shrink-0 items-center gap-0.5 md:gap-1">
               <div
                 className={cn(
-                  "flex shrink-0 items-center",
-                  voiceTranscribing && "pointer-events-none opacity-40",
+                  "flex h-10 shrink-0 items-center",
+                  voiceTranscribing && "pointer-events-none opacity-55",
                 )}
-                title={
-                  sttMode === "record"
-                    ? "Record then transcribe"
-                    : sttMode === "live"
-                      ? "Dictate live"
-                      : "Auto dictation"
-                }
+                title={micColumnTitle}
               >
                 <WorkspaceVoiceMessageInput
                   compact
@@ -767,7 +810,9 @@ export function WorkspaceChatComposer({
                     sttDictationEnabled === false
                       ? sttUnavailableReason ||
                         "Speech-to-text is off — enable it in Workspace → Settings → Voice."
-                      : undefined
+                      : voiceTranscribing
+                        ? "Transcribing…"
+                        : undefined
                   }
                   onRecordingChange={(isRecording) => {
                     if (liveListening) {
@@ -872,6 +917,7 @@ export function WorkspaceChatComposer({
                 type="submit"
                 size="icon"
                 disabled={!canSend}
+                title={sendButtonTitle}
                 className="h-10 w-10 shrink-0 rounded-full border border-emerald-400/15 bg-gradient-to-b from-emerald-600 to-emerald-900 text-white shadow-md hover:from-emerald-500 hover:to-emerald-800 disabled:opacity-40"
                 aria-label="Send"
               >

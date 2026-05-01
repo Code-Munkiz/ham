@@ -23,9 +23,9 @@ function exportBlockedMessage(reason: ComposerExportPdfState["blockedReason"]): 
     case "no_session":
       return "Start a chat first";
     case "no_transcript":
-      return "Add a message first";
+      return "Nothing to export yet";
     case "streaming":
-      return "Wait for response to finish";
+      return "Wait for reply";
     case "session_error":
       return "Session unavailable";
     default:
@@ -36,17 +36,23 @@ function exportBlockedMessage(reason: ComposerExportPdfState["blockedReason"]): 
 type WorkspaceChatComposerActionsMenuProps = {
   onFiles: (files: File[]) => void;
   attachDisabled: boolean;
+  /** Short line when attach row is disabled (e.g. uploads in progress). */
+  attachDisabledReason?: string | null;
+  /** Long capability honesty — tooltip on the Add files row (not inline). */
+  attachDetailsTitle?: string | null;
+  /** Optional one-line footer under menu actions. */
+  menuFooterHint?: string | null;
   exportPdf: ComposerExportPdfState;
-  /** Shown under menu rows / in title attributes — honest capability copy. */
-  attachFooterNote?: string;
   className?: string;
 };
 
 export function WorkspaceChatComposerActionsMenu({
   onFiles,
   attachDisabled,
+  attachDisabledReason = null,
+  attachDetailsTitle = null,
+  menuFooterHint = null,
   exportPdf,
-  attachFooterNote,
   className,
 }: WorkspaceChatComposerActionsMenuProps) {
   const [open, setOpen] = React.useState(false);
@@ -89,7 +95,13 @@ export function WorkspaceChatComposerActionsMenu({
     ? "Generating PDF…"
     : exportBlocked
       ? exportBlockedMessage(exportPdf.blockedReason)
-      : "Download this chat transcript";
+      : "Download transcript";
+
+  const addFilesTitle =
+    attachDisabled && attachDisabledReason?.trim()
+      ? attachDisabledReason.trim()
+      : attachDetailsTitle?.trim() ||
+        "Documents: text-extracted server-side. PDF export is a transcript download, not model-generated.";
 
   return (
     <div className={cn("relative shrink-0", className)} ref={wrapRef}>
@@ -116,7 +128,7 @@ export function WorkspaceChatComposerActionsMenu({
           open && "bg-white/[0.08] text-[#7dd3fc]",
         )}
         onClick={() => setOpen((o) => !o)}
-        aria-label="Composer actions"
+        aria-label="Attachments and export"
         aria-expanded={open}
         aria-haspopup="menu"
         title="Add files or export PDF"
@@ -127,7 +139,7 @@ export function WorkspaceChatComposerActionsMenu({
         ? createPortal(
             <div
               ref={menuPanelRef}
-              className="fixed z-[200] min-w-[min(92vw,17.5rem)] rounded-xl border border-white/[0.12] bg-[#050f0c]/98 py-1 shadow-[0_12px_40px_rgba(0,0,0,0.45)] backdrop-blur-md"
+              className="fixed z-[200] w-[min(92vw,13.75rem)] rounded-lg border border-white/[0.1] bg-[#050a0e]/95 py-0.5 shadow-[0_10px_32px_rgba(0,0,0,0.42)] backdrop-blur-md"
               style={{
                 left: Math.max(8, anchorRect.left),
                 bottom: window.innerHeight - anchorRect.top + 6,
@@ -139,38 +151,36 @@ export function WorkspaceChatComposerActionsMenu({
                 type="button"
                 role="menuitem"
                 disabled={attachDisabled}
+                title={addFilesTitle}
                 className={cn(
-                  "flex w-full flex-col items-start gap-0.5 px-3 py-2.5 text-left text-[12px] transition-colors",
+                  "flex w-full flex-col gap-0 px-2.5 py-2 text-left text-[11px] transition-colors",
                   attachDisabled
-                    ? "cursor-not-allowed text-white/35"
-                    : "text-white/88 hover:bg-white/[0.07]",
+                    ? "cursor-not-allowed opacity-50"
+                    : "text-white/90 hover:bg-white/[0.06]",
                 )}
                 onClick={() => {
                   if (attachDisabled) return;
                   inputRef.current?.click();
                 }}
               >
-                <span className="flex w-full items-center justify-between gap-2 font-medium">
-                  Add photos & files
-                  <ChevronRight className="h-3.5 w-3.5 shrink-0 opacity-45" aria-hidden />
+                <span className="flex w-full items-center justify-between gap-1.5 font-medium leading-tight text-white/92">
+                  Add files
+                  <ChevronRight className="h-3 w-3 shrink-0 opacity-40" aria-hidden strokeWidth={2} />
                 </span>
-                <span className="text-[10px] font-normal leading-snug text-white/45">
-                  Upload images or documents
+                <span className="text-[10px] font-normal leading-snug text-white/42">
+                  {attachDisabled ? attachDisabledReason ?? "Unavailable" : "Images and documents"}
                 </span>
-                {attachFooterNote ? (
-                  <span className="text-[10px] font-normal leading-snug text-white/38">{attachFooterNote}</span>
-                ) : null}
               </button>
-              <div className="mx-2 h-px bg-white/[0.08]" role="separator" />
+              <div className="mx-2 my-0.5 h-px bg-white/[0.07]" role="separator" />
               <button
                 type="button"
                 role="menuitem"
                 disabled={exportBlocked}
                 className={cn(
-                  "flex w-full flex-col items-start gap-0.5 px-3 py-2.5 text-left text-[12px] transition-colors",
+                  "flex w-full flex-col gap-0 px-2.5 py-2 text-left text-[11px] transition-colors",
                   exportBlocked
-                    ? "cursor-not-allowed text-white/40"
-                    : "text-white/88 hover:bg-white/[0.07]",
+                    ? "cursor-not-allowed opacity-50"
+                    : "text-white/90 hover:bg-white/[0.06]",
                 )}
                 title={exportHint}
                 onClick={() => {
@@ -179,18 +189,21 @@ export function WorkspaceChatComposerActionsMenu({
                   setOpen(false);
                 }}
               >
-                <span className="flex w-full items-center justify-between gap-2 font-medium">
-                  <span className="inline-flex items-center gap-1.5">
-                    {exportPdf.busy ? (
-                      <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-emerald-300/90" aria-hidden />
-                    ) : (
-                      <FileDown className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
-                    )}
-                    Export PDF
-                  </span>
+                <span className="flex w-full items-center gap-1.5 font-medium leading-tight text-white/92">
+                  {exportPdf.busy ? (
+                    <Loader2 className="h-3 w-3 shrink-0 animate-spin text-emerald-300/90" aria-hidden />
+                  ) : (
+                    <FileDown className="h-3 w-3 shrink-0 opacity-75" aria-hidden strokeWidth={2} />
+                  )}
+                  Export PDF
                 </span>
-                <span className="text-[10px] font-normal leading-snug text-white/45">{exportHint}</span>
+                <span className="text-[10px] font-normal leading-snug text-white/42">{exportHint}</span>
               </button>
+              {menuFooterHint?.trim() ? (
+                <p className="mx-2 mb-1 mt-0.5 border-t border-white/[0.06] px-0.5 pt-1.5 text-[9px] leading-snug text-white/32">
+                  {menuFooterHint.trim()}
+                </p>
+              ) : null}
             </div>,
             document.body,
           )

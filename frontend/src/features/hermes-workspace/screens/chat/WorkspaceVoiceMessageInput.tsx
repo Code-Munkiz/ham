@@ -240,7 +240,7 @@ export function WorkspaceVoiceMessageInput(props: WorkspaceVoiceMessageInputProp
         const hadFinal = liveProducedFinalRef.current;
         const msg =
           ev?.error === "not-allowed"
-            ? "Microphone permission is blocked for live dictation."
+            ? "Microphone permission is blocked. Allow microphone access in your browser settings."
             : "Live dictation failed to start.";
         setIsLiveListening(false);
         onLiveListeningChange?.(false);
