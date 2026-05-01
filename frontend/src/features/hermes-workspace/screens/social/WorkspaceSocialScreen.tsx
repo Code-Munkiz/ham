@@ -201,6 +201,7 @@ function MessagingProviderPanel({
   setup: SocialMessagingSetupChecklist;
 }) {
   const isTelegram = status.provider_id === "telegram";
+  const telegramCapabilities = capabilities.provider_id === "telegram" ? capabilities : null;
   const guidance = isTelegram
     ? {
         title: "Telegram setup guidance",
@@ -288,7 +289,9 @@ function MessagingProviderPanel({
             { label: "Runtime source", value: titleCase(status.hermes_gateway.source) },
             { label: "Gateway state", value: titleCase(status.hermes_gateway.gateway_state) },
             { label: "Provider runtime", value: titleCase(status.hermes_gateway.provider_runtime_state) },
+            { label: "Gateway status known", value: status.hermes_gateway.status_file_available ? "Yes" : "Unknown" },
             { label: "Status file available", value: status.hermes_gateway.status_file_available ? "Yes" : "No" },
+            { label: "Status path configured", value: status.hermes_gateway.status_path_configured ? "Yes" : "No" },
             { label: "Gateway base configured", value: status.hermes_gateway.base_url_configured ? "Yes" : "No" },
             { label: "Active agents", value: status.hermes_gateway.active_agents ?? "Unknown" },
           ]}
@@ -299,6 +302,44 @@ function MessagingProviderPanel({
           </p>
         ) : null}
       </Panel>
+
+      {telegramCapabilities ? (
+        <Panel title="Telegram runtime validation">
+          <div className="space-y-4">
+            <div className="grid gap-2 sm:grid-cols-2">
+              <BoolRow label="Token present" value={Boolean(status.telegram_bot_token_present ?? telegramCapabilities.bot_token_present)} />
+              <BoolRow label="Allowed users configured" value={Boolean(status.telegram_allowed_users_present ?? telegramCapabilities.allowed_users_configured)} />
+              <BoolRow label="Home channel configured" value={Boolean(status.telegram_home_channel_configured ?? telegramCapabilities.home_channel_configured)} />
+              <BoolRow label="Test group configured" value={Boolean(status.telegram_test_group_configured ?? telegramCapabilities.test_group_configured)} />
+              <BoolRow label="Hermes gateway base URL present" value={Boolean(status.hermes_gateway_base_url_present ?? telegramCapabilities.hermes_gateway_base_url_present)} />
+              <BoolRow label="Hermes gateway status path present" value={Boolean(status.hermes_gateway_status_path_present ?? telegramCapabilities.hermes_gateway_status_path_present)} />
+            </div>
+            <KeyValueGrid
+              rows={[
+                { label: "Telegram mode", value: titleCase(status.telegram_mode ?? telegramCapabilities.telegram_mode) },
+                { label: "Hermes runtime state", value: titleCase(status.hermes_gateway_runtime_state ?? telegramCapabilities.hermes_gateway_runtime_state) },
+                { label: "Telegram platform state", value: titleCase(status.telegram_platform_state ?? telegramCapabilities.telegram_platform_state) },
+                { label: "Readiness", value: titleCase(status.readiness ?? telegramCapabilities.readiness) },
+              ]}
+            />
+            {!status.telegram_bot_token_present || !status.hermes_gateway_base_url_present ? (
+              <p className="rounded-lg border border-amber-400/20 bg-amber-500/5 p-3 text-sm leading-relaxed text-amber-100/80">
+                Bot exists but runtime is not connected yet. Store the token securely, configure allowed chats/users, and validate the Hermes gateway before dry-run preview work.
+              </p>
+            ) : null}
+            {(status.missing_requirements.length || telegramCapabilities.missing_requirements.length) ? (
+              <div>
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-white/45">Missing requirements</h3>
+                <div className="flex flex-wrap gap-2">
+                  {(status.missing_requirements.length ? status.missing_requirements : telegramCapabilities.missing_requirements).map((item) => (
+                    <StatusPill key={item} label={titleCase(item)} tone="warn" />
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </Panel>
+      ) : null}
 
       <Panel title="Setup checklist">
         <div className="space-y-2">

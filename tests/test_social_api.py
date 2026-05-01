@@ -80,6 +80,14 @@ def _isolate_journal(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> tuple[P
         "TELEGRAM_ALLOWED_USERS",
         "TELEGRAM_ALLOW_ALL_USERS",
         "TELEGRAM_HOME_CHANNEL",
+        "TELEGRAM_TEST_GROUP",
+        "TELEGRAM_TEST_GROUP_ID",
+        "TELEGRAM_TEST_CHAT_ID",
+        "TELEGRAM_MODE",
+        "HERMES_TELEGRAM_MODE",
+        "TELEGRAM_GATEWAY_MODE",
+        "TELEGRAM_WEBHOOK_URL",
+        "TELEGRAM_WEBHOOK_BASE_URL",
         "GATEWAY_ALLOWED_USERS",
         "GATEWAY_ALLOW_ALL_USERS",
         "DISCORD_BOT_TOKEN",
@@ -559,6 +567,8 @@ def test_provider_list_marks_td_provider_active_when_gateway_reports_connected(
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "telegram-token-1234567890")
     monkeypatch.setenv("TELEGRAM_ALLOWED_USERS", "123456789")
     monkeypatch.setenv("TELEGRAM_HOME_CHANNEL", "-1001234567890")
+    monkeypatch.setenv("TELEGRAM_TEST_GROUP_ID", "-1009876543210")
+    monkeypatch.setenv("TELEGRAM_MODE", "polling")
     status_path = tmp_path / "hermes-home" / "gateway_state.json"
     _write_hermes_gateway_state(
         status_path,
@@ -711,9 +721,13 @@ def test_telegram_status_capabilities_and_checklist_are_read_only_and_safe(
     token = "telegram-token-secret-1234567890"
     allowed = "123456789"
     channel = "-1001234567890"
+    test_group = "-1009876543210"
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", token)
     monkeypatch.setenv("TELEGRAM_ALLOWED_USERS", allowed)
     monkeypatch.setenv("TELEGRAM_HOME_CHANNEL", channel)
+    monkeypatch.setenv("TELEGRAM_TEST_GROUP_ID", test_group)
+    monkeypatch.setenv("TELEGRAM_MODE", "polling")
+    monkeypatch.setenv("HERMES_GATEWAY_BASE_URL", "http://127.0.0.1:8765")
     _write_hermes_gateway_state(
         tmp_path / "hermes-home" / "gateway_state.json",
         active_agents=1,
@@ -729,18 +743,42 @@ def test_telegram_status_capabilities_and_checklist_are_read_only_and_safe(
         "bot_token_present": True,
         "allowed_users_configured": True,
         "home_channel_configured": True,
+        "test_group_configured": True,
     }
     assert body["hermes_gateway"]["provider_runtime_state"] == "connected"
+    assert body["hermes_gateway"]["base_url_configured"] is True
+    assert body["hermes_gateway"]["status_path_configured"] is True
     assert body["hermes_gateway"]["active_agents"] == 1
+    assert body["telegram_bot_token_present"] is True
+    assert body["telegram_allowed_users_present"] is True
+    assert body["telegram_home_channel_configured"] is True
+    assert body["telegram_test_group_configured"] is True
+    assert body["telegram_mode"] == "polling"
+    assert body["hermes_gateway_base_url_present"] is True
+    assert body["hermes_gateway_status_path_present"] is True
+    assert body["hermes_gateway_runtime_state"] == "connected"
+    assert body["telegram_platform_state"] == "connected"
+    assert body["readiness"] == "ready"
+    assert body["missing_requirements"] == []
+    assert body["recommended_next_steps"]
     assert body["read_only"] is True
     assert body["mutation_attempted"] is False
     assert body["live_apply_available"] is False
     assert body["safe_identifiers"]["home_channel"].startswith("configured:")
+    assert body["safe_identifiers"]["test_group"].startswith("configured:")
 
     caps = client.get("/api/social/providers/telegram/capabilities").json()
     assert caps["bot_token_present"] is True
     assert caps["allowed_users_configured"] is True
     assert caps["home_channel_configured"] is True
+    assert caps["test_group_configured"] is True
+    assert caps["telegram_mode"] == "polling"
+    assert caps["hermes_gateway_base_url_present"] is True
+    assert caps["hermes_gateway_status_path_present"] is True
+    assert caps["hermes_gateway_runtime_state"] == "connected"
+    assert caps["telegram_platform_state"] == "connected"
+    assert caps["readiness"] == "ready"
+    assert caps["missing_requirements"] == []
     assert caps["polling_supported"] is True
     assert caps["webhook_supported"] is True
     assert caps["groups_supported"] is True
@@ -762,12 +800,15 @@ def test_telegram_status_capabilities_and_checklist_are_read_only_and_safe(
         "telegram_bot_token",
         "telegram_allowed_users",
         "telegram_home_channel",
+        "telegram_test_group",
+        "telegram_mode",
+        "hermes_gateway_status",
         "hermes_gateway_runtime",
     }
     assert all(isinstance(item["ok"], bool) for item in checklist["items"])
 
     text = status.text + json.dumps(caps, sort_keys=True) + json.dumps(checklist, sort_keys=True)
-    for raw in (token, allowed, channel):
+    for raw in (token, allowed, channel, test_group):
         assert raw not in text
 
 
@@ -852,8 +893,82 @@ def test_td_missing_or_unknown_gateway_status_is_limited_safely(
     assert "hermes_gateway_runtime_unknown" in body["readiness_reasons"]
     assert body["hermes_gateway"]["source"] == "unknown"
     assert body["hermes_gateway"]["status_file_available"] is False
+    assert body["hermes_gateway"]["status_path_configured"] is True
     assert body["hermes_gateway"]["provider_runtime_state"] == "unknown"
+    assert body["telegram_platform_state"] == "unknown"
+    assert body["telegram_mode"] == "unset"
+    assert "telegram_home_channel" in body["missing_requirements"]
+    assert "telegram_test_group" in body["missing_requirements"]
     assert body["live_apply_available"] is False
+
+
+def test_telegram_malformed_gateway_state_returns_unknown_safely(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    token = "telegram-token-secret-1234567890"
+    allowed = "123456789"
+    status_path = tmp_path / "gateway_state.json"
+    status_path.write_text("{not-json", encoding="utf-8")
+    monkeypatch.setenv("HAM_HERMES_GATEWAY_STATUS_PATH", str(status_path))
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", token)
+    monkeypatch.setenv("TELEGRAM_ALLOWED_USERS", allowed)
+
+    body = client.get("/api/social/providers/telegram/status").json()
+    text = json.dumps(body, sort_keys=True)
+    assert body["overall_readiness"] == "limited"
+    assert body["hermes_gateway"]["source"] == "status_file"
+    assert body["hermes_gateway"]["status_file_available"] is True
+    assert body["hermes_gateway"]["provider_runtime_state"] == "unknown"
+    assert body["telegram_platform_state"] == "not_reported"
+    assert body["mutation_attempted"] is False
+    assert body["live_apply_available"] is False
+    assert token not in text
+    assert allowed not in text
+    assert str(status_path) not in text
+
+
+def test_telegram_gateway_state_extracts_platform_state_without_ids(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    token = "telegram-token-secret-1234567890"
+    allowed = "123456789"
+    channel = "-1001234567890"
+    test_group = "-1009876543210"
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", token)
+    monkeypatch.setenv("TELEGRAM_ALLOWED_USERS", allowed)
+    monkeypatch.setenv("TELEGRAM_HOME_CHANNEL", channel)
+    monkeypatch.setenv("TELEGRAM_TEST_GROUP_ID", test_group)
+    monkeypatch.setenv("HERMES_TELEGRAM_MODE", "webhook")
+    _write_hermes_gateway_state(
+        tmp_path / "hermes-home" / "gateway_state.json",
+        platforms={
+            "telegram": {
+                "state": "retrying",
+                "chat_id": channel,
+                "token": token,
+                "error_message": f"failed for chat {channel} with token {token}",
+            }
+        },
+    )
+
+    status = client.get("/api/social/providers/telegram/status").json()
+    caps = client.get("/api/social/providers/telegram/capabilities").json()
+    text = json.dumps(status, sort_keys=True) + json.dumps(caps, sort_keys=True)
+    assert status["telegram_platform_state"] == "retrying"
+    assert status["hermes_gateway_runtime_state"] == "retrying"
+    assert caps["telegram_platform_state"] == "retrying"
+    assert caps["telegram_mode"] == "webhook"
+    assert status["telegram_bot_token_present"] is True
+    assert status["telegram_allowed_users_present"] is True
+    assert status["telegram_test_group_configured"] is True
+    for raw in (token, allowed, channel, test_group):
+        assert raw not in text
 
 
 def test_td_runtime_status_redacts_provider_errors(

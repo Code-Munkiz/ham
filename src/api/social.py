@@ -407,6 +407,8 @@ class XSetupSummaryResponse(BaseModel):
 
 SocialMessagingProviderId = Literal["telegram", "discord"]
 HermesRuntimeState = Literal["connected", "connecting", "retrying", "fatal", "stopped", "unknown"]
+TelegramMode = Literal["polling", "webhook", "unset"]
+TelegramPlatformState = Literal["connected", "retrying", "fatal", "stopped", "unknown", "not_reported"]
 
 
 class HermesGatewayRuntimeStatusDto(BaseModel):
@@ -414,6 +416,7 @@ class HermesGatewayRuntimeStatusDto(BaseModel):
 
     configured: bool
     base_url_configured: bool
+    status_path_configured: bool = False
     status_file_available: bool
     source: Literal["status_file", "env", "unknown"]
     gateway_state: str = "unknown"
@@ -433,6 +436,18 @@ class SocialMessagingProviderStatusResponse(BaseModel):
     hermes_gateway: HermesGatewayRuntimeStatusDto
     required_connections: dict[str, bool]
     safe_identifiers: dict[str, str] = Field(default_factory=dict)
+    readiness: OverallReadiness | None = None
+    missing_requirements: list[str] = Field(default_factory=list)
+    recommended_next_steps: list[str] = Field(default_factory=list)
+    telegram_bot_token_present: bool | None = None
+    telegram_allowed_users_present: bool | None = None
+    telegram_home_channel_configured: bool | None = None
+    telegram_test_group_configured: bool | None = None
+    telegram_mode: TelegramMode | None = None
+    hermes_gateway_base_url_present: bool | None = None
+    hermes_gateway_status_path_present: bool | None = None
+    hermes_gateway_runtime_state: HermesRuntimeState | None = None
+    telegram_platform_state: TelegramPlatformState | None = None
     read_only: bool = True
     mutation_attempted: bool = False
     live_apply_available: bool = False
@@ -445,6 +460,15 @@ class TelegramCapabilitiesResponse(BaseModel):
     bot_token_present: bool
     allowed_users_configured: bool
     home_channel_configured: bool
+    test_group_configured: bool = False
+    telegram_mode: TelegramMode = "unset"
+    hermes_gateway_base_url_present: bool = False
+    hermes_gateway_status_path_present: bool = False
+    hermes_gateway_runtime_state: HermesRuntimeState = "unknown"
+    telegram_platform_state: TelegramPlatformState = "not_reported"
+    readiness: OverallReadiness = "setup_required"
+    missing_requirements: list[str] = Field(default_factory=list)
+    recommended_next_steps: list[str] = Field(default_factory=list)
     polling_supported: bool = True
     webhook_supported: bool = True
     groups_supported: bool = True
@@ -678,6 +702,30 @@ def _runtime_state(value: Any) -> HermesRuntimeState:
     return "unknown"
 
 
+def _telegram_platform_state(runtime: HermesGatewayRuntimeStatusDto) -> TelegramPlatformState:
+    if runtime.source == "status_file" and runtime.provider_runtime_state == "unknown":
+        return "not_reported"
+    if runtime.provider_runtime_state == "connecting":
+        return "retrying"
+    if runtime.provider_runtime_state in {"connected", "retrying", "fatal", "stopped", "unknown"}:
+        return runtime.provider_runtime_state  # type: ignore[return-value]
+    return "unknown"
+
+
+def _telegram_mode() -> TelegramMode:
+    raw = (
+        os.environ.get("TELEGRAM_MODE")
+        or os.environ.get("HERMES_TELEGRAM_MODE")
+        or os.environ.get("TELEGRAM_GATEWAY_MODE")
+        or ""
+    ).strip().lower()
+    if raw in {"polling", "webhook"}:
+        return raw  # type: ignore[return-value]
+    if _env_present("TELEGRAM_WEBHOOK_URL", "TELEGRAM_WEBHOOK_BASE_URL"):
+        return "webhook"
+    return "unset"
+
+
 def _bounded_json_file(path: Path) -> dict[str, Any] | None:
     try:
         size = path.stat().st_size
@@ -707,19 +755,19 @@ def _hermes_runtime_status(provider_id: SocialMessagingProviderId) -> HermesGate
         return HermesGatewayRuntimeStatusDto(
             configured=True,
             base_url_configured=base_url_configured,
+            status_path_configured=True,
             status_file_available=True,
             source="status_file",
             gateway_state=str(payload.get("gateway_state") or "unknown")[:64],
             provider_runtime_state=_runtime_state(provider_payload.get("state")),
             active_agents=int(payload["active_agents"]) if isinstance(payload.get("active_agents"), int) else None,
             error_code=str(provider_payload.get("error_code"))[:128] if provider_payload.get("error_code") else None,
-            error_message=str(redact(str(provider_payload.get("error_message"))))[:300]
-            if provider_payload.get("error_message")
-            else None,
+            error_message="Provider error [REDACTED]." if provider_payload.get("error_message") else None,
         )
     return HermesGatewayRuntimeStatusDto(
         configured=base_url_configured,
         base_url_configured=base_url_configured,
+        status_path_configured=path is not None,
         status_file_available=False,
         source="env" if base_url_configured else "unknown",
         gateway_state="unknown",
@@ -734,6 +782,11 @@ def _telegram_connections() -> dict[str, bool]:
         or _env_bool("TELEGRAM_ALLOW_ALL_USERS")
         or _env_bool("GATEWAY_ALLOW_ALL_USERS"),
         "home_channel_configured": _env_present("TELEGRAM_HOME_CHANNEL"),
+        "test_group_configured": _env_present(
+            "TELEGRAM_TEST_GROUP",
+            "TELEGRAM_TEST_GROUP_ID",
+            "TELEGRAM_TEST_CHAT_ID",
+        ),
     }
 
 
@@ -781,8 +834,16 @@ def _telegram_status_response() -> SocialMessagingProviderStatusResponse:
     runtime = _hermes_runtime_status("telegram")
     connections = _telegram_connections()
     readiness, reasons = _messaging_readiness("telegram", connections, runtime)
+    missing = _telegram_missing_requirements(connections, runtime)
+    next_steps = _telegram_setup_steps(connections, runtime)
     safe_identifiers = {
         "home_channel": _safe_config_ref(os.environ.get("TELEGRAM_HOME_CHANNEL") or ""),
+        "test_group": _safe_config_ref(
+            os.environ.get("TELEGRAM_TEST_GROUP")
+            or os.environ.get("TELEGRAM_TEST_GROUP_ID")
+            or os.environ.get("TELEGRAM_TEST_CHAT_ID")
+            or ""
+        ),
     }
     return SocialMessagingProviderStatusResponse(
         provider_id="telegram",
@@ -792,6 +853,18 @@ def _telegram_status_response() -> SocialMessagingProviderStatusResponse:
         hermes_gateway=runtime,
         required_connections=connections,
         safe_identifiers={key: value for key, value in safe_identifiers.items() if value},
+        readiness=readiness,
+        missing_requirements=missing,
+        recommended_next_steps=next_steps,
+        telegram_bot_token_present=connections["bot_token_present"],
+        telegram_allowed_users_present=connections["allowed_users_configured"],
+        telegram_home_channel_configured=connections["home_channel_configured"],
+        telegram_test_group_configured=connections["test_group_configured"],
+        telegram_mode=_telegram_mode(),
+        hermes_gateway_base_url_present=runtime.base_url_configured,
+        hermes_gateway_status_path_present=runtime.status_path_configured,
+        hermes_gateway_runtime_state=runtime.provider_runtime_state,
+        telegram_platform_state=_telegram_platform_state(runtime),
     )
 
 
@@ -834,16 +907,43 @@ def _messaging_provider_dto(provider_id: SocialMessagingProviderId) -> SocialPro
 def _telegram_setup_steps(connections: dict[str, bool], runtime: HermesGatewayRuntimeStatusDto) -> list[str]:
     steps: list[str] = []
     if not connections["bot_token_present"]:
-        steps.append("Configure TELEGRAM_BOT_TOKEN on the Hermes gateway host using `hermes gateway setup`.")
+        steps.append("Store the Telegram bot token securely on the Hermes runtime host.")
     if not connections["allowed_users_configured"]:
-        steps.append("Configure TELEGRAM_ALLOWED_USERS or Hermes pairing before enabling Telegram access.")
+        steps.append("Configure allowed Telegram users or chats before enabling Telegram access.")
     if not connections["home_channel_configured"]:
-        steps.append("Set the Telegram home channel with `/sethome` or TELEGRAM_HOME_CHANNEL for proactive delivery.")
+        steps.append("Configure the Telegram home channel for proactive delivery after runtime validation.")
+    if not connections.get("test_group_configured", False):
+        steps.append("Configure a private Telegram test group before dry-run preview work begins.")
+    if _telegram_mode() == "unset":
+        steps.append("Choose Telegram gateway mode: polling or webhook.")
+    if not runtime.base_url_configured and not runtime.status_path_configured:
+        steps.append("Configure Hermes gateway status discovery through HERMES_GATEWAY_BASE_URL or a safe status file path.")
     if runtime.provider_runtime_state != "connected":
-        steps.append("Start or verify the Hermes gateway outside HAM; this Social surface is read-only.")
+        steps.append("Validate the Hermes gateway outside HAM; this Social surface does not start or stop it.")
     if not steps:
         steps.append("Telegram readiness looks configured. Keep using this panel as read-only status until Social live controls are added.")
     return steps
+
+
+def _telegram_missing_requirements(connections: dict[str, bool], runtime: HermesGatewayRuntimeStatusDto) -> list[str]:
+    missing: list[str] = []
+    if not connections["bot_token_present"]:
+        missing.append("telegram_bot_token")
+    if not connections["allowed_users_configured"]:
+        missing.append("telegram_allowed_users")
+    if not connections["home_channel_configured"]:
+        missing.append("telegram_home_channel")
+    if not connections.get("test_group_configured", False):
+        missing.append("telegram_test_group")
+    if _telegram_mode() == "unset":
+        missing.append("telegram_mode")
+    if not runtime.base_url_configured:
+        missing.append("hermes_gateway_base_url")
+    if not runtime.status_path_configured:
+        missing.append("hermes_gateway_status_path")
+    if runtime.provider_runtime_state != "connected":
+        missing.append("hermes_gateway_runtime")
+    return _dedupe(missing)
 
 
 def _discord_setup_steps(connections: dict[str, bool], runtime: HermesGatewayRuntimeStatusDto) -> list[str]:
@@ -1951,10 +2051,20 @@ def telegram_capabilities(
 ) -> TelegramCapabilitiesResponse:
     connections = _telegram_connections()
     runtime = _hermes_runtime_status("telegram")
+    readiness, _reasons = _messaging_readiness("telegram", connections, runtime)
     return TelegramCapabilitiesResponse(
         bot_token_present=connections["bot_token_present"],
         allowed_users_configured=connections["allowed_users_configured"],
         home_channel_configured=connections["home_channel_configured"],
+        test_group_configured=connections["test_group_configured"],
+        telegram_mode=_telegram_mode(),
+        hermes_gateway_base_url_present=runtime.base_url_configured,
+        hermes_gateway_status_path_present=runtime.status_path_configured,
+        hermes_gateway_runtime_state=runtime.provider_runtime_state,
+        telegram_platform_state=_telegram_platform_state(runtime),
+        readiness=readiness,
+        missing_requirements=_telegram_missing_requirements(connections, runtime),
+        recommended_next_steps=_telegram_setup_steps(connections, runtime),
         inbound_available=runtime.provider_runtime_state == "connected",
     )
 
@@ -1982,6 +2092,21 @@ def telegram_setup_checklist(
                 id="telegram_home_channel",
                 label="Telegram home channel configured",
                 ok=connections["home_channel_configured"],
+            ),
+            SetupChecklistItemDto(
+                id="telegram_test_group",
+                label="Telegram private test group configured",
+                ok=connections["test_group_configured"],
+            ),
+            SetupChecklistItemDto(
+                id="telegram_mode",
+                label="Telegram gateway mode selected",
+                ok=_telegram_mode() != "unset",
+            ),
+            SetupChecklistItemDto(
+                id="hermes_gateway_status",
+                label="Hermes gateway status source configured",
+                ok=runtime.base_url_configured or runtime.status_path_configured,
             ),
             SetupChecklistItemDto(
                 id="hermes_gateway_runtime",

@@ -150,10 +150,13 @@ export type XAuditSummary = {
 };
 
 export type SocialMessagingRuntimeState = "connected" | "connecting" | "retrying" | "fatal" | "stopped" | "unknown";
+export type TelegramMode = "polling" | "webhook" | "unset";
+export type TelegramPlatformState = "connected" | "retrying" | "fatal" | "stopped" | "unknown" | "not_reported";
 
 export type SocialMessagingRuntimeStatus = {
   configured: boolean;
   base_url_configured: boolean;
+  status_path_configured: boolean;
   status_file_available: boolean;
   source: "status_file" | "env" | "unknown";
   gateway_state: string;
@@ -171,6 +174,18 @@ export type SocialMessagingProviderStatus = {
   hermes_gateway: SocialMessagingRuntimeStatus;
   required_connections: Record<string, boolean>;
   safe_identifiers: Record<string, string>;
+  readiness?: "ready" | "limited" | "blocked" | "setup_required" | null;
+  missing_requirements: string[];
+  recommended_next_steps: string[];
+  telegram_bot_token_present?: boolean | null;
+  telegram_allowed_users_present?: boolean | null;
+  telegram_home_channel_configured?: boolean | null;
+  telegram_test_group_configured?: boolean | null;
+  telegram_mode?: TelegramMode | null;
+  hermes_gateway_base_url_present?: boolean | null;
+  hermes_gateway_status_path_present?: boolean | null;
+  hermes_gateway_runtime_state?: SocialMessagingRuntimeState | null;
+  telegram_platform_state?: TelegramPlatformState | null;
   read_only: boolean;
   mutation_attempted: boolean;
   live_apply_available: false;
@@ -181,6 +196,15 @@ export type TelegramCapabilities = {
   bot_token_present: boolean;
   allowed_users_configured: boolean;
   home_channel_configured: boolean;
+  test_group_configured: boolean;
+  telegram_mode: TelegramMode;
+  hermes_gateway_base_url_present: boolean;
+  hermes_gateway_status_path_present: boolean;
+  hermes_gateway_runtime_state: SocialMessagingRuntimeState;
+  telegram_platform_state: TelegramPlatformState;
+  readiness: "ready" | "limited" | "blocked" | "setup_required";
+  missing_requirements: string[];
+  recommended_next_steps: string[];
   polling_supported: boolean;
   webhook_supported: boolean;
   groups_supported: boolean;
