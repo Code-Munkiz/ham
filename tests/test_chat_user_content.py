@@ -244,6 +244,46 @@ def test_v2_allows_owner(temp_store: Path) -> None:
     assert "ham_chat_user_v2" in s
 
 
+def test_to_llm_v2_owned_attachment_requires_matching_caller(temp_store: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Without a verified reader id, owned blobs must not load; wrong id must not load either."""
+    monkeypatch.setenv("HERMES_GATEWAY_MODE", "openrouter")
+    monkeypatch.delenv("HAM_CHAT_VISION_FORWARD", raising=False)
+
+    store = LocalDiskAttachmentStore(temp_store)
+    set_chat_attachment_store_for_tests(store)
+    aid = store.new_id()
+    png = b"\x89PNG\r\n\x1a\n" + b"z" * 12
+    store.put(
+        png,
+        AttachmentRecord(
+            id=aid,
+            filename="owned.png",
+            mime="image/png",
+            size=len(png),
+            owner_key="user-a",
+            kind="image",
+        ),
+    )
+    doc = {
+        "h": "ham_chat_user_v2",
+        "text": "see",
+        "attachments": [{"id": aid, "name": "owned.png", "mime": "image/png", "kind": "image"}],
+    }
+    s = mod.normalize_user_incoming_to_stored(doc, attachment_user_id="user-a")
+    out_anon = mod.to_llm_message_content(s)
+    assert isinstance(out_anon, str)
+    assert "Attachment not available for this session" in out_anon
+    assert "image_url" not in out_anon
+
+    out_wrong = mod.to_llm_message_content(s, attachment_user_id="user-b")
+    assert isinstance(out_wrong, str)
+    assert "Attachment not available for this session" in out_wrong
+
+    out_ok = mod.to_llm_message_content(s, attachment_user_id="user-a")
+    assert isinstance(out_ok, list)
+    assert any(p.get("type") == "image_url" for p in out_ok if isinstance(p, dict))
+
+
 def test_normalize_v2_caps_extra_images_even_when_below_upload_limit(temp_store: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from src.ham.chat_attachment_store import get_chat_attachment_store
 

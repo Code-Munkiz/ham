@@ -362,14 +362,24 @@ def _llm_vision_honest_no_forward(*, has_images: bool, text: str) -> str:
     return text
 
 
-def to_llm_message_content(stored: str) -> str | list[dict[str, Any]]:
+def to_llm_message_content(
+    stored: str,
+    *,
+    attachment_user_id: str | None = None,
+) -> str | list[dict[str, Any]]:
     """
     Convert stored user message to ``content`` for the OpenAI-compatible gateway
     (string, or a list of text/image parts).
+
+    When ``attachment_user_id`` is set (Clerk user id from the active chat caller),
+    v2 attachment blobs are only loaded if each attachment's stored ``owner_key``
+    is empty (local dev) or matches that user. When ``attachment_user_id`` is
+    ``None`` and an attachment has a non-empty owner, bytes are not loaded (cannot
+    verify the reader).
     """
     v2 = try_parse_stored_v2(stored)
     if v2 is not None:
-        return _to_llm_message_content_v2(v2)
+        return _to_llm_message_content_v2(v2, attachment_user_id=attachment_user_id)
     v = try_parse_stored_v1(stored)
     if v is None:
         return stored
@@ -447,7 +457,11 @@ def _bytes_to_image_data_url(mime: str, raw: bytes) -> str:
     return f"data:{m};base64,{b64}"
 
 
-def _to_llm_message_content_v2(v2: dict[str, Any]) -> str | list[dict[str, Any]]:
+def _to_llm_message_content_v2(
+    v2: dict[str, Any],
+    *,
+    attachment_user_id: str | None = None,
+) -> str | list[dict[str, Any]]:
     base_text = (v2.get("text") or "").strip()
     ats = [x for x in (v2.get("attachments") or []) if isinstance(x, dict)]
     store = get_chat_attachment_store()
@@ -457,6 +471,15 @@ def _to_llm_message_content_v2(v2: dict[str, Any]) -> str | list[dict[str, Any]]
     for a in ats:
         aid = str(a.get("id") or "")
         if not is_safe_attachment_id(aid):
+            continue
+        meta = store.get_meta(aid)
+        if meta is None:
+            name = str(a.get("name") or "attachment")
+            missing_blocks.append(f"[Attachment missing on server: {name}]")
+            continue
+        if not _check_attachment_owner(meta.owner_key, attachment_user_id):
+            name = str(a.get("name") or "attachment")
+            missing_blocks.append(f"[Attachment not available for this session: {name}]")
             continue
         got = store.get(aid)
         if got is None:

@@ -29,6 +29,7 @@ from src.bridge import (
 )
 from src.ham.chat_user_content import (
     has_screenshot_in_stored,
+    normalize_user_incoming_to_stored,
     plain_text_for_operator,
     to_llm_message_content,
     vision_system_suffix,
@@ -684,6 +685,7 @@ def _prepare_chat_session(
     body: ChatRequest,
     *,
     attachment_user_id: str | None = None,
+    llm_attachment_user_id: str | None = None,
 ) -> tuple[str, list[dict[str, Any]], dict[str, Any] | None, str]:
     """Returns ``(session_id, llm_messages, active_agent_meta, last_user_plain_for_operator)``."""
     store = _chat_store
@@ -744,7 +746,7 @@ def _prepare_chat_session(
     for h in history:
         role, stored = h["role"], h["content"]
         if role == "user":
-            c = to_llm_message_content(stored)
+            c = to_llm_message_content(stored, attachment_user_id=llm_attachment_user_id)
             if isinstance(c, list):
                 any_multimodal = True
             h_llm.append({"role": "user", "content": c})
@@ -769,10 +771,12 @@ def _messages_for_completion(
     body: ChatRequest,
     *,
     attachment_user_id: str | None = None,
+    llm_attachment_user_id: str | None = None,
 ) -> tuple[str, list[dict[str, Any]], str | None, dict[str, Any] | None, str]:
     sid, llm_messages, active_meta, last_user_plain = _prepare_chat_session(
         body,
         attachment_user_id=attachment_user_id,
+        llm_attachment_user_id=llm_attachment_user_id,
     )
     or_override = _resolve_openrouter_model_override(body)
     llm_messages = _append_workbench_to_messages(llm_messages, body)
@@ -909,7 +913,11 @@ async def append_chat_session_turns(
     authorization: str | None = Header(None, alias="Authorization"),
 ) -> dict:
     """Append finalized user/assistant turns to an existing session."""
-    enforce_clerk_session_and_email_for_request(authorization, route="append_chat_session_turns")
+    ham_actor = enforce_clerk_session_and_email_for_request(
+        authorization,
+        route="append_chat_session_turns",
+    )
+    attachment_user_id = ham_actor.user_id if ham_actor is not None else None
     normalized: list[ChatTurn] = []
     for t in body.turns:
         content = str(t.content or "")
@@ -923,6 +931,28 @@ async def append_chat_session_turns(
                 status_code=422,
                 detail={"error": {"code": "MESSAGE_TOO_LONG", "message": "Message exceeds maximum length."}},
             )
+        if t.role == "user" and content.strip().startswith("{"):
+            try:
+                doc = json.loads(content)
+            except json.JSONDecodeError:
+                pass
+            else:
+                if isinstance(doc, dict) and doc.get("h") == "ham_chat_user_v2":
+                    try:
+                        content = normalize_user_incoming_to_stored(
+                            doc,
+                            attachment_user_id=attachment_user_id,
+                        )
+                    except ValueError as exc:
+                        raise HTTPException(
+                            status_code=422,
+                            detail={
+                                "error": {
+                                    "code": "INVALID_USER_MESSAGE",
+                                    "message": str(exc),
+                                }
+                            },
+                        ) from exc
         normalized.append(ChatTurn(role=t.role, content=content))
     try:
         _chat_store.append_turns(session_id, normalized)
@@ -960,6 +990,7 @@ async def post_chat(
     sid, llm_messages, or_override, active_meta, last_user_plain = _messages_for_completion(
         body,
         attachment_user_id=aid,
+        llm_attachment_user_id=aid,
     )
     execution_mode = _execution_mode_payload(body, last_user_plain=last_user_plain)
     execution_mode = _apply_browser_bridge_for_turn(
@@ -1045,6 +1076,7 @@ def post_chat_stream(
     sid, llm_messages, or_override, stream_active_meta, last_user_plain = _messages_for_completion(
         body,
         attachment_user_id=aid,
+        llm_attachment_user_id=aid,
     )
     if not _claim_stream_session(sid):
         raise HTTPException(
