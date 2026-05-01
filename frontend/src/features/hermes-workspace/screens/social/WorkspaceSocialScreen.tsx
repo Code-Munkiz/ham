@@ -200,6 +200,59 @@ function MessagingProviderPanel({
   capabilities: TelegramCapabilities | DiscordCapabilities;
   setup: SocialMessagingSetupChecklist;
 }) {
+  const isTelegram = status.provider_id === "telegram";
+  const guidance = isTelegram
+    ? {
+        title: "Telegram setup guidance",
+        intro: [
+          "BotFather is Telegram's official bot-management bot. It creates the Telegram bot identity, reserves the username, and issues the bot token.",
+          "After the token is configured securely on the runtime host, Hermes controls Telegram receive/send behavior through its messaging gateway.",
+          "HAM Social controls setup guidance, readiness, safety gates, and audit-oriented operator UX. It does not collect secrets in this panel.",
+        ],
+        checklist: [
+          "Bot created with BotFather",
+          "Bot token stored securely",
+          "Private test group created",
+          "Bot added to test group",
+          "Optional announcement channel created",
+          "Privacy mode reviewed",
+          "Allowed users/chats planned",
+          "Ready for Hermes gateway validation",
+        ],
+        warningTitle: "What not to paste",
+        warnings: ["Bot token", "Raw .env contents", "Screenshots containing secrets", "Authorization headers"],
+        noteTitle: "Why Ham may not respond yet",
+        note:
+          "The Telegram bot can exist in Telegram before HAM can use it. Ham will not respond until the token is configured securely as TELEGRAM_BOT_TOKEN and the Hermes gateway is connected.",
+      }
+    : {
+        title: "Discord setup guidance",
+        intro: [
+          "Discord setup starts in the Discord Developer Portal, where a human operator creates the application and bot identity.",
+          "After the bot token and server/channel configuration are wired securely on the runtime host, Hermes controls Discord runtime behavior through its messaging gateway.",
+          "HAM Social controls setup guidance, readiness, permissions guidance, safety gates, and audit-oriented operator UX. It does not collect secrets in this panel.",
+        ],
+        checklist: [
+          "Discord app created",
+          "Bot created",
+          "Bot token stored securely",
+          "Private test server created",
+          "Bot invited to server",
+          "Test channel created",
+          "Required intents reviewed",
+          "Guild/channel IDs planned",
+          "Ready for Hermes gateway validation",
+        ],
+        warningTitle: "Safety note",
+        warnings: [
+          "Do not grant Administrator casually",
+          "Do not paste the bot token into chat or Git",
+          "Keep the server private until readiness passes",
+        ],
+        noteTitle: "Why Ham may not respond yet",
+        note:
+          "The Discord bot can be present in a server before HAM can use it. Ham will not respond until the bot token and routing configuration are stored securely and the Hermes gateway is connected.",
+      };
   return (
     <div className="grid gap-4 xl:grid-cols-2">
       <Panel title={`${status.label} readiness`}>
@@ -268,6 +321,34 @@ function MessagingProviderPanel({
             ))}
           </div>
         ) : null}
+      </Panel>
+
+      <Panel title={guidance.title}>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            {guidance.intro.map((line) => (
+              <p key={line} className="text-sm leading-relaxed text-white/62">
+                {line}
+              </p>
+            ))}
+          </div>
+          <ChecklistGroup
+            title="Deployment checklist"
+            rows={guidance.checklist.map((label) => ({
+              id: `${status.provider_id}-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+              label,
+              ok: false,
+            }))}
+          />
+          <div>
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-white/45">{guidance.warningTitle}</h3>
+            <TextList items={guidance.warnings} tone="warn" />
+          </div>
+          <div className="rounded-lg border border-amber-400/20 bg-amber-500/5 p-3">
+            <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-amber-100/70">{guidance.noteTitle}</h3>
+            <p className="mt-2 text-sm leading-relaxed text-amber-100/80">{guidance.note}</p>
+          </div>
+        </div>
       </Panel>
 
       <Panel title="Capabilities">
