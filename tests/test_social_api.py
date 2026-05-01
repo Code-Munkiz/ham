@@ -484,6 +484,7 @@ _PREVIEW_ROUTES = (
     "/api/social/providers/x/reactive/batch/dry-run",
     "/api/social/providers/x/broadcast/preflight",
     "/api/social/providers/telegram/activity/preview",
+    "/api/social/providers/telegram/activity/run-once/preview",
 )
 
 _APPLY_ROUTE = "/api/social/providers/x/reactive/reply/apply"
@@ -1727,6 +1728,8 @@ def test_telegram_has_preview_and_one_live_apply_route_only(
     assert client.get("/api/social/providers/telegram/messages/preview").status_code == 405
     assert client.post("/api/social/providers/telegram/activity/preview", json={}).status_code == 200
     assert client.get("/api/social/providers/telegram/activity/preview").status_code == 405
+    assert client.post("/api/social/providers/telegram/activity/run-once/preview", json={}).status_code == 200
+    assert client.get("/api/social/providers/telegram/activity/run-once/preview").status_code == 405
     assert client.post("/api/social/providers/telegram/messages/apply", json={}).status_code in {200, 422}
     assert client.post("/api/social/providers/telegram/activity/apply", json={}).status_code in {200, 422}
     assert client.post("/api/social/providers/telegram/messages/send", json={}).status_code == 404
@@ -1773,6 +1776,60 @@ def test_telegram_activity_preview_rejects_client_text_or_target(
         "/api/social/providers/telegram/activity/preview",
         json={"target_id": "-1001234567890"},
     ).status_code == 422
+
+
+def test_telegram_activity_run_once_preview_is_dry_run_only_and_non_mutating(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    token, allowed, home_channel, test_group = _set_telegram_ready(monkeypatch, tmp_path)
+    delivery_log = tmp_path / "social-delivery-log.jsonl"
+    monkeypatch.setenv("HAM_SOCIAL_DELIVERY_LOG_PATH", str(delivery_log))
+
+    with patch("urllib.request.urlopen", side_effect=AssertionError("telegram api should not be called")):
+        with patch("src.ham.social_telegram_activity_runner.send_confirmed_telegram_message") as send:
+            res = client.post(
+                "/api/social/providers/telegram/activity/run-once/preview",
+                json={"client_request_id": "ui-run-once-1", "activity_kind": "test_activity"},
+            )
+
+    assert res.status_code == 200
+    body = res.json()
+    assert body["provider_id"] == "telegram"
+    assert body["preview_kind"] == "telegram_activity_run_once"
+    assert body["status"] == "completed"
+    assert body["dry_run"] is True
+    assert body["execution_allowed"] is False
+    assert body["mutation_attempted"] is False
+    assert body["live_apply_available"] is False
+    assert body["read_only"] is True
+    assert body["proposal_digest"]
+    assert body["target"]["kind"] == "test_group"
+    assert body["target"]["masked_id"].startswith("configured:")
+    assert body["activity_preview"]["text"]
+    assert body["activity_preview"]["char_count"] == len(body["activity_preview"]["text"])
+    assert body["governor"]["allowed"] is True
+    assert "No Telegram message was sent" in " ".join(body["recommended_next_steps"])
+    assert "No scheduler was started" in " ".join(body["recommended_next_steps"])
+    assert send.call_count == 0
+    assert delivery_log.exists() is False
+    text = json.dumps(body, sort_keys=True)
+    for raw in (token, allowed, home_channel, test_group):
+        assert raw not in text
+
+
+def test_telegram_activity_run_once_preview_rejects_client_text_or_target(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _set_telegram_ready(monkeypatch, tmp_path)
+    route = "/api/social/providers/telegram/activity/run-once/preview"
+    assert client.post(route, json={"message_text": "client supplied final text"}).status_code == 422
+    assert client.post(route, json={"target_id": "-1001234567890"}).status_code == 422
 
 
 def test_telegram_activity_apply_blocked_without_proposal_digest(
@@ -1950,6 +2007,9 @@ def test_no_batch_or_reactive_telegram_routes_added(
     assert client.post("/api/social/providers/telegram/reactive/batch/apply", json={}).status_code == 404
     assert client.post("/api/social/providers/telegram/activity/batch/apply", json={}).status_code == 404
     assert client.post("/api/social/providers/telegram/activity/reactive/apply", json={}).status_code == 404
+    assert client.post("/api/social/providers/telegram/activity/run-once/apply", json={}).status_code == 404
+    assert client.post("/api/social/providers/telegram/activity/run-once/live", json={}).status_code == 404
+    assert client.post("/api/social/providers/telegram/activity/scheduler/start", json={}).status_code == 404
 
 
 def test_preview_routes_are_post_only(
@@ -1961,6 +2021,21 @@ def test_preview_routes_are_post_only(
     for route in _PREVIEW_ROUTES:
         assert client.post(route, json={}).status_code == 200
         assert client.get(route).status_code == 405
+
+
+def test_social_ui_contains_telegram_run_once_dry_run_preview_without_live_controls() -> None:
+    screen = Path("frontend/src/features/hermes-workspace/screens/social/WorkspaceSocialScreen.tsx").read_text(
+        encoding="utf-8"
+    )
+    adapter = Path("frontend/src/features/hermes-workspace/adapters/socialAdapter.ts").read_text(encoding="utf-8")
+    assert "Preview autonomous run once" in screen
+    assert "Dry-run only. No Telegram message will be sent. No scheduler will be started." in screen
+    assert "TelegramActivityRunOncePreviewCard" in screen
+    assert "previewTelegramActivityRunOnce" in screen
+    assert "/providers/telegram/activity/run-once/preview" in adapter
+    assert "/providers/telegram/activity/run-once/apply" not in adapter
+    assert "RunOnceApply" not in screen
+    assert "autonomy toggle" not in screen.lower()
 
 
 def test_telegram_activity_apply_recomputes_preview_and_blocks_kind_mismatch(

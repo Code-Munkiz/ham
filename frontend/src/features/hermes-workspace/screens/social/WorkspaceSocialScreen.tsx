@@ -18,6 +18,7 @@ import {
   type TelegramCapabilities,
   type TelegramActivityApplyResponse,
   type TelegramActivityPreviewResponse,
+  type TelegramActivityRunOncePreviewResponse,
   type TelegramMessageApplyResponse,
   type TelegramMessagePreviewResponse,
   type XCapabilities,
@@ -210,6 +211,10 @@ function MessagingProviderPanel({
   telegramActivityPreviewBusy = false,
   telegramActivityPreviewError,
   onPreviewTelegramActivity,
+  telegramActivityRunOncePreview,
+  telegramActivityRunOncePreviewBusy = false,
+  telegramActivityRunOncePreviewError,
+  onPreviewTelegramActivityRunOnce,
   onOpenTelegramActivityLiveConfirm,
   telegramActivityLiveResult,
   telegramActivityLiveError,
@@ -228,6 +233,10 @@ function MessagingProviderPanel({
   telegramActivityPreviewBusy?: boolean;
   telegramActivityPreviewError?: string | null;
   onPreviewTelegramActivity?: () => void;
+  telegramActivityRunOncePreview?: TelegramActivityRunOncePreviewResponse | null;
+  telegramActivityRunOncePreviewBusy?: boolean;
+  telegramActivityRunOncePreviewError?: string | null;
+  onPreviewTelegramActivityRunOnce?: () => void;
   onOpenTelegramActivityLiveConfirm?: () => void;
   telegramActivityLiveResult?: TelegramActivityApplyResponse | null;
   telegramActivityLiveError?: string | null;
@@ -450,6 +459,36 @@ function MessagingProviderPanel({
                 </p>
               ) : null}
               {telegramActivityPreview ? <TelegramActivityPreviewCard preview={telegramActivityPreview} /> : null}
+              <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-semibold text-white/82">Autonomous activity run once</h3>
+                    <p className="mt-1 text-xs text-white/48">
+                      Dry-run only. No Telegram message will be sent. No scheduler will be started.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <StatusPill label="Run once preview" tone="ok" />
+                    <StatusPill label="No live run endpoint" tone="ok" />
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  className="mt-3 border-white/15 bg-white/5 text-white/90"
+                  onClick={onPreviewTelegramActivityRunOnce}
+                  disabled={telegramActivityRunOncePreviewBusy || !onPreviewTelegramActivityRunOnce}
+                >
+                  {telegramActivityRunOncePreviewBusy ? "Previewing..." : "Preview autonomous run once"}
+                </Button>
+                {telegramActivityRunOncePreviewError ? (
+                  <p className="mt-3 rounded-lg border border-amber-400/20 bg-amber-500/5 p-3 text-sm text-amber-100/80">
+                    {telegramActivityRunOncePreviewError}
+                  </p>
+                ) : null}
+                {telegramActivityRunOncePreview ? <TelegramActivityRunOncePreviewCard preview={telegramActivityRunOncePreview} /> : null}
+              </div>
               {canSendOneTelegramActivity ? (
                 <div className="rounded-xl border border-white/10 bg-black/20 p-3">
                   <div className="flex flex-wrap items-center justify-between gap-3">
@@ -893,6 +932,76 @@ function TelegramActivityPreviewCard({ preview }: { preview: TelegramActivityPre
   );
 }
 
+function TelegramActivityRunOncePreviewCard({ preview }: { preview: TelegramActivityRunOncePreviewResponse }) {
+  return (
+    <section className="mt-3 rounded-2xl border border-sky-400/20 bg-sky-500/5 p-4 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold text-white/85">Telegram autonomous run once preview</h3>
+          <p className="mt-1 text-xs text-white/48">
+            Dry-run only. No Telegram message will be sent. No scheduler will be started.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <StatusPill label={titleCase(preview.status)} tone={preview.status === "completed" ? "ok" : "warn"} />
+          <StatusPill label={preview.dry_run ? "Dry-run true" : "Dry-run false"} tone={preview.dry_run ? "ok" : "danger"} />
+          <StatusPill label={preview.execution_allowed ? "Execution allowed" : "Execution blocked"} tone={preview.execution_allowed ? "danger" : "ok"} />
+          <StatusPill label={preview.mutation_attempted ? "Mutation attempted" : "No mutation"} tone={preview.mutation_attempted ? "danger" : "ok"} />
+          <StatusPill label="Persona protected" tone="ok" />
+        </div>
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-3">
+        <div className="rounded-lg border border-white/10 bg-black/20 p-3">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">Target</div>
+          <div className="mt-1 text-sm text-white/82">{titleCase(preview.target.kind)}</div>
+          <div className="mt-1 font-mono text-xs text-white/55">{preview.target.masked_id || "Not configured"}</div>
+        </div>
+        <div className="rounded-lg border border-white/10 bg-black/20 p-3">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">Governor</div>
+          <div className="mt-1 text-sm text-white/82">{preview.governor.allowed ? "Allowed" : "Blocked"}</div>
+          {preview.governor.next_allowed_send_time ? (
+            <div className="mt-1 text-xs text-white/55">Next allowed: {preview.governor.next_allowed_send_time}</div>
+          ) : null}
+        </div>
+        <div className="rounded-lg border border-white/10 bg-black/20 p-3">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">Persona</div>
+          <div className="mt-1 text-sm text-white/82">
+            {preview.persona_id} v{preview.persona_version}
+          </div>
+          <div className="mt-1 font-mono text-xs text-white/55">{preview.persona_digest ? `${preview.persona_digest.slice(0, 12)}...` : "Missing"}</div>
+        </div>
+      </div>
+      {preview.activity_preview.text ? (
+        <div className="mt-3 rounded-lg border border-white/10 bg-black/30 p-3 text-sm leading-relaxed text-white/75">
+          {preview.activity_preview.text}
+        </div>
+      ) : null}
+      {preview.reasons.length || preview.warnings.length || preview.governor.reasons.length ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {preview.reasons.map((reason) => (
+            <StatusPill key={`run-once-reason-${reason}`} label={titleCase(reason)} tone="warn" />
+          ))}
+          {preview.governor.reasons.map((reason) => (
+            <StatusPill key={`run-once-governor-${reason}`} label={titleCase(reason)} tone="warn" />
+          ))}
+          {preview.warnings.map((warning) => (
+            <StatusPill key={`run-once-warning-${warning}`} label={titleCase(warning)} tone="muted" />
+          ))}
+        </div>
+      ) : null}
+      {preview.recommended_next_steps.length ? (
+        <div className="mt-3 space-y-2">
+          {preview.recommended_next_steps.map((step) => (
+            <div key={step} className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm text-white/62">
+              {step}
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 function PreviewResultCard({ preview }: { preview: SocialPreviewResponse }) {
   return (
     <section className="rounded-2xl border border-emerald-400/20 bg-emerald-500/5 p-4 shadow-sm">
@@ -972,6 +1081,9 @@ export function WorkspaceSocialScreen() {
   const [telegramActivityPreviewBusy, setTelegramActivityPreviewBusy] = React.useState(false);
   const [telegramActivityPreviewError, setTelegramActivityPreviewError] = React.useState<string | null>(null);
   const [telegramActivityPreview, setTelegramActivityPreview] = React.useState<TelegramActivityPreviewResponse | null>(null);
+  const [telegramActivityRunOncePreviewBusy, setTelegramActivityRunOncePreviewBusy] = React.useState(false);
+  const [telegramActivityRunOncePreviewError, setTelegramActivityRunOncePreviewError] = React.useState<string | null>(null);
+  const [telegramActivityRunOncePreview, setTelegramActivityRunOncePreview] = React.useState<TelegramActivityRunOncePreviewResponse | null>(null);
   const [telegramActivityConfirmOpen, setTelegramActivityConfirmOpen] = React.useState(false);
   const [telegramActivityConfirmText, setTelegramActivityConfirmText] = React.useState("");
   const [telegramActivityOperatorToken, setTelegramActivityOperatorToken] = React.useState("");
@@ -1049,6 +1161,22 @@ export function WorkspaceSocialScreen() {
     }
     setTelegramActivityPreview(result.preview);
     setTelegramActivityLiveResult(null);
+  };
+
+  const runTelegramActivityRunOncePreview = async () => {
+    setTelegramActivityRunOncePreviewBusy(true);
+    setTelegramActivityRunOncePreviewError(null);
+    const result = await socialAdapter.previewTelegramActivityRunOnce({
+      activityKind: "test_activity",
+      clientRequestId: `social-ui-activity-run-once-${Date.now()}`,
+    });
+    setTelegramActivityRunOncePreviewBusy(false);
+    if (result.bridge.status === "pending" || !result.preview) {
+      const detail = result.bridge.status === "pending" ? result.bridge.detail : result.error;
+      setTelegramActivityRunOncePreviewError(detail || "Telegram run_once preview API unavailable.");
+      return;
+    }
+    setTelegramActivityRunOncePreview(result.preview);
   };
 
   const sendOneTelegramActivity = async () => {
@@ -1288,6 +1416,10 @@ export function WorkspaceSocialScreen() {
               telegramActivityPreviewBusy={telegramActivityPreviewBusy}
               telegramActivityPreviewError={selectedProvider === "telegram" ? telegramActivityPreviewError : null}
               onPreviewTelegramActivity={selectedProvider === "telegram" ? () => void runTelegramActivityPreview() : undefined}
+              telegramActivityRunOncePreview={selectedProvider === "telegram" ? telegramActivityRunOncePreview : null}
+              telegramActivityRunOncePreviewBusy={telegramActivityRunOncePreviewBusy}
+              telegramActivityRunOncePreviewError={selectedProvider === "telegram" ? telegramActivityRunOncePreviewError : null}
+              onPreviewTelegramActivityRunOnce={selectedProvider === "telegram" ? () => void runTelegramActivityRunOncePreview() : undefined}
               onOpenTelegramActivityLiveConfirm={
                 selectedProvider === "telegram"
                   ? () => {

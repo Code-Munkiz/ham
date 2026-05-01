@@ -351,6 +351,39 @@ export type TelegramActivityPreviewResponse = {
   read_only: boolean;
 };
 
+export type TelegramActivityRunOncePreviewResponse = {
+  provider_id: "telegram";
+  preview_kind: "telegram_activity_run_once";
+  status: "completed" | "blocked" | "failed";
+  dry_run: true;
+  execution_allowed: false;
+  mutation_attempted: false;
+  live_apply_available: false;
+  persona_id: string;
+  persona_version: number;
+  persona_digest: string;
+  proposal_digest: string | null;
+  target: {
+    kind: "test_group";
+    configured: boolean;
+    masked_id: string;
+  };
+  activity_preview: {
+    text: string;
+    char_count: number;
+    activity_kind: "status_update" | "test_activity";
+  };
+  governor: {
+    allowed: boolean;
+    reasons: string[];
+    next_allowed_send_time: string | null;
+  };
+  reasons: string[];
+  warnings: string[];
+  recommended_next_steps: string[];
+  read_only: boolean;
+};
+
 export type TelegramActivityApplyResponse = {
   provider_id: "telegram";
   apply_kind: "telegram_activity";
@@ -632,6 +665,27 @@ export const socialAdapter = {
     try {
       return {
         preview: await postPreview<TelegramActivityPreviewResponse>(`${BASE}/providers/telegram/activity/preview`, {
+          activity_kind: input?.activityKind ?? "test_activity",
+          client_request_id: input?.clientRequestId,
+        }),
+        bridge: { status: "ready" },
+      };
+    } catch (e) {
+      return {
+        preview: null,
+        bridge: workspaceApiPending("social", null, e),
+        error: e instanceof Error ? e.message : String(e),
+      };
+    }
+  },
+
+  async previewTelegramActivityRunOnce(input?: {
+    activityKind?: "status_update" | "test_activity";
+    clientRequestId?: string;
+  }): Promise<{ preview: TelegramActivityRunOncePreviewResponse | null; bridge: SocialBridge; error?: string }> {
+    try {
+      return {
+        preview: await postPreview<TelegramActivityRunOncePreviewResponse>(`${BASE}/providers/telegram/activity/run-once/preview`, {
           activity_kind: input?.activityKind ?? "test_activity",
           client_request_id: input?.clientRequestId,
         }),

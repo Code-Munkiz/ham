@@ -54,6 +54,7 @@ from src.ham.social_telegram_activity import (
     TelegramActivityKind,
     plan_telegram_activity_once,
 )
+from src.ham.social_telegram_activity_runner import TelegramActivityRunConfig, run_telegram_activity_once
 from src.ham.social_telegram_send import (
     TELEGRAM_EXECUTION_KIND,
     TelegramSendRequest,
@@ -376,6 +377,29 @@ class TelegramActivityPreviewResponse(BaseModel):
     provider_id: Literal["telegram"] = "telegram"
     preview_kind: Literal["telegram_activity"] = "telegram_activity"
     status: PreviewStatus
+    execution_allowed: bool = False
+    mutation_attempted: bool = False
+    live_apply_available: bool = False
+    persona_id: str
+    persona_version: int
+    persona_digest: str
+    proposal_digest: str | None = None
+    target: TelegramPreviewTargetDto
+    activity_preview: TelegramActivityPreviewDto
+    governor: TelegramActivityGovernorDto
+    reasons: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    recommended_next_steps: list[str] = Field(default_factory=list)
+    read_only: bool = True
+
+
+class TelegramActivityRunOncePreviewResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    provider_id: Literal["telegram"] = "telegram"
+    preview_kind: Literal["telegram_activity_run_once"] = "telegram_activity_run_once"
+    status: PreviewStatus
+    dry_run: bool = True
     execution_allowed: bool = False
     mutation_attempted: bool = False
     live_apply_available: bool = False
@@ -1091,6 +1115,25 @@ def _telegram_setup_steps(connections: dict[str, bool], runtime: HermesGatewayRu
     return steps
 
 
+def _telegram_activity_run_once_steps(*, reasons: list[str], governor: dict[str, object], status: str) -> list[str]:
+    if status == "completed" and not reasons:
+        return [
+            "Dry-run run_once preview generated. No Telegram message was sent.",
+            "No scheduler was started. Future automation must call the runner explicitly.",
+        ]
+    steps: list[str] = []
+    if "telegram_activity_daily_cap_reached" in reasons:
+        steps.append("Daily Telegram activity cap is already reached for the current delivery-log window.")
+    next_allowed = str(governor.get("next_allowed_send_time") or "").strip()
+    if next_allowed:
+        steps.append(f"Next allowed time: {next_allowed}")
+    if "telegram_gateway_not_connected" in reasons or "telegram_readiness_not_ready" in reasons:
+        steps.append("Restore Telegram readiness and Hermes gateway connectivity before a run_once candidate can be generated.")
+    if not steps:
+        steps.append("Resolve run_once readiness or governor blockers, then preview again.")
+    return steps[:5]
+
+
 def _telegram_missing_requirements(connections: dict[str, bool], runtime: HermesGatewayRuntimeStatusDto) -> list[str]:
     missing: list[str] = []
     if not connections["bot_token_present"]:
@@ -1269,6 +1312,47 @@ def _telegram_activity_preview_response(body: TelegramActivityPreviewRequest) ->
         emergency_stop=emergency_stop,
     )
     return TelegramActivityPreviewResponse.model_validate(planned.model_dump(mode="json"))
+
+
+def _telegram_activity_run_once_preview_response(
+    body: TelegramActivityPreviewRequest,
+) -> TelegramActivityRunOncePreviewResponse:
+    status = _telegram_status_response()
+    emergency_stop = False
+    try:
+        emergency_stop = bool(load_ham_x_config().emergency_stop)
+    except Exception:
+        emergency_stop = False
+    result = run_telegram_activity_once(
+        TelegramActivityRunConfig(
+            activity_kind=body.activity_kind,
+            dry_run=True,
+            readiness=status.overall_readiness,
+            gateway_runtime_state=status.hermes_gateway.provider_runtime_state,
+            emergency_stop=emergency_stop,
+        )
+    )
+    return TelegramActivityRunOncePreviewResponse(
+        status=result.status,
+        dry_run=True,
+        execution_allowed=False,
+        mutation_attempted=False,
+        live_apply_available=False,
+        persona_id=result.persona_id,
+        persona_version=result.persona_version,
+        persona_digest=result.persona_digest,
+        proposal_digest=result.proposal_digest,
+        target=TelegramPreviewTargetDto.model_validate(result.target),
+        activity_preview=TelegramActivityPreviewDto.model_validate(result.activity_preview),
+        governor=TelegramActivityGovernorDto.model_validate(result.governor),
+        reasons=_dedupe(result.reasons),
+        warnings=_dedupe(result.warnings),
+        recommended_next_steps=_telegram_activity_run_once_steps(
+            reasons=_dedupe(result.reasons),
+            governor=result.governor,
+            status=str(result.status),
+        ),
+    )
 
 
 def _telegram_live_apply_available() -> bool:
@@ -2501,6 +2585,14 @@ def telegram_activity_preview(
     return _telegram_activity_preview_response(body or TelegramActivityPreviewRequest())
 
 
+@router.post("/providers/telegram/activity/run-once/preview", response_model=TelegramActivityRunOncePreviewResponse)
+def telegram_activity_run_once_preview(
+    body: TelegramActivityPreviewRequest | None = None,
+    _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)] = None,
+) -> TelegramActivityRunOncePreviewResponse:
+    return _telegram_activity_run_once_preview_response(body or TelegramActivityPreviewRequest())
+
+
 @router.post("/providers/telegram/activity/apply", response_model=TelegramActivityApplyResponse)
 def telegram_activity_apply(
     body: TelegramActivityApplyRequest,
@@ -3306,6 +3398,7 @@ __all__ = [
     "SocialPreviewResponse",
     "TelegramActivityPreviewRequest",
     "TelegramActivityPreviewResponse",
+    "TelegramActivityRunOncePreviewResponse",
     "TelegramActivityApplyRequest",
     "TelegramActivityApplyResponse",
     "SocialReactiveReplyApplyRequest",
