@@ -28,6 +28,7 @@ from src.bridge import (
     run_browser_v0,
 )
 from src.ham.chat_user_content import (
+    has_screenshot_in_stored,
     plain_text_for_operator,
     to_llm_message_content,
     vision_system_suffix,
@@ -180,6 +181,84 @@ def _claim_stream_session(session_id: str) -> bool:
 def _release_stream_session(session_id: str) -> None:
     with _ACTIVE_STREAM_SESSIONS_LOCK:
         _ACTIVE_STREAM_SESSIONS.discard(session_id)
+
+
+def _eligible_upstream_vision_text_fallback(
+    exc: GatewayCallError,
+    *,
+    had_stream_tokens: bool,
+) -> bool:
+    """Single retry stripping multimodal payloads when Hermes rejects the first request (+ no tokens yet)."""
+    if had_stream_tokens:
+        return False
+    if exc.code != "UPSTREAM_REJECTED":
+        return False
+    raw = (os.environ.get("HAM_CHAT_VISION_UPSTREAM_TEXT_FALLBACK") or "1").strip().lower()
+    return raw not in {"0", "false", "no"}
+
+
+def _llm_upstream_text_fallback_messages(
+    session_id: str,
+    *,
+    baseline_llm_messages: list[dict[str, Any]],
+) -> list[dict[str, Any]] | None:
+    """
+    When upstream rejects multimodal content, rebuild messages with the last user's turn expressed as plain text
+    plus an explicit ``image withheld`` marker (pixels were never modeled).
+    """
+    hist = _chat_store.list_messages(session_id)
+    stored: str | None = None
+    for row in reversed(hist):
+        if row.get("role") != "user":
+            continue
+        c_any = row.get("content")
+        if isinstance(c_any, str) and (c_any or "").strip():
+            stored = c_any.strip()
+            break
+    if not stored:
+        return None
+
+    had_multimodal_candidate = False
+    for m in baseline_llm_messages:
+        if str(m.get("role") or "") != "user":
+            continue
+        c = m.get("content")
+        if isinstance(c, list):
+            had_multimodal_candidate = True
+            break
+    if not had_multimodal_candidate:
+        return None
+
+    plain = plain_text_for_operator(stored)
+    if has_screenshot_in_stored(stored):
+        plain = (
+            f"{plain}\n\n"
+            "[Technical: the upstream model gateway refused the multimodal request, so image payloads were "
+            "withheld for this retry. Answer from the user's text and these markers only; do not pretend you saw "
+            "the images.]"
+        ).strip()
+
+    try:
+        cloned: list[dict[str, Any]] = json.loads(json.dumps(baseline_llm_messages))
+    except (TypeError, ValueError):
+        return None
+
+    last_user_idx = -1
+    for i in range(len(cloned) - 1, -1, -1):
+        if cloned[i].get("role") != "user":
+            continue
+        if isinstance(cloned[i].get("content"), list):
+            last_user_idx = i
+            break
+    if last_user_idx < 0:
+        return None
+
+    cloned[last_user_idx]["content"] = plain
+    sys0 = cloned[0].get("content")
+    suf = vision_system_suffix()
+    if isinstance(sys0, str) and sys0.endswith(suf):
+        cloned[0]["content"] = sys0[: -len(suf)].rstrip()
+    return cloned
 
 
 def _resolve_chat_clerk_context(
@@ -1021,74 +1100,107 @@ def post_chat_stream(
                 last_checkpoint_at = time.monotonic()
 
             try:
-                for part in stream_chat_turn(
-                    llm_messages,
-                    openrouter_model_override=or_override,
-                ):
-                    pieces.append(part)
-                    chars_since_checkpoint += len(part)
-                    now = time.monotonic()
-                    if (
-                        not checkpoint_started
-                        or
-                        chars_since_checkpoint >= _STREAM_CHECKPOINT_MIN_CHARS
-                        or (checkpoint_started and (now - last_checkpoint_at) >= _STREAM_CHECKPOINT_MIN_SEC)
-                    ):
-                        checkpoint_partial(interrupted=True)
-                    yield json.dumps({"type": "delta", "text": part}) + "\n"
-            except GatewayCallError as exc:
-                assistant_visible = format_gateway_error_user_message(exc)
+                stream_msgs: list[dict[str, Any]] = llm_messages
+                terminal_exc: GatewayCallError | None = None
+                for retry_pass in range(2):
+                    terminal_exc = None
+                    try:
+                        for part in stream_chat_turn(
+                            stream_msgs,
+                            openrouter_model_override=or_override,
+                        ):
+                            pieces.append(part)
+                            chars_since_checkpoint += len(part)
+                            now = time.monotonic()
+                            if (
+                                not checkpoint_started
+                                or chars_since_checkpoint >= _STREAM_CHECKPOINT_MIN_CHARS
+                                or (
+                                    checkpoint_started
+                                    and (now - last_checkpoint_at) >= _STREAM_CHECKPOINT_MIN_SEC
+                                )
+                            ):
+                                checkpoint_partial(interrupted=True)
+                            yield json.dumps({"type": "delta", "text": part}) + "\n"
+                        break
+                    except GatewayCallError as exc:
+                        fb: list[dict[str, Any]] | None = None
+                        if (
+                            retry_pass == 0
+                            and not pieces
+                            and _eligible_upstream_vision_text_fallback(
+                                exc,
+                                had_stream_tokens=False,
+                            )
+                        ):
+                            fb = _llm_upstream_text_fallback_messages(
+                                sid,
+                                baseline_llm_messages=llm_messages,
+                            )
+                        if fb is not None:
+                            stream_msgs = fb
+                            chars_since_checkpoint = 0
+                            checkpoint_started = False
+                            last_checkpoint_at = time.monotonic()
+                            continue
+                        terminal_exc = exc
+                        break
+
+                if terminal_exc is not None:
+                    exc = terminal_exc
+                    assistant_visible_err = format_gateway_error_user_message(exc)
+                    try:
+                        store.upsert_assistant_turn(sid, assistant_turn_id, assistant_visible_err)
+                        payload_err: dict[str, Any] = {
+                            "type": "done",
+                            "session_id": sid,
+                            "messages": store.list_messages(sid),
+                            "actions": [],
+                            "operator_result": None,
+                            "execution_mode": stream_execution_mode,
+                            "gateway_error": {"code": exc.code},
+                        }
+                        if stream_active_meta:
+                            payload_err["active_agent"] = stream_active_meta
+                        yield json.dumps(payload_err) + "\n"
+                    except KeyError:
+                        yield json.dumps(
+                            {
+                                "type": "error",
+                                "code": exc.code,
+                                "message": assistant_visible_err,
+                            },
+                        ) + "\n"
+                    return
+
+                stream_completed = True
+                assistant_raw = "".join(pieces)
+                assistant_visible, actions = (
+                    split_assistant_ui_actions(assistant_raw)
+                    if body.enable_ui_actions
+                    else (assistant_raw, [])
+                )
                 try:
                     store.upsert_assistant_turn(sid, assistant_turn_id, assistant_visible)
-                    payload_err: dict[str, Any] = {
+                    payload: dict[str, Any] = {
                         "type": "done",
                         "session_id": sid,
                         "messages": store.list_messages(sid),
-                        "actions": [],
+                        "actions": actions,
                         "operator_result": None,
                         "execution_mode": stream_execution_mode,
-                        "gateway_error": {"code": exc.code},
                     }
                     if stream_active_meta:
-                        payload_err["active_agent"] = stream_active_meta
-                    yield json.dumps(payload_err) + "\n"
+                        payload["active_agent"] = stream_active_meta
+                    yield json.dumps(payload) + "\n"
                 except KeyError:
                     yield json.dumps(
                         {
                             "type": "error",
-                            "code": exc.code,
-                            "message": assistant_visible,
+                            "code": "SESSION_NOT_FOUND",
+                            "message": "Session disappeared during stream.",
                         },
                     ) + "\n"
-                return
-            stream_completed = True
-            assistant_raw = "".join(pieces)
-            assistant_visible, actions = (
-                split_assistant_ui_actions(assistant_raw)
-                if body.enable_ui_actions
-                else (assistant_raw, [])
-            )
-            try:
-                store.upsert_assistant_turn(sid, assistant_turn_id, assistant_visible)
-                payload: dict[str, Any] = {
-                    "type": "done",
-                    "session_id": sid,
-                    "messages": store.list_messages(sid),
-                    "actions": actions,
-                    "operator_result": None,
-                    "execution_mode": stream_execution_mode,
-                }
-                if stream_active_meta:
-                    payload["active_agent"] = stream_active_meta
-                yield json.dumps(payload) + "\n"
-            except KeyError:
-                yield json.dumps(
-                    {
-                        "type": "error",
-                        "code": "SESSION_NOT_FOUND",
-                        "message": "Session disappeared during stream.",
-                    },
-                ) + "\n"
             finally:
                 # If stream was interrupted (generator closed), save partial content.
                 if not stream_completed and pieces:

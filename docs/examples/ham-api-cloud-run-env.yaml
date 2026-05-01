@@ -44,3 +44,11 @@ HAM_CORS_ORIGIN_REGEX: "https://.*\\.vercel\\.app"
 # HAM_CHAT_SESSION_FIRESTORE_COLLECTION: ham_chat_sessions
 # If the GCP project has no (default) Firestore DB (e.g. only ai-studio-* DBs), set the database id explicitly:
 # HAM_CHAT_SESSION_FIRESTORE_DATABASE: ham-chat-sessions
+
+# --- Shared chat attachment storage (Slice B: fix GET /api/chat/attachments/{id} 404s on multi-instance Cloud Run) ---
+# Default local disk is ephemeral per instance. Production: use GCS with the same REST contract (no /api/upload).
+# Grant the Cloud Run service account storage.objectAdmin on the bucket (narrow to prefix if using IAM conditions).
+# HAM_CHAT_ATTACHMENT_STORE: gcs
+# HAM_CHAT_ATTACHMENT_BUCKET: your-project-ham-chat-attachments
+# Optional object prefix (slashes normalized; trailing / added automatically).
+# HAM_CHAT_ATTACHMENT_PREFIX: chat-attachments/

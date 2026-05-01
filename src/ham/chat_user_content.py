@@ -10,7 +10,9 @@ Wire formats (persisted in chat session ``content`` string)::
 v2 uses opaque ``attachment`` ids and server-side blob storage; v1 embeds
 base64 in Firestore. OpenRouter and HTTP Hermes receive OpenAI-style ``content`` parts (including
 ``image_url`` data URLs resolved server-side for v2). Vision forwarding honors
-``HAM_CHAT_VISION_FORWARD`` (default on for ``openrouter`` and ``http``); mock mode does not forward.
+``HAM_CHAT_VISION_FORWARD`` (default on for ``openrouter`` and ``http``), ``HAM_CHAT_VISION_MODE`` (``auto`` vs ``off``),
+and optional caps ``HAM_CHAT_VISION_MAX_IMAGES`` / ``HAM_CHAT_VISION_MAX_IMAGE_BYTES``.
+Mock mode does not forward.
 """
 from __future__ import annotations
 
@@ -287,31 +289,65 @@ def _gateway_mode() -> str:
     return "http" if base else "mock"
 
 
+def _vision_policy_mode() -> str:
+    """``HAM_CHAT_VISION_MODE`` — ``auto`` (default) or ``off`` (never forward pixels)."""
+    raw = (os.environ.get("HAM_CHAT_VISION_MODE") or "auto").strip().lower()
+    return "off" if raw == "off" else "auto"
+
+
+def _positive_int_env(name: str, default: int, *, upper: int = 128) -> int:
+    raw = (os.environ.get(name) or "").strip()
+    if not raw:
+        return default
+    try:
+        v = int(raw)
+    except ValueError:
+        return default
+    return max(0, min(upper, v))
+
+
 def _gateway_vision_forward_enabled() -> bool:
     """
     Emit multimodal ``image_url`` parts toward OpenRouter or the HTTP Hermes gateway.
 
     Default: enabled (same as legacy OpenRouter behavior). Disable with
     ``HAM_CHAT_VISION_FORWARD`` = ``0`` / ``false`` / ``no`` for gateways that
-    reject multimodal payloads.
+    reject multimodal payloads, or ``HAM_CHAT_VISION_MODE`` = ``off``.
     """
+    if _vision_policy_mode() == "off":
+        return False
     v = (os.environ.get("HAM_CHAT_VISION_FORWARD", "1") or "").strip().lower()
     return v not in {"0", "false", "no"}
+
+
+def _vision_forward_max_images() -> int:
+    """``HAM_CHAT_VISION_MAX_IMAGES`` — forwarded image parts ceiling (multimodal only)."""
+    return max(1, _positive_int_env("HAM_CHAT_VISION_MAX_IMAGES", 1, upper=64))
+
+
+def _vision_forward_max_image_bytes() -> int:
+    """``HAM_CHAT_VISION_MAX_IMAGE_BYTES`` — per-image raw bytes forwarded (default 1 MiB)."""
+    return max(4_096, _positive_int_env("HAM_CHAT_VISION_MAX_IMAGE_BYTES", 1_048_576, upper=48 * 1024 * 1024))
+
+
+def _no_forward_banner_phrase() -> str:
+    return "HAM_CHAT_VISION_MODE is off" if _vision_policy_mode() == "off" else "HAM_CHAT_VISION_FORWARD=0"
 
 
 def _llm_vision_honest_no_forward(*, has_images: bool, text: str) -> str:
     if not has_images and not text:
         return ""
+    banner = _no_forward_banner_phrase()
     if has_images and not text:
         return (
-            "[User attached image(s). Vision forwarding is off (HAM_CHAT_VISION_FORWARD=0), so image "
+            f"[User attached image(s). Vision forwarding is disabled ({banner}), so image "
             "pixels are not sent to the model — answer only from visible text markers.]"
         )
     if has_images:
         return (
-            f"{text}\n\n[User attached image(s). Vision forwarding is disabled on this deployment "
-            f"(HAM_CHAT_VISION_FORWARD=0); image pixels are not sent — you cannot see the image. Answer "
-            f"honestly and suggest enabling vision forwarding or switching to a vision-capable gateway path.]"
+            f"{text}\n\n[User attached image(s). Vision forwarding is disabled ({banner}); "
+            "image pixels are not sent — you cannot see the image. Answer honestly and suggest adjusting "
+            "vision settings or switching to a vision-capable gateway path.]"
         ).strip()
     return text
 
@@ -337,13 +373,55 @@ def to_llm_message_content(stored: str) -> str | list[dict[str, Any]]:
     if not forward_vision or not images:
         return _llm_vision_honest_no_forward(has_images=bool(images), text=text)
 
+    max_fwd = _vision_forward_max_images()
+    max_raw = _vision_forward_max_image_bytes()
+    forwarded = 0
+    notes: list[str] = []
     parts: list[dict[str, Any]] = []
     if text:
         parts.append({"type": "text", "text": text})
     for im in images:
         url = str(im.get("data_url") or "")
+        sz = _data_url_bytes(url) if url else 0
+        name = str(im.get("name") or "").strip() or "(image)"
+        if forwarded >= max_fwd:
+            notes.append(f"{name}: not forwarded (limit {max_fwd} image(s) per turn).")
+            continue
+        if sz > max_raw:
+            notes.append(f"{name}: not forwarded (~{sz} bytes; max forwarded size is {max_raw} bytes on this deployment).")
+            continue
         if url:
             parts.append({"type": "image_url", "image_url": {"url": url}})
+            forwarded += 1
+
+    merged_notes = "; ".join(notes)
+    only_text_so_far = len(parts) == 1 and parts[0].get("type") == "text"
+    if merged_notes and only_text_so_far:
+        base = str(parts[0].get("text") or "")
+        appendix = (
+            f"\n\n[Attachment note: {' '.join(notes)} "
+            "The user still uploaded these in the dashboard; answer from visible text markers and be honest "
+            "that image pixels beyond the forwarded allowance were withheld.]"
+        )
+        merged = (base + appendix).strip()
+        return merged if merged else appendix.strip()
+    if merged_notes:
+        suffix = (
+            "[Attachment note] "
+            + merged_notes
+            + " Uploaded images beyond this limit are withheld from pixels sent to this model."
+        )
+        tx = "".join(str(p.get("text") or "") for p in parts if p.get("type") == "text").strip()
+        tail = suffix if not tx else f"{tx}\n\n{suffix}"
+        img_only = [
+            x for x in parts if isinstance(x, dict) and str(x.get("type") or "") == "image_url"
+        ]
+        if not img_only:
+            return tail
+        rebuilt: list[dict[str, Any]] = []
+        rebuilt.append({"type": "text", "text": tail.strip()})
+        rebuilt.extend(img_only)
+        return rebuilt
     if not parts:
         return ""
     if len(parts) == 1 and parts[0].get("type") == "text":
@@ -364,7 +442,7 @@ def _to_llm_message_content_v2(v2: dict[str, Any]) -> str | list[dict[str, Any]]
     ats = [x for x in (v2.get("attachments") or []) if isinstance(x, dict)]
     store = get_chat_attachment_store()
     file_text_blocks: list[str] = []
-    image_data_urls: list[str] = []
+    image_rows: list[tuple[bytes, str, str]] = []
     for a in ats:
         aid = str(a.get("id") or "")
         if not is_safe_attachment_id(aid):
@@ -384,7 +462,8 @@ def _to_llm_message_content_v2(v2: dict[str, Any]) -> str | list[dict[str, Any]]
             name = str(a.get("name") or rec.filename)
             file_text_blocks.append(f"---\n[Attached file: {name}]\n{body}\n")
         elif rec.kind == "image" or m.startswith("image/"):
-            image_data_urls.append(_bytes_to_image_data_url(rec.mime, raw))
+            disp = str(a.get("name") or rec.filename).strip() or "(image)"
+            image_rows.append((raw, rec.mime, disp))
 
     text = base_text
     if file_text_blocks:
@@ -394,17 +473,60 @@ def _to_llm_message_content_v2(v2: dict[str, Any]) -> str | list[dict[str, Any]]
     mode = _gateway_mode()
     forward_vision = mode in {"openrouter", "http"} and _gateway_vision_forward_enabled()
 
-    if not image_data_urls:
+    if not image_rows:
         return text or ""
 
     if not forward_vision:
         return _llm_vision_honest_no_forward(has_images=True, text=text)
 
+    max_fwd = _vision_forward_max_images()
+    max_raw = _vision_forward_max_image_bytes()
+    notes: list[str] = []
+    forwarded_urls: list[str] = []
+    for raw, mime, fname in image_rows:
+        if len(forwarded_urls) >= max_fwd:
+            notes.append(f"{fname}: not forwarded (limit {max_fwd} image(s) per turn).")
+            continue
+        if len(raw) > max_raw:
+            notes.append(
+                f"{fname}: not forwarded ({len(raw)} bytes uploaded; forwarded cap is {max_raw} bytes on this deployment)."
+            )
+            continue
+        forwarded_urls.append(_bytes_to_image_data_url(mime, raw))
+
     parts: list[dict[str, Any]] = []
     if text:
         parts.append({"type": "text", "text": text})
-    for u in image_data_urls:
-        parts.append({"type": "image_url", "image_url": {"url": u}})
+    for url in forwarded_urls:
+        parts.append({"type": "image_url", "image_url": {"url": url}})
+
+    merged_notes = "; ".join(notes)
+    only_text_so_far = len(parts) == 1 and parts[0].get("type") == "text"
+    if merged_notes and only_text_so_far:
+        base = str(parts[0].get("text") or "")
+        appendix = (
+            f"\n\n[Attachment note: {' '.join(notes)} "
+            "The user still uploaded these in the dashboard; answer from visible text markers and be honest "
+            "that image pixels beyond the forwarded allowance were withheld.]"
+        )
+        merged = (base + appendix).strip()
+        return merged if merged else appendix.strip()
+    if merged_notes:
+        suffix = (
+            "[Attachment note] "
+            + merged_notes
+            + " Uploaded images beyond this limit are withheld from pixels sent to this model."
+        )
+        tx = "".join(str(p.get("text") or "") for p in parts if p.get("type") == "text").strip()
+        tail = suffix if not tx else f"{tx}\n\n{suffix}"
+        img_only = [x for x in parts if isinstance(x, dict) and str(x.get("type") or "") == "image_url"]
+        if not img_only:
+            return tail.strip()
+        rebuilt: list[dict[str, Any]] = [{"type": "text", "text": tail.strip()}]
+        rebuilt.extend(img_only)
+        return rebuilt
+    if not parts:
+        return ""
     if len(parts) == 1 and parts[0].get("type") == "text":
         return str(parts[0].get("text") or "")
     return parts

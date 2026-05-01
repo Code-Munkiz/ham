@@ -499,6 +499,8 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   const endRef = React.useRef<HTMLDivElement | null>(null);
   const chatAttachmentLocalBlobByServerIdRef = React.useRef<Map<string, string>>(new Map());
   const listWrapRef = React.useRef<HTMLDivElement | null>(null);
+  /** Last session id successfully fetched via `loadFromApi` — used to avoid revoking same-tab attachment blob cache on refresh. */
+  const previousLoadedWorkspaceSessionRef = React.useRef<string | null>(null);
 
   const revokeAllChatAttachmentLocalBlobs = React.useCallback(() => {
     for (const u of chatAttachmentLocalBlobByServerIdRef.current.values()) {
@@ -816,7 +818,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
 
   const loadFromApi = React.useCallback(
     async (sid: string) => {
-      if (streamTurnSessionRef.current === sid && sending) {
+      if (sending) {
         return;
       }
       setLoadingSession(true);
@@ -824,7 +826,11 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       try {
         const detail = await workspaceSessionAdapter.get(sid);
         const ts = timeStr;
-        revokeAllChatAttachmentLocalBlobs();
+        const prevLoaded = previousLoadedWorkspaceSessionRef.current;
+        if (prevLoaded && prevLoaded !== sid) {
+          revokeAllChatAttachmentLocalBlobs();
+        }
+        previousLoadedWorkspaceSessionRef.current = sid;
         setSessionId(sid);
         writeLastChatSessionId(sid);
         setMessages(
@@ -859,6 +865,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         );
         if (sessionNotFound) {
           // Only clear durable selection when API confirms session is gone.
+          previousLoadedWorkspaceSessionRef.current = null;
           revokeAllChatAttachmentLocalBlobs();
           setSessionId(null);
           writeLastChatSessionId(null);
@@ -906,6 +913,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     if (!s) {
       streamTurnSessionRef.current = null;
       if (sessionId) {
+        previousLoadedWorkspaceSessionRef.current = null;
         revokeAllChatAttachmentLocalBlobs();
         setSessionId(null);
         setMessages([]);
@@ -922,6 +930,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   }, [embedMode, searchParams, sessionId, sending, loadFromApi, revokeAllChatAttachmentLocalBlobs]);
 
   const startNew = React.useCallback(() => {
+    previousLoadedWorkspaceSessionRef.current = null;
     revokeAllChatAttachmentLocalBlobs();
     setSessionId(null);
     writeLastChatSessionId(null);

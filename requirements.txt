@@ -10,6 +10,7 @@ uvicorn[standard]
 httpx
 edge-tts>=6.1.0
 google-cloud-firestore>=2.16.0
+google-cloud-storage>=2.14.0
 # Windows: ConPTY for /api/workspace/terminal
 pywinpty>=2.0.1; sys_platform == "win32"
 playwright
