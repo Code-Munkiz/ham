@@ -549,8 +549,24 @@ function PreviewResultCard({ preview }: { preview: SocialPreviewResponse }) {
           <StatusPill label={titleCase(preview.status)} tone={preview.status === "completed" ? "ok" : "warn"} />
           <StatusPill label={preview.live_apply_available ? "Live apply available" : "Live apply unavailable"} tone={preview.live_apply_available ? "danger" : "ok"} />
           <StatusPill label={preview.execution_allowed ? "Execution allowed" : "Execution blocked"} tone={preview.execution_allowed ? "danger" : "ok"} />
+          <StatusPill label="Persona protected" tone="ok" />
         </div>
       </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-3">
+        <div className="rounded-lg border border-white/10 bg-black/20 p-3">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">Persona</div>
+          <div className="mt-1 text-sm text-white/82">{preview.persona_id}</div>
+        </div>
+        <div className="rounded-lg border border-white/10 bg-black/20 p-3">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">Version</div>
+          <div className="mt-1 text-sm text-white/82">v{preview.persona_version}</div>
+        </div>
+        <div className="rounded-lg border border-white/10 bg-black/20 p-3">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">Persona digest</div>
+          <div className="mt-1 font-mono text-xs text-white/82">{preview.persona_digest ? `${preview.persona_digest.slice(0, 12)}...` : "Missing"}</div>
+        </div>
+      </div>
+      <p className="mt-3 text-xs text-white/42">Apply blocks if the canonical persona changes after this preview. Re-preview before sending live actions.</p>
       {preview.reasons.length || preview.warnings.length ? (
         <div className="mt-3 flex flex-wrap gap-2">
           {preview.reasons.map((reason) => (
@@ -966,7 +982,7 @@ export function WorkspaceSocialScreen() {
               <Panel title="Confirmed live reply">
                 <div className="space-y-3">
                   <p className="text-sm leading-relaxed text-white/58">
-                    Confirmed live action. This sends exactly one live X reply from the latest inbox preview. No batch. No retry.
+                    Confirmed live action. This sends exactly one live X reply from the latest inbox preview using the previewed persona. If persona changes, re-preview first.
                   </p>
                   <div className="flex flex-wrap gap-2">
                     <StatusPill
@@ -1016,7 +1032,7 @@ export function WorkspaceSocialScreen() {
               <Panel title="Confirmed live reactive batch">
                 <div className="space-y-3">
                   <p className="text-sm leading-relaxed text-white/58">
-                    Confirmed live action. This may send multiple live replies, capped by the reactive governor. No retry. No broadcast post.
+                    Confirmed live action. This may send multiple live replies using the previewed persona, capped by the reactive governor. No retry. No broadcast post.
                   </p>
                   <div className="flex flex-wrap gap-2">
                     <StatusPill
@@ -1066,7 +1082,7 @@ export function WorkspaceSocialScreen() {
               <Panel title="Confirmed live broadcast post">
                 <div className="space-y-3">
                   <p className="text-sm leading-relaxed text-white/58">
-                    Confirmed live action. This sends exactly one live original post. No batch. No retry. No replies.
+                    Confirmed live action. This sends exactly one live original post using the previewed persona. No batch. No retry. No replies.
                   </p>
                   <div className="flex flex-wrap gap-2">
                     <StatusPill

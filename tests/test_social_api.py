@@ -1326,6 +1326,10 @@ def test_audit_summary_does_not_append_audit_event(
 
 def _assert_preview_invariants(body: dict[str, object]) -> None:
     assert body["provider_id"] == "x"
+    assert body["persona_id"] == "ham-canonical"
+    assert body["persona_version"] == 1
+    assert isinstance(body["persona_digest"], str)
+    assert len(str(body["persona_digest"])) == 64
     assert body["execution_allowed"] is False
     assert body["mutation_attempted"] is False
     assert body["live_apply_available"] is False
@@ -1484,6 +1488,23 @@ def test_preview_payloads_do_not_expose_secrets(
     assert "[REDACTED" in text
 
 
+def test_preview_payloads_include_persona_reference_not_full_content(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _enable_broadcast_apply_env(monkeypatch)
+    body = client.post("/api/social/providers/x/broadcast/preflight", json={}).json()
+    _assert_preview_invariants(body)
+    text = json.dumps(body, sort_keys=True)
+    assert "persona_id" in body
+    assert "persona_version" in body
+    assert "persona_digest" in body
+    assert "platform_adaptations" not in text
+    assert "safety_boundaries" not in text
+
+
 # ---------------------------------------------------------------------------
 # Confirmed live reactive reply apply
 # ---------------------------------------------------------------------------
@@ -1627,6 +1648,27 @@ def test_apply_blocked_when_preview_candidate_changes(
     assert "proposal_digest_mismatch" in body["reasons"]
 
 
+def test_apply_blocks_when_persona_digest_changes(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _enable_apply_env(monkeypatch)
+    with patch("src.api.social.discover_reactive_inbox_once", return_value=_fake_discovery()):
+        digest = _preview_digest()
+        original = {"persona_id": "ham-canonical", "persona_version": 1, "persona_digest": "b" * 64}
+        with patch("src.api.social._persona_ref", return_value=original):
+            body = client.post(
+                _APPLY_ROUTE,
+                headers={"Authorization": f"Bearer {_SOCIAL_TOKEN}"},
+                json={"proposal_digest": digest, "confirmation_phrase": _CONFIRM},
+            ).json()
+    assert body["status"] == "blocked"
+    assert "persona_digest_mismatch" in body["reasons"]
+    assert body["persona_digest"] == "b" * 64
+
+
 def test_apply_calls_live_reply_once_and_returns_journal_audit_ids(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -1644,6 +1686,9 @@ def test_apply_calls_live_reply_once_and_returns_journal_audit_ids(
             ).json()
     assert live.call_count == 1
     assert body["status"] == "executed"
+    assert body["persona_id"] == "ham-canonical"
+    assert body["persona_version"] == 1
+    assert len(body["persona_digest"]) == 64
     assert body["execution_allowed"] is True
     assert body["mutation_attempted"] is True
     assert body["provider_status_code"] == 201
@@ -1839,6 +1884,27 @@ def test_batch_apply_blocked_when_dry_run_candidate_set_changes(
     assert "proposal_digest_mismatch" in body["reasons"]
 
 
+def test_batch_apply_blocks_when_persona_digest_changes(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _enable_batch_apply_env(monkeypatch)
+    with patch("src.api.social.discover_reactive_inbox_once", return_value=_fake_discovery()):
+        digest = _batch_preview_digest()
+        changed = {"persona_id": "ham-canonical", "persona_version": 1, "persona_digest": "c" * 64}
+        with patch("src.api.social._persona_ref", return_value=changed):
+            body = client.post(
+                _BATCH_APPLY_ROUTE,
+                headers={"Authorization": f"Bearer {_SOCIAL_TOKEN}"},
+                json={"proposal_digest": digest, "confirmation_phrase": _BATCH_CONFIRM},
+            ).json()
+    assert body["status"] == "blocked"
+    assert "persona_digest_mismatch" in body["reasons"]
+    assert body["persona_digest"] == "c" * 64
+
+
 def test_batch_apply_calls_batch_runner_once_and_returns_journal_audit_ids(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -1856,6 +1922,9 @@ def test_batch_apply_calls_batch_runner_once_and_returns_journal_audit_ids(
             ).json()
     assert batch.call_count == 1
     assert body["status"] == "completed"
+    assert body["persona_id"] == "ham-canonical"
+    assert body["persona_version"] == 1
+    assert len(body["persona_digest"]) == 64
     assert body["execution_allowed"] is True
     assert body["mutation_attempted"] is True
     assert body["attempted_count"] == 2
@@ -2045,6 +2114,26 @@ def test_broadcast_apply_blocked_when_preflight_candidate_changes(
     assert "proposal_digest_mismatch" in body["reasons"]
 
 
+def test_broadcast_apply_blocks_when_persona_digest_changes(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _enable_broadcast_apply_env(monkeypatch)
+    digest = _broadcast_preview_digest()
+    changed = {"persona_id": "ham-canonical", "persona_version": 1, "persona_digest": "d" * 64}
+    with patch("src.api.social._persona_ref", return_value=changed):
+        body = client.post(
+            _BROADCAST_APPLY_ROUTE,
+            headers={"Authorization": f"Bearer {_SOCIAL_TOKEN}"},
+            json={"proposal_digest": digest, "confirmation_phrase": _BROADCAST_CONFIRM},
+        ).json()
+    assert body["status"] == "blocked"
+    assert "persona_digest_mismatch" in body["reasons"]
+    assert body["persona_digest"] == "d" * 64
+
+
 def test_broadcast_apply_calls_governed_controller_once_and_returns_journal_audit_ids(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -2061,6 +2150,9 @@ def test_broadcast_apply_calls_governed_controller_once_and_returns_journal_audi
         ).json()
     assert live.call_count == 1
     assert body["status"] == "executed"
+    assert body["persona_id"] == "ham-canonical"
+    assert body["persona_version"] == 1
+    assert len(body["persona_digest"]) == 64
     assert body["execution_allowed"] is True
     assert body["mutation_attempted"] is True
     assert body["provider_status_code"] == 201

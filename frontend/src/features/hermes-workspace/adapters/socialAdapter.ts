@@ -253,6 +253,9 @@ export type SocialPreviewKind = "reactive_inbox" | "reactive_batch_dry_run" | "b
 
 export type SocialPreviewResponse = {
   provider_id: "x";
+  persona_id: string;
+  persona_version: number;
+  persona_digest: string;
   preview_kind: SocialPreviewKind;
   status: "completed" | "blocked" | "failed";
   execution_allowed: false;
@@ -267,6 +270,9 @@ export type SocialPreviewResponse = {
 
 export type SocialReactiveReplyApplyResponse = {
   provider_id: "x";
+  persona_id: string;
+  persona_version: number;
+  persona_digest: string;
   apply_kind: "reactive_reply";
   status: "blocked" | "executed" | "failed";
   execution_allowed: boolean;
@@ -285,6 +291,9 @@ export type SocialReactiveReplyApplyResponse = {
 
 export type SocialReactiveBatchApplyResponse = {
   provider_id: "x";
+  persona_id: string;
+  persona_version: number;
+  persona_digest: string;
   apply_kind: "reactive_batch";
   status: "blocked" | "completed" | "stopped" | "failed";
   execution_allowed: boolean;
@@ -306,6 +315,9 @@ export type SocialReactiveBatchApplyResponse = {
 
 export type SocialBroadcastApplyResponse = {
   provider_id: "x";
+  persona_id: string;
+  persona_version: number;
+  persona_digest: string;
   apply_kind: "broadcast_post";
   status: "blocked" | "executed" | "failed";
   execution_allowed: boolean;

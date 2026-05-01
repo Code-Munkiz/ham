@@ -273,6 +273,9 @@ class SocialPreviewResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     provider_id: Literal["x"] = "x"
+    persona_id: str
+    persona_version: int
+    persona_digest: str
     preview_kind: PreviewKind
     status: PreviewStatus
     execution_allowed: bool = False
@@ -297,6 +300,9 @@ class SocialReactiveReplyApplyResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     provider_id: Literal["x"] = "x"
+    persona_id: str
+    persona_version: int
+    persona_digest: str
     apply_kind: SocialApplyKind = "reactive_reply"
     status: SocialApplyStatus
     execution_allowed: bool = False
@@ -325,6 +331,9 @@ class SocialReactiveBatchApplyResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     provider_id: Literal["x"] = "x"
+    persona_id: str
+    persona_version: int
+    persona_digest: str
     apply_kind: SocialApplyKind = "reactive_batch"
     status: Literal["blocked", "completed", "stopped", "failed"]
     execution_allowed: bool = False
@@ -356,6 +365,9 @@ class SocialBroadcastApplyResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     provider_id: Literal["x"] = "x"
+    persona_id: str
+    persona_version: int
+    persona_digest: str
     apply_kind: SocialApplyKind = "broadcast_post"
     status: Literal["blocked", "executed", "failed"]
     execution_allowed: bool = False
@@ -604,6 +616,27 @@ def _social_persona_response() -> SocialPersonaResponse:
     )
 
 
+def _persona_ref() -> dict[str, Any]:
+    persona = load_social_persona("ham-canonical", 1)
+    return {
+        "persona_id": persona.persona_id,
+        "persona_version": int(persona.version),
+        "persona_digest": persona_digest(persona),
+    }
+
+
+def _persona_ref_fields() -> dict[str, Any]:
+    # Persona digests are integrity hashes, not credentials. Do not run them
+    # through the generic social redactor, which intentionally masks opaque
+    # token-shaped strings.
+    ref = _persona_ref()
+    return {
+        "persona_id": str(ref["persona_id"])[:128],
+        "persona_version": int(ref["persona_version"]),
+        "persona_digest": str(ref["persona_digest"])[:64],
+    }
+
+
 def _safe_id(value: str) -> str:
     return str(redact((value or "").strip()))[:128]
 
@@ -842,6 +875,30 @@ def _dedupe(items: list[str]) -> list[str]:
 def _proposal_digest(kind: str, payload: dict[str, Any]) -> str:
     raw = json.dumps(_safe_dict(payload), sort_keys=True, default=str)
     return hashlib.sha256(f"{kind}:{raw}".encode("utf-8")).hexdigest()
+
+
+def _proposal_payload_with_persona(payload: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not payload:
+        return None
+    out = _safe_dict(payload)
+    out["persona"] = _persona_ref_fields()
+    return out
+
+
+def _persona_digest_mismatch_response(
+    *,
+    kind: Literal["reply", "batch", "broadcast"],
+    config: HamXConfig,
+    reasons: list[str] | None = None,
+    result: dict[str, Any] | None = None,
+) -> SocialReactiveReplyApplyResponse | SocialReactiveBatchApplyResponse | SocialBroadcastApplyResponse:
+    detail = _safe_dict({"persona": _persona_ref_fields(), **(result or {})})
+    final_reasons = _dedupe([*(reasons or []), "persona_digest_mismatch"])
+    if kind == "reply":
+        return _blocked_apply_response(config, reasons=final_reasons, result=detail)
+    if kind == "batch":
+        return _blocked_batch_apply_response(config, reasons=final_reasons, result=detail)
+    return _blocked_broadcast_apply_response(config, reasons=final_reasons, result=detail)
 
 
 def _social_live_token_enabled() -> bool:
@@ -1160,6 +1217,7 @@ def _blocked_apply_response(
     result: dict[str, Any] | None = None,
 ) -> SocialReactiveReplyApplyResponse:
     return SocialReactiveReplyApplyResponse(
+        **_persona_ref_fields(),
         status="blocked",
         live_apply_available=_apply_available(config),
         journal_path=_display_path(config.execution_journal_path),
@@ -1178,6 +1236,7 @@ def _blocked_batch_apply_response(
     result: dict[str, Any] | None = None,
 ) -> SocialReactiveBatchApplyResponse:
     return SocialReactiveBatchApplyResponse(
+        **_persona_ref_fields(),
         status="blocked",
         live_apply_available=_batch_apply_available(config),
         journal_path=_display_path(config.execution_journal_path),
@@ -1196,6 +1255,7 @@ def _blocked_broadcast_apply_response(
     result: dict[str, Any] | None = None,
 ) -> SocialBroadcastApplyResponse:
     return SocialBroadcastApplyResponse(
+        **_persona_ref_fields(),
         status="blocked",
         live_apply_available=_broadcast_apply_available(config),
         journal_path=_display_path(config.execution_journal_path),
@@ -1346,6 +1406,7 @@ def _inbox_proposal_payload(discovery: Any, config: HamXConfig) -> dict[str, Any
 
 def _inbox_proposal_digest(discovery: Any, config: HamXConfig) -> str | None:
     payload = _inbox_proposal_payload(discovery, config)
+    payload = _proposal_payload_with_persona(payload)
     return _proposal_digest("reactive_inbox", payload) if payload else None
 
 
@@ -1422,6 +1483,7 @@ def _batch_proposal_payload(result: dict[str, Any], config: HamXConfig) -> dict[
 
 def _batch_proposal_digest(result: dict[str, Any], config: HamXConfig) -> str | None:
     payload = _batch_proposal_payload(result, config)
+    payload = _proposal_payload_with_persona(payload)
     return _proposal_digest("reactive_batch", payload) if payload else None
 
 
@@ -1689,6 +1751,7 @@ def _broadcast_proposal_payload(result: dict[str, Any], config: HamXConfig) -> d
 
 def _broadcast_proposal_digest(result: dict[str, Any], config: HamXConfig) -> str | None:
     payload = _broadcast_proposal_payload(result, config)
+    payload = _proposal_payload_with_persona(payload)
     return _proposal_digest("broadcast_preflight", payload) if payload else None
 
 
@@ -2278,6 +2341,7 @@ def x_reactive_inbox_preview(
     reasons = _dedupe(list(result.reasons))
     status: PreviewStatus = "completed" if result.status == "completed" else "blocked"
     return SocialPreviewResponse(
+        **_persona_ref_fields(),
         preview_kind="reactive_inbox",
         status=status,
         reasons=reasons,
@@ -2299,6 +2363,7 @@ def x_reactive_batch_dry_run(
     payload = _force_preview_flags(result)
     proposal_digest = _batch_proposal_digest(result, actual_cfg)
     return SocialPreviewResponse(
+        **_persona_ref_fields(),
         preview_kind="reactive_batch_dry_run",
         status=status,
         reasons=reasons,
@@ -2340,6 +2405,7 @@ def x_broadcast_preflight(
         proposal_digest = _broadcast_proposal_digest(payload, actual_cfg)
         status = "completed" if proposal_digest else "blocked"
     return SocialPreviewResponse(
+        **_persona_ref_fields(),
         preview_kind="broadcast_preflight",
         status=status,
         reasons=reasons,
@@ -2384,7 +2450,7 @@ def x_reactive_reply_apply(
     if body.proposal_digest != expected_digest:
         return _blocked_apply_response(
             cfg,
-            reasons=["proposal_digest_mismatch"],
+            reasons=["proposal_digest_mismatch", "persona_digest_mismatch"],
             result={"expected_preview": _safe_payload(discovery)},
         )
 
@@ -2399,6 +2465,7 @@ def x_reactive_reply_apply(
     provider_post_id = getattr(live_result.execution_result, "provider_post_id", None)
     safe_provider_post_id = redact(provider_post_id) if isinstance(provider_post_id, str) else provider_post_id
     return SocialReactiveReplyApplyResponse(
+        **_persona_ref_fields(),
         status=live_result.status,
         execution_allowed=bool(live_result.execution_allowed),
         mutation_attempted=bool(live_result.mutation_attempted),
@@ -2451,7 +2518,7 @@ def x_reactive_batch_apply(
     if body.proposal_digest != expected_digest:
         return _blocked_batch_apply_response(
             cfg,
-            reasons=["proposal_digest_mismatch"],
+            reasons=["proposal_digest_mismatch", "persona_digest_mismatch"],
             warnings=dry_warnings,
             result={"expected_preview": dry_result},
         )
@@ -2481,6 +2548,7 @@ def x_reactive_batch_apply(
             if isinstance(safe_id, str):
                 provider_post_ids.append(safe_id)
     return SocialReactiveBatchApplyResponse(
+        **_persona_ref_fields(),
         status=live_result.status,
         execution_allowed=bool(live_result.execution_allowed),
         mutation_attempted=bool(live_result.mutation_attempted),
@@ -2534,7 +2602,7 @@ def x_broadcast_apply(
     if body.proposal_digest != expected_digest:
         return _blocked_broadcast_apply_response(
             cfg,
-            reasons=["proposal_digest_mismatch"],
+            reasons=["proposal_digest_mismatch", "persona_digest_mismatch"],
             result={"expected_preview": preview_payload},
         )
 
@@ -2543,6 +2611,7 @@ def x_broadcast_apply(
     provider_post_id = getattr(live_result, "provider_post_id", None)
     safe_provider_post_id = redact(provider_post_id) if isinstance(provider_post_id, str) else provider_post_id
     return SocialBroadcastApplyResponse(
+        **_persona_ref_fields(),
         status=live_result.status,
         execution_allowed=bool(live_result.execution_allowed),
         mutation_attempted=bool(live_result.mutation_attempted),
