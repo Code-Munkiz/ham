@@ -56,6 +56,7 @@ from src.ham.social_telegram_activity import (
 )
 from src.ham.social_telegram_activity_runner import TelegramActivityRunConfig, run_telegram_activity_once
 from src.ham.social_telegram_inbound import discover_telegram_inbound_once
+from src.ham.social_telegram_reactive import preview_telegram_reactive_replies_once
 from src.ham.social_telegram_send import (
     TELEGRAM_EXECUTION_KIND,
     TelegramSendRequest,
@@ -443,6 +444,63 @@ class TelegramInboundPreviewResponse(BaseModel):
     live_apply_available: bool = False
     inbound_count: int = 0
     items: list[TelegramInboundItemDto] = Field(default_factory=list)
+    reasons: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    recommended_next_steps: list[str] = Field(default_factory=list)
+    read_only: bool = True
+
+
+class TelegramReactivePolicyDecisionDto(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    allowed: bool = False
+    classification: str
+    reasons: list[str] = Field(default_factory=list)
+
+
+class TelegramReactiveGovernorDecisionDto(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    allowed: bool = False
+    reasons: list[str] = Field(default_factory=list)
+    max_reply_candidates: int
+    reply_candidates_used: int
+
+
+class TelegramReactiveItemResultDto(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    inbound_id: str
+    inbound_text: str
+    author_ref: str
+    chat_ref: str
+    session_ref: str
+    classification: str
+    policy: TelegramReactivePolicyDecisionDto
+    governor: TelegramReactiveGovernorDecisionDto
+    reply_candidate_text: str = ""
+    proposal_digest: str | None = None
+    already_answered: bool = False
+    repliable: bool = False
+    reasons: list[str] = Field(default_factory=list)
+
+
+class TelegramReactiveRepliesPreviewResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    provider_id: Literal["telegram"] = "telegram"
+    preview_kind: Literal["telegram_reactive_replies"] = "telegram_reactive_replies"
+    status: PreviewStatus
+    execution_allowed: bool = False
+    mutation_attempted: bool = False
+    live_apply_available: bool = False
+    persona_id: str
+    persona_version: int
+    persona_digest: str
+    inbound_count: int = 0
+    processed_count: int = 0
+    reply_candidate_count: int = 0
+    items: list[TelegramReactiveItemResultDto] = Field(default_factory=list)
     reasons: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     recommended_next_steps: list[str] = Field(default_factory=list)
@@ -1391,6 +1449,11 @@ def _telegram_activity_run_once_preview_response(
 def _telegram_inbound_preview_response() -> TelegramInboundPreviewResponse:
     result = discover_telegram_inbound_once()
     return TelegramInboundPreviewResponse.model_validate({**result.model_dump(mode="json"), "read_only": True})
+
+
+def _telegram_reactive_replies_preview_response() -> TelegramReactiveRepliesPreviewResponse:
+    result = preview_telegram_reactive_replies_once()
+    return TelegramReactiveRepliesPreviewResponse.model_validate({**result.model_dump(mode="json"), "read_only": True})
 
 
 def _telegram_live_apply_available() -> bool:
@@ -2638,6 +2701,13 @@ def telegram_inbound_preview(
     return _telegram_inbound_preview_response()
 
 
+@router.post("/providers/telegram/reactive/replies/preview", response_model=TelegramReactiveRepliesPreviewResponse)
+def telegram_reactive_replies_preview(
+    _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)] = None,
+) -> TelegramReactiveRepliesPreviewResponse:
+    return _telegram_reactive_replies_preview_response()
+
+
 @router.post("/providers/telegram/activity/apply", response_model=TelegramActivityApplyResponse)
 def telegram_activity_apply(
     body: TelegramActivityApplyRequest,
@@ -3446,6 +3516,10 @@ __all__ = [
     "TelegramActivityRunOncePreviewResponse",
     "TelegramInboundItemDto",
     "TelegramInboundPreviewResponse",
+    "TelegramReactivePolicyDecisionDto",
+    "TelegramReactiveGovernorDecisionDto",
+    "TelegramReactiveItemResultDto",
+    "TelegramReactiveRepliesPreviewResponse",
     "TelegramActivityApplyRequest",
     "TelegramActivityApplyResponse",
     "SocialReactiveReplyApplyRequest",

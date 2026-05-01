@@ -22,6 +22,7 @@ import {
   type TelegramInboundPreviewResponse,
   type TelegramMessageApplyResponse,
   type TelegramMessagePreviewResponse,
+  type TelegramReactiveRepliesPreviewResponse,
   type XCapabilities,
 } from "../../adapters/socialAdapter";
 import { WorkspaceSurfaceHeader, WorkspaceSurfaceStateCard } from "../../components/workspaceSurfaceChrome";
@@ -220,6 +221,10 @@ function MessagingProviderPanel({
   telegramInboundPreviewBusy = false,
   telegramInboundPreviewError,
   onPreviewTelegramInbound,
+  telegramReactivePreview,
+  telegramReactivePreviewBusy = false,
+  telegramReactivePreviewError,
+  onPreviewTelegramReactive,
   onOpenTelegramActivityLiveConfirm,
   telegramActivityLiveResult,
   telegramActivityLiveError,
@@ -246,6 +251,10 @@ function MessagingProviderPanel({
   telegramInboundPreviewBusy?: boolean;
   telegramInboundPreviewError?: string | null;
   onPreviewTelegramInbound?: () => void;
+  telegramReactivePreview?: TelegramReactiveRepliesPreviewResponse | null;
+  telegramReactivePreviewBusy?: boolean;
+  telegramReactivePreviewError?: string | null;
+  onPreviewTelegramReactive?: () => void;
   onOpenTelegramActivityLiveConfirm?: () => void;
   telegramActivityLiveResult?: TelegramActivityApplyResponse | null;
   telegramActivityLiveError?: string | null;
@@ -468,6 +477,36 @@ function MessagingProviderPanel({
                 </p>
               ) : null}
               {telegramInboundPreview ? <TelegramInboundPreviewCard preview={telegramInboundPreview} /> : null}
+            </div>
+            <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-white/82">Telegram reactive replies (dry-run)</h3>
+                  <p className="mt-1 text-xs text-white/48">
+                    Dry-run only. No Telegram message will be sent. Reads local Hermes transcript preview.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <StatusPill label="No reply/apply control" tone="ok" />
+                  <StatusPill label="No model call" tone="ok" />
+                </div>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                className="mt-3 border-white/15 bg-white/5 text-white/90"
+                onClick={onPreviewTelegramReactive}
+                disabled={telegramReactivePreviewBusy || !onPreviewTelegramReactive}
+              >
+                {telegramReactivePreviewBusy ? "Previewing..." : "Preview Telegram replies"}
+              </Button>
+              {telegramReactivePreviewError ? (
+                <p className="mt-3 rounded-lg border border-amber-400/20 bg-amber-500/5 p-3 text-sm text-amber-100/80">
+                  {telegramReactivePreviewError}
+                </p>
+              ) : null}
+              {telegramReactivePreview ? <TelegramReactiveRepliesPreviewCard preview={telegramReactivePreview} /> : null}
             </div>
             <div className="rounded-xl border border-white/10 bg-black/20 p-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1116,6 +1155,89 @@ function TelegramInboundPreviewCard({ preview }: { preview: TelegramInboundPrevi
   );
 }
 
+function TelegramReactiveRepliesPreviewCard({ preview }: { preview: TelegramReactiveRepliesPreviewResponse }) {
+  return (
+    <section className="mt-3 rounded-2xl border border-fuchsia-400/20 bg-fuchsia-500/5 p-4 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold text-white/85">Telegram reactive reply preview</h3>
+          <p className="mt-1 text-xs text-white/48">
+            Dry-run only. No Telegram message will be sent. Reads local Hermes transcript preview.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <StatusPill label={titleCase(preview.status)} tone={preview.status === "completed" ? "ok" : "warn"} />
+          <StatusPill label={`${preview.reply_candidate_count} candidates`} tone={preview.reply_candidate_count ? "ok" : "muted"} />
+          <StatusPill label={preview.execution_allowed ? "Execution allowed" : "Execution blocked"} tone={preview.execution_allowed ? "danger" : "ok"} />
+          <StatusPill label={preview.mutation_attempted ? "Mutation attempted" : "No mutation"} tone={preview.mutation_attempted ? "danger" : "ok"} />
+        </div>
+      </div>
+      {preview.items.length ? (
+        <div className="mt-3 space-y-3">
+          {preview.items.map((item) => (
+            <div key={item.inbound_id} className="rounded-lg border border-white/10 bg-black/25 p-3">
+              <div className="flex flex-wrap gap-2">
+                <StatusPill label={titleCase(item.classification)} tone={item.policy.allowed ? "ok" : "warn"} />
+                <StatusPill label={item.policy.allowed ? "Policy allows" : "Policy blocked"} tone={item.policy.allowed ? "ok" : "warn"} />
+                <StatusPill label={item.governor.allowed ? "Governor allows" : "Governor blocked"} tone={item.governor.allowed ? "ok" : "warn"} />
+                <StatusPill label={item.proposal_digest ? "Proposal digest present" : "No proposal digest"} tone={item.proposal_digest ? "ok" : "muted"} />
+              </div>
+              <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">Author</div>
+                  <div className="mt-1 font-mono text-xs text-white/55">{item.author_ref || "Missing"}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">Chat</div>
+                  <div className="mt-1 font-mono text-xs text-white/55">{item.chat_ref || "Missing"}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">Session</div>
+                  <div className="mt-1 font-mono text-xs text-white/55">{item.session_ref || "Missing"}</div>
+                </div>
+              </div>
+              <p className="mt-3 rounded-lg border border-white/10 bg-black/30 p-3 text-sm leading-relaxed text-white/75">
+                {item.inbound_text}
+              </p>
+              {item.reply_candidate_text ? (
+                <p className="mt-3 rounded-lg border border-emerald-400/20 bg-emerald-500/10 p-3 text-sm leading-relaxed text-emerald-50/85">
+                  {item.reply_candidate_text}
+                </p>
+              ) : null}
+              {item.reasons.length ? (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {item.reasons.map((reason) => (
+                    <StatusPill key={`${item.inbound_id}-${reason}`} label={titleCase(reason)} tone="warn" />
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {preview.reasons.length || preview.warnings.length ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {preview.reasons.map((reason) => (
+            <StatusPill key={`telegram-reactive-reason-${reason}`} label={titleCase(reason)} tone="warn" />
+          ))}
+          {preview.warnings.map((warning) => (
+            <StatusPill key={`telegram-reactive-warning-${warning}`} label={titleCase(warning)} tone="muted" />
+          ))}
+        </div>
+      ) : null}
+      {preview.recommended_next_steps.length ? (
+        <div className="mt-3 space-y-2">
+          {preview.recommended_next_steps.map((step) => (
+            <div key={step} className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm text-white/62">
+              {step}
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 function PreviewResultCard({ preview }: { preview: SocialPreviewResponse }) {
   return (
     <section className="rounded-2xl border border-emerald-400/20 bg-emerald-500/5 p-4 shadow-sm">
@@ -1195,6 +1317,9 @@ export function WorkspaceSocialScreen() {
   const [telegramInboundPreviewBusy, setTelegramInboundPreviewBusy] = React.useState(false);
   const [telegramInboundPreviewError, setTelegramInboundPreviewError] = React.useState<string | null>(null);
   const [telegramInboundPreview, setTelegramInboundPreview] = React.useState<TelegramInboundPreviewResponse | null>(null);
+  const [telegramReactivePreviewBusy, setTelegramReactivePreviewBusy] = React.useState(false);
+  const [telegramReactivePreviewError, setTelegramReactivePreviewError] = React.useState<string | null>(null);
+  const [telegramReactivePreview, setTelegramReactivePreview] = React.useState<TelegramReactiveRepliesPreviewResponse | null>(null);
   const [telegramActivityPreviewBusy, setTelegramActivityPreviewBusy] = React.useState(false);
   const [telegramActivityPreviewError, setTelegramActivityPreviewError] = React.useState<string | null>(null);
   const [telegramActivityPreview, setTelegramActivityPreview] = React.useState<TelegramActivityPreviewResponse | null>(null);
@@ -1274,6 +1399,19 @@ export function WorkspaceSocialScreen() {
       return;
     }
     setTelegramInboundPreview(result.preview);
+  };
+
+  const runTelegramReactivePreview = async () => {
+    setTelegramReactivePreviewBusy(true);
+    setTelegramReactivePreviewError(null);
+    const result = await socialAdapter.previewTelegramReactiveReplies();
+    setTelegramReactivePreviewBusy(false);
+    if (result.bridge.status === "pending" || !result.preview) {
+      const detail = result.bridge.status === "pending" ? result.bridge.detail : result.error;
+      setTelegramReactivePreviewError(detail || "Telegram reactive preview API unavailable.");
+      return;
+    }
+    setTelegramReactivePreview(result.preview);
   };
 
   const runTelegramActivityPreview = async () => {
@@ -1546,6 +1684,10 @@ export function WorkspaceSocialScreen() {
               telegramInboundPreviewBusy={telegramInboundPreviewBusy}
               telegramInboundPreviewError={selectedProvider === "telegram" ? telegramInboundPreviewError : null}
               onPreviewTelegramInbound={selectedProvider === "telegram" ? () => void runTelegramInboundPreview() : undefined}
+              telegramReactivePreview={selectedProvider === "telegram" ? telegramReactivePreview : null}
+              telegramReactivePreviewBusy={telegramReactivePreviewBusy}
+              telegramReactivePreviewError={selectedProvider === "telegram" ? telegramReactivePreviewError : null}
+              onPreviewTelegramReactive={selectedProvider === "telegram" ? () => void runTelegramReactivePreview() : undefined}
               telegramActivityPreview={selectedProvider === "telegram" ? telegramActivityPreview : null}
               telegramActivityPreviewBusy={telegramActivityPreviewBusy}
               telegramActivityPreviewError={selectedProvider === "telegram" ? telegramActivityPreviewError : null}

@@ -488,6 +488,7 @@ _PREVIEW_ROUTES = (
     "/api/social/providers/x/broadcast/preflight",
     "/api/social/providers/telegram/activity/preview",
     "/api/social/providers/telegram/activity/run-once/preview",
+    "/api/social/providers/telegram/reactive/replies/preview",
 )
 
 _APPLY_ROUTE = "/api/social/providers/x/reactive/reply/apply"
@@ -646,6 +647,62 @@ def test_telegram_inbound_has_no_reply_apply_or_live_routes(
     assert client.post("/api/social/providers/telegram/inbound/reply/apply", json={}).status_code == 404
     assert client.post("/api/social/providers/telegram/inbound/apply", json={}).status_code == 404
     assert client.post("/api/social/providers/telegram/inbound/live", json={}).status_code == 404
+
+
+def test_telegram_reactive_replies_preview_is_dry_run_only(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    transcript = tmp_path / "telegram-reactive.jsonl"
+    raw_chat = "-1009876543210"
+    raw_user = "123456789"
+    transcript.write_text(
+        json.dumps(
+            {
+                "source": "telegram",
+                "role": "user",
+                "text": "How does Ham work?",
+                "chat_id": raw_chat,
+                "user_id": raw_user,
+                "session_id": "session-1",
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("HAM_TELEGRAM_INBOUND_TRANSCRIPT_PATH", str(transcript))
+
+    body = client.post("/api/social/providers/telegram/reactive/replies/preview", json={}).json()
+
+    assert body["provider_id"] == "telegram"
+    assert body["preview_kind"] == "telegram_reactive_replies"
+    assert body["status"] == "completed"
+    assert body["execution_allowed"] is False
+    assert body["mutation_attempted"] is False
+    assert body["live_apply_available"] is False
+    assert body["read_only"] is True
+    assert body["inbound_count"] == 1
+    assert body["processed_count"] == 1
+    assert body["reply_candidate_count"] == 1
+    assert body["items"][0]["classification"] == "genuine_question"
+    assert body["items"][0]["reply_candidate_text"]
+    assert body["items"][0]["proposal_digest"]
+    text = json.dumps(body, sort_keys=True)
+    assert raw_chat not in text
+    assert raw_user not in text
+
+
+def test_telegram_reactive_replies_has_no_apply_or_live_routes(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    assert client.post("/api/social/providers/telegram/reactive/replies/apply", json={}).status_code == 404
+    assert client.post("/api/social/providers/telegram/reactive/replies/live", json={}).status_code == 404
 
 
 # ---------------------------------------------------------------------------
@@ -2078,6 +2135,8 @@ def test_no_batch_or_reactive_telegram_routes_added(
     assert client.post("/api/social/providers/telegram/messages/batch/apply", json={}).status_code == 404
     assert client.post("/api/social/providers/telegram/reactive/reply/apply", json={}).status_code == 404
     assert client.post("/api/social/providers/telegram/reactive/batch/apply", json={}).status_code == 404
+    assert client.post("/api/social/providers/telegram/reactive/replies/apply", json={}).status_code == 404
+    assert client.post("/api/social/providers/telegram/reactive/replies/live", json={}).status_code == 404
     assert client.post("/api/social/providers/telegram/activity/batch/apply", json={}).status_code == 404
     assert client.post("/api/social/providers/telegram/activity/reactive/apply", json={}).status_code == 404
     assert client.post("/api/social/providers/telegram/activity/run-once/apply", json={}).status_code == 404
@@ -2122,6 +2181,21 @@ def test_social_ui_contains_telegram_inbound_preview_without_reply_controls() ->
     assert "previewTelegramInbound" in screen
     assert "/providers/telegram/inbound/preview" in adapter
     assert "/providers/telegram/inbound/reply/apply" not in adapter
+    assert "Send Telegram reply" not in screen
+    assert "Apply Telegram reply" not in screen
+
+
+def test_social_ui_contains_telegram_reactive_preview_without_apply_controls() -> None:
+    screen = Path("frontend/src/features/hermes-workspace/screens/social/WorkspaceSocialScreen.tsx").read_text(
+        encoding="utf-8"
+    )
+    adapter = Path("frontend/src/features/hermes-workspace/adapters/socialAdapter.ts").read_text(encoding="utf-8")
+    assert "Preview Telegram replies" in screen
+    assert "Dry-run only. No Telegram message will be sent. Reads local Hermes transcript preview." in screen
+    assert "TelegramReactiveRepliesPreviewCard" in screen
+    assert "previewTelegramReactiveReplies" in screen
+    assert "/providers/telegram/reactive/replies/preview" in adapter
+    assert "/providers/telegram/reactive/replies/apply" not in adapter
     assert "Send Telegram reply" not in screen
     assert "Apply Telegram reply" not in screen
 

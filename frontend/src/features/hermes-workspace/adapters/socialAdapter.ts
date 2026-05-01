@@ -410,6 +410,49 @@ export type TelegramInboundPreviewResponse = {
   read_only: boolean;
 };
 
+export type TelegramReactiveRepliesPreviewResponse = {
+  provider_id: "telegram";
+  preview_kind: "telegram_reactive_replies";
+  status: "completed" | "blocked" | "failed";
+  execution_allowed: false;
+  mutation_attempted: false;
+  live_apply_available: false;
+  persona_id: string;
+  persona_version: number;
+  persona_digest: string;
+  inbound_count: number;
+  processed_count: number;
+  reply_candidate_count: number;
+  items: Array<{
+    inbound_id: string;
+    inbound_text: string;
+    author_ref: string;
+    chat_ref: string;
+    session_ref: string;
+    classification: string;
+    policy: {
+      allowed: boolean;
+      classification: string;
+      reasons: string[];
+    };
+    governor: {
+      allowed: boolean;
+      reasons: string[];
+      max_reply_candidates: number;
+      reply_candidates_used: number;
+    };
+    reply_candidate_text: string;
+    proposal_digest: string | null;
+    already_answered: boolean;
+    repliable: boolean;
+    reasons: string[];
+  }>;
+  reasons: string[];
+  warnings: string[];
+  recommended_next_steps: string[];
+  read_only: boolean;
+};
+
 export type TelegramActivityApplyResponse = {
   provider_id: "telegram";
   apply_kind: "telegram_activity";
@@ -734,6 +777,21 @@ export const socialAdapter = {
       });
       if (!res.ok) return { preview: null, bridge: { status: "pending", detail: `HTTP ${res.status}` } };
       return { preview: (await res.json()) as TelegramInboundPreviewResponse, bridge: { status: "ready" } };
+    } catch (e) {
+      return {
+        preview: null,
+        bridge: workspaceApiPending("social", null, e),
+        error: e instanceof Error ? e.message : String(e),
+      };
+    }
+  },
+
+  async previewTelegramReactiveReplies(): Promise<{ preview: TelegramReactiveRepliesPreviewResponse | null; bridge: SocialBridge; error?: string }> {
+    try {
+      return {
+        preview: await postPreview<TelegramReactiveRepliesPreviewResponse>(`${BASE}/providers/telegram/reactive/replies/preview`, {}),
+        bridge: { status: "ready" },
+      };
     } catch (e) {
       return {
         preview: null,
