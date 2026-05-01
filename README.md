@@ -12,6 +12,7 @@ Open-source multi-agent autonomous developer swarm: Hermes supervisory orchestra
 - **Chat control plane (skills + roadmap)**: [docs/HAM_CHAT_CONTROL_PLANE.md](docs/HAM_CHAT_CONTROL_PLANE.md)
 - **Browser Runtime (Playwright) setup/caveats**: [docs/BROWSER_RUNTIME_PLAYWRIGHT.md](docs/BROWSER_RUNTIME_PLAYWRIGHT.md)
 - **Cloud Agent + managed missions** (roadmap, SDK bridge, feed): [docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md](docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md); mission-scoped feed and controls: [docs/MISSION_AWARE_FEED_CONTROLS.md](docs/MISSION_AWARE_FEED_CONTROLS.md)
+- **HAM product roadmap** (attachments Phase 2A+, Export-to-PDF Phase 2B, media/RAG): [docs/HAM_ROADMAP.md](docs/HAM_ROADMAP.md)
 - **Deploy (Cloud Run)**: [docs/DEPLOY_CLOUD_RUN.md](docs/DEPLOY_CLOUD_RUN.md) | **Handoff**: [docs/DEPLOY_HANDOFF.md](docs/DEPLOY_HANDOFF.md)
 - **Control plane runs**: [docs/CONTROL_PLANE_RUN.md](docs/CONTROL_PLANE_RUN.md)
 - **Documentation index**: [docs/README.md](docs/README.md)

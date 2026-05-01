@@ -40,6 +40,7 @@ SDK bridge attaches to existing `bc-*` agents; **`HAM_CURSOR_SDK_BRIDGE_ENABLED`
 
 | Doc | Purpose |
 |-----|---------|
+| [HAM_ROADMAP.md](HAM_ROADMAP.md) | Workspace attachments, Phase 2B PDF export, voice/video/RAG sequencing (cross-cutting) |
 | [HAM_CHAT_CONTROL_PLANE.md](HAM_CHAT_CONTROL_PLANE.md) | Dashboard chat + skills intent roadmap |
 | [HERMES_GATEWAY_CONTRACT.md](HERMES_GATEWAY_CONTRACT.md) | Server-side Hermes / OpenAI-compatible adapter contract |
 | [HERMES_GATEWAY_BROKER.md](HERMES_GATEWAY_BROKER.md) | Gateway broker snapshot (Command Center) |
