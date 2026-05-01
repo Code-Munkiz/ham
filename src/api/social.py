@@ -407,7 +407,7 @@ class XSetupSummaryResponse(BaseModel):
 
 SocialMessagingProviderId = Literal["telegram", "discord"]
 HermesRuntimeState = Literal["connected", "connecting", "retrying", "fatal", "stopped", "unknown"]
-TelegramMode = Literal["polling", "webhook", "unset"]
+TelegramMode = Literal["polling", "polling_default", "webhook", "unset"]
 TelegramPlatformState = Literal["connected", "retrying", "fatal", "stopped", "unknown", "not_reported"]
 
 
@@ -713,16 +713,18 @@ def _telegram_platform_state(runtime: HermesGatewayRuntimeStatusDto) -> Telegram
 
 
 def _telegram_mode() -> TelegramMode:
-    raw = (
+    if _env_present("TELEGRAM_WEBHOOK_URL", "TELEGRAM_WEBHOOK_BASE_URL"):
+        return "webhook"
+    explicit = (
         os.environ.get("TELEGRAM_MODE")
         or os.environ.get("HERMES_TELEGRAM_MODE")
         or os.environ.get("TELEGRAM_GATEWAY_MODE")
         or ""
     ).strip().lower()
-    if raw in {"polling", "webhook"}:
-        return raw  # type: ignore[return-value]
-    if _env_present("TELEGRAM_WEBHOOK_URL", "TELEGRAM_WEBHOOK_BASE_URL"):
-        return "webhook"
+    if explicit in {"polling", "polling_default", "webhook"}:
+        return explicit  # type: ignore[return-value]
+    if _env_present("TELEGRAM_BOT_TOKEN"):
+        return "polling_default"
     return "unset"
 
 

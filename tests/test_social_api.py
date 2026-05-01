@@ -896,10 +896,88 @@ def test_td_missing_or_unknown_gateway_status_is_limited_safely(
     assert body["hermes_gateway"]["status_path_configured"] is True
     assert body["hermes_gateway"]["provider_runtime_state"] == "unknown"
     assert body["telegram_platform_state"] == "unknown"
-    assert body["telegram_mode"] == "unset"
+    assert body["telegram_mode"] == "polling_default"
     assert "telegram_home_channel" in body["missing_requirements"]
     assert "telegram_test_group" in body["missing_requirements"]
+    assert "telegram_mode" not in body["missing_requirements"]
     assert body["live_apply_available"] is False
+
+
+def test_telegram_token_without_webhook_reports_polling_default(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    token = "telegram-token-secret-1234567890"
+    allowed = "123456789"
+    channel = "-1001234567890"
+    group = "-1009876543210"
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", token)
+    monkeypatch.setenv("TELEGRAM_ALLOWED_USERS", allowed)
+    monkeypatch.setenv("TELEGRAM_HOME_CHANNEL", channel)
+    monkeypatch.setenv("TELEGRAM_TEST_GROUP_ID", group)
+
+    status = client.get("/api/social/providers/telegram/status").json()
+    caps = client.get("/api/social/providers/telegram/capabilities").json()
+    text = json.dumps(status, sort_keys=True) + json.dumps(caps, sort_keys=True)
+    assert status["telegram_mode"] == "polling_default"
+    assert caps["telegram_mode"] == "polling_default"
+    assert "telegram_mode" not in status["missing_requirements"]
+    assert status["telegram_bot_token_present"] is True
+    for raw in (token, allowed, channel, group):
+        assert raw not in text
+
+
+def test_telegram_webhook_url_reports_webhook_without_exposing_url(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    webhook = "https://example.invalid/secret-telegram-webhook-path"
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "telegram-token-secret-1234567890")
+    monkeypatch.setenv("TELEGRAM_WEBHOOK_URL", webhook)
+
+    status = client.get("/api/social/providers/telegram/status").json()
+    caps = client.get("/api/social/providers/telegram/capabilities").json()
+    text = json.dumps(status, sort_keys=True) + json.dumps(caps, sort_keys=True)
+    assert status["telegram_mode"] == "webhook"
+    assert caps["telegram_mode"] == "webhook"
+    assert "telegram_mode" not in status["missing_requirements"]
+    assert webhook not in text
+
+
+def test_telegram_invalid_explicit_mode_is_safe_and_uses_default_polling(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    invalid_mode = "polling; print-secret"
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "telegram-token-secret-1234567890")
+    monkeypatch.setenv("TELEGRAM_MODE", invalid_mode)
+
+    status = client.get("/api/social/providers/telegram/status").json()
+    caps = client.get("/api/social/providers/telegram/capabilities").json()
+    text = json.dumps(status, sort_keys=True) + json.dumps(caps, sort_keys=True)
+    assert status["telegram_mode"] == "polling_default"
+    assert caps["telegram_mode"] == "polling_default"
+    assert invalid_mode not in text
+
+
+def test_telegram_without_token_stays_setup_required(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    body = client.get("/api/social/providers/telegram/status").json()
+    assert body["overall_readiness"] == "setup_required"
+    assert body["telegram_bot_token_present"] is False
+    assert body["telegram_mode"] == "unset"
+    assert "telegram_bot_token" in body["missing_requirements"]
+    assert "telegram_mode" in body["missing_requirements"]
 
 
 def test_telegram_malformed_gateway_state_returns_unknown_safely(

@@ -150,7 +150,7 @@ export type XAuditSummary = {
 };
 
 export type SocialMessagingRuntimeState = "connected" | "connecting" | "retrying" | "fatal" | "stopped" | "unknown";
-export type TelegramMode = "polling" | "webhook" | "unset";
+export type TelegramMode = "polling" | "polling_default" | "webhook" | "unset";
 export type TelegramPlatformState = "connected" | "retrying" | "fatal" | "stopped" | "unknown" | "not_reported";
 
 export type SocialMessagingRuntimeStatus = {

@@ -322,6 +322,11 @@ function MessagingProviderPanel({
                 { label: "Readiness", value: titleCase(status.readiness ?? telegramCapabilities.readiness) },
               ]}
             />
+            {(status.telegram_mode ?? telegramCapabilities.telegram_mode) === "polling_default" ? (
+              <p className="rounded-lg border border-white/10 bg-black/20 p-3 text-sm leading-relaxed text-white/62">
+                Hermes uses polling locally when no Telegram webhook URL is configured.
+              </p>
+            ) : null}
             {!status.telegram_bot_token_present || !status.hermes_gateway_base_url_present ? (
               <p className="rounded-lg border border-amber-400/20 bg-amber-500/5 p-3 text-sm leading-relaxed text-amber-100/80">
                 Bot exists but runtime is not connected yet. Store the token securely, configure allowed chats/users, and validate the Hermes gateway before dry-run preview work.
