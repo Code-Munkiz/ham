@@ -39,6 +39,19 @@ The repo already includes CORS support (`HAM_CORS_ORIGINS`, `HAM_CORS_ORIGIN_REG
    If this fails on OPTIONS or missing `Access-Control-Allow-Origin`, the API env does not allow that `Origin`.  
    If chat succeeds but the script fails with **mock-mode** detection, the API is still on **`HERMES_GATEWAY_MODE=mock`** (or miswired `http`). Set **`HAM_VERIFY_ALLOW_MOCK=1`** only when you **intentionally** verify a mock deployment.
 
+## 1a. Creative image generation (Phase 2G.1a — optional)
+
+Requirements: **HAM API image built from a commit that includes Phase 2G.1** (`/api/media/images/generate`). The live service **URL** may change; resolve with  
+`gcloud run services describe ham-api --project clarity-staging-488201 --region us-central1 --format='value(status.url)'`.
+
+1. **Dedicated GCS bucket** (not attachment bucket), e.g. **`clarity-staging-488201-ham-generated-media`**, prefix **`generated-media/`**. Grant **`roles/storage.objectUser`** on that bucket to the Cloud Run **runtime** service account (`spec.template.spec.serviceAccountName`, or project default compute SA if unset).
+
+2. **OpenRouter for image only:** image generation uses **`OPENROUTER_API_KEY`** (plausible single-line token). If chat uses **Hermes HTTP** (`HERMES_GATEWAY_MODE=http`), you may still mount **`OPENROUTER_API_KEY`** from Secret Manager **only** for creative media — staging project secret name is often **`ham-openrouter-api-key`**. Use **`gcloud run services update … --update-secrets=OPENROUTER_API_KEY=ham-openrouter-api-key:latest`** (additive; do not paste the key into env files).
+
+3. **Plain env (additive):** `gcloud run services update ham-api --region us-central1 --project clarity-staging-488201 --update-env-vars=HAM_MEDIA_IMAGE_GENERATION_ENABLED=true,HAM_GENERATED_MEDIA_STORE=gcs,HAM_GENERATED_MEDIA_BUCKET=clarity-staging-488201-ham-generated-media,HAM_GENERATED_MEDIA_PREFIX=generated-media/,HAM_MEDIA_IMAGE_DEFAULT_MODEL=<OpenRouter image SKU>`. Pick a model that **supports image output** (see OpenRouter multimodal / model catalog); do not use a text-only chat model.
+
+4. **Smoke:** `GET /api/chat/capabilities` should include **`generation.supports_image_generation`** only when the flag, key, and default model are valid. **Do not** rely on `POST /api/media/images/generate` without **`Authorization: Bearer <Clerk JWT>`** when **`HAM_CLERK_REQUIRE_AUTH`** (or email enforcement) is on.
+
 ## 2. Vercel (dashboard frontend)
 
 The **React dashboard** is built and served only from Vercel. **If the Vercel project Root Directory is the repo root**, use root `vercel.json` (build + `outputDirectory` + SPA rewrite). **If Root Directory is `frontend`**, Vercel reads **`frontend/vercel.json`** for SPA rewrites — without that, direct visits to **`/agents`** (or refresh) can 404. The **Cloud Run image** (`Dockerfile`) ships **FastAPI only** — it does not contain `frontend/dist`. If you redeploy Vercel but not the API, pages like **Agent Builder** may load but fail with a clear error until **GET `/api/projects/{id}/agents`** exists on the API host. If you redeploy the API but not Vercel, new **UI** routes will not appear until you trigger a **new Vercel production deployment** from the commit that includes those files.
