@@ -1,6 +1,7 @@
 """Tests for structured chat user payloads (v1 data URLs, v2 attachment ids)."""
 from __future__ import annotations
 
+from io import BytesIO
 from pathlib import Path
 
 import pytest
