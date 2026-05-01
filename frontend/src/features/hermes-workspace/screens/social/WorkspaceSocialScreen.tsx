@@ -22,6 +22,7 @@ import {
   type TelegramInboundPreviewResponse,
   type TelegramMessageApplyResponse,
   type TelegramMessagePreviewResponse,
+  type TelegramReactiveReplyApplyResponse,
   type TelegramReactiveRepliesPreviewResponse,
   type XCapabilities,
 } from "../../adapters/socialAdapter";
@@ -225,6 +226,9 @@ function MessagingProviderPanel({
   telegramReactivePreviewBusy = false,
   telegramReactivePreviewError,
   onPreviewTelegramReactive,
+  onOpenTelegramReactiveLiveConfirm,
+  telegramReactiveLiveResult,
+  telegramReactiveLiveError,
   onOpenTelegramActivityLiveConfirm,
   telegramActivityLiveResult,
   telegramActivityLiveError,
@@ -255,6 +259,9 @@ function MessagingProviderPanel({
   telegramReactivePreviewBusy?: boolean;
   telegramReactivePreviewError?: string | null;
   onPreviewTelegramReactive?: () => void;
+  onOpenTelegramReactiveLiveConfirm?: (item: TelegramReactiveRepliesPreviewResponse["items"][number]) => void;
+  telegramReactiveLiveResult?: TelegramReactiveReplyApplyResponse | null;
+  telegramReactiveLiveError?: string | null;
   onOpenTelegramActivityLiveConfirm?: () => void;
   telegramActivityLiveResult?: TelegramActivityApplyResponse | null;
   telegramActivityLiveError?: string | null;
@@ -272,6 +279,14 @@ function MessagingProviderPanel({
       telegramActivityPreview?.governor.allowed &&
       telegramCapabilities?.readiness === "ready" &&
       telegramCapabilities?.activity_apply_available,
+  );
+  const telegramReactiveLiveCandidates = (telegramReactivePreview?.items || []).filter(
+    (item) =>
+      Boolean(item.proposal_digest) &&
+      item.policy.allowed &&
+      item.governor.allowed &&
+      telegramCapabilities?.readiness === "ready" &&
+      telegramCapabilities?.reactive_reply_apply_available,
   );
   const guidance = isTelegram
     ? {
@@ -507,6 +522,46 @@ function MessagingProviderPanel({
                 </p>
               ) : null}
               {telegramReactivePreview ? <TelegramReactiveRepliesPreviewCard preview={telegramReactivePreview} /> : null}
+              {telegramReactiveLiveCandidates.length ? (
+                <div className="mt-3 space-y-3">
+                  {telegramReactiveLiveCandidates.map((item) => (
+                    <div key={`telegram-reactive-live-${item.inbound_id}`} className="rounded-xl border border-white/10 bg-black/20 p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <h3 className="text-sm font-semibold text-white/82">Confirmed live Telegram reply</h3>
+                          <p className="mt-1 text-xs text-white/48">
+                            This sends exactly one Telegram reply through the governed Social cockpit. No batch. No retry. No autonomous runner.
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <StatusPill label={item.classification ? titleCase(item.classification) : "Candidate"} tone="ok" />
+                          <StatusPill label="Proposal digest present" tone="ok" />
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="mt-3 bg-red-700 text-white hover:bg-red-600"
+                        disabled={!onOpenTelegramReactiveLiveConfirm}
+                        onClick={() => onOpenTelegramReactiveLiveConfirm?.(item)}
+                      >
+                        Send one Telegram reply
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              {telegramReactiveLiveError ? (
+                <p className="mt-3 rounded-lg border border-amber-400/20 bg-amber-500/5 p-3 text-sm text-amber-100/80">
+                  {telegramReactiveLiveError}
+                </p>
+              ) : null}
+              {telegramReactiveLiveResult ? (
+                <div>
+                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-white/45">Telegram reactive reply live result</h3>
+                  <RecordPreview record={telegramReactiveLiveResult as unknown as Record<string, unknown>} emptyLabel="No Telegram reactive reply live result payload." />
+                </div>
+              ) : null}
             </div>
             <div className="rounded-xl border border-white/10 bg-black/20 p-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -890,6 +945,7 @@ const LIVE_BATCH_CONFIRMATION_PHRASE = "SEND LIVE REACTIVE BATCH";
 const LIVE_BROADCAST_CONFIRMATION_PHRASE = "SEND ONE LIVE POST";
 const LIVE_TELEGRAM_CONFIRMATION_PHRASE = "SEND ONE TELEGRAM MESSAGE";
 const LIVE_TELEGRAM_ACTIVITY_CONFIRMATION_PHRASE = "SEND ONE TELEGRAM ACTIVITY";
+const LIVE_TELEGRAM_REACTIVE_REPLY_CONFIRMATION_PHRASE = "SEND ONE TELEGRAM REPLY";
 
 function TelegramMessagePreviewCard({ preview }: { preview: TelegramMessagePreviewResponse }) {
   return (
@@ -1320,6 +1376,13 @@ export function WorkspaceSocialScreen() {
   const [telegramReactivePreviewBusy, setTelegramReactivePreviewBusy] = React.useState(false);
   const [telegramReactivePreviewError, setTelegramReactivePreviewError] = React.useState<string | null>(null);
   const [telegramReactivePreview, setTelegramReactivePreview] = React.useState<TelegramReactiveRepliesPreviewResponse | null>(null);
+  const [telegramReactiveConfirmOpen, setTelegramReactiveConfirmOpen] = React.useState(false);
+  const [telegramReactiveConfirmText, setTelegramReactiveConfirmText] = React.useState("");
+  const [telegramReactiveOperatorToken, setTelegramReactiveOperatorToken] = React.useState("");
+  const [telegramReactiveLiveBusy, setTelegramReactiveLiveBusy] = React.useState(false);
+  const [telegramReactiveLiveError, setTelegramReactiveLiveError] = React.useState<string | null>(null);
+  const [telegramReactiveLiveResult, setTelegramReactiveLiveResult] = React.useState<TelegramReactiveReplyApplyResponse | null>(null);
+  const [telegramReactiveSelected, setTelegramReactiveSelected] = React.useState<TelegramReactiveRepliesPreviewResponse["items"][number] | null>(null);
   const [telegramActivityPreviewBusy, setTelegramActivityPreviewBusy] = React.useState(false);
   const [telegramActivityPreviewError, setTelegramActivityPreviewError] = React.useState<string | null>(null);
   const [telegramActivityPreview, setTelegramActivityPreview] = React.useState<TelegramActivityPreviewResponse | null>(null);
@@ -1412,6 +1475,32 @@ export function WorkspaceSocialScreen() {
       return;
     }
     setTelegramReactivePreview(result.preview);
+    setTelegramReactiveLiveResult(null);
+  };
+
+  const sendOneTelegramReactiveReply = async () => {
+    if (!telegramReactiveSelected?.proposal_digest) return;
+    setTelegramReactiveLiveBusy(true);
+    setTelegramReactiveLiveError(null);
+    const result = await socialAdapter.sendOneTelegramReactiveReply({
+      proposalDigest: telegramReactiveSelected.proposal_digest,
+      confirmationPhrase: telegramReactiveConfirmText,
+      inboundId: telegramReactiveSelected.inbound_id,
+      operatorToken: telegramReactiveOperatorToken,
+      clientRequestId: `social-ui-telegram-reactive-${Date.now()}`,
+    });
+    setTelegramReactiveLiveBusy(false);
+    if (result.bridge.status === "pending" || !result.apply) {
+      const detail = result.bridge.status === "pending" ? result.bridge.detail : result.error;
+      setTelegramReactiveLiveError(detail || "Telegram reactive reply request failed.");
+      return;
+    }
+    setTelegramReactiveLiveResult(result.apply);
+    setTelegramReactiveConfirmOpen(false);
+    setTelegramReactiveConfirmText("");
+    setTelegramReactiveOperatorToken("");
+    setTelegramReactiveSelected(null);
+    void load();
   };
 
   const runTelegramActivityPreview = async () => {
@@ -1688,6 +1777,17 @@ export function WorkspaceSocialScreen() {
               telegramReactivePreviewBusy={telegramReactivePreviewBusy}
               telegramReactivePreviewError={selectedProvider === "telegram" ? telegramReactivePreviewError : null}
               onPreviewTelegramReactive={selectedProvider === "telegram" ? () => void runTelegramReactivePreview() : undefined}
+              onOpenTelegramReactiveLiveConfirm={
+                selectedProvider === "telegram"
+                  ? (item) => {
+                      setTelegramReactiveSelected(item);
+                      setTelegramReactiveConfirmOpen(true);
+                      setTelegramReactiveLiveError(null);
+                    }
+                  : undefined
+              }
+              telegramReactiveLiveResult={selectedProvider === "telegram" ? telegramReactiveLiveResult : null}
+              telegramReactiveLiveError={selectedProvider === "telegram" ? telegramReactiveLiveError : null}
               telegramActivityPreview={selectedProvider === "telegram" ? telegramActivityPreview : null}
               telegramActivityPreviewBusy={telegramActivityPreviewBusy}
               telegramActivityPreviewError={selectedProvider === "telegram" ? telegramActivityPreviewError : null}
@@ -2266,6 +2366,71 @@ export function WorkspaceSocialScreen() {
                 }
               >
                 {telegramLiveBusy ? "Sending..." : "Send one Telegram message"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {telegramReactiveConfirmOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="telegram-live-reactive-reply-title"
+            className="w-full max-w-lg rounded-2xl border border-red-400/30 bg-[#071016] p-5 text-white shadow-2xl"
+          >
+            <h2 id="telegram-live-reactive-reply-title" className="text-lg font-semibold">
+              Confirmed live Telegram reply
+            </h2>
+            <p className="mt-2 text-sm leading-relaxed text-white/65">
+              This sends exactly one Telegram reply through the governed Social cockpit. No batch. No retry. No autonomous runner.
+            </p>
+            <div className="mt-4 space-y-3">
+              <label className="block text-xs font-semibold uppercase tracking-[0.12em] text-white/50">
+                Type confirmation phrase
+                <input
+                  className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-red-300/50"
+                  value={telegramReactiveConfirmText}
+                  onChange={(event) => setTelegramReactiveConfirmText(event.target.value)}
+                  placeholder={LIVE_TELEGRAM_REACTIVE_REPLY_CONFIRMATION_PHRASE}
+                />
+              </label>
+              <label className="block text-xs font-semibold uppercase tracking-[0.12em] text-white/50">
+                Operator token
+                <input
+                  className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-red-300/50"
+                  type="password"
+                  value={telegramReactiveOperatorToken}
+                  onChange={(event) => setTelegramReactiveOperatorToken(event.target.value)}
+                  placeholder="HAM_SOCIAL_LIVE_APPLY_TOKEN"
+                />
+              </label>
+            </div>
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                className="border-white/15 bg-white/5 text-white/85"
+                onClick={() => setTelegramReactiveConfirmOpen(false)}
+                disabled={telegramReactiveLiveBusy}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                className="bg-red-700 text-white hover:bg-red-600"
+                onClick={() => void sendOneTelegramReactiveReply()}
+                disabled={
+                  telegramReactiveLiveBusy ||
+                  telegramReactiveConfirmText.trim() !== LIVE_TELEGRAM_REACTIVE_REPLY_CONFIRMATION_PHRASE ||
+                  !telegramReactiveOperatorToken.trim() ||
+                  !telegramReactiveSelected?.proposal_digest
+                }
+              >
+                {telegramReactiveLiveBusy ? "Sending..." : "Send one Telegram reply"}
               </Button>
             </div>
           </div>

@@ -216,6 +216,7 @@ export type TelegramCapabilities = {
   live_message_available: boolean;
   live_apply_available: boolean;
   activity_apply_available: boolean;
+  reactive_reply_apply_available: boolean;
   read_only: boolean;
   mutation_attempted: boolean;
 };
@@ -451,6 +452,28 @@ export type TelegramReactiveRepliesPreviewResponse = {
   warnings: string[];
   recommended_next_steps: string[];
   read_only: boolean;
+};
+
+export type TelegramReactiveReplyApplyResponse = {
+  provider_id: "telegram";
+  apply_kind: "telegram_reactive_reply";
+  status: "blocked" | "sent" | "failed" | "duplicate";
+  execution_allowed: boolean;
+  mutation_attempted: boolean;
+  live_apply_available: boolean;
+  persona_id: string;
+  persona_version: number;
+  persona_digest: string;
+  provider_message_id: string | null;
+  target: {
+    kind: "test_group";
+    configured: boolean;
+    masked_id: string;
+  };
+  inbound_id: string;
+  reasons: string[];
+  warnings: string[];
+  result: Record<string, unknown>;
 };
 
 export type TelegramActivityApplyResponse = {
@@ -795,6 +818,49 @@ export const socialAdapter = {
     } catch (e) {
       return {
         preview: null,
+        bridge: workspaceApiPending("social", null, e),
+        error: e instanceof Error ? e.message : String(e),
+      };
+    }
+  },
+
+  async sendOneTelegramReactiveReply(input: {
+    proposalDigest: string;
+    confirmationPhrase: string;
+    inboundId: string;
+    operatorToken: string;
+    clientRequestId?: string;
+  }): Promise<{ apply: TelegramReactiveReplyApplyResponse | null; bridge: SocialBridge; error?: string }> {
+    try {
+      const res = await hamApiFetch(`${BASE}/providers/telegram/reactive/replies/apply`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Ham-Operator-Authorization": `Bearer ${input.operatorToken}`,
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          proposal_digest: input.proposalDigest,
+          confirmation_phrase: input.confirmationPhrase,
+          inbound_id: input.inboundId,
+          client_request_id: input.clientRequestId,
+        }),
+      });
+      if (!res.ok) {
+        let detail = `HTTP ${res.status}`;
+        try {
+          const body = (await res.json()) as { detail?: { error?: { message?: string } } | string };
+          if (typeof body.detail === "string") detail = body.detail;
+          else if (body.detail?.error?.message) detail = body.detail.error.message;
+        } catch {
+          /* ignore */
+        }
+        return { apply: null, bridge: { status: "pending", detail }, error: detail };
+      }
+      return { apply: (await res.json()) as TelegramReactiveReplyApplyResponse, bridge: { status: "ready" } };
+    } catch (e) {
+      return {
+        apply: null,
         bridge: workspaceApiPending("social", null, e),
         error: e instanceof Error ? e.message : String(e),
       };

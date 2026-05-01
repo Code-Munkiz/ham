@@ -15,6 +15,8 @@ from src.ham.social_telegram_inbound import TelegramInboundItem, discover_telegr
 
 MAX_REACTIVE_REPLY_CANDIDATES = 3
 MAX_REACTIVE_REPLY_TEXT_CHARS = 500
+TELEGRAM_REACTIVE_REPLY_EXECUTION_KIND = "social_telegram_reactive_reply"
+TELEGRAM_REACTIVE_REPLY_ACTION_TYPE = "reactive_reply"
 
 TelegramReactiveStatus = Literal["completed", "blocked", "failed"]
 TelegramReactiveClassification = Literal[

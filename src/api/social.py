@@ -56,7 +56,11 @@ from src.ham.social_telegram_activity import (
 )
 from src.ham.social_telegram_activity_runner import TelegramActivityRunConfig, run_telegram_activity_once
 from src.ham.social_telegram_inbound import discover_telegram_inbound_once
-from src.ham.social_telegram_reactive import preview_telegram_reactive_replies_once
+from src.ham.social_telegram_reactive import (
+    TELEGRAM_REACTIVE_REPLY_ACTION_TYPE,
+    TELEGRAM_REACTIVE_REPLY_EXECUTION_KIND,
+    preview_telegram_reactive_replies_once,
+)
 from src.ham.social_telegram_send import (
     TELEGRAM_EXECUTION_KIND,
     TelegramSendRequest,
@@ -89,6 +93,7 @@ LIVE_BATCH_CONFIRMATION_PHRASE = "SEND LIVE REACTIVE BATCH"
 LIVE_BROADCAST_CONFIRMATION_PHRASE = "SEND ONE LIVE POST"
 LIVE_TELEGRAM_CONFIRMATION_PHRASE = "SEND ONE TELEGRAM MESSAGE"
 LIVE_TELEGRAM_ACTIVITY_CONFIRMATION_PHRASE = "SEND ONE TELEGRAM ACTIVITY"
+LIVE_TELEGRAM_REACTIVE_REPLY_CONFIRMATION_PHRASE = "SEND ONE TELEGRAM REPLY"
 
 
 # ---------------------------------------------------------------------------
@@ -507,6 +512,35 @@ class TelegramReactiveRepliesPreviewResponse(BaseModel):
     read_only: bool = True
 
 
+class TelegramReactiveReplyApplyRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    proposal_digest: str | None = Field(default=None, min_length=64, max_length=64, pattern=r"^[a-f0-9]{64}$")
+    confirmation_phrase: str = Field(default="", max_length=64)
+    inbound_id: str = Field(default="", max_length=128)
+    client_request_id: str | None = Field(default=None, max_length=128)
+
+
+class TelegramReactiveReplyApplyResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    provider_id: Literal["telegram"] = "telegram"
+    apply_kind: Literal["telegram_reactive_reply"] = "telegram_reactive_reply"
+    status: Literal["blocked", "sent", "failed", "duplicate"]
+    execution_allowed: bool = False
+    mutation_attempted: bool = False
+    live_apply_available: bool = False
+    persona_id: str
+    persona_version: int
+    persona_digest: str
+    provider_message_id: str | None = None
+    target: TelegramPreviewTargetDto
+    inbound_id: str = ""
+    reasons: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    result: dict[str, Any] = Field(default_factory=dict)
+
+
 class TelegramActivityApplyRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -755,6 +789,7 @@ class TelegramCapabilitiesResponse(BaseModel):
     live_message_available: bool = False
     live_apply_available: bool = False
     activity_apply_available: bool = False
+    reactive_reply_apply_available: bool = False
     read_only: bool = True
     mutation_attempted: bool = False
 
@@ -1466,6 +1501,11 @@ def _telegram_activity_live_apply_available() -> bool:
     return status.overall_readiness == "ready" and status.hermes_gateway.provider_runtime_state == "connected" and _social_live_token_enabled()
 
 
+def _telegram_reactive_reply_live_apply_available() -> bool:
+    status = _telegram_status_response()
+    return status.overall_readiness == "ready" and status.hermes_gateway.provider_runtime_state == "connected" and _social_live_token_enabled()
+
+
 def _telegram_apply_blocked_response(
     *,
     reasons: list[str],
@@ -1508,12 +1548,38 @@ def _telegram_activity_apply_blocked_response(
     )
 
 
+def _telegram_reactive_reply_apply_blocked_response(
+    *,
+    reasons: list[str],
+    inbound_id: str = "",
+    target: TelegramPreviewTargetDto | None = None,
+    warnings: list[str] | None = None,
+    result: dict[str, Any] | None = None,
+) -> TelegramReactiveReplyApplyResponse:
+    return TelegramReactiveReplyApplyResponse(
+        **_persona_ref_fields(),
+        status="blocked",
+        execution_allowed=False,
+        mutation_attempted=False,
+        live_apply_available=_telegram_reactive_reply_live_apply_available(),
+        target=target or _telegram_preview_target(),
+        inbound_id=str(inbound_id or "")[:128],
+        reasons=_dedupe(reasons),
+        warnings=_dedupe(warnings or []),
+        result=_safe_dict(result or {}),
+    )
+
+
 def _telegram_apply_idempotency_key(proposal_digest: str) -> str:
     return hashlib.sha256(f"telegram_message:{proposal_digest}".encode("utf-8")).hexdigest()
 
 
 def _telegram_activity_apply_idempotency_key(proposal_digest: str) -> str:
     return hashlib.sha256(f"telegram_activity:{proposal_digest}".encode("utf-8")).hexdigest()
+
+
+def _telegram_reactive_reply_apply_idempotency_key(*, proposal_digest: str, inbound_id: str) -> str:
+    return hashlib.sha256(f"telegram_reactive_reply:{inbound_id}:{proposal_digest}".encode("utf-8")).hexdigest()
 
 
 def _telegram_readiness_apply_reasons() -> list[str]:
@@ -2618,6 +2684,7 @@ def telegram_capabilities(
         live_message_available=readiness == "ready" and _social_live_token_enabled(),
         live_apply_available=readiness == "ready" and _social_live_token_enabled(),
         activity_apply_available=readiness == "ready" and _social_live_token_enabled(),
+        reactive_reply_apply_available=readiness == "ready" and _social_live_token_enabled(),
     )
 
 
@@ -2706,6 +2773,120 @@ def telegram_reactive_replies_preview(
     _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)] = None,
 ) -> TelegramReactiveRepliesPreviewResponse:
     return _telegram_reactive_replies_preview_response()
+
+
+@router.post("/providers/telegram/reactive/replies/apply", response_model=TelegramReactiveReplyApplyResponse)
+def telegram_reactive_reply_apply(
+    body: TelegramReactiveReplyApplyRequest,
+    _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)] = None,
+    authorization: str | None = Header(None, alias="Authorization"),
+    x_ham_operator_authorization: str | None = Header(None, alias="X-Ham-Operator-Authorization"),
+) -> TelegramReactiveReplyApplyResponse:
+    del _actor
+    target = _telegram_preview_target()
+    if not body.proposal_digest:
+        return _telegram_reactive_reply_apply_blocked_response(reasons=["proposal_digest_required"], inbound_id=body.inbound_id, target=target)
+    if not body.inbound_id.strip():
+        return _telegram_reactive_reply_apply_blocked_response(reasons=["inbound_id_required"], target=target)
+    if body.confirmation_phrase.strip() != LIVE_TELEGRAM_REACTIVE_REPLY_CONFIRMATION_PHRASE:
+        return _telegram_reactive_reply_apply_blocked_response(reasons=["confirmation_phrase_required"], inbound_id=body.inbound_id, target=target)
+
+    ham_bearer = resolve_ham_operator_authorization_header(
+        authorization=authorization,
+        x_ham_operator_authorization=x_ham_operator_authorization,
+    )
+    _require_social_live_token(ham_bearer)
+
+    preview = _telegram_reactive_replies_preview_response()
+    if preview.status != "completed":
+        return _telegram_reactive_reply_apply_blocked_response(
+            reasons=["telegram_reactive_preview_not_available", *preview.reasons],
+            inbound_id=body.inbound_id,
+            target=target,
+            warnings=preview.warnings,
+        )
+    candidate = next((item for item in preview.items if item.inbound_id == body.inbound_id), None)
+    if candidate is None:
+        return _telegram_reactive_reply_apply_blocked_response(reasons=["inbound_id_not_found"], inbound_id=body.inbound_id, target=target)
+
+    current_persona = _persona_ref_fields()
+    if preview.persona_digest != str(current_persona.get("persona_digest") or ""):
+        return _telegram_reactive_reply_apply_blocked_response(
+            reasons=["persona_digest_mismatch"],
+            inbound_id=body.inbound_id,
+            target=target,
+            result={"persona": current_persona},
+        )
+
+    readiness_reasons = _telegram_readiness_apply_reasons()
+    if readiness_reasons:
+        return _telegram_reactive_reply_apply_blocked_response(reasons=readiness_reasons, inbound_id=body.inbound_id, target=target)
+    if not candidate.repliable:
+        return _telegram_reactive_reply_apply_blocked_response(
+            reasons=["telegram_reactive_candidate_not_repliable", *candidate.reasons],
+            inbound_id=body.inbound_id,
+            target=target,
+        )
+    if candidate.already_answered:
+        return _telegram_reactive_reply_apply_blocked_response(reasons=["telegram_inbound_already_answered"], inbound_id=body.inbound_id, target=target)
+    if not bool(candidate.policy.allowed):
+        return _telegram_reactive_reply_apply_blocked_response(
+            reasons=["telegram_reactive_policy_blocked", *candidate.policy.reasons, *candidate.reasons],
+            inbound_id=body.inbound_id,
+            target=target,
+        )
+    if not bool(candidate.governor.allowed):
+        return _telegram_reactive_reply_apply_blocked_response(
+            reasons=["telegram_reactive_governor_blocked", *candidate.governor.reasons],
+            inbound_id=body.inbound_id,
+            target=target,
+        )
+    if not candidate.reply_candidate_text.strip():
+        return _telegram_reactive_reply_apply_blocked_response(reasons=["telegram_reactive_candidate_text_missing"], inbound_id=body.inbound_id, target=target)
+    if not candidate.proposal_digest or body.proposal_digest != candidate.proposal_digest:
+        return _telegram_reactive_reply_apply_blocked_response(
+            reasons=["proposal_digest_mismatch"],
+            inbound_id=body.inbound_id,
+            target=target,
+            result={"expected_preview_status": preview.status},
+        )
+
+    request = TelegramSendRequest(
+        target_kind="test_group",
+        text=candidate.reply_candidate_text,
+        proposal_digest=candidate.proposal_digest,
+        persona_digest=preview.persona_digest,
+        idempotency_key=_telegram_reactive_reply_apply_idempotency_key(
+            proposal_digest=candidate.proposal_digest,
+            inbound_id=candidate.inbound_id,
+        ),
+        telegram_connected=True,
+    )
+    send_result = send_confirmed_telegram_message(
+        request,
+        execution_kind=TELEGRAM_REACTIVE_REPLY_EXECUTION_KIND,
+        action_type=TELEGRAM_REACTIVE_REPLY_ACTION_TYPE,
+    )
+    return TelegramReactiveReplyApplyResponse(
+        **_persona_ref_fields(),
+        status=send_result.status,
+        execution_allowed=bool(send_result.execution_allowed),
+        mutation_attempted=bool(send_result.mutation_attempted),
+        live_apply_available=_telegram_reactive_reply_live_apply_available(),
+        provider_message_id=send_result.provider_message_id,
+        target=target,
+        inbound_id=candidate.inbound_id,
+        reasons=_dedupe(send_result.reasons),
+        warnings=_dedupe(send_result.warnings),
+        result=_safe_dict(
+            {
+                "execution_kind": TELEGRAM_REACTIVE_REPLY_EXECUTION_KIND,
+                "target_ref": send_result.target_ref,
+                "inbound_id": candidate.inbound_id,
+                **send_result.result,
+            }
+        ),
+    )
 
 
 @router.post("/providers/telegram/activity/apply", response_model=TelegramActivityApplyResponse)
@@ -3520,6 +3701,8 @@ __all__ = [
     "TelegramReactiveGovernorDecisionDto",
     "TelegramReactiveItemResultDto",
     "TelegramReactiveRepliesPreviewResponse",
+    "TelegramReactiveReplyApplyRequest",
+    "TelegramReactiveReplyApplyResponse",
     "TelegramActivityApplyRequest",
     "TelegramActivityApplyResponse",
     "SocialReactiveReplyApplyRequest",
