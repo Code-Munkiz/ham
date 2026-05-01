@@ -49,6 +49,10 @@ from src.ham.ham_x.reactive_governor import (
 from src.ham.ham_x.reactive_policy import evaluate_reactive_policy
 from src.ham.ham_x.redaction import redact
 from src.ham.social_persona import load_social_persona, persona_digest
+from src.ham.social_telegram_activity import (
+    TelegramActivityKind,
+    plan_telegram_activity_once,
+)
 from src.ham.social_telegram_send import (
     TELEGRAM_EXECUTION_KIND,
     TelegramSendRequest,
@@ -302,6 +306,13 @@ class TelegramMessagePreviewRequest(BaseModel):
     message_intent: TelegramMessageIntent = "test_message"
 
 
+class TelegramActivityPreviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    client_request_id: str | None = Field(default=None, max_length=128)
+    activity_kind: TelegramActivityKind = "test_activity"
+
+
 class TelegramPreviewTargetDto(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -315,6 +326,25 @@ class TelegramMessagePreviewDto(BaseModel):
 
     text: str
     char_count: int
+
+
+class TelegramActivityPreviewDto(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text: str
+    char_count: int
+    activity_kind: TelegramActivityKind
+
+
+class TelegramActivityGovernorDto(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    allowed: bool
+    reasons: list[str] = Field(default_factory=list)
+    next_allowed_send_time: str | None = None
+    daily_cap: int | None = None
+    daily_used: int | None = None
+    min_spacing_minutes: int | None = None
 
 
 class TelegramMessagePreviewResponse(BaseModel):
@@ -332,6 +362,28 @@ class TelegramMessagePreviewResponse(BaseModel):
     proposal_digest: str | None = None
     target: TelegramPreviewTargetDto
     message_preview: TelegramMessagePreviewDto
+    reasons: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    recommended_next_steps: list[str] = Field(default_factory=list)
+    read_only: bool = True
+
+
+class TelegramActivityPreviewResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    provider_id: Literal["telegram"] = "telegram"
+    preview_kind: Literal["telegram_activity"] = "telegram_activity"
+    status: PreviewStatus
+    execution_allowed: bool = False
+    mutation_attempted: bool = False
+    live_apply_available: bool = False
+    persona_id: str
+    persona_version: int
+    persona_digest: str
+    proposal_digest: str | None = None
+    target: TelegramPreviewTargetDto
+    activity_preview: TelegramActivityPreviewDto
+    governor: TelegramActivityGovernorDto
     reasons: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     recommended_next_steps: list[str] = Field(default_factory=list)
@@ -1170,6 +1222,22 @@ def _telegram_preview_response(body: TelegramMessagePreviewRequest) -> TelegramM
             else _telegram_setup_steps(connections, runtime)
         ),
     )
+
+
+def _telegram_activity_preview_response(body: TelegramActivityPreviewRequest) -> TelegramActivityPreviewResponse:
+    status = _telegram_status_response()
+    emergency_stop = False
+    try:
+        emergency_stop = bool(load_ham_x_config().emergency_stop)
+    except Exception:
+        emergency_stop = False
+    planned = plan_telegram_activity_once(
+        activity_kind=body.activity_kind,
+        readiness=status.overall_readiness,
+        gateway_runtime_state=status.hermes_gateway.provider_runtime_state,
+        emergency_stop=emergency_stop,
+    )
+    return TelegramActivityPreviewResponse.model_validate(planned.model_dump(mode="json"))
 
 
 def _telegram_live_apply_available() -> bool:
@@ -2363,6 +2431,14 @@ def telegram_message_preview(
     return _telegram_preview_response(body or TelegramMessagePreviewRequest())
 
 
+@router.post("/providers/telegram/activity/preview", response_model=TelegramActivityPreviewResponse)
+def telegram_activity_preview(
+    body: TelegramActivityPreviewRequest | None = None,
+    _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)] = None,
+) -> TelegramActivityPreviewResponse:
+    return _telegram_activity_preview_response(body or TelegramActivityPreviewRequest())
+
+
 @router.post("/providers/telegram/messages/apply", response_model=TelegramMessageApplyResponse)
 def telegram_message_apply(
     body: TelegramMessageApplyRequest,
@@ -3079,6 +3155,8 @@ __all__ = [
     "XAuditSummaryResponse",
     "SocialPreviewRequest",
     "SocialPreviewResponse",
+    "TelegramActivityPreviewRequest",
+    "TelegramActivityPreviewResponse",
     "SocialReactiveReplyApplyRequest",
     "SocialReactiveReplyApplyResponse",
     "SocialReactiveBatchApplyRequest",

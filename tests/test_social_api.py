@@ -77,6 +77,7 @@ def _isolate_journal(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> tuple[P
     monkeypatch.delenv("HAM_HERMES_GATEWAY_STATUS_PATH", raising=False)
     monkeypatch.delenv("HERMES_GATEWAY_BASE_URL", raising=False)
     for var in (
+        "HAM_SOCIAL_LIVE_APPLY_TOKEN",
         "TELEGRAM_BOT_TOKEN",
         "TELEGRAM_ALLOWED_USERS",
         "TELEGRAM_ALLOW_ALL_USERS",
@@ -465,6 +466,7 @@ _PREVIEW_ROUTES = (
     "/api/social/providers/x/reactive/inbox/preview",
     "/api/social/providers/x/reactive/batch/dry-run",
     "/api/social/providers/x/broadcast/preflight",
+    "/api/social/providers/telegram/activity/preview",
 )
 
 _APPLY_ROUTE = "/api/social/providers/x/reactive/reply/apply"
@@ -1572,6 +1574,22 @@ def _assert_telegram_preview_invariants(body: dict[str, object]) -> None:
     assert isinstance(body["message_preview"], dict)
 
 
+def _assert_telegram_activity_preview_invariants(body: dict[str, object]) -> None:
+    assert body["provider_id"] == "telegram"
+    assert body["preview_kind"] == "telegram_activity"
+    assert body["execution_allowed"] is False
+    assert body["mutation_attempted"] is False
+    assert body["live_apply_available"] is False
+    assert body["read_only"] is True
+    assert body["persona_id"] == "ham-canonical"
+    assert body["persona_version"] == 1
+    assert isinstance(body["persona_digest"], str)
+    assert len(str(body["persona_digest"])) == 64
+    assert isinstance(body["target"], dict)
+    assert isinstance(body["activity_preview"], dict)
+    assert isinstance(body["governor"], dict)
+
+
 def _assert_preview_invariants(body: dict[str, object]) -> None:
     assert body["provider_id"] == "x"
     assert body["persona_id"] == "ham-canonical"
@@ -1688,8 +1706,54 @@ def test_telegram_has_preview_and_one_live_apply_route_only(
     _set_telegram_ready(monkeypatch, tmp_path)
     assert client.post("/api/social/providers/telegram/messages/preview", json={}).status_code == 200
     assert client.get("/api/social/providers/telegram/messages/preview").status_code == 405
+    assert client.post("/api/social/providers/telegram/activity/preview", json={}).status_code == 200
+    assert client.get("/api/social/providers/telegram/activity/preview").status_code == 405
     assert client.post("/api/social/providers/telegram/messages/apply", json={}).status_code in {200, 422}
     assert client.post("/api/social/providers/telegram/messages/send", json={}).status_code == 404
+    assert client.post("/api/social/providers/telegram/activity/apply", json={}).status_code == 404
+
+
+def test_telegram_activity_preview_succeeds_when_ready(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    token, allowed, home_channel, test_group = _set_telegram_ready(monkeypatch, tmp_path)
+    body = client.post(
+        "/api/social/providers/telegram/activity/preview",
+        json={"client_request_id": "ui-activity-1", "activity_kind": "test_activity"},
+    ).json()
+    _assert_telegram_activity_preview_invariants(body)
+    assert body["status"] == "completed"
+    assert body["proposal_digest"]
+    assert len(body["proposal_digest"]) == 64
+    assert body["target"]["kind"] == "test_group"
+    assert body["target"]["configured"] is True
+    assert body["target"]["masked_id"].startswith("configured:")
+    assert body["activity_preview"]["activity_kind"] == "test_activity"
+    assert body["activity_preview"]["char_count"] == len(body["activity_preview"]["text"])
+    assert body["governor"]["allowed"] is True
+    text = json.dumps(body, sort_keys=True)
+    for raw in (token, allowed, home_channel, test_group):
+        assert raw not in text
+
+
+def test_telegram_activity_preview_rejects_client_text_or_target(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _set_telegram_ready(monkeypatch, tmp_path)
+    assert client.post(
+        "/api/social/providers/telegram/activity/preview",
+        json={"message_text": "client supplied final text"},
+    ).status_code == 422
+    assert client.post(
+        "/api/social/providers/telegram/activity/preview",
+        json={"target_id": "-1001234567890"},
+    ).status_code == 422
 
 
 def test_telegram_apply_blocked_without_proposal_digest(

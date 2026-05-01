@@ -16,6 +16,7 @@ import {
   type SocialProvider,
   type SocialSnapshot,
   type TelegramCapabilities,
+  type TelegramActivityPreviewResponse,
   type TelegramMessageApplyResponse,
   type TelegramMessagePreviewResponse,
   type XCapabilities,
@@ -203,6 +204,10 @@ function MessagingProviderPanel({
   telegramPreviewBusy = false,
   telegramPreviewError,
   onPreviewTelegram,
+  telegramActivityPreview,
+  telegramActivityPreviewBusy = false,
+  telegramActivityPreviewError,
+  onPreviewTelegramActivity,
   onOpenTelegramLiveConfirm,
   telegramLiveResult,
   telegramLiveError,
@@ -214,6 +219,10 @@ function MessagingProviderPanel({
   telegramPreviewBusy?: boolean;
   telegramPreviewError?: string | null;
   onPreviewTelegram?: () => void;
+  telegramActivityPreview?: TelegramActivityPreviewResponse | null;
+  telegramActivityPreviewBusy?: boolean;
+  telegramActivityPreviewError?: string | null;
+  onPreviewTelegramActivity?: () => void;
   onOpenTelegramLiveConfirm?: () => void;
   telegramLiveResult?: TelegramMessageApplyResponse | null;
   telegramLiveError?: string | null;
@@ -398,6 +407,36 @@ function MessagingProviderPanel({
               </p>
             ) : null}
             {telegramPreview ? <TelegramMessagePreviewCard preview={telegramPreview} /> : null}
+            <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-white/82">Telegram regular activity (dry-run)</h3>
+                  <p className="mt-1 text-xs text-white/48">
+                    Generates a bounded regular activity proposal. Dry-run only. No Telegram message will be sent.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <StatusPill label="Regular activity proposal" tone="ok" />
+                  <StatusPill label="No scheduler/autonomy loop" tone="ok" />
+                </div>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                className="mt-3 border-white/15 bg-white/5 text-white/90"
+                onClick={onPreviewTelegramActivity}
+                disabled={telegramActivityPreviewBusy || !onPreviewTelegramActivity}
+              >
+                {telegramActivityPreviewBusy ? "Previewing..." : "Preview Telegram activity"}
+              </Button>
+              {telegramActivityPreviewError ? (
+                <p className="mt-3 rounded-lg border border-amber-400/20 bg-amber-500/5 p-3 text-sm text-amber-100/80">
+                  {telegramActivityPreviewError}
+                </p>
+              ) : null}
+              {telegramActivityPreview ? <TelegramActivityPreviewCard preview={telegramActivityPreview} /> : null}
+            </div>
             {telegramPreview?.proposal_digest ? (
               <div className="rounded-xl border border-white/10 bg-black/20 p-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
@@ -742,6 +781,64 @@ function TelegramMessagePreviewCard({ preview }: { preview: TelegramMessagePrevi
   );
 }
 
+function TelegramActivityPreviewCard({ preview }: { preview: TelegramActivityPreviewResponse }) {
+  return (
+    <section className="mt-3 rounded-2xl border border-cyan-400/20 bg-cyan-500/5 p-4 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold text-white/85">Telegram regular activity preview</h3>
+          <p className="mt-1 text-xs text-white/48">Dry-run only. No Telegram message will be sent.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <StatusPill label={titleCase(preview.status)} tone={preview.status === "completed" ? "ok" : "warn"} />
+          <StatusPill label={preview.governor.allowed ? "Governor allows" : "Governor blocked"} tone={preview.governor.allowed ? "ok" : "warn"} />
+          <StatusPill label="Persona protected" tone="ok" />
+          <StatusPill label={preview.proposal_digest ? "Proposal digest present" : "Proposal digest missing"} tone={preview.proposal_digest ? "ok" : "warn"} />
+        </div>
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-3">
+        <div className="rounded-lg border border-white/10 bg-black/20 p-3">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">Target</div>
+          <div className="mt-1 text-sm text-white/82">{titleCase(preview.target.kind)}</div>
+          <div className="mt-1 font-mono text-xs text-white/55">{preview.target.masked_id || "Not configured"}</div>
+        </div>
+        <div className="rounded-lg border border-white/10 bg-black/20 p-3">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">Persona</div>
+          <div className="mt-1 text-sm text-white/82">
+            {preview.persona_id} v{preview.persona_version}
+          </div>
+          <div className="mt-1 font-mono text-xs text-white/55">{preview.persona_digest ? `${preview.persona_digest.slice(0, 12)}...` : "Missing"}</div>
+        </div>
+        <div className="rounded-lg border border-white/10 bg-black/20 p-3">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">Characters</div>
+          <div className="mt-1 text-sm text-white/82">{preview.activity_preview.char_count}</div>
+        </div>
+      </div>
+      {preview.activity_preview.text ? (
+        <div className="mt-3 rounded-lg border border-white/10 bg-black/30 p-3 text-sm leading-relaxed text-white/75">
+          {preview.activity_preview.text}
+        </div>
+      ) : null}
+      {preview.governor.next_allowed_send_time ? (
+        <p className="mt-3 text-xs text-white/55">Next allowed time: {preview.governor.next_allowed_send_time}</p>
+      ) : null}
+      {preview.reasons.length || preview.warnings.length || preview.governor.reasons.length ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {preview.reasons.map((reason) => (
+            <StatusPill key={`reason-${reason}`} label={titleCase(reason)} tone="warn" />
+          ))}
+          {preview.governor.reasons.map((reason) => (
+            <StatusPill key={`governor-${reason}`} label={titleCase(reason)} tone="warn" />
+          ))}
+          {preview.warnings.map((warning) => (
+            <StatusPill key={`warning-${warning}`} label={titleCase(warning)} tone="muted" />
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 function PreviewResultCard({ preview }: { preview: SocialPreviewResponse }) {
   return (
     <section className="rounded-2xl border border-emerald-400/20 bg-emerald-500/5 p-4 shadow-sm">
@@ -818,6 +915,9 @@ export function WorkspaceSocialScreen() {
   const [telegramPreviewBusy, setTelegramPreviewBusy] = React.useState(false);
   const [telegramPreviewError, setTelegramPreviewError] = React.useState<string | null>(null);
   const [telegramPreview, setTelegramPreview] = React.useState<TelegramMessagePreviewResponse | null>(null);
+  const [telegramActivityPreviewBusy, setTelegramActivityPreviewBusy] = React.useState(false);
+  const [telegramActivityPreviewError, setTelegramActivityPreviewError] = React.useState<string | null>(null);
+  const [telegramActivityPreview, setTelegramActivityPreview] = React.useState<TelegramActivityPreviewResponse | null>(null);
   const [telegramConfirmOpen, setTelegramConfirmOpen] = React.useState(false);
   const [telegramConfirmText, setTelegramConfirmText] = React.useState("");
   const [telegramOperatorToken, setTelegramOperatorToken] = React.useState("");
@@ -872,6 +972,22 @@ export function WorkspaceSocialScreen() {
     }
     setTelegramPreview(result.preview);
     setTelegramLiveResult(null);
+  };
+
+  const runTelegramActivityPreview = async () => {
+    setTelegramActivityPreviewBusy(true);
+    setTelegramActivityPreviewError(null);
+    const result = await socialAdapter.previewTelegramActivity({
+      activityKind: "test_activity",
+      clientRequestId: `social-ui-activity-${Date.now()}`,
+    });
+    setTelegramActivityPreviewBusy(false);
+    if (result.bridge.status === "pending" || !result.preview) {
+      const detail = result.bridge.status === "pending" ? result.bridge.detail : result.error;
+      setTelegramActivityPreviewError(detail || "Telegram activity preview API unavailable.");
+      return;
+    }
+    setTelegramActivityPreview(result.preview);
   };
 
   const x = snapshot?.xStatus;
@@ -1083,6 +1199,10 @@ export function WorkspaceSocialScreen() {
               telegramPreviewBusy={telegramPreviewBusy}
               telegramPreviewError={selectedProvider === "telegram" ? telegramPreviewError : null}
               onPreviewTelegram={selectedProvider === "telegram" ? () => void runTelegramPreview() : undefined}
+              telegramActivityPreview={selectedProvider === "telegram" ? telegramActivityPreview : null}
+              telegramActivityPreviewBusy={telegramActivityPreviewBusy}
+              telegramActivityPreviewError={selectedProvider === "telegram" ? telegramActivityPreviewError : null}
+              onPreviewTelegramActivity={selectedProvider === "telegram" ? () => void runTelegramActivityPreview() : undefined}
               onOpenTelegramLiveConfirm={
                 selectedProvider === "telegram"
                   ? () => {
