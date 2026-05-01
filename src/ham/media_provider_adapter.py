@@ -217,6 +217,14 @@ def _extract_images_from_chat_response(body: dict[str, Any]) -> list[tuple[str, 
     return deduped
 
 
+def openrouter_image_modalities_for_model(model_id: str) -> list[str]:
+    """OpenRouter docs: image-only models (Flux, Sourceful, …) use ``[\"image\"]``; others may use text+image."""
+    mid = model_id.lower()
+    if any(n in mid for n in ("flux", "sourceful", "riverflow")):
+        return ["image"]
+    return ["image", "text"]
+
+
 class OpenRouterImageProviderAdapter(ImageProviderAdapter):
     provider_slug = "openrouter"
 
@@ -248,7 +256,7 @@ class OpenRouterImageProviderAdapter(ImageProviderAdapter):
         payload: dict[str, Any] = {
             "model": mid,
             "messages": [{"role": "user", "content": prompt}],
-            "modalities": ["image", "text"],
+            "modalities": openrouter_image_modalities_for_model(mid),
             "max_tokens": 1024,
         }
         try:
