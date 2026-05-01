@@ -1,0 +1,28 @@
+{
+  "_comment": "Example only — paste values into secrets/env operatorside; never commit real URLs or API keys.",
+  "default_profile": "local_gpu_workstation",
+  "profiles": {
+    "local_gpu_workstation": {
+      "description": "ComfyUI running on a local NVIDIA GeForce workstation",
+      "connection": "same LAN hostname, localhost (only if ham-api co-hosted), Tailscale/Zerotier tailnet hostname, SSH tunnel ingress to API host — values go in env not git",
+      "recommended_for": "developer internal POC",
+      "requires_auth": true,
+      "notes": "Do not expose Comfy raw HTTP to the public internet"
+    },
+    "dedicated_gpu_vm": {
+      "description": "Dedicated cloud GPU VM",
+      "connection": "VPC private hostname, authenticated reverse proxy — values in env/secrets only",
+      "recommended_for": "team shared stable worker"
+    },
+    "runpod_vast_beam_worker": {
+      "description": "Ephemeral or vendor-hosted GPU slot",
+      "connection": "Provider endpoint typically behind Bearer or bespoke gateway headers",
+      "recommended_for": "burstable workloads"
+    },
+    "managed_comfy_cloud_worker": {
+      "description": "Managed Comfy-compatible hosted API surface",
+      "connection": "Provider API base URL in env only; verify HTTP contract vs stock Comfy",
+      "recommended_for": "lower ops overhead once contract matches adapter"
+    }
+  }
+}

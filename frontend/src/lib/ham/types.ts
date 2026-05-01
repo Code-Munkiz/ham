@@ -301,6 +301,8 @@ export interface ChatGenerationCapabilities {
   generated_media_output_types: string[];
   media_generation_provider: string | null;
   media_generation_notes: string[];
+  /** Phase 2G.7: optional opaque profile (`local_gpu_workstation`, …) when provider is comfyui; sanitized server-side. */
+  comfy_worker_profile?: string;
   /** Phase 2G.5+: same strings as ``media_generation_notes`` when API mirrors; no secrets or URLs. */
   provider_notes?: string[];
 }

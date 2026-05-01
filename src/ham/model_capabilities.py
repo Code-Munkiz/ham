@@ -117,7 +117,7 @@ def _build_generation_capabilities_payload() -> dict[str, Any]:
     notes = list(dict.fromkeys(notes))
     available = availability_dict_rows()
 
-    return {
+    payload: dict[str, Any] = {
         "active_media_provider": active,
         "available_media_providers": available,
         "supports_text_to_image": supports_image_generation,
@@ -139,6 +139,15 @@ def _build_generation_capabilities_payload() -> dict[str, Any]:
         "media_generation_notes": notes,
         "provider_notes": notes,
     }
+
+    if active == "comfyui":
+        from src.ham.comfyui_provider_adapter import comfyui_worker_profile_for_capabilities
+
+        profile = comfyui_worker_profile_for_capabilities()
+        if profile:
+            payload["comfy_worker_profile"] = profile
+
+    return payload
 
 
 def build_chat_capabilities_payload(

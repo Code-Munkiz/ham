@@ -48,6 +48,46 @@ def comfyui_api_key_optional() -> str | None:
     return k or None
 
 
+_WORKFLOW_ALIAS: dict[str, str] = {
+    "sdxl_vanilla": "sdxl_baseline",
+}
+
+_ALLOWED_COMFY_WORKER_PROFILES: frozenset[str] = frozenset(
+    {
+        "local_gpu_workstation",
+        "dedicated_gpu_vm",
+        "runpod_vast_beam_worker",
+        "managed_comfy_cloud_worker",
+    }
+)
+
+
+def comfyui_normalize_workflow_key(workflow_key: str) -> str:
+    """Stable manifest stem (`sdxl_vanilla` → `sdxl_baseline`)."""
+    k = (workflow_key or "").strip()
+    if not k:
+        k = (os.environ.get("HAM_COMFYUI_DEFAULT_WORKFLOW") or "sdxl_baseline").strip()
+    k = k or "sdxl_baseline"
+    return _WORKFLOW_ALIAS.get(k, k)
+
+
+def comfyui_default_workflow_key_raw() -> str:
+    k = (os.environ.get("HAM_COMFYUI_DEFAULT_WORKFLOW") or "sdxl_baseline").strip()
+    return k or "sdxl_baseline"
+
+
+def comfyui_default_workflow_key() -> str:
+    """Alias-expanded key used when resolving manifest files."""
+    return comfyui_normalize_workflow_key(comfyui_default_workflow_key_raw())
+
+
+def comfyui_worker_profile_for_capabilities() -> str | None:
+    raw = (os.environ.get("HAM_COMFYUI_WORKER_PROFILE") or "").strip().lower().replace("-", "_")
+    if not raw:
+        return None
+    return raw if raw in _ALLOWED_COMFY_WORKER_PROFILES else None
+
+
 def comfyui_image_generation_ready() -> bool:
     """True when registry may return the live Comfy adapter (feature flag + base URL)."""
     return bool(image_generation_feature_enabled() and comfyui_base_url_configured())
@@ -83,19 +123,15 @@ def comfyui_output_max_bytes() -> int:
     return default_image_output_max_bytes()
 
 
-def comfyui_default_workflow_key() -> str:
-    k = (os.environ.get("HAM_COMFYUI_DEFAULT_WORKFLOW") or "sdxl_baseline").strip()
-    return k or "sdxl_baseline"
-
-
 def _workflow_config_dir() -> Path:
     return _project_root() / "configs" / "media" / "comfyui"
 
 
 def load_comfy_manifest_and_workflow(workflow_key: str) -> tuple[dict[str, Any], dict[str, Any]]:
     """Load manifest + workflow template from repo configs (never from user input paths)."""
+    canonical = comfyui_normalize_workflow_key(workflow_key)
     base = _workflow_config_dir()
-    man_path = base / f"{workflow_key}.manifest.json"
+    man_path = base / f"{canonical}.manifest.json"
     if not man_path.is_file():
         raise ImageGenerationError(
             "IMAGE_GEN_COMFY_WORKFLOW_MISSING",

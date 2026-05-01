@@ -321,7 +321,14 @@ Workspace chat can supply **`reference_attachment_id`** (`hamatt_*`) on **`POST 
 
 - **`src/ham/comfyui_provider_adapter.py`** — loads **`configs/media/comfyui/`** manifests, **`POST /prompt`**, polls **`GET /history/{prompt_id}`**, retrieves bytes from **`GET /view`** server-side only; rejects reference inputs early (**`IMAGE_TO_IMAGE_NOT_SUPPORTED`**).
 - **`sdxl_baseline.manifest.json`** + **`sdxl_baseline.workflow.example.json`** encode **sdxl** graph patch points (**license_check_required**) without committing checkpoint binaries.
-- Tests use **mocked httpx**; live GPU worker integration is explicitly **Phase 2G.7**.
+- Tests use **mocked httpx**; live GPU worker integration is explicitly **Phase 2G.7** operator territory.
+
+### Phase 2G.7 Comfy worker targets + profile hints (implemented in docs / ergonomics)
+
+- **`docs/COMFYUI_WORKER_TARGETS.md`** + **`configs/media/comfyui/worker_targets.example.json`** — default **`local_gpu_workstation`** POC framing; warns **Cloud Run cannot hit laptop `localhost`** without VPN/tunnels; documents future **`dedicated_gpu_vm`**, **`runpod_vast_beam_worker`**, **`managed_comfy_cloud_worker`** setups **without committing URLs**.
+- **`HAM_COMFYUI_WORKER_PROFILE`** — allowlisted opaque label echoed as **`generation.comfy_worker_profile`** when Comfy is active (unknown strings suppressed).
+- **`sdxl_vanilla`** resolves to **`sdxl_baseline`** manifests (no duplicated graph JSON).
+- **SeargeSDXL**: deferred off-repo until custom-node stack proven — **`SEARGE_SDXL_WORKFLOW_DEFERRED`** baseline label.
 
 ### Pitfalls to avoid
 

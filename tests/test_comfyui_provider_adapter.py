@@ -200,3 +200,12 @@ def test_comfyui_patch_applies_dimensions(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setenv("HAM_COMFYUI_DEFAULT_WIDTH", "512")
     monkeypatch.setenv("HAM_COMFYUI_DEFAULT_HEIGHT", "768")
     assert comfyui_defaults_width_height() == (512, 768)
+
+
+def test_load_manifest_sdxl_vanilla_aliases_to_baseline() -> None:
+    from src.ham.comfyui_provider_adapter import comfyui_normalize_workflow_key, load_comfy_manifest_and_workflow
+
+    assert comfyui_normalize_workflow_key("sdxl_vanilla") == "sdxl_baseline"
+    m1, _g1 = load_comfy_manifest_and_workflow("sdxl_vanilla")
+    m2, _g2 = load_comfy_manifest_and_workflow("sdxl_baseline")
+    assert m1["workflow_id"] == m2["workflow_id"] == "sdxl_baseline"

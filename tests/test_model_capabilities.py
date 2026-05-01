@@ -115,3 +115,23 @@ def test_mock_gateway_disables_image_even_if_id_matches_vision_pattern() -> None
     # Default test env may not set HERMES_GATEWAY_MODE; build_payload directly:
     p = build_chat_capabilities_payload(model_id="openai/gpt-4o", gateway_mode="mock")
     assert p["capabilities"]["image_input"] is False
+
+
+def test_comfyui_capability_includes_sanitized_worker_profile(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HAM_MEDIA_PROVIDER", "comfyui")
+    monkeypatch.setenv("HAM_MEDIA_IMAGE_GENERATION_ENABLED", "true")
+    monkeypatch.setenv("HAM_COMFYUI_BASE_URL", "http://127.0.0.1:8188")
+    monkeypatch.setenv("HAM_COMFYUI_WORKER_PROFILE", "local_gpu_workstation")
+    p = build_chat_capabilities_payload(model_id="openai/gpt-4o", gateway_mode="openrouter")
+    assert p["generation"]["comfy_worker_profile"] == "local_gpu_workstation"
+    assert "127.0.0.1" not in json.dumps(p)
+    assert ":8188" not in json.dumps(p)
+
+
+def test_comfyui_worker_profile_unknown_value_omitted(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HAM_MEDIA_PROVIDER", "comfyui")
+    monkeypatch.setenv("HAM_MEDIA_IMAGE_GENERATION_ENABLED", "true")
+    monkeypatch.setenv("HAM_COMFYUI_BASE_URL", "http://127.0.0.1:8188")
+    monkeypatch.setenv("HAM_COMFYUI_WORKER_PROFILE", "operator basement cluster 7 — do not expose")
+    p = build_chat_capabilities_payload(model_id="openai/gpt-4o", gateway_mode="openrouter")
+    assert "comfy_worker_profile" not in p["generation"]
