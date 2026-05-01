@@ -41,6 +41,16 @@ for (const s of [
   "generate a logo for HAM",
   "draw a clean icon of a cloud agent",
   "make a banner with a neural network and terminal",
+  // Wake-word / polite prefix normalization → same matchers as stripped probe
+  "ham show me a picture of a real banana",
+  "ham, show me a picture of a real banana",
+  "hey ham show me a real image of a banana",
+  "hey ham, show me a real image of a banana",
+  "ham: create a real image of a banana",
+  "please generate a photo of a banana",
+  "can you make a realistic image of a monkey eating a banana",
+  "could you draw a monkey eating a banana",
+  "I want you to create an image of a robot monkey architect",
 ]) {
   mustMatchTextToImage(s);
 }
@@ -58,6 +68,12 @@ for (const s of [
   "analyze this UI",
   "draw conclusions from the spreadsheet",
   "generate art of this screenshot",
+  // Same analysis intent with leading invocation — must stay off generation
+  "ham what is in this image?",
+  "ham describe this picture",
+  "ham analyze this screenshot",
+  "please describe the attached image",
+  "could you analyze this UI screenshot?",
 ]) {
   mustNotMatchTextToImage(s);
 }
@@ -77,6 +93,8 @@ for (const s of [
   "use this as reference and make it cleaner",
   "edit this image to look like a SaaS hero",
   "restyle the attached screenshot with a dark theme",
+  "ham make this more modern",
+  "please edit this image to look bolder",
 ]) {
   mustMatchImageToImage(s);
 }
@@ -97,6 +115,8 @@ for (const s of [
   "analyze this attached image",
   "read this UI",
   "summarize the attached image",
+  "ham what is in this image?",
+  "please analyze this screenshot",
 ]) {
   mustNotMatchImageToImage(s);
 }

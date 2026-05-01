@@ -6,6 +6,7 @@
 const ANALYSIS_BLOCKED = [
   /\bwhat(?:'| i)s\s+in\s+(?:this|the)\s+(?:image|picture|photo|screenshot)\b/i,
   /\bdescribe\s+(?:this|the)\s+(?:image|picture|photo|screenshot|ui)\b/i,
+  /\bdescribe\s+the\s+attached\s+(?:image|picture|photo|screenshot)\b/i,
   /\banalyze\s+(?:the\s+|this\s+)?(?:screenshot|ui|interface|mockup)\b/i,
   /\banalyze\s+this\b/i,
   /\b(?:look|see)\s+at\s+(?:this|the)\s+(?:image|picture|photo|screenshot)\b/i,
@@ -18,6 +19,37 @@ const ANALYSIS_BLOCKED = [
   /\b(?:tell\s+me|explain)\s+what\b.+?\b(?:in|about)\s+(?:this|that|the)\s+(?:image|picture|screenshot)\b/i,
   /\bdraw\s+.+\bconclusions?\b/i,
 ];
+
+/**
+ * Strip safe leading wake-words / polite prefixes so anchors like `^show me` still match.
+ * Does not remove words from the middle of the prompt.
+ */
+export function normalizeImageIntentProbe(raw: string): string {
+  let s = raw.replace(/\s+/g, " ").trim();
+  const steps: RegExp[] = [
+    /^(?:hey\s*,?\s*)ham\s*[,:\s]+\s*/i,
+    /^ham\s*[,:\s]+\s*/i,
+    /^ham\s+/i,
+    /^please\s+/i,
+    /^could you\s+/i,
+    /^can you\s+/i,
+    /^would you\s+/i,
+    /^i want you to\s+/i,
+    /^i need you to\s+/i,
+  ];
+  for (let n = 0; n < 6; n++) {
+    const before = s;
+    for (const rx of steps) {
+      s = s.replace(rx, "").trim();
+    }
+    if (s === before) break;
+  }
+  return s;
+}
+
+function analysisBlockedForAny(s: string): boolean {
+  return ANALYSIS_BLOCKED.some((rx) => rx.test(s));
+}
 
 /** After stripping a verb phrase, refuse if remainder looks like deictic analysis-only. */
 function remainderLooksReferential(prompt: string): boolean {
@@ -139,20 +171,20 @@ export function parseWorkspaceCreativeImageIntent(
   ctx: { hasImageAttachment: boolean },
 ): WorkspaceCreativeImageIntent | null {
   const trimmed = raw.trim();
-  if (trimmed.length < 8) return null;
+  if (trimmed.length < 2) return null;
 
-  for (const rx of ANALYSIS_BLOCKED) {
-    if (rx.test(trimmed)) return null;
-  }
+  const probe = normalizeImageIntentProbe(trimmed);
+
+  if (analysisBlockedForAny(trimmed) || analysisBlockedForAny(probe)) return null;
 
   if (ctx.hasImageAttachment) {
-    if (IMAGE_TO_IMAGE_TRIGGERS.some((rx) => rx.test(trimmed))) {
+    if (IMAGE_TO_IMAGE_TRIGGERS.some((rx) => rx.test(probe) || rx.test(trimmed))) {
       return { kind: "image_to_image", prompt: trimmed.slice(0, 8000) };
     }
     return null;
   }
 
-  const p = parseTextToImagePrompt(trimmed);
+  const p = parseTextToImagePrompt(probe);
   return p ? { kind: "text_to_image", prompt: p } : null;
 }
 
