@@ -2051,6 +2051,17 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     const uploadsPending = attachments.some((a) => a.uploadPhase === "uploading");
     const supportsGen = Boolean(chatCapabilities?.generation?.supports_image_generation);
     const supportsI2i = Boolean(chatCapabilities?.generation?.supports_image_to_image);
+    const activeProvider = String(chatCapabilities?.generation?.active_media_provider || "")
+      .trim()
+      .toLowerCase();
+    const comfyProfile = String(chatCapabilities?.generation?.comfy_worker_profile || "").trim();
+    const providerLabel = activeProvider
+      ? activeProvider === "comfyui"
+        ? comfyProfile
+          ? `ComfyUI (${comfyProfile})`
+          : "ComfyUI"
+        : activeProvider
+      : "unknown provider";
     const hasReadyImage = attachments.some(
       (a) =>
         !a.error &&
@@ -2059,9 +2070,9 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         a.kind === "image" &&
         Boolean(a.serverId),
     );
-    let subtitle = "Create from your composer prompt";
+    let subtitle = `Create from your composer prompt (${providerLabel})`;
     if (chatCapabilitiesLoading) subtitle = "Checking workspace capabilities…";
-    else if (!supportsGen) subtitle = "Image generation unavailable";
+    else if (!supportsGen) subtitle = `Image generation unavailable (${providerLabel})`;
     else if (hasReadyImage && !supportsI2i) subtitle = "Image editing is not enabled yet.";
     else if (uploadsPending) subtitle = "Finish uploads before generating";
 
@@ -2086,6 +2097,8 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   }, [
     attachments,
     catalogLoading,
+    chatCapabilities?.generation?.active_media_provider,
+    chatCapabilities?.generation?.comfy_worker_profile,
     chatCapabilities?.generation?.supports_image_generation,
     chatCapabilities?.generation?.supports_image_to_image,
     chatCapabilitiesLoading,

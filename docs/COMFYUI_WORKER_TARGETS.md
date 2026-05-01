@@ -88,6 +88,34 @@ Live Cloud Run revisions, VPC/VPN wiring, CUDA/driver versions on your GPU box, 
 
 ---
 
+## Phase 2G.8 — local Comfy dev profile / proxy alignment
+
+Problem addressed: frontend local smoke can silently hit the wrong API process when `frontend/.env.local` has an old `VITE_HAM_API_PROXY_TARGET` (for example `:8001` while Comfy-enabled `ham-api` is on `:8000`).
+
+Recommended local run pair:
+
+```txt
+# API (repo root)
+.venv\Scripts\python.exe scripts/run_local_api_comfy.py
+
+# Frontend (frontend/)
+npm run dev:comfy
+```
+
+What this does:
+
+- `scripts/run_local_api_comfy.py` sets Comfy-friendly env defaults for local-only smoke (`HAM_MEDIA_PROVIDER=comfyui`, local generated-media store, workflow/profile defaults, checkpoint filename override) before delegating to `scripts/run_local_api.py`.
+- `npm run dev:comfy` forces `VITE_HAM_API_PROXY_TARGET=http://127.0.0.1:8000` for that shell run, so stale `.env.local` values do not silently point the SPA at a non-Comfy API.
+- Workspace composer action subtitle includes the active media backend label (`ComfyUI (...)` vs `openrouter`) so operator state is visible in UI.
+
+Regression follow-up for local smoke:
+
+1. Send an image-generation prompt in workspace chat.
+2. Verify `POST /api/media/images/generate` returns 200 and image card renders.
+3. Immediately send a normal text follow-up (for example `thanks — now summarize this result in one sentence`) and confirm text send/response works.
+
+---
+
 ## Labels (Phase 2G.7)
 
 - **`COMFYUI_WORKER_TARGET_PROFILES_DEFINED`**
