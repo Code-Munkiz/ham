@@ -25,6 +25,7 @@ from fastapi.testclient import TestClient
 
 from src.api.server import app
 from src.ham.clerk_auth import HamActor
+from src.ham.social_telegram_send import TelegramSendResult
 
 client = TestClient(app)
 
@@ -399,6 +400,12 @@ def _enable_broadcast_apply_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HAM_X_EMERGENCY_STOP", "false")
 
 
+def _enable_telegram_apply_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> tuple[str, str, str, str]:
+    monkeypatch.setenv("HAM_SOCIAL_LIVE_APPLY_TOKEN", _SOCIAL_TOKEN)
+    monkeypatch.setenv("HAM_SOCIAL_DELIVERY_LOG_PATH", str(tmp_path / "social_delivery.jsonl"))
+    return _set_telegram_ready(monkeypatch, tmp_path)
+
+
 def _preview_digest(headers: dict[str, str] | None = None) -> str:
     res = client.post("/api/social/providers/x/reactive/inbox/preview", headers=headers or {}, json={})
     assert res.status_code == 200
@@ -417,6 +424,14 @@ def _batch_preview_digest(headers: dict[str, str] | None = None) -> str:
 
 def _broadcast_preview_digest(headers: dict[str, str] | None = None) -> str:
     res = client.post("/api/social/providers/x/broadcast/preflight", headers=headers or {}, json={})
+    assert res.status_code == 200
+    digest = res.json().get("proposal_digest")
+    assert isinstance(digest, str)
+    return digest
+
+
+def _telegram_preview_digest(headers: dict[str, str] | None = None) -> str:
+    res = client.post("/api/social/providers/telegram/messages/preview", headers=headers or {}, json={})
     assert res.status_code == 200
     digest = res.json().get("proposal_digest")
     assert isinstance(digest, str)
@@ -455,10 +470,12 @@ _PREVIEW_ROUTES = (
 _APPLY_ROUTE = "/api/social/providers/x/reactive/reply/apply"
 _BATCH_APPLY_ROUTE = "/api/social/providers/x/reactive/batch/apply"
 _BROADCAST_APPLY_ROUTE = "/api/social/providers/x/broadcast/apply"
+_TELEGRAM_APPLY_ROUTE = "/api/social/providers/telegram/messages/apply"
 _SOCIAL_TOKEN = "social-live-apply-token-1234567890"
 _CONFIRM = "SEND ONE LIVE REPLY"
 _BATCH_CONFIRM = "SEND LIVE REACTIVE BATCH"
 _BROADCAST_CONFIRM = "SEND ONE LIVE POST"
+_TELEGRAM_CONFIRM = "SEND ONE TELEGRAM MESSAGE"
 
 
 def test_routes_require_clerk_session_when_required(
@@ -1097,8 +1114,9 @@ def test_td_has_no_preview_or_apply_routes(
     assert client.post("/api/social/providers/telegram/messages/preview", json={}).status_code == 200
     assert client.get("/api/social/providers/telegram/messages/preview").status_code == 405
     assert client.post("/api/social/providers/discord/messages/preview", json={}).status_code == 404
+    assert client.post("/api/social/providers/telegram/messages/apply", json={}).status_code in {200, 422}
+    assert client.post("/api/social/providers/discord/messages/apply", json={}).status_code == 404
     for provider in ("telegram", "discord"):
-        assert client.post(f"/api/social/providers/{provider}/messages/apply", json={}).status_code == 404
         assert client.post(f"/api/social/providers/{provider}/reactive/reply/apply", json={}).status_code == 404
 
 
@@ -1661,7 +1679,7 @@ def test_telegram_message_preview_rejects_client_target_and_final_text(
     ).status_code == 422
 
 
-def test_telegram_has_preview_but_no_live_apply_route(
+def test_telegram_has_preview_and_one_live_apply_route_only(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -1670,8 +1688,242 @@ def test_telegram_has_preview_but_no_live_apply_route(
     _set_telegram_ready(monkeypatch, tmp_path)
     assert client.post("/api/social/providers/telegram/messages/preview", json={}).status_code == 200
     assert client.get("/api/social/providers/telegram/messages/preview").status_code == 405
-    assert client.post("/api/social/providers/telegram/messages/apply", json={}).status_code == 404
+    assert client.post("/api/social/providers/telegram/messages/apply", json={}).status_code in {200, 422}
     assert client.post("/api/social/providers/telegram/messages/send", json={}).status_code == 404
+
+
+def test_telegram_apply_blocked_without_proposal_digest(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _enable_telegram_apply_env(monkeypatch, tmp_path)
+    body = client.post(
+        _TELEGRAM_APPLY_ROUTE,
+        headers={"X-Ham-Operator-Authorization": f"Bearer {_SOCIAL_TOKEN}"},
+        json={"confirmation_phrase": _TELEGRAM_CONFIRM},
+    ).json()
+    assert body["status"] == "blocked"
+    assert body["execution_allowed"] is False
+    assert body["mutation_attempted"] is False
+    assert "proposal_digest_required" in body["reasons"]
+
+
+def test_telegram_apply_blocked_with_stale_or_wrong_digest(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _enable_telegram_apply_env(monkeypatch, tmp_path)
+    body = client.post(
+        _TELEGRAM_APPLY_ROUTE,
+        headers={"X-Ham-Operator-Authorization": f"Bearer {_SOCIAL_TOKEN}"},
+        json={"proposal_digest": "0" * 64, "confirmation_phrase": _TELEGRAM_CONFIRM},
+    ).json()
+    assert body["status"] == "blocked"
+    assert "proposal_digest_mismatch" in body["reasons"]
+
+
+def test_telegram_apply_blocked_without_operator_auth(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _enable_telegram_apply_env(monkeypatch, tmp_path)
+    digest = _telegram_preview_digest()
+    res = client.post(_TELEGRAM_APPLY_ROUTE, json={"proposal_digest": digest, "confirmation_phrase": _TELEGRAM_CONFIRM})
+    assert res.status_code == 401
+    assert res.json()["detail"]["error"]["code"] == "SOCIAL_LIVE_APPLY_AUTH_REQUIRED"
+
+
+def test_telegram_apply_blocked_with_wrong_operator_token(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _enable_telegram_apply_env(monkeypatch, tmp_path)
+    digest = _telegram_preview_digest()
+    res = client.post(
+        _TELEGRAM_APPLY_ROUTE,
+        headers={"X-Ham-Operator-Authorization": "Bearer wrong-token"},
+        json={"proposal_digest": digest, "confirmation_phrase": _TELEGRAM_CONFIRM},
+    )
+    assert res.status_code == 403
+    assert res.json()["detail"]["error"]["code"] == "SOCIAL_LIVE_APPLY_AUTH_INVALID"
+
+
+def test_telegram_apply_blocked_without_exact_confirmation_phrase(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _enable_telegram_apply_env(monkeypatch, tmp_path)
+    digest = _telegram_preview_digest()
+    body = client.post(
+        _TELEGRAM_APPLY_ROUTE,
+        headers={"X-Ham-Operator-Authorization": f"Bearer {_SOCIAL_TOKEN}"},
+        json={"proposal_digest": digest, "confirmation_phrase": "send one telegram message"},
+    ).json()
+    assert body["status"] == "blocked"
+    assert "confirmation_phrase_required" in body["reasons"]
+
+
+def test_telegram_apply_blocked_when_readiness_not_ready(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _enable_telegram_apply_env(monkeypatch, tmp_path)
+    digest = _telegram_preview_digest()
+    _write_hermes_gateway_state(
+        tmp_path / "hermes-home" / "gateway_state.json",
+        platforms={"telegram": {"state": "retrying"}},
+    )
+    body = client.post(
+        _TELEGRAM_APPLY_ROUTE,
+        headers={"X-Ham-Operator-Authorization": f"Bearer {_SOCIAL_TOKEN}"},
+        json={"proposal_digest": digest, "confirmation_phrase": _TELEGRAM_CONFIRM},
+    ).json()
+    assert body["status"] == "blocked"
+    assert "telegram_preview_not_available" in body["reasons"]
+    assert body["mutation_attempted"] is False
+
+
+def test_telegram_apply_blocked_when_persona_digest_changes(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _enable_telegram_apply_env(monkeypatch, tmp_path)
+    digest = _telegram_preview_digest()
+    changed_ref = {"persona_id": "ham-canonical", "persona_version": 1, "persona_digest": "e" * 64}
+    with patch("src.api.social._persona_ref_fields", return_value=changed_ref):
+        body = client.post(
+            _TELEGRAM_APPLY_ROUTE,
+            headers={"X-Ham-Operator-Authorization": f"Bearer {_SOCIAL_TOKEN}"},
+            json={"proposal_digest": digest, "confirmation_phrase": _TELEGRAM_CONFIRM},
+        ).json()
+    assert body["status"] == "blocked"
+    assert "persona_digest_mismatch" in body["reasons"]
+    assert body["persona_digest"] == "e" * 64
+
+
+def test_telegram_apply_recomputes_preview_and_blocks_intent_mismatch(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _enable_telegram_apply_env(monkeypatch, tmp_path)
+    digest = _telegram_preview_digest()
+    body = client.post(
+        _TELEGRAM_APPLY_ROUTE,
+        headers={"X-Ham-Operator-Authorization": f"Bearer {_SOCIAL_TOKEN}"},
+        json={"proposal_digest": digest, "confirmation_phrase": _TELEGRAM_CONFIRM, "message_intent": "greeting"},
+    ).json()
+    assert body["status"] == "blocked"
+    assert "proposal_digest_mismatch" in body["reasons"]
+
+
+def test_telegram_apply_calls_adapter_once_and_returns_redacted_result(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    token, allowed, home_channel, test_group = _enable_telegram_apply_env(monkeypatch, tmp_path)
+    digest = _telegram_preview_digest()
+    send_result = TelegramSendResult(
+        status="sent",
+        execution_allowed=True,
+        mutation_attempted=True,
+        target_kind="test_group",
+        target_ref="configured:abc123",
+        provider_message_id="telegram-provider-message-1",
+    )
+    with patch("src.api.social.send_confirmed_telegram_message", return_value=send_result) as send:
+        body = client.post(
+            _TELEGRAM_APPLY_ROUTE,
+            headers={"X-Ham-Operator-Authorization": f"Bearer {_SOCIAL_TOKEN}"},
+            json={"proposal_digest": digest, "confirmation_phrase": _TELEGRAM_CONFIRM},
+        ).json()
+    assert send.call_count == 1
+    assert body["status"] == "sent"
+    assert body["execution_allowed"] is True
+    assert body["mutation_attempted"] is True
+    assert body["provider_message_id"] == "telegram-provider-message-1"
+    text = json.dumps(body, sort_keys=True)
+    for raw in (token, allowed, home_channel, test_group, _SOCIAL_TOKEN):
+        assert raw not in text
+
+
+def test_telegram_apply_provider_failure_does_not_retry(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _enable_telegram_apply_env(monkeypatch, tmp_path)
+    digest = _telegram_preview_digest()
+    send_result = TelegramSendResult(
+        status="failed",
+        execution_allowed=True,
+        mutation_attempted=True,
+        reasons=["provider_send_failed"],
+        result={"diagnostic": "Provider error [REDACTED]."},
+    )
+    with patch("src.api.social.send_confirmed_telegram_message", return_value=send_result) as send:
+        body = client.post(
+            _TELEGRAM_APPLY_ROUTE,
+            headers={"X-Ham-Operator-Authorization": f"Bearer {_SOCIAL_TOKEN}"},
+            json={"proposal_digest": digest, "confirmation_phrase": _TELEGRAM_CONFIRM},
+        ).json()
+    assert send.call_count == 1
+    assert body["status"] == "failed"
+    assert body["mutation_attempted"] is True
+    assert "provider_send_failed" in body["reasons"]
+
+
+def test_telegram_apply_rejects_client_target_and_final_message(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _enable_telegram_apply_env(monkeypatch, tmp_path)
+    digest = _telegram_preview_digest()
+    base = {
+        "proposal_digest": digest,
+        "confirmation_phrase": _TELEGRAM_CONFIRM,
+    }
+    assert client.post(
+        _TELEGRAM_APPLY_ROUTE,
+        headers={"X-Ham-Operator-Authorization": f"Bearer {_SOCIAL_TOKEN}"},
+        json={**base, "target_id": "-1009876543210"},
+    ).status_code == 422
+    assert client.post(
+        _TELEGRAM_APPLY_ROUTE,
+        headers={"X-Ham-Operator-Authorization": f"Bearer {_SOCIAL_TOKEN}"},
+        json={**base, "message_text": "client supplied final text"},
+    ).status_code == 422
+
+
+def test_no_batch_or_reactive_telegram_routes_added(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    assert client.post("/api/social/providers/telegram/messages/batch/apply", json={}).status_code == 404
+    assert client.post("/api/social/providers/telegram/reactive/reply/apply", json={}).status_code == 404
+    assert client.post("/api/social/providers/telegram/reactive/batch/apply", json={}).status_code == 404
 
 
 def test_preview_routes_are_post_only(

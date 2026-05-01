@@ -16,6 +16,7 @@ import {
   type SocialProvider,
   type SocialSnapshot,
   type TelegramCapabilities,
+  type TelegramMessageApplyResponse,
   type TelegramMessagePreviewResponse,
   type XCapabilities,
 } from "../../adapters/socialAdapter";
@@ -202,6 +203,9 @@ function MessagingProviderPanel({
   telegramPreviewBusy = false,
   telegramPreviewError,
   onPreviewTelegram,
+  onOpenTelegramLiveConfirm,
+  telegramLiveResult,
+  telegramLiveError,
 }: {
   status: SocialMessagingProviderStatus;
   capabilities: TelegramCapabilities | DiscordCapabilities;
@@ -210,9 +214,15 @@ function MessagingProviderPanel({
   telegramPreviewBusy?: boolean;
   telegramPreviewError?: string | null;
   onPreviewTelegram?: () => void;
+  onOpenTelegramLiveConfirm?: () => void;
+  telegramLiveResult?: TelegramMessageApplyResponse | null;
+  telegramLiveError?: string | null;
 }) {
   const isTelegram = status.provider_id === "telegram";
   const telegramCapabilities = capabilities.provider_id === "telegram" ? capabilities : null;
+  const canSendOneTelegramMessage = Boolean(
+    telegramPreview?.proposal_digest && telegramCapabilities?.readiness === "ready" && telegramCapabilities.live_apply_available,
+  );
   const guidance = isTelegram
     ? {
         title: "Telegram setup guidance",
@@ -388,6 +398,47 @@ function MessagingProviderPanel({
               </p>
             ) : null}
             {telegramPreview ? <TelegramMessagePreviewCard preview={telegramPreview} /> : null}
+            {telegramPreview?.proposal_digest ? (
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-semibold text-white/82">Confirmed live Telegram message</h3>
+                    <p className="mt-1 text-xs text-white/48">
+                      This sends exactly one Telegram message to the configured test/home target. No batch. No retry.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <StatusPill label="Preview digest present" tone="ok" />
+                    <StatusPill label={telegramCapabilities.live_apply_available ? "Live apply available" : "Live apply unavailable"} tone={telegramCapabilities.live_apply_available ? "ok" : "warn"} />
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="mt-3 bg-red-700 text-white hover:bg-red-600"
+                  disabled={!canSendOneTelegramMessage || !onOpenTelegramLiveConfirm}
+                  onClick={onOpenTelegramLiveConfirm}
+                >
+                  Send one Telegram message
+                </Button>
+                {!canSendOneTelegramMessage ? (
+                  <p className="mt-2 text-xs text-white/42">
+                    Requires a completed Telegram preview, ready Telegram readiness, and the Social live apply token configured on the API host.
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+            {telegramLiveError ? (
+              <p className="rounded-lg border border-amber-400/20 bg-amber-500/5 p-3 text-sm text-amber-100/80">
+                {telegramLiveError}
+              </p>
+            ) : null}
+            {telegramLiveResult ? (
+              <div>
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-white/45">Telegram live result</h3>
+                <RecordPreview record={telegramLiveResult as unknown as Record<string, unknown>} emptyLabel="No Telegram live result payload." />
+              </div>
+            ) : null}
           </div>
         </Panel>
       ) : null}
@@ -628,6 +679,7 @@ const PREVIEW_LABELS: Record<SocialPreviewKind, string> = {
 const LIVE_REPLY_CONFIRMATION_PHRASE = "SEND ONE LIVE REPLY";
 const LIVE_BATCH_CONFIRMATION_PHRASE = "SEND LIVE REACTIVE BATCH";
 const LIVE_BROADCAST_CONFIRMATION_PHRASE = "SEND ONE LIVE POST";
+const LIVE_TELEGRAM_CONFIRMATION_PHRASE = "SEND ONE TELEGRAM MESSAGE";
 
 function TelegramMessagePreviewCard({ preview }: { preview: TelegramMessagePreviewResponse }) {
   return (
@@ -766,6 +818,12 @@ export function WorkspaceSocialScreen() {
   const [telegramPreviewBusy, setTelegramPreviewBusy] = React.useState(false);
   const [telegramPreviewError, setTelegramPreviewError] = React.useState<string | null>(null);
   const [telegramPreview, setTelegramPreview] = React.useState<TelegramMessagePreviewResponse | null>(null);
+  const [telegramConfirmOpen, setTelegramConfirmOpen] = React.useState(false);
+  const [telegramConfirmText, setTelegramConfirmText] = React.useState("");
+  const [telegramOperatorToken, setTelegramOperatorToken] = React.useState("");
+  const [telegramLiveBusy, setTelegramLiveBusy] = React.useState(false);
+  const [telegramLiveError, setTelegramLiveError] = React.useState<string | null>(null);
+  const [telegramLiveResult, setTelegramLiveResult] = React.useState<TelegramMessageApplyResponse | null>(null);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -813,6 +871,7 @@ export function WorkspaceSocialScreen() {
       return;
     }
     setTelegramPreview(result.preview);
+    setTelegramLiveResult(null);
   };
 
   const x = snapshot?.xStatus;
@@ -838,6 +897,30 @@ export function WorkspaceSocialScreen() {
   const canSendOneLiveReply = Boolean(inboxPreview?.proposal_digest && caps?.reactive_reply_apply_available);
   const canSendLiveReactiveBatch = Boolean(batchPreview?.proposal_digest && caps?.reactive_batch_apply_available);
   const canSendOneLivePost = Boolean(broadcastPreview?.proposal_digest && caps?.broadcast_apply_available);
+
+  const sendOneTelegramMessage = async () => {
+    if (!telegramPreview?.proposal_digest) return;
+    setTelegramLiveBusy(true);
+    setTelegramLiveError(null);
+    const result = await socialAdapter.sendOneTelegramMessage({
+      proposalDigest: telegramPreview.proposal_digest,
+      confirmationPhrase: telegramConfirmText,
+      operatorToken: telegramOperatorToken,
+      messageIntent: "test_message",
+      clientRequestId: `social-ui-telegram-${Date.now()}`,
+    });
+    setTelegramLiveBusy(false);
+    if (result.bridge.status === "pending" || !result.apply) {
+      const detail = result.bridge.status === "pending" ? result.bridge.detail : result.error;
+      setTelegramLiveError(detail || "Telegram live message request failed.");
+      return;
+    }
+    setTelegramLiveResult(result.apply);
+    setTelegramConfirmOpen(false);
+    setTelegramConfirmText("");
+    setTelegramOperatorToken("");
+    void load();
+  };
 
   const sendOneLiveReply = async () => {
     if (!inboxPreview?.proposal_digest) return;
@@ -1000,6 +1083,16 @@ export function WorkspaceSocialScreen() {
               telegramPreviewBusy={telegramPreviewBusy}
               telegramPreviewError={selectedProvider === "telegram" ? telegramPreviewError : null}
               onPreviewTelegram={selectedProvider === "telegram" ? () => void runTelegramPreview() : undefined}
+              onOpenTelegramLiveConfirm={
+                selectedProvider === "telegram"
+                  ? () => {
+                      setTelegramConfirmOpen(true);
+                      setTelegramLiveError(null);
+                    }
+                  : undefined
+              }
+              telegramLiveResult={selectedProvider === "telegram" ? telegramLiveResult : null}
+              telegramLiveError={selectedProvider === "telegram" ? telegramLiveError : null}
             />
           ) : null}
 
@@ -1490,6 +1583,70 @@ export function WorkspaceSocialScreen() {
             </div>
           ) : null}
         </>
+      ) : null}
+
+      {telegramConfirmOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="telegram-live-message-title"
+            className="w-full max-w-lg rounded-2xl border border-red-400/30 bg-[#071016] p-5 text-white shadow-2xl"
+          >
+            <h2 id="telegram-live-message-title" className="text-lg font-semibold">
+              Confirmed live Telegram message
+            </h2>
+            <p className="mt-2 text-sm leading-relaxed text-white/65">
+              This sends exactly one Telegram message to the configured test/home target. No batch. No retry.
+            </p>
+            <div className="mt-4 space-y-3">
+              <label className="block text-xs font-semibold uppercase tracking-[0.12em] text-white/50">
+                Type confirmation phrase
+                <input
+                  className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-red-300/50"
+                  value={telegramConfirmText}
+                  onChange={(event) => setTelegramConfirmText(event.target.value)}
+                  placeholder={LIVE_TELEGRAM_CONFIRMATION_PHRASE}
+                />
+              </label>
+              <label className="block text-xs font-semibold uppercase tracking-[0.12em] text-white/50">
+                Operator token
+                <input
+                  className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-red-300/50"
+                  type="password"
+                  value={telegramOperatorToken}
+                  onChange={(event) => setTelegramOperatorToken(event.target.value)}
+                  placeholder="HAM_SOCIAL_LIVE_APPLY_TOKEN"
+                />
+              </label>
+            </div>
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                className="border-white/15 bg-white/5 text-white/85"
+                onClick={() => setTelegramConfirmOpen(false)}
+                disabled={telegramLiveBusy}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                className="bg-red-700 text-white hover:bg-red-600"
+                onClick={() => void sendOneTelegramMessage()}
+                disabled={
+                  telegramLiveBusy ||
+                  telegramConfirmText.trim() !== LIVE_TELEGRAM_CONFIRMATION_PHRASE ||
+                  !telegramOperatorToken.trim()
+                }
+              >
+                {telegramLiveBusy ? "Sending..." : "Send one Telegram message"}
+              </Button>
+            </div>
+          </div>
+        </div>
       ) : null}
 
       {confirmOpen ? (

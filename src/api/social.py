@@ -49,6 +49,11 @@ from src.ham.ham_x.reactive_governor import (
 from src.ham.ham_x.reactive_policy import evaluate_reactive_policy
 from src.ham.ham_x.redaction import redact
 from src.ham.social_persona import load_social_persona, persona_digest
+from src.ham.social_telegram_send import (
+    TELEGRAM_EXECUTION_KIND,
+    TelegramSendRequest,
+    send_confirmed_telegram_message,
+)
 
 router = APIRouter(prefix="/api/social", tags=["social"])
 
@@ -74,6 +79,7 @@ SocialApplyKind = Literal["reactive_reply", "reactive_batch", "broadcast_post"]
 LIVE_REPLY_CONFIRMATION_PHRASE = "SEND ONE LIVE REPLY"
 LIVE_BATCH_CONFIRMATION_PHRASE = "SEND LIVE REACTIVE BATCH"
 LIVE_BROADCAST_CONFIRMATION_PHRASE = "SEND ONE LIVE POST"
+LIVE_TELEGRAM_CONFIRMATION_PHRASE = "SEND ONE TELEGRAM MESSAGE"
 
 
 # ---------------------------------------------------------------------------
@@ -330,6 +336,34 @@ class TelegramMessagePreviewResponse(BaseModel):
     warnings: list[str] = Field(default_factory=list)
     recommended_next_steps: list[str] = Field(default_factory=list)
     read_only: bool = True
+
+
+class TelegramMessageApplyRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    proposal_digest: str | None = Field(default=None, min_length=64, max_length=64, pattern=r"^[a-f0-9]{64}$")
+    confirmation_phrase: str = Field(default="", max_length=64)
+    message_intent: TelegramMessageIntent = "test_message"
+    client_request_id: str | None = Field(default=None, max_length=128)
+
+
+class TelegramMessageApplyResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    provider_id: Literal["telegram"] = "telegram"
+    apply_kind: Literal["telegram_message"] = "telegram_message"
+    status: Literal["blocked", "sent", "failed", "duplicate"]
+    execution_allowed: bool = False
+    mutation_attempted: bool = False
+    live_apply_available: bool = False
+    persona_id: str
+    persona_version: int
+    persona_digest: str
+    provider_message_id: str | None = None
+    target: TelegramPreviewTargetDto
+    reasons: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    result: dict[str, Any] = Field(default_factory=dict)
 
 
 class SocialReactiveReplyApplyRequest(BaseModel):
@@ -1136,6 +1170,53 @@ def _telegram_preview_response(body: TelegramMessagePreviewRequest) -> TelegramM
             else _telegram_setup_steps(connections, runtime)
         ),
     )
+
+
+def _telegram_live_apply_available() -> bool:
+    status = _telegram_status_response()
+    return status.overall_readiness == "ready" and status.hermes_gateway.provider_runtime_state == "connected" and _social_live_token_enabled()
+
+
+def _telegram_apply_blocked_response(
+    *,
+    reasons: list[str],
+    preview: TelegramMessagePreviewResponse | None = None,
+    target: TelegramPreviewTargetDto | None = None,
+    warnings: list[str] | None = None,
+    result: dict[str, Any] | None = None,
+) -> TelegramMessageApplyResponse:
+    return TelegramMessageApplyResponse(
+        **_persona_ref_fields(),
+        status="blocked",
+        execution_allowed=False,
+        mutation_attempted=False,
+        live_apply_available=_telegram_live_apply_available(),
+        target=target or (preview.target if preview else _telegram_preview_target()),
+        reasons=_dedupe(reasons),
+        warnings=_dedupe(warnings or []),
+        result=_safe_dict(result or {}),
+    )
+
+
+def _telegram_apply_idempotency_key(proposal_digest: str) -> str:
+    return hashlib.sha256(f"telegram_message:{proposal_digest}".encode("utf-8")).hexdigest()
+
+
+def _telegram_readiness_apply_reasons() -> list[str]:
+    runtime = _hermes_runtime_status("telegram")
+    connections = _telegram_connections()
+    reasons: list[str] = []
+    if not connections["bot_token_present"]:
+        reasons.append("telegram_bot_token_missing")
+    if not connections["allowed_users_configured"]:
+        reasons.append("telegram_allowed_users_missing")
+    if not _telegram_preview_target().configured:
+        reasons.append("telegram_target_not_configured")
+    if runtime.provider_runtime_state != "connected":
+        reasons.append("telegram_gateway_not_connected")
+    if _telegram_platform_state(runtime) != "connected":
+        reasons.append("telegram_platform_not_connected")
+    return _dedupe(reasons)
 
 
 def _persona_digest_mismatch_response(
@@ -2220,6 +2301,8 @@ def telegram_capabilities(
         recommended_next_steps=_telegram_setup_steps(connections, runtime),
         inbound_available=runtime.provider_runtime_state == "connected",
         preview_available=runtime.provider_runtime_state == "connected",
+        live_message_available=readiness == "ready" and _social_live_token_enabled(),
+        live_apply_available=readiness == "ready" and _social_live_token_enabled(),
     )
 
 
@@ -2278,6 +2361,72 @@ def telegram_message_preview(
     _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)] = None,
 ) -> TelegramMessagePreviewResponse:
     return _telegram_preview_response(body or TelegramMessagePreviewRequest())
+
+
+@router.post("/providers/telegram/messages/apply", response_model=TelegramMessageApplyResponse)
+def telegram_message_apply(
+    body: TelegramMessageApplyRequest,
+    _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)] = None,
+    authorization: str | None = Header(None, alias="Authorization"),
+    x_ham_operator_authorization: str | None = Header(None, alias="X-Ham-Operator-Authorization"),
+) -> TelegramMessageApplyResponse:
+    del _actor
+    if not body.proposal_digest:
+        return _telegram_apply_blocked_response(reasons=["proposal_digest_required"])
+    if body.confirmation_phrase.strip() != LIVE_TELEGRAM_CONFIRMATION_PHRASE:
+        return _telegram_apply_blocked_response(reasons=["confirmation_phrase_required"])
+
+    ham_bearer = resolve_ham_operator_authorization_header(
+        authorization=authorization,
+        x_ham_operator_authorization=x_ham_operator_authorization,
+    )
+    _require_social_live_token(ham_bearer)
+
+    preview = _telegram_preview_response(TelegramMessagePreviewRequest(message_intent=body.message_intent))
+    if preview.status != "completed" or not preview.proposal_digest:
+        return _telegram_apply_blocked_response(
+            reasons=["telegram_preview_not_available", *preview.reasons],
+            preview=preview,
+            warnings=preview.warnings,
+        )
+    if body.proposal_digest != preview.proposal_digest:
+        return _telegram_apply_blocked_response(
+            reasons=["proposal_digest_mismatch", "persona_digest_mismatch"],
+            preview=preview,
+            result={"expected_preview_status": preview.status},
+        )
+
+    readiness_reasons = _telegram_readiness_apply_reasons()
+    if readiness_reasons:
+        return _telegram_apply_blocked_response(reasons=readiness_reasons, preview=preview)
+
+    request = TelegramSendRequest(
+        target_kind=preview.target.kind,
+        text=preview.message_preview.text,
+        proposal_digest=preview.proposal_digest,
+        persona_digest=preview.persona_digest,
+        idempotency_key=_telegram_apply_idempotency_key(preview.proposal_digest),
+        telegram_connected=True,
+    )
+    send_result = send_confirmed_telegram_message(request)
+    return TelegramMessageApplyResponse(
+        **_persona_ref_fields(),
+        status=send_result.status,
+        execution_allowed=bool(send_result.execution_allowed),
+        mutation_attempted=bool(send_result.mutation_attempted),
+        live_apply_available=_telegram_live_apply_available(),
+        provider_message_id=send_result.provider_message_id,
+        target=preview.target,
+        reasons=_dedupe(send_result.reasons),
+        warnings=_dedupe(send_result.warnings),
+        result=_safe_dict(
+            {
+                "execution_kind": TELEGRAM_EXECUTION_KIND,
+                "target_ref": send_result.target_ref,
+                **send_result.result,
+            }
+        ),
+    )
 
 
 @router.get("/providers/discord/status", response_model=SocialMessagingProviderStatusResponse)
