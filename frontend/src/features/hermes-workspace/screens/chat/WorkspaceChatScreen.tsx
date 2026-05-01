@@ -1381,8 +1381,14 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         toast.error("Mission follow-up currently supports text-only instructions.");
         return;
       }
-      if (!missionModeId && outboundPlain) {
-        const trimmedNl = String(outboundUser || "").trim();
+      const nlProbeText =
+        outboundPlain
+          ? String(outboundUser || "").trim()
+          : isV2
+            ? String((outboundUser as HamChatUserContentV2).text ?? "").trim()
+            : "";
+      if (!missionModeId && nlProbeText) {
+        const trimmedNl = nlProbeText;
         const nlIntent = parseWorkspaceImageGenerationIntent(trimmedNl);
         if (nlIntent) {
           let capsPayload = chatCapabilities;
