@@ -307,6 +307,10 @@ Frontend generation control, video generation, image edit / i2i, public CDN URLs
 
 Hermes workspace chat uses **explicit + menu → Generate image** and deterministic **natural-language routing** only for clear creation phrases (analyze/describe/“what’s in this image” paths stay on normal chat). **No confirmation modal** for obvious generation intent. Generation remains **HAM API-mediated** (`hamApiFetch`): **no browser→provider** calls or keys in the UI; previews use **`ObjectURL`** from **`/api/media/artifacts/{id}/download`**. Capability flag **`generation.supports_image_generation`** gates the action; when unavailable the row stays visible with disabled copy (**no fake generation**).
 
+### Phase 2G.3 reference generation (implemented)
+
+Workspace chat can supply **`reference_attachment_id`** (`hamatt_*`) on **`POST /api/media/images/generate`** so the backend resolves blob bytes from **`AttachmentStore`**, validates image MIME/size, and (when **`HAM_MEDIA_IMAGE_TO_IMAGE_ENABLED`** is not **`false`** and the default generation model heuristic allows it) forwards a multimodal **`user`** message to OpenRouter. **True inpainting/editing SKU guarantees** remain environment-specific — treat **`supports_image_to_image`** as capability-gated scaffolding; **`IMAGE_TO_IMAGE_NOT_SUPPORTED`** (HTTP 503) is returned when the feature is toggled off. Distinct **`supports_image_editing`** remains **False** until a dedicated inpaint/edit path exists. Frontend NL routing prefers **ambiguous-with-attachment → normal vision chat** except for explicit edit/variation wording; **`+ → Generate image`** uses the reference attachment when **`supports_reference_images`** is true.
+
 ---
 
 - Returning provider-generated **temporary URLs directly** without HAM ingestion.

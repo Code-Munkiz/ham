@@ -22,6 +22,7 @@ export type HwwGeneratedImageCard =
       modelId: string | null;
       width: number | null;
       height: number | null;
+      generatedFromReference?: boolean;
     }
   | { kind: "error"; promptPreview: string; message: string };
 
@@ -177,6 +178,9 @@ export function WorkspaceChatMessageList({
                     </div>
                     {g.promptExcerpt ? (
                       <p className="line-clamp-2 text-[11px] leading-snug text-white/45">{g.promptExcerpt}</p>
+                    ) : null}
+                    {g.generatedFromReference ? (
+                      <p className="text-[10px] leading-snug text-white/42">Generated from reference image</p>
                     ) : null}
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-white/38">
                       {g.modelId ? (

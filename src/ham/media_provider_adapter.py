@@ -69,6 +69,27 @@ def image_generation_feature_enabled() -> bool:
     return v in ("1", "true", "yes", "on")
 
 
+def reference_image_generation_enabled() -> bool:
+    """Whether HAM exposes image→image/reference generation (orthogonal to plain text-to-image)."""
+    if not image_generation_feature_enabled() or not openrouter_api_key_configured():
+        return False
+    o = (os.environ.get("HAM_MEDIA_IMAGE_TO_IMAGE_ENABLED") or "").strip().lower()
+    if o in ("0", "false", "no", "off"):
+        return False
+    if o in ("1", "true", "yes", "on"):
+        return True
+    # Default: conservative allow-list for models that OpenRouter commonly wires for image+I/O with inputs.
+    mid = default_image_model_env().lower()
+    if not mid:
+        return False
+    return (
+        "flux" in mid
+        or "gemini-2.5-flash-image" in mid
+        or "gemini-3" in mid
+        or "riverflow" in mid
+    )
+
+
 def openrouter_api_key_configured() -> bool:
     key = normalized_openrouter_api_key()
     return bool(key and openrouter_api_key_is_plausible(key))
@@ -85,14 +106,26 @@ class ImageProviderAdapter(ABC):
     provider_slug: str
 
     @abstractmethod
-    def generate_image(self, *, prompt: str, model_id: str | None) -> ImageGenerationResult: ...
+    def generate_image(
+        self,
+        *,
+        prompt: str,
+        model_id: str | None,
+        reference_image: tuple[bytes, str] | None = None,
+    ) -> ImageGenerationResult: ...
 
 
 class UnconfiguredImageProviderAdapter(ImageProviderAdapter):
     provider_slug = "none"
 
-    def generate_image(self, *, prompt: str, model_id: str | None) -> ImageGenerationResult:
-        _ = prompt, model_id
+    def generate_image(
+        self,
+        *,
+        prompt: str,
+        model_id: str | None,
+        reference_image: tuple[bytes, str] | None = None,
+    ) -> ImageGenerationResult:
+        _ = prompt, model_id, reference_image
         raise ImageGenerationError(
             "IMAGE_GEN_NOT_CONFIGURED",
             "Image generation is not enabled or is not configured on this server.",
@@ -111,8 +144,14 @@ class SyntheticTestOnlyImageAdapter(ImageProviderAdapter):
         b"\x00IEND\xaeB`\x82"
     )
 
-    def generate_image(self, *, prompt: str, model_id: str | None) -> ImageGenerationResult:
-        _ = prompt, model_id
+    def generate_image(
+        self,
+        *,
+        prompt: str,
+        model_id: str | None,
+        reference_image: tuple[bytes, str] | None = None,
+    ) -> ImageGenerationResult:
+        _ = prompt, model_id, reference_image
         return ImageGenerationResult(data=self._TINY_PNG, mime="image/png", width=1, height=1)
 
 
@@ -233,7 +272,13 @@ class OpenRouterImageProviderAdapter(ImageProviderAdapter):
         self._key = api_key
         self._timeout = timeout_sec
 
-    def generate_image(self, *, prompt: str, model_id: str | None) -> ImageGenerationResult:
+    def generate_image(
+        self,
+        *,
+        prompt: str,
+        model_id: str | None,
+        reference_image: tuple[bytes, str] | None = None,
+    ) -> ImageGenerationResult:
         mid = (model_id or default_image_model_env() or "").strip()
         if not mid:
             raise ImageGenerationError(
@@ -253,9 +298,32 @@ class OpenRouterImageProviderAdapter(ImageProviderAdapter):
         if title_str:
             headers["X-Title"] = title_str
 
+        if reference_image and not reference_image_generation_enabled():
+            raise ImageGenerationError(
+                "IMAGE_TO_IMAGE_NOT_SUPPORTED",
+                "Reference-conditioned image generation is not enabled.",
+            )
+
+        if reference_image:
+            ref_bytes, ref_mime = reference_image
+            nm = _normalize_mime_image(ref_mime.strip())
+            if not nm or not ref_bytes:
+                raise ImageGenerationError(
+                    "IMAGE_REFERENCE_INVALID",
+                    "Reference image MIME or payload is invalid.",
+                )
+            b64 = base64.b64encode(ref_bytes).decode("ascii")
+            data_url = f"data:{nm};base64,{b64}"
+            user_content: Any = [
+                {"type": "text", "text": prompt.strip()},
+                {"type": "image_url", "image_url": {"url": data_url}},
+            ]
+        else:
+            user_content = prompt
+
         payload: dict[str, Any] = {
             "model": mid,
-            "messages": [{"role": "user", "content": prompt}],
+            "messages": [{"role": "user", "content": user_content}],
             "modalities": openrouter_image_modalities_for_model(mid),
             "max_tokens": 1024,
         }

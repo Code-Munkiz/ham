@@ -123,7 +123,13 @@ export async function postChatUploadAttachment(file: File): Promise<{
 export async function postHamGeneratedImage(body: {
   prompt: string;
   model_id?: string | null;
+  /** Opaque uploaded chat attachment id (`hamatt_…`) resolved server-side. */
+  reference_attachment_id?: string | null;
 }): Promise<GeneratedMediaImageGenerateResponse> {
+  const ref =
+    typeof body.reference_attachment_id === "string" && body.reference_attachment_id.trim()
+      ? body.reference_attachment_id.trim()
+      : null;
   const res = await hamApiFetch("/api/media/images/generate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -132,6 +138,7 @@ export async function postHamGeneratedImage(body: {
       ...(typeof body.model_id === "string" && body.model_id.trim()
         ? { model_id: body.model_id.trim() }
         : {}),
+      ...(ref ? { reference_attachment_id: ref } : {}),
     }),
   });
   if (!res.ok) {

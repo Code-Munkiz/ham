@@ -1,6 +1,6 @@
 /**
- * Conservative, deterministic NL routing for Phase 2G.2 workspace image generation.
- * Avoids accidental generation when the user is requesting image understanding / OCR.
+ * Deterministic NL routing for workspace creative image flows (Phase 2G.2 text-to-image, 2G.3 reference).
+ * Avoids accidental generation when the user wants image understanding / OCR.
  */
 
 const ANALYSIS_BLOCKED = [
@@ -19,7 +19,7 @@ const ANALYSIS_BLOCKED = [
   /\bdraw\s+.+\bconclusions?\b/i,
 ];
 
-/** After stripping a verb phrase, refuse if remainder looks like deictic analysis. */
+/** After stripping a verb phrase, refuse if remainder looks like deictic analysis-only. */
 function remainderLooksReferential(prompt: string): boolean {
   const t = prompt.trim().toLowerCase();
   if (!t) return true;
@@ -47,7 +47,7 @@ type Matcher = {
   extra?: (rawCapture: string) => boolean;
 };
 
-const GENERATION_MATCHERS: Matcher[] = [
+const TEXT_TO_IMAGE_MATCHERS: Matcher[] = [
   {
     re: /^\s*(?:please\s+)?(?:create|generate|make)\s+(?:an?\s+)?(image|picture|photo|logo|banner|graphic|icon|illustration|poster|diagram)\s+of\s*(.*)$/is,
     promptGroup: 2,
@@ -72,16 +72,31 @@ const GENERATION_MATCHERS: Matcher[] = [
 ];
 
 /**
- * Returns a cleaned prompt when the utterance clearly requests creation of new imagery,
- * otherwise `null` (fall back to normal chat).
+ * Prompt-level triggers for reference / edit-style generations when at least one image is attached.
+ * Ambiguous conversational turns intentionally return null → normal chat / vision.
  */
-export function parseWorkspaceImageGenerationIntent(raw: string): string | null {
+const IMAGE_TO_IMAGE_TRIGGERS: RegExp[] = [
+  /\b(?:edit|re-?draw|restyle|remix|modernize)\s+(?:this|it|that|my|the\s+(?:attached\s+)?(?:screenshot|image|picture|photo))\b/i,
+  /\bmake\s+(?:this|it)\s+(?:more\b|modern|minimal|dramatic)\b/i,
+  /\bmake\s+(?:this|it)\s+(?:into\b|(?:look\s+like))\b/i,
+  /\bmake\s+(?:the\s+)?(?:attached\s+)?(?:image|picture|photo|screenshot)\s+/i,
+  /\bturn\s+(?:this|it)\s+into\b/i,
+  /\bcreate\s+(?:a\s+)?variation\s+of\s+(?:this|it|the\s+(?:attached\s+)?(?:image|picture|photo))\b/i,
+  /\buse\s+(?:this|it)\s+as\s+(?:a\s+)?reference\b/i,
+  /\bchange\s+(?:the\s+)?(?:background|style)\b(?:\s+of\s+(?:this|it|that|my))?\s*(?:to\b|\s+)/i,
+  /\b(?:re)?design\s+(?:this|it|the\s+(?:attached\s+)?(?:ui|screenshot))\b/i,
+  /\b(?:replace|swap)\s+(?:the\s+)?(?:background|sky)\b/i,
+];
+
+export type WorkspaceCreativeImageIntent =
+  /** New image from text only — no uploaded reference blob. */
+  | { kind: "text_to_image"; prompt: string }
+  /** Use attached image bytes as model input plus the instruction. */
+  | { kind: "image_to_image"; prompt: string };
+
+function parseTextToImagePrompt(raw: string): string | null {
   const trimmed = raw.trim();
   if (trimmed.length < 8) return null;
-
-  for (const rx of ANALYSIS_BLOCKED) {
-    if (rx.test(trimmed)) return null;
-  }
 
   const logoStandalone = trimmed.match(/^\s*(?:please\s+)?(?:generate|create|make)\s+(?:an?\s+)?logo\s+/i);
   if (logoStandalone) {
@@ -91,7 +106,7 @@ export function parseWorkspaceImageGenerationIntent(raw: string): string | null 
     }
   }
 
-  for (const m of GENERATION_MATCHERS) {
+  for (const m of TEXT_TO_IMAGE_MATCHERS) {
     const exec = m.re.exec(trimmed);
     if (!exec) continue;
     const rawPrompt = (exec[m.promptGroup] ?? "").trim();
@@ -103,4 +118,35 @@ export function parseWorkspaceImageGenerationIntent(raw: string): string | null 
   }
 
   return null;
+}
+
+/** NL classification for routed creative-media actions (generation vs fall through to chat/vision). */
+export function parseWorkspaceCreativeImageIntent(
+  raw: string,
+  ctx: { hasImageAttachment: boolean },
+): WorkspaceCreativeImageIntent | null {
+  const trimmed = raw.trim();
+  if (trimmed.length < 8) return null;
+
+  for (const rx of ANALYSIS_BLOCKED) {
+    if (rx.test(trimmed)) return null;
+  }
+
+  if (ctx.hasImageAttachment) {
+    if (IMAGE_TO_IMAGE_TRIGGERS.some((rx) => rx.test(trimmed))) {
+      return { kind: "image_to_image", prompt: trimmed.slice(0, 8000) };
+    }
+    return null;
+  }
+
+  const p = parseTextToImagePrompt(trimmed);
+  return p ? { kind: "text_to_image", prompt: p } : null;
+}
+
+/**
+ * Conservative text-only image generation cueing (backward compatible helper).
+ */
+export function parseWorkspaceImageGenerationIntent(raw: string): string | null {
+  const parsed = parseWorkspaceCreativeImageIntent(raw, { hasImageAttachment: false });
+  return parsed?.kind === "text_to_image" ? parsed.prompt : null;
 }

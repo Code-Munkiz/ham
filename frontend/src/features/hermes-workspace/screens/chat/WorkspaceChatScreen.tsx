@@ -49,7 +49,7 @@ import { WorkspaceChatEmptyState } from "./WorkspaceChatEmptyState";
 import { WorkspaceChatMessageList, type HwwMsgRow } from "./WorkspaceChatMessageList";
 import { WorkspaceChatComposer } from "./WorkspaceChatComposer";
 import type { ComposerExportPdfState, ComposerGenerateImageState } from "./WorkspaceChatComposerActionsMenu";
-import { parseWorkspaceImageGenerationIntent } from "./imageGenerationIntent";
+import { parseWorkspaceCreativeImageIntent, parseWorkspaceImageGenerationIntent } from "./imageGenerationIntent";
 import { WorkspaceChatInspectorPanel } from "./WorkspaceChatInspectorPanel";
 import {
   appendInspectorEvent,
@@ -712,9 +712,17 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   const chatModelIdForApi = catalog?.gateway_mode === "openrouter" ? modelId : null;
 
   const runWorkspaceImageGeneration = React.useCallback(
-    async (opts: { apiPrompt: string; transcriptUserLine: string }) => {
+    async (opts: {
+      apiPrompt: string;
+      transcriptUserLine: string;
+      referenceAttachmentId?: string | null;
+    }) => {
       const apiPrompt = opts.apiPrompt.trim();
       const transcriptUserLine = (opts.transcriptUserLine.trim() || apiPrompt).trim();
+      const referenceAttachmentId =
+        typeof opts.referenceAttachmentId === "string" && opts.referenceAttachmentId.trim()
+          ? opts.referenceAttachmentId.trim()
+          : null;
       if (!apiPrompt) {
         toast.message("Describe the image you want.", { duration: 4000 });
         return;
@@ -749,7 +757,11 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       setImageGenInFlight(true);
 
       try {
-        const gen = await postHamGeneratedImage({ prompt: apiPrompt, model_id: chatModelIdForApi });
+        const gen = await postHamGeneratedImage({
+          prompt: apiPrompt,
+          model_id: chatModelIdForApi,
+          ...(referenceAttachmentId ? { reference_attachment_id: referenceAttachmentId } : {}),
+        });
         const meta = await fetchHamGeneratedMediaMeta(gen.generated_media_id);
         const blob = await fetchHamGeneratedMediaBlob(gen.generated_media_id);
         const blobUrl = URL.createObjectURL(blob);
@@ -772,6 +784,9 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
                     modelId: meta.model_id,
                     width: meta.width,
                     height: meta.height,
+                    generatedFromReference: Boolean(
+                      gen.generated_from_reference_image ?? meta.generated_from_reference_image,
+                    ),
                   },
                 }
               : m,
@@ -1980,22 +1995,64 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
 
   const handleComposerGenerateImage = React.useCallback(() => {
     const trimmed = input.trim();
-    void runWorkspaceImageGeneration({ apiPrompt: trimmed, transcriptUserLine: trimmed });
-  }, [input, runWorkspaceImageGeneration]);
+    const usable = attachments.filter(
+      (a) => !a.error && a.uploadPhase !== "failed" && a.uploadPhase !== "uploading",
+    );
+    const firstImageId = usable.find((a) => a.kind === "image" && a.serverId)?.serverId ?? null;
+
+    if (!trimmed) {
+      if (firstImageId) {
+        toast.message("Describe how to change the image.", { duration: 4000 });
+      } else {
+        toast.message("Describe the image you want.", { duration: 4000 });
+      }
+      return;
+    }
+
+    if (firstImageId && !chatCapabilities?.generation?.supports_image_to_image) {
+      toast.message("Image editing is not enabled yet for this workspace.", { duration: 5000 });
+      return;
+    }
+
+    void runWorkspaceImageGeneration({
+      apiPrompt: trimmed,
+      transcriptUserLine: trimmed,
+      referenceAttachmentId:
+        firstImageId && chatCapabilities?.generation?.supports_image_to_image ? firstImageId : null,
+    });
+  }, [
+    attachments,
+    chatCapabilities?.generation?.supports_image_to_image,
+    input,
+    runWorkspaceImageGeneration,
+  ]);
 
   const composerGenerateImage = React.useMemo((): ComposerGenerateImageState => {
     const uploadsPending = attachments.some((a) => a.uploadPhase === "uploading");
     const supportsGen = Boolean(chatCapabilities?.generation?.supports_image_generation);
+    const supportsI2i = Boolean(chatCapabilities?.generation?.supports_image_to_image);
+    const hasReadyImage = attachments.some(
+      (a) =>
+        !a.error &&
+        a.uploadPhase !== "failed" &&
+        a.uploadPhase !== "uploading" &&
+        a.kind === "image" &&
+        Boolean(a.serverId),
+    );
     let subtitle = "Create from your composer prompt";
     if (chatCapabilitiesLoading) subtitle = "Checking workspace capabilities…";
     else if (!supportsGen) subtitle = "Image generation unavailable";
+    else if (hasReadyImage && !supportsI2i) subtitle = "Image editing is not enabled yet.";
     else if (uploadsPending) subtitle = "Finish uploads before generating";
+
+    const refBlocked = hasReadyImage && supportsGen && !supportsI2i;
 
     const disabled =
       uploadsPending ||
       catalogLoading ||
       chatCapabilitiesLoading ||
       !supportsGen ||
+      refBlocked ||
       sending ||
       voiceTranscribing ||
       imageGenInFlight;
@@ -2010,6 +2067,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     attachments,
     catalogLoading,
     chatCapabilities?.generation?.supports_image_generation,
+    chatCapabilities?.generation?.supports_image_to_image,
     chatCapabilitiesLoading,
     handleComposerGenerateImage,
     imageGenInFlight,
@@ -2034,6 +2092,75 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       }
       if (usable.length > 0) {
         if (usable.every((a) => a.serverId)) {
+          const missionEarly = String(missionIdFromQuery || "").trim();
+          const imageRef =
+            trimmed.length > 0
+              ? usable.find((a) => a.kind === "image" && a.serverId)
+              : undefined;
+          const creative =
+            trimmed.length > 0 && imageRef?.serverId
+              ? parseWorkspaceCreativeImageIntent(trimmed, { hasImageAttachment: true })
+              : null;
+
+          if (!missionEarly && creative?.kind === "image_to_image" && imageRef?.serverId) {
+            if (voiceTranscribing || imageGenInFlight) return;
+            if (chatCapabilitiesLoading) {
+              toast.message("Checking workspace capabilities…", { duration: 3800 });
+              return;
+            }
+            if (!chatCapabilities?.generation?.supports_image_generation) {
+              setInput("");
+              setAttachments((prev) => {
+                revokeWorkspaceComposerAttachmentPreviews(prev);
+                return [];
+              });
+              setLoadErr(null);
+              const userNl: HwwMsgRow = {
+                id: `hww-user-${Date.now()}`,
+                role: "user",
+                content: trimmed,
+                timestamp: timeStr(),
+              };
+              const assistNl: HwwMsgRow = {
+                id: `hww-assist-${Date.now()}`,
+                role: "assistant",
+                content: "Image generation is not enabled for this workspace yet.",
+                timestamp: timeStr(),
+              };
+              setMessages((prev) => [...prev, userNl, assistNl]);
+              return;
+            }
+            if (!chatCapabilities?.generation?.supports_image_to_image) {
+              setInput("");
+              setAttachments((prev) => {
+                revokeWorkspaceComposerAttachmentPreviews(prev);
+                return [];
+              });
+              setLoadErr(null);
+              const userNl: HwwMsgRow = {
+                id: `hww-user-${Date.now()}`,
+                role: "user",
+                content: trimmed,
+                timestamp: timeStr(),
+              };
+              const assistNl: HwwMsgRow = {
+                id: `hww-assist-${Date.now()}`,
+                role: "assistant",
+                content:
+                  "Image editing from a reference image is not enabled yet for this workspace.",
+                timestamp: timeStr(),
+              };
+              setMessages((prev) => [...prev, userNl, assistNl]);
+              return;
+            }
+            await runWorkspaceImageGeneration({
+              apiPrompt: creative.prompt,
+              transcriptUserLine: trimmed,
+              referenceAttachmentId: imageRef.serverId,
+            });
+            return;
+          }
+
           await stashImageBlobsForServerIdsBeforeSend(usable);
           const payload = buildHamChatUserPayloadV2(
             trimmed,

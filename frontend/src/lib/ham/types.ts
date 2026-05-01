@@ -247,6 +247,8 @@ export interface GeneratedMediaImageGenerateResponse {
   download_url: string;
   width?: number | null;
   height?: number | null;
+  /** Phase 2G.3+: output used an uploaded attachment as reference input. */
+  generated_from_reference_image?: boolean;
 }
 
 /** Sanitized artifact row from `GET /api/media/artifacts/{generated_media_id}`. */
@@ -263,6 +265,8 @@ export interface GeneratedMediaArtifactPublicMeta {
   width: number | null;
   height: number | null;
   download_url: string;
+  /** Present when Phase 2G.3 reference generation was used. */
+  generated_from_reference_image?: boolean;
 }
 
 export interface ChatGenerationCapabilities {

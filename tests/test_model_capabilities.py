@@ -82,6 +82,26 @@ def test_generation_disabled_without_flag(monkeypatch: pytest.MonkeyPatch) -> No
     assert p["generation"]["supports_image_generation"] is False
 
 
+def test_generation_i2i_on_when_explicit_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HAM_MEDIA_IMAGE_GENERATION_ENABLED", "true")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-v1-hamtests-fake-long-key-for-plausible-xxxx")
+    monkeypatch.setenv("HAM_MEDIA_IMAGE_TO_IMAGE_ENABLED", "true")
+    p = build_chat_capabilities_payload(model_id="x/y", gateway_mode="openrouter")
+    assert p["generation"]["supports_image_to_image"] is True
+    assert p["generation"]["supports_reference_images"] is True
+
+
+def test_generation_i2i_off_when_explicit_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HAM_MEDIA_IMAGE_GENERATION_ENABLED", "true")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-v1-hamtests-fake-long-key-for-plausible-xxxx")
+    monkeypatch.setenv("HAM_MEDIA_IMAGE_DEFAULT_MODEL", "black-forest-labs/flux.2-pro")
+    monkeypatch.setenv("HAM_MEDIA_IMAGE_TO_IMAGE_ENABLED", "false")
+    p = build_chat_capabilities_payload(model_id="x/y", gateway_mode="openrouter")
+    assert p["generation"]["supports_image_generation"] is True
+    assert p["generation"]["supports_image_to_image"] is False
+    assert p["generation"]["supports_reference_images"] is False
+
+
 def test_mock_gateway_disables_image_even_if_id_matches_vision_pattern() -> None:
     """Registry stays conservative in mock/dev gateway mode."""
     res = client.get("/api/chat/capabilities", params={"model_id": "openai/gpt-4o"})

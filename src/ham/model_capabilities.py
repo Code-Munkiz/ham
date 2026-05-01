@@ -15,6 +15,7 @@ from src.ham.media_provider_adapter import (
     default_image_model_env,
     image_generation_feature_enabled,
     openrouter_api_key_configured,
+    reference_image_generation_enabled,
 )
 
 # Display labels for slugs we see often (OpenRouter-style ``org/model``).
@@ -71,10 +72,18 @@ def _build_generation_capabilities_payload() -> dict[str, Any]:
     notes: list[str] = []
 
     supports_image_generation = core_ok
+    ref_ok = reference_image_generation_enabled()
+    supports_image_to_image = bool(core_ok and ref_ok)
+    supports_reference_images = supports_image_to_image
 
     if core_ok and not default_model:
         notes.append(
             "Image generation requests should include model_id unless HAM_MEDIA_IMAGE_DEFAULT_MODEL is set."
+        )
+    if core_ok and not ref_ok:
+        notes.append(
+            "Reference-conditioned / image-to-image generation may be unavailable until enabled "
+            "(HAM_MEDIA_IMAGE_TO_IMAGE_ENABLED when set, compatible HAM_MEDIA_IMAGE_DEFAULT_MODEL)."
         )
     if not core_ok:
         notes.append(
@@ -85,12 +94,12 @@ def _build_generation_capabilities_payload() -> dict[str, Any]:
     return {
         "supports_image_generation": supports_image_generation,
         "supports_image_editing": False,
-        "supports_image_to_image": False,
+        "supports_image_to_image": supports_image_to_image,
         "supports_video_generation": False,
         "supports_image_to_video": False,
         "supports_video_editing": False,
         "supports_async_media_jobs": False,
-        "supports_reference_images": False,
+        "supports_reference_images": supports_reference_images,
         "generated_media_max_duration_sec": None,
         "generated_media_max_resolution": None,
         "generated_media_output_types": (

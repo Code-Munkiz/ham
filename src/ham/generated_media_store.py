@@ -54,6 +54,7 @@ class GeneratedMediaRecord:
     width: int | None
     height: int | None
     storage_blob_key: str | None  # internal: object key relative to bucket prefix
+    from_reference_image: bool = False
 
     def to_meta_dict(self) -> dict[str, Any]:
         return {
@@ -71,11 +72,12 @@ class GeneratedMediaRecord:
             "width": self.width,
             "height": self.height,
             "storage_blob_key": self.storage_blob_key,
+            "from_reference_image": self.from_reference_image,
         }
 
     def to_public_meta(self) -> dict[str, Any]:
         """Metadata safe for GET /api/media/artifacts/{id} (no storage_blob_key)."""
-        return {
+        out: dict[str, Any] = {
             "generated_media_id": self.id,
             "media_type": self.media_type,
             "mime_type": self.mime,
@@ -88,6 +90,9 @@ class GeneratedMediaRecord:
             "width": self.width,
             "height": self.height,
         }
+        if self.from_reference_image:
+            out["generated_from_reference_image"] = True
+        return out
 
 
 class GeneratedMediaStore(ABC):
@@ -142,6 +147,7 @@ class LocalDiskGeneratedMediaStore(GeneratedMediaStore):
             width=rec.width,
             height=rec.height,
             storage_blob_key=blob_key,
+            from_reference_image=rec.from_reference_image,
         )
         _data_path(self._base, gid).write_bytes(data)
         _meta_path(self._base, gid).write_text(
@@ -194,6 +200,7 @@ def _record_from_meta(doc: dict[str, Any], fallback_id: str) -> GeneratedMediaRe
         width=int(w) if w is not None else None,
         height=int(h) if h is not None else None,
         storage_blob_key=str(doc.get("storage_blob_key") or "") or None,
+        from_reference_image=bool(doc.get("from_reference_image")),
     )
 
 
@@ -264,6 +271,7 @@ class GcsGeneratedMediaStore(GeneratedMediaStore):
             width=rec.width,
             height=rec.height,
             storage_blob_key=data_key,
+            from_reference_image=rec.from_reference_image,
         )
         kb = self._bucket.blob(data_key)
         kb.upload_from_string(data, content_type=rec.mime)

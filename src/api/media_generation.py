@@ -1,13 +1,20 @@
-"""Backend-only image generation (+ download) — Phase 2G.1."""
+"""Backend-only image generation (+ download) — Phase 2G.1, reference image Phase 2G.3."""
 
 from __future__ import annotations
 
+import os
+from typing import Any
 
 from fastapi import APIRouter, Header, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from src.api.chat import _resolve_chat_clerk_context
+from src.ham.chat_attachment_store import (
+    default_attachment_max_bytes,
+    get_chat_attachment_store,
+    is_safe_attachment_id,
+)
 from src.ham.generated_media_store import GeneratedMediaRecord, get_generated_media_store, is_safe_generated_media_id
 from src.ham.media_provider_adapter import (
     ImageGenerationError,
@@ -16,10 +23,36 @@ from src.ham.media_provider_adapter import (
     default_image_prompt_max_chars,
     get_image_generation_adapter,
     prompt_digest_and_excerpt,
+    reference_image_generation_enabled,
     UnconfiguredImageProviderAdapter,
 )
 
 router = APIRouter(tags=["creative-media"])
+
+_REF_MIME_ALLOWED = frozenset({"image/png", "image/jpeg", "image/webp", "image/gif"})
+
+
+def _normalize_ref_mime(raw: str) -> str | None:
+    m = (raw or "").strip().lower()
+    if m == "image/jpg":
+        m = "image/jpeg"
+    return m if m in _REF_MIME_ALLOWED else None
+
+
+# Align with chat uploads: image attachments are capped server-side on upload; keep reference read bound tight.
+_REF_IMAGE_CEIL = 10 * 1024 * 1024
+
+
+def _media_reference_max_bytes() -> int:
+    cap = min(default_attachment_max_bytes(), _REF_IMAGE_CEIL)
+    raw = (os.environ.get("HAM_MEDIA_REFERENCE_IMAGE_MAX_BYTES") or "").strip()
+    if raw:
+        try:
+            parsed = int(raw)
+            return max(1024, min(parsed, cap))
+        except ValueError:
+            pass
+    return cap
 
 
 def _ext_for_mime(mime: str) -> str:
@@ -38,6 +71,7 @@ def _ext_for_mime(mime: str) -> str:
 class GenerateImageRequestBody(BaseModel):
     prompt: str = Field(..., min_length=1)
     model_id: str | None = None
+    reference_attachment_id: str | None = None
 
 
 def _owner_for_request(authorization: str | None) -> str:
@@ -49,12 +83,90 @@ def _public_download_path(gmid: str) -> str:
     return f"/api/media/artifacts/{gmid}/download"
 
 
+def _resolve_reference_attachment(
+    *,
+    attachment_id: str,
+    authorization_actor_user_id: str | None,
+) -> tuple[bytes, str]:
+    """Load reference bytes for image generation; raises HTTPException on client errors."""
+    aid = attachment_id.strip()
+    if not is_safe_attachment_id(aid):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": {
+                    "code": "IMAGE_GEN_REFERENCE_ATTACHMENT_INVALID",
+                    "message": "Invalid reference attachment id.",
+                },
+            },
+        )
+
+    store = get_chat_attachment_store()
+    got = store.get(aid)
+    if got is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": {"code": "ATTACHMENT_NOT_FOUND", "message": "Unknown attachment id."}},
+        )
+    data, rec = got
+    ok = (rec.owner_key or "").strip()
+    if ok:
+        viewer = (authorization_actor_user_id or "").strip()
+        if viewer != ok:
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "error": {
+                        "code": "ATTACHMENT_FORBIDDEN",
+                        "message": "Not allowed to use this attachment.",
+                    },
+                },
+            )
+
+    if rec.kind != "image":
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": {
+                    "code": "IMAGE_GEN_REFERENCE_NOT_IMAGE",
+                    "message": "Reference attachment must be an image.",
+                },
+            },
+        )
+
+    mime = _normalize_ref_mime(rec.mime or "")
+    if not mime:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": {
+                    "code": "IMAGE_GEN_REFERENCE_MIME_UNSUPPORTED",
+                    "message": "Reference image type is not supported for generation.",
+                },
+            },
+        )
+
+    max_ref = _media_reference_max_bytes()
+    if len(data) > max_ref:
+        raise HTTPException(
+            status_code=413,
+            detail={
+                "error": {
+                    "code": "IMAGE_GEN_REFERENCE_TOO_LARGE",
+                    "message": f"Reference image exceeds maximum size ({max_ref} bytes).",
+                },
+            },
+        )
+
+    return data, mime
+
+
 @router.post("/api/media/images/generate")
 async def post_generate_image(
     body: GenerateImageRequestBody,
     authorization: str | None = Header(None, alias="Authorization"),
 ) -> dict[str, Any]:
-    """Text-to-image MVP: server generates, stores, returns opaque metadata + relative download path."""
+    """Text-to-image MVP; optional Phase 2G.3 reference attachment for image-conditioned generation."""
     mc = default_image_prompt_max_chars()
     prompt = body.prompt.strip()
     if not prompt:
@@ -73,7 +185,12 @@ async def post_generate_image(
             },
         )
 
+    ref_raw = (body.reference_attachment_id or "").strip() or None
+    actor_for_owner, _ = _resolve_chat_clerk_context(authorization, None, route="generate_image")
+    viewer_id = actor_for_owner.user_id if actor_for_owner is not None else None
+
     owner = _owner_for_request(authorization)
+
     adapter = get_image_generation_adapter()
     if isinstance(adapter, UnconfiguredImageProviderAdapter):
         raise HTTPException(
@@ -86,8 +203,28 @@ async def post_generate_image(
             },
         )
 
+    reference_image: tuple[bytes, str] | None = None
+    used_reference = False
+    if ref_raw is not None:
+        if not reference_image_generation_enabled():
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "error": {
+                        "code": "IMAGE_TO_IMAGE_NOT_SUPPORTED",
+                        "message": "Image editing / reference-conditioned generation is not enabled on this server.",
+                    },
+                },
+            )
+        ref_bytes, ref_mime = _resolve_reference_attachment(
+            attachment_id=ref_raw,
+            authorization_actor_user_id=viewer_id,
+        )
+        reference_image = (ref_bytes, ref_mime)
+        used_reference = True
+
     try:
-        result = adapter.generate_image(prompt=prompt, model_id=body.model_id)
+        result = adapter.generate_image(prompt=prompt, model_id=body.model_id, reference_image=reference_image)
     except ImageGenerationError as exc:
         status = 400
         if exc.code in (
@@ -97,6 +234,10 @@ async def post_generate_image(
             status = 503 if exc.code == "IMAGE_GEN_NOT_CONFIGURED" else 400
         if exc.code == "IMAGE_GEN_UPSTREAM_TIMEOUT":
             status = 504
+        if exc.code in ("IMAGE_REFERENCE_INVALID",):
+            status = 400
+        if exc.code in ("IMAGE_EDIT_PROVIDER_NOT_CONFIGURED", "IMAGE_TO_IMAGE_NOT_SUPPORTED"):
+            status = 503
         raise HTTPException(
             status_code=status,
             detail={"error": {"code": exc.code, "message": exc.message}},
@@ -134,10 +275,11 @@ async def post_generate_image(
         width=result.width,
         height=result.height,
         storage_blob_key=None,
+        from_reference_image=used_reference,
     )
     store.put(result.data, rec)
 
-    return {
+    out: dict[str, Any] = {
         "generated_media_id": gmid,
         "media_type": "image",
         "mime_type": result.mime,
@@ -146,6 +288,9 @@ async def post_generate_image(
         "width": result.width,
         "height": result.height,
     }
+    if used_reference:
+        out["generated_from_reference_image"] = True
+    return out
 
 
 @router.get("/api/media/artifacts/{generated_media_id}")
