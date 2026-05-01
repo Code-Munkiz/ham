@@ -1384,8 +1384,20 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       if (!missionModeId && outboundPlain) {
         const trimmedNl = String(outboundUser || "").trim();
         const nlIntent = parseWorkspaceImageGenerationIntent(trimmedNl);
-        if (nlIntent && !chatCapabilitiesLoading) {
-          const supportsNl = Boolean(chatCapabilities?.generation?.supports_image_generation);
+        if (nlIntent) {
+          let capsPayload = chatCapabilities;
+          if (chatCapabilitiesLoading || capsPayload === null) {
+            try {
+              capsPayload = await fetchChatCapabilities(modelId);
+              setChatCapabilities(capsPayload);
+            } catch {
+              capsPayload = null;
+              setChatCapabilities(null);
+            } finally {
+              setChatCapabilitiesLoading(false);
+            }
+          }
+          const supportsNl = Boolean(capsPayload?.generation?.supports_image_generation);
           if (!supportsNl) {
             setInput("");
             setAttachments((prev) => {
@@ -1989,6 +2001,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       persistLocalDesktopTurn,
       chatCapabilities,
       chatCapabilitiesLoading,
+      modelId,
       runWorkspaceImageGeneration,
     ],
   );

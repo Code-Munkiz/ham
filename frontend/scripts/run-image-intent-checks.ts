@@ -31,6 +31,13 @@ function mustNotMatchImageToImage(prompt: string) {
 for (const s of [
   "show me a picture of a futuristic HAM dashboard",
   "create an image of a robot monkey architect",
+  "create an image of a realistic monkey eating a banana",
+  "show me a picture of a monkey eating a banana",
+  "generate a photo of a monkey eating a banana",
+  "generate a realistic photo of a monkey eating a banana",
+  "make a realistic image of a monkey eating a banana",
+  "make a picture of a monkey eating a banana",
+  "draw a monkey eating a banana",
   "generate a logo for HAM",
   "draw a clean icon of a cloud agent",
   "make a banner with a neural network and terminal",
@@ -40,6 +47,11 @@ for (const s of [
 
 for (const s of [
   "what is in this picture?",
+  "what is in this image?",
+  "describe this picture",
+  "describe this image.",
+  "analyze this screenshot",
+  "can you read this picture?",
   "describe the attached image",
   "can you read this screenshot?",
   "this image shows a bug",

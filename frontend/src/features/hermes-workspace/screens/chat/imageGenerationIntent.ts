@@ -40,6 +40,18 @@ function drawRemainderLooksVisualArtistic(raw: string): boolean {
   return tokens.test(t);
 }
 
+/** True when "draw …" is clearly a visual request, not analysis (e.g. draw conclusions). */
+function drawRemainderAcceptableForGeneration(raw: string): boolean {
+  const t = raw.trim().toLowerCase();
+  if (/\bconclusions?\b/.test(t)) return false;
+  if (drawRemainderLooksVisualArtistic(raw)) return true;
+  // Scenes, animals, people, food, etc. — avoid wiring "draw" to chat/ASCII fallbacks for obvious subjects.
+  const sceneish =
+    /\b(monkey|banana|cat|dog|bird|fish|horse|lion|tiger|bear|robot|car|house|landscape|portrait|sunset|forest|beach|city|food|fruit|plant|tree|flower|person|man|woman|child|face|hand|mountain|ocean|space|castle|dragon)\b/i;
+  if (sceneish.test(t)) return true;
+  return t.length >= 8;
+}
+
 type Matcher = {
   re: RegExp;
   promptGroup: number;
@@ -48,18 +60,19 @@ type Matcher = {
 };
 
 const TEXT_TO_IMAGE_MATCHERS: Matcher[] = [
+  /** Adjectives allowed between verb/article and noun: "generate a realistic photo of …", "make a realistic image of …". */
   {
-    re: /^\s*(?:please\s+)?(?:create|generate|make)\s+(?:an?\s+)?(image|picture|photo|logo|banner|graphic|icon|illustration|poster|diagram)\s+of\s*(.*)$/is,
-    promptGroup: 2,
+    re: /^\s*(?:please\s+)?(?:create|generate|make)\s+(?:a|an|the\s+)?(?:[\w'-]+\s+)*(?:image|picture|photo|logo|banner|graphic|icon|illustration|poster|diagram)\s+of\s*(.*)$/is,
+    promptGroup: 1,
   },
   {
-    re: /^\s*(?:please\s+)?(?:show|give)\s+me\s+(?:an?\s+)?(picture|image|photo|logo|banner|graphic|icon|illustration)\s+of\s*(.*)$/is,
-    promptGroup: 2,
+    re: /^\s*(?:please\s+)?(?:show|give)\s+me\s+(?:a|an|the\s+)?(?:[\w'-]+\s+)*(?:picture|image|photo|logo|banner|graphic|icon|illustration|poster|diagram)\s+of\s*(.*)$/is,
+    promptGroup: 1,
   },
   {
     re: /^\s*(?:please\s+)?draw\s+([\s\S]+)$/is,
     promptGroup: 1,
-    extra: (remainder: string) => drawRemainderLooksVisualArtistic(remainder),
+    extra: (remainder: string) => drawRemainderAcceptableForGeneration(remainder),
   },
   {
     re: /^\s*(?:please\s+)?generate\s+(?:some\s+)?art\s+of\s+(.*)$/is,
