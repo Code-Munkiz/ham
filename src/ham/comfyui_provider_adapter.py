@@ -3,6 +3,10 @@
 Calls a **remote** ComfyUI instance (`HAM_COMFYUI_BASE_URL`). No GPU stack in ham-api.
 
 Workflow graphs are shipped as **tracked templates** under ``configs/media/comfyui/`` (no checkpoints).
+
+Local / operator workers: templates keep a checkpoint **placeholder**. Set optional
+``HAM_COMFYUI_CHECKPOINT_NAME`` (filename only as listed by ComfyUI, e.g. ``sd_xl_base_1.0.safetensors``)
+to override ``CheckpointLoaderSimple.ckpt_name`` before ``POST /prompt``. Do not put weights in-repo.
 """
 
 from __future__ import annotations
@@ -217,6 +221,25 @@ def _apply_workflow_patches(
     return w
 
 
+def _checkpoint_filename_from_env_optional() -> str | None:
+    raw = (os.environ.get("HAM_COMFYUI_CHECKPOINT_NAME") or "").strip()
+    return raw if raw else None
+
+
+def _apply_checkpoint_name_env_override(graph: dict[str, Any]) -> None:
+    """Substitute CheckpointLoaderSimple ckpt_name when HAM_COMFYUI_CHECKPOINT_NAME is set."""
+    name = _checkpoint_filename_from_env_optional()
+    if not name:
+        return
+    for node in graph.values():
+        if not isinstance(node, dict) or node.get("class_type") != "CheckpointLoaderSimple":
+            continue
+        inp = node.get("inputs")
+        if isinstance(inp, dict):
+            inp["ckpt_name"] = name
+        break
+
+
 def comfyui_defaults_width_height() -> tuple[int, int]:
     def _one(env_name: str, default: int) -> int:
         raw = (os.environ.get(env_name) or "").strip()
@@ -325,7 +348,7 @@ class ComfyUIImageProviderAdapter(ImageProviderAdapter):
                 "IMAGE_GEN_PROMPT_TOO_LONG",
                 f"Prompt exceeds maximum length ({mc} characters).",
             )
-        _ = model_id  # SDXL baseline uses checkpoint wired in workflow template
+        _ = model_id  # SDXL baseline: checkpoint placeholder in template unless HAM_COMFYUI_CHECKPOINT_NAME
 
         manifest, workflow_template = load_comfy_manifest_and_workflow(self._workflow_key)
         w_px, h_px = comfyui_defaults_width_height()
@@ -340,6 +363,7 @@ class ComfyUIImageProviderAdapter(ImageProviderAdapter):
             height=h_px,
             seed=seed,
         )
+        _apply_checkpoint_name_env_override(graph)
 
         client_id = str(uuid.uuid4())
         enqueue = {"prompt": graph, "client_id": client_id}

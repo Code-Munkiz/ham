@@ -67,6 +67,49 @@ def test_comfyui_generation_ready_requires_flag_and_url(monkeypatch: pytest.Monk
     assert comfyui_image_generation_ready() is True
 
 
+def test_comfyui_checkpoint_env_override_updates_post_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+    """HAM_COMFYUI_CHECKPOINT_NAME must replace CheckpointLoaderSimple.ckpt_name (real workers)."""
+    monkeypatch.setenv("HAM_MEDIA_IMAGE_PROMPT_MAX_CHARS", "4000")
+    monkeypatch.setenv("HAM_COMFYUI_CHECKPOINT_NAME", "sd_xl_base_1.0.safetensors")
+    png = _tiny_png_bytes()
+    captured: dict[str, object] = {}
+
+    def make_client(**_kw: object):
+        fake = MagicMock()
+
+        def _post(url: str, **kw: object):
+            captured["prompt_json"] = kw.get("json")
+            return httpx.Response(200, json={"prompt_id": "pid-x", "number": 0, "node_errors": {}})
+
+        fake.post.side_effect = _post
+        hist = {
+            "pid-x": {
+                "outputs": {"9": {"images": [{"filename": "out.png", "type": "output", "subfolder": ""}]}}
+            }
+        }
+        fake.get.side_effect = [
+            httpx.Response(200, json=hist),
+            httpx.Response(200, content=png, headers={"content-type": "image/png"}),
+        ]
+        fake.__enter__ = lambda self_: fake
+        fake.__exit__ = lambda *_: False
+        return fake
+
+    with patch.object(httpx, "Client", side_effect=make_client):
+        adap = ComfyUIImageProviderAdapter(
+            base_url="http://dummy-comfy.invalid",
+            workflow_key="sdxl_baseline",
+            timeout_sec=30.0,
+            poll_sec=0.01,
+        )
+        adap.generate_image(prompt="a lighthouse at dusk", model_id=None, reference_image=None)
+    pj = captured.get("prompt_json") or {}
+    graph = pj.get("prompt") or {}
+    loader = graph.get("4") or {}
+    assert loader.get("class_type") == "CheckpointLoaderSimple"
+    assert (loader.get("inputs") or {}).get("ckpt_name") == "sd_xl_base_1.0.safetensors"
+
+
 def test_comfyui_generation_mock_prompt_history_view(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HAM_MEDIA_IMAGE_PROMPT_MAX_CHARS", "4000")
 
