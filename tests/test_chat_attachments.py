@@ -28,6 +28,10 @@ _TINY_PDF = b"%PDF-1.1\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n"
 
 _OLE_DOC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"\x00" * 40
 
+# Minimal ISO BMFF `ftyp` box (32 bytes) — enough for server-side sniff.
+_MINI_MP4 = b"\x00\x00\x00\x20ftypisom\x00\x00\x00\x00" b"isommp41" + b"\x00" * 8
+_MINI_WEBM = b"\x1a\x45\xdf\xa3" + b"\x00" * 28
+
 
 @pytest.fixture
 def att_dir(tmp_path: Path) -> Path:
@@ -207,6 +211,57 @@ def test_post_attachment_image_over_10mb_rejected(
     )
     assert r.status_code == 413
     assert "Image exceeds" in r.json()["detail"]["error"]["message"]
+
+
+def test_post_attachment_accepts_mp4_sniff(
+    att_dir: Path, mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _ = mock_mode
+    monkeypatch.setenv("HAM_CHAT_ATTACHMENT_DIR", str(att_dir))
+    set_chat_attachment_store_for_tests(LocalDiskAttachmentStore(att_dir))
+
+    r = client.post(
+        "/api/chat/attachments",
+        files={"file": ("clip.mp4", _MINI_MP4, "application/octet-stream")},
+    )
+    assert r.status_code == 200, r.text
+    j = r.json()
+    assert j["mime"] == "video/mp4"
+    assert j["kind"] == "video"
+
+
+def test_post_attachment_accepts_mov_quicktime_sniff(
+    att_dir: Path, mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _ = mock_mode
+    monkeypatch.setenv("HAM_CHAT_ATTACHMENT_DIR", str(att_dir))
+    set_chat_attachment_store_for_tests(LocalDiskAttachmentStore(att_dir))
+
+    r = client.post(
+        "/api/chat/attachments",
+        files={"file": ("clip.mov", _MINI_MP4, "application/octet-stream")},
+    )
+    assert r.status_code == 200, r.text
+    j = r.json()
+    assert j["mime"] == "video/quicktime"
+    assert j["kind"] == "video"
+
+
+def test_post_attachment_accepts_webm_sniff(
+    att_dir: Path, mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _ = mock_mode
+    monkeypatch.setenv("HAM_CHAT_ATTACHMENT_DIR", str(att_dir))
+    set_chat_attachment_store_for_tests(LocalDiskAttachmentStore(att_dir))
+
+    r = client.post(
+        "/api/chat/attachments",
+        files={"file": ("clip.webm", _MINI_WEBM, "application/octet-stream")},
+    )
+    assert r.status_code == 200, r.text
+    j = r.json()
+    assert j["mime"] == "video/webm"
+    assert j["kind"] == "video"
 
 
 def test_get_unknown_404(att_dir: Path, mock_mode: None, monkeypatch: pytest.MonkeyPatch) -> None:

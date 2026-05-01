@@ -190,3 +190,13 @@ def test_extract_legacy_xls_unsupported() -> None:
     assert "legacy .xls extraction is not enabled" in sec
     assert "gs://" not in sec
 
+
+def test_extract_video_mime_unsupported() -> None:
+    r = extract_document_bytes(
+        filename="c.mp4",
+        mime="video/mp4",
+        raw=b"\x00" * 64,
+    )
+    assert r.status == "unsupported"
+    assert not (r.text or "").strip()
+

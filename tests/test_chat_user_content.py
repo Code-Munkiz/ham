@@ -365,3 +365,40 @@ def test_normalize_v2_http_respects_vision_mode_off(temp_store: Path, monkeypatc
     assert isinstance(out, str)
     assert "HAM_CHAT_VISION_MODE is off" in out
     assert "image_url" not in out
+
+
+def test_normalize_v2_video_llm_placeholder_no_path_leak(
+    temp_store: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.ham.chat_attachment_store import get_chat_attachment_store
+
+    monkeypatch.setenv("HERMES_GATEWAY_MODE", "mock")
+
+    store = get_chat_attachment_store()
+    aid = store.new_id()
+    mini_mp4 = b"\x00\x00\x00\x20ftypisom\x00\x00\x00\x00" b"isommp41" + b"\x00" * 8
+    store.put(
+        mini_mp4,
+        AttachmentRecord(
+            id=aid,
+            filename="tiny.mp4",
+            mime="video/mp4",
+            size=len(mini_mp4),
+            owner_key="",
+            kind="video",
+        ),
+    )
+    doc = {
+        "h": "ham_chat_user_v2",
+        "text": "",
+        "attachments": [
+            {"id": aid, "name": "tiny.mp4", "mime": "video/mp4", "kind": "video"},
+        ],
+    }
+    s = mod.normalize_user_incoming_to_stored(doc, attachment_user_id=None)
+    assert "Attached video:" not in s
+    llm = mod.to_llm_message_content(s)
+    assert isinstance(llm, str)
+    assert "[Attached video: tiny.mp4]" in llm
+    assert "is not enabled in this phase" in llm
+    assert "gs://" not in llm

@@ -171,7 +171,7 @@ export function WorkspaceChatComposerActionsMenu({
                   <ChevronRight className="h-3 w-3 shrink-0 opacity-40" aria-hidden strokeWidth={2} />
                 </span>
                 <span className="text-[10px] font-normal leading-snug text-white/42">
-                  {attachDisabled ? attachDisabledReason ?? "Unavailable" : "Images, docs, and spreadsheets"}
+                  {attachDisabled ? attachDisabledReason ?? "Unavailable" : "Images, docs, spreadsheets, MP4/MOV/WebM"}
                 </span>
               </button>
               <div className="mx-2 my-0.5 h-px bg-white/[0.07]" role="separator" />

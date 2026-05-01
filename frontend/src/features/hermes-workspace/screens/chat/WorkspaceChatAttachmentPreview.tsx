@@ -3,7 +3,7 @@
  * HAM dark theme; no @base-ui PreviewCard (not in this repo) — popover is optional detail via expand.
  */
 import * as React from "react";
-import { FileText, Loader2, RotateCcw, X } from "lucide-react";
+import { FileText, Loader2, RotateCcw, Video, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -60,7 +60,11 @@ export function WorkspaceChatAttachmentPreview({
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center text-white/50">
-            <FileText className="h-3.5 w-3.5" strokeWidth={1.5} />
+            {attachment.kind === "video" ? (
+              <Video className="h-3.5 w-3.5" strokeWidth={1.5} aria-hidden />
+            ) : (
+              <FileText className="h-3.5 w-3.5" strokeWidth={1.5} />
+            )}
           </div>
         )}
       </div>
@@ -72,7 +76,9 @@ export function WorkspaceChatAttachmentPreview({
           <p className="line-clamp-2 text-[9px] text-red-300/90">{attachment.error}</p>
         ) : (
           <p className="text-[9px] text-white/40">
-            {fileExt(attachment.name)} • {formatAttachmentByteSize(attachment.size)}
+            {attachment.kind === "video"
+              ? `Video attached — processing not enabled yet · ${formatAttachmentByteSize(attachment.size)}`
+              : `${fileExt(attachment.name)} • ${formatAttachmentByteSize(attachment.size)}`}
           </p>
         )}
       </div>

@@ -71,6 +71,13 @@ export function WorkspaceChatMessageList({
                             alt={at.name || "Attachment"}
                             localPreviewUrl={resolveLocalAttachmentPreview?.(at.id)}
                           />
+                        ) : at.kind === "video" ? (
+                          <span className="block">
+                            <span className="line-clamp-2 font-medium text-white/85">🎬 {at.name || "video"}</span>
+                            <span className="mt-0.5 block text-[9px] leading-snug text-white/45">
+                              Video attached — processing not enabled yet
+                            </span>
+                          </span>
                         ) : (
                           <span className="line-clamp-3">📄 {at.name || "file"}</span>
                         )}

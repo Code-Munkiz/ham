@@ -8,7 +8,7 @@ export type WorkspaceComposerAttachment = {
   id: string;
   name: string;
   size: number;
-  kind: "image" | "file";
+  kind: "image" | "file" | "video";
   /** `blob:` URL for image preview or empty for opaque file uploads before send. */
   payload: string;
   /** Set after `POST /api/chat/attachments` — chat uses v2 refs, not local blobs. */
@@ -43,6 +43,9 @@ export const WORKSPACE_ATTACHMENT_ACCEPT = [
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   "text/csv",
   "application/vnd.ms-excel",
+  "video/mp4",
+  "video/quicktime",
+  "video/webm",
   ".jpg",
   ".jpeg",
   ".png",
@@ -56,6 +59,9 @@ export const WORKSPACE_ATTACHMENT_ACCEPT = [
   ".xlsx",
   ".csv",
   ".xls",
+  ".mp4",
+  ".mov",
+  ".webm",
 ].join(",");
 
 const IMG_EXT = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif"]);
@@ -63,7 +69,7 @@ const IMG_EXT = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif"]);
 const MIME_IMAGE = /^image\/(png|jpe?g|webp|gif)$/i;
 
 const UNSUPPORTED =
-  "Use JPG, PNG, GIF, WebP, PDF, TXT, MD, DOC, DOCX, XLSX, CSV, or XLS (stored; not extracted) — or paste text instead.";
+  "Use JPG, PNG, GIF, WebP, PDF, TXT, MD, DOC, DOCX, XLSX, CSV, XLS (stored; legacy .xls not extracted), MP4/MOV/WebM videos (stored; no transcript yet), or paste text.";
 
 function fileExtensionLower(name: string): string {
   const i = name.lastIndexOf(".");
@@ -106,6 +112,9 @@ function mimeForFile(file: File): string {
   if (ext === ".docx") return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
   if (ext === ".xlsx") return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
   if (ext === ".csv") return "text/csv";
+  if (ext === ".mp4") return "video/mp4";
+  if (ext === ".mov") return "video/quicktime";
+  if (ext === ".webm") return "video/webm";
   return "";
 }
 
@@ -118,6 +127,15 @@ function isAllowedSpreadsheetFile(file: File): boolean {
   if (ext === ".csv" || m === "text/csv" || m === "application/csv") {
     return true;
   }
+  return false;
+}
+
+function isAllowedVideoFile(file: File): boolean {
+  const ext = fileExtensionLower(file.name);
+  const m = mimeForFile(file).toLowerCase();
+  if (ext === ".mp4" || m === "video/mp4") return true;
+  if (ext === ".mov" || m === "video/quicktime") return true;
+  if (ext === ".webm" || m === "video/webm") return true;
   return false;
 }
 
@@ -181,6 +199,13 @@ export async function fileToWorkspaceAttachment(
       return null;
     }
     return { id, name, size: file.size, kind: "file", payload: "" };
+  }
+
+  if (isAllowedVideoFile(file)) {
+    if (file.size > MAX_WORKSPACE_DOCUMENT_BYTES) {
+      return null;
+    }
+    return { id, name, size: file.size, kind: "video", payload: "" };
   }
 
   if (!isAllowedRasterImageFile(file)) {

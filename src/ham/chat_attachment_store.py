@@ -46,6 +46,9 @@ CHAT_UPLOAD_ALLOWED_MIME = frozenset(
         "text/markdown",
         "text/csv",
         "application/vnd.ms-excel",
+        "video/mp4",
+        "video/quicktime",
+        "video/webm",
     }
 )
 
@@ -65,6 +68,8 @@ def kind_for_mime(mime: str) -> str:
     m = _normalize_mime(mime)
     if m.startswith("image/"):
         return "image"
+    if m.startswith("video/"):
+        return "video"
     return "file"
 
 

@@ -360,6 +360,16 @@ def extract_document_bytes(*, filename: str, mime: str, raw: bytes) -> DocumentE
             error_reason=None,
         )
 
+    if m.startswith("video/"):
+        return DocumentExtractionResult(
+            filename=fn,
+            mime=m,
+            status="unsupported",
+            text="",
+            truncated=False,
+            error_reason=None,
+        )
+
     return DocumentExtractionResult(
         filename=fn,
         mime=m,

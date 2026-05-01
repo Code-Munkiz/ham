@@ -21,7 +21,7 @@ export type HamChatUserAttachmentRef = {
   id: string;
   name: string;
   mime: string;
-  kind: "image" | "file";
+  kind: "image" | "file" | "video";
 };
 
 export type HamChatUserContentV2 = {

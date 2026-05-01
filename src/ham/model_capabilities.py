@@ -84,7 +84,8 @@ def build_chat_capabilities_payload(
         "PDF, DOCX, XLSX, and CSV files are text-extracted by HAM before being sent to the model (bounded).",
         "Legacy .xls files may be stored but are not text-extracted in this phase.",
         "Scanned PDFs are not OCRed in this phase.",
-        "Video analysis is not implemented yet.",
+        "MP4/MOV/WebM videos may be attached and stored for the session only; transcripts, thumbnails, "
+        "and keyframes are not generated in this phase.",
         "Export PDF downloads the HAM transcript; the model does not generate the PDF.",
     ]
     if not supports_image_input:

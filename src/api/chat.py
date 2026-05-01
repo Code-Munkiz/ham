@@ -1483,6 +1483,24 @@ def _coerce_request_mime(content_type: str | None, filename: str) -> str | None:
         return "text/markdown"
     if name.endswith(".txt"):
         return "text/plain"
+    if name.endswith(".mp4"):
+        return "video/mp4"
+    if name.endswith(".mov"):
+        return "video/quicktime"
+    if name.endswith(".webm"):
+        return "video/webm"
+    return None
+
+
+def _sniff_video_container_mime(head: bytes, filename: str) -> str | None:
+    """Recognize ISO BMFF (MP4/MOV) and EBML/WebM magic without parsing full streams."""
+    fn = (filename or "").lower()
+    if len(head) >= 12 and head[4:8] == b"ftyp":
+        if fn.endswith(".mov"):
+            return "video/quicktime"
+        return "video/mp4"
+    if len(head) >= 4 and head[:4] == b"\x1a\x45\xdf\xa3":
+        return "video/webm"
     return None
 
 
@@ -1568,6 +1586,8 @@ async def post_chat_attachment(
     if mime is None:
         mime = _sniff_docx_mime(head, name)
     if mime is None:
+        mime = _sniff_video_container_mime(head, name)
+    if mime is None:
         mime = _coerce_request_mime(file.content_type, name)
         if mime in ("text/plain", "text/markdown", "text/csv"):
             try:
@@ -1603,7 +1623,8 @@ async def post_chat_attachment(
                     "code": "ATTACHMENT_UNSUPPORTED_TYPE",
                     "message": (
                         "Unsupported file type. Use PNG, JPEG, GIF, WebP, PDF, plain text, "
-                        "markdown, DOC, DOCX, XLSX, CSV, or legacy XLS (stored only)."
+                        "markdown, DOC, DOCX, XLSX, CSV, legacy XLS (stored only), MP4, MOV, or WebM videos "
+                        "(stored without video analysis in this phase)."
                     ),
                 },
             },

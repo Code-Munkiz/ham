@@ -54,6 +54,19 @@ def _norm_mime(m: str) -> str:
     return x
 
 
+def _format_video_llm_placeholder(filename: str, mime: str) -> str:
+    """Bounded, path-free context for stored video (no analysis in baseline phase)."""
+    fn = (filename or "").strip() or "video"
+    mt = (mime or "").strip() or "video/*"
+    return (
+        f"[Attached video: {fn}]\n"
+        f"Type: {mt}\n"
+        "The user attached a video file. It is stored for this session, but video analysis "
+        "(transcript, thumbnails, keyframes) is not enabled in this phase — you have no access "
+        "to pixels or audio from this attachment."
+    )
+
+
 def _data_url_bytes(data_url: str) -> int:
     """Rough byte size of base64 payload (same heuristic as the frontend)."""
     if "base64," not in data_url:
@@ -169,10 +182,15 @@ def _validate_v2(
             )
         if _norm_mime(rec.mime) != filed:
             raise ValueError("Attachment `mime` does not match the uploaded file.")
-        expect_kind: Literal["image", "file"] = "image" if filed.startswith("image/") else "file"
-        if rec.kind not in ("image", "file"):
+        if filed.startswith("video/"):
+            expect_kind: Literal["image", "file", "video"] = "video"
+        elif filed.startswith("image/"):
+            expect_kind = "image"
+        else:
+            expect_kind = "file"
+        if rec.kind not in ("image", "file", "video"):
             raise ValueError("Stored attachment is corrupted (invalid kind).")
-        if rec.kind != expect_kind:
+        if rec.kind != expect_kind and not (expect_kind == "video" and rec.kind == "file"):
             raise ValueError("Attachment `mime` and stored kind do not match.")
         out.append(
             {
@@ -273,11 +291,37 @@ def plain_text_for_operator(stored: str) -> str:
     if v2 is not None:
         t = (v2.get("text") or "").strip()
         n = len(v2.get("attachments") or [])
-        img = sum(1 for x in (v2.get("attachments") or []) if isinstance(x, dict) and x.get("kind") == "image")
+        img = sum(
+            1
+            for x in (v2.get("attachments") or [])
+            if isinstance(x, dict) and str(x.get("kind") or "") == "image"
+        )
+        vid = sum(
+            1
+            for x in (v2.get("attachments") or [])
+            if isinstance(x, dict) and str(x.get("kind") or "") == "video"
+        )
         if n and t:
-            return f"{t}\n[User attached {n} file(s) in the dashboard ({img} image(s)).]".strip()
+            bits: list[str] = []
+            if img:
+                bits.append(f"{img} image(s)")
+            if vid:
+                bits.append(f"{vid} video(s)")
+            files = n - img - vid
+            if files:
+                bits.append(f"{files} other file(s)")
+            tail = f"[User attached {n} file(s) in the dashboard ({', '.join(bits)}).]"
+            return f"{t}\n{tail}".strip()
         if n:
-            return f"[User attached {n} file(s) in the dashboard ({img} image(s)).]"
+            bits = []
+            if img:
+                bits.append(f"{img} image(s)")
+            if vid:
+                bits.append(f"{vid} video(s)")
+            files = n - img - vid
+            if files:
+                bits.append(f"{files} other file(s)")
+            return f"[User attached {n} file(s) in the dashboard ({', '.join(bits)}).]"
         return t or ""
     v = try_parse_stored_v1(stored)
     if v is None:
@@ -453,6 +497,7 @@ def _to_llm_message_content_v2(v2: dict[str, Any]) -> str | list[dict[str, Any]]
     store = get_chat_attachment_store()
     missing_blocks: list[str] = []
     file_results: list[DocumentExtractionResult] = []
+    video_blocks: list[str] = []
     image_rows: list[tuple[bytes, str, str]] = []
     for a in ats:
         aid = str(a.get("id") or "")
@@ -465,17 +510,20 @@ def _to_llm_message_content_v2(v2: dict[str, Any]) -> str | list[dict[str, Any]]
             continue
         raw, rec = got
         m = _norm_mime(rec.mime)
+        disp = str(a.get("name") or rec.filename).strip() or rec.filename
+        is_video = m.startswith("video/") or rec.kind == "video"
+        if is_video:
+            video_blocks.append(_format_video_llm_placeholder(disp, m))
+            continue
         if rec.kind == "file":
-            disp = str(a.get("name") or rec.filename).strip() or rec.filename
             file_results.append(
                 extract_document_bytes(filename=disp, mime=m, raw=raw),
             )
         elif rec.kind == "image" or m.startswith("image/"):
-            disp = str(a.get("name") or rec.filename).strip() or "(image)"
             image_rows.append((raw, rec.mime, disp))
 
     file_text_blocks = build_document_llm_sections(file_results)
-    file_text_blocks = missing_blocks + file_text_blocks
+    file_text_blocks = missing_blocks + video_blocks + file_text_blocks
 
     text = base_text
     if file_text_blocks:

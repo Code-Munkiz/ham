@@ -63,7 +63,7 @@ Snapshot accepted after Document Intelligence Phase 2A and backend deploy:
 | **Phase 2B** | **Export-to-PDF MVP** | Chat transcript first; audit-friendly PDFs; backend-mediated (**shipped**) |
 | **Phase 2C** | Model capability map + UX copy | Honest modality labels; `GET /api/chat/capabilities`; composer **+** menu (**shipped**) |
 | **Phase 2D** | Voice UX polish | Align with existing voice/dictation; no duplicate stack |
-| **Phase 2E** | Video attachment intelligence | Store, thumbnail, transcript, keyframes; bounded context |
+| **Phase 2E** | Video attachment baseline | **MP4/MOV/WebM** upload + store + honest UI + LLM placeholder (**shipped** store-only); transcript/thumb/keyframes later |
 | **Phase 2F** | File retrieval / search / RAG | Chunk, retrieve, cite; tenant/session scoped |
 
 **Phase 2C (summary):** Conservative capability metadata in `src/ham/model_capabilities.py`; safe JSON from `GET /api/chat/capabilities` (no secrets, Hermes base URL, tokens, paths, or `gs://`). The UI distinguishes **HAM document text extraction** (bounded context into the model request) from **native** PDF/DOCX ingestion, and **transcript PDF export** (HAM-generated download) from the model “creating” a PDF. **Export PDF** is triggered from the composer action menu (**+**), not the header next to Inspector.
@@ -71,6 +71,8 @@ Snapshot accepted after Document Intelligence Phase 2A and backend deploy:
 **Spreadsheet attachments (Phase 2D.1):** `.xlsx` and `.csv` are accepted on `POST /api/chat/attachments` and **text-extracted with bounds** (sheet/row/column/character caps) for model context — values only via `data_only` / stored cell values; no formula or macro execution. **Legacy `.xls`** is **upload-only / store-only** (`application/vnd.ms-excel`) with an explicit placeholder in extracted context until a safe parser is added.
 
 **Phase 2D.2 (composer polish):** The **+** action menu closes as soon as **Add files** is chosen (before the native picker opens, including when the user cancels the picker); hidden input + upload path unchanged.
+
+**Phase 2E (video baseline — shipped):** `.mp4`, `.mov`, `.webm` are accepted on `POST /api/chat/attachments` (ISO BMFF / WebM sniff + declared MIME); stored `kind: video` under the same default **20MB** attachment cap as documents/images policy (images still capped at 10MB). **No ffmpeg** in the default `ham-api` image in this slice — **store-only**: composer + transcript file cards state that processing is not enabled, and the model receives a **short bounded placeholder** (safe filename + MIME only; no storage paths, no `gs://`). Thumbnails, audio transcript, and keyframes are **explicit follow-ups** (requires approved server-side tooling and budgets).
 
 ---
 

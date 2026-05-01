@@ -73,6 +73,12 @@ import { cn } from "@/lib/utils";
 import { isHamDesktopShell } from "@/lib/ham/desktopConfig";
 import { getHamDesktopLocalControlApi, getHamDesktopWebBridgeApi } from "@/lib/ham/desktopBundleBridge";
 
+function mapServerAttachmentKind(serverKind: string): WorkspaceComposerAttachment["kind"] {
+  if (serverKind === "image") return "image";
+  if (serverKind === "video") return "video";
+  return "file";
+}
+
 const VOICE_DEBUG_FLAG = "ham.voiceDebug";
 const HWW_LAST_SESSION_KEY = "hww.chat.lastSessionId";
 
@@ -1035,7 +1041,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
                   name: up.filename || row.name,
                   size: up.size,
                   mime: up.mime,
-                  kind: up.kind === "file" ? "file" : "image",
+                  kind: mapServerAttachmentKind(up.kind),
                   uploadPhase: "done",
                   pendingSource: undefined,
                   error: undefined,
@@ -1094,7 +1100,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
                 name: up.filename || a.name,
                 size: up.size,
                 mime: up.mime,
-                kind: up.kind === "file" ? "file" : "image",
+                kind: mapServerAttachmentKind(up.kind),
                 uploadPhase: "done",
                 pendingSource: undefined,
                 error: undefined,
@@ -1829,7 +1835,13 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
             usable.map((a) => ({
               id: a.serverId!,
               name: a.name,
-              mime: a.mime ?? (a.kind === "file" ? "text/plain" : "image/png"),
+              mime:
+                a.mime ??
+                (a.kind === "image"
+                  ? "image/png"
+                  : a.kind === "video"
+                    ? "video/mp4"
+                    : "text/plain"),
               kind: a.kind,
             })),
           );
