@@ -181,7 +181,7 @@ export function parseWorkspaceCreativeImageIntent(
     if (IMAGE_TO_IMAGE_TRIGGERS.some((rx) => rx.test(probe) || rx.test(trimmed))) {
       return { kind: "image_to_image", prompt: trimmed.slice(0, 8000) };
     }
-    return null;
+    // Composer may still have unrelated attachments; NL text-to-image must not be suppressed.
   }
 
   const p = parseTextToImagePrompt(probe);

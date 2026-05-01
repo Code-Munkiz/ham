@@ -1466,6 +1466,16 @@ export async function fetchChatSession(sessionId: string): Promise<ChatSessionDe
   return (await res.json()) as ChatSessionDetail;
 }
 
+/** Delete persisted chat transcript for a session (`session_id` only; server-side store). */
+export async function deleteChatSession(sessionId: string): Promise<void> {
+  const path = `/api/chat/sessions/${encodeURIComponent(sessionId)}`;
+  const res = await hamApiFetch(path, { method: "DELETE" });
+  if (!res.ok) {
+    if (res.status === 404) throw new Error("Session not found");
+    throw new Error(`Failed to delete chat session (HTTP ${res.status}) via ${apiUrl(path)}.`);
+  }
+}
+
 /** GET /api/chat/capabilities — conservative model/HAM flags for honest workspace copy (Clerk when enabled). */
 export async function fetchChatCapabilities(modelId: string | null): Promise<ChatCapabilitiesPayload> {
   const qp = modelId?.trim() ? `?model_id=${encodeURIComponent(modelId.trim())}` : "";

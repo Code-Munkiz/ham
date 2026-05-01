@@ -189,3 +189,12 @@ class FirestoreChatSessionStore:
                     ),
                 )
         return candidates[offset : offset + limit]
+
+    def delete_session(self, session_id: str) -> bool:
+        doc_ref = self._coll().document(session_id)
+        with self._lock:
+            snap = doc_ref.get()
+            if not snap.exists:
+                return False
+            doc_ref.delete()
+            return True

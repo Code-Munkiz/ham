@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Link, NavLink, useLocation, useSearchParams } from "react-router-dom";
+import { Link, NavLink, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
   ChevronDown,
   ChevronRight,
@@ -11,6 +11,7 @@ import {
   Plus,
   Search,
   Terminal,
+  Trash2,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -24,6 +25,10 @@ import { WorkspaceMobileTabBar } from "./WorkspaceMobileTabBar";
 import { WorkspaceChatFloatingToggle } from "./components/WorkspaceChatFloatingToggle";
 import { WorkspaceChatPanel } from "./components/WorkspaceChatPanel";
 import { WorkspaceTerminalView } from "./screens/terminal/WorkspaceTerminalView";
+import { toast } from "sonner";
+
+/** Keep in sync with `HWW_LAST_SESSION_KEY` in `WorkspaceChatScreen.tsx`. */
+const HWW_SIDEBAR_LAST_SESSION_KEY = "hww.chat.lastSessionId";
 
 const HWW_SIDEBAR_COLLAPSE_KEY = "hww.sidebar.collapsed";
 
@@ -58,6 +63,8 @@ type SideNavOptions = {
   activeSessionId: string | null;
   /** When on `/workspace/chat`, sessions lead the rail (upstream ChatSidebar pattern). */
   isChatRoute: boolean;
+  deletingSessionId: string | null;
+  onDeleteSession?: (sessionId: string) => void;
 };
 
 function sideNavClass(isActive: boolean, iconOnly: boolean) {
@@ -87,6 +94,8 @@ function WorkspaceSideNav({
   onSessionFilterChange,
   activeSessionId,
   isChatRoute,
+  deletingSessionId,
+  onDeleteSession,
 }: SideNavOptions) {
   const brandLogoSrc = hamWorkspaceLogoUrl();
   const landingHref = hamLandingHref();
@@ -210,12 +219,12 @@ function WorkspaceSideNav({
           const active = activeSessionId === s.session_id;
           const sub = sessionCardSubtitle(s.turn_count, s.created_at);
           return (
-            <li key={s.session_id}>
+            <li key={s.session_id} className="flex min-w-0 items-stretch gap-1">
               <Link
                 to={`/workspace/chat?session=${encodeURIComponent(s.session_id)}`}
                 onClick={onNavigate}
                 className={cn(
-                  "block w-full min-w-0 rounded-lg border px-2 py-1.5 text-left transition",
+                  "block min-w-0 flex-1 rounded-lg border px-2 py-1.5 text-left transition",
                   active
                     ? "border-white/20 bg-white/[0.1] text-white/92"
                     : "border-white/[0.04] bg-black/20 text-white/70 hover:border-white/10 hover:bg-white/[0.04]",
@@ -224,6 +233,25 @@ function WorkspaceSideNav({
                 <p className="line-clamp-2 text-[11px] leading-snug text-white/85">{sessionCardTitle(s.preview)}</p>
                 {sub ? <p className="mt-0.5 truncate text-[10px] text-white/45">{sub}</p> : null}
               </Link>
+              {onDeleteSession ? (
+                <button
+                  type="button"
+                  disabled={deletingSessionId === s.session_id}
+                  aria-label={`Delete chat session ${sessionCardTitle(s.preview)}`}
+                  title="Delete thread"
+                  onClick={(evt) => {
+                    evt.preventDefault();
+                    evt.stopPropagation();
+                    onDeleteSession(s.session_id);
+                  }}
+                  className={cn(
+                    "inline-flex shrink-0 items-center justify-center rounded-lg border px-2 text-white/40 transition hover:border-red-500/35 hover:bg-red-950/30 hover:text-red-100/95 disabled:opacity-40",
+                    active ? "border-white/14" : "border-white/[0.06]",
+                  )}
+                >
+                  <Trash2 className="h-3.5 w-3.5" aria-hidden strokeWidth={2} />
+                </button>
+              ) : null}
             </li>
           );
         })}
@@ -465,6 +493,7 @@ function WorkspaceSideNav({
 
 export function WorkspaceShell({ children }: WorkspaceShellProps) {
   const location = useLocation();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [sidebarCollapsed, setSidebarCollapsed] = React.useState(() => {
     try {
@@ -487,6 +516,8 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
       ? searchParams.get("session")
       : null;
 
+  const [deletingSessionId, setDeletingSessionId] = React.useState<string | null>(null);
+
   const loadSessions = React.useCallback(async () => {
     setSessionsLoading(true);
     setSessionsError(null);
@@ -504,6 +535,33 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
   React.useEffect(() => {
     void loadSessions();
   }, [loadSessions, location.pathname, location.search]);
+
+  const handleDeleteSession = React.useCallback(
+    async (sid: string) => {
+      if (!globalThis.confirm("Delete this chat thread? Server-stored messages for this session will be removed.")) {
+        return;
+      }
+      setDeletingSessionId(sid);
+      try {
+        await workspaceSessionAdapter.delete(sid);
+        toast.success("Chat deleted");
+        if (activeSessionId === sid) {
+          try {
+            localStorage.removeItem(HWW_SIDEBAR_LAST_SESSION_KEY);
+          } catch {
+            /* ignore */
+          }
+          navigate({ pathname: "/workspace/chat", search: "" }, { replace: true });
+        }
+        await loadSessions();
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Could not delete chat");
+      } finally {
+        setDeletingSessionId(null);
+      }
+    },
+    [activeSessionId, loadSessions, navigate],
+  );
 
   const pageTitle = workspacePathTitle(location.pathname);
   const isWorkspaceChat =
@@ -528,6 +586,8 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
     onSessionFilterChange: setSessionFilter,
     activeSessionId,
     isChatRoute: isWorkspaceChat,
+    deletingSessionId,
+    onDeleteSession: handleDeleteSession,
   };
 
   const setSidebarPersist = React.useCallback((next: boolean) => {

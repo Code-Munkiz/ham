@@ -845,6 +845,21 @@ async def get_chat_session(
     }
 
 
+@router.delete("/api/chat/sessions/{session_id}", status_code=204)
+async def delete_chat_session(
+    session_id: str,
+    authorization: str | None = Header(None, alias="Authorization"),
+) -> Response:
+    """Delete a chat session and its turns from HAM-backed persistence (SQLite/Firestore/memory)."""
+    enforce_clerk_session_and_email_for_request(authorization, route="delete_chat_session")
+    if not _chat_store.delete_session(session_id):
+        raise HTTPException(
+            status_code=404,
+            detail={"error": {"code": "SESSION_NOT_FOUND", "message": "Unknown chat session."}},
+        )
+    return Response(status_code=204)
+
+
 @router.get("/api/chat/sessions/{session_id}/export.pdf")
 async def export_chat_session_pdf(
     session_id: str,

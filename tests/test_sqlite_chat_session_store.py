@@ -38,3 +38,12 @@ def test_sqlite_upsert_assistant_turn_updates_by_turn_id(tmp_path: Path) -> None
         {"role": "user", "content": "hello"},
         {"role": "assistant", "content": "final"},
     ]
+
+
+def test_sqlite_delete_session(tmp_path: Path) -> None:
+    store = SqliteChatSessionStore(tmp_path / "del.db")
+    sid = store.create_session()
+    store.append_turns(sid, [ChatTurn(role="user", content="x")])
+    assert store.delete_session(sid) is True
+    assert store.get_session(sid) is None
+    assert store.delete_session(sid) is False

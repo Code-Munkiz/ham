@@ -70,6 +70,8 @@ class ChatSessionStore(Protocol):
 
     def list_sessions(self, *, limit: int = 50, offset: int = 0) -> list[ChatSessionSummary]: ...
 
+    def delete_session(self, session_id: str) -> bool: ...
+
 
 def build_chat_session_store() -> ChatSessionStore:
     """
@@ -175,3 +177,10 @@ class InMemoryChatSessionStore:
                     )
                 )
             return out
+
+    def delete_session(self, session_id: str) -> bool:
+        with self._lock:
+            if session_id not in self._sessions:
+                return False
+            del self._sessions[session_id]
+            return True

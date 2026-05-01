@@ -3,6 +3,7 @@
  * Chat streaming is routed exclusively through `postChatStream` (no upstream Workspace VM routes).
  */
 import {
+  deleteChatSession,
   fetchChatSession,
   fetchChatSessions,
   postChatStream,
@@ -62,6 +63,7 @@ export const workspaceSessionAdapter = {
   ready: true as const,
   list: (limit = 50, offset = 0) => fetchChatSessions(limit, offset),
   get: (sessionId: string) => fetchChatSession(sessionId),
+  delete: (sessionId: string) => deleteChatSession(sessionId),
 } as const;
 
 export { workspaceFileAdapter } from "./adapters/filesAdapter";

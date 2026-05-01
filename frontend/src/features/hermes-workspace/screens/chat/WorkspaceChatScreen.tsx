@@ -1381,11 +1381,12 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         toast.error("Mission follow-up currently supports text-only instructions.");
         return;
       }
-      const nlProbeText =
-        outboundPlain
-          ? String(outboundUser || "").trim()
-          : isV2
-            ? String((outboundUser as HamChatUserContentV2).text ?? "").trim()
+      const nlProbeText = outboundPlain
+        ? String(outboundUser || "").trim()
+        : isV2
+          ? String((outboundUser as HamChatUserContentV2).text ?? "").trim()
+          : isV1
+            ? String((outboundUser as HamChatUserContentV1).text ?? "").trim()
             : "";
       if (!missionModeId && nlProbeText) {
         const trimmedNl = nlProbeText;
@@ -2238,6 +2239,28 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     })();
   }, [sessionId]);
 
+  const handleRemoveGeneratedImage = React.useCallback((assistantMessageId: string) => {
+    setMessages((prev) => {
+      const next: HwwMsgRow[] = [];
+      for (const m of prev) {
+        if (m.id !== assistantMessageId) {
+          next.push(m);
+          continue;
+        }
+        if (!m.generatedImageCard) {
+          next.push(m);
+          continue;
+        }
+        revokeGeneratedImageBlobUrlsFromMessages([m]);
+        const textOnly = (m.content || "").trim();
+        if (textOnly) {
+          next.push({ ...m, generatedImageCard: undefined });
+        }
+      }
+      return next;
+    });
+  }, []);
+
   const hasTranscript = messages.length > 0;
   const showEmpty = !loadingSession && !hasTranscript && !loadErr;
   const sessionLoadFailed = Boolean(loadErr && !hasTranscript && !loadingSession);
@@ -2439,6 +2462,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
                 messages={messages}
                 isStreaming={isStreaming}
                 resolveLocalAttachmentPreview={resolveLocalAttachmentPreview}
+                onRemoveGeneratedImage={handleRemoveGeneratedImage}
               />
               <div ref={endRef} className="h-2 shrink-0" />
             </>

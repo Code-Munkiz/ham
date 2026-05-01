@@ -205,3 +205,15 @@ class SqliteChatSessionStore:
                     )
                 )
             return out
+
+    def delete_session(self, session_id: str) -> bool:
+        with self._lock, self._conn:
+            row = self._conn.execute(
+                "SELECT 1 FROM sessions WHERE session_id = ?",
+                (session_id,),
+            ).fetchone()
+            if row is None:
+                return False
+            self._conn.execute("DELETE FROM turns WHERE session_id = ?", (session_id,))
+            self._conn.execute("DELETE FROM sessions WHERE session_id = ?", (session_id,))
+            return True

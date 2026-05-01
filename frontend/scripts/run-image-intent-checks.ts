@@ -28,6 +28,21 @@ function mustNotMatchImageToImage(prompt: string) {
   }
 }
 
+/** Composer may set hasImageAttachment; text-only generation must still match after normalization. */
+function mustMatchTextToImageWithComposerAttachment(prompt: string) {
+  const c = parseWorkspaceCreativeImageIntent(prompt, { hasImageAttachment: true });
+  if (!c || c.kind !== "text_to_image") {
+    throw new Error(`Expected text-to-image with attachment hint for: ${prompt}`);
+  }
+}
+
+function mustBeNullCreativeWithAttachment(prompt: string) {
+  const c = parseWorkspaceCreativeImageIntent(prompt, { hasImageAttachment: true });
+  if (c !== null) {
+    throw new Error(`Expected no creative-media intent with attachment hint for: ${prompt}`);
+  }
+}
+
 for (const s of [
   "show me a picture of a futuristic HAM dashboard",
   "create an image of a robot monkey architect",
@@ -53,6 +68,10 @@ for (const s of [
   "I want you to create an image of a robot monkey architect",
 ]) {
   mustMatchTextToImage(s);
+}
+
+for (const s of ["ham show me a picture of a real banana"]) {
+  mustMatchTextToImageWithComposerAttachment(s);
 }
 
 for (const s of [
@@ -119,6 +138,10 @@ for (const s of [
   "please analyze this screenshot",
 ]) {
   mustNotMatchImageToImage(s);
+}
+
+for (const s of ["ham what is in this image?", "can you read this picture?"]) {
+  mustBeNullCreativeWithAttachment(s);
 }
 
 console.log("run-image-intent-checks: ok");

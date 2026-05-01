@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import uuid
 from pathlib import Path
 from unittest.mock import patch
 
@@ -144,6 +145,29 @@ def test_chat_session_create_and_append_turns() -> None:
     f = fetched.json()
     assert f["session_id"] == sid
     assert len(f["messages"]) == 2
+
+
+def test_chat_session_delete_removes_turns() -> None:
+    created = client.post("/api/chat/sessions")
+    assert created.status_code == 200
+    sid = created.json()["session_id"]
+    appended = client.post(
+        f"/api/chat/sessions/{sid}/turns",
+        json={"turns": [{"role": "user", "content": "tmp"}]},
+    )
+    assert appended.status_code == 200
+    deleted = client.delete(f"/api/chat/sessions/{sid}")
+    assert deleted.status_code == 204
+    fetched = client.get(f"/api/chat/sessions/{sid}")
+    assert fetched.status_code == 404
+    assert fetched.json()["detail"]["error"]["code"] == "SESSION_NOT_FOUND"
+
+
+def test_chat_session_delete_unknown_returns_404() -> None:
+    missing_id = str(uuid.uuid4())
+    deleted = client.delete(f"/api/chat/sessions/{missing_id}")
+    assert deleted.status_code == 404
+    assert deleted.json()["detail"]["error"]["code"] == "SESSION_NOT_FOUND"
 
 
 def test_chat_session_append_turns_unknown_session() -> None:
