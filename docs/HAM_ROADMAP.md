@@ -64,6 +64,7 @@ Snapshot accepted after Document Intelligence Phase 2A and backend deploy:
 | **Phase 2C** | Model capability map + UX copy | Honest modality labels; `GET /api/chat/capabilities`; composer **+** menu (**shipped**) |
 | **Phase 2D** | Voice UX polish | Align with existing voice/dictation; no duplicate stack |
 | **Phase 2E** | Video attachment baseline | **MP4/MOV/WebM** upload + store + honest UI + LLM placeholder (**shipped** store-only); transcript/thumb/keyframes later |
+| **Phase 2E.1** | Video processing investigation | **Documentation / design spike** — runtime audit + architecture options + Phase 2E.2 plan ([`VIDEO_PROCESSING_INVESTIGATION.md`](VIDEO_PROCESSING_INVESTIGATION.md)) |
 | **Phase 2F** | File retrieval / search / RAG | Chunk, retrieve, cite; tenant/session scoped |
 
 **Phase 2C (summary):** Conservative capability metadata in `src/ham/model_capabilities.py`; safe JSON from `GET /api/chat/capabilities` (no secrets, Hermes base URL, tokens, paths, or `gs://`). The UI distinguishes **HAM document text extraction** (bounded context into the model request) from **native** PDF/DOCX ingestion, and **transcript PDF export** (HAM-generated download) from the model “creating” a PDF. **Export PDF** is triggered from the composer action menu (**+**), not the header next to Inspector.
@@ -73,6 +74,8 @@ Snapshot accepted after Document Intelligence Phase 2A and backend deploy:
 **Phase 2D.2 (composer polish):** The **+** action menu closes as soon as **Add files** is chosen (before the native picker opens, including when the user cancels the picker); hidden input + upload path unchanged.
 
 **Phase 2E (video baseline — shipped):** `.mp4`, `.mov`, `.webm` are accepted on `POST /api/chat/attachments` (ISO BMFF / WebM sniff + declared MIME); stored `kind: video` under the same default **20MB** attachment cap as documents/images policy (images still capped at 10MB). **No ffmpeg** in the default `ham-api` image in this slice — **store-only**: composer + transcript file cards state that processing is not enabled, and the model receives a **short bounded placeholder** (safe filename + MIME only; no storage paths, no `gs://`). Thumbnails, audio transcript, and keyframes are **explicit follow-ups** (requires approved server-side tooling and budgets).
+
+**Phase 2E.1 (video processing investigation — documentation):** Audited Dockerfile (`python:3.12-slim-bookworm` + Playwright Chromium; **`ffmpeg` not installed**), `requirements.txt` (no video Python stack), synchronous `AttachmentStore.get` full-buffer load behavior, **`POST /api/chat/transcribe`** as **audio-only** OpenAI-mediated path (**15 MiB** / **120 s httpx**) suitable only **after bounded audio extraction** from video—not by posting raw muxed video. Compared sync-on-send (**rejected primary**), async jobs (**defer** unless required), explicit **Process video** action (**recommended Phase 2E.2 MVP**), and external media SaaS (**later / privacy-sensitive**). Proposed numeric limits + security rules + file touch list live in **`docs/VIDEO_PROCESSING_INVESTIGATION.md`**. **No Hermes/CDN/browser-provider changes.**
 
 ---
 
