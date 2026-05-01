@@ -7,6 +7,7 @@ import type {
   HamVoiceSettingsPatch,
   ModelCatalogPayload,
   ProjectRecord,
+  ChatCapabilitiesPayload,
 } from "./types";
 import type { HermesGatewaySnapshot } from "./hermesGateway";
 import { getRegisteredClerkSessionToken } from "./clerkSession";
@@ -1385,6 +1386,16 @@ export async function fetchChatSession(sessionId: string): Promise<ChatSessionDe
     throw new Error(`Failed to fetch chat session (HTTP ${res.status}) via ${apiUrl(path)}.`);
   }
   return (await res.json()) as ChatSessionDetail;
+}
+
+/** GET /api/chat/capabilities — conservative model/HAM flags for honest workspace copy (Clerk when enabled). */
+export async function fetchChatCapabilities(modelId: string | null): Promise<ChatCapabilitiesPayload> {
+  const qp = modelId?.trim() ? `?model_id=${encodeURIComponent(modelId.trim())}` : "";
+  const res = await hamApiFetch(`/api/chat/capabilities${qp}`);
+  if (!res.ok) {
+    throw new Error(`Failed to load chat capabilities (HTTP ${res.status}).`);
+  }
+  return (await res.json()) as ChatCapabilitiesPayload;
 }
 
 /** Download sanitized chat transcript PDF (server-generated; includes Clerk session when configured). */

@@ -13,7 +13,7 @@ from typing import Any, Literal
 from uuid import uuid4
 
 import httpx
-from fastapi import APIRouter, File, Header, HTTPException, Request, UploadFile
+from fastapi import APIRouter, File, Header, HTTPException, Query, Request, UploadFile
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -786,6 +786,19 @@ def _with_interrupted_note(content: str) -> str:
     if base.endswith(_STREAM_PARTIAL_NOTE.strip()):
         return base
     return f"{base}{_STREAM_PARTIAL_NOTE}"
+
+
+@router.get("/api/chat/capabilities")
+async def get_chat_capabilities(
+    model_id: str | None = Query(None, max_length=256),
+    authorization: str | None = Header(None, alias="Authorization"),
+) -> dict:
+    """Product-facing model + HAM capability flags (no secrets, paths, or provider endpoints)."""
+    from src.ham.model_capabilities import build_chat_capabilities_payload
+
+    enforce_clerk_session_and_email_for_request(authorization, route="get_chat_capabilities")
+    gateway_mode = os.environ.get("HERMES_GATEWAY_MODE", "").strip() or None
+    return build_chat_capabilities_payload(model_id=model_id, gateway_mode=gateway_mode)
 
 
 @router.get("/api/chat/sessions")

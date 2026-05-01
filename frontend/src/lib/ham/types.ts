@@ -237,6 +237,24 @@ export interface ModelCatalogPayload {
   http_chat_model_fallback?: string | null;
 }
 
+/** Safe subset from `GET /api/chat/capabilities` — no secrets or storage paths. */
+export interface ChatCapabilitiesPayload {
+  model: { id: string; display_name: string };
+  capabilities: {
+    text_chat: boolean;
+    image_input: boolean;
+    document_text_context: boolean;
+    native_pdf: boolean;
+    audio_input: boolean;
+    video_input: boolean;
+    pdf_export: boolean;
+    tool_use: boolean;
+  };
+  limitations: string[];
+  document_context_mode: string;
+  notes: string;
+}
+
 /** Uses `dashboard_chat_ready` from API when present; otherwise infers from legacy fields. */
 export function isDashboardChatGatewayReady(c: ModelCatalogPayload | null | undefined): boolean {
   if (!c) return false;

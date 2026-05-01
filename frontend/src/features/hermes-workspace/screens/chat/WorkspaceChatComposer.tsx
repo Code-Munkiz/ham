@@ -8,11 +8,14 @@ import * as React from "react";
 import { ArrowUp, Link2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { ModelCatalogItem, ModelCatalogPayload } from "@/lib/ham/types";
+import type { ChatCapabilitiesPayload, ModelCatalogItem, ModelCatalogPayload } from "@/lib/ham/types";
 import { isDashboardChatGatewayReady } from "@/lib/ham/types";
 import { WorkspaceVoiceMessageInput } from "./WorkspaceVoiceMessageInput";
 import { toast } from "sonner";
-import { WorkspaceChatAttachmentButton } from "./WorkspaceChatAttachmentButton";
+import {
+  WorkspaceChatComposerActionsMenu,
+  type ComposerExportPdfState,
+} from "./WorkspaceChatComposerActionsMenu";
 import { WorkspaceChatAttachmentPreviewList } from "./WorkspaceChatAttachmentPreview";
 import {
   type WorkspaceComposerAttachment,
@@ -71,7 +74,34 @@ type WorkspaceChatComposerProps = {
   onSttModeChange?: (mode: "auto" | "live" | "record") => Promise<void> | void;
   /** Windows Desktop shell: GOHAM local web bridge entry (trusted connect via preload). */
   gohamDesktopChip?: WorkspaceGohamDesktopChipProps | null;
+  /** Capability copy from `GET /api/chat/capabilities` — optional. */
+  chatCapabilities?: ChatCapabilitiesPayload | null;
+  exportPdf: ComposerExportPdfState;
 };
+
+function attachFooterNoteFromCapabilities(caps: ChatCapabilitiesPayload | null | undefined): string | undefined {
+  if (!caps) return undefined;
+  const bits: string[] = [
+    "Documents are text-extracted by HAM and added as bounded context. Scanned PDFs are not OCRed yet.",
+  ];
+  if (caps.capabilities.image_input) {
+    bits.push("Images may be sent to the model when vision routing is available.");
+  } else {
+    bits.push("This model is not marked as vision-capable in HAM.");
+  }
+  return bits.join(" ");
+}
+
+function modelDetailTitle(
+  catalog: ModelCatalogPayload | null,
+  modelId: string | null,
+  caps: ChatCapabilitiesPayload | null | undefined,
+): string | null {
+  const pill = primaryModelPillText(catalog, modelId);
+  if (!caps?.limitations?.length) return pill;
+  const extra = caps.limitations.slice(0, 4).join(" ");
+  return pill ? `${pill} — ${extra}` : extra;
+}
 
 type VoiceUiState = "idle" | "recording" | "live" | "stopping" | "transcribing" | "error";
 
@@ -148,6 +178,8 @@ export function WorkspaceChatComposer({
   sttMode = "record",
   onSttModeChange,
   gohamDesktopChip = null,
+  chatCapabilities = null,
+  exportPdf,
 }: WorkspaceChatComposerProps) {
   const [voiceState, setVoiceState] = React.useState<VoiceUiState>("idle");
   const [voiceBanner, setVoiceBanner] = React.useState<string | null>(null);
@@ -323,6 +355,8 @@ export function WorkspaceChatComposer({
     Boolean(catalog && catalog.gateway_mode === "openrouter" && chatModelCandidates(catalog).length > 0);
   const gatewayOk = isDashboardChatGatewayReady(catalog);
   const modelPill = primaryModelPillText(catalog, modelId);
+  const modelDetail = modelDetailTitle(catalog, modelId, chatCapabilities);
+  const attachFooter = attachFooterNoteFromCapabilities(chatCapabilities);
   const uploadsPending = attachments.some((a) => a.uploadPhase === "uploading");
   const hasAttachErrOnly =
     attachments.length > 0 &&
@@ -669,10 +703,11 @@ export function WorkspaceChatComposer({
                   GOHAM
                 </button>
               ) : null}
-              <WorkspaceChatAttachmentButton
+              <WorkspaceChatComposerActionsMenu
                 onFiles={handleAddFiles}
-                disabled={sending || voiceBusy || disabled || uploadsPending}
-                className="text-emerald-200/50 hover:text-emerald-200/90"
+                attachDisabled={sending || voiceBusy || disabled || uploadsPending}
+                exportPdf={exportPdf}
+                attachFooterNote={attachFooter}
               />
               {value.length >= 100 ? (
                 <span
@@ -691,6 +726,7 @@ export function WorkspaceChatComposer({
                   onChange={(e) => onModelIdChange(e.target.value ? e.target.value : null)}
                   disabled={sending}
                   aria-label="Model"
+                  title={modelDetail ?? undefined}
                 >
                   {chatModelCandidates(catalog!).map((m) => (
                     <option key={m.id} value={m.id}>
@@ -701,7 +737,7 @@ export function WorkspaceChatComposer({
               ) : modelPill ? (
                 <span
                   className="ml-0.5 inline-flex min-w-0 max-w-[10rem] items-center rounded-full bg-emerald-500/10 px-2.5 py-1 font-mono text-[11px] text-emerald-200/80 md:max-w-[16rem] md:text-[12px]"
-                  title={modelPill}
+                  title={modelDetail ?? modelPill ?? undefined}
                 >
                   <span className="truncate">{modelPill}</span>
                 </span>

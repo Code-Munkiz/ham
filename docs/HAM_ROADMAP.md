@@ -56,15 +56,17 @@ Snapshot accepted after Document Intelligence Phase 2A and backend deploy:
 
 ## 4. Active roadmap (priority order)
 
-**Export-to-PDF is the next major product slice** after Phase 2A—do not defer it behind voice or video.
+**Phase 2B (export MVP) is shipped; Phase 2C adds the capability map and composer UX (below).** Do not defer core export behind voice or video.
 
 | Phase | Focus | Notes |
 |-------|--------|--------|
-| **Phase 2B** | **Export-to-PDF MVP** | Chat transcript first; audit-friendly PDFs; backend-mediated |
-| **Phase 2C** | Model capability map + UX copy | Honest modality labels; safe reject/annotate |
+| **Phase 2B** | **Export-to-PDF MVP** | Chat transcript first; audit-friendly PDFs; backend-mediated (**shipped**) |
+| **Phase 2C** | Model capability map + UX copy | Honest modality labels; `GET /api/chat/capabilities`; composer **+** menu (**shipped**) |
 | **Phase 2D** | Voice UX polish | Align with existing voice/dictation; no duplicate stack |
 | **Phase 2E** | Video attachment intelligence | Store, thumbnail, transcript, keyframes; bounded context |
 | **Phase 2F** | File retrieval / search / RAG | Chunk, retrieve, cite; tenant/session scoped |
+
+**Phase 2C (summary):** Conservative capability metadata in `src/ham/model_capabilities.py`; safe JSON from `GET /api/chat/capabilities` (no secrets, Hermes base URL, tokens, paths, or `gs://`). The UI distinguishes **HAM document text extraction** (bounded context into the model request) from **native** PDF/DOCX ingestion, and **transcript PDF export** (HAM-generated download) from the model “creating” a PDF. **Export PDF** is triggered from the composer action menu (**+**), not the header next to Inspector.
 
 ---
 
