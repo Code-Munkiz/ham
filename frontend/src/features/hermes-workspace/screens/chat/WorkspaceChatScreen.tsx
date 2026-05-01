@@ -12,13 +12,16 @@ import {
   createChatSession,
   downloadChatSessionPdf,
   ensureProjectIdForWorkspaceRoot,
-  fetchContextEngine,
   fetchChatCapabilities,
+  fetchContextEngine,
+  fetchHamGeneratedMediaBlob,
+  fetchHamGeneratedMediaMeta,
   fetchModelsCatalog,
   HamAccessRestrictedError,
   HamChatStreamIncompleteError,
   postChatTranscribe,
   postChatUploadAttachment,
+  postHamGeneratedImage,
   type HamChatExecutionMode,
 } from "@/lib/ham/api";
 import { CLIENT_MODEL_CATALOG_FALLBACK } from "@/lib/ham/modelCatalogFallback";
@@ -45,7 +48,8 @@ import { useVoiceWorkspaceSettingsOptional } from "../../voice/VoiceWorkspaceSet
 import { WorkspaceChatEmptyState } from "./WorkspaceChatEmptyState";
 import { WorkspaceChatMessageList, type HwwMsgRow } from "./WorkspaceChatMessageList";
 import { WorkspaceChatComposer } from "./WorkspaceChatComposer";
-import type { ComposerExportPdfState } from "./WorkspaceChatComposerActionsMenu";
+import type { ComposerExportPdfState, ComposerGenerateImageState } from "./WorkspaceChatComposerActionsMenu";
+import { parseWorkspaceImageGenerationIntent } from "./imageGenerationIntent";
 import { WorkspaceChatInspectorPanel } from "./WorkspaceChatInspectorPanel";
 import {
   appendInspectorEvent,
@@ -115,6 +119,15 @@ function shortId(v: string | null | undefined): string {
   if (!s) return "—";
   if (s.length <= 16) return s;
   return `${s.slice(0, 8)}…${s.slice(-6)}`;
+}
+
+function revokeGeneratedImageBlobUrlsFromMessages(rows: readonly HwwMsgRow[]): void {
+  for (const m of rows) {
+    const c = m.generatedImageCard;
+    if (c?.kind === "ready" && typeof c.blobUrl === "string" && c.blobUrl.startsWith("blob:")) {
+      URL.revokeObjectURL(c.blobUrl);
+    }
+  }
 }
 
 function fmtMissionFeedIsoBrief(iso: string | null | undefined): string {
@@ -490,6 +503,8 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   const [inspectorOpen, setInspectorOpen] = React.useState(false);
   const [pdfExporting, setPdfExporting] = React.useState(false);
   const [chatCapabilities, setChatCapabilities] = React.useState<ChatCapabilitiesPayload | null>(null);
+  const [chatCapabilitiesLoading, setChatCapabilitiesLoading] = React.useState(true);
+  const [imageGenInFlight, setImageGenInFlight] = React.useState(false);
   const [inspectorEvents, setInspectorEvents] = React.useState<WorkspaceInspectorEvent[]>([]);
   const [artifactRows, setArtifactRows] = React.useState<ChatInspectorArtifactRow[]>([]);
   /** Desktop GOHAM web bridge: trusted session is main-process only; this tracks UI + follow-up routing. */
@@ -696,6 +711,102 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
 
   const chatModelIdForApi = catalog?.gateway_mode === "openrouter" ? modelId : null;
 
+  const runWorkspaceImageGeneration = React.useCallback(
+    async (opts: { apiPrompt: string; transcriptUserLine: string }) => {
+      const apiPrompt = opts.apiPrompt.trim();
+      const transcriptUserLine = (opts.transcriptUserLine.trim() || apiPrompt).trim();
+      if (!apiPrompt) {
+        toast.message("Describe the image you want.", { duration: 4000 });
+        return;
+      }
+      if (voiceTranscribing || sending || imageGenInFlight) {
+        toast.message("Wait for the current action to finish.", { duration: 4000 });
+        return;
+      }
+
+      setLoadErr(null);
+      setInput("");
+      setAttachments((prev) => {
+        revokeWorkspaceComposerAttachmentPreviews(prev);
+        return [];
+      });
+
+      const userRow: HwwMsgRow = {
+        id: `hww-user-gimg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        role: "user",
+        content: transcriptUserLine,
+        timestamp: timeStr(),
+      };
+      const assistantPlaceId = `hww-assist-gimg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      const assistantLoading: HwwMsgRow = {
+        id: assistantPlaceId,
+        role: "assistant",
+        content: "",
+        timestamp: timeStr(),
+        generatedImageCard: { kind: "loading", promptPreview: apiPrompt.slice(0, 280) },
+      };
+      setMessages((prev) => [...prev, userRow, assistantLoading]);
+      setImageGenInFlight(true);
+
+      try {
+        const gen = await postHamGeneratedImage({ prompt: apiPrompt, model_id: chatModelIdForApi });
+        const meta = await fetchHamGeneratedMediaMeta(gen.generated_media_id);
+        const blob = await fetchHamGeneratedMediaBlob(gen.generated_media_id);
+        const blobUrl = URL.createObjectURL(blob);
+        const providerLabel =
+          typeof meta.provider === "string" && meta.provider.trim() ? meta.provider.trim() : null;
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantPlaceId
+              ? {
+                  ...m,
+                  content: "",
+                  generatedImageCard: {
+                    kind: "ready",
+                    generatedMediaId: meta.generated_media_id,
+                    blobUrl,
+                    mimeType: meta.mime_type,
+                    safeDisplayName: meta.safe_display_name,
+                    promptExcerpt: meta.prompt_excerpt ?? "",
+                    providerLabel,
+                    modelId: meta.model_id,
+                    width: meta.width,
+                    height: meta.height,
+                  },
+                }
+              : m,
+          ),
+        );
+      } catch (err) {
+        const restricted = err instanceof HamAccessRestrictedError;
+        const message = restricted
+          ? "Access restricted: this Ham deployment only allows approved sign-ins. Check Clerk or admin."
+          : err instanceof Error
+            ? err.message
+            : "Image generation failed.";
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantPlaceId
+              ? {
+                  ...m,
+                  content: "",
+                  generatedImageCard: {
+                    kind: "error",
+                    promptPreview: apiPrompt.slice(0, 280),
+                    message,
+                  },
+                }
+              : m,
+          ),
+        );
+        toast.error(message, restricted ? { duration: 12_000 } : { duration: 10_000 });
+      } finally {
+        setImageGenInFlight(false);
+      }
+    },
+    [chatModelIdForApi, imageGenInFlight, sending, voiceTranscribing],
+  );
+
   const persistLocalDesktopTurn = React.useCallback(
     async (userContent: string, assistantContent: string, sessionHint: string | null) => {
       let sid = sessionHint;
@@ -721,14 +832,15 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         ]);
         setSessionId(persisted.session_id);
         writeLastChatSessionId(persisted.session_id);
-        setMessages(
-          persisted.messages.map((m, i) => ({
+        setMessages((prev) => {
+          revokeGeneratedImageBlobUrlsFromMessages(prev);
+          return persisted.messages.map((m, i) => ({
             id: `${persisted.session_id}-persisted-${i}-${m.role}`,
             role: m.role as HwwMsgRow["role"],
             content: m.content,
             timestamp: timeStr(),
-          })),
-        );
+          }));
+        });
         if (createdNew) {
           setInspectorEvents((prev) =>
             appendInspectorEvent(prev, {
@@ -787,11 +899,14 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   React.useEffect(() => {
     let cancelled = false;
     void (async () => {
+      setChatCapabilitiesLoading(true);
       try {
         const caps = await fetchChatCapabilities(modelId);
         if (!cancelled) setChatCapabilities(caps);
       } catch {
         if (!cancelled) setChatCapabilities(null);
+      } finally {
+        if (!cancelled) setChatCapabilitiesLoading(false);
       }
     })();
     return () => {
@@ -859,14 +974,15 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         previousLoadedWorkspaceSessionRef.current = sid;
         setSessionId(sid);
         writeLastChatSessionId(sid);
-        setMessages(
-          detail.messages.map((m, i) => ({
+        setMessages((prev) => {
+          revokeGeneratedImageBlobUrlsFromMessages(prev);
+          return detail.messages.map((m, i) => ({
             id: `${sid}-hww-${i}-${m.role}`,
             role: m.role as HwwMsgRow["role"],
             content: m.content,
             timestamp: ts(),
-          })),
-        );
+          }));
+        });
         setArtifactRows([]);
         setInspectorEvents((prev) =>
           appendInspectorEvent(prev, {
@@ -895,7 +1011,10 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
           revokeAllChatAttachmentLocalBlobs();
           setSessionId(null);
           writeLastChatSessionId(null);
-          setMessages([]);
+          setMessages((prev) => {
+            revokeGeneratedImageBlobUrlsFromMessages(prev);
+            return [];
+          });
           setInspectorEvents([]);
           setArtifactRows([]);
         }
@@ -942,7 +1061,10 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         previousLoadedWorkspaceSessionRef.current = null;
         revokeAllChatAttachmentLocalBlobs();
         setSessionId(null);
-        setMessages([]);
+        setMessages((prev) => {
+          revokeGeneratedImageBlobUrlsFromMessages(prev);
+          return [];
+        });
         setInspectorEvents([]);
         setArtifactRows([]);
       }
@@ -960,7 +1082,10 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     revokeAllChatAttachmentLocalBlobs();
     setSessionId(null);
     writeLastChatSessionId(null);
-    setMessages([]);
+    setMessages((prev) => {
+      revokeGeneratedImageBlobUrlsFromMessages(prev);
+      return [];
+    });
     setInspectorEvents([]);
     setArtifactRows([]);
     setInput("");
@@ -986,7 +1111,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
 
   React.useEffect(() => {
     endRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
-  }, [messages, sending]);
+  }, [messages, sending, imageGenInFlight]);
 
   const handleAddAttachments = React.useCallback(async (files: File[]) => {
     if (files.length === 0) return;
@@ -1185,7 +1310,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       if (!isV1 && !isV2 && !(outboundUser as string).trim()) return;
       if (isV1 && !(outboundUser as HamChatUserContentV1).images?.length) return;
       if (isV2 && !(outboundUser as HamChatUserContentV2).attachments?.length) return;
-      if (sending || voiceTranscribing) return;
+      if (sending || voiceTranscribing || imageGenInFlight) return;
       const missionModeId = String(missionIdFromQuery || "").trim();
       const outboundPlain = !isV1 && !isV2;
       if (missionModeId && outboundPlain) {
@@ -1240,6 +1365,40 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       if (missionModeId && !outboundPlain) {
         toast.error("Mission follow-up currently supports text-only instructions.");
         return;
+      }
+      if (!missionModeId && outboundPlain) {
+        const trimmedNl = String(outboundUser || "").trim();
+        const nlIntent = parseWorkspaceImageGenerationIntent(trimmedNl);
+        if (nlIntent && !chatCapabilitiesLoading) {
+          const supportsNl = Boolean(chatCapabilities?.generation?.supports_image_generation);
+          if (!supportsNl) {
+            setInput("");
+            setAttachments((prev) => {
+              revokeWorkspaceComposerAttachmentPreviews(prev);
+              return [];
+            });
+            setLoadErr(null);
+            const userNl: HwwMsgRow = {
+              id: `hww-user-${Date.now()}`,
+              role: "user",
+              content: trimmedNl,
+              timestamp: timeStr(),
+            };
+            const assistNl: HwwMsgRow = {
+              id: `hww-assist-${Date.now()}`,
+              role: "assistant",
+              content: "Image generation is not enabled for this workspace yet.",
+              timestamp: timeStr(),
+            };
+            setMessages((prev) => [...prev, userNl, assistNl]);
+            return;
+          }
+          await runWorkspaceImageGeneration({
+            apiPrompt: nlIntent,
+            transcriptUserLine: trimmedNl,
+          });
+          return;
+        }
       }
       setInput("");
       setAttachments((prev) => {
@@ -1662,14 +1821,16 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
                 { role: "user" as const, content: displayContent },
                 ...res.messages,
               ];
-        setMessages(
-          normalizedMessages.map((m, i) => ({
+        setMessages((prev) => {
+          revokeGeneratedImageBlobUrlsFromMessages(prev);
+          const next = normalizedMessages.map((m, i) => ({
             id: `${res.session_id}-done-${i}-${m.role}`,
             role: m.role,
             content: m.content,
             timestamp: timeStr(),
-          })),
-        );
+          }));
+          return next;
+        });
         const assistantLast = [...res.messages].reverse().find((m) => m.role === "assistant");
         const assistantChars = assistantLast?.content?.length ?? 0;
         setInspectorEvents((prev) =>
@@ -1725,14 +1886,15 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
             if (detail.messages.length > 0) {
               recoveredFromServer = true;
               setSessionId(detail.session_id);
-              setMessages(
-                detail.messages.map((m, i) => ({
+              setMessages((prev) => {
+                revokeGeneratedImageBlobUrlsFromMessages(prev);
+                return detail.messages.map((m, i) => ({
                   id: `${detail.session_id}-recovered-${i}-${m.role}`,
                   role: m.role,
                   content: m.content,
                   timestamp: timeStr(),
-                })),
-              );
+                }));
+              });
             }
           } catch {
             /* session refetch is best-effort */
@@ -1799,6 +1961,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       embedMode,
       sending,
       voiceTranscribing,
+      imageGenInFlight,
       sessionId,
       chatModelIdForApi,
       projectId,
@@ -1809,8 +1972,50 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       executionEnvironment,
       desktopShell,
       persistLocalDesktopTurn,
+      chatCapabilities,
+      chatCapabilitiesLoading,
+      runWorkspaceImageGeneration,
     ],
   );
+
+  const handleComposerGenerateImage = React.useCallback(() => {
+    const trimmed = input.trim();
+    void runWorkspaceImageGeneration({ apiPrompt: trimmed, transcriptUserLine: trimmed });
+  }, [input, runWorkspaceImageGeneration]);
+
+  const composerGenerateImage = React.useMemo((): ComposerGenerateImageState => {
+    const uploadsPending = attachments.some((a) => a.uploadPhase === "uploading");
+    const supportsGen = Boolean(chatCapabilities?.generation?.supports_image_generation);
+    let subtitle = "Create from your composer prompt";
+    if (chatCapabilitiesLoading) subtitle = "Checking workspace capabilities…";
+    else if (!supportsGen) subtitle = "Image generation unavailable";
+    else if (uploadsPending) subtitle = "Finish uploads before generating";
+
+    const disabled =
+      uploadsPending ||
+      catalogLoading ||
+      chatCapabilitiesLoading ||
+      !supportsGen ||
+      sending ||
+      voiceTranscribing ||
+      imageGenInFlight;
+
+    return {
+      onGenerate: handleComposerGenerateImage,
+      busy: imageGenInFlight,
+      disabled,
+      subtitle,
+    };
+  }, [
+    attachments,
+    catalogLoading,
+    chatCapabilities?.generation?.supports_image_generation,
+    chatCapabilitiesLoading,
+    handleComposerGenerateImage,
+    imageGenInFlight,
+    sending,
+    voiceTranscribing,
+  ]);
 
   const onFormSubmit = () => {
     void (async () => {
@@ -1818,7 +2023,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       const usable = attachments.filter(
         (a) => !a.error && a.uploadPhase !== "failed" && a.uploadPhase !== "uploading",
       );
-      if (voiceTranscribing) return;
+      if (voiceTranscribing || imageGenInFlight) return;
       if (attachments.some((a) => a.uploadPhase === "uploading")) {
         toast.message("Wait for uploads to finish.", { duration: 3800 });
         return;
@@ -1908,7 +2113,10 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       : "Chat";
   const last = messages[messages.length - 1];
   const isStreaming =
-    sending && last?.role === "assistant" && !(last?.content || "").trim();
+    sending &&
+    last?.role === "assistant" &&
+    !(last?.content || "").trim() &&
+    !last.generatedImageCard;
 
   let pdfExportBlockedReason: ComposerExportPdfState["blockedReason"] = "none";
   if (sessionLoadFailed) pdfExportBlockedReason = "session_error";
@@ -2096,7 +2304,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
             onChange={setInput}
             onSubmit={onFormSubmit}
             disabled={catalogLoading}
-            sending={sending}
+            sending={sending || imageGenInFlight}
             voiceTranscribing={voiceTranscribing}
             onVoiceBlob={handleVoiceBlob}
             attachments={attachments}
@@ -2129,6 +2337,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
                 : null
             }
             chatCapabilities={chatCapabilities}
+            generateImage={composerGenerateImage}
             exportPdf={{
               onExport: handleExportPdf,
               busy: pdfExporting,

@@ -11,7 +11,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "verify:image-intent": "tsx --tsconfig tsconfig.json scripts/run-image-intent-checks.ts"
   },
   "dependencies": {
     "@clerk/clerk-react": "^5.61.5",

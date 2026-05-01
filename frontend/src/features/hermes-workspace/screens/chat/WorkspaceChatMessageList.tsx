@@ -3,17 +3,34 @@
  */
 
 import * as React from "react";
-import { Loader2 } from "lucide-react";
+import { Copy, ImageDown, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { tryParseHamChatUserV1String, tryParseHamChatUserV2String } from "@/lib/ham/chatUserContent";
 import { WorkspaceChatAuthImage } from "./WorkspaceChatAttachmentImage";
 import { interruptedAssistantView } from "./interruptedAssistantView";
+
+export type HwwGeneratedImageCard =
+  | { kind: "loading"; promptPreview: string }
+  | {
+      kind: "ready";
+      generatedMediaId: string;
+      promptExcerpt: string;
+      blobUrl: string;
+      mimeType: string;
+      safeDisplayName: string;
+      providerLabel: string | null;
+      modelId: string | null;
+      width: number | null;
+      height: number | null;
+    }
+  | { kind: "error"; promptPreview: string; message: string };
 
 export type HwwMsgRow = {
   id: string;
   role: "user" | "assistant" | "system";
   content: string;
   timestamp: string;
+  generatedImageCard?: HwwGeneratedImageCard | null;
 };
 
 type WorkspaceChatMessageListProps = {
@@ -31,7 +48,8 @@ export function WorkspaceChatMessageList({
 }: WorkspaceChatMessageListProps) {
   const last = messages[messages.length - 1];
   const showThinking =
-    Boolean(isStreaming && last?.role === "assistant" && !(last.content || "").trim());
+    Boolean(isStreaming && last?.role === "assistant" && !(last.content || "").trim()) &&
+    !last.generatedImageCard;
 
   return (
     <div className="hww-chat-transcript w-full space-y-4 px-4 py-5 md:px-8 md:py-6">
@@ -113,8 +131,9 @@ export function WorkspaceChatMessageList({
         }
         if (m.role === "assistant") {
           const isLastAssistant = idx === messages.length - 1;
-          const thinkingHere = showThinking && isLastAssistant;
+          const thinkingHere = showThinking && isLastAssistant && !m.generatedImageCard;
           const { interrupted, visibleContent } = interruptedAssistantView(m.content);
+          const g = m.generatedImageCard;
           return (
             <div key={m.id} className="flex justify-start">
               <div
@@ -128,14 +147,84 @@ export function WorkspaceChatMessageList({
                     <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2} />
                     <span>Thinking…</span>
                   </div>
-                ) : (
+                ) : null}
+
+                {g?.kind === "loading" ? (
+                  <div className="flex items-center gap-2 text-[12px] text-emerald-200/75" role="status">
+                    <Loader2 className="h-4 w-4 animate-spin text-emerald-300/95" aria-hidden strokeWidth={2} />
+                    <span>Generating image…</span>
+                  </div>
+                ) : null}
+
+                {g?.kind === "error" ? (
+                  <div className="rounded-md border border-red-500/25 bg-red-950/35 px-2.5 py-2 text-[12px] text-red-100/90">
+                    <p className="font-medium text-red-200/95">Image generation failed</p>
+                    <p className="mt-1 text-[11px] leading-snug text-red-100/80">{g.message}</p>
+                    {g.promptPreview ? (
+                      <p className="mt-1 line-clamp-2 text-[10px] text-red-100/55">Prompt: {g.promptPreview}</p>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {g?.kind === "ready" ? (
+                  <div className="space-y-2">
+                    <div className="overflow-hidden rounded-lg border border-white/[0.1] bg-black/25">
+                      <img
+                        src={g.blobUrl}
+                        alt={g.promptExcerpt || "Generated image"}
+                        className="max-h-[min(52vh,28rem)] w-full object-contain"
+                      />
+                    </div>
+                    {g.promptExcerpt ? (
+                      <p className="line-clamp-2 text-[11px] leading-snug text-white/45">{g.promptExcerpt}</p>
+                    ) : null}
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-white/38">
+                      {g.modelId ? (
+                        <span className="rounded bg-white/[0.06] px-1.5 py-0.5 font-mono text-white/55">
+                          {g.modelId}
+                        </span>
+                      ) : null}
+                      {g.providerLabel ? <span className="text-white/40">via {g.providerLabel}</span> : null}
+                      {typeof g.width === "number" && typeof g.height === "number"
+                        ? `${g.width} × ${g.height}`
+                        : null}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <a
+                        href={g.blobUrl}
+                        download={g.safeDisplayName || "generated-image.bin"}
+                        className="inline-flex items-center gap-1 rounded-md border border-emerald-500/25 bg-emerald-950/35 px-2.5 py-1 text-[11px] font-medium text-emerald-100/95 hover:bg-emerald-950/55"
+                      >
+                        <ImageDown className="h-3.5 w-3.5 opacity-95" aria-hidden strokeWidth={2} />
+                        Download
+                      </a>
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 rounded-md border border-white/[0.1] px-2.5 py-1 text-[11px] font-medium text-white/70 hover:bg-white/[0.06]"
+                        onClick={() => {
+                          void navigator.clipboard?.writeText(g.generatedMediaId);
+                        }}
+                      >
+                        <Copy className="h-3.5 w-3.5 opacity-85" aria-hidden strokeWidth={2} />
+                        Copy asset id
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+
+                {!thinkingHere && !g ? (
                   <>
                     <p className="whitespace-pre-wrap break-words">{visibleContent || "\u00a0"}</p>
                     {interrupted ? (
                       <p className="mt-2 text-[11px] text-amber-200/85">Connection interrupted. Ask me to continue.</p>
                     ) : null}
                   </>
-                )}
+                ) : null}
+
+                {!thinkingHere && g?.kind === "ready" && visibleContent.trim() ? (
+                  <p className="mt-2 whitespace-pre-wrap break-words text-white/82">{visibleContent}</p>
+                ) : null}
+
                 <p className="mt-1.5 text-[10px] text-white/30">{m.timestamp}</p>
               </div>
             </div>

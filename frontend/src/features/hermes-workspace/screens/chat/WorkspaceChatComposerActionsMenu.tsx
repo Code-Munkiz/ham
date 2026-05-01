@@ -6,7 +6,7 @@
  */
 import * as React from "react";
 import { createPortal } from "react-dom";
-import { ChevronRight, FileDown, Loader2, Plus } from "lucide-react";
+import { ChevronRight, FileDown, ImagePlus, Loader2, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { WORKSPACE_ATTACHMENT_ACCEPT } from "./composerAttachmentHelpers";
@@ -33,6 +33,14 @@ function exportBlockedMessage(reason: ComposerExportPdfState["blockedReason"]): 
   }
 }
 
+export type ComposerGenerateImageState = {
+  onGenerate: () => void;
+  busy: boolean;
+  disabled: boolean;
+  /** Short subtitle under the row label (capability / lock reason). */
+  subtitle: string;
+};
+
 type WorkspaceChatComposerActionsMenuProps = {
   onFiles: (files: File[]) => void;
   attachDisabled: boolean;
@@ -42,6 +50,7 @@ type WorkspaceChatComposerActionsMenuProps = {
   attachDetailsTitle?: string | null;
   /** Optional one-line footer under menu actions. */
   menuFooterHint?: string | null;
+  generateImage: ComposerGenerateImageState;
   exportPdf: ComposerExportPdfState;
   className?: string;
 };
@@ -52,6 +61,7 @@ export function WorkspaceChatComposerActionsMenu({
   attachDisabledReason = null,
   attachDetailsTitle = null,
   menuFooterHint = null,
+  generateImage,
   exportPdf,
   className,
 }: WorkspaceChatComposerActionsMenuProps) {
@@ -97,6 +107,8 @@ export function WorkspaceChatComposerActionsMenu({
       ? exportBlockedMessage(exportPdf.blockedReason)
       : "Download transcript";
 
+  const generateBlocked = generateImage.disabled || generateImage.busy;
+
   const addFilesTitle =
     attachDisabled && attachDisabledReason?.trim()
       ? attachDisabledReason.trim()
@@ -128,10 +140,10 @@ export function WorkspaceChatComposerActionsMenu({
           open && "bg-white/[0.08] text-[#7dd3fc]",
         )}
         onClick={() => setOpen((o) => !o)}
-        aria-label="Attachments and export"
+        aria-label="Attachments, image generation, and export"
         aria-expanded={open}
         aria-haspopup="menu"
-        title="Add files or export PDF"
+        title="Add files, generate an image, or export PDF"
       >
         <Plus className="h-5 w-5" strokeWidth={1.5} />
       </Button>
@@ -172,6 +184,36 @@ export function WorkspaceChatComposerActionsMenu({
                 </span>
                 <span className="text-[10px] font-normal leading-snug text-white/42">
                   {attachDisabled ? attachDisabledReason ?? "Unavailable" : "Images, docs, spreadsheets, MP4/MOV/WebM"}
+                </span>
+              </button>
+              <div className="mx-2 my-0.5 h-px bg-white/[0.07]" role="separator" />
+              <button
+                type="button"
+                role="menuitem"
+                disabled={generateBlocked}
+                title={generateImage.subtitle}
+                className={cn(
+                  "flex w-full flex-col gap-0 px-2.5 py-2 text-left text-[11px] transition-colors",
+                  generateBlocked
+                    ? "cursor-not-allowed opacity-50"
+                    : "text-white/90 hover:bg-white/[0.06]",
+                )}
+                onClick={() => {
+                  if (generateBlocked) return;
+                  generateImage.onGenerate();
+                  setOpen(false);
+                }}
+              >
+                <span className="flex w-full items-center gap-1.5 font-medium leading-tight text-white/92">
+                  {generateImage.busy ? (
+                    <Loader2 className="h-3 w-3 shrink-0 animate-spin text-emerald-300/90" aria-hidden />
+                  ) : (
+                    <ImagePlus className="h-3 w-3 shrink-0 opacity-75" aria-hidden strokeWidth={2} />
+                  )}
+                  Generate image
+                </span>
+                <span className="text-[10px] font-normal leading-snug text-white/42">
+                  {generateImage.busy ? "Generating…" : generateImage.subtitle}
                 </span>
               </button>
               <div className="mx-2 my-0.5 h-px bg-white/[0.07]" role="separator" />

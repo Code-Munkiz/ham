@@ -238,6 +238,33 @@ export interface ModelCatalogPayload {
 }
 
 /** Creative-media generation flags (distinct from `image_input` / video attachment store-only). */
+export interface GeneratedMediaImageGenerateResponse {
+  generated_media_id: string;
+  media_type: string;
+  mime_type: string;
+  status: string;
+  /** Safe relative backend path (`/api/...`). */
+  download_url: string;
+  width?: number | null;
+  height?: number | null;
+}
+
+/** Sanitized artifact row from `GET /api/media/artifacts/{generated_media_id}`. */
+export interface GeneratedMediaArtifactPublicMeta {
+  generated_media_id: string;
+  media_type: string;
+  mime_type: string;
+  size_bytes: number;
+  status: string;
+  safe_display_name: string;
+  prompt_excerpt: string;
+  provider: string | null;
+  model_id: string | null;
+  width: number | null;
+  height: number | null;
+  download_url: string;
+}
+
 export interface ChatGenerationCapabilities {
   supports_image_generation: boolean;
   supports_image_editing: boolean;

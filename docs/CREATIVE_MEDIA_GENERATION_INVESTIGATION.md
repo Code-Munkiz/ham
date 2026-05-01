@@ -303,6 +303,10 @@ Same **Clerk session optional** posture as chat attachments: when a Clerk user i
 
 Frontend generation control, video generation, image edit / i2i, public CDN URLs, billing UI.
 
+### Phase 2G.2 frontend (implemented)
+
+Hermes workspace chat uses **explicit + menu → Generate image** and deterministic **natural-language routing** only for clear creation phrases (analyze/describe/“what’s in this image” paths stay on normal chat). **No confirmation modal** for obvious generation intent. Generation remains **HAM API-mediated** (`hamApiFetch`): **no browser→provider** calls or keys in the UI; previews use **`ObjectURL`** from **`/api/media/artifacts/{id}/download`**. Capability flag **`generation.supports_image_generation`** gates the action; when unavailable the row stays visible with disabled copy (**no fake generation**).
+
 ---
 
 - Returning provider-generated **temporary URLs directly** without HAM ingestion.

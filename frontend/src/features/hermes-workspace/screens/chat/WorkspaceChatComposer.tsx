@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import {
   WorkspaceChatComposerActionsMenu,
   type ComposerExportPdfState,
+  type ComposerGenerateImageState,
 } from "./WorkspaceChatComposerActionsMenu";
 import { WorkspaceChatAttachmentPreviewList } from "./WorkspaceChatAttachmentPreview";
 import {
@@ -77,6 +78,7 @@ type WorkspaceChatComposerProps = {
   /** Capability copy from `GET /api/chat/capabilities` — optional. */
   chatCapabilities?: ChatCapabilitiesPayload | null;
   exportPdf: ComposerExportPdfState;
+  generateImage: ComposerGenerateImageState;
 };
 
 const COMPOSER_MENU_FOOTER_HINT =
@@ -192,6 +194,7 @@ export function WorkspaceChatComposer({
   gohamDesktopChip = null,
   chatCapabilities = null,
   exportPdf,
+  generateImage,
 }: WorkspaceChatComposerProps) {
   const [voiceState, setVoiceState] = React.useState<VoiceUiState>("idle");
   const [voiceBanner, setVoiceBanner] = React.useState<string | null>(null);
@@ -757,6 +760,7 @@ export function WorkspaceChatComposer({
                 )}
                 attachDetailsTitle={attachDetailsTitle}
                 menuFooterHint={COMPOSER_MENU_FOOTER_HINT}
+                generateImage={generateImage}
                 exportPdf={exportPdf}
               />
               {value.length >= 100 ? (

@@ -8,6 +8,8 @@ import type {
   ModelCatalogPayload,
   ProjectRecord,
   ChatCapabilitiesPayload,
+  GeneratedMediaArtifactPublicMeta,
+  GeneratedMediaImageGenerateResponse,
 } from "./types";
 import type { HermesGatewaySnapshot } from "./hermesGateway";
 import { getRegisteredClerkSessionToken } from "./clerkSession";
@@ -115,6 +117,75 @@ export async function postChatUploadAttachment(file: File): Promise<{
     size: number;
     kind: string;
   }>;
+}
+
+/** Text-to-image (Phase 2G.1+) — mediated by HAM backend only. */
+export async function postHamGeneratedImage(body: {
+  prompt: string;
+  model_id?: string | null;
+}): Promise<GeneratedMediaImageGenerateResponse> {
+  const res = await hamApiFetch("/api/media/images/generate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      prompt: body.prompt.trim(),
+      ...(typeof body.model_id === "string" && body.model_id.trim()
+        ? { model_id: body.model_id.trim() }
+        : {}),
+    }),
+  });
+  if (!res.ok) {
+    let detail = `HTTP ${res.status}`;
+    try {
+      const j = (await res.json()) as { detail?: unknown };
+      const d = j.detail;
+      if (typeof d === "string") detail = d;
+      else if (typeof d === "object" && d !== null) {
+        const row = (d as { error?: { message?: string } }).error;
+        if (typeof row?.message === "string") detail = row.message;
+      }
+    } catch {
+      /* ignore */
+    }
+    throw new Error(detail);
+  }
+  return res.json() as Promise<GeneratedMediaImageGenerateResponse>;
+}
+
+export async function fetchHamGeneratedMediaMeta(
+  generatedMediaId: string,
+): Promise<GeneratedMediaArtifactPublicMeta> {
+  const id = encodeURIComponent(generatedMediaId.trim());
+  const res = await hamApiFetch(`/api/media/artifacts/${id}`);
+  if (!res.ok) {
+    let detail = `HTTP ${res.status}`;
+    try {
+      const j = (await res.json()) as { detail?: { error?: { message?: string } } };
+      const m = j?.detail?.error?.message;
+      if (m) detail = m;
+    } catch {
+      /* ignore */
+    }
+    throw new Error(detail);
+  }
+  return res.json() as Promise<GeneratedMediaArtifactPublicMeta>;
+}
+
+export async function fetchHamGeneratedMediaBlob(generatedMediaId: string): Promise<Blob> {
+  const id = encodeURIComponent(generatedMediaId.trim());
+  const res = await hamApiFetch(`/api/media/artifacts/${id}/download`);
+  if (!res.ok) {
+    let detail = `HTTP ${res.status}`;
+    try {
+      const j = (await res.json()) as { detail?: { error?: { message?: string } } };
+      const m = j?.detail?.error?.message;
+      if (m) detail = m;
+    } catch {
+      /* ignore */
+    }
+    throw new Error(detail);
+  }
+  return res.blob();
 }
 
 async function readFastApiDetail(res: Response): Promise<string | null> {
