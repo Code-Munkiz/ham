@@ -832,6 +832,38 @@ async def get_chat_session(
     }
 
 
+@router.get("/api/chat/sessions/{session_id}/export.pdf")
+async def export_chat_session_pdf(
+    session_id: str,
+    authorization: str | None = Header(None, alias="Authorization"),
+) -> Response:
+    """Export persisted chat transcript as PDF (sanitized; no attachment re-fetch)."""
+    from src.ham.chat_pdf_export import render_chat_transcript_pdf_bytes
+    from src.ham.pdf_export_sanitizer import safe_export_filename_fragment
+
+    enforce_clerk_session_and_email_for_request(authorization, route="export_chat_session_pdf")
+    rec = _chat_store.get_session(session_id)
+    if rec is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": {"code": "SESSION_NOT_FOUND", "message": "Unknown chat session."}},
+        )
+    turns = [(t.role, t.content) for t in rec.turns]
+    pdf = render_chat_transcript_pdf_bytes(
+        session_id=rec.session_id,
+        created_at=rec.created_at,
+        turns=turns,
+    )
+    fn = f"ham-chat-{safe_export_filename_fragment(session_id)}.pdf"
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{fn}"',
+        },
+    )
+
+
 @router.post("/api/chat/sessions")
 async def create_chat_session(
     authorization: str | None = Header(None, alias="Authorization"),

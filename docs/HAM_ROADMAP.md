@@ -109,6 +109,8 @@ Snapshot accepted after Document Intelligence Phase 2A and backend deploy:
 
 **Recommendation for Phase 2B implementation prompt:** Prefer **Playwright/Chromium PDF** or server-rendered HTML → print if the **`ham-api` image already ships Playwright** (see [`BROWSER_RUNTIME_PLAYWRIGHT.md`](BROWSER_RUNTIME_PLAYWRIGHT.md)); otherwise evaluate **WeasyPrint** vs **ReportLab** for a smaller footprint.
 
+**MVP shipped:** **ReportLab** — `GET /api/chat/sessions/{session_id}/export.pdf` (sanitized transcript; no attachment re-fetch) and workspace **Export PDF** button. Evolve to Playwright/HTML layout in a later iteration if needed.
+
 **Security rules (Phase 2B):**
 
 - Sanitize Markdown/HTML; strip script, remote assets, and opaque metadata where applicable.

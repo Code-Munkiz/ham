@@ -5,11 +5,12 @@
 
 import * as React from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ExternalLink, Loader2, PanelRight, PanelRightClose } from "lucide-react";
+import { ExternalLink, FileDown, Loader2, PanelRight, PanelRightClose } from "lucide-react";
 import { toast } from "sonner";
 import {
   appendChatSessionTurns,
   createChatSession,
+  downloadChatSessionPdf,
   ensureProjectIdForWorkspaceRoot,
   fetchContextEngine,
   fetchModelsCatalog,
@@ -479,6 +480,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
 
   const [voiceTranscribing, setVoiceTranscribing] = React.useState(false);
   const [inspectorOpen, setInspectorOpen] = React.useState(false);
+  const [pdfExporting, setPdfExporting] = React.useState(false);
   const [inspectorEvents, setInspectorEvents] = React.useState<WorkspaceInspectorEvent[]>([]);
   const [artifactRows, setArtifactRows] = React.useState<ChatInspectorArtifactRow[]>([]);
   /** Desktop GOHAM web bridge: trusted session is main-process only; this tracks UI + follow-up routing. */
@@ -1890,6 +1892,43 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
+            <button
+              type="button"
+              disabled={
+                !sessionId ||
+                !hasTranscript ||
+                pdfExporting ||
+                sessionLoadFailed ||
+                isStreaming
+              }
+              onClick={() => {
+                if (!sessionId) return;
+                void (async () => {
+                  setPdfExporting(true);
+                  try {
+                    await downloadChatSessionPdf(sessionId);
+                    toast.success("Chat exported to PDF");
+                  } catch (err) {
+                    toast.error(err instanceof Error ? err.message : "PDF export failed");
+                  } finally {
+                    setPdfExporting(false);
+                  }
+                })();
+              }}
+              className={cn(
+                "inline-flex h-9 items-center gap-1 rounded-lg border px-2.5 text-[11px] font-medium transition",
+                "border-white/[0.1] bg-white/[0.06] text-white/80 hover:bg-white/[0.09] hover:text-white",
+                "disabled:pointer-events-none disabled:opacity-40",
+              )}
+              title={sessionId ? "Download transcript as PDF" : "Start a chat to export"}
+            >
+              {pdfExporting ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={1.5} />
+              ) : (
+                <FileDown className="h-3.5 w-3.5" strokeWidth={1.5} />
+              )}
+              <span className="hidden sm:inline">Export PDF</span>
+            </button>
             <button
               type="button"
               onClick={() => {

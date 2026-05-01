@@ -1387,6 +1387,35 @@ export async function fetchChatSession(sessionId: string): Promise<ChatSessionDe
   return (await res.json()) as ChatSessionDetail;
 }
 
+/** Download sanitized chat transcript PDF (server-generated; includes Clerk session when configured). */
+export async function downloadChatSessionPdf(sessionId: string): Promise<void> {
+  const path = `/api/chat/sessions/${encodeURIComponent(sessionId)}/export.pdf`;
+  const res = await hamApiFetch(path);
+  if (!res.ok) {
+    if (res.status === 404) throw new Error("Session not found");
+    throw new Error(`Failed to export PDF (HTTP ${res.status}).`);
+  }
+  const blob = await res.blob();
+  const cd = res.headers.get("Content-Disposition") ?? "";
+  let filename = `ham-chat-${sessionId.slice(0, 8)}.pdf`;
+  const mQ = /filename="([^"]+)"/i.exec(cd);
+  if (mQ?.[1]) {
+    filename = mQ[1].trim();
+  }
+  const url = URL.createObjectURL(blob);
+  try {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 /** Create an empty chat session id for explicit turn persistence (desktop local-control turns). */
 export async function createChatSession(): Promise<{ session_id: string; created_at: string | null }> {
   const path = "/api/chat/sessions";
