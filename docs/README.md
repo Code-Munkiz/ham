@@ -1,5 +1,21 @@
 # Ham documentation index
 
+## Docs governance (what belongs where)
+
+**`docs/` (tracked, canonical prose)** — Operational truth and design decisions the team revises together: roadmap, contracts, deploy runbooks, recovery runbooks, active architecture investigations that gate implementation, and **checked-in** examples (for example `examples/ham-api-cloud-run-env.yaml`). Root [`README.md`](../README.md) and this file are the primary entry points.
+
+**`docs/archive/` (tracked, when used)** — Superseded or historical write-ups we keep for auditability (moved here instead of deleted). **Do not** move a doc into `archive/` if [`HAM_ROADMAP.md`](HAM_ROADMAP.md), root `README.md`, deploy docs, or an active runbook still link to it without updating those links first.
+
+**`docs/_scratch/` (local only, never commit)** — AI handoff notes, one-off verification dumps, draft bullets, and scratch planning. This path is **gitignored**; copy anything worth keeping into real doc paths and delete the scratch copy.
+
+**`docs/_generated/` (local only, never commit)** — Regenerated inventories, repomix-style dumps, or machine-exported lists you do not want in history. **Gitignored.** Prefer small curated references under `docs/reference/` when a pattern doc is needed.
+
+**Repomix / bundle dumps** — `docs/repomix-*` is **ignored** by [`.gitignore`](../.gitignore); **`repomix-output-*.txt`** at the **repository root** is also ignored. If another doc cites a repomix filename, treat it as an **optional local artifact** to regenerate, not a committed dependency.
+
+**Never commit** — Provider keys, tokens, live env dumps, raw `gs://` object paths in user-facing artifacts, local desktop smoke binaries (see `desktop/live-smoke/` ignore), `node_modules` under SDK lab scripts, or Cursor **personal** settings / **plan** scratch under `.cursor/` (team rules and skills under `.cursor/rules/` and `.cursor/skills/` **remain tracked** when they are project defaults).
+
+---
+
 Canonical architecture and agent context live at the repo root: [`VISION.md`](../VISION.md), [`AGENTS.md`](../AGENTS.md), [`SWARM.md`](../SWARM.md), [`GAPS.md`](../GAPS.md).
 
 **Not source of truth:** generated exports and tool-local settings (for example [`CURSOR_EXACT_SETUP_EXPORT.md`](../CURSOR_EXACT_SETUP_EXPORT.md), `.cursor/settings.json`) are snapshots or editor config—defer to git-tracked canonical docs unless you deliberately refresh an export script.

@@ -31,3 +31,16 @@ frontend/dist/
 frontend/.env
 .vercel
 .env*.local
+
+# HAM local / generated tooling (never commit binaries or lab trees)
+.cursor/plans/
+.cursor/settings.json
+desktop/live-smoke/
+scripts/cursor_sdk_lab/
+
+# Generated repomix dumps (prefer local regen over committing)
+repomix-output-*.txt
+
+# Docs scratch and generated inventories (canonical prose stays tracked)
+docs/_scratch/
+docs/_generated/
