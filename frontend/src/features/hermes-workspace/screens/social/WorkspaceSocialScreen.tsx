@@ -16,6 +16,7 @@ import {
   type SocialProvider,
   type SocialSnapshot,
   type TelegramCapabilities,
+  type TelegramActivityApplyResponse,
   type TelegramActivityPreviewResponse,
   type TelegramMessageApplyResponse,
   type TelegramMessagePreviewResponse,
@@ -163,6 +164,7 @@ function MessagingCapabilityRows({ capabilities }: { capabilities: TelegramCapab
     { label: "Preview available", value: capabilities.preview_available },
     { label: "Live message available", value: capabilities.live_message_available },
     { label: "Live apply available", value: capabilities.live_apply_available },
+    { label: "Activity apply available", value: capabilities.provider_id === "telegram" ? capabilities.activity_apply_available : false },
     { label: "Read-only API", value: capabilities.read_only },
   ];
   const providerRows =
@@ -208,6 +210,9 @@ function MessagingProviderPanel({
   telegramActivityPreviewBusy = false,
   telegramActivityPreviewError,
   onPreviewTelegramActivity,
+  onOpenTelegramActivityLiveConfirm,
+  telegramActivityLiveResult,
+  telegramActivityLiveError,
   onOpenTelegramLiveConfirm,
   telegramLiveResult,
   telegramLiveError,
@@ -223,6 +228,9 @@ function MessagingProviderPanel({
   telegramActivityPreviewBusy?: boolean;
   telegramActivityPreviewError?: string | null;
   onPreviewTelegramActivity?: () => void;
+  onOpenTelegramActivityLiveConfirm?: () => void;
+  telegramActivityLiveResult?: TelegramActivityApplyResponse | null;
+  telegramActivityLiveError?: string | null;
   onOpenTelegramLiveConfirm?: () => void;
   telegramLiveResult?: TelegramMessageApplyResponse | null;
   telegramLiveError?: string | null;
@@ -231,6 +239,12 @@ function MessagingProviderPanel({
   const telegramCapabilities = capabilities.provider_id === "telegram" ? capabilities : null;
   const canSendOneTelegramMessage = Boolean(
     telegramPreview?.proposal_digest && telegramCapabilities?.readiness === "ready" && telegramCapabilities.live_apply_available,
+  );
+  const canSendOneTelegramActivity = Boolean(
+    telegramActivityPreview?.proposal_digest &&
+      telegramActivityPreview?.governor.allowed &&
+      telegramCapabilities?.readiness === "ready" &&
+      telegramCapabilities?.activity_apply_available,
   );
   const guidance = isTelegram
     ? {
@@ -436,6 +450,45 @@ function MessagingProviderPanel({
                 </p>
               ) : null}
               {telegramActivityPreview ? <TelegramActivityPreviewCard preview={telegramActivityPreview} /> : null}
+              {canSendOneTelegramActivity ? (
+                <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-semibold text-white/82">Confirmed live Telegram activity</h3>
+                      <p className="mt-1 text-xs text-white/48">
+                        This sends exactly one Telegram activity message to the configured test group. No batch. No retry. No scheduler.
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <StatusPill label={telegramActivityPreview.governor.allowed ? "Governor allows" : "Governor blocked"} tone={telegramActivityPreview.governor.allowed ? "ok" : "warn"} />
+                      <StatusPill
+                        label={telegramCapabilities.activity_apply_available ? "Activity apply available" : "Activity apply unavailable"}
+                        tone={telegramCapabilities.activity_apply_available ? "ok" : "warn"}
+                      />
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="mt-3 bg-red-700 text-white hover:bg-red-600"
+                    disabled={!onOpenTelegramActivityLiveConfirm}
+                    onClick={onOpenTelegramActivityLiveConfirm}
+                  >
+                    Send one Telegram activity
+                  </Button>
+                </div>
+              ) : null}
+              {telegramActivityLiveError ? (
+                <p className="rounded-lg border border-amber-400/20 bg-amber-500/5 p-3 text-sm text-amber-100/80">
+                  {telegramActivityLiveError}
+                </p>
+              ) : null}
+              {telegramActivityLiveResult ? (
+                <div>
+                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-white/45">Telegram activity live result</h3>
+                  <RecordPreview record={telegramActivityLiveResult as unknown as Record<string, unknown>} emptyLabel="No Telegram activity live result payload." />
+                </div>
+              ) : null}
             </div>
             {telegramPreview?.proposal_digest ? (
               <div className="rounded-xl border border-white/10 bg-black/20 p-3">
@@ -719,6 +772,7 @@ const LIVE_REPLY_CONFIRMATION_PHRASE = "SEND ONE LIVE REPLY";
 const LIVE_BATCH_CONFIRMATION_PHRASE = "SEND LIVE REACTIVE BATCH";
 const LIVE_BROADCAST_CONFIRMATION_PHRASE = "SEND ONE LIVE POST";
 const LIVE_TELEGRAM_CONFIRMATION_PHRASE = "SEND ONE TELEGRAM MESSAGE";
+const LIVE_TELEGRAM_ACTIVITY_CONFIRMATION_PHRASE = "SEND ONE TELEGRAM ACTIVITY";
 
 function TelegramMessagePreviewCard({ preview }: { preview: TelegramMessagePreviewResponse }) {
   return (
@@ -918,6 +972,12 @@ export function WorkspaceSocialScreen() {
   const [telegramActivityPreviewBusy, setTelegramActivityPreviewBusy] = React.useState(false);
   const [telegramActivityPreviewError, setTelegramActivityPreviewError] = React.useState<string | null>(null);
   const [telegramActivityPreview, setTelegramActivityPreview] = React.useState<TelegramActivityPreviewResponse | null>(null);
+  const [telegramActivityConfirmOpen, setTelegramActivityConfirmOpen] = React.useState(false);
+  const [telegramActivityConfirmText, setTelegramActivityConfirmText] = React.useState("");
+  const [telegramActivityOperatorToken, setTelegramActivityOperatorToken] = React.useState("");
+  const [telegramActivityLiveBusy, setTelegramActivityLiveBusy] = React.useState(false);
+  const [telegramActivityLiveError, setTelegramActivityLiveError] = React.useState<string | null>(null);
+  const [telegramActivityLiveResult, setTelegramActivityLiveResult] = React.useState<TelegramActivityApplyResponse | null>(null);
   const [telegramConfirmOpen, setTelegramConfirmOpen] = React.useState(false);
   const [telegramConfirmText, setTelegramConfirmText] = React.useState("");
   const [telegramOperatorToken, setTelegramOperatorToken] = React.useState("");
@@ -988,6 +1048,31 @@ export function WorkspaceSocialScreen() {
       return;
     }
     setTelegramActivityPreview(result.preview);
+    setTelegramActivityLiveResult(null);
+  };
+
+  const sendOneTelegramActivity = async () => {
+    if (!telegramActivityPreview?.proposal_digest) return;
+    setTelegramActivityLiveBusy(true);
+    setTelegramActivityLiveError(null);
+    const result = await socialAdapter.sendOneTelegramActivity({
+      proposalDigest: telegramActivityPreview.proposal_digest,
+      confirmationPhrase: telegramActivityConfirmText,
+      operatorToken: telegramActivityOperatorToken,
+      activityKind: telegramActivityPreview.activity_preview.activity_kind,
+      clientRequestId: `social-ui-telegram-activity-${Date.now()}`,
+    });
+    setTelegramActivityLiveBusy(false);
+    if (result.bridge.status === "pending" || !result.apply) {
+      const detail = result.bridge.status === "pending" ? result.bridge.detail : result.error;
+      setTelegramActivityLiveError(detail || "Telegram live activity request failed.");
+      return;
+    }
+    setTelegramActivityLiveResult(result.apply);
+    setTelegramActivityConfirmOpen(false);
+    setTelegramActivityConfirmText("");
+    setTelegramActivityOperatorToken("");
+    void load();
   };
 
   const x = snapshot?.xStatus;
@@ -1203,6 +1288,16 @@ export function WorkspaceSocialScreen() {
               telegramActivityPreviewBusy={telegramActivityPreviewBusy}
               telegramActivityPreviewError={selectedProvider === "telegram" ? telegramActivityPreviewError : null}
               onPreviewTelegramActivity={selectedProvider === "telegram" ? () => void runTelegramActivityPreview() : undefined}
+              onOpenTelegramActivityLiveConfirm={
+                selectedProvider === "telegram"
+                  ? () => {
+                      setTelegramActivityConfirmOpen(true);
+                      setTelegramActivityLiveError(null);
+                    }
+                  : undefined
+              }
+              telegramActivityLiveResult={selectedProvider === "telegram" ? telegramActivityLiveResult : null}
+              telegramActivityLiveError={selectedProvider === "telegram" ? telegramActivityLiveError : null}
               onOpenTelegramLiveConfirm={
                 selectedProvider === "telegram"
                   ? () => {
@@ -1763,6 +1858,70 @@ export function WorkspaceSocialScreen() {
                 }
               >
                 {telegramLiveBusy ? "Sending..." : "Send one Telegram message"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {telegramActivityConfirmOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="telegram-live-activity-title"
+            className="w-full max-w-lg rounded-2xl border border-red-400/30 bg-[#071016] p-5 text-white shadow-2xl"
+          >
+            <h2 id="telegram-live-activity-title" className="text-lg font-semibold">
+              Confirmed live Telegram activity
+            </h2>
+            <p className="mt-2 text-sm leading-relaxed text-white/65">
+              This sends exactly one Telegram activity message to the configured test group. No batch. No retry. No scheduler.
+            </p>
+            <div className="mt-4 space-y-3">
+              <label className="block text-xs font-semibold uppercase tracking-[0.12em] text-white/50">
+                Type confirmation phrase
+                <input
+                  className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-red-300/50"
+                  value={telegramActivityConfirmText}
+                  onChange={(event) => setTelegramActivityConfirmText(event.target.value)}
+                  placeholder={LIVE_TELEGRAM_ACTIVITY_CONFIRMATION_PHRASE}
+                />
+              </label>
+              <label className="block text-xs font-semibold uppercase tracking-[0.12em] text-white/50">
+                Operator token
+                <input
+                  className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-red-300/50"
+                  type="password"
+                  value={telegramActivityOperatorToken}
+                  onChange={(event) => setTelegramActivityOperatorToken(event.target.value)}
+                  placeholder="HAM_SOCIAL_LIVE_APPLY_TOKEN"
+                />
+              </label>
+            </div>
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                className="border-white/15 bg-white/5 text-white/85"
+                onClick={() => setTelegramActivityConfirmOpen(false)}
+                disabled={telegramActivityLiveBusy}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                className="bg-red-700 text-white hover:bg-red-600"
+                onClick={() => void sendOneTelegramActivity()}
+                disabled={
+                  telegramActivityLiveBusy ||
+                  telegramActivityConfirmText.trim() !== LIVE_TELEGRAM_ACTIVITY_CONFIRMATION_PHRASE ||
+                  !telegramActivityOperatorToken.trim()
+                }
+              >
+                {telegramActivityLiveBusy ? "Sending..." : "Send one Telegram activity"}
               </Button>
             </div>
           </div>
