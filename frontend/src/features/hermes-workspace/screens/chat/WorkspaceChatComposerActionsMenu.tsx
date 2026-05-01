@@ -1,7 +1,11 @@
 /**
  * Composer "+" opens a small action menu: attach (existing hidden file input) + Export PDF entry.
+ *
+ * The menu is portaled to `document.body` with fixed positioning so it is not clipped by the
+ * composer card's `overflow-hidden` (which would hide the upper rows when opening upward).
  */
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { ChevronRight, FileDown, Loader2, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -46,14 +50,34 @@ export function WorkspaceChatComposerActionsMenu({
   className,
 }: WorkspaceChatComposerActionsMenuProps) {
   const [open, setOpen] = React.useState(false);
+  const [anchorRect, setAnchorRect] = React.useState<DOMRect | null>(null);
   const wrapRef = React.useRef<HTMLDivElement>(null);
+  const menuPanelRef = React.useRef<HTMLDivElement>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
+
+  const syncAnchorRect = React.useCallback(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    setAnchorRect(el.getBoundingClientRect());
+  }, []);
+
+  React.useLayoutEffect(() => {
+    if (!open) return;
+    syncAnchorRect();
+    const onScrollResize = () => syncAnchorRect();
+    window.addEventListener("scroll", onScrollResize, true);
+    window.addEventListener("resize", onScrollResize);
+    return () => {
+      window.removeEventListener("scroll", onScrollResize, true);
+      window.removeEventListener("resize", onScrollResize);
+    };
+  }, [open, syncAnchorRect]);
 
   React.useEffect(() => {
     if (!open) return;
     const onDoc = (e: MouseEvent) => {
-      const el = wrapRef.current;
-      if (!el || el.contains(e.target as Node)) return;
+      const t = e.target as Node;
+      if (wrapRef.current?.contains(t) || menuPanelRef.current?.contains(t)) return;
       setOpen(false);
     };
     document.addEventListener("mousedown", onDoc, true);
@@ -99,70 +123,78 @@ export function WorkspaceChatComposerActionsMenu({
       >
         <Plus className="h-5 w-5" strokeWidth={1.5} />
       </Button>
-      {open ? (
-        <div
-          className="absolute bottom-full left-0 z-[60] mb-1.5 min-w-[min(92vw,17.5rem)] rounded-xl border border-white/[0.12] bg-[#050f0c]/98 py-1 shadow-[0_12px_40px_rgba(0,0,0,0.45)] backdrop-blur-md"
-          role="menu"
-          aria-label="Composer actions"
-        >
-          <button
-            type="button"
-            role="menuitem"
-            disabled={attachDisabled}
-            className={cn(
-              "flex w-full flex-col items-start gap-0.5 px-3 py-2.5 text-left text-[12px] transition-colors",
-              attachDisabled
-                ? "cursor-not-allowed text-white/35"
-                : "text-white/88 hover:bg-white/[0.07]",
-            )}
-            onClick={() => {
-              if (attachDisabled) return;
-              inputRef.current?.click();
-            }}
-          >
-            <span className="flex w-full items-center justify-between gap-2 font-medium">
-              Add photos &amp; files
-              <ChevronRight className="h-3.5 w-3.5 shrink-0 opacity-45" aria-hidden />
-            </span>
-            <span className="text-[10px] font-normal leading-snug text-white/45">
-              Upload images or documents
-            </span>
-            {attachFooterNote ? (
-              <span className="text-[10px] font-normal leading-snug text-white/38">{attachFooterNote}</span>
-            ) : null}
-          </button>
-          <div className="mx-2 h-px bg-white/[0.08]" role="separator" />
-          <button
-            type="button"
-            role="menuitem"
-            disabled={exportBlocked}
-            className={cn(
-              "flex w-full flex-col items-start gap-0.5 px-3 py-2.5 text-left text-[12px] transition-colors",
-              exportBlocked
-                ? "cursor-not-allowed text-white/40"
-                : "text-white/88 hover:bg-white/[0.07]",
-            )}
-            title={exportHint}
-            onClick={() => {
-              if (exportBlocked) return;
-              exportPdf.onExport();
-              setOpen(false);
-            }}
-          >
-            <span className="flex w-full items-center justify-between gap-2 font-medium">
-              <span className="inline-flex items-center gap-1.5">
-                {exportPdf.busy ? (
-                  <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-emerald-300/90" aria-hidden />
-                ) : (
-                  <FileDown className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
+      {open && anchorRect && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              ref={menuPanelRef}
+              className="fixed z-[200] min-w-[min(92vw,17.5rem)] rounded-xl border border-white/[0.12] bg-[#050f0c]/98 py-1 shadow-[0_12px_40px_rgba(0,0,0,0.45)] backdrop-blur-md"
+              style={{
+                left: Math.max(8, anchorRect.left),
+                bottom: window.innerHeight - anchorRect.top + 6,
+              }}
+              role="menu"
+              aria-label="Composer actions"
+            >
+              <button
+                type="button"
+                role="menuitem"
+                disabled={attachDisabled}
+                className={cn(
+                  "flex w-full flex-col items-start gap-0.5 px-3 py-2.5 text-left text-[12px] transition-colors",
+                  attachDisabled
+                    ? "cursor-not-allowed text-white/35"
+                    : "text-white/88 hover:bg-white/[0.07]",
                 )}
-                Export PDF
-              </span>
-            </span>
-            <span className="text-[10px] font-normal leading-snug text-white/45">{exportHint}</span>
-          </button>
-        </div>
-      ) : null}
+                onClick={() => {
+                  if (attachDisabled) return;
+                  inputRef.current?.click();
+                }}
+              >
+                <span className="flex w-full items-center justify-between gap-2 font-medium">
+                  Add photos & files
+                  <ChevronRight className="h-3.5 w-3.5 shrink-0 opacity-45" aria-hidden />
+                </span>
+                <span className="text-[10px] font-normal leading-snug text-white/45">
+                  Upload images or documents
+                </span>
+                {attachFooterNote ? (
+                  <span className="text-[10px] font-normal leading-snug text-white/38">{attachFooterNote}</span>
+                ) : null}
+              </button>
+              <div className="mx-2 h-px bg-white/[0.08]" role="separator" />
+              <button
+                type="button"
+                role="menuitem"
+                disabled={exportBlocked}
+                className={cn(
+                  "flex w-full flex-col items-start gap-0.5 px-3 py-2.5 text-left text-[12px] transition-colors",
+                  exportBlocked
+                    ? "cursor-not-allowed text-white/40"
+                    : "text-white/88 hover:bg-white/[0.07]",
+                )}
+                title={exportHint}
+                onClick={() => {
+                  if (exportBlocked) return;
+                  exportPdf.onExport();
+                  setOpen(false);
+                }}
+              >
+                <span className="flex w-full items-center justify-between gap-2 font-medium">
+                  <span className="inline-flex items-center gap-1.5">
+                    {exportPdf.busy ? (
+                      <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-emerald-300/90" aria-hidden />
+                    ) : (
+                      <FileDown className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
+                    )}
+                    Export PDF
+                  </span>
+                </span>
+                <span className="text-[10px] font-normal leading-snug text-white/45">{exportHint}</span>
+              </button>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }
