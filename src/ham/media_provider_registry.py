@@ -35,9 +35,8 @@ class MediaProviderCapabilityMetadata:
     supports_image_to_video: bool
 
 
-# Declared for roadmap / UI; no server calls in this slice.
+# Declared for roadmap / UI; adapters not implemented except ComfyUI (Phase 2G.6) when configured.
 _FUTURE_PLACEHOLDER_IDS: dict[str, str] = {
-    "comfyui": "ComfyUI (separate GPU service)",
     "openai_images": "OpenAI Images",
     "replicate": "Replicate",
     "runway": "Runway",
@@ -78,6 +77,8 @@ def normalized_ham_media_provider_env() -> str:
 def _coerce_provider_id(raw: str) -> str:
     if raw in _FUTURE_PLACEHOLDER_IDS:
         return raw
+    if raw == "comfyui":
+        return "comfyui"
     if raw in ("none", "unconfigured", "disabled", "off"):
         return "unconfigured"
     if raw in ("openrouter", "router", "or"):
@@ -100,6 +101,23 @@ def _openrouter_effectively_configured() -> bool:
     )
 
     return bool(image_generation_feature_enabled() and openrouter_api_key_configured())
+
+
+def comfyui_capabilities_row() -> MediaProviderCapabilityMetadata:
+    """Metadata only — no outbound calls."""
+    from src.ham.comfyui_provider_adapter import comfyui_image_generation_ready
+
+    ready = comfyui_image_generation_ready()
+    return MediaProviderCapabilityMetadata(
+        provider_id="comfyui",
+        display_name="ComfyUI (separate GPU service)",
+        configured=ready,
+        supports_text_to_image=ready,
+        supports_image_to_image=False,
+        supports_image_editing=False,
+        supports_text_to_video=False,
+        supports_image_to_video=False,
+    )
 
 
 def openrouter_capabilities_row() -> MediaProviderCapabilityMetadata:
@@ -159,6 +177,7 @@ def all_media_providers_metadata() -> list[MediaProviderCapabilityMetadata]:
             supports_image_to_video=False,
         ),
     ]
+    rows.append(comfyui_capabilities_row())
     for pid, label in sorted(_FUTURE_PLACEHOLDER_IDS.items()):
         rows.append(_placeholder_row(pid, label))
     return rows
@@ -198,6 +217,21 @@ def build_selected_image_generation_adapter() -> ImageProviderAdapter:
     if pid == "unconfigured":
         return UnconfiguredImageProviderAdapter()
 
+    if pid == "comfyui":
+        from src.ham.comfyui_provider_adapter import (
+            ComfyUIImageProviderAdapter,
+            comfyui_api_key_optional,
+            comfyui_base_url,
+            comfyui_image_generation_ready,
+        )
+
+        if not comfyui_image_generation_ready():
+            return UnconfiguredImageProviderAdapter()
+        return ComfyUIImageProviderAdapter(
+            base_url=comfyui_base_url(),
+            api_key=comfyui_api_key_optional(),
+        )
+
     if pid in _FUTURE_PLACEHOLDER_IDS:
         return UnconfiguredImageProviderAdapter()
 
@@ -233,7 +267,20 @@ def provider_notes_for_capabilities() -> list[str]:
             f"Unrecognized HAM_MEDIA_PROVIDER={raw!r}; treating selection as OpenRouter-compatible defaults."
         )
     active = active_media_provider_id()
-    if active in _FUTURE_PLACEHOLDER_IDS:
+    if active == "comfyui":
+        from src.ham.comfyui_provider_adapter import comfyui_base_url_configured
+        from src.ham.media_provider_adapter import image_generation_feature_enabled
+
+        if not image_generation_feature_enabled():
+            notes.append(
+                "Image generation is disabled on this server (HAM_MEDIA_IMAGE_GENERATION_ENABLED)."
+            )
+        elif not comfyui_base_url_configured():
+            notes.append(
+                "HAM_MEDIA_PROVIDER is ComfyUI but HAM_COMFYUI_BASE_URL is not set — generation is unavailable."
+            )
+
+    elif active in _FUTURE_PLACEHOLDER_IDS:
         notes.append(
             f"Media provider {active!r} is not implemented on this server yet — "
             "generation remains disabled until a supported backend is configured."

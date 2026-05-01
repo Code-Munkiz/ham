@@ -1,0 +1,20 @@
+{
+  "workflow_id": "sdxl_baseline",
+  "workflow_name": "SDXL text-to-image baseline (minimal Comfy workflow)",
+  "model_family": "sdxl",
+  "workflow_file": "sdxl_baseline.workflow.example.json",
+  "expected_checkpoint_name": "<operator: checkpoint filename as listed in ComfyUI model folder, no path>",
+  "expected_refiner": null,
+  "required_inputs": ["prompt", "width", "height", "seed"],
+  "optional_inputs": ["negative_prompt"],
+  "outputs": ["image"],
+  "notes": "Template workflow only — replace ckpt tokens with weights you have licensed. Do not commit proprietary checkpoints.",
+  "license_check_required": true,
+  "comfy_patches": {
+    "prompt": { "node": "6", "input": "text" },
+    "negative_prompt": { "node": "7", "input": "text" },
+    "width": { "node": "5", "input": "width" },
+    "height": { "node": "5", "input": "height" },
+    "seed": { "node": "3", "input": "seed" }
+  }
+}

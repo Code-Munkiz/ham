@@ -1,0 +1,431 @@
+"""ComfyUI HTTP adapter — text-to-image only (Phase 2G.6).
+
+Calls a **remote** ComfyUI instance (`HAM_COMFYUI_BASE_URL`). No GPU stack in ham-api.
+
+Workflow graphs are shipped as **tracked templates** under ``configs/media/comfyui/`` (no checkpoints).
+"""
+
+from __future__ import annotations
+
+import copy
+import json
+import os
+import secrets
+import time
+import uuid
+from pathlib import Path
+from typing import Any
+from urllib.parse import quote
+
+import httpx
+
+from src.ham.media_provider_adapter import (
+    ImageGenerationError,
+    ImageGenerationResult,
+    ImageProviderAdapter,
+    _normalize_mime_image,
+    _png_dimensions_safe,
+    default_image_output_max_bytes,
+    default_image_prompt_max_chars,
+    image_generation_feature_enabled,
+)
+
+
+def _project_root() -> Path:
+    return Path(__file__).resolve().parents[2]
+
+
+def comfyui_base_url_configured() -> bool:
+    return bool((os.environ.get("HAM_COMFYUI_BASE_URL") or "").strip())
+
+
+def comfyui_base_url() -> str:
+    return (os.environ.get("HAM_COMFYUI_BASE_URL") or "").strip().rstrip("/")
+
+
+def comfyui_api_key_optional() -> str | None:
+    k = (os.environ.get("HAM_COMFYUI_API_KEY") or "").strip()
+    return k or None
+
+
+def comfyui_image_generation_ready() -> bool:
+    """True when registry may return the live Comfy adapter (feature flag + base URL)."""
+    return bool(image_generation_feature_enabled() and comfyui_base_url_configured())
+
+
+def comfyui_timeout_sec() -> float:
+    raw = (os.environ.get("HAM_COMFYUI_TIMEOUT_SEC") or "").strip()
+    if raw:
+        try:
+            return max(5.0, min(600.0, float(raw)))
+        except ValueError:
+            pass
+    return 120.0
+
+
+def comfyui_poll_interval_sec() -> float:
+    raw = (os.environ.get("HAM_COMFYUI_OUTPUT_POLL_SEC") or "").strip()
+    if raw:
+        try:
+            return max(0.25, min(10.0, float(raw)))
+        except ValueError:
+            pass
+    return 2.0
+
+
+def comfyui_output_max_bytes() -> int:
+    raw = (os.environ.get("HAM_COMFYUI_OUTPUT_MAX_BYTES") or "").strip()
+    if raw:
+        try:
+            return max(10_000, min(30 * 1024 * 1024, int(raw)))
+        except ValueError:
+            pass
+    return default_image_output_max_bytes()
+
+
+def comfyui_default_workflow_key() -> str:
+    k = (os.environ.get("HAM_COMFYUI_DEFAULT_WORKFLOW") or "sdxl_baseline").strip()
+    return k or "sdxl_baseline"
+
+
+def _workflow_config_dir() -> Path:
+    return _project_root() / "configs" / "media" / "comfyui"
+
+
+def load_comfy_manifest_and_workflow(workflow_key: str) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Load manifest + workflow template from repo configs (never from user input paths)."""
+    base = _workflow_config_dir()
+    man_path = base / f"{workflow_key}.manifest.json"
+    if not man_path.is_file():
+        raise ImageGenerationError(
+            "IMAGE_GEN_COMFY_WORKFLOW_MISSING",
+            "ComfyUI workflow manifest is missing on the server.",
+        )
+    with man_path.open(encoding="utf-8") as f:
+        manifest = json.load(f)
+    wf_file = (manifest.get("workflow_file") or "").strip()
+    if not wf_file or ".." in wf_file or wf_file.startswith(("/", "\\")):
+        raise ImageGenerationError(
+            "IMAGE_GEN_COMFY_WORKFLOW_INVALID",
+            "ComfyUI workflow manifest is invalid.",
+        )
+    wf_path = base / wf_file
+    if not wf_path.is_file():
+        raise ImageGenerationError(
+            "IMAGE_GEN_COMFY_WORKFLOW_MISSING",
+            "ComfyUI workflow template file is missing on the server.",
+        )
+    with wf_path.open(encoding="utf-8") as f:
+        workflow = json.load(f)
+    if not isinstance(workflow, dict):
+        raise ImageGenerationError(
+            "IMAGE_GEN_COMFY_WORKFLOW_INVALID",
+            "ComfyUI workflow template is invalid.",
+        )
+    return manifest, workflow
+
+
+def _apply_workflow_patches(
+    workflow: dict[str, Any],
+    manifest: dict[str, Any],
+    *,
+    prompt: str,
+    negative_prompt: str,
+    width: int,
+    height: int,
+    seed: int,
+) -> dict[str, Any]:
+    w = copy.deepcopy(workflow)
+    patches = manifest.get("comfy_patches")
+    if not isinstance(patches, dict):
+        raise ImageGenerationError(
+            "IMAGE_GEN_COMFY_WORKFLOW_INVALID",
+            "ComfyUI workflow manifest is invalid.",
+        )
+    mapping: dict[str, Any] = {
+        "prompt": prompt,
+        "negative_prompt": negative_prompt,
+        "width": width,
+        "height": height,
+        "seed": seed,
+    }
+    for key, val in mapping.items():
+        spec = patches.get(key)
+        if key == "negative_prompt" and spec is None:
+            continue
+        if not isinstance(spec, dict):
+            raise ImageGenerationError(
+                "IMAGE_GEN_COMFY_WORKFLOW_INVALID",
+                "ComfyUI workflow manifest is invalid.",
+            )
+        node_id = str(spec.get("node") or "").strip()
+        input_key = str(spec.get("input") or "").strip()
+        if not node_id or not input_key:
+            raise ImageGenerationError(
+                "IMAGE_GEN_COMFY_WORKFLOW_INVALID",
+                "ComfyUI workflow manifest is invalid.",
+            )
+        node = w.get(node_id)
+        if not isinstance(node, dict):
+            raise ImageGenerationError(
+                "IMAGE_GEN_COMFY_WORKFLOW_INVALID",
+                "ComfyUI workflow template is invalid.",
+            )
+        inputs = node.get("inputs")
+        if not isinstance(inputs, dict):
+            raise ImageGenerationError(
+                "IMAGE_GEN_COMFY_WORKFLOW_INVALID",
+                "ComfyUI workflow template is invalid.",
+            )
+        inputs[input_key] = val
+    return w
+
+
+def comfyui_defaults_width_height() -> tuple[int, int]:
+    def _one(env_name: str, default: int) -> int:
+        raw = (os.environ.get(env_name) or "").strip()
+        if raw:
+            try:
+                return max(256, min(4096, int(raw)))
+            except ValueError:
+                pass
+        return default
+
+    return _one("HAM_COMFYUI_DEFAULT_WIDTH", 1024), _one("HAM_COMFYUI_DEFAULT_HEIGHT", 1024)
+
+
+def comfyui_default_negative_prompt() -> str:
+    return (os.environ.get("HAM_COMFYUI_DEFAULT_NEGATIVE_PROMPT") or "").strip()
+
+
+def _sniff_mime(data: bytes) -> str | None:
+    if len(data) >= 8 and data[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    if len(data) >= 3 and data[:3] == b"\xff\xd8\xff":
+        return "image/jpeg"
+    if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    if len(data) >= 6 and data[:6] in (b"GIF87a", b"GIF89a"):
+        return "image/gif"
+    return None
+
+
+def _history_pick_entry(hist_body: dict[str, Any], prompt_id: str) -> dict[str, Any] | None:
+    if prompt_id in hist_body and isinstance(hist_body[prompt_id], dict):
+        return hist_body[prompt_id]  # type: ignore[no-any-return]
+    if len(hist_body) == 1:
+        only = next(iter(hist_body.values()))
+        if isinstance(only, dict):
+            return only
+    return None
+
+
+def _history_output_image(entry: dict[str, Any]) -> dict[str, str] | None:
+    outputs = entry.get("outputs")
+    if not isinstance(outputs, dict):
+        return None
+    for _, node_out in outputs.items():
+        if not isinstance(node_out, dict):
+            continue
+        images = node_out.get("images")
+        if not isinstance(images, list) or not images:
+            continue
+        first = images[0]
+        if not isinstance(first, dict):
+            continue
+        fn = first.get("filename")
+        typ = first.get("type") or "output"
+        sub = first.get("subfolder") or ""
+        if isinstance(fn, str) and fn.strip():
+            return {
+                "filename": fn.strip(),
+                "type": str(typ) if typ else "output",
+                "subfolder": str(sub) if isinstance(sub, str) else "",
+            }
+    return None
+
+
+class ComfyUIImageProviderAdapter(ImageProviderAdapter):
+    provider_slug = "comfyui"
+
+    def __init__(
+        self,
+        *,
+        base_url: str,
+        api_key: str | None = None,
+        timeout_sec: float | None = None,
+        poll_sec: float | None = None,
+        workflow_key: str | None = None,
+    ) -> None:
+        self._base = base_url.strip().rstrip("/")
+        self._api_key = (api_key or "").strip() or None
+        self._timeout = float(timeout_sec) if timeout_sec is not None else comfyui_timeout_sec()
+        self._poll = float(poll_sec) if poll_sec is not None else comfyui_poll_interval_sec()
+        self._workflow_key = (workflow_key or "").strip() or comfyui_default_workflow_key()
+
+    def _headers(self) -> dict[str, str]:
+        if self._api_key:
+            return {"Authorization": f"Bearer {self._api_key}"}
+        return {}
+
+    def generate_image(
+        self,
+        *,
+        prompt: str,
+        model_id: str | None,
+        reference_image: tuple[bytes, str] | None = None,
+    ) -> ImageGenerationResult:
+        if reference_image:
+            raise ImageGenerationError(
+                "IMAGE_TO_IMAGE_NOT_SUPPORTED",
+                "Reference-conditioned image generation is not enabled for ComfyUI in this deployment.",
+            )
+        pstrip = prompt.strip()
+        mc = default_image_prompt_max_chars()
+        if not pstrip:
+            raise ImageGenerationError("IMAGE_GEN_PROMPT_EMPTY", "Prompt must not be empty.")
+        if len(pstrip) > mc:
+            raise ImageGenerationError(
+                "IMAGE_GEN_PROMPT_TOO_LONG",
+                f"Prompt exceeds maximum length ({mc} characters).",
+            )
+        _ = model_id  # SDXL baseline uses checkpoint wired in workflow template
+
+        manifest, workflow_template = load_comfy_manifest_and_workflow(self._workflow_key)
+        w_px, h_px = comfyui_defaults_width_height()
+        seed = secrets.randbelow(2**31 - 1)
+        neg = comfyui_default_negative_prompt()
+        graph = _apply_workflow_patches(
+            workflow_template,
+            manifest,
+            prompt=pstrip,
+            negative_prompt=neg,
+            width=w_px,
+            height=h_px,
+            seed=seed,
+        )
+
+        client_id = str(uuid.uuid4())
+        enqueue = {"prompt": graph, "client_id": client_id}
+        max_out = comfyui_output_max_bytes()
+        deadline = time.monotonic() + self._timeout
+
+        try:
+            with httpx.Client(timeout=self._timeout) as client:
+                r = client.post(
+                    f"{self._base}/prompt",
+                    json=enqueue,
+                    headers=self._headers(),
+                )
+                if r.status_code >= 400:
+                    raise ImageGenerationError(
+                        "IMAGE_GEN_UPSTREAM_REJECTED",
+                        "Image generation failed. Adjust your prompt or try again.",
+                    )
+                try:
+                    resp = r.json()
+                except json.JSONDecodeError as exc:
+                    raise ImageGenerationError(
+                        "IMAGE_GEN_INVALID_RESPONSE",
+                        "Image generation returned an unexpected response.",
+                    ) from exc
+                if not isinstance(resp, dict):
+                    raise ImageGenerationError(
+                        "IMAGE_GEN_INVALID_RESPONSE",
+                        "Image generation returned an unexpected response.",
+                    )
+
+                node_errors = resp.get("node_errors")
+                if isinstance(node_errors, dict) and node_errors:
+                    raise ImageGenerationError(
+                        "IMAGE_GEN_UPSTREAM_REJECTED",
+                        "Image generation failed. Adjust your prompt or try again.",
+                    )
+
+                pid = resp.get("prompt_id")
+                if not isinstance(pid, str) or not pid.strip():
+                    raise ImageGenerationError(
+                        "IMAGE_GEN_INVALID_RESPONSE",
+                        "Image generation returned an unexpected response.",
+                    )
+                pid = pid.strip()
+
+                image_ref: dict[str, str] | None = None
+                while time.monotonic() < deadline:
+                    hr = client.get(f"{self._base}/history/{pid}", headers=self._headers())
+                    if hr.status_code == 200:
+                        try:
+                            hist = hr.json()
+                        except json.JSONDecodeError:
+                            hist = None
+                        if isinstance(hist, dict):
+                            entry = _history_pick_entry(hist, pid)
+                            if isinstance(entry, dict):
+                                image_ref = _history_output_image(entry)
+                                if image_ref:
+                                    break
+                    time.sleep(self._poll)
+
+                if image_ref is None:
+                    raise ImageGenerationError(
+                        "IMAGE_GEN_UPSTREAM_TIMEOUT",
+                        "Image generation timed out.",
+                    )
+
+                q = (
+                    f"filename={quote(image_ref['filename'], safe='')}"
+                    f"&type={quote(image_ref['type'], safe='')}"
+                )
+                sub = image_ref.get("subfolder") or ""
+                if sub.strip():
+                    q += f"&subfolder={quote(sub.strip(), safe='')}"
+
+                vr = client.get(f"{self._base}/view?{q}", headers=self._headers())
+                if vr.status_code >= 400:
+                    raise ImageGenerationError(
+                        "IMAGE_GEN_UPSTREAM_REJECTED",
+                        "Image generation failed while retrieving output.",
+                    )
+
+                blob = vr.content
+                if len(blob) > max_out:
+                    raise ImageGenerationError(
+                        "IMAGE_GEN_OUTPUT_TOO_LARGE",
+                        "Generated image exceeds the maximum allowed size.",
+                    )
+
+                ct_hdr = vr.headers.get("content-type") or ""
+                mime = ""
+                if ";" in ct_hdr:
+                    mime = ct_hdr.split(";", 1)[0].strip()
+                elif ct_hdr:
+                    mime = ct_hdr.strip()
+                mime_n = _normalize_mime_image(mime) if mime else None
+                if not mime_n:
+                    sniffed = _sniff_mime(blob)
+                    mime_n = _normalize_mime_image(sniffed) if sniffed else None
+
+                if not mime_n:
+                    raise ImageGenerationError(
+                        "IMAGE_GEN_NO_IMAGE",
+                        "The upstream service returned no usable image.",
+                    )
+
+                wd: int | None
+                ht: int | None
+                if mime_n == "image/png":
+                    wd, ht = _png_dimensions_safe(blob)
+                else:
+                    wd, ht = None, None
+                return ImageGenerationResult(data=blob, mime=mime_n, width=wd, height=ht)
+
+        except httpx.TimeoutException as exc:
+            raise ImageGenerationError(
+                "IMAGE_GEN_UPSTREAM_TIMEOUT",
+                "Image generation timed out.",
+            ) from exc
+        except httpx.HTTPError as exc:
+            raise ImageGenerationError(
+                "IMAGE_GEN_UPSTREAM_ERROR",
+                "Could not reach the image generation service.",
+            ) from exc

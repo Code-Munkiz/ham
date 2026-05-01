@@ -35,12 +35,23 @@ def test_openrouter_adapter_when_enabled(monkeypatch: pytest.MonkeyPatch) -> Non
     assert isinstance(a, OpenRouterImageProviderAdapter)
 
 
-def test_placeholder_comfy_returns_unconfigured(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_comfy_returns_unconfigured_without_base_url(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HAM_MEDIA_PROVIDER", "comfyui")
     monkeypatch.setenv("HAM_MEDIA_IMAGE_GENERATION_ENABLED", "true")
+    monkeypatch.delenv("HAM_COMFYUI_BASE_URL", raising=False)
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-v1-hamtests-fake-long-key-for-plausible-xxxx")
     rebuild_image_generation_adapter_singleton()
     assert isinstance(build_selected_image_generation_adapter(), UnconfiguredImageProviderAdapter)
+
+
+def test_comfy_selects_adapter_when_base_url_set(monkeypatch: pytest.MonkeyPatch) -> None:
+    from src.ham.comfyui_provider_adapter import ComfyUIImageProviderAdapter
+
+    monkeypatch.setenv("HAM_MEDIA_PROVIDER", "comfyui")
+    monkeypatch.setenv("HAM_MEDIA_IMAGE_GENERATION_ENABLED", "true")
+    monkeypatch.setenv("HAM_COMFYUI_BASE_URL", "http://127.0.0.1:8188")
+    rebuild_image_generation_adapter_singleton()
+    assert isinstance(build_selected_image_generation_adapter(), ComfyUIImageProviderAdapter)
 
 
 def test_unconfigured_explicit(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -57,10 +68,11 @@ def test_synthetic_only_when_flag(monkeypatch: pytest.MonkeyPatch) -> None:
     assert isinstance(build_selected_image_generation_adapter(), SyntheticTestOnlyImageAdapter)
 
 
-def test_capabilities_comfyui_disables_generation(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_capabilities_comfyui_disables_generation_without_base_url(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HAM_MEDIA_PROVIDER", "comfyui")
     monkeypatch.setenv("HAM_MEDIA_IMAGE_GENERATION_ENABLED", "true")
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-v1-hamtests-fake-long-key-for-plausible-xxxx")
+    monkeypatch.delenv("HAM_COMFYUI_BASE_URL", raising=False)
     p = build_chat_capabilities_payload(model_id="x/y", gateway_mode="openrouter")
     gen = p["generation"]
     assert gen["active_media_provider"] == "comfyui"
@@ -71,6 +83,23 @@ def test_capabilities_comfyui_disables_generation(monkeypatch: pytest.MonkeyPatc
     assert "http://" not in raw
     assert "https://" not in raw
     assert "gs://" not in raw
+
+
+def test_capabilities_comfyui_enables_generation_with_base_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HAM_MEDIA_PROVIDER", "comfyui")
+    monkeypatch.setenv("HAM_MEDIA_IMAGE_GENERATION_ENABLED", "true")
+    monkeypatch.setenv("HAM_COMFYUI_BASE_URL", "http://127.0.0.1:8188")
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    p = build_chat_capabilities_payload(model_id="x/y", gateway_mode="openrouter")
+    gen = p["generation"]
+    assert gen["active_media_provider"] == "comfyui"
+    assert gen["supports_image_generation"] is True
+    assert gen["supports_text_to_image"] is True
+    assert gen["media_generation_provider"] == "comfyui"
+    assert gen["supports_image_to_image"] is False
+    raw = json.dumps(p)
+    assert "127.0.0.1" not in raw
+    assert "8188" not in raw
 
 
 def test_capabilities_payload_no_internal_urls(monkeypatch: pytest.MonkeyPatch) -> None:

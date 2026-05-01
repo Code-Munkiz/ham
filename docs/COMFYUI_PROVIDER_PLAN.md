@@ -1,6 +1,6 @@
-# ComfyUI provider plan (Phase 2G.5 / Phase 2G.6 precursor)
+# ComfyUI provider plan (Phase 2G.5–2G.6)
 
-HAM **must not** bundle ComfyUI, PyTorch/CUDA, or model checkpoints in this repository or in the default `ham-api` Cloud Run image. ComfyUI is a **separate GPU-backed service**. HAM integrates only through a **backend media provider adapter** that:
+HAM **must not** bundle ComfyUI, PyTorch/CUDA, or model checkpoints in this repository or in the default `ham-api` Cloud Run image. ComfyUI is a **separate GPU-backed service**. HAM integrates only through a **backend media provider adapter** (`src/ham/comfyui_provider_adapter.py`) that:
 
 1. Resolves configuration from **environment / Secret Manager** (never from the browser).
 2. Submits **prompt + workflow JSON** (or queue API payload) **server-to-server**.
@@ -9,7 +9,8 @@ HAM **must not** bundle ComfyUI, PyTorch/CUDA, or model checkpoints in this repo
 5. Persists artifacts through the existing **`GeneratedMediaStore`** pipeline (`hamgm_*` ids, GCS or local dev).
 6. Exposes only **opaque ids** and **`/api/media/artifacts/{id}`** download routes to clients.
 
-This document is planning only until **Phase 2G.6 — ComfyUI Service POC** is approved.
+Phase **2G.6** (code): **`ComfyUIImageProviderAdapter`** + **SDXL** templates (`configs/media/comfyui/`). Selecting Comfy requires **`HAM_MEDIA_PROVIDER=comfyui`**, **`HAM_MEDIA_IMAGE_GENERATION_ENABLED`**, and **`HAM_COMFYUI_BASE_URL`**. Integration tests mock Comfy REST; **operating a real worker** + **live smoke** = **Phase 2G.7**.
+
 
 ---
 
@@ -27,6 +28,13 @@ Browser → HAM FastAPI (/api/media/images/generate or future route)
 - **No** ComfyUI URL, internal hostname, or workflow file paths in capability JSON or chat responses.
 - **No** browser → ComfyUI traffic.
 - **Optional** gateway API key (`HAM_COMFYUI_API_KEY`) if the worker sits behind auth.
+
+### SDXL baseline templates (**no checkpoints in-repo**)
+
+| Path | Contents |
+|------|-----------|
+| `configs/media/comfyui/sdxl_baseline.manifest.json` | Stable `workflow_id`, **`model_family: sdxl`**, **`license_check_required`**, and **`comfy_patches`** (which graph nodes receive prompt, size, seed). |
+| `configs/media/comfyui/sdxl_baseline.workflow.example.json` | Minimal graph; checkpoint field carries the **`OPERATOR_SDXL_BASE_CHECKPOINT_NAME`** placeholder (operators substitute on GPU after licensing). |
 
 ---
 
@@ -50,13 +58,25 @@ Set on **Cloud Run / local API**, not Vercel except through existing `VITE_*` wi
 
 | Variable | Purpose |
 |----------|---------|
-| `HAM_MEDIA_PROVIDER` | `comfyui` when the ComfyUI adapter is implemented and selected (today: registry acknowledges id; adapter **not** implemented in 2G.5). |
-| `HAM_COMFYUI_BASE_URL` | Base URL for ComfyUI HTTP API (**Secret / env**, not logged in responses). |
-| `HAM_COMFYUI_API_KEY` | Optional Bearer or custom header for a reverse proxy / worker auth. |
-| `HAM_COMFYUI_DEFAULT_WORKFLOW` | Workflow id **or** inline JSON registry key referencing an **approved** workflow artifact (not user scratch). |
-| `HAM_COMFYUI_TIMEOUT_SEC` | Upper bound on queue + render wait (default TBD in 2G.6). |
+| `HAM_MEDIA_PROVIDER` | Set **`comfyui`** to select the Comfy adapter (**OpenRouter** remains default when unset). |
+| `HAM_MEDIA_IMAGE_GENERATION_ENABLED` | Must be enabled for Comfy generation (same gate as OpenRouter media). |
+| `HAM_COMFYUI_BASE_URL` | Base URL for Comfy HTTP API (**Secret / env**, never surfaced in `/capabilities` or client JSON). |
+| `HAM_COMFYUI_API_KEY` | Optional **`Authorization: Bearer …`** secret when a gateway protects Comfy. |
+| `HAM_COMFYUI_DEFAULT_WORKFLOW` | Stem under `configs/media/comfyui/` (default **`sdxl_baseline`** → `sdxl_baseline.manifest.json`). |
+| `HAM_COMFYUI_TIMEOUT_SEC` | Wall-clock ceiling for enqueue + polling (default **120**). |
+| `HAM_COMFYUI_OUTPUT_POLL_SEC` | Sleep between **`/history/{prompt_id}`** polls (default **2**). |
+| `HAM_COMFYUI_OUTPUT_MAX_BYTES` | Max bytes accepted from **`/view`** before rejecting (inherits floor/ceiling logic from shared media caps when unset). |
+| `HAM_COMFYUI_DEFAULT_WIDTH` / `HAM_COMFYUI_DEFAULT_HEIGHT` | Latent dimensions for the SDXL baseline template (**256–4096**, default **1024**). |
+| `HAM_COMFYUI_DEFAULT_NEGATIVE_PROMPT` | Optional negative text wired into manifest **negative_prompt** patch. |
 
-Additional knobs (future): `HAM_COMFYUI_MAX_NODES`, concurrency limits, and per-tenant quotas.
+Additional knobs (future): `HAM_COMFYUI_MAX_NODES`, concurrency caps, tenant quotas.
+
+#### Phase 2G.7 — manual checklist (operators)
+
+1. Run ComfyUI on a GPU host reachable **only from `ham-api` network** (VPN / VPC / SSH tunnel dev-only).
+2. Install licensed SDXL checkpoints and align **`ckpt_name`** in operator-owned workflow overrides (do not rely on placeholders in production JSON).
+3. Set **`HAM_COMFYUI_*`** secrets on **`ham-api`**; confirm **`GET /api/chat/capabilities`** shows Comfy **`configured: true`** but **never** echoes the worker URL.
+4. Smoke **`POST /api/media/images/generate`** and verify **`hamgm_*`** + download route (no **`/view`** or Comfy filenames in JSON).
 
 ---
 
@@ -72,18 +92,16 @@ Additional knobs (future): `HAM_COMFYUI_MAX_NODES`, concurrency limits, and per-
 
 ## Security checklist (non‑negotiables)
 
-- [ ] Browser never receives ComfyUI URL or LAN addresses.
-- [ ] No `gs://` bucket paths or machine file paths returned to clients.
-- [ ] No provider API keys echoed in JSON or logs at info level.
-- [ ] Outputs pass through **`GeneratedMediaStore`** with same redaction posture as OpenRouter-backed images today.
+- [x] Backend-only Comfy access; browsers never receive Comfy base URL (**`/capabilities`** audited in tests).
+- [x] No `gs://` or filesystem paths in client payloads (same **`GeneratedMediaStore`** path as OpenRouter).
+- [x] No Comfy **`/view`** URLs or raw disk filenames echoed in HAM **`POST /generate`** responses.
+- [ ] Operational: redact bearer tokens / worker hostnames from application logs beyond existing HAM observability norms.
 
 ---
 
-## Phase 2G.6 POC scope (proposal)
+## Phase 2G.6 vs 2G.7
 
-1. Stand up single Comfy worker (VM or SaaS GPU) reachable from **`ham-api` only**.
-2. Implement `ComfyUIImageProviderAdapter` behind `HAM_MEDIA_PROVIDER=comfyui`.
-3. One frozen workflow + one smoke test (CI uses synthetic path; optional integration test behind flag).
-4. Document firewall / TLS between HAM and worker.
-
-Until then, `HAM_MEDIA_PROVIDER=comfyui` keeps **generation disabled** with explicit capability notes (registry placeholder).
+| Slice | Delivered |
+|-------|-----------|
+| **2G.6 (this repo)** | `ComfyUIImageProviderAdapter`, registry/capabilities wiring for **`comfyui`**, **`configs/media/comfyui`** SDXL manifest + workflow **example**, **mocked HTTP** tests (no bundled Comfy, no GPUs in `ham-api`). |
+| **2G.7 (next)** | Run a reachable Comfy UI / API on GPU hardware; substitute real checkpoint names; end-to-end smoke from HAM to pixels. |

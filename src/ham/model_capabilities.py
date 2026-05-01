@@ -20,6 +20,7 @@ from src.ham.media_provider_adapter import (
 from src.ham.media_provider_registry import (
     active_media_provider_id,
     availability_dict_rows,
+    comfyui_capabilities_row,
     openrouter_capabilities_row,
     provider_notes_for_capabilities,
 )
@@ -105,11 +106,13 @@ def _build_generation_capabilities_payload() -> dict[str, Any]:
                 "Image generation is unavailable until enabled on the server "
                 "(HAM_MEDIA_IMAGE_GENERATION_ENABLED and OPENROUTER_API_KEY)."
             )
-    elif not core_ok:
-        notes.append(
-            "Image generation is unavailable until enabled on the server "
-            "(HAM_MEDIA_IMAGE_GENERATION_ENABLED and OPENROUTER_API_KEY)."
-        )
+    elif active == "comfyui":
+        crow = comfyui_capabilities_row()
+        supports_image_generation = crow.supports_text_to_image
+        supports_image_to_image = False
+        supports_reference_images = False
+        if supports_image_generation:
+            media_generation_provider = "comfyui"
 
     notes = list(dict.fromkeys(notes))
     available = availability_dict_rows()
