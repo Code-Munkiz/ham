@@ -73,10 +73,12 @@ def _isolate_journal(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> tuple[P
     monkeypatch.setenv("HAM_X_AUDIT_LOG_PATH", str(audit))
     monkeypatch.setenv("HAM_X_REVIEW_QUEUE_PATH", str(tmp_path / "review.jsonl"))
     monkeypatch.setenv("HAM_X_EXCEPTION_QUEUE_PATH", str(tmp_path / "exceptions.jsonl"))
+    monkeypatch.setenv("HAM_SOCIAL_DELIVERY_LOG_PATH", str(tmp_path / "social_delivery_log.jsonl"))
     monkeypatch.setenv("HAM_HERMES_HOME", str(tmp_path / "hermes-home"))
     monkeypatch.delenv("HERMES_HOME", raising=False)
     monkeypatch.delenv("HAM_HERMES_GATEWAY_STATUS_PATH", raising=False)
     monkeypatch.delenv("HERMES_GATEWAY_BASE_URL", raising=False)
+    monkeypatch.delenv("HAM_TELEGRAM_INBOUND_TRANSCRIPT_PATH", raising=False)
     for var in (
         "HAM_SOCIAL_LIVE_APPLY_TOKEN",
         "TELEGRAM_BOT_TOKEN",
@@ -468,6 +470,7 @@ _PROTECTED_ROUTES = (
     "/api/social/providers/telegram/status",
     "/api/social/providers/telegram/capabilities",
     "/api/social/providers/telegram/setup/checklist",
+    "/api/social/providers/telegram/inbound/preview",
     "/api/social/providers/discord/status",
     "/api/social/providers/discord/capabilities",
     "/api/social/providers/discord/setup/checklist",
@@ -573,6 +576,76 @@ def test_routes_ok_when_clerk_disabled(
     for route in _PREVIEW_ROUTES:
         res = client.post(route, json={})
         assert res.status_code == 200, f"{route} expected 200, got {res.status_code}"
+
+
+def test_telegram_inbound_preview_blocks_without_transcript_source(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+
+    body = client.get("/api/social/providers/telegram/inbound/preview").json()
+
+    assert body["provider_id"] == "telegram"
+    assert body["preview_kind"] == "telegram_inbound"
+    assert body["status"] == "blocked"
+    assert body["execution_allowed"] is False
+    assert body["mutation_attempted"] is False
+    assert body["live_apply_available"] is False
+    assert body["read_only"] is True
+    assert body["inbound_count"] == 0
+    assert "hermes_transcript_source_unavailable" in body["reasons"]
+
+
+def test_telegram_inbound_preview_returns_bounded_redacted_items(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    transcript = tmp_path / "telegram-inbound.jsonl"
+    raw_chat = "-1009876543210"
+    raw_user = "123456789"
+    transcript.write_text(
+        json.dumps(
+            {
+                "source": "telegram",
+                "role": "user",
+                "text": "hello inbound",
+                "chat_id": raw_chat,
+                "user_id": raw_user,
+                "session_id": "session-1",
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("HAM_TELEGRAM_INBOUND_TRANSCRIPT_PATH", str(transcript))
+
+    body = client.get("/api/social/providers/telegram/inbound/preview").json()
+
+    assert body["status"] == "completed"
+    assert body["inbound_count"] == 1
+    assert body["items"][0]["text"] == "hello inbound"
+    assert body["items"][0]["author_ref"].startswith("configured:")
+    assert body["items"][0]["chat_ref"].startswith("configured:")
+    assert body["items"][0]["repliable"] is True
+    text = json.dumps(body, sort_keys=True)
+    assert raw_chat not in text
+    assert raw_user not in text
+
+
+def test_telegram_inbound_has_no_reply_apply_or_live_routes(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    assert client.post("/api/social/providers/telegram/inbound/reply/apply", json={}).status_code == 404
+    assert client.post("/api/social/providers/telegram/inbound/apply", json={}).status_code == 404
+    assert client.post("/api/social/providers/telegram/inbound/live", json={}).status_code == 404
 
 
 # ---------------------------------------------------------------------------
@@ -2036,6 +2109,21 @@ def test_social_ui_contains_telegram_run_once_dry_run_preview_without_live_contr
     assert "/providers/telegram/activity/run-once/apply" not in adapter
     assert "RunOnceApply" not in screen
     assert "autonomy toggle" not in screen.lower()
+
+
+def test_social_ui_contains_telegram_inbound_preview_without_reply_controls() -> None:
+    screen = Path("frontend/src/features/hermes-workspace/screens/social/WorkspaceSocialScreen.tsx").read_text(
+        encoding="utf-8"
+    )
+    adapter = Path("frontend/src/features/hermes-workspace/adapters/socialAdapter.ts").read_text(encoding="utf-8")
+    assert "Preview Telegram inbound" in screen
+    assert "Read-only. No Telegram API call. No reply will be sent." in screen
+    assert "TelegramInboundPreviewCard" in screen
+    assert "previewTelegramInbound" in screen
+    assert "/providers/telegram/inbound/preview" in adapter
+    assert "/providers/telegram/inbound/reply/apply" not in adapter
+    assert "Send Telegram reply" not in screen
+    assert "Apply Telegram reply" not in screen
 
 
 def test_telegram_activity_apply_recomputes_preview_and_blocks_kind_mismatch(

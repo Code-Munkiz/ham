@@ -384,6 +384,32 @@ export type TelegramActivityRunOncePreviewResponse = {
   read_only: boolean;
 };
 
+export type TelegramInboundPreviewResponse = {
+  provider_id: "telegram";
+  preview_kind: "telegram_inbound";
+  status: "completed" | "blocked" | "failed";
+  execution_allowed: false;
+  mutation_attempted: false;
+  live_apply_available: false;
+  inbound_count: number;
+  items: Array<{
+    inbound_id: string;
+    text: string;
+    author_ref: string;
+    chat_ref: string;
+    session_ref: string;
+    created_at: string | null;
+    chat_type: string | null;
+    already_answered: boolean;
+    repliable: boolean;
+    reasons: string[];
+  }>;
+  reasons: string[];
+  warnings: string[];
+  recommended_next_steps: string[];
+  read_only: boolean;
+};
+
 export type TelegramActivityApplyResponse = {
   provider_id: "telegram";
   apply_kind: "telegram_activity";
@@ -691,6 +717,23 @@ export const socialAdapter = {
         }),
         bridge: { status: "ready" },
       };
+    } catch (e) {
+      return {
+        preview: null,
+        bridge: workspaceApiPending("social", null, e),
+        error: e instanceof Error ? e.message : String(e),
+      };
+    }
+  },
+
+  async previewTelegramInbound(): Promise<{ preview: TelegramInboundPreviewResponse | null; bridge: SocialBridge; error?: string }> {
+    try {
+      const res = await hamApiFetch(`${BASE}/providers/telegram/inbound/preview`, {
+        method: "GET",
+        credentials: "include",
+      });
+      if (!res.ok) return { preview: null, bridge: { status: "pending", detail: `HTTP ${res.status}` } };
+      return { preview: (await res.json()) as TelegramInboundPreviewResponse, bridge: { status: "ready" } };
     } catch (e) {
       return {
         preview: null,

@@ -55,6 +55,7 @@ from src.ham.social_telegram_activity import (
     plan_telegram_activity_once,
 )
 from src.ham.social_telegram_activity_runner import TelegramActivityRunConfig, run_telegram_activity_once
+from src.ham.social_telegram_inbound import discover_telegram_inbound_once
 from src.ham.social_telegram_send import (
     TELEGRAM_EXECUTION_KIND,
     TelegramSendRequest,
@@ -410,6 +411,38 @@ class TelegramActivityRunOncePreviewResponse(BaseModel):
     target: TelegramPreviewTargetDto
     activity_preview: TelegramActivityPreviewDto
     governor: TelegramActivityGovernorDto
+    reasons: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    recommended_next_steps: list[str] = Field(default_factory=list)
+    read_only: bool = True
+
+
+class TelegramInboundItemDto(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    inbound_id: str
+    text: str
+    author_ref: str
+    chat_ref: str
+    session_ref: str
+    created_at: str | None = None
+    chat_type: str | None = None
+    already_answered: bool = False
+    repliable: bool = False
+    reasons: list[str] = Field(default_factory=list)
+
+
+class TelegramInboundPreviewResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    provider_id: Literal["telegram"] = "telegram"
+    preview_kind: Literal["telegram_inbound"] = "telegram_inbound"
+    status: PreviewStatus
+    execution_allowed: bool = False
+    mutation_attempted: bool = False
+    live_apply_available: bool = False
+    inbound_count: int = 0
+    items: list[TelegramInboundItemDto] = Field(default_factory=list)
     reasons: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     recommended_next_steps: list[str] = Field(default_factory=list)
@@ -1353,6 +1386,11 @@ def _telegram_activity_run_once_preview_response(
             status=str(result.status),
         ),
     )
+
+
+def _telegram_inbound_preview_response() -> TelegramInboundPreviewResponse:
+    result = discover_telegram_inbound_once()
+    return TelegramInboundPreviewResponse.model_validate({**result.model_dump(mode="json"), "read_only": True})
 
 
 def _telegram_live_apply_available() -> bool:
@@ -2593,6 +2631,13 @@ def telegram_activity_run_once_preview(
     return _telegram_activity_run_once_preview_response(body or TelegramActivityPreviewRequest())
 
 
+@router.get("/providers/telegram/inbound/preview", response_model=TelegramInboundPreviewResponse)
+def telegram_inbound_preview(
+    _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)] = None,
+) -> TelegramInboundPreviewResponse:
+    return _telegram_inbound_preview_response()
+
+
 @router.post("/providers/telegram/activity/apply", response_model=TelegramActivityApplyResponse)
 def telegram_activity_apply(
     body: TelegramActivityApplyRequest,
@@ -3399,6 +3444,8 @@ __all__ = [
     "TelegramActivityPreviewRequest",
     "TelegramActivityPreviewResponse",
     "TelegramActivityRunOncePreviewResponse",
+    "TelegramInboundItemDto",
+    "TelegramInboundPreviewResponse",
     "TelegramActivityApplyRequest",
     "TelegramActivityApplyResponse",
     "SocialReactiveReplyApplyRequest",
