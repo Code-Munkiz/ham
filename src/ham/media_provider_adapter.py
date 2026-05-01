@@ -153,7 +153,7 @@ def _normalize_mime_image(mime: str) -> str | None:
     m = mime.strip().lower()
     if m == "image/jpg":
         m = "image/jpeg"
-    return m if m in _ALLOW_IMAGE_MIME else None
+    return m if m in _ALLOWED_IMAGE_MIME else None
 
 
 def _maybe_append_data_url_parts(out: list[tuple[str, bytes]], urls: object) -> None:
