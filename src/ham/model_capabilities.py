@@ -11,6 +11,12 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from src.ham.media_provider_adapter import (
+    default_image_model_env,
+    image_generation_feature_enabled,
+    openrouter_api_key_configured,
+)
+
 # Display labels for slugs we see often (OpenRouter-style ``org/model``).
 _DISPLAY_OVERRIDES: dict[str, str] = {
     "openai/gpt-4o": "GPT-4o",
@@ -56,6 +62,45 @@ def _vision_heuristic(model_id: str) -> bool:
     return any(n in mid for n in needles)
 
 
+def _build_generation_capabilities_payload() -> dict[str, Any]:
+    """Conservative media-generation flags (orthogonal to chat model / vision input)."""
+    flag = image_generation_feature_enabled()
+    key_ok = openrouter_api_key_configured()
+    core_ok = bool(flag and key_ok)
+    default_model = bool(default_image_model_env())
+    notes: list[str] = []
+
+    supports_image_generation = core_ok
+
+    if core_ok and not default_model:
+        notes.append(
+            "Image generation requests should include model_id unless HAM_MEDIA_IMAGE_DEFAULT_MODEL is set."
+        )
+    if not core_ok:
+        notes.append(
+            "Image generation is unavailable until enabled on the server "
+            "(HAM_MEDIA_IMAGE_GENERATION_ENABLED and OPENROUTER_API_KEY)."
+        )
+
+    return {
+        "supports_image_generation": supports_image_generation,
+        "supports_image_editing": False,
+        "supports_image_to_image": False,
+        "supports_video_generation": False,
+        "supports_image_to_video": False,
+        "supports_video_editing": False,
+        "supports_async_media_jobs": False,
+        "supports_reference_images": False,
+        "generated_media_max_duration_sec": None,
+        "generated_media_max_resolution": None,
+        "generated_media_output_types": (
+            ["image/png", "image/jpeg", "image/webp", "image/gif"] if supports_image_generation else []
+        ),
+        "media_generation_provider": ("openrouter" if supports_image_generation else None),
+        "media_generation_notes": notes,
+    }
+
+
 def build_chat_capabilities_payload(
     *,
     model_id: str | None,
@@ -86,7 +131,10 @@ def build_chat_capabilities_payload(
         "Scanned PDFs are not OCRed in this phase.",
         "MP4/MOV/WebM videos may be attached and stored for the session only; transcripts, thumbnails, "
         "and keyframes are not generated in this phase.",
+        "Video attachments are stored for the session — this is not native video generation or editing.",
         "Export PDF downloads the HAM transcript; the model does not generate the PDF.",
+        "HAM image uploads (forwarded only when marked vision-capable) are not the same product object as "
+        "server-generated pixels (creative image generation APIs are gated separately when enabled).",
     ]
     if not supports_image_input:
         limitations.append(
@@ -109,7 +157,9 @@ def build_chat_capabilities_payload(
 
     document_context_mode = "ham_bounded_text_extraction"
 
-    return {
+    gen_block = _build_generation_capabilities_payload()
+
+    payload = {
         "model": {
             "id": mid or "",
             "display_name": display_name,
@@ -124,7 +174,9 @@ def build_chat_capabilities_payload(
             "pdf_export": supports_pdf_export,
             "tool_use": supports_tool_use,
         },
+        "generation": gen_block,
         "limitations": limitations,
         "document_context_mode": document_context_mode,
         "notes": notes,
     }
+    return payload

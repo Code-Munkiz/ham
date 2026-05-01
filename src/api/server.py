@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from src.api.browser_operator import router as browser_operator_router
 from src.api.browser_runtime import router as browser_runtime_router
 from src.api.chat import router as chat_router
+from src.api.media_generation import router as media_generation_router
 from src.api.capability_directory import router as capability_directory_router
 from src.api.capability_library import router as capability_library_router
 from src.api.clerk_gate import get_ham_clerk_actor
@@ -102,6 +103,7 @@ if "allow_private_network" in inspect.signature(CORSMiddleware.__init__).paramet
 app.add_middleware(CORSMiddleware, **_cors_kw)
 
 app.include_router(chat_router)
+app.include_router(media_generation_router)
 app.include_router(capability_directory_router)
 app.include_router(capability_library_router)
 app.include_router(browser_runtime_router)

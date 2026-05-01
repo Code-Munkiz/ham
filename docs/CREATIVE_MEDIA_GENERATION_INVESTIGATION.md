@@ -33,7 +33,7 @@ Official provider documentation should be verified before implementation (URLs b
 ### Labels
 
 - **`CREATIVE_MEDIA_BASELINE_AUDITED`**
-- **`GENERATED_MEDIA_STORE_NOT_PRESENT`** — there is **no** first-class `generated_media_*` store, Firestore collection, or GCS prefix dedicated to creative outputs today.
+- **`GENERATED_MEDIA_STORE_NOT_PRESENT`** — **as of the original investigation baseline** there was **no** first-class store; **Phase 2G.1** adds `src/ham/generated_media_store.py` with `hamgm_*` ids + local/GCS backends (see **MVP implementation notes** at end of this doc).
 - **`MEDIA_PROVIDER_ADAPTER_NOT_PRESENT`** — no `CreativeMediaProvider` abstraction; **`src/llm_client.py`** wraps **LiteLLM + OpenRouter** for **chat completions** only, not Images/Videos endpoints.
 
 ### Current capability payload (`GET /api/chat/capabilities`)
@@ -268,7 +268,42 @@ Likely additions:
 
 ---
 
-## Rejected shortcuts
+## MVP implementation notes (Phase 2G.1 — shipped, backend-only)
+
+These notes supplement §5–§7; **no rewrite** of the architecture sections above.
+
+### HTTP surface
+
+- **`POST /api/media/images/generate`** — JSON `{ "prompt": str, "model_id"?: str }`; returns `{ generated_media_id, media_type, mime_type, status, download_url }` plus optional `width`/`height` when known. Relative **`download_url` only** (same origin); **no** raw provider URLs, **`gs://`**, or storage keys in JSON.
+- **`GET /api/media/artifacts/{id}`** — safe metadata + same relative `download_url`.
+- **`GET /api/media/artifacts/{id}/download`** — bytes, `Cache-Control: no-store`, `Content-Disposition: attachment`.
+
+### Auth / isolation
+
+Same **Clerk session optional** posture as chat attachments: when a Clerk user is present, generated rows record **`owner_key`** and download/metadata require the same user; when absent (local dev), artifacts are **world-readable** by id (rely on id secrecy — same class as attachment downloads without owner).
+
+### Persistence
+
+- **Ids:** `hamgm_` prefix (`src/ham/generated_media_store.py`).
+- **Local (default):** `HAM_GENERATED_MEDIA_DIR` or `HAM_DATA_DIR/generated-media`.
+- **GCS:** `HAM_GENERATED_MEDIA_STORE=gcs` and **`HAM_GENERATED_MEDIA_BUCKET`** or fallback to **`HAM_CHAT_ATTACHMENT_BUCKET`** with prefix **`HAM_GENERATED_MEDIA_PREFIX`** (default `generated-media/`). **Do not** point production at ephemeral local disk without accepting data loss.
+
+### Provider / env (text-to-image)
+
+- **Feature flag:** `HAM_MEDIA_IMAGE_GENERATION_ENABLED` (`1` / `true` / `yes` / `on`).
+- **Key:** existing **`OPENROUTER_API_KEY`** (must pass HAM plausibility checks — same family as chat).
+- **Default model:** `HAM_MEDIA_IMAGE_DEFAULT_MODEL` (OpenRouter model id); otherwise pass **`model_id`** on each request.
+- **Limits:** `HAM_MEDIA_IMAGE_PROMPT_MAX_CHARS`, `HAM_MEDIA_IMAGE_OUTPUT_MAX_BYTES` (optional).
+
+### Capabilities
+
+`GET /api/chat/capabilities` includes a nested **`generation`** object (`supports_image_generation`, etc.). **Enabled** only when the feature flag **and** a plausible OpenRouter key are present; **not** tied to the selected **chat** model id.
+
+### Explicitly not in 2G.1
+
+Frontend generation control, video generation, image edit / i2i, public CDN URLs, billing UI.
+
+---
 
 - Returning provider-generated **temporary URLs directly** without HAM ingestion.
 - Folding generated binaries into **`ham_chat_user_v2`** JSON (bloated Firestore payloads).

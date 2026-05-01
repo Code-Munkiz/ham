@@ -237,6 +237,23 @@ export interface ModelCatalogPayload {
   http_chat_model_fallback?: string | null;
 }
 
+/** Creative-media generation flags (distinct from `image_input` / video attachment store-only). */
+export interface ChatGenerationCapabilities {
+  supports_image_generation: boolean;
+  supports_image_editing: boolean;
+  supports_image_to_image: boolean;
+  supports_video_generation: boolean;
+  supports_image_to_video: boolean;
+  supports_video_editing: boolean;
+  supports_async_media_jobs: boolean;
+  supports_reference_images: boolean;
+  generated_media_max_duration_sec: number | null;
+  generated_media_max_resolution: string | null;
+  generated_media_output_types: string[];
+  media_generation_provider: string | null;
+  media_generation_notes: string[];
+}
+
 /** Safe subset from `GET /api/chat/capabilities` — no secrets or storage paths. */
 export interface ChatCapabilitiesPayload {
   model: { id: string; display_name: string };
@@ -250,6 +267,8 @@ export interface ChatCapabilitiesPayload {
     pdf_export: boolean;
     tool_use: boolean;
   };
+  /** Present from Phase 2G.1+ when API returns `generation`; clients should treat conservative defaults when absent. */
+  generation?: ChatGenerationCapabilities;
   limitations: string[];
   document_context_mode: string;
   notes: string;

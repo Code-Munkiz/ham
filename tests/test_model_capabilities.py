@@ -58,6 +58,28 @@ def test_capabilities_endpoint_no_secret_or_path_leaks(monkeypatch: pytest.Monke
     assert "GOOGLE_APPLICATION" not in raw
     assert "gs://" not in raw
     assert r"svc.json" not in raw
+    assert "generation" in res.json()
+
+def test_build_payload_includes_generation_block() -> None:
+    p = build_chat_capabilities_payload(model_id=None, gateway_mode="openrouter")
+    assert "generation" in p
+    gen = p["generation"]
+    assert gen["supports_video_generation"] is False
+    assert gen["supports_async_media_jobs"] is False
+
+
+def test_generation_enabled_when_env_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HAM_MEDIA_IMAGE_GENERATION_ENABLED", "true")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-v1-hamtests-fake-long-key-for-plausible-xxxx")
+    p = build_chat_capabilities_payload(model_id="x/y", gateway_mode="openrouter")
+    assert p["generation"]["supports_image_generation"] is True
+
+
+def test_generation_disabled_without_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("HAM_MEDIA_IMAGE_GENERATION_ENABLED", raising=False)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-v1-hamtests-fake-long-key-for-plausible-xxxx")
+    p = build_chat_capabilities_payload(model_id="x/y", gateway_mode="openrouter")
+    assert p["generation"]["supports_image_generation"] is False
 
 
 def test_mock_gateway_disables_image_even_if_id_matches_vision_pattern() -> None:
