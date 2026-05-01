@@ -8,7 +8,7 @@ returned in attachment APIs, or logged in full.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from io import BytesIO
+from io import BytesIO, StringIO
 from typing import Literal
 
 MAX_EXTRACTED_CHARS_PER_FILE = 30_000
@@ -16,8 +16,32 @@ MAX_EXTRACTED_CHARS_PER_MESSAGE = 60_000
 MAX_PDF_PAGES = 25
 MAX_DOCX_PARAGRAPHS = 2_000
 MAX_DOCX_TABLES = 200
+MAX_SPREADSHEET_SHEETS = 5
+MAX_SPREADSHEET_ROWS = 100
+MAX_SPREADSHEET_COLS = 30
 
 ExtractionStatus = Literal["extracted", "truncated", "unsupported", "failed", "empty"]
+
+
+def _is_spreadsheet_mime(m: str) -> bool:
+    x = (m or "").strip().lower()
+    return x in (
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "text/csv",
+        "application/csv",
+    )
+
+
+def _is_legacy_xls_placeholder(filename: str, mime: str) -> bool:
+    fn = (filename or "").lower()
+    m = (mime or "").strip().lower()
+    return fn.endswith(".xls") or m == "application/vnd.ms-excel"
+
+
+def _cell_str(v: object) -> str:
+    if v is None:
+        return ""
+    return str(v).replace("\n", " ").replace("\r", " ").strip()
 
 
 @dataclass(frozen=True)
@@ -41,6 +65,103 @@ def _decode_plain_text(raw: bytes) -> str:
         return raw.decode("utf-8")
     except UnicodeDecodeError:
         return raw.decode("utf-8", errors="replace")
+
+
+def _extract_xlsx(raw: bytes) -> tuple[str, ExtractionStatus, bool, str | None]:
+    try:
+        from openpyxl import load_workbook
+    except ImportError:
+        return "", "failed", False, "xlsx_library_unavailable"
+
+    try:
+        wb = load_workbook(filename=BytesIO(raw), read_only=True, data_only=True)
+    except Exception:
+        return "", "failed", False, "invalid_xlsx"
+
+    parts: list[str] = []
+    truncated = False
+    sheet_names_all = list(wb.sheetnames)
+    sheet_names = sheet_names_all[:MAX_SPREADSHEET_SHEETS]
+    if len(sheet_names_all) > MAX_SPREADSHEET_SHEETS:
+        truncated = True
+
+    for sname in sheet_names:
+        ws = wb[sname]
+        rows_buf: list[list[str]] = []
+        row_idx = 0
+        try:
+            for row in ws.iter_rows(
+                min_row=1,
+                max_row=MAX_SPREADSHEET_ROWS,
+                max_col=MAX_SPREADSHEET_COLS,
+                values_only=True,
+            ):
+                row_idx += 1
+                cells = [_cell_str(c) for c in (row or ())]
+                while len(cells) < MAX_SPREADSHEET_COLS:
+                    cells.append("")
+                rows_buf.append(cells[:MAX_SPREADSHEET_COLS])
+        except Exception:
+            wb.close()
+            return "", "failed", False, "invalid_xlsx"
+
+        if row_idx >= MAX_SPREADSHEET_ROWS:
+            truncated = True
+
+        block: list[str] = [f"Sheet: {sname}"]
+        if rows_buf:
+            hdr = rows_buf[0]
+            block.append(f"Columns: {' | '.join(hdr)}")
+            block.append("Rows:")
+            for data_row in rows_buf[1:]:
+                block.append(" | ".join(data_row))
+        parts.append("\n".join(block))
+
+    try:
+        wb.close()
+    except Exception:
+        pass
+
+    merged = "\n\n".join(parts).strip()
+    if not merged:
+        return "", "empty", False, None
+    capped, cut = _cap_body(merged, MAX_EXTRACTED_CHARS_PER_FILE)
+    st: ExtractionStatus = "truncated" if (cut or truncated) else "extracted"
+    return capped, st, cut or truncated, None
+
+
+def _extract_csv(raw: bytes) -> tuple[str, ExtractionStatus, bool, str | None]:
+    import csv
+
+    text = _decode_plain_text(raw)
+    rows: list[list[str]] = []
+    truncated = False
+    try:
+        reader = csv.reader(StringIO(text))
+        for i, row in enumerate(reader):
+            if i >= MAX_SPREADSHEET_ROWS:
+                truncated = True
+                break
+            rows.append([_cell_str(c) for c in row[:MAX_SPREADSHEET_COLS]])
+            if len(row) > MAX_SPREADSHEET_COLS:
+                truncated = True
+    except Exception:
+        return "", "failed", False, "invalid_csv"
+
+    if not rows:
+        return "", "empty", False, None
+
+    block: list[str] = []
+    block.append(f"Columns: {' | '.join(rows[0])}")
+    block.append("Rows:")
+    for data_row in rows[1:]:
+        block.append(" | ".join(data_row))
+    merged = "\n".join(block).strip()
+    if not merged:
+        return "", "empty", False, None
+    capped, cut = _cap_body(merged, MAX_EXTRACTED_CHARS_PER_FILE)
+    st: ExtractionStatus = "truncated" if (cut or truncated) else "extracted"
+    return capped, st, cut or truncated, None
 
 
 def _extract_pdf(raw: bytes) -> tuple[str, ExtractionStatus, bool, str | None]:
@@ -196,6 +317,39 @@ def extract_document_bytes(*, filename: str, mime: str, raw: bytes) -> DocumentE
             error_reason=err,
         )
 
+    if m == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+        text, st, trunc, err = _extract_xlsx(raw)
+        return DocumentExtractionResult(
+            filename=fn,
+            mime=m,
+            status=st,
+            text=text,
+            truncated=trunc,
+            error_reason=err,
+        )
+
+    if m in ("text/csv", "application/csv"):
+        m = "text/csv"
+        text, st, trunc, err = _extract_csv(raw)
+        return DocumentExtractionResult(
+            filename=fn,
+            mime=m,
+            status=st,
+            text=text,
+            truncated=trunc,
+            error_reason=err,
+        )
+
+    if m == "application/vnd.ms-excel":
+        return DocumentExtractionResult(
+            filename=fn,
+            mime=m,
+            status="unsupported",
+            text="",
+            truncated=False,
+            error_reason=None,
+        )
+
     if m == "application/msword":
         return DocumentExtractionResult(
             filename=fn,
@@ -225,8 +379,14 @@ def _extraction_summary_line(r: DocumentExtractionResult) -> str:
     if r.status == "empty":
         return "empty (no extractable text in this slice)"
     if r.status == "truncated":
-        suffix = f" or first {MAX_PDF_PAGES} PDF pages" if r.mime == "application/pdf" else ""
-        return f"truncated after {MAX_EXTRACTED_CHARS_PER_FILE:,} characters{suffix}"
+        if r.mime == "application/pdf":
+            return f"truncated after {MAX_EXTRACTED_CHARS_PER_FILE:,} characters or first {MAX_PDF_PAGES} PDF pages"
+        if _is_spreadsheet_mime(r.mime):
+            return (
+                f"truncated (max {MAX_SPREADSHEET_SHEETS} sheets, {MAX_SPREADSHEET_ROWS} rows, "
+                f"{MAX_SPREADSHEET_COLS} cols, or {MAX_EXTRACTED_CHARS_PER_FILE:,} chars)"
+            )
+        return f"truncated after {MAX_EXTRACTED_CHARS_PER_FILE:,} characters"
     if r.truncated:
         return f"extracted, truncated after {MAX_EXTRACTED_CHARS_PER_FILE:,} characters"
     return "extracted"
@@ -234,8 +394,9 @@ def _extraction_summary_line(r: DocumentExtractionResult) -> str:
 
 def format_document_block_for_llm(r: DocumentExtractionResult, *, content_body: str) -> str:
     """One document block for the model. ``content_body`` is already bounded."""
+    label = "spreadsheet" if _is_spreadsheet_mime(r.mime) else "document"
     return (
-        f"[Attached document: {r.filename}]\n"
+        f"[Attached {label}: {r.filename}]\n"
         f"Type: {r.mime}\n"
         f"Extraction: {_extraction_summary_line(r)}\n"
         f"Content:\n{content_body}\n"
@@ -246,6 +407,12 @@ def format_document_placeholder_for_llm(r: DocumentExtractionResult) -> str:
     """No extractable body: unsupported, empty, or failed — short placeholder."""
     name = r.filename
     mime = r.mime
+    if r.status == "unsupported" and _is_legacy_xls_placeholder(name, mime):
+        return (
+            f"[Attached spreadsheet: {name}]\n"
+            f"Type: {mime}\n"
+            "This file was attached, but legacy .xls extraction is not enabled."
+        )
     if r.status == "unsupported":
         return (
             f"[Attached document: {name}]\n"
@@ -253,15 +420,17 @@ def format_document_placeholder_for_llm(r: DocumentExtractionResult) -> str:
             "This file was attached, but text extraction for this format is not enabled in this deployment."
         )
     if r.status == "failed":
+        label = "spreadsheet" if _is_spreadsheet_mime(mime) else "document"
         return (
-            f"[Attached document: {name}]\n"
+            f"[Attached {label}: {name}]\n"
             f"Type: {mime}\n"
             f"Extraction: {_extraction_summary_line(r)}\n"
             "Content:\n[Text extraction did not succeed; the file is still attached for your reference.]"
         )
     if r.status == "empty":
+        label = "spreadsheet" if _is_spreadsheet_mime(mime) else "document"
         return (
-            f"[Attached document: {name}]\n"
+            f"[Attached {label}: {name}]\n"
             f"Type: {mime}\n"
             f"Extraction: {_extraction_summary_line(r)}\n"
             "Content:\n[No extractable text — the document may be scanned or image-only (OCR is not enabled).]"
@@ -270,8 +439,9 @@ def format_document_placeholder_for_llm(r: DocumentExtractionResult) -> str:
 
 
 def _skipped_budget_block(r: DocumentExtractionResult) -> str:
+    label = "spreadsheet" if _is_spreadsheet_mime(r.mime) else "document"
     return (
-        f"[Attached document: {r.filename}]\n"
+        f"[Attached {label}: {r.filename}]\n"
         f"Type: {r.mime}\n"
         "Extraction: omitted — attached-document text budget exhausted for this message\n"
         "Content:\n[This file was not included in the extracted context due to size limits.]"

@@ -105,6 +105,52 @@ def test_post_attachment_accepts_docx_zip_header(
     assert r.json()["mime"] == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 
+def test_post_attachment_accepts_xlsx_zip_header(
+    att_dir: Path, mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _ = mock_mode
+    monkeypatch.setenv("HAM_CHAT_ATTACHMENT_DIR", str(att_dir))
+    set_chat_attachment_store_for_tests(LocalDiskAttachmentStore(att_dir))
+
+    blob = b"PK\x03\x04" + b"\x00" * 36
+    r = client.post(
+        "/api/chat/attachments",
+        files={"file": ("t.xlsx", blob, "application/octet-stream")},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["mime"] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+def test_post_attachment_accepts_csv(
+    att_dir: Path, mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _ = mock_mode
+    monkeypatch.setenv("HAM_CHAT_ATTACHMENT_DIR", str(att_dir))
+    set_chat_attachment_store_for_tests(LocalDiskAttachmentStore(att_dir))
+
+    r = client.post(
+        "/api/chat/attachments",
+        files={"file": ("data.csv", b"a,b\n1,2\n", "text/csv")},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["mime"] == "text/csv"
+
+
+def test_post_attachment_accepts_xls_as_ms_excel(
+    att_dir: Path, mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _ = mock_mode
+    monkeypatch.setenv("HAM_CHAT_ATTACHMENT_DIR", str(att_dir))
+    set_chat_attachment_store_for_tests(LocalDiskAttachmentStore(att_dir))
+
+    r = client.post(
+        "/api/chat/attachments",
+        files={"file": ("old.xls", _OLE_DOC, "application/octet-stream")},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["mime"] == "application/vnd.ms-excel"
+
+
 def test_post_attachment_accepts_msword_sniff(
     att_dir: Path, mock_mode: None, monkeypatch: pytest.MonkeyPatch,
 ) -> None:

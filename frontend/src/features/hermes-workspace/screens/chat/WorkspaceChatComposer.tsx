@@ -79,7 +79,7 @@ type WorkspaceChatComposerProps = {
   exportPdf: ComposerExportPdfState;
 };
 
-const COMPOSER_MENU_FOOTER_HINT = "Docs are text-extracted. OCR/video not yet supported.";
+const COMPOSER_MENU_FOOTER_HINT = "Docs/spreadsheets are text-extracted. OCR/video not yet supported.";
 
 /** Tooltip-only: full honesty without bloating the menu panel. */
 function attachMenuCapabilityTitle(caps: ChatCapabilitiesPayload | null | undefined): string | null {

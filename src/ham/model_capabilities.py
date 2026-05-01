@@ -81,7 +81,8 @@ def build_chat_capabilities_payload(
     display_name = _slug_display_name(mid) if mid else "Chat model"
 
     limitations = [
-        "PDF and DOCX files are text-extracted by HAM before being sent to the model.",
+        "PDF, DOCX, XLSX, and CSV files are text-extracted by HAM before being sent to the model (bounded).",
+        "Legacy .xls files may be stored but are not text-extracted in this phase.",
         "Scanned PDFs are not OCRed in this phase.",
         "Video analysis is not implemented yet.",
         "Export PDF downloads the HAM transcript; the model does not generate the PDF.",

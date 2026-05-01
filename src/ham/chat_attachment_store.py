@@ -41,8 +41,11 @@ CHAT_UPLOAD_ALLOWED_MIME = frozenset(
         "application/pdf",
         "application/msword",
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         "text/plain",
         "text/markdown",
+        "text/csv",
+        "application/vnd.ms-excel",
     }
 )
 

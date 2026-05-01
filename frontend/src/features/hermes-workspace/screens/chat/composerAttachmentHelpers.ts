@@ -40,9 +40,9 @@ export const WORKSPACE_ATTACHMENT_ACCEPT = [
   "image/gif",
   "application/pdf",
   "application/msword",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "text/plain",
-  "text/markdown",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "text/csv",
+  "application/vnd.ms-excel",
   ".jpg",
   ".jpeg",
   ".png",
@@ -53,6 +53,9 @@ export const WORKSPACE_ATTACHMENT_ACCEPT = [
   ".md",
   ".doc",
   ".docx",
+  ".xlsx",
+  ".csv",
+  ".xls",
 ].join(",");
 
 const IMG_EXT = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif"]);
@@ -60,7 +63,7 @@ const IMG_EXT = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif"]);
 const MIME_IMAGE = /^image\/(png|jpe?g|webp|gif)$/i;
 
 const UNSUPPORTED =
-  "Use JPG, PNG, GIF, WebP, PDF, TXT, MD, DOC, or DOCX — or paste text instead.";
+  "Use JPG, PNG, GIF, WebP, PDF, TXT, MD, DOC, DOCX, XLSX, CSV, or XLS (stored; not extracted) — or paste text instead.";
 
 function fileExtensionLower(name: string): string {
   const i = name.lastIndexOf(".");
@@ -99,8 +102,23 @@ function mimeForFile(file: File): string {
   if (ext === ".txt") return "text/plain";
   if (ext === ".md" || ext === ".markdown") return "text/markdown";
   if (ext === ".doc") return "application/msword";
+  if (ext === ".xls") return "application/vnd.ms-excel";
   if (ext === ".docx") return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  if (ext === ".xlsx") return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+  if (ext === ".csv") return "text/csv";
   return "";
+}
+
+function isAllowedSpreadsheetFile(file: File): boolean {
+  const ext = fileExtensionLower(file.name);
+  const m = mimeForFile(file).toLowerCase();
+  if (ext === ".xlsx" || m === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") {
+    return true;
+  }
+  if (ext === ".csv" || m === "text/csv" || m === "application/csv") {
+    return true;
+  }
+  return false;
 }
 
 function isAllowedTextFile(file: File): boolean {
@@ -114,8 +132,10 @@ function isAllowedTextFile(file: File): boolean {
 function isAllowedBinaryOfficeOrPdf(file: File): boolean {
   const ext = fileExtensionLower(file.name);
   const m = mimeForFile(file).toLowerCase();
+  if (isAllowedSpreadsheetFile(file)) return true;
   if (ext === ".pdf" || m === "application/pdf") return true;
   if (ext === ".doc" || m === "application/msword") return true;
+  if (ext === ".xls" || m === "application/vnd.ms-excel") return true;
   if (
     ext === ".docx" ||
     m === "application/vnd.openxmlformats-officedocument.wordprocessingml.document"

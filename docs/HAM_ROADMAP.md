@@ -68,6 +68,8 @@ Snapshot accepted after Document Intelligence Phase 2A and backend deploy:
 
 **Phase 2C (summary):** Conservative capability metadata in `src/ham/model_capabilities.py`; safe JSON from `GET /api/chat/capabilities` (no secrets, Hermes base URL, tokens, paths, or `gs://`). The UI distinguishes **HAM document text extraction** (bounded context into the model request) from **native** PDF/DOCX ingestion, and **transcript PDF export** (HAM-generated download) from the model “creating” a PDF. **Export PDF** is triggered from the composer action menu (**+**), not the header next to Inspector.
 
+**Spreadsheet attachments (Phase 2D.1):** `.xlsx` and `.csv` are accepted on `POST /api/chat/attachments` and **text-extracted with bounds** (sheet/row/column/character caps) for model context — values only via `data_only` / stored cell values; no formula or macro execution. **Legacy `.xls`** is **upload-only / store-only** (`application/vnd.ms-excel`) with an explicit placeholder in extracted context until a safe parser is added.
+
 ---
 
 ## 5. Phase 2B — Export-to-PDF MVP (definition only)

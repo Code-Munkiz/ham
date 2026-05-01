@@ -1,4 +1,4 @@
-"""Unit tests for chat document extraction (txt/md/pdf/docx) and LLM section budgets."""
+"""Unit tests for chat document extraction (txt/md/pdf/docx/spreadsheet) and LLM section budgets."""
 from __future__ import annotations
 
 import base64
@@ -131,4 +131,62 @@ def test_format_block_no_gs_path() -> None:
     block = format_document_block_for_llm(r, content_body=r.text)
     assert "gs://" not in block
     assert "C:\\" not in block
+
+
+def _small_xlsx_bytes() -> bytes:
+    from openpyxl import Workbook
+
+    buf = BytesIO()
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "January"
+    ws.append(["Agent", "Business", "Amount"])
+    ws.append(["Ada", "North", "42"])
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def test_extract_xlsx_values_only() -> None:
+    raw = _small_xlsx_bytes()
+    r = extract_document_bytes(
+        filename="commissions.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        raw=raw,
+    )
+    assert r.status == "extracted"
+    assert "January" in r.text
+    assert "Agent" in r.text and "Amount" in r.text
+    assert "Ada" in r.text
+    blk = format_document_block_for_llm(r, content_body=r.text)
+    assert "[Attached spreadsheet:" in blk
+    assert "gs://" not in blk
+
+
+def test_extract_csv() -> None:
+    r = extract_document_bytes(
+        filename="rows.csv",
+        mime="text/csv",
+        raw=b"a,b\n1,2\n3,4\n",
+    )
+    assert r.status == "extracted"
+    assert "Columns:" in r.text and "a" in r.text
+
+
+def test_extract_csv_truncates_rows() -> None:
+    lines = ["c,d"] + [f"{i},{i}" for i in range(150)]
+    body = "\n".join(lines).encode()
+    r = extract_document_bytes(filename="big.csv", mime="text/csv", raw=body)
+    assert r.status == "truncated"
+
+
+def test_extract_legacy_xls_unsupported() -> None:
+    r = extract_document_bytes(
+        filename="legacy.xls",
+        mime="application/vnd.ms-excel",
+        raw=b"\xd0\xcf\x11\xe0",
+    )
+    assert r.status == "unsupported"
+    sec = build_document_llm_sections([r], max_total_chars=1000)[0]
+    assert "legacy .xls extraction is not enabled" in sec
+    assert "gs://" not in sec
 

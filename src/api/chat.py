@@ -1454,6 +1454,8 @@ def _coerce_request_mime(content_type: str | None, filename: str) -> str | None:
     raw = (content_type or "").split(";")[0].strip().lower()
     if raw == "image/jpg":
         raw = "image/jpeg"
+    if raw == "application/csv":
+        return "text/csv"
     if raw in CHAT_UPLOAD_ALLOWED_MIME:
         return raw
     name = (filename or "").lower()
@@ -1469,8 +1471,14 @@ def _coerce_request_mime(content_type: str | None, filename: str) -> str | None:
         return "application/pdf"
     if name.endswith(".doc"):
         return "application/msword"
+    if name.endswith(".xls"):
+        return "application/vnd.ms-excel"
     if name.endswith(".docx"):
         return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    if name.endswith(".xlsx"):
+        return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    if name.endswith(".csv"):
+        return "text/csv"
     if name.endswith(".md") or name.endswith(".markdown"):
         return "text/markdown"
     if name.endswith(".txt"):
@@ -1496,8 +1504,10 @@ def _sniff_pdf_mime(head: bytes) -> str | None:
     return None
 
 
-def _sniff_oledoc_mime(head: bytes) -> str | None:
+def _sniff_oledoc_mime(head: bytes, filename: str) -> str | None:
     if len(head) >= 8 and head[:8] == b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1":
+        if (filename or "").lower().endswith(".xls"):
+            return "application/vnd.ms-excel"
         return "application/msword"
     return None
 
@@ -1507,6 +1517,14 @@ def _sniff_docx_mime(head: bytes, filename: str) -> str | None:
         return None
     if len(head) >= 4 and head[:2] == b"PK":
         return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    return None
+
+
+def _sniff_xlsx_mime(head: bytes, filename: str) -> str | None:
+    if not filename.lower().endswith(".xlsx"):
+        return None
+    if len(head) >= 4 and head[:2] == b"PK":
+        return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     return None
 
 
@@ -1544,12 +1562,14 @@ async def post_chat_attachment(
     if mime is None:
         mime = _sniff_pdf_mime(head)
     if mime is None:
-        mime = _sniff_oledoc_mime(head)
+        mime = _sniff_xlsx_mime(head, name)
+    if mime is None:
+        mime = _sniff_oledoc_mime(head, name)
     if mime is None:
         mime = _sniff_docx_mime(head, name)
     if mime is None:
         mime = _coerce_request_mime(file.content_type, name)
-        if mime in ("text/plain", "text/markdown"):
+        if mime in ("text/plain", "text/markdown", "text/csv"):
             try:
                 data.decode("utf-8")
             except UnicodeError as exc:
@@ -1562,7 +1582,7 @@ async def post_chat_attachment(
                         },
                     },
                 ) from exc
-    elif mime in ("text/plain", "text/markdown"):
+    elif mime in ("text/plain", "text/markdown", "text/csv"):
         try:
             data.decode("utf-8")
         except UnicodeError as exc:
@@ -1583,7 +1603,7 @@ async def post_chat_attachment(
                     "code": "ATTACHMENT_UNSUPPORTED_TYPE",
                     "message": (
                         "Unsupported file type. Use PNG, JPEG, GIF, WebP, PDF, plain text, "
-                        "markdown, DOC, or DOCX."
+                        "markdown, DOC, DOCX, XLSX, CSV, or legacy XLS (stored only)."
                     ),
                 },
             },

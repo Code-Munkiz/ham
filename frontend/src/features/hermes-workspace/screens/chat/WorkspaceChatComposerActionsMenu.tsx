@@ -101,7 +101,7 @@ export function WorkspaceChatComposerActionsMenu({
     attachDisabled && attachDisabledReason?.trim()
       ? attachDisabledReason.trim()
       : attachDetailsTitle?.trim() ||
-        "Documents: text-extracted server-side. PDF export is a transcript download, not model-generated.";
+        "Documents and spreadsheets: text-extracted server-side. PDF export downloads the transcript only.";
 
   return (
     <div className={cn("relative shrink-0", className)} ref={wrapRef}>
@@ -168,7 +168,7 @@ export function WorkspaceChatComposerActionsMenu({
                   <ChevronRight className="h-3 w-3 shrink-0 opacity-40" aria-hidden strokeWidth={2} />
                 </span>
                 <span className="text-[10px] font-normal leading-snug text-white/42">
-                  {attachDisabled ? attachDisabledReason ?? "Unavailable" : "Images and documents"}
+                  {attachDisabled ? attachDisabledReason ?? "Unavailable" : "Images, docs, and spreadsheets"}
                 </span>
               </button>
               <div className="mx-2 my-0.5 h-px bg-white/[0.07]" role="separator" />
