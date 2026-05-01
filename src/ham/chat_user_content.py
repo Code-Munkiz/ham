@@ -27,6 +27,11 @@ from src.ham.chat_attachment_store import (
     get_chat_attachment_store,
     is_safe_attachment_id,
 )
+from src.ham.chat_document_extraction import (
+    DocumentExtractionResult,
+    build_document_llm_sections,
+    extract_document_bytes,
+)
 
 HAM_CHAT_USER_V1 = "ham_chat_user_v1"
 HAM_CHAT_USER_V2 = "ham_chat_user_v2"
@@ -258,7 +263,12 @@ def normalize_user_incoming_to_stored(
 
 
 def plain_text_for_operator(stored: str) -> str:
-    """Text-only / safe summary for the operator and previews."""
+    """Text-only / safe summary for the operator and previews.
+
+    Must not load attachment bytes or include extracted document bodies — only
+    user-typed text plus attachment counts — so session/API summaries never
+    leak file contents.
+    """
     v2 = try_parse_stored_v2(stored)
     if v2 is not None:
         t = (v2.get("text") or "").strip()
@@ -441,7 +451,8 @@ def _to_llm_message_content_v2(v2: dict[str, Any]) -> str | list[dict[str, Any]]
     base_text = (v2.get("text") or "").strip()
     ats = [x for x in (v2.get("attachments") or []) if isinstance(x, dict)]
     store = get_chat_attachment_store()
-    file_text_blocks: list[str] = []
+    missing_blocks: list[str] = []
+    file_results: list[DocumentExtractionResult] = []
     image_rows: list[tuple[bytes, str, str]] = []
     for a in ats:
         aid = str(a.get("id") or "")
@@ -450,20 +461,21 @@ def _to_llm_message_content_v2(v2: dict[str, Any]) -> str | list[dict[str, Any]]
         got = store.get(aid)
         if got is None:
             name = str(a.get("name") or "attachment")
-            file_text_blocks.append(f"[Attachment missing on server: {name}]")
+            missing_blocks.append(f"[Attachment missing on server: {name}]")
             continue
         raw, rec = got
         m = _norm_mime(rec.mime)
-        if rec.kind == "file" and m in ("text/plain", "text/markdown"):
-            try:
-                body = raw.decode("utf-8")
-            except UnicodeDecodeError:
-                body = raw.decode("utf-8", errors="replace")
-            name = str(a.get("name") or rec.filename)
-            file_text_blocks.append(f"---\n[Attached file: {name}]\n{body}\n")
+        if rec.kind == "file":
+            disp = str(a.get("name") or rec.filename).strip() or rec.filename
+            file_results.append(
+                extract_document_bytes(filename=disp, mime=m, raw=raw),
+            )
         elif rec.kind == "image" or m.startswith("image/"):
             disp = str(a.get("name") or rec.filename).strip() or "(image)"
             image_rows.append((raw, rec.mime, disp))
+
+    file_text_blocks = build_document_llm_sections(file_results)
+    file_text_blocks = missing_blocks + file_text_blocks
 
     text = base_text
     if file_text_blocks:

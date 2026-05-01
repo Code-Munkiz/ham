@@ -1,10 +1,10 @@
 """Tests for structured chat user payloads (v1 data URLs, v2 attachment ids)."""
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
+from docx import Document
 
 from src.ham.chat_attachment_store import (
     AttachmentRecord,
@@ -284,6 +284,54 @@ def test_normalize_v2_caps_extra_images_even_when_below_upload_limit(temp_store:
     assert isinstance(parts, list)
     img_count = sum(1 for p in parts if isinstance(p, dict) and p.get("type") == "image_url")
     assert img_count == 1
+
+
+def test_v2_stored_json_excludes_extracted_document_text(
+    temp_store: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Extraction is for LLM assembly only; session payload stays id/name/mime/kind."""
+    from src.ham.chat_attachment_store import get_chat_attachment_store
+
+    monkeypatch.setenv("HERMES_GATEWAY_MODE", "mock")
+
+    store = get_chat_attachment_store()
+    aid = store.new_id()
+    buf = BytesIO()
+    docx = Document()
+    docx.add_paragraph("DOCX_SESSION_LEAK_CHECK")
+    docx.save(buf)
+    raw = buf.getvalue()
+    store.put(
+        raw,
+        AttachmentRecord(
+            id=aid,
+            filename="secret.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            size=len(raw),
+            owner_key="",
+            kind="file",
+        ),
+    )
+    payload = {
+        "h": "ham_chat_user_v2",
+        "text": "summarize",
+        "attachments": [
+            {
+                "id": aid,
+                "name": "secret.docx",
+                "mime": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "kind": "file",
+            },
+        ],
+    }
+    s = mod.normalize_user_incoming_to_stored(payload, attachment_user_id=None)
+    assert "DOCX_SESSION_LEAK_CHECK" not in s
+    assert "gs://" not in s
+    plain = mod.plain_text_for_operator(s)
+    assert "DOCX_SESSION_LEAK_CHECK" not in plain
+    llm = mod.to_llm_message_content(s)
+    assert isinstance(llm, str)
+    assert "DOCX_SESSION_LEAK_CHECK" in llm
 
 
 def test_normalize_v2_http_respects_vision_mode_off(temp_store: Path, monkeypatch: pytest.MonkeyPatch) -> None:
