@@ -377,18 +377,9 @@ class OpenRouterImageProviderAdapter(ImageProviderAdapter):
 
 
 def build_default_image_adapter() -> ImageProviderAdapter:
-    if not image_generation_feature_enabled():
-        return UnconfiguredImageProviderAdapter()
+    from src.ham.media_provider_registry import build_selected_image_generation_adapter
 
-    if not openrouter_api_key_configured():
-        return UnconfiguredImageProviderAdapter()
-
-    key_val = (os.getenv("OPENROUTER_API_KEY") or "").strip()
-    if not key_val:
-        return UnconfiguredImageProviderAdapter()
-
-    api_base = get_openrouter_base_url().rstrip("/")
-    return OpenRouterImageProviderAdapter(api_url=api_base, api_key=key_val)
+    return build_selected_image_generation_adapter()
 
 
 _adapter_singleton: ImageProviderAdapter | None = None

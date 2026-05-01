@@ -64,6 +64,10 @@ def test_build_payload_includes_generation_block() -> None:
     p = build_chat_capabilities_payload(model_id=None, gateway_mode="openrouter")
     assert "generation" in p
     gen = p["generation"]
+    assert gen["active_media_provider"] == "openrouter"
+    assert isinstance(gen["available_media_providers"], list)
+    assert len(gen["available_media_providers"]) >= 1
+    assert gen["supports_text_to_video"] is False
     assert gen["supports_video_generation"] is False
     assert gen["supports_async_media_jobs"] is False
 
@@ -72,6 +76,8 @@ def test_generation_enabled_when_env_on(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setenv("HAM_MEDIA_IMAGE_GENERATION_ENABLED", "true")
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-v1-hamtests-fake-long-key-for-plausible-xxxx")
     p = build_chat_capabilities_payload(model_id="x/y", gateway_mode="openrouter")
+    assert p["generation"]["active_media_provider"] == "openrouter"
+    assert p["generation"]["supports_text_to_image"] is True
     assert p["generation"]["supports_image_generation"] is True
 
 

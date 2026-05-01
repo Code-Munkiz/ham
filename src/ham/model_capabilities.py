@@ -17,6 +17,12 @@ from src.ham.media_provider_adapter import (
     openrouter_api_key_configured,
     reference_image_generation_enabled,
 )
+from src.ham.media_provider_registry import (
+    active_media_provider_id,
+    availability_dict_rows,
+    openrouter_capabilities_row,
+    provider_notes_for_capabilities,
+)
 
 # Display labels for slugs we see often (OpenRouter-style ``org/model``).
 _DISPLAY_OVERRIDES: dict[str, str] = {
@@ -65,36 +71,57 @@ def _vision_heuristic(model_id: str) -> bool:
 
 def _build_generation_capabilities_payload() -> dict[str, Any]:
     """Conservative media-generation flags (orthogonal to chat model / vision input)."""
-    flag = image_generation_feature_enabled()
-    key_ok = openrouter_api_key_configured()
-    core_ok = bool(flag and key_ok)
+    core_ok = bool(image_generation_feature_enabled() and openrouter_api_key_configured())
     default_model = bool(default_image_model_env())
+    orow = openrouter_capabilities_row()
+    active = active_media_provider_id()
+
+    supports_image_generation = False
+    supports_image_to_image = False
+    supports_reference_images = False
+    media_generation_provider: str | None = None
+
     notes: list[str] = []
+    notes.extend(provider_notes_for_capabilities())
 
-    supports_image_generation = core_ok
-    ref_ok = reference_image_generation_enabled()
-    supports_image_to_image = bool(core_ok and ref_ok)
-    supports_reference_images = supports_image_to_image
-
-    if core_ok and not default_model:
-        notes.append(
-            "Image generation requests should include model_id unless HAM_MEDIA_IMAGE_DEFAULT_MODEL is set."
-        )
-    if core_ok and not ref_ok:
-        notes.append(
-            "Reference-conditioned / image-to-image generation may be unavailable until enabled "
-            "(HAM_MEDIA_IMAGE_TO_IMAGE_ENABLED when set, compatible HAM_MEDIA_IMAGE_DEFAULT_MODEL)."
-        )
-    if not core_ok:
+    if active == "openrouter":
+        supports_image_generation = orow.supports_text_to_image
+        ref_ok = reference_image_generation_enabled()
+        supports_image_to_image = bool(supports_image_generation and ref_ok)
+        supports_reference_images = supports_image_to_image
+        if supports_image_generation:
+            media_generation_provider = "openrouter"
+        if core_ok and not default_model:
+            notes.append(
+                "Image generation requests should include model_id unless HAM_MEDIA_IMAGE_DEFAULT_MODEL is set."
+            )
+        if core_ok and not ref_ok:
+            notes.append(
+                "Reference-conditioned / image-to-image generation may be unavailable until enabled "
+                "(HAM_MEDIA_IMAGE_TO_IMAGE_ENABLED when set, compatible HAM_MEDIA_IMAGE_DEFAULT_MODEL)."
+            )
+        if not core_ok:
+            notes.append(
+                "Image generation is unavailable until enabled on the server "
+                "(HAM_MEDIA_IMAGE_GENERATION_ENABLED and OPENROUTER_API_KEY)."
+            )
+    elif not core_ok:
         notes.append(
             "Image generation is unavailable until enabled on the server "
             "(HAM_MEDIA_IMAGE_GENERATION_ENABLED and OPENROUTER_API_KEY)."
         )
 
+    notes = list(dict.fromkeys(notes))
+    available = availability_dict_rows()
+
     return {
+        "active_media_provider": active,
+        "available_media_providers": available,
+        "supports_text_to_image": supports_image_generation,
         "supports_image_generation": supports_image_generation,
         "supports_image_editing": False,
         "supports_image_to_image": supports_image_to_image,
+        "supports_text_to_video": False,
         "supports_video_generation": False,
         "supports_image_to_video": False,
         "supports_video_editing": False,
@@ -105,8 +132,9 @@ def _build_generation_capabilities_payload() -> dict[str, Any]:
         "generated_media_output_types": (
             ["image/png", "image/jpeg", "image/webp", "image/gif"] if supports_image_generation else []
         ),
-        "media_generation_provider": ("openrouter" if supports_image_generation else None),
+        "media_generation_provider": media_generation_provider,
         "media_generation_notes": notes,
+        "provider_notes": notes,
     }
 
 

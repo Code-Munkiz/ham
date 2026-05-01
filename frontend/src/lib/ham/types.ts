@@ -269,7 +269,25 @@ export interface GeneratedMediaArtifactPublicMeta {
   generated_from_reference_image?: boolean;
 }
 
+/** Row from ``available_media_providers`` (Phase 2G.5+); server never includes URLs here. */
+export interface MediaProviderAvailabilityRow {
+  id: string;
+  display_name: string;
+  configured: boolean;
+  supports_text_to_image: boolean;
+  supports_image_to_image: boolean;
+  supports_image_editing: boolean;
+  supports_text_to_video: boolean;
+  supports_image_to_video: boolean;
+}
+
 export interface ChatGenerationCapabilities {
+  /** Phase 2G.5+: canonical backend selection after env coercion (`openrouter`, `unconfigured`, placeholders, …). */
+  active_media_provider?: string;
+  /** Phase 2G.5+: registry rows for product surfaces; conservative defaults when absent. */
+  available_media_providers?: MediaProviderAvailabilityRow[];
+  supports_text_to_image?: boolean;
+  supports_text_to_video?: boolean;
   supports_image_generation: boolean;
   supports_image_editing: boolean;
   supports_image_to_image: boolean;
@@ -283,6 +301,8 @@ export interface ChatGenerationCapabilities {
   generated_media_output_types: string[];
   media_generation_provider: string | null;
   media_generation_notes: string[];
+  /** Phase 2G.5+: same strings as ``media_generation_notes`` when API mirrors; no secrets or URLs. */
+  provider_notes?: string[];
 }
 
 /** Safe subset from `GET /api/chat/capabilities` — no secrets or storage paths. */

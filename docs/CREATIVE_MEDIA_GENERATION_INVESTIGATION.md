@@ -311,7 +311,13 @@ Hermes workspace chat uses **explicit + menu → Generate image** and determinis
 
 Workspace chat can supply **`reference_attachment_id`** (`hamatt_*`) on **`POST /api/media/images/generate`** so the backend resolves blob bytes from **`AttachmentStore`**, validates image MIME/size, and (when **`HAM_MEDIA_IMAGE_TO_IMAGE_ENABLED`** is not **`false`** and the default generation model heuristic allows it) forwards a multimodal **`user`** message to OpenRouter. **True inpainting/editing SKU guarantees** remain environment-specific — treat **`supports_image_to_image`** as capability-gated scaffolding; **`IMAGE_TO_IMAGE_NOT_SUPPORTED`** (HTTP 503) is returned when the feature is toggled off. Distinct **`supports_image_editing`** remains **False** until a dedicated inpaint/edit path exists. Frontend NL routing prefers **ambiguous-with-attachment → normal vision chat** except for explicit edit/variation wording; **`+ → Generate image`** uses the reference attachment when **`supports_reference_images`** is true.
 
----
+### Phase 2G.5 provider registry + ComfyUI plan (implemented)
+
+- **`src/ham/media_provider_registry.py`** — canonical **`HAM_MEDIA_PROVIDER`** selection; **OpenRouter** remains the first real backend; **`unconfigured`** / missing config → safe no-op adapter; **`test_synthetic`** only when **`HAM_MEDIA_ALLOW_SYNTHETIC_ADAPTER`** is set; **ComfyUI / Replicate / …** ids are **metadata-only** placeholders (adapter still **Unconfigured** until a later phase implements HTTP to an external worker).
+- **`GET /api/chat/capabilities`** **`generation`** block adds **`active_media_provider`**, **`available_media_providers`** (rows without URLs), **`supports_text_to_image`** / **`supports_text_to_video`** (both conservative; video stays **false** in this slice), and **`provider_notes`** — same non-leakage rules as the rest of the payload.
+- **`docs/COMFYUI_PROVIDER_PLAN.md`** — architecture for **ComfyUI as a separate GPU service** (not installed in `ham-api` or this repo); env placeholders and workflow governance for **Phase 2G.6 POC**.
+
+### Pitfalls to avoid
 
 - Returning provider-generated **temporary URLs directly** without HAM ingestion.
 - Folding generated binaries into **`ham_chat_user_v2`** JSON (bloated Firestore payloads).
