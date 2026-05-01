@@ -15,6 +15,10 @@ export type WorkspaceComposerAttachment = {
   serverId?: string;
   mime?: string;
   error?: string;
+  /** Local upload lifecycle — omit or `"done"` after successful upload */
+  uploadPhase?: "uploading" | "done" | "failed";
+  /** Retained server-side retry path when `uploadPhase` is `"failed"` (not sent over the wire). */
+  pendingSource?: File;
 };
 
 /** JPEG/PNG/WebP/GIF — server enforces the same ceiling. */

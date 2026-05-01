@@ -1,16 +1,35 @@
 /**
- * Loads `GET /api/chat/attachments/{id}` with Clerk auth and displays as an <img> (blob URL).
+ * Loads `GET /api/chat/attachments/{id}` with Clerk auth and displays as an <img> (blob URL),
+ * or renders a caller-supplied blob URL after send (same-tab thumbnails without redundant GET spam).
  */
 import * as React from "react";
 import { hamApiFetch } from "@/lib/ham/api";
 
-export function WorkspaceChatAuthImage({ attachmentId, alt }: { attachmentId: string; alt: string }) {
-  const [url, setUrl] = React.useState<string | null>(null);
+export function WorkspaceChatAuthImage({
+  attachmentId,
+  alt,
+  localPreviewUrl,
+}: {
+  attachmentId: string;
+  alt: string;
+  /** Stable blob/object URL keyed by opaque server id — avoids flaky GET across replicas/temp disks. */
+  localPreviewUrl?: string | null;
+}) {
+  const [url, setUrl] = React.useState<string | null>(localPreviewUrl?.trim() || null);
   const [failed, setFailed] = React.useState(false);
+  const revokedFetchUrl = React.useRef<string | null>(null);
 
   React.useEffect(() => {
+    const local = (localPreviewUrl || "").trim();
+    if (local) {
+      setFailed(false);
+      setUrl(local);
+      return undefined;
+    }
+
     let cancelled = false;
-    void (async () => {
+
+    async function fetchRemote() {
       try {
         const res = await hamApiFetch(`/api/chat/attachments/${encodeURIComponent(attachmentId)}`);
         if (!res.ok) {
@@ -19,19 +38,28 @@ export function WorkspaceChatAuthImage({ attachmentId, alt }: { attachmentId: st
         }
         const blob = await res.blob();
         if (cancelled) return;
-        setUrl(URL.createObjectURL(blob));
+        const u = URL.createObjectURL(blob);
+        revokedFetchUrl.current = u;
+        setUrl(u);
       } catch {
         if (!cancelled) setFailed(true);
       }
-    })();
+    }
+    void fetchRemote();
+
     return () => {
       cancelled = true;
-      setUrl((current) => {
-        if (current) URL.revokeObjectURL(current);
-        return null;
-      });
+      const u = revokedFetchUrl.current;
+      revokedFetchUrl.current = null;
+      if (u) {
+        try {
+          URL.revokeObjectURL(u);
+        } catch {
+          /* ignore */
+        }
+      }
     };
-  }, [attachmentId]);
+  }, [attachmentId, localPreviewUrl]);
 
   if (failed) {
     return (

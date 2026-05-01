@@ -58,6 +58,9 @@ type WorkspaceChatComposerProps = {
   attachments: WorkspaceComposerAttachment[];
   onAddAttachments: (files: File[]) => void;
   onRemoveAttachment: (id: string) => void;
+  onRetryAttachmentUpload?: (id: string) => void | Promise<void>;
+  /** Clipboard / OS paste — image or file payloads from the textarea */
+  onPasteFiles?: (files: File[]) => void;
   catalog: ModelCatalogPayload | null;
   modelId: string | null;
   onModelIdChange: (id: string | null) => void;
@@ -95,6 +98,35 @@ function primaryModelPillText(
   return first ? first.label || first.id : null;
 }
 
+function collectComposerPasteFiles(dt: DataTransfer | null): File[] {
+  if (!dt) return [];
+  const out: File[] = [];
+  const seen = new Set<string>();
+  if (dt.files?.length) {
+    for (let i = 0; i < dt.files.length; i += 1) {
+      const f = dt.files.item(i);
+      if (!f) continue;
+      const key = `${f.name}\0${f.size}\0${f.type}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(f);
+    }
+  }
+  if (dt.items?.length) {
+    for (let i = 0; i < dt.items.length; i += 1) {
+      const it = dt.items[i];
+      if (!it || it.kind !== "file") continue;
+      const f = it.getAsFile();
+      if (!f) continue;
+      const key = `${f.name}\0${f.size}\0${f.type}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(f);
+    }
+  }
+  return out;
+}
+
 export function WorkspaceChatComposer({
   value,
   onChange,
@@ -106,6 +138,8 @@ export function WorkspaceChatComposer({
   attachments,
   onAddAttachments,
   onRemoveAttachment,
+  onRetryAttachmentUpload,
+  onPasteFiles,
   catalog,
   modelId,
   onModelIdChange,
@@ -289,14 +323,19 @@ export function WorkspaceChatComposer({
     Boolean(catalog && catalog.gateway_mode === "openrouter" && chatModelCandidates(catalog).length > 0);
   const gatewayOk = isDashboardChatGatewayReady(catalog);
   const modelPill = primaryModelPillText(catalog, modelId);
+  const uploadsPending = attachments.some((a) => a.uploadPhase === "uploading");
   const hasAttachErrOnly =
-    attachments.length > 0 && attachments.every((a) => a.error) && !value.trim();
-  const allAttachmentsFailed = attachments.length > 0 && attachments.every((a) => a.error);
+    attachments.length > 0 &&
+    attachments.every((a) => Boolean(a.error) || a.uploadPhase === "failed") &&
+    !value.trim();
+  const allAttachmentsFailed =
+    attachments.length > 0 &&
+    attachments.every((a) => Boolean(a.error) || a.uploadPhase === "failed");
   const normalSendReady =
-    gatewayOk &&
-    (value.trim() || (attachments.length > 0 && !hasAttachErrOnly));
+    gatewayOk && (value.trim() || (attachments.length > 0 && !hasAttachErrOnly));
   const canSend =
     !allAttachmentsFailed &&
+    !uploadsPending &&
     normalSendReady &&
     !sending &&
     !voiceBusy;
@@ -325,8 +364,26 @@ export function WorkspaceChatComposer({
     return () => window.removeEventListener("keydown", onKey, true);
   }, [showModel]);
 
+  React.useEffect(() => {
+    const preventBrowseNav = (e: DragEvent) => {
+      if (e.dataTransfer?.types?.includes("Files")) {
+        e.preventDefault();
+      }
+    };
+    window.addEventListener("dragover", preventBrowseNav);
+    window.addEventListener("drop", preventBrowseNav);
+    return () => {
+      window.removeEventListener("dragover", preventBrowseNav);
+      window.removeEventListener("drop", preventBrowseNav);
+    };
+  }, []);
+
   const handleAddFiles = React.useCallback(
     (files: File[]) => {
+      if (uploadsPending) {
+        toast.message("Wait for uploads in progress.", { duration: 4000 });
+        return;
+      }
       if (attachments.length >= MAX_WORKSPACE_ATTACHMENT_COUNT) {
         toast.error(`Up to ${MAX_WORKSPACE_ATTACHMENT_COUNT} attachments.`);
         return;
@@ -338,7 +395,7 @@ export function WorkspaceChatComposer({
       }
       onAddAttachments(slice);
     },
-    [attachments.length, onAddAttachments],
+    [attachments.length, onAddAttachments, uploadsPending],
   );
 
   const onDragOver = (e: React.DragEvent) => {
@@ -351,7 +408,7 @@ export function WorkspaceChatComposer({
     e.stopPropagation();
     dragDepthRef.current = 0;
     setIsDragging(false);
-    if (disabled || sending || voiceBusy) return;
+    if (disabled || sending || voiceBusy || uploadsPending) return;
     const dt = e.dataTransfer?.files;
     if (!dt?.length) return;
     handleAddFiles(Array.from(dt));
@@ -360,7 +417,7 @@ export function WorkspaceChatComposer({
   const onDragEnter = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (disabled || sending || voiceBusy) return;
+    if (disabled || sending || voiceBusy || uploadsPending) return;
     dragDepthRef.current += 1;
     if (dragDepthRef.current === 1) setIsDragging(true);
   };
@@ -485,6 +542,7 @@ export function WorkspaceChatComposer({
                 className="mb-0"
                 attachments={attachments}
                 onRemove={onRemoveAttachment}
+                onRetryUpload={onRetryAttachmentUpload}
               />
             </div>
           ) : null}
@@ -544,6 +602,14 @@ export function WorkspaceChatComposer({
               id="hww-chat-composer"
               value={value}
               onChange={(e) => onChange(e.target.value)}
+              onPaste={(e) => {
+                if (!onPasteFiles || disabled || sending || voiceBusy || uploadsPending) return;
+                const dt = e.clipboardData;
+                const files = collectComposerPasteFiles(dt);
+                if (files.length === 0) return;
+                e.preventDefault();
+                onPasteFiles(files);
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
@@ -605,7 +671,7 @@ export function WorkspaceChatComposer({
               ) : null}
               <WorkspaceChatAttachmentButton
                 onFiles={handleAddFiles}
-                disabled={sending || voiceBusy || disabled}
+                disabled={sending || voiceBusy || disabled || uploadsPending}
                 className="text-emerald-200/50 hover:text-emerald-200/90"
               />
               {value.length >= 100 ? (

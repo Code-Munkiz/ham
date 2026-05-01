@@ -3,7 +3,7 @@
  * HAM dark theme; no @base-ui PreviewCard (not in this repo) — popover is optional detail via expand.
  */
 import * as React from "react";
-import { FileText, X } from "lucide-react";
+import { FileText, Loader2, RotateCcw, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,6 +14,7 @@ import {
 type WorkspaceChatAttachmentPreviewProps = {
   attachment: WorkspaceComposerAttachment;
   onRemove: (id: string) => void;
+  onRetryUpload?: (id: string) => void;
 };
 
 function fileExt(name: string): string {
@@ -21,8 +22,15 @@ function fileExt(name: string): string {
   return parts.length > 1 ? (parts.pop() ?? "").toUpperCase() : "FILE";
 }
 
-export function WorkspaceChatAttachmentPreview({ attachment, onRemove }: WorkspaceChatAttachmentPreviewProps) {
+export function WorkspaceChatAttachmentPreview({
+  attachment,
+  onRemove,
+  onRetryUpload,
+}: WorkspaceChatAttachmentPreviewProps) {
   const hasError = Boolean(attachment.error);
+  const uploading = attachment.uploadPhase === "uploading";
+  const uploadFailed = attachment.uploadPhase === "failed";
+  const canRetry = Boolean(uploadFailed && attachment.pendingSource && onRetryUpload);
   const showImg =
     !hasError &&
     attachment.kind === "image" &&
@@ -32,13 +40,19 @@ export function WorkspaceChatAttachmentPreview({ attachment, onRemove }: Workspa
     <div
       className={cn(
         "relative flex max-w-[220px] items-center gap-1.5 rounded-md border p-1.5",
-        hasError
+        hasError || uploadFailed
           ? "border-red-400/50 bg-red-950/40"
-          : "border-white/[0.1] bg-white/[0.05]",
+          : uploading
+            ? "border-sky-500/35 bg-sky-950/25"
+            : "border-white/[0.1] bg-white/[0.05]",
       )}
     >
       <div className="relative h-7 w-7 shrink-0 overflow-hidden rounded bg-white/[0.07]">
-        {showImg ? (
+        {uploading ? (
+          <div className="flex h-full w-full items-center justify-center text-sky-200/85">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden strokeWidth={2} />
+          </div>
+        ) : showImg ? (
           <img
             src={attachment.payload}
             alt=""
@@ -52,7 +66,9 @@ export function WorkspaceChatAttachmentPreview({ attachment, onRemove }: Workspa
       </div>
       <div className="min-w-0 flex-1 text-left">
         <p className="line-clamp-1 text-[10px] font-medium text-white/90">{attachment.name}</p>
-        {hasError ? (
+        {uploading ? (
+          <p className="text-[9px] text-sky-200/75">Uploading…</p>
+        ) : hasError || uploadFailed ? (
           <p className="line-clamp-2 text-[9px] text-red-300/90">{attachment.error}</p>
         ) : (
           <p className="text-[9px] text-white/40">
@@ -60,6 +76,19 @@ export function WorkspaceChatAttachmentPreview({ attachment, onRemove }: Workspa
           </p>
         )}
       </div>
+      {canRetry ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-5 w-5 shrink-0 rounded-full p-0 text-sky-300/85 hover:bg-sky-500/15 hover:text-sky-100"
+          onClick={() => onRetryUpload?.(attachment.id)}
+          aria-label="Retry upload"
+          title="Retry upload"
+        >
+          <RotateCcw className="h-3 w-3" strokeWidth={1.75} />
+        </Button>
+      ) : null}
       <Button
         type="button"
         variant="ghost"
@@ -77,15 +106,26 @@ export function WorkspaceChatAttachmentPreview({ attachment, onRemove }: Workspa
 type WorkspaceChatAttachmentPreviewListProps = {
   attachments: WorkspaceComposerAttachment[];
   onRemove: (id: string) => void;
+  onRetryUpload?: (id: string) => void;
   className?: string;
 };
 
-export function WorkspaceChatAttachmentPreviewList({ attachments, onRemove, className }: WorkspaceChatAttachmentPreviewListProps) {
+export function WorkspaceChatAttachmentPreviewList({
+  attachments,
+  onRemove,
+  onRetryUpload,
+  className,
+}: WorkspaceChatAttachmentPreviewListProps) {
   if (attachments.length === 0) return null;
   return (
     <div className={cn("mb-2 flex w-full max-w-[56rem] flex-wrap items-start gap-1.5 md:pl-1", className)}>
       {attachments.map((a) => (
-        <WorkspaceChatAttachmentPreview key={a.id} attachment={a} onRemove={onRemove} />
+        <WorkspaceChatAttachmentPreview
+          key={a.id}
+          attachment={a}
+          onRemove={onRemove}
+          onRetryUpload={onRetryUpload}
+        />
       ))}
     </div>
   );

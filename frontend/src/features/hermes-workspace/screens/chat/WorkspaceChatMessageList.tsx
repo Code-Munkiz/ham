@@ -20,9 +20,15 @@ type WorkspaceChatMessageListProps = {
   messages: HwwMsgRow[];
   /** True while the last assistant message is still receiving stream deltas. */
   isStreaming?: boolean;
+  /** Prefer an in-session blob/object URL before GET (mitigates flaky attachment GET on ephemeral hosts). */
+  resolveLocalAttachmentPreview?: (attachmentId: string) => string | undefined;
 };
 
-export function WorkspaceChatMessageList({ messages, isStreaming }: WorkspaceChatMessageListProps) {
+export function WorkspaceChatMessageList({
+  messages,
+  isStreaming,
+  resolveLocalAttachmentPreview,
+}: WorkspaceChatMessageListProps) {
   const last = messages[messages.length - 1];
   const showThinking =
     Boolean(isStreaming && last?.role === "assistant" && !(last.content || "").trim());
@@ -63,6 +69,7 @@ export function WorkspaceChatMessageList({ messages, isStreaming }: WorkspaceCha
                           <WorkspaceChatAuthImage
                             attachmentId={at.id}
                             alt={at.name || "Attachment"}
+                            localPreviewUrl={resolveLocalAttachmentPreview?.(at.id)}
                           />
                         ) : (
                           <span className="line-clamp-3">📄 {at.name || "file"}</span>

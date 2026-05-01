@@ -472,6 +472,11 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   const [executionMode, setExecutionMode] = React.useState<HamChatExecutionMode | null>(null);
   const [projectId, setProjectId] = React.useState<string | null>(null);
   const [attachments, setAttachments] = React.useState<WorkspaceComposerAttachment[]>([]);
+  const attachmentsRef = React.useRef(attachments);
+  React.useEffect(() => {
+    attachmentsRef.current = attachments;
+  }, [attachments]);
+
   const [voiceTranscribing, setVoiceTranscribing] = React.useState(false);
   const [inspectorOpen, setInspectorOpen] = React.useState(false);
   const [inspectorEvents, setInspectorEvents] = React.useState<WorkspaceInspectorEvent[]>([]);
@@ -492,7 +497,45 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   const streamTurnSessionRef = React.useRef<string | null>(null);
   const initialSessionRestoreAttemptedRef = React.useRef(false);
   const endRef = React.useRef<HTMLDivElement | null>(null);
+  const chatAttachmentLocalBlobByServerIdRef = React.useRef<Map<string, string>>(new Map());
   const listWrapRef = React.useRef<HTMLDivElement | null>(null);
+
+  const revokeAllChatAttachmentLocalBlobs = React.useCallback(() => {
+    for (const u of chatAttachmentLocalBlobByServerIdRef.current.values()) {
+      try {
+        URL.revokeObjectURL(u);
+      } catch {
+        /* ignore */
+      }
+    }
+    chatAttachmentLocalBlobByServerIdRef.current.clear();
+  }, []);
+
+  const stashImageBlobsForServerIdsBeforeSend = React.useCallback(
+    async (rows: WorkspaceComposerAttachment[]) => {
+      await Promise.all(
+        rows.map(async (a) => {
+          if (a.kind !== "image" || !a.serverId || !(a.payload || "").startsWith("blob:")) return;
+          try {
+            const blob = await (await fetch(a.payload)).blob();
+            const u = URL.createObjectURL(blob);
+            const old = chatAttachmentLocalBlobByServerIdRef.current.get(a.serverId);
+            if (old && old !== u) {
+              try {
+                URL.revokeObjectURL(old);
+              } catch {
+                /* ignore */
+              }
+            }
+            chatAttachmentLocalBlobByServerIdRef.current.set(a.serverId, u);
+          } catch {
+            /* GET fallback via WorkspaceChatAuthImage */
+          }
+        }),
+      );
+    },
+    [],
+  );
 
   const voiceWs = useVoiceWorkspaceSettingsOptional();
   const sttEnabledBySetting = voiceWs?.payload?.settings.stt.enabled ?? true;
@@ -781,6 +824,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       try {
         const detail = await workspaceSessionAdapter.get(sid);
         const ts = timeStr;
+        revokeAllChatAttachmentLocalBlobs();
         setSessionId(sid);
         writeLastChatSessionId(sid);
         setMessages(
@@ -815,6 +859,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         );
         if (sessionNotFound) {
           // Only clear durable selection when API confirms session is gone.
+          revokeAllChatAttachmentLocalBlobs();
           setSessionId(null);
           writeLastChatSessionId(null);
           setMessages([]);
@@ -826,7 +871,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         setLoadingSession(false);
       }
     },
-    [sending],
+    [sending, revokeAllChatAttachmentLocalBlobs],
   );
 
   React.useEffect(() => {
@@ -861,6 +906,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     if (!s) {
       streamTurnSessionRef.current = null;
       if (sessionId) {
+        revokeAllChatAttachmentLocalBlobs();
         setSessionId(null);
         setMessages([]);
         setInspectorEvents([]);
@@ -873,9 +919,10 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       return;
     }
     void loadFromApi(s);
-  }, [embedMode, searchParams, sessionId, sending, loadFromApi]);
+  }, [embedMode, searchParams, sessionId, sending, loadFromApi, revokeAllChatAttachmentLocalBlobs]);
 
   const startNew = React.useCallback(() => {
+    revokeAllChatAttachmentLocalBlobs();
     setSessionId(null);
     writeLastChatSessionId(null);
     setMessages([]);
@@ -893,7 +940,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     queueMicrotask(() => {
       document.getElementById("hww-chat-composer")?.focus();
     });
-  }, [embedMode, navigate]);
+  }, [embedMode, navigate, revokeAllChatAttachmentLocalBlobs]);
 
   const retryLoadSession = React.useCallback(() => {
     if (embedMode) return;
@@ -908,47 +955,137 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
 
   const handleAddAttachments = React.useCallback(async (files: File[]) => {
     if (files.length === 0) return;
-    const next: WorkspaceComposerAttachment[] = [];
-    for (const f of files) {
-      try {
-        const a = await fileToWorkspaceAttachment(f);
-        if (a == null) {
-          const isImgGuess = /^image\//i.test(f.type || "") || /\.(jpe?g|png|gif|webp)$/i.test(f.name || "");
-          const cap = isImgGuess ? MAX_WORKSPACE_IMAGE_BYTES : MAX_WORKSPACE_DOCUMENT_BYTES;
-          toast.error(
-            `“${f.name || "file"}” is too large (max ${formatAttachmentByteSize(cap)} for ${isImgGuess ? "images" : "documents"}).`,
-          );
-          continue;
-        }
-        if (a.error) {
-          next.push(a);
-          continue;
-        }
-        const uploadFile = await buildFileForServerUpload(f, a);
-        const up = await postChatUploadAttachment(uploadFile);
-        next.push({
-          ...a,
-          serverId: up.attachment_id,
-          name: up.filename || a.name,
-          size: up.size,
-          mime: up.mime,
-          kind: up.kind === "file" ? "file" : "image",
-        });
-      } catch (e) {
+    const limit = MAX_WORKSPACE_ATTACHMENT_COUNT;
+    for (const raw of files) {
+      const f = raw;
+      if (attachmentsRef.current.some((a) => a.uploadPhase === "uploading")) {
+        toast.message("Wait for uploads in progress.", { duration: 4000 });
+        return;
+      }
+      const curLen = attachmentsRef.current.length;
+      if (curLen >= limit) {
+        toast.error(`Up to ${limit} attachments.`);
+        break;
+      }
+      const staged = await fileToWorkspaceAttachment(f);
+      if (staged === null) {
+        const isImgGuess = /^image\//i.test(f.type || "") || /\.(jpe?g|png|gif|webp)$/i.test(f.name || "");
+        const cap = isImgGuess ? MAX_WORKSPACE_IMAGE_BYTES : MAX_WORKSPACE_DOCUMENT_BYTES;
         toast.error(
-          e instanceof Error ? e.message : `Upload failed for "${f.name || "file"}".`,
+          `“${f.name || "file"}” is too large (max ${formatAttachmentByteSize(cap)} for ${isImgGuess ? "images" : "documents"}).`,
+        );
+        continue;
+      }
+      if (staged.error) {
+        setAttachments((prev) => {
+          const room = Math.max(0, limit - prev.length);
+          return room <= 0 ? prev : [...prev, staged];
+        });
+        continue;
+      }
+      const localId = staged.id;
+      const uploadingRow: WorkspaceComposerAttachment = {
+        ...staged,
+        uploadPhase: "uploading",
+        pendingSource: f,
+      };
+      setAttachments((prev) => {
+        const room = Math.max(0, limit - prev.length);
+        return room <= 0 ? prev : [...prev, uploadingRow];
+      });
+      const uploadFile = await buildFileForServerUpload(f, staged);
+      try {
+        const up = await postChatUploadAttachment(uploadFile);
+        setAttachments((prev) =>
+          prev.map((row) =>
+            row.id !== localId
+              ? row
+              : {
+                  ...row,
+                  serverId: up.attachment_id,
+                  name: up.filename || row.name,
+                  size: up.size,
+                  mime: up.mime,
+                  kind: up.kind === "file" ? "file" : "image",
+                  uploadPhase: "done",
+                  pendingSource: undefined,
+                  error: undefined,
+                },
+          ),
+        );
+      } catch (e) {
+        const msg =
+          e instanceof Error
+            ? e.message
+            : `Upload failed for "${(uploadFile?.name ?? f.name) || "file"}".`;
+        toast.error(msg);
+        setAttachments((prev) =>
+          prev.map((row) =>
+            row.id !== localId ? row : { ...row, uploadPhase: "failed", error: msg, pendingSource: f },
+          ),
         );
       }
     }
-    if (next.length === 0) return;
-    setAttachments((prev) => {
-      const room = Math.max(0, MAX_WORKSPACE_ATTACHMENT_COUNT - prev.length);
-      const add = next.slice(0, room);
-      if (next.length > room) {
-        toast.error(`Up to ${MAX_WORKSPACE_ATTACHMENT_COUNT} attachments.`);
-      }
-      return [...prev, ...add];
-    });
+  }, []);
+
+  const handleRetryAttachmentUpload = React.useCallback(async (localId: string) => {
+    const row = attachmentsRef.current.find((x) => x.id === localId);
+    const file = row?.pendingSource;
+    if (!row || !file) return;
+    if (attachmentsRef.current.some((a) => a.id !== localId && a.uploadPhase === "uploading")) {
+      toast.message("Another upload is in progress.", { duration: 4000 });
+      return;
+    }
+    const rebuilt = await fileToWorkspaceAttachment(file);
+    if (rebuilt === null) {
+      toast.error("File is too large to attach.");
+      return;
+    }
+    if (rebuilt.error) {
+      setAttachments((prev) => prev.map((a) => (a.id === localId ? rebuilt : a)));
+      return;
+    }
+    setAttachments((prev) =>
+      prev.map((a) =>
+        a.id === localId
+          ? { ...rebuilt, uploadPhase: "uploading", error: undefined, pendingSource: file }
+          : a,
+      ),
+    );
+    const uploadFile = await buildFileForServerUpload(file, rebuilt);
+    try {
+      const up = await postChatUploadAttachment(uploadFile);
+      setAttachments((prev) =>
+        prev.map((a) =>
+          a.id !== localId
+            ? a
+            : {
+                ...a,
+                serverId: up.attachment_id,
+                name: up.filename || a.name,
+                size: up.size,
+                mime: up.mime,
+                kind: up.kind === "file" ? "file" : "image",
+                uploadPhase: "done",
+                pendingSource: undefined,
+                error: undefined,
+              },
+        ),
+      );
+    } catch (e) {
+      const msg =
+        e instanceof Error
+          ? e.message
+          : `Upload failed for "${(uploadFile?.name ?? file.name) || "file"}".`;
+      toast.error(msg);
+      setAttachments((prev) =>
+        prev.map((a) => (a.id !== localId ? a : { ...a, uploadPhase: "failed", error: msg, pendingSource: file })),
+      );
+    }
+  }, []);
+
+  const resolveLocalAttachmentPreview = React.useCallback((attachmentServerId: string): string | undefined => {
+    return chatAttachmentLocalBlobByServerIdRef.current.get(attachmentServerId);
   }, []);
 
   const handleVoiceBlob = React.useCallback(async (blob: Blob) => {
@@ -1641,48 +1778,57 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   );
 
   const onFormSubmit = () => {
-    const trimmed = input.trim();
-    const usable = attachments.filter((a) => !a.error);
-    if (voiceTranscribing) return;
-    if (attachments.length > 0 && usable.length === 0) {
-      toast.error("Every attachment failed. Remove them or add PNG, JPEG, or WebP under 500 KB, then try again.");
-      return;
-    }
-    if (usable.length > 0) {
-      if (usable.every((a) => a.serverId)) {
-        const payload = buildHamChatUserPayloadV2(
+    void (async () => {
+      const trimmed = input.trim();
+      const usable = attachments.filter(
+        (a) => !a.error && a.uploadPhase !== "failed" && a.uploadPhase !== "uploading",
+      );
+      if (voiceTranscribing) return;
+      if (attachments.some((a) => a.uploadPhase === "uploading")) {
+        toast.message("Wait for uploads to finish.", { duration: 3800 });
+        return;
+      }
+      if (attachments.length > 0 && usable.length === 0) {
+        toast.error("Every attachment failed or is invalid — remove errors or retry uploads, then try again.");
+        return;
+      }
+      if (usable.length > 0) {
+        if (usable.every((a) => a.serverId)) {
+          await stashImageBlobsForServerIdsBeforeSend(usable);
+          const payload = buildHamChatUserPayloadV2(
+            trimmed,
+            usable.map((a) => ({
+              id: a.serverId!,
+              name: a.name,
+              mime: a.mime ?? (a.kind === "file" ? "text/plain" : "image/png"),
+              kind: a.kind,
+            })),
+          );
+          void send(payload);
+          return;
+        }
+        const payload = buildHamChatUserPayloadV1(
           trimmed,
-          usable.map((a) => ({
-            id: a.serverId!,
-            name: a.name,
-            mime: a.mime ?? (a.kind === "file" ? "text/plain" : "image/png"),
-            kind: a.kind,
-          })),
+          usable
+            .filter((a) => a.kind === "image" && a.payload.startsWith("data:"))
+            .map((a) => {
+              const m = /^data:(image\/(?:png|jpe?g|webp));base64,/i.exec(a.payload.trim());
+              const raw = (m ? m[1] : "image/jpeg").toLowerCase();
+              const mime = raw === "image/jpg" ? "image/jpeg" : raw;
+              return { name: a.name, mime, dataUrl: a.payload, size: a.size };
+            }),
         );
+        if (payload.images.length === 0) {
+          toast.error("Re-add attachments (upload may have been interrupted).");
+          return;
+        }
         void send(payload);
         return;
       }
-      const payload = buildHamChatUserPayloadV1(
-        trimmed,
-        usable
-          .filter((a) => a.kind === "image" && a.payload.startsWith("data:"))
-          .map((a) => {
-            const m = /^data:(image\/(?:png|jpe?g|webp));base64,/i.exec(a.payload.trim());
-            const raw = (m ? m[1] : "image/jpeg").toLowerCase();
-            const mime = raw === "image/jpg" ? "image/jpeg" : raw;
-            return { name: a.name, mime, dataUrl: a.payload, size: a.size };
-          }),
-      );
-      if (payload.images.length === 0) {
-        toast.error("Re-add attachments (upload may have been interrupted).");
-        return;
-      }
-      void send(payload);
-      return;
-    }
-    if (!trimmed) return;
+      if (!trimmed) return;
 
-    void send(trimmed);
+      void send(trimmed);
+    })();
   };
 
   const hasTranscript = messages.length > 0;
@@ -1873,7 +2019,11 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
             <WorkspaceChatEmptyState onSuggestionClick={(prompt) => void send(prompt)} />
           ) : (
             <>
-              <WorkspaceChatMessageList messages={messages} isStreaming={isStreaming} />
+              <WorkspaceChatMessageList
+                messages={messages}
+                isStreaming={isStreaming}
+                resolveLocalAttachmentPreview={resolveLocalAttachmentPreview}
+              />
               <div ref={endRef} className="h-2 shrink-0" />
             </>
           )}
@@ -1896,6 +2046,8 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
                 return p.filter((a) => a.id !== id);
               });
             }}
+            onPasteFiles={handleAddAttachments}
+            onRetryAttachmentUpload={(lid) => void handleRetryAttachmentUpload(lid)}
             catalog={catalog}
             modelId={modelId}
             onModelIdChange={setModelId}
