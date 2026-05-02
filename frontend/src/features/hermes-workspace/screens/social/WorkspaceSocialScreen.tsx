@@ -65,6 +65,15 @@ function BoolRow({ label, value }: { label: string; value: boolean }) {
 }
 
 type SocialSelection = "persona" | "x" | "telegram" | "discord";
+type SocialSection = "overview" | "channels" | "persona" | "history" | "setup";
+
+const SOCIAL_SECTIONS: { id: SocialSection; label: string }[] = [
+  { id: "overview", label: "Overview" },
+  { id: "channels", label: "Channels" },
+  { id: "persona", label: "Persona" },
+  { id: "history", label: "History" },
+  { id: "setup", label: "Setup" },
+];
 
 function ProviderCard({
   provider,
@@ -90,12 +99,12 @@ function ProviderCard({
           <div className="text-base font-semibold text-white/92">{provider.label}</div>
           <div className="mt-1 text-xs text-white/45">
             {provider.id === "x"
-              ? "First provider, powered by the existing HAM-on-X engine."
+              ? "Active channel for posts, replies, and governed live actions."
               : provider.id === "telegram"
-                ? "Hermes gateway readiness plus preview-only Telegram drafts."
+                ? "Telegram bot channel with guarded previews, replies, and one-shot sends."
                 : provider.id === "discord"
-                  ? "Hermes gateway readiness only. No Social messaging controls."
-                  : "Future provider slot."}
+                  ? "Setup and readiness only for now. Messaging controls come later."
+                  : "Future channel slot."}
           </div>
         </div>
         <StatusPill label={titleCase(provider.status)} tone={tone} />
@@ -117,6 +126,54 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
       <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-white/60">{title}</h2>
       <div className="mt-3">{children}</div>
     </section>
+  );
+}
+
+function DetailsPanel({
+  title,
+  summary = "Show technical details",
+  children,
+}: {
+  title: string;
+  summary?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <details className="rounded-2xl border border-white/10 bg-black/20 p-4 shadow-sm">
+      <summary className="cursor-pointer list-none text-sm font-semibold uppercase tracking-[0.12em] text-white/60">
+        {title}
+        <span className="ml-2 text-xs font-normal normal-case tracking-normal text-white/38">{summary}</span>
+      </summary>
+      <div className="mt-3">{children}</div>
+    </details>
+  );
+}
+
+function SectionTabs({
+  selected,
+  onSelect,
+}: {
+  selected: SocialSection;
+  onSelect: (section: SocialSection) => void;
+}) {
+  return (
+    <div className="flex flex-wrap gap-2 rounded-2xl border border-white/10 bg-black/25 p-2">
+      {SOCIAL_SECTIONS.map((section) => (
+        <button
+          key={section.id}
+          type="button"
+          onClick={() => onSelect(section.id)}
+          className={cn(
+            "rounded-xl px-3 py-2 text-sm font-medium transition",
+            selected === section.id
+              ? "bg-emerald-400/15 text-emerald-50"
+              : "text-white/58 hover:bg-white/[0.06] hover:text-white/82",
+          )}
+        >
+          {section.label}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -149,13 +206,13 @@ function CapabilityRows({ capabilities }: { capabilities: XCapabilities }) {
     <div className="grid gap-2 sm:grid-cols-2">
       <BoolRow label="Live read available" value={capabilities.live_read_available} />
       <BoolRow label="Live model available" value={capabilities.live_model_available} />
-      <BoolRow label="Broadcast dry-run available" value={capabilities.broadcast_dry_run_available} />
+      <BoolRow label="Draft post available" value={capabilities.broadcast_dry_run_available} />
       <BoolRow label="Broadcast live configured" value={capabilities.broadcast_live_available} />
-      <BoolRow label="Reactive inbox discovery" value={capabilities.reactive_inbox_discovery_available} />
-      <BoolRow label="Reactive dry-run available" value={capabilities.reactive_dry_run_available} />
+      <BoolRow label="Reply inbox available" value={capabilities.reactive_inbox_discovery_available} />
+      <BoolRow label="Suggested replies available" value={capabilities.reactive_dry_run_available} />
       <BoolRow label="Reactive reply canary" value={capabilities.reactive_reply_canary_available} />
-      <BoolRow label="Reactive batch available" value={capabilities.reactive_batch_available} />
-      <BoolRow label="Live apply available" value={capabilities.live_apply_available} />
+      <BoolRow label="Multiple replies available" value={capabilities.reactive_batch_available} />
+      <BoolRow label="Live sending enabled" value={capabilities.live_apply_available} />
       <BoolRow label="Read-only API" value={capabilities.read_only} />
     </div>
   );
@@ -167,7 +224,7 @@ function MessagingCapabilityRows({ capabilities }: { capabilities: TelegramCapab
     { label: "Inbound available", value: capabilities.inbound_available },
     { label: "Preview available", value: capabilities.preview_available },
     { label: "Live message available", value: capabilities.live_message_available },
-    { label: "Live apply available", value: capabilities.live_apply_available },
+    { label: "Live sending enabled", value: capabilities.live_apply_available },
     { label: "Activity apply available", value: capabilities.provider_id === "telegram" ? capabilities.activity_apply_available : false },
     { label: "Read-only API", value: capabilities.read_only },
   ];
@@ -342,15 +399,19 @@ function MessagingProviderPanel({
       };
   return (
     <div className="grid gap-4 xl:grid-cols-2">
-      <Panel title={`${status.label} readiness`}>
+      <Panel title={`${status.label} status strip`}>
         <div className="space-y-3">
           <div className="flex flex-wrap gap-2">
             <StatusPill label={titleCase(status.overall_readiness)} tone={statusTone(status.overall_readiness)} />
-            <StatusPill label={status.read_only ? "Read-only readiness" : "Writable"} tone={status.read_only ? "ok" : "danger"} />
-            <StatusPill label={status.live_apply_available ? "Live apply available" : "Live apply disabled"} tone={status.live_apply_available ? "danger" : "ok"} />
+            <StatusPill label={status.read_only ? "Status check only" : "Writable"} tone={status.read_only ? "ok" : "danger"} />
+            <StatusPill label={status.live_apply_available ? "Live sending enabled" : "Live sending off"} tone={status.live_apply_available ? "danger" : "ok"} />
             <StatusPill
-              label={status.mutation_attempted ? "Mutation attempted" : "No mutation attempted"}
+              label={status.mutation_attempted ? "Tried to send" : "No send attempted"}
               tone={status.mutation_attempted ? "danger" : "ok"}
+            />
+            <StatusPill
+              label={status.hermes_gateway.provider_runtime_state === "connected" ? "Local bot connected" : "Local bot not connected"}
+              tone={status.hermes_gateway.provider_runtime_state === "connected" ? "ok" : "warn"}
             />
           </div>
           {status.readiness_reasons.length ? (
@@ -363,13 +424,12 @@ function MessagingProviderPanel({
             <p className="text-sm text-white/55">No readiness blockers reported.</p>
           )}
           <p className="text-sm text-white/55">
-            This panel only checks Hermes gateway readiness for {status.label}. It does not send messages, run previews, start bots,
-            or collect credentials.
+            This channel page shows what is ready, what needs attention, and which guarded actions are available. Secrets are never collected here.
           </p>
         </div>
       </Panel>
 
-      <Panel title="Hermes gateway runtime">
+      <DetailsPanel title="Local bot connection" summary="Show gateway source, status path, and runtime details">
         <KeyValueGrid
           rows={[
             { label: "Runtime source", value: titleCase(status.hermes_gateway.source) },
@@ -387,10 +447,10 @@ function MessagingProviderPanel({
             {status.hermes_gateway.error_message}
           </p>
         ) : null}
-      </Panel>
+      </DetailsPanel>
 
       {telegramCapabilities ? (
-        <Panel title="Telegram runtime validation">
+        <DetailsPanel title="Telegram setup details" summary="Show setup requirements, masked IDs, and connection proof">
           <div className="space-y-4">
             <div className="grid gap-2 sm:grid-cols-2">
               <BoolRow label="Token present" value={Boolean(status.telegram_bot_token_present ?? telegramCapabilities.bot_token_present)} />
@@ -404,7 +464,7 @@ function MessagingProviderPanel({
               rows={[
                 { label: "Telegram mode", value: titleCase(status.telegram_mode ?? telegramCapabilities.telegram_mode) },
                 { label: "Hermes runtime state", value: titleCase(status.hermes_gateway_runtime_state ?? telegramCapabilities.hermes_gateway_runtime_state) },
-                { label: "Telegram platform state", value: titleCase(status.telegram_platform_state ?? telegramCapabilities.telegram_platform_state) },
+                { label: "Telegram connection", value: titleCase(status.telegram_platform_state ?? telegramCapabilities.telegram_platform_state) },
                 { label: "Readiness", value: titleCase(status.readiness ?? telegramCapabilities.readiness) },
               ]}
             />
@@ -429,15 +489,15 @@ function MessagingProviderPanel({
               </div>
             ) : null}
           </div>
-        </Panel>
+        </DetailsPanel>
       ) : null}
 
       {telegramCapabilities ? (
-        <Panel title="Telegram message preview">
+        <Panel title="Telegram primary actions">
           <div className="space-y-4">
             <div className="space-y-2 text-sm leading-relaxed text-white/62">
-              <p>Preview only. No Telegram message will be sent.</p>
-              <p>Uses connected Hermes Telegram gateway readiness, masked targets, and canonical HAM persona protection.</p>
+              <p>Draft and review Telegram actions before any live send. Live actions still require approval and the existing confirmation flow.</p>
+              <p>Voice is locked to the canonical HAMgomoon persona and targets remain masked.</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <StatusPill
@@ -445,7 +505,7 @@ function MessagingProviderPanel({
                 tone={telegramCapabilities.readiness === "ready" ? "ok" : "warn"}
               />
               <StatusPill label={telegramCapabilities.preview_available ? "Preview available" : "Preview unavailable"} tone={telegramCapabilities.preview_available ? "ok" : "warn"} />
-              <StatusPill label="No send/apply control" tone="ok" />
+              <StatusPill label={telegramCapabilities.live_apply_available ? "Approval required" : "Live sending off"} tone={telegramCapabilities.live_apply_available ? "warn" : "ok"} />
             </div>
             <Button
               type="button"
@@ -455,7 +515,7 @@ function MessagingProviderPanel({
               onClick={onPreviewTelegram}
               disabled={telegramPreviewBusy || !onPreviewTelegram}
             >
-              {telegramPreviewBusy ? "Previewing..." : "Preview Telegram message"}
+              {telegramPreviewBusy ? "Drafting..." : "Draft test message"}
             </Button>
             {telegramPreviewError ? (
               <p className="rounded-lg border border-amber-400/20 bg-amber-500/5 p-3 text-sm text-amber-100/80">
@@ -466,14 +526,14 @@ function MessagingProviderPanel({
             <div className="rounded-xl border border-white/10 bg-black/20 p-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <h3 className="text-sm font-semibold text-white/82">Telegram inbound discovery</h3>
+                  <h3 className="text-sm font-semibold text-white/82">Telegram inbox</h3>
                   <p className="mt-1 text-xs text-white/48">
-                    Read-only. No Telegram API call. No reply will be sent.
+                    Check locally captured inbound messages. No Telegram API call. No reply will be sent.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <StatusPill label="Hermes transcripts only" tone="ok" />
-                  <StatusPill label="No reply/apply control" tone="ok" />
+                  <StatusPill label="Local transcript only" tone="ok" />
+                  <StatusPill label="No send attempted" tone="ok" />
                 </div>
               </div>
               <Button
@@ -484,7 +544,7 @@ function MessagingProviderPanel({
                 onClick={onPreviewTelegramInbound}
                 disabled={telegramInboundPreviewBusy || !onPreviewTelegramInbound}
               >
-                {telegramInboundPreviewBusy ? "Previewing..." : "Preview Telegram inbound"}
+                {telegramInboundPreviewBusy ? "Checking..." : "Check Telegram inbox"}
               </Button>
               {telegramInboundPreviewError ? (
                 <p className="mt-3 rounded-lg border border-amber-400/20 bg-amber-500/5 p-3 text-sm text-amber-100/80">
@@ -496,13 +556,13 @@ function MessagingProviderPanel({
             <div className="rounded-xl border border-white/10 bg-black/20 p-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <h3 className="text-sm font-semibold text-white/82">Telegram reactive replies (dry-run)</h3>
+                  <h3 className="text-sm font-semibold text-white/82">Suggested replies</h3>
                   <p className="mt-1 text-xs text-white/48">
-                    Dry-run only. No Telegram message will be sent. Reads local Hermes transcript preview.
+                    Find reply opportunities from the local inbox preview. No Telegram message will be sent by this check.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <StatusPill label="No reply/apply control" tone="ok" />
+                  <StatusPill label="No send attempted" tone="ok" />
                   <StatusPill label="No model call" tone="ok" />
                 </div>
               </div>
@@ -514,7 +574,7 @@ function MessagingProviderPanel({
                 onClick={onPreviewTelegramReactive}
                 disabled={telegramReactivePreviewBusy || !onPreviewTelegramReactive}
               >
-                {telegramReactivePreviewBusy ? "Previewing..." : "Preview Telegram replies"}
+                {telegramReactivePreviewBusy ? "Checking..." : "Find reply opportunities"}
               </Button>
               {telegramReactivePreviewError ? (
                 <p className="mt-3 rounded-lg border border-amber-400/20 bg-amber-500/5 p-3 text-sm text-amber-100/80">
@@ -528,14 +588,14 @@ function MessagingProviderPanel({
                     <div key={`telegram-reactive-live-${item.inbound_id}`} className="rounded-xl border border-white/10 bg-black/20 p-3">
                       <div className="flex flex-wrap items-center justify-between gap-3">
                         <div>
-                          <h3 className="text-sm font-semibold text-white/82">Confirmed live Telegram reply</h3>
+                          <h3 className="text-sm font-semibold text-white/82">Approved Telegram reply</h3>
                           <p className="mt-1 text-xs text-white/48">
                             This sends exactly one Telegram reply through the governed Social cockpit. No batch. No retry. No autonomous runner.
                           </p>
                         </div>
                         <div className="flex flex-wrap gap-2">
                           <StatusPill label={item.classification ? titleCase(item.classification) : "Candidate"} tone="ok" />
-                          <StatusPill label="Proposal digest present" tone="ok" />
+                          <StatusPill label="Draft locked" tone="ok" />
                         </div>
                       </div>
                       <Button
@@ -557,23 +617,23 @@ function MessagingProviderPanel({
                 </p>
               ) : null}
               {telegramReactiveLiveResult ? (
-                <div>
-                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-white/45">Telegram reactive reply live result</h3>
+                <DetailsPanel title="Telegram reply result" summary="Show raw apply response">
+                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-white/45">Telegram reply result</h3>
                   <RecordPreview record={telegramReactiveLiveResult as unknown as Record<string, unknown>} emptyLabel="No Telegram reactive reply live result payload." />
-                </div>
+                </DetailsPanel>
               ) : null}
             </div>
             <div className="rounded-xl border border-white/10 bg-black/20 p-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <h3 className="text-sm font-semibold text-white/82">Telegram regular activity (dry-run)</h3>
+                  <h3 className="text-sm font-semibold text-white/82">Draft activity post</h3>
                   <p className="mt-1 text-xs text-white/48">
-                    Generates a bounded regular activity proposal. Dry-run only. No Telegram message will be sent.
+                    Draft one bounded activity post. No Telegram message will be sent by the draft action.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <StatusPill label="Regular activity proposal" tone="ok" />
-                  <StatusPill label="No scheduler/autonomy loop" tone="ok" />
+                  <StatusPill label="Activity draft" tone="ok" />
+                  <StatusPill label="No scheduler" tone="ok" />
                 </div>
               </div>
               <Button
@@ -584,7 +644,7 @@ function MessagingProviderPanel({
                 onClick={onPreviewTelegramActivity}
                 disabled={telegramActivityPreviewBusy || !onPreviewTelegramActivity}
               >
-                {telegramActivityPreviewBusy ? "Previewing..." : "Preview Telegram activity"}
+                {telegramActivityPreviewBusy ? "Drafting..." : "Draft activity post"}
               </Button>
               {telegramActivityPreviewError ? (
                 <p className="mt-3 rounded-lg border border-amber-400/20 bg-amber-500/5 p-3 text-sm text-amber-100/80">
@@ -595,13 +655,13 @@ function MessagingProviderPanel({
               <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <h3 className="text-sm font-semibold text-white/82">Autonomous activity run once</h3>
+                    <h3 className="text-sm font-semibold text-white/82">Check scheduled activity once</h3>
                     <p className="mt-1 text-xs text-white/48">
                       Dry-run only. No Telegram message will be sent. No scheduler will be started.
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <StatusPill label="Run once preview" tone="ok" />
+                    <StatusPill label="One-time check" tone="ok" />
                     <StatusPill label="No live run endpoint" tone="ok" />
                   </div>
                 </div>
@@ -613,7 +673,7 @@ function MessagingProviderPanel({
                   onClick={onPreviewTelegramActivityRunOnce}
                   disabled={telegramActivityRunOncePreviewBusy || !onPreviewTelegramActivityRunOnce}
                 >
-                  {telegramActivityRunOncePreviewBusy ? "Previewing..." : "Preview autonomous run once"}
+                  {telegramActivityRunOncePreviewBusy ? "Checking..." : "Check once"}
                 </Button>
                 {telegramActivityRunOncePreviewError ? (
                   <p className="mt-3 rounded-lg border border-amber-400/20 bg-amber-500/5 p-3 text-sm text-amber-100/80">
@@ -626,15 +686,15 @@ function MessagingProviderPanel({
                 <div className="rounded-xl border border-white/10 bg-black/20 p-3">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <h3 className="text-sm font-semibold text-white/82">Confirmed live Telegram activity</h3>
+                      <h3 className="text-sm font-semibold text-white/82">Approved Telegram activity</h3>
                       <p className="mt-1 text-xs text-white/48">
                         This sends exactly one Telegram activity message to the configured test group. No batch. No retry. No scheduler.
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      <StatusPill label={telegramActivityPreview.governor.allowed ? "Governor allows" : "Governor blocked"} tone={telegramActivityPreview.governor.allowed ? "ok" : "warn"} />
+                      <StatusPill label={telegramActivityPreview.governor.allowed ? "Within limits" : "Limit reached"} tone={telegramActivityPreview.governor.allowed ? "ok" : "warn"} />
                       <StatusPill
-                        label={telegramCapabilities.activity_apply_available ? "Activity apply available" : "Activity apply unavailable"}
+                        label={telegramCapabilities.activity_apply_available ? "Approval available" : "Approval unavailable"}
                         tone={telegramCapabilities.activity_apply_available ? "ok" : "warn"}
                       />
                     </div>
@@ -656,24 +716,24 @@ function MessagingProviderPanel({
                 </p>
               ) : null}
               {telegramActivityLiveResult ? (
-                <div>
-                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-white/45">Telegram activity live result</h3>
+                <DetailsPanel title="Telegram activity result" summary="Show raw apply response">
+                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-white/45">Telegram activity result</h3>
                   <RecordPreview record={telegramActivityLiveResult as unknown as Record<string, unknown>} emptyLabel="No Telegram activity live result payload." />
-                </div>
+                </DetailsPanel>
               ) : null}
             </div>
             {telegramPreview?.proposal_digest ? (
               <div className="rounded-xl border border-white/10 bg-black/20 p-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <h3 className="text-sm font-semibold text-white/82">Confirmed live Telegram message</h3>
+                    <h3 className="text-sm font-semibold text-white/82">Approved Telegram message</h3>
                     <p className="mt-1 text-xs text-white/48">
                       This sends exactly one Telegram message to the configured test/home target. No batch. No retry.
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <StatusPill label="Preview digest present" tone="ok" />
-                    <StatusPill label={telegramCapabilities.live_apply_available ? "Live apply available" : "Live apply unavailable"} tone={telegramCapabilities.live_apply_available ? "ok" : "warn"} />
+                    <StatusPill label="Draft locked" tone="ok" />
+                    <StatusPill label={telegramCapabilities.live_apply_available ? "Approval available" : "Approval unavailable"} tone={telegramCapabilities.live_apply_available ? "ok" : "warn"} />
                   </div>
                 </div>
                 <Button
@@ -698,16 +758,16 @@ function MessagingProviderPanel({
               </p>
             ) : null}
             {telegramLiveResult ? (
-              <div>
-                <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-white/45">Telegram live result</h3>
+              <DetailsPanel title="Telegram send result" summary="Show raw apply response">
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-white/45">Telegram send result</h3>
                 <RecordPreview record={telegramLiveResult as unknown as Record<string, unknown>} emptyLabel="No Telegram live result payload." />
-              </div>
+              </DetailsPanel>
             ) : null}
           </div>
         </Panel>
       ) : null}
 
-      <Panel title="Setup checklist">
+      <DetailsPanel title="Setup checklist" summary="Show channel setup steps and recommendations">
         <div className="space-y-2">
           {setup.items.map((item) => (
             <div key={item.id} className="flex items-center justify-between rounded-lg border border-white/10 bg-black/20 px-3 py-2">
@@ -728,9 +788,9 @@ function MessagingProviderPanel({
             ))}
           </div>
         ) : null}
-      </Panel>
+      </DetailsPanel>
 
-      <Panel title={guidance.title}>
+      <DetailsPanel title={guidance.title} summary="Show setup guidance and safety notes">
         <div className="space-y-4">
           <div className="space-y-2">
             {guidance.intro.map((line) => (
@@ -756,13 +816,13 @@ function MessagingProviderPanel({
             <p className="mt-2 text-sm leading-relaxed text-amber-100/80">{guidance.note}</p>
           </div>
         </div>
-      </Panel>
+      </DetailsPanel>
 
-      <Panel title="Capabilities">
+      <DetailsPanel title="Available actions" summary="Show raw capability switches">
         <MessagingCapabilityRows capabilities={capabilities} />
-      </Panel>
+      </DetailsPanel>
 
-      <Panel title="Safety boundary">
+      <DetailsPanel title="Safety proof" summary="Show boundaries and no-secret guarantees">
         <div className="space-y-2 text-sm text-white/62">
           <p className="flex gap-2">
             <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" />
@@ -773,7 +833,7 @@ function MessagingProviderPanel({
             Bot tokens, allowlists, raw channel IDs, and Hermes local paths are never displayed here.
           </p>
         </div>
-      </Panel>
+      </DetailsPanel>
     </div>
   );
 }
@@ -825,7 +885,7 @@ function PersonaPanel({ persona }: { persona: SocialPersona }) {
         </div>
       </Panel>
 
-      <Panel title="Digest protection">
+      <DetailsPanel title="Safety proof" summary="Show persona digest protection details">
         <div className="space-y-2 text-sm text-white/62">
           <p className="flex gap-2">
             <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" />
@@ -836,7 +896,7 @@ function PersonaPanel({ persona }: { persona: SocialPersona }) {
             Future apply should block if the persona changes after preview generation.
           </p>
         </div>
-      </Panel>
+      </DetailsPanel>
 
       <Panel title="Voice rules">
         <div className="space-y-4">
@@ -935,9 +995,9 @@ function LoadingCards() {
 }
 
 const PREVIEW_LABELS: Record<SocialPreviewKind, string> = {
-  reactive_inbox: "Reactive inbox discovery preview",
-  reactive_batch_dry_run: "Reactive batch dry-run preview",
-  broadcast_preflight: "Broadcast preflight preview",
+  reactive_inbox: "Reply check",
+  reactive_batch_dry_run: "Multiple reply preview",
+  broadcast_preflight: "Draft post",
 };
 
 const LIVE_REPLY_CONFIRMATION_PHRASE = "SEND ONE LIVE REPLY";
@@ -957,9 +1017,9 @@ function TelegramMessagePreviewCard({ preview }: { preview: TelegramMessagePrevi
         </div>
         <div className="flex flex-wrap gap-2">
           <StatusPill label={titleCase(preview.status)} tone={preview.status === "completed" ? "ok" : "warn"} />
-          <StatusPill label={preview.execution_allowed ? "Execution allowed" : "Execution blocked"} tone={preview.execution_allowed ? "danger" : "ok"} />
-          <StatusPill label="Persona protected" tone="ok" />
-          <StatusPill label={preview.proposal_digest ? "Proposal digest present" : "Proposal digest missing"} tone={preview.proposal_digest ? "ok" : "warn"} />
+          <StatusPill label={preview.execution_allowed ? "Approval available" : "Approval blocked"} tone={preview.execution_allowed ? "danger" : "ok"} />
+          <StatusPill label="Voice locked" tone="ok" />
+          <StatusPill label={preview.proposal_digest ? "Draft locked" : "Draft not locked"} tone={preview.proposal_digest ? "ok" : "warn"} />
         </div>
       </div>
       <div className="mt-3 grid gap-2 sm:grid-cols-3">
@@ -1013,14 +1073,14 @@ function TelegramActivityPreviewCard({ preview }: { preview: TelegramActivityPre
     <section className="mt-3 rounded-2xl border border-cyan-400/20 bg-cyan-500/5 p-4 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="text-sm font-semibold text-white/85">Telegram regular activity preview</h3>
+          <h3 className="text-sm font-semibold text-white/85">Draft activity post</h3>
           <p className="mt-1 text-xs text-white/48">Dry-run only. No Telegram message will be sent.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <StatusPill label={titleCase(preview.status)} tone={preview.status === "completed" ? "ok" : "warn"} />
-          <StatusPill label={preview.governor.allowed ? "Governor allows" : "Governor blocked"} tone={preview.governor.allowed ? "ok" : "warn"} />
-          <StatusPill label="Persona protected" tone="ok" />
-          <StatusPill label={preview.proposal_digest ? "Proposal digest present" : "Proposal digest missing"} tone={preview.proposal_digest ? "ok" : "warn"} />
+          <StatusPill label={preview.governor.allowed ? "Within limits" : "Limit reached"} tone={preview.governor.allowed ? "ok" : "warn"} />
+          <StatusPill label="Voice locked" tone="ok" />
+          <StatusPill label={preview.proposal_digest ? "Draft locked" : "Draft not locked"} tone={preview.proposal_digest ? "ok" : "warn"} />
         </div>
       </div>
       <div className="mt-3 grid gap-2 sm:grid-cols-3">
@@ -1078,10 +1138,10 @@ function TelegramActivityRunOncePreviewCard({ preview }: { preview: TelegramActi
         </div>
         <div className="flex flex-wrap gap-2">
           <StatusPill label={titleCase(preview.status)} tone={preview.status === "completed" ? "ok" : "warn"} />
-          <StatusPill label={preview.dry_run ? "Dry-run true" : "Dry-run false"} tone={preview.dry_run ? "ok" : "danger"} />
-          <StatusPill label={preview.execution_allowed ? "Execution allowed" : "Execution blocked"} tone={preview.execution_allowed ? "danger" : "ok"} />
-          <StatusPill label={preview.mutation_attempted ? "Mutation attempted" : "No mutation"} tone={preview.mutation_attempted ? "danger" : "ok"} />
-          <StatusPill label="Persona protected" tone="ok" />
+          <StatusPill label={preview.dry_run ? "Dry run" : "Live mode"} tone={preview.dry_run ? "ok" : "danger"} />
+          <StatusPill label={preview.execution_allowed ? "Approval available" : "Approval blocked"} tone={preview.execution_allowed ? "danger" : "ok"} />
+          <StatusPill label={preview.mutation_attempted ? "Tried to send" : "No send attempted"} tone={preview.mutation_attempted ? "danger" : "ok"} />
+          <StatusPill label="Voice locked" tone="ok" />
         </div>
       </div>
       <div className="mt-3 grid gap-2 sm:grid-cols-3">
@@ -1147,8 +1207,8 @@ function TelegramInboundPreviewCard({ preview }: { preview: TelegramInboundPrevi
         <div className="flex flex-wrap gap-2">
           <StatusPill label={titleCase(preview.status)} tone={preview.status === "completed" ? "ok" : "warn"} />
           <StatusPill label={`${preview.inbound_count} inbound`} tone={preview.inbound_count ? "ok" : "muted"} />
-          <StatusPill label={preview.execution_allowed ? "Execution allowed" : "Execution blocked"} tone={preview.execution_allowed ? "danger" : "ok"} />
-          <StatusPill label={preview.mutation_attempted ? "Mutation attempted" : "No mutation"} tone={preview.mutation_attempted ? "danger" : "ok"} />
+          <StatusPill label={preview.execution_allowed ? "Approval available" : "Approval blocked"} tone={preview.execution_allowed ? "danger" : "ok"} />
+          <StatusPill label={preview.mutation_attempted ? "Tried to send" : "No send attempted"} tone={preview.mutation_attempted ? "danger" : "ok"} />
         </div>
       </div>
       {preview.items.length ? (
@@ -1156,7 +1216,7 @@ function TelegramInboundPreviewCard({ preview }: { preview: TelegramInboundPrevi
           {preview.items.map((item) => (
             <div key={item.inbound_id} className="rounded-lg border border-white/10 bg-black/25 p-3">
               <div className="flex flex-wrap gap-2">
-                <StatusPill label={item.repliable ? "Repliable metadata present" : "Not repliable"} tone={item.repliable ? "ok" : "warn"} />
+                <StatusPill label={item.repliable ? "Can reply" : "Cannot reply"} tone={item.repliable ? "ok" : "warn"} />
                 <StatusPill label={item.already_answered ? "Already answered" : "Unanswered"} tone={item.already_answered ? "muted" : "ok"} />
                 {item.chat_type ? <StatusPill label={titleCase(item.chat_type)} tone="muted" /> : null}
               </div>
@@ -1224,8 +1284,8 @@ function TelegramReactiveRepliesPreviewCard({ preview }: { preview: TelegramReac
         <div className="flex flex-wrap gap-2">
           <StatusPill label={titleCase(preview.status)} tone={preview.status === "completed" ? "ok" : "warn"} />
           <StatusPill label={`${preview.reply_candidate_count} candidates`} tone={preview.reply_candidate_count ? "ok" : "muted"} />
-          <StatusPill label={preview.execution_allowed ? "Execution allowed" : "Execution blocked"} tone={preview.execution_allowed ? "danger" : "ok"} />
-          <StatusPill label={preview.mutation_attempted ? "Mutation attempted" : "No mutation"} tone={preview.mutation_attempted ? "danger" : "ok"} />
+          <StatusPill label={preview.execution_allowed ? "Approval available" : "Approval blocked"} tone={preview.execution_allowed ? "danger" : "ok"} />
+          <StatusPill label={preview.mutation_attempted ? "Tried to send" : "No send attempted"} tone={preview.mutation_attempted ? "danger" : "ok"} />
         </div>
       </div>
       {preview.items.length ? (
@@ -1234,9 +1294,9 @@ function TelegramReactiveRepliesPreviewCard({ preview }: { preview: TelegramReac
             <div key={item.inbound_id} className="rounded-lg border border-white/10 bg-black/25 p-3">
               <div className="flex flex-wrap gap-2">
                 <StatusPill label={titleCase(item.classification)} tone={item.policy.allowed ? "ok" : "warn"} />
-                <StatusPill label={item.policy.allowed ? "Policy allows" : "Policy blocked"} tone={item.policy.allowed ? "ok" : "warn"} />
-                <StatusPill label={item.governor.allowed ? "Governor allows" : "Governor blocked"} tone={item.governor.allowed ? "ok" : "warn"} />
-                <StatusPill label={item.proposal_digest ? "Proposal digest present" : "No proposal digest"} tone={item.proposal_digest ? "ok" : "muted"} />
+                <StatusPill label={item.policy.allowed ? "Policy clear" : "Policy blocked"} tone={item.policy.allowed ? "ok" : "warn"} />
+                <StatusPill label={item.governor.allowed ? "Within limits" : "Limit reached"} tone={item.governor.allowed ? "ok" : "warn"} />
+                <StatusPill label={item.proposal_digest ? "Draft locked" : "No locked draft"} tone={item.proposal_digest ? "ok" : "muted"} />
               </div>
               <div className="mt-3 grid gap-2 sm:grid-cols-3">
                 <div>
@@ -1304,9 +1364,9 @@ function PreviewResultCard({ preview }: { preview: SocialPreviewResponse }) {
         </div>
         <div className="flex flex-wrap gap-2">
           <StatusPill label={titleCase(preview.status)} tone={preview.status === "completed" ? "ok" : "warn"} />
-          <StatusPill label={preview.live_apply_available ? "Live apply available" : "Live apply unavailable"} tone={preview.live_apply_available ? "danger" : "ok"} />
-          <StatusPill label={preview.execution_allowed ? "Execution allowed" : "Execution blocked"} tone={preview.execution_allowed ? "danger" : "ok"} />
-          <StatusPill label="Persona protected" tone="ok" />
+          <StatusPill label={preview.live_apply_available ? "Live sending enabled" : "Live sending off"} tone={preview.live_apply_available ? "danger" : "ok"} />
+          <StatusPill label={preview.execution_allowed ? "Approval available" : "Approval blocked"} tone={preview.execution_allowed ? "danger" : "ok"} />
+          <StatusPill label="Voice locked" tone="ok" />
         </div>
       </div>
       <div className="mt-3 grid gap-2 sm:grid-cols-3">
@@ -1343,6 +1403,7 @@ function PreviewResultCard({ preview }: { preview: SocialPreviewResponse }) {
 
 export function WorkspaceSocialScreen() {
   const [snapshot, setSnapshot] = React.useState<SocialSnapshot | null>(null);
+  const [selectedSection, setSelectedSection] = React.useState<SocialSection>("overview");
   const [selectedProvider, setSelectedProvider] = React.useState<SocialSelection>("persona");
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -1682,8 +1743,8 @@ export function WorkspaceSocialScreen() {
       <WorkspaceSurfaceHeader
         variant="dark"
         eyebrow="Social"
-        title="Social Command Center"
-        subtitle="Provider status for autonomous social agents. X has governed controls; Telegram has preview-only drafts; Discord remains read-only Hermes gateway readiness."
+        title="HAMgomoon Social"
+        subtitle="Operate social channels with locked voice, guarded actions, and setup details available only when needed."
         actions={
           <Button
             type="button"
@@ -1700,8 +1761,8 @@ export function WorkspaceSocialScreen() {
       />
 
       <WorkspaceSurfaceStateCard
-        title="Persona-first Social"
-        description="The Persona section is read-only and provider panels keep Telegram/Discord readiness separate from X live controls. No persona editing or credential input is exposed."
+        title="Voice and safety are locked"
+        description="This cockpit shows channel health, safe next actions, recent activity, and setup status. Technical proof and diagnostics stay available in collapsed details."
         tone="neutral"
       />
 
@@ -1723,13 +1784,24 @@ export function WorkspaceSocialScreen() {
 
       {!loading && snapshot ? (
         <>
+          <SectionTabs
+            selected={selectedSection}
+            onSelect={(section) => {
+              setSelectedSection(section);
+              if (section === "channels" && selectedProvider === "persona") {
+                setSelectedProvider("x");
+              }
+            }}
+          />
+
+          {selectedSection === "overview" || selectedSection === "channels" ? (
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             <button
               type="button"
-              onClick={() => setSelectedProvider("persona")}
+              onClick={() => setSelectedSection("persona")}
               className={cn(
                 "rounded-2xl border bg-black/25 p-4 text-left shadow-sm transition hover:border-white/25",
-                selectedProvider === "persona" ? "border-emerald-300/35" : "border-white/10",
+                "border-white/10",
               )}
             >
               <div className="flex items-start justify-between gap-3">
@@ -1748,19 +1820,58 @@ export function WorkspaceSocialScreen() {
               <ProviderCard
                 key={provider.id}
                 provider={provider}
-                selected={provider.id === selectedProvider}
+                selected={selectedSection === "channels" && provider.id === selectedProvider}
                 onSelect={() => {
                   if (provider.id === "x" || provider.id === "telegram" || provider.id === "discord") {
+                    setSelectedSection("channels");
                     setSelectedProvider(provider.id);
                   }
                 }}
               />
             ))}
           </div>
+          ) : null}
 
-          {selectedProvider === "persona" ? <PersonaPanel persona={snapshot.persona} /> : null}
+          {selectedSection === "overview" ? (
+            <div className="grid gap-4 xl:grid-cols-3">
+              <Panel title="What needs attention">
+                <div className="space-y-2 text-sm text-white/62">
+                  {snapshot.providers.some((provider) => provider.status !== "active") ? (
+                    snapshot.providers
+                      .filter((provider) => provider.status !== "active")
+                      .map((provider) => (
+                        <div key={provider.id} className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                          {provider.label}: {provider.status === "coming_soon" ? "planned" : "needs setup"}
+                        </div>
+                      ))
+                  ) : (
+                    <p>No channel blockers reported.</p>
+                  )}
+                </div>
+              </Panel>
+              <Panel title="Safe actions now">
+                <div className="space-y-2 text-sm text-white/62">
+                  <div className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">X: draft posts and check replies</div>
+                  <div className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">Telegram: check inbox, draft messages, and send approved one-shot actions when enabled</div>
+                  <div className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">Discord: check setup only</div>
+                </div>
+              </Panel>
+              <Panel title="Recent activity">
+                <div className="space-y-2 text-sm text-white/62">
+                  <div className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                    Last X post: {snapshot.xStatus.last_autonomous_post ? "found" : "none yet"}
+                  </div>
+                  <div className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                    Last X reply: {snapshot.xStatus.last_reactive_reply ? "found" : "none yet"}
+                  </div>
+                </div>
+              </Panel>
+            </div>
+          ) : null}
 
-          {selectedMessaging ? (
+          {selectedSection === "persona" ? <PersonaPanel persona={snapshot.persona} /> : null}
+
+          {selectedSection === "channels" && selectedMessaging ? (
             <MessagingProviderPanel
               status={selectedMessaging.status}
               capabilities={selectedMessaging.capabilities}
@@ -1819,13 +1930,12 @@ export function WorkspaceSocialScreen() {
             />
           ) : null}
 
-          {selectedProvider === "x" && x && caps ? (
+          {selectedSection === "channels" && selectedProvider === "x" && x && caps ? (
             <div className="grid gap-4 xl:grid-cols-2">
-              <Panel title="Preview controls">
+              <Panel title="X primary actions">
                 <div className="space-y-3">
                   <p className="text-sm leading-relaxed text-white/58">
-                    Preview only. These controls produce dry-run result payloads and keep `execution_allowed=false`,
-                    `mutation_attempted=false`, and `live_apply_available=false`.
+                    Draft posts, check replies, and prepare approved live actions. Every live action still requires the existing confirmation flow.
                   </p>
                   <div className="flex flex-wrap gap-2">
                     <Button
@@ -1836,7 +1946,7 @@ export function WorkspaceSocialScreen() {
                       onClick={() => void runPreview("reactive_inbox")}
                       disabled={previewBusy !== null}
                     >
-                      {previewBusy === "reactive_inbox" ? "Previewing..." : "Preview inbox discovery"}
+                      {previewBusy === "reactive_inbox" ? "Checking..." : "Check replies"}
                     </Button>
                     <Button
                       type="button"
@@ -1846,7 +1956,7 @@ export function WorkspaceSocialScreen() {
                       onClick={() => void runPreview("reactive_batch_dry_run")}
                       disabled={previewBusy !== null}
                     >
-                      {previewBusy === "reactive_batch_dry_run" ? "Previewing..." : "Preview reactive batch dry-run"}
+                      {previewBusy === "reactive_batch_dry_run" ? "Checking..." : "Preview multiple replies"}
                     </Button>
                     <Button
                       type="button"
@@ -1856,10 +1966,10 @@ export function WorkspaceSocialScreen() {
                       onClick={() => void runPreview("broadcast_preflight")}
                       disabled={previewBusy !== null}
                     >
-                      {previewBusy === "broadcast_preflight" ? "Previewing..." : "Preview broadcast preflight"}
+                      {previewBusy === "broadcast_preflight" ? "Drafting..." : "Draft post"}
                     </Button>
                   </div>
-                  <p className="text-xs text-white/42">No live X write. No reply/post execution. Dry-run result only.</p>
+                  <p className="text-xs text-white/42">No live X write happens from these draft/check actions.</p>
                 </div>
               </Panel>
 
@@ -1877,12 +1987,12 @@ export function WorkspaceSocialScreen() {
               )}
 
               {setup ? (
-                <Panel title="Setup and deployment">
+                <DetailsPanel title="X setup" summary="Show required connections, masked IDs, and setup recommendations">
                   <div className="space-y-4">
                     <div className="flex flex-wrap gap-2">
-                      <StatusPill label={setup.provider_configured ? "Provider configured" : "Provider limited"} tone={setup.provider_configured ? "ok" : "warn"} />
+                      <StatusPill label={setup.provider_configured ? "Channel configured" : "Channel limited"} tone={setup.provider_configured ? "ok" : "warn"} />
                       <StatusPill label={titleCase(setup.overall_readiness)} tone={statusTone(setup.overall_readiness)} />
-                      <StatusPill label={setup.mutation_attempted ? "Mutation attempted" : "Read-only setup"} tone={setup.mutation_attempted ? "danger" : "ok"} />
+                      <StatusPill label={setup.mutation_attempted ? "Tried to send" : "Status check only"} tone={setup.mutation_attempted ? "danger" : "ok"} />
                     </div>
                     <ChecklistGroup
                       title="Required connections"
@@ -1921,11 +2031,11 @@ export function WorkspaceSocialScreen() {
                       }))}
                     />
                   </div>
-                </Panel>
+                </DetailsPanel>
               ) : null}
 
               {setup ? (
-                <Panel title="Lane readiness">
+                <DetailsPanel title="Automation readiness" summary="Show per-lane readiness and missing requirements">
                   <div className="space-y-4">
                     {Object.entries(setup.lane_readiness).map(([lane, data]) => (
                       <div key={lane} className="rounded-xl border border-white/10 bg-black/20 p-3">
@@ -1947,11 +2057,11 @@ export function WorkspaceSocialScreen() {
                       </div>
                     ))}
                   </div>
-                </Panel>
+                </DetailsPanel>
               ) : null}
 
               {setup ? (
-                <Panel title="Agent-led setup guidance">
+                <DetailsPanel title="Setup guidance" summary="Show recommended next steps">
                   <div className="space-y-3 text-sm text-white/62">
                     <p>
                       Ask Ham to help configure this is a placeholder for a future guided setup flow. This panel is read-only:
@@ -1965,21 +2075,21 @@ export function WorkspaceSocialScreen() {
                       ))}
                     </div>
                   </div>
-                </Panel>
+                </DetailsPanel>
               ) : null}
 
-              <Panel title="Confirmed live reply">
+              <Panel title="Send approved reply">
                 <div className="space-y-3">
                   <p className="text-sm leading-relaxed text-white/58">
-                    Confirmed live action. This sends exactly one live X reply from the latest inbox preview using the previewed persona. If persona changes, re-preview first.
+                    Sends exactly one X reply from the latest reply check. If the voice changes, check replies again first.
                   </p>
                   <div className="flex flex-wrap gap-2">
                     <StatusPill
-                      label={inboxPreview?.proposal_digest ? "Preview digest present" : "Preview digest required"}
+                      label={inboxPreview?.proposal_digest ? "Draft locked" : "Draft required"}
                       tone={inboxPreview?.proposal_digest ? "ok" : "warn"}
                     />
                     <StatusPill
-                      label={caps.reactive_reply_apply_available ? "Operator apply available" : "Operator apply unavailable"}
+                      label={caps.reactive_reply_apply_available ? "Approval available" : "Approval unavailable"}
                       tone={caps.reactive_reply_apply_available ? "ok" : "muted"}
                     />
                   </div>
@@ -1997,7 +2107,7 @@ export function WorkspaceSocialScreen() {
                   </Button>
                   {!canSendOneLiveReply ? (
                     <p className="text-xs text-white/42">
-                      Run inbox discovery preview first, and ensure the API reports reactive reply apply availability.
+                      Check replies first, then confirm that approved reply sending is available.
                     </p>
                   ) : null}
                 </div>
@@ -2013,23 +2123,23 @@ export function WorkspaceSocialScreen() {
               ) : null}
 
               {liveResult ? (
-                <Panel title="Confirmed live reply result">
+                <DetailsPanel title="Approved reply result" summary="Show raw apply response">
                   <RecordPreview record={liveResult as unknown as Record<string, unknown>} emptyLabel="No live result payload." />
-                </Panel>
+                </DetailsPanel>
               ) : null}
 
-              <Panel title="Confirmed live reactive batch">
+              <Panel title="Send approved reply batch">
                 <div className="space-y-3">
                   <p className="text-sm leading-relaxed text-white/58">
-                    Confirmed live action. This may send multiple live replies using the previewed persona, capped by the reactive governor. No retry. No broadcast post.
+                    Sends multiple approved replies, capped by the reply limits. No retry. No post.
                   </p>
                   <div className="flex flex-wrap gap-2">
                     <StatusPill
-                      label={batchPreview?.proposal_digest ? "Batch preview digest present" : "Batch preview digest required"}
+                      label={batchPreview?.proposal_digest ? "Draft locked" : "Draft required"}
                       tone={batchPreview?.proposal_digest ? "ok" : "warn"}
                     />
                     <StatusPill
-                      label={caps.reactive_batch_apply_available ? "Batch apply available" : "Batch apply unavailable"}
+                      label={caps.reactive_batch_apply_available ? "Approval available" : "Approval unavailable"}
                       tone={caps.reactive_batch_apply_available ? "ok" : "muted"}
                     />
                   </div>
@@ -2047,7 +2157,7 @@ export function WorkspaceSocialScreen() {
                   </Button>
                   {!canSendLiveReactiveBatch ? (
                     <p className="text-xs text-white/42">
-                      Run reactive batch dry-run preview first, and ensure the API reports reactive batch apply availability.
+                      Preview multiple replies first, then confirm that batch sending is available.
                     </p>
                   ) : null}
                 </div>
@@ -2063,23 +2173,23 @@ export function WorkspaceSocialScreen() {
               ) : null}
 
               {batchResult ? (
-                <Panel title="Confirmed live reactive batch result">
+                <DetailsPanel title="Approved reply batch result" summary="Show raw apply response">
                   <RecordPreview record={batchResult as unknown as Record<string, unknown>} emptyLabel="No live batch result payload." />
-                </Panel>
+                </DetailsPanel>
               ) : null}
 
-              <Panel title="Confirmed live broadcast post">
+              <Panel title="Send approved post">
                 <div className="space-y-3">
                   <p className="text-sm leading-relaxed text-white/58">
-                    Confirmed live action. This sends exactly one live original post using the previewed persona. No batch. No retry. No replies.
+                    Sends exactly one original X post using the locked voice. No batch. No retry. No replies.
                   </p>
                   <div className="flex flex-wrap gap-2">
                     <StatusPill
-                      label={broadcastPreview?.proposal_digest ? "Broadcast preview digest present" : "Broadcast preview digest required"}
+                      label={broadcastPreview?.proposal_digest ? "Draft locked" : "Draft required"}
                       tone={broadcastPreview?.proposal_digest ? "ok" : "warn"}
                     />
                     <StatusPill
-                      label={caps.broadcast_apply_available ? "Broadcast apply available" : "Broadcast apply unavailable"}
+                      label={caps.broadcast_apply_available ? "Approval available" : "Approval unavailable"}
                       tone={caps.broadcast_apply_available ? "ok" : "muted"}
                     />
                   </div>
@@ -2097,7 +2207,7 @@ export function WorkspaceSocialScreen() {
                   </Button>
                   {!canSendOneLivePost ? (
                     <p className="text-xs text-white/42">
-                      Run broadcast preflight preview first, and ensure the API reports broadcast apply availability.
+                      Draft a post first, then confirm that approved post sending is available.
                     </p>
                   ) : null}
                 </div>
@@ -2113,12 +2223,12 @@ export function WorkspaceSocialScreen() {
               ) : null}
 
               {broadcastResult ? (
-                <Panel title="Confirmed live broadcast result">
+                <DetailsPanel title="Approved post result" summary="Show raw apply response">
                   <RecordPreview record={broadcastResult as unknown as Record<string, unknown>} emptyLabel="No live broadcast result payload." />
-                </Panel>
+                </DetailsPanel>
               ) : null}
 
-              <Panel title="X readiness">
+              <Panel title="X status strip">
                 <div className="mb-3 flex flex-wrap gap-2">
                   <StatusPill label={titleCase(x.overall_readiness)} tone={statusTone(x.overall_readiness)} />
                   <StatusPill label={x.read_only ? "Read-only" : "Writable"} tone={x.read_only ? "ok" : "danger"} />
@@ -2127,7 +2237,7 @@ export function WorkspaceSocialScreen() {
                     tone={x.emergency_stop.enabled ? "danger" : "ok"}
                   />
                   <StatusPill
-                    label={caps.live_apply_available ? "Live apply enabled" : "Live apply unavailable"}
+                    label={caps.live_apply_available ? "Live sending enabled" : "Live sending off"}
                     tone={caps.live_apply_available ? "danger" : "ok"}
                   />
                 </div>
@@ -2142,20 +2252,20 @@ export function WorkspaceSocialScreen() {
                 )}
               </Panel>
 
-              <Panel title="Capabilities">
+              <DetailsPanel title="Available actions" summary="Show raw X capability switches">
                 <CapabilityRows capabilities={caps} />
-              </Panel>
+              </DetailsPanel>
 
-              <Panel title="Dry-run defaults">
+              <DetailsPanel title="Safety proof" summary="Show dry-run defaults and guarded automation flags">
                 <div className="grid gap-2 sm:grid-cols-2">
                   <BoolRow label="Global dry-run" value={x.dry_run_defaults.global_dry_run} />
                   <BoolRow label="Controller dry-run" value={x.dry_run_defaults.controller_dry_run} />
                   <BoolRow label="Reactive dry-run" value={x.dry_run_defaults.reactive_dry_run} />
                   <BoolRow label="Reactive batch dry-run" value={x.dry_run_defaults.reactive_batch_dry_run} />
                 </div>
-              </Panel>
+              </DetailsPanel>
 
-              <Panel title="Broadcast lane">
+              <DetailsPanel title="Post automation" summary="Show technical readiness for original posts">
                 <KeyValueGrid
                   rows={[
                     { label: "Enabled", value: x.broadcast_lane.enabled ? "Yes" : "No" },
@@ -2163,7 +2273,7 @@ export function WorkspaceSocialScreen() {
                     { label: "Live controller", value: x.broadcast_lane.live_controller_enabled ? "Enabled" : "Disabled" },
                     { label: "Dry-run", value: x.broadcast_lane.dry_run_available ? "Available" : "Unavailable" },
                     { label: "Live configured", value: x.broadcast_lane.live_configured ? "Yes" : "No" },
-                    { label: "Execution allowed now", value: x.broadcast_lane.execution_allowed_now ? "Yes" : "No" },
+                    { label: "Approval available now", value: x.broadcast_lane.execution_allowed_now ? "Yes" : "No" },
                   ]}
                 />
                 {x.broadcast_lane.reasons.length ? (
@@ -2173,9 +2283,9 @@ export function WorkspaceSocialScreen() {
                     ))}
                   </div>
                 ) : null}
-              </Panel>
+              </DetailsPanel>
 
-              <Panel title="Reactive lane">
+              <DetailsPanel title="Reply automation" summary="Show technical readiness for replies">
                 <KeyValueGrid
                   rows={[
                     { label: "Enabled", value: x.reactive_lane.enabled ? "Yes" : "No" },
@@ -2192,9 +2302,9 @@ export function WorkspaceSocialScreen() {
                     ))}
                   </div>
                 ) : null}
-              </Panel>
+              </DetailsPanel>
 
-              <Panel title="Caps and cooldowns">
+              <Panel title="Limits and cooldowns">
                 <KeyValueGrid
                   rows={[
                     { label: "Broadcast daily", value: `${x.cap_cooldown_summary.broadcast_daily_used}/${x.cap_cooldown_summary.broadcast_daily_cap}` },
@@ -2211,15 +2321,15 @@ export function WorkspaceSocialScreen() {
                 />
               </Panel>
 
-              <Panel title="Last autonomous post">
+              <Panel title="Last post">
                 <RecordPreview record={x.last_autonomous_post} emptyLabel="No autonomous post found in the bounded journal summary." />
               </Panel>
 
-              <Panel title="Last reactive reply">
+              <Panel title="Last reply">
                 <RecordPreview record={x.last_reactive_reply} emptyLabel="No reactive reply found in the bounded journal summary." />
               </Panel>
 
-              <Panel title="Setup checklist">
+              <DetailsPanel title="Setup checklist" summary="Show setup checks and feature flags">
                 <div className="space-y-2">
                   {snapshot.xSetup.items.map((item) => (
                     <div key={item.id} className="flex items-center justify-between rounded-lg border border-white/10 bg-black/20 px-3 py-2">
@@ -2236,9 +2346,9 @@ export function WorkspaceSocialScreen() {
                     <BoolRow key={key} label={titleCase(key)} value={value} />
                   ))}
                 </div>
-              </Panel>
+              </DetailsPanel>
 
-              <Panel title="Journal summary">
+              <DetailsPanel title="Delivery history" summary="Show journal scan counts and recent raw records">
                 <KeyValueGrid
                   rows={[
                     { label: "Path", value: snapshot.xJournal.journal_path },
@@ -2259,9 +2369,9 @@ export function WorkspaceSocialScreen() {
                     <p className="text-sm text-white/45">No recent journal items.</p>
                   )}
                 </div>
-              </Panel>
+              </DetailsPanel>
 
-              <Panel title="Audit summary">
+              <DetailsPanel title="Safety log" summary="Show audit scan counts and recent raw events">
                 <KeyValueGrid
                   rows={[
                     { label: "Path", value: snapshot.xAudit.audit_path },
@@ -2289,20 +2399,139 @@ export function WorkspaceSocialScreen() {
                     <p className="text-sm text-white/45">No recent audit events.</p>
                   )}
                 </div>
-              </Panel>
+              </DetailsPanel>
 
-              <Panel title="Safety boundary">
+              <DetailsPanel title="Safety boundary" summary="Show frontend/API safety notes">
                 <div className="space-y-2 text-sm text-white/62">
                   <p className="flex gap-2">
                     <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" />
-                    Frontend uses `hamApiFetch` against read-only `GET /api/social` endpoints only.
+                    Frontend uses `hamApiFetch` against Social API endpoints and keeps live sends behind confirmation flows.
                   </p>
                   <p className="flex gap-2">
                     <Circle className="mt-1 h-3 w-3 shrink-0 text-white/40" />
-                    Live posting, replies, batch execution, and apply buttons are intentionally absent from this MVP.
+                    Live posting, replies, and batch execution stay gated by locked drafts, confirmation phrases, and operator authorization.
                   </p>
                 </div>
+              </DetailsPanel>
+            </div>
+          ) : null}
+
+          {selectedSection === "history" ? (
+            <div className="grid gap-4 xl:grid-cols-2">
+              <Panel title="Recently sent or blocked">
+                <div className="space-y-2 text-sm text-white/62">
+                  <div className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                    Last X post: {snapshot.xJournal.latest_broadcast_post ? "available in delivery details" : "none found"}
+                  </div>
+                  <div className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                    Last X reply: {snapshot.xJournal.latest_reactive_reply ? "available in delivery details" : "none found"}
+                  </div>
+                  <div className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                    Recent delivery records: {snapshot.xJournal.recent_items.length}
+                  </div>
+                </div>
               </Panel>
+              <DetailsPanel title="Delivery history" summary="Show journal scan counts and raw recent records">
+                <KeyValueGrid
+                  rows={[
+                    { label: "Rows scanned", value: snapshot.xJournal.total_count_scanned },
+                    { label: "Malformed rows", value: snapshot.xJournal.malformed_count },
+                    { label: "Recent cap", value: snapshot.xJournal.bounds.max_recent_items },
+                    { label: "Path", value: snapshot.xJournal.journal_path },
+                  ]}
+                />
+                <div className="mt-3">
+                  <RecordPreview record={snapshot.xJournal.counts_by_execution_kind} emptyLabel="No delivery counts yet." />
+                </div>
+                <div className="mt-3 space-y-2">
+                  {snapshot.xJournal.recent_items.length ? (
+                    snapshot.xJournal.recent_items.map((item, idx) => (
+                      <RecordPreview key={idx} record={item} emptyLabel="No delivery record." />
+                    ))
+                  ) : (
+                    <p className="text-sm text-white/45">No recent delivery records.</p>
+                  )}
+                </div>
+              </DetailsPanel>
+              <DetailsPanel title="Safety log" summary="Show audit scan counts and raw recent events">
+                <KeyValueGrid
+                  rows={[
+                    { label: "Rows scanned", value: snapshot.xAudit.total_count_scanned },
+                    { label: "Malformed rows", value: snapshot.xAudit.malformed_count },
+                    { label: "Recent cap", value: snapshot.xAudit.bounds.max_recent_events },
+                    { label: "Path", value: snapshot.xAudit.audit_path },
+                  ]}
+                />
+                <div className="mt-3">
+                  <RecordPreview record={snapshot.xAudit.counts_by_event_type} emptyLabel="No safety log counts yet." />
+                </div>
+                <div className="mt-3 space-y-2">
+                  {snapshot.xAudit.recent_events.length ? (
+                    snapshot.xAudit.recent_events.map((event, idx) => (
+                      <RecordPreview key={idx} record={event} emptyLabel="No safety log event." />
+                    ))
+                  ) : (
+                    <p className="text-sm text-white/45">No recent safety log events.</p>
+                  )}
+                </div>
+              </DetailsPanel>
+            </div>
+          ) : null}
+
+          {selectedSection === "setup" ? (
+            <div className="grid gap-4 xl:grid-cols-2">
+              <Panel title="Setup overview">
+                <div className="space-y-2 text-sm text-white/62">
+                  {snapshot.providers.map((provider) => (
+                    <div key={`setup-${provider.id}`} className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                      <span>{provider.label}</span>
+                      <StatusPill
+                        label={provider.configured ? "Configured" : provider.coming_soon ? "Planned" : "Needs setup"}
+                        tone={provider.configured ? "ok" : provider.coming_soon ? "muted" : "warn"}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </Panel>
+              <DetailsPanel title="X setup checklist" summary="Show required X setup checks">
+                <div className="space-y-2">
+                  {snapshot.xSetup.items.map((item) => (
+                    <div key={item.id} className="flex items-center justify-between rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                      <div className="flex items-center gap-2 text-sm text-white/70">
+                        {item.ok ? <CheckCircle2 className="h-4 w-4 text-emerald-300" /> : <AlertTriangle className="h-4 w-4 text-amber-300" />}
+                        {item.label}
+                      </div>
+                      <StatusPill label={item.ok ? "Ready" : "Missing"} tone={item.ok ? "ok" : "warn"} />
+                    </div>
+                  ))}
+                </div>
+              </DetailsPanel>
+              <DetailsPanel title="Telegram setup checklist" summary="Show Telegram setup checks">
+                <div className="space-y-2">
+                  {snapshot.telegramSetup.items.map((item) => (
+                    <div key={item.id} className="flex items-center justify-between rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                      <div className="flex items-center gap-2 text-sm text-white/70">
+                        {item.ok ? <CheckCircle2 className="h-4 w-4 text-emerald-300" /> : <AlertTriangle className="h-4 w-4 text-amber-300" />}
+                        {item.label}
+                      </div>
+                      <StatusPill label={item.ok ? "Ready" : "Missing"} tone={item.ok ? "ok" : "warn"} />
+                    </div>
+                  ))}
+                </div>
+              </DetailsPanel>
+              <DetailsPanel title="Discord setup checklist" summary="Show Discord setup checks">
+                <div className="space-y-2">
+                  {snapshot.discordSetup.items.map((item) => (
+                    <div key={item.id} className="flex items-center justify-between rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                      <div className="flex items-center gap-2 text-sm text-white/70">
+                        {item.ok ? <CheckCircle2 className="h-4 w-4 text-emerald-300" /> : <AlertTriangle className="h-4 w-4 text-amber-300" />}
+                        {item.label}
+                      </div>
+                      <StatusPill label={item.ok ? "Ready" : "Missing"} tone={item.ok ? "ok" : "warn"} />
+                    </div>
+                  ))}
+                </div>
+              </DetailsPanel>
             </div>
           ) : null}
         </>
