@@ -2,7 +2,7 @@
 
 **Status:** Non-binding direction doc. This file captures *intent and principles*, not shipped reality or committed engineering sequence. For what is actually shipped, see `VISION.md`. For what is deferred, see `GAPS.md`.
 
-**Last updated:** 2026-04-18
+**Last updated:** 2026-05-02
 
 ## What HAM is becoming
 
@@ -15,6 +15,8 @@ HAM is evolving from a **local CLI** with a **bounded inspection-oriented runtim
 **Near term**, the direction is a **small shared workspace** (on the order of **3–5 people**) with a **Vercel-hosted frontend**: **read-only UI first**, while **execution remains CLI-driven** on each developer’s machine. A hosted execution path may follow, but is not committed.
 
 **Longer term**, the same design space may grow toward **configurable AI workers and subagents** with **personas**, **teams**, **plugins**, and **pluggable backends**, and **may eventually support a multi-tenant SaaS control plane**. None of that is committed; it only informs how near-term seams (registries, run records, separation of duties) should stay shaped.
+
+**Builder Platform north star (separate doc):** a fuller **aspirational** Last Mile Builder / Enterprise Orchestrator story and **phased** anchors (starting with Builder Blueprint Mode) are captured in **`docs/BUILDER_PLATFORM_NORTH_STAR.md`** so this file stays a principles lens—not a duplicate roadmap (`PRODUCT_DIRECTION` remains “not a roadmap” for sequencing prose here).
 
 ## Target architecture (eventual)
 

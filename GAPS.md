@@ -5,6 +5,8 @@ Each item tracks what is missing, why it matters, and what blocks it.
 
 **Cloud Agent + managed missions (what works vs stub + phased roadmap):** see [`docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md`](docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md).
 
+**Builder Platform (aspirational vs shipped):** long-term last-mile builder / enterprise orchestrator vision and phased anchors (Builder Blueprint Mode → lifecycle governance) live in [`docs/BUILDER_PLATFORM_NORTH_STAR.md`](docs/BUILDER_PLATFORM_NORTH_STAR.md). [`VISION.md`](../VISION.md) remains the shipped pillar SSOT.
+
 ## Active implementation notes (Cursor / hardening)
 
 - Context Engine hardening and **Phase 1** (Hermes-aligned scanning, tool-output pruning, config-driven compaction thresholds) are **complete** in `src/memory_heist.py`; **Phase 3** guardrail tests are in `tests/test_memory_heist.py` (23 cases).

@@ -20,6 +20,8 @@ Canonical architecture and agent context live at the repo root: [`VISION.md`](..
 
 **Not source of truth:** generated exports and tool-local settings (for example [`CURSOR_EXACT_SETUP_EXPORT.md`](../CURSOR_EXACT_SETUP_EXPORT.md), `.cursor/settings.json`) are snapshots or editor config—defer to git-tracked canonical docs unless you deliberately refresh an export script.
 
+**Builder Platform (aspirational):** [`BUILDER_PLATFORM_NORTH_STAR.md`](BUILDER_PLATFORM_NORTH_STAR.md) — phased roadmap (orthogonal to workspace phases in [`HAM_ROADMAP.md`](HAM_ROADMAP.md)); shipped pillars remain [`VISION.md`](../VISION.md).
+
 **Cursor / contributor setup:** rules, skills, subagents, and slash-command workflows are summarized in [`CURSOR_SETUP_HANDOFF.md`](../CURSOR_SETUP_HANDOFF.md) (canonical copies live under `.cursor/rules/` and `.cursor/skills/`).
 
 **Cloud Agent / HAM VM Git:** these environments use **branch → push branch → open PR into `main`**. Direct **`git push origin main`** and **force-push to `main`** are forbidden — see [`AGENTS.md`](../AGENTS.md) (**Cloud Agent / HAM VM Git policy**).

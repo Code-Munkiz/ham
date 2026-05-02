@@ -12,6 +12,10 @@ the architecture. `src/swarm_agency.py` assembles per-role context for
 Hermes-supervised reasoning surfaces; it does not constitute a parallel
 orchestrator.
 
+## Builder platform product north star (aspirational)
+
+Long-term **Builder Platform** vision (last-mile app building, enterprise orchestration, phased roadmap) lives in **[`docs/BUILDER_PLATFORM_NORTH_STAR.md`](docs/BUILDER_PLATFORM_NORTH_STAR.md)**. That document is **not** shipped pillar architecture; Hermes/Droid/context roles and the implementation table below remain authoritative here.
+
 ## The Four Core Pillars
 
 ### 1. Supervisory Core — Hermes
