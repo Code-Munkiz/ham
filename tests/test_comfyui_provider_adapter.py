@@ -77,7 +77,7 @@ def test_comfyui_checkpoint_env_override_updates_post_payload(monkeypatch: pytes
     def make_client(**_kw: object):
         fake = MagicMock()
 
-        def _post(url: str, **kw: object):
+        def _post(_url: str, **kw: object):
             captured["prompt_json"] = kw.get("json")
             return httpx.Response(200, json={"prompt_id": "pid-x", "number": 0, "node_errors": {}})
 
@@ -252,3 +252,234 @@ def test_load_manifest_sdxl_vanilla_aliases_to_baseline() -> None:
     m1, _g1 = load_comfy_manifest_and_workflow("sdxl_vanilla")
     m2, _g2 = load_comfy_manifest_and_workflow("sdxl_baseline")
     assert m1["workflow_id"] == m2["workflow_id"] == "sdxl_baseline"
+
+
+def test_comfyui_generate_video_mock_prompt_history_view(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HAM_COMFYUI_VIDEO_WORKFLOW", "comfy_video_local_poc")
+    monkeypatch.setenv("HAM_COMFYUI_VIDEO_TIMEOUT_SEC", "30")
+    monkeypatch.setenv("HAM_COMFYUI_VIDEO_OUTPUT_MAX_BYTES", "2000000")
+    mp4 = b"\x00\x00\x00\x18ftypisom\x00\x00\x02\x00isomiso2avc1mp41"
+
+    def make_client(**_kw: object):
+        fake = MagicMock()
+        fake.post.return_value = httpx.Response(200, json={"prompt_id": "vid-1", "number": 0, "node_errors": {}})
+        hist = {
+            "vid-1": {
+                "outputs": {
+                    "9": {"videos": [{"filename": "out.mp4", "type": "output", "subfolder": ""}]}
+                }
+            }
+        }
+        fake.get.side_effect = [
+            httpx.Response(200, json=hist),
+            httpx.Response(200, content=mp4, headers={"content-type": "video/mp4"}),
+        ]
+        fake.__enter__ = lambda self_: fake
+        fake.__exit__ = lambda *_: False
+        return fake
+
+    with patch.object(httpx, "Client", side_effect=make_client):
+        adap = ComfyUIImageProviderAdapter(
+            base_url="http://dummy-comfy.invalid",
+            workflow_key="sdxl_baseline",
+            timeout_sec=5.0,
+            poll_sec=0.01,
+        )
+        v = adap.generate_video(prompt="short clip", model_id=None)
+    assert v.mime == "video/mp4"
+    assert v.data == mp4
+
+
+def test_comfyui_generate_video_from_gifs_array(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HAM_COMFYUI_VIDEO_WORKFLOW", "comfy_video_local_poc")
+    monkeypatch.setenv("HAM_COMFYUI_VIDEO_TIMEOUT_SEC", "30")
+    monkeypatch.setenv("HAM_COMFYUI_VIDEO_OUTPUT_MAX_BYTES", "2000000")
+    gif = b"GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff!\xf9\x04\x00\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;"
+
+    def make_client(**_kw: object):
+        fake = MagicMock()
+        fake.post.return_value = httpx.Response(200, json={"prompt_id": "vid-gif", "number": 0, "node_errors": {}})
+        hist = {
+            "vid-gif": {
+                "outputs": {
+                    "9": {"gifs": [{"filename": "out.gif", "type": "output", "subfolder": ""}]}
+                }
+            }
+        }
+        fake.get.side_effect = [
+            httpx.Response(200, json=hist),
+            httpx.Response(200, content=gif, headers={"content-type": "image/gif"}),
+        ]
+        fake.__enter__ = lambda self_: fake
+        fake.__exit__ = lambda *_: False
+        return fake
+
+    with patch.object(httpx, "Client", side_effect=make_client):
+        adap = ComfyUIImageProviderAdapter(
+            base_url="http://dummy-comfy.invalid",
+            workflow_key="sdxl_baseline",
+            timeout_sec=5.0,
+            poll_sec=0.01,
+        )
+        v = adap.generate_video(prompt="short gif clip", model_id=None)
+    assert v.mime == "image/gif"
+    assert v.data == gif
+
+
+def test_comfyui_generate_video_from_images_array_animated_mp4(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HAM_COMFYUI_VIDEO_WORKFLOW", "comfy_video_local_poc")
+    monkeypatch.setenv("HAM_COMFYUI_VIDEO_TIMEOUT_SEC", "30")
+    monkeypatch.setenv("HAM_COMFYUI_VIDEO_OUTPUT_MAX_BYTES", "2000000")
+    mp4 = b"\x00\x00\x00\x18ftypisom\x00\x00\x02\x00isomiso2avc1mp41"
+
+    def make_client(**_kw: object):
+        fake = MagicMock()
+        fake.post.return_value = httpx.Response(200, json={"prompt_id": "vid-img-a", "number": 0, "node_errors": {}})
+        hist = {
+            "vid-img-a": {
+                "outputs": {
+                    "11": {
+                        "images": [{"filename": "clip.mp4", "type": "output", "subfolder": ""}],
+                        "animated": [True],
+                    }
+                }
+            }
+        }
+        fake.get.side_effect = [
+            httpx.Response(200, json=hist),
+            httpx.Response(200, content=mp4, headers={"content-type": "video/mp4"}),
+        ]
+        fake.__enter__ = lambda self_: fake
+        fake.__exit__ = lambda *_: False
+        return fake
+
+    with patch.object(httpx, "Client", side_effect=make_client):
+        adap = ComfyUIImageProviderAdapter(
+            base_url="http://dummy-comfy.invalid",
+            workflow_key="sdxl_baseline",
+            timeout_sec=5.0,
+            poll_sec=0.01,
+        )
+        v = adap.generate_video(prompt="short mp4 clip", model_id=None)
+    assert v.mime == "video/mp4"
+    assert v.data == mp4
+
+
+def test_comfyui_generate_video_from_images_array_extension(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HAM_COMFYUI_VIDEO_WORKFLOW", "comfy_video_local_poc")
+    monkeypatch.setenv("HAM_COMFYUI_VIDEO_TIMEOUT_SEC", "30")
+    monkeypatch.setenv("HAM_COMFYUI_VIDEO_OUTPUT_MAX_BYTES", "2000000")
+    webm = b"\x1a\x45\xdf\xa3\x93B\x82\x88webm"
+
+    def make_client(**_kw: object):
+        fake = MagicMock()
+        fake.post.return_value = httpx.Response(200, json={"prompt_id": "vid-img-b", "number": 0, "node_errors": {}})
+        hist = {
+            "vid-img-b": {
+                "outputs": {
+                    "11": {
+                        "images": [{"filename": "clip.webm", "type": "output", "subfolder": ""}],
+                    }
+                }
+            }
+        }
+        fake.get.side_effect = [
+            httpx.Response(200, json=hist),
+            httpx.Response(200, content=webm, headers={"content-type": "application/octet-stream"}),
+        ]
+        fake.__enter__ = lambda self_: fake
+        fake.__exit__ = lambda *_: False
+        return fake
+
+    with patch.object(httpx, "Client", side_effect=make_client):
+        adap = ComfyUIImageProviderAdapter(
+            base_url="http://dummy-comfy.invalid",
+            workflow_key="sdxl_baseline",
+            timeout_sec=5.0,
+            poll_sec=0.01,
+        )
+        v = adap.generate_video(prompt="short webm clip", model_id=None)
+    assert v.mime == "video/webm"
+    assert v.data == webm
+
+
+def test_comfyui_generate_video_images_array_png_is_not_video(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HAM_COMFYUI_VIDEO_WORKFLOW", "comfy_video_local_poc")
+    monkeypatch.setenv("HAM_COMFYUI_VIDEO_TIMEOUT_SEC", "1")
+    monkeypatch.setenv("HAM_COMFYUI_VIDEO_OUTPUT_MAX_BYTES", "2000000")
+    png = _tiny_png_bytes()
+
+    def make_client(**_kw: object):
+        fake = MagicMock()
+        fake.post.return_value = httpx.Response(200, json={"prompt_id": "vid-img-png", "number": 0, "node_errors": {}})
+        hist = {
+            "vid-img-png": {
+                "outputs": {
+                    "11": {
+                        "images": [{"filename": "frame.png", "type": "output", "subfolder": ""}],
+                    }
+                }
+            }
+        }
+
+        def _get(url: str, **_kwargs: object) -> httpx.Response:
+            if "/history/" in url:
+                return httpx.Response(200, json=hist)
+            return httpx.Response(200, content=png, headers={"content-type": "image/png"})
+
+        fake.get.side_effect = _get
+        fake.__enter__ = lambda self_: fake
+        fake.__exit__ = lambda *_: False
+        return fake
+
+    with patch.object(httpx, "Client", side_effect=make_client):
+        adap = ComfyUIImageProviderAdapter(
+            base_url="http://dummy-comfy.invalid",
+            workflow_key="sdxl_baseline",
+            timeout_sec=5.0,
+            poll_sec=0.01,
+        )
+        with pytest.raises(ImageGenerationError) as ei:
+            adap.generate_video(prompt="png should not pass", model_id=None)
+    assert ei.value.code == "VIDEO_GEN_UPSTREAM_TIMEOUT"
+
+
+def test_comfyui_generate_video_rejects_non_video_mime_and_no_leak(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HAM_COMFYUI_VIDEO_WORKFLOW", "comfy_video_local_poc")
+    monkeypatch.setenv("HAM_COMFYUI_VIDEO_TIMEOUT_SEC", "30")
+    monkeypatch.setenv("HAM_COMFYUI_VIDEO_OUTPUT_MAX_BYTES", "2000000")
+    png = _tiny_png_bytes()
+
+    def make_client(**_kw: object):
+        fake = MagicMock()
+        fake.post.return_value = httpx.Response(200, json={"prompt_id": "vid-mime", "number": 0, "node_errors": {}})
+        hist = {
+            "vid-mime": {
+                "outputs": {
+                    "11": {
+                        "images": [{"filename": "clip.mp4", "type": "output", "subfolder": ""}],
+                    }
+                }
+            }
+        }
+        fake.get.side_effect = [
+            httpx.Response(200, json=hist),
+            httpx.Response(200, content=png, headers={"content-type": "image/png"}),
+        ]
+        fake.__enter__ = lambda self_: fake
+        fake.__exit__ = lambda *_: False
+        return fake
+
+    with patch.object(httpx, "Client", side_effect=make_client):
+        adap = ComfyUIImageProviderAdapter(
+            base_url="http://dummy-comfy.invalid",
+            workflow_key="sdxl_baseline",
+            timeout_sec=5.0,
+            poll_sec=0.01,
+        )
+        with pytest.raises(ImageGenerationError) as ei:
+            adap.generate_video(prompt="bad mime", model_id=None)
+    assert ei.value.code == "VIDEO_GEN_NO_VIDEO"
+    msg = str(ei.value)
+    assert "dummy-comfy.invalid" not in msg
+    assert "/view" not in msg
