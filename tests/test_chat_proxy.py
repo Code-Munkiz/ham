@@ -20,6 +20,12 @@ from src.bridge.contracts import (
     BrowserStepSpec,
     PolicyDecision,
 )
+from src.ham.clerk_auth import HamActor
+from src.ham.chat_attachment_store import (
+    AttachmentRecord,
+    LocalDiskAttachmentStore,
+    set_chat_attachment_store_for_tests,
+)
 from src.integrations.nous_gateway_client import GatewayCallError
 
 client = TestClient(app)
@@ -188,6 +194,76 @@ def test_chat_session_append_turns_rejects_empty_content() -> None:
     )
     assert res.status_code == 422
     assert res.json()["detail"]["error"]["code"] == "INVALID_MESSAGE"
+
+
+def test_append_turns_v2_rejects_foreign_user_attachment_with_clerk(
+    tmp_path: Path,
+    mock_mode: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ham_chat_user_v2 appended via /turns must re-validate attachment ownership (Clerk on)."""
+    _ = mock_mode
+    monkeypatch.setenv("HAM_CLERK_ENFORCE_EMAIL_RESTRICTIONS", "true")
+    monkeypatch.setenv("HAM_CLERK_ALLOWED_EMAIL_DOMAINS", "good.test")
+    monkeypatch.setenv("CLERK_JWT_ISSUER", "https://clerk.example.com")
+
+    att_dir = tmp_path / "att"
+    att_dir.mkdir()
+    monkeypatch.setenv("HAM_CHAT_ATTACHMENT_DIR", str(att_dir))
+    set_chat_attachment_store_for_tests(LocalDiskAttachmentStore(att_dir))
+
+    victim = HamActor(
+        user_id="user_victim",
+        org_id="o1",
+        session_id="s1",
+        email="v@good.test",
+        permissions=frozenset(),
+        org_role=None,
+        raw_permission_claim=None,
+    )
+    attacker = HamActor(
+        user_id="user_attacker",
+        org_id="o1",
+        session_id="s2",
+        email="a@good.test",
+        permissions=frozenset(),
+        org_role=None,
+        raw_permission_claim=None,
+    )
+
+    def _jwt_actor(token: str) -> HamActor:
+        t = (token or "").strip()
+        if t.startswith("victim"):
+            return victim
+        return attacker
+
+    with patch("src.api.clerk_gate.verify_clerk_session_jwt", side_effect=_jwt_actor):
+        up = client.post(
+            "/api/chat/attachments",
+            files={"file": ("x.png", b"\x89PNG\r\n\x1a\n" + b"x" * 20, "image/png")},
+            headers={"Authorization": "Bearer victim.jwt"},
+        )
+        assert up.status_code == 200, up.text
+        aid = up.json()["attachment_id"]
+
+        created = client.post("/api/chat/sessions", headers={"Authorization": "Bearer attacker.jwt"})
+        assert created.status_code == 200
+        sid = created.json()["session_id"]
+
+        v2 = {
+            "h": "ham_chat_user_v2",
+            "text": "stolen",
+            "attachments": [
+                {"id": aid, "name": "x.png", "mime": "image/png", "kind": "image"},
+            ],
+        }
+        res = client.post(
+            f"/api/chat/sessions/{sid}/turns",
+            headers={"Authorization": "Bearer attacker.jwt"},
+            json={"turns": [{"role": "user", "content": json.dumps(v2)}]},
+        )
+    assert res.status_code == 422
+    assert res.json()["detail"]["error"]["code"] == "INVALID_USER_MESSAGE"
 
 
 def test_post_chat_validation_empty_messages(mock_mode: None) -> None:
