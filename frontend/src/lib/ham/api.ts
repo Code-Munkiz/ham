@@ -55,6 +55,19 @@ export function apiUrl(path: string): string {
   return base ? `${base}${p}` : p;
 }
 
+/** Parse FastAPI `{ detail: { error: { message } } }` JSON from a failed response (best-effort). */
+export async function hamApiErrorDetailMessage(res: Response): Promise<string | null> {
+  try {
+    const ct = res.headers.get("content-type") || "";
+    if (!ct.includes("application/json")) return null;
+    const body = (await res.clone().json()) as { detail?: { error?: { message?: string } } };
+    const msg = body?.detail?.error?.message?.trim();
+    return msg || null;
+  } catch {
+    return null;
+  }
+}
+
 /** If `Authorization` is unset and the dashboard has a Clerk publishable key, attach the session JWT. */
 export async function mergeClerkAuthBearerIfNeeded(headers: Headers): Promise<void> {
   if (headers.has("Authorization")) return;
@@ -1502,7 +1515,10 @@ export async function fetchChatSessions(
   const res = await hamApiFetch(path);
   if (!res.ok) {
     const target = apiUrl(path);
-    throw new Error(`Failed to list chat sessions (HTTP ${res.status}) via ${target}. Retry, or verify desktop API base.`);
+    const detail = await hamApiErrorDetailMessage(res);
+    throw new Error(
+      `Failed to list chat sessions (HTTP ${res.status}) via ${target}${detail ? ` — ${detail}` : ""}. Retry, or verify the API is running with matching Clerk settings (CLERK_JWT_ISSUER or run scripts/run_local_api.py for local defaults).`,
+    );
   }
   return (await res.json()) as { sessions: ChatSessionSummary[] };
 }
@@ -1533,7 +1549,9 @@ export async function fetchChatCapabilities(modelId: string | null): Promise<Cha
   const qp = modelId?.trim() ? `?model_id=${encodeURIComponent(modelId.trim())}` : "";
   const res = await hamApiFetch(`/api/chat/capabilities${qp}`);
   if (!res.ok) {
-    throw new Error(`Failed to load chat capabilities (HTTP ${res.status}).`);
+    const detail = await hamApiErrorDetailMessage(res);
+    const hint = detail ? ` ${detail}` : "";
+    throw new Error(`Failed to load chat capabilities (HTTP ${res.status}).${hint}`);
   }
   return (await res.json()) as ChatCapabilitiesPayload;
 }
