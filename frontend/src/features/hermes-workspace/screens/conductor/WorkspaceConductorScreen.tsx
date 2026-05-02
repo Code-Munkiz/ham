@@ -21,7 +21,6 @@ import {
   type QuickAction,
   type WorkspaceMission,
 } from "../../adapters/conductorAdapter";
-import { WorkspaceManagedMissionsLivePanel } from "../../components/WorkspaceManagedMissionsLivePanel";
 import { WorkspaceSurfaceStateCard } from "../../components/workspaceSurfaceChrome";
 
 /**
@@ -379,7 +378,6 @@ export function WorkspaceConductorScreen() {
   const [completeCostExpanded, setCompleteCostExpanded] = React.useState(true);
   const [sDraft, setSDraft] = React.useState({ budgetCents: 10_000, defaultModel: "ham-local", notes: "" });
   const [now, setNow] = React.useState(() => Date.now());
-  const [managedLiveRefresh, setManagedLiveRefresh] = React.useState(0);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -414,7 +412,6 @@ export function WorkspaceConductorScreen() {
   }, []);
 
   const bumpManagedAndLoad = React.useCallback(() => {
-    setManagedLiveRefresh((n) => n + 1);
     void load();
   }, [load]);
 
@@ -627,7 +624,6 @@ export function WorkspaceConductorScreen() {
               />
             </div>
           )}
-          <WorkspaceManagedMissionsLivePanel refreshSignal={managedLiveRefresh} variant="conductor" />
           <div className="w-full space-y-6">
             <div className="space-y-2 text-center">
               <div className="relative flex items-center justify-center">

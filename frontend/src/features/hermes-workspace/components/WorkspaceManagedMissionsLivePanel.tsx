@@ -1,6 +1,5 @@
 import * as React from "react";
-import { Link } from "react-router-dom";
-import { Cloud, ExternalLink, Loader2, MessageSquare, RefreshCw, RotateCw, Square } from "lucide-react";
+import { Cloud, ExternalLink, Loader2, RefreshCw, RotateCw, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -151,7 +150,6 @@ function DetailField({
 type Props = {
   /** Increment (e.g. from parent Sync) to refetch this panel. */
   refreshSignal: number;
-  variant: "operations" | "conductor";
   /** Digest of merged assistant transcript for Outputs tab (bounded text). */
   onMissionTranscriptDigest?: (preview: string | null) => void;
 };
@@ -263,7 +261,7 @@ function LiveMissionFeedTranscript({
   );
 }
 
-export function WorkspaceManagedMissionsLivePanel({ refreshSignal, variant, onMissionTranscriptDigest }: Props) {
+export function WorkspaceManagedMissionsLivePanel({ refreshSignal, onMissionTranscriptDigest }: Props) {
   const [missions, setMissions] = React.useState<ManagedMissionSnapshot[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -476,10 +474,6 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, variant, onMi
   };
 
   const title = "Live Cloud Agent missions";
-  const subtitle =
-    variant === "operations"
-      ? "HAM owns the managed record, feed, and policy edges; Cursor owns execution upstream. See mission details for the full truth table."
-      : "HAM stores mission history and feed; Cursor runs the agent. Open details for correlation with control-plane runs.";
 
   const d = detailMission;
 
@@ -492,7 +486,6 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, variant, onMi
           </div>
           <div className="min-w-0">
             <h2 className="text-base font-semibold text-[var(--theme-text)]">{title}</h2>
-            <p className="mt-1 text-sm text-[var(--theme-muted-2)]">{subtitle}</p>
           </div>
         </div>
         <Button
@@ -625,18 +618,6 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, variant, onMi
                         >
                           {rowCancelBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Square className="h-3 w-3" />}
                           Stop
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="secondary"
-                          className="h-7 border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 text-[11px]"
-                          asChild
-                        >
-                          <Link to={`/workspace/chat?mission_id=${encodeURIComponent(m.mission_registry_id)}`}>
-                            <MessageSquare className="h-3 w-3" />
-                            Open in Chat
-                          </Link>
                         </Button>
                         {isBcCursorAgentId(m.cursor_agent_id) ? (
                           <Button
@@ -1018,12 +999,6 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, variant, onMi
 
             {d?.cursor_agent_id?.trim() && !detailLoading ? (
               <div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-[var(--theme-border)] pt-4">
-                <Button type="button" size="sm" variant="secondary" className="border border-[var(--theme-border)]" asChild>
-                  <Link to={`/workspace/chat?mission_id=${encodeURIComponent(d.mission_registry_id)}`}>
-                    <MessageSquare className="mr-1 h-3.5 w-3.5" />
-                    Open in Chat
-                  </Link>
-                </Button>
                 {isBcCursorAgentId(d.cursor_agent_id) ? (
                   <Button type="button" size="sm" variant="secondary" className="border border-[var(--theme-border)]" asChild>
                     <a

@@ -152,6 +152,11 @@ function shortId(v: string | null | undefined): string {
   return `${s.slice(0, 8)}…${s.slice(-6)}`;
 }
 
+/** Space after `:` when the API sends `mapped:FINISHED`-style tokens (e.g. `mapped: FINISHED`). */
+function formatMissionStatusTitleForDisplay(title: string): string {
+  return title.replace(/:([A-Z])/g, ": $1");
+}
+
 function revokeGeneratedMediaBlobUrlsFromMessages(rows: readonly HwwMsgRow[]): void {
   for (const m of rows) {
     const cards = [m.generatedImageCard, m.generatedVideoCard];
@@ -185,13 +190,13 @@ function ChatThinkingTranscriptChunk({ item }: { item: Extract<MissionTranscript
   const long = (item.text || "").length > 200;
   if (!long) {
     return (
-      <div className="rounded border border-white/[0.08] bg-black/20 px-2 py-1">
+      <div className="rounded border border-white/[0.06] bg-white/[0.03] px-2 py-1">
         <p className="whitespace-pre-wrap text-[11px] leading-relaxed text-white/55">{item.text}</p>
       </div>
     );
   }
   return (
-    <div className="rounded border border-white/[0.08] bg-black/20 px-2 py-1">
+    <div className="rounded border border-white/[0.06] bg-white/[0.03] px-2 py-1">
       <button
         type="button"
         className="w-full text-left text-[10px] font-medium uppercase tracking-wider text-white/40"
@@ -223,9 +228,9 @@ function ChatMissionFeedTranscript({
         if (block.type === "assistant") {
           const rcDisp = formatTranscriptReasonCodeForDisplay(block.reasonCode);
           return (
-            <div key={block.id} className="rounded border border-white/[0.08] bg-black/15 px-2 py-1.5">
-              <p className="whitespace-pre-wrap text-[12px] leading-relaxed text-white/80">{block.text}</p>
-              <p className="mt-0.5 text-[10px] text-white/35">
+            <div key={block.id} className="rounded border border-white/[0.06] bg-white/[0.03] px-2 py-1.5">
+              <p className="whitespace-pre-wrap text-[12px] leading-snug text-white/[0.88]">{block.text}</p>
+              <p className="mt-0.5 text-[10px] leading-relaxed text-white/40">
                 {fmtMissionFeedIsoBrief(block.updatedAt)}
                 {rcDisp ? ` · ${rcDisp}` : ""}
                 {block.status === "streaming" ? " · streaming…" : ""}
@@ -236,9 +241,9 @@ function ChatMissionFeedTranscript({
         if (block.type === "thinking") return <ChatThinkingTranscriptChunk key={block.id} item={block} />;
         if (block.type === "user") {
           return (
-            <div key={block.id} className="rounded border border-sky-500/20 bg-sky-500/10 px-2 py-1">
-              <p className="whitespace-pre-wrap text-[11px] leading-relaxed text-white/75">{block.text}</p>
-              <p className="mt-0.5 text-[10px] text-white/35">{fmtMissionFeedIsoBrief(block.time)} · user</p>
+            <div key={block.id} className="rounded border border-white/[0.06] bg-white/[0.04] px-2 py-1">
+              <p className="whitespace-pre-wrap text-[11px] leading-relaxed text-white/[0.85]">{block.text}</p>
+              <p className="mt-0.5 text-[10px] leading-relaxed text-white/40">{fmtMissionFeedIsoBrief(block.time)} · user</p>
             </div>
           );
         }
@@ -246,7 +251,7 @@ function ChatMissionFeedTranscript({
           return (
             <div
               key={block.id}
-              className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 border-b border-white/[0.05] py-0.5 font-mono text-[10px] text-white/55"
+              className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 border-b border-white/[0.06] py-0.5 font-mono text-[10px] text-white/50"
             >
               <span className="text-white/35">tool</span>
               <span className="font-sans text-white/65">{block.label}</span>
@@ -2664,6 +2669,86 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         messages,
       });
 
+  const missionAgentActivityContent: React.ReactNode = missionModeActive ? (
+    missionLoading ? (
+      <div className="p-3">
+        <p className="text-[12px] leading-relaxed text-white/60">Loading mission context…</p>
+      </div>
+    ) : missionError ? (
+      <div className="p-3">
+        <p className="text-[12px] leading-relaxed text-amber-200/80">{missionError}</p>
+      </div>
+    ) : missionContext ? (
+      <div className="divide-y divide-white/[0.06]">
+        <div className="space-y-2 px-3 py-2.5">
+          <div className="flex flex-wrap items-start gap-2">
+            <span
+              className={cn(
+                "shrink-0 rounded px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide",
+                missionContext.provider === "cursor"
+                  ? "border border-emerald-400/35 bg-emerald-500/10 text-emerald-200/90"
+                  : "border border-white/[0.08] bg-white/[0.06] text-white/55",
+              )}
+            >
+              {missionContext.provider === "cursor" ? "Cursor" : "Cloud Agent"}
+            </span>
+            <p className="min-w-0 flex-1 text-[12px] leading-snug text-white/[0.88]">
+              {formatMissionStatusTitleForDisplay(missionTitle)}
+              <span className="text-white/35"> · </span>
+              {missionBannerLifecycle}
+              <span className="text-white/35"> · </span>
+              {missionBannerCheckpoint}
+            </p>
+          </div>
+          <p className="text-[10px] leading-relaxed text-white/40">
+            {missionContext.repository_observed || "—"} @ {missionContext.ref_observed || "default"} · mission{" "}
+            <span className="font-mono text-white/45" title={missionContext.mission_registry_id}>
+              {shortId(missionContext.mission_registry_id)}
+            </span>
+            <span className="text-white/35"> · agent </span>
+            <span className="font-mono text-white/45">{shortId(missionContext.cursor_agent_id)}</span>
+            {isBcCursorAgentId(missionContext.cursor_agent_id) ? (
+              <a
+                href={cursorCloudAgentWebHref(String(missionContext.cursor_agent_id).trim())}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Open this Cloud Agent in Cursor"
+                className="ml-2 inline-flex items-center gap-1 text-[10px] font-medium text-[#ffb27a]/90 underline-offset-2 hover:underline"
+              >
+                Open in Cursor
+                <ExternalLink className="h-3 w-3 opacity-70" aria-hidden />
+              </a>
+            ) : null}
+          </p>
+          <p className="text-[10px] leading-relaxed text-white/40">{MANAGED_MISSION_CHAT_OWNERSHIP_HINT}</p>
+          {missionFeedBanner.phase !== "idle" && missionFeedBanner.label ? (
+            <p className="text-[10px] leading-relaxed text-emerald-200/85">{missionFeedBanner.label}</p>
+          ) : missionFeed?.provider_projection?.mode === "rest_projection" ? (
+            <p className="text-[10px] leading-relaxed text-white/45">
+              Mission feed: REST refresh only (not a live provider stream).
+            </p>
+          ) : null}
+        </div>
+        <div className="space-y-1.5 px-3 py-2.5">
+          {(missionFeed?.events || []).length > 0 ? (
+            <ChatMissionFeedTranscript
+              items={displayedMissionFeedTranscript}
+              anchorRef={missionFeedScrollAnchorRef}
+            />
+          ) : missionFeedInitialLoading ? (
+            <p className="text-[10px] leading-relaxed text-white/40">Loading mission feed…</p>
+          ) : (
+            <p className="text-[10px] leading-relaxed text-white/40">Waiting for mission feed updates…</p>
+          )}
+        </div>
+      </div>
+    ) : (
+      <div className="p-3">
+        <p className="text-[12px] leading-relaxed text-white/60">Mission context is not available.</p>
+      </div>
+    )
+  ) : null;
+
   return (
     <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col md:flex-row">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -2705,69 +2790,6 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
             </button>
           </div>
         </header>
-        {missionModeActive ? (
-          <div className="border-b border-white/[0.06] bg-[#06131d] px-4 py-3 md:px-8">
-            {missionLoading ? (
-              <p className="text-xs text-white/60">Loading mission context…</p>
-            ) : missionError ? (
-              <p className="text-xs text-amber-200/90">{missionError}</p>
-            ) : missionContext ? (
-              <div className="space-y-2">
-                <div className="flex flex-wrap items-center gap-2 text-xs text-white/75">
-                  <span className="rounded-full border border-sky-400/30 bg-sky-500/10 px-2 py-0.5 text-sky-200">
-                    {missionContext.provider === "cursor" ? "Cursor" : "Cloud Agent"}
-                  </span>
-                  <span className="font-medium text-white/90">{missionTitle}</span>
-                  <span className="text-white/40">·</span>
-                  <span>{missionBannerLifecycle}</span>
-                  <span className="text-white/40">·</span>
-                  <span>{missionBannerCheckpoint}</span>
-                </div>
-                <p className="text-[11px] text-white/55">
-                  {missionContext.repository_observed || "—"} @ {missionContext.ref_observed || "default"} · mission{" "}
-                  <span className="font-mono" title={missionContext.mission_registry_id}>
-                    {shortId(missionContext.mission_registry_id)}
-                  </span>{" "}
-                  · agent <span className="font-mono">{shortId(missionContext.cursor_agent_id)}</span>
-                  {isBcCursorAgentId(missionContext.cursor_agent_id) ? (
-                    <a
-                      href={cursorCloudAgentWebHref(String(missionContext.cursor_agent_id).trim())}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      title="Open this Cloud Agent in Cursor"
-                      className="ml-2 inline-flex items-center gap-1 text-[10px] font-medium text-sky-400/85 hover:text-sky-300/95"
-                    >
-                      Open in Cursor
-                      <ExternalLink className="h-3 w-3 opacity-70" aria-hidden />
-                    </a>
-                  ) : null}
-                </p>
-                <p className="text-[10px] leading-relaxed text-white/40">{MANAGED_MISSION_CHAT_OWNERSHIP_HINT}</p>
-                {missionFeedBanner.phase !== "idle" && missionFeedBanner.label ? (
-                  <p className="text-[10px] text-emerald-200/80">{missionFeedBanner.label}</p>
-                ) : missionFeed?.provider_projection?.mode === "rest_projection" ? (
-                  <p className="text-[10px] text-white/45">
-                    Mission feed: REST refresh only (not a live provider stream).
-                  </p>
-                ) : null}
-                <div className="space-y-1.5">
-                  {(missionFeed?.events || []).length > 0 ? (
-                    <ChatMissionFeedTranscript
-                      items={displayedMissionFeedTranscript}
-                      anchorRef={missionFeedScrollAnchorRef}
-                    />
-                  ) : missionFeedInitialLoading ? (
-                    <p className="text-[11px] text-white/45">Loading mission feed…</p>
-                  ) : (
-                    <p className="text-[11px] text-white/55">Waiting for mission feed updates…</p>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <p className="text-xs text-white/60">Mission context is not available.</p>
-            )}
-          </div>
-        ) : null}
         <div
           ref={listWrapRef}
           className="hww-scroll flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto"
@@ -3010,10 +3032,9 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
             <WorkspaceChatInspectorPanel
               sessionId={sessionId}
               events={inspectorEvents}
-              messages={messages}
-              composerAttachments={attachments}
               artifactRows={artifactRows}
               executionMode={executionMode}
+              agentActivity={missionAgentActivityContent}
               onClose={() => {
                 setInspectorOpen(false);
               }}

@@ -273,81 +273,79 @@ export function WorkspaceOperationsScreen() {
             </div>
             <div>
               <h1 className="text-base font-semibold text-[var(--theme-text)]">Operations</h1>
-              <p className="mt-1 text-sm text-[var(--theme-muted)]">
-                Mission control for launched work: monitor active agents, review outputs, and coordinate next actions.
-              </p>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2 md:gap-3">
+          <div className="flex flex-wrap items-center gap-1.5 md:gap-2">
             <Button
               type="button"
               size="sm"
               variant="secondary"
-              className="border border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-text)] hover:bg-[var(--theme-card2)]"
+              className="h-7 gap-1 border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 text-[11px] text-[var(--theme-text)] hover:bg-[var(--theme-card2)]"
               onClick={() => {
                 setManagedLiveRefresh((n) => n + 1);
                 void load();
               }}
               disabled={loading}
             >
-              <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
+              <RefreshCw className={cn("h-3 w-3", loading && "animate-spin")} />
               Sync
             </Button>
             <Button
               type="button"
               size="sm"
               variant="secondary"
-              className="border border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-text)] hover:bg-[var(--theme-card2)]"
+              className="h-7 gap-1 border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 text-[11px] text-[var(--theme-text)] hover:bg-[var(--theme-card2)]"
               onClick={() => setAddJobOpen((v) => !v)}
             >
-              <Clock className="h-3.5 w-3.5" />
+              <Clock className="h-3 w-3" />
               Schedule
             </Button>
-            <div className="inline-flex rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] p-1 shadow-sm">
+            <div className="inline-flex rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg)] p-0.5 shadow-sm">
               <button
                 type="button"
                 onClick={() => setView("overview")}
                 className={cn(
-                  "flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-all",
+                  "flex h-7 items-center gap-1 rounded-md px-2 text-[11px] font-medium transition-all",
                   view === "overview"
-                    ? "bg-[var(--theme-accent)] text-[color-mix(in_srgb,var(--theme-text)_5%,#041208)]"
+                    ? "text-[var(--theme-accent)]"
                     : "text-[var(--theme-muted)] hover:bg-[var(--theme-card2)]",
                 )}
               >
-                <LayoutGrid className="h-3.5 w-3.5" />
+                <LayoutGrid className="h-3 w-3 shrink-0" />
                 Overview
               </button>
               <button
                 type="button"
                 onClick={() => setView("outputs")}
                 className={cn(
-                  "flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-all",
+                  "flex h-7 items-center gap-1 rounded-md px-2 text-[11px] font-medium transition-all",
                   view === "outputs"
-                    ? "bg-[var(--theme-accent)] text-[color-mix(in_srgb,var(--theme-text)_5%,#041208)]"
+                    ? "text-[var(--theme-accent)]"
                     : "text-[var(--theme-muted)] hover:bg-[var(--theme-card2)]",
                 )}
               >
-                <Terminal className="h-3.5 w-3.5" />
+                <Terminal className="h-3 w-3 shrink-0" />
                 Outputs
               </button>
             </div>
             <Button
-              className="bg-[var(--theme-accent)] text-[color-mix(in_srgb,var(--theme-text)_8%,#041208)] hover:bg-[var(--theme-accent-strong)]"
+              className="h-7 gap-1 border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 text-[11px] font-medium text-[var(--theme-accent)] hover:bg-[var(--theme-card2)] hover:text-[var(--theme-accent)]"
               type="button"
               size="sm"
+              variant="secondary"
               onClick={() => setNewOpen(true)}
             >
-              <Plus className="h-3.5 w-3.5" />
+              <Plus className="h-3 w-3 shrink-0" />
               New Agent
             </Button>
             <Button
               type="button"
               size="sm"
               variant="secondary"
-              className="border border-[var(--theme-border)] bg-[var(--theme-card)] text-[var(--theme-text)] hover:bg-[var(--theme-card2)]"
+              className="h-7 gap-1 border border-[var(--theme-border)] bg-[var(--theme-card)] px-2 text-[11px] text-[var(--theme-text)] hover:bg-[var(--theme-card2)]"
               onClick={() => setSettingsOpen(true)}
             >
-              <Settings2 className="h-3.5 w-3.5" />
+              <Settings2 className="h-3 w-3" />
               Settings
             </Button>
           </div>
@@ -355,7 +353,6 @@ export function WorkspaceOperationsScreen() {
 
         <WorkspaceManagedMissionsLivePanel
           refreshSignal={managedLiveRefresh}
-          variant="operations"
           onMissionTranscriptDigest={setLatestManagedAssistantPreview}
         />
 

@@ -1,7 +1,8 @@
 /**
  * Upstream `inspector-panel.tsx` structure: header, tab bar, scroll body — honest empty / unavailable
- * per tab. Activity + Logs are wired from real HAM chat stream / session load events only.
+ * per tab. Activity is wired from real HAM chat stream / session load events only.
  * Memory + Skills: read-only summaries via HAM workspace adapters (lazy-loaded per tab).
+ * Agent activity: mission-scoped Cursor / Cloud Agent status and live feed (passed from chat screen).
  */
 import * as React from "react";
 import { Link } from "react-router-dom";
@@ -13,51 +14,38 @@ import {
   workspaceMemoryAdapter,
   type WorkspaceMemoryItem,
 } from "../../adapters/memoryAdapter";
-import { workspaceFileAdapter } from "../../adapters/filesAdapter";
-import {
-  fetchLocalWorkspaceHealth,
-  isLocalRuntimeConfigured,
-} from "../../adapters/localRuntime";
 import {
   workspaceSkillsAdapter,
   type WorkspaceSkill,
 } from "../../adapters/skillsAdapter";
-import { primaryHermesCatalogLabel, workspaceFileEntryLabels } from "../../lib/workspaceHumanLabels";
+import { primaryHermesCatalogLabel } from "../../lib/workspaceHumanLabels";
 import type { WorkspaceInspectorEvent } from "./workspaceInspectorEvents";
 import {
   humanInspectorKindLabel,
   publicMetaSummary,
   statusLabelForUi,
 } from "./workspaceInspectorEvents";
-import type { WorkspaceComposerAttachment } from "./composerAttachmentHelpers";
-import type { HwwMsgRow } from "./WorkspaceChatMessageList";
-import {
-  composerAttachmentRows,
-  extractTranscriptAttachmentRows,
-  type ChatInspectorArtifactRow,
-  type ChatInspectorFileRow,
-} from "./workspaceInspectorChatDerived";
+import type { ChatInspectorArtifactRow } from "./workspaceInspectorChatDerived";
 import type { HamChatExecutionMode } from "@/lib/ham/api";
 
-type TabId = "activity" | "artifacts" | "files" | "memory" | "skills" | "logs";
+type TabId = "activity" | "artifacts" | "memory" | "skills" | "agent_activity";
 
 const TABS: Array<{ id: TabId; label: string }> = [
   { id: "activity", label: "Activity" },
   { id: "artifacts", label: "Artifacts" },
-  { id: "files", label: "Files" },
   { id: "memory", label: "Memory" },
   { id: "skills", label: "Skills" },
-  { id: "logs", label: "Logs" },
+  { id: "agent_activity", label: "Agent activity" },
 ];
 
 type WorkspaceChatInspectorPanelProps = {
   onClose: () => void;
   sessionId: string | null;
   events: WorkspaceInspectorEvent[];
-  messages: HwwMsgRow[];
-  composerAttachments: WorkspaceComposerAttachment[];
   artifactRows: ChatInspectorArtifactRow[];
   executionMode: HamChatExecutionMode | null;
+  /** Mission-scoped chat: Cursor / Cloud Agent status + live feed (null when not in mission mode). */
+  agentActivity: React.ReactNode;
 };
 
 const SKILL_BUILTIN = new Set(["ham-local-docs", "ham-local-plan"]);
@@ -102,12 +90,6 @@ type SkillsInspectorState =
       live: HermesSkillsInstalledResponse | null;
     }
   | { status: "error"; message: string };
-
-type FilesWorkspaceState =
-  | { status: "loading" }
-  | { status: "unconfigured" }
-  | { status: "error"; message: string }
-  | { status: "ready"; rootPath: string; broad: boolean; entries: Array<{ name: string; type: "file" | "folder" }> };
 
 function formatClock(iso: string): string {
   try {
@@ -192,16 +174,6 @@ function ActivityBody({ events }: { events: WorkspaceInspectorEvent[] }) {
       events={events}
       showKindChip={false}
       emptyText="No activity yet. Start a conversation to populate this timeline."
-    />
-  );
-}
-
-function LogsBody({ events }: { events: WorkspaceInspectorEvent[] }) {
-  return (
-    <InspectorEventList
-      events={events}
-      showKindChip
-      emptyText="No events yet. They will show here after you send a message or load a session."
     />
   );
 }
@@ -588,165 +560,6 @@ function SkillsTabBody({
   );
 }
 
-function FilesTabBody({ fileRows }: { fileRows: ChatInspectorFileRow[] }) {
-  const hasRows = fileRows.length > 0;
-  const [ws, setWs] = React.useState<FilesWorkspaceState>({ status: "loading" });
-  const [wsTick, setWsTick] = React.useState(0);
-
-  const loadWorkspaceFiles = React.useCallback(async () => {
-    if (!isLocalRuntimeConfigured()) {
-      setWs({ status: "unconfigured" });
-      return;
-    }
-    setWs({ status: "loading" });
-    const health = await fetchLocalWorkspaceHealth();
-    const { entries, bridge } = await workspaceFileAdapter.list();
-    if (bridge.status !== "ready") {
-      setWs({ status: "error", message: bridge.detail });
-      return;
-    }
-    const rootPath =
-      health?.workspaceRootPath?.trim() ||
-      (health?.workspaceRootConfigured === true ? "(workspace root configured)" : "—");
-    const broad = health?.broadFilesystemAccess === true;
-    setWs({
-      status: "ready",
-      rootPath,
-      broad,
-      entries: entries.slice(0, 12).map((e) => ({ name: e.name, type: e.type })),
-    });
-  }, [wsTick]);
-
-  React.useEffect(() => {
-    void loadWorkspaceFiles();
-  }, [loadWorkspaceFiles]);
-
-  React.useEffect(() => {
-    const onRuntime = () => setWsTick((n) => n + 1);
-    window.addEventListener("hww-local-runtime-changed", onRuntime);
-    return () => window.removeEventListener("hww-local-runtime-changed", onRuntime);
-  }, []);
-
-  return (
-    <div>
-      <div className="border-b border-white/[0.06] px-3 py-2">
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-white/45">Session attachments</p>
-      </div>
-      {hasRows ? (
-        <ul className="divide-y divide-white/[0.06]">
-          {fileRows.map((r) => (
-            <li key={r.id} className="px-3 py-2">
-              <p className="truncate text-[12px] font-medium text-white/[0.88]">{r.name}</p>
-              <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                <span className="rounded bg-white/[0.08] px-1.5 py-0.5 text-[9px] text-white/55">
-                  {r.kindLabel}
-                </span>
-                <span className="text-[10px] text-white/45">{r.sizeLabel}</span>
-                <span
-                  className={cn(
-                    "rounded px-1.5 py-0.5 text-[9px]",
-                    r.source === "queued_in_composer"
-                      ? "bg-amber-500/15 text-amber-200/80"
-                      : "bg-white/[0.06] text-white/40",
-                  )}
-                >
-                  {r.source === "queued_in_composer" ? "in composer" : "in transcript"}
-                </span>
-              </div>
-              {r.atLabel ? (
-                <p className="mt-1 text-[9px] text-white/35">Sent {r.atLabel}</p>
-              ) : null}
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <div className="p-3">
-          <p className="text-[12px] leading-relaxed text-white/70">No files attached to this session yet.</p>
-          <p className="mt-1.5 text-[11px] leading-relaxed text-white/50">
-            Queued composer attachments and transcript markers appear here.
-          </p>
-        </div>
-      )}
-
-      <div className="border-t border-white/[0.06]">
-        <p className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-white/45">Workspace file browser</p>
-      </div>
-
-      {ws.status === "loading" ? (
-        <div className="space-y-2 p-3">
-          <div className="h-3 w-2/3 animate-pulse rounded bg-white/10" />
-          <div className="h-3 w-1/2 animate-pulse rounded bg-white/10" />
-        </div>
-      ) : null}
-
-      {ws.status === "unconfigured" ? (
-        <div className="p-3">
-          <p className="text-[12px] leading-relaxed text-white/70">Workspace file browser is not connected.</p>
-          <p className="mt-1.5 text-[11px] leading-relaxed text-white/50">
-            Connect the local HAM runtime in Settings → Connection to browse files on this machine.
-          </p>
-          <InspectorLinkRow to="/workspace/settings?section=connection">Open Connection</InspectorLinkRow>
-        </div>
-      ) : null}
-
-      {ws.status === "error" ? (
-        <div className="p-3">
-          <p className="text-[12px] font-medium text-white/80">Could not reach local file browser</p>
-          <p className="mt-1.5 whitespace-pre-wrap break-words text-[10px] leading-relaxed text-amber-200/75">
-            {ws.message}
-          </p>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="mt-2 h-7 border-white/20 text-[11px] text-white/80"
-            onClick={() => setWsTick((n) => n + 1)}
-          >
-            Retry
-          </Button>
-        </div>
-      ) : null}
-
-      {ws.status === "ready" ? (
-        <div className="px-3 py-2">
-          <p className="text-[11px] font-medium text-emerald-200/85">Workspace file browser connected</p>
-          <p className="mt-1 text-[10px] text-white/55">
-            Root: <span className="font-mono text-white/70">{ws.rootPath}</span>
-          </p>
-          <p className="mt-1 text-[10px] text-white/45">
-            {ws.broad ? "Broad filesystem access (wide root)" : "Scoped to configured workspace root"}
-          </p>
-          {ws.entries.length > 0 ? (
-            <ul className="mt-2 rounded-lg border border-white/[0.08] bg-white/[0.03]">
-              {ws.entries.map((e) => {
-                const { label, technical } = workspaceFileEntryLabels(e.name);
-                return (
-                  <li
-                    key={`${e.type}:${e.name}`}
-                    className="flex items-center gap-2 border-b border-white/[0.05] px-2 py-1.5 text-[11px] last:border-b-0"
-                  >
-                    <span className="text-white/35">{e.type === "folder" ? "📁" : "📄"}</span>
-                    <span className="flex min-w-0 flex-1 flex-col">
-                      <span className="truncate text-white/80">{label}</span>
-                      {technical ? (
-                        <span className="truncate font-mono text-[9px] text-white/40">{technical}</span>
-                      ) : null}
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-          ) : (
-            <p className="mt-2 text-[10px] text-white/45">Root listing is empty (or not returned).</p>
-          )}
-        </div>
-      ) : null}
-
-      <InspectorLinkRow to="/workspace/files">Open Files</InspectorLinkRow>
-    </div>
-  );
-}
-
 function ArtifactsTabBody({ rows }: { rows: ChatInspectorArtifactRow[] }) {
   if (rows.length === 0) {
     return (
@@ -806,20 +619,13 @@ export function WorkspaceChatInspectorPanel({
   onClose,
   sessionId,
   events,
-  messages,
-  composerAttachments,
   artifactRows,
   executionMode,
+  agentActivity,
 }: WorkspaceChatInspectorPanelProps) {
   const [activeTab, setActiveTab] = React.useState<TabId>("activity");
   const [memoryState, setMemoryState] = React.useState<MemoryInspectorState>({ status: "idle" });
   const [skillsState, setSkillsState] = React.useState<SkillsInspectorState>({ status: "idle" });
-
-  const fileRows = React.useMemo(() => {
-    const queued = composerAttachmentRows(composerAttachments);
-    const fromTx = extractTranscriptAttachmentRows(messages);
-    return [...queued, ...fromTx];
-  }, [composerAttachments, messages]);
 
   const loadMemory = React.useCallback(() => {
     setMemoryState({ status: "loading" });
@@ -947,14 +753,24 @@ export function WorkspaceChatInspectorPanel({
 
       <div className="hww-scroll min-h-0 flex-1 overflow-y-auto">
         {activeTab === "activity" ? <ActivityBody events={events} /> : null}
-        {activeTab === "logs" ? <LogsBody events={events} /> : null}
         {activeTab === "artifacts" ? <ArtifactsTabBody rows={artifactRows} /> : null}
-        {activeTab === "files" ? <FilesTabBody fileRows={fileRows} /> : null}
         {activeTab === "memory" ? (
           <MemoryTabBody state={memoryState} onRetry={loadMemory} />
         ) : null}
         {activeTab === "skills" ? (
           <SkillsTabBody state={skillsState} onRetry={loadSkills} onReloadAfterAction={loadSkills} />
+        ) : null}
+        {activeTab === "agent_activity" ? (
+          agentActivity != null ? (
+            agentActivity
+          ) : (
+            <div className="p-3">
+              <p className="text-[12px] leading-relaxed text-white/60">No mission context for this chat.</p>
+              <p className="mt-1.5 text-[11px] leading-relaxed text-white/45">
+                Open a mission-scoped chat to see provider status and the live mission feed here.
+              </p>
+            </div>
+          )
         ) : null}
       </div>
     </aside>
