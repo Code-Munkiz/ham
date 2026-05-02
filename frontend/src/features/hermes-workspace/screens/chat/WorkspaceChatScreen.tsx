@@ -16,12 +16,14 @@ import {
   fetchContextEngine,
   fetchHamGeneratedMediaBlob,
   fetchHamGeneratedMediaMeta,
+  fetchHamMediaJobStatus,
   fetchModelsCatalog,
   HamAccessRestrictedError,
   HamChatStreamIncompleteError,
   postChatTranscribe,
   postChatUploadAttachment,
   postHamGeneratedImage,
+  postHamGeneratedVideo,
   type HamChatExecutionMode,
 } from "@/lib/ham/api";
 import { CLIENT_MODEL_CATALOG_FALLBACK } from "@/lib/ham/modelCatalogFallback";
@@ -48,7 +50,11 @@ import { useVoiceWorkspaceSettingsOptional } from "../../voice/VoiceWorkspaceSet
 import { WorkspaceChatEmptyState } from "./WorkspaceChatEmptyState";
 import { WorkspaceChatMessageList, type HwwMsgRow } from "./WorkspaceChatMessageList";
 import { WorkspaceChatComposer } from "./WorkspaceChatComposer";
-import type { ComposerExportPdfState, ComposerGenerateImageState } from "./WorkspaceChatComposerActionsMenu";
+import type {
+  ComposerExportPdfState,
+  ComposerGenerateImageState,
+  ComposerGenerateVideoState,
+} from "./WorkspaceChatComposerActionsMenu";
 import { parseWorkspaceCreativeImageIntent, parseWorkspaceImageGenerationIntent } from "./imageGenerationIntent";
 import { WorkspaceChatInspectorPanel } from "./WorkspaceChatInspectorPanel";
 import {
@@ -121,13 +127,19 @@ function shortId(v: string | null | undefined): string {
   return `${s.slice(0, 8)}…${s.slice(-6)}`;
 }
 
-function revokeGeneratedImageBlobUrlsFromMessages(rows: readonly HwwMsgRow[]): void {
+function revokeGeneratedMediaBlobUrlsFromMessages(rows: readonly HwwMsgRow[]): void {
   for (const m of rows) {
-    const c = m.generatedImageCard;
-    if (c?.kind === "ready" && typeof c.blobUrl === "string" && c.blobUrl.startsWith("blob:")) {
-      URL.revokeObjectURL(c.blobUrl);
+    const cards = [m.generatedImageCard, m.generatedVideoCard];
+    for (const c of cards) {
+      if (c?.kind === "ready" && typeof c.blobUrl === "string" && c.blobUrl.startsWith("blob:")) {
+        URL.revokeObjectURL(c.blobUrl);
+      }
     }
   }
+}
+
+async function waitMs(ms: number): Promise<void> {
+  await new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
 function fmtMissionFeedIsoBrief(iso: string | null | undefined): string {
@@ -505,6 +517,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   const [chatCapabilities, setChatCapabilities] = React.useState<ChatCapabilitiesPayload | null>(null);
   const [chatCapabilitiesLoading, setChatCapabilitiesLoading] = React.useState(true);
   const [imageGenInFlight, setImageGenInFlight] = React.useState(false);
+  const [videoGenInFlight, setVideoGenInFlight] = React.useState(false);
   const [inspectorEvents, setInspectorEvents] = React.useState<WorkspaceInspectorEvent[]>([]);
   const [artifactRows, setArtifactRows] = React.useState<ChatInspectorArtifactRow[]>([]);
   /** Desktop GOHAM web bridge: trusted session is main-process only; this tracks UI + follow-up routing. */
@@ -727,7 +740,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         toast.message("Describe the image you want.", { duration: 4000 });
         return;
       }
-      if (voiceTranscribing || sending || imageGenInFlight) {
+      if (voiceTranscribing || sending || imageGenInFlight || videoGenInFlight) {
         toast.message("Wait for the current action to finish.", { duration: 4000 });
         return;
       }
@@ -819,7 +832,167 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         setImageGenInFlight(false);
       }
     },
-    [chatModelIdForApi, imageGenInFlight, sending, voiceTranscribing],
+    [chatModelIdForApi, imageGenInFlight, sending, videoGenInFlight, voiceTranscribing],
+  );
+
+  const runWorkspaceVideoGeneration = React.useCallback(
+    async (opts: { apiPrompt: string; transcriptUserLine: string }) => {
+      const apiPrompt = opts.apiPrompt.trim();
+      const transcriptUserLine = (opts.transcriptUserLine.trim() || apiPrompt).trim();
+      if (!apiPrompt) {
+        toast.message("Describe the video you want.", { duration: 4000 });
+        return;
+      }
+      if (voiceTranscribing || sending || imageGenInFlight || videoGenInFlight) {
+        toast.message("Wait for the current action to finish.", { duration: 4000 });
+        return;
+      }
+
+      setLoadErr(null);
+      setInput("");
+      setAttachments((prev) => {
+        revokeWorkspaceComposerAttachmentPreviews(prev);
+        return [];
+      });
+
+      const userRow: HwwMsgRow = {
+        id: `hww-user-gvid-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        role: "user",
+        content: transcriptUserLine,
+        timestamp: timeStr(),
+      };
+      const assistantPlaceId = `hww-assist-gvid-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      const assistantLoading: HwwMsgRow = {
+        id: assistantPlaceId,
+        role: "assistant",
+        content: "",
+        timestamp: timeStr(),
+        generatedVideoCard: { kind: "loading", promptPreview: apiPrompt.slice(0, 280), phase: "queued" },
+      };
+      setMessages((prev) => [...prev, userRow, assistantLoading]);
+      setVideoGenInFlight(true);
+
+      try {
+        const gen = await postHamGeneratedVideo({
+          prompt: apiPrompt,
+          model_id: chatModelIdForApi,
+        });
+
+        const maxPolls = 90;
+        let phase: "queued" | "running" = "queued";
+        let terminal:
+          | { kind: "succeeded"; generatedMediaId: string }
+          | { kind: "failed"; message: string }
+          | null = null;
+        for (let idx = 0; idx < maxPolls; idx += 1) {
+          const status = await fetchHamMediaJobStatus(gen.job_id);
+          if (status.status === "queued" || status.status === "running") {
+            const nextPhase = status.status;
+            if (nextPhase !== phase) {
+              phase = nextPhase;
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantPlaceId && m.generatedVideoCard?.kind === "loading"
+                    ? {
+                        ...m,
+                        generatedVideoCard: { ...m.generatedVideoCard, phase: nextPhase },
+                      }
+                    : m,
+                ),
+              );
+            }
+            await waitMs(2000);
+            continue;
+          }
+          if (status.status === "succeeded" && typeof status.generated_media_id === "string") {
+            terminal = { kind: "succeeded", generatedMediaId: status.generated_media_id };
+            break;
+          }
+          const errText =
+            typeof status.error?.message === "string" && status.error.message.trim()
+              ? status.error.message.trim()
+              : "Video generation failed.";
+          terminal = { kind: "failed", message: errText };
+          break;
+        }
+
+        if (!terminal) {
+          terminal = { kind: "failed", message: "Video generation timed out." };
+        }
+
+        if (terminal.kind === "failed") {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantPlaceId
+                ? {
+                    ...m,
+                    content: "",
+                    generatedVideoCard: {
+                      kind: "error",
+                      promptPreview: apiPrompt.slice(0, 280),
+                      message: terminal.message,
+                    },
+                  }
+                : m,
+            ),
+          );
+          toast.error(terminal.message, { duration: 10_000 });
+          return;
+        }
+
+        const meta = await fetchHamGeneratedMediaMeta(terminal.generatedMediaId);
+        const blob = await fetchHamGeneratedMediaBlob(terminal.generatedMediaId);
+        const blobUrl = URL.createObjectURL(blob);
+        const providerLabel =
+          typeof meta.provider === "string" && meta.provider.trim() ? meta.provider.trim() : null;
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantPlaceId
+              ? {
+                  ...m,
+                  content: "",
+                  generatedVideoCard: {
+                    kind: "ready",
+                    generatedMediaId: meta.generated_media_id,
+                    blobUrl,
+                    mimeType: meta.mime_type,
+                    safeDisplayName: meta.safe_display_name,
+                    promptExcerpt: meta.prompt_excerpt ?? "",
+                    providerLabel,
+                    modelId: meta.model_id,
+                  },
+                }
+              : m,
+          ),
+        );
+      } catch (err) {
+        const restricted = err instanceof HamAccessRestrictedError;
+        const message = restricted
+          ? "Access restricted: this Ham deployment only allows approved sign-ins. Check Clerk or admin."
+          : err instanceof Error
+            ? err.message
+            : "Video generation failed.";
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantPlaceId
+              ? {
+                  ...m,
+                  content: "",
+                  generatedVideoCard: {
+                    kind: "error",
+                    promptPreview: apiPrompt.slice(0, 280),
+                    message,
+                  },
+                }
+              : m,
+          ),
+        );
+        toast.error(message, restricted ? { duration: 12_000 } : { duration: 10_000 });
+      } finally {
+        setVideoGenInFlight(false);
+      }
+    },
+    [chatModelIdForApi, imageGenInFlight, sending, videoGenInFlight, voiceTranscribing],
   );
 
   const persistLocalDesktopTurn = React.useCallback(
@@ -848,7 +1021,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         setSessionId(persisted.session_id);
         writeLastChatSessionId(persisted.session_id);
         setMessages((prev) => {
-          revokeGeneratedImageBlobUrlsFromMessages(prev);
+          revokeGeneratedMediaBlobUrlsFromMessages(prev);
           return persisted.messages.map((m, i) => ({
             id: `${persisted.session_id}-persisted-${i}-${m.role}`,
             role: m.role as HwwMsgRow["role"],
@@ -990,7 +1163,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         setSessionId(sid);
         writeLastChatSessionId(sid);
         setMessages((prev) => {
-          revokeGeneratedImageBlobUrlsFromMessages(prev);
+          revokeGeneratedMediaBlobUrlsFromMessages(prev);
           return detail.messages.map((m, i) => ({
             id: `${sid}-hww-${i}-${m.role}`,
             role: m.role as HwwMsgRow["role"],
@@ -1027,7 +1200,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
           setSessionId(null);
           writeLastChatSessionId(null);
           setMessages((prev) => {
-            revokeGeneratedImageBlobUrlsFromMessages(prev);
+            revokeGeneratedMediaBlobUrlsFromMessages(prev);
             return [];
           });
           setInspectorEvents([]);
@@ -1077,7 +1250,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         revokeAllChatAttachmentLocalBlobs();
         setSessionId(null);
         setMessages((prev) => {
-          revokeGeneratedImageBlobUrlsFromMessages(prev);
+          revokeGeneratedMediaBlobUrlsFromMessages(prev);
           return [];
         });
         setInspectorEvents([]);
@@ -1098,7 +1271,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     setSessionId(null);
     writeLastChatSessionId(null);
     setMessages((prev) => {
-      revokeGeneratedImageBlobUrlsFromMessages(prev);
+      revokeGeneratedMediaBlobUrlsFromMessages(prev);
       return [];
     });
     setInspectorEvents([]);
@@ -1126,7 +1299,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
 
   React.useEffect(() => {
     endRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
-  }, [messages, sending, imageGenInFlight]);
+  }, [messages, sending, imageGenInFlight, videoGenInFlight]);
 
   const handleAddAttachments = React.useCallback(async (files: File[]) => {
     if (files.length === 0) return;
@@ -1325,7 +1498,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       if (!isV1 && !isV2 && !(outboundUser as string).trim()) return;
       if (isV1 && !(outboundUser as HamChatUserContentV1).images?.length) return;
       if (isV2 && !(outboundUser as HamChatUserContentV2).attachments?.length) return;
-      if (sending || voiceTranscribing || imageGenInFlight) return;
+      if (sending || voiceTranscribing || imageGenInFlight || videoGenInFlight) return;
       const missionModeId = String(missionIdFromQuery || "").trim();
       const outboundPlain = !isV1 && !isV2;
       if (missionModeId && outboundPlain) {
@@ -1856,7 +2029,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
                 ...res.messages,
               ];
         setMessages((prev) => {
-          revokeGeneratedImageBlobUrlsFromMessages(prev);
+          revokeGeneratedMediaBlobUrlsFromMessages(prev);
           const next = normalizedMessages.map((m, i) => ({
             id: `${res.session_id}-done-${i}-${m.role}`,
             role: m.role,
@@ -1921,7 +2094,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
               recoveredFromServer = true;
               setSessionId(detail.session_id);
               setMessages((prev) => {
-                revokeGeneratedImageBlobUrlsFromMessages(prev);
+                revokeGeneratedMediaBlobUrlsFromMessages(prev);
                 return detail.messages.map((m, i) => ({
                   id: `${detail.session_id}-recovered-${i}-${m.role}`,
                   role: m.role,
@@ -1996,6 +2169,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       sending,
       voiceTranscribing,
       imageGenInFlight,
+      videoGenInFlight,
       sessionId,
       chatModelIdForApi,
       projectId,
@@ -2047,6 +2221,26 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     runWorkspaceImageGeneration,
   ]);
 
+  const handleComposerGenerateVideo = React.useCallback(() => {
+    const trimmed = input.trim();
+    if (!trimmed) {
+      toast.message("Describe the video you want.", { duration: 4000 });
+      return;
+    }
+    if (attachments.some((a) => a.uploadPhase === "uploading")) {
+      toast.message("Wait for uploads to finish.", { duration: 3800 });
+      return;
+    }
+    if (attachments.length > 0) {
+      toast.message("Generate video uses text prompt only in this MVP.", { duration: 4500 });
+      return;
+    }
+    void runWorkspaceVideoGeneration({
+      apiPrompt: trimmed,
+      transcriptUserLine: trimmed,
+    });
+  }, [attachments, input, runWorkspaceVideoGeneration]);
+
   const composerGenerateImage = React.useMemo((): ComposerGenerateImageState => {
     const uploadsPending = attachments.some((a) => a.uploadPhase === "uploading");
     const supportsGen = Boolean(chatCapabilities?.generation?.supports_image_generation);
@@ -2086,7 +2280,8 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       refBlocked ||
       sending ||
       voiceTranscribing ||
-      imageGenInFlight;
+      imageGenInFlight ||
+      videoGenInFlight;
 
     return {
       onGenerate: handleComposerGenerateImage,
@@ -2106,15 +2301,60 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     imageGenInFlight,
     sending,
     voiceTranscribing,
+    videoGenInFlight,
+  ]);
+
+  const composerGenerateVideo = React.useMemo((): ComposerGenerateVideoState => {
+    const uploadsPending = attachments.some((a) => a.uploadPhase === "uploading");
+    const supportsVideo = Boolean(
+      chatCapabilities?.generation?.supports_video_generation ||
+        chatCapabilities?.generation?.supports_text_to_video,
+    );
+    const provider = String(chatCapabilities?.generation?.video_generation_provider || "").trim();
+    let subtitle = "Create short clip";
+    if (chatCapabilitiesLoading) subtitle = "Checking workspace capabilities…";
+    else if (!supportsVideo) subtitle = "Video generation unavailable";
+    else if (uploadsPending) subtitle = "Finish uploads before generating";
+    else if (provider) subtitle = `Create short clip (${provider})`;
+
+    const disabled =
+      uploadsPending ||
+      catalogLoading ||
+      chatCapabilitiesLoading ||
+      !supportsVideo ||
+      sending ||
+      voiceTranscribing ||
+      imageGenInFlight ||
+      videoGenInFlight;
+
+    return {
+      onGenerate: handleComposerGenerateVideo,
+      busy: videoGenInFlight,
+      disabled,
+      subtitle,
+    };
+  }, [
+    attachments,
+    catalogLoading,
+    chatCapabilities?.generation?.supports_text_to_video,
+    chatCapabilities?.generation?.supports_video_generation,
+    chatCapabilities?.generation?.video_generation_provider,
+    chatCapabilitiesLoading,
+    handleComposerGenerateVideo,
+    imageGenInFlight,
+    sending,
+    videoGenInFlight,
+    voiceTranscribing,
   ]);
 
   const onFormSubmit = () => {
     void (async () => {
+      // Intentional for Phase 2G.10: explicit + menu action handles video generation.
       const trimmed = input.trim();
       const usable = attachments.filter(
         (a) => !a.error && a.uploadPhase !== "failed" && a.uploadPhase !== "uploading",
       );
-      if (voiceTranscribing || imageGenInFlight) return;
+      if (voiceTranscribing || imageGenInFlight || videoGenInFlight) return;
       if (attachments.some((a) => a.uploadPhase === "uploading")) {
         toast.message("Wait for uploads to finish.", { duration: 3800 });
         return;
@@ -2136,7 +2376,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
               : null;
 
           if (!missionEarly && creative?.kind === "image_to_image" && imageRef?.serverId) {
-            if (voiceTranscribing || imageGenInFlight) return;
+            if (voiceTranscribing || imageGenInFlight || videoGenInFlight) return;
             if (chatCapabilitiesLoading) {
               toast.message("Checking workspace capabilities…", { duration: 3800 });
               return;
@@ -2264,10 +2504,32 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
           next.push(m);
           continue;
         }
-        revokeGeneratedImageBlobUrlsFromMessages([m]);
+        revokeGeneratedMediaBlobUrlsFromMessages([m]);
         const textOnly = (m.content || "").trim();
         if (textOnly) {
           next.push({ ...m, generatedImageCard: undefined });
+        }
+      }
+      return next;
+    });
+  }, []);
+
+  const handleRemoveGeneratedVideo = React.useCallback((assistantMessageId: string) => {
+    setMessages((prev) => {
+      const next: HwwMsgRow[] = [];
+      for (const m of prev) {
+        if (m.id !== assistantMessageId) {
+          next.push(m);
+          continue;
+        }
+        if (!m.generatedVideoCard) {
+          next.push(m);
+          continue;
+        }
+        revokeGeneratedMediaBlobUrlsFromMessages([m]);
+        const textOnly = (m.content || "").trim();
+        if (textOnly) {
+          next.push({ ...m, generatedVideoCard: undefined });
         }
       }
       return next;
@@ -2298,7 +2560,8 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     sending &&
     last?.role === "assistant" &&
     !(last?.content || "").trim() &&
-    !last.generatedImageCard;
+    !last.generatedImageCard &&
+    !last.generatedVideoCard;
 
   let pdfExportBlockedReason: ComposerExportPdfState["blockedReason"] = "none";
   if (sessionLoadFailed) pdfExportBlockedReason = "session_error";
@@ -2476,6 +2739,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
                 isStreaming={isStreaming}
                 resolveLocalAttachmentPreview={resolveLocalAttachmentPreview}
                 onRemoveGeneratedImage={handleRemoveGeneratedImage}
+                onRemoveGeneratedVideo={handleRemoveGeneratedVideo}
               />
               <div ref={endRef} className="h-2 shrink-0" />
             </>
@@ -2487,7 +2751,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
             onChange={setInput}
             onSubmit={onFormSubmit}
             disabled={catalogLoading}
-            sending={sending || imageGenInFlight}
+            sending={sending || imageGenInFlight || videoGenInFlight}
             voiceTranscribing={voiceTranscribing}
             onVoiceBlob={handleVoiceBlob}
             attachments={attachments}
@@ -2521,6 +2785,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
             }
             chatCapabilities={chatCapabilities}
             generateImage={composerGenerateImage}
+            generateVideo={composerGenerateVideo}
             exportPdf={{
               onExport: handleExportPdf,
               busy: pdfExporting,

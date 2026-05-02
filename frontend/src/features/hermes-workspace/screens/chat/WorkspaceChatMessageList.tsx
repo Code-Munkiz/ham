@@ -3,7 +3,7 @@
  */
 
 import * as React from "react";
-import { Copy, ImageDown, Loader2, Trash2 } from "lucide-react";
+import { Clapperboard, Copy, ImageDown, Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { tryParseHamChatUserV1String, tryParseHamChatUserV2String } from "@/lib/ham/chatUserContent";
@@ -45,12 +45,27 @@ export type HwwGeneratedImageCard =
     }
   | { kind: "error"; promptPreview: string; message: string };
 
+export type HwwGeneratedVideoCard =
+  | { kind: "loading"; promptPreview: string; phase: "queued" | "running" }
+  | {
+      kind: "ready";
+      generatedMediaId: string;
+      promptExcerpt: string;
+      blobUrl: string;
+      mimeType: string;
+      safeDisplayName: string;
+      providerLabel: string | null;
+      modelId: string | null;
+    }
+  | { kind: "error"; promptPreview: string; message: string };
+
 export type HwwMsgRow = {
   id: string;
   role: "user" | "assistant" | "system";
   content: string;
   timestamp: string;
   generatedImageCard?: HwwGeneratedImageCard | null;
+  generatedVideoCard?: HwwGeneratedVideoCard | null;
 };
 
 type WorkspaceChatMessageListProps = {
@@ -61,6 +76,7 @@ type WorkspaceChatMessageListProps = {
   resolveLocalAttachmentPreview?: (attachmentId: string) => string | undefined;
   /** Drops the assistant image card from view (blob URL revoked); does not mutate server-side session rows. */
   onRemoveGeneratedImage?: (assistantMessageId: string) => void;
+  onRemoveGeneratedVideo?: (assistantMessageId: string) => void;
 };
 
 function IconTextButton(props: {
@@ -91,11 +107,13 @@ export function WorkspaceChatMessageList({
   isStreaming,
   resolveLocalAttachmentPreview,
   onRemoveGeneratedImage,
+  onRemoveGeneratedVideo,
 }: WorkspaceChatMessageListProps) {
   const last = messages[messages.length - 1];
   const showThinking =
     Boolean(isStreaming && last?.role === "assistant" && !(last.content || "").trim()) &&
-    !last.generatedImageCard;
+    !last.generatedImageCard &&
+    !last.generatedVideoCard;
 
   return (
     <div className="hww-chat-transcript w-full space-y-4 px-4 py-5 md:px-8 md:py-6">
@@ -191,12 +209,17 @@ export function WorkspaceChatMessageList({
         }
         if (m.role === "assistant") {
           const isLastAssistant = idx === messages.length - 1;
-          const thinkingHere = showThinking && isLastAssistant && !m.generatedImageCard;
+          const thinkingHere =
+            showThinking && isLastAssistant && !m.generatedImageCard && !m.generatedVideoCard;
           const { interrupted, visibleContent } = interruptedAssistantView(m.content);
-          const g = m.generatedImageCard;
+          const gImage = m.generatedImageCard;
+          const gVideo = m.generatedVideoCard;
           const assistantTextToCopy = visibleContent.trim();
-          const canCopyAssistantPlain = !thinkingHere && !g && assistantTextToCopy.length > 0;
-          const canCopyImagePrompt = g?.kind === "ready" && (g.promptExcerpt || "").trim().length > 0;
+          const canCopyAssistantPlain = !thinkingHere && !gImage && !gVideo && assistantTextToCopy.length > 0;
+          const canCopyImagePrompt =
+            gImage?.kind === "ready" && (gImage.promptExcerpt || "").trim().length > 0;
+          const canCopyVideoPrompt =
+            gVideo?.kind === "ready" && (gVideo.promptExcerpt || "").trim().length > 0;
           return (
             <div key={m.id} className="flex justify-start">
               <div className="flex max-w-[min(100%,48rem)] flex-col items-stretch gap-1">
@@ -213,53 +236,70 @@ export function WorkspaceChatMessageList({
                     </div>
                   ) : null}
 
-                  {g?.kind === "loading" ? (
+                  {gImage?.kind === "loading" ? (
                     <div className="flex items-center gap-2 text-[12px] text-emerald-200/75" role="status">
                       <Loader2 className="h-4 w-4 animate-spin text-emerald-300/95" aria-hidden strokeWidth={2} />
                       <span>Generating image…</span>
                     </div>
                   ) : null}
 
-                  {g?.kind === "error" ? (
+                  {gVideo?.kind === "loading" ? (
+                    <div className="flex items-center gap-2 text-[12px] text-cyan-100/75" role="status">
+                      <Loader2 className="h-4 w-4 animate-spin text-cyan-300/90" aria-hidden strokeWidth={2} />
+                      <span>{gVideo.phase === "queued" ? "Queued video generation…" : "Generating video…"}</span>
+                    </div>
+                  ) : null}
+
+                  {gImage?.kind === "error" ? (
                     <div className="rounded-md border border-red-500/25 bg-red-950/35 px-2.5 py-2 text-[12px] text-red-100/90">
                       <p className="font-medium text-red-200/95">Image generation failed</p>
-                      <p className="mt-1 text-[11px] leading-snug text-red-100/80">{g.message}</p>
-                      {g.promptPreview ? (
-                        <p className="mt-1 line-clamp-2 text-[10px] text-red-100/55">Prompt: {g.promptPreview}</p>
+                      <p className="mt-1 text-[11px] leading-snug text-red-100/80">{gImage.message}</p>
+                      {gImage.promptPreview ? (
+                        <p className="mt-1 line-clamp-2 text-[10px] text-red-100/55">Prompt: {gImage.promptPreview}</p>
                       ) : null}
                     </div>
                   ) : null}
 
-                  {g?.kind === "ready" ? (
+                  {gVideo?.kind === "error" ? (
+                    <div className="rounded-md border border-red-500/25 bg-red-950/35 px-2.5 py-2 text-[12px] text-red-100/90">
+                      <p className="font-medium text-red-200/95">Video generation failed</p>
+                      <p className="mt-1 text-[11px] leading-snug text-red-100/80">{gVideo.message}</p>
+                      {gVideo.promptPreview ? (
+                        <p className="mt-1 line-clamp-2 text-[10px] text-red-100/55">Prompt: {gVideo.promptPreview}</p>
+                      ) : null}
+                    </div>
+                  ) : null}
+
+                  {gImage?.kind === "ready" ? (
                     <div className="space-y-2">
                       <div className="overflow-hidden rounded-lg border border-white/[0.1] bg-black/25">
                         <img
-                          src={g.blobUrl}
-                          alt={g.promptExcerpt || "Generated image"}
+                          src={gImage.blobUrl}
+                          alt={gImage.promptExcerpt || "Generated image"}
                           className="max-h-[min(52vh,28rem)] w-full object-contain"
                         />
                       </div>
-                      {g.promptExcerpt ? (
-                        <p className="line-clamp-2 text-[11px] leading-snug text-white/45">{g.promptExcerpt}</p>
+                      {gImage.promptExcerpt ? (
+                        <p className="line-clamp-2 text-[11px] leading-snug text-white/45">{gImage.promptExcerpt}</p>
                       ) : null}
-                      {g.generatedFromReference ? (
+                      {gImage.generatedFromReference ? (
                         <p className="text-[10px] leading-snug text-white/42">Generated from reference image</p>
                       ) : null}
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-white/38">
-                        {g.modelId ? (
+                        {gImage.modelId ? (
                           <span className="rounded bg-white/[0.06] px-1.5 py-0.5 font-mono text-white/55">
-                            {g.modelId}
+                            {gImage.modelId}
                           </span>
                         ) : null}
-                        {g.providerLabel ? <span className="text-white/40">via {g.providerLabel}</span> : null}
-                        {typeof g.width === "number" && typeof g.height === "number"
-                          ? `${g.width} × ${g.height}`
+                        {gImage.providerLabel ? <span className="text-white/40">via {gImage.providerLabel}</span> : null}
+                        {typeof gImage.width === "number" && typeof gImage.height === "number"
+                          ? `${gImage.width} × ${gImage.height}`
                           : null}
                       </div>
                       <div className="flex flex-wrap gap-2">
                         <a
-                          href={g.blobUrl}
-                          download={g.safeDisplayName || "generated-image.bin"}
+                          href={gImage.blobUrl}
+                          download={gImage.safeDisplayName || "generated-image.bin"}
                           className="inline-flex items-center gap-1 rounded-md border border-emerald-500/25 bg-emerald-950/35 px-2.5 py-1 text-[11px] font-medium text-emerald-100/95 hover:bg-emerald-950/55"
                         >
                           <ImageDown className="h-3.5 w-3.5 opacity-95" aria-hidden strokeWidth={2} />
@@ -270,7 +310,7 @@ export function WorkspaceChatMessageList({
                             type="button"
                             className="inline-flex items-center gap-1 rounded-md border border-white/[0.1] px-2.5 py-1 text-[11px] font-medium text-white/70 hover:bg-white/[0.06]"
                             onClick={() => {
-                              void copyToClipboard("Prompt", g.promptExcerpt);
+                              void copyToClipboard("Prompt", gImage.promptExcerpt);
                             }}
                           >
                             <Copy className="h-3.5 w-3.5 opacity-85" aria-hidden strokeWidth={2} />
@@ -293,7 +333,69 @@ export function WorkspaceChatMessageList({
                     </div>
                   ) : null}
 
-                  {!thinkingHere && !g ? (
+                  {gVideo?.kind === "ready" ? (
+                    <div className="space-y-2">
+                      <div className="overflow-hidden rounded-lg border border-white/[0.1] bg-black/25">
+                        <video
+                          controls
+                          src={gVideo.blobUrl}
+                          className="max-h-[min(52vh,28rem)] w-full object-contain"
+                          aria-label={gVideo.promptExcerpt || "Generated video"}
+                        />
+                      </div>
+                      {gVideo.promptExcerpt ? (
+                        <p className="line-clamp-2 text-[11px] leading-snug text-white/45">{gVideo.promptExcerpt}</p>
+                      ) : null}
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-white/38">
+                        {gVideo.modelId ? (
+                          <span className="rounded bg-white/[0.06] px-1.5 py-0.5 font-mono text-white/55">
+                            {gVideo.modelId}
+                          </span>
+                        ) : null}
+                        {gVideo.providerLabel ? <span className="text-white/40">via {gVideo.providerLabel}</span> : null}
+                        <span className="inline-flex items-center gap-1 text-white/45">
+                          <Clapperboard className="h-3 w-3" aria-hidden strokeWidth={2} />
+                          {gVideo.mimeType}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <a
+                          href={gVideo.blobUrl}
+                          download={gVideo.safeDisplayName || "generated-video.bin"}
+                          className="inline-flex items-center gap-1 rounded-md border border-cyan-500/25 bg-cyan-950/35 px-2.5 py-1 text-[11px] font-medium text-cyan-100/95 hover:bg-cyan-950/55"
+                        >
+                          <ImageDown className="h-3.5 w-3.5 opacity-95" aria-hidden strokeWidth={2} />
+                          Download
+                        </a>
+                        {canCopyVideoPrompt ? (
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-1 rounded-md border border-white/[0.1] px-2.5 py-1 text-[11px] font-medium text-white/70 hover:bg-white/[0.06]"
+                            onClick={() => {
+                              void copyToClipboard("Prompt", gVideo.promptExcerpt);
+                            }}
+                          >
+                            <Copy className="h-3.5 w-3.5 opacity-85" aria-hidden strokeWidth={2} />
+                            Copy prompt
+                          </button>
+                        ) : null}
+                        {onRemoveGeneratedVideo ? (
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-1 rounded-md border border-white/[0.08] px-2.5 py-1 text-[11px] font-medium text-white/55 hover:bg-red-950/40 hover:text-red-100/90"
+                            onClick={() => {
+                              onRemoveGeneratedVideo(m.id);
+                            }}
+                          >
+                            <Trash2 className="h-3.5 w-3.5 opacity-85" aria-hidden strokeWidth={2} />
+                            Remove
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {!thinkingHere && !gImage && !gVideo ? (
                     <>
                       <p className="whitespace-pre-wrap break-words">{visibleContent || "\u00a0"}</p>
                       {interrupted ? (
@@ -302,7 +404,7 @@ export function WorkspaceChatMessageList({
                     </>
                   ) : null}
 
-                  {!thinkingHere && g?.kind === "ready" && visibleContent.trim() ? (
+                  {!thinkingHere && (gImage?.kind === "ready" || gVideo?.kind === "ready") && visibleContent.trim() ? (
                     <p className="mt-2 whitespace-pre-wrap break-words text-white/82">{visibleContent}</p>
                   ) : null}
 
@@ -318,12 +420,21 @@ export function WorkspaceChatMessageList({
                       }}
                     />
                   ) : null}
-                  {g?.kind === "error" && g.message.trim() ? (
+                  {gImage?.kind === "error" && gImage.message.trim() ? (
                     <IconTextButton
                       label="Copy error"
                       icon={<Copy className="h-3 w-3 opacity-85" aria-hidden strokeWidth={2} />}
                       onClick={() => {
-                        void copyToClipboard("Error", g.message);
+                        void copyToClipboard("Error", gImage.message);
+                      }}
+                    />
+                  ) : null}
+                  {gVideo?.kind === "error" && gVideo.message.trim() ? (
+                    <IconTextButton
+                      label="Copy error"
+                      icon={<Copy className="h-3 w-3 opacity-85" aria-hidden strokeWidth={2} />}
+                      onClick={() => {
+                        void copyToClipboard("Error", gVideo.message);
                       }}
                     />
                   ) : null}

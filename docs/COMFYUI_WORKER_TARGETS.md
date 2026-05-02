@@ -116,6 +116,15 @@ Regression follow-up for local smoke:
 
 ---
 
+## Phase 2G.10 — video UI MVP (explicit action only)
+
+- Workspace chat now exposes **`+ → Generate video`** in local/dev mode when capabilities report video generation support.
+- The UI uses backend routes only: **`POST /api/media/videos/generate`** + poll **`GET /api/media/jobs/{id}`** + download through existing generated-media artifact routes.
+- Natural-language auto-routing for "create a video..." remains deferred until a real Comfy video worker smoke pass is complete.
+- If worker/model/custom node setup is missing, expected behavior is queued/running/failure/unavailable UI states (not fake success).
+
+---
+
 ## Labels (Phase 2G.7)
 
 - **`COMFYUI_WORKER_TARGET_PROFILES_DEFINED`**

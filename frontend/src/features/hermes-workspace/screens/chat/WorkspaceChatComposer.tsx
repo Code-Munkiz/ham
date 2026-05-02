@@ -16,6 +16,7 @@ import {
   WorkspaceChatComposerActionsMenu,
   type ComposerExportPdfState,
   type ComposerGenerateImageState,
+  type ComposerGenerateVideoState,
 } from "./WorkspaceChatComposerActionsMenu";
 import { WorkspaceChatAttachmentPreviewList } from "./WorkspaceChatAttachmentPreview";
 import {
@@ -79,6 +80,7 @@ type WorkspaceChatComposerProps = {
   chatCapabilities?: ChatCapabilitiesPayload | null;
   exportPdf: ComposerExportPdfState;
   generateImage: ComposerGenerateImageState;
+  generateVideo: ComposerGenerateVideoState;
 };
 
 const COMPOSER_MENU_FOOTER_HINT =
@@ -195,6 +197,7 @@ export function WorkspaceChatComposer({
   chatCapabilities = null,
   exportPdf,
   generateImage,
+  generateVideo,
 }: WorkspaceChatComposerProps) {
   const [voiceState, setVoiceState] = React.useState<VoiceUiState>("idle");
   const [voiceBanner, setVoiceBanner] = React.useState<string | null>(null);
@@ -761,6 +764,7 @@ export function WorkspaceChatComposer({
                 attachDetailsTitle={attachDetailsTitle}
                 menuFooterHint={COMPOSER_MENU_FOOTER_HINT}
                 generateImage={generateImage}
+                generateVideo={generateVideo}
                 exportPdf={exportPdf}
               />
               {value.length >= 100 ? (

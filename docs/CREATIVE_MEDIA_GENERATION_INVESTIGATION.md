@@ -317,6 +317,12 @@ Workspace chat can supply **`reference_attachment_id`** (`hamatt_*`) on **`POST 
 - **`GET /api/chat/capabilities`** **`generation`** adds **`active_media_provider`**, **`available_media_providers`**, conservative mode flags, **`provider_notes`** — no internal URLs / keys.
 - **`docs/COMFYUI_PROVIDER_PLAN.md`** — architecture, env table, Phase **2G.7** operator checklist.
 
+### Phase 2G.10 video UI MVP (implemented)
+
+- Workspace chat adds explicit **`+ → Generate video`** (capability-gated) and does not auto-intercept normal text prompts for video in this slice.
+- Frontend calls backend async endpoints (`POST /api/media/videos/generate`, poll `GET /api/media/jobs/{id}`), then resolves the final artifact through the same safe generated-media metadata/download routes.
+- Generated video cards render queued/running/failed/succeeded states with `<video controls>` and a backend-mediated download action only.
+
 ### Phase 2G.6 ComfyUI adapter + SDXL templates (implemented)
 
 - **`src/ham/comfyui_provider_adapter.py`** — loads **`configs/media/comfyui/`** manifests, **`POST /prompt`**, polls **`GET /history/{prompt_id}`**, retrieves bytes from **`GET /view`** server-side only; rejects reference inputs early (**`IMAGE_TO_IMAGE_NOT_SUPPORTED`**).
