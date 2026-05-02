@@ -218,6 +218,258 @@ The user should experience one consistent HAM workflow regardless of which backe
 
 ---
 
+## Additional ecosystem capability layers
+
+These layers are **long-term ecosystem capabilities**. They do **not** all belong in Phase 1. **Phase 1 remains Builder Blueprint Mode.**
+
+Each subsection is aspirational intent—**not** shipped architecture—and must be read together with **`VISION.md`** (shipped pillars) and the **Guardrails** section of this doc.
+
+---
+
+### Orchestration and supervision layer
+
+```txt
+HAM orchestrates at the product/control-plane level.
+Hermes supervises within the implementation architecture per VISION.md.
+Providers are workers/adapters.
+```
+
+HAM coordinates (at the product level) user intent, requirements discovery, architecture and ADRs, worker selection, task planning, execution monitoring, QA/security review, approval gates, evidence generation, deploy/rollback workflows, and knowledge retention—with Hermes fulfilling the supervisory role described in shipped architecture where applicable. This parallels **How HAM should work** above; ecosystem framing here emphasizes durable **Mission Control–style coordination** across workers (operations, telemetry, approvals, evidence surfaces) without replacing pillar ownership in `VISION.md`.
+
+---
+
+### Local Autopilot and full machine control layer
+
+HAM Desktop should eventually support a **Local Autopilot** posture for operators who choose deeper automation **on their own machine**. Frame as **user-controlled autonomy**, not universal defaults—security stance is **profile-based**.
+
+Suggested **trust profiles** (conceptual—not a shipped schema):
+
+```txt
+Locked Down
+Balanced
+Local Autopilot
+Unattended Local Runner
+Developer Lab / Unsafe Local
+```
+
+HAM Desktop may eventually evolve toward richer **local-only** leverage: controlled browser workflows; guarded native automation; bounded file/script operations where policy allows; form assistance; readable page state; repeatable workflows (including scheduled repeats); connectors where safer than raw UI automation; optional **user-approved** credential surfaces (vault / OS keychain class integrations, later and policy-gated); and workflows that honor **hosted web UI cannot touch the bare machine**—intents cross a **user-approved paired local desktop bridge** only.
+
+**Product principle:**
+
+```txt
+The user owns the machine.
+The user chooses how much autonomy HAM has.
+HAM makes the trust level visible, revocable, and auditable.
+```
+
+Guardrails that should remain visible even under permissive local profiles:
+
+- local execution remains **paired** unless an explicit unattended mode is deliberately enabled and surfaced
+- **kill switch**, active-control indicators, revocation, bounded audit of sensitive actions
+- **no provider secrets** exposed to browsers or unmanaged cloud workers without policy
+- **hosted web UI** forwards **intent** through an approved desktop bridge—not direct machine control from the SPA alone
+
+Detailed roadmap labels for this layer (track-level; evaluate before promoting to repo-wide anchors):
+
+```txt
+HAM_LOCAL_AUTOPILOT_MODE
+HAM_USER_CONTROLLED_SECURITY_PROFILES
+HAM_DESKTOP_FULL_MACHINE_CONTROL
+HAM_BROWSER_WORKFLOW_AUTOMATION
+HAM_LOCAL_WORKFLOW_RUNNER
+```
+
+Aligns conceptually with a **local-control lane** orthogonal to Phase 1 Builder Blueprint; merges with broader Builder timelines only when deliberately scoped.
+
+---
+
+### Perception and visual audit layer
+
+HAM should eventually add a perception layer capable of inspecting UI state, previews, screenshots, artifacts, layout/contrast/accessibility cues, supporting both **private/local review** (default for sensitive workflows) and **optional cloud-backed review** governed by organizational policy where enabled.
+
+Possible capabilities:
+
+- screenshot / page-state review, UI regression compares, WCAG-oriented layout/contrast helpers, accessibility review, preview validation before ship, structured **visual evidence** capture, artifact inspection tied to approvals, page-state narration during sanctioned local workflows
+
+**Local/private default:** keep sensitive visual captures and embeddings **local by default**. Do **not** send sensitive screenshots or visual memory payloads to hosted vision providers unless the operator **explicitly** enables outbound review and understands retention/export rules. Separate **HAM_LOCAL_VISUAL_AUDIT**-class tooling from optional **HAM_CLOUD_VISUAL_GROUNDING**. Treat snapshots as evidence with retention/delete controls front and center.
+
+**Agentic Vision reference:** [Agentic Vision](https://github.com/agentralabs/agentic-vision) (`agentralabs/agentic-vision`) is a **named reference/integration candidate**, not shipped HAM software. Evaluate for local/private screenshot memory, visual embeddings, similarity/compare, recalled UI contexts, MCP-oriented visual tooling, and internal audit reproducibility—but **HAM_LOCAL_VISUAL_MEMORY_REFERENCE** posture remains exploratory until hardened.
+
+Suggested track labels:
+
+```txt
+HAM_PERCEPTION_LAYER
+HAM_LOCAL_VISUAL_AUDIT
+HAM_CLOUD_VISUAL_GROUNDING
+HAM_WCAG_VISUAL_GUARDRAILS
+HAM_AGENTIC_VISION_REFERENCE
+HAM_LOCAL_VISUAL_MEMORY_REFERENCE
+```
+
+---
+
+### Worker adapter layer (provider-agnostic)
+
+Concrete examples already appear under **[Interchangeable worker backends](#interchangeable-worker-backends)**. HAM stays **worker-adapter–centric**: interchangeable **worker adapters**, **execution backends**, and **provider adapters** routed through HAM—not “teams” nomenclature. Extend the eventual matrix with scanners, compliance tooling, observability backends, automation hosts, optional **social/comms/research adapters**, and niche providers as integrations mature—all behind policy + approval gates consistent with Hermes-forward supervision (`VISION.md`). **Spaces-style UX** inspirations map to **[Builder Space UX direction](#builder-space-ux-direction)**—build natively inside HAM, isolate generated apps to **iframes/worktrees**, and keep agents executing as **workers/adapters** per existing guardrails.
+
+---
+
+### Infrastructure and artifact layer
+
+Plan for durable **artifact and evidence storage**, **project/build outputs**, bounded **mission/workflow logs**, **rollback metadata**, and auditable fingerprints—eventually backed by combinations of GCP/GCS-class object storage (when deployed), Postgres-style tenant stores, CI artifacts, filesystem sandboxes for dev/local runs, Git/GitHub providers, CDN or Vercel-class hosts, telemetry metadata, and BigQuery/analytics tiers when policy allows—with **HAM-native retention and export** surfaced to operators.
+
+**Naming:** Prefer **artifact and evidence storage**, **mission logs**, **durable artifact layer** language—avoid informal “industrial storage” shorthand.
+
+---
+
+### Auth, tenant, and access layer
+
+Production-grade journeys require disciplined auth/RBAC/multi-tenant design: providers such as Clerk or comparable stacks, isolation between orgs/projects, designed roles & invites, per-worker/per-provider scopes, secret readiness dashboards, audited admin tooling. Cross-reference: **database, auth, RBAC, tenant isolation, deployment assumptions must be explicitly confirmed or intentionally deferred** ([Guardrails](#guardrails)).
+
+---
+
+### Billing, ledger, and usage metering layer
+
+Introduce eventual **HAM_USAGE_LEDGER** concepts: aggregated **HAM_PROVIDER_COST_VISIBILITY**, **HAM_MISSION_COST_TRACKING**, per-project/per-org metering, prepaid **credit / fuel–style gauges**, surfaced spend estimates ahead of pricey runs with optional budget caps—not “token arbitrage.” UI may eventually emphasize **HAM_CREDIT_FUEL_GAUGE** dashboards (running tally, runway warnings, receipts). Monetization sequencing depends on metering maturity.
+
+#### Priority sequencing: usage ledger near-term, autopilot layered on telemetry
+
+Treat the **Usage Ledger** as a **near-term infrastructure track**, not solely a distant billing feature. As HAM routes work across **OpenRouter**, **Cursor**, **Factory/Droid**, **Comfy/media**, and other execution backends, HAM needs **cost visibility before broad multi-agent execution scales.**
+
+**Suggested execution order:**
+
+1. **Usage Ledger MVP first**
+   - track provider, model, worker, mission stage, tokens, estimated or actual cost **per invocation** where attribution is available
+   - aggregate by mission, project, org, and operator/user as policy allows
+   - surface mission cost and configured budget/status in Builder and Operations (even before full monetization UX)
+
+2. **LLM Cost Autopilot second** (consumes ledger data)
+   - recommend lower-cost tiers when profiles allow
+   - route low-risk or draft-class tasks toward policy-acceptable economy models where quality gates pass
+   - reserve premium tiers for architecture, adversarial-sensitive review, final acceptance gates, etc.
+   - enforce budget guardrails, escalation, and audited overrides using live ledger totals—never “drive blind.”
+
+Product principle:
+
+> Before HAM automates expensive multi-agent work, HAM should make cost **visible, measurable, and governable**.
+
+#### LLM Cost Autopilot and intelligent model routing
+
+**LLM Cost Autopilot** describes a future layer that monitors, predicts, and helps steer LLM/provider spend across Builder, dashboard chat, Operations, agents, media, and allied workflows **without** implying lossless shortcuts or unmanaged “free” hopping between models. Spend becomes a visible input to orchestration alongside quality and reliability.
+
+**HAM** should eventually include capabilities such as:
+
+- token or usage-unit tracking aggregated across providers
+- per-invocation attribution: model/workflow/stage/agent (where applicable), input/output sizing, estimated cost where pricing metadata exists and **reported spend** when billed data is wired
+- **mission-level**, **project-level**, and **org-level** aggregates in the **usage ledger**
+- real-time cost / fuel readouts surfaced in Builder and Operations
+- breakdowns by stage, worker/agent, model, provider, and artifact/content class
+- pre-run estimates (with **confidence ranges** where pricing or token counts are fuzzy)
+- **warnings** ahead of unusually expensive models, workers, or media pipelines
+- **budget guardrails**: per-run, project, org, user/credit envelopes; tiers such as advisory warnings (e.g. **50 %**, **80 %**, **95 %**) of configured allowances; escalation or approval before overspend paths; graceful shift to cheaper **policy-allowed** models when thresholds fire; configurable **hard stop** behaviors; audited trails on overrides/floor exceptions
+
+##### Intelligent model router
+
+HAM should eventually support **cost-aware** **intelligent model routing** atop today’s routing primitives—not a brittle “always cheapest,” not “magic routing,” no promise of effortless quality neutrality.
+
+Conceptual routing flow:
+
+```txt
+User or worker task
+  → task classifier
+  → model capability matrix
+  → cost / quality / risk policy
+  → chosen model/provider
+  → usage ledger entry
+  → feedback signals (latency, escalation, evaluator notes)
+```
+
+The router aims to select the **most cost-conscious model/provider pairing that satisfies the configured reliability, correctness, safety, and policy threshold** for each task—not unbounded penny-pinching—and to:
+
+- classify task modality and nominal complexity tiers
+- separate low-risk drafts or summarization sketches from hardened security, architecture gates, extraction with compliance sensitivity, polish/creative extremes, acceptance reviews
+- prefer modest-cost models where policy allows simpler work; reserve capable models where failure cost is dominant
+- keep context windows disciplined (summarize/compact thoughtfully; recommend safe prompt/context compression—not blind truncation)
+- **escalate** to stronger tiers when telemetry or verifier confidence flags regressions or repeated poor outcomes (with safeguards against runaway escalation spend)
+- support provider/model **fallbacks**
+- honor **explicit human overrides**
+- ingest historical spend and outcome summaries for iterative tuning—including controlled evaluation cohorts (**A/B** or offline evaluation harnesses)—without claiming instantaneous optimality
+
+**Budget guardrails (summary):**
+
+- surfaced caps at run/project/org/user granularity; escalating warnings vs approval gates vs hard stops-as-configured
+- optional **graceful degradation** pathways that still obey policy—not silent quality collapse
+- **audit record** tying overrides/adjustments back to approvals and ledger entries for Builder/Operations reviewers
+
+##### UI implications
+
+Builder and Operations UX may evolve to include:
+
+- live mission/run cost indicators
+- projected totals with ranges for uncertain legs
+- per-provider/per-model/per-worker decomposition
+- remaining credits vs configured budgets (**fuel gauge** affordances already described above)
+- expensive-step confirmations
+- short natural-language rationales—for example noting that policy routes a sketch pass to an economy tier while reserving a reviewer tier later
+- summarized cost excerpts packaged into mission evidence bundles
+
+##### Relationship to explicit model picking today
+
+HAM already ships curated **catalog** data (for example **`GET /api/models`**, OpenRouter-aligned rows plus display-only cousins) so users can manually pick composer models—for example **`WorkspaceOpenRouterModelPicker`** drives explicit selection. Those flows remain authoritative for **today’s** dashboards: user-chosen upstream model ids.
+
+The future LLM Cost Autopilot would extend that stack with policy-aware estimation, surfaced recommendations, telemetry-rich routing, automated guardrails aligned to budgets—all **optional overlays** respecting operator defaults and approvals.
+
+Track labels tying this subsection to metering work:
+
+```txt
+HAM_LLM_COST_AUTOPILOT
+HAM_INTELLIGENT_MODEL_ROUTER
+HAM_COST_QUALITY_ROUTING
+HAM_USAGE_LEDGER
+HAM_MISSION_COST_TRACKING
+HAM_PROVIDER_COST_VISIBILITY
+```
+
+---
+
+### Builder / Workspace / Operations UX layer
+
+Maintain the distinctions already embodied in **[Builder Space UX direction](#builder-space-ux-direction)** plus an **operations / Mission Control plane** emphasis:
+
+```txt
+HAM Workspace = operator console
+HAM Builder Space = vibe-building / prototype-to-product surface
+Operations = execution monitoring, approvals, telemetry, evidence
+```
+
+Future affordances might include surfaced mode switchers (**Chat**, **Builder**, **Operations**, **Files**, **Terminal**, **Memory**, **Settings**, etc.), guarded voice prompts for builders, sanctioned local-control gestures for trusted workflows only, live HUDs for missions, selectors for models/upstreams/providers, visibility into trust profiles plus cost/fuel readouts plus worker statuses, surfaced approval/decision/evidence cues—still **HAM-native**.
+
+---
+
+### Social / external communications layer
+
+Maintain any social/comms direction as **future social/comms/research adapter tracks**, gated behind approvals. HAM does **not** require **ElizaOS** (or similar frameworks) as a mandatory near-term platform core unless an execution slice explicitly adopts them through adapters.
+
+Use **adapter** language—not compulsory merges with external persona stacks.
+
+---
+
+### Ecosystem layering vs Builder phases
+
+| Layer emphasis | Typical alignment |
+|----------------|-------------------|
+| Local Autopilot + machine autonomy | Dedicated **local-desktop** roadmap track; overlaps Builder phases only after intentional bridge |
+| Perception/visual audit | Phases emphasizing preview, QA, WCAG/evidence (**3+**, plus governance) |
+| Usage ledger / billing realism | Needed before credible multi-org monetization and multi-provider metering |
+| Intelligent cost routing + LLM autopilot | Layer atop ledger readiness; overlays explicit catalog pickers (see **[Billing, ledger](#billing-ledger-and-usage-metering-layer)**) |
+| Worker adapters breadth | Starts **Phase 2+** adapters & beyond |
+| Builder Spaces UX | Phases **1–3**, per existing Builder roadmap |
+| Lifecycle / governance | Late phases & enterprise posture |
+
+Primary roadmap anchor bundles (builder + ecosystem + usage/cost)—see **[Roadmap anchors](#roadmap-anchors)**.
+
+---
+
 ## Critical UX behavior
 
 HAM should detect missing architectural/product decisions and ask targeted questions only when needed.
@@ -405,7 +657,17 @@ HAM_CURSOR_FACTORY_EXECUTION_ADAPTERS
 HAM_LIVE_PREVIEW_AND_ACCEPTANCE_LOOP
 HAM_PRODUCTION_DEPLOY_AND_EVIDENCE_LOOP
 HAM_LIFECYCLE_INTELLIGENCE_AND_GOVERNANCE
+HAM_LOCAL_AUTOPILOT_MODE
+HAM_USER_CONTROLLED_SECURITY_PROFILES
+HAM_PERCEPTION_LAYER
+HAM_AGENTIC_VISION_REFERENCE
+HAM_USAGE_LEDGER
+HAM_MISSION_COST_TRACKING
+HAM_LLM_COST_AUTOPILOT
+HAM_INTELLIGENT_MODEL_ROUTER
 ```
+
+Detailed layer/track labels beyond these appear in **[Additional ecosystem capability layers](#additional-ecosystem-capability-layers)** to keep this list readable.
 
 ---
 
