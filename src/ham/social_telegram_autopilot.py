@@ -59,9 +59,14 @@ class HamgomoonAutopilotResult(BaseModel):
     execution_allowed: bool = False
     mutation_attempted: bool = False
     lane_order: list[str] = Field(default_factory=list)
+    reactive_lane_status: str | None = None
+    activity_lane_status: str | None = None
+    selected_lane: Literal["reactive", "activity"] | None = None
     reactive: dict[str, object] | None = None
     activity: dict[str, object] | None = None
     skipped_lanes: list[str] = Field(default_factory=list)
+    blocking_reasons: list[str] = Field(default_factory=list)
+    non_blocking_reasons: list[str] = Field(default_factory=list)
     reasons: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     result: dict[str, object] = Field(default_factory=dict)
@@ -103,6 +108,7 @@ def run_hamgomoon_autopilot_once(
             execution_allowed=False,
             mutation_attempted=False,
             lane_order=[],
+            blocking_reasons=gate_reasons,
             reasons=gate_reasons,
             result={"mode": "live_blocked"},
         )
@@ -215,15 +221,31 @@ def _compose_result(
     )
     mutation_attempted = any(bool(item.mutation_attempted) for item in lane_results)
     execution_allowed = any(bool(item.execution_allowed) for item in lane_results)
+    selected_lane = _selected_lane(reactive=reactive, activity=activity)
+    blocking_reasons, non_blocking_reasons = _classify_reasons(
+        reasons=reasons,
+        selected_lane=selected_lane,
+        lane_results=lane_results,
+    )
     return HamgomoonAutopilotResult(
-        status=_status_for_lanes(lane_results=lane_results, reasons=reasons, skipped_lanes=skipped_lanes),
+        status=_status_for_lanes(
+            lane_results=lane_results,
+            selected_lane=selected_lane,
+            blocking_reasons=blocking_reasons,
+            non_blocking_reasons=non_blocking_reasons,
+        ),
         dry_run=cfg.dry_run,
         execution_allowed=execution_allowed,
         mutation_attempted=mutation_attempted,
         lane_order=lane_order,
+        reactive_lane_status=reactive.status if reactive is not None else None,
+        activity_lane_status=activity.status if activity is not None else None,
+        selected_lane=selected_lane,
         reactive=reactive.model_dump(mode="json") if reactive is not None else None,
         activity=activity.model_dump(mode="json") if activity is not None else None,
         skipped_lanes=skipped_lanes,
+        blocking_reasons=blocking_reasons,
+        non_blocking_reasons=non_blocking_reasons,
         reasons=reasons,
         warnings=warnings,
         result={
@@ -238,19 +260,62 @@ def _compose_result(
 def _status_for_lanes(
     *,
     lane_results: list[TelegramReactiveRunResult | TelegramActivityRunResult],
-    reasons: list[str],
-    skipped_lanes: list[str],
+    selected_lane: Literal["reactive", "activity"] | None,
+    blocking_reasons: list[str],
+    non_blocking_reasons: list[str],
 ) -> HamgomoonAutopilotStatus:
     statuses = [str(item.status) for item in lane_results]
-    if any(status == "failed" for status in statuses):
+    if selected_lane is None:
+        return "blocked" if blocking_reasons or statuses else "completed"
+    if any(status == "failed" for status in statuses) and not any(status == "sent" for status in statuses):
         return "failed"
     if any(status == "sent" for status in statuses):
         return "sent"
-    if any(status == "blocked" for status in statuses):
-        return "blocked"
-    if reasons and not skipped_lanes:
+    if non_blocking_reasons or any(status == "blocked" for status in statuses):
+        return "partial"
+    if blocking_reasons:
         return "blocked"
     return "completed"
+
+
+def _selected_lane(
+    *,
+    reactive: TelegramReactiveRunResult | None,
+    activity: TelegramActivityRunResult | None,
+) -> Literal["reactive", "activity"] | None:
+    if reactive is not None and _reactive_has_action(reactive):
+        return "reactive"
+    if activity is not None and _activity_has_action(activity):
+        return "activity"
+    return None
+
+
+def _reactive_has_action(result: TelegramReactiveRunResult) -> bool:
+    if result.status == "sent":
+        return True
+    return result.status == "completed" and bool(result.proposal_digest and result.selected_inbound_id)
+
+
+def _activity_has_action(result: TelegramActivityRunResult) -> bool:
+    if result.status == "sent":
+        return True
+    return bool(result.proposal_digest and result.status == "completed")
+
+
+def _classify_reasons(
+    *,
+    reasons: list[str],
+    selected_lane: Literal["reactive", "activity"] | None,
+    lane_results: list[TelegramReactiveRunResult | TelegramActivityRunResult],
+) -> tuple[list[str], list[str]]:
+    if selected_lane is None:
+        return reasons, []
+    if reasons == ["activity_skipped_after_reactive_send"]:
+        return [], reasons
+    lane_blocked = any(str(item.status) in {"blocked", "failed"} for item in lane_results)
+    if lane_blocked:
+        return [], reasons
+    return reasons, []
 
 
 def _dedupe(items: list[str]) -> list[str]:
@@ -273,8 +338,13 @@ def _cli_summary(result: HamgomoonAutopilotResult) -> dict[str, object]:
         "mutation_attempted": result.mutation_attempted,
         "lane_order": result.lane_order,
         "skipped_lanes": result.skipped_lanes,
+        "selected_lane": result.selected_lane,
+        "blocking_reasons": result.blocking_reasons[:12],
+        "non_blocking_reasons": result.non_blocking_reasons[:12],
         "reasons": result.reasons[:12],
         "warnings": result.warnings[:12],
+        "reactive_lane_status": result.reactive_lane_status,
+        "activity_lane_status": result.activity_lane_status,
         "reactive_status": result.reactive.get("status") if isinstance(result.reactive, dict) else None,
         "activity_status": result.activity.get("status") if isinstance(result.activity, dict) else None,
     }

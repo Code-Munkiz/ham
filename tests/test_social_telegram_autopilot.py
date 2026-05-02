@@ -93,6 +93,39 @@ def _activity_result(status: str = "completed", *, mutation: bool = False, reaso
     )
 
 
+def _blocked_activity_result(*, reasons: list[str] | None = None) -> TelegramActivityRunResult:
+    return TelegramActivityRunResult(
+        status="blocked",
+        dry_run=True,
+        execution_allowed=False,
+        mutation_attempted=False,
+        persona_id="hamgomoon",
+        persona_version=1,
+        persona_digest="persona-digest",
+        proposal_digest=None,
+        target={"kind": "test_group", "configured": True, "masked_id": "configured:abc123"},
+        activity_preview={},
+        governor={"allowed": False, "reasons": reasons or ["telegram_activity_daily_cap_reached"]},
+        reasons=reasons or ["telegram_activity_daily_cap_reached"],
+    )
+
+
+def _blocked_reactive_result(*, reasons: list[str] | None = None) -> TelegramReactiveRunResult:
+    return TelegramReactiveRunResult(
+        status="blocked",
+        dry_run=True,
+        execution_allowed=False,
+        mutation_attempted=False,
+        persona_id="hamgomoon",
+        persona_version=1,
+        persona_digest="persona-digest",
+        selected_inbound_id=None,
+        proposal_digest=None,
+        reply_candidate_text="",
+        reasons=reasons or ["telegram_reactive_no_safe_candidate"],
+    )
+
+
 def test_dry_run_runs_both_lanes_sends_nothing_and_no_log(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     token, user, chat = _ready_env(monkeypatch, tmp_path)
     transcript = tmp_path / "telegram.jsonl"
@@ -127,6 +160,40 @@ def test_dry_run_runs_both_lanes_sends_nothing_and_no_log(monkeypatch: pytest.Mo
     text = result.model_dump_json()
     for raw in (token, user, chat):
         assert raw not in text
+
+
+def test_dry_run_reactive_candidate_activity_cap_is_partial_not_blocked(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    _ready_env(monkeypatch, tmp_path)
+    log = tmp_path / "delivery.jsonl"
+
+    with (
+        patch("src.ham.social_telegram_autopilot.run_telegram_reactive_once", return_value=_reactive_result("completed", mutation=False)),
+        patch("src.ham.social_telegram_autopilot.run_telegram_activity_once", return_value=_blocked_activity_result()),
+    ):
+        result = run_hamgomoon_autopilot_once(HamgomoonAutopilotConfig(dry_run=True, delivery_log_path=log))
+
+    assert result.status == "partial"
+    assert result.selected_lane == "reactive"
+    assert result.reactive_lane_status == "completed"
+    assert result.activity_lane_status == "blocked"
+    assert result.blocking_reasons == []
+    assert result.non_blocking_reasons == ["telegram_activity_daily_cap_reached"]
+    assert result.execution_allowed is False
+    assert result.mutation_attempted is False
+    assert log.exists() is False
+
+
+def test_dry_run_both_lanes_blocked_is_blocked() -> None:
+    with (
+        patch("src.ham.social_telegram_autopilot.run_telegram_reactive_once", return_value=_blocked_reactive_result()),
+        patch("src.ham.social_telegram_autopilot.run_telegram_activity_once", return_value=_blocked_activity_result()),
+    ):
+        result = run_hamgomoon_autopilot_once(HamgomoonAutopilotConfig(dry_run=True))
+
+    assert result.status == "blocked"
+    assert result.selected_lane is None
+    assert result.blocking_reasons == ["telegram_reactive_no_safe_candidate", "telegram_activity_daily_cap_reached"]
+    assert result.non_blocking_reasons == []
 
 
 def test_live_mode_blocked_by_default_global_env_gates(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -206,6 +273,33 @@ def test_live_mode_calls_reactive_then_activity_when_no_reactive_send(monkeypatc
     assert result.activity and result.activity["status"] == "sent"
 
 
+def test_live_mode_can_select_reactive_when_activity_is_blocked_by_cap(monkeypatch: pytest.MonkeyPatch) -> None:
+    _enable_global_gates(monkeypatch)
+    order: list[str] = []
+
+    def reactive(*_args: object, **_kwargs: object) -> TelegramReactiveRunResult:
+        order.append("reactive")
+        return _reactive_result("completed", mutation=False)
+
+    def activity(*_args: object, **_kwargs: object) -> TelegramActivityRunResult:
+        order.append("activity")
+        return _blocked_activity_result()
+
+    with (
+        patch("src.ham.social_telegram_autopilot.run_telegram_reactive_once", side_effect=reactive),
+        patch("src.ham.social_telegram_autopilot.run_telegram_activity_once", side_effect=activity),
+    ):
+        result = run_hamgomoon_autopilot_once(HamgomoonAutopilotConfig(dry_run=False, emergency_stop=False))
+
+    assert order == ["reactive", "activity"]
+    assert result.status == "partial"
+    assert result.selected_lane == "reactive"
+    assert result.blocking_reasons == []
+    assert result.non_blocking_reasons == ["telegram_activity_daily_cap_reached"]
+    assert result.execution_allowed is False
+    assert result.mutation_attempted is False
+
+
 def test_reactive_live_send_skips_activity_by_default_unless_allow_both(monkeypatch: pytest.MonkeyPatch) -> None:
     _enable_global_gates(monkeypatch)
     order: list[str] = []
@@ -226,8 +320,9 @@ def test_reactive_live_send_skips_activity_by_default_unless_allow_both(monkeypa
         both = run_hamgomoon_autopilot_once(HamgomoonAutopilotConfig(dry_run=False, allow_both_live_lanes=True, emergency_stop=False))
 
     assert skipped.status == "sent"
+    assert skipped.selected_lane == "reactive"
     assert skipped.skipped_lanes == ["activity"]
-    assert "activity_skipped_after_reactive_send" in skipped.reasons
+    assert "activity_skipped_after_reactive_send" in skipped.non_blocking_reasons
     assert both.status == "sent"
     assert both.skipped_lanes == []
     assert order == ["reactive", "reactive", "activity"]
@@ -273,6 +368,9 @@ def fake_model_result():
         status="completed",
         dry_run=True,
         lane_order=["reactive", "activity"],
+        selected_lane="reactive",
+        reactive_lane_status="completed",
+        activity_lane_status="completed",
         reactive={"status": "completed", "reply_candidate_text": "secret-looking candidate text"},
         activity={"status": "completed", "activity_preview": {"text": "activity text"}},
         result={"mode": "dry_run"},
