@@ -257,6 +257,77 @@ HAM routes heavy development to specialized workers.
 HAM handles local friction directly when the user grants the appropriate trust profile.
 ```
 
+#### Local Autopilot Runner scope vs worker execution
+
+HAM should use a two-lane execution model:
+
+```txt
+Local Autopilot Runner = local friction, verification, and evidence
+Worker execution = serious product changes through specialized coding workers
+```
+
+**Local Autopilot Runner lane**
+
+The Local Autopilot Runner handles bounded, local, evidence-heavy **local operations and verification** work on a machine the user owns and has explicitly paired or trusted.
+
+This lane is for:
+
+- installing/checking local tools
+- validating environment readiness
+- running shell commands under policy
+- starting/stopping local services
+- checking ports/processes
+- applying tiny patches or config tweaks with diff preview
+- running tests/build/lint
+- opening browser previews
+- performing local UI smoke checks
+- downloading/setting up local model files when policy allows
+- moving/cleaning generated artifacts
+- collecting logs/screenshots
+- preparing evidence for handoff
+
+**Product principle:**
+
+```txt
+Local Autopilot removes local friction and proves the work runs here.
+It operates under a visible trust profile, kill switch, audit log, and revocation controls.
+```
+
+**Worker execution lane**
+
+For serious feature work, HAM should orchestrate and route execution to specialized workers.
+
+This lane is for:
+
+- whole modules
+- large refactors
+- auth/RBAC implementation
+- database/schema work
+- repo-wide testing
+- multi-file missions
+- PR-based implementation
+- CI-backed validation
+- production deployment preparation
+
+Worker backends may include:
+
+- Cursor Cloud Agents
+- Cursor SDK local/sidecar
+- Factory/Droid
+- Claude Code or future coding workers
+
+**Product principle:**
+
+```txt
+HAM routes heavy development to specialized workers.
+Heavy development lives behind PRs, reviews, CI, and approval gates.
+Local Autopilot supports that work by clearing local blockers, reproducing issues, validating results, and collecting evidence.
+```
+
+**Boundary rule**
+
+Local Autopilot may perform small scoped edits when the selected trust profile allows it, but structural product implementation should route through worker execution unless the user explicitly chooses a high-trust local development mode (e.g. **Developer Lab / Unsafe Local** in the profile ladder below).
+
 Suggested **trust profiles** (conceptual—not a shipped schema):
 
 ```txt
