@@ -70,6 +70,18 @@ def _vision_heuristic(model_id: str) -> bool:
     return any(n in mid for n in needles)
 
 
+def _merged_generated_media_output_types(supports_img: bool, supports_vid: bool) -> list[str]:
+    """Union of sanitized output MIME buckets for capability surfacing."""
+    out: list[str] = []
+    if supports_img:
+        out.extend(["image/png", "image/jpeg", "image/webp", "image/gif"])
+    if supports_vid:
+        for mime in ("video/mp4", "video/webm"):
+            if mime not in out:
+                out.append(mime)
+    return out
+
+
 def _build_generation_capabilities_payload() -> dict[str, Any]:
     """Conservative media-generation flags (orthogonal to chat model / vision input)."""
     core_ok = bool(image_generation_feature_enabled() and openrouter_api_key_configured())
@@ -79,8 +91,10 @@ def _build_generation_capabilities_payload() -> dict[str, Any]:
 
     supports_image_generation = False
     supports_image_to_image = False
+    supports_video_generation = False
     supports_reference_images = False
     media_generation_provider: str | None = None
+    video_generation_provider: str | None = None
 
     notes: list[str] = []
     notes.extend(provider_notes_for_capabilities())
@@ -109,10 +123,13 @@ def _build_generation_capabilities_payload() -> dict[str, Any]:
     elif active == "comfyui":
         crow = comfyui_capabilities_row()
         supports_image_generation = crow.supports_text_to_image
+        supports_video_generation = crow.supports_text_to_video
         supports_image_to_image = False
         supports_reference_images = False
         if supports_image_generation:
             media_generation_provider = "comfyui"
+        if supports_video_generation:
+            video_generation_provider = "comfyui"
 
     notes = list(dict.fromkeys(notes))
     available = availability_dict_rows()
@@ -124,18 +141,19 @@ def _build_generation_capabilities_payload() -> dict[str, Any]:
         "supports_image_generation": supports_image_generation,
         "supports_image_editing": False,
         "supports_image_to_image": supports_image_to_image,
-        "supports_text_to_video": False,
-        "supports_video_generation": False,
+        "supports_text_to_video": supports_video_generation,
+        "supports_video_generation": supports_video_generation,
         "supports_image_to_video": False,
         "supports_video_editing": False,
-        "supports_async_media_jobs": False,
+        "supports_async_media_jobs": bool(supports_video_generation),
         "supports_reference_images": supports_reference_images,
         "generated_media_max_duration_sec": None,
         "generated_media_max_resolution": None,
         "generated_media_output_types": (
-            ["image/png", "image/jpeg", "image/webp", "image/gif"] if supports_image_generation else []
+            _merged_generated_media_output_types(supports_image_generation, supports_video_generation)
         ),
         "media_generation_provider": media_generation_provider,
+        "video_generation_provider": video_generation_provider,
         "media_generation_notes": notes,
         "provider_notes": notes,
     }

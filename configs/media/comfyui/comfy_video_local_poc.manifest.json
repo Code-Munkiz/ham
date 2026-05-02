@@ -1,0 +1,15 @@
+{
+  "workflow_id": "comfy_video_local_poc",
+  "workflow_name": "Local Comfy video generation POC (operator wired)",
+  "model_family": "video_local_poc",
+  "workflow_file": "comfy_video_local_poc.workflow.example.json",
+  "mode": "text_to_video",
+  "required_inputs": ["prompt", "seed"],
+  "outputs": ["video"],
+  "notes": "Template only for local POC. Operator must install/maintain video models and custom nodes on the Comfy worker outside this repo.",
+  "license_check_required": true,
+  "comfy_patches": {
+    "prompt": { "node": "6", "input": "text" },
+    "seed": { "node": "3", "input": "seed" }
+  }
+}

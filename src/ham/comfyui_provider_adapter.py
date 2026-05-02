@@ -1,4 +1,4 @@
-"""ComfyUI HTTP adapter — text-to-image only (Phase 2G.6).
+"""ComfyUI HTTP adapter — text-to-image + text-to-video (Phase 2G.6+, AnimateDiff 2G.12).
 
 Calls a **remote** ComfyUI instance (`HAM_COMFYUI_BASE_URL`). No GPU stack in ham-api.
 
@@ -6,7 +6,8 @@ Workflow graphs are shipped as **tracked templates** under ``configs/media/comfy
 
 Local / operator workers: templates keep a checkpoint **placeholder**. Set optional
 ``HAM_COMFYUI_CHECKPOINT_NAME`` (filename only as listed by ComfyUI, e.g. ``sd_xl_base_1.0.safetensors``)
-to override ``CheckpointLoaderSimple.ckpt_name`` before ``POST /prompt``. Do not put weights in-repo.
+to override ``CheckpointLoaderSimple.ckpt_name`` before ``POST /prompt``. Video graphs use
+``HAM_COMFYUI_VIDEO_WORKFLOW`` (default ``comfy_video_local_poc``). Do not put weights in-repo.
 """
 
 from __future__ import annotations
@@ -259,6 +260,16 @@ def _checkpoint_filename_from_env_optional() -> str | None:
     return raw if raw else None
 
 
+def _animatediff_model_name_from_env_optional() -> str | None:
+    raw = (os.environ.get("HAM_COMFYUI_ANIMATEDIFF_MODEL_NAME") or "").strip()
+    return raw if raw else None
+
+
+def _animatediff_beta_schedule_from_env_optional() -> str | None:
+    raw = (os.environ.get("HAM_COMFYUI_ANIMATEDIFF_BETA_SCHEDULE") or "").strip()
+    return raw if raw else None
+
+
 def _apply_checkpoint_name_env_override(graph: dict[str, Any]) -> None:
     """Substitute CheckpointLoaderSimple ckpt_name when HAM_COMFYUI_CHECKPOINT_NAME is set."""
     name = _checkpoint_filename_from_env_optional()
@@ -273,11 +284,31 @@ def _apply_checkpoint_name_env_override(graph: dict[str, Any]) -> None:
         break
 
 
+def _apply_animatediff_loader_env_override(graph: dict[str, Any]) -> None:
+    """Optional overrides for ``ADE_AnimateDiffLoaderGen1`` motion module pairing."""
+    mm = _animatediff_model_name_from_env_optional()
+    bs = _animatediff_beta_schedule_from_env_optional()
+    if not mm and not bs:
+        return
+    for node in graph.values():
+        if not isinstance(node, dict) or node.get("class_type") != "ADE_AnimateDiffLoaderGen1":
+            continue
+        inp = node.get("inputs")
+        if not isinstance(inp, dict):
+            continue
+        if mm:
+            inp["model_name"] = mm
+        if bs:
+            inp["beta_schedule"] = bs
+        break
+
+
 def _apply_video_workflow_patches(
     workflow: dict[str, Any],
     manifest: dict[str, Any],
     *,
     prompt: str,
+    negative_prompt: str,
     seed: int,
 ) -> dict[str, Any]:
     w = copy.deepcopy(workflow)
@@ -287,9 +318,15 @@ def _apply_video_workflow_patches(
             "VIDEO_GEN_COMFY_WORKFLOW_INVALID",
             "ComfyUI video workflow manifest is invalid.",
         )
-    mapping: dict[str, Any] = {"prompt": prompt, "seed": seed}
+    mapping: dict[str, Any] = {
+        "prompt": prompt,
+        "negative_prompt": negative_prompt,
+        "seed": seed,
+    }
     for key, val in mapping.items():
         spec = patches.get(key)
+        if key == "negative_prompt" and not isinstance(spec, dict):
+            continue
         if not isinstance(spec, dict):
             continue
         node_id = str(spec.get("node") or "").strip()
@@ -473,9 +510,11 @@ class ComfyUIImageProviderAdapter(ImageProviderAdapter):
             workflow_template,
             manifest,
             prompt=pstrip,
+            negative_prompt=comfyui_default_negative_prompt(),
             seed=secrets.randbelow(2**31 - 1),
         )
         _apply_checkpoint_name_env_override(graph)
+        _apply_animatediff_loader_env_override(graph)
 
         client_id = str(uuid.uuid4())
         enqueue = {"prompt": graph, "client_id": client_id}

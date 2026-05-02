@@ -706,6 +706,17 @@ export function WorkspaceChatComposer({
             />
           </div>
 
+          {(catalog?.gateway_mode || "").trim().toLowerCase() === "mock" &&
+          chatCapabilities?.generation?.supports_video_generation ? (
+            <p className="mx-2.5 mb-1 text-[11px] leading-snug text-amber-200/75 md:mx-3.5">
+              Mock chat gateway: <span className="font-medium text-amber-100/90">Send</span> queues a Comfy
+              video from your prompt (same as{" "}
+              <span className="font-medium text-amber-100/90">+ → Generate video</span>). Use{" "}
+              <span className="font-mono text-[10px] text-amber-100/85">HERMES_GATEWAY_MODE=openrouter</span>{" "}
+              for normal assistant replies instead.
+            </p>
+          ) : null}
+
           {voiceBanner ? (
             <div
               className="mx-2.5 flex min-h-0 items-start gap-2 rounded-md border border-red-500/20 bg-red-950/20 px-2 py-1.5 text-[10px] leading-snug text-red-100/90 md:mx-3.5"

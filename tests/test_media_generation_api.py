@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 
 import pytest
@@ -19,8 +20,10 @@ from src.ham.chat_attachment_store import (
 from src.ham.media_provider_adapter import (
     SyntheticTestOnlyImageAdapter,
     UnconfiguredImageProviderAdapter,
+    VideoGenerationResult,
     set_image_generation_adapter_for_tests,
 )
+from src.ham.comfyui_provider_adapter import ComfyUIImageProviderAdapter
 
 
 _TINY_PNG = (
@@ -32,6 +35,17 @@ _TINY_PNG = (
 
 
 client = TestClient(app)
+
+
+class _TinyVideoComfyAdapter(ComfyUIImageProviderAdapter):
+    def __init__(self) -> None:
+        super().__init__(base_url="http://dummy-comfy.invalid", timeout_sec=2.0, poll_sec=0.01)
+
+    def generate_video(self, *, prompt: str, model_id: str | None = None) -> VideoGenerationResult:
+        _ = prompt, model_id
+        # tiny-ish mp4-like prefix only; API only needs bytes + mime for storage/download route tests.
+        blob = b"\x00\x00\x00\x18ftypisom\x00\x00\x02\x00isomiso2avc1mp41"
+        return VideoGenerationResult(data=blob, mime="video/mp4")
 
 
 @pytest.fixture(autouse=True)
@@ -330,3 +344,54 @@ def test_reference_forbidden_when_owner_mismatch(
     )
     assert r.status_code == 403
     assert r.json()["detail"]["error"]["code"] == "ATTACHMENT_FORBIDDEN"
+
+
+def test_generate_video_not_configured_returns_503(local_gm_store: LocalDiskGeneratedMediaStore) -> None:
+    _ = local_gm_store
+    set_image_generation_adapter_for_tests(UnconfiguredImageProviderAdapter())
+    r = client.post("/api/media/videos/generate", json={"prompt": "short clip"})
+    assert r.status_code == 503
+    assert r.json()["detail"]["error"]["code"] == "VIDEO_GEN_NOT_CONFIGURED"
+
+
+def test_generate_video_async_job_roundtrip(local_gm_store: LocalDiskGeneratedMediaStore, monkeypatch: pytest.MonkeyPatch) -> None:
+    _ = local_gm_store
+    monkeypatch.setenv("HAM_MEDIA_PROVIDER", "comfyui")
+    monkeypatch.setenv("HAM_MEDIA_IMAGE_GENERATION_ENABLED", "true")
+    monkeypatch.setenv("HAM_MEDIA_VIDEO_GENERATION_ENABLED", "true")
+    monkeypatch.setenv("HAM_COMFYUI_BASE_URL", "http://127.0.0.1:8188")
+    set_image_generation_adapter_for_tests(_TinyVideoComfyAdapter())
+
+    r = client.post("/api/media/videos/generate", json={"prompt": "a tiny test clip"})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["status"] == "queued"
+    job_id = body["job_id"]
+    assert job_id.startswith("hammj_")
+
+    out = None
+    for _ in range(30):
+        time.sleep(0.05)
+        j = client.get(f"/api/media/jobs/{job_id}")
+        assert j.status_code == 200
+        out = j.json()
+        if out.get("status") in ("succeeded", "failed"):
+            break
+    assert out is not None
+    assert out["status"] == "succeeded", out
+    gid = out["generated_media_id"]
+    assert gid.startswith("hamgm_")
+    assert out["download_url"].endswith(f"/api/media/artifacts/{gid}/download")
+
+    meta = client.get(f"/api/media/artifacts/{gid}")
+    assert meta.status_code == 200
+    m = meta.json()
+    assert m["media_type"] == "video"
+    assert m["mime_type"] == "video/mp4"
+    raw = json.dumps(m)
+    assert "gs://" not in raw
+    assert "127.0.0.1:8188" not in raw
+
+    dl = client.get(f"/api/media/artifacts/{gid}/download")
+    assert dl.status_code == 200
+    assert dl.headers.get("content-type") == "video/mp4"

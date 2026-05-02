@@ -1,0 +1,24 @@
+{
+  "workflow_id": "animatediff_sdxl_gen1_mp4",
+  "workflow_name": "AnimateDiff Gen1 SDXL true-motion clip (operator worker)",
+  "model_family": "animatediff_sdxl",
+  "workflow_file": "animatediff_sdxl_gen1_mp4.workflow.example.json",
+  "mode": "text_to_video",
+  "output_mime": "video/mp4",
+  "required_inputs": ["prompt", "seed"],
+  "optional_inputs": ["negative_prompt"],
+  "outputs": ["video"],
+  "requires_custom_nodes": "ComfyUI-AnimateDiff-Evolved",
+  "requires_models": [
+    "sd_xl_base_1.0.safetensors",
+    "mm_sdxl_v10_beta.ckpt"
+  ],
+  "fallback_workflow": "comfy_video_local_poc",
+  "notes": "Operator installs listed custom nodes on the Comfy worker and places model filenames in standard Comfy folders only outside this repo. No weights committed. Default motion pairing: SDXL base + mm_sdxl_v10_beta with beta_schedule linear (AnimateDiff-SDXL).",
+  "license_check_required": true,
+  "comfy_patches": {
+    "prompt": { "node": "2", "input": "text" },
+    "negative_prompt": { "node": "3", "input": "text" },
+    "seed": { "node": "6", "input": "seed" }
+  }
+}

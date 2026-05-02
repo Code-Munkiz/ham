@@ -12,6 +12,7 @@ Usage (from repo root):
 Optional overrides (shell env wins):
     HAM_COMFYUI_BASE_URL
     HAM_COMFYUI_CHECKPOINT_NAME
+    HAM_COMFYUI_VIDEO_WORKFLOW (default remains ``comfy_video_local_poc`` unless set)
     HAM_GENERATED_MEDIA_DIR
     PORT / HAM_API_PORT
 """
@@ -34,11 +35,14 @@ def _default_generated_media_dir() -> str:
 def _apply_local_comfy_defaults() -> None:
     os.environ.setdefault("HAM_MEDIA_PROVIDER", "comfyui")
     os.environ.setdefault("HAM_MEDIA_IMAGE_GENERATION_ENABLED", "true")
+    os.environ.setdefault("HAM_MEDIA_VIDEO_GENERATION_ENABLED", "true")
     os.environ.setdefault("HAM_COMFYUI_BASE_URL", "http://127.0.0.1:8188")
     os.environ.setdefault("HAM_COMFYUI_DEFAULT_WORKFLOW", "sdxl_baseline")
     os.environ.setdefault("HAM_COMFYUI_WORKER_PROFILE", "local_gpu_workstation")
     os.environ.setdefault("HAM_COMFYUI_TIMEOUT_SEC", "180")
     os.environ.setdefault("HAM_COMFYUI_OUTPUT_POLL_SEC", "2")
+    os.environ.setdefault("HAM_COMFYUI_VIDEO_TIMEOUT_SEC", "600")
+    os.environ.setdefault("HAM_COMFYUI_VIDEO_OUTPUT_MAX_BYTES", str(100 * 1024 * 1024))
     # Placeholder template needs a real checkpoint name for local Comfy workers.
     os.environ.setdefault("HAM_COMFYUI_CHECKPOINT_NAME", "sd_xl_base_1.0.safetensors")
     os.environ.setdefault(
@@ -61,8 +65,16 @@ def main() -> None:
     print(f"- HAM_COMFYUI_BASE_URL={os.environ.get('HAM_COMFYUI_BASE_URL')}")
     print(f"- HAM_COMFYUI_DEFAULT_WORKFLOW={os.environ.get('HAM_COMFYUI_DEFAULT_WORKFLOW')}")
     print(f"- HAM_COMFYUI_CHECKPOINT_NAME={os.environ.get('HAM_COMFYUI_CHECKPOINT_NAME')}")
+    print(f"- HAM_COMFYUI_VIDEO_WORKFLOW={(os.environ.get('HAM_COMFYUI_VIDEO_WORKFLOW') or 'comfy_video_local_poc').strip()}")
     print(f"- HAM_GENERATED_MEDIA_STORE={os.environ.get('HAM_GENERATED_MEDIA_STORE')}")
     print(f"- HAM_GENERATED_MEDIA_DIR={os.environ.get('HAM_GENERATED_MEDIA_DIR')}")
+    gw = (os.environ.get("HERMES_GATEWAY_MODE") or "").strip().lower() or "mock"
+    print(f"- HERMES_GATEWAY_MODE={gw} (chat path; unrelated to media jobs)")
+    if gw == "mock":
+        print(
+            "  Tip: Composer + -> Generate video calls Comfy. Chat text still uses mock echo "
+            "unless you set HERMES_GATEWAY_MODE=openrouter (and OPENROUTER_API_KEY) or http."
+        )
 
     from scripts.run_local_api import main as run_local_main
 

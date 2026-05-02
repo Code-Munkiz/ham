@@ -120,6 +120,31 @@ function timeStr() {
   });
 }
 
+/**
+ * True → composer Send should call the async video pipeline instead of /api/chat (text-only submits).
+ * - Mock gateway (local POC): every non-empty prompt is treated as video so Send matches + → Generate video.
+ * - Real gateway: only obvious video phrasing avoids hijacking normal chat.
+ */
+function shouldEnqueueVideoOnComposerSend(opts: {
+  trimmed: string;
+  supportsVideo: boolean;
+  gatewayMode: string | null | undefined;
+}): boolean {
+  const t = opts.trimmed.trim();
+  if (!t || !opts.supportsVideo) return false;
+  const gm = (opts.gatewayMode || "").trim().toLowerCase();
+  if (gm === "mock") return true;
+  return (
+    /\b(video|videos|videoclip|clip|clips|gif|animate|animation|animated|movie|film|footage|cinematic)\b/i.test(
+      t,
+    ) ||
+    /\b\d+\s*(sec|secs|second|seconds)\b/i.test(t) ||
+    /^(make|create|render)\s+/i.test(t) ||
+    /\b(generate|generating)\s+\w*\s*\b(video|clip|animation)\b/i.test(t) ||
+    /\b(video|clip|animation)\b.*\b(of|showing|about)\b/i.test(t)
+  );
+}
+
 function shortId(v: string | null | undefined): string {
   const s = String(v || "").trim();
   if (!s) return "—";
@@ -2354,7 +2379,6 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
 
   const onFormSubmit = () => {
     void (async () => {
-      // Intentional for Phase 2G.10: explicit + menu action handles video generation.
       const trimmed = input.trim();
       const usable = attachments.filter(
         (a) => !a.error && a.uploadPhase !== "failed" && a.uploadPhase !== "uploading",
@@ -2477,6 +2501,58 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         return;
       }
       if (!trimmed) return;
+
+      if (!String(missionIdFromQuery || "").trim()) {
+        const nlIntentImage = parseWorkspaceImageGenerationIntent(trimmed);
+        if (nlIntentImage) {
+          if (voiceTranscribing || imageGenInFlight || videoGenInFlight) return;
+
+          let capsPayload = chatCapabilities;
+          if (chatCapabilitiesLoading || capsPayload === null) {
+            try {
+              capsPayload = await fetchChatCapabilities(modelId);
+              setChatCapabilities(capsPayload);
+            } catch {
+              capsPayload = null;
+              setChatCapabilities(null);
+            } finally {
+              setChatCapabilitiesLoading(false);
+            }
+          }
+
+          if (capsPayload?.generation?.supports_image_generation) {
+            await runWorkspaceImageGeneration({
+              apiPrompt: nlIntentImage,
+              transcriptUserLine: trimmed,
+            });
+            return;
+          }
+          // Workspace has no image capability (or caps fetch failed): fall through to video/chat routing.
+        }
+      }
+
+      const supportsComposerVideo =
+        Boolean(
+          chatCapabilities?.generation?.supports_video_generation ||
+            chatCapabilities?.generation?.supports_text_to_video,
+        ) && String(missionIdFromQuery || "").trim().length === 0;
+
+      if (
+        supportsComposerVideo &&
+        !chatCapabilitiesLoading &&
+        !catalogLoading &&
+        shouldEnqueueVideoOnComposerSend({
+          trimmed,
+          supportsVideo: supportsComposerVideo,
+          gatewayMode: catalog?.gateway_mode ?? null,
+        })
+      ) {
+        void runWorkspaceVideoGeneration({
+          apiPrompt: trimmed,
+          transcriptUserLine: trimmed,
+        });
+        return;
+      }
 
       void send(trimmed);
     })();

@@ -16,11 +16,7 @@ from typing import Any
 
 import httpx
 
-from src.llm_client import (
-    get_openrouter_base_url,
-    normalized_openrouter_api_key,
-    openrouter_api_key_is_plausible,
-)
+from src.llm_client import normalized_openrouter_api_key, openrouter_api_key_is_plausible
 
 _ALLOWED_IMAGE_MIME = frozenset({"image/png", "image/jpeg", "image/webp", "image/gif"})
 
@@ -31,6 +27,15 @@ class ImageGenerationResult:
     mime: str
     width: int | None
     height: int | None
+
+
+@dataclass
+class VideoGenerationResult:
+    data: bytes
+    mime: str
+    width: int | None = None
+    height: int | None = None
+    duration_sec: float | None = None
 
 
 class ImageGenerationError(Exception):
@@ -60,12 +65,27 @@ def default_image_output_max_bytes() -> int:
     return 12 * 1024 * 1024
 
 
+def default_video_output_max_bytes() -> int:
+    raw = (os.environ.get("HAM_MEDIA_VIDEO_OUTPUT_MAX_BYTES") or "").strip()
+    if raw:
+        try:
+            return max(200_000, min(500 * 1024 * 1024, int(raw)))
+        except ValueError:
+            pass
+    return 80 * 1024 * 1024
+
+
 def default_image_model_env() -> str:
     return (os.environ.get("HAM_MEDIA_IMAGE_DEFAULT_MODEL") or "").strip()
 
 
 def image_generation_feature_enabled() -> bool:
     v = (os.environ.get("HAM_MEDIA_IMAGE_GENERATION_ENABLED") or "").strip().lower()
+    return v in ("1", "true", "yes", "on")
+
+
+def video_generation_feature_enabled() -> bool:
+    v = (os.environ.get("HAM_MEDIA_VIDEO_GENERATION_ENABLED") or "").strip().lower()
     return v in ("1", "true", "yes", "on")
 
 

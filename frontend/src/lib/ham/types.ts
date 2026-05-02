@@ -262,6 +262,9 @@ export interface HamMediaJobStatusResponse {
   job_id: string;
   status: "queued" | "running" | "succeeded" | "failed" | "canceled" | string;
   generated_media_id?: string | null;
+  /** Safe relative path when status is succeeded. */
+  download_url?: string | null;
+  media_type?: "video" | null;
   error?: { code?: string | null; message?: string | null } | null;
 }
 
@@ -314,6 +317,7 @@ export interface ChatGenerationCapabilities {
   generated_media_max_resolution: string | null;
   generated_media_output_types: string[];
   media_generation_provider: string | null;
+  video_generation_provider?: string | null;
   media_generation_notes: string[];
   /** Phase 2G.7: optional opaque profile (`local_gpu_workstation`, …) when provider is comfyui; sanitized server-side. */
   comfy_worker_profile?: string;

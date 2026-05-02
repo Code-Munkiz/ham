@@ -135,3 +135,32 @@ def test_comfyui_worker_profile_unknown_value_omitted(monkeypatch: pytest.Monkey
     monkeypatch.setenv("HAM_COMFYUI_WORKER_PROFILE", "operator basement cluster 7 — do not expose")
     p = build_chat_capabilities_payload(model_id="openai/gpt-4o", gateway_mode="openrouter")
     assert "comfy_worker_profile" not in p["generation"]
+
+
+def test_comfyui_video_generation_flags_require_explicit_enable(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HAM_MEDIA_PROVIDER", "comfyui")
+    monkeypatch.setenv("HAM_MEDIA_IMAGE_GENERATION_ENABLED", "true")
+    monkeypatch.setenv("HAM_COMFYUI_BASE_URL", "http://127.0.0.1:8188")
+    monkeypatch.delenv("HAM_MEDIA_VIDEO_GENERATION_ENABLED", raising=False)
+    p = build_chat_capabilities_payload(model_id="openai/gpt-4o", gateway_mode="openrouter")
+    assert p["generation"]["supports_text_to_video"] is False
+    assert p["generation"]["supports_video_generation"] is False
+    assert p["generation"].get("video_generation_provider") in (None, "")
+
+    monkeypatch.setenv("HAM_MEDIA_VIDEO_GENERATION_ENABLED", "true")
+    p2 = build_chat_capabilities_payload(model_id="openai/gpt-4o", gateway_mode="openrouter")
+    assert p2["generation"]["supports_text_to_video"] is True
+    assert p2["generation"]["supports_video_generation"] is True
+    assert p2["generation"]["video_generation_provider"] == "comfyui"
+
+
+def test_comfyui_video_capabilities_include_output_mimes(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HAM_MEDIA_PROVIDER", "comfyui")
+    monkeypatch.setenv("HAM_MEDIA_IMAGE_GENERATION_ENABLED", "true")
+    monkeypatch.setenv("HAM_MEDIA_VIDEO_GENERATION_ENABLED", "true")
+    monkeypatch.setenv("HAM_COMFYUI_BASE_URL", "http://127.0.0.1:8188")
+    p = build_chat_capabilities_payload(model_id="openai/gpt-4o", gateway_mode="mock")
+    g = p["generation"]
+    assert g["supports_async_media_jobs"] is True
+    assert "video/mp4" in g["generated_media_output_types"]
+    assert "127.0.0.1" not in json.dumps(g)

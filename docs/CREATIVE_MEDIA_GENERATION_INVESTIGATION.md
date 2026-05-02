@@ -323,6 +323,12 @@ Workspace chat can supply **`reference_attachment_id`** (`hamatt_*`) on **`POST 
 - Frontend calls backend async endpoints (`POST /api/media/videos/generate`, poll `GET /api/media/jobs/{id}`), then resolves the final artifact through the same safe generated-media metadata/download routes.
 - Generated video cards render queued/running/failed/succeeded states with `<video controls>` and a backend-mediated download action only.
 
+### Phase 2G.12 AnimateDiff true-motion workflow (templates only)
+
+- Repo ships **`configs/media/comfyui/animatediff_sdxl_gen1_mp4.manifest.json`** + **`.workflow.example.json`** (graph shape + **`comfy_patches`** targets only).
+- Operators install **`ComfyUI-AnimateDiff-Evolved`**, **`mm_sdxl_v10_beta.ckpt`**, and an SDXL **`sd_xl_base_1.0.safetensors`** (or compatible) checkpoint on the **Comfy worker** under normal Comfy model folders (**no weights in-repo**).
+- **`HAM_COMFYUI_VIDEO_WORKFLOW`** selects **`animatediff_sdxl_gen1_mp4`** vs **`comfy_video_local_poc`** repeated-frame fallback; optional **`HAM_COMFYUI_ANIMATEDIFF_MODEL_NAME`** / **`HAM_COMFYUI_ANIMATEDIFF_BETA_SCHEDULE`** override motion pairing when manifests must stay generic.
+
 ### Phase 2G.6 ComfyUI adapter + SDXL templates (implemented)
 
 - **`src/ham/comfyui_provider_adapter.py`** — loads **`configs/media/comfyui/`** manifests, **`POST /prompt`**, polls **`GET /history/{prompt_id}`**, retrieves bytes from **`GET /view`** server-side only; rejects reference inputs early (**`IMAGE_TO_IMAGE_NOT_SUPPORTED`**).

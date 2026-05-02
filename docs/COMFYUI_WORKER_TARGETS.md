@@ -59,6 +59,8 @@ Hosted “Comfy-as-a-Service” APIs.
 |----|---------------|
 | **`sdxl_baseline`** | Shipped Phase 2G.6 templates (`configs/media/comfyui/sdxl_baseline.*`). |
 | **`sdxl_vanilla`** | **Alias → `sdxl_baseline`** inside `ham-api` (**no duplicate graph files** required). **`HAM_COMFYUI_DEFAULT_WORKFLOW=sdxl_vanilla`** supported. |
+| **`comfy_video_local_poc`** | Repeated-frame **`video/mp4`** template for local POC; default when **`HAM_COMFYUI_VIDEO_WORKFLOW`** unset. |
+| **`animatediff_sdxl_gen1_mp4`** | AnimateDiff Gen1 **SDXL** true-motion (**`video/mp4`**); requires **`ComfyUI-AnimateDiff-Evolved`** + listed motion/base filenames on the **worker only** — select via **`HAM_COMFYUI_VIDEO_WORKFLOW`** (**`comfy_video_local_poc`** remains manifest **fallback_workflow** / operator default).
 
 ### SeargeSDXL (`sdxl_searge`)
 
@@ -120,7 +122,7 @@ Regression follow-up for local smoke:
 
 - Workspace chat now exposes **`+ → Generate video`** in local/dev mode when capabilities report video generation support.
 - The UI uses backend routes only: **`POST /api/media/videos/generate`** + poll **`GET /api/media/jobs/{id}`** + download through existing generated-media artifact routes.
-- Natural-language auto-routing for "create a video..." remains deferred until a real Comfy video worker smoke pass is complete.
+- Natural-language auto-routing for prompts like **create a video…** stays **off** (**explicit menu action only**) even when AnimateDiff true-motion (**`HAM_COMFYUI_VIDEO_WORKFLOW=animatediff_sdxl_gen1_mp4`**) is provisioned on the worker.
 - If worker/model/custom node setup is missing, expected behavior is queued/running/failure/unavailable UI states (not fake success).
 
 ---

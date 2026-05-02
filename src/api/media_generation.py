@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import threading
 from typing import Any
 
 from fastapi import APIRouter, Header, HTTPException
@@ -16,8 +17,11 @@ from src.ham.chat_attachment_store import (
     is_safe_attachment_id,
 )
 from src.ham.generated_media_store import GeneratedMediaRecord, get_generated_media_store, is_safe_generated_media_id
+from src.ham.media_jobs import create_media_job, get_media_job, is_safe_media_job_id, update_media_job
+from src.ham.comfyui_provider_adapter import ComfyUIImageProviderAdapter
 from src.ham.media_provider_adapter import (
     ImageGenerationError,
+    VideoGenerationResult,
     default_image_model_env,
     default_image_output_max_bytes,
     default_image_prompt_max_chars,
@@ -25,6 +29,7 @@ from src.ham.media_provider_adapter import (
     prompt_digest_and_excerpt,
     reference_image_generation_enabled,
     UnconfiguredImageProviderAdapter,
+    video_generation_feature_enabled,
 )
 
 router = APIRouter(tags=["creative-media"])
@@ -74,6 +79,11 @@ class GenerateImageRequestBody(BaseModel):
     reference_attachment_id: str | None = None
 
 
+class GenerateVideoRequestBody(BaseModel):
+    prompt: str = Field(..., min_length=1)
+    model_id: str | None = None
+
+
 def _owner_for_request(authorization: str | None) -> str:
     actor, _hdr = _resolve_chat_clerk_context(authorization, None, route="generate_image")
     return actor.user_id if actor is not None else ""
@@ -81,6 +91,66 @@ def _owner_for_request(authorization: str | None) -> str:
 
 def _public_download_path(gmid: str) -> str:
     return f"/api/media/artifacts/{gmid}/download"
+
+
+def _video_ext_for_mime(mime: str) -> str:
+    m = mime.lower()
+    if m == "video/mp4":
+        return "mp4"
+    if m == "video/webm":
+        return "webm"
+    return "bin"
+
+
+def _run_video_job(
+    *,
+    job_id: str,
+    prompt: str,
+    model_id: str | None,
+    owner: str,
+) -> None:
+    update_media_job(job_id, status="running")
+    try:
+        adapter = get_image_generation_adapter()
+        if not isinstance(adapter, ComfyUIImageProviderAdapter):
+            raise ImageGenerationError("VIDEO_GENERATION_FAILED", "Video generation failed.")
+        res: VideoGenerationResult = adapter.generate_video(prompt=prompt, model_id=model_id)
+        digest, excerpt = prompt_digest_and_excerpt(prompt)
+        store = get_generated_media_store()
+        gmid = store.new_id()
+        ext = _video_ext_for_mime(res.mime)
+        safe_name = f"ham-generated.{ext}"
+        rec = GeneratedMediaRecord(
+            id=gmid,
+            media_type="video",
+            mime=res.mime,
+            size_bytes=len(res.data),
+            owner_key=owner,
+            status="ready",
+            safe_display_name=safe_name,
+            prompt_digest=digest,
+            prompt_excerpt=excerpt,
+            provider_slug=getattr(adapter, "provider_slug", None),
+            model_id=(model_id or None),
+            width=res.width,
+            height=res.height,
+            storage_blob_key=None,
+            from_reference_image=False,
+        )
+        store.put(res.data, rec)
+        update_media_job(
+            job_id,
+            status="succeeded",
+            generated_media_id=gmid,
+            download_url=_public_download_path(gmid),
+            media_type="video",
+        )
+    except Exception:
+        update_media_job(
+            job_id,
+            status="failed",
+            error={"code": "VIDEO_GENERATION_FAILED", "message": "Video generation failed."},
+        )
 
 
 def _resolve_reference_attachment(
@@ -290,6 +360,98 @@ async def post_generate_image(
     }
     if used_reference:
         out["generated_from_reference_image"] = True
+    return out
+
+
+@router.post("/api/media/videos/generate")
+async def post_generate_video(
+    body: GenerateVideoRequestBody,
+    authorization: str | None = Header(None, alias="Authorization"),
+) -> dict[str, Any]:
+    prompt = body.prompt.strip()
+    mc = default_image_prompt_max_chars()
+    if not prompt:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": {"code": "VIDEO_GEN_PROMPT_EMPTY", "message": "Prompt must not be empty."}},
+        )
+    if len(prompt) > mc:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": {
+                    "code": "VIDEO_GEN_PROMPT_TOO_LONG",
+                    "message": f"Prompt exceeds maximum length ({mc} characters).",
+                },
+            },
+        )
+    if not video_generation_feature_enabled():
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": {
+                    "code": "VIDEO_GEN_NOT_CONFIGURED",
+                    "message": "Video generation is not enabled or is not configured on this server.",
+                },
+            },
+        )
+    adapter = get_image_generation_adapter()
+    if isinstance(adapter, UnconfiguredImageProviderAdapter) or not isinstance(adapter, ComfyUIImageProviderAdapter):
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": {
+                    "code": "VIDEO_GEN_NOT_CONFIGURED",
+                    "message": "Video generation is not enabled or is not configured on this server.",
+                },
+            },
+        )
+    owner = _owner_for_request(authorization)
+    job = create_media_job(status="queued", owner_key=owner)
+    t = threading.Thread(
+        target=_run_video_job,
+        kwargs={
+            "job_id": str(job["job_id"]),
+            "prompt": prompt,
+            "model_id": body.model_id,
+            "owner": owner,
+        },
+        daemon=True,
+    )
+    t.start()
+    return {"job_id": job["job_id"], "status": "queued"}
+
+
+@router.get("/api/media/jobs/{job_id}")
+async def get_media_job_status(
+    job_id: str,
+    authorization: str | None = Header(None, alias="Authorization"),
+) -> dict[str, Any]:
+    if not is_safe_media_job_id(job_id):
+        raise HTTPException(
+            status_code=404,
+            detail={"error": {"code": "MEDIA_JOB_NOT_FOUND", "message": "Unknown media job id."}},
+        )
+    job = get_media_job(job_id)
+    if job is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": {"code": "MEDIA_JOB_NOT_FOUND", "message": "Unknown media job id."}},
+        )
+    actor, _hdr = _resolve_chat_clerk_context(authorization, None, route="get_media_job_status")
+    owner = str(job.get("owner_key") or "").strip()
+    if owner and (actor is None or actor.user_id != owner):
+        raise HTTPException(
+            status_code=403,
+            detail={"error": {"code": "MEDIA_JOB_FORBIDDEN", "message": "Not allowed to read this media job."}},
+        )
+    out: dict[str, Any] = {"job_id": job["job_id"], "status": job["status"]}
+    if job.get("status") == "succeeded":
+        out["generated_media_id"] = job.get("generated_media_id")
+        out["download_url"] = job.get("download_url")
+        out["media_type"] = "video"
+    elif job.get("status") == "failed":
+        out["error"] = {"code": "VIDEO_GENERATION_FAILED", "message": "Video generation failed."}
     return out
 
 

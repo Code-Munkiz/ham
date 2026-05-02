@@ -483,3 +483,136 @@ def test_comfyui_generate_video_rejects_non_video_mime_and_no_leak(monkeypatch: 
     msg = str(ei.value)
     assert "dummy-comfy.invalid" not in msg
     assert "/view" not in msg
+
+
+def test_animatediff_manifest_and_example_shapes() -> None:
+    root = Path(__file__).resolve().parents[1]
+    man_path = root / "configs" / "media" / "comfyui" / "animatediff_sdxl_gen1_mp4.manifest.json"
+    data = json.loads(man_path.read_text(encoding="utf-8"))
+    assert data.get("workflow_id") == "animatediff_sdxl_gen1_mp4"
+    assert data.get("fallback_workflow") == "comfy_video_local_poc"
+    patches = data.get("comfy_patches") or {}
+    assert patches.get("prompt") == {"node": "2", "input": "text"}
+    assert patches.get("negative_prompt") == {"node": "3", "input": "text"}
+    assert patches.get("seed") == {"node": "6", "input": "seed"}
+    raw_m = json.dumps(data)
+    assert "gs://" not in raw_m
+    assert "C:\\" not in raw_m
+
+    wf_name = data.get("workflow_file")
+    assert wf_name
+    wf_path = root / "configs" / "media" / "comfyui" / wf_name
+    wf = json.loads(wf_path.read_text(encoding="utf-8"))
+    wf_raw = json.dumps(wf)
+    assert "gs://" not in wf_raw
+    assert ":\\" not in wf_raw and "C:/" not in wf_raw and "/home/" not in wf_raw
+    five = wf.get("5") or {}
+    assert five.get("class_type") == "ADE_AnimateDiffLoaderGen1"
+    assert five.get("inputs", {}).get("model_name") == "mm_sdxl_v10_beta.ckpt"
+
+
+def test_comfy_generate_video_animatediff_patches_and_env_overrides(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("HAM_COMFYUI_VIDEO_WORKFLOW", "animatediff_sdxl_gen1_mp4")
+    monkeypatch.setenv("HAM_COMFYUI_VIDEO_TIMEOUT_SEC", "30")
+    monkeypatch.setenv("HAM_COMFYUI_VIDEO_OUTPUT_MAX_BYTES", "2000000")
+    monkeypatch.setenv("HAM_MEDIA_IMAGE_PROMPT_MAX_CHARS", "4000")
+    monkeypatch.setenv("HAM_COMFYUI_CHECKPOINT_NAME", "sd_xl_base_1.0.safetensors")
+    monkeypatch.setenv("HAM_COMFYUI_DEFAULT_NEGATIVE_PROMPT", "neg-from-env")
+    monkeypatch.setenv("HAM_COMFYUI_ANIMATEDIFF_MODEL_NAME", "mm_override.ckpt")
+    monkeypatch.setenv("HAM_COMFYUI_ANIMATEDIFF_BETA_SCHEDULE", "custom-beta")
+
+    mp4 = b"\x00\x00\x00\x18ftypisom\x00\x00\x02\x00isomiso2avc1mp41"
+    captured: dict[str, object] = {}
+
+    def make_client(**_kw: object):
+        fake = MagicMock()
+
+        def _post(_url: str, **kw: object):
+            captured["prompt_json"] = kw.get("json")
+            return httpx.Response(200, json={"prompt_id": "vid-ad", "number": 0, "node_errors": {}})
+
+        fake.post.side_effect = _post
+        hist = {
+            "vid-ad": {
+                "outputs": {
+                    "9": {
+                        "images": [{"filename": "clip.mp4", "type": "output", "subfolder": ""}],
+                        "animated": [True],
+                    }
+                }
+            }
+        }
+        fake.get.side_effect = [
+            httpx.Response(200, json=hist),
+            httpx.Response(200, content=mp4, headers={"content-type": "video/mp4"}),
+        ]
+        fake.__enter__ = lambda self_: fake
+        fake.__exit__ = lambda *_: False
+        return fake
+
+    with patch.object(httpx, "Client", side_effect=make_client):
+        adap = ComfyUIImageProviderAdapter(
+            base_url="http://dummy-comfy.invalid",
+            workflow_key="sdxl_baseline",
+            timeout_sec=5.0,
+            poll_sec=0.01,
+        )
+        v = adap.generate_video(prompt="robot monkey typing", model_id=None)
+
+    pj = captured.get("prompt_json") or {}
+    graph = pj.get("prompt") or {}
+    assert v.mime == "video/mp4"
+
+    assert (graph.get("2") or {}).get("inputs", {}).get("text") == "robot monkey typing"
+    assert (graph.get("3") or {}).get("inputs", {}).get("text") == "neg-from-env"
+    seed_val = (graph.get("6") or {}).get("inputs", {}).get("seed")
+    assert isinstance(seed_val, int)
+
+    ck = (graph.get("1") or {}).get("inputs", {}).get("ckpt_name")
+    assert ck == "sd_xl_base_1.0.safetensors"
+
+    ld = graph.get("5") or {}
+    assert ld.get("class_type") == "ADE_AnimateDiffLoaderGen1"
+    assert ld.get("inputs", {}).get("model_name") == "mm_override.ckpt"
+    assert ld.get("inputs", {}).get("beta_schedule") == "custom-beta"
+
+
+def test_comfy_generate_video_poc_ignores_negative_patch_when_manifest_omits(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("HAM_COMFYUI_VIDEO_WORKFLOW", "comfy_video_local_poc")
+    monkeypatch.setenv("HAM_COMFYUI_VIDEO_TIMEOUT_SEC", "30")
+    monkeypatch.setenv("HAM_COMFYUI_VIDEO_OUTPUT_MAX_BYTES", "2000000")
+    monkeypatch.setenv("HAM_MEDIA_IMAGE_PROMPT_MAX_CHARS", "4000")
+    monkeypatch.setenv("HAM_COMFYUI_DEFAULT_NEGATIVE_PROMPT", "THIS_SHOULD_NOT_APPEAR_IN_POC")
+    captured: dict[str, object] = {}
+
+    mp4 = b"\x00\x00\x00\x18ftypisom\x00\x00\x02\x00isomiso2avc1mp41"
+
+    def make_client(**_kw: object):
+        fake = MagicMock()
+
+        def _post(_url: str, **kw: object):
+            captured["prompt_json"] = kw.get("json")
+            return httpx.Response(200, json={"prompt_id": "vid-p", "number": 0, "node_errors": {}})
+
+        fake.post.side_effect = _post
+        hist = {
+            "vid-p": {"outputs": {"9": {"videos": [{"filename": "out.mp4", "type": "output", "subfolder": ""}]}}}
+        }
+        fake.get.side_effect = [
+            httpx.Response(200, json=hist),
+            httpx.Response(200, content=mp4, headers={"content-type": "video/mp4"}),
+        ]
+        fake.__enter__ = lambda self_: fake
+        fake.__exit__ = lambda *_: False
+        return fake
+
+    with patch.object(httpx, "Client", side_effect=make_client):
+        adap = ComfyUIImageProviderAdapter(base_url="http://dummy.invalid", workflow_key="sdxl_baseline", poll_sec=0.01)
+        adap.generate_video(prompt="x", model_id=None)
+
+    graph = (captured.get("prompt_json") or {}).get("prompt") or {}
+    assert (graph.get("7") or {}).get("inputs", {}).get("text") != "THIS_SHOULD_NOT_APPEAR_IN_POC"

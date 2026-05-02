@@ -105,17 +105,18 @@ def _openrouter_effectively_configured() -> bool:
 
 def comfyui_capabilities_row() -> MediaProviderCapabilityMetadata:
     """Metadata only — no outbound calls."""
-    from src.ham.comfyui_provider_adapter import comfyui_image_generation_ready
+    from src.ham.comfyui_provider_adapter import comfyui_image_generation_ready, comfyui_video_generation_ready
 
-    ready = comfyui_image_generation_ready()
+    ready_img = comfyui_image_generation_ready()
+    ready_vid = comfyui_video_generation_ready()
     return MediaProviderCapabilityMetadata(
         provider_id="comfyui",
         display_name="ComfyUI (separate GPU service)",
-        configured=ready,
-        supports_text_to_image=ready,
+        configured=bool(ready_img or ready_vid),
+        supports_text_to_image=ready_img,
         supports_image_to_image=False,
         supports_image_editing=False,
-        supports_text_to_video=False,
+        supports_text_to_video=ready_vid,
         supports_image_to_video=False,
     )
 
