@@ -27,9 +27,69 @@ import {
   type XCapabilities,
 } from "../../adapters/socialAdapter";
 import { WorkspaceSurfaceHeader, WorkspaceSurfaceStateCard } from "../../components/workspaceSurfaceChrome";
+import { SOCIAL_COPY } from "./lib/socialCopy";
+import {
+  buildSocialProductTruth,
+  deriveChannelProductTruth,
+  deriveContentStyle,
+  discordSafetyHints,
+  formatLooseRecordSummary,
+  friendlyDraftStatus,
+  friendlyXPreviewStatus,
+  operatingModeSummary,
+  personaBlockedTopicsSummary,
+  resolveProviderReadiness,
+  telegramApprovalWindowProductPill,
+  telegramPacingProductPill,
+  telegramSafetyHints,
+  type ProductProviderReadiness,
+  xSafetyHints,
+} from "./lib/socialViewModel";
 
 function titleCase(value: string): string {
   return value.replace(/_/g, " ").replace(/\b\w/g, (m) => m.toUpperCase());
+}
+
+function TechnicalProofIntro() {
+  return (
+    <div className="col-span-full rounded-xl border border-amber-400/25 bg-amber-500/5 p-3 text-sm leading-relaxed text-amber-50/90">
+      {SOCIAL_COPY.technicalProofWarning}
+    </div>
+  );
+}
+
+function humanTelegramChatLabel(chatType?: string | null): string {
+  if (!chatType) return "Telegram conversation";
+  const t = chatType.toLowerCase();
+  if (t === "group" || t === "supergroup") return "Telegram group";
+  if (t === "channel") return "Telegram channel";
+  if (t === "private") return "Direct message";
+  return `${titleCase(chatType)} chat`;
+}
+
+function friendlyApplyOutcome(record: Record<string, unknown> | null): { summary: string; statusLine: string | null } {
+  if (!record) return { summary: "No result details were returned for this action.", statusLine: null };
+  const statusRaw = record.status;
+  const statusLine = typeof statusRaw === "string" ? `Status: ${titleCase(statusRaw)}` : null;
+  const text = formatLooseRecordSummary(record);
+  const summary =
+    text ||
+    (statusLine
+      ? "Ham finished this step. Open Advanced technical proof if you need the full raw response."
+      : "Ham finished this step.");
+  return { summary, statusLine };
+}
+
+function FriendlyLiveOutcomeCard({ title, record }: { title: string; record: Record<string, unknown> | null }) {
+  const { summary, statusLine } = friendlyApplyOutcome(record);
+  return (
+    <section className="rounded-2xl border border-white/10 bg-black/20 p-4 shadow-sm">
+      <h3 className="text-sm font-semibold text-white/85">{title}</h3>
+      {statusLine ? <p className="mt-1 text-xs text-white/48">{statusLine}</p> : null}
+      <p className="mt-3 text-sm leading-relaxed text-white/75">{summary}</p>
+      <p className="mt-2 text-xs text-white/42">Full technical detail lives under Advanced technical proof.</p>
+    </section>
+  );
 }
 
 function statusTone(status: string): "ok" | "warn" | "danger" | "muted" {
@@ -65,26 +125,64 @@ function BoolRow({ label, value }: { label: string; value: boolean }) {
 }
 
 type SocialSelection = "persona" | "x" | "telegram" | "discord";
-type SocialSection = "overview" | "channels" | "persona" | "history" | "setup";
+type SocialSection = "overview" | "channels" | "persona" | "activity" | "setup";
+type ChannelDetailTab = "operate" | "inbox" | "activity" | "setup" | "advanced";
 
 const SOCIAL_SECTIONS: { id: SocialSection; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "channels", label: "Channels" },
   { id: "persona", label: "Persona" },
-  { id: "history", label: "History" },
+  { id: "activity", label: "Activity" },
   { id: "setup", label: "Setup" },
 ];
 
+const CHANNEL_DETAIL_TABS: { id: ChannelDetailTab; label: string }[] = [
+  { id: "operate", label: "Preview & send" },
+  { id: "inbox", label: "Inbox" },
+  { id: "activity", label: "Activity" },
+  { id: "setup", label: "Setup" },
+  { id: "advanced", label: "Advanced technical proof" },
+];
+
+function readinessLabel(status: string): string {
+  if (status === "active" || status === "ready") return "Ready";
+  if (status === "setup_required") return "Needs setup";
+  if (status === "coming_soon") return "Coming soon";
+  if (status === "blocked") return "Held by safety check";
+  return "Limited";
+}
+
+function productReadinessTone(status: ProductProviderReadiness): "ok" | "warn" | "danger" | "muted" {
+  if (status === "Ready") return "ok";
+  if (status === "Coming soon") return "muted";
+  if (status === "Blocked") return "danger";
+  if (status === "Limited" || status === "Needs setup") return "warn";
+  return "muted";
+}
+
 function ProviderCard({
   provider,
+  snapshot,
   selected = false,
   onSelect,
+  lastActivity,
+  primaryAction,
+  warning,
 }: {
   provider: SocialProvider;
+  snapshot?: SocialSnapshot | null;
   selected?: boolean;
   onSelect?: () => void;
+  lastActivity?: string;
+  primaryAction?: string;
+  warning?: string | null;
 }) {
-  const tone = statusTone(provider.status);
+  const readinessProduct =
+    snapshot && (provider.id === "x" || provider.id === "telegram" || provider.id === "discord")
+      ? resolveProviderReadiness(snapshot, provider.id)
+      : null;
+  const readinessLabelText = readinessProduct ?? readinessLabel(provider.status);
+  const tone = readinessProduct ? productReadinessTone(readinessProduct) : statusTone(provider.status);
   return (
     <button
       type="button"
@@ -99,22 +197,20 @@ function ProviderCard({
           <div className="text-base font-semibold text-white/92">{provider.label}</div>
           <div className="mt-1 text-xs text-white/45">
             {provider.id === "x"
-              ? "Active channel for posts, replies, and governed live actions."
+              ? "Ready for previews and confirmed actions."
               : provider.id === "telegram"
-                ? "Telegram bot channel with guarded previews, replies, and one-shot sends."
+                ? "Ready for previews and confirmed actions."
                 : provider.id === "discord"
-                  ? "Setup and readiness only for now. Messaging controls come later."
+                  ? "Setup guidance available. Messaging controls come later."
                   : "Future channel slot."}
           </div>
         </div>
-        <StatusPill label={titleCase(provider.status)} tone={tone} />
+        <StatusPill label={readinessLabelText} tone={tone} />
       </div>
-      <div className="mt-4 flex flex-wrap gap-2">
-        <StatusPill label={provider.configured ? "Configured" : "Not configured"} tone={provider.configured ? "ok" : "muted"} />
-        {provider.coming_soon ? <StatusPill label="Coming soon" tone="muted" /> : <StatusPill label="Read-only" tone="ok" />}
-        {provider.enabled_lanes.map((lane) => (
-          <StatusPill key={lane} label={titleCase(lane)} tone="warn" />
-        ))}
+      <div className="mt-4 space-y-2 text-sm">
+        <div className="text-white/72">{lastActivity || "No recent activity reported."}</div>
+        <div className="font-medium text-emerald-100">{primaryAction || "Open channel details"}</div>
+        {warning ? <div className="rounded-lg border border-amber-400/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-100/80">{warning}</div> : null}
       </div>
     </button>
   );
@@ -131,7 +227,7 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
 
 function DetailsPanel({
   title,
-  summary = "Show technical details",
+  summary = SOCIAL_COPY.advancedDetailsSummary,
   children,
 }: {
   title: string;
@@ -177,6 +273,84 @@ function SectionTabs({
   );
 }
 
+function ChannelDetailTabs({
+  selected,
+  onSelect,
+}: {
+  selected: ChannelDetailTab;
+  onSelect: (tab: ChannelDetailTab) => void;
+}) {
+  return (
+    <div className="flex flex-wrap gap-2 rounded-2xl border border-white/10 bg-black/25 p-2">
+      {CHANNEL_DETAIL_TABS.map((tab) => (
+        <button
+          key={tab.id}
+          type="button"
+          onClick={() => onSelect(tab.id)}
+          className={cn(
+            "rounded-xl px-3 py-2 text-sm font-medium transition",
+            selected === tab.id
+              ? "bg-white/12 text-white"
+              : "text-white/58 hover:bg-white/[0.06] hover:text-white/82",
+          )}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function GlobalStatusStrip({ snapshot }: { snapshot: SocialSnapshot }) {
+  const truth = buildSocialProductTruth(snapshot);
+  const hamTone =
+    truth.hamStatus === "Active" ? "ok" : truth.hamStatus === "Paused" ? "danger" : "warn";
+  const core = ["x", "telegram", "discord"] as const;
+  const readyCount = core.filter((id) => resolveProviderReadiness(snapshot, id) === "Ready").length;
+  return (
+    <div className="grid gap-2 rounded-2xl border border-white/10 bg-black/25 p-3 sm:grid-cols-2 xl:grid-cols-3">
+      <StatusPill label={`Ham: ${truth.hamStatus}`} tone={hamTone} />
+      <StatusPill
+        label={`Providers ready: ${readyCount} / ${core.length}`}
+        tone={readyCount === core.length ? "ok" : "warn"}
+      />
+      <StatusPill
+        label={snapshot.xStatus.emergency_stop.enabled ? "Emergency stop on (X)" : "Emergency stop off"}
+        tone={snapshot.xStatus.emergency_stop.enabled ? "danger" : "ok"}
+      />
+      <div className="col-span-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white/78 sm:col-span-2 xl:col-span-3">
+        <span className="text-white/45">Next · </span>
+        {truth.nextAction}
+      </div>
+      <div className="col-span-full flex flex-wrap gap-2 text-xs text-white/52">
+        {truth.safetyLines.map((line) => (
+          <span key={line} className="rounded-lg border border-white/10 bg-black/25 px-2 py-1">
+            {line}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SettingsCard({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="rounded-2xl border border-white/10 bg-black/25 p-4 shadow-sm">
+      <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-white/50">{title}</h3>
+      <div className="mt-3 space-y-1 text-sm">{children}</div>
+    </section>
+  );
+}
+
+function SettingsRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between gap-3 border-b border-white/5 py-2 last:border-0">
+      <span className="text-white/55">{label}</span>
+      <span className="max-w-[55%] text-right font-medium text-white/88">{value}</span>
+    </div>
+  );
+}
+
 function KeyValueGrid({ rows }: { rows: { label: string; value: React.ReactNode }[] }) {
   return (
     <div className="grid gap-2 sm:grid-cols-2">
@@ -204,16 +378,16 @@ function RecordPreview({ record, emptyLabel }: { record: Record<string, unknown>
 function CapabilityRows({ capabilities }: { capabilities: XCapabilities }) {
   return (
     <div className="grid gap-2 sm:grid-cols-2">
-      <BoolRow label="Live read available" value={capabilities.live_read_available} />
-      <BoolRow label="Live model available" value={capabilities.live_model_available} />
-      <BoolRow label="Draft post available" value={capabilities.broadcast_dry_run_available} />
-      <BoolRow label="Broadcast live configured" value={capabilities.broadcast_live_available} />
-      <BoolRow label="Reply inbox available" value={capabilities.reactive_inbox_discovery_available} />
-      <BoolRow label="Suggested replies available" value={capabilities.reactive_dry_run_available} />
-      <BoolRow label="Reactive reply canary" value={capabilities.reactive_reply_canary_available} />
-      <BoolRow label="Multiple replies available" value={capabilities.reactive_batch_available} />
-      <BoolRow label="Live sending enabled" value={capabilities.live_apply_available} />
-      <BoolRow label="Read-only API" value={capabilities.read_only} />
+      <BoolRow label="Inbox checks configured" value={capabilities.live_read_available} />
+      <BoolRow label="Model preview configured" value={capabilities.live_model_available} />
+      <BoolRow label="X post preview configured" value={capabilities.broadcast_dry_run_available} />
+      <BoolRow label="Confirmed post sending configured" value={capabilities.broadcast_live_available} />
+      <BoolRow label="X inbox checks configured" value={capabilities.reactive_inbox_discovery_available} />
+      <BoolRow label="Reply preview configured" value={capabilities.reactive_dry_run_available} />
+      <BoolRow label="One-reply confirmation configured" value={capabilities.reactive_reply_canary_available} />
+      <BoolRow label="Reply batch preview configured" value={capabilities.reactive_batch_available} />
+      <BoolRow label="Live actions require confirmation" value={capabilities.live_apply_available} />
+      <BoolRow label="Status API available" value={capabilities.read_only} />
     </div>
   );
 }
@@ -221,12 +395,12 @@ function CapabilityRows({ capabilities }: { capabilities: XCapabilities }) {
 function MessagingCapabilityRows({ capabilities }: { capabilities: TelegramCapabilities | DiscordCapabilities }) {
   const sharedRows = [
     { label: "Bot token present", value: capabilities.bot_token_present },
-    { label: "Inbound available", value: capabilities.inbound_available },
-    { label: "Preview available", value: capabilities.preview_available },
-    { label: "Live message available", value: capabilities.live_message_available },
-    { label: "Live sending enabled", value: capabilities.live_apply_available },
-    { label: "Activity apply available", value: capabilities.provider_id === "telegram" ? capabilities.activity_apply_available : false },
-    { label: "Read-only API", value: capabilities.read_only },
+    { label: "Inbox checks configured", value: capabilities.inbound_available },
+    { label: "Previews configured", value: capabilities.preview_available },
+    { label: "Confirmed message sending configured", value: capabilities.live_message_available },
+    { label: "Live actions require confirmation", value: capabilities.live_apply_available },
+    { label: "Confirmed activity sending configured", value: capabilities.provider_id === "telegram" ? capabilities.activity_apply_available : false },
+    { label: "Status API available", value: capabilities.read_only },
   ];
   const providerRows =
     capabilities.provider_id === "telegram"
@@ -263,6 +437,7 @@ function MessagingProviderPanel({
   status,
   capabilities,
   setup,
+  activeTab,
   telegramPreview,
   telegramPreviewBusy = false,
   telegramPreviewError,
@@ -296,6 +471,7 @@ function MessagingProviderPanel({
   status: SocialMessagingProviderStatus;
   capabilities: TelegramCapabilities | DiscordCapabilities;
   setup: SocialMessagingSetupChecklist;
+  activeTab: ChannelDetailTab;
   telegramPreview?: TelegramMessagePreviewResponse | null;
   telegramPreviewBusy?: boolean;
   telegramPreviewError?: string | null;
@@ -348,44 +524,53 @@ function MessagingProviderPanel({
   const guidance = isTelegram
     ? {
         title: "Telegram setup guidance",
-        intro: [
-          "BotFather is Telegram's official bot-management bot. It creates the Telegram bot identity, reserves the username, and issues the bot token.",
-          "After the token is configured securely on the runtime host, Hermes controls Telegram receive/send behavior through its messaging gateway.",
-          "HAM Social controls setup guidance, readiness, safety gates, and audit-oriented operator UX. It does not collect secrets in this panel.",
+        productIntro: [
+          "Connect a Telegram bot so Ham has a clear identity to speak as.",
+          "Confirm a private test group and make sure Ham can read messages there and send only when you approve.",
+          "Use previews in this cockpit first — nothing sends without your confirmation flow.",
+        ],
+        technicalIntro: [
+          "BotFather is Telegram’s official tool to create the bot username and issue a secret token. Store that token only on the trusted runtime that runs your Ham bridge — never paste it here.",
+          "Ham’s messaging bridge must be running and reachable in your environment so Telegram traffic can flow through approved paths.",
         ],
         checklist: [
-          "Bot created with BotFather",
-          "Bot token stored securely",
-          "Private test group created",
-          "Bot added to test group",
-          "Optional announcement channel created",
-          "Privacy mode reviewed",
-          "Allowed users/chats planned",
-          "Ready for Hermes gateway validation",
+          "Connect Telegram bot (via BotFather)",
+          "Store bot credentials only on the trusted runtime",
+          "Create or confirm a private test group",
+          "Add the bot to the test group with the right permissions",
+          "Optional: add an announcement channel for later trials",
+          "Review privacy mode for how the bot sees messages",
+          "Plan allowed users/chats for early trials",
+          "Verify Ham can read messages and preview sends in this cockpit",
         ],
         warningTitle: "What not to paste",
-        warnings: ["Bot token", "Raw .env contents", "Screenshots containing secrets", "Authorization headers"],
+        warnings: ["Bot token", "Raw environment files", "Screenshots containing secrets", "Authorization headers"],
         noteTitle: "Why Ham may not respond yet",
-        note:
-          "The Telegram bot can exist in Telegram before HAM can use it. Ham will not respond until the token is configured securely as TELEGRAM_BOT_TOKEN and the Hermes gateway is connected.",
+        noteProduct:
+          "The bot can exist in Telegram before Ham is fully wired. Work the checklist, then refresh until previews succeed.",
+        noteTechnical:
+          "On the API host, Telegram token and bridge configuration must be present before confirmed sends. This panel never collects those secrets.",
       }
     : {
         title: "Discord setup guidance",
-        intro: [
-          "Discord setup starts in the Discord Developer Portal, where a human operator creates the application and bot identity.",
-          "After the bot token and server/channel configuration are wired securely on the runtime host, Hermes controls Discord runtime behavior through its messaging gateway.",
-          "HAM Social controls setup guidance, readiness, permissions guidance, safety gates, and audit-oriented operator UX. It does not collect secrets in this panel.",
+        productIntro: [
+          "Connect a Discord bot from the Developer Portal so Ham has an application identity.",
+          "Invite the bot to a private test server and pick channels for safe trials.",
+          "Use previews here first; confirmed sends stay behind your approval flow.",
+        ],
+        technicalIntro: [
+          "The Developer Portal issues a secret bot token. Store it only on the trusted runtime that runs your Ham bridge — never paste it here.",
+          "Server and channel routing must be configured on that host so Ham can read and send only through approved paths.",
         ],
         checklist: [
-          "Discord app created",
-          "Bot created",
-          "Bot token stored securely",
-          "Private test server created",
-          "Bot invited to server",
-          "Test channel created",
-          "Required intents reviewed",
-          "Guild/channel IDs planned",
-          "Ready for Hermes gateway validation",
+          "Create Discord application and bot",
+          "Store bot credentials only on the trusted runtime",
+          "Create or confirm a private test server",
+          "Invite the bot with appropriate (minimal) permissions",
+          "Create test channels for previews",
+          "Review required intents for reading and replying",
+          "Plan server/channel routing for Ham",
+          "Verify Ham can read messages and run previews in this cockpit",
         ],
         warningTitle: "Safety note",
         warnings: [
@@ -394,17 +579,21 @@ function MessagingProviderPanel({
           "Keep the server private until readiness passes",
         ],
         noteTitle: "Why Ham may not respond yet",
-        note:
-          "The Discord bot can be present in a server before HAM can use it. Ham will not respond until the bot token and routing configuration are stored securely and the Hermes gateway is connected.",
+        noteProduct:
+          "The bot can exist in a server before Ham is fully wired. Complete the checklist and refresh until setup turns green.",
+        noteTechnical:
+          "Bot token and routing must be stored securely on the runtime host and the messaging bridge must be connected before confirmed sends.",
       };
   return (
     <div className="grid gap-4 xl:grid-cols-2">
-      <Panel title={`${status.label} status strip`}>
+      {activeTab === "advanced" ? <TechnicalProofIntro /> : null}
+      {activeTab === "advanced" ? (
+      <Panel title={`${status.label} runtime snapshot`}>
         <div className="space-y-3">
           <div className="flex flex-wrap gap-2">
             <StatusPill label={titleCase(status.overall_readiness)} tone={statusTone(status.overall_readiness)} />
-            <StatusPill label={status.read_only ? "Status check only" : "Writable"} tone={status.read_only ? "ok" : "danger"} />
-            <StatusPill label={status.live_apply_available ? "Live sending enabled" : "Live sending off"} tone={status.live_apply_available ? "danger" : "ok"} />
+            <StatusPill label={status.read_only ? "Status check" : "Actions available"} tone={status.read_only ? "ok" : "danger"} />
+            <StatusPill label={status.live_apply_available ? "Live actions require confirmation" : "Setup required for live actions"} tone={status.live_apply_available ? "warn" : "ok"} />
             <StatusPill
               label={status.mutation_attempted ? "Tried to send" : "No send attempted"}
               tone={status.mutation_attempted ? "danger" : "ok"}
@@ -421,20 +610,22 @@ function MessagingProviderPanel({
               ))}
             </div>
           ) : (
-            <p className="text-sm text-white/55">No readiness blockers reported.</p>
+            <p className="text-sm text-white/55">No setup needs reported.</p>
           )}
           <p className="text-sm text-white/55">
-            This channel page shows what is ready, what needs attention, and which guarded actions are available. Secrets are never collected here.
+            Technical connection snapshot for operators. Day-to-day settings are summarized in the cards above.
           </p>
         </div>
       </Panel>
+      ) : null}
 
+      {activeTab === "advanced" ? (
       <DetailsPanel title="Local bot connection" summary="Show gateway source, status path, and runtime details">
         <KeyValueGrid
           rows={[
             { label: "Runtime source", value: titleCase(status.hermes_gateway.source) },
             { label: "Gateway state", value: titleCase(status.hermes_gateway.gateway_state) },
-            { label: "Provider runtime", value: titleCase(status.hermes_gateway.provider_runtime_state) },
+            { label: "Channel runtime", value: titleCase(status.hermes_gateway.provider_runtime_state) },
             { label: "Gateway status known", value: status.hermes_gateway.status_file_available ? "Yes" : "Unknown" },
             { label: "Status file available", value: status.hermes_gateway.status_file_available ? "Yes" : "No" },
             { label: "Status path configured", value: status.hermes_gateway.status_path_configured ? "Yes" : "No" },
@@ -448,9 +639,10 @@ function MessagingProviderPanel({
           </p>
         ) : null}
       </DetailsPanel>
+      ) : null}
 
-      {telegramCapabilities ? (
-        <DetailsPanel title="Telegram setup details" summary="Show setup requirements, masked IDs, and connection proof">
+      {telegramCapabilities && activeTab === "advanced" ? (
+        <DetailsPanel title="Telegram setup details" summary="Runtime requirements, booleans, and readiness (technical)">
           <div className="space-y-4">
             <div className="grid gap-2 sm:grid-cols-2">
               <BoolRow label="Token present" value={Boolean(status.telegram_bot_token_present ?? telegramCapabilities.bot_token_present)} />
@@ -475,7 +667,7 @@ function MessagingProviderPanel({
             ) : null}
             {!status.telegram_bot_token_present || !status.hermes_gateway_base_url_present ? (
               <p className="rounded-lg border border-amber-400/20 bg-amber-500/5 p-3 text-sm leading-relaxed text-amber-100/80">
-                Bot exists but runtime is not connected yet. Store the token securely, configure allowed chats/users, and validate the Hermes gateway before dry-run preview work.
+                Bot exists but runtime is not connected yet. Store the token securely, configure allowed chats/users, and validate the Hermes gateway before preview work.
               </p>
             ) : null}
             {(status.missing_requirements.length || telegramCapabilities.missing_requirements.length) ? (
@@ -492,20 +684,19 @@ function MessagingProviderPanel({
         </DetailsPanel>
       ) : null}
 
-      {telegramCapabilities ? (
+      {telegramCapabilities && activeTab === "operate" ? (
         <Panel title="Telegram primary actions">
           <div className="space-y-4">
             <div className="space-y-2 text-sm leading-relaxed text-white/62">
-              <p>Draft and review Telegram actions before any live send. Live actions still require approval and the existing confirmation flow.</p>
+              <p>Preview and review Telegram actions before any live send. Live actions still require approval and the existing confirmation flow.</p>
               <p>Voice is locked to the canonical HAMgomoon persona and targets remain masked.</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <StatusPill
-                label={telegramCapabilities.readiness === "ready" ? "Readiness ready" : "Readiness limited"}
+                label={telegramCapabilities.readiness === "ready" ? "Setup ready" : "Setup needs attention"}
                 tone={telegramCapabilities.readiness === "ready" ? "ok" : "warn"}
               />
-              <StatusPill label={telegramCapabilities.preview_available ? "Preview available" : "Preview unavailable"} tone={telegramCapabilities.preview_available ? "ok" : "warn"} />
-              <StatusPill label={telegramCapabilities.live_apply_available ? "Approval required" : "Live sending off"} tone={telegramCapabilities.live_apply_available ? "warn" : "ok"} />
+              <StatusPill label={telegramCapabilities.preview_available ? "Previews ready" : "Setup required for previews"} tone={telegramCapabilities.preview_available ? "ok" : "warn"} />
             </div>
             <Button
               type="button"
@@ -515,7 +706,7 @@ function MessagingProviderPanel({
               onClick={onPreviewTelegram}
               disabled={telegramPreviewBusy || !onPreviewTelegram}
             >
-              {telegramPreviewBusy ? "Drafting..." : "Draft test message"}
+              {telegramPreviewBusy ? "Drafting..." : "Draft Telegram message"}
             </Button>
             {telegramPreviewError ? (
               <p className="rounded-lg border border-amber-400/20 bg-amber-500/5 p-3 text-sm text-amber-100/80">
@@ -523,6 +714,54 @@ function MessagingProviderPanel({
               </p>
             ) : null}
             {telegramPreview ? <TelegramMessagePreviewCard preview={telegramPreview} /> : null}
+            {telegramPreview?.proposal_digest ? (
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-semibold text-white/82">Approved Telegram message</h3>
+                    <p className="mt-1 text-xs text-white/48">
+                      This sends exactly one Telegram message to the configured test/home target. No batch. No retry.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <StatusPill label="Preview locked" tone="ok" />
+                    <StatusPill label={telegramCapabilities.live_apply_available ? "Ready for operator approval" : "Setup required before sending"} tone={telegramCapabilities.live_apply_available ? "ok" : "warn"} />
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="mt-3 bg-red-700 text-white hover:bg-red-600"
+                  disabled={!canSendOneTelegramMessage || !onOpenTelegramLiveConfirm}
+                  onClick={onOpenTelegramLiveConfirm}
+                >
+                  Send one Telegram message
+                </Button>
+                {!canSendOneTelegramMessage ? (
+                  <p className="mt-2 text-xs text-white/42">
+                    Preview required before sending. Also requires ready Telegram setup and the Social live apply token configured on the API host.
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+            {telegramLiveError ? (
+              <p className="rounded-lg border border-amber-400/20 bg-amber-500/5 p-3 text-sm text-amber-100/80">
+                {telegramLiveError}
+              </p>
+            ) : null}
+            {telegramLiveResult ? (
+              <FriendlyLiveOutcomeCard
+                title="Telegram message result"
+                record={telegramLiveResult as unknown as Record<string, unknown>}
+              />
+            ) : null}
+          </div>
+        </Panel>
+      ) : null}
+
+      {telegramCapabilities && activeTab === "inbox" ? (
+        <Panel title="Telegram inbox">
+          <div className="space-y-4">
             <div className="rounded-xl border border-white/10 bg-black/20 p-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
@@ -558,7 +797,7 @@ function MessagingProviderPanel({
                 <div>
                   <h3 className="text-sm font-semibold text-white/82">Suggested replies</h3>
                   <p className="mt-1 text-xs text-white/48">
-                    Find reply opportunities from the local inbox preview. No Telegram message will be sent by this check.
+                    Find reply opportunities from the local inbox. No Telegram message will be sent by this check.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -574,7 +813,7 @@ function MessagingProviderPanel({
                 onClick={onPreviewTelegramReactive}
                 disabled={telegramReactivePreviewBusy || !onPreviewTelegramReactive}
               >
-                {telegramReactivePreviewBusy ? "Checking..." : "Find reply opportunities"}
+                {telegramReactivePreviewBusy ? "Checking..." : "Preview Telegram replies"}
               </Button>
               {telegramReactivePreviewError ? (
                 <p className="mt-3 rounded-lg border border-amber-400/20 bg-amber-500/5 p-3 text-sm text-amber-100/80">
@@ -595,7 +834,7 @@ function MessagingProviderPanel({
                         </div>
                         <div className="flex flex-wrap gap-2">
                           <StatusPill label={item.classification ? titleCase(item.classification) : "Candidate"} tone="ok" />
-                          <StatusPill label="Draft locked" tone="ok" />
+                          <StatusPill label="Preview locked" tone="ok" />
                         </div>
                       </div>
                       <Button
@@ -605,7 +844,7 @@ function MessagingProviderPanel({
                         disabled={!onOpenTelegramReactiveLiveConfirm}
                         onClick={() => onOpenTelegramReactiveLiveConfirm?.(item)}
                       >
-                        Send one Telegram reply
+                        Send one approved reply
                       </Button>
                     </div>
                   ))}
@@ -617,22 +856,29 @@ function MessagingProviderPanel({
                 </p>
               ) : null}
               {telegramReactiveLiveResult ? (
-                <DetailsPanel title="Telegram reply result" summary="Show raw apply response">
-                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-white/45">Telegram reply result</h3>
-                  <RecordPreview record={telegramReactiveLiveResult as unknown as Record<string, unknown>} emptyLabel="No Telegram reactive reply live result payload." />
-                </DetailsPanel>
+                <FriendlyLiveOutcomeCard
+                  title="Telegram reply result"
+                  record={telegramReactiveLiveResult as unknown as Record<string, unknown>}
+                />
               ) : null}
             </div>
+          </div>
+        </Panel>
+      ) : null}
+
+      {telegramCapabilities && activeTab === "activity" ? (
+        <Panel title="Telegram activity & pacing">
+          <div className="space-y-4">
             <div className="rounded-xl border border-white/10 bg-black/20 p-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <h3 className="text-sm font-semibold text-white/82">Draft activity post</h3>
+                  <h3 className="text-sm font-semibold text-white/82">Preview Telegram activity</h3>
                   <p className="mt-1 text-xs text-white/48">
-                    Draft one bounded activity post. No Telegram message will be sent by the draft action.
+                    Preview one bounded activity post. No Telegram message will be sent by this action.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <StatusPill label="Activity draft" tone="ok" />
+                  <StatusPill label="Activity preview" tone="ok" />
                   <StatusPill label="No scheduler" tone="ok" />
                 </div>
               </div>
@@ -644,7 +890,7 @@ function MessagingProviderPanel({
                 onClick={onPreviewTelegramActivity}
                 disabled={telegramActivityPreviewBusy || !onPreviewTelegramActivity}
               >
-                {telegramActivityPreviewBusy ? "Drafting..." : "Draft activity post"}
+                {telegramActivityPreviewBusy ? "Drafting..." : "Draft Telegram activity"}
               </Button>
               {telegramActivityPreviewError ? (
                 <p className="mt-3 rounded-lg border border-amber-400/20 bg-amber-500/5 p-3 text-sm text-amber-100/80">
@@ -657,12 +903,12 @@ function MessagingProviderPanel({
                   <div>
                     <h3 className="text-sm font-semibold text-white/82">Check scheduled activity once</h3>
                     <p className="mt-1 text-xs text-white/48">
-                      Dry-run only. No Telegram message will be sent. No scheduler will be started.
+                      Preview only. No Telegram message will be sent. No scheduler will be started.
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <StatusPill label="One-time check" tone="ok" />
-                    <StatusPill label="No live run endpoint" tone="ok" />
+                    <StatusPill label="Preview only" tone="ok" />
                   </div>
                 </div>
                 <Button
@@ -692,9 +938,12 @@ function MessagingProviderPanel({
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      <StatusPill label={telegramActivityPreview.governor.allowed ? "Within limits" : "Limit reached"} tone={telegramActivityPreview.governor.allowed ? "ok" : "warn"} />
                       <StatusPill
-                        label={telegramCapabilities.activity_apply_available ? "Approval available" : "Approval unavailable"}
+                        label={telegramApprovalWindowProductPill(telegramActivityPreview.governor.allowed).label}
+                        tone={telegramApprovalWindowProductPill(telegramActivityPreview.governor.allowed).tone}
+                      />
+                      <StatusPill
+                        label={telegramCapabilities.activity_apply_available ? "Ready for operator approval" : "Setup required before sending"}
                         tone={telegramCapabilities.activity_apply_available ? "ok" : "warn"}
                       />
                     </div>
@@ -716,57 +965,51 @@ function MessagingProviderPanel({
                 </p>
               ) : null}
               {telegramActivityLiveResult ? (
-                <DetailsPanel title="Telegram activity result" summary="Show raw apply response">
-                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-white/45">Telegram activity result</h3>
-                  <RecordPreview record={telegramActivityLiveResult as unknown as Record<string, unknown>} emptyLabel="No Telegram activity live result payload." />
-                </DetailsPanel>
+                <FriendlyLiveOutcomeCard
+                  title="Telegram activity result"
+                  record={telegramActivityLiveResult as unknown as Record<string, unknown>}
+                />
               ) : null}
             </div>
-            {telegramPreview?.proposal_digest ? (
-              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <h3 className="text-sm font-semibold text-white/82">Approved Telegram message</h3>
-                    <p className="mt-1 text-xs text-white/48">
-                      This sends exactly one Telegram message to the configured test/home target. No batch. No retry.
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <StatusPill label="Draft locked" tone="ok" />
-                    <StatusPill label={telegramCapabilities.live_apply_available ? "Approval available" : "Approval unavailable"} tone={telegramCapabilities.live_apply_available ? "ok" : "warn"} />
-                  </div>
-                </div>
-                <Button
-                  type="button"
-                  size="sm"
-                  className="mt-3 bg-red-700 text-white hover:bg-red-600"
-                  disabled={!canSendOneTelegramMessage || !onOpenTelegramLiveConfirm}
-                  onClick={onOpenTelegramLiveConfirm}
-                >
-                  Send one Telegram message
-                </Button>
-                {!canSendOneTelegramMessage ? (
-                  <p className="mt-2 text-xs text-white/42">
-                    Requires a completed Telegram preview, ready Telegram readiness, and the Social live apply token configured on the API host.
-                  </p>
-                ) : null}
-              </div>
-            ) : null}
-            {telegramLiveError ? (
-              <p className="rounded-lg border border-amber-400/20 bg-amber-500/5 p-3 text-sm text-amber-100/80">
-                {telegramLiveError}
-              </p>
-            ) : null}
-            {telegramLiveResult ? (
-              <DetailsPanel title="Telegram send result" summary="Show raw apply response">
-                <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-white/45">Telegram send result</h3>
-                <RecordPreview record={telegramLiveResult as unknown as Record<string, unknown>} emptyLabel="No Telegram live result payload." />
-              </DetailsPanel>
-            ) : null}
           </div>
         </Panel>
       ) : null}
 
+      {telegramCapabilities && activeTab === "advanced" &&
+      (telegramLiveResult || telegramReactiveLiveResult || telegramActivityLiveResult) ? (
+        <DetailsPanel title="Live send payloads (raw JSON)" summary="Session apply responses">
+          {telegramLiveResult ? (
+            <div className="mb-3">
+              <h3 className="mb-1 text-xs font-semibold uppercase tracking-[0.12em] text-white/45">Message send</h3>
+              <RecordPreview record={telegramLiveResult as unknown as Record<string, unknown>} emptyLabel="No payload." />
+            </div>
+          ) : null}
+          {telegramReactiveLiveResult ? (
+            <div className="mb-3">
+              <h3 className="mb-1 text-xs font-semibold uppercase tracking-[0.12em] text-white/45">Reply send</h3>
+              <RecordPreview record={telegramReactiveLiveResult as unknown as Record<string, unknown>} emptyLabel="No payload." />
+            </div>
+          ) : null}
+          {telegramActivityLiveResult ? (
+            <div>
+              <h3 className="mb-1 text-xs font-semibold uppercase tracking-[0.12em] text-white/45">Activity send</h3>
+              <RecordPreview record={telegramActivityLiveResult as unknown as Record<string, unknown>} emptyLabel="No payload." />
+            </div>
+          ) : null}
+        </DetailsPanel>
+      ) : null}
+
+      {!telegramCapabilities && activeTab === "operate" ? (
+        <Panel title="Discord actions">
+          <div className="space-y-3 text-sm text-white/62">
+            <p>Discord setup guidance is available in this cockpit right now. Messaging controls come later.</p>
+            <StatusPill label="Setup guidance available" tone="ok" />
+            <StatusPill label="Check setup" tone="warn" />
+          </div>
+        </Panel>
+      ) : null}
+
+      {activeTab === "setup" ? (
       <DetailsPanel title="Setup checklist" summary="Show channel setup steps and recommendations">
         <div className="space-y-2">
           {setup.items.map((item) => (
@@ -789,18 +1032,24 @@ function MessagingProviderPanel({
           </div>
         ) : null}
       </DetailsPanel>
+      ) : null}
 
-      <DetailsPanel title={guidance.title} summary="Show setup guidance and safety notes">
+      {activeTab === "setup" ? (
+      <DetailsPanel title={guidance.title} summary="What to do before previews and sends">
         <div className="space-y-4">
           <div className="space-y-2">
-            {guidance.intro.map((line) => (
-              <p key={line} className="text-sm leading-relaxed text-white/62">
+            {guidance.productIntro.map((line) => (
+              <p key={line} className="text-sm leading-relaxed text-white/72">
                 {line}
               </p>
             ))}
           </div>
+          <div className="rounded-lg border border-white/10 bg-black/20 p-3">
+            <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-white/45">{guidance.noteTitle}</h3>
+            <p className="mt-2 text-sm leading-relaxed text-white/62">{guidance.noteProduct}</p>
+          </div>
           <ChecklistGroup
-            title="Deployment checklist"
+            title="Setup checklist"
             rows={guidance.checklist.map((label) => ({
               id: `${status.provider_id}-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
               label,
@@ -811,22 +1060,32 @@ function MessagingProviderPanel({
             <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-white/45">{guidance.warningTitle}</h3>
             <TextList items={guidance.warnings} tone="warn" />
           </div>
-          <div className="rounded-lg border border-amber-400/20 bg-amber-500/5 p-3">
-            <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-amber-100/70">{guidance.noteTitle}</h3>
-            <p className="mt-2 text-sm leading-relaxed text-amber-100/80">{guidance.note}</p>
-          </div>
+          <DetailsPanel title={SOCIAL_COPY.setupHostTokenTechnicalTitle} summary={SOCIAL_COPY.setupHostTokenTechnicalSummary}>
+            <div className="space-y-2">
+              {guidance.technicalIntro.map((line) => (
+                <p key={line} className="text-sm leading-relaxed text-white/55">
+                  {line}
+                </p>
+              ))}
+            </div>
+            <p className="mt-3 text-sm leading-relaxed text-amber-100/78">{guidance.noteTechnical}</p>
+          </DetailsPanel>
         </div>
       </DetailsPanel>
+      ) : null}
 
+      {activeTab === "advanced" ? (
       <DetailsPanel title="Available actions" summary="Show raw capability switches">
         <MessagingCapabilityRows capabilities={capabilities} />
       </DetailsPanel>
+      ) : null}
 
+      {activeTab === "advanced" ? (
       <DetailsPanel title="Safety proof" summary="Show boundaries and no-secret guarantees">
         <div className="space-y-2 text-sm text-white/62">
-          <p className="flex gap-2">
+            <p className="flex gap-2">
             <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" />
-            Telegram exposes preview-only drafts. No Telegram or Discord send, apply, bot startup, or gateway process controls are exposed.
+            Telegram exposes preview-first actions. No Telegram or Discord send, confirmed-action, bot startup, or gateway process controls are exposed.
           </p>
           <p className="flex gap-2">
             <Circle className="mt-1 h-3 w-3 shrink-0 text-white/40" />
@@ -834,6 +1093,118 @@ function MessagingProviderPanel({
           </p>
         </div>
       </DetailsPanel>
+      ) : null}
+
+      {telegramCapabilities &&
+      activeTab === "advanced" &&
+      (telegramPreview ||
+        telegramInboundPreview ||
+        telegramReactivePreview ||
+        telegramActivityPreview ||
+        telegramActivityRunOncePreview) ? (
+        <DetailsPanel title="Recent Telegram previews (raw JSON)" summary="Latest preview responses for this session">
+          {telegramPreview ? (
+            <div className="mb-3">
+              <h3 className="mb-1 text-xs font-semibold uppercase tracking-[0.12em] text-white/45">Message draft</h3>
+              <RecordPreview record={telegramPreview as unknown as Record<string, unknown>} emptyLabel="No payload." />
+            </div>
+          ) : null}
+          {telegramInboundPreview ? (
+            <div className="mb-3">
+              <h3 className="mb-1 text-xs font-semibold uppercase tracking-[0.12em] text-white/45">Inbox check</h3>
+              <RecordPreview record={telegramInboundPreview as unknown as Record<string, unknown>} emptyLabel="No payload." />
+            </div>
+          ) : null}
+          {telegramReactivePreview ? (
+            <div className="mb-3">
+              <h3 className="mb-1 text-xs font-semibold uppercase tracking-[0.12em] text-white/45">Reply suggestions</h3>
+              <RecordPreview record={telegramReactivePreview as unknown as Record<string, unknown>} emptyLabel="No payload." />
+            </div>
+          ) : null}
+          {telegramActivityPreview ? (
+            <div className="mb-3">
+              <h3 className="mb-1 text-xs font-semibold uppercase tracking-[0.12em] text-white/45">Activity draft</h3>
+              <RecordPreview record={telegramActivityPreview as unknown as Record<string, unknown>} emptyLabel="No payload." />
+            </div>
+          ) : null}
+          {telegramActivityRunOncePreview ? (
+            <div>
+              <h3 className="mb-1 text-xs font-semibold uppercase tracking-[0.12em] text-white/45">One-time activity check</h3>
+              <RecordPreview record={telegramActivityRunOncePreview as unknown as Record<string, unknown>} emptyLabel="No payload." />
+            </div>
+          ) : null}
+        </DetailsPanel>
+      ) : null}
+
+      {telegramCapabilities &&
+      activeTab === "advanced" &&
+      (telegramActivityPreview ||
+        telegramActivityRunOncePreview ||
+        (telegramReactivePreview?.items?.length ?? 0) > 0) ? (
+        <DetailsPanel title={SOCIAL_COPY.telegramPacingTechnicalTitle} summary={SOCIAL_COPY.telegramPacingTechnicalSummary}>
+          {telegramActivityPreview ? (
+            <div className="mb-4">
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-white/45">Activity draft preview</h3>
+              {telegramActivityPreview.governor.next_allowed_send_time ? (
+                <p className="text-sm text-white/60">
+                  Next allowed send window:{" "}
+                  <span className="font-mono text-xs">{telegramActivityPreview.governor.next_allowed_send_time}</span>
+                </p>
+              ) : null}
+              {telegramActivityPreview.governor.reasons.length ? (
+                <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-white/65">
+                  {telegramActivityPreview.governor.reasons.map((r) => (
+                    <li key={r}>{titleCase(r)}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-2 text-sm text-white/45">No internal pacing reasons on this preview.</p>
+              )}
+            </div>
+          ) : null}
+          {telegramActivityRunOncePreview ? (
+            <div className="mb-4">
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-white/45">One-time activity check</h3>
+              {telegramActivityRunOncePreview.governor.next_allowed_send_time ? (
+                <p className="text-sm text-white/60">
+                  Next allowed send window:{" "}
+                  <span className="font-mono text-xs">{telegramActivityRunOncePreview.governor.next_allowed_send_time}</span>
+                </p>
+              ) : null}
+              {telegramActivityRunOncePreview.governor.reasons.length ? (
+                <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-white/65">
+                  {telegramActivityRunOncePreview.governor.reasons.map((r) => (
+                    <li key={r}>{titleCase(r)}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-2 text-sm text-white/45">No internal pacing reasons on this check.</p>
+              )}
+            </div>
+          ) : null}
+          {telegramReactivePreview?.items?.length ? (
+            <div>
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-white/45">Suggested replies (pacing)</h3>
+              <div className="space-y-3">
+                {telegramReactivePreview.items.map((item) => (
+                  <div key={item.inbound_id} className="rounded-lg border border-white/10 bg-black/20 p-3">
+                    <p className="text-xs text-white/45">Suggestion for one conversation</p>
+                    {item.governor.reasons.length ? (
+                      <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-white/65">
+                        {item.governor.reasons.map((r) => (
+                          <li key={r}>{titleCase(r)}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="mt-2 text-sm text-white/45">No internal pacing reasons for this row.</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </DetailsPanel>
+      ) : null}
     </div>
   );
 }
@@ -873,28 +1244,32 @@ function PersonaPanel({ persona }: { persona: SocialPersona }) {
           <div className="flex flex-wrap gap-2">
             <StatusPill label={persona.display_name} tone="ok" />
             <StatusPill label={`${persona.persona_id} v${persona.version}`} tone="muted" />
-            <StatusPill label={persona.read_only ? "Read-only" : "Editable"} tone={persona.read_only ? "ok" : "warn"} />
+            <StatusPill label={persona.read_only ? "Voice locked" : "Editable"} tone={persona.read_only ? "ok" : "warn"} />
           </div>
           <p className="text-sm leading-relaxed text-white/65">{persona.short_bio}</p>
           <KeyValueGrid
             rows={[
               { label: "Mission", value: persona.mission },
-              { label: "Digest", value: <span className="font-mono text-xs">{persona.persona_digest.slice(0, 16)}...</span> },
+              { label: "Tone summary", value: persona.tone_rules.slice(0, 2).join(" · ") || "—" },
             ]}
           />
         </div>
       </Panel>
 
-      <DetailsPanel title="Safety proof" summary="Show persona digest protection details">
+      <DetailsPanel title="Digest protection" summary="Why previews and sends stay consistent">
         <div className="space-y-2 text-sm text-white/62">
           <p className="flex gap-2">
             <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" />
-            Read-only now. Future Social previews and apply routes should include this persona digest.
+            Ham’s voice is fingerprinted. If the persona changes after a preview, sends should stop until you preview again.
           </p>
           <p className="flex gap-2">
             <Circle className="mt-1 h-3 w-3 shrink-0 text-white/40" />
-            Future apply should block if the persona changes after preview generation.
+            The fingerprint is a digest checksum — you don’t need to manage it; it is proof the voice did not drift.
           </p>
+          <details className="rounded-lg border border-white/10 bg-black/20 p-3 text-xs text-white/45">
+            <summary className="cursor-pointer text-white/55">Technical fingerprint prefix</summary>
+            <p className="mt-2 font-mono text-[11px] text-white/55">{persona.persona_digest.slice(0, 16)}…</p>
+          </details>
         </div>
       </DetailsPanel>
 
@@ -995,9 +1370,27 @@ function LoadingCards() {
 }
 
 const PREVIEW_LABELS: Record<SocialPreviewKind, string> = {
-  reactive_inbox: "Reply check",
-  reactive_batch_dry_run: "Multiple reply preview",
-  broadcast_preflight: "Draft post",
+  reactive_inbox: "Check X inbox",
+  reactive_batch_dry_run: "Preview X replies",
+  broadcast_preflight: "Draft X post",
+};
+
+const X_ACTION_COPY: Record<SocialPreviewKind, { button: string; description: string; busy: string }> = {
+  broadcast_preflight: {
+    button: "Draft X post",
+    description: "Prepare one original X post. Nothing is sent.",
+    busy: "Drafting...",
+  },
+  reactive_inbox: {
+    button: "Check X inbox",
+    description: "Find one safe reply opportunity. Nothing is sent.",
+    busy: "Checking...",
+  },
+  reactive_batch_dry_run: {
+    button: "Preview X replies",
+    description: "Review multiple possible replies. Nothing is sent.",
+    busy: "Checking...",
+  },
 };
 
 const LIVE_REPLY_CONFIRMATION_PHRASE = "SEND ONE LIVE REPLY";
@@ -1008,36 +1401,28 @@ const LIVE_TELEGRAM_ACTIVITY_CONFIRMATION_PHRASE = "SEND ONE TELEGRAM ACTIVITY";
 const LIVE_TELEGRAM_REACTIVE_REPLY_CONFIRMATION_PHRASE = "SEND ONE TELEGRAM REPLY";
 
 function TelegramMessagePreviewCard({ preview }: { preview: TelegramMessagePreviewResponse }) {
+  const draft = friendlyDraftStatus(preview.status, Boolean(preview.proposal_digest));
   return (
     <section className="rounded-2xl border border-emerald-400/20 bg-emerald-500/5 p-4 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="text-sm font-semibold text-white/85">Telegram message preview</h3>
-          <p className="mt-1 text-xs text-white/48">Preview only. No Telegram message will be sent.</p>
+          <h3 className="text-sm font-semibold text-white/85">Draft Telegram message</h3>
+          <p className="mt-1 text-xs text-white/48">Preview only. No Telegram message will be sent from this step.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <StatusPill label={titleCase(preview.status)} tone={preview.status === "completed" ? "ok" : "warn"} />
-          <StatusPill label={preview.execution_allowed ? "Approval available" : "Approval blocked"} tone={preview.execution_allowed ? "danger" : "ok"} />
+          <StatusPill label={draft.label} tone={draft.tone} />
           <StatusPill label="Voice locked" tone="ok" />
-          <StatusPill label={preview.proposal_digest ? "Draft locked" : "Draft not locked"} tone={preview.proposal_digest ? "ok" : "warn"} />
+          {preview.proposal_digest ? <StatusPill label="Draft locked" tone="ok" /> : null}
         </div>
       </div>
-      <div className="mt-3 grid gap-2 sm:grid-cols-3">
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
         <div className="rounded-lg border border-white/10 bg-black/20 p-3">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">Target</div>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">Destination</div>
           <div className="mt-1 text-sm text-white/82">{titleCase(preview.target.kind)}</div>
-          <div className="mt-1 font-mono text-xs text-white/55">{preview.target.masked_id || "Not configured"}</div>
         </div>
         <div className="rounded-lg border border-white/10 bg-black/20 p-3">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">Persona</div>
-          <div className="mt-1 text-sm text-white/82">
-            {preview.persona_id} v{preview.persona_version}
-          </div>
-          <div className="mt-1 font-mono text-xs text-white/55">{preview.persona_digest ? `${preview.persona_digest.slice(0, 12)}...` : "Missing"}</div>
-        </div>
-        <div className="rounded-lg border border-white/10 bg-black/20 p-3">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">Characters</div>
-          <div className="mt-1 text-sm text-white/82">{preview.message_preview.char_count}</div>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">Length</div>
+          <div className="mt-1 text-sm text-white/82">{preview.message_preview.char_count} characters</div>
         </div>
       </div>
       {preview.message_preview.text ? (
@@ -1046,17 +1431,18 @@ function TelegramMessagePreviewCard({ preview }: { preview: TelegramMessagePrevi
         </div>
       ) : null}
       {preview.reasons.length || preview.warnings.length ? (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {preview.reasons.map((reason) => (
-            <StatusPill key={`reason-${reason}`} label={titleCase(reason)} tone="warn" />
-          ))}
-          {preview.warnings.map((warning) => (
-            <StatusPill key={`warning-${warning}`} label={titleCase(warning)} tone="muted" />
-          ))}
+        <div className="mt-3 space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-white/45">Why it’s paused</p>
+          <ul className="list-disc space-y-1 pl-5 text-sm text-white/65">
+            {[...preview.reasons, ...preview.warnings].map((line) => (
+              <li key={line}>{titleCase(line)}</li>
+            ))}
+          </ul>
         </div>
       ) : null}
       {preview.recommended_next_steps.length ? (
         <div className="mt-3 space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-white/45">Next step</p>
           {preview.recommended_next_steps.map((step) => (
             <div key={step} className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm text-white/62">
               {step}
@@ -1069,36 +1455,30 @@ function TelegramMessagePreviewCard({ preview }: { preview: TelegramMessagePrevi
 }
 
 function TelegramActivityPreviewCard({ preview }: { preview: TelegramActivityPreviewResponse }) {
+  const draft = friendlyDraftStatus(preview.status, Boolean(preview.proposal_digest));
+  const pacing = telegramPacingProductPill(preview.governor.allowed);
   return (
     <section className="mt-3 rounded-2xl border border-cyan-400/20 bg-cyan-500/5 p-4 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="text-sm font-semibold text-white/85">Draft activity post</h3>
-          <p className="mt-1 text-xs text-white/48">Dry-run only. No Telegram message will be sent.</p>
+          <h3 className="text-sm font-semibold text-white/85">Draft Telegram activity</h3>
+          <p className="mt-1 text-xs text-white/48">Preview only. No Telegram message will be sent from this step.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <StatusPill label={titleCase(preview.status)} tone={preview.status === "completed" ? "ok" : "warn"} />
-          <StatusPill label={preview.governor.allowed ? "Within limits" : "Limit reached"} tone={preview.governor.allowed ? "ok" : "warn"} />
+          <StatusPill label={draft.label} tone={draft.tone} />
+          <StatusPill label={pacing.label} tone={pacing.tone} />
           <StatusPill label="Voice locked" tone="ok" />
-          <StatusPill label={preview.proposal_digest ? "Draft locked" : "Draft not locked"} tone={preview.proposal_digest ? "ok" : "warn"} />
+          {preview.proposal_digest ? <StatusPill label="Draft locked" tone="ok" /> : null}
         </div>
       </div>
-      <div className="mt-3 grid gap-2 sm:grid-cols-3">
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
         <div className="rounded-lg border border-white/10 bg-black/20 p-3">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">Target</div>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">Destination</div>
           <div className="mt-1 text-sm text-white/82">{titleCase(preview.target.kind)}</div>
-          <div className="mt-1 font-mono text-xs text-white/55">{preview.target.masked_id || "Not configured"}</div>
         </div>
         <div className="rounded-lg border border-white/10 bg-black/20 p-3">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">Persona</div>
-          <div className="mt-1 text-sm text-white/82">
-            {preview.persona_id} v{preview.persona_version}
-          </div>
-          <div className="mt-1 font-mono text-xs text-white/55">{preview.persona_digest ? `${preview.persona_digest.slice(0, 12)}...` : "Missing"}</div>
-        </div>
-        <div className="rounded-lg border border-white/10 bg-black/20 p-3">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">Characters</div>
-          <div className="mt-1 text-sm text-white/82">{preview.activity_preview.char_count}</div>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">Length</div>
+          <div className="mt-1 text-sm text-white/82">{preview.activity_preview.char_count} characters</div>
         </div>
       </div>
       {preview.activity_preview.text ? (
@@ -1106,20 +1486,14 @@ function TelegramActivityPreviewCard({ preview }: { preview: TelegramActivityPre
           {preview.activity_preview.text}
         </div>
       ) : null}
-      {preview.governor.next_allowed_send_time ? (
-        <p className="mt-3 text-xs text-white/55">Next allowed time: {preview.governor.next_allowed_send_time}</p>
-      ) : null}
-      {preview.reasons.length || preview.warnings.length || preview.governor.reasons.length ? (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {preview.reasons.map((reason) => (
-            <StatusPill key={`reason-${reason}`} label={titleCase(reason)} tone="warn" />
-          ))}
-          {preview.governor.reasons.map((reason) => (
-            <StatusPill key={`governor-${reason}`} label={titleCase(reason)} tone="warn" />
-          ))}
-          {preview.warnings.map((warning) => (
-            <StatusPill key={`warning-${warning}`} label={titleCase(warning)} tone="muted" />
-          ))}
+      {preview.reasons.length || preview.warnings.length ? (
+        <div className="mt-3 space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-white/45">Notes</p>
+          <ul className="list-disc space-y-1 pl-5 text-sm text-white/65">
+            {[...preview.reasons, ...preview.warnings].map((line) => (
+              <li key={`a-${line}`}>{titleCase(line)}</li>
+            ))}
+          </ul>
         </div>
       ) : null}
     </section>
@@ -1127,42 +1501,31 @@ function TelegramActivityPreviewCard({ preview }: { preview: TelegramActivityPre
 }
 
 function TelegramActivityRunOncePreviewCard({ preview }: { preview: TelegramActivityRunOncePreviewResponse }) {
+  const draft = friendlyDraftStatus(preview.status, Boolean(preview.proposal_digest));
+  const pacing = preview.governor.allowed
+    ? { label: "Ready to preview", tone: "ok" as const }
+    : { label: "Waiting for the next safe send window", tone: "warn" as const };
   return (
     <section className="mt-3 rounded-2xl border border-sky-400/20 bg-sky-500/5 p-4 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="text-sm font-semibold text-white/85">Telegram autonomous run once preview</h3>
-          <p className="mt-1 text-xs text-white/48">
-            Dry-run only. No Telegram message will be sent. No scheduler will be started.
-          </p>
+          <h3 className="text-sm font-semibold text-white/85">One-time activity check</h3>
+          <p className="mt-1 text-xs text-white/48">Safe read-style check. No message is sent and no scheduler is started.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <StatusPill label={titleCase(preview.status)} tone={preview.status === "completed" ? "ok" : "warn"} />
-          <StatusPill label={preview.dry_run ? "Dry run" : "Live mode"} tone={preview.dry_run ? "ok" : "danger"} />
-          <StatusPill label={preview.execution_allowed ? "Approval available" : "Approval blocked"} tone={preview.execution_allowed ? "danger" : "ok"} />
-          <StatusPill label={preview.mutation_attempted ? "Tried to send" : "No send attempted"} tone={preview.mutation_attempted ? "danger" : "ok"} />
+          <StatusPill label={draft.label} tone={draft.tone} />
+          <StatusPill label="Preview only" tone="ok" />
           <StatusPill label="Voice locked" tone="ok" />
         </div>
       </div>
-      <div className="mt-3 grid gap-2 sm:grid-cols-3">
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
         <div className="rounded-lg border border-white/10 bg-black/20 p-3">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">Target</div>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">Destination</div>
           <div className="mt-1 text-sm text-white/82">{titleCase(preview.target.kind)}</div>
-          <div className="mt-1 font-mono text-xs text-white/55">{preview.target.masked_id || "Not configured"}</div>
         </div>
         <div className="rounded-lg border border-white/10 bg-black/20 p-3">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">Governor</div>
-          <div className="mt-1 text-sm text-white/82">{preview.governor.allowed ? "Allowed" : "Blocked"}</div>
-          {preview.governor.next_allowed_send_time ? (
-            <div className="mt-1 text-xs text-white/55">Next allowed: {preview.governor.next_allowed_send_time}</div>
-          ) : null}
-        </div>
-        <div className="rounded-lg border border-white/10 bg-black/20 p-3">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">Persona</div>
-          <div className="mt-1 text-sm text-white/82">
-            {preview.persona_id} v{preview.persona_version}
-          </div>
-          <div className="mt-1 font-mono text-xs text-white/55">{preview.persona_digest ? `${preview.persona_digest.slice(0, 12)}...` : "Missing"}</div>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">Send spacing</div>
+          <div className="mt-1 text-sm text-white/82">{pacing.label}</div>
         </div>
       </div>
       {preview.activity_preview.text ? (
@@ -1170,21 +1533,19 @@ function TelegramActivityRunOncePreviewCard({ preview }: { preview: TelegramActi
           {preview.activity_preview.text}
         </div>
       ) : null}
-      {preview.reasons.length || preview.warnings.length || preview.governor.reasons.length ? (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {preview.reasons.map((reason) => (
-            <StatusPill key={`run-once-reason-${reason}`} label={titleCase(reason)} tone="warn" />
-          ))}
-          {preview.governor.reasons.map((reason) => (
-            <StatusPill key={`run-once-governor-${reason}`} label={titleCase(reason)} tone="warn" />
-          ))}
-          {preview.warnings.map((warning) => (
-            <StatusPill key={`run-once-warning-${warning}`} label={titleCase(warning)} tone="muted" />
-          ))}
+      {preview.reasons.length || preview.warnings.length ? (
+        <div className="mt-3 space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-white/45">Notes</p>
+          <ul className="list-disc space-y-1 pl-5 text-sm text-white/65">
+            {[...preview.reasons, ...preview.warnings].map((line) => (
+              <li key={`ro-${line}`}>{titleCase(line)}</li>
+            ))}
+          </ul>
         </div>
       ) : null}
       {preview.recommended_next_steps.length ? (
         <div className="mt-3 space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-white/45">Next step</p>
           {preview.recommended_next_steps.map((step) => (
             <div key={step} className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm text-white/62">
               {step}
@@ -1197,18 +1558,21 @@ function TelegramActivityRunOncePreviewCard({ preview }: { preview: TelegramActi
 }
 
 function TelegramInboundPreviewCard({ preview }: { preview: TelegramInboundPreviewResponse }) {
+  const draft = friendlyDraftStatus(preview.status, false);
   return (
     <section className="mt-3 rounded-2xl border border-violet-400/20 bg-violet-500/5 p-4 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="text-sm font-semibold text-white/85">Telegram inbound preview</h3>
-          <p className="mt-1 text-xs text-white/48">Read-only. No Telegram API call. No reply will be sent.</p>
+          <h3 className="text-sm font-semibold text-white/85">Telegram inbox</h3>
+          <p className="mt-1 text-xs text-white/48">Local inbox snapshot. No outbound send.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <StatusPill label={titleCase(preview.status)} tone={preview.status === "completed" ? "ok" : "warn"} />
-          <StatusPill label={`${preview.inbound_count} inbound`} tone={preview.inbound_count ? "ok" : "muted"} />
-          <StatusPill label={preview.execution_allowed ? "Approval available" : "Approval blocked"} tone={preview.execution_allowed ? "danger" : "ok"} />
-          <StatusPill label={preview.mutation_attempted ? "Tried to send" : "No send attempted"} tone={preview.mutation_attempted ? "danger" : "ok"} />
+          <StatusPill label={draft.label} tone={draft.tone} />
+          <StatusPill
+            label={preview.inbound_count ? `${preview.inbound_count} opportunit${preview.inbound_count === 1 ? "y" : "ies"}` : "Inbox quiet"}
+            tone={preview.inbound_count ? "ok" : "muted"}
+          />
+          <StatusPill label="No send from this step" tone="ok" />
         </div>
       </div>
       {preview.items.length ? (
@@ -1218,29 +1582,13 @@ function TelegramInboundPreviewCard({ preview }: { preview: TelegramInboundPrevi
               <div className="flex flex-wrap gap-2">
                 <StatusPill label={item.repliable ? "Can reply" : "Cannot reply"} tone={item.repliable ? "ok" : "warn"} />
                 <StatusPill label={item.already_answered ? "Already answered" : "Unanswered"} tone={item.already_answered ? "muted" : "ok"} />
-                {item.chat_type ? <StatusPill label={titleCase(item.chat_type)} tone="muted" /> : null}
+                <StatusPill label={humanTelegramChatLabel(item.chat_type)} tone="muted" />
               </div>
-              <div className="mt-3 grid gap-2 sm:grid-cols-3">
-                <div>
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">Author</div>
-                  <div className="mt-1 font-mono text-xs text-white/55">{item.author_ref || "Missing"}</div>
-                </div>
-                <div>
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">Chat</div>
-                  <div className="mt-1 font-mono text-xs text-white/55">{item.chat_ref || "Missing"}</div>
-                </div>
-                <div>
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">Session</div>
-                  <div className="mt-1 font-mono text-xs text-white/55">{item.session_ref || "Missing"}</div>
-                </div>
-              </div>
-              <p className="mt-3 rounded-lg border border-white/10 bg-black/30 p-3 text-sm leading-relaxed text-white/75">
-                {item.text}
-              </p>
+              <p className="mt-3 rounded-lg border border-white/10 bg-black/30 p-3 text-sm leading-relaxed text-white/75">{item.text}</p>
               {item.reasons.length ? (
-                <div className="mt-3 flex flex-wrap gap-2">
+                <div className="mt-3 space-y-1 text-sm text-white/60">
                   {item.reasons.map((reason) => (
-                    <StatusPill key={`${item.inbound_id}-${reason}`} label={titleCase(reason)} tone="warn" />
+                    <p key={`${item.inbound_id}-${reason}`}>• {titleCase(reason)}</p>
                   ))}
                 </div>
               ) : null}
@@ -1249,17 +1597,18 @@ function TelegramInboundPreviewCard({ preview }: { preview: TelegramInboundPrevi
         </div>
       ) : null}
       {preview.reasons.length || preview.warnings.length ? (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {preview.reasons.map((reason) => (
-            <StatusPill key={`inbound-reason-${reason}`} label={titleCase(reason)} tone="warn" />
-          ))}
-          {preview.warnings.map((warning) => (
-            <StatusPill key={`inbound-warning-${warning}`} label={titleCase(warning)} tone="muted" />
-          ))}
+        <div className="mt-3 space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-white/45">Notes</p>
+          <ul className="list-disc space-y-1 pl-5 text-sm text-white/65">
+            {[...preview.reasons, ...preview.warnings].map((line) => (
+              <li key={line}>{titleCase(line)}</li>
+            ))}
+          </ul>
         </div>
       ) : null}
       {preview.recommended_next_steps.length ? (
         <div className="mt-3 space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-white/45">Next step</p>
           {preview.recommended_next_steps.map((step) => (
             <div key={step} className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm text-white/62">
               {step}
@@ -1272,77 +1621,70 @@ function TelegramInboundPreviewCard({ preview }: { preview: TelegramInboundPrevi
 }
 
 function TelegramReactiveRepliesPreviewCard({ preview }: { preview: TelegramReactiveRepliesPreviewResponse }) {
+  const draft = friendlyDraftStatus(preview.status, false);
   return (
     <section className="mt-3 rounded-2xl border border-fuchsia-400/20 bg-fuchsia-500/5 p-4 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="text-sm font-semibold text-white/85">Telegram reactive reply preview</h3>
-          <p className="mt-1 text-xs text-white/48">
-            Dry-run only. No Telegram message will be sent. Reads local Hermes transcript preview.
-          </p>
+          <h3 className="text-sm font-semibold text-white/85">Suggested Telegram replies</h3>
+          <p className="mt-1 text-xs text-white/48">Draft replies from your inbox. Nothing sends from this preview.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <StatusPill label={titleCase(preview.status)} tone={preview.status === "completed" ? "ok" : "warn"} />
-          <StatusPill label={`${preview.reply_candidate_count} candidates`} tone={preview.reply_candidate_count ? "ok" : "muted"} />
-          <StatusPill label={preview.execution_allowed ? "Approval available" : "Approval blocked"} tone={preview.execution_allowed ? "danger" : "ok"} />
-          <StatusPill label={preview.mutation_attempted ? "Tried to send" : "No send attempted"} tone={preview.mutation_attempted ? "danger" : "ok"} />
+          <StatusPill label={draft.label} tone={draft.tone} />
+          <StatusPill
+            label={
+              preview.reply_candidate_count
+                ? `${preview.reply_candidate_count} suggestion${preview.reply_candidate_count === 1 ? "" : "s"}`
+                : "No suggestions yet"
+            }
+            tone={preview.reply_candidate_count ? "ok" : "muted"}
+          />
+          <StatusPill label="No send from this step" tone="ok" />
         </div>
       </div>
       {preview.items.length ? (
         <div className="mt-3 space-y-3">
-          {preview.items.map((item) => (
+          {preview.items.map((item) => {
+            const itemPacing = telegramPacingProductPill(item.governor.allowed);
+            return (
             <div key={item.inbound_id} className="rounded-lg border border-white/10 bg-black/25 p-3">
               <div className="flex flex-wrap gap-2">
                 <StatusPill label={titleCase(item.classification)} tone={item.policy.allowed ? "ok" : "warn"} />
-                <StatusPill label={item.policy.allowed ? "Policy clear" : "Policy blocked"} tone={item.policy.allowed ? "ok" : "warn"} />
-                <StatusPill label={item.governor.allowed ? "Within limits" : "Limit reached"} tone={item.governor.allowed ? "ok" : "warn"} />
-                <StatusPill label={item.proposal_digest ? "Draft locked" : "No locked draft"} tone={item.proposal_digest ? "ok" : "muted"} />
+                <StatusPill label={item.policy.allowed ? "Policy OK" : "Needs review"} tone={item.policy.allowed ? "ok" : "warn"} />
+                <StatusPill label={itemPacing.label} tone={itemPacing.tone} />
+                {item.proposal_digest ? <StatusPill label="Draft locked" tone="ok" /> : null}
               </div>
-              <div className="mt-3 grid gap-2 sm:grid-cols-3">
-                <div>
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">Author</div>
-                  <div className="mt-1 font-mono text-xs text-white/55">{item.author_ref || "Missing"}</div>
-                </div>
-                <div>
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">Chat</div>
-                  <div className="mt-1 font-mono text-xs text-white/55">{item.chat_ref || "Missing"}</div>
-                </div>
-                <div>
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">Session</div>
-                  <div className="mt-1 font-mono text-xs text-white/55">{item.session_ref || "Missing"}</div>
-                </div>
-              </div>
-              <p className="mt-3 rounded-lg border border-white/10 bg-black/30 p-3 text-sm leading-relaxed text-white/75">
-                {item.inbound_text}
-              </p>
+              <p className="mt-3 rounded-lg border border-white/10 bg-black/30 p-3 text-sm leading-relaxed text-white/75">{item.inbound_text}</p>
               {item.reply_candidate_text ? (
                 <p className="mt-3 rounded-lg border border-emerald-400/20 bg-emerald-500/10 p-3 text-sm leading-relaxed text-emerald-50/85">
                   {item.reply_candidate_text}
                 </p>
               ) : null}
               {item.reasons.length ? (
-                <div className="mt-3 flex flex-wrap gap-2">
+                <div className="mt-3 space-y-1 text-sm text-white/60">
                   {item.reasons.map((reason) => (
-                    <StatusPill key={`${item.inbound_id}-${reason}`} label={titleCase(reason)} tone="warn" />
+                    <p key={`${item.inbound_id}-${reason}`}>• {titleCase(reason)}</p>
                   ))}
                 </div>
               ) : null}
             </div>
-          ))}
+            );
+          })}
         </div>
       ) : null}
       {preview.reasons.length || preview.warnings.length ? (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {preview.reasons.map((reason) => (
-            <StatusPill key={`telegram-reactive-reason-${reason}`} label={titleCase(reason)} tone="warn" />
-          ))}
-          {preview.warnings.map((warning) => (
-            <StatusPill key={`telegram-reactive-warning-${warning}`} label={titleCase(warning)} tone="muted" />
-          ))}
+        <div className="mt-3 space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-white/45">Notes</p>
+          <ul className="list-disc space-y-1 pl-5 text-sm text-white/65">
+            {[...preview.reasons, ...preview.warnings].map((line) => (
+              <li key={`tr-${line}`}>{titleCase(line)}</li>
+            ))}
+          </ul>
         </div>
       ) : null}
       {preview.recommended_next_steps.length ? (
         <div className="mt-3 space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-white/45">Next step</p>
           {preview.recommended_next_steps.map((step) => (
             <div key={step} className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm text-white/62">
               {step}
@@ -1355,47 +1697,154 @@ function TelegramReactiveRepliesPreviewCard({ preview }: { preview: TelegramReac
 }
 
 function PreviewResultCard({ preview }: { preview: SocialPreviewResponse }) {
+  const st = friendlyXPreviewStatus(preview);
+  const proposed = formatLooseRecordSummary(preview.result);
+  const whyHeld =
+    preview.reasons.length > 0
+      ? preview.reasons.map((r) => titleCase(r)).join(" · ")
+      : preview.warnings.length > 0
+        ? preview.warnings.map((w) => titleCase(w)).join(" · ")
+        : null;
+  let nextStep = "Run the preview again after you address any setup notes above.";
+  if (preview.status === "blocked") nextStep = "Adjust setup or persona rules, then run this preview again.";
+  if (preview.status === "failed") nextStep = "Fix the issue described in the notes, refresh, and preview again.";
+  if (preview.proposal_digest && preview.status === "completed") nextStep = "Use the send panel when you’re ready — the existing confirmation flow still applies.";
+
   return (
     <section className="rounded-2xl border border-emerald-400/20 bg-emerald-500/5 p-4 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-sm font-semibold text-white/85">{PREVIEW_LABELS[preview.preview_kind]}</h2>
-          <p className="mt-1 text-xs text-white/48">Preview only. No live X write. No reply/post execution.</p>
+          <p className="mt-1 text-xs text-white/48">Preview only. No live X write.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <StatusPill label={titleCase(preview.status)} tone={preview.status === "completed" ? "ok" : "warn"} />
-          <StatusPill label={preview.live_apply_available ? "Live sending enabled" : "Live sending off"} tone={preview.live_apply_available ? "danger" : "ok"} />
-          <StatusPill label={preview.execution_allowed ? "Approval available" : "Approval blocked"} tone={preview.execution_allowed ? "danger" : "ok"} />
+          <StatusPill label={st.label} tone={st.tone} />
           <StatusPill label="Voice locked" tone="ok" />
+          {preview.proposal_digest ? <StatusPill label="Draft locked" tone="ok" /> : null}
         </div>
       </div>
-      <div className="mt-3 grid gap-2 sm:grid-cols-3">
-        <div className="rounded-lg border border-white/10 bg-black/20 p-3">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">Persona</div>
-          <div className="mt-1 text-sm text-white/82">{preview.persona_id}</div>
+      <p className="mt-3 text-sm text-white/60">{X_ACTION_COPY[preview.preview_kind].description}</p>
+      {proposed ? (
+        <div className="mt-3 rounded-lg border border-white/10 bg-black/30 p-3 text-sm leading-relaxed text-white/80">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">Proposed text</p>
+          <p className="mt-2">{proposed}</p>
         </div>
-        <div className="rounded-lg border border-white/10 bg-black/20 p-3">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">Version</div>
-          <div className="mt-1 text-sm text-white/82">v{preview.persona_version}</div>
-        </div>
-        <div className="rounded-lg border border-white/10 bg-black/20 p-3">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">Persona digest</div>
-          <div className="mt-1 font-mono text-xs text-white/82">{preview.persona_digest ? `${preview.persona_digest.slice(0, 12)}...` : "Missing"}</div>
-        </div>
-      </div>
-      <p className="mt-3 text-xs text-white/42">Apply blocks if the canonical persona changes after this preview. Re-preview before sending live actions.</p>
-      {preview.reasons.length || preview.warnings.length ? (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {preview.reasons.map((reason) => (
-            <StatusPill key={`reason-${reason}`} label={titleCase(reason)} tone="warn" />
-          ))}
-          {preview.warnings.map((warning) => (
-            <StatusPill key={`warning-${warning}`} label={titleCase(warning)} tone="muted" />
-          ))}
-        </div>
+      ) : (
+        <p className="mt-3 text-sm text-white/45">No draft text was returned. Use Advanced technical proof if you need raw fields.</p>
+      )}
+      {whyHeld ? (
+        <p className="mt-3 text-sm text-white/62">
+          <span className="font-medium text-white/78">Why it’s paused: </span>
+          {whyHeld}
+        </p>
       ) : null}
-      <div className="mt-3">
-        <RecordPreview record={preview.result} emptyLabel="No preview result payload." />
+      <p className="mt-3 text-sm text-white/62">
+        <span className="font-medium text-white/78">Next step: </span>
+        {nextStep}
+      </p>
+      <p className="mt-1 text-xs text-white/42">
+        Voice fingerprinting still applies: if the persona changes after this preview, re-preview before any live send.
+      </p>
+    </section>
+  );
+}
+
+function XActionCard({
+  kind,
+  busyKind,
+  onPreview,
+}: {
+  kind: SocialPreviewKind;
+  busyKind: SocialPreviewKind | null;
+  onPreview: (kind: SocialPreviewKind) => void;
+}) {
+  const copy = X_ACTION_COPY[kind];
+  return (
+    <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+      <div className="space-y-2">
+        <h3 className="text-base font-semibold text-white/90">{PREVIEW_LABELS[kind]}</h3>
+        <p className="text-sm leading-relaxed text-white/58">{copy.description}</p>
+      </div>
+      <Button
+        type="button"
+        size="sm"
+        variant="secondary"
+        className="mt-4 border-white/15 bg-white/5 text-white/90"
+        onClick={() => onPreview(kind)}
+        disabled={busyKind !== null}
+      >
+        {busyKind === kind ? copy.busy : copy.button}
+      </Button>
+    </div>
+  );
+}
+
+function ConfiguredBehaviorPanel({ snapshot }: { snapshot: SocialSnapshot }) {
+  const channels = (["x", "telegram", "discord"] as const).map((id) => {
+    const t = deriveChannelProductTruth(snapshot, id);
+    const label = id === "x" ? "X" : id === "telegram" ? "Telegram" : "Discord";
+    return (
+      <div key={id} className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm text-white/72">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="font-semibold text-white/88">{label}</span>
+          <StatusPill label={t.readiness} tone={productReadinessTone(t.readiness)} />
+        </div>
+        <p className="mt-2 text-white/62">
+          Posting <span className="text-white/85">{t.postingMode}</span> · cadence{" "}
+          <span className="text-white/85">{t.postingFrequency}</span>
+        </p>
+        <p className="text-white/62">
+          Replies <span className="text-white/85">{t.replyMode}</span> · volume{" "}
+          <span className="text-white/85">{t.replyVolume}</span>
+        </p>
+        <p className="mt-2 text-xs text-white/48">{t.autopilotLine}</p>
+      </div>
+    );
+  });
+  return (
+    <Panel title={SOCIAL_COPY.overviewProductSummary}>
+      <div className="grid gap-2 md:grid-cols-3">{channels}</div>
+      <p className="mt-3 text-xs text-white/45">{SOCIAL_COPY.overviewRhythm}</p>
+    </Panel>
+  );
+}
+
+function ProductChannelBanner({
+  snapshot,
+  channelId,
+}: {
+  snapshot: SocialSnapshot;
+  channelId: "x" | "telegram" | "discord";
+}) {
+  const t = deriveChannelProductTruth(snapshot, channelId);
+  const label = channelId === "x" ? "X" : channelId === "telegram" ? "Telegram" : "Discord";
+  return (
+    <section className="rounded-2xl border border-emerald-400/15 bg-emerald-500/5 p-4 shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-white/55">{SOCIAL_COPY.channelProductSummary}</h3>
+          <p className="mt-1 text-lg font-semibold text-white/92">{label}</p>
+          <p className="mt-2 text-sm text-white/68">{t.autopilotLine}</p>
+        </div>
+        <StatusPill label={t.readiness} tone={productReadinessTone(t.readiness)} />
+      </div>
+      <div className="mt-4 grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+          <div className="text-white/45">Posting</div>
+          <div className="font-medium text-white/88">
+            {t.postingMode} · {t.postingFrequency}
+          </div>
+        </div>
+        <div className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+          <div className="text-white/45">Replies</div>
+          <div className="font-medium text-white/88">
+            {t.replyMode} · {t.replyVolume}
+          </div>
+        </div>
+        <div className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 sm:col-span-2 lg:col-span-2">
+          <div className="text-white/45">Next for this channel</div>
+          <div className="font-medium text-white/82">{t.nextHint}</div>
+        </div>
       </div>
     </section>
   );
@@ -1404,7 +1853,8 @@ function PreviewResultCard({ preview }: { preview: SocialPreviewResponse }) {
 export function WorkspaceSocialScreen() {
   const [snapshot, setSnapshot] = React.useState<SocialSnapshot | null>(null);
   const [selectedSection, setSelectedSection] = React.useState<SocialSection>("overview");
-  const [selectedProvider, setSelectedProvider] = React.useState<SocialSelection>("persona");
+  const [selectedProvider, setSelectedProvider] = React.useState<SocialSelection>("x");
+  const [channelTab, setChannelTab] = React.useState<ChannelDetailTab>("operate");
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [previewBusy, setPreviewBusy] = React.useState<SocialPreviewKind | null>(null);
@@ -1468,7 +1918,7 @@ export function WorkspaceSocialScreen() {
     setError(null);
     const result = await socialAdapter.loadSnapshot();
     if (result.bridge.status === "pending") {
-      setError(result.bridge.detail || result.error || "Social API unavailable.");
+      setError(result.bridge.detail || result.error || "Social API needs attention.");
       setSnapshot(null);
     } else {
       setSnapshot(result.snapshot);
@@ -1492,7 +1942,7 @@ export function WorkspaceSocialScreen() {
     setPreviewBusy(null);
     if (result.bridge.status === "pending" || !result.preview) {
       const detail = result.bridge.status === "pending" ? result.bridge.detail : result.error;
-      setPreviewError(detail || "Preview API unavailable.");
+      setPreviewError(detail || "Preview needs attention.");
       return;
     }
     setPreviews((prev) => ({ ...prev, [kind]: result.preview ?? undefined }));
@@ -1505,7 +1955,7 @@ export function WorkspaceSocialScreen() {
     setTelegramPreviewBusy(false);
     if (result.bridge.status === "pending" || !result.preview) {
       const detail = result.bridge.status === "pending" ? result.bridge.detail : result.error;
-      setTelegramPreviewError(detail || "Telegram preview API unavailable.");
+      setTelegramPreviewError(detail || "Telegram preview needs attention.");
       return;
     }
     setTelegramPreview(result.preview);
@@ -1519,7 +1969,7 @@ export function WorkspaceSocialScreen() {
     setTelegramInboundPreviewBusy(false);
     if (result.bridge.status === "pending" || !result.preview) {
       const detail = result.bridge.status === "pending" ? result.bridge.detail : result.error;
-      setTelegramInboundPreviewError(detail || "Telegram inbound preview API unavailable.");
+      setTelegramInboundPreviewError(detail || "Telegram inbox preview needs attention.");
       return;
     }
     setTelegramInboundPreview(result.preview);
@@ -1532,7 +1982,7 @@ export function WorkspaceSocialScreen() {
     setTelegramReactivePreviewBusy(false);
     if (result.bridge.status === "pending" || !result.preview) {
       const detail = result.bridge.status === "pending" ? result.bridge.detail : result.error;
-      setTelegramReactivePreviewError(detail || "Telegram reactive preview API unavailable.");
+      setTelegramReactivePreviewError(detail || "Telegram reply preview needs attention.");
       return;
     }
     setTelegramReactivePreview(result.preview);
@@ -1553,7 +2003,7 @@ export function WorkspaceSocialScreen() {
     setTelegramReactiveLiveBusy(false);
     if (result.bridge.status === "pending" || !result.apply) {
       const detail = result.bridge.status === "pending" ? result.bridge.detail : result.error;
-      setTelegramReactiveLiveError(detail || "Telegram reactive reply request failed.");
+      setTelegramReactiveLiveError(detail || "Telegram reply needs attention.");
       return;
     }
     setTelegramReactiveLiveResult(result.apply);
@@ -1574,7 +2024,7 @@ export function WorkspaceSocialScreen() {
     setTelegramActivityPreviewBusy(false);
     if (result.bridge.status === "pending" || !result.preview) {
       const detail = result.bridge.status === "pending" ? result.bridge.detail : result.error;
-      setTelegramActivityPreviewError(detail || "Telegram activity preview API unavailable.");
+      setTelegramActivityPreviewError(detail || "Telegram activity preview needs attention.");
       return;
     }
     setTelegramActivityPreview(result.preview);
@@ -1591,7 +2041,7 @@ export function WorkspaceSocialScreen() {
     setTelegramActivityRunOncePreviewBusy(false);
     if (result.bridge.status === "pending" || !result.preview) {
       const detail = result.bridge.status === "pending" ? result.bridge.detail : result.error;
-      setTelegramActivityRunOncePreviewError(detail || "Telegram run_once preview API unavailable.");
+      setTelegramActivityRunOncePreviewError(detail || "Telegram scheduled activity preview needs attention.");
       return;
     }
     setTelegramActivityRunOncePreview(result.preview);
@@ -1611,7 +2061,7 @@ export function WorkspaceSocialScreen() {
     setTelegramActivityLiveBusy(false);
     if (result.bridge.status === "pending" || !result.apply) {
       const detail = result.bridge.status === "pending" ? result.bridge.detail : result.error;
-      setTelegramActivityLiveError(detail || "Telegram live activity request failed.");
+      setTelegramActivityLiveError(detail || "Telegram live activity needs attention.");
       return;
     }
     setTelegramActivityLiveResult(result.apply);
@@ -1644,6 +2094,46 @@ export function WorkspaceSocialScreen() {
   const canSendOneLiveReply = Boolean(inboxPreview?.proposal_digest && caps?.reactive_reply_apply_available);
   const canSendLiveReactiveBatch = Boolean(batchPreview?.proposal_digest && caps?.reactive_batch_apply_available);
   const canSendOneLivePost = Boolean(broadcastPreview?.proposal_digest && caps?.broadcast_apply_available);
+  const providerSummary = (provider: SocialProvider) => {
+    if (provider.id === "x") {
+      return {
+        lastActivity: `Last post: ${snapshot?.xStatus.last_autonomous_post ? "found" : "none yet"} · Last reply: ${snapshot?.xStatus.last_reactive_reply ? "found" : "none yet"}`,
+        primaryAction: deriveChannelProductTruth(snapshot!, "x").nextHint,
+        warning: snapshot?.xStatus.emergency_stop.enabled
+          ? "Emergency stop is on."
+          : provider.status === "active"
+            ? null
+            : "Setup required before live sends.",
+      };
+    }
+    if (provider.id === "telegram") {
+      return {
+        lastActivity: telegramInboundPreview
+          ? `${telegramInboundPreview.inbound_count} inbox items found`
+          : telegramReactivePreview
+            ? `${telegramReactivePreview.reply_candidate_count} reply opportunities`
+            : "No inbox check run yet.",
+        primaryAction: deriveChannelProductTruth(snapshot!, "telegram").nextHint,
+        warning: snapshot?.telegramStatus.readiness_reasons[0]
+          ? titleCase(snapshot.telegramStatus.readiness_reasons[0])
+          : null,
+      };
+    }
+    if (provider.id === "discord") {
+      return {
+        lastActivity: "No live Discord activity yet.",
+        primaryAction: deriveChannelProductTruth(snapshot!, "discord").nextHint,
+        warning: "Live controls are not available yet.",
+      };
+    }
+    return {
+      lastActivity: "No activity reported.",
+      primaryAction: "Open channel details",
+      warning: provider.coming_soon ? "Coming soon." : null,
+    };
+  };
+
+  const socialProductTruth = snapshot ? buildSocialProductTruth(snapshot) : null;
 
   const sendOneTelegramMessage = async () => {
     if (!telegramPreview?.proposal_digest) return;
@@ -1659,7 +2149,7 @@ export function WorkspaceSocialScreen() {
     setTelegramLiveBusy(false);
     if (result.bridge.status === "pending" || !result.apply) {
       const detail = result.bridge.status === "pending" ? result.bridge.detail : result.error;
-      setTelegramLiveError(detail || "Telegram live message request failed.");
+      setTelegramLiveError(detail || "Telegram live message needs attention.");
       return;
     }
     setTelegramLiveResult(result.apply);
@@ -1682,7 +2172,7 @@ export function WorkspaceSocialScreen() {
     setLiveBusy(false);
     if (result.bridge.status === "pending" || !result.apply) {
       const detail = result.bridge.status === "pending" ? result.bridge.detail : result.error;
-      setLiveError(detail || "Live reply request failed.");
+      setLiveError(detail || "Live reply needs attention.");
       return;
     }
     setLiveResult(result.apply);
@@ -1705,7 +2195,7 @@ export function WorkspaceSocialScreen() {
     setBatchBusy(false);
     if (result.bridge.status === "pending" || !result.apply) {
       const detail = result.bridge.status === "pending" ? result.bridge.detail : result.error;
-      setBatchError(detail || "Live reactive batch request failed.");
+      setBatchError(detail || "Live reply batch needs attention.");
       return;
     }
     setBatchResult(result.apply);
@@ -1728,7 +2218,7 @@ export function WorkspaceSocialScreen() {
     setBroadcastBusy(false);
     if (result.bridge.status === "pending" || !result.apply) {
       const detail = result.bridge.status === "pending" ? result.bridge.detail : result.error;
-      setBroadcastError(detail || "Live post request failed.");
+      setBroadcastError(detail || "Live post needs attention.");
       return;
     }
     setBroadcastResult(result.apply);
@@ -1744,7 +2234,7 @@ export function WorkspaceSocialScreen() {
         variant="dark"
         eyebrow="Social"
         title="HAMgomoon Social"
-        subtitle="Operate social channels with locked voice, guarded actions, and setup details available only when needed."
+        subtitle="Operate autonomous social reach with previews first, confirmations second, and voice locked to Ham’s persona."
         actions={
           <Button
             type="button"
@@ -1762,14 +2252,14 @@ export function WorkspaceSocialScreen() {
 
       <WorkspaceSurfaceStateCard
         title="Voice and safety are locked"
-        description="This cockpit shows channel health, safe next actions, recent activity, and setup status. Technical proof and diagnostics stay available in collapsed details."
+        description="HAMgomoon keeps your voice, channel settings, and confirmed sends aligned. Technical proof stays under Advanced technical proof."
         tone="neutral"
       />
 
       {error ? (
         <WorkspaceSurfaceStateCard
-          title="Social API unavailable"
-          description="The Social provider facade could not be loaded. Other workspace routes may still work."
+          title="Social API needs attention"
+          description="The Social channel snapshot could not be loaded. Other workspace routes may still work."
           tone="amber"
           technicalDetail={error}
           primaryAction={
@@ -1784,6 +2274,8 @@ export function WorkspaceSocialScreen() {
 
       {!loading && snapshot ? (
         <>
+          <GlobalStatusStrip snapshot={snapshot} />
+
           <SectionTabs
             selected={selectedSection}
             onSelect={(section) => {
@@ -1796,45 +2288,96 @@ export function WorkspaceSocialScreen() {
 
           {selectedSection === "overview" || selectedSection === "channels" ? (
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            <button
-              type="button"
-              onClick={() => setSelectedSection("persona")}
-              className={cn(
-                "rounded-2xl border bg-black/25 p-4 text-left shadow-sm transition hover:border-white/25",
-                "border-white/10",
-              )}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-base font-semibold text-white/92">Persona</div>
-                  <div className="mt-1 text-xs text-white/45">Canonical HAM voice and platform adaptations.</div>
-                </div>
-                <StatusPill label="Read Only" tone="ok" />
-              </div>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <StatusPill label={snapshot.persona.display_name} tone="ok" />
-                <StatusPill label={`v${snapshot.persona.version}`} tone="muted" />
-              </div>
-            </button>
             {snapshot.providers.map((provider) => (
               <ProviderCard
                 key={provider.id}
                 provider={provider}
+                snapshot={snapshot}
                 selected={selectedSection === "channels" && provider.id === selectedProvider}
                 onSelect={() => {
                   if (provider.id === "x" || provider.id === "telegram" || provider.id === "discord") {
                     setSelectedSection("channels");
                     setSelectedProvider(provider.id);
+                    setChannelTab("operate");
                   }
                 }}
+                {...providerSummary(provider)}
               />
             ))}
           </div>
           ) : null}
 
-          {selectedSection === "overview" ? (
+          {selectedSection === "overview" && socialProductTruth ? (
             <div className="grid gap-4 xl:grid-cols-3">
-              <Panel title="What needs attention">
+              <div className="xl:col-span-3">
+                <ConfiguredBehaviorPanel snapshot={snapshot} />
+              </div>
+
+              <Panel title={SOCIAL_COPY.overviewNextAction}>
+                <p className="text-sm leading-relaxed text-white/78">{socialProductTruth.nextAction}</p>
+              </Panel>
+
+              <Panel title={SOCIAL_COPY.overviewHamStatus}>
+                <div className="space-y-2 text-sm text-white/72">
+                  <div className="flex flex-wrap gap-2">
+                    <StatusPill
+                      label={socialProductTruth.hamStatus}
+                      tone={
+                        socialProductTruth.hamStatus === "Active"
+                          ? "ok"
+                          : socialProductTruth.hamStatus === "Paused"
+                            ? "danger"
+                            : "warn"
+                      }
+                    />
+                  </div>
+                  <p>{operatingModeSummary(snapshot)}</p>
+                </div>
+              </Panel>
+
+              <Panel title={SOCIAL_COPY.overviewAutopilot}>
+                <p className="text-sm leading-relaxed text-white/72">{socialProductTruth.autopilotSummary}</p>
+              </Panel>
+
+              <Panel title={SOCIAL_COPY.overviewPersona}>
+                <div className="space-y-2 text-sm text-white/72">
+                  <p>
+                    <span className="font-medium text-white/88">{socialProductTruth.persona.headline}</span>{" "}
+                    <span className="text-white/45">
+                      ({snapshot.persona.persona_id} v{snapshot.persona.version})
+                    </span>
+                  </p>
+                  <p className="text-white/58">{snapshot.persona.short_bio}</p>
+                  <p className="text-xs text-white/50">{socialProductTruth.persona.detail}</p>
+                </div>
+              </Panel>
+
+              <Panel title={SOCIAL_COPY.overviewSafety}>
+                <ul className="list-inside list-disc space-y-1 text-sm text-white/65">
+                  {socialProductTruth.safetyLines.map((line) => (
+                    <li key={line}>{line}</li>
+                  ))}
+                </ul>
+                <p className="mt-3 text-sm leading-relaxed text-white/60">{socialProductTruth.voiceBoundariesLine}</p>
+              </Panel>
+
+              <Panel title={SOCIAL_COPY.overviewCanDoNow}>
+                <ul className="list-inside list-disc space-y-1 text-sm text-white/62">
+                  {socialProductTruth.canDoNow.map((line) => (
+                    <li key={line}>{line}</li>
+                  ))}
+                </ul>
+              </Panel>
+
+              <Panel title={SOCIAL_COPY.overviewNeedsSetup}>
+                <ul className="list-inside list-disc space-y-1 text-sm text-white/62">
+                  {socialProductTruth.needsSetup.map((line) => (
+                    <li key={line}>{line}</li>
+                  ))}
+                </ul>
+              </Panel>
+
+              <Panel title={SOCIAL_COPY.overviewAttention}>
                 <div className="space-y-2 text-sm text-white/62">
                   {snapshot.providers.some((provider) => provider.status !== "active") ? (
                     snapshot.providers
@@ -1845,24 +2388,18 @@ export function WorkspaceSocialScreen() {
                         </div>
                       ))
                   ) : (
-                    <p>No channel blockers reported.</p>
+                    <p>No channel setup needs reported.</p>
                   )}
                 </div>
               </Panel>
-              <Panel title="Safe actions now">
-                <div className="space-y-2 text-sm text-white/62">
-                  <div className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">X: draft posts and check replies</div>
-                  <div className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">Telegram: check inbox, draft messages, and send approved one-shot actions when enabled</div>
-                  <div className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">Discord: check setup only</div>
-                </div>
-              </Panel>
-              <Panel title="Recent activity">
+
+              <Panel title={SOCIAL_COPY.overviewRecentActivity}>
                 <div className="space-y-2 text-sm text-white/62">
                   <div className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">
-                    Last X post: {snapshot.xStatus.last_autonomous_post ? "found" : "none yet"}
+                    Last X post: {formatLooseRecordSummary(snapshot.xStatus.last_autonomous_post) || "none captured yet"}
                   </div>
                   <div className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">
-                    Last X reply: {snapshot.xStatus.last_reactive_reply ? "found" : "none yet"}
+                    Last X reply: {formatLooseRecordSummary(snapshot.xStatus.last_reactive_reply) || "none captured yet"}
                   </div>
                 </div>
               </Panel>
@@ -1871,11 +2408,151 @@ export function WorkspaceSocialScreen() {
 
           {selectedSection === "persona" ? <PersonaPanel persona={snapshot.persona} /> : null}
 
+          {selectedSection === "channels" ? <ChannelDetailTabs selected={channelTab} onSelect={setChannelTab} /> : null}
+
+          {selectedSection === "channels" && snapshot && selectedProvider === "x" && x && caps ? (
+            <ProductChannelBanner snapshot={snapshot} channelId="x" />
+          ) : null}
+          {selectedSection === "channels" && snapshot && selectedProvider === "telegram" ? (
+            <ProductChannelBanner snapshot={snapshot} channelId="telegram" />
+          ) : null}
+          {selectedSection === "channels" && snapshot && selectedProvider === "discord" ? (
+            <ProductChannelBanner snapshot={snapshot} channelId="discord" />
+          ) : null}
+
+          {selectedSection === "channels" && snapshot && selectedProvider === "x" && x && caps ? (
+            <div className="grid gap-3 md:grid-cols-3">
+              <SettingsCard title={SOCIAL_COPY.channelPostingSettings}>
+                <SettingsRow label="Provider readiness" value={resolveProviderReadiness(snapshot, "x")} />
+                <SettingsRow label="Posting mode" value={deriveChannelProductTruth(snapshot, "x").postingMode} />
+                <SettingsRow label="Posting frequency" value={deriveChannelProductTruth(snapshot, "x").postingFrequency} />
+                <SettingsRow label="Autopilot (this channel)" value={deriveChannelProductTruth(snapshot, "x").autopilotLine} />
+                <SettingsRow label="Content style" value={deriveContentStyle(snapshot.persona)} />
+                <DetailsPanel title={SOCIAL_COPY.channelPacingAdvanced} summary="Daily caps and spacing from status">
+                  <SettingsRow label="Max posts per day" value={String(x.cap_cooldown_summary.broadcast_daily_cap)} />
+                  <SettingsRow label="Minimum spacing" value={`${x.cap_cooldown_summary.broadcast_min_spacing_minutes} min`} />
+                  <SettingsRow label="Max posts per run" value={String(x.cap_cooldown_summary.broadcast_per_run_cap)} />
+                </DetailsPanel>
+              </SettingsCard>
+              <SettingsCard title={SOCIAL_COPY.channelReplySettings}>
+                <SettingsRow label="Provider readiness" value={resolveProviderReadiness(snapshot, "x")} />
+                <SettingsRow label="Reply mode" value={deriveChannelProductTruth(snapshot, "x").replyMode} />
+                <SettingsRow label="Reply volume" value={deriveChannelProductTruth(snapshot, "x").replyVolume} />
+                <SettingsRow label="Safe / blocked topics" value={personaBlockedTopicsSummary(snapshot.persona)} />
+                <DetailsPanel title={SOCIAL_COPY.channelPacingAdvanced} summary="Reply caps from status">
+                  <SettingsRow label="Max replies per 15m" value={String(x.cap_cooldown_summary.reactive_max_replies_per_15m)} />
+                  <SettingsRow label="Max replies per hour" value={String(x.cap_cooldown_summary.reactive_max_replies_per_hour)} />
+                  <SettingsRow label="Reply to mentions/comments" value={x.reactive_lane.inbox_discovery_enabled ? "Inbox checks on" : "Needs setup"} />
+                </DetailsPanel>
+              </SettingsCard>
+              <SettingsCard title={SOCIAL_COPY.channelSafetySettings}>
+                {(() => {
+                  const h = xSafetyHints(x, snapshot.persona);
+                  return (
+                    <>
+                      <SettingsRow label="Voice locked" value={h.voiceLocked ? "Yes" : "No"} />
+                      <SettingsRow label="Approval required for live sends" value={h.approvalRequired ? "Yes" : "No"} />
+                      <SettingsRow label="Emergency stop" value={h.emergencyStop ? "On" : "Off"} />
+                      <SettingsRow label="Links in posts" value={h.noLinksUnlessEnabled ? "Restricted unless voice allows" : "Standard"} />
+                      <SettingsRow label="Financial advice" value={h.noFinancialAdvice ? "Not allowed" : "Standard"} />
+                      <SettingsRow label="Buy/sell language" value={h.noBuySellLanguage ? "Limited by voice rules" : "Standard"} />
+                      <SettingsRow label="Secrets in this UI" value="Not collected here" />
+                    </>
+                  );
+                })()}
+              </SettingsCard>
+            </div>
+          ) : null}
+
+          {selectedSection === "channels" && snapshot && selectedProvider === "telegram" ? (
+            <div className="grid gap-3 md:grid-cols-3">
+              <SettingsCard title={SOCIAL_COPY.channelPostingSettings}>
+                <SettingsRow label="Provider readiness" value={resolveProviderReadiness(snapshot, "telegram")} />
+                <SettingsRow label="Posting mode" value={deriveChannelProductTruth(snapshot, "telegram").postingMode} />
+                <SettingsRow label="Posting frequency" value={deriveChannelProductTruth(snapshot, "telegram").postingFrequency} />
+                <SettingsRow label="Autopilot (this channel)" value={deriveChannelProductTruth(snapshot, "telegram").autopilotLine} />
+                <SettingsRow label="Content style" value={deriveContentStyle(snapshot.persona)} />
+                <DetailsPanel title={SOCIAL_COPY.channelPacingAdvanced} summary="Telegram pacing is enforced server-side">
+                  <SettingsRow label="Pacing detail" value="See activity preview and server limits" />
+                </DetailsPanel>
+              </SettingsCard>
+              <SettingsCard title={SOCIAL_COPY.channelReplySettings}>
+                <SettingsRow label="Provider readiness" value={resolveProviderReadiness(snapshot, "telegram")} />
+                <SettingsRow label="Reply mode" value={deriveChannelProductTruth(snapshot, "telegram").replyMode} />
+                <SettingsRow label="Reply volume" value={deriveChannelProductTruth(snapshot, "telegram").replyVolume} />
+                <SettingsRow label="Safe / blocked topics" value={personaBlockedTopicsSummary(snapshot.persona)} />
+                <DetailsPanel title={SOCIAL_COPY.channelPacingAdvanced} summary="Inbound and reply bounds">
+                  <SettingsRow label="Max replies per run/hour" value="Bounded by Social limits" />
+                  <SettingsRow label="Reply only to mentions/comments" value="Uses allowed chat policy" />
+                </DetailsPanel>
+              </SettingsCard>
+              <SettingsCard title={SOCIAL_COPY.channelSafetySettings}>
+                {(() => {
+                  const h = telegramSafetyHints(snapshot.telegramStatus, snapshot.persona);
+                  return (
+                    <>
+                      <SettingsRow label="Voice locked" value={h.voiceLocked ? "Yes" : "No"} />
+                      <SettingsRow label="Approval required for live sends" value={h.approvalRequired ? "Yes" : "No"} />
+                      <SettingsRow label="Emergency stop" value={h.emergencyStop ? "On" : "Off"} />
+                      <SettingsRow label="Links in posts" value={h.noLinksUnlessEnabled ? "Restricted unless voice allows" : "Standard"} />
+                      <SettingsRow label="Financial advice" value={h.noFinancialAdvice ? "Not allowed" : "Standard"} />
+                      <SettingsRow label="Buy/sell language" value={h.noBuySellLanguage ? "Limited by voice rules" : "Standard"} />
+                      <SettingsRow label="Secrets in this UI" value="Not collected here" />
+                    </>
+                  );
+                })()}
+              </SettingsCard>
+            </div>
+          ) : null}
+
+          {selectedSection === "channels" && snapshot && selectedProvider === "discord" ? (
+            <div className="grid gap-3 md:grid-cols-3">
+              <SettingsCard title={SOCIAL_COPY.channelPostingSettings}>
+                <SettingsRow label="Provider readiness" value={resolveProviderReadiness(snapshot, "discord")} />
+                <SettingsRow label="Posting mode" value={deriveChannelProductTruth(snapshot, "discord").postingMode} />
+                <SettingsRow label="Posting frequency" value={deriveChannelProductTruth(snapshot, "discord").postingFrequency} />
+                <SettingsRow label="Autopilot (this channel)" value={deriveChannelProductTruth(snapshot, "discord").autopilotLine} />
+                <SettingsRow label="Content style" value={deriveContentStyle(snapshot.persona)} />
+                <DetailsPanel title={SOCIAL_COPY.channelPacingAdvanced} summary="Discord limits">
+                  <SettingsRow label="Max posts per day" value="—" />
+                  <SettingsRow label="Minimum spacing" value="—" />
+                </DetailsPanel>
+              </SettingsCard>
+              <SettingsCard title={SOCIAL_COPY.channelReplySettings}>
+                <SettingsRow label="Provider readiness" value={resolveProviderReadiness(snapshot, "discord")} />
+                <SettingsRow label="Reply mode" value={deriveChannelProductTruth(snapshot, "discord").replyMode} />
+                <SettingsRow label="Reply volume" value={deriveChannelProductTruth(snapshot, "discord").replyVolume} />
+                <SettingsRow label="Safe / blocked topics" value={personaBlockedTopicsSummary(snapshot.persona)} />
+                <DetailsPanel title={SOCIAL_COPY.channelPacingAdvanced} summary="Reply limits">
+                  <SettingsRow label="Max replies per run/hour" value="—" />
+                  <SettingsRow label="Reply only to mentions/comments" value="Not configured yet" />
+                </DetailsPanel>
+              </SettingsCard>
+              <SettingsCard title={SOCIAL_COPY.channelSafetySettings}>
+                {(() => {
+                  const h = discordSafetyHints(snapshot.persona);
+                  return (
+                    <>
+                      <SettingsRow label="Voice locked" value={h.voiceLocked ? "Yes" : "No"} />
+                      <SettingsRow label="Approval required for live sends" value={h.approvalRequired ? "Yes" : "No"} />
+                      <SettingsRow label="Emergency stop" value={h.emergencyStop ? "On" : "Off"} />
+                      <SettingsRow label="Links in posts" value={h.noLinksUnlessEnabled ? "Restricted unless voice allows" : "Standard"} />
+                      <SettingsRow label="Financial advice" value={h.noFinancialAdvice ? "Not allowed" : "Standard"} />
+                      <SettingsRow label="Buy/sell language" value={h.noBuySellLanguage ? "Limited by voice rules" : "Standard"} />
+                      <SettingsRow label="Secrets in this UI" value="Not collected here" />
+                    </>
+                  );
+                })()}
+              </SettingsCard>
+            </div>
+          ) : null}
+
           {selectedSection === "channels" && selectedMessaging ? (
             <MessagingProviderPanel
               status={selectedMessaging.status}
               capabilities={selectedMessaging.capabilities}
               setup={selectedMessaging.setup}
+              activeTab={channelTab}
               telegramPreview={selectedProvider === "telegram" ? telegramPreview : null}
               telegramPreviewBusy={telegramPreviewBusy}
               telegramPreviewError={selectedProvider === "telegram" ? telegramPreviewError : null}
@@ -1932,51 +2609,38 @@ export function WorkspaceSocialScreen() {
 
           {selectedSection === "channels" && selectedProvider === "x" && x && caps ? (
             <div className="grid gap-4 xl:grid-cols-2">
+              {channelTab === "operate" ? (
+              <>
               <Panel title="X primary actions">
                 <div className="space-y-3">
                   <p className="text-sm leading-relaxed text-white/58">
-                    Draft posts, check replies, and prepare approved live actions. Every live action still requires the existing confirmation flow.
+                    Preview the three safe X work modes first. Nothing is sent from these actions, and live controls still require the existing confirmation flow.
                   </p>
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="secondary"
-                      className="border-white/15 bg-white/5 text-white/90"
-                      onClick={() => void runPreview("reactive_inbox")}
-                      disabled={previewBusy !== null}
-                    >
-                      {previewBusy === "reactive_inbox" ? "Checking..." : "Check replies"}
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="secondary"
-                      className="border-white/15 bg-white/5 text-white/90"
-                      onClick={() => void runPreview("reactive_batch_dry_run")}
-                      disabled={previewBusy !== null}
-                    >
-                      {previewBusy === "reactive_batch_dry_run" ? "Checking..." : "Preview multiple replies"}
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="secondary"
-                      className="border-white/15 bg-white/5 text-white/90"
-                      onClick={() => void runPreview("broadcast_preflight")}
-                      disabled={previewBusy !== null}
-                    >
-                      {previewBusy === "broadcast_preflight" ? "Drafting..." : "Draft post"}
-                    </Button>
+                  <div className="grid gap-3 lg:grid-cols-3">
+                    <XActionCard
+                      kind="broadcast_preflight"
+                      busyKind={previewBusy}
+                      onPreview={(kind) => void runPreview(kind)}
+                    />
+                    <XActionCard
+                      kind="reactive_inbox"
+                      busyKind={previewBusy}
+                      onPreview={(kind) => void runPreview(kind)}
+                    />
+                    <XActionCard
+                      kind="reactive_batch_dry_run"
+                      busyKind={previewBusy}
+                      onPreview={(kind) => void runPreview(kind)}
+                    />
                   </div>
-                  <p className="text-xs text-white/42">No live X write happens from these draft/check actions.</p>
+                  <p className="text-xs text-white/42">No live X write happens from these preview/check actions.</p>
                 </div>
               </Panel>
 
               {previewError ? (
                 <WorkspaceSurfaceStateCard
-                  title="Preview API unavailable"
-                  description="A preview request failed. Status panels may still be available."
+                  title="Preview needs attention"
+                  description="A preview request needs attention. Status panels may still be available."
                   tone="amber"
                   technicalDetail={previewError}
                 />
@@ -1985,14 +2649,16 @@ export function WorkspaceSocialScreen() {
               {Object.entries(previews).map(([kind, preview]) =>
                 preview ? <PreviewResultCard key={kind} preview={preview} /> : null,
               )}
+              </>
+              ) : null}
 
-              {setup ? (
-                <DetailsPanel title="X setup" summary="Show required connections, masked IDs, and setup recommendations">
+              {setup && channelTab === "setup" ? (
+              <>
+                <DetailsPanel title="X setup" summary="Connections, readiness, and recommended steps">
                   <div className="space-y-4">
                     <div className="flex flex-wrap gap-2">
                       <StatusPill label={setup.provider_configured ? "Channel configured" : "Channel limited"} tone={setup.provider_configured ? "ok" : "warn"} />
                       <StatusPill label={titleCase(setup.overall_readiness)} tone={statusTone(setup.overall_readiness)} />
-                      <StatusPill label={setup.mutation_attempted ? "Tried to send" : "Status check only"} tone={setup.mutation_attempted ? "danger" : "ok"} />
                     </div>
                     <ChecklistGroup
                       title="Required connections"
@@ -2000,15 +2666,15 @@ export function WorkspaceSocialScreen() {
                         { id: "x_read", label: "X read credential present", ok: Boolean(setup.required_connections.x_read_credential_present) },
                         { id: "x_write", label: "X write credential present", ok: Boolean(setup.required_connections.x_write_credential_present) },
                         { id: "xai", label: "xAI key present", ok: Boolean(setup.required_connections.xai_key_present) },
-                        { id: "reactive_handle", label: "Reactive handle configured", ok: Boolean(setup.required_connections.reactive_handle_configured) },
+                        { id: "reactive_handle", label: "Reply handle configured", ok: Boolean(setup.required_connections.reactive_handle_configured) },
                         { id: "operator", label: "Operator token ready", ok: Boolean(setup.required_connections.operator_token_ready) },
-                        { id: "emergency", label: "Emergency stop disabled", ok: Boolean(setup.required_connections.emergency_stop_disabled) },
+                        { id: "emergency", label: "Emergency stop off", ok: Boolean(setup.required_connections.emergency_stop_disabled) },
                       ]}
                     />
                     <ChecklistGroup
                       title="Deployment checklist"
                       rows={[
-                        { id: "dry_run", label: "Ready for dry-run", ok: setup.ready_for_dry_run },
+                        { id: "dry_run", label: "Ready for previews", ok: setup.ready_for_dry_run },
                         { id: "live_reply", label: "Ready for confirmed live reply", ok: setup.ready_for_confirmed_live_reply },
                         { id: "batch", label: "Ready for reactive batch", ok: setup.ready_for_reactive_batch },
                         { id: "broadcast", label: "Ready for broadcast", ok: setup.ready_for_broadcast },
@@ -2024,18 +2690,22 @@ export function WorkspaceSocialScreen() {
                         </div>
                       </div>
                     ) : null}
-                    <KeyValueGrid
-                      rows={Object.entries(setup.safe_identifiers).map(([key, value]) => ({
-                        label: titleCase(key),
-                        value: value || "Not set",
-                      }))}
-                    />
                   </div>
                 </DetailsPanel>
+              </>
               ) : null}
 
-              {setup ? (
-                <DetailsPanel title="Automation readiness" summary="Show per-lane readiness and missing requirements">
+              {setup && channelTab === "advanced" ? (
+              <>
+                <DetailsPanel title="X setup identifiers (masked)" summary={SOCIAL_COPY.advancedDetailsSummary}>
+                  <KeyValueGrid
+                    rows={Object.entries(setup.safe_identifiers).map(([key, value]) => ({
+                      label: titleCase(key),
+                      value: value || "Not set",
+                    }))}
+                  />
+                </DetailsPanel>
+                <DetailsPanel title="Automation readiness" summary={SOCIAL_COPY.advancedDetailsSummary}>
                   <div className="space-y-4">
                     {Object.entries(setup.lane_readiness).map(([lane, data]) => (
                       <div key={lane} className="rounded-xl border border-white/10 bg-black/20 p-3">
@@ -2058,14 +2728,15 @@ export function WorkspaceSocialScreen() {
                     ))}
                   </div>
                 </DetailsPanel>
+              </>
               ) : null}
 
-              {setup ? (
+              {setup && channelTab === "setup" ? (
                 <DetailsPanel title="Setup guidance" summary="Show recommended next steps">
                   <div className="space-y-3 text-sm text-white/62">
                     <p>
-                      Ask Ham to help configure this is a placeholder for a future guided setup flow. This panel is read-only:
-                      no secrets, no credential entry, and no configuration mutation.
+                      Ask Ham to help configure this is a placeholder for a future guided setup flow. This panel is setup guidance:
+                      no secret entry on this screen, no credential entry, and no configuration changes here.
                     </p>
                     <div className="space-y-2">
                       {setup.recommended_next_steps.map((step) => (
@@ -2078,6 +2749,8 @@ export function WorkspaceSocialScreen() {
                 </DetailsPanel>
               ) : null}
 
+              {channelTab === "operate" ? (
+              <>
               <Panel title="Send approved reply">
                 <div className="space-y-3">
                   <p className="text-sm leading-relaxed text-white/58">
@@ -2085,11 +2758,11 @@ export function WorkspaceSocialScreen() {
                   </p>
                   <div className="flex flex-wrap gap-2">
                     <StatusPill
-                      label={inboxPreview?.proposal_digest ? "Draft locked" : "Draft required"}
+                      label={inboxPreview?.proposal_digest ? "Preview locked" : "Preview required before sending"}
                       tone={inboxPreview?.proposal_digest ? "ok" : "warn"}
                     />
                     <StatusPill
-                      label={caps.reactive_reply_apply_available ? "Approval available" : "Approval unavailable"}
+                      label={caps.reactive_reply_apply_available ? "Ready for operator approval" : "Preview required before sending"}
                       tone={caps.reactive_reply_apply_available ? "ok" : "muted"}
                     />
                   </div>
@@ -2103,7 +2776,7 @@ export function WorkspaceSocialScreen() {
                       setLiveError(null);
                     }}
                   >
-                    Send one live reply
+                    Send one approved reply
                   </Button>
                   {!canSendOneLiveReply ? (
                     <p className="text-xs text-white/42">
@@ -2115,7 +2788,7 @@ export function WorkspaceSocialScreen() {
 
               {liveError ? (
                 <WorkspaceSurfaceStateCard
-                  title="Live reply request blocked"
+                  title="Live reply needs attention"
                   description="The confirmed one-shot live reply did not run."
                   tone="amber"
                   technicalDetail={liveError}
@@ -2123,9 +2796,7 @@ export function WorkspaceSocialScreen() {
               ) : null}
 
               {liveResult ? (
-                <DetailsPanel title="Approved reply result" summary="Show raw apply response">
-                  <RecordPreview record={liveResult as unknown as Record<string, unknown>} emptyLabel="No live result payload." />
-                </DetailsPanel>
+                <FriendlyLiveOutcomeCard title="Approved reply result" record={liveResult as unknown as Record<string, unknown>} />
               ) : null}
 
               <Panel title="Send approved reply batch">
@@ -2135,11 +2806,11 @@ export function WorkspaceSocialScreen() {
                   </p>
                   <div className="flex flex-wrap gap-2">
                     <StatusPill
-                      label={batchPreview?.proposal_digest ? "Draft locked" : "Draft required"}
+                      label={batchPreview?.proposal_digest ? "Preview locked" : "Preview required before sending"}
                       tone={batchPreview?.proposal_digest ? "ok" : "warn"}
                     />
                     <StatusPill
-                      label={caps.reactive_batch_apply_available ? "Approval available" : "Approval unavailable"}
+                      label={caps.reactive_batch_apply_available ? "Ready for operator approval" : "Preview required before sending"}
                       tone={caps.reactive_batch_apply_available ? "ok" : "muted"}
                     />
                   </div>
@@ -2165,17 +2836,15 @@ export function WorkspaceSocialScreen() {
 
               {batchError ? (
                 <WorkspaceSurfaceStateCard
-                  title="Live reactive batch request blocked"
-                  description="The confirmed live reactive batch did not run."
+                  title="Live reply batch needs attention"
+                  description="The confirmed live reply batch did not run."
                   tone="amber"
                   technicalDetail={batchError}
                 />
               ) : null}
 
               {batchResult ? (
-                <DetailsPanel title="Approved reply batch result" summary="Show raw apply response">
-                  <RecordPreview record={batchResult as unknown as Record<string, unknown>} emptyLabel="No live batch result payload." />
-                </DetailsPanel>
+                <FriendlyLiveOutcomeCard title="Approved reply batch result" record={batchResult as unknown as Record<string, unknown>} />
               ) : null}
 
               <Panel title="Send approved post">
@@ -2185,11 +2854,11 @@ export function WorkspaceSocialScreen() {
                   </p>
                   <div className="flex flex-wrap gap-2">
                     <StatusPill
-                      label={broadcastPreview?.proposal_digest ? "Draft locked" : "Draft required"}
+                      label={broadcastPreview?.proposal_digest ? "Preview locked" : "Preview required before sending"}
                       tone={broadcastPreview?.proposal_digest ? "ok" : "warn"}
                     />
                     <StatusPill
-                      label={caps.broadcast_apply_available ? "Approval available" : "Approval unavailable"}
+                      label={caps.broadcast_apply_available ? "Ready for operator approval" : "Preview required before sending"}
                       tone={caps.broadcast_apply_available ? "ok" : "muted"}
                     />
                   </div>
@@ -2203,11 +2872,11 @@ export function WorkspaceSocialScreen() {
                       setBroadcastError(null);
                     }}
                   >
-                    Send one live post
+                    Send approved post
                   </Button>
                   {!canSendOneLivePost ? (
                     <p className="text-xs text-white/42">
-                      Draft a post first, then confirm that approved post sending is available.
+                      Preview an X post first, then confirm that approved post sending is ready.
                     </p>
                   ) : null}
                 </div>
@@ -2215,7 +2884,7 @@ export function WorkspaceSocialScreen() {
 
               {broadcastError ? (
                 <WorkspaceSurfaceStateCard
-                  title="Live broadcast request blocked"
+                  title="Live post needs attention"
                   description="The confirmed one-shot live post did not run."
                   tone="amber"
                   technicalDetail={broadcastError}
@@ -2223,21 +2892,24 @@ export function WorkspaceSocialScreen() {
               ) : null}
 
               {broadcastResult ? (
-                <DetailsPanel title="Approved post result" summary="Show raw apply response">
-                  <RecordPreview record={broadcastResult as unknown as Record<string, unknown>} emptyLabel="No live broadcast result payload." />
-                </DetailsPanel>
+                <FriendlyLiveOutcomeCard title="Approved post result" record={broadcastResult as unknown as Record<string, unknown>} />
+              ) : null}
+              </>
               ) : null}
 
+              {channelTab === "advanced" ? (
+              <>
+              <TechnicalProofIntro />
               <Panel title="X status strip">
                 <div className="mb-3 flex flex-wrap gap-2">
                   <StatusPill label={titleCase(x.overall_readiness)} tone={statusTone(x.overall_readiness)} />
-                  <StatusPill label={x.read_only ? "Read-only" : "Writable"} tone={x.read_only ? "ok" : "danger"} />
+                  <StatusPill label={x.read_only ? "Status check" : "Actions available"} tone={x.read_only ? "ok" : "danger"} />
                   <StatusPill
                     label={x.emergency_stop.enabled ? "Emergency stop on" : "Emergency stop off"}
                     tone={x.emergency_stop.enabled ? "danger" : "ok"}
                   />
                   <StatusPill
-                    label={caps.live_apply_available ? "Live sending enabled" : "Live sending off"}
+                    label={caps.live_apply_available ? "Live actions require confirmation" : "Preview required before sending"}
                     tone={caps.live_apply_available ? "danger" : "ok"}
                   />
                 </div>
@@ -2248,32 +2920,40 @@ export function WorkspaceSocialScreen() {
                     ))}
                   </ul>
                 ) : (
-                  <p className="text-sm text-white/55">No readiness blockers reported.</p>
+                  <p className="text-sm text-white/55">No setup needs reported.</p>
                 )}
               </Panel>
 
-              <DetailsPanel title="Available actions" summary="Show raw X capability switches">
-                <CapabilityRows capabilities={caps} />
-              </DetailsPanel>
-
-              <DetailsPanel title="Safety proof" summary="Show dry-run defaults and guarded automation flags">
+              <DetailsPanel title="X setup feature flags" summary={SOCIAL_COPY.advancedDetailsSummary}>
                 <div className="grid gap-2 sm:grid-cols-2">
-                  <BoolRow label="Global dry-run" value={x.dry_run_defaults.global_dry_run} />
-                  <BoolRow label="Controller dry-run" value={x.dry_run_defaults.controller_dry_run} />
-                  <BoolRow label="Reactive dry-run" value={x.dry_run_defaults.reactive_dry_run} />
-                  <BoolRow label="Reactive batch dry-run" value={x.dry_run_defaults.reactive_batch_dry_run} />
+                  {Object.entries(snapshot.xSetup.feature_flags).map(([key, value]) => (
+                    <BoolRow key={key} label={titleCase(key)} value={value} />
+                  ))}
                 </div>
               </DetailsPanel>
 
-              <DetailsPanel title="Post automation" summary="Show technical readiness for original posts">
+              <DetailsPanel title="Available actions" summary={SOCIAL_COPY.advancedDetailsSummary}>
+                <CapabilityRows capabilities={caps} />
+              </DetailsPanel>
+
+              <DetailsPanel title="Safety proof" summary={SOCIAL_COPY.advancedDetailsSummary}>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <BoolRow label="Global preview mode" value={x.dry_run_defaults.global_dry_run} />
+                  <BoolRow label="Controller preview mode" value={x.dry_run_defaults.controller_dry_run} />
+                  <BoolRow label="Reply preview mode" value={x.dry_run_defaults.reactive_dry_run} />
+                  <BoolRow label="Reply batch preview mode" value={x.dry_run_defaults.reactive_batch_dry_run} />
+                </div>
+              </DetailsPanel>
+
+              <DetailsPanel title="Posting lane (advanced)" summary="Technical readiness for original posts">
                 <KeyValueGrid
                   rows={[
-                    { label: "Enabled", value: x.broadcast_lane.enabled ? "Yes" : "No" },
-                    { label: "Controller", value: x.broadcast_lane.controller_enabled ? "Enabled" : "Disabled" },
-                    { label: "Live controller", value: x.broadcast_lane.live_controller_enabled ? "Enabled" : "Disabled" },
-                    { label: "Dry-run", value: x.broadcast_lane.dry_run_available ? "Available" : "Unavailable" },
+                    { label: "Mode configured", value: x.broadcast_lane.enabled ? "Yes" : "No" },
+                    { label: "Controller", value: x.broadcast_lane.controller_enabled ? "Configured" : "Waiting for setup" },
+                    { label: "Live controller", value: x.broadcast_lane.live_controller_enabled ? "Configured" : "Waiting for setup" },
+                    { label: "Preview", value: x.broadcast_lane.dry_run_available ? "Ready" : "Needs setup" },
                     { label: "Live configured", value: x.broadcast_lane.live_configured ? "Yes" : "No" },
-                    { label: "Approval available now", value: x.broadcast_lane.execution_allowed_now ? "Yes" : "No" },
+                    { label: "Ready to send now", value: x.broadcast_lane.execution_allowed_now ? "Yes" : "No" },
                   ]}
                 />
                 {x.broadcast_lane.reasons.length ? (
@@ -2285,14 +2965,14 @@ export function WorkspaceSocialScreen() {
                 ) : null}
               </DetailsPanel>
 
-              <DetailsPanel title="Reply automation" summary="Show technical readiness for replies">
+              <DetailsPanel title="Reply lane (advanced)" summary="Technical readiness for replies">
                 <KeyValueGrid
                   rows={[
-                    { label: "Enabled", value: x.reactive_lane.enabled ? "Yes" : "No" },
-                    { label: "Inbox discovery", value: x.reactive_lane.inbox_discovery_enabled ? "Enabled" : "Disabled" },
-                    { label: "Dry-run", value: x.reactive_lane.dry_run_enabled ? "Enabled" : "Disabled" },
-                    { label: "Live canary", value: x.reactive_lane.live_canary_enabled ? "Enabled" : "Disabled" },
-                    { label: "Batch", value: x.reactive_lane.batch_enabled ? "Enabled" : "Disabled" },
+                    { label: "Mode configured", value: x.reactive_lane.enabled ? "Yes" : "No" },
+                    { label: "Inbox discovery", value: x.reactive_lane.inbox_discovery_enabled ? "Configured" : "Waiting for setup" },
+                    { label: "Preview", value: x.reactive_lane.dry_run_enabled ? "Ready" : "Needs setup" },
+                    { label: "One-reply confirmation", value: x.reactive_lane.live_canary_enabled ? "Configured" : "Waiting for setup" },
+                    { label: "Batch replies", value: x.reactive_lane.batch_enabled ? "Configured" : "Waiting for setup" },
                   ]}
                 />
                 {x.reactive_lane.reasons.length ? (
@@ -2304,51 +2984,62 @@ export function WorkspaceSocialScreen() {
                 ) : null}
               </DetailsPanel>
 
-              <Panel title="Limits and cooldowns">
-                <KeyValueGrid
-                  rows={[
-                    { label: "Broadcast daily", value: `${x.cap_cooldown_summary.broadcast_daily_used}/${x.cap_cooldown_summary.broadcast_daily_cap}` },
-                    { label: "Broadcast remaining", value: x.cap_cooldown_summary.broadcast_daily_remaining },
-                    { label: "Broadcast per run", value: x.cap_cooldown_summary.broadcast_per_run_cap },
-                    { label: "Broadcast spacing", value: `${x.cap_cooldown_summary.broadcast_min_spacing_minutes} min` },
-                    { label: "Reactive 15m cap", value: x.cap_cooldown_summary.reactive_max_replies_per_15m },
-                    { label: "Reactive hourly cap", value: x.cap_cooldown_summary.reactive_max_replies_per_hour },
-                    { label: "Reactive per user/day", value: x.cap_cooldown_summary.reactive_max_replies_per_user_per_day },
-                    { label: "Reactive per thread/day", value: x.cap_cooldown_summary.reactive_max_replies_per_thread_per_day },
-                    { label: "Reactive cooldown", value: `${x.cap_cooldown_summary.reactive_min_seconds_between_replies}s` },
-                    { label: "Reactive batch/run", value: x.cap_cooldown_summary.reactive_batch_max_replies_per_run },
-                  ]}
-                />
-              </Panel>
-
-              <Panel title="Last post">
-                <RecordPreview record={x.last_autonomous_post} emptyLabel="No autonomous post found in the bounded journal summary." />
-              </Panel>
-
-              <Panel title="Last reply">
-                <RecordPreview record={x.last_reactive_reply} emptyLabel="No reactive reply found in the bounded journal summary." />
-              </Panel>
-
-              <DetailsPanel title="Setup checklist" summary="Show setup checks and feature flags">
-                <div className="space-y-2">
-                  {snapshot.xSetup.items.map((item) => (
-                    <div key={item.id} className="flex items-center justify-between rounded-lg border border-white/10 bg-black/20 px-3 py-2">
-                      <div className="flex items-center gap-2 text-sm text-white/70">
-                        {item.ok ? <CheckCircle2 className="h-4 w-4 text-emerald-300" /> : <AlertTriangle className="h-4 w-4 text-amber-300" />}
-                        {item.label}
-                      </div>
-                      <StatusPill label={item.ok ? "OK" : "Missing"} tone={item.ok ? "ok" : "warn"} />
-                    </div>
-                  ))}
-                </div>
-                <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  {Object.entries(snapshot.xSetup.feature_flags).map(([key, value]) => (
-                    <BoolRow key={key} label={titleCase(key)} value={value} />
-                  ))}
+              <DetailsPanel title="Safety boundary" summary="Show frontend/API safety notes">
+                <div className="space-y-2 text-sm text-white/62">
+                  <p className="flex gap-2">
+                    <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" />
+                    Frontend uses `hamApiFetch` against Social API endpoints and keeps live sends behind confirmation flows.
+                  </p>
+                  <p className="flex gap-2">
+                    <Circle className="mt-1 h-3 w-3 shrink-0 text-white/40" />
+                    Live posting, replies, and batch execution stay gated by locked previews, confirmation phrases, and operator authorization.
+                  </p>
                 </div>
               </DetailsPanel>
 
-              <DetailsPanel title="Delivery history" summary="Show journal scan counts and recent raw records">
+              <DetailsPanel title="Live apply payloads (raw JSON)" summary="Confirmed sends from this browser session">
+                {liveResult || batchResult || broadcastResult ? (
+                  <div className="space-y-3">
+                    {liveResult ? (
+                      <div>
+                        <h3 className="mb-1 text-xs font-semibold uppercase tracking-[0.12em] text-white/45">One reply apply</h3>
+                        <RecordPreview record={liveResult as unknown as Record<string, unknown>} emptyLabel="No payload." />
+                      </div>
+                    ) : null}
+                    {batchResult ? (
+                      <div>
+                        <h3 className="mb-1 text-xs font-semibold uppercase tracking-[0.12em] text-white/45">Reply batch apply</h3>
+                        <RecordPreview record={batchResult as unknown as Record<string, unknown>} emptyLabel="No payload." />
+                      </div>
+                    ) : null}
+                    {broadcastResult ? (
+                      <div>
+                        <h3 className="mb-1 text-xs font-semibold uppercase tracking-[0.12em] text-white/45">Post apply</h3>
+                        <RecordPreview record={broadcastResult as unknown as Record<string, unknown>} emptyLabel="No payload." />
+                      </div>
+                    ) : null}
+                  </div>
+                ) : (
+                  <p className="text-sm text-white/45">No live apply responses in this session yet.</p>
+                )}
+              </DetailsPanel>
+
+              {Object.keys(previews).length ? (
+                <DetailsPanel title="Recent X previews (raw JSON)" summary="Preflight payloads from this session">
+                  <div className="space-y-3">
+                    {(Object.entries(previews) as [SocialPreviewKind, SocialPreviewResponse | undefined][]).map(([kind, preview]) =>
+                      preview ? (
+                        <div key={kind}>
+                          <h3 className="mb-1 text-xs font-semibold uppercase tracking-[0.12em] text-white/45">{PREVIEW_LABELS[kind]}</h3>
+                          <RecordPreview record={preview.result} emptyLabel="No preview payload." />
+                        </div>
+                      ) : null,
+                    )}
+                  </div>
+                </DetailsPanel>
+              ) : null}
+
+              <DetailsPanel title="Delivery history" summary={SOCIAL_COPY.advancedDetailsSummary}>
                 <KeyValueGrid
                   rows={[
                     { label: "Path", value: snapshot.xJournal.journal_path },
@@ -2371,7 +3062,7 @@ export function WorkspaceSocialScreen() {
                 </div>
               </DetailsPanel>
 
-              <DetailsPanel title="Safety log" summary="Show audit scan counts and recent raw events">
+              <DetailsPanel title="Safety log" summary={SOCIAL_COPY.advancedDetailsSummary}>
                 <KeyValueGrid
                   rows={[
                     { label: "Path", value: snapshot.xAudit.audit_path },
@@ -2401,80 +3092,131 @@ export function WorkspaceSocialScreen() {
                 </div>
               </DetailsPanel>
 
-              <DetailsPanel title="Safety boundary" summary="Show frontend/API safety notes">
-                <div className="space-y-2 text-sm text-white/62">
-                  <p className="flex gap-2">
-                    <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" />
-                    Frontend uses `hamApiFetch` against Social API endpoints and keeps live sends behind confirmation flows.
-                  </p>
-                  <p className="flex gap-2">
-                    <Circle className="mt-1 h-3 w-3 shrink-0 text-white/40" />
-                    Live posting, replies, and batch execution stay gated by locked drafts, confirmation phrases, and operator authorization.
-                  </p>
+              <DetailsPanel title="Latest post & reply (raw journal rows)" summary={SOCIAL_COPY.advancedDetailsSummary}>
+                <RecordPreview record={x.last_autonomous_post} emptyLabel="No autonomous post in summary." />
+                <div className="mt-3">
+                  <RecordPreview record={x.last_reactive_reply} emptyLabel="No reactive reply in summary." />
                 </div>
               </DetailsPanel>
+              </>
+              ) : null}
+
+              {channelTab === "activity" ? (
+              <>
+              <Panel title="How hard Ham is working on X">
+                <p className="text-sm leading-relaxed text-white/68">
+                  Today Ham has used{" "}
+                  <span className="text-white/85">
+                    {x.cap_cooldown_summary.broadcast_daily_used} of {x.cap_cooldown_summary.broadcast_daily_cap}
+                  </span>{" "}
+                  post slots, with{" "}
+                  <span className="text-white/85">{x.cap_cooldown_summary.broadcast_daily_remaining}</span> still available. Posts are
+                  spaced at least {x.cap_cooldown_summary.broadcast_min_spacing_minutes} minutes apart. Reply pacing is capped per
+                  quarter-hour, hour, user, and thread so bursts cannot slip through unnoticed.
+                </p>
+              </Panel>
+
+              <Panel title="Latest post">
+                {formatLooseRecordSummary(x.last_autonomous_post) ? (
+                  <p className="text-sm leading-relaxed text-white/75">{formatLooseRecordSummary(x.last_autonomous_post)}</p>
+                ) : (
+                  <p className="text-sm text-white/45">No recent post text in the activity window.</p>
+                )}
+              </Panel>
+
+              <Panel title="Latest reply">
+                {formatLooseRecordSummary(x.last_reactive_reply) ? (
+                  <p className="text-sm leading-relaxed text-white/75">{formatLooseRecordSummary(x.last_reactive_reply)}</p>
+                ) : (
+                  <p className="text-sm text-white/45">No recent reply text in the activity window.</p>
+                )}
+              </Panel>
+
+              <Panel title="Deeper logs">
+                <p className="text-sm text-white/58">
+                  Delivery rows, safety counters, and full JSON snapshots stay under{" "}
+                  <span className="text-white/78">Advanced technical proof</span> for this channel.
+                </p>
+              </Panel>
+              </>
+              ) : null}
+
+              {channelTab === "setup" ? (
+              <DetailsPanel title="Setup checklist" summary="Connection checks for this channel">
+                <div className="space-y-2">
+                  {snapshot.xSetup.items.map((item) => (
+                    <div key={item.id} className="flex items-center justify-between rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                      <div className="flex items-center gap-2 text-sm text-white/70">
+                        {item.ok ? <CheckCircle2 className="h-4 w-4 text-emerald-300" /> : <AlertTriangle className="h-4 w-4 text-amber-300" />}
+                        {item.label}
+                      </div>
+                      <StatusPill label={item.ok ? "OK" : "Missing"} tone={item.ok ? "ok" : "warn"} />
+                    </div>
+                  ))}
+                </div>
+              </DetailsPanel>
+              ) : null}
+
             </div>
           ) : null}
 
-          {selectedSection === "history" ? (
+          {selectedSection === "activity" ? (
             <div className="grid gap-4 xl:grid-cols-2">
-              <Panel title="Recently sent or blocked">
-                <div className="space-y-2 text-sm text-white/62">
+              <Panel title={SOCIAL_COPY.activityWhatHamDoing}>
+                <div className="space-y-3 text-sm text-white/68">
+                  <p>
+                    Ham drafts and previews social messages with your persona. Confirmed sends only happen through the existing
+                    approval flows on each channel.
+                  </p>
                   <div className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">
-                    Last X post: {snapshot.xJournal.latest_broadcast_post ? "available in delivery details" : "none found"}
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/40">Last X post (summary)</p>
+                    <p className="mt-2 text-white/75">
+                      {formatLooseRecordSummary(snapshot.xJournal.latest_broadcast_post as Record<string, unknown> | null) ||
+                        "Nothing recorded in this snapshot yet."}
+                    </p>
                   </div>
                   <div className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">
-                    Last X reply: {snapshot.xJournal.latest_reactive_reply ? "available in delivery details" : "none found"}
-                  </div>
-                  <div className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">
-                    Recent delivery records: {snapshot.xJournal.recent_items.length}
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/40">Last X reply (summary)</p>
+                    <p className="mt-2 text-white/75">
+                      {formatLooseRecordSummary(snapshot.xJournal.latest_reactive_reply as Record<string, unknown> | null) ||
+                        "Nothing recorded in this snapshot yet."}
+                    </p>
                   </div>
                 </div>
               </Panel>
-              <DetailsPanel title="Delivery history" summary="Show journal scan counts and raw recent records">
-                <KeyValueGrid
-                  rows={[
-                    { label: "Rows scanned", value: snapshot.xJournal.total_count_scanned },
-                    { label: "Malformed rows", value: snapshot.xJournal.malformed_count },
-                    { label: "Recent cap", value: snapshot.xJournal.bounds.max_recent_items },
-                    { label: "Path", value: snapshot.xJournal.journal_path },
-                  ]}
-                />
-                <div className="mt-3">
-                  <RecordPreview record={snapshot.xJournal.counts_by_execution_kind} emptyLabel="No delivery counts yet." />
-                </div>
-                <div className="mt-3 space-y-2">
-                  {snapshot.xJournal.recent_items.length ? (
-                    snapshot.xJournal.recent_items.map((item, idx) => (
-                      <RecordPreview key={idx} record={item} emptyLabel="No delivery record." />
-                    ))
-                  ) : (
-                    <p className="text-sm text-white/45">No recent delivery records.</p>
-                  )}
-                </div>
-              </DetailsPanel>
-              <DetailsPanel title="Safety log" summary="Show audit scan counts and raw recent events">
-                <KeyValueGrid
-                  rows={[
-                    { label: "Rows scanned", value: snapshot.xAudit.total_count_scanned },
-                    { label: "Malformed rows", value: snapshot.xAudit.malformed_count },
-                    { label: "Recent cap", value: snapshot.xAudit.bounds.max_recent_events },
-                    { label: "Path", value: snapshot.xAudit.audit_path },
-                  ]}
-                />
-                <div className="mt-3">
-                  <RecordPreview record={snapshot.xAudit.counts_by_event_type} emptyLabel="No safety log counts yet." />
-                </div>
-                <div className="mt-3 space-y-2">
-                  {snapshot.xAudit.recent_events.length ? (
-                    snapshot.xAudit.recent_events.map((event, idx) => (
-                      <RecordPreview key={idx} record={event} emptyLabel="No safety log event." />
-                    ))
-                  ) : (
-                    <p className="text-sm text-white/45">No recent safety log events.</p>
-                  )}
-                </div>
-              </DetailsPanel>
+              <Panel title={SOCIAL_COPY.overviewRecentActivity}>
+                <p className="text-sm leading-relaxed text-white/65">
+                  This is a light view of recent X outcomes. For Telegram or Discord, run an inbox or preview on that channel —
+                  suggestions appear in those flows, not as raw feeds here.
+                </p>
+              </Panel>
+              <Panel title={SOCIAL_COPY.activityRecentSuggestions}>
+                <p className="text-sm leading-relaxed text-white/65">
+                  Open <span className="text-white/80">Channels</span>, pick X or Telegram, then run an inbox or draft preview.
+                  Suggested replies and posts stay on those screens until you confirm or dismiss them.
+                </p>
+              </Panel>
+              <Panel title={SOCIAL_COPY.activitySafetyRelevant}>
+                <p className="text-sm leading-relaxed text-white/65">
+                  When Ham holds something back, preview cards explain why in plain language. For full safety and audit payloads,
+                  use <span className="text-white/80">Advanced technical proof</span> on the channel.
+                </p>
+              </Panel>
+              <div className="col-span-full">
+                <DetailsPanel title={SOCIAL_COPY.activityTelemetryDetailsTitle} summary={SOCIAL_COPY.activityTelemetryDetailsSummary}>
+                  <div className="grid gap-2 text-sm text-white/60 sm:grid-cols-2">
+                    <div className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                      Journal items in snapshot: {snapshot.xJournal.recent_items.length}
+                    </div>
+                    <div className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                      Recent safety events in snapshot: {snapshot.xAudit.recent_events.length}
+                    </div>
+                  </div>
+                  <p className="mt-3 text-xs text-white/45">
+                    Full JSON is under <span className="text-white/60">Channels → X → Advanced technical proof</span>.
+                  </p>
+                </DetailsPanel>
+              </div>
             </div>
           ) : null}
 
@@ -2787,7 +3529,7 @@ export function WorkspaceSocialScreen() {
                 onClick={() => void sendOneLiveReply()}
                 disabled={liveBusy || confirmText !== LIVE_REPLY_CONFIRMATION_PHRASE || !operatorToken.trim()}
               >
-                {liveBusy ? "Sending one live reply..." : "Send one live reply"}
+                {liveBusy ? "Sending approved reply..." : "Send one approved reply"}
               </Button>
             </div>
           </div>
@@ -2806,7 +3548,7 @@ export function WorkspaceSocialScreen() {
               Confirmed live reactive batch
             </h2>
             <p className="mt-2 text-sm leading-relaxed text-white/65">
-              This may send multiple live replies, capped by the reactive governor. No retry. No broadcast post.
+              This may send multiple approved replies, capped by your configured reply limits. No retry. No broadcast post.
             </p>
             <div className="mt-4 space-y-3">
               <label className="block text-xs font-semibold uppercase tracking-[0.12em] text-white/50">
@@ -2915,7 +3657,7 @@ export function WorkspaceSocialScreen() {
                 onClick={() => void sendOneLivePost()}
                 disabled={broadcastBusy || broadcastConfirmText !== LIVE_BROADCAST_CONFIRMATION_PHRASE || !broadcastOperatorToken.trim()}
               >
-                {broadcastBusy ? "Sending one live post..." : "Send one live post"}
+                {broadcastBusy ? "Sending approved post..." : "Send approved post"}
               </Button>
             </div>
           </div>
