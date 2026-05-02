@@ -2775,7 +2775,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
               className={cn(
                 "inline-flex h-9 items-center gap-1 rounded-lg border px-2.5 text-[11px] font-medium transition",
                 inspectorOpen
-                  ? "border-[#c45c12]/50 bg-white/[0.08] text-[#ffb27a]"
+                  ? "border-emerald-400/40 bg-emerald-500/10 text-emerald-200/95"
                   : "border-white/[0.1] bg-white/[0.06] text-white/80 hover:bg-white/[0.09] hover:text-white",
               )}
               aria-pressed={inspectorOpen}
