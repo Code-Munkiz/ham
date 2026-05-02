@@ -12,6 +12,11 @@ _RE_UNIX_PATH = re.compile(
     r"(?:(?:/usr/|/var/|/home/|/Users/|/tmp/|/etc/)[^\s]+)",
     re.IGNORECASE,
 )
+# Localhost / loopback HTTP(S) — common Comfy dev URLs; keep PDFs path/provider-free.
+_RE_LOCAL_HTTP = re.compile(
+    r"https?://(?:127\.0\.0\.1|localhost)(?::\d+)?[^\s\)\"\'>]*",
+    re.IGNORECASE,
+)
 # Provider-style API keys (OpenAI-style sk-, long alnum)
 _RE_SK_OPENAI = re.compile(r"\bsk-[A-Za-z0-9]{24,}\b")
 # Bearer tokens in prose
@@ -32,6 +37,7 @@ def redact_for_pdf_export(text: str) -> str:
     s = _RE_S3.sub(_REDACT, s)
     s = _RE_WIN_PATH.sub(_REDACT, s)
     s = _RE_UNIX_PATH.sub(_REDACT, s)
+    s = _RE_LOCAL_HTTP.sub(_REDACT, s)
     s = _RE_SK_OPENAI.sub(_REDACT, s)
     s = _RE_BEARER.sub(f"Bearer {_REDACT}", s)
     return s
