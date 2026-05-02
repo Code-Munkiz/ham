@@ -39,6 +39,28 @@ def _parse_ndjson(text: str) -> list[dict]:
     return out
 
 
+def test_chat_stream_rejects_multiple_messages_in_one_request(mock_mode: None) -> None:
+    """Data minimization: each turn sends one user message; prior context is session-backed."""
+    res = client.post(
+        "/api/chat/stream",
+        json={
+            "messages": [
+                {"role": "user", "content": "first"},
+                {"role": "user", "content": "second"},
+            ],
+        },
+    )
+    assert res.status_code == 422
+
+
+def test_chat_stream_rejects_non_user_single_message(mock_mode: None) -> None:
+    res = client.post(
+        "/api/chat/stream",
+        json={"messages": [{"role": "assistant", "content": "hello"}]},
+    )
+    assert res.status_code == 422
+
+
 def test_chat_stream_mock_yields_session_delta_done(mock_mode: None) -> None:
     res = client.post(
         "/api/chat/stream",

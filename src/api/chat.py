@@ -9,13 +9,13 @@ import time
 from pathlib import Path
 from threading import RLock
 from types import SimpleNamespace
-from typing import Any, Literal
+from typing import Any, Literal, Self
 from uuid import uuid4
 
 import httpx
 from fastapi import APIRouter, File, Header, HTTPException, Query, Request, UploadFile
 from fastapi.responses import Response, StreamingResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from src.api.models_catalog import resolve_model_id_for_chat
 from src.bridge import (
@@ -101,7 +101,14 @@ class ChatMessageIn(BaseModel):
 
 class ChatRequest(BaseModel):
     session_id: str | None = None
-    messages: list[ChatMessageIn] = Field(min_length=1, max_length=50)
+    messages: list[ChatMessageIn] = Field(
+        min_length=1,
+        max_length=1,
+        description=(
+            "Exactly one new user turn per request. When session_id is set, prior transcript is loaded "
+            "server-side; do not resend earlier user/assistant messages from the browser."
+        ),
+    )
     client_request_id: str | None = Field(default=None, max_length=128)
     # When true (default), append `.cursor/skills` catalog to system context so Ham maps intents to operator workflows.
     include_operator_skills: bool = True
@@ -123,6 +130,16 @@ class ChatRequest(BaseModel):
     # Execution routing preferences for browser/local-machine/chat control surfaces.
     execution_mode_preference: ExecutionModePreference = "auto"
     execution_environment: ExecutionEnvironment = "unknown"
+
+    @model_validator(mode="after")
+    def _incremental_user_turn_only(self) -> Self:
+        m0 = self.messages[0]
+        if m0.role != "user":
+            raise ValueError(
+                "Chat requests must include a single user message. "
+                "Do not send assistant or system history from the client; the API loads stored turns when session_id is set."
+            )
+        return self
 
 
 class ChatActiveAgentMeta(BaseModel):

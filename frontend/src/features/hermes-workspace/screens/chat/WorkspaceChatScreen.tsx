@@ -1,5 +1,6 @@
 /**
  * Workspace-native chat: upstream Hermes `ChatScreen` visual/IA pattern, HAM `/api/chat/stream` only.
+ * Each stream POST sends one new user turn plus `session_id`; prior transcript is not re-sent (privacy + payload size).
  * Hermes Workspace chat only (no legacy workbench chrome).
  */
 

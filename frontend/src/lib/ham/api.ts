@@ -1320,7 +1320,8 @@ export interface HamChatActiveAgentMeta {
 
 export interface HamChatRequest {
   session_id?: string;
-  messages: HamChatRequestMessage[];
+  /** Exactly one new user message per turn; server loads prior transcript when `session_id` is set. */
+  messages: [HamChatRequestMessage];
   client_request_id?: string;
   /** When true (default), API injects `.cursor/skills` summary into system context for intent routing. */
   include_operator_skills?: boolean;
@@ -1710,6 +1711,7 @@ function applyChatStreamAuthHeaders(
 
 /**
  * Streaming assistant turn (NDJSON). Tokens arrive as `delta` events; final transcript in `done`.
+ * Request must carry exactly one new user message; prior turns are server-side when `session_id` is set.
  */
 export async function postChatStream(
   body: HamChatRequest,

@@ -271,6 +271,19 @@ def test_post_chat_validation_empty_messages(mock_mode: None) -> None:
     assert res.status_code == 422
 
 
+def test_post_chat_rejects_multiple_messages_in_one_request(mock_mode: None) -> None:
+    res = client.post(
+        "/api/chat",
+        json={
+            "messages": [
+                {"role": "user", "content": "a"},
+                {"role": "user", "content": "b"},
+            ],
+        },
+    )
+    assert res.status_code == 422
+
+
 def test_post_chat_gateway_error_mapped(mock_mode: None) -> None:
     with patch(
         "src.api.chat.complete_chat_turn",
