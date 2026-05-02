@@ -23,6 +23,7 @@ import {
   type WorkspaceComposerAttachment,
   MAX_WORKSPACE_ATTACHMENT_COUNT,
 } from "./composerAttachmentHelpers";
+import { WorkspaceOpenRouterModelPicker } from "./WorkspaceOpenRouterModelPicker";
 
 const VOICE_DEBUG_FLAG = "ham.voiceDebug";
 
@@ -235,7 +236,7 @@ export function WorkspaceChatComposer({
   const stopTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const outerRef = React.useRef<HTMLDivElement>(null);
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
-  const modelSelectRef = React.useRef<HTMLSelectElement>(null);
+  const modelPickerTriggerRef = React.useRef<HTMLButtonElement>(null);
   const dragDepthRef = React.useRef(0);
   const TEXTAREA_MAX_PX = 240;
 
@@ -441,7 +442,7 @@ export function WorkspaceChatComposer({
       if (!(e.metaKey || e.ctrlKey) || !e.shiftKey) return;
       if (e.key.toLowerCase() !== "m") return;
       e.preventDefault();
-      modelSelectRef.current?.focus();
+      modelPickerTriggerRef.current?.focus();
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
@@ -787,22 +788,15 @@ export function WorkspaceChatComposer({
                 </span>
               ) : null}
               {showModel ? (
-                <select
-                  ref={modelSelectRef}
-                  id="hww-chat-model"
-                  className="hww-input ml-0.5 max-w-[8rem] shrink cursor-pointer truncate rounded-md border-0 bg-emerald-500/10 py-1 pl-2 pr-1 text-[11px] text-emerald-200/90 outline-none ring-0 md:max-w-[14rem] md:py-1.5 md:pl-2.5 md:text-[12px]"
-                  value={modelId ?? ""}
-                  onChange={(e) => onModelIdChange(e.target.value ? e.target.value : null)}
+                <WorkspaceOpenRouterModelPicker
+                  catalog={catalog!}
+                  candidates={chatModelCandidates(catalog!)}
+                  modelId={modelId}
+                  onModelIdChange={onModelIdChange}
                   disabled={sending}
-                  aria-label="Model"
-                  title={modelDetail ?? undefined}
-                >
-                  {chatModelCandidates(catalog!).map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.label || m.id}
-                    </option>
-                  ))}
-                </select>
+                  title={modelDetail}
+                  triggerRef={modelPickerTriggerRef}
+                />
               ) : modelPill ? (
                 <span
                   className="ml-0.5 inline-flex min-w-0 max-w-[10rem] items-center rounded-full bg-emerald-500/10 px-2.5 py-1 font-mono text-[11px] text-emerald-200/80 md:max-w-[16rem] md:text-[12px]"

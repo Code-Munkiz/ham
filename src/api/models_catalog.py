@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import os
+import threading
+import time
 from typing import Any, Literal
 
 import httpx
@@ -17,6 +19,20 @@ from src.llm_client import (
 from src.persistence.cursor_credentials import get_effective_cursor_api_key
 
 router = APIRouter(prefix="/api", tags=["models"], dependencies=[Depends(get_ham_clerk_actor)])
+
+_OPENROUTER_MODELS_TTL_SEC = 120.0
+_OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models"
+# Internal row ids that must never collide with remote OpenRouter model ids.
+_RESERVED_OPENROUTER_CATALOG_IDS: frozenset[str] = frozenset(
+    {"openrouter:default", "tier:auto", "tier:premium"},
+)
+
+_OPENROUTER_MODELS_LOCK = threading.Lock()
+_OPENROUTER_MODELS_CACHE: dict[str, Any] = {
+    "monotonic_at": 0.0,
+    "items": None,  # None before first fetch in eligible mode; list afterward
+    "fetch_failed": False,
+}
 
 CURSOR_CHAT_DISABLED_REASON = (
     "Dashboard chat is OpenRouter-backed only. Cursor API models are listed for alignment; "
@@ -128,6 +144,182 @@ def _normalize_openrouter_litellm_model(raw: str) -> str:
     if r.startswith("openrouter/"):
         return r
     return f"openrouter/{r}"
+
+
+def reset_openrouter_catalog_cache_for_tests() -> None:
+    """Test-only: clear in-process OpenRouter list cache."""
+    with _OPENROUTER_MODELS_LOCK:
+        _OPENROUTER_MODELS_CACHE["monotonic_at"] = 0.0
+        _OPENROUTER_MODELS_CACHE["items"] = None
+        _OPENROUTER_MODELS_CACHE["fetch_failed"] = False
+
+
+def _pricing_hint(raw: Any) -> str | None:
+    if not isinstance(raw, dict):
+        return None
+    p = raw.get("prompt")
+    c = raw.get("completion")
+    if p is None and c is None:
+        return None
+
+    def fmt_one(v: Any) -> str | None:
+        if v is None:
+            return None
+        try:
+            f = float(v)
+            if f == 0.0:
+                return "free"
+            s = f"{f:.6g}".rstrip("0").rstrip(".")
+            return f"${s}/1M"
+        except (TypeError, ValueError):
+            text = str(v).strip()
+            return text[:48] if text else None
+
+    pp = fmt_one(p)
+    cc = fmt_one(c)
+    if pp and cc:
+        return f"in {pp} · out {cc}"
+    return pp or cc
+
+
+def _model_row_likely_chat_capable(row: dict[str, Any]) -> bool:
+    mid = str(row.get("id") or "").lower()
+    if "text-embedding" in mid or mid.endswith("embedding"):
+        return False
+    arch = row.get("architecture")
+    if not isinstance(arch, dict):
+        return True
+    outs = arch.get("output_modalities")
+    if isinstance(outs, list) and outs:
+        lowered = {str(x).lower() for x in outs}
+        if lowered and lowered <= {"embedding", "embeddings"}:
+            return False
+    return True
+
+
+def _fetch_openrouter_public_models_from_network() -> tuple[list[dict[str, Any]], bool]:
+    """
+    Pull OpenRouter /api/v1/models using server-side OPENROUTER_API_KEY.
+    Returns (sanitized catalog rows, fetch_failed).
+    """
+    key = (os.environ.get("OPENROUTER_API_KEY") or "").strip()
+    if not key or not openrouter_api_key_is_plausible(key):
+        return [], False
+    try:
+        with httpx.Client(timeout=25.0) as client:
+            resp = client.get(
+                _OPENROUTER_MODELS_URL,
+                headers={"Authorization": f"Bearer {key}"},
+            )
+    except httpx.RequestError:
+        return [], True
+    if resp.status_code != 200:
+        return [], True
+    try:
+        data = resp.json()
+    except (ValueError, TypeError):
+        return [], True
+    raw_list = data.get("data")
+    if not isinstance(raw_list, list):
+        return [], True
+
+    out: list[dict[str, Any]] = []
+    for m in raw_list:
+        if not isinstance(m, dict):
+            continue
+        if not _model_row_likely_chat_capable(m):
+            continue
+        mid = m.get("id")
+        if not isinstance(mid, str) or not mid.strip():
+            continue
+        mid = mid.strip()
+        if mid in _RESERVED_OPENROUTER_CATALOG_IDS:
+            continue
+        name = m.get("name")
+        label = name.strip() if isinstance(name, str) and name.strip() else mid
+        desc = m.get("description")
+        description = desc.strip() if isinstance(desc, str) else ""
+        if len(description) > 600:
+            description = description[:597] + "..."
+        ctx = m.get("context_length")
+        context_length: int | None
+        try:
+            context_length = int(ctx) if ctx is not None else None
+        except (TypeError, ValueError):
+            context_length = None
+        family = mid.split("/", 1)[0] if "/" in mid else "openrouter"
+        pricing = _pricing_hint(m.get("pricing"))
+        out.append(
+            {
+                "id": mid,
+                "label": label,
+                "tag": "API",
+                "tier": None,
+                "provider": family,
+                "description": description or f"OpenRouter model `{mid}`.",
+                "supports_chat": True,
+                "disabled_reason": None,
+                "openrouter_model": _normalize_openrouter_litellm_model(mid),
+                "context_length": context_length,
+                "pricing_display": pricing,
+            },
+        )
+    out.sort(key=lambda r: (str(r.get("label") or "").lower(), r.get("id") or ""))
+    return out, False
+
+
+def _cached_openrouter_dynamic_rows(
+    *,
+    gateway_mode: str,
+    openrouter_chat_ready: bool,
+    composer_row_chat: bool,
+    composer_disabled_reason: str | None,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """
+    TTL-cached OpenRouter model rows merged only when dashboard OpenRouter path is live.
+    """
+    meta: dict[str, Any] = {
+        "remote_models_fetched": False,
+        "remote_model_count": 0,
+        "remote_fetch_failed": False,
+        "cache_ttl_sec": int(_OPENROUTER_MODELS_TTL_SEC),
+    }
+    if gateway_mode != "openrouter" or not openrouter_chat_ready:
+        return [], meta
+
+    now = time.monotonic()
+    with _OPENROUTER_MODELS_LOCK:
+        cached = _OPENROUTER_MODELS_CACHE["items"]
+        at = float(_OPENROUTER_MODELS_CACHE["monotonic_at"])
+        if cached is not None and (now - at) < _OPENROUTER_MODELS_TTL_SEC:
+            meta["remote_models_fetched"] = True
+            meta["remote_model_count"] = len(cached)
+            meta["remote_fetch_failed"] = bool(_OPENROUTER_MODELS_CACHE["fetch_failed"])
+            rows = list(cached)
+        else:
+            rows, failed = _fetch_openrouter_public_models_from_network()
+            _OPENROUTER_MODELS_CACHE["items"] = list(rows)
+            _OPENROUTER_MODELS_CACHE["monotonic_at"] = now
+            _OPENROUTER_MODELS_CACHE["fetch_failed"] = failed
+            meta["remote_models_fetched"] = True
+            meta["remote_model_count"] = len(rows)
+            meta["remote_fetch_failed"] = failed
+
+    if not composer_row_chat:
+        disabled = composer_disabled_reason or "OpenRouter composer rows inactive for this gateway mode."
+        gated = []
+        for r in rows:
+            gated.append(
+                {
+                    **r,
+                    "supports_chat": False,
+                    "disabled_reason": disabled,
+                },
+            )
+        meta["remote_model_count"] = len(gated)
+        return gated, meta
+
+    return rows, meta
 
 
 def _fetch_cursor_slugs() -> list[str]:
@@ -249,7 +441,13 @@ def build_catalog_payload() -> dict[str, Any]:
         },
     ]
 
-    items = openrouter_items + cursor_items
+    dyn_rows, or_cat_meta = _cached_openrouter_dynamic_rows(
+        gateway_mode=gw,
+        openrouter_chat_ready=or_ready,
+        composer_row_chat=or_row_chat,
+        composer_disabled_reason=or_row_reason,
+    )
+    items = openrouter_items + dyn_rows + cursor_items
     http_primary = (os.environ.get("HERMES_GATEWAY_MODEL") or "").strip() or None
     http_fallback = (os.environ.get("HAM_CHAT_FALLBACK_MODEL") or "").strip() or None
     return {
@@ -261,6 +459,7 @@ def build_catalog_payload() -> dict[str, Any]:
         "dashboard_chat_ready": dashboard_chat_ready,
         "http_chat_model_primary": http_primary,
         "http_chat_model_fallback": http_fallback,
+        "openrouter_catalog": or_cat_meta,
     }
 
 

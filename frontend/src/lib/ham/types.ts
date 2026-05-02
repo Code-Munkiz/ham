@@ -183,6 +183,10 @@ export interface ModelCatalogItem {
   disabled_reason?: string | null;
   cursor_slug?: string;
   openrouter_model?: string;
+  /** From OpenRouter /api/v1/models when available. */
+  context_length?: number | null;
+  /** Short pricing summary derived from provider metadata (no secrets). */
+  pricing_display?: string | null;
 }
 
 /** Response from `GET /api/tts/health` — TTS enabled and mounted (no network probe). */
@@ -235,6 +239,13 @@ export interface ModelCatalogPayload {
   http_chat_model_primary?: string | null;
   /** When set on API: `HAM_CHAT_FALLBACK_MODEL` for HTTP retry (informational). */
   http_chat_model_fallback?: string | null;
+  /** OpenRouter remote catalog integration (server-side fetch; never includes API keys). */
+  openrouter_catalog?: {
+    remote_models_fetched: boolean;
+    remote_model_count: number;
+    remote_fetch_failed: boolean;
+    cache_ttl_sec: number;
+  };
 }
 
 /** Creative-media generation flags (distinct from `image_input` / video attachment store-only). */
