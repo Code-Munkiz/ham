@@ -5,15 +5,26 @@ const CURSOR_NOTE =
 
 /**
  * Shown when `GET /api/models` fails (API down, CORS, or wrong VITE_HAM_API_BASE).
- * Keeps the composer list populated; selection still requires a live Ham API for chat.
+ * Uses mock gateway readiness so the composer stays usable when FastAPI is up but this fetch failed.
+ * Chat/generation HTTP calls can still fail until `GET /api/models` succeeds — fix proxy/base URL and reload.
  */
 export const CLIENT_MODEL_CATALOG_FALLBACK: ModelCatalogPayload = {
   source: "client_fallback",
-  gateway_mode: "unknown",
+  gateway_mode: "mock",
   openrouter_chat_ready: false,
   http_chat_ready: false,
-  dashboard_chat_ready: false,
+  dashboard_chat_ready: true,
   items: [
+    {
+      id: "mock:fallback",
+      label: "Mock assistant (catalog fetch failed)",
+      tag: "LOCAL",
+      tier: null,
+      provider: "ham",
+      description:
+        "Use when the models catalog request failed. Chat uses the server mock gateway if FastAPI is running (`scripts/run_local_api.py`). Reload the page after fixing API/proxy.",
+      supports_chat: true,
+    },
     {
       id: "openrouter:default",
       label: "OpenRouter AI",
