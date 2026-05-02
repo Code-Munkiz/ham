@@ -1245,16 +1245,21 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     if (sessionId) return;
     // Mission-mode deep links must remain mission-scoped and should not be replaced by saved session URLs.
     if (missionIdFromQuery) return;
-    const saved = readLastChatSessionId();
+    const savedRaw = readLastChatSessionId();
+    if (!savedRaw) return;
+    const saved = savedRaw.trim();
     if (!saved) return;
-    const fromQuery = embedMode ? null : searchParams.get("session");
+    const fromQuery = embedMode ? null : searchParams.get("session")?.trim() || null;
     if (!embedMode && !fromQuery) {
       navigate(
         { pathname: "/workspace/chat", search: `?session=${encodeURIComponent(saved)}` },
         { replace: true },
       );
     }
-    // Always attempt load from durable key so packaged restarts are not blocked by URL lag.
+    // Deep-link wins: stale last-session ids must not race `?session=` (404 overlays a valid chat).
+    if (fromQuery && fromQuery !== saved) {
+      return;
+    }
     void loadFromApi(saved);
   }, [embedMode, loadFromApi, missionIdFromQuery, navigate, searchParams, sessionId]);
 
