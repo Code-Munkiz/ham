@@ -5,10 +5,10 @@ Run Ham FastAPI locally with defaults that match desktop + Vite smoke testing.
 - Loads optional repo-root ``.env`` (does not override variables already set in the shell).
 - Sets ``HERMES_GATEWAY_MODE=mock`` when unset (avoids broken upstream gateway during UI work).
 - Uses in-memory chat sessions when unset (no SQLite path issues).
-- With ``HAM_LOCAL_DEV_LOOSE_CLERK=1`` (default), forces API-side Clerk enforcement **off** so a
-  frontend that sends ``Authorization: Bearer`` (e.g. VITE_CLERK_PUBLISHABLE_KEY) does not hit
-  ``CLERK_JWT_ISSUER`` misconfiguration HTTP 500 on read-only routes like
-  ``GET /api/hermes-gateway/snapshot`` and ``GET /api/chat/sessions``.
+- **Always** forces API-side Clerk enforcement **off** for this entrypoint so a SPA that sends
+  ``Authorization: Bearer`` (e.g. ``VITE_CLERK_PUBLISHABLE_KEY``) never hits
+  ``CLERK_JWT_ISSUER`` / JWT verification HTTP 500 on routes like ``GET /api/chat/sessions`` or
+  ``GET /api/chat/capabilities``.
 
 Usage (from repo root)::
 
@@ -18,9 +18,10 @@ Override port::
 
     PORT=8000 .venv/bin/python scripts/run_local_api.py
 
-Full Clerk local testing (issuer + JWT on API; turn off loose mode)::
+Full Clerk-enforced local testing (not this script)::
 
-    HAM_LOCAL_DEV_LOOSE_CLERK=0 .venv/bin/python scripts/run_local_api.py
+    HAM_CLERK_REQUIRE_AUTH=true HAM_CLERK_ENFORCE_EMAIL_RESTRICTIONS=… CLERK_JWT_ISSUER=… \\
+      .venv/bin/python -m uvicorn src.api.server:app --host 127.0.0.1 --port 8000
 """
 
 from __future__ import annotations
@@ -48,10 +49,9 @@ def main() -> None:
     os.environ.setdefault("HERMES_GATEWAY_MODE", "mock")
     os.environ.setdefault("HAM_CHAT_SESSION_STORE", "memory")
 
-    loose = (os.environ.get("HAM_LOCAL_DEV_LOOSE_CLERK") or "1").strip().lower()
-    if loose in ("1", "true", "yes", "on"):
-        os.environ["HAM_CLERK_REQUIRE_AUTH"] = "false"
-        os.environ["HAM_CLERK_ENFORCE_EMAIL_RESTRICTIONS"] = "false"
+    # Local dashboard/dev: never verify Clerk JWTs here (.env may set REQUIRE_AUTH / email gate).
+    os.environ["HAM_CLERK_REQUIRE_AUTH"] = "false"
+    os.environ["HAM_CLERK_ENFORCE_EMAIL_RESTRICTIONS"] = "false"
 
     host = (os.environ.get("HAM_API_HOST") or "127.0.0.1").strip()
     port = int((os.environ.get("PORT") or os.environ.get("HAM_API_PORT") or "8000").strip())
