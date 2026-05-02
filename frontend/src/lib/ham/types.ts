@@ -251,6 +251,20 @@ export interface GeneratedMediaImageGenerateResponse {
   generated_from_reference_image?: boolean;
 }
 
+/** Async video generation request acknowledgement (server-owned job id only). */
+export interface GeneratedMediaVideoGenerateResponse {
+  job_id: string;
+  status: "queued" | "running" | "succeeded" | "failed" | "canceled" | string;
+}
+
+/** Async media job status; successful video jobs resolve to a generated media artifact id. */
+export interface HamMediaJobStatusResponse {
+  job_id: string;
+  status: "queued" | "running" | "succeeded" | "failed" | "canceled" | string;
+  generated_media_id?: string | null;
+  error?: { code?: string | null; message?: string | null } | null;
+}
+
 /** Sanitized artifact row from `GET /api/media/artifacts/{generated_media_id}`. */
 export interface GeneratedMediaArtifactPublicMeta {
   generated_media_id: string;

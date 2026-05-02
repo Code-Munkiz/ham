@@ -2310,7 +2310,11 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       chatCapabilities?.generation?.supports_video_generation ||
         chatCapabilities?.generation?.supports_text_to_video,
     );
-    const provider = String(chatCapabilities?.generation?.video_generation_provider || "").trim();
+    const provider = String(
+      chatCapabilities?.generation?.media_generation_provider ||
+        chatCapabilities?.generation?.active_media_provider ||
+        "",
+    ).trim();
     let subtitle = "Create short clip";
     if (chatCapabilitiesLoading) subtitle = "Checking workspace capabilities…";
     else if (!supportsVideo) subtitle = "Video generation unavailable";
@@ -2338,7 +2342,8 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     catalogLoading,
     chatCapabilities?.generation?.supports_text_to_video,
     chatCapabilities?.generation?.supports_video_generation,
-    chatCapabilities?.generation?.video_generation_provider,
+    chatCapabilities?.generation?.active_media_provider,
+    chatCapabilities?.generation?.media_generation_provider,
     chatCapabilitiesLoading,
     handleComposerGenerateVideo,
     imageGenInFlight,

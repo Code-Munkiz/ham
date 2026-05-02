@@ -5,11 +5,13 @@ import type {
   HamTtsHealthPayload,
   HamVoiceSettingsPayload,
   HamVoiceSettingsPatch,
+  HamMediaJobStatusResponse,
   ModelCatalogPayload,
   ProjectRecord,
   ChatCapabilitiesPayload,
   GeneratedMediaArtifactPublicMeta,
   GeneratedMediaImageGenerateResponse,
+  GeneratedMediaVideoGenerateResponse,
 } from "./types";
 import type { HermesGatewaySnapshot } from "./hermesGateway";
 import { getRegisteredClerkSessionToken } from "./clerkSession";
@@ -157,6 +159,56 @@ export async function postHamGeneratedImage(body: {
     throw new Error(detail);
   }
   return res.json() as Promise<GeneratedMediaImageGenerateResponse>;
+}
+
+/** Text-to-video — async job wrapper; backend owns provider dispatch and artifact storage. */
+export async function postHamGeneratedVideo(body: {
+  prompt: string;
+  model_id?: string | null;
+}): Promise<GeneratedMediaVideoGenerateResponse> {
+  const res = await hamApiFetch("/api/media/videos/generate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      prompt: body.prompt.trim(),
+      ...(typeof body.model_id === "string" && body.model_id.trim()
+        ? { model_id: body.model_id.trim() }
+        : {}),
+    }),
+  });
+  if (!res.ok) {
+    let detail = `HTTP ${res.status}`;
+    try {
+      const j = (await res.json()) as { detail?: unknown };
+      const d = j.detail;
+      if (typeof d === "string") detail = d;
+      else if (typeof d === "object" && d !== null) {
+        const row = (d as { error?: { message?: string } }).error;
+        if (typeof row?.message === "string") detail = row.message;
+      }
+    } catch {
+      /* ignore */
+    }
+    throw new Error(detail);
+  }
+  return res.json() as Promise<GeneratedMediaVideoGenerateResponse>;
+}
+
+export async function fetchHamMediaJobStatus(jobId: string): Promise<HamMediaJobStatusResponse> {
+  const id = encodeURIComponent(jobId.trim());
+  const res = await hamApiFetch(`/api/media/jobs/${id}`);
+  if (!res.ok) {
+    let detail = `HTTP ${res.status}`;
+    try {
+      const j = (await res.json()) as { detail?: { error?: { message?: string } } };
+      const m = j?.detail?.error?.message;
+      if (m) detail = m;
+    } catch {
+      /* ignore */
+    }
+    throw new Error(detail);
+  }
+  return res.json() as Promise<HamMediaJobStatusResponse>;
 }
 
 export async function fetchHamGeneratedMediaMeta(
