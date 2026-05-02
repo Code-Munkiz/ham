@@ -579,6 +579,82 @@ def test_comfy_generate_video_animatediff_patches_and_env_overrides(
     assert ld.get("inputs", {}).get("beta_schedule") == "custom-beta"
 
 
+def test_wan_hq_t2v_manifest_and_example_shapes() -> None:
+    root = Path(__file__).resolve().parents[1]
+    man_path = root / "configs" / "media" / "comfyui" / "wan_hq_t2v_local.manifest.json"
+    data = json.loads(man_path.read_text(encoding="utf-8"))
+    assert data.get("workflow_id") == "wan_hq_t2v_local"
+    assert data.get("fallback_workflow") == "comfy_video_local_poc"
+    patches = data.get("comfy_patches") or {}
+    assert patches.get("prompt") == {"node": "6", "input": "text"}
+    assert patches.get("negative_prompt") == {"node": "7", "input": "text"}
+    assert patches.get("seed") == {"node": "3", "input": "seed"}
+    raw_m = json.dumps(data)
+    assert "gs://" not in raw_m
+    assert "C:\\" not in raw_m
+
+    wf_name = data.get("workflow_file")
+    assert wf_name
+    wf_path = root / "configs" / "media" / "comfyui" / wf_name
+    wf = json.loads(wf_path.read_text(encoding="utf-8"))
+    wf_raw = json.dumps(wf)
+    assert "gs://" not in wf_raw
+    assert ":\\" not in wf_raw and "C:/" not in wf_raw and "/home/" not in wf_raw
+
+    assert (wf.get("37") or {}).get("class_type") == "UNETLoader"
+    assert (wf.get("38") or {}).get("class_type") == "CLIPLoader"
+    assert (wf.get("48") or {}).get("class_type") == "ModelSamplingSD3"
+    assert (wf.get("51") or {}).get("class_type") == "SaveVideo"
+
+
+def test_comfy_generate_video_wan_loader_env_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HAM_COMFYUI_VIDEO_WORKFLOW", "wan_hq_t2v_local")
+    monkeypatch.setenv("HAM_COMFYUI_VIDEO_TIMEOUT_SEC", "30")
+    monkeypatch.setenv("HAM_COMFYUI_VIDEO_OUTPUT_MAX_BYTES", "2000000")
+    monkeypatch.setenv("HAM_MEDIA_IMAGE_PROMPT_MAX_CHARS", "4000")
+    monkeypatch.setenv("HAM_COMFYUI_DEFAULT_NEGATIVE_PROMPT", "neg-env-wan")
+
+    monkeypatch.setenv("HAM_COMFYUI_WAN_VIDEO_MODEL_NAME", "wan_custom.safetensors")
+    monkeypatch.setenv("HAM_COMFYUI_WAN_CLIP_MODEL_NAME", "clip_custom.safetensors")
+    monkeypatch.setenv("HAM_COMFYUI_WAN_VAE_MODEL_NAME", "vae_custom.safetensors")
+
+    mp4 = b"\x00\x00\x00\x18ftypisom\x00\x00\x02\x00isomiso2avc1mp41"
+    captured: dict[str, object] = {}
+
+    def make_client(**_kw: object):
+        fake = MagicMock()
+
+        def _post(_url: str, **kw: object):
+            captured["prompt_json"] = kw.get("json")
+            return httpx.Response(200, json={"prompt_id": "wan-j", "number": 0, "node_errors": {}})
+
+        fake.post.side_effect = _post
+        hist = {
+            "wan-j": {"outputs": {"51": {"videos": [{"filename": "hq.mp4", "type": "output", "subfolder": ""}]}}}
+        }
+        fake.get.side_effect = [
+            httpx.Response(200, json=hist),
+            httpx.Response(200, content=mp4, headers={"content-type": "video/mp4"}),
+        ]
+        fake.__enter__ = lambda self_: fake
+        fake.__exit__ = lambda *_: False
+        return fake
+
+    with patch.object(httpx, "Client", side_effect=make_client):
+        adap = ComfyUIImageProviderAdapter(base_url="http://dummy.invalid", workflow_key="sdxl_baseline", poll_sec=0.01)
+        v = adap.generate_video(prompt="sunny coastline flyover", model_id=None)
+
+    assert v.mime == "video/mp4"
+    pj = captured.get("prompt_json") or {}
+    graph = pj.get("prompt") or {}
+    assert graph["6"]["inputs"]["text"] == "sunny coastline flyover"
+    assert graph["7"]["inputs"]["text"] == "neg-env-wan"
+    assert isinstance(graph["3"]["inputs"]["seed"], int)
+    assert graph["37"]["inputs"]["unet_name"] == "wan_custom.safetensors"
+    assert graph["38"]["inputs"]["clip_name"] == "clip_custom.safetensors"
+    assert graph["39"]["inputs"]["vae_name"] == "vae_custom.safetensors"
+
+
 def test_comfy_generate_video_poc_ignores_negative_patch_when_manifest_omits(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -12,7 +12,8 @@ Usage (from repo root):
 Optional overrides (shell env wins):
     HAM_COMFYUI_BASE_URL
     HAM_COMFYUI_CHECKPOINT_NAME
-    HAM_COMFYUI_VIDEO_WORKFLOW (default remains ``comfy_video_local_poc`` unless set)
+    HAM_COMFYUI_VIDEO_WORKFLOW (default ``comfy_video_local_poc``; use ``wan_hq_t2v_local`` for Wan HQ T2V)
+    HAM_COMFYUI_WAN_VIDEO_MODEL_NAME / HAM_COMFYUI_WAN_CLIP_MODEL_NAME / HAM_COMFYUI_WAN_VAE_MODEL_NAME
     HAM_GENERATED_MEDIA_DIR
     PORT / HAM_API_PORT
 """

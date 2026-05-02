@@ -1,0 +1,33 @@
+{
+  "workflow_id": "wan_hq_t2v_local",
+  "workflow_name": "Wan 2.1 text-to-video (local HQ, operator-maintained)",
+  "model_family": "wan2.1_t2v",
+  "workflow_file": "wan_hq_t2v_local.workflow.example.json",
+  "mode": "text_to_video",
+  "output_mime": "video/mp4",
+  "artifact_kind": "video",
+  "required_inputs": ["prompt", "seed"],
+  "optional_inputs": ["negative_prompt"],
+  "outputs": ["video"],
+  "local_only": true,
+  "requires_comfy_ui": "Stock ComfyUI with Wan 2.1 diffusion path (see ComfyUI_examples/wan); upgrade Comfy if nodes are missing",
+  "requires_models": [
+    "wan2.1_t2v_1.3B_fp16.safetensors (or wan2.1_t2v_1.3B_bf16.safetensors, etc.; filename only)",
+    "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+    "wan_2.1_vae.safetensors"
+  ],
+  "expected_comfy_directories": [
+    "ComfyUI/models/diffusion_models/",
+    "ComfyUI/models/text_encoders/",
+    "ComfyUI/models/vae/"
+  ],
+  "optional_models_note": "Larger Wan 14B checkpoints are supported in principle — swap unet via HAM_COMFYUI_WAN_VIDEO_MODEL_NAME after placing the file under diffusion_models/",
+  "fallback_workflow": "comfy_video_local_poc",
+  "notes": "LOCAL DEV ONLY. Template derived from upstream ComfyUI Wan T2V example graphs (API format): UNETLoader + CLIPLoader (wan) + EmptyHunyuanLatentVideo + ModelSamplingSD3 + KSampler + VAELoader + CreateVideo + SaveVideo. Operator must install weights on the worker; no checkpoints in-repo. Override filenames with HAM_COMFYUI_WAN_VIDEO_MODEL_NAME, HAM_COMFYUI_WAN_CLIP_MODEL_NAME, HAM_COMFYUI_WAN_VAE_MODEL_NAME. If CreateVideo rejects Wan decode tensors, disable HAM patching and replace nodes 50–51 in a worker-local export while keeping comfy_patches targets (nodes 6, 7, 3) aligned.",
+  "license_check_required": true,
+  "comfy_patches": {
+    "prompt": { "node": "6", "input": "text" },
+    "negative_prompt": { "node": "7", "input": "text" },
+    "seed": { "node": "3", "input": "seed" }
+  }
+}

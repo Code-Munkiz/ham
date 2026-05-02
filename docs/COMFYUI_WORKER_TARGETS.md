@@ -60,7 +60,8 @@ Hosted “Comfy-as-a-Service” APIs.
 | **`sdxl_baseline`** | Shipped Phase 2G.6 templates (`configs/media/comfyui/sdxl_baseline.*`). |
 | **`sdxl_vanilla`** | **Alias → `sdxl_baseline`** inside `ham-api` (**no duplicate graph files** required). **`HAM_COMFYUI_DEFAULT_WORKFLOW=sdxl_vanilla`** supported. |
 | **`comfy_video_local_poc`** | Repeated-frame **`video/mp4`** template for local POC; default when **`HAM_COMFYUI_VIDEO_WORKFLOW`** unset. |
-| **`animatediff_sdxl_gen1_mp4`** | AnimateDiff Gen1 **SDXL** true-motion (**`video/mp4`**); requires **`ComfyUI-AnimateDiff-Evolved`** + listed motion/base filenames on the **worker only** — select via **`HAM_COMFYUI_VIDEO_WORKFLOW`** (**`comfy_video_local_poc`** remains manifest **fallback_workflow** / operator default).
+| **`animatediff_sdxl_gen1_mp4`** | AnimateDiff Gen1 **SDXL** true-motion (**`video/mp4`**); requires **`ComfyUI-AnimateDiff-Evolved`** + listed motion/base filenames on the **worker only** — select via **`HAM_COMFYUI_VIDEO_WORKFLOW`** (**`comfy_video_local_poc`** remains manifest **fallback_workflow** / operator default). |
+| **`wan_hq_t2v_local`** | **Local-only** Wan 2.1 **text-to-video** template (**`video/mp4`** via CreateVideo/SaveVideo); requires current **stock ComfyUI** Wan graph nodes + diffusion/text-encoder/VAE files on the **worker only**. Select with **`HAM_COMFYUI_VIDEO_WORKFLOW=wan_hq_t2v_local`**. See **`docs/media/local_hq_video_setup.md`**. |
 
 ### SeargeSDXL (`sdxl_searge`)
 
