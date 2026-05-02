@@ -242,6 +242,21 @@ HAM coordinates (at the product level) user intent, requirements discovery, arch
 
 HAM Desktop should eventually support a **Local Autopilot** posture for operators who choose deeper automation **on their own machine**. Frame as **user-controlled autonomy**, not universal defaults—security stance is **profile-based**.
 
+#### Worker orchestration vs local autopilot
+
+HAM should not try to perform all **heavy development** work directly on behalf of the user. HAM should **orchestrate** the best available **worker** for the job.
+
+**Heavy development** (large code changes, multi-file refactors, repo-wide implementation missions, long-running agentic coding) should be routed to execution backends such as **Cursor Cloud Agents**, **Factory/Droid**, **Cursor SDK / local sidecar**, **Claude Code**, or **future coding workers**—each behind policy, approvals, and telemetry as the product matures.
+
+**HAM Local Autopilot Runner** (this layer) should focus on **local machine and local workflow** work: environment setup, CLI execution, service startup, browser/UI smoke checks, local file operations, test/build commands, log collection, artifact cleanup, and evidence gathering—bounded by the active **trust profile**.
+
+**Product principle:**
+
+```txt
+HAM routes heavy development to specialized workers.
+HAM handles local friction directly when the user grants the appropriate trust profile.
+```
+
 Suggested **trust profiles** (conceptual—not a shipped schema):
 
 ```txt
@@ -254,7 +269,7 @@ Developer Lab / Unsafe Local
 
 HAM Desktop may eventually evolve toward richer **local-only** leverage: controlled browser workflows; guarded native automation; bounded file/script operations where policy allows; form assistance; readable page state; repeatable workflows (including scheduled repeats); connectors where safer than raw UI automation; optional **user-approved** credential surfaces (vault / OS keychain class integrations, later and policy-gated); and workflows that honor **hosted web UI cannot touch the bare machine**—intents cross a **user-approved paired local desktop bridge** only.
 
-**Product principle:**
+**Autonomy and visibility principle:**
 
 ```txt
 The user owns the machine.
