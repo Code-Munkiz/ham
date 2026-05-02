@@ -77,16 +77,6 @@ def test_chat_stream_mock_yields_session_delta_done(mock_mode: None) -> None:
             "cursor_agent_launch",
             "missing_project_context",
         ),
-        (
-            "send this to Factory Droid to update the SDK adapter",
-            "agent_router_blocked",
-            "provider_not_implemented",
-        ),
-        (
-            "use Claude to implement this change",
-            "agent_router_blocked",
-            "provider_not_implemented",
-        ),
     ],
 )
 def test_chat_stream_routes_agent_intents_when_operator_disabled(
@@ -114,7 +104,32 @@ def test_chat_stream_routes_agent_intents_when_operator_disabled(
     assert operator_result.get("data", {}).get("reason_code") == expected_reason_code
 
 
-def test_chat_stream_agent_routed_turn_persists_in_session_when_operator_disabled(
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "send this to Factory Droid to update the SDK adapter",
+        "use Claude to implement this change",
+        "launch Claude Cloud Agent to edit this repo",
+    ],
+)
+def test_chat_stream_non_cursor_agent_mention_streams_without_operator_block(
+    mock_mode: None,
+    monkeypatch: pytest.MonkeyPatch,
+    prompt: str,
+) -> None:
+    monkeypatch.setenv("HAM_CHAT_OPERATOR", "false")
+    res = client.post(
+        "/api/chat/stream",
+        json={"messages": [{"role": "user", "content": prompt}]},
+    )
+    assert res.status_code == 200, res.text
+    events = _parse_ndjson(res.text)
+    assert any(e.get("type") == "delta" for e in events)
+    done = [e for e in events if e["type"] == "done"][0]
+    assert not done.get("operator_result")
+
+
+def test_chat_stream_non_cursor_turn_persists_streamed_assistant_when_operator_disabled(
     mock_mode: None,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -134,7 +149,8 @@ def test_chat_stream_agent_routed_turn_persists_in_session_when_operator_disable
     assert detail.status_code == 200
     msgs = detail.json()["messages"]
     assert msgs[-1]["role"] == "assistant"
-    assert "provider_not_implemented" in msgs[-1]["content"]
+    assert "provider_not_implemented" not in msgs[-1]["content"]
+    assert "Blocked:" not in msgs[-1]["content"]
 
 
 def test_chat_stream_local_repo_ops_not_forced_into_mission_route_when_operator_disabled(

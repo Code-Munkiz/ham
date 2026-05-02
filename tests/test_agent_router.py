@@ -11,7 +11,8 @@ def test_router_cursor_launch_explicit() -> None:
     assert out.task and "sdk adapter fix" in out.task.lower()
 
 
-def test_router_factory_launch_explicit_blocked() -> None:
+def test_router_factory_launch_marks_non_cursor_reason() -> None:
+    """Router still classifies provider; chat maps non-Cursor routes to normal LLM."""
     out = route_agent_intent(
         "send this to Factory Droid to patch tests",
         default_project_id="project.demo-123",

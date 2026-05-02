@@ -610,14 +610,10 @@ def _map_agent_router_result(
     branch_ref = routed.branch.strip() if routed.branch else None
     if routed.intent == "normal_chat":
         return None
+    # Non-Cursor providers are detected in route_agent_intent but not executable in
+    # Workspace Chat. Degrade to normal LLM streaming instead of agent_router_blocked.
     if routed.provider not in ("cursor",):
-        return (
-            "agent_router_blocked",
-            {
-                "reason_code": routed.reason_code or "provider_not_implemented",
-                "provider": routed.provider,
-            },
-        )
+        return None
     if routed.intent == "agent_preview":
         params: dict[str, Any] = {}
         if "task" in routed.missing:

@@ -281,26 +281,36 @@ def test_process_operator_cursor_launch_backfills_cursor_metadata_from_git(
     assert dict(updated.metadata).get("cursor_cloud_ref") == "main"
 
 
-def test_heuristic_factory_route_blocks_with_stable_reason() -> None:
+def test_heuristic_factory_agent_mention_degrades_to_normal_chat() -> None:
     h = try_heuristic_intent(
         "send this to Factory Droid to patch flaky tests",
         default_project_id="project.x-abc123",
     )
-    assert h is not None
-    assert h[0] == "agent_router_blocked"
-    assert h[1]["reason_code"] == "provider_not_implemented"
-    assert h[1]["provider"] == "factory"
+    assert h is None
 
 
-def test_heuristic_claude_route_blocks_with_stable_reason() -> None:
+def test_heuristic_claude_mention_degrades_to_normal_chat() -> None:
     h = try_heuristic_intent(
         "use Claude to implement this",
         default_project_id="project.x-abc123",
     )
-    assert h is not None
-    assert h[0] == "agent_router_blocked"
-    assert h[1]["reason_code"] == "provider_not_implemented"
-    assert h[1]["provider"] == "claude"
+    assert h is None
+
+
+def test_heuristic_claude_design_discussion_degrades_to_normal_chat() -> None:
+    h = try_heuristic_intent(
+        "use Claude to think through the architecture",
+        default_project_id="project.x-abc123",
+    )
+    assert h is None
+
+
+def test_heuristic_codex_question_degrades_to_normal_chat() -> None:
+    h = try_heuristic_intent(
+        "can Codex help with this?",
+        default_project_id="project.x-abc123",
+    )
+    assert h is None
 
 
 def test_heuristic_normal_chat_remains_normal() -> None:
