@@ -316,7 +316,7 @@ Phase B added CI steps and a separate `secret-scan` workflow without raising the
 
 - Branch protection / ruleset on `main` — see `docs/BRANCH_PROTECTION_SETUP.md`. Enable only after PR2 has at least one green run on `main`.
 - ESLint / Prettier on `frontend/` and `desktop/` (Phase A.2).
-- Vulture / deptry / knip / jscpd (Phase C.2 / Phase C.3, warning-only).
+- Knip / jscpd (Phase C.3, warning-only).
 
 ## Frontend tests (Phase C.1 baseline)
 
@@ -353,4 +353,48 @@ Out of scope for C.1 (deferred):
 - Component / route smoke tests (need Clerk env mocking).
 - Coverage threshold for the frontend.
 - ESLint / Prettier on `frontend/`.
-- Vulture / deptry / knip / jscpd (Phase C.2 / C.3).
+- Knip / jscpd (Phase C.3).
+
+## Python dead-code + unused-deps (Phase C.2 baseline)
+
+Phase C.2 wires two Python static-analysis tools into the existing `python`
+CI job, both **warning-only** (`continue-on-error: true`). They surface
+signal without blocking merges; ratchet to blocking later via a one-line
+follow-up PR after a cleanup pass.
+
+Run locally from the repo root (after `pip install -r requirements-dev.txt`):
+
+```bash
+vulture src              # dead-code (uses [tool.vulture] in pyproject.toml)
+deptry .                 # unused / transitive deps (uses [tool.deptry])
+```
+
+What's covered today:
+
+- **Vulture** — `min_confidence=80`, `paths=["src"]`, excludes `tests/`
+  and `.venv/`. Surfaces unused imports, unused variables, dead branches.
+  Current baseline: 7 findings (all 90–100% confidence) — eligible for a
+  separate cleanup PR.
+- **Deptry** — scans `requirements.txt` against actual imports. The
+  `[tool.deptry.per_rule_ignores]` table holds explicit, commented entries
+  for known false positives:
+  - `DEP001` ignores `winpty` (Windows-only, ships via `pywinpty`).
+  - `DEP002` ignores `python-multipart` (FastAPI `Form()` implicit),
+    `google-cloud-storage` (dotted import), `pywinpty`, `cryptography`
+    (pinned for TLS/JWT). Plus `package_module_name_map` quietens the
+    package→module hint warnings.
+  - Visible `DEP003` findings (`requests`, `starlette`) are intentional
+    cleanup signal — treat them as TODO to promote to direct deps.
+
+CI status:
+
+- `python` job → `vulture src` and `deptry .` run **warning-only**
+  (`continue-on-error: true` in `.github/workflows/ci.yml`). Promote to
+  blocking only after the listed dead-code cleanup PR lands.
+
+Out of scope for C.2 (deferred):
+
+- Cleaning the 7 vulture findings (separate cleanup PR).
+- Promoting `requests` / `starlette` from transitive to direct deps.
+- Frontend dead-code (knip) and duplicate-code (jscpd) — Phase C.3.
+- Pre-commit integration of vulture / deptry (CI is sufficient for now).

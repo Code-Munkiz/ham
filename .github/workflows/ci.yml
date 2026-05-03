@@ -61,6 +61,23 @@ jobs:
         continue-on-error: true
         run: mypy src --ignore-missing-imports || true
 
+      # ---------- WARNING-ONLY: vulture dead-code (Phase C.2) ------------
+      # Static dead-code finder; reads [tool.vulture] from pyproject.toml
+      # (paths=src, exclude=tests/.venv, min_confidence=80). Real findings
+      # become a follow-up cleanup PR; warning-only here so it never blocks.
+      - name: Vulture (warning-only)
+        continue-on-error: true
+        run: vulture src
+
+      # ---------- WARNING-ONLY: deptry unused-deps (Phase C.2) ------------
+      # Reads [tool.deptry] from pyproject.toml. Known false positives
+      # (Windows-only deps, FastAPI implicit Form() deps, dotted-name
+      # imports) are listed in per_rule_ignores. Visible DEP003 transitive
+      # findings are intentional cleanup signal.
+      - name: Deptry (warning-only)
+        continue-on-error: true
+        run: deptry .
+
       # ---------- WARNING-ONLY: coverage report ---------------------------
       # We do NOT enforce a --cov-fail-under threshold yet; this step exists
       # to surface the current floor so a future PR can ratchet to blocking.
