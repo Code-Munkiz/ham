@@ -501,6 +501,7 @@ def _telegram_reactive_candidate() -> dict[str, object]:
 
 
 _PROTECTED_ROUTES = (
+    "/api/social",
     "/api/social/providers",
     "/api/social/persona/current",
     "/api/social/personas/ham-canonical",
@@ -994,6 +995,67 @@ def test_provider_list_includes_x_first_td_providers_setup_and_future_providers_
         assert other[pid]["configured"] is False
         assert other[pid]["status"] == "coming_soon"
         assert other[pid]["enabled_lanes"] == []
+
+
+def test_social_snapshot_aggregates_read_only_redacted_data_without_live_calls(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_journal(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _set_x_creds(monkeypatch)
+    telegram_token, telegram_allowed, telegram_home, telegram_group = _set_telegram_ready(monkeypatch, tmp_path)
+    discord_token = "discord-token-secret-1234567890"
+    monkeypatch.setenv("DISCORD_BOT_TOKEN", discord_token)
+    monkeypatch.setenv("DISCORD_ALLOWED_USERS", "discord-user-secret-1234567890")
+    monkeypatch.setenv("DISCORD_HOME_CHANNEL", "discord-channel-secret-1234567890")
+
+    with (
+        patch("src.api.social.send_confirmed_telegram_message") as telegram_send,
+        patch("src.api.social.run_live_controller_once") as x_broadcast_send,
+        patch("src.api.social.run_reactive_live_once") as x_reply_send,
+        patch("src.api.social.run_reactive_batch_once") as x_batch_send,
+    ):
+        res = client.get("/api/social")
+
+    assert res.status_code == 200
+    body = res.json()
+    assert body["read_only"] is True
+    assert body["mutation_attempted"] is False
+    assert body["providers"][0]["id"] == "x"
+    assert body["persona"]["read_only"] is True
+    assert body["xStatus"]["read_only"] is True
+    assert body["xStatus"]["mutation_attempted"] is False
+    assert body["xCapabilities"]["read_only"] is True
+    assert body["telegramStatus"]["read_only"] is True
+    assert body["telegramCapabilities"]["read_only"] is True
+    assert body["telegramSetup"]["read_only"] is True
+    assert body["discordStatus"]["read_only"] is True
+    assert body["discordCapabilities"]["read_only"] is True
+    assert body["discordSetup"]["read_only"] is True
+
+    telegram_send.assert_not_called()
+    x_broadcast_send.assert_not_called()
+    x_reply_send.assert_not_called()
+    x_batch_send.assert_not_called()
+
+    text = json.dumps(body, sort_keys=True)
+    for secret in (
+        _BEARER,
+        _API_KEY,
+        _API_SECRET,
+        _ACCESS_TOKEN,
+        _ACCESS_TOKEN_SECRET,
+        _XAI_KEY,
+        telegram_token,
+        telegram_allowed,
+        telegram_home,
+        telegram_group,
+        discord_token,
+        "discord-user-secret-1234567890",
+        "discord-channel-secret-1234567890",
+    ):
+        assert secret not in text
 
 
 def test_provider_list_marks_td_provider_active_when_gateway_reports_connected(
@@ -2410,8 +2472,8 @@ def test_social_ui_contains_telegram_run_once_dry_run_preview_without_live_contr
         encoding="utf-8"
     )
     adapter = Path("frontend/src/features/hermes-workspace/adapters/socialAdapter.ts").read_text(encoding="utf-8")
-    assert "Preview autonomous run once" in screen
-    assert "Dry-run only. No Telegram message will be sent. No scheduler will be started." in screen
+    assert "Check once" in screen
+    assert "no scheduler is started" in screen
     assert "TelegramActivityRunOncePreviewCard" in screen
     assert "previewTelegramActivityRunOnce" in screen
     assert "/providers/telegram/activity/run-once/preview" in adapter
@@ -2425,8 +2487,8 @@ def test_social_ui_contains_telegram_inbound_preview_without_reply_controls() ->
         encoding="utf-8"
     )
     adapter = Path("frontend/src/features/hermes-workspace/adapters/socialAdapter.ts").read_text(encoding="utf-8")
-    assert "Preview Telegram inbound" in screen
-    assert "Read-only. No Telegram API call. No reply will be sent." in screen
+    assert "Check Telegram inbox" in screen
+    assert "No Telegram API call. No reply will be sent." in screen
     assert "TelegramInboundPreviewCard" in screen
     assert "previewTelegramInbound" in screen
     assert "/providers/telegram/inbound/preview" in adapter
@@ -2439,13 +2501,13 @@ def test_social_ui_contains_telegram_reactive_confirmed_reply_controls_without_r
         encoding="utf-8"
     )
     adapter = Path("frontend/src/features/hermes-workspace/adapters/socialAdapter.ts").read_text(encoding="utf-8")
-    assert "Preview Telegram replies" in screen
-    assert "Dry-run only. No Telegram message will be sent. Reads local Hermes transcript preview." in screen
+    assert "Find reply opportunities" in screen
+    assert "No Telegram message will be sent by this check." in screen
     assert "TelegramReactiveRepliesPreviewCard" in screen
     assert "previewTelegramReactiveReplies" in screen
     assert "/providers/telegram/reactive/replies/preview" in adapter
     assert "/providers/telegram/reactive/replies/apply" in adapter
-    assert "Confirmed live Telegram reply" in screen
+    assert "Approved Telegram reply" in screen
     assert "SEND ONE TELEGRAM REPLY" in screen
     assert "Send one Telegram reply" in screen
     assert "Apply Telegram reply" not in screen

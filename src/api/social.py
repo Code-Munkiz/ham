@@ -846,6 +846,27 @@ class SocialPersonaResponse(BaseModel):
     mutation_attempted: bool = False
 
 
+class SocialSnapshotResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    providers: list[SocialProviderDto]
+    persona: SocialPersonaResponse
+    xStatus: XProviderStatusResponse
+    xCapabilities: XCapabilitiesResponse
+    xSetup: XSetupChecklistResponse
+    xSetupSummary: XSetupSummaryResponse
+    xJournal: XJournalSummaryResponse
+    xAudit: XAuditSummaryResponse
+    telegramStatus: SocialMessagingProviderStatusResponse
+    telegramCapabilities: TelegramCapabilitiesResponse
+    telegramSetup: SocialMessagingSetupChecklistResponse
+    discordStatus: SocialMessagingProviderStatusResponse
+    discordCapabilities: DiscordCapabilitiesResponse
+    discordSetup: SocialMessagingSetupChecklistResponse
+    read_only: bool = True
+    mutation_attempted: bool = False
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -2612,6 +2633,28 @@ _FUTURE_PROVIDERS: tuple[tuple[str, str], ...] = (
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
+
+
+@router.get("", response_model=SocialSnapshotResponse)
+def social_snapshot(
+    _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
+) -> SocialSnapshotResponse:
+    return SocialSnapshotResponse(
+        providers=list_social_providers(_actor).providers,
+        persona=current_social_persona(_actor),
+        xStatus=x_provider_status(_actor),
+        xCapabilities=x_capabilities(_actor),
+        xSetup=x_setup_checklist(_actor),
+        xSetupSummary=x_setup_summary(_actor),
+        xJournal=x_journal_summary(_actor),
+        xAudit=x_audit_summary(_actor),
+        telegramStatus=telegram_provider_status(_actor),
+        telegramCapabilities=telegram_capabilities(_actor),
+        telegramSetup=telegram_setup_checklist(_actor),
+        discordStatus=discord_provider_status(_actor),
+        discordCapabilities=discord_capabilities(_actor),
+        discordSetup=discord_setup_checklist(_actor),
+    )
 
 
 @router.get("/providers", response_model=SocialProvidersResponse)
