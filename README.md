@@ -58,6 +58,7 @@ Before landing edits to canonical markdown, run `python scripts/check_docs_fresh
 
 - `main.py` — CLI entry (bridge / Hermes one-shot orchestration wiring)
 - `src/api/server.py` — FastAPI app (runs, chat, Cursor/managed missions routes; see [AGENTS.md](AGENTS.md))
+- `src/api/workspace_tools.py` — workspace tool/worker discovery (`GET /api/workspace/tools`) and optional Claude Agent SDK smoke path (see [AGENTS.md](AGENTS.md))
 - `src/hermes_feedback.py` — Hermes supervisory/critic MVP surface (reviewer implemented)
 - `src/tools/droid_executor.py` — Droid execution backend (bounded `subprocess.run`, timeout, stdout/stderr caps; profile argv + policy gate what actually runs)
 - `src/memory_heist.py` — repo context, instructions, git, sessions
