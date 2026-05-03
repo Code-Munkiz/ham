@@ -46,6 +46,8 @@ SDK bridge attaches to existing `bc-*` agents; **`HAM_CURSOR_SDK_BRIDGE_ENABLED`
 | [HAM_CLOUD_AGENT_ROUTING_SMOKE.md](HAM_CLOUD_AGENT_ROUTING_SMOKE.md) | Routing / smoke notes for Cloud Agent paths |
 | [RUNBOOK_HAM_MODEL_RECOVERY.md](RUNBOOK_HAM_MODEL_RECOVERY.md) | Model / gateway recovery runbook |
 
+**HAM operator CLI** (diagnostics and packaging helpers, not chat/missions): `python -m src.ham_cli` or `./scripts/ham` — module tree `src/ham_cli/`; see [`AGENTS.md`](../AGENTS.md).
+
 ## Cursor Cloud Agent and managed missions
 
 | Doc | Purpose |
