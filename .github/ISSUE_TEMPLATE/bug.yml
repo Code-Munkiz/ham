@@ -1,0 +1,64 @@
+name: Bug report
+description: Something is broken or behaving incorrectly.
+title: "bug: <short summary>"
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug. Please redact any secrets, tokens, or live
+        provider IDs (X / Telegram / Discord / GoHAM) before submitting.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug.
+      placeholder: When I do X, Y happens instead of Z.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps. Include exact commands when possible.
+      placeholder: |
+        1. `python3 scripts/run_local_api.py`
+        2. `npm run dev` in `frontend/`
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: input
+    id: area
+    attributes:
+      label: Area
+      description: e.g. backend, frontend, desktop, ci, docs, hermes-feedback, droid-executor
+      placeholder: backend
+    validations:
+      required: false
+
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+      description: Output of `git rev-parse HEAD` or release tag.
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / stack trace
+      description: Redact secrets. Use ``` blocks for readability.
+      render: shell
+    validations:
+      required: false

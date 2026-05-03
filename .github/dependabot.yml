@@ -1,0 +1,83 @@
+# Dependabot configuration for ham (Phase A baseline).
+#
+# Goals:
+# - Keep deps fresh without PR spam.
+# - Group minor/patch bumps to reduce review overhead.
+# - Cover all three apps (backend pip, frontend npm, desktop npm) and CI actions.
+#
+# Notes:
+# - Weekly cadence is intentional; daily is too noisy for a small team.
+# - Major bumps stay individual so they get explicit review.
+# - We do NOT enable security-only updates here — GitHub does that automatically
+#   when secret-scanning + dependency-graph are on (enabled in Phase B).
+
+version: 2
+
+updates:
+  # Backend Python (runtime + dev requirements)
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "08:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    labels: ["dependencies", "area:backend"]
+    groups:
+      python-minor-and-patch:
+        update-types: ["minor", "patch"]
+
+  # Frontend (Vite + React workspace)
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "08:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps,frontend)"
+      include: "scope"
+    labels: ["dependencies", "area:frontend"]
+    groups:
+      frontend-minor-and-patch:
+        update-types: ["minor", "patch"]
+
+  # Desktop (Electron shell)
+  - package-ecosystem: "npm"
+    directory: "/desktop"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "08:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "chore(deps,desktop)"
+      include: "scope"
+    labels: ["dependencies", "area:desktop"]
+    groups:
+      desktop-minor-and-patch:
+        update-types: ["minor", "patch"]
+
+  # GitHub Actions used in workflows
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "08:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "chore(ci)"
+      include: "scope"
+    labels: ["dependencies", "area:ci"]
+    groups:
+      actions-minor-and-patch:
+        update-types: ["minor", "patch"]

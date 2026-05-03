@@ -1,0 +1,23 @@
+# Dev-only dependencies for backend tooling (Phase A baseline).
+# Install with: pip install -r requirements-dev.txt
+#
+# Runtime deps stay in requirements.txt. This file is intentionally separate
+# so production images do not pick up linters / test tooling.
+
+# Lint + format (single binary)
+ruff==0.15.7
+
+# Type check (warning-only baseline; not blocking yet)
+mypy>=1.11,<2.0
+
+# Test runner + coverage (already used in CI for pytest; pytest-cov added so
+# the Phase B coverage gate has the plugin available locally)
+pytest>=8.0
+pytest-cov>=5.0
+
+# Pre-commit framework (runs ruff/prettier/gitleaks/etc. locally)
+pre-commit>=3.7
+
+# Phase C tooling (installed but not yet enforced; safe to have around)
+vulture>=2.11
+deptry>=0.20

@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Architecture / vision questions
+    url: https://github.com/Code-Munkiz/ham/blob/main/VISION.md
+    about: Read VISION.md before opening an issue about pillars or boundaries.
+  - name: Product direction (non-binding)
+    url: https://github.com/Code-Munkiz/ham/blob/main/PRODUCT_DIRECTION.md
+    about: Where the product is heading; not a contract.
+  - name: Tracked gaps and remediation
+    url: https://github.com/Code-Munkiz/ham/blob/main/GAPS.md
+    about: Many "is X done?" questions are answered here.

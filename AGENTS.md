@@ -264,3 +264,31 @@ When opening a permitted PR:
 
 - Prefer titles like `docs(agent): …`, `fix(missions): …`, `feat(missions): …`, `chore(agent): …`.
 - Mention **mission_registry_id / agent id** when known; list files touched; say **docs-only vs code-bearing**; list tests/commands run — see also direct-main discipline in `.cursor/rules/ham-direct-main-workflow.mdc` where applicable.
+
+## Local hooks (Phase A baseline)
+
+Repo hardening landed in PR1 (`pyproject.toml`, `requirements-dev.txt`, `.pre-commit-config.yaml`, `.github/CODEOWNERS`, `.github/pull_request_template.md`, `.github/ISSUE_TEMPLATE/*`, `.github/dependabot.yml`). To opt in locally:
+
+```bash
+pip install -r requirements-dev.txt
+pre-commit install
+# one-off audit pass
+pre-commit run --all-files
+```
+
+What runs:
+
+- **`ruff`** (lint) and **`ruff format --check`** — fast, single binary; config in `pyproject.toml [tool.ruff]`. Curated rule set: `E,F,I,N,B,UP,S,C901`. Tests/scripts get per-file ignores.
+- **`mypy`** — warning-only baseline (`ignore_missing_imports = true`, no `disallow_untyped_defs` yet); not in pre-commit, but installed via `requirements-dev.txt` for local use. Will be ratcheted module-by-module in a follow-up PR.
+- **`pre-commit-hooks`** standard hygiene: trailing whitespace, EOF newlines, YAML/JSON syntax, merge-conflict markers, large files (>1MB), private-key detector.
+- **`gitleaks`** with **`--redact`** — secret-value scrubbed; pre-push stage only so commits stay fast. CI integration lands in Phase B.
+
+What is **not** yet enforced:
+
+- ESLint / Prettier on `frontend/` and `desktop/` (Phase A.2 follow-up).
+- Coverage gate (`pytest --cov-fail-under=…`) (Phase B).
+- Vitest scaffold + frontend test runner (Phase C).
+- Vulture / deptry / knip / jscpd dead/duplicate-code checks (Phase C, warning-only).
+- Branch protection / ruleset on `main` and GitHub native secret scanning (Phase B; requires repo settings change).
+
+Do **not** wire `--fix`/`--write` autofixers into CI. Autofix is a local pre-commit concern; CI runs `--check` variants only. See the readiness lift plan in `~/.factory/specs/2026-05-03-ham-agent-readiness-lift-plan-foundations.md` for the full phased plan.

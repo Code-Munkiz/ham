@@ -1,0 +1,104 @@
+# pyproject.toml — backend Python tool config (Phase A baseline).
+#
+# Ruff = lint + format (replaces flake8/black/isort/pylint for our needs).
+# Mypy = warning-only type baseline; will be ratcheted in a follow-up PR.
+# Pytest config stays in pytest.ini for now (do not duplicate here).
+#
+# This file is intentionally additive: it does NOT change runtime behavior.
+# CI integration of these tools lands in a separate follow-up PR (Phase B);
+# pre-commit (.pre-commit-config.yaml) wires them locally now.
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = [
+  ".venv",
+  ".git",
+  ".pytest_cache",
+  ".ruff_cache",
+  "__pycache__",
+  "dist",
+  "build",
+  "node_modules",
+  "frontend",
+  "desktop",
+  ".ham",
+  ".data",
+  ".ham_workspace_sandbox",
+  "models",
+  "assets",
+  "repomix-output-*.txt",
+  "ham-workspace v2.0.zip",
+]
+
+[tool.ruff.lint]
+# Curated baseline: pyflakes, pycodestyle, isort, naming, bugbear,
+# pyupgrade, security (bandit-equivalent), mccabe complexity.
+# We deliberately omit RUF/SIM/PERF for now to avoid churn; ratchet later.
+select = [
+  "E",    # pycodestyle errors
+  "F",    # pyflakes (unused imports/vars → also feeds dead-code detection)
+  "I",    # isort
+  "N",    # pep8-naming
+  "B",    # flake8-bugbear
+  "UP",   # pyupgrade
+  "S",    # flake8-bandit (security)
+  "C901", # mccabe complexity
+]
+ignore = [
+  "E501", # line length is enforced by formatter, not linter
+  "S101", # asserts are fine (esp. in tests)
+  "B008", # FastAPI's Depends(...) default-arg pattern
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S", "N", "B", "C901"]
+"scripts/**" = ["S"]
+"main.py" = ["S"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 15
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+docstring-code-format = false
+
+[tool.mypy]
+python_version = "3.12"
+files = ["src"]
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+# Intentionally NOT strict yet. Strict mode lands per-module via overrides
+# in a follow-up PR after the codebase has had one cleanup pass.
+disallow_untyped_defs = false
+check_untyped_defs = false
+no_implicit_optional = true
+
+[[tool.mypy.overrides]]
+# Vendored / generated / external-shaped modules: keep loose.
+module = [
+  "litellm.*",
+  "google.cloud.*",
+  "playwright.*",
+  "edge_tts.*",
+]
+ignore_missing_imports = true
+
+[tool.vulture]
+# Warning-only dead-code finder. Wired in Phase C.
+min_confidence = 80
+paths = ["src"]
+exclude = ["tests/", ".venv/"]
+
+[tool.deptry]
+# Warning-only unused-dependency finder. Wired in Phase C.
+extend_exclude = [
+  "frontend",
+  "desktop",
+  ".venv",
+  "tests",
+  "scripts",
+]
+ignore_unused = []

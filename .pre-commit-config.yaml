@@ -1,0 +1,53 @@
+# Pre-commit hooks for HAM (Phase A baseline).
+#
+# Install once locally:
+#   pip install pre-commit
+#   pre-commit install
+#
+# Run on demand:
+#   pre-commit run --all-files
+#
+# Notes:
+# - Hooks are intentionally minimal and FAST. Slow checks (mypy, vulture, deptry,
+#   knip, jscpd) live in CI as warning-only and are not in this file.
+# - gitleaks runs with --redact so no secret values are ever written to logs or
+#   stdout. Pre-push only (manual stage) keeps commit cycles fast.
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: ^(repomix-output-.*\.txt|.*\.lock|.*\.zip)$
+      - id: end-of-file-fixer
+        exclude: ^(repomix-output-.*\.txt|.*\.lock|.*\.zip)$
+      - id: check-yaml
+        exclude: ^(.*\.template\.ya?ml|configs/.*)$
+      - id: check-json
+        exclude: ^(.*tsconfig.*\.json|.*tsbuildinfo.*)$
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ["--maxkb=1024"]
+        exclude: ^(.*\.lock|.*-lock\.json|repomix-output-.*\.txt|ham-workspace.*\.zip)$
+      - id: detect-private-key
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.7
+    hooks:
+      - id: ruff
+        # Lint only (no --fix in pre-commit; explicit local control over autofix).
+        args: ["--no-fix"]
+      - id: ruff-format
+        args: ["--check"]
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.4
+    hooks:
+      - id: gitleaks
+        # --redact ensures secret values never appear in logs.
+        args: ["--redact"]
+        # Run only when explicitly invoked or on push to keep commits fast.
+        stages: [pre-push]
+
+# CI parity: see future .github/workflows/ci.yml additions in Phase B.
+# This file is the source of truth for "what runs locally before commit/push".
