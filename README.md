@@ -23,6 +23,8 @@ Open-source multi-agent autonomous developer swarm: Hermes supervisory orchestra
 ```bash
 pip install -r requirements.txt
 cp .env.example .env
+# (optional UI) install frontend deps for the workspace dashboard
+npm install --prefix frontend
 ```
 
 For **`python main.py`** with a real model, set `OPENROUTER_API_KEY` (see `.env.example` for gateway defaults). For a quick local dashboard + API smoke path, `scripts/run_local_api.py` loads `.env`, defaults `HERMES_GATEWAY_MODE=mock` when unset, and aligns with [AGENTS.md](AGENTS.md).
@@ -53,6 +55,15 @@ python -m pytest tests/ -q
 Frontend typecheck: `npm run lint` in `frontend/` (`tsc --noEmit`). See [`AGENTS.md`](AGENTS.md) for per-area test guidance.
 
 Before landing edits to canonical markdown, run `python scripts/check_docs_freshness.py` (same check as the CI **warning-only** doc freshness step).
+
+### CI/VM test caveats
+
+Some terminal-PTY dependent tests can hang in headless CI/VM environments. If you are running the suite non-interactively:
+
+- Exclude the PTY suite:
+  - `python -m pytest tests/ -q --ignore=tests/test_workspace_terminal.py`
+- If you hit a known pre-existing failure in `tests/test_model_capabilities.py::test_known_vision_model_enables_image_input`, deselect it:
+  - `python -m pytest tests/ -q -k 'not test_known_vision_model_enables_image_input'`
 
 ## Project layout
 
