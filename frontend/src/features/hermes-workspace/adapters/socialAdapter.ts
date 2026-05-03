@@ -584,6 +584,22 @@ export type SocialBroadcastApplyResponse = {
   result: Record<string, unknown>;
 };
 
+/**
+ * D.2 advisory snapshot block surfaced on GET /api/social. Optional so older
+ * server builds without the advisory layer continue to type-check.
+ */
+export type SocialPolicySnapshotBlockOnSocial = {
+  exists: boolean;
+  revision: string;
+  advisory_only: true;
+  autopilot_mode: "off" | "manual_only" | "armed";
+  live_autonomy_armed: boolean;
+  writes_enabled: boolean;
+  live_apply_token_present: boolean;
+  warnings: string[];
+  policy: Record<string, unknown> | null;
+};
+
 export type SocialSnapshot = {
   providers: SocialProvider[];
   xStatus: XProviderStatus;
@@ -599,6 +615,8 @@ export type SocialSnapshot = {
   discordCapabilities: DiscordCapabilities;
   discordSetup: SocialMessagingSetupChecklist;
   persona: SocialPersona;
+  /** D.2 advisory snapshot block (optional, type-only — runtime unchanged). */
+  policy?: SocialPolicySnapshotBlockOnSocial | null;
 };
 
 async function getJson<T>(path: string): Promise<T> {
