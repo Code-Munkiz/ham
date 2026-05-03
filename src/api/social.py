@@ -49,6 +49,15 @@ from src.ham.ham_x.reactive_governor import (
 from src.ham.ham_x.reactive_policy import evaluate_reactive_policy
 from src.ham.ham_x.redaction import redact
 from src.ham.social_persona import load_social_persona, persona_digest
+from src.ham.social_policy import (
+    DEFAULT_SOCIAL_POLICY,
+    SocialPolicy,
+    policy_advisory_reasons_for_lane,
+    policy_to_safe_dict,
+    read_social_policy_document,
+    revision_for_document,
+    social_policy_writes_enabled,
+)
 from src.ham.social_telegram_activity import (
     TELEGRAM_ACTIVITY_EXECUTION_KIND,
     TelegramActivityKind,
@@ -143,6 +152,9 @@ class BroadcastLaneStatusDto(BaseModel):
     live_configured: bool
     execution_allowed_now: bool
     reasons: list[str] = Field(default_factory=list)
+    # Advisory only — does not gate apply. Existing ``reasons`` remains the
+    # sole source of enforcement signal.
+    policy_advisory_reasons: list[str] = Field(default_factory=list)
 
 
 class ReactiveLaneStatusDto(BaseModel):
@@ -154,6 +166,8 @@ class ReactiveLaneStatusDto(BaseModel):
     live_canary_enabled: bool
     batch_enabled: bool
     reasons: list[str] = Field(default_factory=list)
+    # Advisory only — does not gate apply.
+    policy_advisory_reasons: list[str] = Field(default_factory=list)
 
 
 class CapCooldownSummaryDto(BaseModel):
@@ -304,6 +318,8 @@ class SocialPreviewResponse(BaseModel):
     live_apply_available: bool = False
     reasons: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+    # Advisory only — never merged into ``reasons``.
+    policy_advisory_reasons: list[str] = Field(default_factory=list)
     result: dict[str, Any] = Field(default_factory=dict)
     proposal_digest: str | None = None
     read_only: bool = True
@@ -374,6 +390,8 @@ class TelegramMessagePreviewResponse(BaseModel):
     message_preview: TelegramMessagePreviewDto
     reasons: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+    # Advisory only — never merged into ``reasons``.
+    policy_advisory_reasons: list[str] = Field(default_factory=list)
     recommended_next_steps: list[str] = Field(default_factory=list)
     read_only: bool = True
 
@@ -396,6 +414,8 @@ class TelegramActivityPreviewResponse(BaseModel):
     governor: TelegramActivityGovernorDto
     reasons: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+    # Advisory only — never merged into ``reasons``.
+    policy_advisory_reasons: list[str] = Field(default_factory=list)
     recommended_next_steps: list[str] = Field(default_factory=list)
     read_only: bool = True
 
@@ -419,6 +439,8 @@ class TelegramActivityRunOncePreviewResponse(BaseModel):
     governor: TelegramActivityGovernorDto
     reasons: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+    # Advisory only — never merged into ``reasons``.
+    policy_advisory_reasons: list[str] = Field(default_factory=list)
     recommended_next_steps: list[str] = Field(default_factory=list)
     read_only: bool = True
 
@@ -451,6 +473,8 @@ class TelegramInboundPreviewResponse(BaseModel):
     items: list[TelegramInboundItemDto] = Field(default_factory=list)
     reasons: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+    # Advisory only — never merged into ``reasons``.
+    policy_advisory_reasons: list[str] = Field(default_factory=list)
     recommended_next_steps: list[str] = Field(default_factory=list)
     read_only: bool = True
 
@@ -508,6 +532,8 @@ class TelegramReactiveRepliesPreviewResponse(BaseModel):
     items: list[TelegramReactiveItemResultDto] = Field(default_factory=list)
     reasons: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+    # Advisory only — never merged into ``reasons``.
+    policy_advisory_reasons: list[str] = Field(default_factory=list)
     recommended_next_steps: list[str] = Field(default_factory=list)
     read_only: bool = True
 
@@ -757,6 +783,8 @@ class SocialMessagingProviderStatusResponse(BaseModel):
     hermes_gateway_status_path_present: bool | None = None
     hermes_gateway_runtime_state: HermesRuntimeState | None = None
     telegram_platform_state: TelegramPlatformState | None = None
+    # Advisory only — never replaces ``readiness_reasons`` / blocking gates.
+    policy_advisory_reasons: list[str] = Field(default_factory=list)
     read_only: bool = True
     mutation_attempted: bool = False
     live_apply_available: bool = False
@@ -863,6 +891,10 @@ class SocialSnapshotResponse(BaseModel):
     discordStatus: SocialMessagingProviderStatusResponse
     discordCapabilities: DiscordCapabilitiesResponse
     discordSetup: SocialMessagingSetupChecklistResponse
+    # Advisory snapshot of the persisted SocialPolicy; ``None`` when the
+    # ``HAM_SOCIAL_POLICY_SNAPSHOT_DISABLED`` env feature flag is set.
+    # Never gates apply; ``advisory_only=True`` is a literal contract marker.
+    policy: dict[str, Any] | None = None
     read_only: bool = True
     mutation_attempted: bool = False
 
@@ -1179,6 +1211,12 @@ def _telegram_status_response() -> SocialMessagingProviderStatusResponse:
             or ""
         ),
     }
+    advisory = sorted(
+        set(
+            _advisory_reasons_for_provider_lane("telegram", "broadcast")
+            + _advisory_reasons_for_provider_lane("telegram", "reactive")
+        )
+    )
     return SocialMessagingProviderStatusResponse(
         provider_id="telegram",
         label="Telegram",
@@ -1199,6 +1237,7 @@ def _telegram_status_response() -> SocialMessagingProviderStatusResponse:
         hermes_gateway_status_path_present=runtime.status_path_configured,
         hermes_gateway_runtime_state=runtime.provider_runtime_state,
         telegram_platform_state=_telegram_platform_state(runtime),
+        policy_advisory_reasons=advisory,
     )
 
 
@@ -1209,6 +1248,12 @@ def _discord_status_response() -> SocialMessagingProviderStatusResponse:
     safe_identifiers = {
         "home_channel": _safe_config_ref(os.environ.get("DISCORD_HOME_CHANNEL") or ""),
     }
+    advisory = sorted(
+        set(
+            _advisory_reasons_for_provider_lane("discord", "broadcast")
+            + _advisory_reasons_for_provider_lane("discord", "reactive")
+        )
+    )
     return SocialMessagingProviderStatusResponse(
         provider_id="discord",
         label="Discord",
@@ -1217,6 +1262,7 @@ def _discord_status_response() -> SocialMessagingProviderStatusResponse:
         hermes_gateway=runtime,
         required_connections=connections,
         safe_identifiers={key: value for key, value in safe_identifiers.items() if value},
+        policy_advisory_reasons=advisory,
     )
 
 
@@ -1437,6 +1483,7 @@ def _telegram_preview_response(body: TelegramMessagePreviewRequest) -> TelegramM
         message_preview=TelegramMessagePreviewDto(text=text if not reasons else "", char_count=len(text) if not reasons else 0),
         reasons=_dedupe(reasons),
         warnings=_dedupe(warnings),
+        policy_advisory_reasons=_advisory_reasons_for_provider_lane("telegram", "broadcast"),
         recommended_next_steps=(
             ["Preview generated only. No Telegram message was sent. Keep this digest for a future confirmed send flow."]
             if status == "completed"
@@ -1458,7 +1505,14 @@ def _telegram_activity_preview_response(body: TelegramActivityPreviewRequest) ->
         gateway_runtime_state=status.hermes_gateway.provider_runtime_state,
         emergency_stop=emergency_stop,
     )
-    return TelegramActivityPreviewResponse.model_validate(planned.model_dump(mode="json"))
+    response = TelegramActivityPreviewResponse.model_validate(planned.model_dump(mode="json"))
+    return response.model_copy(
+        update={
+            "policy_advisory_reasons": _advisory_reasons_for_provider_lane(
+                "telegram", "broadcast"
+            ),
+        }
+    )
 
 
 def _telegram_activity_run_once_preview_response(
@@ -1494,6 +1548,7 @@ def _telegram_activity_run_once_preview_response(
         governor=TelegramActivityGovernorDto.model_validate(result.governor),
         reasons=_dedupe(result.reasons),
         warnings=_dedupe(result.warnings),
+        policy_advisory_reasons=_advisory_reasons_for_provider_lane("telegram", "broadcast"),
         recommended_next_steps=_telegram_activity_run_once_steps(
             reasons=_dedupe(result.reasons),
             governor=result.governor,
@@ -1504,12 +1559,28 @@ def _telegram_activity_run_once_preview_response(
 
 def _telegram_inbound_preview_response() -> TelegramInboundPreviewResponse:
     result = discover_telegram_inbound_once()
-    return TelegramInboundPreviewResponse.model_validate({**result.model_dump(mode="json"), "read_only": True})
+    return TelegramInboundPreviewResponse.model_validate(
+        {
+            **result.model_dump(mode="json"),
+            "read_only": True,
+            "policy_advisory_reasons": _advisory_reasons_for_provider_lane(
+                "telegram", "reactive"
+            ),
+        }
+    )
 
 
 def _telegram_reactive_replies_preview_response() -> TelegramReactiveRepliesPreviewResponse:
     result = preview_telegram_reactive_replies_once()
-    return TelegramReactiveRepliesPreviewResponse.model_validate({**result.model_dump(mode="json"), "read_only": True})
+    return TelegramReactiveRepliesPreviewResponse.model_validate(
+        {
+            **result.model_dump(mode="json"),
+            "read_only": True,
+            "policy_advisory_reasons": _advisory_reasons_for_provider_lane(
+                "telegram", "reactive"
+            ),
+        }
+    )
 
 
 def _telegram_live_apply_available() -> bool:
@@ -1869,6 +1940,105 @@ def _reactive_lane_reasons(cfg: HamXConfig) -> list[str]:
     if not _reactive_handle_configured(cfg):
         reasons.append("reactive_handle_or_query_missing")
     return reasons
+
+
+# ---------------------------------------------------------------------------
+# SocialPolicy advisory helpers (D.2 — read-only, never gate apply)
+# ---------------------------------------------------------------------------
+
+
+def _social_policy_snapshot_disabled() -> bool:
+    return (os.environ.get("HAM_SOCIAL_POLICY_SNAPSHOT_DISABLED") or "").strip().lower() == "true"
+
+
+def _load_social_policy_for_advisory() -> tuple[SocialPolicy | None, dict[str, Any]]:
+    """Read the on-disk SocialPolicy if any; tolerate missing or malformed doc.
+
+    Returns ``(policy, raw_doc)`` where ``policy`` is ``None`` when the
+    document is absent or fails schema validation. Never raises. No live
+    transports, no scheduler — only :func:`read_social_policy_document`,
+    which is itself read-only and bounded.
+    """
+    if _social_policy_snapshot_disabled():
+        return None, {}
+    try:
+        root = Path.cwd()
+        doc = read_social_policy_document(root)
+    except Exception:  # noqa: BLE001
+        return None, {}
+    if not doc:
+        return None, {}
+    try:
+        return SocialPolicy.model_validate(doc), doc
+    except Exception:  # noqa: BLE001
+        return None, doc
+
+
+def _social_policy_snapshot_block() -> dict[str, Any] | None:
+    """Build the snapshot ``policy`` block for ``GET /api/social``.
+
+    ``advisory_only=True`` is a stable contract marker. This function never
+    triggers an apply. Returns ``None`` when the snapshot field is disabled.
+    """
+    if _social_policy_snapshot_disabled():
+        return None
+    policy, doc = _load_social_policy_for_advisory()
+    live_token_present = bool((os.environ.get("HAM_SOCIAL_LIVE_APPLY_TOKEN") or "").strip())
+    if policy is None and not doc:
+        return {
+            "exists": False,
+            "revision": revision_for_document({}),
+            "policy": policy_to_safe_dict(DEFAULT_SOCIAL_POLICY),
+            "autopilot_mode": "off",
+            "live_autonomy_armed": False,
+            "writes_enabled": social_policy_writes_enabled(),
+            "live_apply_token_present": live_token_present,
+            "advisory_only": True,
+            "warnings": ["policy_document_missing"],
+        }
+    if policy is None:
+        return {
+            "exists": True,
+            "revision": revision_for_document(doc),
+            "policy": None,
+            "autopilot_mode": "off",
+            "live_autonomy_armed": False,
+            "writes_enabled": social_policy_writes_enabled(),
+            "live_apply_token_present": live_token_present,
+            "advisory_only": True,
+            "warnings": ["policy_document_invalid"],
+        }
+    return {
+        "exists": True,
+        "revision": revision_for_document(doc),
+        "policy": policy_to_safe_dict(policy),
+        "autopilot_mode": policy.autopilot_mode,
+        "live_autonomy_armed": bool(policy.live_autonomy_armed),
+        "writes_enabled": social_policy_writes_enabled(),
+        "live_apply_token_present": live_token_present,
+        "advisory_only": True,
+        "warnings": [],
+    }
+
+
+def _advisory_reasons_for_provider_lane(
+    provider_id: Literal["x", "telegram", "discord"],
+    lane: Literal["broadcast", "reactive"],
+    *,
+    target_label: str | None = None,
+) -> list[str]:
+    """Read the advisory policy and return ``policy_*`` codes for one lane.
+
+    Pure read of the on-disk policy at request time. Returns ``[]`` when
+    the snapshot is disabled — the lane DTOs treat advisory as
+    informational only.
+    """
+    if _social_policy_snapshot_disabled():
+        return []
+    policy, _doc = _load_social_policy_for_advisory()
+    return policy_advisory_reasons_for_lane(
+        policy, provider_id=provider_id, lane=lane, target_label=target_label,
+    )
 
 
 def _bounded_jsonl_tail(path: Path) -> tuple[list[dict[str, Any]], int]:
@@ -2654,6 +2824,7 @@ def social_snapshot(
         discordStatus=discord_provider_status(_actor),
         discordCapabilities=discord_capabilities(_actor),
         discordSetup=discord_setup_checklist(_actor),
+        policy=_social_policy_snapshot_block(),
     )
 
 
@@ -3155,6 +3326,7 @@ def x_provider_status(
         live_configured=_broadcast_live_configured(cfg),
         execution_allowed_now=exec_allowed,
         reasons=_broadcast_lane_reasons(cfg),
+        policy_advisory_reasons=_advisory_reasons_for_provider_lane("x", "broadcast"),
     )
     reactive = ReactiveLaneStatusDto(
         enabled=cfg.enable_goham_reactive,
@@ -3163,6 +3335,7 @@ def x_provider_status(
         live_canary_enabled=cfg.goham_reactive_live_canary,
         batch_enabled=cfg.enable_goham_reactive_batch,
         reasons=_reactive_lane_reasons(cfg),
+        policy_advisory_reasons=_advisory_reasons_for_provider_lane("x", "reactive"),
     )
     cap_summary = CapCooldownSummaryDto(
         broadcast_daily_cap=cap,
@@ -3438,6 +3611,7 @@ def x_reactive_inbox_preview(
         status=status,
         reasons=reasons,
         warnings=[],
+        policy_advisory_reasons=_advisory_reasons_for_provider_lane("x", "reactive"),
         result=payload,
         proposal_digest=proposal_digest,
     )
@@ -3460,6 +3634,7 @@ def x_reactive_batch_dry_run(
         status=status,
         reasons=reasons,
         warnings=warnings,
+        policy_advisory_reasons=_advisory_reasons_for_provider_lane("x", "reactive"),
         result=payload,
         proposal_digest=proposal_digest,
     )
@@ -3502,6 +3677,7 @@ def x_broadcast_preflight(
         status=status,
         reasons=reasons,
         warnings=[],
+        policy_advisory_reasons=_advisory_reasons_for_provider_lane("x", "broadcast"),
         result=payload,
         proposal_digest=proposal_digest,
     )

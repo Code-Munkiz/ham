@@ -1039,6 +1039,19 @@ def test_social_snapshot_aggregates_read_only_redacted_data_without_live_calls(
     x_reply_send.assert_not_called()
     x_batch_send.assert_not_called()
 
+    # D.2: snapshot exposes a top-level advisory ``policy`` block. Default
+    # tree has no on-disk policy doc, but the field must still be present
+    # and explicitly tagged as advisory-only.
+    assert "policy" in body
+    assert body["policy"] is not None
+    assert body["policy"]["advisory_only"] is True
+    # Lane DTOs gained an additive advisory field; default is empty list
+    # except for the ``policy_document_missing`` advisory when no doc exists.
+    assert "policy_advisory_reasons" in body["xStatus"]["broadcast_lane"]
+    assert "policy_advisory_reasons" in body["xStatus"]["reactive_lane"]
+    assert "policy_advisory_reasons" in body["telegramStatus"]
+    assert "policy_advisory_reasons" in body["discordStatus"]
+
     text = json.dumps(body, sort_keys=True)
     for secret in (
         _BEARER,
