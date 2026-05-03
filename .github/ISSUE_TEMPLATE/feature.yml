@@ -1,0 +1,44 @@
+name: Feature request
+description: Propose a new capability or improvement.
+title: "feat: <short summary>"
+labels: ["feature", "needs-triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / motivation
+      description: What user / agent / operator pain are we solving?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Roughly what would the change look like?
+    validations:
+      required: true
+
+  - type: input
+    id: area
+    attributes:
+      label: Area
+      description: e.g. backend, frontend, desktop, ci, docs, hermes-feedback
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: vision-fit
+    attributes:
+      label: Vision / direction
+      description: Confirm fit with HAM's stated direction.
+      options:
+        - label: I have read VISION.md and PRODUCT_DIRECTION.md
+        - label: This proposal does not contradict the HAM-native naming/contract rules

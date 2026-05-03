@@ -1,0 +1,69 @@
+name: Agent run report
+description: Capture a notable agent run (Cursor, Droid, Hermes) — successful or failed — for later review.
+title: "agent: <short summary>"
+labels: ["agent", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template to document an agent execution worth reviewing
+        (e.g. an interesting Hermes critique, a Cursor Cloud Agent edge case,
+        a droid_executor bridge bug). Redact tokens, gateway keys, and any
+        provider-side identifiers that aren't yours.
+
+  - type: dropdown
+    id: agent-kind
+    attributes:
+      label: Agent kind
+      options:
+        - Cursor Cloud Agent
+        - Factory Droid (droid_executor)
+        - Hermes (HermesReviewer)
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: mission-id
+    attributes:
+      label: mission_registry_id (if applicable)
+    validations:
+      required: false
+
+  - type: input
+    id: run-id
+    attributes:
+      label: ham_run_id / control_plane_run id (if applicable)
+    validations:
+      required: false
+
+  - type: textarea
+    id: what-ran
+    attributes:
+      label: What the agent was asked to do
+    validations:
+      required: true
+
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Outcome
+      description: Did it succeed? What broke? What surprised you?
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence (logs, transcripts, links)
+      description: Paste bounded excerpts. Redact secrets. Prefer links to internal storage over inline dumps.
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: follow-up
+    attributes:
+      label: Suggested follow-up
+    validations:
+      required: false

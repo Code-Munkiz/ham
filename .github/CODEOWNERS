@@ -1,0 +1,40 @@
+# CODEOWNERS for ham (Phase A baseline).
+#
+# Syntax: https://docs.github.com/en/repositories/managing-your-repositories-settings-and-security/customizing-your-repository/about-code-owners
+#
+# Notes:
+# - Default owners cover the whole repo so unowned PRs always get a reviewer.
+# - Per-area owners narrow review to subject-matter folks for that path.
+# - This file is recognized only when on the default branch (main) and when
+#   branch protection / rulesets actually require code-owner review. Phase B
+#   wires that up; until then this file is informational + agent guidance.
+
+# Global fallback
+*                                @abundy1 @Gio2050
+
+# Backend / API / orchestration
+/src/                            @abundy1 @Gio2050
+/main.py                         @abundy1 @Gio2050
+/scripts/                        @abundy1 @Gio2050
+/tests/                          @abundy1 @Gio2050
+/pyproject.toml                  @abundy1 @Gio2050
+/requirements*.txt               @abundy1 @Gio2050
+/Dockerfile                      @abundy1 @Gio2050
+
+# Frontend (Vite + React workspace)
+/frontend/                       @abundy1 @Gio2050
+
+# Desktop (Electron shell)
+/desktop/                        @abundy1 @Gio2050
+
+# Repo governance / CI
+/.github/                        @abundy1 @Gio2050
+/.pre-commit-config.yaml         @abundy1 @Gio2050
+/AGENTS.md                       @abundy1 @Gio2050
+/VISION.md                       @abundy1 @Gio2050
+/PRODUCT_DIRECTION.md            @abundy1 @Gio2050
+/CURSOR_SETUP_HANDOFF.md         @abundy1 @Gio2050
+/CURSOR_EXACT_SETUP_EXPORT.md    @abundy1 @Gio2050
+
+# Docs (lighter review surface)
+/docs/                           @abundy1 @Gio2050
