@@ -108,6 +108,47 @@ def get_workspace_store() -> WorkspaceStore:
 # ---------------------------------------------------------------------------
 
 
+def resolve_actor_or_401(actor: HamActor | None) -> HamActor:
+    """Shared auth gate for both workspace-scoped (``require_workspace``) and
+    actor-only (``require_actor``) routes.
+
+    1. If Clerk required + actor missing → ``401 CLERK_SESSION_REQUIRED``.
+    2. If Clerk not required + actor missing + bypass on → synthetic actor.
+    3. If Clerk not required + actor missing + bypass off → ``401 HAM_WORKSPACE_AUTH_REQUIRED``.
+    4. If actor present → return as-is (Clerk JWT verification already happened upstream).
+    """
+    if actor is not None:
+        return actor
+    if clerk_operator_require_auth_enabled():
+        raise HTTPException(
+            status_code=401,
+            detail={
+                "error": {
+                    "code": "CLERK_SESSION_REQUIRED",
+                    "message": (
+                        "Authorization: Bearer <Clerk session JWT> required for "
+                        "workspace-scoped endpoints."
+                    ),
+                },
+            },
+        )
+    if not _local_dev_bypass_enabled():
+        raise HTTPException(
+            status_code=401,
+            detail={
+                "error": {
+                    "code": "HAM_WORKSPACE_AUTH_REQUIRED",
+                    "message": (
+                        "No Clerk session and HAM_LOCAL_DEV_WORKSPACE_BYPASS is not set; "
+                        "set HAM_LOCAL_DEV_WORKSPACE_BYPASS=true for local dev or send "
+                        "a Clerk JWT."
+                    ),
+                },
+            },
+        )
+    return synthetic_local_dev_actor()
+
+
 async def require_workspace(
     workspace_id: Annotated[str, Path(min_length=1)],
     actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)] = None,
@@ -115,43 +156,11 @@ async def require_workspace(
 ) -> WorkspaceContext:
     """Resolve a tenant-scoped :class:`WorkspaceContext`.
 
-    Order of operations:
-
-    1. If Clerk required + actor missing → ``401``.
-    2. If Clerk not required + actor missing + bypass flag on → synthetic actor.
-    3. If Clerk not required + actor missing + bypass flag off → ``401``.
-    4. Resolve workspace + membership; raise ``404`` / ``403`` accordingly.
+    Auth gating is delegated to :func:`resolve_actor_or_401`; the resolver
+    then maps ``actor + workspace_id`` to a frozen ``WorkspaceContext`` or
+    raises ``404 HAM_WORKSPACE_NOT_FOUND`` / ``403 HAM_WORKSPACE_FORBIDDEN``.
     """
-    effective_actor = actor
-    if effective_actor is None:
-        if clerk_operator_require_auth_enabled():
-            raise HTTPException(
-                status_code=401,
-                detail={
-                    "error": {
-                        "code": "CLERK_SESSION_REQUIRED",
-                        "message": (
-                            "Authorization: Bearer <Clerk session JWT> required for "
-                            "workspace-scoped endpoints."
-                        ),
-                    },
-                },
-            )
-        if not _local_dev_bypass_enabled():
-            raise HTTPException(
-                status_code=401,
-                detail={
-                    "error": {
-                        "code": "HAM_WORKSPACE_AUTH_REQUIRED",
-                        "message": (
-                            "No Clerk session and HAM_LOCAL_DEV_WORKSPACE_BYPASS is not set; "
-                            "set HAM_LOCAL_DEV_WORKSPACE_BYPASS=true for local dev or send "
-                            "a Clerk JWT."
-                        ),
-                    },
-                },
-            )
-        effective_actor = synthetic_local_dev_actor()
+    effective_actor = resolve_actor_or_401(actor)
     try:
         return resolve_workspace_context(effective_actor, workspace_id, store)
     except (WorkspaceForbidden, WorkspaceNotFound) as exc:
@@ -198,5 +207,6 @@ __all__ = [
     "get_workspace_store",
     "require_perm",
     "require_workspace",
+    "resolve_actor_or_401",
     "synthetic_local_dev_actor",
 ]
