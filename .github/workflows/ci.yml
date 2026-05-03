@@ -102,3 +102,13 @@ jobs:
       - name: Typecheck
         working-directory: frontend
         run: npm run lint
+
+      # ---------- WARNING-ONLY: Vitest baseline (Phase C.1) ---------------
+      # Pure-function smoke tests live under frontend/src/**/__tests__/*.
+      # Warning-only for one cycle so any unforeseen flakiness can't block
+      # merges; promote to blocking in a follow-up PR after one green run
+      # on main.
+      - name: Vitest (warning-only)
+        continue-on-error: true
+        working-directory: frontend
+        run: npm test -- --run --reporter=default
