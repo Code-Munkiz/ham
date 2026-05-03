@@ -103,7 +103,7 @@ def claude_agent_smoke_route_armed() -> bool:
 
 def claude_agent_coarse_provider() -> str:
     """Coarse auth channel label for logs/responses — never values."""
-    if _has_anthropic_api_key():
+    if _anthropic_direct_key_present():
         return "anthropic_direct"
     if _has_bedrock_signal():
         return "bedrock"
@@ -124,6 +124,23 @@ def reset_claude_agent_readiness_cache() -> None:
 
 def _has_anthropic_api_key() -> bool:
     return bool((os.environ.get("ANTHROPIC_API_KEY") or "").strip())
+
+
+def _workspace_stored_anthropic_key_present() -> bool:
+    """True if the Connected Tools file store holds an Anthropic key (server-side MVP)."""
+    try:
+        from src.persistence.workspace_tool_credentials import (
+            get_stored_anthropic_api_key,
+        )
+
+        return bool(get_stored_anthropic_api_key())
+    except Exception:
+        return False
+
+
+def _anthropic_direct_key_present() -> bool:
+    """Anthropic direct auth: env key or workspace-stored user key."""
+    return _has_anthropic_api_key() or _workspace_stored_anthropic_key_present()
 
 
 def _has_bedrock_signal() -> bool:
@@ -163,7 +180,7 @@ def _has_any_auth_signal() -> bool:
     """
     try:
         return (
-            _has_anthropic_api_key() or _has_bedrock_signal() or _has_vertex_signal()
+            _anthropic_direct_key_present() or _has_bedrock_signal() or _has_vertex_signal()
         )
     except Exception:
         return False
