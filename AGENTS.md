@@ -140,7 +140,7 @@ For **that** workflow, prefer **`main` directly** — not feature branches or au
 1. `git status --short --branch` and `git branch --show-current`.
 2. If not on `main`: `git checkout main`, then `git pull origin main`.
 3. Apply the requested change. Stage **only** intended files.
-4. **Do not stage:** `.cursor/settings.json`, `desktop/live-smoke/`, repomix outputs, build artifacts, temp scripts, unrelated dirty files.
+4. **Do not stage:** editor-local Cursor settings under `.cursor/` (for example settings.json when present locally), `desktop/live-smoke/`, repomix outputs, build artifacts, temp scripts, unrelated dirty files.
 5. Run **scoped** tests for the touched area.
 6. Commit on `main`: `git commit -m "<clear commit message>"`.
 7. Push: `git push origin main`.
@@ -201,7 +201,7 @@ There are many draft PRs for small docs notes. I want to stop accumulating PR cl
 
 - `desktop/` — Milestone 1 Electron shell (thin wrapper; see `desktop/README.md`); `npm start` after `npm run dev` in `frontend/`
 - `frontend/` — Vite + React workspace; `npm run dev` (port 3000), `npm run lint` (`tsc --noEmit`)
-- `frontend/src/pages/HermesSkills.tsx` — **Skills** catalog UI (`/skills`, redirect from `/hermes-skills`); distinct from Cursor operator skills; API remains `/api/hermes-skills/*`
+- `frontend/src/features/hermes-workspace/screens/skills/WorkspaceSkillsScreen.tsx` — **Skills** workspace UI (`/workspace/skills`; legacy `/skills` and `/hermes-skills` redirect here); distinct from Cursor operator skills; Hermes runtime catalog APIs remain under `/api/hermes-skills/*` and workspace skills under `/api/workspace/skills*`
 
 ## Tests
 
