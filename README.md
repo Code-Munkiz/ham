@@ -52,6 +52,13 @@ python -m pytest tests/ -q
 
 Frontend typecheck: `npm run lint` in `frontend/` (`tsc --noEmit`). See [`AGENTS.md`](AGENTS.md) for per-area test guidance.
 
+Cloud Agent / VM caveats:
+- `pytest` is not pinned in `requirements.txt` — install separately as above.
+- Some PTY-driven tests hang on headless VMs. When running in a Cloud Agent, prefer:
+  - `python -m pytest tests/ -q --ignore=tests/test_workspace_terminal.py`
+  - Optionally deselect `tests/test_model_capabilities.py::test_known_vision_model_enables_image_input` if your base image lacks the expected models.
+- If `pip install -r requirements.txt` fails due to a system `PyJWT 2.7.0`, run `pip install --ignore-installed PyJWT>=2.8.0` first, then re-run installs.
+
 Before landing edits to canonical markdown, run `python scripts/check_docs_freshness.py` (same check as the CI **warning-only** doc freshness step).
 
 ## Project layout
