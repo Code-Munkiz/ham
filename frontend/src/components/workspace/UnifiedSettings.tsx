@@ -59,6 +59,7 @@ import {
   fetchLocalWorkspaceHealth,
   isLocalRuntimeConfigured,
 } from "@/features/hermes-workspace/adapters/localRuntime";
+import { loadContextMemorySnapshot, shouldGateContextMemorySettingsMutations } from "@/features/hermes-workspace/lib/contextMemorySnapshotLoadPlan";
 import { useOptionalWorkspaceHamProject } from "@/features/hermes-workspace/WorkspaceHamProjectContext";
 
 export type SettingsPanelVisualVariant = "default" | "workspace";
@@ -1302,51 +1303,21 @@ export function ContextAndMemoryPanel({ variant = "default" }: { variant?: Setti
   const [snapshotSource, setSnapshotSource] = React.useState<"local" | "project" | "global" | null>(null);
   const [fallbackNote, setFallbackNote] = React.useState<string | null>(null);
 
-  const loadCloudChain = React.useCallback(async () => {
-    if (hamProjectId) {
-      try {
-        const payload = await fetchProjectContextEngine(hamProjectId);
-        setData({ ...payload, context_source: "cloud" });
-        setSnapshotSource("project");
-        return;
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : "Project snapshot failed";
-        setFallbackNote(
-          `Could not load the cloud project snapshot (${msg}). Showing the global cloud API snapshot instead — this is normal when the cloud host does not have that project folder.`,
-        );
-        const payload = await fetchContextEngine();
-        setData({ ...payload, context_source: "cloud" });
-        setSnapshotSource("global");
-        return;
-      }
-    }
-    const payload = await fetchContextEngine();
-    setData({ ...payload, context_source: "cloud" });
-    setSnapshotSource("global");
-  }, [hamProjectId]);
-
   const load = React.useCallback(async () => {
     setLoading(true);
     setError(null);
     setFallbackNote(null);
     try {
-      if (isLocalRuntimeConfigured()) {
-        const health = await fetchLocalWorkspaceHealth();
-        if (health?.ok === true && health.workspaceRootConfigured === true) {
-          try {
-            const localPayload = await fetchLocalWorkspaceContextSnapshot();
-            setData(localPayload);
-            setSnapshotSource("local");
-            return;
-          } catch (e) {
-            const msg = e instanceof Error ? e.message : "Local snapshot failed";
-            setFallbackNote(
-              `This computer did not return a project snapshot (${msg}). Showing the cloud snapshot instead.`,
-            );
-          }
-        }
-      }
-      await loadCloudChain();
+      const outcome = await loadContextMemorySnapshot(hamProjectId, {
+        isLocalRuntimeConfigured,
+        fetchLocalWorkspaceHealth,
+        fetchLocalWorkspaceContextSnapshot,
+        fetchProjectContextEngine,
+        fetchContextEngine,
+      });
+      setData(outcome.payload);
+      setSnapshotSource(outcome.source);
+      setFallbackNote(outcome.fallbackNote);
     } catch (e) {
       setData(null);
       setSnapshotSource(null);
@@ -1354,7 +1325,7 @@ export function ContextAndMemoryPanel({ variant = "default" }: { variant?: Setti
     } finally {
       setLoading(false);
     }
-  }, [loadCloudChain]);
+  }, [hamProjectId]);
 
   React.useEffect(() => {
     void load();
@@ -1882,7 +1853,7 @@ export function ContextAndMemoryPanel({ variant = "default" }: { variant?: Setti
             data={data}
             onApplied={() => void load()}
             visualVariant={w ? "workspace" : "default"}
-            contextSnapshotLocal={snapshotSource === "local"}
+            contextSnapshotLocal={shouldGateContextMemorySettingsMutations(snapshotSource)}
           />
         </>
       )}
