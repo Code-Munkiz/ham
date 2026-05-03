@@ -316,5 +316,41 @@ Phase B added CI steps and a separate `secret-scan` workflow without raising the
 
 - Branch protection / ruleset on `main` — see `docs/BRANCH_PROTECTION_SETUP.md`. Enable only after PR2 has at least one green run on `main`.
 - ESLint / Prettier on `frontend/` and `desktop/` (Phase A.2).
-- Vitest scaffold for `frontend/` (Phase C).
-- Vulture / deptry / knip / jscpd (Phase C, warning-only).
+- Vulture / deptry / knip / jscpd (Phase C.2 / Phase C.3, warning-only).
+
+## Frontend tests (Phase C.1 baseline)
+
+Phase C.1 introduced Vitest as the frontend test runner. Pure-function tests
+live under `frontend/src/**/__tests__/*.test.ts`. The runner is wired with
+jsdom + `@testing-library/jest-dom` matchers so component smoke tests can
+land in a follow-up without further setup.
+
+Run locally from `frontend/`:
+
+```bash
+npm install            # one-time, picks up vitest + jsdom + @testing-library/*
+npm test               # one-shot run (CI mode)
+npm run test:watch     # interactive watch mode for local dev
+```
+
+What's covered today:
+
+- `frontend/src/lib/ham/__tests__/voiceRecordingErrors.test.ts` — locks user-
+  facing copy for MediaRecorder / getUserMedia error mapping.
+- `frontend/src/lib/ham/__tests__/desktopDownloadsManifest.test.ts` — happy /
+  sad paths for the manifest parser (trust boundary on fetched JSON).
+- `frontend/src/features/hermes-workspace/screens/social/lib/__tests__/socialViewModel.test.ts`
+  — pins product-truth helpers (mode/readiness/frequency/volume mapping).
+
+CI status:
+
+- `frontend` job → `npm test` runs **warning-only** for one cycle
+  (`continue-on-error: true` in `.github/workflows/ci.yml`). Promote to
+  blocking in a follow-up PR after one green run on `main`.
+
+Out of scope for C.1 (deferred):
+
+- Component / route smoke tests (need Clerk env mocking).
+- Coverage threshold for the frontend.
+- ESLint / Prettier on `frontend/`.
+- Vulture / deptry / knip / jscpd (Phase C.2 / C.3).
