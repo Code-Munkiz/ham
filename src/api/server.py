@@ -276,7 +276,40 @@ async def get_project_context_engine(
     record = get_project_store().get_project(project_id)
     if record is None:
         raise HTTPException(status_code=404, detail=f"Project {project_id!r} not found")
-    return context_engine_dashboard_payload(Path(record.root))
+    raw_root = Path(record.root).expanduser()
+    try:
+        root_path = raw_root.resolve()
+    except OSError:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": {
+                    "code": "PROJECT_ROOT_UNRESOLVABLE",
+                    "message": "Registered project root could not be resolved on this API host.",
+                }
+            },
+        )
+    if not root_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": {
+                    "code": "PROJECT_ROOT_MISSING",
+                    "message": "Registered project root does not exist on this API host.",
+                }
+            },
+        )
+    if not root_path.is_dir():
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": {
+                    "code": "PROJECT_ROOT_NOT_A_DIRECTORY",
+                    "message": "Registered project root is not a directory on this API host.",
+                }
+            },
+        )
+    return context_engine_dashboard_payload(root_path)
 
 
 @app.get("/api/projects/{project_id}/agents")

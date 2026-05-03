@@ -1289,7 +1289,9 @@ export async function fetchProjectContextEngine(
 ): Promise<ContextEnginePayload> {
   const res = await hamApiFetch(`/api/projects/${encodeURIComponent(projectId)}/context-engine`);
   if (!res.ok) {
-    throw new Error(`project context-engine: HTTP ${res.status}`);
+    const structured = await hamApiErrorDetailMessage(res);
+    const raw = structured ?? (await readFastApiDetail(res));
+    throw new Error(raw?.trim() ? raw : `project context-engine: HTTP ${res.status}`);
   }
   return res.json() as Promise<ContextEnginePayload>;
 }

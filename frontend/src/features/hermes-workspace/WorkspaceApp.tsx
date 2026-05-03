@@ -17,6 +17,7 @@ import { WorkspaceSkillsScreen } from "./screens/skills/WorkspaceSkillsScreen";
 import { WorkspaceSocialScreen } from "./screens/social/WorkspaceSocialScreen";
 import "./hermesWorkspace.css";
 import { VoiceWorkspaceSettingsProvider } from "./voice/VoiceWorkspaceSettingsContext";
+import { WorkspaceHamProjectProvider } from "./WorkspaceHamProjectContext";
 
 /**
  * Hermes Workspace surface (`/workspace/*`). Not gated on `VITE_ENABLE_HERMES_WORKSPACE` (routing);
@@ -25,6 +26,7 @@ import { VoiceWorkspaceSettingsProvider } from "./voice/VoiceWorkspaceSettingsCo
  */
 export function WorkspaceApp() {
   return (
+    <WorkspaceHamProjectProvider>
     <VoiceWorkspaceSettingsProvider>
     <div className="hww-outer h-full min-h-0 w-full min-w-0">
       <WorkspaceShell>
@@ -51,5 +53,6 @@ export function WorkspaceApp() {
       </WorkspaceShell>
     </div>
     </VoiceWorkspaceSettingsProvider>
+    </WorkspaceHamProjectProvider>
   );
 }

@@ -57,6 +57,7 @@ import type {
   ComposerGenerateVideoState,
 } from "./WorkspaceChatComposerActionsMenu";
 import { parseWorkspaceCreativeImageIntent, parseWorkspaceImageGenerationIntent } from "./imageGenerationIntent";
+import { useWorkspaceHamProject } from "../../WorkspaceHamProjectContext";
 import { WorkspaceChatInspectorPanel } from "./WorkspaceChatInspectorPanel";
 import {
   appendInspectorEvent,
@@ -502,6 +503,7 @@ export type WorkspaceChatScreenProps = {
 
 export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   const { embedMode = false } = props;
+  const { setHamProjectId } = useWorkspaceHamProject();
   const navigate = useNavigate();
   const desktopShell = isHamDesktopShell();
   const executionEnvironment: "desktop" | "web" = desktopShell ? "desktop" : "web";
@@ -1139,15 +1141,21 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       try {
         const ctx = await fetchContextEngine();
         const id = await ensureProjectIdForWorkspaceRoot(ctx.cwd);
-        if (!c) setProjectId(id);
+        if (!c) {
+          setProjectId(id);
+          setHamProjectId(id);
+        }
       } catch {
-        if (!c) setProjectId(null);
+        if (!c) {
+          setProjectId(null);
+          setHamProjectId(null);
+        }
       }
     })();
     return () => {
       c = true;
     };
-  }, []);
+  }, [setHamProjectId]);
 
   React.useEffect(() => {
     let cancelled = false;
