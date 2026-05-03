@@ -20,6 +20,8 @@ pywinpty>=2.0.1; sys_platform == "win32"
 playwright
 PyJWT>=2.8.0
 cryptography>=42.0.0
+# Claude Agent SDK — Cloud Run image installs this for readiness + gated smoke only (no broad execution).
+claude-agent-sdk>=0.1.70,<0.2.0
 # Nous Hermes Agent CLI is not on PyPI; install separately if needed:
 #   PowerShell: irm https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.ps1 | iex
 #   Or: pip install "git+https://github.com/NousResearch/hermes-agent.git"

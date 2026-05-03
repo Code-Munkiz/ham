@@ -26,6 +26,7 @@ EXPECTED_TOOL_IDS = [
     "cursor",
     "factory_droid",
     "claude_code",
+    "claude_agent_sdk",
     "openclaw",
     "ai_studio",
     "antigravity",
@@ -44,6 +45,18 @@ def _get_tools() -> dict:
     resp = client.get("/api/workspace/tools")
     assert resp.status_code == 200
     return resp.json()
+
+
+@pytest.fixture(autouse=True)
+def _reset_claude_agent_sdk_cache():
+    """Module-level _SDK_DETECTION cache leaks across tests; clear it."""
+    from src.ham.worker_adapters.claude_agent_adapter import (
+        reset_claude_agent_readiness_cache,
+    )
+
+    reset_claude_agent_readiness_cache()
+    yield
+    reset_claude_agent_readiness_cache()
 
 
 class TestToolDiscoveryEndpoint:
@@ -259,3 +272,191 @@ class TestConnectAndScanEndpoints:
         body = r.json()
         assert "tools" in body
         assert len(body["tools"]) >= len(EXPECTED_TOOL_IDS)
+
+
+class TestClaudeAgentSdkEntry:
+    """Behavior of the new claude_agent_sdk Connected Tools entry."""
+
+    def _claude_entry(self) -> dict:
+        data = _get_tools()
+        matches = [t for t in data["tools"] if t["id"] == "claude_agent_sdk"]
+        assert len(matches) == 1, "claude_agent_sdk entry missing or duplicated"
+        return matches[0]
+
+    def test_entry_shape(self):
+        tool = self._claude_entry()
+        assert tool["label"] == "Claude Agent"
+        assert tool["category"] == "coding"
+        assert tool["source"] == "cloud"
+        assert tool["connect_kind"] == "api_key"
+        assert tool["safe_actions"] == ["check_status", "connect"]
+        assert "plan" in tool["capabilities"]
+        assert "edit_code" in tool["capabilities"]
+        assert "version" in tool
+        assert "service_smoke_available" in tool
+        assert "service_smoke_hint" in tool
+
+    def test_status_is_valid(self):
+        valid = {"ready", "needs_sign_in", "not_found", "off", "error", "unknown"}
+        assert self._claude_entry()["status"] in valid
+
+    def test_safe_actions_include_connect_for_future_vault_ux(self):
+        assert "connect" in self._claude_entry()["safe_actions"]
+        assert "check_status" in self._claude_entry()["safe_actions"]
+
+    def test_service_smoke_metadata_when_route_armed(self, monkeypatch):
+        monkeypatch.setenv("HAM_CLAUDE_AGENT_SMOKE_ENABLED", "1")
+        monkeypatch.setenv("HAM_CLAUDE_AGENT_SMOKE_TOKEN", "z" * 32)
+        monkeypatch.delenv("HAM_CLERK_REQUIRE_AUTH", raising=False)
+        monkeypatch.delenv("HAM_CLERK_ENFORCE_EMAIL_RESTRICTIONS", raising=False)
+        tool = self._claude_entry()
+        assert tool["service_smoke_available"] is True
+        assert tool["service_smoke_hint"]
+        assert "HAM_CLAUDE_AGENT_SMOKE_TOKEN" not in str(tool)
+
+    def test_setup_hint_for_not_found(self):
+        from src.ham.worker_adapters.claude_agent_adapter import (
+            ClaudeAgentWorkerCapabilities,
+            ClaudeAgentWorkerReadiness,
+        )
+
+        readiness = ClaudeAgentWorkerReadiness(
+            authenticated=False,
+            sdk_available=False,
+            status="unavailable",
+            capabilities=ClaudeAgentWorkerCapabilities(),
+        )
+        with patch(
+            "src.api.workspace_tools.check_claude_agent_readiness",
+            return_value=readiness,
+        ):
+            tool = self._claude_entry()
+            assert tool["status"] == "not_found"
+            assert tool["setup_hint"] == "Claude isn't installed on this server yet."
+            assert tool["version"] is None
+
+    def test_setup_hint_for_needs_sign_in(self):
+        from src.ham.worker_adapters.claude_agent_adapter import (
+            ClaudeAgentWorkerCapabilities,
+            ClaudeAgentWorkerReadiness,
+        )
+
+        readiness = ClaudeAgentWorkerReadiness(
+            authenticated=False,
+            sdk_available=True,
+            sdk_version="0.1.2",
+            status="needs_sign_in",
+            capabilities=ClaudeAgentWorkerCapabilities(),
+        )
+        with patch(
+            "src.api.workspace_tools.check_claude_agent_readiness",
+            return_value=readiness,
+        ):
+            tool = self._claude_entry()
+            assert tool["status"] == "needs_sign_in"
+            assert "ANTHROPIC_API_KEY" in tool["setup_hint"]
+            assert "Bedrock" in tool["setup_hint"] or "Vertex" in tool["setup_hint"]
+            assert tool["version"] == "0.1.2"
+
+    def test_setup_hint_for_ready(self):
+        from src.ham.worker_adapters.claude_agent_adapter import (
+            ClaudeAgentWorkerCapabilities,
+            ClaudeAgentWorkerReadiness,
+        )
+
+        readiness = ClaudeAgentWorkerReadiness(
+            authenticated=True,
+            sdk_available=True,
+            sdk_version="0.1.2",
+            status="ready",
+            capabilities=ClaudeAgentWorkerCapabilities(),
+        )
+        with patch(
+            "src.api.workspace_tools.check_claude_agent_readiness",
+            return_value=readiness,
+        ):
+            tool = self._claude_entry()
+            assert tool["status"] == "ready"
+            assert "full autonomous execution" in tool["setup_hint"].lower()
+            assert tool["version"] == "0.1.2"
+
+    def test_setup_hint_for_error(self):
+        with patch(
+            "src.api.workspace_tools.check_claude_agent_readiness",
+            side_effect=RuntimeError("boom"),
+        ):
+            tool = self._claude_entry()
+            assert tool["status"] == "error"
+            assert "unexpected error" in tool["setup_hint"].lower()
+            assert tool["version"] is None
+
+    def test_connect_returns_501_secure_storage_not_ready(self):
+        r = client.post(
+            "/api/workspace/tools/claude_agent_sdk/connect",
+            json={"api_key": "sk-ant-test-not-real"},
+        )
+        assert r.status_code == 501
+        body = r.json()
+        assert "SECURE_STORAGE_NOT_READY" in str(body).upper() or "secure" in str(body).lower()
+        assert "sk-ant-test-not-real" not in str(body)
+
+    def test_disconnect_returns_501(self):
+        r = client.post("/api/workspace/tools/claude_agent_sdk/disconnect")
+        assert r.status_code == 501
+
+    def test_no_auth_values_in_response(self):
+        env = {
+            "ANTHROPIC_API_KEY": "sk-ant-secret-not-real-12345",
+            "ANTHROPIC_VERTEX_PROJECT_ID": "secret-vertex-project-id-99999",
+        }
+        with patch.dict(os.environ, env):
+            data = _get_tools()
+            raw = str(data)
+            assert "sk-ant-secret-not-real-12345" not in raw
+            assert "secret-vertex-project-id-99999" not in raw
+
+
+class TestClaudeCodeEntryUnchanged:
+    """Regression: the existing claude_code (local CLI) entry must not change."""
+
+    def test_claude_code_id_label_source_unchanged(self):
+        data = _get_tools()
+        cc = next(t for t in data["tools"] if t["id"] == "claude_code")
+        assert cc["label"] == "Claude Code"
+        assert cc["connect_kind"] == "local_scan"
+        assert cc["safe_actions"] == ["check_status"]
+        # Source flips to "unknown" in cloud mode and "this_computer" otherwise;
+        # both are fine. Just confirm it is NOT the new SDK source.
+        assert cc["source"] in ("this_computer", "unknown")
+
+    def test_claude_code_has_no_version(self):
+        data = _get_tools()
+        cc = next(t for t in data["tools"] if t["id"] == "claude_code")
+        # The new optional field defaults to None for entries that don't set it.
+        assert cc.get("version") is None
+
+
+class TestVersionFieldDefaults:
+    """The new optional `version` field must default to None for everything
+    except the claude_agent_sdk entry (and only when it actually has one)."""
+
+    def test_version_is_none_for_non_claude_entries(self):
+        data = _get_tools()
+        for tool in data["tools"]:
+            if tool["id"] == "claude_agent_sdk":
+                continue
+            assert tool.get("version") is None, (
+                f"{tool['id']} unexpectedly has version={tool.get('version')!r}"
+            )
+
+
+class TestScanInvalidatesClaudeCache:
+    """The scan endpoint must invalidate the Claude SDK detection cache."""
+
+    def test_scan_calls_reset_cache(self):
+        with patch(
+            "src.api.workspace_tools.reset_claude_agent_readiness_cache"
+        ) as mock_reset:
+            r = client.post("/api/workspace/tools/scan")
+            assert r.status_code == 200
+            assert mock_reset.called

@@ -11,6 +11,7 @@ const BASE_IDS = [
   "cursor",
   "factory_droid",
   "claude_code",
+  "claude_agent_sdk",
   "openclaw",
   "ai_studio",
   "antigravity",
@@ -33,6 +34,10 @@ function mockTool(
     enabled: boolean;
     connect_kind: string;
     credential_preview: string | null;
+    safe_actions: string[];
+    version: string | null;
+    service_smoke_available: boolean;
+    service_smoke_hint: string | null;
   }> = {},
 ) {
   return {
@@ -48,7 +53,10 @@ function mockTool(
     connected_account_label: null,
     credential_preview: overrides.credential_preview ?? null,
     last_checked_at: "2026-01-01T00:00:00+00:00",
-    safe_actions: [],
+    safe_actions: overrides.safe_actions ?? [],
+    version: overrides.version ?? null,
+    service_smoke_available: overrides.service_smoke_available ?? false,
+    service_smoke_hint: overrides.service_smoke_hint ?? null,
   };
 }
 
@@ -57,6 +65,7 @@ const TOOL_LABELS: Record<string, string> = {
   cursor: "Cursor",
   factory_droid: "Factory Droid",
   claude_code: "Claude Code",
+  claude_agent_sdk: "Claude Agent",
   openclaw: "OpenClaw",
   ai_studio: "AI Studio",
   antigravity: "Antigravity",
@@ -84,6 +93,15 @@ function buildDefaultPayload() {
         enabled: true,
         connect_kind: "api_key",
         credential_preview: "sk-or-v…abcd",
+        safe_actions: ["check_status", "connect"],
+      });
+    }
+    if (id === "claude_agent_sdk") {
+      return mockTool(id, {
+        label,
+        status: "not_found",
+        connect_kind: "api_key",
+        safe_actions: ["check_status", "connect"],
       });
     }
     if (id === "git") {
@@ -209,5 +227,120 @@ describe("WorkspaceConnectedToolsSection", () => {
       expect(screen.getByText(/Secure key storage is coming next/i)).toBeInTheDocument();
     });
     expect(connectSpy).toHaveBeenCalledWith("openrouter", { api_key: "sk-or-testtokennotreal" });
+  });
+
+  it("Claude Agent shows connect form and secure-storage message on Connect (no key echoed)", async () => {
+    const payload = buildDefaultPayload();
+    vi.spyOn(HamApi, "fetchWorkspaceTools").mockResolvedValue(
+      new Response(JSON.stringify(payload), { status: 200 }),
+    );
+    const connectSpy = vi.spyOn(HamApi, "connectWorkspaceTool").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          detail: { code: "SECURE_STORAGE_NOT_READY", message: "Secure key storage is coming next." },
+        }),
+        { status: 501 },
+      ),
+    );
+
+    render(<WorkspaceConnectedToolsSection />);
+    await waitFor(() => expect(screen.getByText("Claude Agent")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText("Claude Agent"));
+    const input = await screen.findByLabelText(/Paste your API key/i);
+    const fake = "sk-ant-user-fake-not-stored";
+    fireEvent.change(input, { target: { value: fake } });
+    fireEvent.click(screen.getByRole("button", { name: /^Connect$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Secure key storage is coming next/i)).toBeInTheDocument();
+    });
+    expect(connectSpy).toHaveBeenCalledWith("claude_agent_sdk", { api_key: fake });
+    expect(document.body.textContent).not.toContain(fake);
+  });
+
+  it("shows server smoke section separately from user key connect when flagged", async () => {
+    const payload = buildDefaultPayload();
+    payload.tools = payload.tools.map((t) =>
+      t.id === "claude_agent_sdk"
+        ? mockTool("claude_agent_sdk", {
+            label: "Claude Agent",
+            status: "ready",
+            enabled: true,
+            connect_kind: "api_key",
+            safe_actions: ["check_status", "connect"],
+            version: "0.1.2",
+            service_smoke_available: true,
+            service_smoke_hint: "Service test available (server-side only).",
+          })
+        : t,
+    );
+    vi.spyOn(HamApi, "fetchWorkspaceTools").mockResolvedValue(
+      new Response(JSON.stringify(payload), { status: 200 }),
+    );
+    vi.spyOn(HamApi, "postClaudeAgentSmoke").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          status: "ok",
+          provider: "anthropic_direct",
+          sdk_available: true,
+          authenticated: true,
+          smoke_ok: true,
+          response_text: "HAM_CLAUDE_SMOKE_OK",
+          blocker: null,
+        }),
+        { status: 200 },
+      ),
+    );
+
+    render(<WorkspaceConnectedToolsSection />);
+    await waitFor(() => expect(screen.getByText("Claude Agent")).toBeInTheDocument());
+    fireEvent.click(screen.getByText("Claude Agent"));
+    await waitFor(() => expect(screen.getByText(/Advanced — server test/i)).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: /Run server-side smoke test/i }));
+    await waitFor(() => {
+      expect(screen.getByTestId("claude-smoke-status").textContent).toMatch(/harmless check only/i);
+    });
+  });
+
+  it("renders version in tagline for ready Claude Agent entry", async () => {
+    const payload = buildDefaultPayload();
+    payload.tools = payload.tools.map((t) =>
+      t.id === "claude_agent_sdk"
+        ? mockTool("claude_agent_sdk", {
+            label: "Claude Agent",
+            status: "ready",
+            enabled: true,
+            connect_kind: "api_key",
+            safe_actions: ["check_status", "connect"],
+            version: "0.1.2",
+          })
+        : t,
+    );
+    vi.spyOn(HamApi, "fetchWorkspaceTools").mockResolvedValue(
+      new Response(JSON.stringify(payload), { status: 200 }),
+    );
+
+    render(<WorkspaceConnectedToolsSection />);
+    await waitFor(() => expect(screen.getByText("Claude Agent")).toBeInTheDocument());
+
+    // Tagline format: "Ready · On · 0.1.2"
+    await waitFor(() => {
+      expect(screen.getByText(/0\.1\.2/)).toBeInTheDocument();
+    });
+  });
+
+  it("connectable tool with safe_actions including 'connect' still shows Connect form", async () => {
+    // Regression: the safe_actions gate must not break OpenRouter, Cursor, etc.
+    vi.spyOn(HamApi, "fetchWorkspaceTools").mockResolvedValue(
+      new Response(JSON.stringify(buildDefaultPayload()), { status: 200 }),
+    );
+
+    render(<WorkspaceConnectedToolsSection />);
+    await waitFor(() => expect(screen.getByText("OpenRouter")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText("OpenRouter"));
+    const input = await screen.findByLabelText(/Paste your API key/i);
+    expect(input).toBeInTheDocument();
   });
 });
