@@ -3,6 +3,7 @@
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import * as HamApi from "@/lib/ham/api";
 import { WorkspaceConnectedToolsSection } from "../WorkspaceConnectedToolsSection";
 
 const BASE_IDS = [
@@ -107,8 +108,37 @@ describe("WorkspaceConnectedToolsSection", () => {
     vi.restoreAllMocks();
   });
 
+  it("loads tools via fetchWorkspaceTools (not raw same-origin fetch)", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const spy = vi.spyOn(HamApi, "fetchWorkspaceTools").mockResolvedValue(
+      new Response(JSON.stringify(buildDefaultPayload()), { status: 200 }),
+    );
+    render(<WorkspaceConnectedToolsSection />);
+    await waitFor(() => expect(screen.getByText("Connected tools")).toBeInTheDocument());
+    expect(spy).toHaveBeenCalledTimes(1);
+    const sameOriginToolsOnly = fetchSpy.mock.calls.some(
+      (c) => typeof c[0] === "string" && c[0] === "/api/workspace/tools",
+    );
+    expect(sameOriginToolsOnly).toBe(false);
+    fetchSpy.mockRestore();
+  });
+
+  it("Scan again uses scanWorkspaceTools helper", async () => {
+    const listPayload = buildDefaultPayload();
+    vi.spyOn(HamApi, "fetchWorkspaceTools").mockResolvedValue(
+      new Response(JSON.stringify(listPayload), { status: 200 }),
+    );
+    const scanSpy = vi.spyOn(HamApi, "scanWorkspaceTools").mockResolvedValue(
+      new Response(JSON.stringify(listPayload), { status: 200 }),
+    );
+    render(<WorkspaceConnectedToolsSection />);
+    await waitFor(() => expect(screen.getByText("Scan again")).toBeInTheDocument());
+    fireEvent.click(screen.getByText("Scan again"));
+    await waitFor(() => expect(scanSpy).toHaveBeenCalledTimes(1));
+  });
+
   it("renders all expected tools including AI Studio and Antigravity", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    vi.spyOn(HamApi, "fetchWorkspaceTools").mockResolvedValue(
       new Response(JSON.stringify(buildDefaultPayload()), { status: 200 }),
     );
     render(<WorkspaceConnectedToolsSection />);
@@ -119,7 +149,7 @@ describe("WorkspaceConnectedToolsSection", () => {
   });
 
   it("groups Ready vs Not found sections", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    vi.spyOn(HamApi, "fetchWorkspaceTools").mockResolvedValue(
       new Response(JSON.stringify(buildDefaultPayload()), { status: 200 }),
     );
     render(<WorkspaceConnectedToolsSection />);
@@ -131,7 +161,7 @@ describe("WorkspaceConnectedToolsSection", () => {
   });
 
   it("does not render a toggle for Not found rows", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    vi.spyOn(HamApi, "fetchWorkspaceTools").mockResolvedValue(
       new Response(JSON.stringify(buildDefaultPayload()), { status: 200 }),
     );
     render(<WorkspaceConnectedToolsSection />);
@@ -141,7 +171,7 @@ describe("WorkspaceConnectedToolsSection", () => {
   });
 
   it("Select all does not enable Not found tools (no switch for Git)", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    vi.spyOn(HamApi, "fetchWorkspaceTools").mockResolvedValue(
       new Response(JSON.stringify(buildDefaultPayload()), { status: 200 }),
     );
     render(<WorkspaceConnectedToolsSection />);
@@ -155,21 +185,17 @@ describe("WorkspaceConnectedToolsSection", () => {
 
   it("shows Connect panel and secure-storage message when connect returns 501", async () => {
     const payload = buildDefaultPayload();
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input: RequestInfo) => {
-      const url = typeof input === "string" ? input : input.url;
-      if (url.endsWith("/api/workspace/tools")) {
-        return new Response(JSON.stringify(payload), { status: 200 });
-      }
-      if (url.includes("/openrouter/connect")) {
-        return new Response(
-          JSON.stringify({
-            detail: { code: "SECURE_STORAGE_NOT_READY", message: "Secure key storage is coming next." },
-          }),
-          { status: 501 },
-        );
-      }
-      return new Response("{}", { status: 404 });
-    });
+    vi.spyOn(HamApi, "fetchWorkspaceTools").mockResolvedValue(
+      new Response(JSON.stringify(payload), { status: 200 }),
+    );
+    const connectSpy = vi.spyOn(HamApi, "connectWorkspaceTool").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          detail: { code: "SECURE_STORAGE_NOT_READY", message: "Secure key storage is coming next." },
+        }),
+        { status: 501 },
+      ),
+    );
 
     render(<WorkspaceConnectedToolsSection />);
     await waitFor(() => expect(screen.getByText("OpenRouter")).toBeInTheDocument());
@@ -182,6 +208,6 @@ describe("WorkspaceConnectedToolsSection", () => {
     await waitFor(() => {
       expect(screen.getByText(/Secure key storage is coming next/i)).toBeInTheDocument();
     });
-    expect(fetchMock).toHaveBeenCalled();
+    expect(connectSpy).toHaveBeenCalledWith("openrouter", { api_key: "sk-or-testtokennotreal" });
   });
 });
