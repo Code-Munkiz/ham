@@ -92,6 +92,21 @@ def test_workspace_context_snapshot_not_configured(monkeypatch: pytest.MonkeyPat
     assert "message" in body["detail"]
 
 
+def test_workspace_context_snapshot_not_configured_after_files_creates_sandbox(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Files may create ``.ham_workspace_sandbox`` when env is unset; context-snapshot must still 503."""
+    monkeypatch.delenv("HAM_WORKSPACE_ROOT", raising=False)
+    monkeypatch.delenv("HAM_WORKSPACE_FILES_ROOT", raising=False)
+    with TestClient(app) as client:
+        files_res = client.get("/api/workspace/files?action=list")
+        assert files_res.status_code == 200, files_res.text
+        snap = client.get("/api/workspace/context-snapshot")
+    assert snap.status_code == 503, snap.text
+    assert snap.json()["detail"]["error"] == "WORKSPACE_ROOT_NOT_CONFIGURED"
+    assert "cwd" not in snap.json().get("detail", {})
+
+
 def test_workspace_context_snapshot_root_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     missing = tmp_path / "does_not_exist"
     monkeypatch.delenv("HAM_WORKSPACE_ROOT", raising=False)

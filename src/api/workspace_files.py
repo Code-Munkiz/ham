@@ -62,8 +62,10 @@ def configured_workspace_env_path_raw() -> str:
 def resolve_workspace_context_snapshot_root() -> Path:
     """Resolve configured workspace root for context snapshots (no sandbox, no ``Path.cwd()``).
 
-    Same **env precedence** as ``_workspace_root()`` when env is set; does **not** create directories
-    or fall back to ``.ham_workspace_sandbox``.
+    Same **env precedence** as Files when env is set (``HAM_WORKSPACE_ROOT`` then ``HAM_WORKSPACE_FILES_ROOT``),
+    with ``Path.expanduser()`` / ``Path.resolve()`` only — same normalization style as ``_workspace_root()``
+    for the env branch. **Never** call ``_workspace_root()`` here: that helper falls back to
+    ``<repo>/.ham_workspace_sandbox``, which is not user-approved project context for memory_heist snapshots.
     """
     raw = configured_workspace_env_path_raw()
     if not raw:
