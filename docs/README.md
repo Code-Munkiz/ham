@@ -4,6 +4,8 @@
 
 **`docs/` (tracked, canonical prose)** — Operational truth and design decisions the team revises together: roadmap, contracts, deploy runbooks, recovery runbooks, active architecture investigations that gate implementation, and **checked-in** examples (for example `examples/ham-api-cloud-run-env.yaml`). Root [`README.md`](../README.md) and this file are the primary entry points.
 
+**Canonical doc freshness + links:** [`scripts/check_docs_freshness.py`](../scripts/check_docs_freshness.py) walks the tracked allowlist (`CANONICAL_DOCS` in that script—root `README.md`, `AGENTS.md`, `VISION.md`, `PRODUCT_DIRECTION.md`, `GAPS.md`, and this index), checks each was touched in git within **180 days**, and flags unresolved relative markdown targets. Run `python scripts/check_docs_freshness.py` locally before large doc-only changes; CI runs the same script as **warning-only** until the team promotes it.
+
 **`docs/archive/` (tracked, when used)** — Superseded or historical write-ups we keep for auditability (moved here instead of deleted). **Do not** move a doc into `archive/` if [`HAM_ROADMAP.md`](HAM_ROADMAP.md), root `README.md`, deploy docs, or an active runbook still link to it without updating those links first.
 
 **`docs/_scratch/` (local only, never commit)** — AI handoff notes, one-off verification dumps, draft bullets, and scratch planning. This path is **gitignored**; copy anything worth keeping into real doc paths and delete the scratch copy.
@@ -57,6 +59,8 @@ SDK bridge attaches to existing `bc-*` agents; **`HAM_CURSOR_SDK_BRIDGE_ENABLED`
 | [CONTROL_PLANE_RUN.md](CONTROL_PLANE_RUN.md) | `ControlPlaneRun` substrate (factual runs, not a mission graph) |
 
 ## Chat, gateway, and capabilities
+
+**Workspace Connected Tools (Claude Agent SDK):** no standalone doc — implementation is `src/api/workspace_tools.py` + `src/ham/worker_adapters/claude_agent_adapter.py`; operator env and semantics are in [`.env.example`](../.env.example) (search `CLAUDE_AGENT`) and the pillar index in [`AGENTS.md`](../AGENTS.md). This path is readiness + optional gated smoke only; it does not replace Bridge/Droid or Hermes supervision.
 
 | Doc | Purpose |
 |-----|---------|
