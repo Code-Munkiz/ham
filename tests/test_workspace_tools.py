@@ -12,7 +12,7 @@ Validates:
 from __future__ import annotations
 
 import os
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -547,7 +547,88 @@ class TestClaudeAgentSdkEntry:
             assert "secret-vertex-project-id-99999" not in raw
 
 
-class TestClaudeCodeEntryUnchanged:
+class TestClaudeAgentSdkMissionRoute:
+    """Gated POST /api/workspace/tools/claude_agent_sdk/mission."""
+
+    def test_mission_not_found_when_gate_off(self):
+        with patch.dict(os.environ, {"HAM_CLAUDE_AGENT_SMOKE_ENABLED": "0"}, clear=False):
+            with patch(
+                "src.api.workspace_tools.clerk_authorization_is_clerk_session",
+                return_value=False,
+            ):
+                r = client.post(
+                    "/api/workspace/tools/claude_agent_sdk/mission",
+                    headers={"X-HAM-SMOKE-TOKEN": "ignored"},
+                )
+        assert r.status_code == 404
+
+    def test_mission_requires_token_when_clerk_off(self):
+        env = {
+            "HAM_CLAUDE_AGENT_SMOKE_ENABLED": "1",
+            "HAM_CLAUDE_AGENT_SMOKE_TOKEN": "secret-token-value",
+        }
+        with patch.dict(os.environ, env, clear=False):
+            with patch(
+                "src.api.workspace_tools.clerk_authorization_is_clerk_session",
+                return_value=False,
+            ):
+                r = client.post("/api/workspace/tools/claude_agent_sdk/mission")
+        assert r.status_code == 403
+
+    def test_mission_rejects_bad_token(self):
+        env = {
+            "HAM_CLAUDE_AGENT_SMOKE_ENABLED": "1",
+            "HAM_CLAUDE_AGENT_SMOKE_TOKEN": "secret-token-value",
+        }
+        with patch.dict(os.environ, env, clear=False):
+            with patch(
+                "src.api.workspace_tools.clerk_authorization_is_clerk_session",
+                return_value=False,
+            ):
+                r = client.post(
+                    "/api/workspace/tools/claude_agent_sdk/mission",
+                    headers={"X-HAM-SMOKE-TOKEN": "wrong"},
+                )
+        assert r.status_code == 403
+
+    def test_mission_success_mocked(self):
+        from src.ham.worker_adapters.claude_agent_adapter import ClaudeAgentMissionResult
+
+        env = {
+            "HAM_CLAUDE_AGENT_SMOKE_ENABLED": "1",
+            "HAM_CLAUDE_AGENT_SMOKE_TOKEN": "secret-token-value",
+        }
+        fake = ClaudeAgentMissionResult(
+            ok=True,
+            mission_ok=True,
+            worker="claude_agent_sdk",
+            mission_type="non_mutating_review",
+            result_text='{"mission_status":"ok"}',
+            parsed_result={"mission_status": "ok", "worker": "claude_agent_sdk"},
+            duration_ms=12,
+            safety_mode="plan",
+            blocker=None,
+        )
+        with patch.dict(os.environ, env, clear=False):
+            with patch(
+                "src.api.workspace_tools.clerk_authorization_is_clerk_session",
+                return_value=False,
+            ):
+                with patch(
+                    "src.api.workspace_tools.run_claude_agent_sdk_mission",
+                    new=AsyncMock(return_value=fake),
+                ):
+                    r = client.post(
+                        "/api/workspace/tools/claude_agent_sdk/mission",
+                        headers={"X-HAM-SMOKE-TOKEN": "secret-token-value"},
+                    )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["ok"] is True
+        assert body["mission_ok"] is True
+        assert body["worker"] == "claude_agent_sdk"
+        assert body["safety_mode"] == "plan"
+        assert "secret-token-value" not in str(body)
     """Regression: the existing claude_code (local CLI) entry must not change."""
 
     def test_claude_code_id_label_source_unchanged(self):

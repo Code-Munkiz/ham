@@ -7,8 +7,9 @@ API keys for selected tools are stored **server-side only** (file-backed JSON,
 same pattern as Cursor credentials). Keys are validated before save and are
 never returned or logged.
 
-Internal-only: ``POST /api/workspace/tools/claude_agent_sdk/smoke`` remains
-available when feature-flagged; it is not linked from the default dashboard UI.
+Internal-only: gated ``POST /api/workspace/tools/claude_agent_sdk/smoke`` and
+``POST /api/workspace/tools/claude_agent_sdk/mission`` when feature-flagged; not
+linked from the default dashboard UI.
 """
 
 from __future__ import annotations
@@ -38,6 +39,7 @@ from src.ham.worker_adapters.claude_agent_adapter import (
     claude_agent_smoke_feature_enabled,
     claude_agent_smoke_route_armed,
     reset_claude_agent_readiness_cache,
+    run_claude_agent_sdk_mission,
     run_claude_agent_sdk_smoke,
 )
 from src.ham.worker_adapters.cursor_adapter import check_cursor_readiness
@@ -199,6 +201,20 @@ class ClaudeAgentSmokeHttpResponse(BaseModel):
     authenticated: bool
     smoke_ok: bool
     response_text: str
+    blocker: Optional[str] = None
+
+
+class ClaudeAgentMissionHttpResponse(BaseModel):
+    """Bounded mission outcome — fixed prompt only; no arbitrary user input."""
+
+    ok: bool
+    mission_ok: bool
+    worker: str
+    mission_type: str
+    result_text: str
+    parsed_result: Optional[dict[str, Any]] = None
+    duration_ms: int
+    safety_mode: str
     blocker: Optional[str] = None
 
 
@@ -730,6 +746,27 @@ async def workspace_claude_agent_smoke(
         authenticated=result.authenticated,
         smoke_ok=result.smoke_ok,
         response_text=result.response_text,
+        blocker=result.blocker,
+    )
+
+
+@router.post("/tools/claude_agent_sdk/mission", response_model=ClaudeAgentMissionHttpResponse)
+async def workspace_claude_agent_mission(
+    actor: HamActor | None = Depends(get_ham_clerk_actor),
+    x_ham_smoke_token: str | None = Header(default=None, alias="X-HAM-SMOKE-TOKEN"),
+) -> ClaudeAgentMissionHttpResponse:
+    """Fixed bounded mission — same auth gate as smoke; not user-prompt driven."""
+    _authorize_claude_agent_smoke(actor, x_ham_smoke_token)
+    result = await run_claude_agent_sdk_mission()
+    return ClaudeAgentMissionHttpResponse(
+        ok=result.ok,
+        mission_ok=result.mission_ok,
+        worker=result.worker,
+        mission_type=result.mission_type,
+        result_text=result.result_text,
+        parsed_result=result.parsed_result,
+        duration_ms=result.duration_ms,
+        safety_mode=result.safety_mode,
         blocker=result.blocker,
     )
 

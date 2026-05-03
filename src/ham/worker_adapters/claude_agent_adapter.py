@@ -4,21 +4,35 @@ Detects whether the optional ``claude-agent-sdk`` package is importable and
 whether one of its supported auth modes appears configured (presence-only;
 values are never read or returned).
 
-Controlled smoke (``run_claude_agent_sdk_smoke``) calls ``query()`` with
-**no tools**, ``permission_mode='plan'``, ``max_turns=1`` — only when invoked
-from an explicitly feature-gated HTTP route. Not used by readiness checks.
+Controlled smoke (``run_claude_agent_sdk_smoke``) and the bounded mission
+runner (``run_claude_agent_sdk_mission``) call ``query()`` with **no tools**,
+``permission_mode='plan'``, ``max_turns=1`` — only from feature-gated HTTP routes.
 """
 
 from __future__ import annotations
 
 import asyncio
+import json
 import os
+import re
+import shutil
+import time
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Any, Literal
 
 CLAUDE_AGENT_SMOKE_PROMPT = "Reply with exactly: HAM_CLAUDE_SMOKE_OK"
 SMOKE_QUERY_TIMEOUT_SEC = 60.0
+MISSION_QUERY_TIMEOUT_SEC = 90.0
 _RESPONSE_TEXT_CAP = 500
+_MISSION_RESPONSE_CAP = 4000
+
+CLAUDE_AGENT_MISSION_PROMPT = """Review this HAM mission brief and return a JSON object with:
+- mission_status: ok
+- worker: claude_agent_sdk
+- job_type: non_mutating_review
+- summary: one sentence
+- acceptance_criteria: exactly three short bullets
+Do not request tools. Do not edit files."""
 
 # Module-level cache for the SDK import probe. The /api/workspace/tools
 # endpoint rebuilds the registry on every request; importing the SDK each
@@ -262,11 +276,151 @@ def _text_from_sdk_message(msg: object) -> str:
     return "".join(chunks)
 
 
-def _sanitize_smoke_response_text(raw: str) -> str:
+_SECRETISH = re.compile(
+    r"(sk-ant-|sk-or-v1-|sk_live_|sk_test_|ghp_|HAM_CLAUDE_AGENT_SMOKE_TOKEN|ANTHROPIC_API_KEY)",
+    re.I,
+)
+
+
+def _sanitize_capped_response_text(raw: str, cap: int) -> str:
     s = " ".join(raw.split())
-    if len(s) > _RESPONSE_TEXT_CAP:
-        return s[:_RESPONSE_TEXT_CAP].rstrip() + "…"
+    if len(s) > cap:
+        return s[:cap].rstrip() + "…"
     return s
+
+
+def _sanitize_smoke_response_text(raw: str) -> str:
+    return _sanitize_capped_response_text(raw, _RESPONSE_TEXT_CAP)
+
+
+def _ham_preferred_cli_path() -> str | None:
+    """Prefer npm/system ``claude`` when installed (bundled wheel binary can fail on slim Linux)."""
+    return shutil.which("claude")
+
+
+def _plan_mode_query_options() -> Any:
+    from claude_agent_sdk import ClaudeAgentOptions  # type: ignore[import-not-found]
+
+    kwargs: dict[str, Any] = {
+        "tools": [],
+        "allowed_tools": [],
+        "permission_mode": "plan",
+        "max_turns": 1,
+    }
+    cli = _ham_preferred_cli_path()
+    if cli:
+        kwargs["cli_path"] = cli
+    return ClaudeAgentOptions(**kwargs)
+
+
+async def _run_claude_agent_sdk_plan_query(
+    prompt: str,
+    timeout_sec: float,
+    response_cap: int,
+) -> tuple[str | None, str | None, ClaudeAgentWorkerReadiness]:
+    """Execute one bounded plan-mode SDK query.
+
+    Returns ``(sanitized_text, blocker, readiness_snapshot)``.
+    """
+    readiness = check_claude_agent_readiness()
+    if readiness.status != "ready":
+        return (
+            None,
+            readiness.reason or "Claude Agent SDK is not ready on this server.",
+            readiness,
+        )
+    try:
+        from claude_agent_sdk import query  # type: ignore[import-not-found]
+    except ImportError:
+        return (
+            None,
+            "claude-agent-sdk import failed or package not installed.",
+            readiness,
+        )
+
+    opts = _plan_mode_query_options()
+
+    async def _collect() -> str:
+        parts: list[str] = []
+        async for msg in query(prompt=prompt, options=opts):
+            parts.append(_text_from_sdk_message(msg))
+        return "".join(parts).strip()
+
+    try:
+        combined = await asyncio.wait_for(_collect(), timeout=timeout_sec)
+    except TimeoutError:
+        return None, "Claude Agent SDK query timed out.", readiness
+    except Exception as exc:
+        return None, f"Claude Agent SDK query failed: {type(exc).__name__}", readiness
+
+    return _sanitize_capped_response_text(combined, response_cap), None, readiness
+
+
+def _strip_json_fence(raw: str) -> str:
+    t = raw.strip()
+    if t.startswith("```"):
+        t = re.sub(r"^```[a-zA-Z0-9]*\s*", "", t)
+        t = re.sub(r"\s*```\s*$", "", t)
+    return t.strip()
+
+
+def _primitive_is_safe(val: Any) -> bool:
+    if isinstance(val, bool):
+        return True
+    if isinstance(val, int | float) and not isinstance(val, bool):
+        return True
+    if isinstance(val, str):
+        return _SECRETISH.search(val) is None
+    if isinstance(val, list):
+        return all(isinstance(x, str) and _SECRETISH.search(x) is None for x in val)
+    return False
+
+
+def _safe_mission_parsed_subset(obj: dict[str, Any]) -> dict[str, Any] | None:
+    allowed_keys = (
+        "mission_status",
+        "worker",
+        "job_type",
+        "summary",
+        "acceptance_criteria",
+    )
+    out: dict[str, Any] = {}
+    for k in allowed_keys:
+        if k not in obj:
+            continue
+        v = obj[k]
+        if not _primitive_is_safe(v):
+            continue
+        out[k] = v
+    return out or None
+
+
+def _parse_mission_json(text: str) -> tuple[dict[str, Any] | None, bool]:
+    """Returns ``(parsed_subset_or_none, mission_ok)``."""
+    stripped = _strip_json_fence(text)
+    try:
+        data = json.loads(stripped)
+    except json.JSONDecodeError:
+        return None, False
+    if not isinstance(data, dict):
+        return None, False
+    summary = data.get("summary")
+    ac = data.get("acceptance_criteria")
+    ac_ok = (
+        isinstance(ac, list)
+        and len(ac) == 3
+        and all(isinstance(x, str) and x.strip() for x in ac)
+    )
+    mission_ok = (
+        data.get("mission_status") == "ok"
+        and data.get("worker") == "claude_agent_sdk"
+        and data.get("job_type") == "non_mutating_review"
+        and isinstance(summary, str)
+        and bool(summary.strip())
+        and ac_ok
+    )
+    safe = _safe_mission_parsed_subset(data)
+    return safe, bool(mission_ok and safe)
 
 
 @dataclass(frozen=True)
@@ -282,6 +436,21 @@ class ClaudeAgentSmokeResult:
     blocker: str | None = None
 
 
+@dataclass(frozen=True)
+class ClaudeAgentMissionResult:
+    """Bounded mission outcome — no secrets."""
+
+    ok: bool
+    mission_ok: bool
+    worker: str
+    mission_type: str
+    result_text: str
+    parsed_result: dict[str, Any] | None
+    duration_ms: int
+    safety_mode: str
+    blocker: str | None = None
+
+
 async def run_claude_agent_sdk_smoke() -> ClaudeAgentSmokeResult:
     """One harmless SDK ``query`` with tools disabled and plan-only permissions.
 
@@ -290,74 +459,70 @@ async def run_claude_agent_sdk_smoke() -> ClaudeAgentSmokeResult:
     """
     readiness = check_claude_agent_readiness()
     provider = claude_agent_coarse_provider()
-    if readiness.status != "ready":
-        return ClaudeAgentSmokeResult(
-            status="error",
-            provider=provider,
-            sdk_available=readiness.sdk_available,
-            authenticated=readiness.authenticated,
-            smoke_ok=False,
-            response_text="",
-            blocker=readiness.reason or "Claude Agent SDK is not ready on this server.",
-        )
-
-    try:
-        from claude_agent_sdk import ClaudeAgentOptions, query  # type: ignore[import-not-found]
-    except ImportError:
-        return ClaudeAgentSmokeResult(
-            status="error",
-            provider=provider,
-            sdk_available=readiness.sdk_available,
-            authenticated=readiness.authenticated,
-            smoke_ok=False,
-            response_text="",
-            blocker="claude-agent-sdk import failed or package not installed.",
-        )
-
-    opts = ClaudeAgentOptions(
-        tools=[],
-        allowed_tools=[],
-        permission_mode="plan",
-        max_turns=1,
+    combined, blocker, rd = await _run_claude_agent_sdk_plan_query(
+        CLAUDE_AGENT_SMOKE_PROMPT,
+        SMOKE_QUERY_TIMEOUT_SEC,
+        _RESPONSE_TEXT_CAP,
     )
-
-    async def _collect() -> str:
-        parts: list[str] = []
-        async for msg in query(prompt=CLAUDE_AGENT_SMOKE_PROMPT, options=opts):
-            parts.append(_text_from_sdk_message(msg))
-        return "".join(parts).strip()
-
-    try:
-        combined = await asyncio.wait_for(_collect(), timeout=SMOKE_QUERY_TIMEOUT_SEC)
-    except TimeoutError:
+    if blocker or combined is None:
         return ClaudeAgentSmokeResult(
             status="error",
             provider=provider,
-            sdk_available=readiness.sdk_available,
-            authenticated=readiness.authenticated,
+            sdk_available=rd.sdk_available,
+            authenticated=rd.authenticated,
             smoke_ok=False,
             response_text="",
-            blocker="Smoke query timed out.",
-        )
-    except Exception as exc:
-        return ClaudeAgentSmokeResult(
-            status="error",
-            provider=provider,
-            sdk_available=readiness.sdk_available,
-            authenticated=readiness.authenticated,
-            smoke_ok=False,
-            response_text="",
-            blocker=f"Smoke query failed: {type(exc).__name__}",
+            blocker=blocker or "Claude Agent SDK query produced no text.",
         )
 
-    safe_text = _sanitize_smoke_response_text(combined)
-    smoke_ok = "HAM_CLAUDE_SMOKE_OK" in safe_text
+    smoke_ok = "HAM_CLAUDE_SMOKE_OK" in combined
     return ClaudeAgentSmokeResult(
         status="ok" if smoke_ok else "error",
         provider=provider,
-        sdk_available=readiness.sdk_available,
-        authenticated=readiness.authenticated,
+        sdk_available=rd.sdk_available,
+        authenticated=rd.authenticated,
         smoke_ok=smoke_ok,
-        response_text=safe_text,
+        response_text=combined,
         blocker=None if smoke_ok else "Model reply did not contain the expected smoke token.",
+    )
+
+
+async def run_claude_agent_sdk_mission() -> ClaudeAgentMissionResult:
+    """Fixed HAM mission brief — plan mode, no tools, bounded turns/time."""
+    t0 = time.monotonic()
+    worker = "claude_agent_sdk"
+    mission_type = "non_mutating_review"
+    safety_mode = "plan"
+
+    combined, blocker, rd = await _run_claude_agent_sdk_plan_query(
+        CLAUDE_AGENT_MISSION_PROMPT,
+        MISSION_QUERY_TIMEOUT_SEC,
+        _MISSION_RESPONSE_CAP,
+    )
+    duration_ms = max(0, int((time.monotonic() - t0) * 1000))
+
+    if blocker or combined is None:
+        return ClaudeAgentMissionResult(
+            ok=False,
+            mission_ok=False,
+            worker=worker,
+            mission_type=mission_type,
+            result_text="",
+            parsed_result=None,
+            duration_ms=duration_ms,
+            safety_mode=safety_mode,
+            blocker=blocker or "Claude Agent SDK query produced no text.",
+        )
+
+    parsed, mission_ok = _parse_mission_json(combined)
+    return ClaudeAgentMissionResult(
+        ok=True,
+        mission_ok=mission_ok,
+        worker=worker,
+        mission_type=mission_type,
+        result_text=combined,
+        parsed_result=parsed,
+        duration_ms=duration_ms,
+        safety_mode=safety_mode,
+        blocker=None if mission_ok else "Mission JSON did not match acceptance shape.",
     )

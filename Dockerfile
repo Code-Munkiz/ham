@@ -20,6 +20,11 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
 
+# Claude Agent SDK spawns the Claude Code CLI. The PyPI wheel may ship a bundled
+# binary that fails in slim containers; prefer the npm CLI on PATH when present.
+RUN npm install -g @anthropic-ai/claude-code \
+    && command -v claude
+
 COPY requirements.txt .
 # Browser runtime: pip installs `playwright` but browsers are a separate download.
 # --with-deps pulls Debian packages Chromium needs in slim images.
