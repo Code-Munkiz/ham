@@ -11,6 +11,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from src.ham.chat_context_meters import context_meters_feature_enabled
 from src.ham.media_provider_adapter import (
     default_image_model_env,
     image_generation_feature_enabled,
@@ -231,6 +232,7 @@ def build_chat_capabilities_payload(
             "id": mid or "",
             "display_name": display_name,
         },
+        "context_meters_enabled": context_meters_feature_enabled(),
         "capabilities": {
             "text_chat": supports_text_chat,
             "image_input": supports_image_input,

@@ -14,6 +14,7 @@ import {
   downloadChatSessionPdf,
   ensureProjectIdForWorkspaceRoot,
   fetchChatCapabilities,
+  fetchChatContextMeters,
   fetchContextEngine,
   fetchHamGeneratedMediaBlob,
   fetchHamGeneratedMediaMeta,
@@ -28,7 +29,7 @@ import {
   type HamChatExecutionMode,
 } from "@/lib/ham/api";
 import { CLIENT_MODEL_CATALOG_FALLBACK } from "@/lib/ham/modelCatalogFallback";
-import type { ChatCapabilitiesPayload, ModelCatalogPayload } from "@/lib/ham/types";
+import type { ChatCapabilitiesPayload, ChatContextMetersPayload, ModelCatalogPayload } from "@/lib/ham/types";
 import { applyHamUiActions } from "@/lib/ham/applyUiActions";
 import type { HamChatStreamAuth } from "@/lib/ham/api";
 import type { HamChatUserContentV1, HamChatUserContentV2 } from "@/lib/ham/chatUserContent";
@@ -549,6 +550,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   const [pdfExporting, setPdfExporting] = React.useState(false);
   const [chatCapabilities, setChatCapabilities] = React.useState<ChatCapabilitiesPayload | null>(null);
   const [chatCapabilitiesLoading, setChatCapabilitiesLoading] = React.useState(true);
+  const [contextMetersPayload, setContextMetersPayload] = React.useState<ChatContextMetersPayload | null>(null);
   const [imageGenInFlight, setImageGenInFlight] = React.useState(false);
   const [videoGenInFlight, setVideoGenInFlight] = React.useState(false);
   const [inspectorEvents, setInspectorEvents] = React.useState<WorkspaceInspectorEvent[]>([]);
@@ -757,6 +759,39 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
 
   const chatModelIdForApi = catalog?.gateway_mode === "openrouter" ? modelId : null;
 
+  const refreshContextMeters = React.useCallback(
+    async (sessionOverride?: string | null) => {
+      const sid = (sessionOverride ?? sessionId)?.trim();
+      if (!sid || chatCapabilitiesLoading) return;
+      if (!chatCapabilities?.context_meters_enabled) {
+        setContextMetersPayload(null);
+        return;
+      }
+      try {
+        const mid = chatModelIdForApi ?? modelId;
+        const p = await fetchChatContextMeters({
+          sessionId: sid,
+          modelId: mid,
+          projectId,
+        });
+        setContextMetersPayload(p);
+      } catch {
+        setContextMetersPayload(null);
+      }
+    },
+    [
+      sessionId,
+      chatCapabilitiesLoading,
+      chatCapabilities?.context_meters_enabled,
+      chatModelIdForApi,
+      modelId,
+      projectId,
+    ],
+  );
+
+  React.useEffect(() => {
+    void refreshContextMeters();
+  }, [refreshContextMeters]);
   const runWorkspaceImageGeneration = React.useCallback(
     async (opts: {
       apiPrompt: string;
@@ -2206,6 +2241,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       } finally {
         streamTurnSessionRef.current = null;
         setSending(false);
+        void refreshContextMeters();
       }
     },
     [
@@ -2228,6 +2264,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       chatCapabilitiesLoading,
       modelId,
       runWorkspaceImageGeneration,
+      refreshContextMeters,
     ],
   );
 
@@ -2901,6 +2938,8 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
                 : null
             }
             chatCapabilities={chatCapabilities}
+            contextMetersEnabled={chatCapabilities?.context_meters_enabled === true}
+            contextMetersPayload={contextMetersPayload}
             generateImage={composerGenerateImage}
             generateVideo={composerGenerateVideo}
             exportPdf={{

@@ -354,6 +354,45 @@ export interface ChatCapabilitiesPayload {
   limitations: string[];
   document_context_mode: string;
   notes: string;
+  /** Present when API exposes chat context meters feature gate. */
+  context_meters_enabled?: boolean;
+}
+
+/** GET /api/chat/context-meters — safe aggregates only (no message text). */
+export type ChatContextMeterColor = "green" | "amber" | "red" | "gray";
+
+export interface ChatContextThisTurnMeter {
+  fill_ratio: number;
+  color: ChatContextMeterColor;
+  unit: "estimate_tokens";
+  used: number;
+  limit: number;
+  model_id: string | null;
+}
+
+export interface ChatContextWorkspaceMeter {
+  fill_ratio: number;
+  color: ChatContextMeterColor;
+  bottleneck_role: string | null;
+  source: "local" | "cloud" | "unavailable";
+  used: number;
+  limit: number;
+  unit: "chars";
+}
+
+export interface ChatContextThreadMeter {
+  fill_ratio: number;
+  color: ChatContextMeterColor;
+  approx_transcript_chars: number;
+  thread_budget_chars: number;
+  unit: "chars_estimate";
+}
+
+export interface ChatContextMetersPayload {
+  enabled: boolean;
+  this_turn: ChatContextThisTurnMeter | null;
+  workspace: ChatContextWorkspaceMeter | null;
+  thread: ChatContextThreadMeter | null;
 }
 
 /** Uses `dashboard_chat_ready` from API when present; otherwise infers from legacy fields. */
