@@ -8,7 +8,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.api.server import app
-from src.ham.worker_adapters.claude_agent_adapter import ClaudeAgentSmokeResult
+from src.ham.worker_adapters.claude_agent_adapter import (
+    ClaudeAgentSmokeResult,
+    claude_agent_smoke_feature_enabled,
+)
 
 client = TestClient(app)
 
@@ -27,6 +30,11 @@ TOK32 = "x" * 32
 
 class TestSmokeEndpointGating:
     """Feature flag, arming, and auth."""
+
+    def test_smoke_feature_env_not_implicitly_enabled(self, monkeypatch):
+        """Runtime SDK dependency does not imply HAM_CLAUDE_AGENT_SMOKE_ENABLED — ops must opt in."""
+        monkeypatch.delenv("HAM_CLAUDE_AGENT_SMOKE_ENABLED", raising=False)
+        assert claude_agent_smoke_feature_enabled() is False
 
     def test_disabled_by_default_returns_404(self, clear_smoke_env):
         r = client.post("/api/workspace/tools/claude_agent_sdk/smoke")
