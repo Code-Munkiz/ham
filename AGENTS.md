@@ -121,7 +121,7 @@ If asked to push to **`main`**:
 
 **Read-only / report-only missions:** if the mission is strictly investigation with **no landed code/doc commits**, summarize without `gh pr create` unless the operator asked you to ship a change.
 
-**Docs-only churn:** Prefer **in-place edits** per *Cloud Agent PR hygiene* later in this section. Use `gh pr list` overlap checks before any docs-only PR.
+**Docs-only churn:** Prefer **in-place edits** per *Cloud Agent PR hygiene* later in this section. Use `gh pr list` overlap checks before any docs-only PR. If `gh` is unavailable or returns an auth error (for example HTTP 401), you cannot satisfy the overlap scan from automation alone—coordinate with a human who has `gh auth login`, or extend an existing open docs PR/branch manually; do not open parallel duplicate docs PRs blindly.
 
 **Incident note (2026-04):** a VM force-push overwrote GitHub `main`; combine this policy with **branch protection** and tight VM credentials until access is productized (prefer **GitHub App** tokens).
 
