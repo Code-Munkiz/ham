@@ -93,12 +93,39 @@ paths = ["src"]
 exclude = ["tests/", ".venv/"]
 
 [tool.deptry]
-# Warning-only unused-dependency finder. Wired in Phase C.
+# Warning-only unused-dependency finder. Wired in Phase C.2 (CI step is
+# `continue-on-error: true`). Per-rule ignores below are kept narrow and
+# explicitly commented; the goal is to surface real signal, not silence
+# the tool. The two unignored DEP003 transitive findings (`requests`,
+# `starlette`) are intentionally left visible so a future cleanup PR
+# can promote them to direct dependencies.
 extend_exclude = [
   "frontend",
   "desktop",
   ".venv",
   "tests",
   "scripts",
+  "\\.factory",
+  "\\.ham",
+  "\\.data",
+  "\\.ham_workspace_sandbox",
 ]
-ignore_unused = []
+
+[tool.deptry.per_rule_ignores]
+# DEP001 = imported but missing from dependency definitions.
+# DEP002 = declared as dependency but not used in the codebase.
+# See https://deptry.com/issue-codes/ for the full table.
+DEP001 = ["winpty"]                # Windows-only; provided by pywinpty package
+DEP002 = [
+  "python-multipart",              # FastAPI Form() / UploadFile implicit dep
+  "google-cloud-storage",          # imported via dotted name `google.cloud.storage`
+  "pywinpty",                      # Windows-only platform-conditional install
+  "cryptography",                  # explicit pin for TLS/JWT chains
+]
+
+[tool.deptry.package_module_name_map]
+# Hint deptry about non-trivial package -> module name mappings so it stops
+# emitting "Assuming the corresponding module name of package X is Y" warnings.
+pre-commit = "pre_commit"
+pywinpty = "winpty"
+google-cloud-storage = "google.cloud.storage"
