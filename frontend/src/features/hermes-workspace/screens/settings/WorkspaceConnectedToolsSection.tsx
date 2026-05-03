@@ -1,4 +1,10 @@
 import * as React from "react";
+import {
+  connectWorkspaceTool,
+  disconnectWorkspaceTool,
+  fetchWorkspaceTools,
+  scanWorkspaceTools,
+} from "@/lib/ham/api";
 
 type ToolStatus = "ready" | "needs_sign_in" | "not_found" | "off" | "error" | "unknown";
 type ToolSource = "cloud" | "this_computer" | "built_in" | "unknown";
@@ -85,7 +91,7 @@ export function WorkspaceConnectedToolsSection() {
     setLoading(true);
     setError(null);
     try {
-      const resp = await fetch("/api/workspace/tools");
+      const resp = await fetchWorkspaceTools();
       if (!resp.ok) throw new Error(`Failed to load tools (${resp.status})`);
       const json: ToolDiscoveryResponse = await resp.json();
       setData(json);
@@ -140,11 +146,7 @@ export function WorkspaceConnectedToolsSection() {
     setConnectBusy(toolId);
     setConnectRowError((prev) => ({ ...prev, [toolId]: "" }));
     try {
-      const resp = await fetch(`/api/workspace/tools/${toolId}/connect`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
+      const resp = await connectWorkspaceTool(toolId, body);
       if (resp.ok) {
         const json: ToolDiscoveryResponse = await resp.json();
         setData(json);
@@ -179,7 +181,7 @@ export function WorkspaceConnectedToolsSection() {
     setConnectBusy(toolId);
     setConnectRowError((prev) => ({ ...prev, [toolId]: "" }));
     try {
-      const resp = await fetch(`/api/workspace/tools/${toolId}/disconnect`, { method: "POST" });
+      const resp = await disconnectWorkspaceTool(toolId);
       if (resp.ok) {
         const json: ToolDiscoveryResponse = await resp.json();
         setData(json);
@@ -203,7 +205,7 @@ export function WorkspaceConnectedToolsSection() {
     setLoading(true);
     setError(null);
     try {
-      const resp = await fetch("/api/workspace/tools/scan", { method: "POST" });
+      const resp = await scanWorkspaceTools();
       if (!resp.ok) throw new Error(`Scan failed (${resp.status})`);
       const json: ToolDiscoveryResponse = await resp.json();
       setData(json);

@@ -103,6 +103,37 @@ export async function hamApiFetch(path: string, init: RequestInit = {}): Promise
   return fetch(url, { ...init, headers });
 }
 
+/** Workspace → Connected Tools discovery (`GET /api/workspace/tools`). Uses Ham API origin / Clerk like other workspace routes. */
+export async function fetchWorkspaceTools(): Promise<Response> {
+  return hamApiFetch("/api/workspace/tools");
+}
+
+/** Refresh tool discovery snapshot (`POST /api/workspace/tools/scan`). */
+export async function scanWorkspaceTools(): Promise<Response> {
+  return hamApiFetch("/api/workspace/tools/scan", { method: "POST" });
+}
+
+export type WorkspaceToolConnectBody = { api_key?: string; access_token?: string };
+
+/** Connect / store credentials when supported (`POST /api/workspace/tools/{tool_id}/connect`). */
+export async function connectWorkspaceTool(
+  toolId: string,
+  body: WorkspaceToolConnectBody,
+): Promise<Response> {
+  const id = encodeURIComponent(toolId);
+  return hamApiFetch(`/api/workspace/tools/${id}/connect`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+/** Disconnect tool credentials when supported (`POST /api/workspace/tools/{tool_id}/disconnect`). */
+export async function disconnectWorkspaceTool(toolId: string): Promise<Response> {
+  const id = encodeURIComponent(toolId);
+  return hamApiFetch(`/api/workspace/tools/${id}/disconnect`, { method: "POST" });
+}
+
 /** Multipart upload for workspace chat; returns an opaque `attachment_id` (blob stored server-side). */
 export async function postChatUploadAttachment(file: File): Promise<{
   attachment_id: string;
