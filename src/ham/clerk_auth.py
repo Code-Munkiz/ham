@@ -18,12 +18,15 @@ when ``Authorization`` carries the Clerk session (``HAM_CLERK_REQUIRE_AUTH`` or 
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+from types import MappingProxyType
 from typing import Any
 
 from fastapi import HTTPException
 
 # --- Future M2M seam (not wired into enforcement in this slice) -------------------------------
+
 
 def clerk_m2m_note() -> str:
     """Design hook: later verify Clerk M2M tokens for runner/service callers."""
@@ -34,6 +37,9 @@ def clerk_m2m_note() -> str:
 
 
 # ----------------------------------------------------------------------------------------------
+
+
+_EMPTY_WORKSPACES_CLAIM: Mapping[str, Any] = MappingProxyType({})
 
 
 @dataclass(frozen=True)
@@ -47,6 +53,12 @@ class HamActor:
     permissions: frozenset[str]
     org_role: str | None
     raw_permission_claim: str | None  # evaluation hint for audit (e.g. claim source)
+    # Optional ``workspaces`` custom JWT claim of shape ``{wid: role|[perms]}``.
+    # Default is an empty read-only mapping for back-compat with existing callers
+    # that construct ``HamActor`` positionally without this field.
+    # Consumed by :mod:`src.ham.workspace_resolver` to *augment* (never grant)
+    # workspace permissions; it cannot bypass Firestore membership.
+    workspaces_claim: Mapping[str, Any] = field(default_factory=lambda: _EMPTY_WORKSPACES_CLAIM)
 
 
 def clerk_operator_require_auth_enabled() -> bool:
@@ -68,7 +80,30 @@ def clerk_issuer() -> str:
     return (os.environ.get("CLERK_JWT_ISSUER") or "").strip().rstrip("/")
 
 
-def _extract_permissions_and_role(payload: dict[str, Any]) -> tuple[frozenset[str], str | None, str | None]:
+def extract_workspaces_claim(payload: dict[str, Any]) -> Mapping[str, Any]:
+    """Read optional ``workspaces`` custom claim. Always returns a mapping.
+
+    Shape (advisory; resolver authoritative): ``{workspace_id: role_str | [perm,…]}``.
+    Non-mapping values are ignored. Empty mapping is the back-compat default.
+
+    Phase 1a only: Phase 1b's resolver consumes this to *augment* — never grant —
+    workspace permissions. Membership remains Firestore-backed.
+    """
+    raw = payload.get("workspaces")
+    if not isinstance(raw, dict):
+        return _EMPTY_WORKSPACES_CLAIM
+    cleaned: dict[str, Any] = {}
+    for k, v in raw.items():
+        if not isinstance(k, str) or not k.strip():
+            continue
+        if isinstance(v, (str, list, tuple)):
+            cleaned[k] = v
+    return MappingProxyType(cleaned) if cleaned else _EMPTY_WORKSPACES_CLAIM
+
+
+def _extract_permissions_and_role(
+    payload: dict[str, Any],
+) -> tuple[frozenset[str], str | None, str | None]:
     """
     Build effective permissions from JWT claims.
 
@@ -193,6 +228,7 @@ def verify_clerk_session_jwt(token: str) -> HamActor:
         permissions=perms,
         org_role=org_role,
         raw_permission_claim=src,
+        workspaces_claim=extract_workspaces_claim(payload),
     )
 
 
