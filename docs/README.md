@@ -93,6 +93,7 @@ SDK bridge attaches to existing `bc-*` agents; **`HAM_CURSOR_SDK_BRIDGE_ENABLED`
 | [reference/openclaw-reference.md](reference/openclaw-reference.md) | OpenClaw-informed patterns |
 | [reference/elizaos-reference.md](reference/elizaos-reference.md) | ElizaOS-flavored host patterns |
 | [reference/hermes-agent-reference.md](reference/hermes-agent-reference.md) | Hermes agent upstream reference |
+| [../.cursor/rules/hermes-workspace-repomix-ssot.mdc](../.cursor/rules/hermes-workspace-repomix-ssot.mdc) | Hermes Workspace UI/UX parity: repomix SSOT must exist before parity implementation |
 
 ## HAM-on-X (social / reactive)
 
