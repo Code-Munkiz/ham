@@ -8,6 +8,7 @@ import type {
   ModelCatalogPayload,
   ProjectRecord,
   ChatCapabilitiesPayload,
+  ChatContextMetersPayload,
   GeneratedMediaArtifactPublicMeta,
   GeneratedMediaImageGenerateResponse,
   GeneratedMediaVideoGenerateResponse,
@@ -1578,7 +1579,27 @@ export async function deleteChatSession(sessionId: string): Promise<void> {
   }
 }
 
-/** GET /api/chat/capabilities — conservative model/HAM flags for honest workspace copy (Clerk when enabled). */
+/** GET /api/chat/context-meters — context pressure (no message bodies). */
+export async function fetchChatContextMeters(opts: {
+  sessionId: string;
+  modelId: string | null;
+  projectId?: string | null;
+}): Promise<ChatContextMetersPayload> {
+  const q = new URLSearchParams();
+  q.set("session_id", opts.sessionId.trim());
+  if (opts.modelId?.trim()) q.set("model_id", opts.modelId.trim());
+  if (opts.projectId?.trim()) q.set("project_id", opts.projectId.trim());
+  const res = await hamApiFetch(`/api/chat/context-meters?${q.toString()}`);
+  if (!res.ok) {
+    if (res.status === 404) {
+      return { enabled: false, this_turn: null, workspace: null, thread: null };
+    }
+    const detail = await hamApiErrorDetailMessage(res);
+    throw new Error(`context-meters: HTTP ${res.status}${detail ? ` ${detail}` : ""}`);
+  }
+  return (await res.json()) as ChatContextMetersPayload;
+}
+
 export async function fetchChatCapabilities(modelId: string | null): Promise<ChatCapabilitiesPayload> {
   const qp = modelId?.trim() ? `?model_id=${encodeURIComponent(modelId.trim())}` : "";
   const res = await hamApiFetch(`/api/chat/capabilities${qp}`);

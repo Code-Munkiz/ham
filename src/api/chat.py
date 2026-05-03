@@ -17,7 +17,8 @@ from fastapi import APIRouter, File, Header, HTTPException, Query, Request, Uplo
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from src.api.models_catalog import resolve_model_id_for_chat
+from src.api.models_catalog import build_catalog_payload, resolve_model_id_for_chat
+from src.api.workspace_files import resolve_workspace_context_snapshot_root
 from src.bridge import (
     BrowserAction,
     BrowserIntent,
@@ -71,6 +72,14 @@ from src.integrations.nous_gateway_client import (
     stream_chat_turn,
 )
 from src.persistence.chat_session_store import ChatTurn, build_chat_session_store
+from src.ham.chat_context_meters import (
+    DEFAULT_THREAD_BUDGET_CHARS,
+    compute_this_turn_meter_block,
+    compute_thread_meter_block,
+    context_meters_feature_enabled,
+    resolve_model_context_tokens,
+    workspace_snapshot_and_meter,
+)
 from src.ham.chat_attachment_store import (
     CHAT_UPLOAD_ALLOWED_MIME,
     AttachmentRecord,
@@ -85,6 +94,8 @@ from src.ham.transcription_config import (
     transcription_runtime_configured,
 )
 from src.memory_heist import browser_policy_from_config, discover_config
+from src.metadata_stamps import ScanMode
+from src.persistence.project_store import get_project_store
 
 router = APIRouter(tags=["chat"])
 _LOG = logging.getLogger(__name__)
@@ -820,6 +831,91 @@ async def get_chat_capabilities(
     enforce_clerk_session_and_email_for_request(authorization, route="get_chat_capabilities")
     gateway_mode = os.environ.get("HERMES_GATEWAY_MODE", "").strip() or None
     return build_chat_capabilities_payload(model_id=model_id, gateway_mode=gateway_mode)
+
+
+@router.get("/api/chat/context-meters")
+def get_chat_context_meters(
+    session_id: str = Query(..., min_length=1, max_length=256),
+    model_id: str | None = Query(None, max_length=256),
+    project_id: str | None = Query(None, max_length=256),
+    authorization: str | None = Header(None, alias="Authorization"),
+) -> dict[str, Any]:
+    """Safe context pressure meters (no message contents in the response)."""
+    enforce_clerk_session_and_email_for_request(authorization, route="get_chat_context_meters")
+    if not context_meters_feature_enabled():
+        return {"enabled": False, "this_turn": None, "workspace": None, "thread": None}
+
+    rec = _chat_store.get_session(session_id)
+    if rec is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": {"code": "SESSION_NOT_FOUND", "message": "Unknown chat session."}},
+        )
+    turns = rec.turns
+    cat = build_catalog_payload()
+    raw_items = cat.get("items")
+    items = raw_items if isinstance(raw_items, list) else []
+    model_limit, _from_cat = resolve_model_context_tokens(model_id, items)
+    this_turn = compute_this_turn_meter_block(
+        turns=turns,
+        model_limit_tokens=model_limit,
+        model_id=model_id,
+    )
+
+    workspace: dict[str, Any] | None = None
+    thread_budget = DEFAULT_THREAD_BUDGET_CHARS
+    root: Path | None = None
+    if (project_id or "").strip():
+        p = get_project_store().get_project(project_id.strip())
+        if p is not None:
+            try:
+                root = Path(p.root).expanduser().resolve()
+            except OSError:
+                root = None
+            if root is not None and root.is_dir():
+                ws_block, extra = workspace_snapshot_and_meter(root=root, scan_mode=ScanMode.CACHED)
+                if ws_block is not None:
+                    workspace = {**ws_block, "source": "cloud"}
+                tb = extra.get("thread_budget_chars")
+                if tb is not None:
+                    try:
+                        thread_budget = int(tb)
+                    except (TypeError, ValueError):
+                        pass
+    if workspace is None:
+        try:
+            r = resolve_workspace_context_snapshot_root()
+        except ValueError:
+            r = None
+        if r is not None and r.is_dir():
+            ws_block, extra = workspace_snapshot_and_meter(root=r, scan_mode=ScanMode.CACHED)
+            if ws_block is not None:
+                workspace = {**ws_block, "source": "local"}
+            tb = extra.get("thread_budget_chars")
+            if tb is not None:
+                try:
+                    thread_budget = int(tb)
+                except (TypeError, ValueError):
+                    pass
+    if workspace is None:
+        ws_block, extra = workspace_snapshot_and_meter(root=Path.cwd(), scan_mode=ScanMode.CACHED)
+        if ws_block is not None:
+            workspace = {**ws_block, "source": "cloud"}
+        tb = extra.get("thread_budget_chars")
+        if tb is not None:
+            try:
+                thread_budget = int(tb)
+            except (TypeError, ValueError):
+                pass
+
+    thread = compute_thread_meter_block(turns=turns, thread_budget_chars=thread_budget)
+
+    return {
+        "enabled": True,
+        "this_turn": this_turn,
+        "workspace": workspace,
+        "thread": thread,
+    }
 
 
 @router.get("/api/chat/sessions")
