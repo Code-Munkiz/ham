@@ -61,7 +61,9 @@ class TestToolDiscoveryEndpoint:
         assert "OPENROUTER_API_KEY" not in raw
         assert "CURSOR_API_KEY" not in raw
         assert "HAM_DROID_EXEC_TOKEN" not in raw
-        assert "sk-" not in raw
+        assert "GITHUB_TOKEN" not in raw
+        assert "GH_TOKEN" not in raw
+        # Masked previews may begin with sk-or…; never leak raw env-style blobs.
         assert "Bearer " not in raw
 
     def test_response_has_no_env_dump(self):
@@ -93,10 +95,12 @@ class TestToolDiscoveryEndpoint:
         data = _get_tools()
         for tool in data["tools"]:
             assert isinstance(tool["enabled"], bool)
-            if tool["status"] in ("unknown", "not_found", "off"):
+            if tool["status"] in ("unknown", "not_found", "off", "needs_sign_in"):
                 assert tool["enabled"] is False, (
                     f"{tool['id']} should not be enabled when status={tool['status']}"
                 )
+            if tool["status"] == "ready":
+                assert tool["enabled"] is True
 
 
 class TestCloudModeSafety:
@@ -132,11 +136,12 @@ class TestCredentialStatusSafety:
     """Statuses must not leak credential values."""
 
     def test_openrouter_ready_when_key_set(self):
-        with patch.dict(os.environ, {"OPENROUTER_API_KEY": "sk-or-test-12345"}):
+        plausible_key = "sk-or-" + "a" * 30
+        with patch.dict(os.environ, {"OPENROUTER_API_KEY": plausible_key}):
             data = _get_tools()
             tool = next(t for t in data["tools"] if t["id"] == "openrouter")
             assert tool["status"] == "ready"
-            assert "sk-or-test-12345" not in str(data)
+            assert plausible_key not in str(data)
 
     def test_openrouter_needs_sign_in_when_no_key(self):
         with patch.dict(os.environ, {"OPENROUTER_API_KEY": ""}):
@@ -151,17 +156,25 @@ class TestCredentialStatusSafety:
             assert tool["status"] == "ready"
             assert "cur_test_key_abc" not in str(data)
 
-    def test_cursor_needs_sign_in_when_no_key(self):
-        with patch.dict(os.environ, {"CURSOR_API_KEY": ""}):
+    def test_openrouter_ready_from_catalog_flag_without_env_key(self):
+        with patch("src.api.workspace_tools.build_catalog_payload", return_value={"openrouter_chat_ready": True}):
+            with patch.dict(os.environ, {"OPENROUTER_API_KEY": ""}):
+                data = _get_tools()
+                tool = next(t for t in data["tools"] if t["id"] == "openrouter")
+                assert tool["status"] == "ready"
+
+    def test_github_ready_when_token_env_set(self):
+        with patch.dict(os.environ, {"GITHUB_TOKEN": "ghp_" + "x" * 36}):
             data = _get_tools()
-            tool = next(t for t in data["tools"] if t["id"] == "cursor")
-            assert tool["status"] in ("needs_sign_in", "ready")
+            gh = next(t for t in data["tools"] if t["id"] == "github")
+            assert gh["status"] == "ready"
+            assert "ghp_" not in str(data)
 
     def test_comfyui_does_not_leak_config(self):
         data = _get_tools()
         tool = next(t for t in data["tools"] if t["id"] == "comfyui")
-        assert tool["status"] == "unknown"
-        assert "comfyui" not in str(tool.get("setup_hint", "")).lower() or "detect" in str(tool.get("setup_hint", "")).lower()
+        assert tool["status"] in ("unknown", "not_found", "ready", "needs_sign_in")
+        assert "HAM_COMFYUI" not in str(tool)
 
 
 class TestResponseSchema:
@@ -169,7 +182,7 @@ class TestResponseSchema:
 
     def test_all_tools_have_required_fields(self):
         data = _get_tools()
-        required_fields = {"id", "label", "category", "status", "enabled", "source"}
+        required_fields = {"id", "label", "category", "status", "enabled", "source", "connect_kind"}
         for tool in data["tools"]:
             for field in required_fields:
                 assert field in tool, f"Tool {tool.get('id', '?')} missing field: {field}"
@@ -197,3 +210,52 @@ class TestResponseSchema:
             assert tool["category"] in valid_categories, (
                 f"{tool['id']} has invalid category: {tool['category']}"
             )
+
+    def test_connect_kind_values_are_valid(self):
+        valid = {"none", "api_key", "access_token", "local_scan", "coming_soon"}
+        data = _get_tools()
+        for tool in data["tools"]:
+            assert tool["connect_kind"] in valid
+
+
+class TestConnectAndScanEndpoints:
+    def test_connect_unknown_tool_404(self):
+        r = client.post("/api/workspace/tools/nope_tool/connect", json={"api_key": "x"})
+        assert r.status_code == 404
+
+    def test_connect_openrouter_blocked_501(self):
+        plausible = "sk-or-" + "v" * 30
+        r = client.post("/api/workspace/tools/openrouter/connect", json={"api_key": plausible})
+        assert r.status_code == 501
+        body = r.json()
+        assert "detail" in body
+        assert plausible not in str(body)
+
+    def test_cursor_connect_and_disconnect_roundtrip(self, tmp_path):
+        cred_file = tmp_path / "cursor_credentials.json"
+        env = {
+            "HAM_CURSOR_CREDENTIALS_FILE": str(cred_file),
+            "CURSOR_API_KEY": "",
+        }
+        with patch.dict(os.environ, env):
+            plausible = "cur_" + "a" * 40
+            r = client.post("/api/workspace/tools/cursor/connect", json={"api_key": plausible})
+            assert r.status_code == 200
+            data = r.json()
+            assert plausible not in str(data)
+            cur = next(t for t in data["tools"] if t["id"] == "cursor")
+            assert cur["status"] == "ready"
+            assert cur.get("credential_preview")
+
+            r2 = client.post("/api/workspace/tools/cursor/disconnect")
+            assert r2.status_code == 200
+            data2 = r2.json()
+            cur2 = next(t for t in data2["tools"] if t["id"] == "cursor")
+            assert cur2["status"] == "needs_sign_in"
+
+    def test_scan_endpoint_returns_tools(self):
+        r = client.post("/api/workspace/tools/scan")
+        assert r.status_code == 200
+        body = r.json()
+        assert "tools" in body
+        assert len(body["tools"]) >= len(EXPECTED_TOOL_IDS)
