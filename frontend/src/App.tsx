@@ -11,6 +11,7 @@ import Landing from "./pages/Landing";
 
 import { AgentProvider } from "./lib/ham/AgentContext";
 import { WorkspaceProvider } from "./lib/ham/WorkspaceContext";
+import { HamWorkspaceProvider } from "./lib/ham/HamWorkspaceContext";
 import { ClerkAccessBridge } from "./lib/ham/ClerkAccessBridge";
 import { getHamDesktopConfig, isHamDesktopShell } from "./lib/ham/desktopConfig";
 import { WorkspaceApp } from "./features/hermes-workspace";
@@ -82,7 +83,9 @@ export default function App() {
     <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
       <AgentProvider>
         <WorkspaceProvider>
-          <AppRoutes />
+          <HamWorkspaceProvider>
+            <AppRoutes />
+          </HamWorkspaceProvider>
         </WorkspaceProvider>
       </AgentProvider>
     </ThemeProvider>
