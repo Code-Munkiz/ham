@@ -54,6 +54,12 @@ import {
 } from "@/lib/ham/api";
 import type { ContextEnginePayload, CursorCredentialsStatus } from "@/lib/ham/types";
 import { DesktopBundlePanel } from "@/components/settings/DesktopBundlePanel";
+import {
+  fetchLocalWorkspaceContextSnapshot,
+  fetchLocalWorkspaceHealth,
+  isLocalRuntimeConfigured,
+} from "@/features/hermes-workspace/adapters/localRuntime";
+import { loadContextMemorySnapshot, shouldGateContextMemorySettingsMutations } from "@/features/hermes-workspace/lib/contextMemorySnapshotLoadPlan";
 import { useOptionalWorkspaceHamProject } from "@/features/hermes-workspace/WorkspaceHamProjectContext";
 
 export type SettingsPanelVisualVariant = "default" | "workspace";
@@ -935,10 +941,13 @@ function AllowlistedWorkspaceSettings({
   data,
   onApplied,
   visualVariant = "default",
+  contextSnapshotLocal = false,
 }: {
   data: ContextEnginePayload;
   onApplied: () => void;
   visualVariant?: SettingsPanelVisualVariant;
+  /** True when the panel shows a snapshot from the connected machine (cloud preview/apply would be misleading). */
+  contextSnapshotLocal?: boolean;
 }) {
   const w = visualVariant === "workspace";
   const cwd = data.cwd;
@@ -1070,6 +1079,29 @@ function AllowlistedWorkspaceSettings({
   );
 
   const fieldLbl = w ? "text-xs font-medium text-white/50" : "text-[9px] font-black text-white/35 uppercase tracking-widest";
+
+  if (contextSnapshotLocal) {
+    return (
+      <div
+        className={cn(
+          "space-y-3 rounded-xl border p-6",
+          w ? "border-white/[0.08] bg-white/[0.02]" : "border-[#FF6B00]/20 bg-black/40",
+        )}
+      >
+        <h4
+          className={cn(
+            w ? "text-sm font-medium text-white/85" : "text-[11px] font-black uppercase italic tracking-widest text-[#FF6B00]",
+          )}
+        >
+          Project settings writes
+        </h4>
+        <p className={cn("max-w-2xl leading-relaxed", w ? "text-[13px] text-white/45" : "text-[10px] text-white/35")}>
+          Cloud settings changes are unavailable while viewing this computer&apos;s project snapshot. Preview and apply
+          always use your linked cloud project, not the folder shown above.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -1267,8 +1299,8 @@ export function ContextAndMemoryPanel({ variant = "default" }: { variant?: Setti
   const [data, setData] = React.useState<ContextEnginePayload | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
-  /** "project" = GET /api/projects/{id}/context-engine; "global" = GET /api/context-engine */
-  const [snapshotSource, setSnapshotSource] = React.useState<"project" | "global" | null>(null);
+  /** "local" = connected machine snapshot; "project" / "global" = cloud API */
+  const [snapshotSource, setSnapshotSource] = React.useState<"local" | "project" | "global" | null>(null);
   const [fallbackNote, setFallbackNote] = React.useState<string | null>(null);
 
   const load = React.useCallback(async () => {
@@ -1276,26 +1308,16 @@ export function ContextAndMemoryPanel({ variant = "default" }: { variant?: Setti
     setError(null);
     setFallbackNote(null);
     try {
-      if (hamProjectId) {
-        try {
-          const payload = await fetchProjectContextEngine(hamProjectId);
-          setData(payload);
-          setSnapshotSource("project");
-          return;
-        } catch (e) {
-          const msg = e instanceof Error ? e.message : "Project snapshot failed";
-          setFallbackNote(
-            `Could not load the project-scoped snapshot for this workspace (${msg}). Showing the global API snapshot instead — this is normal when the API host does not have that project root on disk.`,
-          );
-          const payload = await fetchContextEngine();
-          setData(payload);
-          setSnapshotSource("global");
-          return;
-        }
-      }
-      const payload = await fetchContextEngine();
-      setData(payload);
-      setSnapshotSource("global");
+      const outcome = await loadContextMemorySnapshot(hamProjectId, {
+        isLocalRuntimeConfigured,
+        fetchLocalWorkspaceHealth,
+        fetchLocalWorkspaceContextSnapshot,
+        fetchProjectContextEngine,
+        fetchContextEngine,
+      });
+      setData(outcome.payload);
+      setSnapshotSource(outcome.source);
+      setFallbackNote(outcome.fallbackNote);
     } catch (e) {
       setData(null);
       setSnapshotSource(null);
@@ -1315,32 +1337,44 @@ export function ContextAndMemoryPanel({ variant = "default" }: { variant?: Setti
     { key: "critic" as const, label: "Review (Hermes)" },
   ];
 
+  const sourceBadge =
+    snapshotSource === "local" ? (
+      <span className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-200/95">
+        This computer
+      </span>
+    ) : snapshotSource === "project" || snapshotSource === "global" ? (
+      <span className="rounded-md border border-sky-500/25 bg-sky-500/10 px-2 py-0.5 text-[11px] font-semibold text-sky-100/90">
+        Cloud
+      </span>
+    ) : null;
+
   return (
     <div className={cn("space-y-6", w && "hww-settings-panels")}>
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <p
-          className={cn(
-            "max-w-xl leading-relaxed",
-            w ? "text-[13px] text-white/45" : "text-[10px] font-bold uppercase tracking-widest text-white/30",
-          )}
-        >
-          {w ? (
-            <>
-              Live snapshot from the context engine. With a linked workspace project, the UI prefers{" "}
-              <span className="font-mono text-white/55">GET /api/projects/{"{id}"}/context-engine</span> so the scan
-              uses the registered project root. Otherwise it uses{" "}
-              <span className="font-mono text-white/55">GET /api/context-engine</span> (API process working directory).
-            </>
-          ) : (
-            <>
-              Live snapshot from <span className="font-mono text-[#FF6B00]/80">GET /api/context-engine</span> or, when
-              a Hermes workspace project id is available,{" "}
-              <span className="font-mono text-[#FF6B00]/80">GET /api/projects/{"{id}"}/context-engine</span>. Vite dev
-              proxies <span className="font-mono">/api</span> to FastAPI; production uses{" "}
-              <span className="font-mono">VITE_HAM_API_BASE</span>.
-            </>
-          )}
-        </p>
+        <div className="flex max-w-xl flex-col gap-2">
+          <div className="flex flex-wrap items-center gap-2">{sourceBadge}</div>
+          <p
+            className={cn(
+              "leading-relaxed",
+              w ? "text-[13px] text-white/45" : "text-[10px] font-bold uppercase tracking-widest text-white/30",
+            )}
+          >
+            {w ? (
+              <>
+                Project memory snapshot: when your connected folder is available on this computer, this panel prefers
+                that folder. Otherwise it uses your linked cloud project, or the global cloud API view.
+              </>
+            ) : (
+              <>
+                Live snapshot from <span className="font-mono text-[#FF6B00]/80">GET /api/context-engine</span> or, when
+                a Hermes workspace project id is available,{" "}
+                <span className="font-mono text-[#FF6B00]/80">GET /api/projects/{"{id}"}/context-engine</span>. Vite dev
+                proxies <span className="font-mono">/api</span> to FastAPI; production uses{" "}
+                <span className="font-mono">VITE_HAM_API_BASE</span>.
+              </>
+            )}
+          </p>
+        </div>
         <button
           type="button"
           onClick={() => void load()}
@@ -1357,6 +1391,16 @@ export function ContextAndMemoryPanel({ variant = "default" }: { variant?: Setti
         </button>
       </div>
 
+      {snapshotSource === "local" && w && (
+        <div className="space-y-2 rounded-xl border border-emerald-500/25 bg-emerald-500/[0.06] p-4 text-[13px] leading-relaxed text-emerald-50/90">
+          <p className="font-medium text-emerald-100/95">This computer</p>
+          <p className="text-emerald-100/80">
+            This panel is showing your connected project folder on this computer. Chat still uses the cloud app in this
+            version.
+          </p>
+        </div>
+      )}
+
       <div
         className={cn(
           "space-y-2 rounded-xl border p-4 leading-relaxed",
@@ -1366,7 +1410,7 @@ export function ContextAndMemoryPanel({ variant = "default" }: { variant?: Setti
         )}
       >
         <p className={cn(w ? "font-medium text-amber-50/95" : "text-[10px] font-black tracking-widest text-amber-200/90")}>
-          What this snapshot means (hosted &amp; containers)
+          {w ? "What the Cloud snapshot means" : "What this snapshot means (hosted &amp; containers)"}
         </p>
         <ul
           className={cn(
@@ -1374,16 +1418,37 @@ export function ContextAndMemoryPanel({ variant = "default" }: { variant?: Setti
             w ? "text-[12px] text-amber-100/75" : "text-[9px] font-semibold normal-case tracking-normal text-amber-100/65",
           )}
         >
-          <li>
-            The <span className="font-mono">global</span> route reflects the API process working directory (often
-            something like <span className="font-mono">/app</span> on Cloud Run), not your laptop path.
-          </li>
-          <li>
-            Many images omit <span className="font-mono">.git</span> (e.g. via <span className="font-mono">.dockerignore</span>
-            ), so &quot;Git unavailable&quot; there is expected — it does <strong className="font-semibold">not</strong> mean{" "}
-            <span className="font-mono">memory_heist</span> is broken.
-          </li>
-          <li>Open the Hermes workspace chat once to link a project id; the Context &amp; Memory panel then prefers the project-scoped route when the API can read that root.</li>
+          {w ? (
+            <>
+              <li>
+                The global cloud view reflects the cloud API process folder (hosted deployments often use something like{" "}
+                <span className="font-mono text-amber-200/70">/app</span>), not a path on your laptop.
+              </li>
+              <li>
+                Many cloud images omit a <span className="font-mono text-amber-200/70">.git</span> tree, so &quot;Git
+                unavailable&quot; there is expected — it does <strong className="font-semibold">not</strong> mean project
+                memory is broken.
+              </li>
+              <li>Link a workspace project to prefer that cloud project&apos;s folder when the cloud host can read it.</li>
+            </>
+          ) : (
+            <>
+              <li>
+                The <span className="font-mono">global</span> route reflects the API process working directory (often
+                something like <span className="font-mono">/app</span> on Cloud Run), not your laptop path.
+              </li>
+              <li>
+                Many images omit <span className="font-mono">.git</span> (e.g. via{" "}
+                <span className="font-mono">.dockerignore</span>
+                ), so &quot;Git unavailable&quot; there is expected — it does <strong className="font-semibold">not</strong>{" "}
+                mean <span className="font-mono">memory_heist</span> is broken.
+              </li>
+              <li>
+                Open the Hermes workspace chat once to link a project id; the Context &amp; Memory panel then prefers the
+                project-scoped route when the API can read that root.
+              </li>
+            </>
+          )}
         </ul>
       </div>
 
@@ -1403,25 +1468,48 @@ export function ContextAndMemoryPanel({ variant = "default" }: { variant?: Setti
       {snapshotSource && data && (
         <div
           className={cn(
-            "rounded-lg border px-3 py-2 font-mono",
+            "rounded-lg border px-3 py-2",
             w
-              ? "border-white/[0.08] text-[11px] text-white/45"
-              : "border-white/10 text-[9px] text-white/35",
+              ? "border-white/[0.08] text-[12px] text-white/55"
+              : "border-white/10 font-mono text-[9px] text-white/35",
           )}
         >
-          Active route:{" "}
-          {snapshotSource === "project" ? (
+          {w ? (
             <>
-              <span className="text-emerald-400/90">project</span>
-              {" · "}
-              <span className="text-white/55">GET /api/projects/{hamProjectId}/context-engine</span>
+              <span className="font-medium text-white/65">Source: </span>
+              {snapshotSource === "local" && (
+                <span>
+                  Connected folder on this computer (local Ham API with a configured project folder).
+                </span>
+              )}
+              {snapshotSource === "project" && <span>Linked cloud project folder.</span>}
+              {snapshotSource === "global" && (
+                <span>Global cloud API view{hamProjectId ? " (fallback)" : ""}.</span>
+              )}
             </>
           ) : (
             <>
-              <span className="text-white/55">global</span>
-              {" · "}
-              <span className="text-white/55">GET /api/context-engine</span>
-              {hamProjectId ? " (fallback)" : ""}
+              Active route:{" "}
+              {snapshotSource === "local" ? (
+                <>
+                  <span className="text-emerald-400/90">local</span>
+                  {" · "}
+                  <span className="text-white/55">GET /api/workspace/context-snapshot</span>
+                </>
+              ) : snapshotSource === "project" ? (
+                <>
+                  <span className="text-emerald-400/90">project</span>
+                  {" · "}
+                  <span className="text-white/55">GET /api/projects/{hamProjectId}/context-engine</span>
+                </>
+              ) : (
+                <>
+                  <span className="text-white/55">global</span>
+                  {" · "}
+                  <span className="text-white/55">GET /api/context-engine</span>
+                  {hamProjectId ? " (fallback)" : ""}
+                </>
+              )}
             </>
           )}
         </div>
@@ -1765,6 +1853,7 @@ export function ContextAndMemoryPanel({ variant = "default" }: { variant?: Setti
             data={data}
             onApplied={() => void load()}
             visualVariant={w ? "workspace" : "default"}
+            contextSnapshotLocal={shouldGateContextMemorySettingsMutations(snapshotSource)}
           />
         </>
       )}

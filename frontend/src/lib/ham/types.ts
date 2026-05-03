@@ -420,6 +420,8 @@ export interface ContextEngineRoleSlice {
 }
 
 export interface ContextEnginePayload {
+  /** Present when snapshot is from ``GET /api/workspace/context-snapshot`` (local API + configured root). */
+  context_source?: "local" | "cloud";
   cwd: string;
   current_date: string;
   platform_info: string;

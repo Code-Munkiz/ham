@@ -5,6 +5,7 @@
  */
 
 import { mergeClerkAuthBearerIfNeeded } from "@/lib/ham/api";
+import type { ContextEnginePayload } from "@/lib/ham/types";
 
 const STORAGE_KEY = "hww.localRuntimeBase";
 
@@ -136,6 +137,38 @@ export async function fetchLocalWorkspaceHealth(): Promise<LocalRuntimeHealthPay
   } catch {
     return null;
   }
+}
+
+const LOCAL_CONTEXT_SNAPSHOT_PATH = "/api/workspace/context-snapshot" as const;
+
+/**
+ * Context engine snapshot from the **local** HAM API using configured workspace root only.
+ * Throws on HTTP errors or invalid JSON (caller falls back to cloud routes).
+ */
+export async function fetchLocalWorkspaceContextSnapshot(): Promise<ContextEnginePayload> {
+  const res = await localRuntimeFetch(LOCAL_CONTEXT_SNAPSHOT_PATH, { method: "GET" });
+  const rawText = await res.text();
+  let body: unknown = null;
+  try {
+    body = rawText ? JSON.parse(rawText) : null;
+  } catch {
+    body = null;
+  }
+  if (!res.ok) {
+    const d =
+      body && typeof body === "object" && body !== null && "detail" in body
+        ? (body as { detail?: unknown }).detail
+        : null;
+    const msg =
+      d && typeof d === "object" && d !== null && "message" in d && typeof (d as { message: unknown }).message === "string"
+        ? (d as { message: string }).message
+        : `Local context snapshot failed (${res.status})`;
+    throw new Error(msg);
+  }
+  if (!body || typeof body !== "object") {
+    throw new Error("Invalid local context snapshot response");
+  }
+  return { ...(body as ContextEnginePayload), context_source: "local" };
 }
 
 /**
