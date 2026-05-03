@@ -5,7 +5,7 @@
 # so production images do not pick up linters / test tooling.
 
 # Lint + format (single binary)
-ruff==0.15.7
+ruff==0.15.12
 
 # Type check (warning-only baseline; not blocking yet)
 mypy>=1.11,<2.0
