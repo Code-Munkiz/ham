@@ -1465,6 +1465,8 @@ There are many draft PRs for small docs notes. I want to stop accumulating PR cl
 - Create `.env` from `.env.example` before first run. Default mock mode needs no API keys.
 - Frontend lint is `npm run lint --prefix frontend` (`tsc --noEmit`).
 - Full test suite: `python3 -m pytest tests/ -q`. Some HAM-on-X reactive inbox tests may have pre-existing failures unrelated to setup.
+- **Hanging tests in Cloud VMs:** `tests/test_workspace_terminal.py` (3 tests) hangs indefinitely in cloud agent environments due to PTY requirements. Exclude with `--ignore=tests/test_workspace_terminal.py`. One pre-existing failure in `tests/test_model_capabilities.py::test_known_vision_model_enables_image_input` can be deselected.
+- **PyJWT system conflict:** The base image has a system-installed `PyJWT 2.7.0` without RECORD metadata. Use `pip install --ignore-installed PyJWT>=2.8.0` before `pip install -r requirements.txt` if install fails.
 - See `.cursor/skills/cloud-agent-starter/SKILL.md` for detailed per-area testing workflows and common quick fixes.
 
 ### HAM / Cursor Cloud Agent truth table
