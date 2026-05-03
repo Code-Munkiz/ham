@@ -20,6 +20,8 @@ from src.ham.worker_adapters import claude_agent_adapter
 from src.ham.worker_adapters.claude_agent_adapter import (
     ClaudeAgentWorkerCapabilities,
     ClaudeAgentWorkerReadiness,
+    _format_sdk_query_failure,
+    _redact_diagnostic_text,
     check_claude_agent_readiness,
     is_claude_agent_launchable,
     reset_claude_agent_readiness_cache,
@@ -284,3 +286,21 @@ class TestNoRealSdkAtModuleTop:
         except Exception as exc:  # pragma: no cover — safety net
             pytest.fail(f"check_claude_agent_readiness raised: {exc!r}")
         assert readiness.status in {"ready", "needs_sign_in", "unavailable"}
+
+
+class TestDiagnosticRedaction:
+    def test_redact_masks_secret_patterns(self):
+        raw = "error sk-ant-api03-fake HAM_CLAUDE_AGENT_SMOKE_TOKEN=x ANTHROPIC_API_KEY=y ok"
+        out = _redact_diagnostic_text(raw)
+        assert "sk-ant-" not in out
+        assert "HAM_CLAUDE_AGENT_SMOKE_TOKEN=" not in out
+        assert "ANTHROPIC_API_KEY=" not in out
+        assert "[REDACTED]" in out
+
+    def test_format_sdk_query_failure_includes_redacted_stderr(self):
+        exc = Exception("Command failed with exit code 1 (exit code: 1)")
+        stderr = ["line one", "oauth token sk-ant-secret"]
+        detail = _format_sdk_query_failure(exc, stderr)
+        assert "exit code 1" in detail
+        assert "sk-ant-" not in detail
+        assert "stderr:" in detail

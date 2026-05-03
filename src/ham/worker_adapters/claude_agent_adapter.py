@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import re
 import shutil
@@ -25,6 +26,10 @@ SMOKE_QUERY_TIMEOUT_SEC = 60.0
 MISSION_QUERY_TIMEOUT_SEC = 90.0
 _RESPONSE_TEXT_CAP = 500
 _MISSION_RESPONSE_CAP = 4000
+_DIAG_STDERR_LINE_CAP = 48
+_DIAG_STDERR_JOIN_CAP = 900
+
+_LOG = logging.getLogger(__name__)
 
 CLAUDE_AGENT_MISSION_PROMPT = """Review this HAM mission brief and return a JSON object with:
 - mission_status: ok
@@ -282,6 +287,25 @@ _SECRETISH = re.compile(
 )
 
 
+def _redact_diagnostic_text(raw: str, cap: int = _DIAG_STDERR_JOIN_CAP) -> str:
+    """Redact likely secrets and cap length for logs/API blocker text."""
+    redacted = _SECRETISH.sub("[REDACTED]", raw)
+    redacted = " ".join(redacted.split())
+    if len(redacted) > cap:
+        return redacted[:cap].rstrip() + "…"
+    return redacted
+
+
+def _format_sdk_query_failure(exc: BaseException, stderr_lines: list[str]) -> str:
+    """Human-readable failure detail; stderr only appears when options.stderr is wired."""
+    msg = _redact_diagnostic_text(str(exc).strip(), cap=700)
+    if not stderr_lines:
+        return msg
+    tail = stderr_lines[-_DIAG_STDERR_LINE_CAP :]
+    stderr_blob = _redact_diagnostic_text("\n".join(tail), cap=_DIAG_STDERR_JOIN_CAP)
+    return f"{msg} | stderr: {stderr_blob}"
+
+
 def _sanitize_capped_response_text(raw: str, cap: int) -> str:
     s = " ".join(raw.split())
     if len(s) > cap:
@@ -298,14 +322,20 @@ def _ham_preferred_cli_path() -> str | None:
     return shutil.which("claude")
 
 
-def _plan_mode_query_options() -> Any:
+def _plan_mode_query_options(stderr_lines: list[str]) -> Any:
     from claude_agent_sdk import ClaudeAgentOptions  # type: ignore[import-not-found]
+
+    def _stderr_cb(line: str) -> None:
+        stderr_lines.append(line)
+        while len(stderr_lines) > _DIAG_STDERR_LINE_CAP:
+            stderr_lines.pop(0)
 
     kwargs: dict[str, Any] = {
         "tools": [],
         "allowed_tools": [],
         "permission_mode": "plan",
         "max_turns": 1,
+        "stderr": _stderr_cb,
     }
     cli = _ham_preferred_cli_path()
     if cli:
@@ -338,7 +368,8 @@ async def _run_claude_agent_sdk_plan_query(
             readiness,
         )
 
-    opts = _plan_mode_query_options()
+    stderr_lines: list[str] = []
+    opts = _plan_mode_query_options(stderr_lines)
 
     async def _collect() -> str:
         parts: list[str] = []
@@ -351,7 +382,9 @@ async def _run_claude_agent_sdk_plan_query(
     except TimeoutError:
         return None, "Claude Agent SDK query timed out.", readiness
     except Exception as exc:
-        return None, f"Claude Agent SDK query failed: {type(exc).__name__}", readiness
+        detail = _format_sdk_query_failure(exc, stderr_lines)
+        _LOG.warning("claude_agent_sdk query failed: %s", detail)
+        return None, f"Claude Agent SDK query failed: {detail}", readiness
 
     return _sanitize_capped_response_text(combined, response_cap), None, readiness
 
