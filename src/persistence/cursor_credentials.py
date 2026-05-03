@@ -85,4 +85,7 @@ def mask_api_key_preview(key: str) -> str:
     k = key.strip()
     if len(k) <= 12:
         return "***"
+    # Fine-grained / classic PATs: do not echo the recognizable prefix in UI.
+    if k.startswith("ghp_") or k.startswith("github_pat_"):
+        return f"github…{k[-4:]}"
     return f"{k[:8]}…{k[-4:]}"
