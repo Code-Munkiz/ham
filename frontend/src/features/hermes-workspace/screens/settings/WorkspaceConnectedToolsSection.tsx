@@ -3,6 +3,7 @@ import {
   connectWorkspaceTool,
   disconnectWorkspaceTool,
   fetchWorkspaceTools,
+  postClaudeAgentSmoke,
   scanWorkspaceTools,
 } from "@/lib/ham/api";
 
@@ -25,6 +26,8 @@ interface ToolEntry {
   last_checked_at: string | null;
   safe_actions: string[];
   version: string | null;
+  service_smoke_available?: boolean;
+  service_smoke_hint?: string | null;
 }
 
 interface ToolDiscoveryResponse {
@@ -87,6 +90,8 @@ export function WorkspaceConnectedToolsSection() {
   const [connectInputs, setConnectInputs] = React.useState<Record<string, string>>({});
   const [connectBusy, setConnectBusy] = React.useState<string | null>(null);
   const [connectRowError, setConnectRowError] = React.useState<Record<string, string>>({});
+  const [smokeBusy, setSmokeBusy] = React.useState(false);
+  const [smokeMessage, setSmokeMessage] = React.useState<string | null>(null);
 
   const fetchTools = React.useCallback(async () => {
     setLoading(true);
@@ -392,7 +397,8 @@ export function WorkspaceConnectedToolsSection() {
                         <p className="text-[12px] text-white/50">Connect coming later.</p>
                       )}
 
-                      {(tool.connect_kind === "api_key" || tool.connect_kind === "access_token") && (
+                      {(tool.connect_kind === "api_key" || tool.connect_kind === "access_token") &&
+                        wantsConnect && (
                         <div className="space-y-2">
                           <label className="block text-[11px] font-medium text-white/50" htmlFor={`key-${tool.id}`}>
                             {pasteLabel}
@@ -435,10 +441,73 @@ export function WorkspaceConnectedToolsSection() {
                             )}
                           </div>
                           <p className="text-[11px] text-white/35">
-                            Your key is saved securely by HAM when Connect is available for this tool.
+                            {tool.id === "claude_agent_sdk"
+                              ? "User API keys are not stored here yet—Connect stays blocked until the secure vault ships. This is not full Claude execution."
+                              : "Your key is saved securely by HAM when Connect is available for this tool."}
                           </p>
                           {connectRowError[tool.id] && (
                             <p className="text-[12px] text-amber-300/90">{connectRowError[tool.id]}</p>
+                          )}
+                        </div>
+                      )}
+
+                      {tool.id === "claude_agent_sdk" && tool.service_smoke_available && (
+                        <div className="space-y-2 rounded-md border border-white/[0.04] bg-black/20 px-3 py-2">
+                          <p className="text-[11px] font-medium uppercase tracking-wide text-white/35">
+                            Advanced — server test
+                          </p>
+                          {tool.service_smoke_hint && (
+                            <p className="text-[11px] text-white/40">{tool.service_smoke_hint}</p>
+                          )}
+                          <button
+                            type="button"
+                            disabled={smokeBusy}
+                            onClick={() => {
+                              setSmokeMessage(null);
+                              setSmokeBusy(true);
+                              void (async () => {
+                                try {
+                                  const resp = await postClaudeAgentSmoke();
+                                  const j = (await resp.json().catch(() => null)) as {
+                                    smoke_ok?: boolean;
+                                    status?: string;
+                                    blocker?: string | null;
+                                    response_text?: string;
+                                  } | null;
+                                  if (!resp.ok) {
+                                    const msg =
+                                      (j && typeof j === "object" && "detail" in j
+                                        ? String(
+                                            (j as { detail?: { message?: string } }).detail?.message ??
+                                              (j as { detail?: string }).detail,
+                                          )
+                                        : null) || `Smoke request failed (${resp.status})`;
+                                    setSmokeMessage(msg);
+                                    return;
+                                  }
+                                  if (j?.smoke_ok) {
+                                    setSmokeMessage("Server smoke succeeded (harmless check only—not full execution).");
+                                  } else {
+                                    setSmokeMessage(
+                                      j?.blocker ||
+                                        "Smoke did not complete as expected (SDK or model response).",
+                                    );
+                                  }
+                                } catch {
+                                  setSmokeMessage("Could not run server smoke test.");
+                                } finally {
+                                  setSmokeBusy(false);
+                                }
+                              })();
+                            }}
+                            className="rounded-md border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[12px] font-medium text-white/70 hover:bg-white/[0.08] disabled:opacity-50"
+                          >
+                            {smokeBusy ? "Running…" : "Run server-side smoke test"}
+                          </button>
+                          {smokeMessage && (
+                            <p className="text-[11px] text-white/45" data-testid="claude-smoke-status">
+                              {smokeMessage}
+                            </p>
                           )}
                         </div>
                       )}

@@ -135,6 +135,11 @@ export async function disconnectWorkspaceTool(toolId: string): Promise<Response>
   return hamApiFetch(`/api/workspace/tools/${id}/disconnect`, { method: "POST" });
 }
 
+/** Controlled Claude Agent SDK smoke (`POST /api/workspace/tools/claude_agent_sdk/smoke`). Clerk or smoke token only. */
+export async function postClaudeAgentSmoke(): Promise<Response> {
+  return hamApiFetch("/api/workspace/tools/claude_agent_sdk/smoke", { method: "POST" });
+}
+
 /** Multipart upload for workspace chat; returns an opaque `attachment_id` (blob stored server-side). */
 export async function postChatUploadAttachment(file: File): Promise<{
   attachment_id: string;

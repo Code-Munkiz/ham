@@ -1,18 +1,24 @@
-"""Claude Agent SDK worker adapter — readiness shell only (MVP).
+"""Claude Agent SDK worker adapter — readiness + optional controlled smoke.
 
 Detects whether the optional ``claude-agent-sdk`` package is importable and
 whether one of its supported auth modes appears configured (presence-only;
-values are never read or returned). Does NOT launch a real agent and does
-NOT call ``claude_agent_sdk.query()``.
+values are never read or returned).
 
-Mirrors the surface and conventions of ``cursor_adapter`` in this package.
+Controlled smoke (``run_claude_agent_sdk_smoke``) calls ``query()`` with
+**no tools**, ``permission_mode='plan'``, ``max_turns=1`` — only when invoked
+from an explicitly feature-gated HTTP route. Not used by readiness checks.
 """
 
 from __future__ import annotations
 
+import asyncio
 import os
 from dataclasses import dataclass, field
 from typing import Literal
+
+CLAUDE_AGENT_SMOKE_PROMPT = "Reply with exactly: HAM_CLAUDE_SMOKE_OK"
+SMOKE_QUERY_TIMEOUT_SEC = 60.0
+_RESPONSE_TEXT_CAP = 500
 
 # Module-level cache for the SDK import probe. The /api/workspace/tools
 # endpoint rebuilds the registry on every request; importing the SDK each
@@ -71,6 +77,39 @@ def _detect_sdk() -> tuple[bool, str | None]:
         return _SDK_DETECTION
     _SDK_DETECTION = _do_import()
     return _SDK_DETECTION
+
+
+def _truthy_env(name: str) -> bool:
+    return (os.environ.get(name) or "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def claude_agent_smoke_feature_enabled() -> bool:
+    """``HAM_CLAUDE_AGENT_SMOKE_ENABLED`` gate for the HTTP smoke route."""
+    return _truthy_env("HAM_CLAUDE_AGENT_SMOKE_ENABLED")
+
+
+def claude_agent_smoke_route_armed() -> bool:
+    """Feature on AND (Clerk session mode OR a non-empty ``HAM_CLAUDE_AGENT_SMOKE_TOKEN``)."""
+    if not claude_agent_smoke_feature_enabled():
+        return False
+    try:
+        from src.ham.clerk_auth import clerk_authorization_is_clerk_session
+    except Exception:
+        return False
+    if clerk_authorization_is_clerk_session():
+        return True
+    return bool((os.environ.get("HAM_CLAUDE_AGENT_SMOKE_TOKEN") or "").strip())
+
+
+def claude_agent_coarse_provider() -> str:
+    """Coarse auth channel label for logs/responses — never values."""
+    if _has_anthropic_api_key():
+        return "anthropic_direct"
+    if _has_bedrock_signal():
+        return "bedrock"
+    if _has_vertex_signal():
+        return "vertex"
+    return "unknown"
 
 
 def reset_claude_agent_readiness_cache() -> None:
@@ -191,3 +230,117 @@ def is_claude_agent_launchable(
     if readiness is None:
         readiness = check_claude_agent_readiness()
     return readiness.authenticated and readiness.status == "ready"
+
+
+def _text_from_sdk_message(msg: object) -> str:
+    """Best-effort text extraction without importing SDK message types."""
+    chunks: list[str] = []
+    content = getattr(msg, "content", None)
+    if not content:
+        return ""
+    for block in content:
+        text = getattr(block, "text", None)
+        if isinstance(text, str):
+            chunks.append(text)
+    return "".join(chunks)
+
+
+def _sanitize_smoke_response_text(raw: str) -> str:
+    s = " ".join(raw.split())
+    if len(s) > _RESPONSE_TEXT_CAP:
+        return s[:_RESPONSE_TEXT_CAP].rstrip() + "…"
+    return s
+
+
+@dataclass(frozen=True)
+class ClaudeAgentSmokeResult:
+    """Structured smoke outcome — never includes secrets or env dumps."""
+
+    status: Literal["ok", "error"]
+    provider: str
+    sdk_available: bool
+    authenticated: bool
+    smoke_ok: bool
+    response_text: str
+    blocker: str | None = None
+
+
+async def run_claude_agent_sdk_smoke() -> ClaudeAgentSmokeResult:
+    """One harmless SDK ``query`` with tools disabled and plan-only permissions.
+
+    Uses server-side auth already present in the environment. Does not pass
+    project files, user prompts, or tool allowlists beyond empty/disabled tools.
+    """
+    readiness = check_claude_agent_readiness()
+    provider = claude_agent_coarse_provider()
+    if readiness.status != "ready":
+        return ClaudeAgentSmokeResult(
+            status="error",
+            provider=provider,
+            sdk_available=readiness.sdk_available,
+            authenticated=readiness.authenticated,
+            smoke_ok=False,
+            response_text="",
+            blocker=readiness.reason or "Claude Agent SDK is not ready on this server.",
+        )
+
+    try:
+        from claude_agent_sdk import ClaudeAgentOptions, query  # type: ignore[import-not-found]
+    except ImportError:
+        return ClaudeAgentSmokeResult(
+            status="error",
+            provider=provider,
+            sdk_available=readiness.sdk_available,
+            authenticated=readiness.authenticated,
+            smoke_ok=False,
+            response_text="",
+            blocker="claude-agent-sdk import failed or package not installed.",
+        )
+
+    opts = ClaudeAgentOptions(
+        tools=[],
+        allowed_tools=[],
+        permission_mode="plan",
+        max_turns=1,
+    )
+
+    async def _collect() -> str:
+        parts: list[str] = []
+        async for msg in query(prompt=CLAUDE_AGENT_SMOKE_PROMPT, options=opts):
+            parts.append(_text_from_sdk_message(msg))
+        return "".join(parts).strip()
+
+    try:
+        combined = await asyncio.wait_for(_collect(), timeout=SMOKE_QUERY_TIMEOUT_SEC)
+    except TimeoutError:
+        return ClaudeAgentSmokeResult(
+            status="error",
+            provider=provider,
+            sdk_available=readiness.sdk_available,
+            authenticated=readiness.authenticated,
+            smoke_ok=False,
+            response_text="",
+            blocker="Smoke query timed out.",
+        )
+    except Exception as exc:
+        return ClaudeAgentSmokeResult(
+            status="error",
+            provider=provider,
+            sdk_available=readiness.sdk_available,
+            authenticated=readiness.authenticated,
+            smoke_ok=False,
+            response_text="",
+            blocker=f"Smoke query failed: {type(exc).__name__}",
+        )
+
+    safe_text = _sanitize_smoke_response_text(combined)
+    smoke_ok = "HAM_CLAUDE_SMOKE_OK" in safe_text
+    return ClaudeAgentSmokeResult(
+        status="ok" if smoke_ok else "error",
+        provider=provider,
+        sdk_available=readiness.sdk_available,
+        authenticated=readiness.authenticated,
+        smoke_ok=smoke_ok,
+        response_text=safe_text,
+        blocker=None if smoke_ok else "Model reply did not contain the expected smoke token.",
+    )

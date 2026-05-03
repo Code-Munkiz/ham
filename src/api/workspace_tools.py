@@ -1,7 +1,10 @@
 """Workspace tool/worker discovery — status + safe connect contracts (MVP).
 
 Returns a safe list of tools/workers with discovery status.
-No secrets, no env dumps, no auto-install, no real execution from this module.
+No secrets, no env dumps, no auto-install. The Claude Agent SDK **smoke** route
+(``POST /api/workspace/tools/claude_agent_sdk/smoke``) is optional and
+feature-flagged; it runs only a fixed harmless prompt with tools disabled.
+
 Cloud Run must never pretend it scanned the user's local computer.
 
 Connect: Cursor API keys may be persisted via the existing file-backed store
@@ -13,18 +16,23 @@ from __future__ import annotations
 
 import logging
 import os
+import secrets
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Optional
+from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from src.api.clerk_gate import get_ham_clerk_actor
+from src.ham.clerk_auth import HamActor, clerk_authorization_is_clerk_session
 from src.api.models_catalog import build_catalog_payload
 from src.ham.worker_adapters.claude_agent_adapter import (
     check_claude_agent_readiness,
+    claude_agent_smoke_feature_enabled,
+    claude_agent_smoke_route_armed,
     reset_claude_agent_readiness_cache,
+    run_claude_agent_sdk_smoke,
 )
 from src.ham.worker_adapters.cursor_adapter import check_cursor_readiness
 from src.llm_client import normalized_openrouter_api_key, openrouter_api_key_is_plausible
@@ -89,6 +97,8 @@ class ToolEntry(BaseModel):
     last_checked_at: Optional[str] = None
     safe_actions: list[str] = Field(default_factory=list)
     version: Optional[str] = None
+    service_smoke_available: bool = False
+    service_smoke_hint: Optional[str] = None
 
 
 class ToolDiscoveryResponse(BaseModel):
@@ -100,6 +110,63 @@ class ToolDiscoveryResponse(BaseModel):
 class ToolConnectBody(BaseModel):
     api_key: Optional[str] = Field(default=None, max_length=8192)
     access_token: Optional[str] = Field(default=None, max_length=8192)
+
+
+class ClaudeAgentSmokeHttpResponse(BaseModel):
+    """Safe smoke outcome — no env dumps, keys, or user-supplied secrets."""
+
+    status: Literal["ok", "error"]
+    provider: str
+    sdk_available: bool
+    authenticated: bool
+    smoke_ok: bool
+    response_text: str
+    blocker: Optional[str] = None
+
+
+def _authorize_claude_agent_smoke(actor: HamActor | None, x_ham_smoke_token: str | None) -> None:
+    if not claude_agent_smoke_feature_enabled():
+        raise HTTPException(status_code=404, detail="Not found.")
+    if not claude_agent_smoke_route_armed():
+        raise HTTPException(
+            status_code=404,
+            detail="Claude Agent service smoke is not configured.",
+        )
+    if clerk_authorization_is_clerk_session():
+        if actor is None:
+            raise HTTPException(
+                status_code=401,
+                detail={
+                    "code": "CLERK_SESSION_REQUIRED",
+                    "message": (
+                        "Authorization: Bearer <Clerk session JWT> required when "
+                        "Clerk session auth is enabled for this deployment."
+                    ),
+                },
+            )
+        return
+    expected = (os.environ.get("HAM_CLAUDE_AGENT_SMOKE_TOKEN") or "").strip()
+    got = (x_ham_smoke_token or "").strip()
+    if not got or not expected or len(got) != len(expected):
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "SMOKE_AUTH_REQUIRED",
+                "message": (
+                    "Valid X-HAM-SMOKE-TOKEN required when Clerk session auth is not enabled."
+                ),
+            },
+        )
+    if not secrets.compare_digest(got, expected):
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "SMOKE_AUTH_REQUIRED",
+                "message": (
+                    "Valid X-HAM-SMOKE-TOKEN required when Clerk session auth is not enabled."
+                ),
+            },
+        )
 
 
 def _now_iso() -> str:
@@ -176,7 +243,10 @@ _CLAUDE_AGENT_HINTS: dict[ToolStatus, str] = {
         "Set ANTHROPIC_API_KEY, or configure Bedrock/Vertex credentials "
         "on the server, to enable Claude."
     ),
-    ToolStatus.ready: "Connected. Execution stays disabled in this release.",
+    ToolStatus.ready: (
+        "Connected. Secure user key storage is coming next; "
+        "full autonomous execution is not enabled."
+    ),
     ToolStatus.error: "Claude detection hit an unexpected error.",
 }
 
@@ -238,6 +308,7 @@ def _build_tool_registry() -> list[ToolEntry]:
     claude_agent_status, claude_agent_hint, claude_agent_version = (
         _claude_agent_status_and_meta()
     )
+    smoke_armed = claude_agent_smoke_route_armed()
 
     tools: list[ToolEntry] = [
         ToolEntry(
@@ -306,7 +377,14 @@ def _build_tool_registry() -> list[ToolEntry]:
             connect_kind=ConnectKind.api_key,
             version=claude_agent_version,
             last_checked_at=now,
-            safe_actions=["check_status"],
+            safe_actions=["check_status", "connect"],
+            service_smoke_available=smoke_armed,
+            service_smoke_hint=(
+                "Service test available (server-side only). "
+                "Pasting a user key still uses secure vault storage when that ships."
+                if smoke_armed
+                else None
+            ),
         ),
         ToolEntry(
             id="openclaw",
@@ -481,6 +559,29 @@ def workspace_tools_scan(
     """
     reset_claude_agent_readiness_cache()
     return workspace_tools(_actor)  # type: ignore[arg-type]
+
+
+@router.post("/tools/claude_agent_sdk/smoke", response_model=ClaudeAgentSmokeHttpResponse)
+async def workspace_claude_agent_smoke(
+    actor: HamActor | None = Depends(get_ham_clerk_actor),
+    x_ham_smoke_token: str | None = Header(default=None, alias="X-HAM-SMOKE-TOKEN"),
+) -> ClaudeAgentSmokeHttpResponse:
+    """Controlled server-side Claude Agent SDK smoke (feature-flag + auth gated).
+
+    Uses service-level credentials only. Does not accept arbitrary prompts,
+    files, or tool permissions from the client.
+    """
+    _authorize_claude_agent_smoke(actor, x_ham_smoke_token)
+    result = await run_claude_agent_sdk_smoke()
+    return ClaudeAgentSmokeHttpResponse(
+        status=result.status,
+        provider=result.provider,
+        sdk_available=result.sdk_available,
+        authenticated=result.authenticated,
+        smoke_ok=result.smoke_ok,
+        response_text=result.response_text,
+        blocker=result.blocker,
+    )
 
 
 @router.post("/tools/{tool_id}/connect")

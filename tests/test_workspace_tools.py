@@ -289,19 +289,30 @@ class TestClaudeAgentSdkEntry:
         assert tool["category"] == "coding"
         assert tool["source"] == "cloud"
         assert tool["connect_kind"] == "api_key"
-        assert tool["safe_actions"] == ["check_status"]
+        assert tool["safe_actions"] == ["check_status", "connect"]
         assert "plan" in tool["capabilities"]
         assert "edit_code" in tool["capabilities"]
         assert "version" in tool
+        assert "service_smoke_available" in tool
+        assert "service_smoke_hint" in tool
 
     def test_status_is_valid(self):
         valid = {"ready", "needs_sign_in", "not_found", "off", "error", "unknown"}
         assert self._claude_entry()["status"] in valid
 
-    def test_safe_actions_excludes_connect(self):
-        # The frontend Connect form is gated by safe_actions including
-        # "connect"; without it no Connect form renders.
-        assert "connect" not in self._claude_entry()["safe_actions"]
+    def test_safe_actions_include_connect_for_future_vault_ux(self):
+        assert "connect" in self._claude_entry()["safe_actions"]
+        assert "check_status" in self._claude_entry()["safe_actions"]
+
+    def test_service_smoke_metadata_when_route_armed(self, monkeypatch):
+        monkeypatch.setenv("HAM_CLAUDE_AGENT_SMOKE_ENABLED", "1")
+        monkeypatch.setenv("HAM_CLAUDE_AGENT_SMOKE_TOKEN", "z" * 32)
+        monkeypatch.delenv("HAM_CLERK_REQUIRE_AUTH", raising=False)
+        monkeypatch.delenv("HAM_CLERK_ENFORCE_EMAIL_RESTRICTIONS", raising=False)
+        tool = self._claude_entry()
+        assert tool["service_smoke_available"] is True
+        assert tool["service_smoke_hint"]
+        assert "HAM_CLAUDE_AGENT_SMOKE_TOKEN" not in str(tool)
 
     def test_setup_hint_for_not_found(self):
         from src.ham.worker_adapters.claude_agent_adapter import (
@@ -366,7 +377,7 @@ class TestClaudeAgentSdkEntry:
         ):
             tool = self._claude_entry()
             assert tool["status"] == "ready"
-            assert "Execution stays disabled" in tool["setup_hint"]
+            assert "full autonomous execution" in tool["setup_hint"].lower()
             assert tool["version"] == "0.1.2"
 
     def test_setup_hint_for_error(self):
