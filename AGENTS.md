@@ -316,7 +316,6 @@ Phase B added CI steps and a separate `secret-scan` workflow without raising the
 
 - Branch protection / ruleset on `main` — see `docs/BRANCH_PROTECTION_SETUP.md`. Enable only after PR2 has at least one green run on `main`.
 - ESLint / Prettier on `frontend/` and `desktop/` (Phase A.2).
-- Knip / jscpd (Phase C.3, warning-only).
 
 ## Frontend tests (Phase C.1 baseline)
 
@@ -353,7 +352,6 @@ Out of scope for C.1 (deferred):
 - Component / route smoke tests (need Clerk env mocking).
 - Coverage threshold for the frontend.
 - ESLint / Prettier on `frontend/`.
-- Knip / jscpd (Phase C.3).
 
 ## Python dead-code + unused-deps (Phase C.2 baseline)
 
@@ -396,5 +394,51 @@ Out of scope for C.2 (deferred):
 
 - Cleaning the 7 vulture findings (separate cleanup PR).
 - Promoting `requests` / `starlette` from transitive to direct deps.
-- Frontend dead-code (knip) and duplicate-code (jscpd) — Phase C.3.
 - Pre-commit integration of vulture / deptry (CI is sufficient for now).
+
+## Frontend dead-code + duplicate-code (Phase C.3 baseline)
+
+Phase C.3 wires two frontend static-analysis tools into the existing
+`frontend` CI job, both **warning-only** (`continue-on-error: true`).
+They surface signal without blocking merges; cleanup is a separate
+follow-up PR.
+
+Run locally from `frontend/` (after `npm install` picks up the new
+devDeps):
+
+```bash
+npm run dup-check    # jscpd; reads frontend/.jscpd.json
+npm run knip         # knip; reads frontend/knip.json
+```
+
+What's covered today:
+
+- **jscpd** (`^4.0.5`) — token-based duplicate-code detector.
+  `min-lines=8`, `min-tokens=70`, scans `src/**/*.{ts,tsx}`, ignores
+  test files. Current baseline: **54 clones, 754 duplicated lines
+  (2.57%)** — well under the 5% concerning threshold. Heaviest cluster
+  in `frontend/src/components/settings/DesktopLocalControlStatusCard.tsx`
+  and `frontend/src/features/hermes-workspace/adapters/conductorAdapter.ts`.
+- **knip** (`^5.62.0`) — TS-aware unused files / exports / deps finder.
+  Reads `frontend/knip.json` (entry=`index.html`, project=`src+scripts`,
+  ignores `src/components/ui/**` shadcn primitives, ignoreDependencies
+  for build-config-implicit deps `autoprefixer`, `tailwindcss`,
+  `@testing-library/react`). Current baseline: 17 unused files, 8
+  unused deps, 2 unused devDeps, 134 unused exports, 130 unused exported
+  types, 1 duplicate export. **All cleanup is deferred** to separate
+  follow-up PRs.
+
+CI status:
+
+- `frontend` job → `npm run dup-check` and `npm run knip` run
+  **warning-only** (`continue-on-error: true` in
+  `.github/workflows/ci.yml`). Knip is invoked with `--no-exit-code` as
+  belt-and-suspenders so the binary itself never fails the step.
+
+Out of scope for C.3 (deferred):
+
+- Cleaning any flagged duplicate, file, export, or dependency.
+- Promoting any check (Vitest, vulture, deptry, jscpd, knip) to blocking.
+- Pre-commit integration of jscpd / knip (CI is sufficient for now).
+- HTML / JSON report uploads (console output is enough for the baseline).
+- Frontend ESLint / Prettier (Phase A.2 follow-up).
