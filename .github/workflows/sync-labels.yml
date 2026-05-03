@@ -1,0 +1,34 @@
+name: Sync issue labels
+
+# Idempotent label taxonomy sync. Runs:
+#   - manually via the Actions tab (workflow_dispatch)
+#   - automatically when the script or this workflow itself changes on main
+#
+# Does NOT run on PRs from forks (no token), and does NOT modify branch
+# protection or any other repo settings.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/sync_github_labels.sh"
+      - ".github/workflows/sync-labels.yml"
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Sync labels
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          chmod +x scripts/sync_github_labels.sh
+          ./scripts/sync_github_labels.sh

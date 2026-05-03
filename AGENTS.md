@@ -442,3 +442,49 @@ Out of scope for C.3 (deferred):
 - Pre-commit integration of jscpd / knip (CI is sufficient for now).
 - HTML / JSON report uploads (console output is enough for the baseline).
 - Frontend ESLint / Prettier (Phase A.2 follow-up).
+
+## Issue label taxonomy
+
+GitHub issue labels are managed by `scripts/sync_github_labels.sh` —
+an idempotent bash script that wraps `gh label create --force` for each
+entry. Re-run any time the taxonomy changes; existing default GitHub
+labels (`bug`, `enhancement`, `documentation`, etc.) are NOT touched and
+coexist with the prefixed taxonomy below.
+
+Five orthogonal dimensions plus one operational tag:
+
+- **`priority:P0`/P1/P2/P3** — actionability ladder (drop-everything →
+  backlog).
+- **`severity:critical`/high/medium/low** — impact ladder (orthogonal to
+  priority; e.g. a `severity:high` regression can still be `priority:P2`
+  if a workaround exists).
+- **`status:needs-triage`/blocked** — workflow state.
+- **`area:frontend`/backend/desktop/ci/docs** — codebase surface (matches
+  the labels used in `.github/dependabot.yml`).
+- **`type:bug`/feature/agent-run** — issue category. `type:agent-run`
+  is for capturing notable Cursor / Hermes / droid_executor runs via
+  `.github/ISSUE_TEMPLATE/agent_run.yml`.
+- **`dependencies`** — Dependabot / Renovate update PRs.
+
+To sync the live labels on the GitHub repo with the script after editing:
+
+```bash
+# locally (requires gh authenticated with `repo` scope)
+./scripts/sync_github_labels.sh
+
+# or trigger the manual workflow from the Actions tab:
+gh workflow run sync-labels.yml
+```
+
+The workflow at `.github/workflows/sync-labels.yml` also auto-runs on
+pushes to `main` that touch `scripts/sync_github_labels.sh` itself, so
+edits to the taxonomy land on the repo without a separate manual step.
+
+Out of scope (deferred):
+
+- Migrating existing issues from old unprefixed labels (`bug`,
+  `needs-triage`, `feature`, `agent`) to the new `type:` / `status:`
+  prefixes — there are 0 open issues at the time of this taxonomy.
+- Deleting GitHub's default labels — kept for compatibility with external
+  tools that expect them.
+- Wiring labels into branch protection or required-status checks.
