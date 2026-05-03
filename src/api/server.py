@@ -43,6 +43,7 @@ from src.api.workspace_voice_settings import router as workspace_voice_settings_
 from src.api.tts_endpoint import router as tts_router
 from src.api.pna_middleware import private_network_access_middleware
 from src.api.workspace_profiles import router as workspace_profiles_router
+from src.api.workspace_files import resolve_workspace_context_snapshot_root
 from src.api.workspace_skills import router as workspace_skills_router
 from src.api.control_plane_runs import router as control_plane_runs_router
 from src.ham.agent_profiles import agents_config_from_merged
@@ -266,6 +267,34 @@ async def get_context_engine(
 ) -> dict:
     """Snapshot for the API server's current working directory (repo root when started from repo)."""
     return context_engine_dashboard_payload(Path.cwd())
+
+
+@app.get("/api/workspace/context-snapshot")
+async def get_workspace_context_snapshot(
+    _ham_gate: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
+) -> dict[str, Any]:
+    """Context engine snapshot for ``HAM_WORKSPACE_ROOT`` / ``HAM_WORKSPACE_FILES_ROOT`` only (no cwd/sandbox).
+
+    On Cloud Run without those env vars: 503 ``WORKSPACE_ROOT_NOT_CONFIGURED`` — no scan of ``/app``.
+    """
+    try:
+        root = resolve_workspace_context_snapshot_root()
+    except ValueError as exc:
+        args = exc.args
+        code = str(args[0]) if args else "WORKSPACE_ROOT_NOT_CONFIGURED"
+        message = str(args[1]) if len(args) > 1 else "Workspace root is not available."
+        if code == "WORKSPACE_ROOT_NOT_CONFIGURED":
+            raise HTTPException(
+                status_code=503,
+                detail={"error": code, "message": message},
+            ) from None
+        raise HTTPException(
+            status_code=400,
+            detail={"error": code, "message": message},
+        ) from None
+    payload = context_engine_dashboard_payload(root)
+    payload["context_source"] = "local"
+    return payload
 
 
 @app.get("/api/projects/{project_id}/context-engine")

@@ -48,6 +48,46 @@ def _using_env_workspace_root() -> bool:
     )
 
 
+def configured_workspace_env_path_raw() -> str:
+    """Same env precedence as Files: ``HAM_WORKSPACE_ROOT`` then ``HAM_WORKSPACE_FILES_ROOT`` (trimmed).
+
+    Empty when neither is set — used by context snapshot (no sandbox / cwd fallback).
+    """
+    return (
+        (os.environ.get("HAM_WORKSPACE_ROOT") or "").strip()
+        or (os.environ.get("HAM_WORKSPACE_FILES_ROOT") or "").strip()
+    )
+
+
+def resolve_workspace_context_snapshot_root() -> Path:
+    """Resolve configured workspace root for context snapshots (no sandbox, no ``Path.cwd()``).
+
+    Same **env precedence** as ``_workspace_root()`` when env is set; does **not** create directories
+    or fall back to ``.ham_workspace_sandbox``.
+    """
+    raw = configured_workspace_env_path_raw()
+    if not raw:
+        msg = "Workspace root is not configured. Set HAM_WORKSPACE_ROOT (or HAM_WORKSPACE_FILES_ROOT) on this API process."
+        raise ValueError("WORKSPACE_ROOT_NOT_CONFIGURED", msg)
+    try:
+        root = Path(raw).expanduser().resolve()
+    except OSError:
+        msg = "The configured workspace root could not be resolved."
+        raise ValueError("WORKSPACE_ROOT_UNREADABLE", msg) from None
+    if not root.exists():
+        msg = "The configured workspace root does not exist on this host."
+        raise ValueError("WORKSPACE_ROOT_MISSING", msg)
+    if not root.is_dir():
+        msg = "The configured workspace root is not a directory."
+        raise ValueError("WORKSPACE_ROOT_NOT_DIRECTORY", msg)
+    try:
+        os.listdir(root)
+    except OSError:
+        msg = "The configured workspace root exists but cannot be read."
+        raise ValueError("WORKSPACE_ROOT_UNREADABLE", msg) from None
+    return root
+
+
 def _workspace_root() -> Path:
     raw = (
         (os.environ.get("HAM_WORKSPACE_ROOT") or "").strip()
