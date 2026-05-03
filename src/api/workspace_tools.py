@@ -22,6 +22,10 @@ from pydantic import BaseModel, Field
 
 from src.api.clerk_gate import get_ham_clerk_actor
 from src.api.models_catalog import build_catalog_payload
+from src.ham.worker_adapters.claude_agent_adapter import (
+    check_claude_agent_readiness,
+    reset_claude_agent_readiness_cache,
+)
 from src.ham.worker_adapters.cursor_adapter import check_cursor_readiness
 from src.llm_client import normalized_openrouter_api_key, openrouter_api_key_is_plausible
 from src.persistence.cursor_credentials import (
@@ -84,6 +88,7 @@ class ToolEntry(BaseModel):
     credential_preview: Optional[str] = None
     last_checked_at: Optional[str] = None
     safe_actions: list[str] = Field(default_factory=list)
+    version: Optional[str] = None
 
 
 class ToolDiscoveryResponse(BaseModel):
@@ -165,6 +170,38 @@ def _github_status(cloud: bool) -> ToolStatus:
     return ToolStatus.not_found
 
 
+_CLAUDE_AGENT_HINTS: dict[ToolStatus, str] = {
+    ToolStatus.not_found: "Claude isn't installed on this server yet.",
+    ToolStatus.needs_sign_in: (
+        "Set ANTHROPIC_API_KEY, or configure Bedrock/Vertex credentials "
+        "on the server, to enable Claude."
+    ),
+    ToolStatus.ready: "Connected. Execution stays disabled in this release.",
+    ToolStatus.error: "Claude detection hit an unexpected error.",
+}
+
+
+def _claude_agent_status_and_meta() -> tuple[ToolStatus, Optional[str], Optional[str]]:
+    """Map adapter readiness → (ToolStatus, setup_hint, sdk_version).
+
+    Never returns auth values. Swallows unexpected exceptions and reports
+    them as ToolStatus.error so the registry never fails to build.
+    """
+    try:
+        readiness = check_claude_agent_readiness()
+    except Exception:
+        return ToolStatus.error, _CLAUDE_AGENT_HINTS[ToolStatus.error], None
+
+    if readiness.status == "ready":
+        status = ToolStatus.ready
+    elif readiness.status == "needs_sign_in":
+        status = ToolStatus.needs_sign_in
+    else:
+        status = ToolStatus.not_found
+
+    return status, _CLAUDE_AGENT_HINTS.get(status), readiness.sdk_version
+
+
 def _comfyui_status(cloud: bool) -> ToolStatus:
     try:
         from src.ham.comfyui_provider_adapter import (
@@ -198,6 +235,9 @@ def _build_tool_registry() -> list[ToolEntry]:
     fd_status = _factory_droid_status()
     gh_status = _github_status(cloud)
     cf_status = _comfyui_status(cloud)
+    claude_agent_status, claude_agent_hint, claude_agent_version = (
+        _claude_agent_status_and_meta()
+    )
 
     tools: list[ToolEntry] = [
         ToolEntry(
@@ -251,6 +291,20 @@ def _build_tool_registry() -> list[ToolEntry]:
             capabilities=["plan", "edit_code", "run_tests"],
             setup_hint="Install Claude Code on this computer to connect.",
             connect_kind=ConnectKind.local_scan,
+            last_checked_at=now,
+            safe_actions=["check_status"],
+        ),
+        ToolEntry(
+            id="claude_agent_sdk",
+            label="Claude Agent",
+            category=ToolCategory.coding,
+            status=claude_agent_status,
+            enabled=_tool_enabled_for_status(claude_agent_status),
+            source=ToolSource.cloud,
+            capabilities=["plan", "edit_code", "run_tests"],
+            setup_hint=claude_agent_hint,
+            connect_kind=ConnectKind.api_key,
+            version=claude_agent_version,
             last_checked_at=now,
             safe_actions=["check_status"],
         ),
@@ -420,7 +474,12 @@ def workspace_tools(
 def workspace_tools_scan(
     _actor: object = Depends(get_ham_clerk_actor),
 ) -> ToolDiscoveryResponse:
-    """Refresh discovery snapshot (no local exec)."""
+    """Refresh discovery snapshot (no local exec).
+
+    Invalidates per-adapter detection caches so a freshly installed SDK
+    or a new env var becomes visible without a server restart.
+    """
+    reset_claude_agent_readiness_cache()
     return workspace_tools(_actor)  # type: ignore[arg-type]
 
 

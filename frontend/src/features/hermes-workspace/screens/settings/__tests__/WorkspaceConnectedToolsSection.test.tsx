@@ -11,6 +11,7 @@ const BASE_IDS = [
   "cursor",
   "factory_droid",
   "claude_code",
+  "claude_agent_sdk",
   "openclaw",
   "ai_studio",
   "antigravity",
@@ -33,6 +34,8 @@ function mockTool(
     enabled: boolean;
     connect_kind: string;
     credential_preview: string | null;
+    safe_actions: string[];
+    version: string | null;
   }> = {},
 ) {
   return {
@@ -48,7 +51,8 @@ function mockTool(
     connected_account_label: null,
     credential_preview: overrides.credential_preview ?? null,
     last_checked_at: "2026-01-01T00:00:00+00:00",
-    safe_actions: [],
+    safe_actions: overrides.safe_actions ?? [],
+    version: overrides.version ?? null,
   };
 }
 
@@ -57,6 +61,7 @@ const TOOL_LABELS: Record<string, string> = {
   cursor: "Cursor",
   factory_droid: "Factory Droid",
   claude_code: "Claude Code",
+  claude_agent_sdk: "Claude Agent",
   openclaw: "OpenClaw",
   ai_studio: "AI Studio",
   antigravity: "Antigravity",
@@ -84,6 +89,15 @@ function buildDefaultPayload() {
         enabled: true,
         connect_kind: "api_key",
         credential_preview: "sk-or-v…abcd",
+        safe_actions: ["check_status", "connect"],
+      });
+    }
+    if (id === "claude_agent_sdk") {
+      return mockTool(id, {
+        label,
+        status: "not_found",
+        connect_kind: "api_key",
+        safe_actions: ["check_status"],
       });
     }
     if (id === "git") {
@@ -209,5 +223,69 @@ describe("WorkspaceConnectedToolsSection", () => {
       expect(screen.getByText(/Secure key storage is coming next/i)).toBeInTheDocument();
     });
     expect(connectSpy).toHaveBeenCalledWith("openrouter", { api_key: "sk-or-testtokennotreal" });
+  });
+
+  it("does not render Connect form for claude_agent_sdk (safe_actions excludes 'connect')", async () => {
+    vi.spyOn(HamApi, "fetchWorkspaceTools").mockResolvedValue(
+      new Response(JSON.stringify(buildDefaultPayload()), { status: 200 }),
+    );
+
+    render(<WorkspaceConnectedToolsSection />);
+    await waitFor(() => expect(screen.getByText("Claude Agent")).toBeInTheDocument());
+
+    // Expand the Claude Agent row.
+    fireEvent.click(screen.getByText("Claude Agent"));
+
+    // No "Paste your API key" label should appear, even though
+    // connect_kind is "api_key" — because safe_actions excludes "connect".
+    // The section's setup_hint may still render; we only assert no input form.
+    await waitFor(() => {
+      const inputs = screen.queryAllByLabelText(/Paste your API key/i);
+      // Other ready entries (OpenRouter) may have one; just confirm Claude
+      // does not contribute one. Easiest: assert exactly one (OpenRouter).
+      expect(inputs.length).toBe(1);
+    });
+  });
+
+  it("renders version in tagline for ready Claude Agent entry", async () => {
+    const payload = buildDefaultPayload();
+    // Promote claude_agent_sdk to ready with a version for this test.
+    payload.tools = payload.tools.map((t) =>
+      t.id === "claude_agent_sdk"
+        ? mockTool("claude_agent_sdk", {
+            label: "Claude Agent",
+            status: "ready",
+            enabled: true,
+            connect_kind: "api_key",
+            safe_actions: ["check_status"],
+            version: "0.1.2",
+          })
+        : t,
+    );
+    vi.spyOn(HamApi, "fetchWorkspaceTools").mockResolvedValue(
+      new Response(JSON.stringify(payload), { status: 200 }),
+    );
+
+    render(<WorkspaceConnectedToolsSection />);
+    await waitFor(() => expect(screen.getByText("Claude Agent")).toBeInTheDocument());
+
+    // Tagline format: "Ready · On · 0.1.2"
+    await waitFor(() => {
+      expect(screen.getByText(/0\.1\.2/)).toBeInTheDocument();
+    });
+  });
+
+  it("connectable tool with safe_actions including 'connect' still shows Connect form", async () => {
+    // Regression: the safe_actions gate must not break OpenRouter, Cursor, etc.
+    vi.spyOn(HamApi, "fetchWorkspaceTools").mockResolvedValue(
+      new Response(JSON.stringify(buildDefaultPayload()), { status: 200 }),
+    );
+
+    render(<WorkspaceConnectedToolsSection />);
+    await waitFor(() => expect(screen.getByText("OpenRouter")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText("OpenRouter"));
+    const input = await screen.findByLabelText(/Paste your API key/i);
+    expect(input).toBeInTheDocument();
   });
 });

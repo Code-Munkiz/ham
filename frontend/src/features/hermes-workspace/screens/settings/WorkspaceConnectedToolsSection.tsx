@@ -24,6 +24,7 @@ interface ToolEntry {
   credential_preview: string | null;
   last_checked_at: string | null;
   safe_actions: string[];
+  version: string | null;
 }
 
 interface ToolDiscoveryResponse {
@@ -310,10 +311,11 @@ export function WorkspaceConnectedToolsSection() {
               const expanded = expandedId === tool.id;
               const showToggle = canShowToggle(tool);
               const wantsConnect =
-                tool.connect_kind === "api_key" ||
-                tool.connect_kind === "access_token" ||
-                tool.connect_kind === "local_scan" ||
-                tool.connect_kind === "coming_soon";
+                (tool.connect_kind === "api_key" ||
+                  tool.connect_kind === "access_token" ||
+                  tool.connect_kind === "local_scan" ||
+                  tool.connect_kind === "coming_soon") &&
+                tool.safe_actions.includes("connect");
               const inputVal = connectInputs[tool.id] ?? "";
               const pasteLabel =
                 tool.connect_kind === "access_token" ? "Paste your access token" : "Paste your API key";
@@ -339,6 +341,7 @@ export function WorkspaceConnectedToolsSection() {
                               : "Ready · Off"
                             : STATUS_LABELS[tool.status]}
                           {tool.credential_preview ? ` · ${tool.credential_preview}` : ""}
+                          {tool.version ? ` · ${tool.version}` : ""}
                         </p>
                       </div>
                     </button>
