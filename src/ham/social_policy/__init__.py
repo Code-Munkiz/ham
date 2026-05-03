@@ -10,6 +10,20 @@ Re-exports the public names used by the API router.
 """
 from __future__ import annotations
 
+from src.ham.social_policy.advisory import (
+    ADVISORY_REASON_CODES,
+    POLICY_ACTION_NOT_ALLOWED,
+    POLICY_DOCUMENT_MISSING,
+    POLICY_LIVE_AUTONOMY_NOT_ARMED,
+    POLICY_POSTING_MODE_OFF,
+    POLICY_PROVIDER_UNMAPPED,
+    POLICY_REPLY_MODE_OFF,
+    POLICY_TARGET_LABEL_DISABLED,
+    policy_advisory_reasons_for_apply,
+    policy_advisory_reasons_for_lane,
+    policy_for_provider,
+    policy_revision_summary,
+)
 from src.ham.social_policy.schema import (
     DEFAULT_SOCIAL_POLICY,
     SOCIAL_POLICY_REL_PATH,
@@ -22,6 +36,7 @@ from src.ham.social_policy.schema import (
     SafetyRules,
     SocialPolicy,
     SocialPolicyChanges,
+    policy_to_safe_dict,
     redact_string_field,
 )
 from src.ham.social_policy.store import (
@@ -45,12 +60,20 @@ from src.ham.social_policy.store import (
 )
 
 __all__ = [
+    "ADVISORY_REASON_CODES",
     "APPLY_CONFIRMATION_PHRASE",
     "ApplyResult",
     "ChannelTarget",
     "ContentStyle",
     "DEFAULT_SOCIAL_POLICY",
     "LIVE_AUTONOMY_CONFIRMATION_PHRASE",
+    "POLICY_ACTION_NOT_ALLOWED",
+    "POLICY_DOCUMENT_MISSING",
+    "POLICY_LIVE_AUTONOMY_NOT_ARMED",
+    "POLICY_POSTING_MODE_OFF",
+    "POLICY_PROVIDER_UNMAPPED",
+    "POLICY_REPLY_MODE_OFF",
+    "POLICY_TARGET_LABEL_DISABLED",
     "PersonaRef",
     "PostingCaps",
     "PreviewResult",
@@ -67,6 +90,11 @@ __all__ = [
     "apply_social_policy",
     "list_audit_envelopes",
     "list_backups",
+    "policy_advisory_reasons_for_apply",
+    "policy_advisory_reasons_for_lane",
+    "policy_for_provider",
+    "policy_revision_summary",
+    "policy_to_safe_dict",
     "preview_social_policy",
     "read_social_policy_document",
     "redact_string_field",
