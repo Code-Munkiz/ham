@@ -1550,7 +1550,7 @@ Phase B added CI steps and a separate `secret-scan` workflow without raising the
 - `ruff format --check .` — ~280 files would reformat; ratchet after a separate `ruff format --write` PR.
 - `mypy src --ignore-missing-imports` — baseline only; per-module strict overrides in a follow-up.
 - `pytest --cov=src --cov-report=xml` — coverage report uploaded as artifact `coverage-xml`; **no** `--cov-fail-under` threshold yet.
-- `python scripts/check_docs_freshness.py` — checks canonical docs were touched within 180 days and that markdown link targets resolve. Currently surfaces 2 pre-existing dangling references to be cleaned up separately.
+- `python scripts/check_docs_freshness.py` — checks canonical docs were touched within 180 days and that markdown link targets in those files still resolve on disk (see `scripts/check_docs_freshness.py` for the tracked path list).
 
 **Not yet wired** (deferred per the lift plan):
 
