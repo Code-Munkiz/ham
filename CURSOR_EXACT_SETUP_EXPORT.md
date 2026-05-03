@@ -171,6 +171,7 @@ alwaysApply: true
 **HAM VM / Cloud Agent / ephemeral remotes:** do **not** use this workflow for lands. Follow **`AGENTS.md`** (**Cloud Agent / HAM VM Git policy**) and **`cloud-agent-starter`**: **branch → push branch → PR**; **never** **`git push origin main`** or **force-push `main`**.
 
 ## Standing rule (owner-local)
+
 - Do **not** create draft PRs by default.
 - Do **not** run unless the user **explicitly** asks for a PR:
   - `gh pr create`
@@ -1377,7 +1378,7 @@ For **that** workflow, prefer **`main` directly** — not feature branches or au
 1. `git status --short --branch` and `git branch --show-current`.
 2. If not on `main`: `git checkout main`, then `git pull origin main`.
 3. Apply the requested change. Stage **only** intended files.
-4. **Do not stage:** `.cursor/settings.json`, `desktop/live-smoke/`, repomix outputs, build artifacts, temp scripts, unrelated dirty files.
+4. **Do not stage:** optional local Cursor `settings.json` under `.cursor/` (not the tracked rules/skills tree), `desktop/live-smoke/`, repomix outputs, build artifacts, temp scripts, unrelated dirty files.
 5. Run **scoped** tests for the touched area.
 6. Commit on `main`: `git commit -m "<clear commit message>"`.
 7. Push: `git push origin main`.
@@ -1438,7 +1439,7 @@ There are many draft PRs for small docs notes. I want to stop accumulating PR cl
 
 - `desktop/` — Milestone 1 Electron shell (thin wrapper; see `desktop/README.md`); `npm start` after `npm run dev` in `frontend/`
 - `frontend/` — Vite + React workspace; `npm run dev` (port 3000), `npm run lint` (`tsc --noEmit`)
-- `frontend/src/pages/HermesSkills.tsx` — **Skills** catalog UI (`/skills`, redirect from `/hermes-skills`); distinct from Cursor operator skills; API remains `/api/hermes-skills/*`
+- `frontend/src/features/hermes-workspace/screens/skills/WorkspaceSkillsScreen.tsx` — **Skills** workspace UI (`/workspace/skills`; legacy `/skills` and `/hermes-skills` redirect here); distinct from Cursor operator skills; catalog/install APIs remain under `/api/hermes-skills/*` and workspace adapters under `/api/workspace/skills/*`
 
 ## Tests
 
@@ -1501,6 +1502,60 @@ When opening a permitted PR:
 
 - Prefer titles like `docs(agent): …`, `fix(missions): …`, `feat(missions): …`, `chore(agent): …`.
 - Mention **mission_registry_id / agent id** when known; list files touched; say **docs-only vs code-bearing**; list tests/commands run — see also direct-main discipline in `.cursor/rules/ham-direct-main-workflow.mdc` where applicable.
+
+## Local hooks (Phase A baseline)
+
+Repo hardening landed in PR1 (`pyproject.toml`, `requirements-dev.txt`, `.pre-commit-config.yaml`, `.github/CODEOWNERS`, `.github/pull_request_template.md`, `.github/ISSUE_TEMPLATE/*`, `.github/dependabot.yml`). To opt in locally:
+
+```bash
+pip install -r requirements-dev.txt
+pre-commit install
+# one-off audit pass
+pre-commit run --all-files
+```
+
+What runs:
+
+- **`ruff`** (lint) and **`ruff format --check`** — fast, single binary; config in `pyproject.toml [tool.ruff]`. Curated rule set: `E,F,I,N,B,UP,S,C901`. Tests/scripts get per-file ignores.
+- **`mypy`** — warning-only baseline (`ignore_missing_imports = true`, no `disallow_untyped_defs` yet); not in pre-commit, but installed via `requirements-dev.txt` for local use. Will be ratcheted module-by-module in a follow-up PR.
+- **`pre-commit-hooks`** standard hygiene: trailing whitespace, EOF newlines, YAML/JSON syntax, merge-conflict markers, large files (>1MB), private-key detector.
+- **`gitleaks`** with **`--redact`** — secret-value scrubbed; pre-push stage only so commits stay fast. CI integration lands in Phase B.
+
+What is **not** yet enforced:
+
+- ESLint / Prettier on `frontend/` and `desktop/` (Phase A.2 follow-up).
+- Coverage gate (`pytest --cov-fail-under=…`) (Phase B).
+- Vitest scaffold + frontend test runner (Phase C).
+- Vulture / deptry / knip / jscpd dead/duplicate-code checks (Phase C, warning-only).
+- Branch protection / ruleset on `main` and GitHub native secret scanning (Phase B; requires repo settings change).
+
+Do **not** wire `--fix`/`--write` autofixers into CI. Autofix is a local pre-commit concern; CI runs `--check` variants only. See the readiness lift plan in `~/.factory/specs/2026-05-03-ham-agent-readiness-lift-plan-foundations.md` for the full phased plan.
+
+## CI guardrails (Phase B baseline)
+
+Phase B added CI steps and a separate `secret-scan` workflow without raising the bar all at once. What runs today:
+
+**Blocking** (failure blocks merge):
+
+- `python` job → `python -m pytest tests/ -q --durations=20` (existing green path; `--durations=20` adds test-performance reporting at no measurable extra time).
+- `python` job → `large-file-guard` step (fails if any **git-tracked** file is >1MB; current tree has zero tracked files >1MB).
+- `frontend` job → `npm run lint` (existing `tsc --noEmit`).
+- `gitleaks` job (in `.github/workflows/secret-scan.yml`) → scans PR diff or full tree on push, always with `--redact` so secret values never appear in logs.
+
+**Warning-only** (`continue-on-error: true`, surfaces in the run UI but never blocks):
+
+- `ruff check . --output-format=github` — the codebase has ~530 pre-existing lint findings; ratchet to blocking after a dedicated cleanup PR.
+- `ruff format --check .` — ~280 files would reformat; ratchet after a separate `ruff format --write` PR.
+- `mypy src --ignore-missing-imports` — baseline only; per-module strict overrides in a follow-up.
+- `pytest --cov=src --cov-report=xml` — coverage report uploaded as artifact `coverage-xml`; **no** `--cov-fail-under` threshold yet.
+- `python scripts/check_docs_freshness.py` — checks canonical docs were touched within 180 days and that markdown link targets resolve (run after doc edits; fix warnings before treating docs as clean).
+
+**Not yet wired** (deferred per the lift plan):
+
+- Branch protection / ruleset on `main` — see `docs/BRANCH_PROTECTION_SETUP.md`. Enable only after PR2 has at least one green run on `main`.
+- ESLint / Prettier on `frontend/` and `desktop/` (Phase A.2).
+- Vitest scaffold for `frontend/` (Phase C).
+- Vulture / deptry / knip / jscpd (Phase C, warning-only).
 ```
 
 ---
@@ -1521,6 +1576,10 @@ There is **no CrewAI** (or any other third-party orchestration framework) in
 the architecture. `src/swarm_agency.py` assembles per-role context for
 Hermes-supervised reasoning surfaces; it does not constitute a parallel
 orchestrator.
+
+## Builder platform product north star (aspirational)
+
+Long-term **Builder Platform** vision (last-mile app building, enterprise orchestration, phased roadmap) lives in **[`docs/BUILDER_PLATFORM_NORTH_STAR.md`](docs/BUILDER_PLATFORM_NORTH_STAR.md)**. That document is **not** shipped pillar architecture; Hermes/Droid/context roles and the implementation table below remain authoritative here.
 
 ## The Four Core Pillars
 
@@ -1658,7 +1717,7 @@ User Prompt
 | Hermes gateway broker (dashboard) | `src/ham/hermes_gateway/`, `src/api/hermes_gateway.py`, `docs/HERMES_GATEWAY_BROKER.md` | **Path B:** `GET /api/hermes-gateway/snapshot` (+ capabilities, optional SSE stream) aggregates hub, allowlisted CLI inventory, skills overlay, Hermes HTTP `/health` probe, run-store + control-plane summaries, external-runner cards; snapshot includes **operator_connection** (derived CLI + HTTP + chat `gateway_mode` + freshness guidance; no new `hermes` argv); **Path C** placeholders for JSON-RPC/WebSocket/live-menu REST until upstream exists; raw CLI captures redacted; UI: `/command-center` + desktop **Settings → HAM + Hermes setup** strip; team operator story: `docs/TEAM_HERMES_STATUS.md` |
 | Workspace UI | `frontend/` (Vite + React), `desktop/` (Electron shell) | Extracted workspace; TypeScript types aligned with persisted run / bridge shapes; optional **Clerk** for chat JWT; **execution mode** routing + Bridge browser adapters (`src/ham/execution_mode.py`, `src/bridge/browser_*.py`). **Desktop** (`desktop/README.md`): **Windows** installers via `npm run pack:win*`; **Linux `.deb`/AppImage packaging targets were removed** (dev: `npm start`). `window.hamDesktop.localControl` exposes Local Control policy/audit/kill-switch, sidecar lifecycle, and **main-process** managed-browser IPC (MVP/real CDP) where enabled — separate from Ham API **`/api/browser*`.** **Workspace chat** does not run the removed **GoHAM-mode** managed-browser/chat loop (`POST /api/goham/planner` stays API-only). See `docs/desktop/local_control_v1.md`; `docs/goham/browser_smoke.md` for historical/future notes. |
 | Chat operator + identity gate | `src/api/chat.py`, `src/ham/chat_operator.py`, `src/ham/clerk_auth.py`, `src/ham/clerk_policy.py`, `src/ham/clerk_email_access.py`, `src/ham/operator_audit.py` | Server-side operator before LLM; optional Clerk JWT (`HAM_CLERK_REQUIRE_AUTH` or `HAM_CLERK_ENFORCE_EMAIL_RESTRICTIONS`, `CLERK_JWT_ISSUER`), `ham:*` permission checks, optional HAM allowlist email/domain defense-in-depth; append-only audit in HAM JSONL — **not** Clerk metadata; Cursor API key unchanged |
-| HAM-on-X social agent | `src/ham/ham_x/`, `docs/ham-x-agent/`, `src/api/social.py`, `frontend/src/features/hermes-workspace/screens/social/` | **Phase 4C Reactive Batch Mode + Social TD-1:** Phase 2B remains execution-disconnected, Phase 3A `goham_controller.py` remains dry-run-only, and Phase 3B `goham_live_controller.py` remains original-post-only. Phase 4A `goham_reactive.py` still classifies prepared/read-only inbound mentions/comments into dry-run review/exception records. Phase 4B `reactive_reply_executor.py` / `goham_reactive_live.py` remain a separate one-shot reply canary. Phase 4B.1 `goham_reactive_inbox.py` discovers mentions/comments and returns automatic reply targets without executing. Phase 4C adds opt-in, dry-run-first `goham_reactive_batch.py` for bounded multi-candidate processing with per-item policy/governor rechecks, existing reactive rolling caps/cooldowns, per-reply journal rows, provider failure stops, and no retries. Social TD-1 adds read-only Telegram/Discord readiness, capabilities, and setup checklist endpoints backed by safe Hermes gateway env/status-file signals, plus read-only workspace panels; no Telegram/Discord preview, send, apply, bot startup, scheduler, daemon, or gateway process control. Reactive budgets remain separate from broadcast caps; no scheduler, daemon, infinite loop, original posts, quotes, DMs, likes/follows, xurl mutation, manual canary, broadcast executor, or Phase 2B execution |
+| HAM-on-X social agent | `src/ham/ham_x/`, `docs/ham-x-agent/`, `src/api/social.py`, `src/ham/social_persona/`, `frontend/src/features/hermes-workspace/screens/social/` | **Phase 4C Reactive Batch Mode + Social TD-1/SP-3/TD-3A:** Phase 2B remains execution-disconnected, Phase 3A `goham_controller.py` remains dry-run-only, and Phase 3B `goham_live_controller.py` remains original-post-only. Phase 4A `goham_reactive.py` still classifies prepared/read-only inbound mentions/comments into dry-run review/exception records. Phase 4B `reactive_reply_executor.py` / `goham_reactive_live.py` remain a separate one-shot reply canary. Phase 4B.1 `goham_reactive_inbox.py` discovers mentions/comments and returns automatic reply targets without executing. Phase 4C adds opt-in, dry-run-first `goham_reactive_batch.py` for bounded multi-candidate processing with per-item policy/governor rechecks, existing reactive rolling caps/cooldowns, per-reply journal rows, provider failure stops, and no retries. Social TD-1 adds read-only Telegram/Discord readiness, capabilities, and setup checklist endpoints backed by safe Hermes gateway env/status-file signals, plus read-only workspace panels. Social SP-1/SP-3 adds the read-only `ham-canonical` persona registry, deterministic digest, bounded persona API, docs, Persona panel, and persona id/version/digest protection in X preview/apply digests. Social TD-2A strengthens Telegram readiness with safe token/allowlist/home/test-group/mode presence booleans plus bounded Hermes gateway runtime/platform-state validation. Social TD-2B adds `POST /api/social/providers/telegram/messages/preview` for deterministic, persona-protected, masked-target Telegram dry-run message previews with proposal digests. Social TD-3A adds a narrow HAM-owned Telegram Bot API one-shot sender (`src/ham/social_telegram_send.py`), redacted delivery log (`src/ham/social_delivery_log.py`), and confirmed `POST /api/social/providers/telegram/messages/apply` gated by operator token, exact confirmation, recomputed preview digest, persona digest, server-side target resolution, and connected Hermes/Telegram readiness; no Telegram batch/reactive route, arbitrary target/text, broad Hermes `send_message` tool, gateway process controls, credential inputs, raw IDs, Hermes/Eliza export, or persona editing. Reactive budgets remain separate from broadcast caps; no scheduler, daemon, infinite loop, original posts, quotes, DMs, likes/follows, xurl mutation, manual canary, broadcast executor, or Phase 2B execution |
 | Control plane runs (v1) | `src/persistence/control_plane_run.py`, `src/ham/cursor_agent_workflow.py`, `src/ham/droid_workflows/preview_launch.py`, `src/api/control_plane_runs.py` | **Durable** JSON per `ham_run_id` under `HAM_CONTROL_PLANE_RUNS_DIR` (default `~/.ham/control_plane_runs`): committed Cursor Cloud Agent + Factory Droid launches and Cursor status updates; **read** list/detail API (`/api/control-plane-runs*`) is factual only; **not** a mission graph, queue, or bridge `RunStore` |
 | Managed Cloud Agent + mission record | `src/persistence/managed_mission.py`, `src/ham/managed_mission_wiring.py`, `src/ham/managed_mission_truth.py`, `src/api/cursor_settings.py`, `src/api/cursor_managed_*.py`, `src/ham/cursor_agent_workflow.py`, `src/ham/chat_operator.py`, Hermes Workspace (`WorkspaceManagedMissionsLivePanel`), `src/integrations/cursor_sdk_bridge_client.py` | Durable per-agent mission JSON + API read (observed lifecycle, deploy/Vercel last-seen); optional `project_id` on HAM launch for create-time `mission_deploy_approval_mode` snapshot; **Chat operator** can preview/launch Cursor Cloud Agent with `cursor_mission_handling: managed` — same managed prompt for digest/launch, `ManagedMission` row on successful API launch; mission **feed** projection: `HAM_CURSOR_SDK_BRIDGE_ENABLED=true` uses the live Cursor SDK bridge (`bridge.mjs`); unset/false falls back to REST projection (same route, honest `provider_projection.mode`); **Roadmap phases A–D (v1 slices):** `GET .../truth` observability table; `GET .../correlation` + optional embedded `ControlPlaneRun`; token-gated `POST .../hermes-advisory` (`HAM_MANAGED_MISSION_WRITE_TOKEN`) for capped `HermesReviewer` advisory fields only; token-gated `PATCH .../board` for operator `mission_board_state` lanes (`backlog`/`active`/`archive`, not a graph) with automatic active→archive on terminal lifecycle; Workspace detail surfaces truth + correlation + token field; **not** a mission queue or Hermes-to-Cursor action loop — see `docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md`, `docs/examples/managed_cloud_agent_phases/README.md` |
 | Context engine | `src/memory_heist.py` | Hardened + tested (Phase 1/3 guardrails complete) |
@@ -1709,6 +1768,8 @@ Gaps between the current codebase and the VISION.md architecture target.
 Each item tracks what is missing, why it matters, and what blocks it.
 
 **Cloud Agent + managed missions (what works vs stub + phased roadmap):** see [`docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md`](docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md).
+
+**Builder Platform (aspirational vs shipped):** long-term last-mile builder / enterprise orchestrator vision and phased anchors (Builder Blueprint Mode → lifecycle governance) live in [`docs/BUILDER_PLATFORM_NORTH_STAR.md`](docs/BUILDER_PLATFORM_NORTH_STAR.md). [`VISION.md`](VISION.md) remains the shipped pillar SSOT.
 
 ## Active implementation notes (Cursor / hardening)
 

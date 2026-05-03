@@ -18,7 +18,7 @@
 
 Canonical architecture and agent context live at the repo root: [`VISION.md`](../VISION.md), [`AGENTS.md`](../AGENTS.md), [`SWARM.md`](../SWARM.md), [`GAPS.md`](../GAPS.md).
 
-**Not source of truth:** generated exports and tool-local settings (for example [`CURSOR_EXACT_SETUP_EXPORT.md`](../CURSOR_EXACT_SETUP_EXPORT.md), `.cursor/settings.json`) are snapshots or editor config—defer to git-tracked canonical docs unless you deliberately refresh an export script.
+**Not source of truth:** generated exports and optional local Cursor editor settings (for example [`CURSOR_EXACT_SETUP_EXPORT.md`](../CURSOR_EXACT_SETUP_EXPORT.md), a personal `settings.json` under `.cursor/` that is not part of the tracked rules/skills tree) are snapshots or editor config—defer to git-tracked canonical docs unless you deliberately refresh an export script.
 
 **Builder Platform (aspirational):** [`BUILDER_PLATFORM_NORTH_STAR.md`](BUILDER_PLATFORM_NORTH_STAR.md) — phased roadmap (orthogonal to workspace phases in [`HAM_ROADMAP.md`](HAM_ROADMAP.md)); shipped pillars remain [`VISION.md`](../VISION.md).
 
