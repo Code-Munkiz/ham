@@ -292,3 +292,29 @@ What is **not** yet enforced:
 - Branch protection / ruleset on `main` and GitHub native secret scanning (Phase B; requires repo settings change).
 
 Do **not** wire `--fix`/`--write` autofixers into CI. Autofix is a local pre-commit concern; CI runs `--check` variants only. See the readiness lift plan in `~/.factory/specs/2026-05-03-ham-agent-readiness-lift-plan-foundations.md` for the full phased plan.
+
+## CI guardrails (Phase B baseline)
+
+Phase B added CI steps and a separate `secret-scan` workflow without raising the bar all at once. What runs today:
+
+**Blocking** (failure blocks merge):
+
+- `python` job → `python -m pytest tests/ -q --durations=20` (existing green path; `--durations=20` adds test-performance reporting at no measurable extra time).
+- `python` job → `large-file-guard` step (fails if any **git-tracked** file is >1MB; current tree has zero tracked files >1MB).
+- `frontend` job → `npm run lint` (existing `tsc --noEmit`).
+- `gitleaks` job (in `.github/workflows/secret-scan.yml`) → scans PR diff or full tree on push, always with `--redact` so secret values never appear in logs.
+
+**Warning-only** (`continue-on-error: true`, surfaces in the run UI but never blocks):
+
+- `ruff check . --output-format=github` — the codebase has ~530 pre-existing lint findings; ratchet to blocking after a dedicated cleanup PR.
+- `ruff format --check .` — ~280 files would reformat; ratchet after a separate `ruff format --write` PR.
+- `mypy src --ignore-missing-imports` — baseline only; per-module strict overrides in a follow-up.
+- `pytest --cov=src --cov-report=xml` — coverage report uploaded as artifact `coverage-xml`; **no** `--cov-fail-under` threshold yet.
+- `python scripts/check_docs_freshness.py` — checks canonical docs were touched within 180 days and that markdown link targets resolve. Currently surfaces 2 pre-existing dangling references to be cleaned up separately.
+
+**Not yet wired** (deferred per the lift plan):
+
+- Branch protection / ruleset on `main` — see `docs/BRANCH_PROTECTION_SETUP.md`. Enable only after PR2 has at least one green run on `main`.
+- ESLint / Prettier on `frontend/` and `desktop/` (Phase A.2).
+- Vitest scaffold for `frontend/` (Phase C).
+- Vulture / deptry / knip / jscpd (Phase C, warning-only).

@@ -1,5 +1,12 @@
 name: CI
 
+# Phase B baseline (PR2):
+# - Existing pytest + frontend tsc remain BLOCKING (already green on main).
+# - New ruff/mypy/coverage/docs steps land as WARNING-ONLY first; we ratchet
+#   them to blocking in follow-up PRs after one cleanup pass.
+# - large-file-guard is BLOCKING but constrained to git-tracked files >1MB,
+#   so it cannot fail on the current tree.
+
 on:
   push:
     branches: [main, master]
@@ -15,10 +22,70 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - name: Install dependencies
-        run: pip install -r requirements.txt pytest
+
+      - name: Install runtime + dev dependencies
+        run: |
+          pip install -r requirements.txt pytest
+          # Dev tooling lives in requirements-dev.txt (Phase A). Install with
+          # `|| true` to keep the job green if the file is somehow absent.
+          pip install -r requirements-dev.txt || true
+
+      # ---------- BLOCKING: existing green path (full test suite) ----------
       - name: Pytest
-        run: python -m pytest tests/ -q
+        run: python -m pytest tests/ -q --durations=20
+
+      # ---------- BLOCKING: large-file guard (tracked files only) ----------
+      - name: Large-file guard (>1MB tracked files)
+        run: |
+          set -euo pipefail
+          OFFENDERS="$(git ls-files | xargs -I{} sh -c 'sz=$(stat -c%s "{}" 2>/dev/null || echo 0); [ "$sz" -gt 1048576 ] && echo "$sz {}"' || true)"
+          if [ -n "${OFFENDERS}" ]; then
+            echo "::error::Tracked files exceed 1MB:"
+            echo "${OFFENDERS}"
+            exit 1
+          fi
+          echo "OK: no tracked files >1MB."
+
+      # ---------- WARNING-ONLY: ruff lint ---------------------------------
+      - name: Ruff lint (warning-only)
+        continue-on-error: true
+        run: ruff check . --output-format=github
+
+      # ---------- WARNING-ONLY: ruff format ------------------------------
+      - name: Ruff format check (warning-only)
+        continue-on-error: true
+        run: ruff format --check .
+
+      # ---------- WARNING-ONLY: mypy baseline ----------------------------
+      - name: Mypy (warning-only)
+        continue-on-error: true
+        run: mypy src --ignore-missing-imports || true
+
+      # ---------- WARNING-ONLY: coverage report ---------------------------
+      # We do NOT enforce a --cov-fail-under threshold yet; this step exists
+      # to surface the current floor so a future PR can ratchet to blocking.
+      - name: Pytest with coverage (warning-only)
+        continue-on-error: true
+        run: |
+          python -m pytest tests/ -q \
+            --cov=src \
+            --cov-report=term-missing:skip-covered \
+            --cov-report=xml:coverage.xml \
+            --no-header
+
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: coverage.xml
+          if-no-files-found: ignore
+          retention-days: 14
+
+      # ---------- WARNING-ONLY: docs freshness ---------------------------
+      - name: Docs freshness + reference check (warning-only)
+        continue-on-error: true
+        run: python scripts/check_docs_freshness.py
 
   frontend:
     runs-on: ubuntu-latest
