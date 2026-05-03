@@ -45,6 +45,7 @@ from src.api.pna_middleware import private_network_access_middleware
 from src.api.workspace_profiles import router as workspace_profiles_router
 from src.api.workspace_files import resolve_workspace_context_snapshot_root
 from src.api.workspace_skills import router as workspace_skills_router
+from src.api.workspace_tools import router as workspace_tools_router
 from src.api.control_plane_runs import router as control_plane_runs_router
 from src.ham.agent_profiles import agents_config_from_merged
 from src.ham.clerk_auth import HamActor, clerk_authorization_is_clerk_session
@@ -133,6 +134,7 @@ app.include_router(workspace_terminal_router)
 app.include_router(workspace_conductor_router)
 app.include_router(workspace_memory_router)
 app.include_router(workspace_skills_router)
+app.include_router(workspace_tools_router)
 app.include_router(workspace_profiles_router)
 app.include_router(workspace_operations_router)
 app.include_router(workspace_voice_settings_router)
