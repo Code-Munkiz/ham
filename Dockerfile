@@ -49,6 +49,13 @@ COPY AGENTS.md SWARM.md VISION.md ./
 COPY .cursor/skills .cursor/skills
 COPY .cursor/rules .cursor/rules
 
+# Claude Code probes git workspace roots; ship a repo with HEAD so rev-parse succeeds.
+RUN git config --global init.defaultBranch main \
+    && git init . \
+    && git config user.email "ham-api-container@invalid.local" \
+    && git config user.name "HAM API" \
+    && git commit --allow-empty --quiet -m "ham-api:synthetic"
+
 EXPOSE 8080
 
 CMD exec uvicorn src.api.server:app --host 0.0.0.0 --port "${PORT:-8080}"

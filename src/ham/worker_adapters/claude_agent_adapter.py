@@ -336,6 +336,9 @@ def _plan_mode_query_options(stderr_lines: list[str]) -> Any:
         "permission_mode": "plan",
         "max_turns": 1,
         "stderr": _stderr_cb,
+        # Headless / SDK: skip hooks, skills auto-discovery, project MCP — avoids
+        # failures when the API container cwd is not a full interactive workspace.
+        "extra_args": {"bare": None},
     }
     cli = _ham_preferred_cli_path()
     if cli:
