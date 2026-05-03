@@ -129,3 +129,22 @@ jobs:
         continue-on-error: true
         working-directory: frontend
         run: npm test -- --run --reporter=default
+
+      # ---------- WARNING-ONLY: jscpd duplicate-code (Phase C.3) ----------
+      # Token-based duplicate detector; reads frontend/.jscpd.json
+      # (pattern=src/**/*.{ts,tsx}, min-lines=8, min-tokens=70). Surfaces
+      # known cleanup targets (e.g. conductorAdapter fetch boilerplate);
+      # warning-only so flagged duplicates never block merges.
+      - name: jscpd duplicate-code (warning-only)
+        continue-on-error: true
+        working-directory: frontend
+        run: npm run dup-check
+
+      # ---------- WARNING-ONLY: knip frontend dead-code (Phase C.3) -------
+      # TS-aware unused files / exports / deps finder; reads
+      # frontend/knip.json. Real cleanup happens in separate follow-up PR;
+      # warning-only here so the noisy initial baseline never blocks.
+      - name: knip frontend dead-code (warning-only)
+        continue-on-error: true
+        working-directory: frontend
+        run: npm run knip
