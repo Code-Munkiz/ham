@@ -40,6 +40,9 @@ frontend/.env
 .vercel
 .env*.local
 
+# Editor / workspace (local paths, launch configs)
+.vscode/
+
 # HAM local / generated tooling (never commit binaries or lab trees)
 .cursor/plans/
 .cursor/settings.json
