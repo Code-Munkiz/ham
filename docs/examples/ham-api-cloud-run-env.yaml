@@ -45,6 +45,23 @@ HAM_CORS_ORIGIN_REGEX: "https://.*\\.vercel\\.app"
 # If the GCP project has no (default) Firestore DB (e.g. only ai-studio-* DBs), set the database id explicitly:
 # HAM_CHAT_SESSION_FIRESTORE_DATABASE: ham-chat-sessions
 
+# --- Hosted workspace storage (PR-1d-B; commented examples only) ---
+# Keep Clerk auth enforced in hosted mode.
+# HAM_CLERK_REQUIRE_AUTH: "true"
+# Local-dev bypass should stay unset/false in hosted deployments.
+# HAM_LOCAL_DEV_WORKSPACE_BYPASS: "false"
+# Keep workspace routes enabled.
+# HAM_WORKSPACE_ROUTES_ENABLED: "true"
+# Opt in to Firestore-backed workspace store (default remains file-backed unless explicitly set).
+# HAM_WORKSPACE_STORE_BACKEND: firestore
+# Firestore project/database for workspace records.
+# HAM_FIRESTORE_PROJECT_ID: clarity-staging-488201
+# HAM_FIRESTORE_DATABASE: ham-workspaces
+# Clerk JWT verification for workspace-scoped routes.
+# CLERK_JWT_ISSUER: https://YOUR_INSTANCE.clerk.accounts.dev
+# Optional when your Clerk JWT template includes aud:
+# CLERK_JWT_AUDIENCE: your-audience
+
 # --- Shared chat attachment storage (Slice B: fix GET /api/chat/attachments/{id} 404s on multi-instance Cloud Run) ---
 # Default local disk is ephemeral per instance. Production: use GCS with the same REST contract (no /api/upload).
 # Grant the Cloud Run service account storage.objectAdmin on the bucket (narrow to prefix if using IAM conditions).
