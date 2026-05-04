@@ -56,6 +56,20 @@ _WORKSPACE_MEMBERS_SUBCOLL = "members"
 _IN_QUERY_CHUNK = 10
 
 
+class _FallbackFieldFilter:
+    """Duck-typed fallback when google-cloud-firestore is unavailable.
+
+    The fake client in tests only needs ``field_path`` / ``op_string`` /
+    ``value`` attributes. Production continues to use real ``FieldFilter``
+    objects whenever the firestore SDK is installed.
+    """
+
+    def __init__(self, field_path: str, op_string: str, value: Any) -> None:
+        self.field_path = field_path
+        self.op_string = op_string
+        self.value = value
+
+
 def _membership_doc_id(user_id: str, org_id: str) -> str:
     return f"{user_id}__{org_id}"
 
@@ -116,9 +130,24 @@ class FirestoreWorkspaceStore:
         Imported lazily so this module stays importable when the firestore
         package is absent (file-backed local dev).
         """
-        from google.cloud.firestore_v1.base_query import FieldFilter  # noqa: PLC0415
+        try:
+            from google.cloud.firestore_v1.base_query import FieldFilter  # noqa: PLC0415
+        except ImportError:
+            return _FallbackFieldFilter(field, op, value)
 
         return FieldFilter(field, op, value)
+
+    @staticmethod
+    def _commit_transaction(transaction: Any) -> None:
+        commit = getattr(transaction, "commit", None)
+        if callable(commit):
+            commit()
+
+    @staticmethod
+    def _rollback_transaction(transaction: Any) -> None:
+        rollback = getattr(transaction, "rollback", None)
+        if callable(rollback):
+            rollback()
 
     # ------------------------------------------------------------------
     # Datetime hydration
@@ -239,36 +268,28 @@ class FirestoreWorkspaceStore:
         coll = db.collection(_WORKSPACES_COLL)
         new_doc = coll.document(record.workspace_id)
 
+        transaction = db.transaction()
         try:
-            from google.cloud import firestore  # noqa: PLC0415
-        except ImportError as exc:  # pragma: no cover
-            raise self._wrap("create_workspace", exc) from exc
-
-        store = self
-
-        @firestore.transactional
-        def _create(transaction: Any) -> WorkspaceRecord:
             # Slug-uniqueness scan within the active scope. Reads precede the
-            # write inside the transaction so Firestore aborts on conflicting
-            # commits.
+            # write so Firestore transactions can detect conflicting commits.
             if record.org_id is not None:
                 slug_q = (
-                    coll.where(filter=store._field_filter("org_id", "==", record.org_id))
-                    .where(filter=store._field_filter("slug", "==", record.slug))
-                    .where(filter=store._field_filter("status", "==", "active"))
+                    coll.where(filter=self._field_filter("org_id", "==", record.org_id))
+                    .where(filter=self._field_filter("slug", "==", record.slug))
+                    .where(filter=self._field_filter("status", "==", "active"))
                 )
             else:
                 slug_q = (
-                    coll.where(filter=store._field_filter("org_id", "==", None))
+                    coll.where(filter=self._field_filter("org_id", "==", None))
                     .where(
-                        filter=store._field_filter(
+                        filter=self._field_filter(
                             "owner_user_id",
                             "==",
                             record.owner_user_id,
                         ),
                     )
-                    .where(filter=store._field_filter("slug", "==", record.slug))
-                    .where(filter=store._field_filter("status", "==", "active"))
+                    .where(filter=self._field_filter("slug", "==", record.slug))
+                    .where(filter=self._field_filter("status", "==", "active"))
                 )
             for _ in slug_q.stream(transaction=transaction):
                 msg = (
@@ -282,14 +303,13 @@ class FirestoreWorkspaceStore:
                     f"workspace_id collision: {record.workspace_id}",
                 )
             transaction.set(new_doc, record.model_dump(mode="python"))
+            self._commit_transaction(transaction)
             return record
-
-        transaction = db.transaction()
-        try:
-            return _create(transaction)
         except (WorkspaceSlugConflict, WorkspaceStoreError):
+            self._rollback_transaction(transaction)
             raise
         except Exception as exc:  # noqa: BLE001
+            self._rollback_transaction(transaction)
             raise self._wrap("create_workspace", exc) from exc
 
     def get_workspace(self, workspace_id: str) -> WorkspaceRecord | None:
@@ -318,20 +338,13 @@ class FirestoreWorkspaceStore:
         db = self._db()
         doc_ref = db.collection(_WORKSPACES_COLL).document(workspace_id)
 
+        transaction = db.transaction()
         try:
-            from google.cloud import firestore  # noqa: PLC0415
-        except ImportError as exc:  # pragma: no cover
-            raise self._wrap("update_workspace", exc) from exc
-
-        store = self
-
-        @firestore.transactional
-        def _update(transaction: Any) -> WorkspaceRecord:
             snap = doc_ref.get(transaction=transaction)
             if not getattr(snap, "exists", False):
                 raise WorkspaceNotFoundError(workspace_id)
             data = snap.to_dict() or {}
-            existing = WorkspaceRecord.model_validate(store._hydrate(data))
+            existing = WorkspaceRecord.model_validate(self._hydrate(data))
             payload: dict[str, Any] = {}
             if name is not None:
                 payload["name"] = name
@@ -342,14 +355,13 @@ class FirestoreWorkspaceStore:
             payload["updated_at"] = updated_at or _utc_now()
             updated = existing.model_copy(update=payload)
             transaction.set(doc_ref, updated.model_dump(mode="python"))
+            self._commit_transaction(transaction)
             return updated
-
-        transaction = db.transaction()
-        try:
-            return _update(transaction)
         except WorkspaceNotFoundError:
+            self._rollback_transaction(transaction)
             raise
         except Exception as exc:  # noqa: BLE001
+            self._rollback_transaction(transaction)
             raise self._wrap("update_workspace", exc) from exc
 
     def _absorb_workspace(
