@@ -141,16 +141,43 @@ class FirestoreWorkspaceStore:
         return FieldFilter(field, op, value)
 
     @staticmethod
+    def _ensure_transaction_begun(transaction: Any) -> None:
+        """Start a Firestore read-write transaction before any transactional read.
+
+        ``Client.transaction()`` returns a transaction object that is **not**
+        in progress until :meth:`_begin` runs; reads with ``transaction=...``
+        ``transaction=...`` require an active transaction id or the client raises
+        ``ValueError`` (inactive transaction). The public ``@transactional`` helper
+        does this implicitly; manual use must call ``_begin`` first.
+        """
+        begin = getattr(transaction, "_begin", None)
+        if not callable(begin):
+            return
+        if getattr(transaction, "in_progress", True):
+            return
+        begin()
+
+    @staticmethod
     def _commit_transaction(transaction: Any) -> None:
-        commit = getattr(transaction, "commit", None)
+        # Prefer ``_commit`` so the transaction id is sent with writes (``commit()``
+        # on ``Transaction`` inherits ``WriteBatch.commit`` and would omit it).
+        commit = getattr(transaction, "_commit", None)
         if callable(commit):
             commit()
+            return
+        legacy = getattr(transaction, "commit", None)
+        if callable(legacy):
+            legacy()
 
     @staticmethod
     def _rollback_transaction(transaction: Any) -> None:
-        rollback = getattr(transaction, "rollback", None)
+        rollback = getattr(transaction, "_rollback", None)
         if callable(rollback):
             rollback()
+            return
+        legacy = getattr(transaction, "rollback", None)
+        if callable(legacy):
+            legacy()
 
     # ------------------------------------------------------------------
     # Datetime hydration
@@ -273,6 +300,7 @@ class FirestoreWorkspaceStore:
 
         transaction = db.transaction()
         try:
+            self._ensure_transaction_begun(transaction)
             # Slug-uniqueness scan within the active scope. Reads precede the
             # write so Firestore transactions can detect conflicting commits.
             if record.org_id is not None:
@@ -343,6 +371,7 @@ class FirestoreWorkspaceStore:
 
         transaction = db.transaction()
         try:
+            self._ensure_transaction_begun(transaction)
             snap = doc_ref.get(transaction=transaction)
             if not getattr(snap, "exists", False):
                 raise WorkspaceNotFoundError(workspace_id)

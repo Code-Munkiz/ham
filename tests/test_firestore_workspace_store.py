@@ -78,7 +78,10 @@ class _FakeDocRef:
     def id(self) -> str:
         return self.path.rsplit("/", 1)[-1]
 
-    def get(self, transaction: Any = None) -> _FakeDocSnap:  # noqa: ARG002
+    def get(self, transaction: Any = None) -> _FakeDocSnap:
+        if transaction is not None and not getattr(transaction, "in_progress", True):
+            msg = "Transaction not in progress, cannot be used in API requests."
+            raise ValueError(msg)
         data = self.root.docs.get(self.path)
         return _FakeDocSnap(id=self.id, exists=data is not None, _data=data)
 
@@ -135,7 +138,10 @@ class _FakeQuery:
                 out.append(p)
         return out
 
-    def stream(self, transaction: Any = None):  # noqa: ARG002
+    def stream(self, transaction: Any = None):
+        if transaction is not None and not getattr(transaction, "in_progress", True):
+            msg = "Transaction not in progress, cannot be used in API requests."
+            raise ValueError(msg)
         for p in self._candidate_paths():
             data = self.root.docs[p]
             ok = True
@@ -165,14 +171,35 @@ class _FakeCollection:
 @dataclass
 class _FakeTransaction:
     root: _FakeFirestore
+    _begun: bool = False
+
+    @property
+    def in_progress(self) -> bool:
+        return self._begun
+
+    def _begin(self, retry_id: Any = None) -> None:  # noqa: ARG002
+        self._begun = True
 
     def set(self, ref: _FakeDocRef, data: dict[str, Any]) -> None:
+        if not self._begun:
+            msg = "Transaction not in progress, cannot be used in API requests."
+            raise ValueError(msg)
         ref.set(data)
 
     def update(self, ref: _FakeDocRef, patch: dict[str, Any]) -> None:
+        if not self._begun:
+            msg = "Transaction not in progress, cannot be used in API requests."
+            raise ValueError(msg)
         cur = dict(self.root.docs.get(ref.path, {}))
         cur.update(patch)
         self.root.docs[ref.path] = cur
+
+    def _commit(self) -> list:
+        self._begun = False
+        return []
+
+    def _rollback(self) -> None:
+        self._begun = False
 
 
 class _FakeFirestore:
@@ -224,6 +251,18 @@ def _ws(
         created_at=_now(),
         updated_at=_now(),
     )
+
+
+def test_fake_get_requires_active_transaction() -> None:
+    """Mirror Firestore: transactional reads need ``transaction._begin()`` first."""
+    fake = _FakeFirestore()
+    t = fake.transaction()
+    doc = fake.collection("workspaces").document("ws_12345678")
+    with pytest.raises(ValueError, match="not in progress"):
+        doc.get(transaction=t)
+    t._begin()
+    snap = doc.get(transaction=t)
+    assert snap.exists is False
 
 
 # ---------------------------------------------------------------------------
