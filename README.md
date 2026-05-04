@@ -54,6 +54,23 @@ Frontend typecheck: `npm run lint` in `frontend/` (`tsc --noEmit`). See [`AGENTS
 
 Before landing edits to canonical markdown, run `python scripts/check_docs_freshness.py` (same check as the CI **warning-only** doc freshness step).
 
+### Cloud VM notes (Cursor / CI-like environments)
+
+- pytest is intentionally not in `requirements.txt`; install it separately as shown above.
+- Some terminal/PTY-dependent tests can hang in headless VMs. If you hit a hang, run:
+
+  ```bash
+  python -m pytest tests/ -q --ignore=tests/test_workspace_terminal.py
+  ```
+
+- Known package quirk on some Linux base images: a system `PyJWT 2.7.0` without proper RECORD
+  metadata can interfere with installs. If you see an install error referencing PyJWT, run:
+
+  ```bash
+  pip install --upgrade --ignore-installed PyJWT>=2.8.0
+  pip install -r requirements.txt
+  ```
+
 ## Project layout
 
 - `main.py` — CLI entry (bridge / Hermes one-shot orchestration wiring)
