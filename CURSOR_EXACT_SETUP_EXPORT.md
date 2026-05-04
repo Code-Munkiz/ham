@@ -1448,7 +1448,7 @@ There are many draft PRs for small docs notes. I want to stop accumulating PR cl
 - `tests/test_context_engine_api.py` — Context Engine dashboard routes (project root validation; 3 cases)
 - `tests/test_hermes_feedback.py` — Critic MVP + Phase 3 guardrails (7 cases)
 - `tests/test_droid_registry.py` — Droid registry conventions (10 cases)
-- Run: `python -m pytest` — full suite (`pytest.ini` sets `pythonpath = .`; run `pytest tests/ --collect-only -q` for current count — on the order of 1200+ tests)
+- Run: `python -m pytest` — full suite (`pytest.ini` sets `pythonpath = .`; run `pytest tests/ --collect-only -q` for current count — on the order of 1800+ tests)
 - Other tests under `tests/` as added; bootstrap with `/test-context-regressions` for Context Engine focus
 
 ## Cursor Cloud specific instructions
