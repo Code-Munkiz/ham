@@ -427,19 +427,24 @@ class FirestoreWorkspaceStore:
         user_id: str,
         sink: dict[str, WorkspaceRecord],
     ) -> None:
-        member_q = db.collection_group(_WORKSPACE_MEMBERS_SUBCOLL).where(
-            filter=self._field_filter("user_id", "==", user_id),
-        )
-        member_workspace_ids: set[str] = set()
-        for snap in member_q.stream():
-            data = snap.to_dict() or {}
-            wid = str(data.get("workspace_id") or "")
-            if wid:
-                member_workspace_ids.add(wid)
-        for wid in member_workspace_ids - set(sink.keys()):
-            ws_snap = coll.document(wid).get()
-            if getattr(ws_snap, "exists", False):
-                self._absorb_workspace(ws_snap, sink)
+        try:
+            member_q = db.collection_group(_WORKSPACE_MEMBERS_SUBCOLL).where(
+                filter=self._field_filter("user_id", "==", user_id),
+            )
+            member_workspace_ids: set[str] = set()
+            for snap in member_q.stream():
+                data = snap.to_dict() or {}
+                wid = str(data.get("workspace_id") or "")
+                if wid:
+                    member_workspace_ids.add(wid)
+            for wid in member_workspace_ids - set(sink.keys()):
+                ws_snap = coll.document(wid).get()
+                if getattr(ws_snap, "exists", False):
+                    self._absorb_workspace(ws_snap, sink)
+        except Exception as exc:  # noqa: BLE001
+            if isinstance(exc, WorkspaceStoreError):
+                raise
+            raise self._wrap("_accumulate_member_rows", exc) from exc
 
     def _accumulate_org_fallback(
         self,

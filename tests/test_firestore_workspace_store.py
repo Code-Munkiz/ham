@@ -528,6 +528,56 @@ def test_list_workspaces_survives_member_query_phase_failure(monkeypatch: pytest
     assert wid in out
 
 
+def test_list_workspaces_survives_failed_precondition_on_collection_group() -> None:
+    """Firestore COLLECTION_GROUP_ASC missing-index errors must degrade (see prod FailedPrecondition)."""
+
+    from google.api_core.exceptions import FailedPrecondition
+
+    class BoomCG:
+        def where(self, *, filter):  # noqa: A002
+            return self
+
+        def stream(self):
+            raise FailedPrecondition(
+                "400 The query requires a COLLECTION_GROUP_ASC index for collection members",
+            )
+
+    class BoomClient(_FakeFirestore):
+        def collection_group(self, name: str):  # noqa: ARG002
+            return BoomCG()
+
+    fake = BoomClient()
+    s = FirestoreWorkspaceStore(client=fake)
+    wid = new_workspace_id()
+    rec = _ws(workspace_id=wid, org_id=None, owner="user_a", slug="solo")
+    fake.docs[f"workspaces/{wid}"] = rec.model_dump(mode="python")
+    out = {w.workspace_id for w in s.list_workspaces_for_user("user_a")}
+    assert wid in out
+
+
+def test_accumulate_member_rows_wraps_failed_precondition() -> None:
+    from google.api_core.exceptions import FailedPrecondition
+
+    class BoomCG:
+        def where(self, *, filter):  # noqa: A002
+            return self
+
+        def stream(self):
+            raise FailedPrecondition("requires index")
+
+    class BoomDb:
+        def collection_group(self, name: str):  # noqa: ARG002
+            return BoomCG()
+
+    class EmptyColl:
+        def document(self, _wid: str):
+            raise AssertionError("should not reach document fetch")
+
+    s, _ = _store()
+    with pytest.raises(WorkspaceStoreError, match="member_rows"):
+        s._accumulate_member_rows(BoomDb(), EmptyColl(), "user_a", {})
+
+
 # ---------------------------------------------------------------------------
 # Workspace members
 # ---------------------------------------------------------------------------
