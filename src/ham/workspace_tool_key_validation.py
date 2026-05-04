@@ -43,22 +43,23 @@ def validate_github_token(token: str) -> bool:
 
 
 def validate_anthropic_api_key(api_key: str) -> bool:
+    """Return True if Anthropic accepts this API key.
+
+    Uses ``GET /v1/models`` so we do not depend on a single Messages ``model``
+    id staying valid forever (deprecated snapshot IDs caused false negatives).
+    """
     k = (api_key or "").strip()
     if not k.startswith("sk-ant-") or len(k) < 24:
         return False
+    headers = {
+        "x-api-key": k,
+        "anthropic-version": "2023-06-01",
+    }
     try:
-        r = httpx.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={
-                "x-api-key": k,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
-            },
-            json={
-                "model": "claude-3-5-haiku-20241022",
-                "max_tokens": 1,
-                "messages": [{"role": "user", "content": "ok"}],
-            },
+        r = httpx.get(
+            "https://api.anthropic.com/v1/models",
+            headers=headers,
+            params={"limit": 1},
             timeout=25.0,
         )
         return r.status_code == 200
