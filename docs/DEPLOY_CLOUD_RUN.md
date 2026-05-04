@@ -356,6 +356,31 @@ Expected:
 - `GET /api/workspaces` returns workspace list for the same actor
 - `401 CLERK_SESSION_REQUIRED` indicates missing/invalid Clerk token or auth config mismatch
 
+For end-to-end hosted workspace verification with two Clerk users, run:
+
+```bash
+HAM_API_BASE="${SERVICE_URL}" \
+HAM_WEB_ORIGIN="https://YOUR-VERCEL-HOST.vercel.app" \
+TOKEN_A="<clerk-session-jwt-user-a>" \
+TOKEN_B="<clerk-session-jwt-user-b>" \
+bash scripts/verify_workspace_hosted_smoke.sh
+```
+
+The script verifies:
+
+- CORS preflight for workspace-authenticated calls (`/api/me`)
+- `GET /api/me` for user A with `auth_mode="clerk"`
+- `GET /api/workspaces` for user A
+- `POST /api/workspaces` create personal workspace for user A
+- `GET /api/workspaces` confirms created workspace persists
+- user B cannot access user A personal workspace (`403` or `404`)
+
+Safety behavior:
+
+- fails fast if `jq`, `TOKEN_A`, or `TOKEN_B` is missing
+- never prints full tokens (redacted in logs)
+- verification-only (does not mutate Clerk/Cloud Run/Vercel/Firestore configuration)
+
 ## In-app browser (Playwright) on Cloud Run
 
 The **`/api/browser/*`** Playwright runtime remains available for **future workspace/desktop** consumers and integration tests; the legacy dashboard War Room UI was removed (Batch 2A). For Playwright to work **in production** (not just locally):

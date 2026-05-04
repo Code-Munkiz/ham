@@ -63,6 +63,15 @@ The repo already includes CORS support (`HAM_CORS_ORIGINS`, `HAM_CORS_ORIGIN_REG
    - Smoke with Clerk bearer token:
      - `GET /api/me`
      - `GET /api/workspaces`
+   - Run hosted two-user smoke verification (non-mutating):
+     ```bash
+     HAM_API_BASE="https://YOUR-SERVICE.run.app" \
+     HAM_WEB_ORIGIN="https://YOUR-VERCEL-HOST.vercel.app" \
+     TOKEN_A="<clerk-session-jwt-user-a>" \
+     TOKEN_B="<clerk-session-jwt-user-b>" \
+     bash scripts/verify_workspace_hosted_smoke.sh
+     ```
+     This script validates CORS preflight, `/api/me` (`auth_mode="clerk"`), workspace create/persistence, and cross-user workspace isolation. It does not update Clerk/Cloud Run/Vercel/Firestore settings.
 
 ## 1a. Creative image generation (Phase 2G.1a — optional)
 
