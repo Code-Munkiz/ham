@@ -7,6 +7,11 @@ API keys for selected tools are stored **server-side only** (file-backed JSON,
 same pattern as Cursor credentials). Keys are validated before save and are
 never returned or logged.
 
+On Cloud Run, when ``HAM_CONNECTED_TOOLS_SECRET_MANAGER_WRITE_THROUGH`` is
+enabled, a validated Claude Agent (Anthropic) key is also written to Secret
+Manager ``anthropic-api-key`` (new version); failures return ``DURABLE_STORE_FAILED``
+without saving locally.
+
 Internal-only: gated ``POST /api/workspace/tools/claude_agent_sdk/smoke`` and
 ``POST /api/workspace/tools/claude_agent_sdk/mission`` when feature-flagged; not
 linked from the default dashboard UI.
@@ -28,6 +33,11 @@ from pydantic import BaseModel, Field
 from src.api.clerk_gate import get_ham_clerk_actor
 from src.api.models_catalog import build_catalog_payload
 from src.ham.clerk_auth import HamActor, clerk_authorization_is_clerk_session
+from src.ham.connected_tools_secret_publish import (
+    connected_tools_secret_manager_write_through_enabled,
+    publish_anthropic_api_key_to_secret_manager,
+    try_rollout_cloud_run_service_for_new_secrets,
+)
 from src.ham.workspace_tool_key_validation import (
     validate_anthropic_api_key,
     validate_cursor_api_key,
@@ -843,6 +853,23 @@ def workspace_tool_connect(
         if not validate_anthropic_api_key(secret):
             _LOG.info("claude_agent_sdk connect: validation failed (key not logged)")
             return _invalid_key_response(tool_id)
+        if _is_cloud_mode() and connected_tools_secret_manager_write_through_enabled():
+            try:
+                publish_anthropic_api_key_to_secret_manager(secret)
+            except RuntimeError:
+                return JSONResponse(
+                    status_code=503,
+                    content=ToolConnectFailResponse(
+                        error_code="DURABLE_STORE_FAILED",
+                        message=(
+                            "The key validated, but saving it to the server credential "
+                            "store failed. Ask your admin to fix Secret Manager IAM and "
+                            "try again."
+                        ),
+                        help=_help(tool_id),
+                    ).model_dump(),
+                )
+            try_rollout_cloud_run_service_for_new_secrets()
         save_anthropic_api_key(secret)
         reset_claude_agent_readiness_cache()
         prev = preview_anthropic() or mask_api_key_preview(secret)
