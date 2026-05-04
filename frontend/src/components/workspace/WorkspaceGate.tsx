@@ -6,9 +6,8 @@
  *
  * - Renders children unchanged when state is `ready`.
  * - Renders the onboarding screen when state is `onboarding` (zero workspaces).
- * - Renders `WorkspaceSetupMessage` for local-dev `HAM_WORKSPACE_AUTH_REQUIRED`.
- * - Renders children passed through untouched for `auth_required` (lets the
- *   existing Clerk surfaces handle sign-in).
+ * - Renders `WorkspaceSetupMessage` for `setup_needed` and `auth_required`.
+ *   Messaging is hosted-safe by default; optional dev hint is local-only.
  * - Renders a small inline error block on `error` with a retry button.
  * - Renders a thin loading hint inline while `loading`/`idle`.
  *
@@ -33,6 +32,16 @@ export interface WorkspaceGateProps {
 
 export function WorkspaceGate({ children, loadingFallback }: WorkspaceGateProps) {
   const ctx = useHamWorkspace();
+  const clerkConfigured = Boolean(
+    (import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined)?.trim(),
+  );
+  const showLocalDevHint =
+    import.meta.env.DEV &&
+    !clerkConfigured &&
+    (import.meta.env.VITE_HAM_SHOW_LOCAL_DEV_HINTS as string | undefined) === "true";
+  const goToSignIn = () => {
+    window.location.assign("/sign-in");
+  };
 
   switch (ctx.state.status) {
     case "ready":
@@ -48,12 +57,23 @@ export function WorkspaceGate({ children, loadingFallback }: WorkspaceGateProps)
       );
 
     case "setup_needed":
-      return <WorkspaceSetupMessage onRetry={() => void ctx.refresh()} />;
+      return (
+        <WorkspaceSetupMessage
+          mode="setup_needed"
+          onRetry={() => void ctx.refresh()}
+          showDeveloperHint={showLocalDevHint}
+        />
+      );
 
     case "auth_required":
-      // Clerk handles sign-in elsewhere; pass children through so the existing
-      // SignedIn/SignedOut surfaces remain authoritative.
-      return <>{children}</>;
+      return (
+        <WorkspaceSetupMessage
+          mode="auth_required"
+          onRetry={() => void ctx.refresh()}
+          onSignIn={clerkConfigured ? goToSignIn : undefined}
+          showDeveloperHint={showLocalDevHint}
+        />
+      );
 
     case "error":
       return (
