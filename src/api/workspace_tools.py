@@ -12,9 +12,14 @@ enabled, a validated Claude Agent (Anthropic) key is also written to Secret
 Manager ``anthropic-api-key`` (new version); failures return ``DURABLE_STORE_FAILED``
 without saving locally.
 
-Internal-only: gated ``POST /api/workspace/tools/claude_agent_sdk/smoke`` and
-``POST /api/workspace/tools/claude_agent_sdk/mission`` when feature-flagged; not
-linked from the default dashboard UI.
+Internal-only (optional): gated ``POST /api/workspace/tools/claude_agent_sdk/smoke``
+when ``HAM_CLAUDE_AGENT_SMOKE_ENABLED`` is on; not linked from the default
+dashboard UI.
+
+Product path: ``POST /api/workspace/tools/claude_agent_sdk/mission`` requires
+Clerk session (when Clerk auth is enabled for this deployment), plus Connected
+Tools / runtime Anthropic auth (stored key, optional legacy env, or Bedrock /
+Vertex host signals). Does not use ``X-HAM-SMOKE-TOKEN`` or smoke flags.
 """
 
 from __future__ import annotations
@@ -46,6 +51,7 @@ from src.ham.workspace_tool_key_validation import (
 )
 from src.ham.worker_adapters.claude_agent_adapter import (
     check_claude_agent_readiness,
+    claude_agent_mission_auth_configured,
     claude_agent_smoke_feature_enabled,
     claude_agent_smoke_route_armed,
     reset_claude_agent_readiness_cache,
@@ -295,6 +301,42 @@ def _authorize_claude_agent_smoke(actor: HamActor | None, x_ham_smoke_token: str
                 "message": (
                     "Valid X-HAM-SMOKE-TOKEN required when Clerk session auth is not enabled."
                 ),
+            },
+        )
+
+
+def _authorize_claude_agent_mission(actor: HamActor | None) -> None:
+    """Clerk session + Anthropic auth signal (Connected Tools SSOT, optional legacy env / cloud)."""
+    if not clerk_authorization_is_clerk_session():
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "CLERK_AUTH_NOT_CONFIGURED_FOR_MISSION",
+                "message": (
+                    "Enable HAM_CLERK_REQUIRE_AUTH or HAM_CLERK_ENFORCE_EMAIL_RESTRICTIONS so "
+                    "Claude Agent missions can require a signed-in user."
+                ),
+            },
+        )
+    if actor is None:
+        raise HTTPException(
+            status_code=401,
+            detail={
+                "error": {
+                    "code": "CLERK_SESSION_REQUIRED",
+                    "message": (
+                        "Authorization: Bearer <Clerk session JWT> required for "
+                        "Claude Agent missions."
+                    ),
+                },
+            },
+        )
+    if not claude_agent_mission_auth_configured():
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "CONNECT_CLAUDE_AGENT_REQUIRED",
+                "message": "Connect Claude Agent first.",
             },
         )
 
@@ -763,10 +805,9 @@ async def workspace_claude_agent_smoke(
 @router.post("/tools/claude_agent_sdk/mission", response_model=ClaudeAgentMissionHttpResponse)
 async def workspace_claude_agent_mission(
     actor: HamActor | None = Depends(get_ham_clerk_actor),
-    x_ham_smoke_token: str | None = Header(default=None, alias="X-HAM-SMOKE-TOKEN"),
 ) -> ClaudeAgentMissionHttpResponse:
-    """Fixed bounded mission — same auth gate as smoke; not user-prompt driven."""
-    _authorize_claude_agent_smoke(actor, x_ham_smoke_token)
+    """Fixed bounded mission — Clerk + Connected Tools auth; not user-prompt driven."""
+    _authorize_claude_agent_mission(actor)
     result = await run_claude_agent_sdk_mission()
     return ClaudeAgentMissionHttpResponse(
         ok=result.ok,

@@ -18,9 +18,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-from src.api.server import app
+from src.api.clerk_gate import get_ham_clerk_actor
+from src.api.server import fastapi_app
+from src.ham.clerk_auth import HamActor
 
-client = TestClient(app)
+# ``server.app`` is the PNA middleware wrapper; use the FastAPI instance for routes + overrides.
+client = TestClient(fastapi_app)
 
 EXPECTED_TOOL_IDS = [
     "openrouter",
@@ -727,56 +730,100 @@ class TestClaudeAgentSdkEntry:
 
 
 class TestClaudeAgentSdkMissionRoute:
-    """Gated POST /api/workspace/tools/claude_agent_sdk/mission."""
+    """POST /api/workspace/tools/claude_agent_sdk/mission — Clerk + credential gate."""
 
-    def test_mission_not_found_when_gate_off(self):
-        with patch.dict(os.environ, {"HAM_CLAUDE_AGENT_SMOKE_ENABLED": "0"}, clear=False):
-            with patch(
-                "src.api.workspace_tools.clerk_authorization_is_clerk_session",
-                return_value=False,
-            ):
-                r = client.post(
-                    "/api/workspace/tools/claude_agent_sdk/mission",
-                    headers={"X-HAM-SMOKE-TOKEN": "ignored"},
-                )
-        assert r.status_code == 404
+    def _actor(self) -> HamActor:
+        return HamActor(
+            user_id="user_mission_test",
+            org_id=None,
+            session_id="sess_mission",
+            email="mission-test@example.com",
+            permissions=frozenset(),
+            org_role=None,
+            raw_permission_claim=None,
+        )
 
-    def test_mission_requires_token_when_clerk_off(self):
-        env = {
-            "HAM_CLAUDE_AGENT_SMOKE_ENABLED": "1",
-            "HAM_CLAUDE_AGENT_SMOKE_TOKEN": "secret-token-value",
-        }
-        with patch.dict(os.environ, env, clear=False):
-            with patch(
-                "src.api.workspace_tools.clerk_authorization_is_clerk_session",
-                return_value=False,
-            ):
-                r = client.post("/api/workspace/tools/claude_agent_sdk/mission")
-        assert r.status_code == 403
+    def test_mission_401_without_clerk_when_auth_required(self, monkeypatch):
+        monkeypatch.setenv("HAM_CLERK_REQUIRE_AUTH", "1")
+        monkeypatch.delenv("HAM_CLERK_ENFORCE_EMAIL_RESTRICTIONS", raising=False)
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
 
-    def test_mission_rejects_bad_token(self):
-        env = {
-            "HAM_CLAUDE_AGENT_SMOKE_ENABLED": "1",
-            "HAM_CLAUDE_AGENT_SMOKE_TOKEN": "secret-token-value",
-        }
-        with patch.dict(os.environ, env, clear=False):
-            with patch(
-                "src.api.workspace_tools.clerk_authorization_is_clerk_session",
-                return_value=False,
-            ):
-                r = client.post(
-                    "/api/workspace/tools/claude_agent_sdk/mission",
-                    headers={"X-HAM-SMOKE-TOKEN": "wrong"},
-                )
-        assert r.status_code == 403
+        async def _no_actor() -> None:
+            return None
 
-    def test_mission_success_mocked(self):
+        fastapi_app.dependency_overrides[get_ham_clerk_actor] = _no_actor
+        try:
+            r = client.post("/api/workspace/tools/claude_agent_sdk/mission")
+        finally:
+            fastapi_app.dependency_overrides.pop(get_ham_clerk_actor, None)
+
+        assert r.status_code == 401
+        body = r.json()
+        assert body["detail"]["error"]["code"] == "CLERK_SESSION_REQUIRED"
+
+    def test_mission_smoke_token_does_not_bypass_clerk(self, monkeypatch):
+        monkeypatch.setenv("HAM_CLERK_REQUIRE_AUTH", "1")
+        monkeypatch.delenv("HAM_CLERK_ENFORCE_EMAIL_RESTRICTIONS", raising=False)
+        monkeypatch.setenv("HAM_CLAUDE_AGENT_SMOKE_ENABLED", "1")
+        monkeypatch.setenv("HAM_CLAUDE_AGENT_SMOKE_TOKEN", "x" * 32)
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+        async def _no_actor() -> None:
+            return None
+
+        fastapi_app.dependency_overrides[get_ham_clerk_actor] = _no_actor
+        try:
+            r = client.post(
+                "/api/workspace/tools/claude_agent_sdk/mission",
+                headers={"X-HAM-SMOKE-TOKEN": "x" * 32},
+            )
+        finally:
+            fastapi_app.dependency_overrides.pop(get_ham_clerk_actor, None)
+
+        assert r.status_code == 401
+
+    def test_mission_400_connect_required_with_session_no_key(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.setenv("HAM_CLERK_REQUIRE_AUTH", "1")
+        monkeypatch.delenv("HAM_CLERK_ENFORCE_EMAIL_RESTRICTIONS", raising=False)
+        monkeypatch.setenv("HAM_WORKSPACE_TOOL_CREDENTIALS_FILE", str(tmp_path / "empty.json"))
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+        cred = tmp_path / "empty.json"
+        cred.write_text("{}\n", encoding="utf-8")
+
+        async def _actor_dep() -> HamActor:
+            return self._actor()
+
+        fastapi_app.dependency_overrides[get_ham_clerk_actor] = _actor_dep
+        try:
+            r = client.post("/api/workspace/tools/claude_agent_sdk/mission")
+        finally:
+            fastapi_app.dependency_overrides.pop(get_ham_clerk_actor, None)
+
+        assert r.status_code == 400
+        assert r.json()["detail"]["code"] == "CONNECT_CLAUDE_AGENT_REQUIRED"
+        assert "Connect Claude Agent first" in r.json()["detail"]["message"]
+
+    def test_mission_200_calls_adapter_when_authed_and_key_present(
+        self, tmp_path, monkeypatch
+    ):
         from src.ham.worker_adapters.claude_agent_adapter import ClaudeAgentMissionResult
 
-        env = {
-            "HAM_CLAUDE_AGENT_SMOKE_ENABLED": "1",
-            "HAM_CLAUDE_AGENT_SMOKE_TOKEN": "secret-token-value",
-        }
+        monkeypatch.setenv("HAM_CLERK_REQUIRE_AUTH", "1")
+        monkeypatch.delenv("HAM_CLERK_ENFORCE_EMAIL_RESTRICTIONS", raising=False)
+        monkeypatch.setenv(
+            "HAM_WORKSPACE_TOOL_CREDENTIALS_FILE", str(tmp_path / "wtc.json")
+        )
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+        cred = tmp_path / "wtc.json"
+        cred.write_text(
+            '{"anthropic_api_key": "sk-ant-api03-connect-tools-test-not-real"}\n',
+            encoding="utf-8",
+        )
+
         fake = ClaudeAgentMissionResult(
             ok=True,
             mission_ok=True,
@@ -788,26 +835,29 @@ class TestClaudeAgentSdkMissionRoute:
             safety_mode="plan",
             blocker=None,
         )
-        with patch.dict(os.environ, env, clear=False):
+
+        async def _actor_dep() -> HamActor:
+            return self._actor()
+
+        fastapi_app.dependency_overrides[get_ham_clerk_actor] = _actor_dep
+        try:
             with patch(
-                "src.api.workspace_tools.clerk_authorization_is_clerk_session",
-                return_value=False,
+                "src.api.workspace_tools.run_claude_agent_sdk_mission",
+                new=AsyncMock(return_value=fake),
             ):
-                with patch(
-                    "src.api.workspace_tools.run_claude_agent_sdk_mission",
-                    new=AsyncMock(return_value=fake),
-                ):
-                    r = client.post(
-                        "/api/workspace/tools/claude_agent_sdk/mission",
-                        headers={"X-HAM-SMOKE-TOKEN": "secret-token-value"},
-                    )
+                r = client.post("/api/workspace/tools/claude_agent_sdk/mission")
+        finally:
+            fastapi_app.dependency_overrides.pop(get_ham_clerk_actor, None)
+
         assert r.status_code == 200
         body = r.json()
         assert body["ok"] is True
         assert body["mission_ok"] is True
         assert body["worker"] == "claude_agent_sdk"
-        assert body["safety_mode"] == "plan"
-        assert "secret-token-value" not in str(body)
+        assert "sk-ant-api03" not in str(body)
+
+
+class TestClaudeCodeEntryRegression:
     """Regression: the existing claude_code (local CLI) entry must not change."""
 
     def test_claude_code_id_label_source_unchanged(self):
@@ -816,14 +866,11 @@ class TestClaudeAgentSdkMissionRoute:
         assert cc["label"] == "Claude Code"
         assert cc["connect_kind"] == "local_scan"
         assert cc["safe_actions"] == ["check_status"]
-        # Source flips to "unknown" in cloud mode and "this_computer" otherwise;
-        # both are fine. Just confirm it is NOT the new SDK source.
         assert cc["source"] in ("this_computer", "unknown")
 
     def test_claude_code_has_no_version(self):
         data = _get_tools()
         cc = next(t for t in data["tools"] if t["id"] == "claude_code")
-        # The new optional field defaults to None for entries that don't set it.
         assert cc.get("version") is None
 
 

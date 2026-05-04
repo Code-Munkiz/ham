@@ -26,6 +26,7 @@ from src.ham.worker_adapters.claude_agent_adapter import (
     _format_sdk_query_failure,
     _redact_diagnostic_text,
     check_claude_agent_readiness,
+    claude_agent_mission_auth_configured,
     is_claude_agent_launchable,
     reset_claude_agent_readiness_cache,
 )
@@ -67,6 +68,30 @@ class TestCapabilities:
         assert caps.requires_project_root is True
         assert caps.requires_auth is True
         assert caps.launch_mode == "sdk_local"
+
+
+class TestMissionAuthConfigured:
+    def test_false_without_stored_key_or_env(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("HAM_WORKSPACE_TOOL_CREDENTIALS_FILE", str(tmp_path / "w.json"))
+        (tmp_path / "w.json").write_text("{}\n", encoding="utf-8")
+        assert claude_agent_mission_auth_configured() is False
+
+    def test_true_with_connected_tools_stored_key(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("HAM_WORKSPACE_TOOL_CREDENTIALS_FILE", str(tmp_path / "w.json"))
+        (tmp_path / "w.json").write_text(
+            '{"anthropic_api_key": "sk-ant-fake-mission-gate"}\n',
+            encoding="utf-8",
+        )
+        assert claude_agent_mission_auth_configured() is True
+
+    def test_true_with_legacy_env_anthropic_key(self, monkeypatch):
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-fake-env-fallback")
+        assert claude_agent_mission_auth_configured() is True
+
+    def test_true_with_bedrock_signals(self, monkeypatch):
+        monkeypatch.setenv("CLAUDE_CODE_USE_BEDROCK", "1")
+        monkeypatch.setenv("AWS_REGION", "us-east-1")
+        assert claude_agent_mission_auth_configured() is True
 
 
 class TestSdkDetection:

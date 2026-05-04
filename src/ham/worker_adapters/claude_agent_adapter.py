@@ -213,6 +213,21 @@ def _has_any_auth_signal() -> bool:
         return False
 
 
+def claude_agent_mission_auth_configured() -> bool:
+    """True when mission runtime has a credential channel (not SDK install).
+
+    Direct Anthropic: Connected Tools store or legacy ``ANTHROPIC_API_KEY`` via
+    :func:`resolve_claude_agent_anthropic_api_key`. Also allows Bedrock/Vertex
+    host configuration without a stored sk-ant key.
+    """
+    try:
+        if resolve_claude_agent_anthropic_api_key():
+            return True
+        return _has_bedrock_signal() or _has_vertex_signal()
+    except Exception:
+        return False
+
+
 def _uses_non_anthropic_direct_cloud_auth() -> bool:
     """True when Bedrock or Vertex signals are active (CLI uses those channels)."""
     return _has_bedrock_signal() or _has_vertex_signal()
