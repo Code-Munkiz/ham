@@ -25,6 +25,7 @@ import { WorkspaceMobileTabBar } from "./WorkspaceMobileTabBar";
 import { WorkspaceChatFloatingToggle } from "./components/WorkspaceChatFloatingToggle";
 import { WorkspaceChatPanel } from "./components/WorkspaceChatPanel";
 import { WorkspaceTerminalView } from "./screens/terminal/WorkspaceTerminalView";
+import { HamWorkspaceTopbarPill } from "@/components/layout/HamWorkspaceTopbarPill";
 import { toast } from "sonner";
 
 /** Keep in sync with `HWW_LAST_SESSION_KEY` in `WorkspaceChatScreen.tsx`. */
@@ -306,6 +307,12 @@ function WorkspaceSideNav({
           ) : null}
         </div>
       </div>
+
+      {c ? null : (
+        <div className="mb-4">
+          <HamWorkspaceTopbarPill />
+        </div>
+      )}
 
       {c ? null : (
         <>
