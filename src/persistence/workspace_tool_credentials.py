@@ -59,6 +59,22 @@ def get_stored_anthropic_api_key() -> str | None:
     return k or None
 
 
+def resolve_claude_agent_anthropic_api_key() -> str | None:
+    """Anthropic API key for Claude Agent / Claude Code **direct** API auth.
+
+    **Precedence:** Connected Tools store (``save_anthropic_api_key``) wins over
+    process ``ANTHROPIC_API_KEY``. Values are never logged by this helper.
+
+    Bedrock and Vertex modes ignore this key for routing; callers that support
+    those channels must not rely on this value alone.
+    """
+    s = get_stored_anthropic_api_key()
+    if s:
+        return s
+    e = (os.environ.get("ANTHROPIC_API_KEY") or "").strip()
+    return e or None
+
+
 def get_effective_openrouter_api_key() -> str:
     s = get_stored_openrouter_api_key()
     if s:

@@ -25,6 +25,10 @@ from asyncio.subprocess import PIPE
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from src.persistence.workspace_tool_credentials import (
+    resolve_claude_agent_anthropic_api_key,
+)
+
 CLAUDE_AGENT_SMOKE_PROMPT = "Reply with exactly: HAM_CLAUDE_SMOKE_OK"
 SMOKE_QUERY_TIMEOUT_SEC = 60.0
 MISSION_QUERY_TIMEOUT_SEC = 90.0
@@ -209,6 +213,34 @@ def _has_any_auth_signal() -> bool:
         return False
 
 
+def _uses_non_anthropic_direct_cloud_auth() -> bool:
+    """True when Bedrock or Vertex signals are active (CLI uses those channels)."""
+    return _has_bedrock_signal() or _has_vertex_signal()
+
+
+def _claude_runtime_anthropic_env_overlay() -> dict[str, str]:
+    """Extra env vars for Claude SDK/CLI children (**not** merged into ``os.environ``).
+
+    When using the **direct** Anthropic API, forces ``ANTHROPIC_API_KEY`` to the
+    effective value (Connected Tools store first, then process env). When
+    Bedrock/Vertex is configured, returns empty dict so existing host env is
+    inherited unchanged by the merge logic in subprocess helpers.
+    """
+    if _uses_non_anthropic_direct_cloud_auth():
+        return {}
+    key = resolve_claude_agent_anthropic_api_key()
+    if not key:
+        return {}
+    return {"ANTHROPIC_API_KEY": key}
+
+
+def _subprocess_env_for_claude() -> dict[str, str]:
+    """Full env map for ``create_subprocess_exec`` — copy of process env + Claude overrides."""
+    merged: dict[str, str] = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
+    merged.update(_claude_runtime_anthropic_env_overlay())
+    return merged
+
+
 def check_claude_agent_readiness() -> ClaudeAgentWorkerReadiness:
     """Check whether the Claude Agent worker is ready (SDK + auth signal).
 
@@ -319,7 +351,7 @@ async def _probe_claude_cli(cli_path: str) -> str | None:
             "--version",
             stdout=PIPE,
             stderr=PIPE,
-            env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+            env=_subprocess_env_for_claude(),
         )
         out_b, err_b = await proc.communicate()
         out = (out_b or b"").decode(errors="replace").strip()
@@ -381,7 +413,7 @@ async def _run_claude_headless_plan_json_query(
             "plan",
             stdout=PIPE,
             stderr=PIPE,
-            env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+            env=_subprocess_env_for_claude(),
         )
         out_b, err_b = await asyncio.wait_for(proc.communicate(), timeout=timeout_sec)
     except TimeoutError:
@@ -421,7 +453,9 @@ def _ham_preferred_cli_path() -> str | None:
     return shutil.which("claude")
 
 
-def _plan_mode_query_options(stderr_lines: list[str]) -> Any:
+def _plan_mode_query_options(
+    stderr_lines: list[str], *, anthropic_env_overlay: dict[str, str]
+) -> Any:
     from claude_agent_sdk import ClaudeAgentOptions  # type: ignore[import-not-found]
 
     def _stderr_cb(line: str) -> None:
@@ -434,6 +468,7 @@ def _plan_mode_query_options(stderr_lines: list[str]) -> Any:
         "permission_mode": "plan",
         "max_turns": 1,
         "stderr": _stderr_cb,
+        "env": dict(anthropic_env_overlay),
         # Headless / SDK: skip hooks, skills auto-discovery, project MCP — avoids
         # failures when the API container cwd is not a full interactive workspace.
         "extra_args": {"bare": None},
@@ -460,6 +495,16 @@ async def _run_claude_agent_sdk_plan_query(
             readiness.reason or "Claude Agent SDK is not ready on this server.",
             readiness,
         )
+    if not _uses_non_anthropic_direct_cloud_auth():
+        if not resolve_claude_agent_anthropic_api_key():
+            return (
+                None,
+                (
+                    "Claude Agent runtime is missing an Anthropic API key. "
+                    "Connect Claude Agent in Workspace Settings or set ANTHROPIC_API_KEY."
+                ),
+                readiness,
+            )
     try:
         from claude_agent_sdk import query  # type: ignore[import-not-found]
     except ImportError:
@@ -470,7 +515,9 @@ async def _run_claude_agent_sdk_plan_query(
         )
 
     stderr_lines: list[str] = []
-    opts = _plan_mode_query_options(stderr_lines)
+    opts = _plan_mode_query_options(
+        stderr_lines, anthropic_env_overlay=_claude_runtime_anthropic_env_overlay()
+    )
 
     async def _collect() -> str:
         parts: list[str] = []
@@ -606,8 +653,10 @@ class ClaudeAgentMissionResult:
 async def run_claude_agent_sdk_smoke() -> ClaudeAgentSmokeResult:
     """One harmless SDK ``query`` with plan-only permissions (no tool execution).
 
-    Uses server-side auth already present in the environment. Does not pass
-    project files, user prompts, or tool allowlists beyond empty/disabled tools.
+    Auth for the **direct** Anthropic API path: Connected Tools stored key, else
+    ``ANTHROPIC_API_KEY`` on the host (injected per subprocess, never logged).
+    Bedrock/Vertex use existing env signals without overriding ``ANTHROPIC_API_KEY``
+    from the store.
     """
     readiness = check_claude_agent_readiness()
     provider = claude_agent_coarse_provider()

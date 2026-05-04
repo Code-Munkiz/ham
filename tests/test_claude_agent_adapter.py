@@ -12,6 +12,7 @@ Validates:
 
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import patch
 
 import json
@@ -322,3 +323,147 @@ class TestDiagnosticRedaction:
         assert "exit code 1" in detail
         assert "sk-ant-" not in detail
         assert "stderr:" in detail
+
+
+class TestResolveClaudeAgentAnthropicApiKey:
+    """``resolve_claude_agent_anthropic_api_key`` precedence (never logged by helper)."""
+
+    def test_stored_preferred_over_env(self, monkeypatch, tmp_path):
+        cred_path = tmp_path / "creds.json"
+        monkeypatch.setenv("HAM_WORKSPACE_TOOL_CREDENTIALS_FILE", str(cred_path))
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-env-test")
+        from src.persistence import workspace_tool_credentials as wtc
+
+        wtc.save_anthropic_api_key("sk-ant-stored-test")
+        assert wtc.resolve_claude_agent_anthropic_api_key() == "sk-ant-stored-test"
+
+    def test_env_fallback_when_no_stored(self, monkeypatch, tmp_path):
+        cred_path = tmp_path / "empty.json"
+        cred_path.write_text("{}", encoding="utf-8")
+        monkeypatch.setenv("HAM_WORKSPACE_TOOL_CREDENTIALS_FILE", str(cred_path))
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-env-test")
+        from src.persistence import workspace_tool_credentials as wtc
+
+        assert wtc.resolve_claude_agent_anthropic_api_key() == "sk-ant-env-test"
+
+    def test_missing_returns_none(self, monkeypatch, tmp_path):
+        cred_path = tmp_path / "empty.json"
+        cred_path.write_text("{}", encoding="utf-8")
+        monkeypatch.setenv("HAM_WORKSPACE_TOOL_CREDENTIALS_FILE", str(cred_path))
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        from src.persistence import workspace_tool_credentials as wtc
+
+        assert wtc.resolve_claude_agent_anthropic_api_key() is None
+
+
+class TestClaudeRuntimeEnvOverlay:
+    def test_overlay_prefers_stored_over_env(self, monkeypatch, tmp_path):
+        cred_path = tmp_path / "creds.json"
+        monkeypatch.setenv("HAM_WORKSPACE_TOOL_CREDENTIALS_FILE", str(cred_path))
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-env-test")
+        from src.persistence import workspace_tool_credentials as wtc
+
+        wtc.save_anthropic_api_key("sk-ant-stored-test")
+        overlay = claude_agent_adapter._claude_runtime_anthropic_env_overlay()
+        assert overlay == {"ANTHROPIC_API_KEY": "sk-ant-stored-test"}
+
+    def test_overlay_empty_when_bedrock_configured(self, monkeypatch, tmp_path):
+        cred_path = tmp_path / "creds.json"
+        monkeypatch.setenv("HAM_WORKSPACE_TOOL_CREDENTIALS_FILE", str(cred_path))
+        monkeypatch.setenv("CLAUDE_CODE_USE_BEDROCK", "1")
+        monkeypatch.setenv("AWS_REGION", "us-east-1")
+        from src.persistence import workspace_tool_credentials as wtc
+
+        wtc.save_anthropic_api_key("sk-ant-stored-test")
+        assert claude_agent_adapter._claude_runtime_anthropic_env_overlay() == {}
+
+    def test_subprocess_env_contains_git_prompt_and_resolved_key(
+        self, monkeypatch, tmp_path
+    ):
+        cred_path = tmp_path / "creds.json"
+        monkeypatch.setenv("HAM_WORKSPACE_TOOL_CREDENTIALS_FILE", str(cred_path))
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-env-test")
+        from src.persistence import workspace_tool_credentials as wtc
+
+        wtc.save_anthropic_api_key("sk-ant-stored-test")
+        env = claude_agent_adapter._subprocess_env_for_claude()
+        assert env.get("GIT_TERMINAL_PROMPT") == "0"
+        assert env.get("ANTHROPIC_API_KEY") == "sk-ant-stored-test"
+
+    def test_headless_subprocess_receives_stored_anthropic_key(
+        self, monkeypatch, tmp_path
+    ):
+        cred_path = tmp_path / "creds.json"
+        monkeypatch.setenv("HAM_WORKSPACE_TOOL_CREDENTIALS_FILE", str(cred_path))
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-env-test")
+        from src.persistence import workspace_tool_credentials as wtc
+
+        wtc.save_anthropic_api_key("sk-ant-stored-test")
+
+        captured: dict[str, object] = {}
+
+        async def fake_exec(*_a, **_kw):
+            captured.update(_kw)
+            class _Proc:
+                returncode = 0
+
+                async def communicate(self):
+                    return (b'{"result":"ok"}', b"")
+
+            return _Proc()
+
+        monkeypatch.setattr(
+            claude_agent_adapter.asyncio, "create_subprocess_exec", fake_exec
+        )
+        monkeypatch.setattr(claude_agent_adapter.shutil, "which", lambda _x: "/bin/claude")
+
+        async def run():
+            return await claude_agent_adapter._run_claude_headless_plan_json_query(
+                "p", 30.0, 100
+            )
+
+        text, err = asyncio.run(run())
+        assert err is None
+        assert text == "ok"
+        env = captured.get("env")
+        assert isinstance(env, dict)
+        assert env.get("ANTHROPIC_API_KEY") == "sk-ant-stored-test"
+        blob = str(captured)
+        assert "sk-ant-env-test" not in blob
+
+    def test_plan_query_fails_safe_without_direct_key_when_claimed_ready(
+        self, monkeypatch
+    ):
+        fake_rd = ClaudeAgentWorkerReadiness(
+            authenticated=True,
+            sdk_available=True,
+            sdk_version="0.1.2",
+            status="ready",
+        )
+        monkeypatch.setattr(
+            claude_agent_adapter,
+            "check_claude_agent_readiness",
+            lambda: fake_rd,
+        )
+        monkeypatch.setattr(
+            claude_agent_adapter,
+            "_uses_non_anthropic_direct_cloud_auth",
+            lambda: False,
+        )
+        monkeypatch.setattr(
+            claude_agent_adapter,
+            "resolve_claude_agent_anthropic_api_key",
+            lambda: None,
+        )
+
+        async def run():
+            return await claude_agent_adapter._run_claude_agent_sdk_plan_query(
+                "x", 1.0, 100
+            )
+
+        text, blocker, rd = asyncio.run(run())
+        assert text is None
+        assert rd is fake_rd
+        assert blocker is not None
+        assert "sk-ant-" not in (blocker or "")
+        assert "ANTHROPIC_API_KEY=" not in (blocker or "")
