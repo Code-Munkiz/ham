@@ -32,16 +32,14 @@ export interface WorkspaceGateProps {
 
 export function WorkspaceGate({ children, loadingFallback }: WorkspaceGateProps) {
   const ctx = useHamWorkspace();
-  const clerkConfigured = Boolean(
-    (import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined)?.trim(),
-  );
+  const clerkConfigured =
+    ctx.hostedAuth?.clerkConfigured ??
+    Boolean((import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined)?.trim());
   const showLocalDevHint =
     import.meta.env.DEV &&
     !clerkConfigured &&
     (import.meta.env.VITE_HAM_SHOW_LOCAL_DEV_HINTS as string | undefined) === "true";
-  const goToSignIn = () => {
-    window.location.assign("/sign-in");
-  };
+  const openSignIn = ctx.openSignIn;
 
   switch (ctx.state.status) {
     case "ready":
@@ -70,7 +68,16 @@ export function WorkspaceGate({ children, loadingFallback }: WorkspaceGateProps)
         <WorkspaceSetupMessage
           mode="auth_required"
           onRetry={() => void ctx.refresh()}
-          onSignIn={clerkConfigured ? goToSignIn : undefined}
+          onSignIn={clerkConfigured ? openSignIn : undefined}
+          showDeveloperHint={showLocalDevHint}
+        />
+      );
+
+    case "auth_not_configured":
+      return (
+        <WorkspaceSetupMessage
+          mode="auth_not_configured"
+          onRetry={() => void ctx.refresh()}
           showDeveloperHint={showLocalDevHint}
         />
       );
@@ -93,21 +100,21 @@ export function WorkspaceGate({ children, loadingFallback }: WorkspaceGateProps)
         </div>
       );
 
+    case "auth_loading":
     case "idle":
     case "loading":
     default:
       return (
-        <>
+        <div className="flex h-full w-full items-center justify-center p-6">
           {loadingFallback ?? (
             <div
               data-testid="workspace-gate-loading"
-              className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-full bg-black/40 px-3 py-1 text-[11px] text-foreground/70 backdrop-blur"
+              className="rounded-full bg-black/40 px-3 py-1 text-[11px] text-foreground/70 backdrop-blur"
             >
-              Loading workspace…
+              {ctx.state.status === "auth_loading" ? "Initializing sign-in…" : "Loading workspace…"}
             </div>
           )}
-          {children}
-        </>
+        </div>
       );
   }
 }

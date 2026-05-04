@@ -7,7 +7,7 @@ import * as React from "react";
 import { Button } from "@/components/ui/button";
 
 export interface WorkspaceSetupMessageProps {
-  mode?: "setup_needed" | "auth_required";
+  mode?: "setup_needed" | "auth_required" | "auth_not_configured";
   onRetry?: () => void;
   onSignIn?: () => void;
   /** Local-only dev hint; should never be enabled in hosted user-facing builds. */
@@ -21,16 +21,23 @@ export function WorkspaceSetupMessage({
   showDeveloperHint = false,
 }: WorkspaceSetupMessageProps) {
   const authRequired = mode === "auth_required";
+  const authNotConfigured = mode === "auth_not_configured";
   return (
     <div className="flex h-full w-full items-center justify-center p-6">
       <div className="max-w-xl space-y-4 rounded-2xl border border-amber-300/25 bg-[#07111a] p-6 text-sm text-white shadow-2xl shadow-black/30">
         <h2 className="text-base font-semibold tracking-tight text-amber-50">
-          {authRequired ? "Sign in required" : "Workspace unavailable"}
+          {authNotConfigured
+            ? "Authentication is not configured"
+            : authRequired
+              ? "Sign in required"
+              : "Workspace unavailable"}
         </h2>
         <p className="text-white/[0.78]">
-          {authRequired
-            ? "Please sign in to load your HAM workspace."
-            : "HAM could not load your workspace. Sign in again or contact your workspace admin."}
+          {authNotConfigured
+            ? "Set VITE_CLERK_PUBLISHABLE_KEY and redeploy."
+            : authRequired
+              ? "Please sign in to load your HAM workspace."
+              : "HAM could not load your workspace. Sign in again or contact your workspace admin."}
         </p>
 
         {showDeveloperHint ? (

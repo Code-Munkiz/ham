@@ -78,6 +78,14 @@ function withProvider() {
   );
 }
 
+function withHostedProvider(
+  hostedAuth: React.ComponentProps<typeof HamWorkspaceProvider>["hostedAuth"],
+) {
+  return ({ children }: { children: React.ReactNode }) => (
+    <HamWorkspaceProvider hostedAuth={hostedAuth}>{children}</HamWorkspaceProvider>
+  );
+}
+
 beforeEach(() => {
   window.localStorage.clear();
   mockedGetMe.mockReset();
@@ -155,6 +163,55 @@ describe("HamWorkspaceProvider initial fetch", () => {
     );
     const { result } = renderHook(() => useHamWorkspace(), { wrapper: withProvider() });
     await waitFor(() => expect(result.current.state.status).toBe("auth_required"));
+  });
+
+  it("does not call /api/me until Clerk auth has loaded", async () => {
+    const { result } = renderHook(() => useHamWorkspace(), {
+      wrapper: withHostedProvider({
+        clerkConfigured: true,
+        isLoaded: false,
+        isSignedIn: false,
+      }),
+    });
+    await waitFor(() => expect(result.current.state.status).toBe("auth_loading"));
+    expect(mockedGetMe).not.toHaveBeenCalled();
+  });
+
+  it("does not call /api/me when Clerk is configured but signed out", async () => {
+    const { result } = renderHook(() => useHamWorkspace(), {
+      wrapper: withHostedProvider({
+        clerkConfigured: true,
+        isLoaded: true,
+        isSignedIn: false,
+      }),
+    });
+    await waitFor(() => expect(result.current.state.status).toBe("auth_required"));
+    expect(mockedGetMe).not.toHaveBeenCalled();
+  });
+
+  it("shows auth_not_configured without calling /api/me when Clerk key is missing", async () => {
+    const { result } = renderHook(() => useHamWorkspace(), {
+      wrapper: withHostedProvider({
+        clerkConfigured: false,
+        isLoaded: true,
+        isSignedIn: false,
+      }),
+    });
+    await waitFor(() => expect(result.current.state.status).toBe("auth_not_configured"));
+    expect(mockedGetMe).not.toHaveBeenCalled();
+  });
+
+  it("calls /api/me when Clerk is configured, loaded, and signed in", async () => {
+    mockedGetMe.mockResolvedValue(meWith([summary()]));
+    const { result } = renderHook(() => useHamWorkspace(), {
+      wrapper: withHostedProvider({
+        clerkConfigured: true,
+        isLoaded: true,
+        isSignedIn: true,
+      }),
+    });
+    await waitFor(() => expect(result.current.state.status).toBe("ready"));
+    expect(mockedGetMe).toHaveBeenCalledTimes(1);
   });
 
   it("transitions to error on 5xx and recovers via refresh", async () => {
