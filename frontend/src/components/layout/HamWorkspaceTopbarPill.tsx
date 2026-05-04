@@ -24,6 +24,7 @@ export function HamWorkspaceTopbarPill({ className }: HamWorkspaceTopbarPillProp
   const ctx = useHamWorkspace();
   const [pickerOpen, setPickerOpen] = React.useState(false);
   const [createOpen, setCreateOpen] = React.useState(false);
+  const [detailsOpen, setDetailsOpen] = React.useState(false);
 
   const baseLabel = (() => {
     switch (ctx.state.status) {
@@ -61,11 +62,37 @@ export function HamWorkspaceTopbarPill({ className }: HamWorkspaceTopbarPillProp
   })();
 
   const interactive =
-    ctx.state.status === "ready" || ctx.state.status === "onboarding";
+    ctx.state.status === "ready" ||
+    ctx.state.status === "onboarding" ||
+    ctx.state.status === "setup_needed" ||
+    ctx.state.status === "auth_required" ||
+    ctx.state.status === "error";
+
+  const pillClass = (() => {
+    switch (ctx.state.status) {
+      case "setup_needed":
+        return "border-amber-300/45 bg-amber-500/20 text-amber-50 shadow-[0_0_0_1px_rgba(251,191,36,0.12)] hover:bg-amber-500/25";
+      case "auth_required":
+        return "border-sky-300/45 bg-sky-500/20 text-sky-50 shadow-[0_0_0_1px_rgba(125,211,252,0.12)] hover:bg-sky-500/25";
+      case "error":
+        return "border-red-300/45 bg-red-500/20 text-red-50 shadow-[0_0_0_1px_rgba(248,113,113,0.12)] hover:bg-red-500/25";
+      case "ready":
+        return "border-emerald-300/30 bg-emerald-500/[0.12] text-white hover:bg-emerald-500/[0.18]";
+      case "onboarding":
+        return "border-sky-300/35 bg-sky-500/[0.15] text-white hover:bg-sky-500/20";
+      case "idle":
+      case "loading":
+        return "border-white/14 bg-white/[0.08] text-white/85";
+    }
+  })();
 
   const onPillClick = () => {
     if (ctx.state.status === "error") {
-      void ctx.refresh();
+      setDetailsOpen((v) => !v);
+      return;
+    }
+    if (ctx.state.status === "setup_needed" || ctx.state.status === "auth_required") {
+      setDetailsOpen((v) => !v);
       return;
     }
     if (ctx.state.status === "onboarding") {
@@ -95,20 +122,99 @@ export function HamWorkspaceTopbarPill({ className }: HamWorkspaceTopbarPillProp
         data-testid="ham-workspace-pill"
         onClick={onPillClick}
         className={cn(
-          "flex items-center gap-2 rounded-full border border-white/10 bg-black/40 px-3 py-1 text-xs text-foreground/90 backdrop-blur transition-colors hover:bg-white/5",
+          "flex min-h-8 w-full max-w-full items-center gap-2 rounded-lg border px-3 py-1.5 text-left text-xs font-semibold backdrop-blur transition-colors",
+          pillClass,
           interactive ? "cursor-pointer" : "",
         )}
-        aria-haspopup={interactive ? "menu" : undefined}
-        aria-expanded={interactive ? pickerOpen : undefined}
+        aria-haspopup={
+          ctx.state.status === "ready" || ctx.state.status === "onboarding"
+            ? "menu"
+            : ctx.state.status === "setup_needed" ||
+                ctx.state.status === "auth_required" ||
+                ctx.state.status === "error"
+              ? "dialog"
+              : undefined
+        }
+        aria-expanded={
+          ctx.state.status === "ready" || ctx.state.status === "onboarding"
+            ? pickerOpen
+            : ctx.state.status === "setup_needed" ||
+                ctx.state.status === "auth_required" ||
+                ctx.state.status === "error"
+              ? detailsOpen
+              : undefined
+        }
       >
         <span className={cn("inline-block h-1.5 w-1.5 rounded-full", dotClass)} />
-        <span className="max-w-[12rem] truncate">{baseLabel}</span>
+        <span className="min-w-0 flex-1 truncate">{baseLabel}</span>
         {ctx.active?.role ? (
-          <span className="rounded bg-white/5 px-1 text-[10px] uppercase tracking-wide text-foreground/70">
+          <span className="shrink-0 rounded bg-white/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-white/75">
             {ctx.active.role}
           </span>
         ) : null}
       </button>
+      {detailsOpen ? (
+        <div
+          role="dialog"
+          aria-label={
+            ctx.state.status === "auth_required"
+              ? "Workspace sign-in needed"
+              : "Workspace setup needed"
+          }
+          className="absolute left-0 top-[calc(100%+0.5rem)] z-50 w-[min(20rem,calc(100vw-2rem))] rounded-xl border border-white/12 bg-[#07111a] p-4 text-left text-xs text-white shadow-2xl shadow-black/45"
+        >
+          {ctx.state.status === "error" ? (
+            <>
+              <h2 className="text-sm font-semibold text-red-50">Workspace error</h2>
+              <p className="mt-2 leading-relaxed text-white/75">
+                HAM could not load workspace context. Retry after checking the local API.
+              </p>
+              <p className="mt-3 rounded-lg border border-red-300/20 bg-red-300/10 p-3 leading-relaxed text-red-50">
+                {ctx.state.message}
+              </p>
+            </>
+          ) : ctx.state.status === "auth_required" ? (
+            <>
+              <h2 className="text-sm font-semibold text-sky-50">Workspace sign-in needed</h2>
+              <p className="mt-2 leading-relaxed text-white/75">
+                HAM could not load a workspace because no Clerk session is attached.
+                Sign in, then retry loading workspace context.
+              </p>
+            </>
+          ) : (
+            <>
+              <h2 className="text-sm font-semibold text-amber-50">Workspace setup needed</h2>
+              <p className="mt-2 leading-relaxed text-white/75">
+                HAM could not load a workspace because local workspace bypass is not enabled.
+              </p>
+              <div className="mt-3 rounded-lg border border-amber-300/20 bg-amber-300/10 p-3">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-100/80">
+                  Local dev instruction
+                </p>
+                <code className="mt-1 block select-all rounded bg-black/35 px-2 py-1.5 text-[11px] font-semibold text-amber-50">
+                  HAM_LOCAL_DEV_WORKSPACE_BYPASS=true
+                </code>
+              </div>
+            </>
+          )}
+          <div className="mt-4 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void ctx.refresh()}
+              className="rounded-lg border border-white/14 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/[0.15]"
+            >
+              Retry
+            </button>
+            <button
+              type="button"
+              onClick={() => setDetailsOpen(false)}
+              className="rounded-lg px-3 py-1.5 text-xs font-medium text-white/65 transition hover:bg-white/[0.08] hover:text-white"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      ) : null}
       {ctx.state.status === "ready" || ctx.state.status === "onboarding" ? (
         <WorkspacePicker
           workspaces={ctx.workspaces}
