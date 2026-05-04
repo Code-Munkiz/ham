@@ -19,6 +19,7 @@ import os
 import re
 import shutil
 import time
+from asyncio.subprocess import PIPE
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -307,6 +308,31 @@ def _format_sdk_query_failure(exc: BaseException, stderr_lines: list[str]) -> st
     return f"{msg} | stderr: {stderr_blob}"
 
 
+async def _probe_claude_cli(cli_path: str) -> str | None:
+    """Best-effort stdout/stderr from ``claude --bare --version`` (never raises)."""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            cli_path,
+            "--bare",
+            "--version",
+            stdout=PIPE,
+            stderr=PIPE,
+            env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+        )
+        out_b, err_b = await proc.communicate()
+        out = (out_b or b"").decode(errors="replace").strip()
+        err = (err_b or b"").decode(errors="replace").strip()
+        bits = [
+            f"exit={proc.returncode}",
+            f"v_out={_redact_diagnostic_text(out, cap=240)}" if out else "",
+            f"v_err={_redact_diagnostic_text(err, cap=400)}" if err else "",
+        ]
+        blob = " ".join(b for b in bits if b)
+        return blob or None
+    except Exception:
+        return None
+
+
 def _sanitize_capped_response_text(raw: str, cap: int) -> str:
     s = " ".join(raw.split())
     if len(s) > cap:
@@ -388,6 +414,11 @@ async def _run_claude_agent_sdk_plan_query(
         return None, "Claude Agent SDK query timed out.", readiness
     except Exception as exc:
         detail = _format_sdk_query_failure(exc, stderr_lines)
+        cli = _ham_preferred_cli_path()
+        if cli:
+            probe = await _probe_claude_cli(cli)
+            if probe:
+                detail = f"{detail} | cli_probe: {probe}"
         _LOG.warning("claude_agent_sdk query failed: %s", detail)
         return None, f"Claude Agent SDK query failed: {detail}", readiness
 
