@@ -5,8 +5,11 @@
  * jsdom for hook composition with the provider.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, render, renderHook, waitFor } from "@testing-library/react";
+import { act, render, renderHook, screen, waitFor } from "@testing-library/react";
 import * as React from "react";
+
+import { WorkspaceGate } from "@/components/workspace/WorkspaceGate";
+import { WORKSPACE_API_UNREACHABLE_USER_COPY } from "@/components/workspace/workspaceApiUnreachableCopy";
 
 vi.mock("@/lib/ham/workspaceApi", async () => {
   const actual = await vi.importActual<typeof import("@/lib/ham/workspaceApi")>(
@@ -31,6 +34,7 @@ import * as api from "@/lib/ham/workspaceApi";
 import {
   HamWorkspaceProvider,
   useHamWorkspace,
+  __TEST__,
 } from "@/lib/ham/HamWorkspaceContext";
 import { activeWorkspaceStorageKey } from "@/lib/ham/hamWorkspaceStorage";
 
@@ -223,6 +227,64 @@ describe("HamWorkspaceProvider initial fetch", () => {
       await result.current.refresh();
     });
     expect(result.current.state.status).toBe("ready");
+  });
+
+  it("classifies fetch TypeError as error with networkUnreachable metadata", async () => {
+    mockedGetMe.mockRejectedValue(new TypeError("Failed to fetch"));
+    const { result } = renderHook(() => useHamWorkspace(), { wrapper: withProvider() });
+    await waitFor(() => expect(result.current.state.status).toBe("error"));
+    const st = result.current.state;
+    expect(st.status).toBe("error");
+    if (st.status !== "error") throw new Error("expected error state");
+    expect(st.networkUnreachable).toBeDefined();
+    expect(st.networkUnreachable?.statusUrl.endsWith("/api/status")).toBe(true);
+    expect(st.networkUnreachable?.apiOrigin.length).toBeGreaterThan(0);
+    expect(st.message).toBe("Failed to fetch");
+  });
+
+  it("does not attach networkUnreachable for generic Errors", async () => {
+    mockedGetMe.mockRejectedValue(new Error("something else"));
+    const { result } = renderHook(() => useHamWorkspace(), { wrapper: withProvider() });
+    await waitFor(() => expect(result.current.state.status).toBe("error"));
+    const st = result.current.state;
+    expect(st.status).toBe("error");
+    if (st.status === "error") expect(st.networkUnreachable).toBeUndefined();
+  });
+});
+
+describe("classifyError (pure)", () => {
+  it("preserves HTTP workspace errors without networkUnreachable", () => {
+    const st = __TEST__.classifyError(new HamWorkspaceApiError(503, "X", "down"));
+    expect(st).toMatchObject({ status: "error", message: "down", code: "X" });
+    if (st.status === "error") expect(st.networkUnreachable).toBeUndefined();
+  });
+
+  it("tags likely fetch failures", () => {
+    const st = __TEST__.classifyError(new TypeError("Failed to fetch"));
+    expect(st.status).toBe("error");
+    if (st.status !== "error") throw new Error("expected error");
+    expect(st.networkUnreachable?.apiOrigin).toBeTruthy();
+    expect(st.networkUnreachable?.statusUrl).toContain("/api/status");
+    expect(st.message).toBe("Failed to fetch");
+  });
+});
+
+describe("WorkspaceGate network diagnostics UI", () => {
+  it("shows unreachable copy and Open API status when fetch fails at network layer", async () => {
+    mockedGetMe.mockRejectedValue(new TypeError("Failed to fetch"));
+    render(
+      <HamWorkspaceProvider>
+        <WorkspaceGate>
+          <div data-testid="child">child</div>
+        </WorkspaceGate>
+      </HamWorkspaceProvider>,
+    );
+    await waitFor(() => {
+      expect(screen.getByText(WORKSPACE_API_UNREACHABLE_USER_COPY)).toBeInTheDocument();
+    });
+    const link = screen.getByRole("link", { name: /open api status/i });
+    expect(link.getAttribute("href") ?? "").toMatch(/\/api\/status$/);
+    expect(screen.getByRole("button", { name: /^retry$/i })).toBeInTheDocument();
   });
 });
 

@@ -24,6 +24,11 @@ import {
   type HamWorkspaceSummary,
 } from "./workspaceApi";
 import {
+  buildHamApiStatusUrl,
+  getHamApiOriginLabel,
+  isLikelyHamApiFetchNetworkFailure,
+} from "./api";
+import {
   readActiveWorkspaceId,
   writeActiveWorkspaceId,
 } from "./hamWorkspaceStorage";
@@ -32,6 +37,14 @@ import {
 // State machine
 // ---------------------------------------------------------------------------
 
+/** Shown when GET /api/me fails before an HTTP response (fetch/network layer). */
+export interface HamWorkspaceNetworkUnreachableInfo {
+  /** API origin only — never secrets or tokens. */
+  apiOrigin: string;
+  /** `${apiOrigin}/api/status` for manual checks in a new tab. */
+  statusUrl: string;
+}
+
 export type HamWorkspaceState =
   | { status: "idle" }
   | { status: "loading" }
@@ -39,7 +52,13 @@ export type HamWorkspaceState =
   | { status: "auth_not_configured" }
   | { status: "setup_needed" }
   | { status: "auth_required" }
-  | { status: "error"; message: string; code: string | null }
+  | {
+      status: "error";
+      message: string;
+      code: string | null;
+      /** Present only for browser-level fetch failures (not HTTP JSON errors). */
+      networkUnreachable?: HamWorkspaceNetworkUnreachableInfo;
+    }
   | {
       status: "onboarding";
       me: HamMeResponse;
@@ -131,9 +150,21 @@ function classifyError(err: unknown): HamWorkspaceState {
       code: err.code,
     };
   }
+  const message = err instanceof Error ? err.message : "Failed to load workspace";
+  if (isLikelyHamApiFetchNetworkFailure(err)) {
+    return {
+      status: "error",
+      message,
+      code: null,
+      networkUnreachable: {
+        apiOrigin: getHamApiOriginLabel(),
+        statusUrl: buildHamApiStatusUrl(),
+      },
+    };
+  }
   return {
     status: "error",
-    message: err instanceof Error ? err.message : "Failed to load workspace",
+    message,
     code: null,
   };
 }

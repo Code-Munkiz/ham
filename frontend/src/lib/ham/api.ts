@@ -79,6 +79,45 @@ export async function mergeClerkAuthBearerIfNeeded(headers: Headers): Promise<vo
 }
 
 /**
+ * True when `fetch` rejected before an HTTP response (messages vary by browser).
+ * Does not apply to HTTP errors — those yield a `Response` and are handled separately.
+ */
+export function isLikelyHamApiFetchNetworkFailure(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const msg = err.message.toLowerCase();
+  if (err instanceof TypeError) {
+    if (msg.includes("failed to fetch")) return true;
+    if (msg.includes("fetch failed")) return true;
+    if (msg.includes("networkerror when attempting to fetch")) return true;
+    if (msg.includes("network request failed")) return true;
+    if (msg.includes("load failed")) return true;
+  }
+  return false;
+}
+
+/** Human-readable Ham API origin for diagnostics (never includes secrets). */
+export function getHamApiOriginLabel(): string {
+  try {
+    const base = getApiBase().trim();
+    return base || (typeof window !== "undefined" ? window.location.origin : "(same-origin)");
+  } catch {
+    return "(could not resolve API base)";
+  }
+}
+
+/** Absolute `/api/status` URL for the configured Ham API (for user-facing diagnostics links). */
+export function buildHamApiStatusUrl(): string {
+  try {
+    const base = getApiBase().replace(/\/+$/, "");
+    const origin =
+      base || (typeof window !== "undefined" ? window.location.origin.replace(/\/+$/, "") : "");
+    return `${origin}/api/status`;
+  } catch {
+    return "/api/status";
+  }
+}
+
+/**
  * Clerk session on `Authorization` when present; otherwise legacy `Authorization: Bearer` for HAM secrets.
  * When both are needed, sets `X-Ham-Operator-Authorization` for the HAM token.
  */

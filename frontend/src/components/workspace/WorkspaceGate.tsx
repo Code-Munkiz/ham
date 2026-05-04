@@ -23,6 +23,7 @@ import { useHamWorkspace } from "@/lib/ham/HamWorkspaceContext";
 
 import { WorkspaceOnboardingScreen } from "./WorkspaceOnboardingScreen";
 import { WorkspaceSetupMessage } from "./WorkspaceSetupMessage";
+import { WORKSPACE_API_UNREACHABLE_USER_COPY } from "./workspaceApiUnreachableCopy";
 
 export interface WorkspaceGateProps {
   children: React.ReactNode;
@@ -82,23 +83,40 @@ export function WorkspaceGate({ children, loadingFallback }: WorkspaceGateProps)
         />
       );
 
-    case "error":
+    case "error": {
+      const net = ctx.state.networkUnreachable;
       return (
         <div className="flex h-full w-full items-center justify-center p-6">
           <div className="max-w-md space-y-3 rounded-2xl border border-white/10 bg-black/40 p-6 text-sm">
             <p className="font-semibold">Couldn&rsquo;t load workspace</p>
-            <p className="text-foreground/70">{ctx.state.message}</p>
-            <Button
-              size="sm"
-              variant="outline"
-              type="button"
-              onClick={() => void ctx.refresh()}
-            >
-              Retry
-            </Button>
+            {net ? (
+              <>
+                <p className="text-foreground/85">{WORKSPACE_API_UNREACHABLE_USER_COPY}</p>
+                <p className="text-foreground/75">
+                  <span className="font-medium text-foreground/85">API endpoint: </span>
+                  <span className="break-all font-mono text-[13px]">{net.apiOrigin}</span>
+                </p>
+                <p className="text-[12px] text-foreground/55">{ctx.state.message}</p>
+              </>
+            ) : (
+              <p className="text-foreground/70">{ctx.state.message}</p>
+            )}
+            <div className="flex flex-wrap gap-2 pt-1">
+              <Button size="sm" variant="outline" type="button" onClick={() => void ctx.refresh()}>
+                Retry
+              </Button>
+              {net ? (
+                <Button size="sm" variant="outline" asChild>
+                  <a href={net.statusUrl} target="_blank" rel="noopener noreferrer">
+                    Open API status
+                  </a>
+                </Button>
+              ) : null}
+            </div>
           </div>
         </div>
       );
+    }
 
     case "auth_loading":
     case "idle":

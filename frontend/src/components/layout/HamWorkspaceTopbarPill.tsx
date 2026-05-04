@@ -14,6 +14,7 @@ import type { HamCreateWorkspaceBody } from "@/lib/ham/workspaceApi";
 
 import { WorkspaceOnboardingScreen } from "@/components/workspace/WorkspaceOnboardingScreen";
 import { WorkspacePicker } from "@/components/workspace/WorkspacePicker";
+import { WORKSPACE_API_UNREACHABLE_USER_COPY } from "@/components/workspace/workspaceApiUnreachableCopy";
 
 export interface HamWorkspaceTopbarPillProps {
   /** Tailwind utility overrides for the wrapper (positioning). */
@@ -189,12 +190,27 @@ export function HamWorkspaceTopbarPill({ className }: HamWorkspaceTopbarPillProp
           {ctx.state.status === "error" ? (
             <>
               <h2 className="text-sm font-semibold text-red-50">Workspace error</h2>
-              <p className="mt-2 leading-relaxed text-white/75">
-                HAM could not load workspace context. Retry after checking the local API.
-              </p>
-              <p className="mt-3 rounded-lg border border-red-300/20 bg-red-300/10 p-3 leading-relaxed text-red-50">
-                {ctx.state.message}
-              </p>
+              {ctx.state.networkUnreachable ? (
+                <>
+                  <p className="mt-2 leading-relaxed text-white/80">{WORKSPACE_API_UNREACHABLE_USER_COPY}</p>
+                  <p className="mt-2 leading-relaxed text-white/75">
+                    <span className="font-medium text-white/85">API endpoint: </span>
+                    <span className="break-all font-mono text-[11px] text-white/80">
+                      {ctx.state.networkUnreachable.apiOrigin}
+                    </span>
+                  </p>
+                  <p className="mt-2 text-[11px] leading-relaxed text-white/55">{ctx.state.message}</p>
+                </>
+              ) : (
+                <>
+                  <p className="mt-2 leading-relaxed text-white/75">
+                    HAM could not load workspace context. Retry or try again shortly.
+                  </p>
+                  <p className="mt-3 rounded-lg border border-red-300/20 bg-red-300/10 p-3 leading-relaxed text-red-50">
+                    {ctx.state.message}
+                  </p>
+                </>
+              )}
             </>
           ) : ctx.state.status === "auth_required" ? (
             <>
@@ -231,7 +247,7 @@ export function HamWorkspaceTopbarPill({ className }: HamWorkspaceTopbarPillProp
               </pre>
             </details>
           ) : null}
-          <div className="mt-4 flex items-center gap-2">
+          <div className="mt-4 flex flex-wrap items-center gap-2">
             {ctx.state.status === "auth_required" && clerkConfigured ? (
               <button
                 type="button"
@@ -240,6 +256,16 @@ export function HamWorkspaceTopbarPill({ className }: HamWorkspaceTopbarPillProp
               >
                 Sign in
               </button>
+            ) : null}
+            {ctx.state.status === "error" && ctx.state.networkUnreachable ? (
+              <a
+                href={ctx.state.networkUnreachable.statusUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-lg border border-white/14 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/[0.15]"
+              >
+                Open API status
+              </a>
             ) : null}
             <button
               type="button"
