@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+import json
+
 import pytest
 
 from src.ham.worker_adapters import claude_agent_adapter
@@ -286,6 +288,22 @@ class TestNoRealSdkAtModuleTop:
         except Exception as exc:  # pragma: no cover — safety net
             pytest.fail(f"check_claude_agent_readiness raised: {exc!r}")
         assert readiness.status in {"ready", "needs_sign_in", "unavailable"}
+
+
+class TestHeadlessNonzeroSummary:
+    def test_summarizes_cli_auth_json_stdout(self):
+        payload = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": True,
+                "api_error_status": 401,
+                "result": "Should not appear wholesale",
+            }
+        )
+        s = claude_agent_adapter._headless_nonzero_summary(payload, "")
+        assert "401" in s or "http=401" in s
+        assert "Should not appear wholesale" not in s
 
 
 class TestDiagnosticRedaction:

@@ -335,6 +335,26 @@ async def _probe_claude_cli(cli_path: str) -> str | None:
         return None
 
 
+def _headless_nonzero_summary(stdout_txt: str, stderr_txt: str) -> str:
+    """Short operator-facing summary when ``claude -p`` exits non-zero (often API/auth JSON on stdout)."""
+    st = stdout_txt.strip()
+    try:
+        obj = json.loads(st)
+        if isinstance(obj, dict) and obj.get("is_error"):
+            api_code = obj.get("api_error_status")
+            subtype = obj.get("subtype")
+            bits = ["headless_cli_error"]
+            if api_code is not None:
+                bits.append(f"http={api_code}")
+            if isinstance(subtype, str):
+                bits.append(f"subtype={subtype}")
+            return _redact_diagnostic_text(" ".join(bits), cap=400)
+    except json.JSONDecodeError:
+        pass
+    tail = stderr_txt or st[:600]
+    return _redact_diagnostic_text(f"exit=1 {tail}", cap=600)
+
+
 async def _run_claude_headless_plan_json_query(
     prompt: str,
     timeout_sec: float,
@@ -374,11 +394,7 @@ async def _run_claude_headless_plan_json_query(
     stderr_txt = (err_b or b"").decode(errors="replace").strip()
     stdout_txt = (out_b or b"").decode(errors="replace").strip()
     if proc.returncode != 0:
-        tail = stderr_txt or stdout_txt[:800]
-        return None, _redact_diagnostic_text(
-            f"exit={proc.returncode} {tail}",
-            cap=700,
-        )
+        return None, _headless_nonzero_summary(stdout_txt, stderr_txt)
     try:
         payload = json.loads(stdout_txt)
     except json.JSONDecodeError:
