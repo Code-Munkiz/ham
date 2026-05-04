@@ -5,8 +5,9 @@ whether one of its supported auth modes appears configured (presence-only;
 values are never read or returned).
 
 Controlled smoke (``run_claude_agent_sdk_smoke``) and the bounded mission
-runner (``run_claude_agent_sdk_mission``) call ``query()`` with **no tools**,
-``permission_mode='plan'``, ``max_turns=1`` — only from feature-gated HTTP routes.
+runner (``run_claude_agent_sdk_mission``) call ``query()`` with **plan**
+permissions (no tool execution), ``max_turns=1``, bare/isolated settings —
+only from feature-gated HTTP routes.
 """
 
 from __future__ import annotations
@@ -331,7 +332,6 @@ def _plan_mode_query_options(stderr_lines: list[str]) -> Any:
             stderr_lines.pop(0)
 
     kwargs: dict[str, Any] = {
-        "tools": [],
         "allowed_tools": [],
         "permission_mode": "plan",
         "max_turns": 1,
@@ -490,7 +490,7 @@ class ClaudeAgentMissionResult:
 
 
 async def run_claude_agent_sdk_smoke() -> ClaudeAgentSmokeResult:
-    """One harmless SDK ``query`` with tools disabled and plan-only permissions.
+    """One harmless SDK ``query`` with plan-only permissions (no tool execution).
 
     Uses server-side auth already present in the environment. Does not pass
     project files, user prompts, or tool allowlists beyond empty/disabled tools.
