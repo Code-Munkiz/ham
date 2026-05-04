@@ -50,6 +50,14 @@ pip install pytest
 python -m pytest tests/ -q
 ```
 
+- Cloud Agent / VM caveats:
+  - Some PTY-based tests hang in headless VMs. Exclude them with:
+    - `python -m pytest tests/ -q --ignore=tests/test_workspace_terminal.py`
+  - If you see a pre-existing failure in the vision-capabilities test, deselect it:
+    - `-k 'not test_known_vision_model_enables_image_input'`
+  - If `pip install -r requirements.txt` fails due to a system `PyJWT` conflict, run:
+    - `pip install --ignore-installed 'PyJWT>=2.8.0'` first, then install requirements.
+
 Frontend typecheck: `npm run lint` in `frontend/` (`tsc --noEmit`). See [`AGENTS.md`](AGENTS.md) for per-area test guidance.
 
 Before landing edits to canonical markdown, run `python scripts/check_docs_freshness.py` (same check as the CI **warning-only** doc freshness step).
