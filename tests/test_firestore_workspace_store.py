@@ -11,7 +11,6 @@ from datetime import UTC, datetime
 from typing import Any
 
 import pytest
-from google.cloud.firestore_v1.base_query import FieldFilter
 
 from src.ham.workspace_models import (  # noqa: I001  # see __future__ import above
     MembershipRecord,
@@ -108,7 +107,7 @@ class _FakeQuery:
     group: str | None
     filters: list[tuple[str, Any, Any]] = field(default_factory=list)
 
-    def where(self, *, filter: FieldFilter) -> _FakeQuery:  # noqa: A002
+    def where(self, *, filter: Any) -> _FakeQuery:  # noqa: A002
         # FieldFilter exposes ``field_path``/``op_string``/``value``.
         f = (filter.field_path, filter.op_string, filter.value)
         return _FakeQuery(
@@ -156,7 +155,7 @@ class _FakeCollection:
     def document(self, doc_id: str) -> _FakeDocRef:
         return _FakeDocRef(self.root, path=f"{self.prefix}/{doc_id}")
 
-    def where(self, *, filter: FieldFilter) -> _FakeQuery:  # noqa: A002
+    def where(self, *, filter: Any) -> _FakeQuery:  # noqa: A002
         return _FakeQuery(self.root, prefix=self.prefix, group=None).where(filter=filter)
 
     def stream(self, transaction: Any = None):  # noqa: ARG002
@@ -188,21 +187,6 @@ class _FakeFirestore:
 
     def transaction(self) -> _FakeTransaction:
         return _FakeTransaction(self)
-
-
-# ---------------------------------------------------------------------------
-# Transactional passthrough — same idea as the chat-session store tests.
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture(autouse=True)
-def _transactional_passthrough(monkeypatch: pytest.MonkeyPatch) -> None:
-    from google.cloud.firestore_v1.transaction import _Transactional
-
-    def _call(self, transaction, *args, **kwargs):
-        return self.to_wrap(transaction, *args, **kwargs)
-
-    monkeypatch.setattr(_Transactional, "__call__", _call)
 
 
 # ---------------------------------------------------------------------------
@@ -603,7 +587,7 @@ class _ExplodingClient:
         def document(self, doc_id: str) -> _ExplodingClient._ExplodingDoc:
             return _ExplodingClient._ExplodingDoc(self._root, f"{self.prefix}/{doc_id}")
 
-        def where(self, *, filter: FieldFilter):  # noqa: A002, ARG002
+        def where(self, *, filter: Any):  # noqa: A002, ARG002
             return self
 
         def stream(self, transaction: Any = None):  # noqa: ARG002
