@@ -27,7 +27,18 @@ import { WorkspaceChatPanel } from "./components/WorkspaceChatPanel";
 import { WorkspaceTerminalView } from "./screens/terminal/WorkspaceTerminalView";
 import { HamWorkspaceTopbarPill } from "@/components/layout/HamWorkspaceTopbarPill";
 import { useHamWorkspace } from "@/lib/ham/HamWorkspaceContext";
+import { isLocalRuntimeConfigured } from "./adapters/localRuntime";
 import { toast } from "sonner";
+
+/**
+ * Build-time opt-in for dev-only surfaces (`VITE_HAM_SHOW_LOCAL_DEV_HINTS=true`).
+ * Same flag used by `HamWorkspaceTopbarPill` and `WorkspaceGate`. Does **not**
+ * gate `import.meta.env.DEV` here so power users can keep the runtime-only dock
+ * available in production builds when they explicitly enable it.
+ */
+function isWorkspaceDeveloperModeEnabled(): boolean {
+  return (import.meta.env.VITE_HAM_SHOW_LOCAL_DEV_HINTS as string | undefined) === "true";
+}
 
 /** Keep in sync with `HWW_LAST_SESSION_KEY` in `WorkspaceChatScreen.tsx`. */
 const HWW_SIDEBAR_LAST_SESSION_KEY = "hww.chat.lastSessionId";
@@ -512,8 +523,20 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
     }
   });
   const [drawerOpen, setDrawerOpen] = React.useState(false);
-  /** SHELL-015 — docked terminal strip on chat route */
+  /**
+   * SHELL-015 — docked terminal strip on chat route.
+   * Hidden by default for hosted users with no paired local runtime; revealed
+   * once `isLocalRuntimeConfigured()` is true or developer mode is enabled.
+   */
   const [chatTerminalDockOpen, setChatTerminalDockOpen] = React.useState(false);
+  const [hasLocalRuntime, setHasLocalRuntime] = React.useState(() => isLocalRuntimeConfigured());
+  React.useEffect(() => {
+    const sync = () => setHasLocalRuntime(isLocalRuntimeConfigured());
+    window.addEventListener("hww-local-runtime-changed", sync);
+    return () => window.removeEventListener("hww-local-runtime-changed", sync);
+  }, []);
+  const developerModeEnabled = isWorkspaceDeveloperModeEnabled();
+  const terminalDockVisible = hasLocalRuntime || developerModeEnabled;
   const [workspaceChatPanelOpen, setWorkspaceChatPanelOpen] = React.useState(false);
   const [sessions, setSessions] = React.useState<ChatSessionSummary[]>([]);
   const [sessionsLoading, setSessionsLoading] = React.useState(false);
@@ -696,8 +719,8 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
       >
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           {children}
-          {isWorkspaceChat ? (
-            <div className="shrink-0 border-t border-white/[0.06] bg-[#030a0f]/90">
+          {isWorkspaceChat && terminalDockVisible ? (
+            <div className="shrink-0 border-t border-white/[0.06] bg-[#030a0f]/90" data-testid="hww-chat-terminal-dock">
               {chatTerminalDockOpen ? (
                 <div className="h-[min(14rem,38vh)] min-h-0 w-full">
                   <WorkspaceTerminalView
