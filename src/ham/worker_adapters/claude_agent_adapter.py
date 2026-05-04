@@ -5,9 +5,11 @@ whether one of its supported auth modes appears configured (presence-only;
 values are never read or returned).
 
 Controlled smoke (``run_claude_agent_sdk_smoke``) and the bounded mission
-runner (``run_claude_agent_sdk_mission``) call ``query()`` with **plan**
-permissions (no tool execution), ``max_turns=1``, bare/isolated settings —
-only from feature-gated HTTP routes.
+runner (``run_claude_agent_sdk_mission``) first attempt ``query()`` (SDK +
+stream-json) with **plan** permissions (no tool execution), ``max_turns=1``
+and ``--bare``. When that subprocess exits non-zero (seen on Cloud Run),
+the adapter retries once via the same Claude CLI in ``--bare -p`` JSON
+headless mode with identical prompts — gated HTTP routes only.
 """
 
 from __future__ import annotations
@@ -333,6 +335,60 @@ async def _probe_claude_cli(cli_path: str) -> str | None:
         return None
 
 
+async def _run_claude_headless_plan_json_query(
+    prompt: str,
+    timeout_sec: float,
+    response_cap: int,
+) -> tuple[str | None, str | None]:
+    """Same prompt/model constraints via ``claude --bare -p`` JSON output (no shell).
+
+    Used only when ``query()`` stream-json transport exits unsuccessfully.
+    """
+    cli = _ham_preferred_cli_path()
+    if not cli:
+        return None, "Claude CLI not found on PATH"
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            cli,
+            "--bare",
+            "-p",
+            prompt,
+            "--output-format",
+            "json",
+            "--max-turns",
+            "1",
+            "--permission-mode",
+            "plan",
+            stdout=PIPE,
+            stderr=PIPE,
+            env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+        )
+        out_b, err_b = await asyncio.wait_for(proc.communicate(), timeout=timeout_sec)
+    except TimeoutError:
+        return None, "Claude headless CLI timed out."
+    except Exception as conv_exc:
+        return None, _redact_diagnostic_text(
+            f"Claude headless CLI failed: {type(conv_exc).__name__}", cap=300
+        )
+
+    stderr_txt = (err_b or b"").decode(errors="replace").strip()
+    stdout_txt = (out_b or b"").decode(errors="replace").strip()
+    if proc.returncode != 0:
+        tail = stderr_txt or stdout_txt[:800]
+        return None, _redact_diagnostic_text(
+            f"exit={proc.returncode} {tail}",
+            cap=700,
+        )
+    try:
+        payload = json.loads(stdout_txt)
+    except json.JSONDecodeError:
+        return None, "Claude headless CLI stdout was not valid JSON."
+    text = payload.get("result")
+    if not isinstance(text, str):
+        return None, "Claude headless JSON missing string result field."
+    return _sanitize_capped_response_text(text.strip(), response_cap), None
+
+
 def _sanitize_capped_response_text(raw: str, cap: int) -> str:
     s = " ".join(raw.split())
     if len(s) > cap:
@@ -411,7 +467,20 @@ async def _run_claude_agent_sdk_plan_query(
     except TimeoutError:
         return None, "Claude Agent SDK query timed out.", readiness
     except Exception as exc:
+        hl_text, hl_err = await _run_claude_headless_plan_json_query(
+            prompt, timeout_sec, response_cap
+        )
+        if hl_text is not None:
+            _LOG.warning(
+                "claude_agent_sdk stream-json failed (%s); headless CLI fallback ok",
+                _format_sdk_query_failure(exc, stderr_lines),
+            )
+            return hl_text, None, readiness
+
         detail = _format_sdk_query_failure(exc, stderr_lines)
+        if hl_err:
+            detail = f"{detail} | headless_fallback: {hl_err}"
+
         cli = _ham_preferred_cli_path()
         if cli:
             probe = await _probe_claude_cli(cli)
