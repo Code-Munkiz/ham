@@ -26,6 +26,7 @@ import { WorkspaceChatFloatingToggle } from "./components/WorkspaceChatFloatingT
 import { WorkspaceChatPanel } from "./components/WorkspaceChatPanel";
 import { WorkspaceTerminalView } from "./screens/terminal/WorkspaceTerminalView";
 import { HamWorkspaceTopbarPill } from "@/components/layout/HamWorkspaceTopbarPill";
+import { useHamWorkspace } from "@/lib/ham/HamWorkspaceContext";
 import { toast } from "sonner";
 
 /** Keep in sync with `HWW_LAST_SESSION_KEY` in `WorkspaceChatScreen.tsx`. */
@@ -499,6 +500,7 @@ function WorkspaceSideNav({
 }
 
 export function WorkspaceShell({ children }: WorkspaceShellProps) {
+  const hamWorkspace = useHamWorkspace();
   const location = useLocation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -514,7 +516,7 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
   const [chatTerminalDockOpen, setChatTerminalDockOpen] = React.useState(false);
   const [workspaceChatPanelOpen, setWorkspaceChatPanelOpen] = React.useState(false);
   const [sessions, setSessions] = React.useState<ChatSessionSummary[]>([]);
-  const [sessionsLoading, setSessionsLoading] = React.useState(true);
+  const [sessionsLoading, setSessionsLoading] = React.useState(false);
   const [sessionsError, setSessionsError] = React.useState<string | null>(null);
   const [sessionFilter, setSessionFilter] = React.useState("");
 
@@ -524,8 +526,15 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
       : null;
 
   const [deletingSessionId, setDeletingSessionId] = React.useState<string | null>(null);
+  const canLoadSessions = hamWorkspace.state.status === "ready";
 
   const loadSessions = React.useCallback(async () => {
+    if (!canLoadSessions) {
+      setSessions([]);
+      setSessionsError(null);
+      setSessionsLoading(false);
+      return;
+    }
     setSessionsLoading(true);
     setSessionsError(null);
     try {
@@ -537,14 +546,21 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
     } finally {
       setSessionsLoading(false);
     }
-  }, []);
+  }, [canLoadSessions]);
 
   React.useEffect(() => {
+    if (!canLoadSessions) {
+      setSessions([]);
+      setSessionsError(null);
+      setSessionsLoading(false);
+      return;
+    }
     void loadSessions();
-  }, [loadSessions, location.pathname, location.search]);
+  }, [canLoadSessions, loadSessions, location.pathname, location.search]);
 
   const handleDeleteSession = React.useCallback(
     async (sid: string) => {
+      if (!canLoadSessions) return;
       if (!globalThis.confirm("Delete this chat thread? Server-stored messages for this session will be removed.")) {
         return;
       }
@@ -567,7 +583,7 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
         setDeletingSessionId(null);
       }
     },
-    [activeSessionId, loadSessions, navigate],
+    [activeSessionId, canLoadSessions, loadSessions, navigate],
   );
 
   const pageTitle = workspacePathTitle(location.pathname);
@@ -587,6 +603,7 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
     sessionsLoading,
     sessionsError,
     onSessionsRetry: () => {
+      if (!canLoadSessions) return;
       void loadSessions();
     },
     sessionFilter,
@@ -718,10 +735,13 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
         </div>
       </div>
       <WorkspaceMobileTabBar />
-      {!isWorkspaceChat ? (
+      {!isWorkspaceChat && canLoadSessions ? (
         <WorkspaceChatFloatingToggle onOpen={() => setWorkspaceChatPanelOpen(true)} />
       ) : null}
-      <WorkspaceChatPanel open={workspaceChatPanelOpen} onClose={() => setWorkspaceChatPanelOpen(false)} />
+      <WorkspaceChatPanel
+        open={workspaceChatPanelOpen && canLoadSessions}
+        onClose={() => setWorkspaceChatPanelOpen(false)}
+      />
     </div>
   );
 }

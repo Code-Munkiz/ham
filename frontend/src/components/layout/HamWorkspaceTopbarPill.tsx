@@ -25,9 +25,9 @@ export function HamWorkspaceTopbarPill({ className }: HamWorkspaceTopbarPillProp
   const [pickerOpen, setPickerOpen] = React.useState(false);
   const [createOpen, setCreateOpen] = React.useState(false);
   const [detailsOpen, setDetailsOpen] = React.useState(false);
-  const clerkConfigured = Boolean(
-    (import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined)?.trim(),
-  );
+  const clerkConfigured =
+    ctx.hostedAuth?.clerkConfigured ??
+    Boolean((import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined)?.trim());
   const showLocalDevHint =
     import.meta.env.DEV &&
     !clerkConfigured &&
@@ -37,7 +37,10 @@ export function HamWorkspaceTopbarPill({ className }: HamWorkspaceTopbarPillProp
     switch (ctx.state.status) {
       case "idle":
       case "loading":
+      case "auth_loading":
         return "Loading…";
+      case "auth_not_configured":
+        return "Auth not configured";
       case "setup_needed":
         return "Setup needed";
       case "auth_required":
@@ -56,8 +59,10 @@ export function HamWorkspaceTopbarPill({ className }: HamWorkspaceTopbarPillProp
       case "ready":
         return "bg-emerald-400";
       case "loading":
+      case "auth_loading":
       case "idle":
         return "bg-foreground/40 animate-pulse";
+      case "auth_not_configured":
       case "auth_required":
       case "setup_needed":
         return "bg-amber-400";
@@ -72,12 +77,14 @@ export function HamWorkspaceTopbarPill({ className }: HamWorkspaceTopbarPillProp
     ctx.state.status === "ready" ||
     ctx.state.status === "onboarding" ||
     ctx.state.status === "setup_needed" ||
+    ctx.state.status === "auth_not_configured" ||
     ctx.state.status === "auth_required" ||
     ctx.state.status === "error";
 
   const pillClass = (() => {
     switch (ctx.state.status) {
       case "setup_needed":
+      case "auth_not_configured":
         return "border-amber-300/45 bg-amber-500/20 text-amber-50 shadow-[0_0_0_1px_rgba(251,191,36,0.12)] hover:bg-amber-500/25";
       case "auth_required":
         return "border-sky-300/45 bg-sky-500/20 text-sky-50 shadow-[0_0_0_1px_rgba(125,211,252,0.12)] hover:bg-sky-500/25";
@@ -89,6 +96,7 @@ export function HamWorkspaceTopbarPill({ className }: HamWorkspaceTopbarPillProp
         return "border-sky-300/35 bg-sky-500/[0.15] text-white hover:bg-sky-500/20";
       case "idle":
       case "loading":
+      case "auth_loading":
         return "border-white/14 bg-white/[0.08] text-white/85";
     }
   })();
@@ -98,7 +106,11 @@ export function HamWorkspaceTopbarPill({ className }: HamWorkspaceTopbarPillProp
       setDetailsOpen((v) => !v);
       return;
     }
-    if (ctx.state.status === "setup_needed" || ctx.state.status === "auth_required") {
+    if (
+      ctx.state.status === "setup_needed" ||
+      ctx.state.status === "auth_not_configured" ||
+      ctx.state.status === "auth_required"
+    ) {
       setDetailsOpen((v) => !v);
       return;
     }
@@ -137,6 +149,7 @@ export function HamWorkspaceTopbarPill({ className }: HamWorkspaceTopbarPillProp
           ctx.state.status === "ready" || ctx.state.status === "onboarding"
             ? "menu"
             : ctx.state.status === "setup_needed" ||
+                ctx.state.status === "auth_not_configured" ||
                 ctx.state.status === "auth_required" ||
                 ctx.state.status === "error"
               ? "dialog"
@@ -146,6 +159,7 @@ export function HamWorkspaceTopbarPill({ className }: HamWorkspaceTopbarPillProp
           ctx.state.status === "ready" || ctx.state.status === "onboarding"
             ? pickerOpen
             : ctx.state.status === "setup_needed" ||
+                ctx.state.status === "auth_not_configured" ||
                 ctx.state.status === "auth_required" ||
                 ctx.state.status === "error"
               ? detailsOpen
@@ -166,6 +180,8 @@ export function HamWorkspaceTopbarPill({ className }: HamWorkspaceTopbarPillProp
           aria-label={
             ctx.state.status === "auth_required"
               ? "Sign in required"
+              : ctx.state.status === "auth_not_configured"
+                ? "Authentication is not configured"
               : "Workspace unavailable"
           }
           className="absolute left-0 top-[calc(100%+0.5rem)] z-50 w-[min(20rem,calc(100vw-2rem))] rounded-xl border border-white/12 bg-[#07111a] p-4 text-left text-xs text-white shadow-2xl shadow-black/45"
@@ -185,6 +201,15 @@ export function HamWorkspaceTopbarPill({ className }: HamWorkspaceTopbarPillProp
               <h2 className="text-sm font-semibold text-sky-50">Sign in required</h2>
               <p className="mt-2 leading-relaxed text-white/75">
                 Please sign in to load your HAM workspace.
+              </p>
+            </>
+          ) : ctx.state.status === "auth_not_configured" ? (
+            <>
+              <h2 className="text-sm font-semibold text-amber-50">
+                Authentication is not configured
+              </h2>
+              <p className="mt-2 leading-relaxed text-white/75">
+                Set VITE_CLERK_PUBLISHABLE_KEY and redeploy.
               </p>
             </>
           ) : (
@@ -210,7 +235,7 @@ export function HamWorkspaceTopbarPill({ className }: HamWorkspaceTopbarPillProp
             {ctx.state.status === "auth_required" && clerkConfigured ? (
               <button
                 type="button"
-                onClick={() => window.location.assign("/sign-in")}
+                onClick={() => ctx.openSignIn?.()}
                 className="rounded-lg border border-sky-300/25 bg-sky-400/20 px-3 py-1.5 text-xs font-semibold text-sky-50 transition hover:bg-sky-400/30"
               >
                 Sign in

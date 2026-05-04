@@ -20,6 +20,7 @@ function baseCtx(
     workspaces: [],
     active: null,
     authMode: null,
+    hostedAuth: null,
     refresh: vi.fn(async () => undefined),
     selectWorkspace: vi.fn(),
     createWorkspace: vi.fn(),
@@ -74,7 +75,14 @@ describe("HamWorkspaceTopbarPill", () => {
   });
 
   it("points auth-required details toward sign-in", () => {
-    mockUseHamWorkspace.mockReturnValue(baseCtx({ state: { status: "auth_required" } }));
+    const openSignIn = vi.fn();
+    mockUseHamWorkspace.mockReturnValue(
+      baseCtx({
+        state: { status: "auth_required" },
+        hostedAuth: { clerkConfigured: true, isLoaded: true, isSignedIn: false },
+        openSignIn,
+      }),
+    );
 
     render(<HamWorkspaceTopbarPill />);
     fireEvent.click(screen.getByRole("button", { name: /sign in/i }));
@@ -83,6 +91,27 @@ describe("HamWorkspaceTopbarPill", () => {
     expect(
       screen.getByText("Please sign in to load your HAM workspace."),
     ).toBeInTheDocument();
+    const signInButtons = screen.getAllByRole("button", { name: /^sign in$/i });
+    fireEvent.click(signInButtons[signInButtons.length - 1]);
+    expect(openSignIn).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("button", { name: /refresh/i })).toBeInTheDocument();
+  });
+
+  it("shows auth-not-configured details without a sign-in button", () => {
+    mockUseHamWorkspace.mockReturnValue(
+      baseCtx({
+        state: { status: "auth_not_configured" },
+        hostedAuth: { clerkConfigured: false, isLoaded: true, isSignedIn: false },
+      }),
+    );
+
+    render(<HamWorkspaceTopbarPill />);
+    fireEvent.click(screen.getByRole("button", { name: /auth not configured/i }));
+
+    expect(screen.getByText("Authentication is not configured")).toBeInTheDocument();
+    expect(
+      screen.getByText("Set VITE_CLERK_PUBLISHABLE_KEY and redeploy."),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^sign in$/i })).not.toBeInTheDocument();
   });
 });

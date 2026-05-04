@@ -35,6 +35,8 @@ import {
 export type HamWorkspaceState =
   | { status: "idle" }
   | { status: "loading" }
+  | { status: "auth_loading" }
+  | { status: "auth_not_configured" }
   | { status: "setup_needed" }
   | { status: "auth_required" }
   | { status: "error"; message: string; code: string | null }
@@ -53,11 +55,29 @@ export interface HamWorkspaceContextValue {
   workspaces: HamWorkspaceSummary[];
   active: HamWorkspaceSummary | null;
   authMode: HamAuthMode | null;
+  hostedAuth: HamWorkspaceHostedAuthState | null;
+  openSignIn?: () => void;
   refresh: () => Promise<void>;
   selectWorkspace: (workspaceId: string) => void;
   createWorkspace: (body: HamCreateWorkspaceBody) => Promise<HamWorkspaceSummary>;
   patchActiveWorkspace: (patch: HamPatchWorkspaceBody) => Promise<HamWorkspaceSummary>;
   hasPerm: (perm: string) => boolean;
+}
+
+export type HamWorkspaceHostedAuthState = {
+  clerkConfigured: boolean;
+  isLoaded: boolean;
+  isSignedIn: boolean;
+};
+
+export interface HamWorkspaceProviderProps {
+  children: React.ReactNode;
+  /**
+   * When provided by App's Clerk wrapper, prevents protected workspace calls
+   * until Clerk has loaded and the user is signed in.
+   */
+  hostedAuth?: HamWorkspaceHostedAuthState | null;
+  openSignIn?: () => void;
 }
 
 const HamWorkspaceContext = React.createContext<HamWorkspaceContextValue | null>(null);
@@ -132,7 +152,11 @@ function selectActiveSummary(
 // Provider
 // ---------------------------------------------------------------------------
 
-export function HamWorkspaceProvider({ children }: { children: React.ReactNode }) {
+export function HamWorkspaceProvider({
+  children,
+  hostedAuth = null,
+  openSignIn,
+}: HamWorkspaceProviderProps) {
   const [state, setState] = React.useState<HamWorkspaceState>({ status: "idle" });
   const inflightRef = React.useRef<Promise<void> | null>(null);
 
@@ -148,6 +172,20 @@ export function HamWorkspaceProvider({ children }: { children: React.ReactNode }
   );
 
   const refresh = React.useCallback(async (): Promise<void> => {
+    if (hostedAuth) {
+      if (!hostedAuth.clerkConfigured) {
+        setState({ status: "auth_not_configured" });
+        return;
+      }
+      if (!hostedAuth.isLoaded) {
+        setState({ status: "auth_loading" });
+        return;
+      }
+      if (!hostedAuth.isSignedIn) {
+        setState({ status: "auth_required" });
+        return;
+      }
+    }
     if (inflightRef.current) {
       return inflightRef.current;
     }
@@ -169,7 +207,7 @@ export function HamWorkspaceProvider({ children }: { children: React.ReactNode }
     })();
     inflightRef.current = p;
     return p;
-  }, [persistSelection]);
+  }, [hostedAuth, persistSelection]);
 
   React.useEffect(() => {
     void refresh();
@@ -288,13 +326,15 @@ export function HamWorkspaceProvider({ children }: { children: React.ReactNode }
       workspaces,
       active,
       authMode,
+      hostedAuth,
+      openSignIn,
       refresh,
       selectWorkspace,
       createWorkspace,
       patchActiveWorkspace,
       hasPerm,
     };
-  }, [state, refresh, selectWorkspace, createWorkspace, patchActiveWorkspace]);
+  }, [state, hostedAuth, openSignIn, refresh, selectWorkspace, createWorkspace, patchActiveWorkspace]);
 
   return <HamWorkspaceContext.Provider value={value}>{children}</HamWorkspaceContext.Provider>;
 }

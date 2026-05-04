@@ -39,6 +39,27 @@ describe("WorkspaceSetupMessage", () => {
     expect(onRetry).toHaveBeenCalledTimes(1);
   });
 
+  it("shows auth-not-configured copy without a dead sign-in button", () => {
+    const onRetry = vi.fn();
+    render(<WorkspaceSetupMessage mode="auth_not_configured" onRetry={onRetry} />);
+
+    expect(screen.getByText("Authentication is not configured")).toBeInTheDocument();
+    expect(
+      screen.getByText("Set VITE_CLERK_PUBLISHABLE_KEY and redeploy."),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Sign in" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it("omits sign-in action when auth is required but no sign-in handler is provided", () => {
+    render(<WorkspaceSetupMessage mode="auth_required" />);
+
+    expect(screen.getByText("Sign in required")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Sign in" })).not.toBeInTheDocument();
+  });
+
   it("shows local-only developer hint only when explicitly enabled", () => {
     render(<WorkspaceSetupMessage showDeveloperHint />);
 
