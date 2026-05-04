@@ -28,7 +28,7 @@ Canonical architecture and agent context live at the repo root: [`VISION.md`](..
 
 **Cloud Agent / HAM VM Git:** these environments use **branch → push branch → open PR into `main`**. Direct **`git push origin main`** and **force-push to `main`** are forbidden — see [`AGENTS.md`](../AGENTS.md) (**Cloud Agent / HAM VM Git policy**).
 
-**Overlapping docs-only PRs:** Prefer editing canonical docs in place instead of spawning duplicate PR churn; overlap checks and tokens live under [`AGENTS.md`](../AGENTS.md) and ship in deterministic launch prompts (`CURSOR_AGENT_BASE_REVISION` in `cursor_agent_workflow.py`). When you have GitHub CLI auth, run `gh pr list --repo <org>/<repo> --state open --limit 50` before a docs-only PR; if `gh` is unavailable or returns auth errors, extend an existing open PR or branch manually rather than opening parallel duplicates.
+**Overlapping docs-only PRs:** Prefer editing canonical docs in place instead of spawning duplicate PR churn; overlap checks and tokens live under [`AGENTS.md`](../AGENTS.md) and ship in deterministic launch prompts (`CURSOR_AGENT_BASE_REVISION` in `cursor_agent_workflow.py`). When you have GitHub CLI auth, run `gh pr list --repo <org>/<repo> --state open --limit 50` before a docs-only PR; if `gh` is unavailable or returns auth errors (for example HTTP 401), automation cannot complete the scan—extend an existing open docs PR/branch manually, or have an operator with `gh auth login` run the list and only open a new PR when no overlap exists. When automation *does* find overlapping intent, report **`OVERLAPPING_DOCS_PR_FOUND`** with PR numbers instead of opening a duplicate.
 
 ### Suggested read order (Cloud Agent + missions)
 
