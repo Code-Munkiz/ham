@@ -25,6 +25,13 @@ export function HamWorkspaceTopbarPill({ className }: HamWorkspaceTopbarPillProp
   const [pickerOpen, setPickerOpen] = React.useState(false);
   const [createOpen, setCreateOpen] = React.useState(false);
   const [detailsOpen, setDetailsOpen] = React.useState(false);
+  const clerkConfigured = Boolean(
+    (import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined)?.trim(),
+  );
+  const showLocalDevHint =
+    import.meta.env.DEV &&
+    !clerkConfigured &&
+    (import.meta.env.VITE_HAM_SHOW_LOCAL_DEV_HINTS as string | undefined) === "true";
 
   const baseLabel = (() => {
     switch (ctx.state.status) {
@@ -158,8 +165,8 @@ export function HamWorkspaceTopbarPill({ className }: HamWorkspaceTopbarPillProp
           role="dialog"
           aria-label={
             ctx.state.status === "auth_required"
-              ? "Workspace sign-in needed"
-              : "Workspace setup needed"
+              ? "Sign in required"
+              : "Workspace unavailable"
           }
           className="absolute left-0 top-[calc(100%+0.5rem)] z-50 w-[min(20rem,calc(100vw-2rem))] rounded-xl border border-white/12 bg-[#07111a] p-4 text-left text-xs text-white shadow-2xl shadow-black/45"
         >
@@ -175,35 +182,46 @@ export function HamWorkspaceTopbarPill({ className }: HamWorkspaceTopbarPillProp
             </>
           ) : ctx.state.status === "auth_required" ? (
             <>
-              <h2 className="text-sm font-semibold text-sky-50">Workspace sign-in needed</h2>
+              <h2 className="text-sm font-semibold text-sky-50">Sign in required</h2>
               <p className="mt-2 leading-relaxed text-white/75">
-                HAM could not load a workspace because no Clerk session is attached.
-                Sign in, then retry loading workspace context.
+                Please sign in to load your HAM workspace.
               </p>
             </>
           ) : (
             <>
-              <h2 className="text-sm font-semibold text-amber-50">Workspace setup needed</h2>
+              <h2 className="text-sm font-semibold text-amber-50">Workspace unavailable</h2>
               <p className="mt-2 leading-relaxed text-white/75">
-                HAM could not load a workspace because local workspace bypass is not enabled.
+                HAM could not load your workspace. Sign in again or contact your workspace
+                admin.
               </p>
-              <div className="mt-3 rounded-lg border border-amber-300/20 bg-amber-300/10 p-3">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-100/80">
-                  Local dev instruction
-                </p>
-                <code className="mt-1 block select-all rounded bg-black/35 px-2 py-1.5 text-[11px] font-semibold text-amber-50">
-                  HAM_LOCAL_DEV_WORKSPACE_BYPASS=true
-                </code>
-              </div>
             </>
           )}
+          {showLocalDevHint ? (
+            <details className="mt-3 rounded-lg border border-amber-300/20 bg-amber-300/10 p-3 text-[11px] text-amber-50">
+              <summary className="cursor-pointer font-semibold text-amber-100/85">
+                Developer setup (local-only)
+              </summary>
+              <pre className="mt-2 overflow-x-auto rounded border border-amber-300/20 bg-black/35 p-2">
+                <code>{`export HAM_LOCAL_DEV_WORKSPACE_BYPASS=true\npython3 scripts/run_local_api.py`}</code>
+              </pre>
+            </details>
+          ) : null}
           <div className="mt-4 flex items-center gap-2">
+            {ctx.state.status === "auth_required" && clerkConfigured ? (
+              <button
+                type="button"
+                onClick={() => window.location.assign("/sign-in")}
+                className="rounded-lg border border-sky-300/25 bg-sky-400/20 px-3 py-1.5 text-xs font-semibold text-sky-50 transition hover:bg-sky-400/30"
+              >
+                Sign in
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={() => void ctx.refresh()}
               className="rounded-lg border border-white/14 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/[0.15]"
             >
-              Retry
+              Refresh
             </button>
             <button
               type="button"

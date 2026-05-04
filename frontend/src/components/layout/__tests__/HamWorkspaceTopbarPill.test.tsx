@@ -51,17 +51,15 @@ describe("HamWorkspaceTopbarPill", () => {
     fireEvent.click(screen.getByRole("button", { name: /setup needed/i }));
 
     expect(
-      screen.getByRole("dialog", { name: /workspace setup needed/i }),
+      screen.getByRole("dialog", { name: /workspace unavailable/i }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Workspace setup needed")).toBeInTheDocument();
+    expect(screen.getByText("Workspace unavailable")).toBeInTheDocument();
     expect(
       screen.getByText(
-        "HAM could not load a workspace because local workspace bypass is not enabled.",
+        "HAM could not load your workspace. Sign in again or contact your workspace admin.",
       ),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText("HAM_LOCAL_DEV_WORKSPACE_BYPASS=true"),
-    ).toBeInTheDocument();
+    expect(screen.queryByText("HAM_LOCAL_DEV_WORKSPACE_BYPASS=true")).not.toBeInTheDocument();
   });
 
   it("calls refresh from the setup-needed details", () => {
@@ -70,7 +68,7 @@ describe("HamWorkspaceTopbarPill", () => {
 
     render(<HamWorkspaceTopbarPill />);
     fireEvent.click(screen.getByRole("button", { name: /setup needed/i }));
-    fireEvent.click(screen.getByRole("button", { name: /retry/i }));
+    fireEvent.click(screen.getByRole("button", { name: /refresh/i }));
 
     expect(refresh).toHaveBeenCalledTimes(1);
   });
@@ -81,7 +79,10 @@ describe("HamWorkspaceTopbarPill", () => {
     render(<HamWorkspaceTopbarPill />);
     fireEvent.click(screen.getByRole("button", { name: /sign in/i }));
 
-    expect(screen.getByText("Workspace sign-in needed")).toBeInTheDocument();
-    expect(screen.getByText(/Sign in, then retry/i)).toBeInTheDocument();
+    expect(screen.getByText("Sign in required")).toBeInTheDocument();
+    expect(
+      screen.getByText("Please sign in to load your HAM workspace."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /refresh/i })).toBeInTheDocument();
   });
 });

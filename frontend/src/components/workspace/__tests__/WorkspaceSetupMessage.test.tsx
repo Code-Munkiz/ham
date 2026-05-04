@@ -1,20 +1,48 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 
 import { WorkspaceSetupMessage } from "@/components/workspace/WorkspaceSetupMessage";
 
 describe("WorkspaceSetupMessage", () => {
-  it("explains local workspace bypass setup", () => {
+  it("shows hosted-safe workspace unavailable copy by default", () => {
     render(<WorkspaceSetupMessage />);
 
-    expect(screen.getByText("Workspace setup needed")).toBeInTheDocument();
+    expect(screen.getByText("Workspace unavailable")).toBeInTheDocument();
     expect(
       screen.getByText(
-        /HAM could not load a workspace because local workspace bypass is not enabled/i,
+        /HAM could not load your workspace\. Sign in again or contact your workspace admin\./i,
       ),
     ).toBeInTheDocument();
+    expect(screen.queryByText(/HAM_LOCAL_DEV_WORKSPACE_BYPASS=true/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/python3 scripts\/run_local_api\.py/)).not.toBeInTheDocument();
+  });
+
+  it("shows sign-in-required copy and actions", () => {
+    const onRetry = vi.fn();
+    const onSignIn = vi.fn();
+    render(
+      <WorkspaceSetupMessage
+        mode="auth_required"
+        onRetry={onRetry}
+        onSignIn={onSignIn}
+      />,
+    );
+
+    expect(screen.getByText("Sign in required")).toBeInTheDocument();
     expect(
-      screen.getByText(/HAM_LOCAL_DEV_WORKSPACE_BYPASS=true/),
+      screen.getByText("Please sign in to load your HAM workspace."),
     ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    expect(onSignIn).toHaveBeenCalledTimes(1);
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows local-only developer hint only when explicitly enabled", () => {
+    render(<WorkspaceSetupMessage showDeveloperHint />);
+
+    expect(screen.getByText("Developer setup (local-only)")).toBeInTheDocument();
+    expect(screen.getByText(/HAM_LOCAL_DEV_WORKSPACE_BYPASS=true/)).toBeInTheDocument();
   });
 });
