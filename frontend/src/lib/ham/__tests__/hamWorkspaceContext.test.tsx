@@ -270,7 +270,7 @@ describe("classifyError (pure)", () => {
 });
 
 describe("WorkspaceGate network diagnostics UI", () => {
-  it("shows unreachable copy and Open API status when fetch fails at network layer", async () => {
+  it("shows hosted-safe unreachable copy when fetch fails at network layer", async () => {
     mockedGetMe.mockRejectedValue(new TypeError("Failed to fetch"));
     render(
       <HamWorkspaceProvider>
@@ -282,9 +282,10 @@ describe("WorkspaceGate network diagnostics UI", () => {
     await waitFor(() => {
       expect(screen.getByText(WORKSPACE_API_UNREACHABLE_USER_COPY)).toBeInTheDocument();
     });
-    const link = screen.getByRole("link", { name: /open api status/i });
-    expect(link.getAttribute("href") ?? "").toMatch(/\/api\/status$/);
-    expect(screen.getByRole("button", { name: /^retry$/i })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /open api status/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/API endpoint/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Failed to fetch/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^refresh$/i })).toBeInTheDocument();
   });
 });
 

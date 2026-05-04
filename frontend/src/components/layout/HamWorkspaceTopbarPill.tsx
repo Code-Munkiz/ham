@@ -33,6 +33,8 @@ export function HamWorkspaceTopbarPill({ className }: HamWorkspaceTopbarPillProp
     import.meta.env.DEV &&
     !clerkConfigured &&
     (import.meta.env.VITE_HAM_SHOW_LOCAL_DEV_HINTS as string | undefined) === "true";
+  const shouldShowDeveloperDetails =
+    showLocalDevHint && (ctx.state.status === "setup_needed" || ctx.state.status === "auth_not_configured" || ctx.state.status === "error");
 
   const baseLabel = (() => {
     switch (ctx.state.status) {
@@ -189,28 +191,12 @@ export function HamWorkspaceTopbarPill({ className }: HamWorkspaceTopbarPillProp
         >
           {ctx.state.status === "error" ? (
             <>
-              <h2 className="text-sm font-semibold text-red-50">Workspace error</h2>
-              {ctx.state.networkUnreachable ? (
-                <>
-                  <p className="mt-2 leading-relaxed text-white/80">{WORKSPACE_API_UNREACHABLE_USER_COPY}</p>
-                  <p className="mt-2 leading-relaxed text-white/75">
-                    <span className="font-medium text-white/85">API endpoint: </span>
-                    <span className="break-all font-mono text-[11px] text-white/80">
-                      {ctx.state.networkUnreachable.apiOrigin}
-                    </span>
-                  </p>
-                  <p className="mt-2 text-[11px] leading-relaxed text-white/55">{ctx.state.message}</p>
-                </>
-              ) : (
-                <>
-                  <p className="mt-2 leading-relaxed text-white/75">
-                    HAM could not load workspace context. Retry or try again shortly.
-                  </p>
-                  <p className="mt-3 rounded-lg border border-red-300/20 bg-red-300/10 p-3 leading-relaxed text-red-50">
-                    {ctx.state.message}
-                  </p>
-                </>
-              )}
+              <h2 className="text-sm font-semibold text-red-50">Workspace unavailable</h2>
+              <p className="mt-2 leading-relaxed text-white/80">
+                {ctx.state.networkUnreachable
+                  ? WORKSPACE_API_UNREACHABLE_USER_COPY
+                  : "We couldn't load your workspace. Refresh or try again shortly."}
+              </p>
             </>
           ) : ctx.state.status === "auth_required" ? (
             <>
@@ -225,7 +211,7 @@ export function HamWorkspaceTopbarPill({ className }: HamWorkspaceTopbarPillProp
                 Authentication is not configured
               </h2>
               <p className="mt-2 leading-relaxed text-white/75">
-                Set VITE_CLERK_PUBLISHABLE_KEY and redeploy.
+                Workspace sign-in is temporarily unavailable. Refresh or contact your workspace admin.
               </p>
             </>
           ) : (
@@ -237,14 +223,32 @@ export function HamWorkspaceTopbarPill({ className }: HamWorkspaceTopbarPillProp
               </p>
             </>
           )}
-          {showLocalDevHint ? (
+          {shouldShowDeveloperDetails ? (
             <details className="mt-3 rounded-lg border border-amber-300/20 bg-amber-300/10 p-3 text-[11px] text-amber-50">
               <summary className="cursor-pointer font-semibold text-amber-100/85">
-                Developer setup (local-only)
+                Developer details
               </summary>
-              <pre className="mt-2 overflow-x-auto rounded border border-amber-300/20 bg-black/35 p-2">
-                <code>{`export HAM_LOCAL_DEV_WORKSPACE_BYPASS=true\npython3 scripts/run_local_api.py`}</code>
-              </pre>
+              {ctx.state.status === "auth_not_configured" ? (
+                <p className="mt-2 text-amber-50/90">
+                  Set <span className="font-mono">VITE_CLERK_PUBLISHABLE_KEY</span> before building the hosted app.
+                </p>
+              ) : null}
+              {ctx.state.status === "setup_needed" ? (
+                <pre className="mt-2 overflow-x-auto rounded border border-amber-300/20 bg-black/35 p-2">
+                  <code>{`export HAM_LOCAL_DEV_WORKSPACE_BYPASS=true\npython3 scripts/run_local_api.py`}</code>
+                </pre>
+              ) : null}
+              {ctx.state.status === "error" ? (
+                <div className="mt-2 space-y-2">
+                  {ctx.state.networkUnreachable ? (
+                    <p className="break-all">
+                      API endpoint: <span className="font-mono">{ctx.state.networkUnreachable.apiOrigin}</span>
+                    </p>
+                  ) : null}
+                  <p className="break-words">{ctx.state.message}</p>
+                  {ctx.state.code ? <p>Code: <span className="font-mono">{ctx.state.code}</span></p> : null}
+                </div>
+              ) : null}
             </details>
           ) : null}
           <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -257,7 +261,7 @@ export function HamWorkspaceTopbarPill({ className }: HamWorkspaceTopbarPillProp
                 Sign in
               </button>
             ) : null}
-            {ctx.state.status === "error" && ctx.state.networkUnreachable ? (
+            {showLocalDevHint && ctx.state.status === "error" && ctx.state.networkUnreachable ? (
               <a
                 href={ctx.state.networkUnreachable.statusUrl}
                 target="_blank"

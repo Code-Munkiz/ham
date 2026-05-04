@@ -34,7 +34,7 @@ export function WorkspaceSetupMessage({
         </h2>
         <p className="text-white/[0.78]">
           {authNotConfigured
-            ? "Set VITE_CLERK_PUBLISHABLE_KEY and redeploy."
+            ? "Workspace sign-in is temporarily unavailable. Refresh or contact your workspace admin."
             : authRequired
               ? "Please sign in to load your HAM workspace."
               : "HAM could not load your workspace. Sign in again or contact your workspace admin."}
@@ -43,7 +43,7 @@ export function WorkspaceSetupMessage({
         {showDeveloperHint ? (
           <details className="rounded-md border border-amber-300/20 bg-amber-300/10 p-3 text-xs leading-relaxed text-amber-50">
             <summary className="cursor-pointer font-semibold text-amber-100/90">
-              Developer setup (local-only)
+              Developer details
             </summary>
             <p className="mt-2 text-amber-50/90">
               For local development without Clerk, set a local bypass before starting
