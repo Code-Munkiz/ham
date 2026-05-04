@@ -475,6 +475,20 @@ def test_list_workspaces_union_is_deduped() -> None:
     assert [w.workspace_id for w in out] == [wid]
 
 
+def test_list_workspaces_survives_member_query_phase_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Production failed HTTP 500 when collection-group query lacked an index — degrade instead."""
+
+    def boom(self, db, coll, user_id, sink):  # noqa: ANN001
+        raise WorkspaceStoreError("simulated collection-group failure")
+
+    monkeypatch.setattr(FirestoreWorkspaceStore, "_accumulate_member_rows", boom)
+    s, _ = _store()
+    wid = new_workspace_id()
+    s.create_workspace(_ws(workspace_id=wid, org_id=None, owner="user_a", slug="solo"))
+    out = {w.workspace_id for w in s.list_workspaces_for_user("user_a")}
+    assert wid in out
+
+
 # ---------------------------------------------------------------------------
 # Workspace members
 # ---------------------------------------------------------------------------

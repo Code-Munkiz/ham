@@ -26,9 +26,12 @@ the records validated here (``UserRecord`` / ``OrgRecord`` / ``MembershipRecord`
 
 from __future__ import annotations
 
+import logging
 import os
 from datetime import UTC, datetime
 from typing import Any
+
+_LOG = logging.getLogger(__name__)
 
 from src.ham.workspace_models import (
     MembershipRecord,
@@ -444,12 +447,30 @@ class FirestoreWorkspaceStore:
         coll = db.collection(_WORKSPACES_COLL)
         records: dict[str, WorkspaceRecord] = {}
 
+        # Each phase is isolated: missing composite/collection-group indexes (or transient
+        # Firestore errors) must not take down GET /api/me — degrade to partial results.
         try:
             self._accumulate_owned(coll, user_id, records)
+        except WorkspaceStoreError:
+            _LOG.warning(
+                "list_workspaces_for_user: owned workspaces query failed",
+                exc_info=True,
+            )
+        try:
             self._accumulate_member_rows(db, coll, user_id, records)
+        except WorkspaceStoreError:
+            _LOG.warning(
+                "list_workspaces_for_user: member collection-group query failed "
+                "(often missing Firestore index on collectionGroup members + user_id)",
+                exc_info=True,
+            )
+        try:
             self._accumulate_org_fallback(db, coll, user_id, records)
-        except Exception as exc:  # noqa: BLE001
-            raise self._wrap("list_workspaces_for_user", exc) from exc
+        except WorkspaceStoreError:
+            _LOG.warning(
+                "list_workspaces_for_user: org fallback query failed",
+                exc_info=True,
+            )
 
         results: list[WorkspaceRecord] = []
         for rec in records.values():
