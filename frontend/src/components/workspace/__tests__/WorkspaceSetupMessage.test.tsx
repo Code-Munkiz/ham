@@ -3,6 +3,16 @@ import { describe, expect, it, vi } from "vitest";
 
 import { WorkspaceSetupMessage } from "@/components/workspace/WorkspaceSetupMessage";
 
+function expectNoHostedUnsafeCopy() {
+  const html = document.body.innerHTML;
+  expect(html).not.toMatch(/local API/i);
+  expect(html).not.toMatch(/uvicorn/i);
+  expect(html).not.toMatch(/127\.0\.0\.1/);
+  expect(html).not.toMatch(/HAM_[A-Z0-9_]+/);
+  expect(html).not.toMatch(/VITE_[A-Z0-9_]+/);
+  expect(html).not.toMatch(/Cloud Run|Vercel config/i);
+}
+
 describe("WorkspaceSetupMessage", () => {
   it("shows hosted-safe workspace unavailable copy by default", () => {
     render(<WorkspaceSetupMessage />);
@@ -13,8 +23,8 @@ describe("WorkspaceSetupMessage", () => {
         /HAM could not load your workspace\. Sign in again or contact your workspace admin\./i,
       ),
     ).toBeInTheDocument();
-    expect(screen.queryByText(/HAM_LOCAL_DEV_WORKSPACE_BYPASS=true/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/python3 scripts\/run_local_api\.py/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Developer details")).not.toBeInTheDocument();
+    expectNoHostedUnsafeCopy();
   });
 
   it("shows sign-in-required copy and actions", () => {
@@ -45,9 +55,10 @@ describe("WorkspaceSetupMessage", () => {
 
     expect(screen.getByText("Authentication is not configured")).toBeInTheDocument();
     expect(
-      screen.getByText("Set VITE_CLERK_PUBLISHABLE_KEY and redeploy."),
+      screen.getByText("Workspace sign-in is temporarily unavailable. Refresh or contact your workspace admin."),
     ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Sign in" })).not.toBeInTheDocument();
+    expectNoHostedUnsafeCopy();
 
     fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
     expect(onRetry).toHaveBeenCalledTimes(1);
@@ -63,7 +74,7 @@ describe("WorkspaceSetupMessage", () => {
   it("shows local-only developer hint only when explicitly enabled", () => {
     render(<WorkspaceSetupMessage showDeveloperHint />);
 
-    expect(screen.getByText("Developer setup (local-only)")).toBeInTheDocument();
+    expect(screen.getByText("Developer details")).toBeInTheDocument();
     expect(screen.getByText(/HAM_LOCAL_DEV_WORKSPACE_BYPASS=true/)).toBeInTheDocument();
   });
 });

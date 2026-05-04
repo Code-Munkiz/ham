@@ -31,8 +31,19 @@ function baseCtx(
 }
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   vi.clearAllMocks();
 });
+
+function expectNoHostedUnsafeCopy() {
+  const html = document.body.innerHTML;
+  expect(html).not.toMatch(/local API/i);
+  expect(html).not.toMatch(/uvicorn/i);
+  expect(html).not.toMatch(/127\.0\.0\.1/);
+  expect(html).not.toMatch(/HAM_[A-Z0-9_]+/);
+  expect(html).not.toMatch(/VITE_[A-Z0-9_]+/);
+  expect(html).not.toMatch(/Cloud Run|Vercel config/i);
+}
 
 describe("HamWorkspaceTopbarPill", () => {
   it("renders high-contrast setup-needed copy", () => {
@@ -45,7 +56,7 @@ describe("HamWorkspaceTopbarPill", () => {
     expect(pill.className).toContain("text-amber-50");
   });
 
-  it("opens setup-needed details with local-dev instruction", () => {
+  it("opens setup-needed details with hosted-safe copy and no developer details by default", () => {
     mockUseHamWorkspace.mockReturnValue(baseCtx());
 
     render(<HamWorkspaceTopbarPill />);
@@ -60,7 +71,8 @@ describe("HamWorkspaceTopbarPill", () => {
         "HAM could not load your workspace. Sign in again or contact your workspace admin.",
       ),
     ).toBeInTheDocument();
-    expect(screen.queryByText("HAM_LOCAL_DEV_WORKSPACE_BYPASS=true")).not.toBeInTheDocument();
+    expect(screen.queryByText("Developer details")).not.toBeInTheDocument();
+    expectNoHostedUnsafeCopy();
   });
 
   it("calls refresh from the setup-needed details", () => {
@@ -97,7 +109,7 @@ describe("HamWorkspaceTopbarPill", () => {
     expect(screen.getByRole("button", { name: /refresh/i })).toBeInTheDocument();
   });
 
-  it("shows auth-not-configured details without a sign-in button", () => {
+  it("shows auth-not-configured details with product-safe copy and no sign-in button", () => {
     mockUseHamWorkspace.mockReturnValue(
       baseCtx({
         state: { status: "auth_not_configured" },
@@ -110,8 +122,28 @@ describe("HamWorkspaceTopbarPill", () => {
 
     expect(screen.getByText("Authentication is not configured")).toBeInTheDocument();
     expect(
-      screen.getByText("Set VITE_CLERK_PUBLISHABLE_KEY and redeploy."),
+      screen.getByText("Workspace sign-in is temporarily unavailable. Refresh or contact your workspace admin."),
     ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^sign in$/i })).not.toBeInTheDocument();
+    expectNoHostedUnsafeCopy();
+  });
+
+  it("keeps developer details hidden unless local-dev hints are explicitly enabled", () => {
+    mockUseHamWorkspace.mockReturnValue(baseCtx());
+
+    render(<HamWorkspaceTopbarPill />);
+    fireEvent.click(screen.getByRole("button", { name: /setup needed/i }));
+
+    expect(screen.queryByText("Developer details")).not.toBeInTheDocument();
+
+    vi.stubEnv("VITE_HAM_SHOW_LOCAL_DEV_HINTS", "true");
+    mockUseHamWorkspace.mockReturnValue(baseCtx());
+
+    render(<HamWorkspaceTopbarPill />);
+    const setupButtons = screen.getAllByRole("button", { name: /setup needed/i });
+    fireEvent.click(setupButtons[setupButtons.length - 1]);
+
+    expect(screen.getByText("Developer details")).toBeInTheDocument();
+    expect(screen.getByText(/HAM_LOCAL_DEV_WORKSPACE_BYPASS=true/)).toBeInTheDocument();
   });
 });
