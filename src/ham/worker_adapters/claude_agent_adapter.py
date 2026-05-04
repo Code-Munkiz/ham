@@ -339,6 +339,8 @@ def _plan_mode_query_options(stderr_lines: list[str]) -> Any:
         # Headless / SDK: skip hooks, skills auto-discovery, project MCP — avoids
         # failures when the API container cwd is not a full interactive workspace.
         "extra_args": {"bare": None},
+        # Do not merge arbitrary filesystem settings from user HOME or repo-local `.claude/`.
+        "setting_sources": [],
     }
     cli = _ham_preferred_cli_path()
     if cli:
