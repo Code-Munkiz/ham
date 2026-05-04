@@ -29,24 +29,40 @@ function normalizeApiBaseOrigin(raw: string): string {
 /**
  * Ham API **origin** for `fetch` (scheme + host, optional port). Paths already include `/api/...`.
  * - **Desktop (Electron):** non-empty `window.__HAM_DESKTOP_CONFIG__.apiBase` wins at runtime (no rebuild per environment).
+ * - **Vercel (`*.vercel.app`):** `""` → same-origin `/api/*`; root `vercel.json` proxies to Cloud Run (avoids browser→`*.run.app` failures).
  * - **Dev (default):** `""` → same origin as Vite; `/api/*` is proxied to FastAPI (see `vite.config.ts`).
- * - **Override:** `VITE_HAM_API_BASE` = e.g. `https://ham-api-xxxxx.run.app` — **no** `/api` suffix (that would produce `/api/api/...` and HTTP 404).
+ * - **Elsewhere:** optional `VITE_HAM_API_BASE` e.g. `https://ham-api-xxxxx.run.app` — **no** `/api` suffix (that would produce `/api/api/...` and HTTP 404).
  */
-export function getApiBase(): string {
-  const desktop = getHamDesktopConfig();
-  const desktopRaw = desktop?.apiBase?.trim();
+export function resolveHamApiBase(params: {
+  desktopApiBase?: string | null | undefined;
+  viteHamApiBase?: string | undefined;
+  hostname: string | null | undefined;
+  isDev: boolean;
+}): string {
+  const desktopRaw = params.desktopApiBase?.trim();
   if (desktopRaw) {
     return normalizeApiBaseOrigin(desktopRaw);
   }
-  const raw = (import.meta.env.VITE_HAM_API_BASE as string | undefined)?.trim();
+  const host = (params.hostname ?? "").trim().toLowerCase();
+  if (host.endsWith(".vercel.app")) {
+    return "";
+  }
+  const raw = params.viteHamApiBase?.trim();
   if (raw) {
     return normalizeApiBaseOrigin(raw);
   }
-  if (import.meta.env.DEV) return "";
-  // Production build without VITE_HAM_API_BASE → browser would call localhost and "Failed to fetch".
-  throw new Error(
-    "VITE_HAM_API_BASE was not set when this site was built. In Vercel: Settings → Environment Variables → add VITE_HAM_API_BASE = your Cloud Run URL (no trailing slash, no /api suffix). Enable it for Production and Preview, then redeploy. For the desktop app, set HAM_DESKTOP_API_BASE or ham-desktop-config.json (see desktop/README.md).",
-  );
+  if (params.isDev) return "";
+  return "";
+}
+
+export function getApiBase(): string {
+  const desktop = getHamDesktopConfig();
+  return resolveHamApiBase({
+    desktopApiBase: desktop?.apiBase,
+    viteHamApiBase: import.meta.env.VITE_HAM_API_BASE as string | undefined,
+    hostname: typeof window !== "undefined" ? window.location.hostname : undefined,
+    isDev: Boolean(import.meta.env.DEV),
+  });
 }
 
 /** Build an absolute or same-origin path for the Ham API (Vite dev uses relative `/api/...` + proxy). */
@@ -95,11 +111,16 @@ export function isLikelyHamApiFetchNetworkFailure(err: unknown): boolean {
   return false;
 }
 
-/** Human-readable Ham API origin for diagnostics (never includes secrets). */
+/** Human-readable Ham API prefix for diagnostics (never includes secrets). Same-origin builds show `{origin}/api`. */
 export function getHamApiOriginLabel(): string {
   try {
     const base = getApiBase().trim();
-    return base || (typeof window !== "undefined" ? window.location.origin : "(same-origin)");
+    if (base) return base;
+    if (typeof window !== "undefined") {
+      const origin = window.location.origin.replace(/\/+$/, "");
+      return `${origin}/api`;
+    }
+    return "(same-origin)/api";
   } catch {
     return "(could not resolve API base)";
   }
