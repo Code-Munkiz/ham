@@ -36,8 +36,15 @@ def resolve_openrouter_model_name() -> str:
 
 
 def normalized_openrouter_api_key() -> str:
-    """Stripped ``OPENROUTER_API_KEY`` from the environment (may be empty)."""
-    return (os.getenv("OPENROUTER_API_KEY") or "").strip()
+    """Effective OpenRouter key: workspace-stored credential wins, else env (may be empty)."""
+    try:
+        from src.persistence.workspace_tool_credentials import (
+            get_effective_openrouter_api_key,
+        )
+
+        return get_effective_openrouter_api_key()
+    except ImportError:
+        return (os.getenv("OPENROUTER_API_KEY") or "").strip()
 
 
 def openrouter_api_key_is_plausible(raw: str | None = None) -> bool:

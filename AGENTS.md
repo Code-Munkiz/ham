@@ -43,7 +43,8 @@ Shipped muscle today centers on **Bridge + Droid executor** (`src/tools/droid_ex
 - `src/swarm_agency.py` — Hermes-supervised **context assembly** (shared `ProjectContext` + per-role render budgets for Architect / routing / critic prompts); **not** a separate orchestration framework (no CrewAI)
 - `src/registry/droids.py` — `DroidRecord` + `DroidRegistry` + `DEFAULT_DROID_REGISTRY` (builder, reviewer)
 - `src/persistence/run_store.py` — read-side `RunStore` over `.ham/runs/*.json`
-- `src/api/server.py` — FastAPI app: read API (`/api/status`, `/api/runs`, …) plus **`POST /api/chat`**, **`POST /api/chat/stream`** (see `src/api/chat.py` — optional `project_id` + **HAM active agent guidance** from Agent Builder; distinct from Cursor operator skills and Hermes CLI profiles), **`GET /api/cursor-skills`** (Cursor operator skills), **`GET /api/hermes-skills/*`** (Hermes **runtime** skills catalog + host probe + **Phase 2a** shared install preview/apply; see `src/api/hermes_skills.py`, `src/ham/hermes_skills_install.py`), **`GET /api/capability-library/*`** and **`POST .../save|remove|reorder`** (per-project **My library** of saved `hermes:` / `capdir:` catalog refs; `HAM_CAPABILITY_LIBRARY_WRITE_TOKEN`; see `src/api/capability_library.py`, `src/ham/capability_library/`), **`GET /api/cursor-subagents`**, **`GET /api/projects/{id}/agents`** (HAM agent builder profiles; on `app` in `src/api/server.py`), and **project settings** preview/apply (`src/api/project_settings.py`, `HAM_SETTINGS_WRITE_TOKEN` for mutating routes)
+- `src/api/server.py` — FastAPI app: read API (`/api/status`, `/api/runs`, **`GET /api/context-engine`**, **`GET /api/projects/{id}/context-engine`**, …) plus **`POST /api/chat`**, **`POST /api/chat/stream`** (see `src/api/chat.py` — optional `project_id` + **HAM active agent guidance** from Agent Builder; distinct from Cursor operator skills and Hermes CLI profiles), **`GET /api/cursor-skills`** (Cursor operator skills), **`GET /api/hermes-skills/*`** (Hermes **runtime** skills catalog + host probe + **Phase 2a** shared install preview/apply; see `src/api/hermes_skills.py`, `src/ham/hermes_skills_install.py`), **`GET /api/capability-library/*`** and **`POST .../save|remove|reorder`** (per-project **My library** of saved `hermes:` / `capdir:` catalog refs; `HAM_CAPABILITY_LIBRARY_WRITE_TOKEN`; see `src/api/capability_library.py`, `src/ham/capability_library/`), **`GET /api/cursor-subagents`**, **`GET /api/projects/{id}/agents`** (HAM agent builder profiles; on `app` in `src/api/server.py`), and **project settings** preview/apply (`src/api/project_settings.py`, `HAM_SETTINGS_WRITE_TOKEN` for mutating routes)
+- `src/api/workspace_tools.py`, `src/ham/worker_adapters/claude_agent_adapter.py` — Workspace **Connected Tools** (`GET /api/workspace/tools`, `POST /api/workspace/tools/scan`): optional **Claude Agent SDK** readiness when `claude-agent-sdk` is installed (see `requirements.txt`); presence-only auth hints (`ANTHROPIC_API_KEY`, or `CLAUDE_CODE_USE_BEDROCK=1` plus `AWS_REGION` / `AWS_DEFAULT_REGION`, or `CLAUDE_CODE_USE_VERTEX=1` plus a project id env — values never returned). Optional gated one-shot smoke: `POST /api/workspace/tools/claude_agent_sdk/smoke` requires `HAM_CLAUDE_AGENT_SMOKE_ENABLED=1` and either a Clerk-authenticated session or `HAM_CLAUDE_AGENT_SMOKE_TOKEN` (Bearer or `X-Ham-Smoke-Token`) — **not** dashboard chat routing or a second orchestrator; Cloud Run image includes the SDK for readiness and this smoke path only
 - `src/ham/cursor_skills_catalog.py` — loads `.cursor/skills` for chat control plane + API index (operator docs; **not** Hermes runtime skills)
 - `src/ham/hermes_skills_catalog.py` — vendored Hermes-runtime catalog manifest (`src/ham/data/hermes_skills_catalog.json`)
 - `scripts/build_hermes_skills_catalog.py` — regenerate catalog from pinned **NousResearch/hermes-agent** (`skills/` + `optional-skills/`); requires network unless `--repo-root` points at a checkout
@@ -121,7 +122,7 @@ If asked to push to **`main`**:
 
 **Read-only / report-only missions:** if the mission is strictly investigation with **no landed code/doc commits**, summarize without `gh pr create` unless the operator asked you to ship a change.
 
-**Docs-only churn:** Prefer **in-place edits** per *Cloud Agent PR hygiene* later in this section. Use `gh pr list` overlap checks before any docs-only PR.
+**Docs-only churn:** Prefer **in-place edits** per *Cloud Agent PR hygiene* later in this section. Use `gh pr list` overlap checks before any docs-only PR. If `gh` is unavailable or returns an auth error (for example HTTP 401), you cannot satisfy the overlap scan from automation alone—coordinate with a human who has `gh auth login`, or extend an existing open docs PR/branch manually; do not open parallel duplicate docs PRs blindly.
 
 **Incident note (2026-04):** a VM force-push overwrote GitHub `main`; combine this policy with **branch protection** and tight VM credentials until access is productized (prefer **GitHub App** tokens).
 
@@ -206,9 +207,10 @@ There are many draft PRs for small docs notes. I want to stop accumulating PR cl
 ## Tests
 
 - `tests/test_memory_heist.py` — Context Engine + Phase 1/3 guardrails (23 cases)
+- `tests/test_context_engine_api.py` — Context Engine dashboard routes (project root validation; 3 cases)
 - `tests/test_hermes_feedback.py` — Critic MVP + Phase 3 guardrails (7 cases)
 - `tests/test_droid_registry.py` — Droid registry conventions (10 cases)
-- Run: `python -m pytest` — full suite (`pytest.ini` sets `pythonpath = .`; run `pytest tests/ --collect-only -q` for current count — on the order of 1200+ tests)
+- Run: `python -m pytest` — full suite (`pytest.ini` sets `pythonpath = .`; run `pytest tests/ --collect-only -q` for current count — on the order of 1900+ tests)
 - Other tests under `tests/` as added; bootstrap with `/test-context-regressions` for Context Engine focus
 
 ## Cursor Cloud specific instructions
@@ -259,7 +261,7 @@ From **HAM VM / Cursor Cloud**:
 - Avoid duplicating identical “Cloud Agent truth” bullets across unrelated files when one canonical paragraph suffices.
 - **Before opening a docs-only PR:** run  
   `gh pr list --repo <org>/<repo> --state open --limit 50`  
-  and scan titles/branches (`gh pr view <n> --json files` helps). If overlapping docs intent exists → report **`OVERLAPPING_DOCS_PR_FOUND`** and extend the existing PR/list it — do **not** open parallel duplicates from the same automation.
+  and scan titles/branches (`gh pr view <n> --json files` helps). If overlapping docs intent exists → report **`OVERLAPPING_DOCS_PR_FOUND`** and extend the existing PR/list it — do **not** open parallel duplicates from the same automation. If `gh` is missing or returns **HTTP 401** / bad credentials, the overlap scan **did not run** — report **`GH_PR_OVERLAP_CHECK_UNAVAILABLE`** in the handoff, land **one** scoped PR (or extend a branch the operator names), and do **not** treat “no list” as “no overlap.”
 - **Code vs docs cleanup:** do not lump unrelated observability/UI fixes together with unrelated doc sweeps unless the operator asked — separate PR scopes reduce reviewer noise.
 
 When opening a permitted PR:
@@ -312,7 +314,7 @@ Phase B added CI steps and a separate `secret-scan` workflow without raising the
 - `ruff format --check .` — ~280 files would reformat; ratchet after a separate `ruff format --write` PR.
 - `mypy src --ignore-missing-imports` — baseline only; per-module strict overrides in a follow-up.
 - `pytest --cov=src --cov-report=xml` — coverage report uploaded as artifact `coverage-xml`; **no** `--cov-fail-under` threshold yet.
-- `python scripts/check_docs_freshness.py` — checks canonical docs were touched within 180 days and that markdown link targets resolve. Currently surfaces 2 pre-existing dangling references to be cleaned up separately.
+- `python scripts/check_docs_freshness.py` — checks canonical docs were touched within 180 days and that markdown link targets in those files still resolve on disk (see `scripts/check_docs_freshness.py` for the tracked path list).
 
 **Not yet wired** (deferred per the lift plan):
 

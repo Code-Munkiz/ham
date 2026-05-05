@@ -1,7 +1,7 @@
 litellm
 reportlab>=4.0.0
 typer>=0.12.0
-rich>=13.0
+rich>=15.0.0
 python-dotenv
 pyyaml>=6.0
 pydantic
@@ -9,9 +9,11 @@ fastapi
 python-multipart
 uvicorn[standard]
 httpx
-edge-tts>=6.1.0
+edge-tts>=7.2.8
 google-cloud-firestore>=2.16.0
 google-cloud-storage>=2.14.0
+google-cloud-secret-manager>=2.20.0
+google-cloud-run>=0.16.0
 pypdf>=4.0.0
 python-docx>=1.2.0
 openpyxl>=3.1.0
@@ -20,6 +22,8 @@ pywinpty>=2.0.1; sys_platform == "win32"
 playwright
 PyJWT>=2.8.0
 cryptography>=42.0.0
+# Claude Agent SDK — Cloud Run image installs this for readiness + gated smoke only (no broad execution).
+claude-agent-sdk>=0.1.70,<0.2.0
 # Nous Hermes Agent CLI is not on PyPI; install separately if needed:
 #   PowerShell: irm https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.ps1 | iex
 #   Or: pip install "git+https://github.com/NousResearch/hermes-agent.git"

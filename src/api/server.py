@@ -42,6 +42,8 @@ from src.api.workspace_memory import router as workspace_memory_router
 from src.api.workspace_operations import router as workspace_operations_router
 from src.api.workspace_voice_settings import router as workspace_voice_settings_router
 from src.api.tts_endpoint import router as tts_router
+from src.api.me import router as me_router
+from src.api.workspaces import router as workspaces_router
 from src.api.pna_middleware import private_network_access_middleware
 from src.api.workspace_profiles import router as workspace_profiles_router
 from src.api.workspace_files import resolve_workspace_context_snapshot_root
@@ -141,6 +143,18 @@ app.include_router(workspace_profiles_router)
 app.include_router(workspace_operations_router)
 app.include_router(workspace_voice_settings_router)
 app.include_router(tts_router)
+
+# Phase 1b: multi-user workspace primitive routers, mounted behind a
+# soft-rollback flag (default ON). Set HAM_WORKSPACE_ROUTES_ENABLED=false to
+# disable without redeploying the rest of the API. v1 endpoints are NOT
+# affected either way.
+_workspace_routes_enabled = (
+    (os.environ.get("HAM_WORKSPACE_ROUTES_ENABLED") or "true").strip().lower()
+    in ("1", "true", "yes", "on")
+)
+if _workspace_routes_enabled:
+    app.include_router(me_router)
+    app.include_router(workspaces_router)
 
 _store = RunStore()
 

@@ -8,6 +8,7 @@ import type {
   ModelCatalogPayload,
   ProjectRecord,
   ChatCapabilitiesPayload,
+  ChatContextMetersPayload,
   GeneratedMediaArtifactPublicMeta,
   GeneratedMediaImageGenerateResponse,
   GeneratedMediaVideoGenerateResponse,
@@ -28,24 +29,40 @@ function normalizeApiBaseOrigin(raw: string): string {
 /**
  * Ham API **origin** for `fetch` (scheme + host, optional port). Paths already include `/api/...`.
  * - **Desktop (Electron):** non-empty `window.__HAM_DESKTOP_CONFIG__.apiBase` wins at runtime (no rebuild per environment).
+ * - **Vercel (`*.vercel.app`):** `""` → same-origin `/api/*`; root `vercel.json` proxies to Cloud Run (avoids browser→`*.run.app` failures).
  * - **Dev (default):** `""` → same origin as Vite; `/api/*` is proxied to FastAPI (see `vite.config.ts`).
- * - **Override:** `VITE_HAM_API_BASE` = e.g. `https://ham-api-xxxxx.run.app` — **no** `/api` suffix (that would produce `/api/api/...` and HTTP 404).
+ * - **Elsewhere:** optional `VITE_HAM_API_BASE` e.g. `https://ham-api-xxxxx.run.app` — **no** `/api` suffix (that would produce `/api/api/...` and HTTP 404).
  */
-export function getApiBase(): string {
-  const desktop = getHamDesktopConfig();
-  const desktopRaw = desktop?.apiBase?.trim();
+export function resolveHamApiBase(params: {
+  desktopApiBase?: string | null | undefined;
+  viteHamApiBase?: string | undefined;
+  hostname: string | null | undefined;
+  isDev: boolean;
+}): string {
+  const desktopRaw = params.desktopApiBase?.trim();
   if (desktopRaw) {
     return normalizeApiBaseOrigin(desktopRaw);
   }
-  const raw = (import.meta.env.VITE_HAM_API_BASE as string | undefined)?.trim();
+  const host = (params.hostname ?? "").trim().toLowerCase();
+  if (host.endsWith(".vercel.app")) {
+    return "";
+  }
+  const raw = params.viteHamApiBase?.trim();
   if (raw) {
     return normalizeApiBaseOrigin(raw);
   }
-  if (import.meta.env.DEV) return "";
-  // Production build without VITE_HAM_API_BASE → browser would call localhost and "Failed to fetch".
-  throw new Error(
-    "VITE_HAM_API_BASE was not set when this site was built. In Vercel: Settings → Environment Variables → add VITE_HAM_API_BASE = your Cloud Run URL (no trailing slash, no /api suffix). Enable it for Production and Preview, then redeploy. For the desktop app, set HAM_DESKTOP_API_BASE or ham-desktop-config.json (see desktop/README.md).",
-  );
+  if (params.isDev) return "";
+  return "";
+}
+
+export function getApiBase(): string {
+  const desktop = getHamDesktopConfig();
+  return resolveHamApiBase({
+    desktopApiBase: desktop?.apiBase,
+    viteHamApiBase: import.meta.env.VITE_HAM_API_BASE as string | undefined,
+    hostname: typeof window !== "undefined" ? window.location.hostname : undefined,
+    isDev: Boolean(import.meta.env.DEV),
+  });
 }
 
 /** Build an absolute or same-origin path for the Ham API (Vite dev uses relative `/api/...` + proxy). */
@@ -75,6 +92,50 @@ export async function mergeClerkAuthBearerIfNeeded(headers: Headers): Promise<vo
   if (!pk) return;
   const tok = (await getRegisteredClerkSessionToken())?.trim();
   if (tok) headers.set("Authorization", `Bearer ${tok}`);
+}
+
+/**
+ * True when `fetch` rejected before an HTTP response (messages vary by browser).
+ * Does not apply to HTTP errors — those yield a `Response` and are handled separately.
+ */
+export function isLikelyHamApiFetchNetworkFailure(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const msg = err.message.toLowerCase();
+  if (err instanceof TypeError) {
+    if (msg.includes("failed to fetch")) return true;
+    if (msg.includes("fetch failed")) return true;
+    if (msg.includes("networkerror when attempting to fetch")) return true;
+    if (msg.includes("network request failed")) return true;
+    if (msg.includes("load failed")) return true;
+  }
+  return false;
+}
+
+/** Human-readable Ham API prefix for diagnostics (never includes secrets). Same-origin builds show `{origin}/api`. */
+export function getHamApiOriginLabel(): string {
+  try {
+    const base = getApiBase().trim();
+    if (base) return base;
+    if (typeof window !== "undefined") {
+      const origin = window.location.origin.replace(/\/+$/, "");
+      return `${origin}/api`;
+    }
+    return "(same-origin)/api";
+  } catch {
+    return "(could not resolve API base)";
+  }
+}
+
+/** Absolute `/api/status` URL for the configured Ham API (for user-facing diagnostics links). */
+export function buildHamApiStatusUrl(): string {
+  try {
+    const base = getApiBase().replace(/\/+$/, "");
+    const origin =
+      base || (typeof window !== "undefined" ? window.location.origin.replace(/\/+$/, "") : "");
+    return `${origin}/api/status`;
+  } catch {
+    return "/api/status";
+  }
 }
 
 /**
@@ -132,6 +193,16 @@ export async function connectWorkspaceTool(
 export async function disconnectWorkspaceTool(toolId: string): Promise<Response> {
   const id = encodeURIComponent(toolId);
   return hamApiFetch(`/api/workspace/tools/${id}/disconnect`, { method: "POST" });
+}
+
+/** Controlled Claude Agent SDK smoke (`POST /api/workspace/tools/claude_agent_sdk/smoke`). Clerk or smoke token only. */
+export async function postClaudeAgentSmoke(): Promise<Response> {
+  return hamApiFetch("/api/workspace/tools/claude_agent_sdk/smoke", { method: "POST" });
+}
+
+/** Claude Agent bounded mission (`POST /api/workspace/tools/claude_agent_sdk/mission`). Clerk auth only; no smoke token. */
+export async function postClaudeAgentMission(): Promise<Response> {
+  return hamApiFetch("/api/workspace/tools/claude_agent_sdk/mission", { method: "POST" });
 }
 
 /** Multipart upload for workspace chat; returns an opaque `attachment_id` (blob stored server-side). */
@@ -1355,6 +1426,8 @@ export interface HamChatRequest {
   session_id?: string;
   /** Exactly one new user message per turn; server loads prior transcript when `session_id` is set. */
   messages: [HamChatRequestMessage];
+  /** Optional workspace scope for session tenancy (`src/api/chat.py`); omitted keeps legacy unscoped behavior. */
+  workspace_id?: string;
   client_request_id?: string;
   /** When true (default), API injects `.cursor/skills` summary into system context for intent routing. */
   include_operator_skills?: boolean;
@@ -1540,12 +1613,26 @@ export type ChatSessionTurn = {
   content: string;
 };
 
+function normalizedWorkspaceId(workspaceId: string | null | undefined): string | null {
+  const wid = workspaceId?.trim();
+  return wid ? wid : null;
+}
+
+function appendWorkspaceIdToPath(path: string, workspaceId: string | null | undefined): string {
+  const wid = normalizedWorkspaceId(workspaceId);
+  if (!wid) return path;
+  const q = new URLSearchParams();
+  q.set("workspace_id", wid);
+  return `${path}${path.includes("?") ? "&" : "?"}${q.toString()}`;
+}
+
 /** List past chat sessions (newest first). */
 export async function fetchChatSessions(
   limit = 50,
   offset = 0,
+  workspaceId?: string | null,
 ): Promise<{ sessions: ChatSessionSummary[] }> {
-  const path = `/api/chat/sessions?limit=${limit}&offset=${offset}`;
+  const path = appendWorkspaceIdToPath(`/api/chat/sessions?limit=${limit}&offset=${offset}`, workspaceId);
   const res = await hamApiFetch(path);
   if (!res.ok) {
     const target = apiUrl(path);
@@ -1558,8 +1645,11 @@ export async function fetchChatSessions(
 }
 
 /** Fetch full message history for a single chat session. */
-export async function fetchChatSession(sessionId: string): Promise<ChatSessionDetail> {
-  const path = `/api/chat/sessions/${encodeURIComponent(sessionId)}`;
+export async function fetchChatSession(
+  sessionId: string,
+  workspaceId?: string | null,
+): Promise<ChatSessionDetail> {
+  const path = appendWorkspaceIdToPath(`/api/chat/sessions/${encodeURIComponent(sessionId)}`, workspaceId);
   const res = await hamApiFetch(path);
   if (!res.ok) {
     if (res.status === 404) throw new Error("Session not found");
@@ -1569,8 +1659,8 @@ export async function fetchChatSession(sessionId: string): Promise<ChatSessionDe
 }
 
 /** Delete persisted chat transcript for a session (`session_id` only; server-side store). */
-export async function deleteChatSession(sessionId: string): Promise<void> {
-  const path = `/api/chat/sessions/${encodeURIComponent(sessionId)}`;
+export async function deleteChatSession(sessionId: string, workspaceId?: string | null): Promise<void> {
+  const path = appendWorkspaceIdToPath(`/api/chat/sessions/${encodeURIComponent(sessionId)}`, workspaceId);
   const res = await hamApiFetch(path, { method: "DELETE" });
   if (!res.ok) {
     if (res.status === 404) throw new Error("Session not found");
@@ -1578,7 +1668,30 @@ export async function deleteChatSession(sessionId: string): Promise<void> {
   }
 }
 
-/** GET /api/chat/capabilities — conservative model/HAM flags for honest workspace copy (Clerk when enabled). */
+/** GET /api/chat/context-meters — context pressure (no message bodies). */
+export async function fetchChatContextMeters(opts: {
+  sessionId: string;
+  modelId: string | null;
+  projectId?: string | null;
+  workspaceId?: string | null;
+}): Promise<ChatContextMetersPayload> {
+  const q = new URLSearchParams();
+  q.set("session_id", opts.sessionId.trim());
+  if (opts.modelId?.trim()) q.set("model_id", opts.modelId.trim());
+  if (opts.projectId?.trim()) q.set("project_id", opts.projectId.trim());
+  const wid = normalizedWorkspaceId(opts.workspaceId);
+  if (wid) q.set("workspace_id", wid);
+  const res = await hamApiFetch(`/api/chat/context-meters?${q.toString()}`);
+  if (!res.ok) {
+    if (res.status === 404) {
+      return { enabled: false, this_turn: null, workspace: null, thread: null };
+    }
+    const detail = await hamApiErrorDetailMessage(res);
+    throw new Error(`context-meters: HTTP ${res.status}${detail ? ` ${detail}` : ""}`);
+  }
+  return (await res.json()) as ChatContextMetersPayload;
+}
+
 export async function fetchChatCapabilities(modelId: string | null): Promise<ChatCapabilitiesPayload> {
   const qp = modelId?.trim() ? `?model_id=${encodeURIComponent(modelId.trim())}` : "";
   const res = await hamApiFetch(`/api/chat/capabilities${qp}`);
@@ -1591,8 +1704,11 @@ export async function fetchChatCapabilities(modelId: string | null): Promise<Cha
 }
 
 /** Download sanitized chat transcript PDF (server-generated; includes Clerk session when configured). */
-export async function downloadChatSessionPdf(sessionId: string): Promise<void> {
-  const path = `/api/chat/sessions/${encodeURIComponent(sessionId)}/export.pdf`;
+export async function downloadChatSessionPdf(
+  sessionId: string,
+  workspaceId?: string | null,
+): Promise<void> {
+  const path = appendWorkspaceIdToPath(`/api/chat/sessions/${encodeURIComponent(sessionId)}/export.pdf`, workspaceId);
   const res = await hamApiFetch(path);
   if (!res.ok) {
     if (res.status === 404) throw new Error("Session not found");
@@ -1620,8 +1736,10 @@ export async function downloadChatSessionPdf(sessionId: string): Promise<void> {
 }
 
 /** Create an empty chat session id for explicit turn persistence (desktop local-control turns). */
-export async function createChatSession(): Promise<{ session_id: string; created_at: string | null }> {
-  const path = "/api/chat/sessions";
+export async function createChatSession(
+  workspaceId?: string | null,
+): Promise<{ session_id: string; created_at: string | null }> {
+  const path = appendWorkspaceIdToPath("/api/chat/sessions", workspaceId);
   const res = await hamApiFetch(path, { method: "POST" });
   if (!res.ok) {
     throw new Error(`Failed to create chat session (HTTP ${res.status}) via ${apiUrl(path)}.`);
@@ -1633,8 +1751,9 @@ export async function createChatSession(): Promise<{ session_id: string; created
 export async function appendChatSessionTurns(
   sessionId: string,
   turns: ChatSessionTurn[],
+  workspaceId?: string | null,
 ): Promise<{ session_id: string; messages: HamChatMessage[] }> {
-  const path = `/api/chat/sessions/${encodeURIComponent(sessionId)}/turns`;
+  const path = appendWorkspaceIdToPath(`/api/chat/sessions/${encodeURIComponent(sessionId)}/turns`, workspaceId);
   const res = await hamApiFetch(path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

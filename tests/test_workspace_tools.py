@@ -11,21 +11,26 @@ Validates:
 
 from __future__ import annotations
 
+import json
 import os
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
-from src.api.server import app
+from src.api.clerk_gate import get_ham_clerk_actor
+from src.api.server import fastapi_app
+from src.ham.clerk_auth import HamActor
 
-client = TestClient(app)
+# ``server.app`` is the PNA middleware wrapper; use the FastAPI instance for routes + overrides.
+client = TestClient(fastapi_app)
 
 EXPECTED_TOOL_IDS = [
     "openrouter",
     "cursor",
     "factory_droid",
     "claude_code",
+    "claude_agent_sdk",
     "openclaw",
     "ai_studio",
     "antigravity",
@@ -44,6 +49,18 @@ def _get_tools() -> dict:
     resp = client.get("/api/workspace/tools")
     assert resp.status_code == 200
     return resp.json()
+
+
+@pytest.fixture(autouse=True)
+def _reset_claude_agent_sdk_cache():
+    """Module-level _SDK_DETECTION cache leaks across tests; clear it."""
+    from src.ham.worker_adapters.claude_agent_adapter import (
+        reset_claude_agent_readiness_cache,
+    )
+
+    reset_claude_agent_readiness_cache()
+    yield
+    reset_claude_agent_readiness_cache()
 
 
 class TestToolDiscoveryEndpoint:
@@ -182,7 +199,7 @@ class TestResponseSchema:
 
     def test_all_tools_have_required_fields(self):
         data = _get_tools()
-        required_fields = {"id", "label", "category", "status", "enabled", "source", "connect_kind"}
+        required_fields = {"id", "label", "category", "status", "connection", "enabled", "source", "connect_kind"}
         for tool in data["tools"]:
             for field in required_fields:
                 assert field in tool, f"Tool {tool.get('id', '?')} missing field: {field}"
@@ -211,6 +228,14 @@ class TestResponseSchema:
                 f"{tool['id']} has invalid category: {tool['category']}"
             )
 
+    def test_connection_values_are_valid(self):
+        valid_conn = {"on", "off", "error"}
+        data = _get_tools()
+        for tool in data["tools"]:
+            assert tool["connection"] in valid_conn, (
+                f"{tool['id']} has invalid connection: {tool['connection']}"
+            )
+
     def test_connect_kind_values_are_valid(self):
         valid = {"none", "api_key", "access_token", "local_scan", "coming_soon"}
         data = _get_tools()
@@ -223,13 +248,221 @@ class TestConnectAndScanEndpoints:
         r = client.post("/api/workspace/tools/nope_tool/connect", json={"api_key": "x"})
         assert r.status_code == 404
 
-    def test_connect_openrouter_blocked_501(self):
+    def test_connect_openrouter_ok_when_validation_passes(self, tmp_path, monkeypatch):
+        cred_path = tmp_path / "wtc.json"
+        monkeypatch.setenv("HAM_WORKSPACE_TOOL_CREDENTIALS_FILE", str(cred_path))
         plausible = "sk-or-" + "v" * 30
-        r = client.post("/api/workspace/tools/openrouter/connect", json={"api_key": plausible})
-        assert r.status_code == 501
+        with patch.dict(os.environ, {"OPENROUTER_API_KEY": ""}):
+            with patch(
+                "src.api.workspace_tools.validate_openrouter_api_key",
+                return_value=True,
+            ):
+                r = client.post("/api/workspace/tools/openrouter/connect", json={"api_key": plausible})
+        assert r.status_code == 200
         body = r.json()
-        assert "detail" in body
+        assert body["ok"] is True
+        assert body["status"] == "on"
+        assert body.get("credential_preview")
         assert plausible not in str(body)
+
+    def test_connect_openrouter_invalid_key_returns_400(self, tmp_path, monkeypatch):
+        cred_path = tmp_path / "wtc.json"
+        monkeypatch.setenv("HAM_WORKSPACE_TOOL_CREDENTIALS_FILE", str(cred_path))
+        plausible = "sk-or-" + "v" * 30
+        with patch(
+            "src.api.workspace_tools.validate_openrouter_api_key",
+            return_value=False,
+        ):
+            r = client.post("/api/workspace/tools/openrouter/connect", json={"api_key": plausible})
+        assert r.status_code == 400
+        body = r.json()
+        assert body["ok"] is False
+        assert body["status"] == "off"
+        assert body["error_code"] == "INVALID_KEY"
+        assert plausible not in str(body)
+
+    def test_connect_github_ok_and_invalid(self, tmp_path, monkeypatch):
+        cred_path = tmp_path / "wtc.json"
+        monkeypatch.setenv("HAM_WORKSPACE_TOOL_CREDENTIALS_FILE", str(cred_path))
+        tok = "ghp_" + "x" * 36
+        with patch("src.api.workspace_tools.validate_github_token", return_value=True):
+            r = client.post("/api/workspace/tools/github/connect", json={"access_token": tok})
+        assert r.status_code == 200
+        body = r.json()
+        assert body["ok"] is True
+        assert tok not in str(body)
+
+        with patch("src.api.workspace_tools.validate_github_token", return_value=False):
+            r2 = client.post("/api/workspace/tools/github/connect", json={"access_token": tok})
+        assert r2.status_code == 400
+        assert r2.json()["error_code"] == "INVALID_KEY"
+
+    def test_connect_claude_agent_sdk_ok_and_invalid(self, tmp_path, monkeypatch):
+        cred_path = tmp_path / "wtc.json"
+        monkeypatch.setenv("HAM_WORKSPACE_TOOL_CREDENTIALS_FILE", str(cred_path))
+        from src.ham.worker_adapters.claude_agent_adapter import (
+            ClaudeAgentWorkerCapabilities,
+            ClaudeAgentWorkerReadiness,
+        )
+
+        key = "sk-ant-api03-fake-not-real-" + "a" * 20
+        ready_sdk = ClaudeAgentWorkerReadiness(
+            authenticated=False,
+            sdk_available=True,
+            sdk_version="0.1.2",
+            status="needs_sign_in",
+            capabilities=ClaudeAgentWorkerCapabilities(),
+        )
+        with patch(
+            "src.api.workspace_tools.check_claude_agent_readiness",
+            return_value=ready_sdk,
+        ):
+            with patch(
+                "src.api.workspace_tools.validate_anthropic_api_key",
+                return_value=True,
+            ):
+                r = client.post(
+                    "/api/workspace/tools/claude_agent_sdk/connect",
+                    json={"api_key": key},
+                )
+        assert r.status_code == 200
+        assert r.json()["ok"] is True
+        assert key not in r.text
+
+        with patch(
+            "src.api.workspace_tools.check_claude_agent_readiness",
+            return_value=ready_sdk,
+        ):
+            with patch(
+                "src.api.workspace_tools.validate_anthropic_api_key",
+                return_value=False,
+            ):
+                r2 = client.post(
+                    "/api/workspace/tools/claude_agent_sdk/connect",
+                    json={"api_key": key},
+                )
+        assert r2.status_code == 400
+        assert r2.json()["error_code"] == "INVALID_KEY"
+
+    def test_connect_claude_never_uses_secret_manager_write_through(
+        self, tmp_path, monkeypatch
+    ):
+        cred_path = tmp_path / "wtc.json"
+        monkeypatch.setenv("HAM_WORKSPACE_TOOL_CREDENTIALS_FILE", str(cred_path))
+        monkeypatch.setenv("K_SERVICE", "ham-api")
+        monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "test-proj-123")
+        monkeypatch.setenv("HAM_CONNECTED_TOOLS_SECRET_MANAGER_WRITE_THROUGH", "1")
+        from src.ham.worker_adapters.claude_agent_adapter import (
+            ClaudeAgentWorkerCapabilities,
+            ClaudeAgentWorkerReadiness,
+        )
+
+        key = "sk-ant-api03-" + "a" * 32
+        ready_sdk = ClaudeAgentWorkerReadiness(
+            authenticated=False,
+            sdk_available=True,
+            sdk_version="0.1.2",
+            status="needs_sign_in",
+            capabilities=ClaudeAgentWorkerCapabilities(),
+        )
+        mock_pub = MagicMock()
+        with patch(
+            "src.api.workspace_tools.check_claude_agent_readiness",
+            return_value=ready_sdk,
+        ):
+            with patch(
+                "src.api.workspace_tools.validate_anthropic_api_key",
+                return_value=True,
+            ):
+                with patch(
+                    "src.ham.connected_tools_secret_publish.publish_anthropic_api_key_to_secret_manager",
+                    mock_pub,
+                ):
+                    r = client.post(
+                        "/api/workspace/tools/claude_agent_sdk/connect",
+                        json={"api_key": key},
+                    )
+        assert r.status_code == 200
+        mock_pub.assert_not_called()
+        assert key not in r.text
+        data = json.loads(cred_path.read_text(encoding="utf-8"))
+        assert data.get("anthropic_api_key") == key
+
+    def test_connect_requires_clerk_when_firestore_credential_backend(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.setenv("HAM_WORKSPACE_STORE_BACKEND", "firestore")
+        monkeypatch.setenv("HAM_FIRESTORE_PROJECT_ID", "proj")
+        from cryptography.fernet import Fernet
+
+        monkeypatch.setenv(
+            "HAM_CONNECTED_TOOLS_CREDENTIAL_ENCRYPTION_KEY",
+            Fernet.generate_key().decode("ascii"),
+        )
+        from src.ham.worker_adapters.claude_agent_adapter import (
+            ClaudeAgentWorkerCapabilities,
+            ClaudeAgentWorkerReadiness,
+        )
+
+        key = "sk-ant-api03-" + "z" * 32
+        ready_sdk = ClaudeAgentWorkerReadiness(
+            authenticated=False,
+            sdk_available=True,
+            sdk_version="0.1.2",
+            status="needs_sign_in",
+            capabilities=ClaudeAgentWorkerCapabilities(),
+        )
+        with patch(
+            "src.api.workspace_tools.check_claude_agent_readiness",
+            return_value=ready_sdk,
+        ):
+            with patch(
+                "src.api.workspace_tools.validate_anthropic_api_key",
+                return_value=True,
+            ):
+                r = client.post(
+                    "/api/workspace/tools/claude_agent_sdk/connect",
+                    json={"api_key": key},
+                )
+        assert r.status_code == 401
+        assert r.json()["error_code"] == "CLERK_SESSION_REQUIRED"
+
+    def test_connect_claude_agent_sdk_requires_sdk(self, monkeypatch):
+        from src.ham.worker_adapters.claude_agent_adapter import (
+            ClaudeAgentWorkerCapabilities,
+            ClaudeAgentWorkerReadiness,
+        )
+
+        no_sdk = ClaudeAgentWorkerReadiness(
+            authenticated=False,
+            sdk_available=False,
+            sdk_version=None,
+            status="unavailable",
+            capabilities=ClaudeAgentWorkerCapabilities(),
+        )
+        with patch(
+            "src.api.workspace_tools.check_claude_agent_readiness",
+            return_value=no_sdk,
+        ):
+            r = client.post(
+                "/api/workspace/tools/claude_agent_sdk/connect",
+                json={"api_key": "sk-ant-" + "a" * 40},
+            )
+        assert r.status_code == 400
+        assert r.json()["error_code"] == "SETUP_REQUIRED"
+
+    def test_disconnect_openrouter_clears_store(self, tmp_path, monkeypatch):
+        cred_path = tmp_path / "wtc.json"
+        monkeypatch.setenv("HAM_WORKSPACE_TOOL_CREDENTIALS_FILE", str(cred_path))
+        cred_path.write_text(
+            '{"openrouter_api_key": "sk-or-secret-not-in-response"}\n',
+            encoding="utf-8",
+        )
+        r = client.post("/api/workspace/tools/openrouter/disconnect")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["ok"] is True
+        assert "sk-or-secret" not in str(body)
 
     def test_cursor_connect_and_disconnect_roundtrip(self, tmp_path):
         cred_file = tmp_path / "cursor_credentials.json"
@@ -239,18 +472,28 @@ class TestConnectAndScanEndpoints:
         }
         with patch.dict(os.environ, env):
             plausible = "cur_" + "a" * 40
-            r = client.post("/api/workspace/tools/cursor/connect", json={"api_key": plausible})
+            with patch(
+                "src.api.workspace_tools.validate_cursor_api_key",
+                return_value=True,
+            ):
+                r = client.post("/api/workspace/tools/cursor/connect", json={"api_key": plausible})
             assert r.status_code == 200
-            data = r.json()
-            assert plausible not in str(data)
-            cur = next(t for t in data["tools"] if t["id"] == "cursor")
+            body = r.json()
+            assert body["ok"] is True
+            assert plausible not in str(body)
+            assert body.get("credential_preview")
+
+            tools = client.get("/api/workspace/tools").json()["tools"]
+            cur = next(t for t in tools if t["id"] == "cursor")
             assert cur["status"] == "ready"
             assert cur.get("credential_preview")
 
             r2 = client.post("/api/workspace/tools/cursor/disconnect")
             assert r2.status_code == 200
-            data2 = r2.json()
-            cur2 = next(t for t in data2["tools"] if t["id"] == "cursor")
+            assert r2.json()["ok"] is True
+
+            tools2 = client.get("/api/workspace/tools").json()["tools"]
+            cur2 = next(t for t in tools2 if t["id"] == "cursor")
             assert cur2["status"] == "needs_sign_in"
 
     def test_scan_endpoint_returns_tools(self):
@@ -259,3 +502,304 @@ class TestConnectAndScanEndpoints:
         body = r.json()
         assert "tools" in body
         assert len(body["tools"]) >= len(EXPECTED_TOOL_IDS)
+
+
+class TestClaudeAgentSdkEntry:
+    """Behavior of the new claude_agent_sdk Connected Tools entry."""
+
+    def _claude_entry(self) -> dict:
+        data = _get_tools()
+        matches = [t for t in data["tools"] if t["id"] == "claude_agent_sdk"]
+        assert len(matches) == 1, "claude_agent_sdk entry missing or duplicated"
+        return matches[0]
+
+    def test_entry_shape(self):
+        tool = self._claude_entry()
+        assert tool["label"] == "Claude Agent"
+        assert tool["category"] == "coding"
+        assert tool["source"] == "cloud"
+        assert tool["connect_kind"] == "api_key"
+        assert tool["safe_actions"] == ["check_status", "connect", "disconnect"]
+        assert "plan" in tool["capabilities"]
+        assert "edit_code" in tool["capabilities"]
+        assert "version" in tool
+        assert "connection" in tool
+        assert tool["connection"] in ("on", "off", "error")
+
+    def test_status_is_valid(self):
+        valid = {"ready", "needs_sign_in", "not_found", "off", "error", "unknown"}
+        assert self._claude_entry()["status"] in valid
+
+    def test_safe_actions_include_connect(self):
+        assert "connect" in self._claude_entry()["safe_actions"]
+        assert "check_status" in self._claude_entry()["safe_actions"]
+
+    def test_setup_hint_for_not_found(self):
+        from src.ham.worker_adapters.claude_agent_adapter import (
+            ClaudeAgentWorkerCapabilities,
+            ClaudeAgentWorkerReadiness,
+        )
+
+        readiness = ClaudeAgentWorkerReadiness(
+            authenticated=False,
+            sdk_available=False,
+            status="unavailable",
+            capabilities=ClaudeAgentWorkerCapabilities(),
+        )
+        with patch(
+            "src.api.workspace_tools.check_claude_agent_readiness",
+            return_value=readiness,
+        ):
+            tool = self._claude_entry()
+            assert tool["status"] == "not_found"
+            assert "Install Claude Agent" in tool["setup_hint"]
+            assert tool["version"] is None
+
+    def test_setup_hint_for_needs_sign_in(self):
+        from src.ham.worker_adapters.claude_agent_adapter import (
+            ClaudeAgentWorkerCapabilities,
+            ClaudeAgentWorkerReadiness,
+        )
+
+        readiness = ClaudeAgentWorkerReadiness(
+            authenticated=False,
+            sdk_available=True,
+            sdk_version="0.1.2",
+            status="needs_sign_in",
+            capabilities=ClaudeAgentWorkerCapabilities(),
+        )
+        with patch(
+            "src.api.workspace_tools.check_claude_agent_readiness",
+            return_value=readiness,
+        ):
+            tool = self._claude_entry()
+            assert tool["status"] == "needs_sign_in"
+            assert "Paste your Anthropic API key" in tool["setup_hint"]
+            assert tool["version"] == "0.1.2"
+
+    def test_setup_hint_for_ready(self):
+        from src.ham.worker_adapters.claude_agent_adapter import (
+            ClaudeAgentWorkerCapabilities,
+            ClaudeAgentWorkerReadiness,
+        )
+
+        readiness = ClaudeAgentWorkerReadiness(
+            authenticated=True,
+            sdk_available=True,
+            sdk_version="0.1.2",
+            status="ready",
+            capabilities=ClaudeAgentWorkerCapabilities(),
+        )
+        with patch(
+            "src.api.workspace_tools.check_claude_agent_readiness",
+            return_value=readiness,
+        ):
+            tool = self._claude_entry()
+            assert tool["status"] == "ready"
+            assert tool["setup_hint"] == "Claude Agent is connected."
+            assert tool["version"] == "0.1.2"
+
+    def test_setup_hint_for_error(self):
+        with patch(
+            "src.api.workspace_tools.check_claude_agent_readiness",
+            side_effect=RuntimeError("boom"),
+        ):
+            tool = self._claude_entry()
+            assert tool["status"] == "error"
+            assert "something went wrong" in tool["setup_hint"].lower()
+            assert tool["version"] is None
+
+    def test_disconnect_clears_stored_key(self, tmp_path, monkeypatch):
+        cred_path = tmp_path / "wtc.json"
+        monkeypatch.setenv("HAM_WORKSPACE_TOOL_CREDENTIALS_FILE", str(cred_path))
+        cred_path.write_text(
+            '{"anthropic_api_key": "sk-ant-secret-not-in-body"}\n',
+            encoding="utf-8",
+        )
+        r = client.post("/api/workspace/tools/claude_agent_sdk/disconnect")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["ok"] is True
+        assert "sk-ant-secret-not-in-body" not in str(body)
+
+    def test_no_auth_values_in_response(self):
+        env = {
+            "ANTHROPIC_API_KEY": "sk-ant-secret-not-real-12345",
+            "ANTHROPIC_VERTEX_PROJECT_ID": "secret-vertex-project-id-99999",
+        }
+        with patch.dict(os.environ, env):
+            data = _get_tools()
+            raw = str(data)
+            assert "sk-ant-secret-not-real-12345" not in raw
+            assert "secret-vertex-project-id-99999" not in raw
+
+
+class TestClaudeAgentSdkMissionRoute:
+    """POST /api/workspace/tools/claude_agent_sdk/mission — Clerk + credential gate."""
+
+    def _actor(self) -> HamActor:
+        return HamActor(
+            user_id="user_mission_test",
+            org_id=None,
+            session_id="sess_mission",
+            email="mission-test@example.com",
+            permissions=frozenset(),
+            org_role=None,
+            raw_permission_claim=None,
+        )
+
+    def test_mission_401_without_clerk_when_auth_required(self, monkeypatch):
+        monkeypatch.setenv("HAM_CLERK_REQUIRE_AUTH", "1")
+        monkeypatch.delenv("HAM_CLERK_ENFORCE_EMAIL_RESTRICTIONS", raising=False)
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+        async def _no_actor() -> None:
+            return None
+
+        fastapi_app.dependency_overrides[get_ham_clerk_actor] = _no_actor
+        try:
+            r = client.post("/api/workspace/tools/claude_agent_sdk/mission")
+        finally:
+            fastapi_app.dependency_overrides.pop(get_ham_clerk_actor, None)
+
+        assert r.status_code == 401
+        body = r.json()
+        assert body["detail"]["error"]["code"] == "CLERK_SESSION_REQUIRED"
+
+    def test_mission_smoke_token_does_not_bypass_clerk(self, monkeypatch):
+        monkeypatch.setenv("HAM_CLERK_REQUIRE_AUTH", "1")
+        monkeypatch.delenv("HAM_CLERK_ENFORCE_EMAIL_RESTRICTIONS", raising=False)
+        monkeypatch.setenv("HAM_CLAUDE_AGENT_SMOKE_ENABLED", "1")
+        monkeypatch.setenv("HAM_CLAUDE_AGENT_SMOKE_TOKEN", "x" * 32)
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+        async def _no_actor() -> None:
+            return None
+
+        fastapi_app.dependency_overrides[get_ham_clerk_actor] = _no_actor
+        try:
+            r = client.post(
+                "/api/workspace/tools/claude_agent_sdk/mission",
+                headers={"X-HAM-SMOKE-TOKEN": "x" * 32},
+            )
+        finally:
+            fastapi_app.dependency_overrides.pop(get_ham_clerk_actor, None)
+
+        assert r.status_code == 401
+
+    def test_mission_400_connect_required_with_session_no_key(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.setenv("HAM_CLERK_REQUIRE_AUTH", "1")
+        monkeypatch.delenv("HAM_CLERK_ENFORCE_EMAIL_RESTRICTIONS", raising=False)
+        monkeypatch.setenv("HAM_WORKSPACE_TOOL_CREDENTIALS_FILE", str(tmp_path / "empty.json"))
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+        cred = tmp_path / "empty.json"
+        cred.write_text("{}\n", encoding="utf-8")
+
+        async def _actor_dep() -> HamActor:
+            return self._actor()
+
+        fastapi_app.dependency_overrides[get_ham_clerk_actor] = _actor_dep
+        try:
+            r = client.post("/api/workspace/tools/claude_agent_sdk/mission")
+        finally:
+            fastapi_app.dependency_overrides.pop(get_ham_clerk_actor, None)
+
+        assert r.status_code == 400
+        assert r.json()["detail"]["code"] == "CONNECT_CLAUDE_AGENT_REQUIRED"
+        assert "Connect Claude Agent first" in r.json()["detail"]["message"]
+
+    def test_mission_200_calls_adapter_when_authed_and_key_present(
+        self, tmp_path, monkeypatch
+    ):
+        from src.ham.worker_adapters.claude_agent_adapter import ClaudeAgentMissionResult
+
+        monkeypatch.setenv("HAM_CLERK_REQUIRE_AUTH", "1")
+        monkeypatch.delenv("HAM_CLERK_ENFORCE_EMAIL_RESTRICTIONS", raising=False)
+        monkeypatch.setenv(
+            "HAM_WORKSPACE_TOOL_CREDENTIALS_FILE", str(tmp_path / "wtc.json")
+        )
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+        cred = tmp_path / "wtc.json"
+        cred.write_text(
+            '{"anthropic_api_key": "sk-ant-api03-connect-tools-test-not-real"}\n',
+            encoding="utf-8",
+        )
+
+        fake = ClaudeAgentMissionResult(
+            ok=True,
+            mission_ok=True,
+            worker="claude_agent_sdk",
+            mission_type="non_mutating_review",
+            result_text='{"mission_status":"ok"}',
+            parsed_result={"mission_status": "ok", "worker": "claude_agent_sdk"},
+            duration_ms=12,
+            safety_mode="plan",
+            blocker=None,
+        )
+
+        async def _actor_dep() -> HamActor:
+            return self._actor()
+
+        fastapi_app.dependency_overrides[get_ham_clerk_actor] = _actor_dep
+        try:
+            with patch(
+                "src.api.workspace_tools.run_claude_agent_sdk_mission",
+                new=AsyncMock(return_value=fake),
+            ):
+                r = client.post("/api/workspace/tools/claude_agent_sdk/mission")
+        finally:
+            fastapi_app.dependency_overrides.pop(get_ham_clerk_actor, None)
+
+        assert r.status_code == 200
+        body = r.json()
+        assert body["ok"] is True
+        assert body["mission_ok"] is True
+        assert body["worker"] == "claude_agent_sdk"
+        assert "sk-ant-api03" not in str(body)
+
+
+class TestClaudeCodeEntryRegression:
+    """Regression: the existing claude_code (local CLI) entry must not change."""
+
+    def test_claude_code_id_label_source_unchanged(self):
+        data = _get_tools()
+        cc = next(t for t in data["tools"] if t["id"] == "claude_code")
+        assert cc["label"] == "Claude Code"
+        assert cc["connect_kind"] == "local_scan"
+        assert cc["safe_actions"] == ["check_status"]
+        assert cc["source"] in ("this_computer", "unknown")
+
+    def test_claude_code_has_no_version(self):
+        data = _get_tools()
+        cc = next(t for t in data["tools"] if t["id"] == "claude_code")
+        assert cc.get("version") is None
+
+
+class TestVersionFieldDefaults:
+    """The new optional `version` field must default to None for everything
+    except the claude_agent_sdk entry (and only when it actually has one)."""
+
+    def test_version_is_none_for_non_claude_entries(self):
+        data = _get_tools()
+        for tool in data["tools"]:
+            if tool["id"] == "claude_agent_sdk":
+                continue
+            assert tool.get("version") is None, (
+                f"{tool['id']} unexpectedly has version={tool.get('version')!r}"
+            )
+
+
+class TestScanInvalidatesClaudeCache:
+    """The scan endpoint must invalidate the Claude SDK detection cache."""
+
+    def test_scan_calls_reset_cache(self):
+        with patch(
+            "src.api.workspace_tools.reset_claude_agent_readiness_cache"
+        ) as mock_reset:
+            r = client.post("/api/workspace/tools/scan")
+            assert r.status_code == 200
+            assert mock_reset.called

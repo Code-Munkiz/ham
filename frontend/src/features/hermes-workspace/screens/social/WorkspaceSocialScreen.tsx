@@ -27,6 +27,8 @@ import {
   type XCapabilities,
 } from "../../adapters/socialAdapter";
 import { WorkspaceSurfaceHeader, WorkspaceSurfaceStateCard } from "../../components/workspaceSurfaceChrome";
+import { Link } from "react-router-dom";
+import { AdvisoryChipsRow } from "./policy/components/AdvisoryChipsRow";
 import { SOCIAL_COPY } from "./lib/socialCopy";
 import {
   buildSocialProductTruth,
@@ -2274,6 +2276,18 @@ export function WorkspaceSocialScreen() {
 
       {!loading && snapshot ? (
         <>
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/10 bg-black/25 px-3 py-2">
+            <AdvisoryChipsRow
+              label="SocialPolicy advisories"
+              reasons={snapshot.policy?.warnings ?? []}
+            />
+            <Link
+              to="/workspace/social/policy"
+              className="text-xs font-medium text-white/70 underline hover:text-white"
+            >
+              Open SocialPolicy editor →
+            </Link>
+          </div>
           <GlobalStatusStrip snapshot={snapshot} />
 
           <SectionTabs
