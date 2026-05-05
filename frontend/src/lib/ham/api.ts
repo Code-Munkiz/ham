@@ -200,6 +200,11 @@ export async function postClaudeAgentSmoke(): Promise<Response> {
   return hamApiFetch("/api/workspace/tools/claude_agent_sdk/smoke", { method: "POST" });
 }
 
+/** Claude Agent bounded mission (`POST /api/workspace/tools/claude_agent_sdk/mission`). Clerk auth only; no smoke token. */
+export async function postClaudeAgentMission(): Promise<Response> {
+  return hamApiFetch("/api/workspace/tools/claude_agent_sdk/mission", { method: "POST" });
+}
+
 /** Multipart upload for workspace chat; returns an opaque `attachment_id` (blob stored server-side). */
 export async function postChatUploadAttachment(file: File): Promise<{
   attachment_id: string;
