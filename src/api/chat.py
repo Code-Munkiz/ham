@@ -17,6 +17,7 @@ from fastapi import APIRouter, File, Header, HTTPException, Query, Request, Uplo
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from src.api.clerk_gate import enforce_clerk_session_and_email_for_request
 from src.api.models_catalog import build_catalog_payload, resolve_model_id_for_chat
 from src.api.workspace_files import resolve_workspace_context_snapshot_root
 from src.bridge import (
@@ -28,22 +29,23 @@ from src.bridge import (
     build_browser_executor,
     run_browser_v0,
 )
-from src.ham.chat_user_content import (
-    has_screenshot_in_stored,
-    normalize_user_incoming_to_stored,
-    plain_text_for_operator,
-    to_llm_message_content,
-    vision_system_suffix,
-)
-from src.ham.execution_mode import (
-    ExecutionEnvironment,
-    ExecutionModePreference,
-    browser_runtime_available,
-    resolve_execution_mode,
-)
 from src.ham.active_agent_context import try_active_agent_guidance_for_project_root
-from src.ham.cursor_skills_catalog import list_cursor_skills, render_skills_for_system_prompt
-from src.ham.cursor_subagents_catalog import list_cursor_subagents, render_subagents_for_system_prompt
+from src.ham.chat_attachment_store import (
+    CHAT_UPLOAD_ALLOWED_MIME,
+    AttachmentRecord,
+    default_attachment_max_bytes,
+    get_chat_attachment_store,
+    kind_for_mime,
+    safe_upload_filename,
+)
+from src.ham.chat_context_meters import (
+    DEFAULT_THREAD_BUDGET_CHARS,
+    compute_this_turn_meter_block,
+    compute_thread_meter_block,
+    context_meters_feature_enabled,
+    resolve_model_context_tokens,
+    workspace_snapshot_and_meter,
+)
 from src.ham.chat_operator import (
     ChatOperatorPayload,
     OperatorTurnResult,
@@ -52,7 +54,13 @@ from src.ham.chat_operator import (
     process_agent_router_turn,
     process_operator_turn,
 )
-from src.api.clerk_gate import enforce_clerk_session_and_email_for_request
+from src.ham.chat_user_content import (
+    has_screenshot_in_stored,
+    normalize_user_incoming_to_stored,
+    plain_text_for_operator,
+    to_llm_message_content,
+    vision_system_suffix,
+)
 from src.ham.clerk_auth import (
     HamActor,
     actor_attribution_dict,
@@ -63,7 +71,23 @@ from src.ham.clerk_policy import (
     permission_for_intent,
     permission_for_phase,
 )
+from src.ham.cursor_skills_catalog import list_cursor_skills, render_skills_for_system_prompt
+from src.ham.cursor_subagents_catalog import (
+    list_cursor_subagents,
+    render_subagents_for_system_prompt,
+)
+from src.ham.execution_mode import (
+    ExecutionEnvironment,
+    ExecutionModePreference,
+    browser_runtime_available,
+    resolve_execution_mode,
+)
 from src.ham.operator_audit import append_operator_action_audit
+from src.ham.transcription_config import (
+    transcription_api_key,
+    transcription_provider,
+    transcription_runtime_configured,
+)
 from src.ham.ui_actions import split_assistant_ui_actions, ui_actions_system_instructions
 from src.integrations.nous_gateway_client import (
     GatewayCallError,
@@ -71,30 +95,9 @@ from src.integrations.nous_gateway_client import (
     format_gateway_error_user_message,
     stream_chat_turn,
 )
-from src.persistence.chat_session_store import ChatTurn, build_chat_session_store
-from src.ham.chat_context_meters import (
-    DEFAULT_THREAD_BUDGET_CHARS,
-    compute_this_turn_meter_block,
-    compute_thread_meter_block,
-    context_meters_feature_enabled,
-    resolve_model_context_tokens,
-    workspace_snapshot_and_meter,
-)
-from src.ham.chat_attachment_store import (
-    CHAT_UPLOAD_ALLOWED_MIME,
-    AttachmentRecord,
-    default_attachment_max_bytes,
-    get_chat_attachment_store,
-    kind_for_mime,
-    safe_upload_filename,
-)
-from src.ham.transcription_config import (
-    transcription_api_key,
-    transcription_provider,
-    transcription_runtime_configured,
-)
 from src.memory_heist import browser_policy_from_config, discover_config
 from src.metadata_stamps import ScanMode
+from src.persistence.chat_session_store import ChatTurn, build_chat_session_store
 from src.persistence.project_store import get_project_store
 
 router = APIRouter(tags=["chat"])
@@ -131,6 +134,8 @@ class ChatRequest(BaseModel):
     project_id: str | None = Field(default=None, max_length=180)
     # When true (default), append compact HAM active-agent guidance from merged project config (Hermes catalog descriptors only; not execution).
     include_active_agent_guidance: bool = True
+    # Workspace-scoped chat history (Phase 2a). Optional for legacy v1 compatibility.
+    workspace_id: str | None = Field(default=None, max_length=180)
     model_id: str | None = Field(default=None, max_length=256)
     workbench_mode: Literal["ask", "plan", "agent"] | None = None
     worker: str | None = Field(default=None, max_length=64)
@@ -303,6 +308,46 @@ def _resolve_chat_clerk_context(
     )
     actor = enforce_clerk_session_and_email_for_request(authorization, route=route)
     return actor, ham_hdr
+
+
+def _normalized_workspace_id(workspace_id: str | None) -> str | None:
+    wid = (workspace_id or "").strip()
+    return wid or None
+
+
+def _scoped_user_id(ham_actor: HamActor | None, workspace_id: str | None) -> str | None:
+    if workspace_id is None or ham_actor is None:
+        return None
+    return ham_actor.user_id
+
+
+def _session_not_found() -> HTTPException:
+    return HTTPException(
+        status_code=404,
+        detail={"error": {"code": "SESSION_NOT_FOUND", "message": "Unknown chat session."}},
+    )
+
+
+def _get_session_for_scope(
+    session_id: str,
+    *,
+    user_id: str | None,
+    workspace_id: str | None,
+    authenticated_actor_user_id: str | None = None,
+):
+    rec = _chat_store.get_session(session_id)
+    if rec is None:
+        raise _session_not_found()
+    if workspace_id is not None:
+        if rec.workspace_id != workspace_id or rec.user_id != user_id:
+            raise _session_not_found()
+        return rec
+    # Request did not pin a workspace: still enforce ownership when the record is tenant-scoped
+    # so omitting workspace_id cannot bypass user/workspace isolation (chat append / delete / export).
+    if rec.workspace_id is not None or rec.user_id is not None:
+        if authenticated_actor_user_id is None or rec.user_id != authenticated_actor_user_id:
+            raise _session_not_found()
+    return rec
 
 
 def _record_operator_audit(
@@ -712,25 +757,24 @@ def _finalize_incoming_for_store(
 def _prepare_chat_session(
     body: ChatRequest,
     *,
+    user_id: str | None = None,
     attachment_user_id: str | None = None,
     llm_attachment_user_id: str | None = None,
+    authenticated_actor_user_id: str | None = None,
 ) -> tuple[str, list[dict[str, Any]], dict[str, Any] | None, str]:
     """Returns ``(session_id, llm_messages, active_agent_meta, last_user_plain_for_operator)``."""
     store = _chat_store
+    workspace_id = _normalized_workspace_id(body.workspace_id)
     if body.session_id:
-        if store.get_session(body.session_id) is None:
-            raise HTTPException(
-                status_code=404,
-                detail={
-                    "error": {
-                        "code": "SESSION_NOT_FOUND",
-                        "message": "Unknown chat session.",
-                    }
-                },
-            )
+        _get_session_for_scope(
+            body.session_id,
+            user_id=user_id if workspace_id is not None else None,
+            workspace_id=workspace_id,
+            authenticated_actor_user_id=authenticated_actor_user_id,
+        )
         sid = body.session_id
     else:
-        sid = store.create_session()
+        sid = store.create_session(user_id=user_id, workspace_id=workspace_id)
 
     incoming = _finalize_incoming_for_store(body.messages, attachment_user_id=attachment_user_id)
     last_user_plain = (
@@ -798,13 +842,17 @@ def _prepare_chat_session(
 def _messages_for_completion(
     body: ChatRequest,
     *,
+    user_id: str | None = None,
     attachment_user_id: str | None = None,
     llm_attachment_user_id: str | None = None,
+    authenticated_actor_user_id: str | None = None,
 ) -> tuple[str, list[dict[str, Any]], str | None, dict[str, Any] | None, str]:
     sid, llm_messages, active_meta, last_user_plain = _prepare_chat_session(
         body,
+        user_id=user_id,
         attachment_user_id=attachment_user_id,
         llm_attachment_user_id=llm_attachment_user_id,
+        authenticated_actor_user_id=authenticated_actor_user_id,
     )
     or_override = _resolve_openrouter_model_override(body)
     llm_messages = _append_workbench_to_messages(llm_messages, body)
@@ -838,19 +886,21 @@ def get_chat_context_meters(
     session_id: str = Query(..., min_length=1, max_length=256),
     model_id: str | None = Query(None, max_length=256),
     project_id: str | None = Query(None, max_length=256),
+    workspace_id: str | None = Query(None, max_length=180),
     authorization: str | None = Header(None, alias="Authorization"),
 ) -> dict[str, Any]:
     """Safe context pressure meters (no message contents in the response)."""
-    enforce_clerk_session_and_email_for_request(authorization, route="get_chat_context_meters")
+    ham_actor = enforce_clerk_session_and_email_for_request(authorization, route="get_chat_context_meters")
     if not context_meters_feature_enabled():
         return {"enabled": False, "this_turn": None, "workspace": None, "thread": None}
 
-    rec = _chat_store.get_session(session_id)
-    if rec is None:
-        raise HTTPException(
-            status_code=404,
-            detail={"error": {"code": "SESSION_NOT_FOUND", "message": "Unknown chat session."}},
-        )
+    workspace_scope = _normalized_workspace_id(workspace_id)
+    rec = _get_session_for_scope(
+        session_id,
+        user_id=_scoped_user_id(ham_actor, workspace_scope),
+        workspace_id=workspace_scope,
+        authenticated_actor_user_id=ham_actor.user_id if ham_actor is not None else None,
+    )
     turns = rec.turns
     cat = build_catalog_payload()
     raw_items = cat.get("items")
@@ -922,13 +972,21 @@ def get_chat_context_meters(
 async def list_chat_sessions(
     limit: int = 50,
     offset: int = 0,
+    workspace_id: str | None = Query(None, max_length=180),
     authorization: str | None = Header(None, alias="Authorization"),
 ) -> dict:
     """List chat sessions with previews (newest first)."""
-    enforce_clerk_session_and_email_for_request(authorization, route="list_chat_sessions")
+    ham_actor = enforce_clerk_session_and_email_for_request(authorization, route="list_chat_sessions")
+    workspace_scope = _normalized_workspace_id(workspace_id)
+    user_scope = _scoped_user_id(ham_actor, workspace_scope)
     clamped_limit = max(1, min(limit, 100))
     clamped_offset = max(0, offset)
-    items = _chat_store.list_sessions(limit=clamped_limit, offset=clamped_offset)
+    items = _chat_store.list_sessions(
+        user_id=user_scope,
+        workspace_id=workspace_scope,
+        limit=clamped_limit,
+        offset=clamped_offset,
+    )
     return {
         "sessions": [
             {
@@ -945,16 +1003,18 @@ async def list_chat_sessions(
 @router.get("/api/chat/sessions/{session_id}")
 async def get_chat_session(
     session_id: str,
+    workspace_id: str | None = Query(None, max_length=180),
     authorization: str | None = Header(None, alias="Authorization"),
 ) -> dict:
     """Get full message history for a single chat session."""
-    enforce_clerk_session_and_email_for_request(authorization, route="get_chat_session")
-    rec = _chat_store.get_session(session_id)
-    if rec is None:
-        raise HTTPException(
-            status_code=404,
-            detail={"error": {"code": "SESSION_NOT_FOUND", "message": "Unknown chat session."}},
-        )
+    ham_actor = enforce_clerk_session_and_email_for_request(authorization, route="get_chat_session")
+    workspace_scope = _normalized_workspace_id(workspace_id)
+    rec = _get_session_for_scope(
+        session_id,
+        user_id=_scoped_user_id(ham_actor, workspace_scope),
+        workspace_id=workspace_scope,
+        authenticated_actor_user_id=ham_actor.user_id if ham_actor is not None else None,
+    )
     return {
         "session_id": rec.session_id,
         "messages": [{"role": t.role, "content": t.content} for t in rec.turns],
@@ -965,21 +1025,27 @@ async def get_chat_session(
 @router.delete("/api/chat/sessions/{session_id}", status_code=204)
 async def delete_chat_session(
     session_id: str,
+    workspace_id: str | None = Query(None, max_length=180),
     authorization: str | None = Header(None, alias="Authorization"),
 ) -> Response:
     """Delete a chat session and its turns from HAM-backed persistence (SQLite/Firestore/memory)."""
-    enforce_clerk_session_and_email_for_request(authorization, route="delete_chat_session")
+    ham_actor = enforce_clerk_session_and_email_for_request(authorization, route="delete_chat_session")
+    workspace_scope = _normalized_workspace_id(workspace_id)
+    _get_session_for_scope(
+        session_id,
+        user_id=_scoped_user_id(ham_actor, workspace_scope),
+        workspace_id=workspace_scope,
+        authenticated_actor_user_id=ham_actor.user_id if ham_actor is not None else None,
+    )
     if not _chat_store.delete_session(session_id):
-        raise HTTPException(
-            status_code=404,
-            detail={"error": {"code": "SESSION_NOT_FOUND", "message": "Unknown chat session."}},
-        )
+        raise _session_not_found()
     return Response(status_code=204)
 
 
 @router.get("/api/chat/sessions/{session_id}/export.pdf")
 async def export_chat_session_pdf(
     session_id: str,
+    workspace_id: str | None = Query(None, max_length=180),
     authorization: str | None = Header(None, alias="Authorization"),
 ) -> Response:
     """Export persisted chat transcript as PDF (sanitized; no attachment re-fetch).
@@ -987,21 +1053,22 @@ async def export_chat_session_pdf(
     **Authorization:** Same as :func:`get_chat_session` — ``enforce_clerk_session_and_email_for_request``
     when Clerk auth is enabled; no separate export policy.
 
-    **Session scope:** Chat persistence (Firestore/SQLite/memory) does **not** record a per-user
-    owner on the session document. Any principal who may call ``GET /api/chat/sessions/{id}``
-    (including with a guessed or leaked ``session_id``) can export the same transcript. Mitigate
-    by treating ``session_id`` as secret; per-user session isolation requires store/API changes.
+    **Session scope:** when ``workspace_id`` is supplied, export uses the same user/workspace
+    ownership check as ``GET /api/chat/sessions/{id}``. When ``workspace_id`` is omitted, legacy
+    sessions (no stored owner) remain readable; tenant-scoped sessions still require the
+    authenticated Clerk user to match the session owner.
     """
     from src.ham.chat_pdf_export import render_chat_transcript_pdf_bytes
     from src.ham.pdf_export_sanitizer import safe_export_filename_fragment
 
-    enforce_clerk_session_and_email_for_request(authorization, route="export_chat_session_pdf")
-    rec = _chat_store.get_session(session_id)
-    if rec is None:
-        raise HTTPException(
-            status_code=404,
-            detail={"error": {"code": "SESSION_NOT_FOUND", "message": "Unknown chat session."}},
-        )
+    ham_actor = enforce_clerk_session_and_email_for_request(authorization, route="export_chat_session_pdf")
+    workspace_scope = _normalized_workspace_id(workspace_id)
+    rec = _get_session_for_scope(
+        session_id,
+        user_id=_scoped_user_id(ham_actor, workspace_scope),
+        workspace_id=workspace_scope,
+        authenticated_actor_user_id=ham_actor.user_id if ham_actor is not None else None,
+    )
     turns = [(t.role, t.content) for t in rec.turns]
     pdf = render_chat_transcript_pdf_bytes(
         session_id=rec.session_id,
@@ -1022,11 +1089,16 @@ async def export_chat_session_pdf(
 
 @router.post("/api/chat/sessions")
 async def create_chat_session(
+    workspace_id: str | None = Query(None, max_length=180),
     authorization: str | None = Header(None, alias="Authorization"),
 ) -> dict:
     """Create an empty chat session for explicit persistence flows (desktop local-control turns)."""
-    enforce_clerk_session_and_email_for_request(authorization, route="create_chat_session")
-    sid = _chat_store.create_session()
+    ham_actor = enforce_clerk_session_and_email_for_request(authorization, route="create_chat_session")
+    workspace_scope = _normalized_workspace_id(workspace_id)
+    sid = _chat_store.create_session(
+        user_id=_scoped_user_id(ham_actor, workspace_scope),
+        workspace_id=workspace_scope,
+    )
     rec = _chat_store.get_session(sid)
     return {
         "session_id": sid,
@@ -1038,6 +1110,7 @@ async def create_chat_session(
 async def append_chat_session_turns(
     session_id: str,
     body: ChatSessionAppendRequest,
+    workspace_id: str | None = Query(None, max_length=180),
     authorization: str | None = Header(None, alias="Authorization"),
 ) -> dict:
     """Append finalized user/assistant turns to an existing session."""
@@ -1046,6 +1119,13 @@ async def append_chat_session_turns(
         route="append_chat_session_turns",
     )
     attachment_user_id = ham_actor.user_id if ham_actor is not None else None
+    workspace_scope = _normalized_workspace_id(workspace_id)
+    _get_session_for_scope(
+        session_id,
+        user_id=_scoped_user_id(ham_actor, workspace_scope),
+        workspace_id=workspace_scope,
+        authenticated_actor_user_id=ham_actor.user_id if ham_actor is not None else None,
+    )
     normalized: list[ChatTurn] = []
     for t in body.turns:
         content = str(t.content or "")
@@ -1117,8 +1197,10 @@ async def post_chat(
     aid = ham_actor.user_id if ham_actor is not None else None
     sid, llm_messages, or_override, active_meta, last_user_plain = _messages_for_completion(
         body,
+        user_id=_scoped_user_id(ham_actor, _normalized_workspace_id(body.workspace_id)),
         attachment_user_id=aid,
         llm_attachment_user_id=aid,
+        authenticated_actor_user_id=aid,
     )
     execution_mode = _execution_mode_payload(body, last_user_plain=last_user_plain)
     execution_mode = _apply_browser_bridge_for_turn(
@@ -1203,8 +1285,10 @@ def post_chat_stream(
     aid = ham_actor.user_id if ham_actor is not None else None
     sid, llm_messages, or_override, stream_active_meta, last_user_plain = _messages_for_completion(
         body,
+        user_id=_scoped_user_id(ham_actor, _normalized_workspace_id(body.workspace_id)),
         attachment_user_id=aid,
         llm_attachment_user_id=aid,
+        authenticated_actor_user_id=aid,
     )
     if not _claim_stream_session(sid):
         raise HTTPException(

@@ -25,8 +25,12 @@ from asyncio.subprocess import PIPE
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from src.ham.clerk_auth import HamActor
+from src.persistence.connected_tool_credentials import (
+    resolve_claude_agent_anthropic_api_key_for_actor,
+)
 from src.persistence.workspace_tool_credentials import (
-    resolve_claude_agent_anthropic_api_key,
+    get_stored_anthropic_api_key,
 )
 
 CLAUDE_AGENT_SMOKE_PROMPT = "Reply with exactly: HAM_CLAUDE_SMOKE_OK"
@@ -39,13 +43,24 @@ _DIAG_STDERR_JOIN_CAP = 900
 
 _LOG = logging.getLogger(__name__)
 
-CLAUDE_AGENT_MISSION_PROMPT = """Review this HAM mission brief and return a JSON object with:
-- mission_status: ok
-- worker: claude_agent_sdk
-- job_type: non_mutating_review
-- summary: one sentence
-- acceptance_criteria: exactly three short bullets
-Do not request tools. Do not edit files."""
+CLAUDE_AGENT_MISSION_PROMPT = """You are running a read-only HAM mission check (plan / permission-mode plan, max_turns=1, no tools, no file edits, no shell, no browser).
+
+Output ONLY a single JSON object. No markdown, no code fences, no backticks, no commentary before or after the JSON.
+
+Required shape (types and lengths matter):
+{
+  "mission_status": "ok",
+  "worker": "claude_agent_sdk",
+  "job_type": "non_mutating_review",
+  "summary": "one plain sentence summarizing the review",
+  "acceptance_criteria": ["short string 1", "short string 2", "short string 3"]
+}
+
+Rules:
+- acceptance_criteria MUST be a JSON array of exactly three non-empty strings (not bullet lines, not markdown).
+- worker MUST be the literal string claude_agent_sdk.
+- mission_status MUST be the literal string ok.
+- Do not call tools or claim any file or repo changes."""
 
 # Module-level cache for the SDK import probe. The /api/workspace/tools
 # endpoint rebuilds the registry on every request; importing the SDK each
@@ -153,21 +168,26 @@ def _has_anthropic_api_key() -> bool:
     return bool((os.environ.get("ANTHROPIC_API_KEY") or "").strip())
 
 
-def _workspace_stored_anthropic_key_present() -> bool:
-    """True if the Connected Tools file store holds an Anthropic key (server-side MVP)."""
+def _persisted_anthropic_key_present(actor: HamActor | None) -> bool:
+    """Firestore/user-scoped Connected Tools credential or legacy file-backed key."""
     try:
-        from src.persistence.workspace_tool_credentials import (
-            get_stored_anthropic_api_key,
+        from src.persistence.connected_tool_credentials import (
+            has_connected_tool_credential_record,
         )
 
+        if actor and has_connected_tool_credential_record(actor, "claude_agent_sdk"):
+            return True
+    except Exception:
+        pass
+    try:
         return bool(get_stored_anthropic_api_key())
     except Exception:
         return False
 
 
-def _anthropic_direct_key_present() -> bool:
+def _anthropic_direct_key_present(actor: HamActor | None = None) -> bool:
     """Anthropic direct auth: env key or workspace-stored user key."""
-    return _has_anthropic_api_key() or _workspace_stored_anthropic_key_present()
+    return _has_anthropic_api_key() or _persisted_anthropic_key_present(actor)
 
 
 def _has_bedrock_signal() -> bool:
@@ -199,7 +219,7 @@ def _has_vertex_signal() -> bool:
     return bool(project)
 
 
-def _has_any_auth_signal() -> bool:
+def _has_any_auth_signal(actor: HamActor | None = None) -> bool:
     """Presence-only auth check across the three supported SDK modes.
 
     Never reads or returns the underlying values. Returns only a boolean,
@@ -207,8 +227,27 @@ def _has_any_auth_signal() -> bool:
     """
     try:
         return (
-            _anthropic_direct_key_present() or _has_bedrock_signal() or _has_vertex_signal()
+            _anthropic_direct_key_present(actor)
+            or _has_bedrock_signal()
+            or _has_vertex_signal()
         )
+    except Exception:
+        return False
+
+
+def claude_agent_mission_auth_configured(actor: HamActor | None) -> bool:
+    """True when mission runtime has a credential channel (not SDK install).
+
+    Direct Anthropic: Clerk-scoped Connected Tools credential, legacy file-backed
+    key, legacy ``ANTHROPIC_API_KEY``, or Bedrock / Vertex routing without a stored
+    sk-ant-* key.
+
+    Prefer passing the authenticated Clerk actor whenever available.
+    """
+    try:
+        if resolve_claude_agent_anthropic_api_key_for_actor(actor):
+            return True
+        return _has_bedrock_signal() or _has_vertex_signal()
     except Exception:
         return False
 
@@ -218,7 +257,7 @@ def _uses_non_anthropic_direct_cloud_auth() -> bool:
     return _has_bedrock_signal() or _has_vertex_signal()
 
 
-def _claude_runtime_anthropic_env_overlay() -> dict[str, str]:
+def _claude_runtime_anthropic_env_overlay(actor: HamActor | None = None) -> dict[str, str]:
     """Extra env vars for Claude SDK/CLI children (**not** merged into ``os.environ``).
 
     When using the **direct** Anthropic API, forces ``ANTHROPIC_API_KEY`` to the
@@ -228,20 +267,20 @@ def _claude_runtime_anthropic_env_overlay() -> dict[str, str]:
     """
     if _uses_non_anthropic_direct_cloud_auth():
         return {}
-    key = resolve_claude_agent_anthropic_api_key()
+    key = resolve_claude_agent_anthropic_api_key_for_actor(actor)
     if not key:
         return {}
     return {"ANTHROPIC_API_KEY": key}
 
 
-def _subprocess_env_for_claude() -> dict[str, str]:
+def _subprocess_env_for_claude(actor: HamActor | None = None) -> dict[str, str]:
     """Full env map for ``create_subprocess_exec`` — copy of process env + Claude overrides."""
     merged: dict[str, str] = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
-    merged.update(_claude_runtime_anthropic_env_overlay())
+    merged.update(_claude_runtime_anthropic_env_overlay(actor))
     return merged
 
 
-def check_claude_agent_readiness() -> ClaudeAgentWorkerReadiness:
+def check_claude_agent_readiness(actor: HamActor | None = None) -> ClaudeAgentWorkerReadiness:
     """Check whether the Claude Agent worker is ready (SDK + auth signal).
 
     Performs only local checks: an optional import probe and presence-only
@@ -271,7 +310,7 @@ def check_claude_agent_readiness() -> ClaudeAgentWorkerReadiness:
             reason="claude-agent-sdk is not installed on this server.",
         )
 
-    if not _has_any_auth_signal():
+    if not _has_any_auth_signal(actor):
         return ClaudeAgentWorkerReadiness(
             authenticated=False,
             sdk_available=True,
@@ -300,7 +339,7 @@ def is_claude_agent_launchable(
     This is a policy gate for future use.
     """
     if readiness is None:
-        readiness = check_claude_agent_readiness()
+        readiness = check_claude_agent_readiness(None)
     return readiness.authenticated and readiness.status == "ready"
 
 
@@ -342,7 +381,7 @@ def _format_sdk_query_failure(exc: BaseException, stderr_lines: list[str]) -> st
     return f"{msg} | stderr: {stderr_blob}"
 
 
-async def _probe_claude_cli(cli_path: str) -> str | None:
+async def _probe_claude_cli(cli_path: str, actor: HamActor | None = None) -> str | None:
     """Best-effort stdout/stderr from ``claude --bare --version`` (never raises)."""
     try:
         proc = await asyncio.create_subprocess_exec(
@@ -351,7 +390,7 @@ async def _probe_claude_cli(cli_path: str) -> str | None:
             "--version",
             stdout=PIPE,
             stderr=PIPE,
-            env=_subprocess_env_for_claude(),
+            env=_subprocess_env_for_claude(actor),
         )
         out_b, err_b = await proc.communicate()
         out = (out_b or b"").decode(errors="replace").strip()
@@ -391,6 +430,7 @@ async def _run_claude_headless_plan_json_query(
     prompt: str,
     timeout_sec: float,
     response_cap: int,
+    actor: HamActor | None = None,
 ) -> tuple[str | None, str | None]:
     """Same prompt/model constraints via ``claude --bare -p`` JSON output (no shell).
 
@@ -413,7 +453,7 @@ async def _run_claude_headless_plan_json_query(
             "plan",
             stdout=PIPE,
             stderr=PIPE,
-            env=_subprocess_env_for_claude(),
+            env=_subprocess_env_for_claude(actor),
         )
         out_b, err_b = await asyncio.wait_for(proc.communicate(), timeout=timeout_sec)
     except TimeoutError:
@@ -483,12 +523,13 @@ async def _run_claude_agent_sdk_plan_query(
     prompt: str,
     timeout_sec: float,
     response_cap: int,
+    actor: HamActor | None = None,
 ) -> tuple[str | None, str | None, ClaudeAgentWorkerReadiness]:
     """Execute one bounded plan-mode SDK query.
 
     Returns ``(sanitized_text, blocker, readiness_snapshot)``.
     """
-    readiness = check_claude_agent_readiness()
+    readiness = check_claude_agent_readiness(actor)
     if readiness.status != "ready":
         return (
             None,
@@ -496,7 +537,7 @@ async def _run_claude_agent_sdk_plan_query(
             readiness,
         )
     if not _uses_non_anthropic_direct_cloud_auth():
-        if not resolve_claude_agent_anthropic_api_key():
+        if not resolve_claude_agent_anthropic_api_key_for_actor(actor):
             return (
                 None,
                 (
@@ -516,7 +557,8 @@ async def _run_claude_agent_sdk_plan_query(
 
     stderr_lines: list[str] = []
     opts = _plan_mode_query_options(
-        stderr_lines, anthropic_env_overlay=_claude_runtime_anthropic_env_overlay()
+        stderr_lines,
+        anthropic_env_overlay=_claude_runtime_anthropic_env_overlay(actor),
     )
 
     async def _collect() -> str:
@@ -531,7 +573,7 @@ async def _run_claude_agent_sdk_plan_query(
         return None, "Claude Agent SDK query timed out.", readiness
     except Exception as exc:
         hl_text, hl_err = await _run_claude_headless_plan_json_query(
-            prompt, timeout_sec, response_cap
+            prompt, timeout_sec, response_cap, actor
         )
         if hl_text is not None:
             _LOG.warning(
@@ -546,7 +588,7 @@ async def _run_claude_agent_sdk_plan_query(
 
         cli = _ham_preferred_cli_path()
         if cli:
-            probe = await _probe_claude_cli(cli)
+            probe = await _probe_claude_cli(cli, actor)
             if probe:
                 detail = f"{detail} | cli_probe: {probe}"
         _LOG.warning("claude_agent_sdk query failed: %s", detail)
@@ -555,12 +597,68 @@ async def _run_claude_agent_sdk_plan_query(
     return _sanitize_capped_response_text(combined, response_cap), None, readiness
 
 
-def _strip_json_fence(raw: str) -> str:
-    t = raw.strip()
-    if t.startswith("```"):
-        t = re.sub(r"^```[a-zA-Z0-9]*\s*", "", t)
-        t = re.sub(r"\s*```\s*$", "", t)
-    return t.strip()
+_MARKDOWN_FENCE_RE = re.compile(r"```(?:json)?\s*([\s\S]*?)```", re.I)
+
+
+def _extract_markdown_fence_inners(raw: str) -> list[str]:
+    """Return non-empty inner bodies of ``` / ```json fenced blocks, in order."""
+    out: list[str] = []
+    for m in _MARKDOWN_FENCE_RE.finditer(raw):
+        inner = (m.group(1) or "").strip()
+        if inner:
+            out.append(inner)
+    return out
+
+
+def _mission_acceptance_blocker(reason: str, *, cap: int = 280) -> str:
+    """Short, redacted operator message — never includes model output blobs."""
+    prefix = "Mission JSON did not match acceptance"
+    msg = f"{prefix}: {reason}" if reason else prefix
+    return _redact_diagnostic_text(msg, cap=cap)
+
+
+def _tail_has_second_json_dict(s: str, first_end: int) -> bool:
+    """True when another top-level JSON object starts after a successful raw_decode."""
+    tail = s[first_end:].strip()
+    if not tail:
+        return False
+    pos = tail.find("{")
+    if pos < 0:
+        return False
+    try:
+        decoder = json.JSONDecoder()
+        obj2, _end2 = decoder.raw_decode(tail, pos)
+    except json.JSONDecodeError:
+        return False
+    return isinstance(obj2, dict)
+
+
+def _try_parse_single_json_dict_blob(blob: str) -> dict[str, Any] | None:
+    """Parse exactly one JSON object from a blob (whole-string JSON or one embedded object)."""
+    s = blob.strip()
+    if not s:
+        return None
+    try:
+        data = json.loads(s)
+        if isinstance(data, dict):
+            return data
+        return None
+    except json.JSONDecodeError:
+        pass
+
+    pos = s.find("{")
+    if pos < 0:
+        return None
+    try:
+        decoder = json.JSONDecoder()
+        data, end = decoder.raw_decode(s, pos)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(data, dict):
+        return None
+    if _tail_has_second_json_dict(s, end):
+        return None
+    return data
 
 
 def _primitive_is_safe(val: Any) -> bool:
@@ -594,15 +692,10 @@ def _safe_mission_parsed_subset(obj: dict[str, Any]) -> dict[str, Any] | None:
     return out or None
 
 
-def _parse_mission_json(text: str) -> tuple[dict[str, Any] | None, bool]:
-    """Returns ``(parsed_subset_or_none, mission_ok)``."""
-    stripped = _strip_json_fence(text)
-    try:
-        data = json.loads(stripped)
-    except json.JSONDecodeError:
-        return None, False
-    if not isinstance(data, dict):
-        return None, False
+def _validate_mission_acceptance_schema(
+    data: dict[str, Any],
+) -> tuple[dict[str, Any] | None, bool, str | None]:
+    """Apply mission acceptance rules; return ``(safe_subset, mission_ok, blocker_reason)``."""
     summary = data.get("summary")
     ac = data.get("acceptance_criteria")
     ac_ok = (
@@ -610,16 +703,66 @@ def _parse_mission_json(text: str) -> tuple[dict[str, Any] | None, bool]:
         and len(ac) == 3
         and all(isinstance(x, str) and x.strip() for x in ac)
     )
-    mission_ok = (
-        data.get("mission_status") == "ok"
-        and data.get("worker") == "claude_agent_sdk"
-        and data.get("job_type") == "non_mutating_review"
-        and isinstance(summary, str)
-        and bool(summary.strip())
-        and ac_ok
-    )
+
+    reason: str | None = None
+    if data.get("mission_status") != "ok":
+        reason = "mission_status must be ok"
+    elif data.get("worker") != "claude_agent_sdk":
+        reason = "worker must be claude_agent_sdk"
+    elif data.get("job_type") != "non_mutating_review":
+        reason = "job_type must be non_mutating_review"
+    elif not isinstance(summary, str) or not summary.strip():
+        reason = "summary must be a non-empty string"
+    elif not ac_ok:
+        reason = "acceptance_criteria must be exactly three non-empty strings"
+
     safe = _safe_mission_parsed_subset(data)
-    return safe, bool(mission_ok and safe)
+    needed_keys = (
+        "mission_status",
+        "worker",
+        "job_type",
+        "summary",
+        "acceptance_criteria",
+    )
+    if safe is None or not all(k in safe for k in needed_keys):
+        reason = reason or "parsed mission payload contained no safe fields"
+    mission_ok = reason is None and bool(safe)
+    if mission_ok:
+        return safe, True, None
+    return None, False, reason or "unknown"
+
+
+def parse_claude_mission_acceptance_text(
+    text: str,
+) -> tuple[dict[str, Any] | None, bool, str | None]:
+    """Parse bounded Claude mission output: raw JSON, fenced JSON, or one embedded object.
+
+    Uses ``json.loads`` / ``JSONDecoder.raw_decode`` only (no ``eval``).
+    Returns ``(parsed_subset_or_none, mission_ok, internal_blocker_reason)`` where
+    ``internal_blocker_reason`` is a short token/message suitable for wrapping with
+    ``_mission_acceptance_blocker`` (never includes raw model text).
+    """
+    stripped = (text or "").strip()
+    if not stripped:
+        return None, False, "empty response"
+
+    fence_blobs = _extract_markdown_fence_inners(stripped)
+    dicts: list[dict[str, Any]] = []
+    if fence_blobs:
+        for inner in fence_blobs:
+            d = _try_parse_single_json_dict_blob(inner)
+            if d is not None:
+                dicts.append(d)
+        if len(dicts) > 1:
+            return None, False, "ambiguous multiple JSON objects in fenced blocks"
+        if len(dicts) == 1:
+            return _validate_mission_acceptance_schema(dicts[0])
+
+    d = _try_parse_single_json_dict_blob(stripped)
+    if d is None:
+        return None, False, "could not parse a single JSON object"
+
+    return _validate_mission_acceptance_schema(d)
 
 
 @dataclass(frozen=True)
@@ -650,20 +793,21 @@ class ClaudeAgentMissionResult:
     blocker: str | None = None
 
 
-async def run_claude_agent_sdk_smoke() -> ClaudeAgentSmokeResult:
+async def run_claude_agent_sdk_smoke(actor: HamActor | None = None) -> ClaudeAgentSmokeResult:
     """One harmless SDK ``query`` with plan-only permissions (no tool execution).
 
-    Auth for the **direct** Anthropic API path: Connected Tools stored key, else
-    ``ANTHROPIC_API_KEY`` on the host (injected per subprocess, never logged).
-    Bedrock/Vertex use existing env signals without overriding ``ANTHROPIC_API_KEY``
-    from the store.
+    Auth for the **direct** Anthropic API path: Clerk-scoped Connected Tools
+    credential, legacy file-backed key, or legacy ``ANTHROPIC_API_KEY`` on the
+    host (injected per subprocess, never logged). Bedrock / Vertex reuse host
+    configuration without overwriting store-derived keys incorrectly.
     """
-    readiness = check_claude_agent_readiness()
+    readiness = check_claude_agent_readiness(actor)
     provider = claude_agent_coarse_provider()
     combined, blocker, rd = await _run_claude_agent_sdk_plan_query(
         CLAUDE_AGENT_SMOKE_PROMPT,
         SMOKE_QUERY_TIMEOUT_SEC,
         _RESPONSE_TEXT_CAP,
+        actor,
     )
     if blocker or combined is None:
         return ClaudeAgentSmokeResult(
@@ -688,7 +832,7 @@ async def run_claude_agent_sdk_smoke() -> ClaudeAgentSmokeResult:
     )
 
 
-async def run_claude_agent_sdk_mission() -> ClaudeAgentMissionResult:
+async def run_claude_agent_sdk_mission(actor: HamActor | None = None) -> ClaudeAgentMissionResult:
     """Fixed HAM mission brief — plan mode, no tools, bounded turns/time."""
     t0 = time.monotonic()
     worker = "claude_agent_sdk"
@@ -699,6 +843,7 @@ async def run_claude_agent_sdk_mission() -> ClaudeAgentMissionResult:
         CLAUDE_AGENT_MISSION_PROMPT,
         MISSION_QUERY_TIMEOUT_SEC,
         _MISSION_RESPONSE_CAP,
+        actor,
     )
     duration_ms = max(0, int((time.monotonic() - t0) * 1000))
 
@@ -715,7 +860,10 @@ async def run_claude_agent_sdk_mission() -> ClaudeAgentMissionResult:
             blocker=blocker or "Claude Agent SDK query produced no text.",
         )
 
-    parsed, mission_ok = _parse_mission_json(combined)
+    parsed, mission_ok, raw_reason = parse_claude_mission_acceptance_text(combined)
+    blocker: str | None = None
+    if not mission_ok:
+        blocker = _mission_acceptance_blocker(raw_reason or "unknown")
     return ClaudeAgentMissionResult(
         ok=True,
         mission_ok=mission_ok,
@@ -725,5 +873,5 @@ async def run_claude_agent_sdk_mission() -> ClaudeAgentMissionResult:
         parsed_result=parsed,
         duration_ms=duration_ms,
         safety_mode=safety_mode,
-        blocker=None if mission_ok else "Mission JSON did not match acceptance shape.",
+        blocker=blocker,
     )

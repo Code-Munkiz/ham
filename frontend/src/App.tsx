@@ -111,14 +111,18 @@ function ClerkHostedApp() {
   const openSignIn = React.useCallback(() => {
     void clerk.openSignIn();
   }, [clerk]);
+  const hostedAuth = React.useMemo(
+    () => ({
+      clerkConfigured: true,
+      isLoaded,
+      isSignedIn: Boolean(isSignedIn),
+    }),
+    [isLoaded, isSignedIn],
+  );
   return (
     <ClerkAccessBridge>
       <AppProviders
-        hostedAuth={{
-          clerkConfigured: true,
-          isLoaded,
-          isSignedIn: Boolean(isSignedIn),
-        }}
+        hostedAuth={hostedAuth}
         openSignIn={openSignIn}
       >
         <AppRoutes />

@@ -210,7 +210,7 @@ There are many draft PRs for small docs notes. I want to stop accumulating PR cl
 - `tests/test_context_engine_api.py` — Context Engine dashboard routes (project root validation; 3 cases)
 - `tests/test_hermes_feedback.py` — Critic MVP + Phase 3 guardrails (7 cases)
 - `tests/test_droid_registry.py` — Droid registry conventions (10 cases)
-- Run: `python -m pytest` — full suite (`pytest.ini` sets `pythonpath = .`; run `pytest tests/ --collect-only -q` for current count — on the order of 1200+ tests)
+- Run: `python -m pytest` — full suite (`pytest.ini` sets `pythonpath = .`; run `pytest tests/ --collect-only -q` for current count — on the order of 1900+ tests)
 - Other tests under `tests/` as added; bootstrap with `/test-context-regressions` for Context Engine focus
 
 ## Cursor Cloud specific instructions
@@ -261,7 +261,7 @@ From **HAM VM / Cursor Cloud**:
 - Avoid duplicating identical “Cloud Agent truth” bullets across unrelated files when one canonical paragraph suffices.
 - **Before opening a docs-only PR:** run  
   `gh pr list --repo <org>/<repo> --state open --limit 50`  
-  and scan titles/branches (`gh pr view <n> --json files` helps). If overlapping docs intent exists → report **`OVERLAPPING_DOCS_PR_FOUND`** and extend the existing PR/list it — do **not** open parallel duplicates from the same automation.
+  and scan titles/branches (`gh pr view <n> --json files` helps). If overlapping docs intent exists → report **`OVERLAPPING_DOCS_PR_FOUND`** and extend the existing PR/list it — do **not** open parallel duplicates from the same automation. If `gh` is missing or returns **HTTP 401** / bad credentials, the overlap scan **did not run** — report **`GH_PR_OVERLAP_CHECK_UNAVAILABLE`** in the handoff, land **one** scoped PR (or extend a branch the operator names), and do **not** treat “no list” as “no overlap.”
 - **Code vs docs cleanup:** do not lump unrelated observability/UI fixes together with unrelated doc sweeps unless the operator asked — separate PR scopes reduce reviewer noise.
 
 When opening a permitted PR:

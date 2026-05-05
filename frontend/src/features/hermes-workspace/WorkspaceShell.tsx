@@ -25,12 +25,21 @@ import { WorkspaceMobileTabBar } from "./WorkspaceMobileTabBar";
 import { WorkspaceChatFloatingToggle } from "./components/WorkspaceChatFloatingToggle";
 import { WorkspaceChatPanel } from "./components/WorkspaceChatPanel";
 import { WorkspaceTerminalView } from "./screens/terminal/WorkspaceTerminalView";
+import { workspaceLastSessionStorageKey } from "./screens/chat/workspaceChatSessionStorage";
 import { HamWorkspaceTopbarPill } from "@/components/layout/HamWorkspaceTopbarPill";
 import { useHamWorkspace } from "@/lib/ham/HamWorkspaceContext";
+import { isLocalRuntimeConfigured } from "./adapters/localRuntime";
 import { toast } from "sonner";
 
-/** Keep in sync with `HWW_LAST_SESSION_KEY` in `WorkspaceChatScreen.tsx`. */
-const HWW_SIDEBAR_LAST_SESSION_KEY = "hww.chat.lastSessionId";
+/**
+ * Build-time opt-in for dev-only surfaces (`VITE_HAM_SHOW_LOCAL_DEV_HINTS=true`).
+ * Same flag used by `HamWorkspaceTopbarPill` and `WorkspaceGate`. Does **not**
+ * gate `import.meta.env.DEV` here so power users can keep the runtime-only dock
+ * available in production builds when they explicitly enable it.
+ */
+function isWorkspaceDeveloperModeEnabled(): boolean {
+  return (import.meta.env.VITE_HAM_SHOW_LOCAL_DEV_HINTS as string | undefined) === "true";
+}
 
 const HWW_SIDEBAR_COLLAPSE_KEY = "hww.sidebar.collapsed";
 
@@ -512,8 +521,20 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
     }
   });
   const [drawerOpen, setDrawerOpen] = React.useState(false);
-  /** SHELL-015 — docked terminal strip on chat route */
+  /**
+   * SHELL-015 — docked terminal strip on chat route.
+   * Hidden by default for hosted users with no paired local runtime; revealed
+   * once `isLocalRuntimeConfigured()` is true or developer mode is enabled.
+   */
   const [chatTerminalDockOpen, setChatTerminalDockOpen] = React.useState(false);
+  const [hasLocalRuntime, setHasLocalRuntime] = React.useState(() => isLocalRuntimeConfigured());
+  React.useEffect(() => {
+    const sync = () => setHasLocalRuntime(isLocalRuntimeConfigured());
+    window.addEventListener("hww-local-runtime-changed", sync);
+    return () => window.removeEventListener("hww-local-runtime-changed", sync);
+  }, []);
+  const developerModeEnabled = isWorkspaceDeveloperModeEnabled();
+  const terminalDockVisible = hasLocalRuntime || developerModeEnabled;
   const [workspaceChatPanelOpen, setWorkspaceChatPanelOpen] = React.useState(false);
   const [sessions, setSessions] = React.useState<ChatSessionSummary[]>([]);
   const [sessionsLoading, setSessionsLoading] = React.useState(false);
@@ -527,26 +548,34 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
 
   const [deletingSessionId, setDeletingSessionId] = React.useState<string | null>(null);
   const canLoadSessions = hamWorkspace.state.status === "ready";
+  const activeWorkspaceId = hamWorkspace.state.status === "ready" ? hamWorkspace.state.activeWorkspaceId : null;
+  const sessionsRequestSeqRef = React.useRef(0);
 
   const loadSessions = React.useCallback(async () => {
+    const requestSeq = sessionsRequestSeqRef.current + 1;
+    sessionsRequestSeqRef.current = requestSeq;
     if (!canLoadSessions) {
       setSessions([]);
       setSessionsError(null);
       setSessionsLoading(false);
       return;
     }
+    setSessions([]);
     setSessionsLoading(true);
     setSessionsError(null);
     try {
-      const { sessions: list } = await workspaceSessionAdapter.list();
+      const { sessions: list } = await workspaceSessionAdapter.list(50, 0, activeWorkspaceId);
+      if (sessionsRequestSeqRef.current !== requestSeq) return;
       setSessions(list);
     } catch (e) {
+      if (sessionsRequestSeqRef.current !== requestSeq) return;
       setSessionsError(e instanceof Error ? e.message : "Failed to load sessions");
       setSessions([]);
     } finally {
+      if (sessionsRequestSeqRef.current !== requestSeq) return;
       setSessionsLoading(false);
     }
-  }, [canLoadSessions]);
+  }, [activeWorkspaceId, canLoadSessions]);
 
   React.useEffect(() => {
     if (!canLoadSessions) {
@@ -556,7 +585,7 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
       return;
     }
     void loadSessions();
-  }, [canLoadSessions, loadSessions, location.pathname, location.search]);
+  }, [canLoadSessions, loadSessions, location.pathname]);
 
   const handleDeleteSession = React.useCallback(
     async (sid: string) => {
@@ -566,11 +595,11 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
       }
       setDeletingSessionId(sid);
       try {
-        await workspaceSessionAdapter.delete(sid);
+        await workspaceSessionAdapter.delete(sid, activeWorkspaceId);
         toast.success("Chat deleted");
         if (activeSessionId === sid) {
           try {
-            localStorage.removeItem(HWW_SIDEBAR_LAST_SESSION_KEY);
+            localStorage.removeItem(workspaceLastSessionStorageKey(activeWorkspaceId));
           } catch {
             /* ignore */
           }
@@ -583,7 +612,7 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
         setDeletingSessionId(null);
       }
     },
-    [activeSessionId, canLoadSessions, loadSessions, navigate],
+    [activeSessionId, activeWorkspaceId, canLoadSessions, loadSessions, navigate],
   );
 
   const pageTitle = workspacePathTitle(location.pathname);
@@ -696,8 +725,8 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
       >
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           {children}
-          {isWorkspaceChat ? (
-            <div className="shrink-0 border-t border-white/[0.06] bg-[#030a0f]/90">
+          {isWorkspaceChat && terminalDockVisible ? (
+            <div className="shrink-0 border-t border-white/[0.06] bg-[#030a0f]/90" data-testid="hww-chat-terminal-dock">
               {chatTerminalDockOpen ? (
                 <div className="h-[min(14rem,38vh)] min-h-0 w-full">
                   <WorkspaceTerminalView

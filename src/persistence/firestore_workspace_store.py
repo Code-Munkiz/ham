@@ -26,9 +26,12 @@ the records validated here (``UserRecord`` / ``OrgRecord`` / ``MembershipRecord`
 
 from __future__ import annotations
 
+import logging
 import os
 from datetime import UTC, datetime
 from typing import Any
+
+_LOG = logging.getLogger(__name__)
 
 from src.ham.workspace_models import (
     MembershipRecord,
@@ -138,16 +141,43 @@ class FirestoreWorkspaceStore:
         return FieldFilter(field, op, value)
 
     @staticmethod
+    def _ensure_transaction_begun(transaction: Any) -> None:
+        """Start a Firestore read-write transaction before any transactional read.
+
+        ``Client.transaction()`` returns a transaction object that is **not**
+        in progress until :meth:`_begin` runs; reads with ``transaction=...``
+        ``transaction=...`` require an active transaction id or the client raises
+        ``ValueError`` (inactive transaction). The public ``@transactional`` helper
+        does this implicitly; manual use must call ``_begin`` first.
+        """
+        begin = getattr(transaction, "_begin", None)
+        if not callable(begin):
+            return
+        if getattr(transaction, "in_progress", True):
+            return
+        begin()
+
+    @staticmethod
     def _commit_transaction(transaction: Any) -> None:
-        commit = getattr(transaction, "commit", None)
+        # Prefer ``_commit`` so the transaction id is sent with writes (``commit()``
+        # on ``Transaction`` inherits ``WriteBatch.commit`` and would omit it).
+        commit = getattr(transaction, "_commit", None)
         if callable(commit):
             commit()
+            return
+        legacy = getattr(transaction, "commit", None)
+        if callable(legacy):
+            legacy()
 
     @staticmethod
     def _rollback_transaction(transaction: Any) -> None:
-        rollback = getattr(transaction, "rollback", None)
+        rollback = getattr(transaction, "_rollback", None)
         if callable(rollback):
             rollback()
+            return
+        legacy = getattr(transaction, "rollback", None)
+        if callable(legacy):
+            legacy()
 
     # ------------------------------------------------------------------
     # Datetime hydration
@@ -270,6 +300,7 @@ class FirestoreWorkspaceStore:
 
         transaction = db.transaction()
         try:
+            self._ensure_transaction_begun(transaction)
             # Slug-uniqueness scan within the active scope. Reads precede the
             # write so Firestore transactions can detect conflicting commits.
             if record.org_id is not None:
@@ -340,6 +371,7 @@ class FirestoreWorkspaceStore:
 
         transaction = db.transaction()
         try:
+            self._ensure_transaction_begun(transaction)
             snap = doc_ref.get(transaction=transaction)
             if not getattr(snap, "exists", False):
                 raise WorkspaceNotFoundError(workspace_id)
@@ -395,19 +427,24 @@ class FirestoreWorkspaceStore:
         user_id: str,
         sink: dict[str, WorkspaceRecord],
     ) -> None:
-        member_q = db.collection_group(_WORKSPACE_MEMBERS_SUBCOLL).where(
-            filter=self._field_filter("user_id", "==", user_id),
-        )
-        member_workspace_ids: set[str] = set()
-        for snap in member_q.stream():
-            data = snap.to_dict() or {}
-            wid = str(data.get("workspace_id") or "")
-            if wid:
-                member_workspace_ids.add(wid)
-        for wid in member_workspace_ids - set(sink.keys()):
-            ws_snap = coll.document(wid).get()
-            if getattr(ws_snap, "exists", False):
-                self._absorb_workspace(ws_snap, sink)
+        try:
+            member_q = db.collection_group(_WORKSPACE_MEMBERS_SUBCOLL).where(
+                filter=self._field_filter("user_id", "==", user_id),
+            )
+            member_workspace_ids: set[str] = set()
+            for snap in member_q.stream():
+                data = snap.to_dict() or {}
+                wid = str(data.get("workspace_id") or "")
+                if wid:
+                    member_workspace_ids.add(wid)
+            for wid in member_workspace_ids - set(sink.keys()):
+                ws_snap = coll.document(wid).get()
+                if getattr(ws_snap, "exists", False):
+                    self._absorb_workspace(ws_snap, sink)
+        except Exception as exc:  # noqa: BLE001
+            if isinstance(exc, WorkspaceStoreError):
+                raise
+            raise self._wrap("_accumulate_member_rows", exc) from exc
 
     def _accumulate_org_fallback(
         self,
@@ -444,12 +481,30 @@ class FirestoreWorkspaceStore:
         coll = db.collection(_WORKSPACES_COLL)
         records: dict[str, WorkspaceRecord] = {}
 
+        # Each phase is isolated: missing composite/collection-group indexes (or transient
+        # Firestore errors) must not take down GET /api/me — degrade to partial results.
         try:
             self._accumulate_owned(coll, user_id, records)
+        except WorkspaceStoreError:
+            _LOG.warning(
+                "list_workspaces_for_user: owned workspaces query failed",
+                exc_info=True,
+            )
+        try:
             self._accumulate_member_rows(db, coll, user_id, records)
+        except WorkspaceStoreError:
+            _LOG.warning(
+                "list_workspaces_for_user: member collection-group query failed "
+                "(often missing Firestore index on collectionGroup members + user_id)",
+                exc_info=True,
+            )
+        try:
             self._accumulate_org_fallback(db, coll, user_id, records)
-        except Exception as exc:  # noqa: BLE001
-            raise self._wrap("list_workspaces_for_user", exc) from exc
+        except WorkspaceStoreError:
+            _LOG.warning(
+                "list_workspaces_for_user: org fallback query failed",
+                exc_info=True,
+            )
 
         results: list[WorkspaceRecord] = []
         for rec in records.values():

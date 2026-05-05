@@ -6,6 +6,7 @@
  * in error. The pill **never** prevents the underlying page from mounting.
  */
 import * as React from "react";
+import { createPortal } from "react-dom";
 
 import { cn } from "@/lib/utils";
 
@@ -14,6 +15,7 @@ import type { HamCreateWorkspaceBody } from "@/lib/ham/workspaceApi";
 
 import { WorkspaceOnboardingScreen } from "@/components/workspace/WorkspaceOnboardingScreen";
 import { WorkspacePicker } from "@/components/workspace/WorkspacePicker";
+import { WORKSPACE_API_UNREACHABLE_USER_COPY } from "@/components/workspace/workspaceApiUnreachableCopy";
 
 export interface HamWorkspaceTopbarPillProps {
   /** Tailwind utility overrides for the wrapper (positioning). */
@@ -22,6 +24,7 @@ export interface HamWorkspaceTopbarPillProps {
 
 export function HamWorkspaceTopbarPill({ className }: HamWorkspaceTopbarPillProps) {
   const ctx = useHamWorkspace();
+  const pillAnchorRef = React.useRef<HTMLDivElement>(null);
   const [pickerOpen, setPickerOpen] = React.useState(false);
   const [createOpen, setCreateOpen] = React.useState(false);
   const [detailsOpen, setDetailsOpen] = React.useState(false);
@@ -32,6 +35,8 @@ export function HamWorkspaceTopbarPill({ className }: HamWorkspaceTopbarPillProp
     import.meta.env.DEV &&
     !clerkConfigured &&
     (import.meta.env.VITE_HAM_SHOW_LOCAL_DEV_HINTS as string | undefined) === "true";
+  const shouldShowDeveloperDetails =
+    showLocalDevHint && (ctx.state.status === "setup_needed" || ctx.state.status === "auth_not_configured" || ctx.state.status === "error");
 
   const baseLabel = (() => {
     switch (ctx.state.status) {
@@ -127,6 +132,15 @@ export function HamWorkspaceTopbarPill({ className }: HamWorkspaceTopbarPillProp
     return ws;
   };
 
+  React.useEffect(() => {
+    if (!createOpen) return;
+    function onKey(ev: KeyboardEvent) {
+      if (ev.key === "Escape") setCreateOpen(false);
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [createOpen]);
+
   // Build user/orgs reference for onboarding dialog. Falls back gracefully
   // when state is loading.
   const me =
@@ -135,7 +149,8 @@ export function HamWorkspaceTopbarPill({ className }: HamWorkspaceTopbarPillProp
       : null;
 
   return (
-    <div className={cn("relative pointer-events-auto", className)}>
+    <>
+      <div ref={pillAnchorRef} className={cn("relative pointer-events-auto", className)}>
       <button
         type="button"
         data-testid="ham-workspace-pill"
@@ -188,12 +203,11 @@ export function HamWorkspaceTopbarPill({ className }: HamWorkspaceTopbarPillProp
         >
           {ctx.state.status === "error" ? (
             <>
-              <h2 className="text-sm font-semibold text-red-50">Workspace error</h2>
-              <p className="mt-2 leading-relaxed text-white/75">
-                HAM could not load workspace context. Retry after checking the local API.
-              </p>
-              <p className="mt-3 rounded-lg border border-red-300/20 bg-red-300/10 p-3 leading-relaxed text-red-50">
-                {ctx.state.message}
+              <h2 className="text-sm font-semibold text-red-50">Workspace unavailable</h2>
+              <p className="mt-2 leading-relaxed text-white/80">
+                {ctx.state.networkUnreachable
+                  ? WORKSPACE_API_UNREACHABLE_USER_COPY
+                  : "We couldn't load your workspace. Refresh or try again shortly."}
               </p>
             </>
           ) : ctx.state.status === "auth_required" ? (
@@ -209,7 +223,7 @@ export function HamWorkspaceTopbarPill({ className }: HamWorkspaceTopbarPillProp
                 Authentication is not configured
               </h2>
               <p className="mt-2 leading-relaxed text-white/75">
-                Set VITE_CLERK_PUBLISHABLE_KEY and redeploy.
+                Workspace sign-in is temporarily unavailable. Refresh or contact your workspace admin.
               </p>
             </>
           ) : (
@@ -221,17 +235,35 @@ export function HamWorkspaceTopbarPill({ className }: HamWorkspaceTopbarPillProp
               </p>
             </>
           )}
-          {showLocalDevHint ? (
+          {shouldShowDeveloperDetails ? (
             <details className="mt-3 rounded-lg border border-amber-300/20 bg-amber-300/10 p-3 text-[11px] text-amber-50">
               <summary className="cursor-pointer font-semibold text-amber-100/85">
-                Developer setup (local-only)
+                Developer details
               </summary>
-              <pre className="mt-2 overflow-x-auto rounded border border-amber-300/20 bg-black/35 p-2">
-                <code>{`export HAM_LOCAL_DEV_WORKSPACE_BYPASS=true\npython3 scripts/run_local_api.py`}</code>
-              </pre>
+              {ctx.state.status === "auth_not_configured" ? (
+                <p className="mt-2 text-amber-50/90">
+                  Set <span className="font-mono">VITE_CLERK_PUBLISHABLE_KEY</span> before building the hosted app.
+                </p>
+              ) : null}
+              {ctx.state.status === "setup_needed" ? (
+                <pre className="mt-2 overflow-x-auto rounded border border-amber-300/20 bg-black/35 p-2">
+                  <code>{`export HAM_LOCAL_DEV_WORKSPACE_BYPASS=true\npython3 scripts/run_local_api.py`}</code>
+                </pre>
+              ) : null}
+              {ctx.state.status === "error" ? (
+                <div className="mt-2 space-y-2">
+                  {ctx.state.networkUnreachable ? (
+                    <p className="break-all">
+                      API endpoint: <span className="font-mono">{ctx.state.networkUnreachable.apiOrigin}</span>
+                    </p>
+                  ) : null}
+                  <p className="break-words">{ctx.state.message}</p>
+                  {ctx.state.code ? <p>Code: <span className="font-mono">{ctx.state.code}</span></p> : null}
+                </div>
+              ) : null}
             </details>
           ) : null}
-          <div className="mt-4 flex items-center gap-2">
+          <div className="mt-4 flex flex-wrap items-center gap-2">
             {ctx.state.status === "auth_required" && clerkConfigured ? (
               <button
                 type="button"
@@ -240,6 +272,16 @@ export function HamWorkspaceTopbarPill({ className }: HamWorkspaceTopbarPillProp
               >
                 Sign in
               </button>
+            ) : null}
+            {showLocalDevHint && ctx.state.status === "error" && ctx.state.networkUnreachable ? (
+              <a
+                href={ctx.state.networkUnreachable.statusUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-lg border border-white/14 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/[0.15]"
+              >
+                Open API status
+              </a>
             ) : null}
             <button
               type="button"
@@ -260,6 +302,7 @@ export function HamWorkspaceTopbarPill({ className }: HamWorkspaceTopbarPillProp
       ) : null}
       {ctx.state.status === "ready" || ctx.state.status === "onboarding" ? (
         <WorkspacePicker
+          anchorRef={pillAnchorRef}
           workspaces={ctx.workspaces}
           activeWorkspaceId={
             ctx.state.status === "ready" ? ctx.state.activeWorkspaceId : null
@@ -270,26 +313,31 @@ export function HamWorkspaceTopbarPill({ className }: HamWorkspaceTopbarPillProp
           onClose={() => setPickerOpen(false)}
         />
       ) : null}
-      {createOpen && me ? (
-        <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4"
-          role="dialog"
-          aria-modal="true"
-          data-testid="ham-workspace-create-dialog"
-          onClick={(ev) => {
-            if (ev.target === ev.currentTarget) setCreateOpen(false);
-          }}
-        >
-          <WorkspaceOnboardingScreen
-            user={me.user}
-            orgs={me.orgs}
-            onCreate={handleCreate}
-            onDismiss={() => setCreateOpen(false)}
-            allowDismiss
-            variant="dialog"
-          />
-        </div>
-      ) : null}
     </div>
+    {createOpen && me && typeof document !== "undefined"
+      ? createPortal(
+          <div
+            className="fixed inset-0 z-[400] flex items-center justify-center bg-black/70 p-4"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="ham-workspace-create-title"
+            data-testid="ham-workspace-create-dialog"
+            onClick={(ev) => {
+              if (ev.target === ev.currentTarget) setCreateOpen(false);
+            }}
+          >
+            <WorkspaceOnboardingScreen
+              user={me.user}
+              orgs={me.orgs}
+              onCreate={handleCreate}
+              onDismiss={() => setCreateOpen(false)}
+              allowDismiss
+              variant="dialog"
+            />
+          </div>,
+          document.body,
+        )
+      : null}
+    </>
   );
 }

@@ -16,6 +16,8 @@ from src.ham.workspace_models import (
     WorkspaceRecord,
 )
 from src.persistence.workspace_store import (
+    InMemoryWorkspaceStore,
+    WorkspaceStoreError,
     new_workspace_id,
 )
 from tests._helpers.workspace_api import (
@@ -94,6 +96,28 @@ def test_me_200_with_clerk_actor() -> None:
     assert ids["ws_a"] in wids
     assert ids["ws_personal"] in wids
     assert ids["ws_b"] not in wids  # cross-tenant isolation
+
+
+def test_me_503_when_workspace_store_list_raises() -> None:
+    """Unhandled WorkspaceStoreError must not surface as plaintext HTTP 500."""
+
+    class FailList(InMemoryWorkspaceStore):
+        def list_workspaces_for_user(self, user_id: str, **kwargs):  # type: ignore[no-untyped-def]
+            raise WorkspaceStoreError("simulated store outage")
+
+    store = FailList()
+    ids = seed_two_workspaces(store)
+    actor = actor_for_user(
+        ids["owner_a"],
+        email="alice@example.com",
+        org_id=ids["org_a"],
+        org_role="org:admin",
+    )
+    client = client_for(store, actor=actor)
+    resp = client.get("/api/me")
+    assert resp.status_code == 503
+    body = resp.json()
+    assert body["detail"]["error"]["code"] == "HAM_WORKSPACE_STORE_UNAVAILABLE"
 
 
 def test_me_default_workspace_prefers_owner() -> None:

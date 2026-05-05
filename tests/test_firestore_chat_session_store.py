@@ -112,9 +112,15 @@ def _transactional_passthrough(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_firestore_create_append_list_messages() -> None:
     fake = _FakeFirestoreClient()
     store = FirestoreChatSessionStore("sessions", client=fake)  # type: ignore[arg-type]
-    sid = store.create_session()
+    sid = store.create_session(user_id="user-a", workspace_id="ws-1")
+    assert fake.docs[sid]["user_id"] == "user-a"
+    assert fake.docs[sid]["workspace_id"] == "ws-1"
     store.append_turns(sid, [ChatTurn(role="user", content="hi")])
     store.append_turns(sid, [ChatTurn(role="assistant", content="yo")])
+    rec = store.get_session(sid)
+    assert rec is not None
+    assert rec.user_id == "user-a"
+    assert rec.workspace_id == "ws-1"
     assert store.list_messages(sid) == [
         {"role": "user", "content": "hi"},
         {"role": "assistant", "content": "yo"},
@@ -175,3 +181,42 @@ def test_firestore_upsert_assistant_turn_updates_single_turn() -> None:
         {"role": "user", "content": "hello"},
         {"role": "assistant", "content": "final"},
     ]
+
+
+def _create_with_turn(
+    store: FirestoreChatSessionStore,
+    text: str,
+    *,
+    user_id: str | None = None,
+    workspace_id: str | None = None,
+) -> str:
+    sid = store.create_session(user_id=user_id, workspace_id=workspace_id)
+    store.append_turns(sid, [ChatTurn(role="user", content=text)])
+    return sid
+
+
+def test_firestore_scoped_sessions_are_private_by_user_and_workspace() -> None:
+    fake = _FakeFirestoreClient()
+    store = FirestoreChatSessionStore("sessions", client=fake)  # type: ignore[arg-type]
+    user_a_ws_1 = _create_with_turn(store, "a/w1", user_id="user-a", workspace_id="ws-1")
+    user_b_ws_1 = _create_with_turn(store, "b/w1", user_id="user-b", workspace_id="ws-1")
+    user_a_ws_2 = _create_with_turn(store, "a/w2", user_id="user-a", workspace_id="ws-2")
+
+    scoped = store.list_sessions(user_id="user-a", workspace_id="ws-1")
+    assert [s.session_id for s in scoped] == [user_a_ws_1]
+    assert scoped[0].user_id == "user-a"
+    assert scoped[0].workspace_id == "ws-1"
+
+    assert user_b_ws_1 not in {s.session_id for s in scoped}
+    assert user_a_ws_2 not in {s.session_id for s in scoped}
+
+
+def test_firestore_legacy_sessions_remain_unscoped_but_hidden_from_scoped_lists() -> None:
+    fake = _FakeFirestoreClient()
+    store = FirestoreChatSessionStore("sessions", client=fake)  # type: ignore[arg-type]
+    legacy = _create_with_turn(store, "legacy")
+    scoped = _create_with_turn(store, "scoped", user_id="user-a", workspace_id="ws-1")
+
+    assert {s.session_id for s in store.list_sessions()} == {legacy, scoped}
+    assert [s.session_id for s in store.list_sessions(user_id="user-a", workspace_id="ws-1")] == [scoped]
+    assert legacy not in {s.session_id for s in store.list_sessions(workspace_id="ws-1")}

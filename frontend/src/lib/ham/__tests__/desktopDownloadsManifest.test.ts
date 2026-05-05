@@ -94,28 +94,39 @@ describe("parseDesktopDownloadsManifest", () => {
 });
 
 describe("manifestToDownloadCtas", () => {
-  it("emits one CTA per platform in stable order", () => {
+  it("emits only Windows and macOS CTAs in stable order (Linux omitted)", () => {
     const ctas = manifestToDownloadCtas(validManifest());
-    expect(ctas.map((c) => c.platform)).toEqual([
-      "linux",
-      "windows",
-      "macos",
-    ]);
+    expect(ctas.map((c) => c.platform)).toEqual(["windows", "macos"]);
   });
 
-  it("marks present platforms as available and absent ones as unavailable", () => {
+  it("marks Windows/macOS availability from manifest; ignores Linux for CTAs", () => {
     const ctas = manifestToDownloadCtas(validManifest());
     const byPlatform = Object.fromEntries(ctas.map((c) => [c.platform, c]));
-    expect(byPlatform.linux.available).toBe(true);
-    expect(byPlatform.linux.href).toBe(VALID_HTTPS_URL);
     expect(byPlatform.windows.available).toBe(false);
     expect(byPlatform.windows.href).toBe("");
     expect(byPlatform.macos.available).toBe(false);
+    expect(byPlatform.macos.href).toBe("");
+    expect(ctas.find((c) => c.platform === "linux")).toBeUndefined();
   });
 
-  it("propagates sha256 as checksumHex on available CTAs", () => {
-    const ctas = manifestToDownloadCtas(validManifest());
-    const linux = ctas.find((c) => c.platform === "linux");
-    expect(linux?.checksumHex).toBe("abc123");
+  it("propagates sha256 as checksumHex on available Windows CTA", () => {
+    const ctas = manifestToDownloadCtas({
+      ...validManifest(),
+      platforms: {
+        linux: null,
+        macos: null,
+        windows: {
+          label: "Windows",
+          arch: "x64",
+          type: "Portable",
+          version: "1.0.0",
+          url: VALID_HTTPS_URL,
+          sha256: "abc123",
+        },
+      },
+    });
+    const win = ctas.find((c) => c.platform === "windows");
+    expect(win?.available).toBe(true);
+    expect(win?.checksumHex).toBe("abc123");
   });
 });
