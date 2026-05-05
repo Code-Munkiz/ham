@@ -1,11 +1,17 @@
 import { describe, expect, it } from "vitest";
 
 /** Mirrors `fetchChatContextMeters` query assembly — must stay on `/api/chat/context-meters` (hamApiFetch). */
-function buildContextMetersPath(sessionId: string, modelId: string | null, projectId: string | null) {
+function buildContextMetersPath(
+  sessionId: string,
+  modelId: string | null,
+  projectId: string | null,
+  workspaceId?: string | null,
+) {
   const q = new URLSearchParams();
   q.set("session_id", sessionId);
   if (modelId?.trim()) q.set("model_id", modelId.trim());
   if (projectId?.trim()) q.set("project_id", projectId.trim());
+  if (workspaceId?.trim()) q.set("workspace_id", workspaceId.trim());
   return `/api/chat/context-meters?${q.toString()}`;
 }
 
@@ -16,5 +22,10 @@ describe("context meters API path", () => {
     expect(path).toContain("session_id=s1");
     expect(path).toContain("model_id=");
     expect(path).toContain("project_id=p9");
+  });
+
+  it("includes workspace_id when active workspace scope exists", () => {
+    const path = buildContextMetersPath("s1", "openrouter:default", "p9", "ws_a");
+    expect(path).toContain("workspace_id=ws_a");
   });
 });

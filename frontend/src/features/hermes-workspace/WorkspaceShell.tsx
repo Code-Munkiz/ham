@@ -25,6 +25,7 @@ import { WorkspaceMobileTabBar } from "./WorkspaceMobileTabBar";
 import { WorkspaceChatFloatingToggle } from "./components/WorkspaceChatFloatingToggle";
 import { WorkspaceChatPanel } from "./components/WorkspaceChatPanel";
 import { WorkspaceTerminalView } from "./screens/terminal/WorkspaceTerminalView";
+import { workspaceLastSessionStorageKey } from "./screens/chat/workspaceChatSessionStorage";
 import { HamWorkspaceTopbarPill } from "@/components/layout/HamWorkspaceTopbarPill";
 import { useHamWorkspace } from "@/lib/ham/HamWorkspaceContext";
 import { isLocalRuntimeConfigured } from "./adapters/localRuntime";
@@ -39,9 +40,6 @@ import { toast } from "sonner";
 function isWorkspaceDeveloperModeEnabled(): boolean {
   return (import.meta.env.VITE_HAM_SHOW_LOCAL_DEV_HINTS as string | undefined) === "true";
 }
-
-/** Keep in sync with `HWW_LAST_SESSION_KEY` in `WorkspaceChatScreen.tsx`. */
-const HWW_SIDEBAR_LAST_SESSION_KEY = "hww.chat.lastSessionId";
 
 const HWW_SIDEBAR_COLLAPSE_KEY = "hww.sidebar.collapsed";
 
@@ -550,6 +548,7 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
 
   const [deletingSessionId, setDeletingSessionId] = React.useState<string | null>(null);
   const canLoadSessions = hamWorkspace.state.status === "ready";
+  const activeWorkspaceId = hamWorkspace.state.status === "ready" ? hamWorkspace.state.activeWorkspaceId : null;
 
   const loadSessions = React.useCallback(async () => {
     if (!canLoadSessions) {
@@ -561,7 +560,7 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
     setSessionsLoading(true);
     setSessionsError(null);
     try {
-      const { sessions: list } = await workspaceSessionAdapter.list();
+      const { sessions: list } = await workspaceSessionAdapter.list(50, 0, activeWorkspaceId);
       setSessions(list);
     } catch (e) {
       setSessionsError(e instanceof Error ? e.message : "Failed to load sessions");
@@ -569,7 +568,7 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
     } finally {
       setSessionsLoading(false);
     }
-  }, [canLoadSessions]);
+  }, [activeWorkspaceId, canLoadSessions]);
 
   React.useEffect(() => {
     if (!canLoadSessions) {
@@ -589,11 +588,11 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
       }
       setDeletingSessionId(sid);
       try {
-        await workspaceSessionAdapter.delete(sid);
+        await workspaceSessionAdapter.delete(sid, activeWorkspaceId);
         toast.success("Chat deleted");
         if (activeSessionId === sid) {
           try {
-            localStorage.removeItem(HWW_SIDEBAR_LAST_SESSION_KEY);
+            localStorage.removeItem(workspaceLastSessionStorageKey(activeWorkspaceId));
           } catch {
             /* ignore */
           }
@@ -606,7 +605,7 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
         setDeletingSessionId(null);
       }
     },
-    [activeSessionId, canLoadSessions, loadSessions, navigate],
+    [activeSessionId, activeWorkspaceId, canLoadSessions, loadSessions, navigate],
   );
 
   const pageTitle = workspacePathTitle(location.pathname);
