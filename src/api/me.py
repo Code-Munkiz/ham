@@ -25,7 +25,7 @@ import logging
 from datetime import UTC, datetime
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from src.api.dependencies.auth import require_actor
 from src.api.dependencies.workspace import (
@@ -44,7 +44,7 @@ from src.ham.workspace_serializers import (
     pick_default_workspace_id,
     workspace_summary,
 )
-from src.persistence.workspace_store import WorkspaceStore
+from src.persistence.workspace_store import WorkspaceStore, WorkspaceStoreError
 
 router = APIRouter(tags=["me"])
 _LOG = logging.getLogger(__name__)
@@ -184,18 +184,30 @@ async def get_me(
     store: Annotated[WorkspaceStore, Depends(get_workspace_store)],
 ) -> dict[str, Any]:
     """Caller identity + accessible workspace summaries."""
-    _mirror_user_org_membership(actor, store)
-    summaries = _workspace_summaries(actor, store)
-    default_id = pick_default_workspace_id(summaries)
-    for s in summaries:
-        s["is_default"] = s["workspace_id"] == default_id
-    return {
-        "user": _user_dict(actor, store),
-        "orgs": _orgs_for_actor(actor, store),
-        "workspaces": summaries,
-        "default_workspace_id": default_id,
-        "auth_mode": "local_dev_bypass" if _is_local_dev_actor(actor) else "clerk",
-    }
+    try:
+        _mirror_user_org_membership(actor, store)
+        summaries = _workspace_summaries(actor, store)
+        default_id = pick_default_workspace_id(summaries)
+        for s in summaries:
+            s["is_default"] = s["workspace_id"] == default_id
+        return {
+            "user": _user_dict(actor, store),
+            "orgs": _orgs_for_actor(actor, store),
+            "workspaces": summaries,
+            "default_workspace_id": default_id,
+            "auth_mode": "local_dev_bypass" if _is_local_dev_actor(actor) else "clerk",
+        }
+    except WorkspaceStoreError as exc:
+        _LOG.warning("GET /api/me workspace store failure", exc_info=True)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": {
+                    "code": "HAM_WORKSPACE_STORE_UNAVAILABLE",
+                    "message": "Workspace data could not be loaded. Try again shortly.",
+                }
+            },
+        ) from exc
 
 
 __all__ = ["router"]

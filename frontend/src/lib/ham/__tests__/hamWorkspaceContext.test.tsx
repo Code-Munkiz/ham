@@ -5,8 +5,11 @@
  * jsdom for hook composition with the provider.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, render, renderHook, waitFor } from "@testing-library/react";
+import { act, render, renderHook, screen, waitFor } from "@testing-library/react";
 import * as React from "react";
+
+import { WorkspaceGate } from "@/components/workspace/WorkspaceGate";
+import { WORKSPACE_API_UNREACHABLE_USER_COPY } from "@/components/workspace/workspaceApiUnreachableCopy";
 
 vi.mock("@/lib/ham/workspaceApi", async () => {
   const actual = await vi.importActual<typeof import("@/lib/ham/workspaceApi")>(
@@ -31,6 +34,7 @@ import * as api from "@/lib/ham/workspaceApi";
 import {
   HamWorkspaceProvider,
   useHamWorkspace,
+  __TEST__,
 } from "@/lib/ham/HamWorkspaceContext";
 import { activeWorkspaceStorageKey } from "@/lib/ham/hamWorkspaceStorage";
 
@@ -75,6 +79,14 @@ function meWith(workspaces: HamWorkspaceSummary[], opts: Partial<HamMeResponse> 
 function withProvider() {
   return ({ children }: { children: React.ReactNode }) => (
     <HamWorkspaceProvider>{children}</HamWorkspaceProvider>
+  );
+}
+
+function withHostedProvider(
+  hostedAuth: React.ComponentProps<typeof HamWorkspaceProvider>["hostedAuth"],
+) {
+  return ({ children }: { children: React.ReactNode }) => (
+    <HamWorkspaceProvider hostedAuth={hostedAuth}>{children}</HamWorkspaceProvider>
   );
 }
 
@@ -157,6 +169,55 @@ describe("HamWorkspaceProvider initial fetch", () => {
     await waitFor(() => expect(result.current.state.status).toBe("auth_required"));
   });
 
+  it("does not call /api/me until Clerk auth has loaded", async () => {
+    const { result } = renderHook(() => useHamWorkspace(), {
+      wrapper: withHostedProvider({
+        clerkConfigured: true,
+        isLoaded: false,
+        isSignedIn: false,
+      }),
+    });
+    await waitFor(() => expect(result.current.state.status).toBe("auth_loading"));
+    expect(mockedGetMe).not.toHaveBeenCalled();
+  });
+
+  it("does not call /api/me when Clerk is configured but signed out", async () => {
+    const { result } = renderHook(() => useHamWorkspace(), {
+      wrapper: withHostedProvider({
+        clerkConfigured: true,
+        isLoaded: true,
+        isSignedIn: false,
+      }),
+    });
+    await waitFor(() => expect(result.current.state.status).toBe("auth_required"));
+    expect(mockedGetMe).not.toHaveBeenCalled();
+  });
+
+  it("shows auth_not_configured without calling /api/me when Clerk key is missing", async () => {
+    const { result } = renderHook(() => useHamWorkspace(), {
+      wrapper: withHostedProvider({
+        clerkConfigured: false,
+        isLoaded: true,
+        isSignedIn: false,
+      }),
+    });
+    await waitFor(() => expect(result.current.state.status).toBe("auth_not_configured"));
+    expect(mockedGetMe).not.toHaveBeenCalled();
+  });
+
+  it("calls /api/me when Clerk is configured, loaded, and signed in", async () => {
+    mockedGetMe.mockResolvedValue(meWith([summary()]));
+    const { result } = renderHook(() => useHamWorkspace(), {
+      wrapper: withHostedProvider({
+        clerkConfigured: true,
+        isLoaded: true,
+        isSignedIn: true,
+      }),
+    });
+    await waitFor(() => expect(result.current.state.status).toBe("ready"));
+    expect(mockedGetMe).toHaveBeenCalledTimes(1);
+  });
+
   it("transitions to error on 5xx and recovers via refresh", async () => {
     mockedGetMe.mockRejectedValueOnce(new HamWorkspaceApiError(503, null, "down"));
     const { result } = renderHook(() => useHamWorkspace(), { wrapper: withProvider() });
@@ -166,6 +227,65 @@ describe("HamWorkspaceProvider initial fetch", () => {
       await result.current.refresh();
     });
     expect(result.current.state.status).toBe("ready");
+  });
+
+  it("classifies fetch TypeError as error with networkUnreachable metadata", async () => {
+    mockedGetMe.mockRejectedValue(new TypeError("Failed to fetch"));
+    const { result } = renderHook(() => useHamWorkspace(), { wrapper: withProvider() });
+    await waitFor(() => expect(result.current.state.status).toBe("error"));
+    const st = result.current.state;
+    expect(st.status).toBe("error");
+    if (st.status !== "error") throw new Error("expected error state");
+    expect(st.networkUnreachable).toBeDefined();
+    expect(st.networkUnreachable?.statusUrl.endsWith("/api/status")).toBe(true);
+    expect(st.networkUnreachable?.apiOrigin.length).toBeGreaterThan(0);
+    expect(st.message).toBe("Failed to fetch");
+  });
+
+  it("does not attach networkUnreachable for generic Errors", async () => {
+    mockedGetMe.mockRejectedValue(new Error("something else"));
+    const { result } = renderHook(() => useHamWorkspace(), { wrapper: withProvider() });
+    await waitFor(() => expect(result.current.state.status).toBe("error"));
+    const st = result.current.state;
+    expect(st.status).toBe("error");
+    if (st.status === "error") expect(st.networkUnreachable).toBeUndefined();
+  });
+});
+
+describe("classifyError (pure)", () => {
+  it("preserves HTTP workspace errors without networkUnreachable", () => {
+    const st = __TEST__.classifyError(new HamWorkspaceApiError(503, "X", "down"));
+    expect(st).toMatchObject({ status: "error", message: "down", code: "X" });
+    if (st.status === "error") expect(st.networkUnreachable).toBeUndefined();
+  });
+
+  it("tags likely fetch failures", () => {
+    const st = __TEST__.classifyError(new TypeError("Failed to fetch"));
+    expect(st.status).toBe("error");
+    if (st.status !== "error") throw new Error("expected error");
+    expect(st.networkUnreachable?.apiOrigin).toBeTruthy();
+    expect(st.networkUnreachable?.statusUrl).toContain("/api/status");
+    expect(st.message).toBe("Failed to fetch");
+  });
+});
+
+describe("WorkspaceGate network diagnostics UI", () => {
+  it("shows hosted-safe unreachable copy when fetch fails at network layer", async () => {
+    mockedGetMe.mockRejectedValue(new TypeError("Failed to fetch"));
+    render(
+      <HamWorkspaceProvider>
+        <WorkspaceGate>
+          <div data-testid="child">child</div>
+        </WorkspaceGate>
+      </HamWorkspaceProvider>,
+    );
+    await waitFor(() => {
+      expect(screen.getByText(WORKSPACE_API_UNREACHABLE_USER_COPY)).toBeInTheDocument();
+    });
+    expect(screen.queryByRole("link", { name: /open api status/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/API endpoint/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Failed to fetch/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^refresh$/i })).toBeInTheDocument();
   });
 });
 

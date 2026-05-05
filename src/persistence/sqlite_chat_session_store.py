@@ -2,12 +2,18 @@
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Sequence
 from pathlib import Path
 from threading import RLock
-from typing import Any, Sequence
+from typing import Any
 from uuid import uuid4
 
-from src.persistence.chat_session_store import ChatSessionRecord, ChatSessionSummary, ChatTurn, _normalize_turns
+from src.persistence.chat_session_store import (
+    ChatSessionRecord,
+    ChatSessionSummary,
+    ChatTurn,
+    _normalize_turns,
+)
 
 
 class SqliteChatSessionStore:
@@ -44,6 +50,26 @@ class SqliteChatSessionStore:
                 self._conn.execute(
                     "ALTER TABLE sessions ADD COLUMN created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"
                 )
+            try:
+                self._conn.execute("SELECT user_id FROM sessions LIMIT 0")
+            except sqlite3.OperationalError:
+                self._conn.execute("ALTER TABLE sessions ADD COLUMN user_id TEXT")
+            try:
+                self._conn.execute("SELECT workspace_id FROM sessions LIMIT 0")
+            except sqlite3.OperationalError:
+                self._conn.execute("ALTER TABLE sessions ADD COLUMN workspace_id TEXT")
+            self._conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_chat_sessions_workspace_user_created
+                ON sessions(workspace_id, user_id, created_at DESC)
+                """
+            )
+            self._conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_chat_sessions_user_workspace_created
+                ON sessions(user_id, workspace_id, created_at DESC)
+                """
+            )
             self._conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS turns (
@@ -63,19 +89,24 @@ class SqliteChatSessionStore:
             except sqlite3.OperationalError:
                 self._conn.execute("ALTER TABLE turns ADD COLUMN turn_id TEXT")
 
-    def create_session(self) -> str:
+    def create_session(
+        self,
+        *,
+        user_id: str | None = None,
+        workspace_id: str | None = None,
+    ) -> str:
         sid = str(uuid4())
         with self._lock, self._conn:
             self._conn.execute(
-                "INSERT INTO sessions (session_id, upstream_ref) VALUES (?, ?)",
-                (sid, None),
+                "INSERT INTO sessions (session_id, upstream_ref, user_id, workspace_id) VALUES (?, ?, ?, ?)",
+                (sid, None, user_id, workspace_id),
             )
         return sid
 
     def get_session(self, session_id: str) -> ChatSessionRecord | None:
         with self._lock:
             row = self._conn.execute(
-                "SELECT session_id, upstream_ref, created_at FROM sessions WHERE session_id = ?",
+                "SELECT session_id, upstream_ref, created_at, user_id, workspace_id FROM sessions WHERE session_id = ?",
                 (session_id,),
             ).fetchone()
             if row is None:
@@ -97,6 +128,8 @@ class SqliteChatSessionStore:
                 turns=turns,
                 upstream_ref=row["upstream_ref"],
                 created_at=row["created_at"] if "created_at" in row.keys() else None,
+                user_id=row["user_id"] if "user_id" in row.keys() else None,
+                workspace_id=row["workspace_id"] if "workspace_id" in row.keys() else None,
             )
 
     def append_turns(self, session_id: str, turns: Sequence[ChatTurn | dict[str, Any]]) -> None:
@@ -170,13 +203,22 @@ class SqliteChatSessionStore:
             )
             return [{"role": str(r["role"]), "content": str(r["content"])} for r in cur.fetchall()]
 
-    def list_sessions(self, *, limit: int = 50, offset: int = 0) -> list[ChatSessionSummary]:
+    def list_sessions(
+        self,
+        *,
+        user_id: str | None = None,
+        workspace_id: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[ChatSessionSummary]:
         with self._lock:
             rows = self._conn.execute(
                 """
                 SELECT
                     s.session_id,
                     s.created_at,
+                    s.user_id,
+                    s.workspace_id,
                     COUNT(t.id) AS turn_count,
                     (
                         SELECT t2.content FROM turns t2
@@ -185,12 +227,14 @@ class SqliteChatSessionStore:
                     ) AS first_user_content
                 FROM sessions s
                 LEFT JOIN turns t ON t.session_id = s.session_id
+                WHERE (? IS NULL OR s.user_id = ?)
+                  AND (? IS NULL OR s.workspace_id = ?)
                 GROUP BY s.session_id
                 HAVING turn_count > 0
                 ORDER BY s.created_at DESC
                 LIMIT ? OFFSET ?
                 """,
-                (limit, offset),
+                (user_id, user_id, workspace_id, workspace_id, limit, offset),
             ).fetchall()
             out: list[ChatSessionSummary] = []
             for r in rows:
@@ -202,6 +246,8 @@ class SqliteChatSessionStore:
                         preview=preview,
                         turn_count=int(r["turn_count"]),
                         created_at=r["created_at"],
+                        user_id=r["user_id"],
+                        workspace_id=r["workspace_id"],
                     )
                 )
             return out

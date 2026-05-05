@@ -4,12 +4,21 @@
  * Lightweight self-contained menu (no radix dropdown wrapper) so the topbar
  * pill stays a single component. Closes on outside click, escape, or
  * selection.
+ *
+ * When `anchorRef` is set, the menu is portaled to `document.body` with
+ * `position: fixed` under the anchor. That avoids clipping from
+ * `overflow-hidden` ancestors (e.g. workspace shell) when the menu is wider
+ * than the sidebar and was previously `right`-aligned off the left edge.
  */
 import * as React from "react";
+import { createPortal } from "react-dom";
 
 import { cn } from "@/lib/utils";
 
 import type { HamWorkspaceSummary } from "@/lib/ham/workspaceApi";
+
+const PICKER_WIDTH_PX = 288;
+const PICKER_MARGIN_PX = 8;
 
 export interface WorkspacePickerProps {
   workspaces: HamWorkspaceSummary[];
@@ -18,6 +27,8 @@ export interface WorkspacePickerProps {
   onSelect: (workspaceId: string) => void;
   onCreate: () => void;
   onClose: () => void;
+  /** When provided, menu is portaled and fixed-positioned below this element. */
+  anchorRef?: React.RefObject<HTMLElement | null>;
 }
 
 function roleBadgeClass(role: string): string {
@@ -40,11 +51,71 @@ export function WorkspacePicker({
   onSelect,
   onCreate,
   onClose,
+  anchorRef,
 }: WorkspacePickerProps) {
   const containerRef = React.useRef<HTMLDivElement | null>(null);
+  const [fixedPos, setFixedPos] = React.useState<{
+    top: number;
+    left: number;
+    width: number;
+  } | null>(null);
 
   React.useEffect(() => {
-    if (!open) return;
+    if (!open) setFixedPos(null);
+  }, [open]);
+
+  const updateFixedPosition = React.useCallback(() => {
+    const anchor = anchorRef?.current;
+    if (!anchor) return;
+    const r = anchor.getBoundingClientRect();
+    const w = Math.min(PICKER_WIDTH_PX, window.innerWidth - PICKER_MARGIN_PX * 2);
+    let left = r.left;
+    if (left + w + PICKER_MARGIN_PX > window.innerWidth) {
+      left = window.innerWidth - w - PICKER_MARGIN_PX;
+    }
+    if (left < PICKER_MARGIN_PX) left = PICKER_MARGIN_PX;
+    setFixedPos({
+      top: r.bottom + PICKER_MARGIN_PX,
+      left,
+      width: w,
+    });
+  }, [anchorRef]);
+
+  React.useLayoutEffect(() => {
+    if (!open || !anchorRef) return;
+    updateFixedPosition();
+  }, [open, anchorRef, updateFixedPosition, workspaces.length]);
+
+  React.useEffect(() => {
+    if (!open || !anchorRef) return;
+    function onDocClick(ev: MouseEvent) {
+      const menu = containerRef.current;
+      const anchor = anchorRef.current;
+      const t = ev.target;
+      if (!(t instanceof Node)) return;
+      if (menu?.contains(t) || anchor?.contains(t)) return;
+      onClose();
+    }
+    function onKey(ev: KeyboardEvent) {
+      if (ev.key === "Escape") onClose();
+    }
+    function onViewportChange() {
+      updateFixedPosition();
+    }
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKey);
+    window.addEventListener("resize", onViewportChange);
+    window.addEventListener("scroll", onViewportChange, true);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("resize", onViewportChange);
+      window.removeEventListener("scroll", onViewportChange, true);
+    };
+  }, [open, onClose, anchorRef, updateFixedPosition]);
+
+  React.useEffect(() => {
+    if (!open || anchorRef) return;
     function onDocClick(ev: MouseEvent) {
       const el = containerRef.current;
       if (el && ev.target instanceof Node && !el.contains(ev.target)) {
@@ -60,23 +131,43 @@ export function WorkspacePicker({
       document.removeEventListener("mousedown", onDocClick);
       document.removeEventListener("keydown", onKey);
     };
-  }, [open, onClose]);
+  }, [open, onClose, anchorRef]);
 
   if (!open) return null;
 
   const visible = workspaces.filter((w) => w.status === "active");
 
-  return (
+  // Wait one layout pass so the anchor has bounds before portaling (avoids a stray 0,0 flash).
+  if (anchorRef && fixedPos === null) return null;
+
+  // Menu is self-contained visually: explicit text colors + opaque dark surface
+  // so it stays readable when portaled to document.body, where the global
+  // `text-foreground` token resolves to black (see `src/index.css`).
+  const menuClassName = cn(
+    "overflow-hidden rounded-xl border border-white/15 bg-[#0b1620] text-sm text-white/90 shadow-2xl shadow-black/55",
+    anchorRef ? "fixed z-[300]" : "absolute left-0 top-full z-[300] mt-2 w-[min(18rem,calc(100vw-1rem))]",
+  );
+
+  const menuInner = (
     <div
       ref={containerRef}
       role="menu"
       aria-label="Workspace picker"
       data-testid="workspace-picker"
-      className="absolute right-0 top-full z-50 mt-2 w-72 overflow-hidden rounded-xl border border-white/10 bg-black/85 text-sm text-foreground shadow-2xl backdrop-blur"
+      className={menuClassName}
+      style={
+        anchorRef && fixedPos
+          ? {
+              top: fixedPos.top,
+              left: fixedPos.left,
+              width: fixedPos.width,
+            }
+          : undefined
+      }
     >
       <ul className="max-h-72 overflow-y-auto py-1">
         {visible.length === 0 ? (
-          <li className="px-3 py-2 text-foreground/60">No workspaces yet.</li>
+          <li className="px-3 py-2 text-white/65">No workspaces yet.</li>
         ) : (
           visible.map((w) => {
             const isActive = w.workspace_id === activeWorkspaceId;
@@ -88,8 +179,8 @@ export function WorkspacePicker({
                   aria-checked={isActive}
                   data-active={isActive ? "true" : "false"}
                   className={cn(
-                    "flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition-colors hover:bg-white/5",
-                    isActive ? "bg-white/[0.06]" : undefined,
+                    "flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-white/92 transition-colors hover:bg-white/[0.08] hover:text-white",
+                    isActive ? "bg-white/[0.10] text-white" : undefined,
                   )}
                   onClick={() => {
                     onSelect(w.workspace_id);
@@ -98,7 +189,7 @@ export function WorkspacePicker({
                 >
                   <span className="flex min-w-0 flex-col">
                     <span className="truncate font-medium">{w.name}</span>
-                    <span className="truncate text-xs text-foreground/60">
+                    <span className="truncate text-xs text-white/55">
                       {w.slug}
                       {w.org_id ? ` · ${w.org_id}` : ""}
                     </span>
@@ -117,21 +208,26 @@ export function WorkspacePicker({
           })
         )}
       </ul>
-      <div className="border-t border-white/10">
+      <div className="border-t border-white/12 bg-white/[0.02]">
         <button
           type="button"
           role="menuitem"
           data-testid="workspace-picker-create"
-          className="flex w-full items-center gap-2 px-3 py-2 text-left text-foreground/80 transition-colors hover:bg-white/5"
+          className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-white/90 transition-colors hover:bg-white/[0.08] hover:text-white"
           onClick={() => {
             onCreate();
             onClose();
           }}
         >
-          <span className="text-base leading-none">＋</span>
+          <span className="text-base leading-none text-amber-300">＋</span>
           <span>Create workspace</span>
         </button>
       </div>
     </div>
   );
+
+  if (anchorRef) {
+    return typeof document !== "undefined" ? createPortal(menuInner, document.body) : null;
+  }
+  return menuInner;
 }

@@ -6,6 +6,10 @@
 
 **Canonical doc freshness + links:** [`scripts/check_docs_freshness.py`](../scripts/check_docs_freshness.py) walks the tracked allowlist (`CANONICAL_DOCS` in that script—root `README.md`, `AGENTS.md`, `VISION.md`, `PRODUCT_DIRECTION.md`, `GAPS.md`, and this index), checks each was touched in git within **180 days**, and flags unresolved relative markdown targets. Run `python scripts/check_docs_freshness.py` locally before large doc-only changes; CI runs the same script as **warning-only** until the team promotes it.
 
+**Small, scoped commits:** touch only the allowlisted files you mean to update—a commit that edits an allowlisted path resets its freshness clock for CI. When you change `.cursor/rules/`, `.cursor/skills/`, or other sources embedded by [`scripts/build_cursor_export.py`](../scripts/build_cursor_export.py), regenerate [`CURSOR_EXACT_SETUP_EXPORT.md`](../CURSOR_EXACT_SETUP_EXPORT.md) from the repo root; do not hand-edit that snapshot.
+
+Other markdown under `docs/` (for example [`HAM_HARDENING_REMEDIATION.md`](HAM_HARDENING_REMEDIATION.md), [`ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md`](ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md)) remains **canonical for its topic** but is **outside** that allowlist on purpose—avoid widening the list casually (it creates churn). When you edit those files or add cross-links, still keep relative targets valid; the freshness script does not scan them today.
+
 **`docs/archive/` (tracked, when used)** — Superseded or historical write-ups we keep for auditability (moved here instead of deleted). **Do not** move a doc into `archive/` if [`HAM_ROADMAP.md`](HAM_ROADMAP.md), root `README.md`, deploy docs, or an active runbook still link to it without updating those links first.
 
 **`docs/_scratch/` (local only, never commit)** — AI handoff notes, one-off verification dumps, draft bullets, and scratch planning. This path is **gitignored**; copy anything worth keeping into real doc paths and delete the scratch copy.
@@ -20,7 +24,7 @@
 
 Canonical architecture and agent context live at the repo root: [`VISION.md`](../VISION.md), [`AGENTS.md`](../AGENTS.md), [`SWARM.md`](../SWARM.md), [`GAPS.md`](../GAPS.md).
 
-**Not source of truth:** generated exports and tool-local settings (for example [`CURSOR_EXACT_SETUP_EXPORT.md`](../CURSOR_EXACT_SETUP_EXPORT.md), or the gitignored .cursor/settings.json file) are snapshots or editor config—defer to git-tracked canonical docs unless you deliberately refresh an export script.
+**Not source of truth:** generated exports and tool-local settings (for example [`CURSOR_EXACT_SETUP_EXPORT.md`](../CURSOR_EXACT_SETUP_EXPORT.md), or the gitignored .cursor/settings.json file) are snapshots or editor config—defer to git-tracked canonical docs. To refresh the Cursor setup export after changing tracked rules or skills, run `python scripts/build_cursor_export.py` from the repo root (do not hand-edit the export file).
 
 **Builder Platform (aspirational):** [`BUILDER_PLATFORM_NORTH_STAR.md`](BUILDER_PLATFORM_NORTH_STAR.md) — phased roadmap (orthogonal to workspace phases in [`HAM_ROADMAP.md`](HAM_ROADMAP.md)); shipped pillars remain [`VISION.md`](../VISION.md).
 
@@ -28,7 +32,7 @@ Canonical architecture and agent context live at the repo root: [`VISION.md`](..
 
 **Cloud Agent / HAM VM Git:** these environments use **branch → push branch → open PR into `main`**. Direct **`git push origin main`** and **force-push to `main`** are forbidden — see [`AGENTS.md`](../AGENTS.md) (**Cloud Agent / HAM VM Git policy**).
 
-**Overlapping docs-only PRs:** Prefer editing canonical docs in place instead of spawning duplicate PR churn; overlap checks and tokens live under [`AGENTS.md`](../AGENTS.md) and ship in deterministic launch prompts (`CURSOR_AGENT_BASE_REVISION` in `cursor_agent_workflow.py`). When you have GitHub CLI auth, run `gh pr list --repo <org>/<repo> --state open --limit 50` before a docs-only PR; if `gh` is unavailable or returns auth errors, extend an existing open PR or branch manually rather than opening parallel duplicates.
+**Overlapping docs-only PRs:** Prefer editing canonical docs in place instead of spawning duplicate PR churn; overlap checks and tokens live under [`AGENTS.md`](../AGENTS.md) and ship in deterministic launch prompts (`CURSOR_AGENT_BASE_REVISION` in `cursor_agent_workflow.py`). When you have GitHub CLI auth, run `gh pr list --repo <org>/<repo> --state open --limit 50` before a docs-only PR. If `gh` is unavailable or returns auth errors (for example **HTTP 401** / “Bad credentials”), you cannot complete the overlap scan from automation alone—coordinate with a human who has `gh auth login`, or extend an existing open PR or branch manually rather than opening parallel duplicates. In agent handoffs where `gh` cannot be run, report **`GH_PR_OVERLAP_CHECK_UNAVAILABLE`**—do not treat an empty overlap list or a failed `gh` invocation as proof of no overlap.
 
 ### Suggested read order (Cloud Agent + missions)
 

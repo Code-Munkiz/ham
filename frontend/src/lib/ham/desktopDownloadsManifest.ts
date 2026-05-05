@@ -97,23 +97,22 @@ export function parseDesktopDownloadsManifest(raw: unknown): DesktopDownloadsMan
   return out;
 }
 
-/** Build landing CTAs — mac remains disabled unless manifest adds a downloadable entry. */
+/** Build landing CTAs (Windows + macOS only; Linux is ignored for the public landing). */
 export function manifestToDownloadCtas(manifest: DesktopDownloadsManifest): DesktopDownloadCta[] {
-  const order: DesktopPlatform[] = ["linux", "windows", "macos"];
+  const order: DesktopPlatform[] = ["windows", "macos"];
   return order.map((platform) => {
     const raw = manifest.platforms[platform];
     if (!raw) {
       return {
         platform,
-        label: platform === "linux" ? "Linux" : platform === "windows" ? "Windows" : "macOS",
+        label: platform === "windows" ? "Windows" : "macOS",
         href: "",
         available: false,
-        subtext: platform === "macos" ? "Apple silicon & Intel" : undefined,
       };
     }
     return {
       platform,
-      label: raw.label || (platform === "linux" ? "Linux" : platform === "windows" ? "Windows" : "macOS"),
+      label: raw.label || (platform === "windows" ? "Windows" : "macOS"),
       href: raw.url,
       available: true,
       subtext: [`${raw.type}`, `${raw.arch}`, `v${raw.version}`].join(" · "),

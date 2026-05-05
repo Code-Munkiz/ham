@@ -24,9 +24,12 @@ from src.ham.worker_adapters.claude_agent_adapter import (
     ClaudeAgentWorkerCapabilities,
     ClaudeAgentWorkerReadiness,
     _format_sdk_query_failure,
+    _mission_acceptance_blocker,
     _redact_diagnostic_text,
     check_claude_agent_readiness,
+    claude_agent_mission_auth_configured,
     is_claude_agent_launchable,
+    parse_claude_mission_acceptance_text,
     reset_claude_agent_readiness_cache,
 )
 
@@ -67,6 +70,30 @@ class TestCapabilities:
         assert caps.requires_project_root is True
         assert caps.requires_auth is True
         assert caps.launch_mode == "sdk_local"
+
+
+class TestMissionAuthConfigured:
+    def test_false_without_stored_key_or_env(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("HAM_WORKSPACE_TOOL_CREDENTIALS_FILE", str(tmp_path / "w.json"))
+        (tmp_path / "w.json").write_text("{}\n", encoding="utf-8")
+        assert claude_agent_mission_auth_configured(None) is False
+
+    def test_true_with_connected_tools_stored_key(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("HAM_WORKSPACE_TOOL_CREDENTIALS_FILE", str(tmp_path / "w.json"))
+        (tmp_path / "w.json").write_text(
+            '{"anthropic_api_key": "sk-ant-fake-mission-gate"}\n',
+            encoding="utf-8",
+        )
+        assert claude_agent_mission_auth_configured(None) is True
+
+    def test_true_with_legacy_env_anthropic_key(self, monkeypatch):
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-fake-env-fallback")
+        assert claude_agent_mission_auth_configured(None) is True
+
+    def test_true_with_bedrock_signals(self, monkeypatch):
+        monkeypatch.setenv("CLAUDE_CODE_USE_BEDROCK", "1")
+        monkeypatch.setenv("AWS_REGION", "us-east-1")
+        assert claude_agent_mission_auth_configured(None) is True
 
 
 class TestSdkDetection:
@@ -443,7 +470,7 @@ class TestClaudeRuntimeEnvOverlay:
         monkeypatch.setattr(
             claude_agent_adapter,
             "check_claude_agent_readiness",
-            lambda: fake_rd,
+            lambda actor=None: fake_rd,
         )
         monkeypatch.setattr(
             claude_agent_adapter,
@@ -452,8 +479,8 @@ class TestClaudeRuntimeEnvOverlay:
         )
         monkeypatch.setattr(
             claude_agent_adapter,
-            "resolve_claude_agent_anthropic_api_key",
-            lambda: None,
+            "resolve_claude_agent_anthropic_api_key_for_actor",
+            lambda actor=None: None,
         )
 
         async def run():
@@ -467,3 +494,166 @@ class TestClaudeRuntimeEnvOverlay:
         assert blocker is not None
         assert "sk-ant-" not in (blocker or "")
         assert "ANTHROPIC_API_KEY=" not in (blocker or "")
+
+
+class TestClaudeMissionAcceptanceParsing:
+    def _valid(self) -> dict:
+        return {
+            "mission_status": "ok",
+            "worker": "claude_agent_sdk",
+            "job_type": "non_mutating_review",
+            "summary": "Review complete.",
+            "acceptance_criteria": ["c1", "c2", "c3"],
+        }
+
+    def test_raw_json_passes(self):
+        d = self._valid()
+        text = json.dumps(d)
+        parsed, ok, reason = parse_claude_mission_acceptance_text(text)
+        assert ok is True
+        assert reason is None
+        assert parsed is not None
+        assert parsed["worker"] == "claude_agent_sdk"
+        assert len(parsed["acceptance_criteria"]) == 3
+
+    def test_fenced_json_passes(self):
+        d = self._valid()
+        text = "```json\n" + json.dumps(d) + "\n```"
+        parsed, ok, reason = parse_claude_mission_acceptance_text(text)
+        assert ok is True
+        assert parsed is not None
+
+    def test_prose_before_and_after_json_passes(self):
+        d = self._valid()
+        text = 'Here you go: ' + json.dumps(d) + " — thanks"
+        parsed, ok, reason = parse_claude_mission_acceptance_text(text)
+        assert ok is True
+        assert parsed is not None
+
+    def test_malformed_json_fails(self):
+        parsed, ok, reason = parse_claude_mission_acceptance_text("{not json")
+        assert ok is False
+        assert parsed is None
+        assert reason
+
+    def test_missing_acceptance_criteria_fails(self):
+        d = self._valid()
+        del d["acceptance_criteria"]
+        parsed, ok, reason = parse_claude_mission_acceptance_text(json.dumps(d))
+        assert ok is False
+        assert parsed is None
+        assert reason and "acceptance_criteria" in reason
+
+    def test_wrong_worker_fails(self):
+        d = self._valid()
+        d["worker"] = "other_worker"
+        parsed, ok, reason = parse_claude_mission_acceptance_text(json.dumps(d))
+        assert ok is False
+        assert parsed is None
+        assert reason and "worker" in reason.lower()
+
+    def test_acceptance_criteria_wrong_length_fails(self):
+        d = self._valid()
+        d["acceptance_criteria"] = ["only", "two"]
+        parsed, ok, reason = parse_claude_mission_acceptance_text(json.dumps(d))
+        assert ok is False
+        assert parsed is None
+        assert reason
+
+    def test_long_invalid_payload_blocker_stays_short(self):
+        noise = "x" * 3000
+        parsed, ok, reason = parse_claude_mission_acceptance_text(noise)
+        assert ok is False
+        assert parsed is None
+        wrapped = _mission_acceptance_blocker(reason or "x")
+        assert len(wrapped) < 400
+        assert noise not in wrapped
+
+    def test_two_top_level_json_objects_fails(self):
+        d1 = self._valid()
+        d2 = self._valid()
+        d2["summary"] = "Second summary."
+        text = json.dumps(d1) + " " + json.dumps(d2)
+        parsed, ok, reason = parse_claude_mission_acceptance_text(text)
+        assert ok is False
+        assert parsed is None
+
+    def test_two_valid_fenced_blocks_ambiguous(self):
+        d1 = self._valid()
+        d2 = self._valid()
+        d2["summary"] = "Second summary."
+        text = (
+            "```json\n"
+            + json.dumps(d1)
+            + "\n```\n```\n"
+            + json.dumps(d2)
+            + "\n```"
+        )
+        parsed, ok, reason = parse_claude_mission_acceptance_text(text)
+        assert ok is False
+        assert parsed is None
+        assert reason and "ambiguous" in reason.lower()
+
+    def test_secret_pattern_in_summary_rejected(self):
+        d = self._valid()
+        d["summary"] = "stopped on sk-ant-api03-example"
+        parsed, ok, reason = parse_claude_mission_acceptance_text(json.dumps(d))
+        assert ok is False
+        assert parsed is None
+        assert reason
+        assert "sk-ant-" not in (reason or "")
+
+    def test_run_mission_invalid_result_text_safe_blocker(self, monkeypatch):
+        rd = ClaudeAgentWorkerReadiness(
+            authenticated=True,
+            sdk_available=True,
+            sdk_version="0.1.2",
+            status="ready",
+        )
+
+        async def fake_run(*_a, **_kw):
+            return ("x" * 900 + " not json", None, rd)
+
+        monkeypatch.setattr(
+            claude_agent_adapter,
+            "_run_claude_agent_sdk_plan_query",
+            fake_run,
+        )
+        out = asyncio.run(claude_agent_adapter.run_claude_agent_sdk_mission(None))
+        assert out.ok is True
+        assert out.mission_ok is False
+        assert out.result_text
+        assert out.parsed_result is None
+        assert out.blocker
+        assert len(out.blocker) < 450
+        assert out.result_text not in (out.blocker or "")
+
+    def test_run_mission_valid_json_round_trip(self, monkeypatch):
+        rd = ClaudeAgentWorkerReadiness(
+            authenticated=True,
+            sdk_available=True,
+            sdk_version="0.1.2",
+            status="ready",
+        )
+        d = {
+            "mission_status": "ok",
+            "worker": "claude_agent_sdk",
+            "job_type": "non_mutating_review",
+            "summary": "Done.",
+            "acceptance_criteria": ["a", "b", "c"],
+        }
+
+        async def fake_run(*_a, **_kw):
+            return (json.dumps(d), None, rd)
+
+        monkeypatch.setattr(
+            claude_agent_adapter,
+            "_run_claude_agent_sdk_plan_query",
+            fake_run,
+        )
+        out = asyncio.run(claude_agent_adapter.run_claude_agent_sdk_mission(None))
+        assert out.ok is True
+        assert out.mission_ok is True
+        assert out.parsed_result is not None
+        assert out.parsed_result["worker"] == "claude_agent_sdk"
+        assert out.blocker is None

@@ -7,10 +7,11 @@ from __future__ import annotations
 
 import os
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from threading import RLock
-from typing import Any, Protocol, Sequence, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 
 @dataclass
@@ -26,6 +27,8 @@ class ChatSessionRecord:
     turns: list[ChatTurn] = field(default_factory=list)
     upstream_ref: str | None = None
     created_at: str | None = None  # ISO-8601; populated by SQLite store
+    user_id: str | None = None
+    workspace_id: str | None = None
 
 
 @dataclass
@@ -36,6 +39,8 @@ class ChatSessionSummary:
     preview: str
     turn_count: int
     created_at: str | None = None
+    user_id: str | None = None
+    workspace_id: str | None = None
 
 
 def _normalize_turns(turns: Sequence[ChatTurn | dict[str, Any]]) -> list[ChatTurn]:
@@ -56,7 +61,12 @@ def _normalize_turns(turns: Sequence[ChatTurn | dict[str, Any]]) -> list[ChatTur
 class ChatSessionStore(Protocol):
     """Contract for chat persistence (implementations: memory, SQLite, …)."""
 
-    def create_session(self) -> str: ...
+    def create_session(
+        self,
+        *,
+        user_id: str | None = None,
+        workspace_id: str | None = None,
+    ) -> str: ...
 
     def get_session(self, session_id: str) -> ChatSessionRecord | None: ...
 
@@ -68,7 +78,14 @@ class ChatSessionStore(Protocol):
 
     def list_messages(self, session_id: str) -> list[dict[str, str]]: ...
 
-    def list_sessions(self, *, limit: int = 50, offset: int = 0) -> list[ChatSessionSummary]: ...
+    def list_sessions(
+        self,
+        *,
+        user_id: str | None = None,
+        workspace_id: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[ChatSessionSummary]: ...
 
     def delete_session(self, session_id: str) -> bool: ...
 
@@ -110,10 +127,21 @@ class InMemoryChatSessionStore:
         self._sessions: dict[str, ChatSessionRecord] = {}
         self._lock = RLock()
 
-    def create_session(self) -> str:
+    def create_session(
+        self,
+        *,
+        user_id: str | None = None,
+        workspace_id: str | None = None,
+    ) -> str:
         sid = str(uuid.uuid4())
         with self._lock:
-            self._sessions[sid] = ChatSessionRecord(session_id=sid, turns=[], upstream_ref=None)
+            self._sessions[sid] = ChatSessionRecord(
+                session_id=sid,
+                turns=[],
+                upstream_ref=None,
+                user_id=user_id,
+                workspace_id=workspace_id,
+            )
         return sid
 
     def get_session(self, session_id: str) -> ChatSessionRecord | None:
@@ -157,9 +185,22 @@ class InMemoryChatSessionStore:
                 raise KeyError(session_id)
             return [{"role": t.role, "content": t.content} for t in rec.turns]
 
-    def list_sessions(self, *, limit: int = 50, offset: int = 0) -> list[ChatSessionSummary]:
+    def list_sessions(
+        self,
+        *,
+        user_id: str | None = None,
+        workspace_id: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[ChatSessionSummary]:
         with self._lock:
-            items = sorted(self._sessions.values(), key=lambda r: r.session_id, reverse=True)
+            items = [
+                rec
+                for rec in self._sessions.values()
+                if (user_id is None or rec.user_id == user_id)
+                and (workspace_id is None or rec.workspace_id == workspace_id)
+            ]
+            items = sorted(items, key=lambda r: r.session_id, reverse=True)
             page = items[offset : offset + limit]
             out: list[ChatSessionSummary] = []
             for rec in page:
@@ -174,6 +215,8 @@ class InMemoryChatSessionStore:
                         preview=preview,
                         turn_count=len(rec.turns),
                         created_at=rec.created_at,
+                        user_id=rec.user_id,
+                        workspace_id=rec.workspace_id,
                     )
                 )
             return out

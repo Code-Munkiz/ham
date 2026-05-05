@@ -39,6 +39,40 @@ The repo already includes CORS support (`HAM_CORS_ORIGINS`, `HAM_CORS_ORIGIN_REG
    If this fails on OPTIONS or missing `Access-Control-Allow-Origin`, the API env does not allow that `Origin`.  
    If chat succeeds but the script fails with **mock-mode** detection, the API is still on **`HERMES_GATEWAY_MODE=mock`** (or miswired `http`). Set **`HAM_VERIFY_ALLOW_MOCK=1`** only when you **intentionally** verify a mock deployment.
 
+6. **Workspace Firestore readiness (PR-1d-B)**:
+   - Keep hosted auth strict:
+     - `HAM_CLERK_REQUIRE_AUTH=true`
+     - `HAM_LOCAL_DEV_WORKSPACE_BYPASS` unset/false
+     - `HAM_WORKSPACE_ROUTES_ENABLED=true`
+   - Use Firestore-backed workspace store:
+     - `HAM_WORKSPACE_STORE_BACKEND=firestore`
+     - `HAM_FIRESTORE_PROJECT_ID=<project-id>`
+     - `HAM_FIRESTORE_DATABASE=<database-id>` (or `(default)` when present)
+   - Clerk JWT verifier config:
+     - `CLERK_JWT_ISSUER=<issuer>`
+     - optional `CLERK_JWT_AUDIENCE=<aud>`
+   - Firestore/IAM:
+     - create database (example): `gcloud firestore databases create --database=ham-workspaces --location=us-central1 --project=YOUR_PROJECT_ID`
+     - grant Cloud Run runtime service account `roles/datastore.user` (or equivalent custom Firestore/Datastore role)
+   - Deploy repo artifacts:
+     - `firestore.rules` (deny-all direct client access; Cloud Run Admin SDK/service account is the only path)
+     - `firestore.indexes.json` (slug-conflict composites)
+   - Index caveat:
+     - workspace list sorting is currently done in application code; `owner_user_id/status/updated_at` and `org_id/status/updated_at` composites are not required yet
+     - if `list_workspaces_for_user` moves to Firestore `orderBy("updated_at")`, deploy those indexes before shipping that query
+   - Smoke with Clerk bearer token:
+     - `GET /api/me`
+     - `GET /api/workspaces`
+   - Run hosted two-user smoke verification (non-mutating):
+     ```bash
+     HAM_API_BASE="https://YOUR-SERVICE.run.app" \
+     HAM_WEB_ORIGIN="https://YOUR-VERCEL-HOST.vercel.app" \
+     TOKEN_A="<clerk-session-jwt-user-a>" \
+     TOKEN_B="<clerk-session-jwt-user-b>" \
+     bash scripts/verify_workspace_hosted_smoke.sh
+     ```
+     This script validates CORS preflight, `/api/me` (`auth_mode="clerk"`), workspace create/persistence, and cross-user workspace isolation. It does not update Clerk/Cloud Run/Vercel/Firestore settings.
+
 ## 1a. Creative image generation (Phase 2G.1a — optional)
 
 Requirements: **HAM API image built from a commit that includes Phase 2G.1** (`/api/media/images/generate`). The live service **URL** may change; resolve with  
@@ -57,6 +91,7 @@ Requirements: **HAM API image built from a commit that includes Phase 2G.1** (`/
 The **React dashboard** is built and served only from Vercel. **If the Vercel project Root Directory is the repo root**, use root `vercel.json` (build + `outputDirectory` + SPA rewrite). **If Root Directory is `frontend`**, Vercel reads **`frontend/vercel.json`** for SPA rewrites — without that, direct visits to **`/agents`** (or refresh) can 404. The **Cloud Run image** (`Dockerfile`) ships **FastAPI only** — it does not contain `frontend/dist`. If you redeploy Vercel but not the API, pages like **Agent Builder** may load but fail with a clear error until **GET `/api/projects/{id}/agents`** exists on the API host. If you redeploy the API but not Vercel, new **UI** routes will not appear until you trigger a **new Vercel production deployment** from the commit that includes those files.
 
 1. Project → **Settings → Environment Variables**:
+   - **`VITE_CLERK_PUBLISHABLE_KEY`** = Clerk publishable key used by the dashboard app
    - **`VITE_HAM_API_BASE`** = your Cloud Run **origin** only, e.g. `https://ham-api-xxxxx.run.app` — **no trailing slash**, **no `/api` suffix** (the app requests `/api/...` itself; `…/api` + `/api/...` → 404).
    - Scope: enable for **Production** and **Preview** (previews need it too).
 2. **Redeploy** after any change to `VITE_*` (Vite inlines them at **build** time), and after merging **frontend** changes (new pages, nav, etc.).
