@@ -585,7 +585,7 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
       return;
     }
     void loadSessions();
-  }, [canLoadSessions, loadSessions, location.pathname, location.search]);
+  }, [canLoadSessions, loadSessions, location.pathname]);
 
   const handleDeleteSession = React.useCallback(
     async (sid: string) => {
