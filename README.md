@@ -50,9 +50,11 @@ pip install pytest
 python -m pytest tests/ -q
 ```
 
+In **cloud / PTY-less shells**, `tests/test_workspace_terminal.py` can hang (PTY); use `python -m pytest tests/ -q --ignore=tests/test_workspace_terminal.py` when needed. Curated commands and optional deselects: [`AGENTS.md`](AGENTS.md).
+
 Frontend typecheck: `npm run lint` in `frontend/` (`tsc --noEmit`). See [`AGENTS.md`](AGENTS.md) for per-area test guidance.
 
-Before landing edits to canonical markdown, run `python scripts/check_docs_freshness.py` (same check as the CI **warning-only** doc freshness step). The exact tracked paths are the `CANONICAL_DOCS` list in [`scripts/check_docs_freshness.py`](scripts/check_docs_freshness.py).
+Before landing edits to canonical markdown, run `python scripts/check_docs_freshness.py` (same check as the CI **warning-only** doc freshness step). The exact tracked paths are the `CANONICAL_DOCS` list in [`scripts/check_docs_freshness.py`](scripts/check_docs_freshness.py). After changing `.cursor/rules/`, `.cursor/skills/`, or export-embedded sources such as `AGENTS.md`, `VISION.md`, `GAPS.md`, or `docs/HAM_HARDENING_REMEDIATION.md`, regenerate [`CURSOR_EXACT_SETUP_EXPORT.md`](CURSOR_EXACT_SETUP_EXPORT.md) with `python scripts/build_cursor_export.py` instead of editing that snapshot by hand.
 
 ## Project layout
 
