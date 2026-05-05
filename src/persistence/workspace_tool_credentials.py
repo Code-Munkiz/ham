@@ -60,19 +60,17 @@ def get_stored_anthropic_api_key() -> str | None:
 
 
 def resolve_claude_agent_anthropic_api_key() -> str | None:
-    """Anthropic API key for Claude Agent / Claude Code **direct** API auth.
+    """Anthropic API key — **without** per-user Clerk context (legacy / tests).
 
-    **Precedence:** Connected Tools store (``save_anthropic_api_key``) wins over
-    process ``ANTHROPIC_API_KEY``. Values are never logged by this helper.
-
-    Bedrock and Vertex modes ignore this key for routing; callers that support
-    those channels must not rely on this value alone.
+    Product routes should call
+    :func:`resolve_claude_agent_anthropic_api_key_for_actor` instead.
     """
-    s = get_stored_anthropic_api_key()
-    if s:
-        return s
-    e = (os.environ.get("ANTHROPIC_API_KEY") or "").strip()
-    return e or None
+    # Late import avoids circular bootstrap with Firebase-backed facade.
+    from src.persistence.connected_tool_credentials import (
+        resolve_claude_agent_anthropic_api_key_for_actor,
+    )
+
+    return resolve_claude_agent_anthropic_api_key_for_actor(None)
 
 
 def get_effective_openrouter_api_key() -> str:

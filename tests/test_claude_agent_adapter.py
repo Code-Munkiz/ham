@@ -74,7 +74,7 @@ class TestMissionAuthConfigured:
     def test_false_without_stored_key_or_env(self, tmp_path, monkeypatch):
         monkeypatch.setenv("HAM_WORKSPACE_TOOL_CREDENTIALS_FILE", str(tmp_path / "w.json"))
         (tmp_path / "w.json").write_text("{}\n", encoding="utf-8")
-        assert claude_agent_mission_auth_configured() is False
+        assert claude_agent_mission_auth_configured(None) is False
 
     def test_true_with_connected_tools_stored_key(self, tmp_path, monkeypatch):
         monkeypatch.setenv("HAM_WORKSPACE_TOOL_CREDENTIALS_FILE", str(tmp_path / "w.json"))
@@ -82,16 +82,16 @@ class TestMissionAuthConfigured:
             '{"anthropic_api_key": "sk-ant-fake-mission-gate"}\n',
             encoding="utf-8",
         )
-        assert claude_agent_mission_auth_configured() is True
+        assert claude_agent_mission_auth_configured(None) is True
 
     def test_true_with_legacy_env_anthropic_key(self, monkeypatch):
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-fake-env-fallback")
-        assert claude_agent_mission_auth_configured() is True
+        assert claude_agent_mission_auth_configured(None) is True
 
     def test_true_with_bedrock_signals(self, monkeypatch):
         monkeypatch.setenv("CLAUDE_CODE_USE_BEDROCK", "1")
         monkeypatch.setenv("AWS_REGION", "us-east-1")
-        assert claude_agent_mission_auth_configured() is True
+        assert claude_agent_mission_auth_configured(None) is True
 
 
 class TestSdkDetection:
@@ -468,7 +468,7 @@ class TestClaudeRuntimeEnvOverlay:
         monkeypatch.setattr(
             claude_agent_adapter,
             "check_claude_agent_readiness",
-            lambda: fake_rd,
+            lambda actor=None: fake_rd,
         )
         monkeypatch.setattr(
             claude_agent_adapter,
@@ -477,8 +477,8 @@ class TestClaudeRuntimeEnvOverlay:
         )
         monkeypatch.setattr(
             claude_agent_adapter,
-            "resolve_claude_agent_anthropic_api_key",
-            lambda: None,
+            "resolve_claude_agent_anthropic_api_key_for_actor",
+            lambda actor=None: None,
         )
 
         async def run():

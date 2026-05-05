@@ -344,7 +344,9 @@ class TestConnectAndScanEndpoints:
         assert r2.status_code == 400
         assert r2.json()["error_code"] == "INVALID_KEY"
 
-    def test_connect_claude_secret_write_through_on_cloud_when_flag_on(self, tmp_path, monkeypatch):
+    def test_connect_claude_never_uses_secret_manager_write_through(
+        self, tmp_path, monkeypatch
+    ):
         cred_path = tmp_path / "wtc.json"
         monkeypatch.setenv("HAM_WORKSPACE_TOOL_CREDENTIALS_FILE", str(cred_path))
         monkeypatch.setenv("K_SERVICE", "ham-api")
@@ -364,7 +366,6 @@ class TestConnectAndScanEndpoints:
             capabilities=ClaudeAgentWorkerCapabilities(),
         )
         mock_pub = MagicMock()
-        mock_roll = MagicMock()
         with patch(
             "src.api.workspace_tools.check_claude_agent_readiness",
             return_value=ready_sdk,
@@ -374,37 +375,36 @@ class TestConnectAndScanEndpoints:
                 return_value=True,
             ):
                 with patch(
-                    "src.api.workspace_tools.publish_anthropic_api_key_to_secret_manager",
+                    "src.ham.connected_tools_secret_publish.publish_anthropic_api_key_to_secret_manager",
                     mock_pub,
                 ):
-                    with patch(
-                        "src.api.workspace_tools.try_rollout_cloud_run_service_for_new_secrets",
-                        mock_roll,
-                    ):
-                        r = client.post(
-                            "/api/workspace/tools/claude_agent_sdk/connect",
-                            json={"api_key": key},
-                        )
+                    r = client.post(
+                        "/api/workspace/tools/claude_agent_sdk/connect",
+                        json={"api_key": key},
+                    )
         assert r.status_code == 200
-        mock_pub.assert_called_once()
-        mock_roll.assert_called_once()
+        mock_pub.assert_not_called()
         assert key not in r.text
         data = json.loads(cred_path.read_text(encoding="utf-8"))
         assert data.get("anthropic_api_key") == key
 
-    def test_connect_claude_secret_write_through_not_used_locally_even_if_flag_on(
+    def test_connect_requires_clerk_when_firestore_credential_backend(
         self, tmp_path, monkeypatch
     ):
-        cred_path = tmp_path / "wtc.json"
-        monkeypatch.setenv("HAM_WORKSPACE_TOOL_CREDENTIALS_FILE", str(cred_path))
-        monkeypatch.delenv("K_SERVICE", raising=False)
-        monkeypatch.setenv("HAM_CONNECTED_TOOLS_SECRET_MANAGER_WRITE_THROUGH", "1")
+        monkeypatch.setenv("HAM_WORKSPACE_STORE_BACKEND", "firestore")
+        monkeypatch.setenv("HAM_FIRESTORE_PROJECT_ID", "proj")
+        from cryptography.fernet import Fernet
+
+        monkeypatch.setenv(
+            "HAM_CONNECTED_TOOLS_CREDENTIAL_ENCRYPTION_KEY",
+            Fernet.generate_key().decode("ascii"),
+        )
         from src.ham.worker_adapters.claude_agent_adapter import (
             ClaudeAgentWorkerCapabilities,
             ClaudeAgentWorkerReadiness,
         )
 
-        key = "sk-ant-api03-" + "b" * 32
+        key = "sk-ant-api03-" + "z" * 32
         ready_sdk = ClaudeAgentWorkerReadiness(
             authenticated=False,
             sdk_available=True,
@@ -412,7 +412,6 @@ class TestConnectAndScanEndpoints:
             status="needs_sign_in",
             capabilities=ClaudeAgentWorkerCapabilities(),
         )
-        mock_pub = MagicMock()
         with patch(
             "src.api.workspace_tools.check_claude_agent_readiness",
             return_value=ready_sdk,
@@ -421,106 +420,12 @@ class TestConnectAndScanEndpoints:
                 "src.api.workspace_tools.validate_anthropic_api_key",
                 return_value=True,
             ):
-                with patch(
-                    "src.api.workspace_tools.publish_anthropic_api_key_to_secret_manager",
-                    mock_pub,
-                ):
-                    r = client.post(
-                        "/api/workspace/tools/claude_agent_sdk/connect",
-                        json={"api_key": key},
-                    )
-        assert r.status_code == 200
-        mock_pub.assert_not_called()
-
-    def test_connect_claude_secret_write_through_failure_does_not_persist_key(
-        self, tmp_path, monkeypatch
-    ):
-        cred_path = tmp_path / "wtc.json"
-        cred_path.write_text(
-            '{"anthropic_api_key": "sk-ant-prior-only-not-returned"}\n',
-            encoding="utf-8",
-        )
-        monkeypatch.setenv("HAM_WORKSPACE_TOOL_CREDENTIALS_FILE", str(cred_path))
-        monkeypatch.setenv("K_SERVICE", "ham-api")
-        monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "p")
-        monkeypatch.setenv("HAM_CONNECTED_TOOLS_SECRET_MANAGER_WRITE_THROUGH", "1")
-        from src.ham.worker_adapters.claude_agent_adapter import (
-            ClaudeAgentWorkerCapabilities,
-            ClaudeAgentWorkerReadiness,
-        )
-
-        new_key = "sk-ant-api03-" + "c" * 32
-        ready_sdk = ClaudeAgentWorkerReadiness(
-            authenticated=False,
-            sdk_available=True,
-            sdk_version="0.1.2",
-            status="needs_sign_in",
-            capabilities=ClaudeAgentWorkerCapabilities(),
-        )
-
-        def boom(_k: str) -> None:
-            raise RuntimeError("sm failed")
-
-        with patch(
-            "src.api.workspace_tools.check_claude_agent_readiness",
-            return_value=ready_sdk,
-        ):
-            with patch(
-                "src.api.workspace_tools.validate_anthropic_api_key",
-                return_value=True,
-            ):
-                with patch(
-                    "src.api.workspace_tools.publish_anthropic_api_key_to_secret_manager",
-                    side_effect=boom,
-                ):
-                    r = client.post(
-                        "/api/workspace/tools/claude_agent_sdk/connect",
-                        json={"api_key": new_key},
-                    )
-        assert r.status_code == 503
-        body = r.json()
-        assert body["error_code"] == "DURABLE_STORE_FAILED"
-        assert new_key not in json.dumps(body)
-        data = json.loads(cred_path.read_text(encoding="utf-8"))
-        assert data.get("anthropic_api_key") == "sk-ant-prior-only-not-returned"
-
-    def test_connect_claude_invalid_skips_secret_publish(self, tmp_path, monkeypatch):
-        cred_path = tmp_path / "wtc.json"
-        monkeypatch.setenv("HAM_WORKSPACE_TOOL_CREDENTIALS_FILE", str(cred_path))
-        monkeypatch.setenv("K_SERVICE", "ham-api")
-        monkeypatch.setenv("HAM_CONNECTED_TOOLS_SECRET_MANAGER_WRITE_THROUGH", "1")
-        from src.ham.worker_adapters.claude_agent_adapter import (
-            ClaudeAgentWorkerCapabilities,
-            ClaudeAgentWorkerReadiness,
-        )
-
-        key = "sk-ant-api03-" + "d" * 32
-        ready_sdk = ClaudeAgentWorkerReadiness(
-            authenticated=False,
-            sdk_available=True,
-            sdk_version="0.1.2",
-            status="needs_sign_in",
-            capabilities=ClaudeAgentWorkerCapabilities(),
-        )
-        mock_pub = MagicMock()
-        with patch(
-            "src.api.workspace_tools.check_claude_agent_readiness",
-            return_value=ready_sdk,
-        ):
-            with patch(
-                "src.api.workspace_tools.validate_anthropic_api_key",
-                return_value=False,
-            ):
-                with patch(
-                    "src.api.workspace_tools.publish_anthropic_api_key_to_secret_manager",
-                    mock_pub,
-                ):
-                    r = client.post(
-                        "/api/workspace/tools/claude_agent_sdk/connect",
-                        json={"api_key": key},
-                    )
-        assert r.status_code == 400
-        mock_pub.assert_not_called()
+                r = client.post(
+                    "/api/workspace/tools/claude_agent_sdk/connect",
+                    json={"api_key": key},
+                )
+        assert r.status_code == 401
+        assert r.json()["error_code"] == "CLERK_SESSION_REQUIRED"
 
     def test_connect_claude_agent_sdk_requires_sdk(self, monkeypatch):
         from src.ham.worker_adapters.claude_agent_adapter import (

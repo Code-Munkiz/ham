@@ -3,23 +3,23 @@
 Returns a safe list of tools/workers with discovery status.
 No secrets, no env dumps, no auto-install.
 
-API keys for selected tools are stored **server-side only** (file-backed JSON,
-same pattern as Cursor credentials). Keys are validated before save and are
-never returned or logged.
+API keys for selected tools are persisted **server-side only**. When workspace
+Firestore is enabled, Connected Tools secrets are encrypted (Fernet) in the
+``connected_tool_credentials`` collection keyed by Clerk user id — never in
+plaintext in Firestore, never returned by the HTTP API.
 
-On Cloud Run, when ``HAM_CONNECTED_TOOLS_SECRET_MANAGER_WRITE_THROUGH`` is
-enabled, a validated Claude Agent (Anthropic) key is also written to Secret
-Manager ``anthropic-api-key`` (new version); failures return ``DURABLE_STORE_FAILED``
-without saving locally.
+Local dev fallback (``HAM_CONNECTED_TOOLS_CREDENTIAL_BACKEND=file``) continues
+plain file-backed storage under ``~/.ham/workspace_tool_credentials.json``.
 
 Internal-only (optional): gated ``POST /api/workspace/tools/claude_agent_sdk/smoke``
 when ``HAM_CLAUDE_AGENT_SMOKE_ENABLED`` is on; not linked from the default
 dashboard UI.
 
 Product path: ``POST /api/workspace/tools/claude_agent_sdk/mission`` requires
-Clerk session (when Clerk auth is enabled for this deployment), plus Connected
-Tools / runtime Anthropic auth (stored key, optional legacy env, or Bedrock /
-Vertex host signals). Does not use ``X-HAM-SMOKE-TOKEN`` or smoke flags.
+Clerk session (when Clerk auth is enabled for this deployment), plus Clerk-scoped
+Connected Tools / runtime Anthropic auth (Firestore encrypted credential, legacy
+local file credential, Bedrock / Vertex routing, or bootstrap env). Does not use
+``X-HAM-SMOKE-TOKEN`` or smoke flags for this route.
 """
 
 from __future__ import annotations
@@ -38,11 +38,6 @@ from pydantic import BaseModel, Field
 from src.api.clerk_gate import get_ham_clerk_actor
 from src.api.models_catalog import build_catalog_payload
 from src.ham.clerk_auth import HamActor, clerk_authorization_is_clerk_session
-from src.ham.connected_tools_secret_publish import (
-    connected_tools_secret_manager_write_through_enabled,
-    publish_anthropic_api_key_to_secret_manager,
-    try_rollout_cloud_run_service_for_new_secrets,
-)
 from src.ham.workspace_tool_key_validation import (
     validate_anthropic_api_key,
     validate_cursor_api_key,
@@ -60,25 +55,27 @@ from src.ham.worker_adapters.claude_agent_adapter import (
 )
 from src.ham.worker_adapters.cursor_adapter import check_cursor_readiness
 from src.llm_client import normalized_openrouter_api_key, openrouter_api_key_is_plausible
+from src.persistence.connected_tool_credentials import (
+    ConnectedCredentialSaveFailed,
+    connected_tools_credentials_use_firestore,
+    delete_connected_tool_secret,
+    get_connected_tool_masked_preview,
+    has_connected_tool_credential_record,
+    save_connected_tool_secret,
+)
 from src.persistence.cursor_credentials import (
     clear_saved_cursor_api_key,
     get_effective_cursor_api_key,
     mask_api_key_preview,
     save_cursor_api_key,
 )
-from src.persistence.workspace_tool_credentials import (
-    clear_anthropic_api_key,
-    clear_github_token,
-    clear_openrouter_api_key,
-    get_effective_github_token,
-    get_stored_anthropic_api_key,
-    preview_anthropic,
-    preview_github,
-    preview_openrouter,
-    save_anthropic_api_key,
-    save_github_token,
-    save_openrouter_api_key,
-)
+from src.persistence.workspace_tool_credentials import get_effective_github_token
+
+
+def _credential_store_requires_clerk(actor: HamActor | None) -> bool:
+    if not connected_tools_credentials_use_firestore():
+        return False
+    return actor is None
 
 _LOG = logging.getLogger(__name__)
 
@@ -331,7 +328,7 @@ def _authorize_claude_agent_mission(actor: HamActor | None) -> None:
                 },
             },
         )
-    if not claude_agent_mission_auth_configured():
+    if not claude_agent_mission_auth_configured(actor):
         raise HTTPException(
             status_code=400,
             detail={
@@ -361,7 +358,9 @@ def _openrouter_chat_ready_from_catalog() -> bool:
         return False
 
 
-def _openrouter_status() -> ToolStatus:
+def _openrouter_status(actor: HamActor | None = None) -> ToolStatus:
+    if actor and has_connected_tool_credential_record(actor, "openrouter"):
+        return ToolStatus.ready
     if _openrouter_chat_ready_from_catalog():
         return ToolStatus.ready
     raw = normalized_openrouter_api_key()
@@ -370,8 +369,8 @@ def _openrouter_status() -> ToolStatus:
     return ToolStatus.needs_sign_in
 
 
-def _openrouter_credential_preview() -> Optional[str]:
-    prev = preview_openrouter()
+def _openrouter_credential_preview(actor: HamActor | None) -> Optional[str]:
+    prev = get_connected_tool_masked_preview(actor, "openrouter")
     if prev:
         return prev
     raw = normalized_openrouter_api_key()
@@ -403,7 +402,9 @@ def _factory_droid_status() -> ToolStatus:
     return ToolStatus.unknown
 
 
-def _github_status(cloud: bool) -> ToolStatus:
+def _github_status(cloud: bool, actor: HamActor | None = None) -> ToolStatus:
+    if actor and has_connected_tool_credential_record(actor, "github"):
+        return ToolStatus.ready
     token = get_effective_github_token()
     if token.strip():
         return ToolStatus.ready
@@ -412,8 +413,8 @@ def _github_status(cloud: bool) -> ToolStatus:
     return ToolStatus.not_found
 
 
-def _github_credential_preview() -> Optional[str]:
-    t = preview_github()
+def _github_credential_preview(actor: HamActor | None) -> Optional[str]:
+    t = get_connected_tool_masked_preview(actor, "github")
     if t:
         return t
     raw = get_effective_github_token()
@@ -422,10 +423,10 @@ def _github_credential_preview() -> Optional[str]:
     return mask_api_key_preview(raw)
 
 
-def _claude_agent_status_and_meta() -> tuple[ToolStatus, Optional[str], Optional[str]]:
-    """Map adapter readiness + workspace-stored key → (ToolStatus, setup_hint, sdk_version)."""
+def _claude_agent_status_and_meta(actor: HamActor | None) -> tuple[ToolStatus, Optional[str], Optional[str]]:
+    """Map adapter readiness + workspace-stored user key → (ToolStatus, setup_hint, sdk_version)."""
     try:
-        readiness = check_claude_agent_readiness()
+        readiness = check_claude_agent_readiness(actor)
     except Exception:
         return (
             ToolStatus.error,
@@ -433,7 +434,7 @@ def _claude_agent_status_and_meta() -> tuple[ToolStatus, Optional[str], Optional
             None,
         )
 
-    stored = get_stored_anthropic_api_key()
+    has_user_cred = has_connected_tool_credential_record(actor, "claude_agent_sdk")
 
     if not readiness.sdk_available:
         return (
@@ -442,16 +443,10 @@ def _claude_agent_status_and_meta() -> tuple[ToolStatus, Optional[str], Optional
             readiness.sdk_version,
         )
 
-    if stored:
-        if stored.startswith("sk-ant-") and len(stored) >= 24:
-            return (
-                ToolStatus.ready,
-                "Claude Agent is connected.",
-                readiness.sdk_version,
-            )
+    if has_user_cred:
         return (
-            ToolStatus.needs_sign_in,
-            "Paste your Anthropic API key to connect.",
+            ToolStatus.ready,
+            "Claude Agent is connected.",
             readiness.sdk_version,
         )
 
@@ -496,17 +491,17 @@ def _tool_enabled_for_status(status: ToolStatus) -> bool:
     return status == ToolStatus.ready
 
 
-def _build_tool_registry() -> list[ToolEntry]:
+def _build_tool_registry(actor: HamActor | None = None) -> list[ToolEntry]:
     now = _now_iso()
     cloud = _is_cloud_mode()
 
-    or_status = _openrouter_status()
+    or_status = _openrouter_status(actor)
     cur_status = _cursor_status()
     fd_status = _factory_droid_status()
-    gh_status = _github_status(cloud)
+    gh_status = _github_status(cloud, actor)
     cf_status = _comfyui_status(cloud)
-    claude_agent_status, claude_agent_hint, claude_agent_version = (
-        _claude_agent_status_and_meta()
+    claude_agent_status, claude_agent_hint, claude_agent_version = _claude_agent_status_and_meta(
+        actor,
     )
 
     tools: list[ToolEntry] = [
@@ -521,7 +516,7 @@ def _build_tool_registry() -> list[ToolEntry]:
             capabilities=["chat", "completions"],
             setup_hint="Cloud models for chat when this is connected.",
             connect_kind=ConnectKind.api_key,
-            credential_preview=_openrouter_credential_preview(),
+            credential_preview=_openrouter_credential_preview(actor),
             last_checked_at=now,
             safe_actions=["check_status", "connect", "disconnect"],
         ),
@@ -582,7 +577,7 @@ def _build_tool_registry() -> list[ToolEntry]:
             setup_hint=claude_agent_hint,
             connect_kind=ConnectKind.api_key,
             version=claude_agent_version,
-            credential_preview=preview_anthropic(),
+            credential_preview=get_connected_tool_masked_preview(actor, "claude_agent_sdk"),
             last_checked_at=now,
             safe_actions=["check_status", "connect", "disconnect"],
         ),
@@ -641,7 +636,7 @@ def _build_tool_registry() -> list[ToolEntry]:
             capabilities=["pull_requests", "issues", "actions"],
             setup_hint="Paste a token so HAM can reach your GitHub repositories.",
             connect_kind=ConnectKind.access_token,
-            credential_preview=_github_credential_preview(),
+            credential_preview=_github_credential_preview(actor),
             last_checked_at=now,
             safe_actions=["check_status", "connect", "disconnect"],
         ),
@@ -764,8 +759,9 @@ def _build_tool_registry() -> list[ToolEntry]:
 def workspace_tools(
     _actor: object = Depends(get_ham_clerk_actor),
 ) -> ToolDiscoveryResponse:
+    actor = _actor if isinstance(_actor, HamActor) else None
     cloud = _is_cloud_mode()
-    tools = _build_tool_registry()
+    tools = _build_tool_registry(actor)
     return ToolDiscoveryResponse(
         tools=tools,
         scan_available=not cloud,
@@ -790,7 +786,7 @@ async def workspace_claude_agent_smoke(
 ) -> ClaudeAgentSmokeHttpResponse:
     """Internal server-side Claude Agent check (feature-flag + auth gated)."""
     _authorize_claude_agent_smoke(actor, x_ham_smoke_token)
-    result = await run_claude_agent_sdk_smoke()
+    result = await run_claude_agent_sdk_smoke(actor)
     return ClaudeAgentSmokeHttpResponse(
         status=result.status,
         provider=result.provider,
@@ -808,7 +804,7 @@ async def workspace_claude_agent_mission(
 ) -> ClaudeAgentMissionHttpResponse:
     """Fixed bounded mission — Clerk + Connected Tools auth; not user-prompt driven."""
     _authorize_claude_agent_mission(actor)
-    result = await run_claude_agent_sdk_mission()
+    result = await run_claude_agent_sdk_mission(actor)
     return ClaudeAgentMissionHttpResponse(
         ok=result.ok,
         mission_ok=result.mission_ok,
@@ -839,7 +835,8 @@ def workspace_tool_connect(
     body: ToolConnectBody,
     _actor: object = Depends(get_ham_clerk_actor),
 ) -> Any:
-    known = {t.id for t in _build_tool_registry()}
+    actor = _actor if isinstance(_actor, HamActor) else None
+    known = {t.id for t in _build_tool_registry(None)}
     if tool_id not in known:
         raise HTTPException(status_code=404, detail="Unknown tool.")
 
@@ -859,12 +856,31 @@ def workspace_tool_connect(
             ).model_dump(),
         )
 
+    if _credential_store_requires_clerk(actor):
+        return JSONResponse(
+            status_code=401,
+            content=ToolConnectFailResponse(
+                error_code="CLERK_SESSION_REQUIRED",
+                message="Sign in again, then reconnect this tool.",
+                help=_help(tool_id),
+            ).model_dump(),
+        )
+
     if tool_id == "openrouter":
         if not validate_openrouter_api_key(secret):
             _LOG.info("openrouter tool connect: validation failed (key not logged)")
             return _invalid_key_response(tool_id)
-        save_openrouter_api_key(secret)
-        prev = preview_openrouter() or mask_api_key_preview(secret)
+        try:
+            prev = save_connected_tool_secret(actor, "openrouter", secret)
+        except ConnectedCredentialSaveFailed:
+            return JSONResponse(
+                status_code=503,
+                content=ToolConnectFailResponse(
+                    error_code="CREDENTIAL_STORE_FAILED",
+                    message="Could not save this credential on the server. Ask your operator.",
+                    help=_help(tool_id),
+                ).model_dump(),
+            )
         _LOG.info("openrouter tool connect: saved (key not logged)")
         return ToolConnectSuccessResponse(credential_preview=prev)
 
@@ -872,13 +888,22 @@ def workspace_tool_connect(
         if not validate_github_token(secret):
             _LOG.info("github tool connect: validation failed (token not logged)")
             return _invalid_key_response(tool_id)
-        save_github_token(secret)
-        prev = preview_github() or mask_api_key_preview(secret)
+        try:
+            prev = save_connected_tool_secret(actor, "github", secret)
+        except ConnectedCredentialSaveFailed:
+            return JSONResponse(
+                status_code=503,
+                content=ToolConnectFailResponse(
+                    error_code="CREDENTIAL_STORE_FAILED",
+                    message="Could not save this credential on the server. Ask your operator.",
+                    help=_help(tool_id),
+                ).model_dump(),
+            )
         _LOG.info("github tool connect: saved (token not logged)")
         return ToolConnectSuccessResponse(credential_preview=prev)
 
     if tool_id == "claude_agent_sdk":
-        readiness = check_claude_agent_readiness()
+        readiness = check_claude_agent_readiness(actor)
         if not readiness.sdk_available:
             return JSONResponse(
                 status_code=400,
@@ -894,26 +919,18 @@ def workspace_tool_connect(
         if not validate_anthropic_api_key(secret):
             _LOG.info("claude_agent_sdk connect: validation failed (key not logged)")
             return _invalid_key_response(tool_id)
-        if _is_cloud_mode() and connected_tools_secret_manager_write_through_enabled():
-            try:
-                publish_anthropic_api_key_to_secret_manager(secret)
-            except RuntimeError:
-                return JSONResponse(
-                    status_code=503,
-                    content=ToolConnectFailResponse(
-                        error_code="DURABLE_STORE_FAILED",
-                        message=(
-                            "The key validated, but saving it to the server credential "
-                            "store failed. Ask your admin to fix Secret Manager IAM and "
-                            "try again."
-                        ),
-                        help=_help(tool_id),
-                    ).model_dump(),
-                )
-            try_rollout_cloud_run_service_for_new_secrets()
-        save_anthropic_api_key(secret)
+        try:
+            prev = save_connected_tool_secret(actor, "claude_agent_sdk", secret)
+        except ConnectedCredentialSaveFailed:
+            return JSONResponse(
+                status_code=503,
+                content=ToolConnectFailResponse(
+                    error_code="CREDENTIAL_STORE_FAILED",
+                    message="Could not save this credential on the server. Ask your operator.",
+                    help=_help(tool_id),
+                ).model_dump(),
+            )
         reset_claude_agent_readiness_cache()
-        prev = preview_anthropic() or mask_api_key_preview(secret)
         _LOG.info("claude_agent_sdk connect: saved (key not logged)")
         return ToolConnectSuccessResponse(credential_preview=prev)
 
@@ -937,7 +954,8 @@ def workspace_tool_disconnect(
     tool_id: str,
     _actor: object = Depends(get_ham_clerk_actor),
 ) -> Any:
-    known = {t.id for t in _build_tool_registry()}
+    actor = _actor if isinstance(_actor, HamActor) else None
+    known = {t.id for t in _build_tool_registry(None)}
     if tool_id not in known:
         raise HTTPException(status_code=404, detail="Unknown tool.")
 
@@ -947,19 +965,49 @@ def workspace_tool_disconnect(
         return ToolDisconnectSuccessResponse()
 
     if tool_id == "openrouter":
-        clear_openrouter_api_key()
-        _LOG.info("openrouter tool disconnect: cleared stored key if present")
+        try:
+            delete_connected_tool_secret(actor, "openrouter")
+        except ConnectedCredentialSaveFailed:
+            return JSONResponse(
+                status_code=503,
+                content=ToolConnectFailResponse(
+                    error_code="CREDENTIAL_STORE_FAILED",
+                    message="Could not remove this credential on the server. Ask your operator.",
+                    help=_help(tool_id),
+                ).model_dump(),
+            )
+        _LOG.info("openrouter tool disconnect: cleared stored credential if present")
         return ToolDisconnectSuccessResponse()
 
     if tool_id == "github":
-        clear_github_token()
-        _LOG.info("github tool disconnect: cleared stored token if present")
+        try:
+            delete_connected_tool_secret(actor, "github")
+        except ConnectedCredentialSaveFailed:
+            return JSONResponse(
+                status_code=503,
+                content=ToolConnectFailResponse(
+                    error_code="CREDENTIAL_STORE_FAILED",
+                    message="Could not remove this credential on the server. Ask your operator.",
+                    help=_help(tool_id),
+                ).model_dump(),
+            )
+        _LOG.info("github tool disconnect: cleared stored credential if present")
         return ToolDisconnectSuccessResponse()
 
     if tool_id == "claude_agent_sdk":
-        clear_anthropic_api_key()
+        try:
+            delete_connected_tool_secret(actor, "claude_agent_sdk")
+        except ConnectedCredentialSaveFailed:
+            return JSONResponse(
+                status_code=503,
+                content=ToolConnectFailResponse(
+                    error_code="CREDENTIAL_STORE_FAILED",
+                    message="Could not remove this credential on the server. Ask your operator.",
+                    help=_help(tool_id),
+                ).model_dump(),
+            )
         reset_claude_agent_readiness_cache()
-        _LOG.info("claude_agent_sdk disconnect: cleared stored key if present")
+        _LOG.info("claude_agent_sdk disconnect: cleared stored credential if present")
         return ToolDisconnectSuccessResponse()
 
     return JSONResponse(

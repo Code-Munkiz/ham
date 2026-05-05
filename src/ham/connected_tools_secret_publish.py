@@ -1,7 +1,12 @@
-"""Optional write-through: persist validated Anthropic keys to Secret Manager (admin MVP).
+"""LEGACY operator workflow: Secret Manager write-through (no longer used by product Connect).
 
-Used when ``HAM_CONNECTED_TOOLS_SECRET_MANAGER_WRITE_THROUGH`` is enabled on a
-Cloud Run–style host. Never logs raw keys or secret payloads.
+Historically toggled via ``HAM_CONNECTED_TOOLS_SECRET_MANAGER_WRITE_THROUGH``.
+Connected Tools store now persists user credentials to encrypted Firestore; this
+module stays only for one-off bootstrap / migration scripts if needed — **do not**
+call ``publish_anthropic_api_key_to_secret_manager`` from normal Connected Tools
+connect/disconnect handlers.
+
+Never logs raw keys or secret payloads.
 """
 
 from __future__ import annotations

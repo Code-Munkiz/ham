@@ -25,8 +25,12 @@ from asyncio.subprocess import PIPE
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from src.ham.clerk_auth import HamActor
+from src.persistence.connected_tool_credentials import (
+    resolve_claude_agent_anthropic_api_key_for_actor,
+)
 from src.persistence.workspace_tool_credentials import (
-    resolve_claude_agent_anthropic_api_key,
+    get_stored_anthropic_api_key,
 )
 
 CLAUDE_AGENT_SMOKE_PROMPT = "Reply with exactly: HAM_CLAUDE_SMOKE_OK"
@@ -153,21 +157,26 @@ def _has_anthropic_api_key() -> bool:
     return bool((os.environ.get("ANTHROPIC_API_KEY") or "").strip())
 
 
-def _workspace_stored_anthropic_key_present() -> bool:
-    """True if the Connected Tools file store holds an Anthropic key (server-side MVP)."""
+def _persisted_anthropic_key_present(actor: HamActor | None) -> bool:
+    """Firestore/user-scoped Connected Tools credential or legacy file-backed key."""
     try:
-        from src.persistence.workspace_tool_credentials import (
-            get_stored_anthropic_api_key,
+        from src.persistence.connected_tool_credentials import (
+            has_connected_tool_credential_record,
         )
 
+        if actor and has_connected_tool_credential_record(actor, "claude_agent_sdk"):
+            return True
+    except Exception:
+        pass
+    try:
         return bool(get_stored_anthropic_api_key())
     except Exception:
         return False
 
 
-def _anthropic_direct_key_present() -> bool:
+def _anthropic_direct_key_present(actor: HamActor | None = None) -> bool:
     """Anthropic direct auth: env key or workspace-stored user key."""
-    return _has_anthropic_api_key() or _workspace_stored_anthropic_key_present()
+    return _has_anthropic_api_key() or _persisted_anthropic_key_present(actor)
 
 
 def _has_bedrock_signal() -> bool:
@@ -199,7 +208,7 @@ def _has_vertex_signal() -> bool:
     return bool(project)
 
 
-def _has_any_auth_signal() -> bool:
+def _has_any_auth_signal(actor: HamActor | None = None) -> bool:
     """Presence-only auth check across the three supported SDK modes.
 
     Never reads or returns the underlying values. Returns only a boolean,
@@ -207,21 +216,25 @@ def _has_any_auth_signal() -> bool:
     """
     try:
         return (
-            _anthropic_direct_key_present() or _has_bedrock_signal() or _has_vertex_signal()
+            _anthropic_direct_key_present(actor)
+            or _has_bedrock_signal()
+            or _has_vertex_signal()
         )
     except Exception:
         return False
 
 
-def claude_agent_mission_auth_configured() -> bool:
+def claude_agent_mission_auth_configured(actor: HamActor | None) -> bool:
     """True when mission runtime has a credential channel (not SDK install).
 
-    Direct Anthropic: Connected Tools store or legacy ``ANTHROPIC_API_KEY`` via
-    :func:`resolve_claude_agent_anthropic_api_key`. Also allows Bedrock/Vertex
-    host configuration without a stored sk-ant key.
+    Direct Anthropic: Clerk-scoped Connected Tools credential, legacy file-backed
+    key, legacy ``ANTHROPIC_API_KEY``, or Bedrock / Vertex routing without a stored
+    sk-ant-* key.
+
+    Prefer passing the authenticated Clerk actor whenever available.
     """
     try:
-        if resolve_claude_agent_anthropic_api_key():
+        if resolve_claude_agent_anthropic_api_key_for_actor(actor):
             return True
         return _has_bedrock_signal() or _has_vertex_signal()
     except Exception:
@@ -233,7 +246,7 @@ def _uses_non_anthropic_direct_cloud_auth() -> bool:
     return _has_bedrock_signal() or _has_vertex_signal()
 
 
-def _claude_runtime_anthropic_env_overlay() -> dict[str, str]:
+def _claude_runtime_anthropic_env_overlay(actor: HamActor | None = None) -> dict[str, str]:
     """Extra env vars for Claude SDK/CLI children (**not** merged into ``os.environ``).
 
     When using the **direct** Anthropic API, forces ``ANTHROPIC_API_KEY`` to the
@@ -243,20 +256,20 @@ def _claude_runtime_anthropic_env_overlay() -> dict[str, str]:
     """
     if _uses_non_anthropic_direct_cloud_auth():
         return {}
-    key = resolve_claude_agent_anthropic_api_key()
+    key = resolve_claude_agent_anthropic_api_key_for_actor(actor)
     if not key:
         return {}
     return {"ANTHROPIC_API_KEY": key}
 
 
-def _subprocess_env_for_claude() -> dict[str, str]:
+def _subprocess_env_for_claude(actor: HamActor | None = None) -> dict[str, str]:
     """Full env map for ``create_subprocess_exec`` — copy of process env + Claude overrides."""
     merged: dict[str, str] = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
-    merged.update(_claude_runtime_anthropic_env_overlay())
+    merged.update(_claude_runtime_anthropic_env_overlay(actor))
     return merged
 
 
-def check_claude_agent_readiness() -> ClaudeAgentWorkerReadiness:
+def check_claude_agent_readiness(actor: HamActor | None = None) -> ClaudeAgentWorkerReadiness:
     """Check whether the Claude Agent worker is ready (SDK + auth signal).
 
     Performs only local checks: an optional import probe and presence-only
@@ -286,7 +299,7 @@ def check_claude_agent_readiness() -> ClaudeAgentWorkerReadiness:
             reason="claude-agent-sdk is not installed on this server.",
         )
 
-    if not _has_any_auth_signal():
+    if not _has_any_auth_signal(actor):
         return ClaudeAgentWorkerReadiness(
             authenticated=False,
             sdk_available=True,
@@ -315,7 +328,7 @@ def is_claude_agent_launchable(
     This is a policy gate for future use.
     """
     if readiness is None:
-        readiness = check_claude_agent_readiness()
+        readiness = check_claude_agent_readiness(None)
     return readiness.authenticated and readiness.status == "ready"
 
 
@@ -357,7 +370,7 @@ def _format_sdk_query_failure(exc: BaseException, stderr_lines: list[str]) -> st
     return f"{msg} | stderr: {stderr_blob}"
 
 
-async def _probe_claude_cli(cli_path: str) -> str | None:
+async def _probe_claude_cli(cli_path: str, actor: HamActor | None = None) -> str | None:
     """Best-effort stdout/stderr from ``claude --bare --version`` (never raises)."""
     try:
         proc = await asyncio.create_subprocess_exec(
@@ -366,7 +379,7 @@ async def _probe_claude_cli(cli_path: str) -> str | None:
             "--version",
             stdout=PIPE,
             stderr=PIPE,
-            env=_subprocess_env_for_claude(),
+            env=_subprocess_env_for_claude(actor),
         )
         out_b, err_b = await proc.communicate()
         out = (out_b or b"").decode(errors="replace").strip()
@@ -406,6 +419,7 @@ async def _run_claude_headless_plan_json_query(
     prompt: str,
     timeout_sec: float,
     response_cap: int,
+    actor: HamActor | None = None,
 ) -> tuple[str | None, str | None]:
     """Same prompt/model constraints via ``claude --bare -p`` JSON output (no shell).
 
@@ -428,7 +442,7 @@ async def _run_claude_headless_plan_json_query(
             "plan",
             stdout=PIPE,
             stderr=PIPE,
-            env=_subprocess_env_for_claude(),
+            env=_subprocess_env_for_claude(actor),
         )
         out_b, err_b = await asyncio.wait_for(proc.communicate(), timeout=timeout_sec)
     except TimeoutError:
@@ -498,12 +512,13 @@ async def _run_claude_agent_sdk_plan_query(
     prompt: str,
     timeout_sec: float,
     response_cap: int,
+    actor: HamActor | None = None,
 ) -> tuple[str | None, str | None, ClaudeAgentWorkerReadiness]:
     """Execute one bounded plan-mode SDK query.
 
     Returns ``(sanitized_text, blocker, readiness_snapshot)``.
     """
-    readiness = check_claude_agent_readiness()
+    readiness = check_claude_agent_readiness(actor)
     if readiness.status != "ready":
         return (
             None,
@@ -511,7 +526,7 @@ async def _run_claude_agent_sdk_plan_query(
             readiness,
         )
     if not _uses_non_anthropic_direct_cloud_auth():
-        if not resolve_claude_agent_anthropic_api_key():
+        if not resolve_claude_agent_anthropic_api_key_for_actor(actor):
             return (
                 None,
                 (
@@ -531,7 +546,8 @@ async def _run_claude_agent_sdk_plan_query(
 
     stderr_lines: list[str] = []
     opts = _plan_mode_query_options(
-        stderr_lines, anthropic_env_overlay=_claude_runtime_anthropic_env_overlay()
+        stderr_lines,
+        anthropic_env_overlay=_claude_runtime_anthropic_env_overlay(actor),
     )
 
     async def _collect() -> str:
@@ -546,7 +562,7 @@ async def _run_claude_agent_sdk_plan_query(
         return None, "Claude Agent SDK query timed out.", readiness
     except Exception as exc:
         hl_text, hl_err = await _run_claude_headless_plan_json_query(
-            prompt, timeout_sec, response_cap
+            prompt, timeout_sec, response_cap, actor
         )
         if hl_text is not None:
             _LOG.warning(
@@ -561,7 +577,7 @@ async def _run_claude_agent_sdk_plan_query(
 
         cli = _ham_preferred_cli_path()
         if cli:
-            probe = await _probe_claude_cli(cli)
+            probe = await _probe_claude_cli(cli, actor)
             if probe:
                 detail = f"{detail} | cli_probe: {probe}"
         _LOG.warning("claude_agent_sdk query failed: %s", detail)
@@ -665,20 +681,21 @@ class ClaudeAgentMissionResult:
     blocker: str | None = None
 
 
-async def run_claude_agent_sdk_smoke() -> ClaudeAgentSmokeResult:
+async def run_claude_agent_sdk_smoke(actor: HamActor | None = None) -> ClaudeAgentSmokeResult:
     """One harmless SDK ``query`` with plan-only permissions (no tool execution).
 
-    Auth for the **direct** Anthropic API path: Connected Tools stored key, else
-    ``ANTHROPIC_API_KEY`` on the host (injected per subprocess, never logged).
-    Bedrock/Vertex use existing env signals without overriding ``ANTHROPIC_API_KEY``
-    from the store.
+    Auth for the **direct** Anthropic API path: Clerk-scoped Connected Tools
+    credential, legacy file-backed key, or legacy ``ANTHROPIC_API_KEY`` on the
+    host (injected per subprocess, never logged). Bedrock / Vertex reuse host
+    configuration without overwriting store-derived keys incorrectly.
     """
-    readiness = check_claude_agent_readiness()
+    readiness = check_claude_agent_readiness(actor)
     provider = claude_agent_coarse_provider()
     combined, blocker, rd = await _run_claude_agent_sdk_plan_query(
         CLAUDE_AGENT_SMOKE_PROMPT,
         SMOKE_QUERY_TIMEOUT_SEC,
         _RESPONSE_TEXT_CAP,
+        actor,
     )
     if blocker or combined is None:
         return ClaudeAgentSmokeResult(
@@ -703,7 +720,7 @@ async def run_claude_agent_sdk_smoke() -> ClaudeAgentSmokeResult:
     )
 
 
-async def run_claude_agent_sdk_mission() -> ClaudeAgentMissionResult:
+async def run_claude_agent_sdk_mission(actor: HamActor | None = None) -> ClaudeAgentMissionResult:
     """Fixed HAM mission brief — plan mode, no tools, bounded turns/time."""
     t0 = time.monotonic()
     worker = "claude_agent_sdk"
@@ -714,6 +731,7 @@ async def run_claude_agent_sdk_mission() -> ClaudeAgentMissionResult:
         CLAUDE_AGENT_MISSION_PROMPT,
         MISSION_QUERY_TIMEOUT_SEC,
         _MISSION_RESPONSE_CAP,
+        actor,
     )
     duration_ms = max(0, int((time.monotonic() - t0) * 1000))
 
