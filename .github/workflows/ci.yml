@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
@@ -61,6 +61,23 @@ jobs:
         continue-on-error: true
         run: mypy src --ignore-missing-imports || true
 
+      # ---------- WARNING-ONLY: vulture dead-code (Phase C.2) ------------
+      # Static dead-code finder; reads [tool.vulture] from pyproject.toml
+      # (paths=src, exclude=tests/.venv, min_confidence=80). Real findings
+      # become a follow-up cleanup PR; warning-only here so it never blocks.
+      - name: Vulture (warning-only)
+        continue-on-error: true
+        run: vulture src
+
+      # ---------- WARNING-ONLY: deptry unused-deps (Phase C.2) ------------
+      # Reads [tool.deptry] from pyproject.toml. Known false positives
+      # (Windows-only deps, FastAPI implicit Form() deps, dotted-name
+      # imports) are listed in per_rule_ignores. Visible DEP003 transitive
+      # findings are intentional cleanup signal.
+      - name: Deptry (warning-only)
+        continue-on-error: true
+        run: deptry .
+
       # ---------- WARNING-ONLY: coverage report ---------------------------
       # We do NOT enforce a --cov-fail-under threshold yet; this step exists
       # to surface the current floor so a future PR can ratchet to blocking.
@@ -102,3 +119,32 @@ jobs:
       - name: Typecheck
         working-directory: frontend
         run: npm run lint
+
+      # ---------- WARNING-ONLY: Vitest baseline (Phase C.1) ---------------
+      # Pure-function smoke tests live under frontend/src/**/__tests__/*.
+      # Warning-only for one cycle so any unforeseen flakiness can't block
+      # merges; promote to blocking in a follow-up PR after one green run
+      # on main.
+      - name: Vitest (warning-only)
+        continue-on-error: true
+        working-directory: frontend
+        run: npm test -- --run --reporter=default
+
+      # ---------- WARNING-ONLY: jscpd duplicate-code (Phase C.3) ----------
+      # Token-based duplicate detector; reads frontend/.jscpd.json
+      # (pattern=src/**/*.{ts,tsx}, min-lines=8, min-tokens=70). Surfaces
+      # known cleanup targets (e.g. conductorAdapter fetch boilerplate);
+      # warning-only so flagged duplicates never block merges.
+      - name: jscpd duplicate-code (warning-only)
+        continue-on-error: true
+        working-directory: frontend
+        run: npm run dup-check
+
+      # ---------- WARNING-ONLY: knip frontend dead-code (Phase C.3) -------
+      # TS-aware unused files / exports / deps finder; reads
+      # frontend/knip.json. Real cleanup happens in separate follow-up PR;
+      # warning-only here so the noisy initial baseline never blocks.
+      - name: knip frontend dead-code (warning-only)
+        continue-on-error: true
+        working-directory: frontend
+        run: npm run knip

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://unpkg.com/jscpd@4/schema.json",
+  "pattern": "src/**/*.{ts,tsx}",
+  "ignore": [
+    "src/**/__tests__/**",
+    "src/**/*.test.{ts,tsx}",
+    "src/**/*.d.ts"
+  ],
+  "min-lines": 8,
+  "min-tokens": 70,
+  "reporters": ["console"],
+  "absolute": false,
+  "gitignore": true
+}

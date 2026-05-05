@@ -6,11 +6,13 @@ WORKDIR /app
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PYTHONPATH=/app
+    PYTHONPATH=/app \
+    GIT_TERMINAL_PROMPT=0
 
 # Backend-only Cursor SDK bridge runtime (Node 22).
+# git: Claude Code CLI expects a git binary for workspace introspection in headless runs.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
+    && apt-get install -y --no-install-recommends ca-certificates curl gnupg git \
     && mkdir -p /etc/apt/keyrings \
     && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
       | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
@@ -19,6 +21,11 @@ RUN apt-get update \
     && apt-get update \
     && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
+
+# Claude Agent SDK spawns the Claude Code CLI. The PyPI wheel may ship a bundled
+# binary that fails in slim containers; prefer the npm CLI on PATH when present.
+RUN npm install -g @anthropic-ai/claude-code \
+    && command -v claude
 
 COPY requirements.txt .
 # Browser runtime: pip installs `playwright` but browsers are a separate download.
@@ -41,6 +48,13 @@ COPY AGENTS.md SWARM.md VISION.md ./
 # Operator skills + subagent rule stubs for chat system prompt + control-plane GET routes.
 COPY .cursor/skills .cursor/skills
 COPY .cursor/rules .cursor/rules
+
+# Claude Code probes git workspace roots; ship a repo with HEAD so rev-parse succeeds.
+RUN git config --global init.defaultBranch main \
+    && git init . \
+    && git config user.email "ham-api-container@invalid.local" \
+    && git config user.name "HAM API" \
+    && git commit --allow-empty --quiet -m "ham-api:synthetic"
 
 EXPOSE 8080
 

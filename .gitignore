@@ -22,6 +22,14 @@ ham-workspace*.zip
 .ham/
 .data/
 
+# Belt-and-suspenders: explicit Social Policy Store paths (already covered by
+# .ham/ above, but listed here so deletions of the broader rule cannot
+# accidentally unmask user-intent data, backups, or audit envelopes).
+.ham/social_policy.json
+.ham/social_policy.local.json
+.ham/_backups/social_policy/
+.ham/_audit/social_policy/
+
 # Frontend
 frontend/node_modules/
 desktop/node_modules/
@@ -31,6 +39,9 @@ frontend/dist/
 frontend/.env
 .vercel
 .env*.local
+
+# Editor / workspace (local paths, launch configs)
+.vscode/
 
 # HAM local / generated tooling (never commit binaries or lab trees)
 .cursor/plans/

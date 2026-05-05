@@ -41,6 +41,7 @@ import {
   clearSavedCursorApiKey,
   ensureProjectIdForWorkspaceRoot,
   fetchContextEngine,
+  fetchProjectContextEngine,
   fetchCursorCredentialsStatus,
   fetchCursorModels,
   fetchSettingsWriteStatus,
@@ -53,6 +54,13 @@ import {
 } from "@/lib/ham/api";
 import type { ContextEnginePayload, CursorCredentialsStatus } from "@/lib/ham/types";
 import { DesktopBundlePanel } from "@/components/settings/DesktopBundlePanel";
+import {
+  fetchLocalWorkspaceContextSnapshot,
+  fetchLocalWorkspaceHealth,
+  isLocalRuntimeConfigured,
+} from "@/features/hermes-workspace/adapters/localRuntime";
+import { loadContextMemorySnapshot, shouldGateContextMemorySettingsMutations } from "@/features/hermes-workspace/lib/contextMemorySnapshotLoadPlan";
+import { useOptionalWorkspaceHamProject } from "@/features/hermes-workspace/WorkspaceHamProjectContext";
 
 export type SettingsPanelVisualVariant = "default" | "workspace";
 
@@ -933,10 +941,13 @@ function AllowlistedWorkspaceSettings({
   data,
   onApplied,
   visualVariant = "default",
+  contextSnapshotLocal = false,
 }: {
   data: ContextEnginePayload;
   onApplied: () => void;
   visualVariant?: SettingsPanelVisualVariant;
+  /** True when the panel shows a snapshot from the connected machine (cloud preview/apply would be misleading). */
+  contextSnapshotLocal?: boolean;
 }) {
   const w = visualVariant === "workspace";
   const cwd = data.cwd;
@@ -1068,6 +1079,29 @@ function AllowlistedWorkspaceSettings({
   );
 
   const fieldLbl = w ? "text-xs font-medium text-white/50" : "text-[9px] font-black text-white/35 uppercase tracking-widest";
+
+  if (contextSnapshotLocal) {
+    return (
+      <div
+        className={cn(
+          "space-y-3 rounded-xl border p-6",
+          w ? "border-white/[0.08] bg-white/[0.02]" : "border-[#FF6B00]/20 bg-black/40",
+        )}
+      >
+        <h4
+          className={cn(
+            w ? "text-sm font-medium text-white/85" : "text-[11px] font-black uppercase italic tracking-widest text-[#FF6B00]",
+          )}
+        >
+          Project settings writes
+        </h4>
+        <p className={cn("max-w-2xl leading-relaxed", w ? "text-[13px] text-white/45" : "text-[10px] text-white/35")}>
+          Cloud settings changes are unavailable while viewing this computer&apos;s project snapshot. Preview and apply
+          always use your linked cloud project, not the folder shown above.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -1259,23 +1293,39 @@ function AllowlistedWorkspaceSettings({
 
 export function ContextAndMemoryPanel({ variant = "default" }: { variant?: SettingsPanelVisualVariant }) {
   const w = variant === "workspace";
+  const wsProject = useOptionalWorkspaceHamProject();
+  const hamProjectId = wsProject?.hamProjectId ?? null;
+
   const [data, setData] = React.useState<ContextEnginePayload | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
+  /** "local" = connected machine snapshot; "project" / "global" = cloud API */
+  const [snapshotSource, setSnapshotSource] = React.useState<"local" | "project" | "global" | null>(null);
+  const [fallbackNote, setFallbackNote] = React.useState<string | null>(null);
 
   const load = React.useCallback(async () => {
     setLoading(true);
     setError(null);
+    setFallbackNote(null);
     try {
-      const payload = await fetchContextEngine();
-      setData(payload);
+      const outcome = await loadContextMemorySnapshot(hamProjectId, {
+        isLocalRuntimeConfigured,
+        fetchLocalWorkspaceHealth,
+        fetchLocalWorkspaceContextSnapshot,
+        fetchProjectContextEngine,
+        fetchContextEngine,
+      });
+      setData(outcome.payload);
+      setSnapshotSource(outcome.source);
+      setFallbackNote(outcome.fallbackNote);
     } catch (e) {
       setData(null);
+      setSnapshotSource(null);
       setError(e instanceof Error ? e.message : "Failed to load context engine snapshot");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [hamProjectId]);
 
   React.useEffect(() => {
     void load();
@@ -1287,29 +1337,44 @@ export function ContextAndMemoryPanel({ variant = "default" }: { variant?: Setti
     { key: "critic" as const, label: "Review (Hermes)" },
   ];
 
+  const sourceBadge =
+    snapshotSource === "local" ? (
+      <span className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-200/95">
+        This computer
+      </span>
+    ) : snapshotSource === "project" || snapshotSource === "global" ? (
+      <span className="rounded-md border border-sky-500/25 bg-sky-500/10 px-2 py-0.5 text-[11px] font-semibold text-sky-100/90">
+        Cloud
+      </span>
+    ) : null;
+
   return (
     <div className={cn("space-y-6", w && "hww-settings-panels")}>
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <p
-          className={cn(
-            "max-w-xl leading-relaxed",
-            w ? "text-[13px] text-white/45" : "text-[10px] font-bold uppercase tracking-widest text-white/30",
-          )}
-        >
-          {w ? (
-            <>
-              Live snapshot from the context engine. In development, the UI proxies <span className="font-mono text-white/50">/api</span> to
-              your Ham API. Values reflect the API working directory.
-            </>
-          ) : (
-            <>
-              Live snapshot from <span className="font-mono text-[#FF6B00]/80">GET /api/context-engine</span>
-              {" "}(Vite dev proxies <span className="font-mono">/api</span> to FastAPI; production set{" "}
-              <span className="font-mono">VITE_HAM_API_BASE</span>). Snapshot uses the API process working directory unless
-              you use a project-scoped route.
-            </>
-          )}
-        </p>
+        <div className="flex max-w-xl flex-col gap-2">
+          <div className="flex flex-wrap items-center gap-2">{sourceBadge}</div>
+          <p
+            className={cn(
+              "leading-relaxed",
+              w ? "text-[13px] text-white/45" : "text-[10px] font-bold uppercase tracking-widest text-white/30",
+            )}
+          >
+            {w ? (
+              <>
+                Project memory snapshot: when your connected folder is available on this computer, this panel prefers
+                that folder. Otherwise it uses your linked cloud project, or the global cloud API view.
+              </>
+            ) : (
+              <>
+                Live snapshot from <span className="font-mono text-[#FF6B00]/80">GET /api/context-engine</span> or, when
+                a Hermes workspace project id is available,{" "}
+                <span className="font-mono text-[#FF6B00]/80">GET /api/projects/{"{id}"}/context-engine</span>. Vite dev
+                proxies <span className="font-mono">/api</span> to FastAPI; production uses{" "}
+                <span className="font-mono">VITE_HAM_API_BASE</span>.
+              </>
+            )}
+          </p>
+        </div>
         <button
           type="button"
           onClick={() => void load()}
@@ -1326,10 +1391,132 @@ export function ContextAndMemoryPanel({ variant = "default" }: { variant?: Setti
         </button>
       </div>
 
-      {error && (
-        <div className="rounded-xl border border-red-500/30 bg-red-500/5 p-4 text-[13px] text-red-300/90">
-          {error}
+      {snapshotSource === "local" && w && (
+        <div className="space-y-2 rounded-xl border border-emerald-500/25 bg-emerald-500/[0.06] p-4 text-[13px] leading-relaxed text-emerald-50/90">
+          <p className="font-medium text-emerald-100/95">This computer</p>
+          <p className="text-emerald-100/80">
+            This panel is showing your connected project folder on this computer. Chat still uses the cloud app in this
+            version.
+          </p>
         </div>
+      )}
+
+      <div
+        className={cn(
+          "space-y-2 rounded-xl border p-4 leading-relaxed",
+          w
+            ? "border-amber-500/25 bg-amber-500/[0.06] text-[12px] text-amber-100/80"
+            : "border-amber-500/20 bg-amber-500/[0.04] p-5 text-[9px] font-bold uppercase tracking-wide text-amber-100/70",
+        )}
+      >
+        <p className={cn(w ? "font-medium text-amber-50/95" : "text-[10px] font-black tracking-widest text-amber-200/90")}>
+          {w ? "What the Cloud snapshot means" : "What this snapshot means (hosted &amp; containers)"}
+        </p>
+        <ul
+          className={cn(
+            "list-disc space-y-1.5 pl-4",
+            w ? "text-[12px] text-amber-100/75" : "text-[9px] font-semibold normal-case tracking-normal text-amber-100/65",
+          )}
+        >
+          {w ? (
+            <>
+              <li>
+                The global cloud view reflects the cloud API process folder (hosted deployments often use something like{" "}
+                <span className="font-mono text-amber-200/70">/app</span>), not a path on your laptop.
+              </li>
+              <li>
+                Many cloud images omit a <span className="font-mono text-amber-200/70">.git</span> tree, so &quot;Git
+                unavailable&quot; there is expected — it does <strong className="font-semibold">not</strong> mean project
+                memory is broken.
+              </li>
+              <li>Link a workspace project to prefer that cloud project&apos;s folder when the cloud host can read it.</li>
+            </>
+          ) : (
+            <>
+              <li>
+                The <span className="font-mono">global</span> route reflects the API process working directory (often
+                something like <span className="font-mono">/app</span> on Cloud Run), not your laptop path.
+              </li>
+              <li>
+                Many images omit <span className="font-mono">.git</span> (e.g. via{" "}
+                <span className="font-mono">.dockerignore</span>
+                ), so &quot;Git unavailable&quot; there is expected — it does <strong className="font-semibold">not</strong>{" "}
+                mean <span className="font-mono">memory_heist</span> is broken.
+              </li>
+              <li>
+                Open the Hermes workspace chat once to link a project id; the Context &amp; Memory panel then prefers the
+                project-scoped route when the API can read that root.
+              </li>
+            </>
+          )}
+        </ul>
+      </div>
+
+      {fallbackNote && (
+        <div
+          className={cn(
+            "rounded-xl border p-4",
+            w
+              ? "border-sky-500/25 bg-sky-500/[0.06] text-[13px] text-sky-100/85"
+              : "border-sky-500/20 bg-sky-500/[0.04] text-[10px] font-bold uppercase tracking-wide text-sky-100/75",
+          )}
+        >
+          {fallbackNote}
+        </div>
+      )}
+
+      {snapshotSource && data && (
+        <div
+          className={cn(
+            "rounded-lg border px-3 py-2",
+            w
+              ? "border-white/[0.08] text-[12px] text-white/55"
+              : "border-white/10 font-mono text-[9px] text-white/35",
+          )}
+        >
+          {w ? (
+            <>
+              <span className="font-medium text-white/65">Source: </span>
+              {snapshotSource === "local" && (
+                <span>
+                  Connected folder on this computer (local Ham API with a configured project folder).
+                </span>
+              )}
+              {snapshotSource === "project" && <span>Linked cloud project folder.</span>}
+              {snapshotSource === "global" && (
+                <span>Global cloud API view{hamProjectId ? " (fallback)" : ""}.</span>
+              )}
+            </>
+          ) : (
+            <>
+              Active route:{" "}
+              {snapshotSource === "local" ? (
+                <>
+                  <span className="text-emerald-400/90">local</span>
+                  {" · "}
+                  <span className="text-white/55">GET /api/workspace/context-snapshot</span>
+                </>
+              ) : snapshotSource === "project" ? (
+                <>
+                  <span className="text-emerald-400/90">project</span>
+                  {" · "}
+                  <span className="text-white/55">GET /api/projects/{hamProjectId}/context-engine</span>
+                </>
+              ) : (
+                <>
+                  <span className="text-white/55">global</span>
+                  {" · "}
+                  <span className="text-white/55">GET /api/context-engine</span>
+                  {hamProjectId ? " (fallback)" : ""}
+                </>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {error && (
+        <div className="rounded-xl border border-red-500/30 bg-red-500/5 p-4 text-[13px] text-red-300/90">{error}</div>
       )}
 
       {loading && !data && !error && (
@@ -1373,15 +1560,30 @@ export function ContextAndMemoryPanel({ variant = "default" }: { variant?: Setti
                 Git {data.git.has_repo ? "detected" : "unavailable"}
               </span>
             </div>
+            {!data.git.has_repo && (
+              <p
+                className={cn(
+                  "leading-relaxed",
+                  w ? "text-xs text-white/40" : "text-[9px] font-bold uppercase tracking-wide text-white/30",
+                )}
+              >
+                Without a <span className="font-mono">.git</span> directory in the scanned tree (common in slim deploy
+                images), git-sized fields below may be zero. Configuration and instruction sampling still work.
+              </p>
+            )}
           </div>
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             {roleOrder.map(({ key, label }) => {
               const r = data.roles[key];
-              const pct = Math.min(
-                100,
-                (r.rendered_chars / Math.max(1, r.instruction_budget_chars + r.max_diff_chars)) * 100,
-              );
+              const instructionBudget = r.instruction_budget_chars;
+              const diffCap = r.max_diff_chars;
+              const combinedCeiling = Math.max(1, instructionBudget + diffCap);
+              const assembled = r.rendered_chars;
+              const ratio = assembled / combinedCeiling;
+              const barWidthPct = Math.min(100, ratio * 100);
+              const overCeiling = assembled > combinedCeiling;
+              const barTitle = `Assembled ${assembled.toLocaleString()} chars · instruction budget ${instructionBudget.toLocaleString()} · diff cap ${diffCap.toLocaleString()} · combined ceiling ${combinedCeiling.toLocaleString()}`;
               return (
                 <div
                   key={key}
@@ -1400,34 +1602,51 @@ export function ContextAndMemoryPanel({ variant = "default" }: { variant?: Setti
                   <div className="space-y-2">
                     <div
                       className={cn(
-                        "flex justify-between",
+                        "flex justify-between gap-2",
                         w ? "text-xs text-white/50" : "text-[10px] font-bold uppercase tracking-wider text-white/35",
                       )}
                     >
-                      <span>Context assembled</span>
-                      <span className="font-mono text-white/65">{r.rendered_chars.toLocaleString()} chars</span>
+                      <span>Assembled (rendered)</span>
+                      <span className="shrink-0 font-mono text-white/65">{assembled.toLocaleString()} chars</span>
                     </div>
-                    <div className="h-2 overflow-hidden rounded-full border border-white/10 bg-white/5">
+                    <div
+                      className={cn("h-2 overflow-hidden rounded-full border border-white/10 bg-white/5")}
+                      title={barTitle}
+                    >
                       <div
-                        className={cn("h-full", w ? "bg-[#5eead4]/70" : "bg-[#FF6B00]/80 shadow-[0_0_12px_rgba(255,107,0,0.35)]")}
-                        style={{ width: `${pct}%` }}
+                        className={cn(
+                          "h-full",
+                          w ? "bg-[#5eead4]/70" : "bg-[#FF6B00]/80 shadow-[0_0_12px_rgba(255,107,0,0.35)]",
+                          overCeiling && (w ? "bg-amber-400/85" : "bg-amber-500/90"),
+                        )}
+                        style={{ width: `${barWidthPct}%` }}
                       />
                     </div>
                     <p
                       className={cn(
                         "leading-relaxed",
-                        w
-                          ? "text-xs text-white/35"
-                          : "text-[9px] font-bold uppercase tracking-wide text-white/25",
+                        w ? "text-xs text-white/35" : "text-[9px] font-bold uppercase tracking-wide text-white/25",
                       )}
                     >
-                      Budget {r.instruction_budget_chars.toLocaleString()} chars · cap {r.max_diff_chars.toLocaleString()}{" "}
-                      {w ? "" : (
+                      Instruction budget {instructionBudget.toLocaleString()} chars · Diff cap {diffCap.toLocaleString()} ·
+                      Combined ceiling {combinedCeiling.toLocaleString()}{" "}
+                      {!w && (
                         <>
-                          (matches <span className="font-mono">swarm_agency</span> per-role)
+                          (<span className="font-mono">swarm_agency</span> per-role)
                         </>
                       )}
                     </p>
+                    {overCeiling && (
+                      <p
+                        className={cn(
+                          "font-medium text-amber-400/90",
+                          w ? "text-xs" : "text-[9px] uppercase tracking-wide",
+                        )}
+                      >
+                        Assembled size exceeds combined ceiling ({assembled.toLocaleString()} &gt;{" "}
+                        {combinedCeiling.toLocaleString()}).
+                      </p>
+                    )}
                   </div>
                 </div>
               );
@@ -1634,6 +1853,7 @@ export function ContextAndMemoryPanel({ variant = "default" }: { variant?: Setti
             data={data}
             onApplied={() => void load()}
             visualVariant={w ? "workspace" : "default"}
+            contextSnapshotLocal={shouldGateContextMemorySettingsMutations(snapshotSource)}
           />
         </>
       )}

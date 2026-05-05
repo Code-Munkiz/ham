@@ -127,7 +127,7 @@ Snapshot accepted after Document Intelligence Phase 2A and backend deploy:
 
 **MVP shipped:** **ReportLab** — `GET /api/chat/sessions/{session_id}/export.pdf` (sanitized transcript; no attachment re-fetch) and workspace **Export PDF** button. Evolve to Playwright/HTML layout in a later iteration if needed.
 
-**Authorization note:** Export uses the **same Clerk gate** as `GET /api/chat/sessions/{id}`. The session store **does not** attach an owner/user id to each session; **session_id secrecy** is the practical access control (same as fetching JSON history). Per-user session isolation is a separate persistence effort.
+**Authorization note:** Export uses the **same Clerk gate** as `GET /api/chat/sessions/{id}`. Session reads validate the session against the authenticated **user id** and optional **`workspace_id`** query (same scoping as chat create/list). **session_id secrecy** remains important: do not share session URLs. Rows still store only opaque ids (no email in the session record); richer per-tenant policy is a separate product effort if needed beyond Clerk + workspace scope.
 
 ### Security rules (Phase 2B)
 
