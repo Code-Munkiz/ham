@@ -549,23 +549,30 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
   const [deletingSessionId, setDeletingSessionId] = React.useState<string | null>(null);
   const canLoadSessions = hamWorkspace.state.status === "ready";
   const activeWorkspaceId = hamWorkspace.state.status === "ready" ? hamWorkspace.state.activeWorkspaceId : null;
+  const sessionsRequestSeqRef = React.useRef(0);
 
   const loadSessions = React.useCallback(async () => {
+    const requestSeq = sessionsRequestSeqRef.current + 1;
+    sessionsRequestSeqRef.current = requestSeq;
     if (!canLoadSessions) {
       setSessions([]);
       setSessionsError(null);
       setSessionsLoading(false);
       return;
     }
+    setSessions([]);
     setSessionsLoading(true);
     setSessionsError(null);
     try {
       const { sessions: list } = await workspaceSessionAdapter.list(50, 0, activeWorkspaceId);
+      if (sessionsRequestSeqRef.current !== requestSeq) return;
       setSessions(list);
     } catch (e) {
+      if (sessionsRequestSeqRef.current !== requestSeq) return;
       setSessionsError(e instanceof Error ? e.message : "Failed to load sessions");
       setSessions([]);
     } finally {
+      if (sessionsRequestSeqRef.current !== requestSeq) return;
       setSessionsLoading(false);
     }
   }, [activeWorkspaceId, canLoadSessions]);

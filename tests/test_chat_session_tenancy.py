@@ -131,6 +131,64 @@ def test_cross_workspace_session_access_is_not_found(
     assert res.json()["detail"]["error"]["code"] == "SESSION_NOT_FOUND"
 
 
+def test_scoped_session_created_by_chat_cannot_be_loaded_from_other_workspace(
+    chat_store: InMemoryChatSessionStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("HERMES_GATEWAY_MODE", "mock")
+    with _install_auth(monkeypatch):
+        created = client.post(
+            "/api/chat",
+            headers={"Authorization": "Bearer user-a.jwt"},
+            json={
+                "workspace_id": "ws_b",
+                "messages": [{"role": "user", "content": "workspace b"}],
+            },
+        )
+        assert created.status_code == 200, created.text
+        sid = created.json()["session_id"]
+
+        wrong_workspace = client.get(
+            f"/api/chat/sessions/{sid}",
+            params={"workspace_id": "ws_a"},
+            headers={"Authorization": "Bearer user-a.jwt"},
+        )
+        listed = client.get(
+            "/api/chat/sessions",
+            params={"workspace_id": "ws_a"},
+            headers={"Authorization": "Bearer user-a.jwt"},
+        )
+
+    assert wrong_workspace.status_code == 404
+    assert wrong_workspace.json()["detail"]["error"]["code"] == "SESSION_NOT_FOUND"
+    assert listed.status_code == 200, listed.text
+    assert sid not in {row["session_id"] for row in listed.json()["sessions"]}
+
+
+def test_scoped_request_does_not_load_legacy_unowned_session(
+    chat_store: InMemoryChatSessionStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    legacy = chat_store.create_session()
+    chat_store.append_turns(legacy, [ChatTurn(role="user", content="legacy")])
+
+    with _install_auth(monkeypatch):
+        scoped = client.get(
+            f"/api/chat/sessions/{legacy}",
+            params={"workspace_id": "ws_a"},
+            headers={"Authorization": "Bearer user-a.jwt"},
+        )
+        unscoped = client.get(
+            f"/api/chat/sessions/{legacy}",
+            headers={"Authorization": "Bearer user-a.jwt"},
+        )
+
+    assert scoped.status_code == 404
+    assert scoped.json()["detail"]["error"]["code"] == "SESSION_NOT_FOUND"
+    assert unscoped.status_code == 200, unscoped.text
+    assert unscoped.json()["messages"] == [{"role": "user", "content": "legacy"}]
+
+
 def test_cross_user_session_access_is_not_found(
     chat_store: InMemoryChatSessionStore,
     monkeypatch: pytest.MonkeyPatch,
