@@ -33,6 +33,7 @@ import type { ChatCapabilitiesPayload, ChatContextMetersPayload, ModelCatalogPay
 import { applyHamUiActions } from "@/lib/ham/applyUiActions";
 import type { HamChatStreamAuth } from "@/lib/ham/api";
 import type { HamChatUserContentV1, HamChatUserContentV2 } from "@/lib/ham/chatUserContent";
+import { useHamWorkspace } from "@/lib/ham/HamWorkspaceContext";
 import {
   buildHamChatUserPayloadV1,
   buildHamChatUserPayloadV2,
@@ -85,6 +86,10 @@ import { hamWorkspaceLogoUrl } from "@/lib/ham/publicAssets";
 import { cn } from "@/lib/utils";
 import { isHamDesktopShell } from "@/lib/ham/desktopConfig";
 import { getHamDesktopLocalControlApi, getHamDesktopWebBridgeApi } from "@/lib/ham/desktopBundleBridge";
+import {
+  readWorkspaceLastChatSessionId,
+  writeWorkspaceLastChatSessionId,
+} from "./workspaceChatSessionStorage";
 
 function mapServerAttachmentKind(serverKind: string): WorkspaceComposerAttachment["kind"] {
   if (serverKind === "image") return "image";
@@ -93,7 +98,6 @@ function mapServerAttachmentKind(serverKind: string): WorkspaceComposerAttachmen
 }
 
 const VOICE_DEBUG_FLAG = "ham.voiceDebug";
-const HWW_LAST_SESSION_KEY = "hww.chat.lastSessionId";
 
 function voiceDebugEnabled(): boolean {
   if (typeof window === "undefined") return false;
@@ -282,29 +286,6 @@ function ChatMissionFeedTranscript({
       <div ref={anchorRef} className="h-px w-full" aria-hidden />
     </div>
   );
-}
-
-function readLastChatSessionId(): string | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = window.localStorage.getItem(HWW_LAST_SESSION_KEY);
-    return raw?.trim() ? raw.trim() : null;
-  } catch {
-    return null;
-  }
-}
-
-function writeLastChatSessionId(sessionId: string | null): void {
-  if (typeof window === "undefined") return;
-  try {
-    if (sessionId?.trim()) {
-      window.localStorage.setItem(HWW_LAST_SESSION_KEY, sessionId.trim());
-    } else {
-      window.localStorage.removeItem(HWW_LAST_SESSION_KEY);
-    }
-  } catch {
-    /* ignore */
-  }
 }
 
 function workspaceChatSubtitle(opts: {
@@ -505,6 +486,7 @@ export type WorkspaceChatScreenProps = {
 export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   const { embedMode = false } = props;
   const { setHamProjectId } = useWorkspaceHamProject();
+  const hamWorkspace = useHamWorkspace();
   const navigate = useNavigate();
   const desktopShell = isHamDesktopShell();
   const executionEnvironment: "desktop" | "web" = desktopShell ? "desktop" : "web";
@@ -523,6 +505,8 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     const ev = missionFeed?.events ?? [];
     return missionFeedTranscriptFromEvents(ev, missionFeed?.lifecycle ?? null, missionFeedBanner.phase).slice(-5);
   }, [missionFeed?.events, missionFeed?.lifecycle, missionFeedBanner.phase]);
+  const activeWorkspaceId = hamWorkspace.state.status === "ready" ? hamWorkspace.state.activeWorkspaceId : null;
+  const workspaceRestoreScope = activeWorkspaceId?.trim() || "__legacy__";
 
   const [messages, setMessages] = React.useState<HwwMsgRow[]>([]);
   const [sessionId, setSessionId] = React.useState<string | null>(null);
@@ -569,7 +553,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   const [gohamBridgeExplicitlyDisabled, setGohamBridgeExplicitlyDisabled] = React.useState(false);
   /** When set, deep-link effect must not call `loadFromApi` for this session while the stream turn is active. */
   const streamTurnSessionRef = React.useRef<string | null>(null);
-  const initialSessionRestoreAttemptedRef = React.useRef(false);
+  const lastSessionRestoreScopeRef = React.useRef<string | null>(null);
   const endRef = React.useRef<HTMLDivElement | null>(null);
   const chatAttachmentLocalBlobByServerIdRef = React.useRef<Map<string, string>>(new Map());
   const listWrapRef = React.useRef<HTMLDivElement | null>(null);
@@ -773,6 +757,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
           sessionId: sid,
           modelId: mid,
           projectId,
+          workspaceId: activeWorkspaceId,
         });
         setContextMetersPayload(p);
       } catch {
@@ -786,6 +771,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       chatModelIdForApi,
       modelId,
       projectId,
+      activeWorkspaceId,
     ],
   );
 
@@ -1069,25 +1055,29 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       let createdNew = false;
       try {
         if (!sid) {
-          const created = await createChatSession();
+          const created = await createChatSession(activeWorkspaceId);
           sid = created.session_id;
           createdNew = true;
           setSessionId(sid);
         }
         if (!sid) return;
-        writeLastChatSessionId(sid);
+        writeWorkspaceLastChatSessionId(activeWorkspaceId, sid);
         if (!embedMode) {
           navigate(
             { pathname: "/workspace/chat", search: `?session=${encodeURIComponent(sid)}` },
             { replace: true },
           );
         }
-        const persisted = await appendChatSessionTurns(sid, [
-          { role: "user", content: userContent },
-          { role: "assistant", content: assistantContent },
-        ]);
+        const persisted = await appendChatSessionTurns(
+          sid,
+          [
+            { role: "user", content: userContent },
+            { role: "assistant", content: assistantContent },
+          ],
+          activeWorkspaceId,
+        );
         setSessionId(persisted.session_id);
-        writeLastChatSessionId(persisted.session_id);
+        writeWorkspaceLastChatSessionId(activeWorkspaceId, persisted.session_id);
         setMessages((prev) => {
           revokeGeneratedMediaBlobUrlsFromMessages(prev);
           return persisted.messages.map((m, i) => ({
@@ -1125,7 +1115,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         );
       }
     },
-    [embedMode, navigate],
+    [activeWorkspaceId, embedMode, navigate],
   );
 
   React.useEffect(() => {
@@ -1227,7 +1217,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       setLoadingSession(true);
       setLoadErr(null);
       try {
-        const detail = await workspaceSessionAdapter.get(sid);
+        const detail = await workspaceSessionAdapter.get(sid, activeWorkspaceId);
         const ts = timeStr;
         const prevLoaded = previousLoadedWorkspaceSessionRef.current;
         if (prevLoaded && prevLoaded !== sid) {
@@ -1235,7 +1225,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         }
         previousLoadedWorkspaceSessionRef.current = sid;
         setSessionId(sid);
-        writeLastChatSessionId(sid);
+        writeWorkspaceLastChatSessionId(activeWorkspaceId, sid);
         setMessages((prev) => {
           revokeGeneratedMediaBlobUrlsFromMessages(prev);
           return detail.messages.map((m, i) => ({
@@ -1272,7 +1262,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
           previousLoadedWorkspaceSessionRef.current = null;
           revokeAllChatAttachmentLocalBlobs();
           setSessionId(null);
-          writeLastChatSessionId(null);
+          writeWorkspaceLastChatSessionId(activeWorkspaceId, null);
           setMessages((prev) => {
             revokeGeneratedMediaBlobUrlsFromMessages(prev);
             return [];
@@ -1285,16 +1275,16 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         setLoadingSession(false);
       }
     },
-    [sending, revokeAllChatAttachmentLocalBlobs],
+    [activeWorkspaceId, sending, revokeAllChatAttachmentLocalBlobs],
   );
 
   React.useEffect(() => {
-    if (initialSessionRestoreAttemptedRef.current) return;
-    initialSessionRestoreAttemptedRef.current = true;
+    if (lastSessionRestoreScopeRef.current === workspaceRestoreScope) return;
+    lastSessionRestoreScopeRef.current = workspaceRestoreScope;
     if (sessionId) return;
     // Mission-mode deep links must remain mission-scoped and should not be replaced by saved session URLs.
     if (missionIdFromQuery) return;
-    const savedRaw = readLastChatSessionId();
+    const savedRaw = readWorkspaceLastChatSessionId(activeWorkspaceId);
     if (!savedRaw) return;
     const saved = savedRaw.trim();
     if (!saved) return;
@@ -1310,13 +1300,22 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       return;
     }
     void loadFromApi(saved);
-  }, [embedMode, loadFromApi, missionIdFromQuery, navigate, searchParams, sessionId]);
+  }, [
+    activeWorkspaceId,
+    embedMode,
+    loadFromApi,
+    missionIdFromQuery,
+    navigate,
+    searchParams,
+    sessionId,
+    workspaceRestoreScope,
+  ]);
 
   React.useEffect(() => {
     if (sessionId) {
-      writeLastChatSessionId(sessionId);
+      writeWorkspaceLastChatSessionId(activeWorkspaceId, sessionId);
     }
-  }, [sessionId]);
+  }, [activeWorkspaceId, sessionId]);
 
   /** Deep link `?session=` (full-page chat only). */
   React.useEffect(() => {
@@ -1348,7 +1347,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     previousLoadedWorkspaceSessionRef.current = null;
     revokeAllChatAttachmentLocalBlobs();
     setSessionId(null);
-    writeLastChatSessionId(null);
+    writeWorkspaceLastChatSessionId(activeWorkspaceId, null);
     setMessages((prev) => {
       revokeGeneratedMediaBlobUrlsFromMessages(prev);
       return [];
@@ -1367,7 +1366,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     queueMicrotask(() => {
       document.getElementById("hww-chat-composer")?.focus();
     });
-  }, [embedMode, navigate, revokeAllChatAttachmentLocalBlobs]);
+  }, [activeWorkspaceId, embedMode, navigate, revokeAllChatAttachmentLocalBlobs]);
 
   const retryLoadSession = React.useCallback(() => {
     if (embedMode) return;
@@ -2065,6 +2064,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
             max_mode: false,
             execution_mode_preference: execPrefEffective,
             execution_environment: executionEnvironment,
+            ...(activeWorkspaceId?.trim() ? { workspace_id: activeWorkspaceId.trim() } : {}),
           },
           {
             onSession: (sid) => {
@@ -2168,7 +2168,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         let recoveredFromServer = false;
         if (!(err instanceof HamAccessRestrictedError) && sidForRecovery) {
           try {
-            const detail = await workspaceSessionAdapter.get(sidForRecovery);
+            const detail = await workspaceSessionAdapter.get(sidForRecovery, activeWorkspaceId);
             if (detail.messages.length > 0) {
               recoveredFromServer = true;
               setSessionId(detail.session_id);
@@ -2251,6 +2251,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       imageGenInFlight,
       videoGenInFlight,
       sessionId,
+      activeWorkspaceId,
       chatModelIdForApi,
       projectId,
       missionIdFromQuery,
@@ -2619,7 +2620,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     void (async () => {
       setPdfExporting(true);
       try {
-        await downloadChatSessionPdf(sessionId);
+        await downloadChatSessionPdf(sessionId, activeWorkspaceId);
         toast.success("Chat exported to PDF");
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "PDF export failed");
@@ -2627,7 +2628,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         setPdfExporting(false);
       }
     })();
-  }, [sessionId]);
+  }, [activeWorkspaceId, sessionId]);
 
   const handleRemoveGeneratedImage = React.useCallback((assistantMessageId: string) => {
     setMessages((prev) => {

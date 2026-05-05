@@ -1421,6 +1421,8 @@ export interface HamChatRequest {
   session_id?: string;
   /** Exactly one new user message per turn; server loads prior transcript when `session_id` is set. */
   messages: [HamChatRequestMessage];
+  /** Optional workspace scope for session tenancy (`src/api/chat.py`); omitted keeps legacy unscoped behavior. */
+  workspace_id?: string;
   client_request_id?: string;
   /** When true (default), API injects `.cursor/skills` summary into system context for intent routing. */
   include_operator_skills?: boolean;
@@ -1606,12 +1608,26 @@ export type ChatSessionTurn = {
   content: string;
 };
 
+function normalizedWorkspaceId(workspaceId: string | null | undefined): string | null {
+  const wid = workspaceId?.trim();
+  return wid ? wid : null;
+}
+
+function appendWorkspaceIdToPath(path: string, workspaceId: string | null | undefined): string {
+  const wid = normalizedWorkspaceId(workspaceId);
+  if (!wid) return path;
+  const q = new URLSearchParams();
+  q.set("workspace_id", wid);
+  return `${path}${path.includes("?") ? "&" : "?"}${q.toString()}`;
+}
+
 /** List past chat sessions (newest first). */
 export async function fetchChatSessions(
   limit = 50,
   offset = 0,
+  workspaceId?: string | null,
 ): Promise<{ sessions: ChatSessionSummary[] }> {
-  const path = `/api/chat/sessions?limit=${limit}&offset=${offset}`;
+  const path = appendWorkspaceIdToPath(`/api/chat/sessions?limit=${limit}&offset=${offset}`, workspaceId);
   const res = await hamApiFetch(path);
   if (!res.ok) {
     const target = apiUrl(path);
@@ -1624,8 +1640,11 @@ export async function fetchChatSessions(
 }
 
 /** Fetch full message history for a single chat session. */
-export async function fetchChatSession(sessionId: string): Promise<ChatSessionDetail> {
-  const path = `/api/chat/sessions/${encodeURIComponent(sessionId)}`;
+export async function fetchChatSession(
+  sessionId: string,
+  workspaceId?: string | null,
+): Promise<ChatSessionDetail> {
+  const path = appendWorkspaceIdToPath(`/api/chat/sessions/${encodeURIComponent(sessionId)}`, workspaceId);
   const res = await hamApiFetch(path);
   if (!res.ok) {
     if (res.status === 404) throw new Error("Session not found");
@@ -1635,8 +1654,8 @@ export async function fetchChatSession(sessionId: string): Promise<ChatSessionDe
 }
 
 /** Delete persisted chat transcript for a session (`session_id` only; server-side store). */
-export async function deleteChatSession(sessionId: string): Promise<void> {
-  const path = `/api/chat/sessions/${encodeURIComponent(sessionId)}`;
+export async function deleteChatSession(sessionId: string, workspaceId?: string | null): Promise<void> {
+  const path = appendWorkspaceIdToPath(`/api/chat/sessions/${encodeURIComponent(sessionId)}`, workspaceId);
   const res = await hamApiFetch(path, { method: "DELETE" });
   if (!res.ok) {
     if (res.status === 404) throw new Error("Session not found");
@@ -1649,11 +1668,14 @@ export async function fetchChatContextMeters(opts: {
   sessionId: string;
   modelId: string | null;
   projectId?: string | null;
+  workspaceId?: string | null;
 }): Promise<ChatContextMetersPayload> {
   const q = new URLSearchParams();
   q.set("session_id", opts.sessionId.trim());
   if (opts.modelId?.trim()) q.set("model_id", opts.modelId.trim());
   if (opts.projectId?.trim()) q.set("project_id", opts.projectId.trim());
+  const wid = normalizedWorkspaceId(opts.workspaceId);
+  if (wid) q.set("workspace_id", wid);
   const res = await hamApiFetch(`/api/chat/context-meters?${q.toString()}`);
   if (!res.ok) {
     if (res.status === 404) {
@@ -1677,8 +1699,11 @@ export async function fetchChatCapabilities(modelId: string | null): Promise<Cha
 }
 
 /** Download sanitized chat transcript PDF (server-generated; includes Clerk session when configured). */
-export async function downloadChatSessionPdf(sessionId: string): Promise<void> {
-  const path = `/api/chat/sessions/${encodeURIComponent(sessionId)}/export.pdf`;
+export async function downloadChatSessionPdf(
+  sessionId: string,
+  workspaceId?: string | null,
+): Promise<void> {
+  const path = appendWorkspaceIdToPath(`/api/chat/sessions/${encodeURIComponent(sessionId)}/export.pdf`, workspaceId);
   const res = await hamApiFetch(path);
   if (!res.ok) {
     if (res.status === 404) throw new Error("Session not found");
@@ -1706,8 +1731,10 @@ export async function downloadChatSessionPdf(sessionId: string): Promise<void> {
 }
 
 /** Create an empty chat session id for explicit turn persistence (desktop local-control turns). */
-export async function createChatSession(): Promise<{ session_id: string; created_at: string | null }> {
-  const path = "/api/chat/sessions";
+export async function createChatSession(
+  workspaceId?: string | null,
+): Promise<{ session_id: string; created_at: string | null }> {
+  const path = appendWorkspaceIdToPath("/api/chat/sessions", workspaceId);
   const res = await hamApiFetch(path, { method: "POST" });
   if (!res.ok) {
     throw new Error(`Failed to create chat session (HTTP ${res.status}) via ${apiUrl(path)}.`);
@@ -1719,8 +1746,9 @@ export async function createChatSession(): Promise<{ session_id: string; created
 export async function appendChatSessionTurns(
   sessionId: string,
   turns: ChatSessionTurn[],
+  workspaceId?: string | null,
 ): Promise<{ session_id: string; messages: HamChatMessage[] }> {
-  const path = `/api/chat/sessions/${encodeURIComponent(sessionId)}/turns`;
+  const path = appendWorkspaceIdToPath(`/api/chat/sessions/${encodeURIComponent(sessionId)}/turns`, workspaceId);
   const res = await hamApiFetch(path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

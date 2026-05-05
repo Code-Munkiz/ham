@@ -97,4 +97,36 @@ describe("WorkspaceShell auth gating", () => {
 
     await waitFor(() => expect(list).toHaveBeenCalledTimes(1));
   });
+
+  it("passes active workspace id when loading chat sessions", async () => {
+    const list = vi.spyOn(workspaceSessionAdapter, "list").mockResolvedValue({
+      sessions: [],
+    });
+    mockUseHamWorkspace.mockReturnValue(
+      baseCtx({
+        state: {
+          status: "ready",
+          me: {
+            user: {
+              user_id: "u_alice",
+              email: "alice@example.com",
+              display_name: null,
+              photo_url: null,
+              primary_org_id: null,
+            },
+            orgs: [],
+            workspaces: [],
+            default_workspace_id: "ws_a",
+            auth_mode: "clerk",
+          },
+          activeWorkspaceId: "ws_a",
+        },
+        hostedAuth: { clerkConfigured: true, isLoaded: true, isSignedIn: true },
+      }),
+    );
+
+    renderShell();
+
+    await waitFor(() => expect(list).toHaveBeenCalledWith(50, 0, "ws_a"));
+  });
 });
