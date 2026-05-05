@@ -50,12 +50,17 @@ pip install pytest
 python -m pytest tests/ -q
 ```
 
+In **cloud / PTY-less shells**, `tests/test_workspace_terminal.py` can hang (PTY); use `python -m pytest tests/ -q --ignore=tests/test_workspace_terminal.py` when needed. Curated commands and optional deselects: [`AGENTS.md`](AGENTS.md).
+
 Frontend typecheck: `npm run lint` in `frontend/` (`tsc --noEmit`). See [`AGENTS.md`](AGENTS.md) for per-area test guidance.
+
+Before landing edits to canonical markdown, run `python scripts/check_docs_freshness.py` (same check as the CI **warning-only** doc freshness step). The exact tracked paths are the `CANONICAL_DOCS` list in [`scripts/check_docs_freshness.py`](scripts/check_docs_freshness.py). After changing `.cursor/rules/`, `.cursor/skills/`, or export-embedded sources such as `AGENTS.md`, `VISION.md`, `GAPS.md`, or `docs/HAM_HARDENING_REMEDIATION.md`, regenerate [`CURSOR_EXACT_SETUP_EXPORT.md`](CURSOR_EXACT_SETUP_EXPORT.md) with `python scripts/build_cursor_export.py` instead of editing that snapshot by hand.
 
 ## Project layout
 
 - `main.py` — CLI entry (bridge / Hermes one-shot orchestration wiring)
 - `src/api/server.py` — FastAPI app (runs, chat, Cursor/managed missions routes; see [AGENTS.md](AGENTS.md))
+- `src/api/workspace_tools.py` — workspace tool/worker discovery (`GET /api/workspace/tools`) and optional Claude Agent SDK smoke path (see [AGENTS.md](AGENTS.md))
 - `src/hermes_feedback.py` — Hermes supervisory/critic MVP surface (reviewer implemented)
 - `src/tools/droid_executor.py` — Droid execution backend (bounded `subprocess.run`, timeout, stdout/stderr caps; profile argv + policy gate what actually runs)
 - `src/memory_heist.py` — repo context, instructions, git, sessions

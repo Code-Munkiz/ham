@@ -52,6 +52,43 @@ Synthesis uses the **`edge-tts`** PyPI package (WebSocket to Microsoft; same pro
 
 Defaults to **local JSON** under the workspace root (`.ham/workspace_state/voice_settings/`). For **durable multi-replica** storage on Cloud Run, set **`HAM_VOICE_SETTINGS_STORE=firestore`** and optional **`HAM_VOICE_SETTINGS_FIRESTORE_COLLECTION`** / **`HAM_VOICE_SETTINGS_FIRESTORE_PROJECT`** / **`HAM_VOICE_SETTINGS_FIRESTORE_DATABASE`** (same multi-database story as chat sessions). Documents are keyed by a stable hash of the Clerk scope (`user:<id>` or `default`).
 
+### Workspace store persistence (`GET /api/me`, `GET /api/workspaces`)
+
+PR-1d-B adds Firestore deploy artifacts for hosted workspace storage:
+
+- `firestore.rules` (deny-all client direct access; Cloud Run Admin SDK path only)
+- `firestore.indexes.json` (workspace slug-conflict query indexes)
+
+Hosted workspace env shape (Cloud Run):
+
+- `HAM_CLERK_REQUIRE_AUTH=true`
+- `HAM_LOCAL_DEV_WORKSPACE_BYPASS` unset or `false`
+- `HAM_WORKSPACE_ROUTES_ENABLED=true`
+- `HAM_WORKSPACE_STORE_BACKEND=firestore`
+- `HAM_FIRESTORE_PROJECT_ID=<gcp-project-id>`
+- `HAM_FIRESTORE_DATABASE=<database-id>` (omit to use `(default)` when it exists)
+- `CLERK_JWT_ISSUER=<your-clerk-issuer>`
+- `CLERK_JWT_AUDIENCE=<aud>` (optional; set when your Clerk JWT template includes `aud`)
+
+Local dev remains file-backed by default (`HAM_WORKSPACE_STORE_BACKEND` unset -> `file`) unless you explicitly opt in to Firestore.
+
+Firestore database + IAM:
+
+1. Ensure a Firestore Native database exists in the target project:
+   `gcloud firestore databases create --database=ham-workspaces --location=us-central1 --project=YOUR_PROJECT_ID`
+2. Grant the Cloud Run runtime service account Firestore/Datastore data access:
+   - `roles/datastore.user` (or equivalent custom role with required datastore/firestore permissions)
+
+Index notes:
+
+- Current `FirestoreWorkspaceStore.list_workspaces_for_user` sorts by `updated_at` in application code after reads.
+- Therefore composite indexes for `(owner_user_id, status, updated_at)` and `(org_id, status, updated_at)` are not required yet.
+- If listing later moves to Firestore `orderBy("updated_at")`, deploy those indexes before shipping that query change.
+- Current required composites are for slug-conflict checks:
+  - `workspaces(org_id, slug, status)`
+  - `workspaces(org_id, owner_user_id, slug, status)`
+- Simple `user`/`org`/`membership` lookups and collection-group member lookups currently rely on Firestore automatic single-field indexes.
+
 ## What you do in GCP (not automatable from this repo)
 
 1. Confirm you are in the right project: **`gcloud config set project clarity-staging-488201`** (or another project for a one-off).
@@ -305,6 +342,45 @@ curl -sS -X POST "${SERVICE_URL}/api/chat" \
 - If **`HERMES_GATEWAY_MODE=mock`**: assistant content typically contains **`Mock assistant reply`**.
 - If **`HERMES_GATEWAY_MODE=http`** or **`openrouter`** with a working upstream: assistant content should **not** be the mock phrase; use **`scripts/verify_ham_api_deploy.sh`** (fails on accidental mock unless `HAM_VERIFY_ALLOW_MOCK=1`).
 
+Workspace smoke checks (Clerk-authenticated hosted path):
+
+```bash
+export CLERK_BEARER="Bearer <clerk-session-jwt>"
+curl -sS "${SERVICE_URL}/api/me" -H "Authorization: ${CLERK_BEARER}"
+curl -sS "${SERVICE_URL}/api/workspaces" -H "Authorization: ${CLERK_BEARER}"
+```
+
+Expected:
+
+- `GET /api/me` returns caller identity + workspace summaries
+- `GET /api/workspaces` returns workspace list for the same actor
+- `401 CLERK_SESSION_REQUIRED` indicates missing/invalid Clerk token or auth config mismatch
+
+For end-to-end hosted workspace verification with two Clerk users, run:
+
+```bash
+HAM_API_BASE="${SERVICE_URL}" \
+HAM_WEB_ORIGIN="https://YOUR-VERCEL-HOST.vercel.app" \
+TOKEN_A="<clerk-session-jwt-user-a>" \
+TOKEN_B="<clerk-session-jwt-user-b>" \
+bash scripts/verify_workspace_hosted_smoke.sh
+```
+
+The script verifies:
+
+- CORS preflight for workspace-authenticated calls (`/api/me`)
+- `GET /api/me` for user A with `auth_mode="clerk"`
+- `GET /api/workspaces` for user A
+- `POST /api/workspaces` create personal workspace for user A
+- `GET /api/workspaces` confirms created workspace persists
+- user B cannot access user A personal workspace (`403` or `404`)
+
+Safety behavior:
+
+- fails fast if `jq`, `TOKEN_A`, or `TOKEN_B` is missing
+- never prints full tokens (redacted in logs)
+- verification-only (does not mutate Clerk/Cloud Run/Vercel/Firestore configuration)
+
 ## In-app browser (Playwright) on Cloud Run
 
 The **`/api/browser/*`** Playwright runtime remains available for **future workspace/desktop** consumers and integration tests; the legacy dashboard War Room UI was removed (Batch 2A). For Playwright to work **in production** (not just locally):
@@ -319,10 +395,11 @@ The **`/api/browser/*`** Playwright runtime remains available for **future works
 ## Wire the Vercel frontend
 
 1. In Vercel project env: **`VITE_HAM_API_BASE`** = Cloud Run URL (no trailing slash).
-2. Redeploy the frontend (Vite bakes this at build time).
-3. Ensure **`HAM_CORS_ORIGINS`** on Cloud Run includes your exact Vercel origin(s).
-4. **Preview URLs:** each Vercel deployment gets a different hostname. Either add every preview origin to **`HAM_CORS_ORIGINS`**, or set **`HAM_CORS_ORIGIN_REGEX`** (e.g. `https://.*\.vercel\.app`) via the same env file and redeploy the service. Without a matching origin, the API may return **200** to `curl` but the **browser** will block the response (no `Access-Control-Allow-Origin`) → **Failed to fetch**.
-5. **Packaged HAM Desktop (Linux/Windows):** the UI loads from **`file://`**, so browsers send **`Origin: null`**. Include the literal token **`null`** in **`HAM_CORS_ORIGINS`** (comma-separated) or the desktop app cannot use chat against this API. See **`docs/examples/ham-api-cloud-run-env.yaml`**.
+2. In Vercel project env: **`VITE_CLERK_PUBLISHABLE_KEY`** = Clerk frontend publishable key used by the dashboard shell.
+3. Redeploy the frontend (Vite bakes `VITE_*` values at build time).
+4. Ensure **`HAM_CORS_ORIGINS`** on Cloud Run includes your exact Vercel origin(s).
+5. **Preview URLs:** each Vercel deployment gets a different hostname. Either add every preview origin to **`HAM_CORS_ORIGINS`**, or set **`HAM_CORS_ORIGIN_REGEX`** (e.g. `https://.*\.vercel\.app`) via the same env file and redeploy the service. Without a matching origin, the API may return **200** to `curl` but the **browser** will block the response (no `Access-Control-Allow-Origin`) → **Failed to fetch**.
+6. **Packaged HAM Desktop (Linux/Windows):** the UI loads from **`file://`**, so browsers send **`Origin: null`**. Include the literal token **`null`** in **`HAM_CORS_ORIGINS`** (comma-separated) or the desktop app cannot use chat against this API. See **`docs/examples/ham-api-cloud-run-env.yaml`**.
 
 ## Local container (optional)
 

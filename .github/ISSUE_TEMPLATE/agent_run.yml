@@ -1,7 +1,7 @@
 name: Agent run report
 description: Capture a notable agent run (Cursor, Droid, Hermes) — successful or failed — for later review.
 title: "agent: <short summary>"
-labels: ["agent", "needs-triage"]
+labels: ["type:agent-run", "status:needs-triage"]
 body:
   - type: markdown
     attributes:

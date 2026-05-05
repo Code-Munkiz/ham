@@ -174,6 +174,17 @@ def test_path_traversal_read_rejected(
     assert "escape" in detail.lower() or "workspace" in detail.lower()
 
 
+def test_workspace_files_implicit_sandbox_list_ok(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When no workspace env is set, Files still uses repo ``.ham_workspace_sandbox`` (unchanged)."""
+    monkeypatch.delenv("HAM_WORKSPACE_ROOT", raising=False)
+    monkeypatch.delenv("HAM_WORKSPACE_FILES_ROOT", raising=False)
+    r = client.get("/api/workspace/files?action=list")
+    assert r.status_code == 200
+    assert "entries" in r.json()
+
+
 def test_workspace_health(client: TestClient) -> None:
     r = client.get("/api/workspace/health")
     assert r.status_code == 200

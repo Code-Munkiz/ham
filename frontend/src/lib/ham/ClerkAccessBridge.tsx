@@ -27,7 +27,7 @@ export function ClerkAccessBridge({ children }: { children: React.ReactNode }) {
   const [restricted, setRestricted] = React.useState(false);
   const [checking, setChecking] = React.useState(false);
 
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     registerClerkSessionGetter(() => getToken());
     return () => registerClerkSessionGetter(null);
   }, [getToken]);

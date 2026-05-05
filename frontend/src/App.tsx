@@ -4,13 +4,15 @@
  */
 
 import { BrowserRouter, HashRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
-import { ClerkProvider } from "@clerk/clerk-react";
+import { ClerkProvider, useAuth, useClerk } from "@clerk/clerk-react";
+import * as React from "react";
 import { ThemeProvider } from "next-themes";
 import { AppLayout } from "./components/layout/AppLayout";
 import Landing from "./pages/Landing";
 
 import { AgentProvider } from "./lib/ham/AgentContext";
 import { WorkspaceProvider } from "./lib/ham/WorkspaceContext";
+import { HamWorkspaceProvider } from "./lib/ham/HamWorkspaceContext";
 import { ClerkAccessBridge } from "./lib/ham/ClerkAccessBridge";
 import { getHamDesktopConfig, isHamDesktopShell } from "./lib/ham/desktopConfig";
 import { WorkspaceApp } from "./features/hermes-workspace";
@@ -76,23 +78,76 @@ function AppRoutes() {
   );
 }
 
-export default function App() {
-  const tree = (
+function AppProviders({
+  children,
+  hostedAuth,
+  openSignIn,
+}: {
+  children: React.ReactNode;
+  hostedAuth: {
+    clerkConfigured: boolean;
+    isLoaded: boolean;
+    isSignedIn: boolean;
+  } | null;
+  openSignIn?: () => void;
+}) {
+  return (
     // @ts-ignore - ThemeProvider children type mismatch in some versions of next-themes with React 18/19
     <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
       <AgentProvider>
         <WorkspaceProvider>
-          <AppRoutes />
+          <HamWorkspaceProvider hostedAuth={hostedAuth} openSignIn={openSignIn}>
+            {children}
+          </HamWorkspaceProvider>
         </WorkspaceProvider>
       </AgentProvider>
     </ThemeProvider>
   );
+}
+
+function ClerkHostedApp() {
+  const { isLoaded, isSignedIn } = useAuth();
+  const clerk = useClerk();
+  const openSignIn = React.useCallback(() => {
+    void clerk.openSignIn();
+  }, [clerk]);
+  const hostedAuth = React.useMemo(
+    () => ({
+      clerkConfigured: true,
+      isLoaded,
+      isSignedIn: Boolean(isSignedIn),
+    }),
+    [isLoaded, isSignedIn],
+  );
+  return (
+    <ClerkAccessBridge>
+      <AppProviders
+        hostedAuth={hostedAuth}
+        openSignIn={openSignIn}
+      >
+        <AppRoutes />
+      </AppProviders>
+    </ClerkAccessBridge>
+  );
+}
+
+export default function App() {
   if (clerkPublishableKey) {
     return (
       <ClerkProvider publishableKey={clerkPublishableKey}>
-        <ClerkAccessBridge>{tree}</ClerkAccessBridge>
+        <ClerkHostedApp />
       </ClerkProvider>
     );
   }
-  return tree;
+  return (
+    <AppProviders
+      hostedAuth={{
+        clerkConfigured: false,
+        isLoaded: true,
+        isSignedIn: false,
+      }}
+    >
+      <AppRoutes />
+    </AppProviders>
+  );
 }

@@ -1,7 +1,7 @@
 name: Feature request
 description: Propose a new capability or improvement.
 title: "feat: <short summary>"
-labels: ["feature", "needs-triage"]
+labels: ["type:feature", "status:needs-triage", "priority:P2"]
 body:
   - type: textarea
     id: problem

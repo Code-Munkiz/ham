@@ -1,5 +1,12 @@
 name: CI
 
+# Phase B baseline (PR2):
+# - Existing pytest + frontend tsc remain BLOCKING (already green on main).
+# - New ruff/mypy/coverage/docs steps land as WARNING-ONLY first; we ratchet
+#   them to blocking in follow-up PRs after one cleanup pass.
+# - large-file-guard is BLOCKING but constrained to git-tracked files >1MB,
+#   so it cannot fail on the current tree.
+
 on:
   push:
     branches: [main, master]
@@ -11,14 +18,91 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
-      - name: Install dependencies
-        run: pip install -r requirements.txt pytest
+
+      - name: Install runtime + dev dependencies
+        run: |
+          pip install -r requirements.txt pytest
+          # Dev tooling lives in requirements-dev.txt (Phase A). Install with
+          # `|| true` to keep the job green if the file is somehow absent.
+          pip install -r requirements-dev.txt || true
+
+      # ---------- BLOCKING: existing green path (full test suite) ----------
       - name: Pytest
-        run: python -m pytest tests/ -q
+        run: python -m pytest tests/ -q --durations=20
+
+      # ---------- BLOCKING: large-file guard (tracked files only) ----------
+      - name: Large-file guard (>1MB tracked files)
+        run: |
+          set -euo pipefail
+          OFFENDERS="$(git ls-files | xargs -I{} sh -c 'sz=$(stat -c%s "{}" 2>/dev/null || echo 0); [ "$sz" -gt 1048576 ] && echo "$sz {}"' || true)"
+          if [ -n "${OFFENDERS}" ]; then
+            echo "::error::Tracked files exceed 1MB:"
+            echo "${OFFENDERS}"
+            exit 1
+          fi
+          echo "OK: no tracked files >1MB."
+
+      # ---------- WARNING-ONLY: ruff lint ---------------------------------
+      - name: Ruff lint (warning-only)
+        continue-on-error: true
+        run: ruff check . --output-format=github
+
+      # ---------- WARNING-ONLY: ruff format ------------------------------
+      - name: Ruff format check (warning-only)
+        continue-on-error: true
+        run: ruff format --check .
+
+      # ---------- WARNING-ONLY: mypy baseline ----------------------------
+      - name: Mypy (warning-only)
+        continue-on-error: true
+        run: mypy src --ignore-missing-imports || true
+
+      # ---------- WARNING-ONLY: vulture dead-code (Phase C.2) ------------
+      # Static dead-code finder; reads [tool.vulture] from pyproject.toml
+      # (paths=src, exclude=tests/.venv, min_confidence=80). Real findings
+      # become a follow-up cleanup PR; warning-only here so it never blocks.
+      - name: Vulture (warning-only)
+        continue-on-error: true
+        run: vulture src
+
+      # ---------- WARNING-ONLY: deptry unused-deps (Phase C.2) ------------
+      # Reads [tool.deptry] from pyproject.toml. Known false positives
+      # (Windows-only deps, FastAPI implicit Form() deps, dotted-name
+      # imports) are listed in per_rule_ignores. Visible DEP003 transitive
+      # findings are intentional cleanup signal.
+      - name: Deptry (warning-only)
+        continue-on-error: true
+        run: deptry .
+
+      # ---------- WARNING-ONLY: coverage report ---------------------------
+      # We do NOT enforce a --cov-fail-under threshold yet; this step exists
+      # to surface the current floor so a future PR can ratchet to blocking.
+      - name: Pytest with coverage (warning-only)
+        continue-on-error: true
+        run: |
+          python -m pytest tests/ -q \
+            --cov=src \
+            --cov-report=term-missing:skip-covered \
+            --cov-report=xml:coverage.xml \
+            --no-header
+
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-xml
+          path: coverage.xml
+          if-no-files-found: ignore
+          retention-days: 14
+
+      # ---------- WARNING-ONLY: docs freshness ---------------------------
+      - name: Docs freshness + reference check (warning-only)
+        continue-on-error: true
+        run: python scripts/check_docs_freshness.py
 
   frontend:
     runs-on: ubuntu-latest
@@ -35,3 +119,32 @@ jobs:
       - name: Typecheck
         working-directory: frontend
         run: npm run lint
+
+      # ---------- WARNING-ONLY: Vitest baseline (Phase C.1) ---------------
+      # Pure-function smoke tests live under frontend/src/**/__tests__/*.
+      # Warning-only for one cycle so any unforeseen flakiness can't block
+      # merges; promote to blocking in a follow-up PR after one green run
+      # on main.
+      - name: Vitest (warning-only)
+        continue-on-error: true
+        working-directory: frontend
+        run: npm test -- --run --reporter=default
+
+      # ---------- WARNING-ONLY: jscpd duplicate-code (Phase C.3) ----------
+      # Token-based duplicate detector; reads frontend/.jscpd.json
+      # (pattern=src/**/*.{ts,tsx}, min-lines=8, min-tokens=70). Surfaces
+      # known cleanup targets (e.g. conductorAdapter fetch boilerplate);
+      # warning-only so flagged duplicates never block merges.
+      - name: jscpd duplicate-code (warning-only)
+        continue-on-error: true
+        working-directory: frontend
+        run: npm run dup-check
+
+      # ---------- WARNING-ONLY: knip frontend dead-code (Phase C.3) -------
+      # TS-aware unused files / exports / deps finder; reads
+      # frontend/knip.json. Real cleanup happens in separate follow-up PR;
+      # warning-only here so the noisy initial baseline never blocks.
+      - name: knip frontend dead-code (warning-only)
+        continue-on-error: true
+        working-directory: frontend
+        run: npm run knip

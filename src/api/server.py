@@ -31,6 +31,7 @@ from src.api.goham_planner import router as goham_planner_router
 from src.api.models_catalog import router as models_catalog_router
 from src.api.project_settings import router as project_settings_router
 from src.api.social import router as social_router
+from src.api.social_policy import router as social_policy_router
 from src.api.workspace_health import router as workspace_health_router
 from src.api.workspace_files import router as workspace_files_router
 from src.api.workspace_jobs import router as workspace_jobs_router
@@ -41,9 +42,13 @@ from src.api.workspace_memory import router as workspace_memory_router
 from src.api.workspace_operations import router as workspace_operations_router
 from src.api.workspace_voice_settings import router as workspace_voice_settings_router
 from src.api.tts_endpoint import router as tts_router
+from src.api.me import router as me_router
+from src.api.workspaces import router as workspaces_router
 from src.api.pna_middleware import private_network_access_middleware
 from src.api.workspace_profiles import router as workspace_profiles_router
+from src.api.workspace_files import resolve_workspace_context_snapshot_root
 from src.api.workspace_skills import router as workspace_skills_router
+from src.api.workspace_tools import router as workspace_tools_router
 from src.api.control_plane_runs import router as control_plane_runs_router
 from src.ham.agent_profiles import agents_config_from_merged
 from src.ham.clerk_auth import HamActor, clerk_authorization_is_clerk_session
@@ -122,6 +127,7 @@ app.include_router(hermes_skills_router)
 app.include_router(goham_planner_router)
 app.include_router(project_settings_router)
 app.include_router(social_router)
+app.include_router(social_policy_router)
 app.include_router(control_plane_runs_router)
 app.include_router(models_catalog_router)
 app.include_router(workspace_health_router)
@@ -132,10 +138,23 @@ app.include_router(workspace_terminal_router)
 app.include_router(workspace_conductor_router)
 app.include_router(workspace_memory_router)
 app.include_router(workspace_skills_router)
+app.include_router(workspace_tools_router)
 app.include_router(workspace_profiles_router)
 app.include_router(workspace_operations_router)
 app.include_router(workspace_voice_settings_router)
 app.include_router(tts_router)
+
+# Phase 1b: multi-user workspace primitive routers, mounted behind a
+# soft-rollback flag (default ON). Set HAM_WORKSPACE_ROUTES_ENABLED=false to
+# disable without redeploying the rest of the API. v1 endpoints are NOT
+# affected either way.
+_workspace_routes_enabled = (
+    (os.environ.get("HAM_WORKSPACE_ROUTES_ENABLED") or "true").strip().lower()
+    in ("1", "true", "yes", "on")
+)
+if _workspace_routes_enabled:
+    app.include_router(me_router)
+    app.include_router(workspaces_router)
 
 _store = RunStore()
 
@@ -268,6 +287,34 @@ async def get_context_engine(
     return context_engine_dashboard_payload(Path.cwd())
 
 
+@app.get("/api/workspace/context-snapshot")
+async def get_workspace_context_snapshot(
+    _ham_gate: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
+) -> dict[str, Any]:
+    """Context engine snapshot for ``HAM_WORKSPACE_ROOT`` / ``HAM_WORKSPACE_FILES_ROOT`` only (no cwd/sandbox).
+
+    On Cloud Run without those env vars: 503 ``WORKSPACE_ROOT_NOT_CONFIGURED`` — no scan of ``/app``.
+    """
+    try:
+        root = resolve_workspace_context_snapshot_root()
+    except ValueError as exc:
+        args = exc.args
+        code = str(args[0]) if args else "WORKSPACE_ROOT_NOT_CONFIGURED"
+        message = str(args[1]) if len(args) > 1 else "Workspace root is not available."
+        if code == "WORKSPACE_ROOT_NOT_CONFIGURED":
+            raise HTTPException(
+                status_code=503,
+                detail={"error": code, "message": message},
+            ) from None
+        raise HTTPException(
+            status_code=400,
+            detail={"error": code, "message": message},
+        ) from None
+    payload = context_engine_dashboard_payload(root)
+    payload["context_source"] = "local"
+    return payload
+
+
 @app.get("/api/projects/{project_id}/context-engine")
 async def get_project_context_engine(
     project_id: str,
@@ -276,7 +323,40 @@ async def get_project_context_engine(
     record = get_project_store().get_project(project_id)
     if record is None:
         raise HTTPException(status_code=404, detail=f"Project {project_id!r} not found")
-    return context_engine_dashboard_payload(Path(record.root))
+    raw_root = Path(record.root).expanduser()
+    try:
+        root_path = raw_root.resolve()
+    except OSError:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": {
+                    "code": "PROJECT_ROOT_UNRESOLVABLE",
+                    "message": "Registered project root could not be resolved on this API host.",
+                }
+            },
+        )
+    if not root_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": {
+                    "code": "PROJECT_ROOT_MISSING",
+                    "message": "Registered project root does not exist on this API host.",
+                }
+            },
+        )
+    if not root_path.is_dir():
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": {
+                    "code": "PROJECT_ROOT_NOT_A_DIRECTORY",
+                    "message": "Registered project root is not a directory on this API host.",
+                }
+            },
+        )
+    return context_engine_dashboard_payload(root_path)
 
 
 @app.get("/api/projects/{project_id}/agents")

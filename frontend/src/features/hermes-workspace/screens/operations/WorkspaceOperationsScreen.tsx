@@ -29,6 +29,7 @@ import {
   type WorkspaceAgent,
 } from "../../adapters/operationsAdapter";
 import { WorkspaceManagedMissionsLivePanel } from "../../components/WorkspaceManagedMissionsLivePanel";
+import { ClaudeAgentMissionCard } from "../../components/ClaudeAgentMissionCard";
 import { WorkspaceSurfaceStateCard } from "../../components/workspaceSurfaceChrome";
 
 function fmt(ts: number) {
@@ -355,6 +356,8 @@ export function WorkspaceOperationsScreen() {
           refreshSignal={managedLiveRefresh}
           onMissionTranscriptDigest={setLatestManagedAssistantPreview}
         />
+
+        <ClaudeAgentMissionCard />
 
         {loading && agents.length === 0 ? (
           <section className="rounded-3xl border border-[var(--theme-border)] bg-[var(--theme-card)] px-6 py-12 text-center text-sm text-[var(--theme-muted)] shadow-[0_24px_80px_var(--theme-shadow)]">

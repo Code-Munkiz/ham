@@ -1,25 +1,32 @@
 """Firestore-backed chat session store — durable across Cloud Run revisions (shared GCP project)."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from collections.abc import Sequence
+from datetime import UTC, datetime
 from threading import RLock
-from typing import Any, Sequence
+from typing import Any
 from uuid import uuid4
 
 from google.cloud import firestore
 from google.cloud.firestore import transactional
 
-from src.persistence.chat_session_store import ChatSessionRecord, ChatSessionSummary, ChatTurn, _normalize_turns
+from src.persistence.chat_session_store import (
+    ChatSessionRecord,
+    ChatSessionSummary,
+    ChatTurn,
+    _normalize_turns,
+)
 
 
 def _utc_now_iso() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
 
 class FirestoreChatSessionStore:
     """
     One document per session: ``{collection}/{session_id}`` with fields
-    ``upstream_ref``, ``created_at``, ``turns`` (array of {role, content}), ``turn_count``.
+    ``user_id``, ``workspace_id``, ``upstream_ref``, ``created_at``,
+    ``turns`` (array of {role, content}), ``turn_count``.
 
     Uses transactions on append. Firestore documents are capped (~1 MiB); very long threads may
     need a subcollection-backed store later.
@@ -48,12 +55,19 @@ class FirestoreChatSessionStore:
     def _coll(self) -> firestore.CollectionReference:
         return self._db.collection(self._coll_name)
 
-    def create_session(self) -> str:
+    def create_session(
+        self,
+        *,
+        user_id: str | None = None,
+        workspace_id: str | None = None,
+    ) -> str:
         sid = str(uuid4())
         now = _utc_now_iso()
         with self._lock:
             self._coll().document(sid).set(
                 {
+                    "user_id": user_id,
+                    "workspace_id": workspace_id,
                     "upstream_ref": None,
                     "created_at": now,
                     "turns": [],
@@ -82,6 +96,8 @@ class FirestoreChatSessionStore:
                 turns=turns,
                 upstream_ref=data.get("upstream_ref"),
                 created_at=str(data.get("created_at")) if data.get("created_at") is not None else None,
+                user_id=str(data.get("user_id")) if data.get("user_id") is not None else None,
+                workspace_id=str(data.get("workspace_id")) if data.get("workspace_id") is not None else None,
             )
 
     def append_turns(self, session_id: str, turns: Sequence[ChatTurn | dict[str, Any]]) -> None:
@@ -160,7 +176,14 @@ class FirestoreChatSessionStore:
             raise KeyError(session_id)
         return [{"role": t.role, "content": t.content} for t in rec.turns]
 
-    def list_sessions(self, *, limit: int = 50, offset: int = 0) -> list[ChatSessionSummary]:
+    def list_sessions(
+        self,
+        *,
+        user_id: str | None = None,
+        workspace_id: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[ChatSessionSummary]:
         """
         Newest first by ``created_at``. Over-fetches when ``offset`` is large (MVP); prefer cursors later.
         """
@@ -170,6 +193,14 @@ class FirestoreChatSessionStore:
             candidates: list[ChatSessionSummary] = []
             for doc in q.stream():
                 data = doc.to_dict() or {}
+                doc_user_id = str(data.get("user_id")) if data.get("user_id") is not None else None
+                doc_workspace_id = (
+                    str(data.get("workspace_id")) if data.get("workspace_id") is not None else None
+                )
+                if user_id is not None and doc_user_id != user_id:
+                    continue
+                if workspace_id is not None and doc_workspace_id != workspace_id:
+                    continue
                 tc = int(data.get("turn_count", 0))
                 if tc <= 0:
                     continue
@@ -186,6 +217,8 @@ class FirestoreChatSessionStore:
                         preview=preview,
                         turn_count=tc,
                         created_at=str(data["created_at"]) if data.get("created_at") is not None else None,
+                        user_id=doc_user_id,
+                        workspace_id=doc_workspace_id,
                     ),
                 )
         return candidates[offset : offset + limit]

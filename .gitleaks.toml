@@ -1,0 +1,47 @@
+# gitleaks configuration for the HAM repo.
+#
+# This config extends the gitleaks default ruleset and adds an allowlist
+# scoped to test fixture files. The push-to-main scan in
+# `.github/workflows/secret-scan.yml` does a full working-tree scan with
+# `--no-git`; without this allowlist, fake test fixtures (e.g. literals
+# like `bearer-token-1234567890`, `dummy-x-api-key-...`) trigger
+# `generic-api-key` matches and block the workflow.
+#
+# Important properties:
+#   - We extend the default config rather than redefining rules. New rules
+#     and tightening of defaults from upstream gitleaks releases continue
+#     to apply.
+#   - Allowlists are SCOPED: they only apply to known test-fixture paths
+#     (`tests/test_ham_x_*.py`, `tests/test_social_*.py`). Source code
+#     under `src/`, configuration files, scripts, and any other tests
+#     remain fully scanned.
+#   - We do NOT broaden the allowlist to `tests/**` — only the specific
+#     test-suite glob patterns that we have audited for fake fixtures.
+#     If new test files start using fake keys outside these globs, prefer
+#     replacing the literal with a clearly non-key value (e.g.
+#     `"REDACTED-FOR-TESTS"`) over expanding this allowlist.
+#   - All scans still run with `--redact`, so real secret values would be
+#     scrubbed from logs even if they did slip through.
+#
+# Re-run locally after editing:
+#   gitleaks detect --source . --config .gitleaks.toml --no-git --redact
+
+[extend]
+useDefault = true
+
+# Global allowlist for gitleaks v8.18.x (single [allowlist] table; the
+# plural [[allowlists]] form is for v8.20+).
+#
+# `paths` are regexes matched against the source-relative file path.
+# Keep this list narrow and explicit. If new test files start using
+# fake keys outside these globs, prefer replacing the literal with a
+# clearly non-key value (e.g. "REDACTED-FOR-TESTS") over expanding
+# this allowlist.
+[allowlist]
+description = "HAM test fixture allowlist (fake API keys in unit-test files)"
+paths = [
+  # HAM-X test fixtures: fake bearer/api-key constants
+  '''(^|/)tests/test_ham_x_[A-Za-z0-9_]+\.py$''',
+  # Social API test fixtures: fake X/Telegram/Discord credentials
+  '''(^|/)tests/test_social_[A-Za-z0-9_]+\.py$''',
+]

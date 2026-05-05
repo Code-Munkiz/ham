@@ -8,7 +8,7 @@ import * as React from "react";
 import { ArrowUp, Link2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { ChatCapabilitiesPayload, ModelCatalogItem, ModelCatalogPayload } from "@/lib/ham/types";
+import type { ChatContextMetersPayload, ChatCapabilitiesPayload, ModelCatalogItem, ModelCatalogPayload } from "@/lib/ham/types";
 import { isDashboardChatGatewayReady } from "@/lib/ham/types";
 import { WorkspaceVoiceMessageInput } from "./WorkspaceVoiceMessageInput";
 import { toast } from "sonner";
@@ -23,6 +23,7 @@ import {
   type WorkspaceComposerAttachment,
   MAX_WORKSPACE_ATTACHMENT_COUNT,
 } from "./composerAttachmentHelpers";
+import { ContextMeterCluster } from "./ContextMeterCluster";
 import { WorkspaceOpenRouterModelPicker } from "./WorkspaceOpenRouterModelPicker";
 
 const VOICE_DEBUG_FLAG = "ham.voiceDebug";
@@ -82,6 +83,9 @@ type WorkspaceChatComposerProps = {
   exportPdf: ComposerExportPdfState;
   generateImage: ComposerGenerateImageState;
   generateVideo: ComposerGenerateVideoState;
+  /** When true, show context meter rings before voice/send. */
+  contextMetersEnabled?: boolean;
+  contextMetersPayload?: ChatContextMetersPayload | null;
 };
 
 const COMPOSER_MENU_FOOTER_HINT =
@@ -199,6 +203,8 @@ export function WorkspaceChatComposer({
   exportPdf,
   generateImage,
   generateVideo,
+  contextMetersEnabled = false,
+  contextMetersPayload = null,
 }: WorkspaceChatComposerProps) {
   const [voiceState, setVoiceState] = React.useState<VoiceUiState>("idle");
   const [voiceBanner, setVoiceBanner] = React.useState<string | null>(null);
@@ -808,6 +814,9 @@ export function WorkspaceChatComposer({
             </div>
 
             <div className="relative z-[5] flex h-10 shrink-0 items-center gap-0.5 md:gap-1">
+              {contextMetersEnabled ? (
+                <ContextMeterCluster payload={contextMetersPayload} enabled />
+              ) : null}
               <div
                 className={cn(
                   "flex h-10 shrink-0 items-center",
