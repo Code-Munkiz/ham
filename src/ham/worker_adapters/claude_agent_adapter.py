@@ -43,13 +43,24 @@ _DIAG_STDERR_JOIN_CAP = 900
 
 _LOG = logging.getLogger(__name__)
 
-CLAUDE_AGENT_MISSION_PROMPT = """Review this HAM mission brief and return a JSON object with:
-- mission_status: ok
-- worker: claude_agent_sdk
-- job_type: non_mutating_review
-- summary: one sentence
-- acceptance_criteria: exactly three short bullets
-Do not request tools. Do not edit files."""
+CLAUDE_AGENT_MISSION_PROMPT = """You are running a read-only HAM mission check (plan / permission-mode plan, max_turns=1, no tools, no file edits, no shell, no browser).
+
+Output ONLY a single JSON object. No markdown, no code fences, no backticks, no commentary before or after the JSON.
+
+Required shape (types and lengths matter):
+{
+  "mission_status": "ok",
+  "worker": "claude_agent_sdk",
+  "job_type": "non_mutating_review",
+  "summary": "one plain sentence summarizing the review",
+  "acceptance_criteria": ["short string 1", "short string 2", "short string 3"]
+}
+
+Rules:
+- acceptance_criteria MUST be a JSON array of exactly three non-empty strings (not bullet lines, not markdown).
+- worker MUST be the literal string claude_agent_sdk.
+- mission_status MUST be the literal string ok.
+- Do not call tools or claim any file or repo changes."""
 
 # Module-level cache for the SDK import probe. The /api/workspace/tools
 # endpoint rebuilds the registry on every request; importing the SDK each
@@ -586,12 +597,68 @@ async def _run_claude_agent_sdk_plan_query(
     return _sanitize_capped_response_text(combined, response_cap), None, readiness
 
 
-def _strip_json_fence(raw: str) -> str:
-    t = raw.strip()
-    if t.startswith("```"):
-        t = re.sub(r"^```[a-zA-Z0-9]*\s*", "", t)
-        t = re.sub(r"\s*```\s*$", "", t)
-    return t.strip()
+_MARKDOWN_FENCE_RE = re.compile(r"```(?:json)?\s*([\s\S]*?)```", re.I)
+
+
+def _extract_markdown_fence_inners(raw: str) -> list[str]:
+    """Return non-empty inner bodies of ``` / ```json fenced blocks, in order."""
+    out: list[str] = []
+    for m in _MARKDOWN_FENCE_RE.finditer(raw):
+        inner = (m.group(1) or "").strip()
+        if inner:
+            out.append(inner)
+    return out
+
+
+def _mission_acceptance_blocker(reason: str, *, cap: int = 280) -> str:
+    """Short, redacted operator message — never includes model output blobs."""
+    prefix = "Mission JSON did not match acceptance"
+    msg = f"{prefix}: {reason}" if reason else prefix
+    return _redact_diagnostic_text(msg, cap=cap)
+
+
+def _tail_has_second_json_dict(s: str, first_end: int) -> bool:
+    """True when another top-level JSON object starts after a successful raw_decode."""
+    tail = s[first_end:].strip()
+    if not tail:
+        return False
+    pos = tail.find("{")
+    if pos < 0:
+        return False
+    try:
+        decoder = json.JSONDecoder()
+        obj2, _end2 = decoder.raw_decode(tail, pos)
+    except json.JSONDecodeError:
+        return False
+    return isinstance(obj2, dict)
+
+
+def _try_parse_single_json_dict_blob(blob: str) -> dict[str, Any] | None:
+    """Parse exactly one JSON object from a blob (whole-string JSON or one embedded object)."""
+    s = blob.strip()
+    if not s:
+        return None
+    try:
+        data = json.loads(s)
+        if isinstance(data, dict):
+            return data
+        return None
+    except json.JSONDecodeError:
+        pass
+
+    pos = s.find("{")
+    if pos < 0:
+        return None
+    try:
+        decoder = json.JSONDecoder()
+        data, end = decoder.raw_decode(s, pos)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(data, dict):
+        return None
+    if _tail_has_second_json_dict(s, end):
+        return None
+    return data
 
 
 def _primitive_is_safe(val: Any) -> bool:
@@ -625,15 +692,10 @@ def _safe_mission_parsed_subset(obj: dict[str, Any]) -> dict[str, Any] | None:
     return out or None
 
 
-def _parse_mission_json(text: str) -> tuple[dict[str, Any] | None, bool]:
-    """Returns ``(parsed_subset_or_none, mission_ok)``."""
-    stripped = _strip_json_fence(text)
-    try:
-        data = json.loads(stripped)
-    except json.JSONDecodeError:
-        return None, False
-    if not isinstance(data, dict):
-        return None, False
+def _validate_mission_acceptance_schema(
+    data: dict[str, Any],
+) -> tuple[dict[str, Any] | None, bool, str | None]:
+    """Apply mission acceptance rules; return ``(safe_subset, mission_ok, blocker_reason)``."""
     summary = data.get("summary")
     ac = data.get("acceptance_criteria")
     ac_ok = (
@@ -641,16 +703,66 @@ def _parse_mission_json(text: str) -> tuple[dict[str, Any] | None, bool]:
         and len(ac) == 3
         and all(isinstance(x, str) and x.strip() for x in ac)
     )
-    mission_ok = (
-        data.get("mission_status") == "ok"
-        and data.get("worker") == "claude_agent_sdk"
-        and data.get("job_type") == "non_mutating_review"
-        and isinstance(summary, str)
-        and bool(summary.strip())
-        and ac_ok
-    )
+
+    reason: str | None = None
+    if data.get("mission_status") != "ok":
+        reason = "mission_status must be ok"
+    elif data.get("worker") != "claude_agent_sdk":
+        reason = "worker must be claude_agent_sdk"
+    elif data.get("job_type") != "non_mutating_review":
+        reason = "job_type must be non_mutating_review"
+    elif not isinstance(summary, str) or not summary.strip():
+        reason = "summary must be a non-empty string"
+    elif not ac_ok:
+        reason = "acceptance_criteria must be exactly three non-empty strings"
+
     safe = _safe_mission_parsed_subset(data)
-    return safe, bool(mission_ok and safe)
+    needed_keys = (
+        "mission_status",
+        "worker",
+        "job_type",
+        "summary",
+        "acceptance_criteria",
+    )
+    if safe is None or not all(k in safe for k in needed_keys):
+        reason = reason or "parsed mission payload contained no safe fields"
+    mission_ok = reason is None and bool(safe)
+    if mission_ok:
+        return safe, True, None
+    return None, False, reason or "unknown"
+
+
+def parse_claude_mission_acceptance_text(
+    text: str,
+) -> tuple[dict[str, Any] | None, bool, str | None]:
+    """Parse bounded Claude mission output: raw JSON, fenced JSON, or one embedded object.
+
+    Uses ``json.loads`` / ``JSONDecoder.raw_decode`` only (no ``eval``).
+    Returns ``(parsed_subset_or_none, mission_ok, internal_blocker_reason)`` where
+    ``internal_blocker_reason`` is a short token/message suitable for wrapping with
+    ``_mission_acceptance_blocker`` (never includes raw model text).
+    """
+    stripped = (text or "").strip()
+    if not stripped:
+        return None, False, "empty response"
+
+    fence_blobs = _extract_markdown_fence_inners(stripped)
+    dicts: list[dict[str, Any]] = []
+    if fence_blobs:
+        for inner in fence_blobs:
+            d = _try_parse_single_json_dict_blob(inner)
+            if d is not None:
+                dicts.append(d)
+        if len(dicts) > 1:
+            return None, False, "ambiguous multiple JSON objects in fenced blocks"
+        if len(dicts) == 1:
+            return _validate_mission_acceptance_schema(dicts[0])
+
+    d = _try_parse_single_json_dict_blob(stripped)
+    if d is None:
+        return None, False, "could not parse a single JSON object"
+
+    return _validate_mission_acceptance_schema(d)
 
 
 @dataclass(frozen=True)
@@ -748,7 +860,10 @@ async def run_claude_agent_sdk_mission(actor: HamActor | None = None) -> ClaudeA
             blocker=blocker or "Claude Agent SDK query produced no text.",
         )
 
-    parsed, mission_ok = _parse_mission_json(combined)
+    parsed, mission_ok, raw_reason = parse_claude_mission_acceptance_text(combined)
+    blocker: str | None = None
+    if not mission_ok:
+        blocker = _mission_acceptance_blocker(raw_reason or "unknown")
     return ClaudeAgentMissionResult(
         ok=True,
         mission_ok=mission_ok,
@@ -758,5 +873,5 @@ async def run_claude_agent_sdk_mission(actor: HamActor | None = None) -> ClaudeA
         parsed_result=parsed,
         duration_ms=duration_ms,
         safety_mode=safety_mode,
-        blocker=None if mission_ok else "Mission JSON did not match acceptance shape.",
+        blocker=blocker,
     )
