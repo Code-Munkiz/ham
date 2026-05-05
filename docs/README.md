@@ -24,6 +24,8 @@ Other markdown under `docs/` (for example [`HAM_HARDENING_REMEDIATION.md`](HAM_H
 
 Canonical architecture and agent context live at the repo root: [`VISION.md`](../VISION.md), [`AGENTS.md`](../AGENTS.md), [`SWARM.md`](../SWARM.md), [`GAPS.md`](../GAPS.md).
 
+**Operating model (three lanes):** [`HAM_THREE_LANE_ARCHITECTURE.md`](HAM_THREE_LANE_ARCHITECTURE.md) — how the web app, desktop app, and cloud/hosted-agent lanes divide responsibilities.
+
 **Not source of truth:** generated exports and tool-local settings (for example [`CURSOR_EXACT_SETUP_EXPORT.md`](../CURSOR_EXACT_SETUP_EXPORT.md), or the gitignored .cursor/settings.json file) are snapshots or editor config—defer to git-tracked canonical docs. To refresh the Cursor setup export after changing tracked rules or skills, run `python scripts/build_cursor_export.py` from the repo root (do not hand-edit the export file).
 
 **Builder Platform (aspirational):** [`BUILDER_PLATFORM_NORTH_STAR.md`](BUILDER_PLATFORM_NORTH_STAR.md) — phased roadmap (orthogonal to workspace phases in [`HAM_ROADMAP.md`](HAM_ROADMAP.md)); shipped pillars remain [`VISION.md`](../VISION.md).
@@ -79,6 +81,7 @@ SDK bridge attaches to existing `bc-*` agents; **`HAM_CURSOR_SDK_BRIDGE_ENABLED`
 
 | Doc | Purpose |
 |-----|---------|
+| [HAM_THREE_LANE_ARCHITECTURE.md](HAM_THREE_LANE_ARCHITECTURE.md) | Web vs desktop vs cloud lanes — product truth and boundaries |
 | [BROWSER_RUNTIME_PLAYWRIGHT.md](BROWSER_RUNTIME_PLAYWRIGHT.md) | In-process Playwright setup and caveats |
 | [desktop/local_control_v1.md](desktop/local_control_v1.md) | Local control v1 (Windows-first path) |
 | [desktop/local_web_bridge_mvp.md](desktop/local_web_bridge_mvp.md) | Web ↔ local bridge MVP |
