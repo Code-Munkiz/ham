@@ -6,6 +6,8 @@
 
 **Canonical doc freshness + links:** [`scripts/check_docs_freshness.py`](../scripts/check_docs_freshness.py) walks the tracked allowlist (`CANONICAL_DOCS` in that script—root `README.md`, `AGENTS.md`, `VISION.md`, `PRODUCT_DIRECTION.md`, `GAPS.md`, and this index), checks each was touched in git within **180 days**, and flags unresolved relative markdown targets. Run `python scripts/check_docs_freshness.py` locally before large doc-only changes; CI runs the same script as **warning-only** until the team promotes it.
 
+Other markdown under `docs/` (for example [`HAM_HARDENING_REMEDIATION.md`](HAM_HARDENING_REMEDIATION.md), [`ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md`](ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md)) remains **canonical for its topic** but is **outside** that allowlist on purpose—avoid widening the list casually (it creates churn). When you edit those files or add cross-links, still keep relative targets valid; the freshness script does not scan them today.
+
 **`docs/archive/` (tracked, when used)** — Superseded or historical write-ups we keep for auditability (moved here instead of deleted). **Do not** move a doc into `archive/` if [`HAM_ROADMAP.md`](HAM_ROADMAP.md), root `README.md`, deploy docs, or an active runbook still link to it without updating those links first.
 
 **`docs/_scratch/` (local only, never commit)** — AI handoff notes, one-off verification dumps, draft bullets, and scratch planning. This path is **gitignored**; copy anything worth keeping into real doc paths and delete the scratch copy.
