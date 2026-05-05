@@ -52,7 +52,7 @@ python -m pytest tests/ -q
 
 Frontend typecheck: `npm run lint` in `frontend/` (`tsc --noEmit`). See [`AGENTS.md`](AGENTS.md) for per-area test guidance.
 
-Before landing edits to canonical markdown, run `python scripts/check_docs_freshness.py` (same check as the CI **warning-only** doc freshness step).
+Before landing edits to canonical markdown, run `python scripts/check_docs_freshness.py` (same check as the CI **warning-only** doc freshness step). The exact tracked paths are the `CANONICAL_DOCS` list in [`scripts/check_docs_freshness.py`](scripts/check_docs_freshness.py).
 
 ## Project layout
 
