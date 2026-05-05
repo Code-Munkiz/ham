@@ -89,19 +89,24 @@ export function WorkspaceOnboardingScreen({
 
   return (
     <div className={wrapperClasses} data-testid="workspace-onboarding">
-      <div className="w-full max-w-md space-y-4 rounded-2xl border border-white/10 bg-black/40 p-6 text-sm text-foreground">
+      <div className="w-full max-w-md space-y-4 rounded-2xl border border-white/15 bg-[#0b1620] p-6 text-sm text-white/90 shadow-2xl shadow-black/55">
         <div>
-          <h2 className="text-base font-semibold tracking-tight">
+          <h2
+            id={variant === "dialog" ? "ham-workspace-create-title" : undefined}
+            className="text-base font-semibold tracking-tight text-white"
+          >
             {variant === "fullscreen" ? "Create your first workspace" : "New workspace"}
           </h2>
-          <p className="mt-1 text-foreground/70">
+          <p className="mt-1 text-white/65">
             A workspace is a tenant boundary for chats, agents, jobs, and
             artifacts. You can create more later.
           </p>
         </div>
         <form className="space-y-3" onSubmit={handleSubmit}>
           <div className="space-y-1.5">
-            <Label htmlFor="ham-workspace-name">Name</Label>
+            <Label htmlFor="ham-workspace-name" className="text-white/85">
+              Name
+            </Label>
             <Input
               id="ham-workspace-name"
               autoFocus
@@ -111,31 +116,30 @@ export function WorkspaceOnboardingScreen({
               maxLength={80}
               disabled={submitting}
               required
+              className="border-white/20 bg-black/35 text-white placeholder:text-white/40 focus-visible:ring-white/35"
             />
           </div>
           {candidateAdminOrgs.length > 0 ? (
-            <div className="flex items-center gap-2 rounded-md border border-white/10 bg-white/5 p-2">
+            <div className="flex items-center gap-2 rounded-md border border-white/15 bg-white/[0.06] p-2">
               <input
                 id="ham-workspace-org-scoped"
                 type="checkbox"
                 checked={orgScoped}
                 onChange={(e) => setOrgScoped(e.target.checked)}
                 disabled={submitting}
-                className="h-4 w-4"
+                className="h-4 w-4 rounded border-white/30 text-[#ff6b00] focus:ring-white/40"
               />
               <Label
                 htmlFor="ham-workspace-org-scoped"
-                className="text-foreground/80"
+                className="text-sm text-white/80"
               >
                 Create under{" "}
-                <span className="font-medium text-foreground">
-                  {candidateAdminOrgs[0]?.name ?? defaultOrgId}
-                </span>
+                <span className="font-medium text-white">{candidateAdminOrgs[0]?.name ?? defaultOrgId}</span>
               </Label>
             </div>
           ) : null}
           {errMessage ? (
-            <p className="text-xs text-destructive" role="alert">
+            <p className="text-xs text-red-300" role="alert">
               {errMessage}
             </p>
           ) : null}
@@ -147,11 +151,12 @@ export function WorkspaceOnboardingScreen({
                 size="sm"
                 onClick={onDismiss}
                 disabled={submitting}
+                className="text-white/80 hover:bg-white/10 hover:text-white"
               >
                 Cancel
               </Button>
             ) : null}
-            <Button type="submit" size="sm" disabled={!canSubmit}>
+            <Button type="submit" size="sm" disabled={!canSubmit} className="bg-[#ff6b00] text-black hover:bg-[#ff8533]">
               {submitting ? "Creating…" : "Create workspace"}
             </Button>
           </div>
