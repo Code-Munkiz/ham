@@ -140,8 +140,11 @@ export function WorkspacePicker({
   // Wait one layout pass so the anchor has bounds before portaling (avoids a stray 0,0 flash).
   if (anchorRef && fixedPos === null) return null;
 
+  // Menu is self-contained visually: explicit text colors + opaque dark surface
+  // so it stays readable when portaled to document.body, where the global
+  // `text-foreground` token resolves to black (see `src/index.css`).
   const menuClassName = cn(
-    "overflow-hidden rounded-xl border border-white/10 bg-black/85 text-sm text-foreground shadow-2xl backdrop-blur",
+    "overflow-hidden rounded-xl border border-white/15 bg-[#0b1620] text-sm text-white/90 shadow-2xl shadow-black/55",
     anchorRef ? "fixed z-[300]" : "absolute left-0 top-full z-[300] mt-2 w-[min(18rem,calc(100vw-1rem))]",
   );
 
@@ -164,7 +167,7 @@ export function WorkspacePicker({
     >
       <ul className="max-h-72 overflow-y-auto py-1">
         {visible.length === 0 ? (
-          <li className="px-3 py-2 text-foreground/60">No workspaces yet.</li>
+          <li className="px-3 py-2 text-white/65">No workspaces yet.</li>
         ) : (
           visible.map((w) => {
             const isActive = w.workspace_id === activeWorkspaceId;
@@ -176,8 +179,8 @@ export function WorkspacePicker({
                   aria-checked={isActive}
                   data-active={isActive ? "true" : "false"}
                   className={cn(
-                    "flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition-colors hover:bg-white/5",
-                    isActive ? "bg-white/[0.06]" : undefined,
+                    "flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-white/92 transition-colors hover:bg-white/[0.08] hover:text-white",
+                    isActive ? "bg-white/[0.10] text-white" : undefined,
                   )}
                   onClick={() => {
                     onSelect(w.workspace_id);
@@ -186,7 +189,7 @@ export function WorkspacePicker({
                 >
                   <span className="flex min-w-0 flex-col">
                     <span className="truncate font-medium">{w.name}</span>
-                    <span className="truncate text-xs text-foreground/60">
+                    <span className="truncate text-xs text-white/55">
                       {w.slug}
                       {w.org_id ? ` · ${w.org_id}` : ""}
                     </span>
@@ -205,18 +208,18 @@ export function WorkspacePicker({
           })
         )}
       </ul>
-      <div className="border-t border-white/10">
+      <div className="border-t border-white/12 bg-white/[0.02]">
         <button
           type="button"
           role="menuitem"
           data-testid="workspace-picker-create"
-          className="flex w-full items-center gap-2 px-3 py-2 text-left text-foreground/80 transition-colors hover:bg-white/5"
+          className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-white/90 transition-colors hover:bg-white/[0.08] hover:text-white"
           onClick={() => {
             onCreate();
             onClose();
           }}
         >
-          <span className="text-base leading-none">＋</span>
+          <span className="text-base leading-none text-amber-300">＋</span>
           <span>Create workspace</span>
         </button>
       </div>
