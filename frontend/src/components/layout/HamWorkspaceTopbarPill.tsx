@@ -23,6 +23,7 @@ export interface HamWorkspaceTopbarPillProps {
 
 export function HamWorkspaceTopbarPill({ className }: HamWorkspaceTopbarPillProps) {
   const ctx = useHamWorkspace();
+  const pillAnchorRef = React.useRef<HTMLDivElement>(null);
   const [pickerOpen, setPickerOpen] = React.useState(false);
   const [createOpen, setCreateOpen] = React.useState(false);
   const [detailsOpen, setDetailsOpen] = React.useState(false);
@@ -138,7 +139,7 @@ export function HamWorkspaceTopbarPill({ className }: HamWorkspaceTopbarPillProp
       : null;
 
   return (
-    <div className={cn("relative pointer-events-auto", className)}>
+    <div ref={pillAnchorRef} className={cn("relative pointer-events-auto", className)}>
       <button
         type="button"
         data-testid="ham-workspace-pill"
@@ -290,6 +291,7 @@ export function HamWorkspaceTopbarPill({ className }: HamWorkspaceTopbarPillProp
       ) : null}
       {ctx.state.status === "ready" || ctx.state.status === "onboarding" ? (
         <WorkspacePicker
+          anchorRef={pillAnchorRef}
           workspaces={ctx.workspaces}
           activeWorkspaceId={
             ctx.state.status === "ready" ? ctx.state.activeWorkspaceId : null
