@@ -6,8 +6,10 @@
 # - Cover all three apps (backend pip, frontend npm, desktop npm) and CI actions.
 #
 # Notes:
-# - Weekly cadence is intentional; daily is too noisy for a small team.
-# - Major bumps stay individual so they get explicit review.
+# - pip stays weekly; npm and github-actions use monthly cadence to cut major-PR churn.
+# - Major bumps for toolchain packages (TypeScript, Vite, Electron, etc.) are ignored
+#   here so they are upgraded deliberately (security advisories still surface via
+#   GitHub dependency security features).
 # - We do NOT enable security-only updates here — GitHub does that automatically
 #   when secret-scanning + dependency-graph are on (enabled in Phase B).
 
@@ -22,7 +24,7 @@ updates:
       day: "monday"
       time: "08:00"
       timezone: "Etc/UTC"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 3
     commit-message:
       prefix: "chore(deps)"
       include: "scope"
@@ -35,15 +37,23 @@ updates:
   - package-ecosystem: "npm"
     directory: "/frontend"
     schedule:
-      interval: "weekly"
-      day: "monday"
+      interval: "monthly"
       time: "08:00"
       timezone: "Etc/UTC"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 2
     commit-message:
       prefix: "chore(deps,frontend)"
       include: "scope"
     labels: ["dependencies", "area:frontend"]
+    ignore:
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "vite"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@vitejs/plugin-react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
     groups:
       frontend-minor-and-patch:
         update-types: ["minor", "patch"]
@@ -52,15 +62,19 @@ updates:
   - package-ecosystem: "npm"
     directory: "/desktop"
     schedule:
-      interval: "weekly"
-      day: "monday"
+      interval: "monthly"
       time: "08:00"
       timezone: "Etc/UTC"
-    open-pull-requests-limit: 3
+    open-pull-requests-limit: 2
     commit-message:
       prefix: "chore(deps,desktop)"
       include: "scope"
     labels: ["dependencies", "area:desktop"]
+    ignore:
+      - dependency-name: "electron"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "electron-builder"
+        update-types: ["version-update:semver-major"]
     groups:
       desktop-minor-and-patch:
         update-types: ["minor", "patch"]
@@ -69,11 +83,10 @@ updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "weekly"
-      day: "monday"
+      interval: "monthly"
       time: "08:00"
       timezone: "Etc/UTC"
-    open-pull-requests-limit: 3
+    open-pull-requests-limit: 2
     commit-message:
       prefix: "chore(ci)"
       include: "scope"
