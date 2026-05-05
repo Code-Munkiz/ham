@@ -3,7 +3,7 @@
  * Verifies: render, launch, loading state, success display, failure display, no secrets.
  */
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
 import * as HamApi from "@/lib/ham/api";
 import { ClaudeAgentMissionCard } from "../ClaudeAgentMissionCard";
 
@@ -85,7 +85,9 @@ describe("ClaudeAgentMissionCard", () => {
       expect(screen.getByTestId("mission-loading")).toBeDefined();
     });
 
-    resolvePromise!(mockFetchResponse(MOCK_SUCCESS_RESPONSE));
+    await act(async () => {
+      resolvePromise!(mockFetchResponse(MOCK_SUCCESS_RESPONSE));
+    });
   });
 
   it("calls mission endpoint without X-HAM-SMOKE-TOKEN", async () => {
