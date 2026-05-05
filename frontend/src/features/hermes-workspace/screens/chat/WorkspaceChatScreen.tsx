@@ -561,6 +561,13 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   const previousLoadedWorkspaceSessionRef = React.useRef<string | null>(null);
   const activeWorkspaceIdRef = React.useRef(activeWorkspaceId);
   const previousActiveWorkspaceIdRef = React.useRef<string | null | undefined>(undefined);
+  /**
+   * Workspace switch schedules `navigate({ search: "" })`, but `useSearchParams` in that same
+   * commit still reflects the pre-navigation URL. Skip `?session=` deep-link loads until the
+   * param clears so a prior workspace's session id is not fetched under the new workspace
+   * (404 / "Session unavailable" after create/switch).
+   */
+  const suppressSessionQueryUntilNavigationRef = React.useRef(false);
 
   React.useEffect(() => {
     activeWorkspaceIdRef.current = activeWorkspaceId;
@@ -1297,6 +1304,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     }
     if (prev === activeWorkspaceId) return;
     previousActiveWorkspaceIdRef.current = activeWorkspaceId;
+    suppressSessionQueryUntilNavigationRef.current = true;
 
     streamTurnSessionRef.current = null;
     lastSessionRestoreScopeRef.current = null;
@@ -1320,6 +1328,12 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   }, [activeWorkspaceId, embedMode, missionIdFromQuery, navigate, revokeAllChatAttachmentLocalBlobs]);
 
   React.useEffect(() => {
+    const sessionParamWhileSwitching = embedMode
+      ? null
+      : searchParams.get("session")?.trim() || null;
+    if (suppressSessionQueryUntilNavigationRef.current && sessionParamWhileSwitching) {
+      return;
+    }
     if (lastSessionRestoreScopeRef.current === workspaceRestoreScope) return;
     lastSessionRestoreScopeRef.current = workspaceRestoreScope;
     if (sessionId) return;
@@ -1355,6 +1369,13 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   /** Deep link `?session=` (full-page chat only). */
   React.useEffect(() => {
     if (embedMode) return;
+    const querySession = searchParams.get("session")?.trim() || null;
+    if (suppressSessionQueryUntilNavigationRef.current && querySession) {
+      return;
+    }
+    if (suppressSessionQueryUntilNavigationRef.current && !querySession) {
+      suppressSessionQueryUntilNavigationRef.current = false;
+    }
     const s = searchParams.get("session");
     if (!s) {
       streamTurnSessionRef.current = null;
