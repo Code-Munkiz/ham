@@ -189,6 +189,68 @@ def test_scoped_request_does_not_load_legacy_unowned_session(
     assert unscoped.json()["messages"] == [{"role": "user", "content": "legacy"}]
 
 
+def test_post_chat_omitting_workspace_id_cannot_append_to_other_users_scoped_session(
+    chat_store: InMemoryChatSessionStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression: omitting workspace_id must not bypass user ownership on scoped sessions."""
+    monkeypatch.setenv("HERMES_GATEWAY_MODE", "mock")
+    sid = chat_store.create_session(user_id="user_a", workspace_id="ws_a")
+    chat_store.append_turns(sid, [ChatTurn(role="user", content="victim")])
+
+    with _install_auth(monkeypatch):
+        res = client.post(
+            "/api/chat",
+            headers={"Authorization": "Bearer user-b.jwt"},
+            json={
+                "session_id": sid,
+                "messages": [{"role": "user", "content": "injected"}],
+            },
+        )
+
+    assert res.status_code == 404
+    assert res.json()["detail"]["error"]["code"] == "SESSION_NOT_FOUND"
+    rec = chat_store.get_session(sid)
+    assert rec is not None
+    assert len(rec.turns) == 1
+    assert rec.turns[0].content == "victim"
+
+
+def test_get_session_omitting_workspace_id_requires_owner_for_scoped_sessions(
+    chat_store: InMemoryChatSessionStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sid = chat_store.create_session(user_id="user_a", workspace_id="ws_a")
+    chat_store.append_turns(sid, [ChatTurn(role="user", content="secret")])
+
+    with _install_auth(monkeypatch):
+        res = client.get(
+            f"/api/chat/sessions/{sid}",
+            headers={"Authorization": "Bearer user-b.jwt"},
+        )
+
+    assert res.status_code == 404
+    assert res.json()["detail"]["error"]["code"] == "SESSION_NOT_FOUND"
+
+
+def test_delete_session_omitting_workspace_id_requires_owner_for_scoped_sessions(
+    chat_store: InMemoryChatSessionStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sid = chat_store.create_session(user_id="user_a", workspace_id="ws_a")
+    chat_store.append_turns(sid, [ChatTurn(role="user", content="x")])
+
+    with _install_auth(monkeypatch):
+        res = client.delete(
+            f"/api/chat/sessions/{sid}",
+            headers={"Authorization": "Bearer user-b.jwt"},
+        )
+
+    assert res.status_code == 404
+    assert res.json()["detail"]["error"]["code"] == "SESSION_NOT_FOUND"
+    assert chat_store.get_session(sid) is not None
+
+
 def test_cross_user_session_access_is_not_found(
     chat_store: InMemoryChatSessionStore,
     monkeypatch: pytest.MonkeyPatch,

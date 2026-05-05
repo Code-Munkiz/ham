@@ -333,14 +333,20 @@ def _get_session_for_scope(
     *,
     user_id: str | None,
     workspace_id: str | None,
+    authenticated_actor_user_id: str | None = None,
 ):
     rec = _chat_store.get_session(session_id)
     if rec is None:
         raise _session_not_found()
-    if workspace_id is None:
+    if workspace_id is not None:
+        if rec.workspace_id != workspace_id or rec.user_id != user_id:
+            raise _session_not_found()
         return rec
-    if rec.workspace_id != workspace_id or rec.user_id != user_id:
-        raise _session_not_found()
+    # Request did not pin a workspace: still enforce ownership when the record is tenant-scoped
+    # so omitting workspace_id cannot bypass user/workspace isolation (chat append / delete / export).
+    if rec.workspace_id is not None or rec.user_id is not None:
+        if authenticated_actor_user_id is None or rec.user_id != authenticated_actor_user_id:
+            raise _session_not_found()
     return rec
 
 
@@ -754,6 +760,7 @@ def _prepare_chat_session(
     user_id: str | None = None,
     attachment_user_id: str | None = None,
     llm_attachment_user_id: str | None = None,
+    authenticated_actor_user_id: str | None = None,
 ) -> tuple[str, list[dict[str, Any]], dict[str, Any] | None, str]:
     """Returns ``(session_id, llm_messages, active_agent_meta, last_user_plain_for_operator)``."""
     store = _chat_store
@@ -763,6 +770,7 @@ def _prepare_chat_session(
             body.session_id,
             user_id=user_id if workspace_id is not None else None,
             workspace_id=workspace_id,
+            authenticated_actor_user_id=authenticated_actor_user_id,
         )
         sid = body.session_id
     else:
@@ -837,12 +845,14 @@ def _messages_for_completion(
     user_id: str | None = None,
     attachment_user_id: str | None = None,
     llm_attachment_user_id: str | None = None,
+    authenticated_actor_user_id: str | None = None,
 ) -> tuple[str, list[dict[str, Any]], str | None, dict[str, Any] | None, str]:
     sid, llm_messages, active_meta, last_user_plain = _prepare_chat_session(
         body,
         user_id=user_id,
         attachment_user_id=attachment_user_id,
         llm_attachment_user_id=llm_attachment_user_id,
+        authenticated_actor_user_id=authenticated_actor_user_id,
     )
     or_override = _resolve_openrouter_model_override(body)
     llm_messages = _append_workbench_to_messages(llm_messages, body)
@@ -889,6 +899,7 @@ def get_chat_context_meters(
         session_id,
         user_id=_scoped_user_id(ham_actor, workspace_scope),
         workspace_id=workspace_scope,
+        authenticated_actor_user_id=ham_actor.user_id if ham_actor is not None else None,
     )
     turns = rec.turns
     cat = build_catalog_payload()
@@ -1002,6 +1013,7 @@ async def get_chat_session(
         session_id,
         user_id=_scoped_user_id(ham_actor, workspace_scope),
         workspace_id=workspace_scope,
+        authenticated_actor_user_id=ham_actor.user_id if ham_actor is not None else None,
     )
     return {
         "session_id": rec.session_id,
@@ -1019,12 +1031,12 @@ async def delete_chat_session(
     """Delete a chat session and its turns from HAM-backed persistence (SQLite/Firestore/memory)."""
     ham_actor = enforce_clerk_session_and_email_for_request(authorization, route="delete_chat_session")
     workspace_scope = _normalized_workspace_id(workspace_id)
-    if workspace_scope is not None:
-        _get_session_for_scope(
-            session_id,
-            user_id=_scoped_user_id(ham_actor, workspace_scope),
-            workspace_id=workspace_scope,
-        )
+    _get_session_for_scope(
+        session_id,
+        user_id=_scoped_user_id(ham_actor, workspace_scope),
+        workspace_id=workspace_scope,
+        authenticated_actor_user_id=ham_actor.user_id if ham_actor is not None else None,
+    )
     if not _chat_store.delete_session(session_id):
         raise _session_not_found()
     return Response(status_code=204)
@@ -1042,8 +1054,9 @@ async def export_chat_session_pdf(
     when Clerk auth is enabled; no separate export policy.
 
     **Session scope:** when ``workspace_id`` is supplied, export uses the same user/workspace
-    ownership check as ``GET /api/chat/sessions/{id}``. Omitted ``workspace_id`` preserves legacy
-    unscoped v1 behavior until the frontend threads active workspace ids.
+    ownership check as ``GET /api/chat/sessions/{id}``. When ``workspace_id`` is omitted, legacy
+    sessions (no stored owner) remain readable; tenant-scoped sessions still require the
+    authenticated Clerk user to match the session owner.
     """
     from src.ham.chat_pdf_export import render_chat_transcript_pdf_bytes
     from src.ham.pdf_export_sanitizer import safe_export_filename_fragment
@@ -1054,6 +1067,7 @@ async def export_chat_session_pdf(
         session_id,
         user_id=_scoped_user_id(ham_actor, workspace_scope),
         workspace_id=workspace_scope,
+        authenticated_actor_user_id=ham_actor.user_id if ham_actor is not None else None,
     )
     turns = [(t.role, t.content) for t in rec.turns]
     pdf = render_chat_transcript_pdf_bytes(
@@ -1110,6 +1124,7 @@ async def append_chat_session_turns(
         session_id,
         user_id=_scoped_user_id(ham_actor, workspace_scope),
         workspace_id=workspace_scope,
+        authenticated_actor_user_id=ham_actor.user_id if ham_actor is not None else None,
     )
     normalized: list[ChatTurn] = []
     for t in body.turns:
@@ -1185,6 +1200,7 @@ async def post_chat(
         user_id=_scoped_user_id(ham_actor, _normalized_workspace_id(body.workspace_id)),
         attachment_user_id=aid,
         llm_attachment_user_id=aid,
+        authenticated_actor_user_id=aid,
     )
     execution_mode = _execution_mode_payload(body, last_user_plain=last_user_plain)
     execution_mode = _apply_browser_bridge_for_turn(
@@ -1272,6 +1288,7 @@ def post_chat_stream(
         user_id=_scoped_user_id(ham_actor, _normalized_workspace_id(body.workspace_id)),
         attachment_user_id=aid,
         llm_attachment_user_id=aid,
+        authenticated_actor_user_id=aid,
     )
     if not _claim_stream_session(sid):
         raise HTTPException(
