@@ -678,7 +678,7 @@ export function WorkspaceOperationsScreen() {
                           {em}
                         </div>
                         <p className="w-full truncate text-[11px] text-[var(--theme-muted)]">
-                          {ag.systemPrompt ? ag.systemPrompt : "No system prompt (HAM v0)."}
+                          {ag.systemPrompt ? ag.systemPrompt : "No system prompt yet."}
                         </p>
                         <p className="w-full truncate text-[10px] text-[var(--theme-muted)]/85">
                           {ag.cronEnabled
@@ -815,8 +815,7 @@ export function WorkspaceOperationsScreen() {
               <div className="border-b border-[var(--theme-border)] pb-2">
                 <h2 className="text-sm font-semibold text-[var(--theme-text)]">Team bridge</h2>
                 <p className="text-xs text-[var(--theme-muted-2)]">
-                  HAM v0: messages go through{" "}
-                  <code className="text-[var(--theme-muted)]">/message</code> (synthetic echo)
+                  Drop a quick message to the focused agent.
                 </p>
               </div>
               <div className="mt-2 flex min-h-0 flex-col gap-2 md:grid md:grid-cols-[1fr,18rem] md:items-stretch">
@@ -984,7 +983,7 @@ export function WorkspaceOperationsScreen() {
                   className="mt-0.5 min-h-[72px] w-full rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-text)]"
                   value={newPrompt}
                   onChange={(e) => setNewPrompt(e.target.value)}
-                  placeholder="You are a helpful agent operating in HAM v0 (local synthetic outputs)."
+                  placeholder="e.g. You are a senior code reviewer focused on…"
                 />
               </label>
             </div>
