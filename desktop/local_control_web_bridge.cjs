@@ -1,87 +1,98 @@
-'use strict';
+"use strict";
 
-const http = require('node:http');
-const { createWebBridgePairingStore } = require('./local_control_web_bridge_pairing.cjs');
+const http = require("node:http");
+const { createWebBridgePairingStore } = require("./local_control_web_bridge_pairing.cjs");
 
-const BRIDGE_VERSION = 'v1';
-const BRIDGE_PREFIX = '/ham/local-control/v1';
-const CANONICAL_ORIGIN = 'https://ham-nine-mu.vercel.app';
+const BRIDGE_VERSION = "v1";
+const BRIDGE_PREFIX = "/ham/local-control/v1";
+const CANONICAL_ORIGIN = "https://ham-nine-mu.vercel.app";
 
 function json(res, statusCode, payload, extraHeaders = {}) {
   const body = JSON.stringify(payload);
   res.writeHead(statusCode, {
-    'Content-Type': 'application/json; charset=utf-8',
-    'Content-Length': Buffer.byteLength(body),
+    "Content-Type": "application/json; charset=utf-8",
+    "Content-Length": Buffer.byteLength(body),
     ...extraHeaders,
   });
   res.end(body);
 }
 
 function parseBearer(authorization) {
-  const raw = String(authorization || '').trim();
-  if (!raw) return '';
+  const raw = String(authorization || "").trim();
+  if (!raw) return "";
   const m = /^Bearer\s+(.+)$/i.exec(raw);
-  if (!m) return '';
-  return String(m[1] || '').trim();
+  if (!m) return "";
+  return String(m[1] || "").trim();
 }
 
 function parseJsonBody(req, maxBytes = 4096) {
   return new Promise((resolve, reject) => {
     let total = 0;
     const chunks = [];
-    req.on('data', (chunk) => {
+    req.on("data", (chunk) => {
       total += chunk.length;
       if (total > maxBytes) {
-        reject(new Error('payload_too_large'));
+        reject(new Error("payload_too_large"));
         return;
       }
       chunks.push(chunk);
     });
-    req.on('end', () => {
+    req.on("end", () => {
       if (!chunks.length) {
         resolve({});
         return;
       }
       try {
-        const parsed = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-        resolve(parsed && typeof parsed === 'object' ? parsed : {});
+        const parsed = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+        resolve(parsed && typeof parsed === "object" ? parsed : {});
       } catch {
-        reject(new Error('invalid_json'));
+        reject(new Error("invalid_json"));
       }
     });
-    req.on('error', reject);
+    req.on("error", reject);
   });
 }
 
 function looksLikeDeniedStaleOrigin(origin) {
-  const o = String(origin || '').trim().toLowerCase();
+  const o = String(origin || "")
+    .trim()
+    .toLowerCase();
   if (!o) return false;
-  if (o === 'https://ham-kappa-fawn.vercel.app') return true;
+  if (o === "https://ham-kappa-fawn.vercel.app") return true;
   return /^https:\/\/.*aaron-bundys-projects.*\.vercel\.app$/i.test(o);
 }
 
 function parseBrowserIntentPayload(raw) {
-  const body = raw && typeof raw === 'object' ? raw : {};
-  const action = String(body.action || '').trim();
-  const intentId = String(body.intent_id || '').trim();
-  const clientContext = body.client_context && typeof body.client_context === 'object' ? body.client_context : {};
-  if (action === 'navigate_and_capture') {
-    const url = String(body.url || '').trim();
-    if (!url) return { ok: false, error: 'invalid_intent' };
-    return { ok: true, payload: { action, intent_id: intentId, url, client_context: clientContext } };
-  }
-  if (action === 'observe') {
-    return { ok: true, payload: { action, intent_id: intentId, client_context: clientContext } };
-  }
-  if (action === 'click_candidate') {
-    const candidateId = String(body.candidate_id || '').trim();
-    if (!candidateId) return { ok: false, error: 'invalid_intent' };
+  const body = raw && typeof raw === "object" ? raw : {};
+  const action = String(body.action || "").trim();
+  const intentId = String(body.intent_id || "").trim();
+  const clientContext =
+    body.client_context && typeof body.client_context === "object" ? body.client_context : {};
+  if (action === "navigate_and_capture") {
+    const url = String(body.url || "").trim();
+    if (!url) return { ok: false, error: "invalid_intent" };
     return {
       ok: true,
-      payload: { action, intent_id: intentId, candidate_id: candidateId, client_context: clientContext },
+      payload: { action, intent_id: intentId, url, client_context: clientContext },
     };
   }
-  if (action === 'scroll') {
+  if (action === "observe") {
+    return { ok: true, payload: { action, intent_id: intentId, client_context: clientContext } };
+  }
+  if (action === "click_candidate") {
+    const candidateId = String(body.candidate_id || "").trim();
+    if (!candidateId) return { ok: false, error: "invalid_intent" };
+    return {
+      ok: true,
+      payload: {
+        action,
+        intent_id: intentId,
+        candidate_id: candidateId,
+        client_context: clientContext,
+      },
+    };
+  }
+  if (action === "scroll") {
     return {
       ok: true,
       payload: {
@@ -92,10 +103,10 @@ function parseBrowserIntentPayload(raw) {
       },
     };
   }
-  if (action === 'type_into_field') {
-    const selector = String(body.selector || '').trim();
-    const text = String(body.text || '');
-    if (!selector || !text) return { ok: false, error: 'invalid_intent' };
+  if (action === "type_into_field") {
+    const selector = String(body.selector || "").trim();
+    const text = String(body.text || "");
+    if (!selector || !text) return { ok: false, error: "invalid_intent" };
     return {
       ok: true,
       payload: {
@@ -108,15 +119,15 @@ function parseBrowserIntentPayload(raw) {
       },
     };
   }
-  if (action === 'key_press') {
-    const key = String(body.key || '').trim();
-    if (!key) return { ok: false, error: 'invalid_intent' };
+  if (action === "key_press") {
+    const key = String(body.key || "").trim();
+    if (!key) return { ok: false, error: "invalid_intent" };
     return {
       ok: true,
       payload: { action, intent_id: intentId, key, client_context: clientContext },
     };
   }
-  if (action === 'wait') {
+  if (action === "wait") {
     return {
       ok: true,
       payload: {
@@ -127,17 +138,21 @@ function parseBrowserIntentPayload(raw) {
       },
     };
   }
-  return { ok: false, error: 'invalid_intent' };
+  return { ok: false, error: "invalid_intent" };
 }
 
 function createLocalControlWebBridge(opts = {}) {
-  const host = '127.0.0.1';
+  const host = "127.0.0.1";
   const port = Number.isFinite(Number(opts.port)) ? Number(opts.port) : 0;
-  const canonicalOrigin = String(opts.canonicalOrigin || CANONICAL_ORIGIN).trim() || CANONICAL_ORIGIN;
-  const emitAudit = typeof opts.emitAudit === 'function' ? opts.emitAudit : () => {};
-  const executeBrowserIntent = typeof opts.executeBrowserIntent === 'function' ? opts.executeBrowserIntent : null;
+  const canonicalOrigin =
+    String(opts.canonicalOrigin || CANONICAL_ORIGIN).trim() || CANONICAL_ORIGIN;
+  const emitAudit = typeof opts.emitAudit === "function" ? opts.emitAudit : () => {};
+  const executeBrowserIntent =
+    typeof opts.executeBrowserIntent === "function" ? opts.executeBrowserIntent : null;
   const executeMachineEscalationRequest =
-    typeof opts.executeMachineEscalationRequest === 'function' ? opts.executeMachineEscalationRequest : null;
+    typeof opts.executeMachineEscalationRequest === "function"
+      ? opts.executeMachineEscalationRequest
+      : null;
   const pairing = createWebBridgePairingStore({
     nowMs: opts.nowMs,
     emitAudit,
@@ -152,7 +167,7 @@ function createLocalControlWebBridge(opts = {}) {
   let started = false;
 
   function isOriginAllowed(origin) {
-    const o = String(origin || '').trim();
+    const o = String(origin || "").trim();
     if (!o) return false;
     if (looksLikeDeniedStaleOrigin(o)) return false;
     return o === canonicalOrigin;
@@ -160,28 +175,28 @@ function createLocalControlWebBridge(opts = {}) {
 
   function corsHeaders(origin) {
     return {
-      'Access-Control-Allow-Origin': origin,
-      Vary: 'Origin',
-      'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
-      'Access-Control-Allow-Headers': 'Authorization,Content-Type',
-      'Access-Control-Max-Age': '300',
+      "Access-Control-Allow-Origin": origin,
+      Vary: "Origin",
+      "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+      "Access-Control-Allow-Headers": "Authorization,Content-Type",
+      "Access-Control-Max-Age": "300",
     };
   }
 
   async function handle(req, res) {
-    const origin = String(req.headers.origin || '').trim();
+    const origin = String(req.headers.origin || "").trim();
     const allowed = isOriginAllowed(origin);
-    const method = String(req.method || 'GET').toUpperCase();
-    const url = String(req.url || '');
+    const method = String(req.method || "GET").toUpperCase();
+    const url = String(req.url || "");
     if (!url.startsWith(BRIDGE_PREFIX)) {
-      json(res, 404, { ok: false, error: 'not_found' });
+      json(res, 404, { ok: false, error: "not_found" });
       return;
     }
-    const path = url.slice(BRIDGE_PREFIX.length) || '/';
+    const path = url.slice(BRIDGE_PREFIX.length) || "/";
 
-    if (method === 'OPTIONS') {
+    if (method === "OPTIONS") {
       if (!allowed) {
-        json(res, 403, { ok: false, error: 'origin_not_allowed' });
+        json(res, 403, { ok: false, error: "origin_not_allowed" });
         return;
       }
       res.writeHead(204, corsHeaders(origin));
@@ -190,25 +205,25 @@ function createLocalControlWebBridge(opts = {}) {
     }
 
     if (!allowed) {
-      if (method === 'GET' && path === '/health') {
+      if (method === "GET" && path === "/health") {
         json(res, 403, {
           ok: false,
           bridge_version: BRIDGE_VERSION,
           pairing_required: true,
           paired: false,
           origin_allowed: false,
-          error: 'origin_not_allowed',
+          error: "origin_not_allowed",
         });
         return;
       }
-      json(res, 403, { ok: false, error: 'origin_not_allowed' });
+      json(res, 403, { ok: false, error: "origin_not_allowed" });
       return;
     }
 
     const headers = corsHeaders(origin);
 
-    if (method === 'GET' && path === '/health') {
-      emitAudit({ event: 'bridge_health_read', origin });
+    if (method === "GET" && path === "/health") {
+      emitAudit({ event: "bridge_health_read", origin });
       json(
         res,
         200,
@@ -219,28 +234,28 @@ function createLocalControlWebBridge(opts = {}) {
           paired: pairing.isPairedForOrigin(origin),
           origin_allowed: true,
         },
-        headers
+        headers,
       );
       return;
     }
 
-    if (method === 'POST' && path === '/pairing/exchange') {
+    if (method === "POST" && path === "/pairing/exchange") {
       let body;
       try {
         body = await parseJsonBody(req);
       } catch (err) {
-        const code = err instanceof Error ? err.message : 'bad_request';
+        const code = err instanceof Error ? err.message : "bad_request";
         json(res, 400, { ok: false, error: code }, headers);
         return;
       }
-      const requestedOrigin = String(body.requested_origin || '').trim();
+      const requestedOrigin = String(body.requested_origin || "").trim();
       if (requestedOrigin !== origin || requestedOrigin !== canonicalOrigin) {
         emitAudit({
-          event: 'pairing_exchange_failure',
+          event: "pairing_exchange_failure",
           origin,
-          reason_code: 'requested_origin_mismatch',
+          reason_code: "requested_origin_mismatch",
         });
-        json(res, 403, { ok: false, error: 'requested_origin_mismatch' }, headers);
+        json(res, 403, { ok: false, error: "requested_origin_mismatch" }, headers);
         return;
       }
       const outcome = pairing.exchangePairingCode({
@@ -249,7 +264,7 @@ function createLocalControlWebBridge(opts = {}) {
         client_nonce: body.client_nonce,
       });
       if (!outcome.ok) {
-        const status = outcome.reason_code === 'pairing_rate_limited' ? 429 : 401;
+        const status = outcome.reason_code === "pairing_rate_limited" ? 429 : 401;
         json(res, status, { ok: false, error: outcome.reason_code }, headers);
         return;
       }
@@ -258,21 +273,21 @@ function createLocalControlWebBridge(opts = {}) {
         200,
         {
           ok: true,
-          token_type: 'Bearer',
+          token_type: "Bearer",
           access_token: outcome.access_token,
           expires_in_sec: outcome.expires_in_sec,
           session_id: outcome.session_id,
           scopes: outcome.scopes,
         },
-        headers
+        headers,
       );
       return;
     }
 
-    if (method === 'POST' && path === '/pairing/revoke') {
+    if (method === "POST" && path === "/pairing/revoke") {
       const token = parseBearer(req.headers.authorization);
       if (!token) {
-        json(res, 401, { ok: false, error: 'token_missing' }, headers);
+        json(res, 401, { ok: false, error: "token_missing" }, headers);
         return;
       }
       const valid = pairing.validateToken({ token, origin });
@@ -285,13 +300,13 @@ function createLocalControlWebBridge(opts = {}) {
       return;
     }
 
-    if (method === 'GET' && path === '/status') {
+    if (method === "GET" && path === "/status") {
       const token = parseBearer(req.headers.authorization);
       if (!token) {
-        json(res, 401, { ok: false, error: 'token_missing' }, headers);
+        json(res, 401, { ok: false, error: "token_missing" }, headers);
         return;
       }
-      const valid = pairing.validateToken({ token, origin, requiredScope: 'status.read' });
+      const valid = pairing.validateToken({ token, origin, requiredScope: "status.read" });
       if (!valid.ok) {
         json(res, 401, { ok: false, error: valid.reason_code }, headers);
         return;
@@ -301,23 +316,23 @@ function createLocalControlWebBridge(opts = {}) {
         200,
         {
           ok: true,
-          kind: 'ham_local_control_bridge_status',
+          kind: "ham_local_control_bridge_status",
           bridge_version: BRIDGE_VERSION,
           pairing_required: true,
           paired: true,
         },
-        headers
+        headers,
       );
       return;
     }
 
-    if (method === 'POST' && path === '/browser/intent') {
+    if (method === "POST" && path === "/browser/intent") {
       const token = parseBearer(req.headers.authorization);
       if (!token) {
-        json(res, 401, { ok: false, error: 'token_missing' }, headers);
+        json(res, 401, { ok: false, error: "token_missing" }, headers);
         return;
       }
-      const valid = pairing.validateToken({ token, origin, requiredScope: 'browser.intent' });
+      const valid = pairing.validateToken({ token, origin, requiredScope: "browser.intent" });
       if (!valid.ok) {
         json(res, 401, { ok: false, error: valid.reason_code }, headers);
         return;
@@ -326,27 +341,31 @@ function createLocalControlWebBridge(opts = {}) {
       try {
         body = await parseJsonBody(req);
       } catch (err) {
-        const code = err instanceof Error ? err.message : 'bad_request';
+        const code = err instanceof Error ? err.message : "bad_request";
         json(res, 400, { ok: false, error: code }, headers);
         return;
       }
-      const action = String(body.action || '').trim();
+      const action = String(body.action || "").trim();
       if (!action) {
-        json(res, 400, { ok: false, error: 'invalid_intent' }, headers);
+        json(res, 400, { ok: false, error: "invalid_intent" }, headers);
         return;
       }
       const parsed = parseBrowserIntentPayload(body);
       if (!parsed.ok) {
-        json(res, 400, { ok: false, error: parsed.error || 'invalid_intent' }, headers);
+        json(res, 400, { ok: false, error: parsed.error || "invalid_intent" }, headers);
         return;
       }
       if (!executeBrowserIntent) {
-        json(res, 503, { ok: false, error: 'browser_intent_unavailable' }, headers);
+        json(res, 503, { ok: false, error: "browser_intent_unavailable" }, headers);
         return;
       }
-      const result = await executeBrowserIntent({ ...parsed.payload, session_id: valid.session_id, origin });
+      const result = await executeBrowserIntent({
+        ...parsed.payload,
+        session_id: valid.session_id,
+        origin,
+      });
       const statusCode =
-        result && typeof result.http_status === 'number'
+        result && typeof result.http_status === "number"
           ? result.http_status
           : result && result.ok === false
             ? 409
@@ -355,16 +374,16 @@ function createLocalControlWebBridge(opts = {}) {
       return;
     }
 
-    if (method === 'POST' && path === '/machine/escalation-request') {
+    if (method === "POST" && path === "/machine/escalation-request") {
       const token = parseBearer(req.headers.authorization);
       if (!token) {
-        json(res, 401, { ok: false, error: 'token_missing' }, headers);
+        json(res, 401, { ok: false, error: "token_missing" }, headers);
         return;
       }
       const valid = pairing.validateToken({
         token,
         origin,
-        requiredScope: 'machine.escalation.request',
+        requiredScope: "machine.escalation.request",
       });
       if (!valid.ok) {
         json(res, 401, { ok: false, error: valid.reason_code }, headers);
@@ -374,43 +393,43 @@ function createLocalControlWebBridge(opts = {}) {
       try {
         body = await parseJsonBody(req);
       } catch (err) {
-        const code = err instanceof Error ? err.message : 'bad_request';
+        const code = err instanceof Error ? err.message : "bad_request";
         json(res, 400, { ok: false, error: code }, headers);
         return;
       }
-      const escalatedFrom = String(body.escalated_from || '').trim();
-      const trigger = String(body.trigger || '').trim();
+      const escalatedFrom = String(body.escalated_from || "").trim();
+      const trigger = String(body.trigger || "").trim();
       const userConfirmed = body.user_confirmed === true;
       const allowedTrigger =
-        trigger === 'partial' || trigger === 'blocked' || trigger === 'browser_insufficient';
-      if (escalatedFrom !== 'browser') {
-        json(res, 409, { ok: false, error: 'browser_context_required' }, headers);
+        trigger === "partial" || trigger === "blocked" || trigger === "browser_insufficient";
+      if (escalatedFrom !== "browser") {
+        json(res, 409, { ok: false, error: "browser_context_required" }, headers);
         return;
       }
       if (!allowedTrigger) {
-        json(res, 400, { ok: false, error: 'trigger_not_allowed' }, headers);
+        json(res, 400, { ok: false, error: "trigger_not_allowed" }, headers);
         return;
       }
       if (!userConfirmed) {
-        json(res, 409, { ok: false, error: 'user_confirmation_required' }, headers);
+        json(res, 409, { ok: false, error: "user_confirmation_required" }, headers);
         return;
       }
       if (!executeMachineEscalationRequest) {
-        json(res, 503, { ok: false, error: 'machine_escalation_unavailable' }, headers);
+        json(res, 503, { ok: false, error: "machine_escalation_unavailable" }, headers);
         return;
       }
       const result = await executeMachineEscalationRequest({
-        intent_id: String(body.intent_id || '').trim(),
+        intent_id: String(body.intent_id || "").trim(),
         escalated_from: escalatedFrom,
         trigger,
         user_confirmed: true,
-        requested_scope: String(body.requested_scope || '').trim(),
-        browser_bridge_status: String(body.browser_bridge_status || '').trim(),
+        requested_scope: String(body.requested_scope || "").trim(),
+        browser_bridge_status: String(body.browser_bridge_status || "").trim(),
         session_id: valid.session_id,
         origin,
       });
       const statusCode =
-        result && typeof result.http_status === 'number'
+        result && typeof result.http_status === "number"
           ? result.http_status
           : result && result.ok === false
             ? 409
@@ -419,18 +438,18 @@ function createLocalControlWebBridge(opts = {}) {
       return;
     }
 
-    json(res, 404, { ok: false, error: 'not_found' }, headers);
+    json(res, 404, { ok: false, error: "not_found" }, headers);
   }
 
   async function start() {
     if (started && server) return address();
     server = http.createServer((req, res) => {
       void handle(req, res).catch(() => {
-        json(res, 500, { ok: false, error: 'internal_error' });
+        json(res, 500, { ok: false, error: "internal_error" });
       });
     });
     await new Promise((resolve, reject) => {
-      server.once('error', reject);
+      server.once("error", reject);
       server.listen({ host, port }, () => resolve());
     });
     started = true;
@@ -448,7 +467,7 @@ function createLocalControlWebBridge(opts = {}) {
   function address() {
     if (!server) return null;
     const a = server.address();
-    if (!a || typeof a === 'string') return null;
+    if (!a || typeof a === "string") return null;
     return {
       host: a.address,
       port: a.port,
@@ -466,7 +485,7 @@ function createLocalControlWebBridge(opts = {}) {
 
   function getStatusSnapshot(origin) {
     const addr = address();
-    const o = String(origin || '').trim();
+    const o = String(origin || "").trim();
     const originAllowed = o ? isOriginAllowed(o) : false;
     const paired = originAllowed ? pairing.isPairedForOrigin(o) : false;
     return {
@@ -488,7 +507,7 @@ function createLocalControlWebBridge(opts = {}) {
     return pairing.exchangePairingCode({
       pairing_code,
       requested_origin: canonicalOrigin,
-      client_nonce: String(client_nonce || '').slice(0, 64),
+      client_nonce: String(client_nonce || "").slice(0, 64),
     });
   }
 
@@ -496,14 +515,14 @@ function createLocalControlWebBridge(opts = {}) {
     const valid = pairing.validateToken({
       token,
       origin: canonicalOrigin,
-      requiredScope: 'status.read',
+      requiredScope: "status.read",
     });
     if (!valid.ok) {
       return { ok: false, error: valid.reason_code };
     }
     return {
       ok: true,
-      kind: 'ham_local_control_bridge_status',
+      kind: "ham_local_control_bridge_status",
       bridge_version: BRIDGE_VERSION,
       pairing_required: true,
       paired: true,
@@ -514,24 +533,46 @@ function createLocalControlWebBridge(opts = {}) {
     const valid = pairing.validateToken({
       token,
       origin: canonicalOrigin,
-      requiredScope: 'browser.intent',
+      requiredScope: "browser.intent",
     });
     if (!valid.ok) {
-      return { ok: false, error: valid.reason_code, reason_code: valid.reason_code, http_status: 401 };
+      return {
+        ok: false,
+        error: valid.reason_code,
+        reason_code: valid.reason_code,
+        http_status: 401,
+      };
     }
     if (!executeBrowserIntent) {
-      return { ok: false, error: 'browser_intent_unavailable', reason_code: 'browser_intent_unavailable', http_status: 503 };
+      return {
+        ok: false,
+        error: "browser_intent_unavailable",
+        reason_code: "browser_intent_unavailable",
+        http_status: 503,
+      };
     }
     const parsed = parseBrowserIntentPayload(payload);
     if (!parsed.ok) {
-      return { ok: false, error: 'invalid_intent', reason_code: 'invalid_intent', http_status: 400 };
+      return {
+        ok: false,
+        error: "invalid_intent",
+        reason_code: "invalid_intent",
+        http_status: 400,
+      };
     }
     const result = await executeBrowserIntent({
       ...parsed.payload,
       session_id: valid.session_id,
       origin: canonicalOrigin,
     });
-    return result && typeof result === 'object' ? result : { ok: false, error: 'browser_intent_failed', reason_code: 'browser_intent_failed', http_status: 409 };
+    return result && typeof result === "object"
+      ? result
+      : {
+          ok: false,
+          error: "browser_intent_failed",
+          reason_code: "browser_intent_failed",
+          http_status: 409,
+        };
   }
 
   function revokeTrustedToken({ token }) {
@@ -568,4 +609,3 @@ module.exports = {
   BRIDGE_VERSION,
   CANONICAL_ORIGIN,
 };
-

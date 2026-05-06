@@ -1,6 +1,6 @@
-'use strict';
+"use strict";
 
-const crypto = require('node:crypto');
+const crypto = require("node:crypto");
 
 const DEFAULT_PAIRING_CODE_TTL_MS = 120_000;
 const DEFAULT_TOKEN_TTL_MS = 900_000;
@@ -14,7 +14,7 @@ function nowMsDefault() {
 }
 
 function randomHex(bytes) {
-  return crypto.randomBytes(bytes).toString('hex');
+  return crypto.randomBytes(bytes).toString("hex");
 }
 
 function sessionId() {
@@ -22,8 +22,8 @@ function sessionId() {
 }
 
 function pairingCode() {
-  const a = crypto.randomInt(0, 1000).toString().padStart(3, '0');
-  const b = crypto.randomInt(0, 1000).toString().padStart(3, '0');
+  const a = crypto.randomInt(0, 1000).toString().padStart(3, "0");
+  const b = crypto.randomInt(0, 1000).toString().padStart(3, "0");
   return `${a}-${b}`;
 }
 
@@ -45,8 +45,8 @@ function clampPairingCodeTtlMs(valueMs) {
  * No disk persistence in MVP by design.
  */
 function createWebBridgePairingStore(opts = {}) {
-  const nowMs = typeof opts.nowMs === 'function' ? opts.nowMs : nowMsDefault;
-  const emitAudit = typeof opts.emitAudit === 'function' ? opts.emitAudit : () => {};
+  const nowMs = typeof opts.nowMs === "function" ? opts.nowMs : nowMsDefault;
+  const emitAudit = typeof opts.emitAudit === "function" ? opts.emitAudit : () => {};
   let pairCodeTtlMsCurrent = clampPairingCodeTtlMs(opts.pairCodeTtlMs);
   const tokenTtlMs = Number(opts.tokenTtlMs) > 0 ? Number(opts.tokenTtlMs) : DEFAULT_TOKEN_TTL_MS;
   const failWindowMs =
@@ -86,19 +86,19 @@ function createWebBridgePairingStore(opts = {}) {
     const sid = sessionId();
     const expiresAt = nowMs() + pairCodeTtlMsCurrent;
     codes.set(code, { expiresAt, used: false, sessionId: sid });
-    emitAudit({ event: 'pairing_code_created', session_id: sid, expires_at_ms: expiresAt });
+    emitAudit({ event: "pairing_code_created", session_id: sid, expires_at_ms: expiresAt });
     return { code, session_id: sid, expires_at_ms: expiresAt };
   }
 
   function recordFailure(origin, reason) {
-    const key = String(origin || 'unknown').trim() || 'unknown';
+    const key = String(origin || "unknown").trim() || "unknown";
     const arr = ensureArrayMap(failures, key);
     arr.push(nowMs());
-    emitAudit({ event: 'pairing_exchange_failure', origin: key, reason_code: reason });
+    emitAudit({ event: "pairing_exchange_failure", origin: key, reason_code: reason });
   }
 
   function tooManyFailures(origin) {
-    const key = String(origin || 'unknown').trim() || 'unknown';
+    const key = String(origin || "unknown").trim() || "unknown";
     const arr = failures.get(key);
     if (!arr || !arr.length) return false;
     return arr.length >= failMax;
@@ -106,33 +106,33 @@ function createWebBridgePairingStore(opts = {}) {
 
   function exchangePairingCode({ pairing_code, requested_origin, client_nonce }) {
     prune();
-    const origin = String(requested_origin || '').trim();
+    const origin = String(requested_origin || "").trim();
     emitAudit({
-      event: 'pairing_exchange_attempt',
+      event: "pairing_exchange_attempt",
       origin,
-      client_nonce: String(client_nonce || '').slice(0, 64),
+      client_nonce: String(client_nonce || "").slice(0, 64),
     });
     if (tooManyFailures(origin)) {
-      recordFailure(origin, 'pairing_rate_limited');
-      return { ok: false, reason_code: 'pairing_rate_limited' };
+      recordFailure(origin, "pairing_rate_limited");
+      return { ok: false, reason_code: "pairing_rate_limited" };
     }
 
-    const code = String(pairing_code || '').trim();
+    const code = String(pairing_code || "").trim();
     if (!code || !codes.has(code)) {
-      recordFailure(origin, 'pairing_code_invalid');
-      return { ok: false, reason_code: 'pairing_code_invalid' };
+      recordFailure(origin, "pairing_code_invalid");
+      return { ok: false, reason_code: "pairing_code_invalid" };
     }
     const row = codes.get(code);
     const now = nowMs();
     if (row.used) {
       codes.delete(code);
-      recordFailure(origin, 'pairing_code_already_used');
-      return { ok: false, reason_code: 'pairing_code_already_used' };
+      recordFailure(origin, "pairing_code_already_used");
+      return { ok: false, reason_code: "pairing_code_already_used" };
     }
     if (row.expiresAt <= now) {
       codes.delete(code);
-      recordFailure(origin, 'pairing_code_expired');
-      return { ok: false, reason_code: 'pairing_code_expired' };
+      recordFailure(origin, "pairing_code_expired");
+      return { ok: false, reason_code: "pairing_code_expired" };
     }
 
     row.used = true;
@@ -140,7 +140,7 @@ function createWebBridgePairingStore(opts = {}) {
     const tok = randomHex(24);
     const expiresAt = now + tokenTtlMs;
     const sessionIdValue = row.sessionId;
-    const scopes = ['status.read', 'browser.intent', 'machine.escalation.request'];
+    const scopes = ["status.read", "browser.intent", "machine.escalation.request"];
     tokens.set(tok, {
       sessionId: sessionIdValue,
       origin,
@@ -150,7 +150,7 @@ function createWebBridgePairingStore(opts = {}) {
     });
     failures.delete(origin);
     emitAudit({
-      event: 'pairing_exchange_success',
+      event: "pairing_exchange_success",
       session_id: sessionIdValue,
       origin,
       expires_at_ms: expiresAt,
@@ -166,36 +166,36 @@ function createWebBridgePairingStore(opts = {}) {
 
   function validateToken({ token, origin, requiredScope }) {
     prune();
-    const tok = String(token || '').trim();
-    if (!tok) return { ok: false, reason_code: 'token_missing' };
-    if (!tokens.has(tok)) return { ok: false, reason_code: 'token_invalid' };
+    const tok = String(token || "").trim();
+    if (!tok) return { ok: false, reason_code: "token_missing" };
+    if (!tokens.has(tok)) return { ok: false, reason_code: "token_invalid" };
     const row = tokens.get(tok);
     const now = nowMs();
     if (row.revoked) {
       tokens.delete(tok);
-      return { ok: false, reason_code: 'token_revoked' };
+      return { ok: false, reason_code: "token_revoked" };
     }
     if (row.expiresAt <= now) {
       tokens.delete(tok);
-      return { ok: false, reason_code: 'token_expired' };
+      return { ok: false, reason_code: "token_expired" };
     }
-    if (String(origin || '').trim() !== row.origin) {
-      return { ok: false, reason_code: 'origin_mismatch' };
+    if (String(origin || "").trim() !== row.origin) {
+      return { ok: false, reason_code: "origin_mismatch" };
     }
     if (requiredScope && !row.scopes.includes(requiredScope)) {
-      return { ok: false, reason_code: 'scope_denied' };
+      return { ok: false, reason_code: "scope_denied" };
     }
     return { ok: true, session_id: row.sessionId, scopes: [...row.scopes] };
   }
 
   function revokeToken(token) {
     prune();
-    const tok = String(token || '').trim();
+    const tok = String(token || "").trim();
     if (!tok || !tokens.has(tok)) return false;
     const row = tokens.get(tok);
     row.revoked = true;
     tokens.set(tok, row);
-    emitAudit({ event: 'token_revoked', session_id: row.sessionId, origin: row.origin });
+    emitAudit({ event: "token_revoked", session_id: row.sessionId, origin: row.origin });
     tokens.delete(tok);
     return true;
   }
@@ -210,7 +210,7 @@ function createWebBridgePairingStore(opts = {}) {
 
   function isPairedForOrigin(origin) {
     prune();
-    const o = String(origin || '').trim();
+    const o = String(origin || "").trim();
     if (!o) return false;
     for (const row of tokens.values()) {
       if (!row.revoked && row.origin === o && row.expiresAt > nowMs()) return true;
@@ -232,7 +232,7 @@ function createWebBridgePairingStore(opts = {}) {
     const ttlMs = clampPairingCodeTtlMs(Number(ttlSec) * 1000);
     pairCodeTtlMsCurrent = ttlMs;
     emitAudit({
-      event: 'pairing_ttl_updated',
+      event: "pairing_ttl_updated",
       pairing_code_ttl_sec: Math.floor(ttlMs / 1000),
     });
     return getPairingConfig();
@@ -260,4 +260,3 @@ module.exports = {
   MIN_PAIRING_CODE_TTL_MS,
   MAX_PAIRING_CODE_TTL_MS,
 };
-

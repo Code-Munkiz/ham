@@ -1,10 +1,10 @@
-'use strict';
+"use strict";
 
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const { spawn } = require('node:child_process');
-const { validateNavigateUrl, safeDisplayUrl } = require('./local_control_browser_url.cjs');
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
+const { spawn } = require("node:child_process");
+const { validateNavigateUrl, safeDisplayUrl } = require("./local_control_browser_url.cjs");
 
 const MAX_SCREENSHOT_DATA_URL_CHARS = 1_500_000;
 const CDP_READY_MS = 45_000;
@@ -21,16 +21,16 @@ const CANDIDATE_TTL_MS = 45_000;
 const MAX_TYPE_TEXT_CHARS = 280;
 const MAX_TYPE_SELECTOR_CHARS = 180;
 const SAFE_KEY_PRESS_ALLOWLIST = new Set([
-  'Tab',
-  'Escape',
-  'ArrowUp',
-  'ArrowDown',
-  'ArrowLeft',
-  'ArrowRight',
-  'PageUp',
-  'PageDown',
-  'Home',
-  'End',
+  "Tab",
+  "Escape",
+  "ArrowUp",
+  "ArrowDown",
+  "ArrowLeft",
+  "ArrowRight",
+  "PageUp",
+  "PageDown",
+  "Home",
+  "End",
 ]);
 
 /**
@@ -41,21 +41,21 @@ const SAFE_KEY_PRESS_ALLOWLIST = new Set([
  * @returns {{ ok: true, selector: string } | { ok: false, error: string }}
  */
 function normalizeTypeSelector(selector) {
-  const sel = String(selector || '').trim();
-  if (!sel || sel.length > MAX_TYPE_SELECTOR_CHARS) return { ok: false, error: 'selector_invalid' };
+  const sel = String(selector || "").trim();
+  if (!sel || sel.length > MAX_TYPE_SELECTOR_CHARS) return { ok: false, error: "selector_invalid" };
   const parts = sel
-    .split(',')
+    .split(",")
     .map((x) => x.trim())
     .filter(Boolean);
-  if (!parts.length) return { ok: false, error: 'selector_invalid' };
+  if (!parts.length) return { ok: false, error: "selector_invalid" };
   const safeInputOrTextarea = /^(input|textarea)(\[[^\]\n\r]+\])*$/i;
   const safeContentEditable = /^\[contenteditable(?:\s*=\s*["']?(?:true|false)?["']?)?\]$/i;
   for (const p of parts) {
     if (!(safeInputOrTextarea.test(p) || safeContentEditable.test(p))) {
-      return { ok: false, error: 'selector_not_allowed' };
+      return { ok: false, error: "selector_not_allowed" };
     }
   }
-  return { ok: true, selector: parts.join(',') };
+  return { ok: true, selector: parts.join(",") };
 }
 
 /**
@@ -65,9 +65,9 @@ function normalizeTypeSelector(selector) {
  * @returns {{ ok: true, text: string } | { ok: false, error: string }}
  */
 function normalizeTypeText(text) {
-  const rawText = String(text || '');
-  if (!rawText.trim()) return { ok: false, error: 'text_required' };
-  if (rawText.length > MAX_TYPE_TEXT_CHARS) return { ok: false, error: 'text_too_long' };
+  const rawText = String(text || "");
+  if (!rawText.trim()) return { ok: false, error: "text_required" };
+  if (rawText.length > MAX_TYPE_TEXT_CHARS) return { ok: false, error: "text_too_long" };
   return { ok: true, text: rawText };
 }
 
@@ -98,7 +98,7 @@ function clampWaitMs(ms) {
  * @returns {boolean}
  */
 function isValidCandidateId(id) {
-  return /^ham_cand_\d+_\d+$/.test(String(id || '').trim());
+  return /^ham_cand_\d+_\d+$/.test(String(id || "").trim());
 }
 
 /**
@@ -203,9 +203,9 @@ function buildClickCandidateExpression(id) {
  * @param {boolean} clearFirst
  */
 function buildTypeIntoFieldExpression(selector, text, clearFirst) {
-  const selectorLit = JSON.stringify(String(selector || ''));
-  const textLit = JSON.stringify(String(text || ''));
-  const clearFirstLit = clearFirst === false ? 'false' : 'true';
+  const selectorLit = JSON.stringify(String(selector || ""));
+  const textLit = JSON.stringify(String(text || ""));
+  const clearFirstLit = clearFirst === false ? "false" : "true";
   return `(() => {
     const selector = ${selectorLit};
     const txt = ${textLit};
@@ -269,11 +269,14 @@ function buildTypeIntoFieldExpression(selector, text, clearFirst) {
  * @param {string} platform process.platform
  */
 function realBrowserActionGates(policy, platform) {
-  if (platform !== 'linux' && platform !== 'win32') return { ok: false, reason: 'platform_not_supported' };
-  if (policy.kill_switch.engaged) return { ok: false, reason: 'kill_switch_engaged' };
-  if (!policy.real_browser_control_armed) return { ok: false, reason: 'real_browser_not_armed' };
-  if (!policy.permissions.real_browser_automation) return { ok: false, reason: 'real_browser_automation_off' };
-  if (!isRealBrowserRuntimeDiscoverable(platform)) return { ok: false, reason: 'chromium_not_found' };
+  if (platform !== "linux" && platform !== "win32")
+    return { ok: false, reason: "platform_not_supported" };
+  if (policy.kill_switch.engaged) return { ok: false, reason: "kill_switch_engaged" };
+  if (!policy.real_browser_control_armed) return { ok: false, reason: "real_browser_not_armed" };
+  if (!policy.permissions.real_browser_automation)
+    return { ok: false, reason: "real_browser_automation_off" };
+  if (!isRealBrowserRuntimeDiscoverable(platform))
+    return { ok: false, reason: "chromium_not_found" };
   return { ok: true };
 }
 
@@ -282,8 +285,8 @@ function realBrowserActionGates(policy, platform) {
  * No sudo required; use ``python -m playwright install chromium`` or install system Chrome/Chromium.
  */
 function discoverPlaywrightChromiumLinux() {
-  const raw = (process.env.PLAYWRIGHT_BROWSERS_PATH || '').trim();
-  const root = raw || path.join(os.homedir(), '.cache', 'ms-playwright');
+  const raw = (process.env.PLAYWRIGHT_BROWSERS_PATH || "").trim();
+  const root = raw || path.join(os.homedir(), ".cache", "ms-playwright");
   let names;
   try {
     names = fs.readdirSync(root, { withFileTypes: true });
@@ -294,12 +297,12 @@ function discoverPlaywrightChromiumLinux() {
     .filter((d) => d.isDirectory() && /^chromium-\d+$/u.test(d.name))
     .map((d) => d.name)
     .sort((a, b) => {
-      const na = parseInt(a.replace(/^chromium-/u, ''), 10);
-      const nb = parseInt(b.replace(/^chromium-/u, ''), 10);
+      const na = parseInt(a.replace(/^chromium-/u, ""), 10);
+      const nb = parseInt(b.replace(/^chromium-/u, ""), 10);
       return (Number.isFinite(nb) ? nb : 0) - (Number.isFinite(na) ? na : 0);
     });
   for (const name of dirs) {
-    const chrome = path.join(root, name, 'chrome-linux64', 'chrome');
+    const chrome = path.join(root, name, "chrome-linux64", "chrome");
     try {
       fs.accessSync(chrome, fs.constants.X_OK);
       return chrome;
@@ -314,19 +317,19 @@ function discoverPlaywrightChromiumLinux() {
  * @param {(cmd: string, args: string[], opts?: object) => string} execFileSync
  */
 function discoverChromiumExecutableLinux(execFileSync) {
-  const env = String(process.env.HAM_DESKTOP_CHROME_PATH || process.env.CHROME_PATH || '').trim();
+  const env = String(process.env.HAM_DESKTOP_CHROME_PATH || process.env.CHROME_PATH || "").trim();
   if (env) return env;
   const candidates = [
-    'google-chrome-stable',
-    'google-chrome',
-    'chromium-browser',
-    'chromium',
-    'microsoft-edge-stable',
-    'brave-browser',
+    "google-chrome-stable",
+    "google-chrome",
+    "chromium-browser",
+    "chromium",
+    "microsoft-edge-stable",
+    "brave-browser",
   ];
   for (const c of candidates) {
     try {
-      const p = execFileSync('which', [c], { encoding: 'utf8', timeout: 4000 }).trim();
+      const p = execFileSync("which", [c], { encoding: "utf8", timeout: 4000 }).trim();
       if (p) return p;
     } catch {
       /* continue */
@@ -334,15 +337,15 @@ function discoverChromiumExecutableLinux(execFileSync) {
   }
   // Distros / snaps often install here without every desktop PATH matching the Electron main process.
   const absoluteCandidates = [
-    '/usr/bin/google-chrome-stable',
-    '/usr/bin/google-chrome',
-    '/opt/google/chrome/google-chrome',
-    '/usr/bin/chromium',
-    '/usr/bin/chromium-browser',
-    '/snap/bin/chromium',
-    '/var/lib/snapd/snap/bin/chromium',
-    '/usr/local/bin/google-chrome',
-    '/usr/local/bin/chromium',
+    "/usr/bin/google-chrome-stable",
+    "/usr/bin/google-chrome",
+    "/opt/google/chrome/google-chrome",
+    "/usr/bin/chromium",
+    "/usr/bin/chromium-browser",
+    "/snap/bin/chromium",
+    "/var/lib/snapd/snap/bin/chromium",
+    "/usr/local/bin/google-chrome",
+    "/usr/local/bin/chromium",
   ];
   for (const p of absoluteCandidates) {
     try {
@@ -358,16 +361,16 @@ function discoverChromiumExecutableLinux(execFileSync) {
 }
 
 function discoverChromiumExecutableWindows() {
-  const env = String(process.env.HAM_DESKTOP_CHROME_PATH || process.env.CHROME_PATH || '').trim();
+  const env = String(process.env.HAM_DESKTOP_CHROME_PATH || process.env.CHROME_PATH || "").trim();
   if (env) return env;
-  const programFiles = (process.env.PROGRAMFILES || '').trim();
-  const programFilesX86 = (process.env['PROGRAMFILES(X86)'] || '').trim();
-  const localAppData = (process.env.LOCALAPPDATA || '').trim();
+  const programFiles = (process.env.PROGRAMFILES || "").trim();
+  const programFilesX86 = (process.env["PROGRAMFILES(X86)"] || "").trim();
+  const localAppData = (process.env.LOCALAPPDATA || "").trim();
   const roots = [programFiles, programFilesX86, localAppData].filter((p) => p.length > 0);
   const rels = [
-    ['Google', 'Chrome', 'Application', 'chrome.exe'],
-    ['Microsoft', 'Edge', 'Application', 'msedge.exe'],
-    ['Chromium', 'Application', 'chrome.exe'],
+    ["Google", "Chrome", "Application", "chrome.exe"],
+    ["Microsoft", "Edge", "Application", "msedge.exe"],
+    ["Chromium", "Application", "chrome.exe"],
   ];
   for (const root of roots) {
     for (const rel of rels) {
@@ -390,8 +393,8 @@ function discoverChromiumExecutableWindows() {
  * @param {string} platform
  */
 function discoverChromiumExecutable(execFileSync, platform) {
-  if (platform === 'linux') return discoverChromiumExecutableLinux(execFileSync);
-  if (platform === 'win32') return discoverChromiumExecutableWindows();
+  if (platform === "linux") return discoverChromiumExecutableLinux(execFileSync);
+  if (platform === "win32") return discoverChromiumExecutableWindows();
   return null;
 }
 
@@ -400,7 +403,7 @@ function discoverChromiumExecutable(execFileSync, platform) {
  */
 function isRealBrowserRuntimeDiscoverable(platform) {
   try {
-    const execFileSync = require('node:child_process').execFileSync;
+    const execFileSync = require("node:child_process").execFileSync;
     return Boolean(discoverChromiumExecutable(execFileSync, platform));
   } catch {
     return false;
@@ -420,12 +423,12 @@ function pickDebugPort() {
  * @returns {string}
  */
 function normalizeLoopbackWebSocketUrl(urlStr) {
-  if (!urlStr || typeof urlStr !== 'string') return urlStr;
+  if (!urlStr || typeof urlStr !== "string") return urlStr;
   try {
     const u = new URL(urlStr);
-    const h = u.hostname.replace(/^\[|\]$/g, '').toLowerCase();
-    if (h === 'localhost' || h === '::1') {
-      u.hostname = '127.0.0.1';
+    const h = u.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+    if (h === "localhost" || h === "::1") {
+      u.hostname = "127.0.0.1";
     }
     return u.href;
   } catch {
@@ -444,9 +447,9 @@ async function fetchDebuggerTargets(port, fetchImpl) {
   if (!r.ok) {
     r = await fetchImpl(legacyUrl);
   }
-  if (!r.ok) throw new Error('json_list_failed');
+  if (!r.ok) throw new Error("json_list_failed");
   const list = await r.json();
-  if (!Array.isArray(list)) throw new Error('json_list_invalid');
+  if (!Array.isArray(list)) throw new Error("json_list_invalid");
   return list;
 }
 
@@ -456,16 +459,19 @@ async function fetchDebuggerTargets(port, fetchImpl) {
  */
 function mapAttachExceptionToResult(err) {
   const detail = err instanceof Error ? err.message : String(err);
-  if (detail === 'no_page_target') {
-    return { ok: false, error: 'cdp_no_page_target', detail };
+  if (detail === "no_page_target") {
+    return { ok: false, error: "cdp_no_page_target", detail };
   }
-  if (detail === 'json_list_failed' || detail === 'json_list_invalid') {
-    return { ok: false, error: 'cdp_target_list_failed', detail };
+  if (detail === "json_list_failed" || detail === "json_list_invalid") {
+    return { ok: false, error: "cdp_target_list_failed", detail };
   }
-  if (detail === 'managed_browser_exited_during_cdp_attach' || detail === 'cdp_debug_port_changed') {
-    return { ok: false, error: 'browser_exited_during_attach', detail };
+  if (
+    detail === "managed_browser_exited_during_cdp_attach" ||
+    detail === "cdp_debug_port_changed"
+  ) {
+    return { ok: false, error: "browser_exited_during_attach", detail };
   }
-  return { ok: false, error: 'cdp_attach_failed', detail };
+  return { ok: false, error: "cdp_attach_failed", detail };
 }
 
 /**
@@ -483,7 +489,7 @@ async function waitForDevtoolsJsonVersion(port, fetchImpl, deadlineMs) {
     }
     await new Promise((r) => setTimeout(r, 80));
   }
-  throw new Error('cdp_not_ready');
+  throw new Error("cdp_not_ready");
 }
 
 /**
@@ -499,15 +505,15 @@ async function waitForDevtoolsJsonVersion(port, fetchImpl, deadlineMs) {
 async function reloadPageViaCdp(cdp, navWaitMs) {
   const loadDone = new Promise((resolve) => {
     const t = setTimeout(() => resolve(false), navWaitMs);
-    cdp.onceEvent('Page.loadEventFired', () => {
+    cdp.onceEvent("Page.loadEventFired", () => {
       clearTimeout(t);
       resolve(true);
     });
   });
   try {
-    await cdp.send('Page.reload', { ignoreCache: false });
+    await cdp.send("Page.reload", { ignoreCache: false });
   } catch {
-    return { ok: false, error: 'reload_failed' };
+    return { ok: false, error: "reload_failed" };
   }
   await loadDone;
   return { ok: true };
@@ -515,25 +521,22 @@ async function reloadPageViaCdp(cdp, navWaitMs) {
 
 async function fetchPageDebuggerWebSocketUrl(port, fetchImpl) {
   const list = await fetchDebuggerTargets(port, fetchImpl);
-  const isDevtools = (u) => String(u || '').startsWith('devtools://');
+  const isDevtools = (u) => String(u || "").startsWith("devtools://");
   let page = list.find(
     (t) =>
-      t &&
-      t.type === 'page' &&
-      typeof t.webSocketDebuggerUrl === 'string' &&
-      !isDevtools(t.url),
+      t && t.type === "page" && typeof t.webSocketDebuggerUrl === "string" && !isDevtools(t.url),
   );
   if (!page) {
     page = list.find(
       (t) =>
         t &&
-        typeof t.webSocketDebuggerUrl === 'string' &&
-        String(t.webSocketDebuggerUrl).includes('/devtools/page/') &&
+        typeof t.webSocketDebuggerUrl === "string" &&
+        String(t.webSocketDebuggerUrl).includes("/devtools/page/") &&
         !isDevtools(t.url) &&
-        t.type !== 'browser',
+        t.type !== "browser",
     );
   }
-  if (!page) throw new Error('no_page_target');
+  if (!page) throw new Error("no_page_target");
   return page.webSocketDebuggerUrl;
 }
 
@@ -553,16 +556,16 @@ class CdpSession {
   }
 
   async connect() {
-    const WebSocket = require('ws');
+    const WebSocket = require("ws");
     await new Promise((resolve, reject) => {
       const ws = new WebSocket(this.wsUrl, {
         perMessageDeflate: false,
         handshakeTimeout: 15_000,
       });
       this.ws = ws;
-      ws.on('open', () => resolve());
-      ws.on('error', (e) => reject(e instanceof Error ? e : new Error(String(e))));
-      ws.on('message', (data) => this._onMessage(data));
+      ws.on("open", () => resolve());
+      ws.on("error", (e) => reject(e instanceof Error ? e : new Error(String(e))));
+      ws.on("message", (data) => this._onMessage(data));
     });
   }
 
@@ -580,11 +583,11 @@ class CdpSession {
       const slot = this.pending.get(msg.id);
       this.pending.delete(msg.id);
       clearTimeout(slot.t);
-      if (msg.error) slot.reject(new Error(msg.error.message || 'cdp_error'));
+      if (msg.error) slot.reject(new Error(msg.error.message || "cdp_error"));
       else slot.resolve(msg.result);
       return;
     }
-    if (typeof msg.method === 'string') {
+    if (typeof msg.method === "string") {
       const q = this.eventQueue.get(msg.method);
       if (q && q.length) {
         const fn = q.shift();
@@ -607,16 +610,16 @@ class CdpSession {
    * @param {Record<string, unknown>} [params]
    */
   send(method, params = {}) {
-    const WebSocket = require('ws');
+    const WebSocket = require("ws");
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      return Promise.reject(new Error('ws_closed'));
+      return Promise.reject(new Error("ws_closed"));
     }
     const id = ++this.nextId;
     return new Promise((resolve, reject) => {
       const t = setTimeout(() => {
         if (this.pending.has(id)) {
           this.pending.delete(id);
-          reject(new Error('cdp_timeout'));
+          reject(new Error("cdp_timeout"));
         }
       }, 45000);
       this.pending.set(id, {
@@ -658,20 +661,20 @@ class CdpSession {
 function createRealBrowserCdpController(opts = {}) {
   const fetchImpl = opts.fetchImpl || fetch;
   const spawnImpl = opts.spawnImpl || spawn;
-  const execFileSyncImpl = opts.execFileSyncImpl || require('node:child_process').execFileSync;
-  const pathMod = opts.path || require('node:path');
-  const fsMod = opts.fs || require('node:fs');
+  const execFileSyncImpl = opts.execFileSyncImpl || require("node:child_process").execFileSync;
+  const pathMod = opts.path || require("node:path");
+  const fsMod = opts.fs || require("node:fs");
 
-  const userDataPath = opts.userDataPath || '';
+  const userDataPath = opts.userDataPath || "";
   const profileRoot =
     userDataPath && pathMod
-      ? pathMod.join(userDataPath, 'ham-desktop', 'local-control', 'real-browser-sessions')
-      : '';
+      ? pathMod.join(userDataPath, "ham-desktop", "local-control", "real-browser-sessions")
+      : "";
 
   /** @type {import('node:child_process').ChildProcess | null} */
   let child = null;
   let debugPort = /** @type {number | null} */ (null);
-  let sessionProfileDir = '';
+  let sessionProfileDir = "";
   /** @type {CdpSession | null} */
   let cdp = null;
   let candidateEpoch = 0;
@@ -690,26 +693,36 @@ function createRealBrowserCdpController(opts = {}) {
     } catch {
       /* best effort */
     }
-    if (sessionProfileDir === dir) sessionProfileDir = '';
+    if (sessionProfileDir === dir) sessionProfileDir = "";
   }
 
   function getStatus() {
     if (!isChildAlive()) {
-      return { running: false, title: '', href: '', display_url: '' };
+      return { running: false, title: "", href: "", display_url: "" };
     }
-    return { running: true, title: '', href: '', display_url: '' };
+    return { running: true, title: "", href: "", display_url: "" };
   }
 
   async function readPageMeta() {
-    if (!cdp) return { title: '', href: '', display_url: '' };
+    if (!cdp) return { title: "", href: "", display_url: "" };
     try {
-      const hrefR = await cdp.send('Runtime.evaluate', { expression: 'location.href', returnByValue: true });
-      const titleR = await cdp.send('Runtime.evaluate', { expression: 'document.title', returnByValue: true });
-      const href = hrefR && hrefR.result && 'value' in hrefR.result ? String(hrefR.result.value || '') : '';
-      const title = titleR && titleR.result && 'value' in titleR.result ? String(titleR.result.value || '') : '';
+      const hrefR = await cdp.send("Runtime.evaluate", {
+        expression: "location.href",
+        returnByValue: true,
+      });
+      const titleR = await cdp.send("Runtime.evaluate", {
+        expression: "document.title",
+        returnByValue: true,
+      });
+      const href =
+        hrefR && hrefR.result && "value" in hrefR.result ? String(hrefR.result.value || "") : "";
+      const title =
+        titleR && titleR.result && "value" in titleR.result
+          ? String(titleR.result.value || "")
+          : "";
       return { title, href, display_url: safeDisplayUrl(href) };
     } catch {
-      return { title: '', href: '', display_url: '' };
+      return { title: "", href: "", display_url: "" };
     }
   }
 
@@ -717,15 +730,15 @@ function createRealBrowserCdpController(opts = {}) {
    * Compact observe: title, URL, display URL, optional viewport (no DOM / storage).
    */
   async function observeCompact() {
-    if (!isChildAlive() || !cdp) return { ok: false, error: 'not_running' };
+    if (!isChildAlive() || !cdp) return { ok: false, error: "not_running" };
     try {
       const expr =
         '(() => ({ title: document.title || "", href: location.href || "", viewport: { innerWidth: window.innerWidth, innerHeight: window.innerHeight, scrollX: window.scrollX, scrollY: window.scrollY } }))()';
-      const r = await cdp.send('Runtime.evaluate', { expression: expr, returnByValue: true });
-      const v = r && r.result && 'value' in r.result ? r.result.value : null;
-      const title = v && typeof v.title === 'string' ? v.title : '';
-      const href = v && typeof v.href === 'string' ? v.href : '';
-      const vp = v && v.viewport && typeof v.viewport === 'object' ? v.viewport : null;
+      const r = await cdp.send("Runtime.evaluate", { expression: expr, returnByValue: true });
+      const v = r && r.result && "value" in r.result ? r.result.value : null;
+      const title = v && typeof v.title === "string" ? v.title : "";
+      const href = v && typeof v.href === "string" ? v.href : "";
+      const vp = v && v.viewport && typeof v.viewport === "object" ? v.viewport : null;
       return {
         ok: true,
         title,
@@ -741,7 +754,7 @@ function createRealBrowserCdpController(opts = {}) {
           : undefined,
       };
     } catch {
-      return { ok: false, error: 'observe_failed' };
+      return { ok: false, error: "observe_failed" };
     }
   }
 
@@ -751,38 +764,39 @@ function createRealBrowserCdpController(opts = {}) {
    * @param {number} deltaY
    */
   async function scrollVerticalBounded(deltaY) {
-    if (!isChildAlive() || !cdp) return { ok: false, error: 'not_running' };
+    if (!isChildAlive() || !cdp) return { ok: false, error: "not_running" };
     const dy = clampScrollDelta(deltaY);
     if (dy === 0) {
       return { ok: true, delta_applied: 0 };
     }
     try {
-      const lm = await cdp.send('Page.getLayoutMetrics');
-      const lv = lm && typeof lm === 'object' && lm.layoutViewport ? lm.layoutViewport : null;
-      const cw = lv && typeof lv.clientWidth === 'number' ? lv.clientWidth : 800;
-      const ch = lv && typeof lv.clientHeight === 'number' ? lv.clientHeight : 600;
+      const lm = await cdp.send("Page.getLayoutMetrics");
+      const lv = lm && typeof lm === "object" && lm.layoutViewport ? lm.layoutViewport : null;
+      const cw = lv && typeof lv.clientWidth === "number" ? lv.clientWidth : 800;
+      const ch = lv && typeof lv.clientHeight === "number" ? lv.clientHeight : 600;
       const cx = Math.max(1, Math.round(cw / 2));
       const cy = Math.max(1, Math.round(ch / 2));
-      await cdp.send('Input.dispatchMouseEvent', {
-        type: 'mouseWheel',
+      await cdp.send("Input.dispatchMouseEvent", {
+        type: "mouseWheel",
         x: cx,
         y: cy,
         deltaX: 0,
         deltaY: dy,
       });
-      const scrollR = await cdp.send('Runtime.evaluate', {
-        expression: '({ scrollY: window.scrollY, innerHeight: window.innerHeight })',
+      const scrollR = await cdp.send("Runtime.evaluate", {
+        expression: "({ scrollY: window.scrollY, innerHeight: window.innerHeight })",
         returnByValue: true,
       });
-      const sv = scrollR && scrollR.result && 'value' in scrollR.result ? scrollR.result.value : null;
+      const sv =
+        scrollR && scrollR.result && "value" in scrollR.result ? scrollR.result.value : null;
       return {
         ok: true,
         delta_applied: dy,
-        scroll_y: sv && typeof sv.scrollY === 'number' ? sv.scrollY : undefined,
-        inner_height: sv && typeof sv.innerHeight === 'number' ? sv.innerHeight : undefined,
+        scroll_y: sv && typeof sv.scrollY === "number" ? sv.scrollY : undefined,
+        inner_height: sv && typeof sv.innerHeight === "number" ? sv.innerHeight : undefined,
       };
     } catch {
-      return { ok: false, error: 'scroll_failed' };
+      return { ok: false, error: "scroll_failed" };
     }
   }
 
@@ -790,31 +804,31 @@ function createRealBrowserCdpController(opts = {}) {
    * @param {unknown} ms
    */
   async function waitBoundedMs(ms) {
-    if (!isChildAlive() || !cdp) return { ok: false, error: 'not_running' };
+    if (!isChildAlive() || !cdp) return { ok: false, error: "not_running" };
     const w = clampWaitMs(ms);
-    if (w === null) return { ok: false, error: 'wait_out_of_range' };
+    if (w === null) return { ok: false, error: "wait_out_of_range" };
     await new Promise((resolve) => setTimeout(resolve, w));
     return { ok: true, waited_ms: w };
   }
 
   async function enumerateClickCandidates() {
-    if (!isChildAlive() || !cdp) return { ok: false, error: 'not_running' };
+    if (!isChildAlive() || !cdp) return { ok: false, error: "not_running" };
     candidateEpoch += 1;
     const epoch = candidateEpoch;
     try {
       const expr = buildCandidateEnumerationExpression(epoch);
-      const r = await cdp.send('Runtime.evaluate', { expression: expr, returnByValue: true });
-      const val = r && r.result && 'value' in r.result ? r.result.value : null;
+      const r = await cdp.send("Runtime.evaluate", { expression: expr, returnByValue: true });
+      const val = r && r.result && "value" in r.result ? r.result.value : null;
       let list = [];
       if (Array.isArray(val)) {
         list = val.slice(0, MAX_CLICK_CANDIDATES).map((c) => ({
-          id: String((c && c.id) || ''),
-          tag: String((c && c.tag) || ''),
+          id: String((c && c.id) || ""),
+          tag: String((c && c.tag) || ""),
           role: c && c.role != null ? String(c.role) : null,
-          text: String((c && c.text) || '').slice(0, CANDIDATE_TEXT_SNIPPET + 8),
-          risk: String((c && c.risk) || 'low'),
+          text: String((c && c.text) || "").slice(0, CANDIDATE_TEXT_SNIPPET + 8),
+          risk: String((c && c.risk) || "low"),
           box:
-            c && c.box && typeof c.box === 'object'
+            c && c.box && typeof c.box === "object"
               ? {
                   x: Number(c.box.x) || 0,
                   y: Number(c.box.y) || 0,
@@ -830,7 +844,7 @@ function createRealBrowserCdpController(opts = {}) {
     } catch {
       lastCandidateIds.clear();
       lastCandidateAt = 0;
-      return { ok: false, error: 'candidates_failed' };
+      return { ok: false, error: "candidates_failed" };
     }
   }
 
@@ -838,24 +852,28 @@ function createRealBrowserCdpController(opts = {}) {
    * @param {string} candidateId
    */
   async function clickCandidate(candidateId) {
-    if (!isChildAlive() || !cdp) return { ok: false, error: 'not_running' };
-    const id = String(candidateId || '').trim();
-    if (!isValidCandidateId(id)) return { ok: false, error: 'invalid_candidate_id' };
-    if (Date.now() - lastCandidateAt > CANDIDATE_TTL_MS) return { ok: false, error: 'candidates_stale' };
-    if (!lastCandidateIds.has(id)) return { ok: false, error: 'unknown_candidate_id' };
+    if (!isChildAlive() || !cdp) return { ok: false, error: "not_running" };
+    const id = String(candidateId || "").trim();
+    if (!isValidCandidateId(id)) return { ok: false, error: "invalid_candidate_id" };
+    if (Date.now() - lastCandidateAt > CANDIDATE_TTL_MS)
+      return { ok: false, error: "candidates_stale" };
+    if (!lastCandidateIds.has(id)) return { ok: false, error: "unknown_candidate_id" };
     try {
       const expr = buildClickCandidateExpression(id);
-      const r = await cdp.send('Runtime.evaluate', { expression: expr, returnByValue: true });
-      const val = r && r.result && 'value' in r.result ? r.result.value : null;
-      if (!val || typeof val !== 'object') return { ok: false, error: 'click_eval_invalid' };
+      const r = await cdp.send("Runtime.evaluate", { expression: expr, returnByValue: true });
+      const val = r && r.result && "value" in r.result ? r.result.value : null;
+      if (!val || typeof val !== "object") return { ok: false, error: "click_eval_invalid" };
       if (val.ok === true) return { ok: true };
-      const err = val.err != null ? String(val.err) : 'click_failed';
-      if (err === 'blocked' || err === 'invisible' || err === 'offscreen' || err === 'gone') {
-        return { ok: false, error: err === 'blocked' ? 'click_blocked' : err === 'gone' ? 'target_gone' : err };
+      const err = val.err != null ? String(val.err) : "click_failed";
+      if (err === "blocked" || err === "invisible" || err === "offscreen" || err === "gone") {
+        return {
+          ok: false,
+          error: err === "blocked" ? "click_blocked" : err === "gone" ? "target_gone" : err,
+        };
       }
-      return { ok: false, error: 'click_failed' };
+      return { ok: false, error: "click_failed" };
     } catch {
-      return { ok: false, error: 'click_failed' };
+      return { ok: false, error: "click_failed" };
     }
   }
 
@@ -867,28 +885,32 @@ function createRealBrowserCdpController(opts = {}) {
    * @param {{ clear_first?: boolean }} [opts]
    */
   async function typeIntoFieldSafe(selector, text, opts = {}) {
-    if (!isChildAlive() || !cdp) return { ok: false, error: 'not_running' };
+    if (!isChildAlive() || !cdp) return { ok: false, error: "not_running" };
     const selNorm = normalizeTypeSelector(selector);
     if (!selNorm.ok) return { ok: false, error: selNorm.error };
     const textNorm = normalizeTypeText(text);
     if (!textNorm.ok) return { ok: false, error: textNorm.error };
     try {
-      const expr = buildTypeIntoFieldExpression(selNorm.selector, textNorm.text, opts.clear_first !== false);
-      const r = await cdp.send('Runtime.evaluate', { expression: expr, returnByValue: true });
-      const v = r && r.result && 'value' in r.result ? r.result.value : null;
-      if (!v || typeof v !== 'object') return { ok: false, error: 'type_failed' };
+      const expr = buildTypeIntoFieldExpression(
+        selNorm.selector,
+        textNorm.text,
+        opts.clear_first !== false,
+      );
+      const r = await cdp.send("Runtime.evaluate", { expression: expr, returnByValue: true });
+      const v = r && r.result && "value" in r.result ? r.result.value : null;
+      if (!v || typeof v !== "object") return { ok: false, error: "type_failed" };
       if (v.ok === true) {
         return {
           ok: true,
           chars: Number(v.chars) || textNorm.text.length,
-          field_tag: typeof v.tag === 'string' ? v.tag : '',
-          field_type: typeof v.type === 'string' ? v.type : '',
+          field_tag: typeof v.tag === "string" ? v.tag : "",
+          field_type: typeof v.type === "string" ? v.type : "",
         };
       }
-      const err = v.err != null ? String(v.err) : 'type_failed';
+      const err = v.err != null ? String(v.err) : "type_failed";
       return { ok: false, error: err };
     } catch {
-      return { ok: false, error: 'type_failed' };
+      return { ok: false, error: "type_failed" };
     }
   }
 
@@ -898,17 +920,25 @@ function createRealBrowserCdpController(opts = {}) {
    * @param {string} key
    */
   async function pressSafeKey(key) {
-    if (!isChildAlive() || !cdp) return { ok: false, error: 'not_running' };
-    const normalized = String(key || '').trim();
+    if (!isChildAlive() || !cdp) return { ok: false, error: "not_running" };
+    const normalized = String(key || "").trim();
     if (!SAFE_KEY_PRESS_ALLOWLIST.has(normalized)) {
-      return { ok: false, error: 'key_not_allowed' };
+      return { ok: false, error: "key_not_allowed" };
     }
     try {
-      await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: normalized, windowsVirtualKeyCode: 0 });
-      await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: normalized, windowsVirtualKeyCode: 0 });
+      await cdp.send("Input.dispatchKeyEvent", {
+        type: "keyDown",
+        key: normalized,
+        windowsVirtualKeyCode: 0,
+      });
+      await cdp.send("Input.dispatchKeyEvent", {
+        type: "keyUp",
+        key: normalized,
+        windowsVirtualKeyCode: 0,
+      });
       return { ok: true, key: normalized };
     } catch {
-      return { ok: false, error: 'key_press_failed' };
+      return { ok: false, error: "key_press_failed" };
     }
   }
 
@@ -926,59 +956,59 @@ function createRealBrowserCdpController(opts = {}) {
     }
 
     const exe = discoverChromiumExecutable(execFileSyncImpl, process.platform);
-    if (!exe) return { ok: false, error: 'chromium_not_found' };
+    if (!exe) return { ok: false, error: "chromium_not_found" };
 
-    if (!profileRoot) return { ok: false, error: 'profile_root_missing' };
+    if (!profileRoot) return { ok: false, error: "profile_root_missing" };
     try {
       fsMod.mkdirSync(profileRoot, { recursive: true });
     } catch {
-      return { ok: false, error: 'profile_mkdir_failed' };
+      return { ok: false, error: "profile_mkdir_failed" };
     }
-    let launchProfileDir = '';
+    let launchProfileDir = "";
     try {
-      launchProfileDir = fsMod.mkdtempSync(pathMod.join(profileRoot, 'session-'));
+      launchProfileDir = fsMod.mkdtempSync(pathMod.join(profileRoot, "session-"));
       sessionProfileDir = launchProfileDir;
     } catch {
-      return { ok: false, error: 'profile_mkdir_failed' };
+      return { ok: false, error: "profile_mkdir_failed" };
     }
 
     const port = pickDebugPort();
     const args = [
       `--user-data-dir=${launchProfileDir}`,
       `--remote-debugging-port=${port}`,
-      '--remote-debugging-address=127.0.0.1',
+      "--remote-debugging-address=127.0.0.1",
       // Recent Chromium rejects CDP WebSocket upgrades that include an Origin header unless
       // explicitly allowed; Node's `ws` client may send Origin → attach fails after /json/version is up.
-      '--remote-allow-origins=*',
-      '--no-first-run',
-      '--no-default-browser-check',
-      '--disable-extensions',
-      '--disable-dev-shm-usage',
-      '--disable-background-networking',
+      "--remote-allow-origins=*",
+      "--no-first-run",
+      "--no-default-browser-check",
+      "--disable-extensions",
+      "--disable-dev-shm-usage",
+      "--disable-background-networking",
     ];
     // Linux: Chromium often exits immediately when spawned from Electron unless the
     // sandbox is disabled for this dedicated profile (same pattern as Puppeteer/CI).
-    if (process.platform === 'linux') {
-      args.push('--no-sandbox', '--disable-setuid-sandbox');
+    if (process.platform === "linux") {
+      args.push("--no-sandbox", "--disable-setuid-sandbox");
     }
-    args.push('about:blank');
+    args.push("about:blank");
 
     try {
       child = spawnImpl(exe, args, {
-        stdio: 'ignore',
+        stdio: "ignore",
         detached: false,
         env: { ...process.env },
       });
     } catch {
       cleanupSessionProfile(launchProfileDir);
-      return { ok: false, error: 'spawn_failed' };
+      return { ok: false, error: "spawn_failed" };
     }
 
     debugPort = port;
     const spawnedProc = child;
     const spawnedPort = port;
     const spawnedProfileDir = launchProfileDir;
-    spawnedProc.on('exit', () => {
+    spawnedProc.on("exit", () => {
       // A *previous* Chrome child's exit can fire after we've already spawned a replacement;
       // without this guard we'd clear debugPort for the live session → :null CDP URLs.
       if (child !== spawnedProc) {
@@ -1002,7 +1032,7 @@ function createRealBrowserCdpController(opts = {}) {
       await waitForDevtoolsJsonVersion(port, fetchImpl, CDP_READY_MS);
     } catch {
       stopSession();
-      return { ok: false, error: 'cdp_devtools_timeout' };
+      return { ok: false, error: "cdp_devtools_timeout" };
     }
     try {
       await attachCdp();
@@ -1017,20 +1047,20 @@ function createRealBrowserCdpController(opts = {}) {
   async function attachCdp() {
     const portForAttach = debugPort;
     if (!Number.isFinite(portForAttach)) {
-      throw new Error('no_debug_port');
+      throw new Error("no_debug_port");
     }
     const deadline = Date.now() + CDP_ATTACH_RETRY_MS;
     /** @type {Error} */
-    let lastErr = new Error('cdp_attach_exhausted_retries');
+    let lastErr = new Error("cdp_attach_exhausted_retries");
     while (Date.now() < deadline) {
       // If the managed Chrome process exits (or stopSession clears state) while we retry,
       // debugPort becomes null but this loop would keep running and call fetch with a null
       // port → "http://127.0.0.1:null/json/list". Abort instead.
       if (!isChildAlive()) {
-        throw new Error('managed_browser_exited_during_cdp_attach');
+        throw new Error("managed_browser_exited_during_cdp_attach");
       }
       if (debugPort !== portForAttach) {
-        throw new Error('cdp_debug_port_changed');
+        throw new Error("cdp_debug_port_changed");
       }
       /** @type {CdpSession | null} */
       let session = null;
@@ -1039,8 +1069,8 @@ function createRealBrowserCdpController(opts = {}) {
         const wsUrl = normalizeLoopbackWebSocketUrl(wsUrlRaw);
         session = new CdpSession(wsUrl);
         await session.connect();
-        await session.send('Page.enable', {});
-        await session.send('Runtime.enable', {});
+        await session.send("Page.enable", {});
+        await session.send("Runtime.enable", {});
         if (cdp) cdp.close();
         cdp = session;
         return;
@@ -1060,43 +1090,43 @@ function createRealBrowserCdpController(opts = {}) {
   async function navigate(urlString, urlOpts) {
     const v = validateNavigateUrl(urlString, { allow_loopback: urlOpts.allow_loopback });
     if (!v.ok) return { ok: false, error: v.error };
-    if (!isChildAlive() || !cdp) return { ok: false, error: 'not_running' };
+    if (!isChildAlive() || !cdp) return { ok: false, error: "not_running" };
 
     const loadDone = new Promise((resolve) => {
       const t = setTimeout(() => resolve(false), NAV_WAIT_MS);
-      cdp.onceEvent('Page.loadEventFired', () => {
+      cdp.onceEvent("Page.loadEventFired", () => {
         clearTimeout(t);
         resolve(true);
       });
     });
 
     try {
-      await cdp.send('Page.navigate', { url: v.href });
+      await cdp.send("Page.navigate", { url: v.href });
     } catch {
-      return { ok: false, error: 'navigate_failed' };
+      return { ok: false, error: "navigate_failed" };
     }
     await loadDone;
     return { ok: true };
   }
 
   async function reload() {
-    if (!isChildAlive() || !cdp) return { ok: false, error: 'not_running' };
+    if (!isChildAlive() || !cdp) return { ok: false, error: "not_running" };
     return reloadPageViaCdp(cdp, NAV_WAIT_MS);
   }
 
   async function screenshot() {
-    if (!isChildAlive() || !cdp) return { ok: false, error: 'not_running' };
+    if (!isChildAlive() || !cdp) return { ok: false, error: "not_running" };
     let result;
     try {
-      result = await cdp.send('Page.captureScreenshot', { format: 'png' });
+      result = await cdp.send("Page.captureScreenshot", { format: "png" });
     } catch {
-      return { ok: false, error: 'screenshot_failed' };
+      return { ok: false, error: "screenshot_failed" };
     }
-    const b64 = result && typeof result.data === 'string' ? result.data : '';
-    if (!b64) return { ok: false, error: 'screenshot_empty' };
+    const b64 = result && typeof result.data === "string" ? result.data : "";
+    if (!b64) return { ok: false, error: "screenshot_empty" };
     const dataUrl = `data:image/png;base64,${b64}`;
     if (dataUrl.length > MAX_SCREENSHOT_DATA_URL_CHARS) {
-      return { ok: false, error: 'screenshot_too_large' };
+      return { ok: false, error: "screenshot_too_large" };
     }
     return { ok: true, data_url: dataUrl };
   }
@@ -1111,7 +1141,7 @@ function createRealBrowserCdpController(opts = {}) {
     }
     if (child && !child.killed && child.exitCode === null) {
       try {
-        child.kill('SIGTERM');
+        child.kill("SIGTERM");
       } catch {
         /* ignore */
       }
@@ -1119,7 +1149,7 @@ function createRealBrowserCdpController(opts = {}) {
       const dir = sessionProfileDir;
       setTimeout(() => {
         try {
-          if (c && c.exitCode === null && !c.killed) c.kill('SIGKILL');
+          if (c && c.exitCode === null && !c.killed) c.kill("SIGKILL");
         } catch {
           /* ignore */
         }
@@ -1133,7 +1163,7 @@ function createRealBrowserCdpController(opts = {}) {
 
   async function getStatusForIpc() {
     const base = getStatus();
-    if (!base.running || !cdp) return { ...base, title: '', display_url: '' };
+    if (!base.running || !cdp) return { ...base, title: "", display_url: "" };
     const meta = await readPageMeta();
     return { running: true, title: meta.title, href: meta.href, display_url: meta.display_url };
   }

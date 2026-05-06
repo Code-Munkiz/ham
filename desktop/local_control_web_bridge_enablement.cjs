@@ -1,10 +1,12 @@
-'use strict';
+"use strict";
 
 function parseEnvFlag(rawValue) {
-  const raw = String(rawValue || '').trim().toLowerCase();
+  const raw = String(rawValue || "")
+    .trim()
+    .toLowerCase();
   if (!raw) return null;
-  if (raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on') return true;
-  if (raw === '0' || raw === 'false' || raw === 'no' || raw === 'off') return false;
+  if (raw === "1" || raw === "true" || raw === "yes" || raw === "on") return true;
+  if (raw === "0" || raw === "false" || raw === "no" || raw === "off") return false;
   return null;
 }
 
@@ -22,9 +24,9 @@ function localWebBridgeEnabled({ envValue, isPackaged } = {}) {
 
 function localWebBridgeDisabledReason({ envValue, isPackaged } = {}) {
   const parsed = parseEnvFlag(envValue);
-  if (parsed === false) return 'explicit_disabled';
+  if (parsed === false) return "explicit_disabled";
   if (parsed === true) return null;
-  return isPackaged ? null : 'disabled_by_default_dev';
+  return isPackaged ? null : "disabled_by_default_dev";
 }
 
 module.exports = {
@@ -32,4 +34,3 @@ module.exports = {
   localWebBridgeEnabled,
   localWebBridgeDisabledReason,
 };
-

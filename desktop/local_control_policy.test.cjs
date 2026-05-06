@@ -1,10 +1,10 @@
-'use strict';
+"use strict";
 
-const test = require('node:test');
-const assert = require('node:assert/strict');
-const path = require('node:path');
-const fs = require('node:fs');
-const os = require('node:os');
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const path = require("node:path");
+const fs = require("node:fs");
+const os = require("node:os");
 
 const {
   defaultPolicy,
@@ -18,10 +18,10 @@ const {
   disengageKillSwitchForBrowserMvp,
   BROWSER_MVP_KILL_SWITCH_RELEASE_TOKEN,
   POLICY_SCHEMA_VERSION,
-} = require('./local_control_policy.cjs');
+} = require("./local_control_policy.cjs");
 
-test('defaultPolicy: schema v3, browser + real arms false, kill switch engaged', () => {
-  const p = defaultPolicy('linux');
+test("defaultPolicy: schema v3, browser + real arms false, kill switch engaged", () => {
+  const p = defaultPolicy("linux");
   assert.equal(p.schema_version, POLICY_SCHEMA_VERSION);
   assert.equal(p.enabled, false);
   assert.equal(p.kill_switch.engaged, true);
@@ -32,25 +32,25 @@ test('defaultPolicy: schema v3, browser + real arms false, kill switch engaged',
   assert.equal(p.permissions.filesystem_access, false);
 });
 
-test('normalizePolicyForPhase2 (v1 migration): remands disengaged kill_switch', () => {
+test("normalizePolicyForPhase2 (v1 migration): remands disengaged kill_switch", () => {
   const raw = {
-    kill_switch: { engaged: false, reason: 'bad' },
-    updated_at: '2020-01-01T00:00:00.000Z',
+    kill_switch: { engaged: false, reason: "bad" },
+    updated_at: "2020-01-01T00:00:00.000Z",
   };
-  const n = normalizePolicyForPhase2(raw, 'linux');
+  const n = normalizePolicyForPhase2(raw, "linux");
   assert.equal(n.kill_switch.engaged, true);
-  assert.equal(n.kill_switch.reason, 'auto_remanded_phase2');
+  assert.equal(n.kill_switch.reason, "auto_remanded_phase2");
 });
 
-test('normalizePolicyV2FromDisk: preserves disengaged kill_switch', () => {
+test("normalizePolicyV2FromDisk: preserves disengaged kill_switch", () => {
   const n = normalizePolicyV2FromDisk(
     {
       schema_version: 2,
-      kill_switch: { engaged: false, reason: 'browser_mvp_operator_ack' },
+      kill_switch: { engaged: false, reason: "browser_mvp_operator_ack" },
       browser_control_armed: true,
       permissions: { browser_automation: true },
     },
-    'linux',
+    "linux",
   );
   assert.equal(n.schema_version, POLICY_SCHEMA_VERSION);
   assert.equal(n.kill_switch.engaged, false);
@@ -60,11 +60,11 @@ test('normalizePolicyV2FromDisk: preserves disengaged kill_switch', () => {
   assert.equal(n.permissions.real_browser_automation, false);
 });
 
-test('normalizePolicyV2FromDisk: clamps non-browser permissions false', () => {
+test("normalizePolicyV2FromDisk: clamps non-browser permissions false", () => {
   const n = normalizePolicyV2FromDisk(
     {
       schema_version: 2,
-      kill_switch: { engaged: false, reason: 'x' },
+      kill_switch: { engaged: false, reason: "x" },
       browser_control_armed: true,
       permissions: {
         browser_automation: true,
@@ -74,7 +74,7 @@ test('normalizePolicyV2FromDisk: clamps non-browser permissions false', () => {
         mcp_adapters: true,
       },
     },
-    'linux',
+    "linux",
   );
   assert.equal(n.permissions.filesystem_access, false);
   assert.equal(n.permissions.shell_commands, false);
@@ -82,12 +82,12 @@ test('normalizePolicyV2FromDisk: clamps non-browser permissions false', () => {
   assert.equal(n.permissions.mcp_adapters, false);
 });
 
-test('engageKillSwitch: clears browser arm', () => {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ham-lc-pol-'));
+test("engageKillSwitch: clears browser arm", () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ham-lc-pol-"));
   try {
-    armBrowserOnlyControl({ userDataPath: tmp, platform: 'linux', fs, path });
-    engageKillSwitch({ userDataPath: tmp, platform: 'linux', fs, path });
-    const { policy } = loadPolicy({ userDataPath: tmp, platform: 'linux', fs, path });
+    armBrowserOnlyControl({ userDataPath: tmp, platform: "linux", fs, path });
+    engageKillSwitch({ userDataPath: tmp, platform: "linux", fs, path });
+    const { policy } = loadPolicy({ userDataPath: tmp, platform: "linux", fs, path });
     assert.equal(policy.browser_control_armed, false);
     assert.equal(policy.permissions.browser_automation, false);
     assert.equal(policy.kill_switch.engaged, true);
@@ -96,14 +96,14 @@ test('engageKillSwitch: clears browser arm', () => {
   }
 });
 
-test('engageKillSwitch: clears real browser arm', () => {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ham-lc-pol-rb-'));
+test("engageKillSwitch: clears real browser arm", () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ham-lc-pol-rb-"));
   try {
-    armRealBrowserControl({ userDataPath: tmp, platform: 'linux', fs, path });
-    let { policy } = loadPolicy({ userDataPath: tmp, platform: 'linux', fs, path });
+    armRealBrowserControl({ userDataPath: tmp, platform: "linux", fs, path });
+    let { policy } = loadPolicy({ userDataPath: tmp, platform: "linux", fs, path });
     assert.equal(policy.real_browser_control_armed, true);
-    engageKillSwitch({ userDataPath: tmp, platform: 'linux', fs, path });
-    ({ policy } = loadPolicy({ userDataPath: tmp, platform: 'linux', fs, path }));
+    engageKillSwitch({ userDataPath: tmp, platform: "linux", fs, path });
+    ({ policy } = loadPolicy({ userDataPath: tmp, platform: "linux", fs, path }));
     assert.equal(policy.real_browser_control_armed, false);
     assert.equal(policy.permissions.real_browser_automation, false);
   } finally {
@@ -111,11 +111,11 @@ test('engageKillSwitch: clears real browser arm', () => {
   }
 });
 
-test('armBrowserOnlyControl: sets narrow browser permission', () => {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ham-lc-pol2-'));
+test("armBrowserOnlyControl: sets narrow browser permission", () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ham-lc-pol2-"));
   try {
-    armBrowserOnlyControl({ userDataPath: tmp, platform: 'linux', fs, path });
-    const { policy } = loadPolicy({ userDataPath: tmp, platform: 'linux', fs, path });
+    armBrowserOnlyControl({ userDataPath: tmp, platform: "linux", fs, path });
+    const { policy } = loadPolicy({ userDataPath: tmp, platform: "linux", fs, path });
     assert.equal(policy.browser_control_armed, true);
     assert.equal(policy.permissions.browser_automation, true);
     assert.equal(policy.permissions.filesystem_access, false);
@@ -124,11 +124,11 @@ test('armBrowserOnlyControl: sets narrow browser permission', () => {
   }
 });
 
-test('armRealBrowserControl: sets narrow real-browser permission', () => {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ham-lc-pol-rb-arm-'));
+test("armRealBrowserControl: sets narrow real-browser permission", () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ham-lc-pol-rb-arm-"));
   try {
-    armRealBrowserControl({ userDataPath: tmp, platform: 'linux', fs, path });
-    const { policy } = loadPolicy({ userDataPath: tmp, platform: 'linux', fs, path });
+    armRealBrowserControl({ userDataPath: tmp, platform: "linux", fs, path });
+    const { policy } = loadPolicy({ userDataPath: tmp, platform: "linux", fs, path });
     assert.equal(policy.real_browser_control_armed, true);
     assert.equal(policy.permissions.real_browser_automation, true);
     assert.equal(policy.permissions.filesystem_access, false);
@@ -137,34 +137,34 @@ test('armRealBrowserControl: sets narrow real-browser permission', () => {
   }
 });
 
-test('disengageKillSwitchForBrowserMvp: requires token', () => {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ham-lc-pol3-'));
+test("disengageKillSwitchForBrowserMvp: requires token", () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ham-lc-pol3-"));
   try {
     const bad = disengageKillSwitchForBrowserMvp({
       userDataPath: tmp,
-      platform: 'linux',
+      platform: "linux",
       fs,
       path,
-      token: 'wrong',
+      token: "wrong",
     });
     assert.equal(bad.ok, false);
     const ok = disengageKillSwitchForBrowserMvp({
       userDataPath: tmp,
-      platform: 'linux',
+      platform: "linux",
       fs,
       path,
       token: BROWSER_MVP_KILL_SWITCH_RELEASE_TOKEN,
     });
     assert.equal(ok.ok, true);
-    const { policy } = loadPolicy({ userDataPath: tmp, platform: 'linux', fs, path });
+    const { policy } = loadPolicy({ userDataPath: tmp, platform: "linux", fs, path });
     assert.equal(policy.kill_switch.engaged, false);
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 });
 
-test('getPolicyStatusPayload: browser + real flags present', () => {
-  const p = defaultPolicy('linux');
+test("getPolicyStatusPayload: browser + real flags present", () => {
+  const p = defaultPolicy("linux");
   p.browser_control_armed = true;
   p.real_browser_control_armed = true;
   p.permissions.browser_automation = true;
@@ -178,12 +178,12 @@ test('getPolicyStatusPayload: browser + real flags present', () => {
   assert.equal(st.real_browser_allow_loopback, false);
 });
 
-test('loadPolicy: missing file is not persisted', () => {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ham-lc-pol4-'));
+test("loadPolicy: missing file is not persisted", () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ham-lc-pol4-"));
   try {
     const { policy, persisted } = loadPolicy({
       userDataPath: tmp,
-      platform: 'linux',
+      platform: "linux",
       fs,
       path,
     });

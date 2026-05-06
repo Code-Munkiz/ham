@@ -155,7 +155,7 @@ electron-builder can produce **Windows x64** artifacts on a Linux host. This rep
 
 ### Why portable first, NSIS setup second?
 
-On Linux, **`npm run pack:win`** (portable) has been verified **without** installing system Wine. **`npm run pack:win:nsis`** fails with *`wine is required`* until Wine is available (see [electron-builder multi-platform](https://www.electron.build/multi-platform-build#linux)). Use portable for Linux CI and quick handoff; add Wine or build on Windows when you need the Setup wizard.
+On Linux, **`npm run pack:win`** (portable) has been verified **without** installing system Wine. **`npm run pack:win:nsis`** fails with _`wine is required`_ until Wine is available (see [electron-builder multi-platform](https://www.electron.build/multi-platform-build#linux)). Use portable for Linux CI and quick handoff; add Wine or build on Windows when you need the Setup wizard.
 
 ### Cross-build note: `signAndEditExecutable: false`
 
@@ -169,11 +169,11 @@ Windows builds set **`signAndEditExecutable: false`** so Linux hosts do not need
 
 From `desktop/`:
 
-| Command | Output | Wine on Linux? |
-|---------|--------|----------------|
-| `npm run pack:win` | `dist-pack/HAM-Desktop-<version>-Win-x64-Portable.exe` | No |
-| `npm run pack:win:dir` | `dist-pack/win-unpacked/` (run `HAM Desktop.exe` inside) | No |
-| `npm run pack:win:nsis` | `dist-pack/HAM-Desktop-<version>-Win-x64-Setup.exe` | **Yes** (or use Windows) |
+| Command                 | Output                                                   | Wine on Linux?           |
+| ----------------------- | -------------------------------------------------------- | ------------------------ |
+| `npm run pack:win`      | `dist-pack/HAM-Desktop-<version>-Win-x64-Portable.exe`   | No                       |
+| `npm run pack:win:dir`  | `dist-pack/win-unpacked/` (run `HAM Desktop.exe` inside) | No                       |
+| `npm run pack:win:nsis` | `dist-pack/HAM-Desktop-<version>-Win-x64-Setup.exe`      | **Yes** (or use Windows) |
 
 Example (portable, recommended for first internal testing):
 
@@ -195,13 +195,13 @@ Copy the portable `.exe` or zip **`win-unpacked/`** to Windows. First run may tr
 
 ## Environment reference
 
-| Variable | Purpose |
-|----------|---------|
-| `HAM_DESKTOP_DEV_SERVER_URL` | URL to load in `devserver` mode (default `http://127.0.0.1:3000`) |
-| `HAM_DESKTOP_LOAD_MODE` | `devserver` (default) or `file` |
-| `HAM_DESKTOP_WEB_ROOT` | Directory containing `index.html` for `file` mode (default `../frontend/dist`) |
-| `HAM_DESKTOP_API_BASE` | Ham API origin for runtime `getApiBase()` |
-| `HAM_DESKTOP_USE_HASH_ROUTER` | `1` / `true` to force HashRouter (usually auto for `file` mode) |
+| Variable                      | Purpose                                                                        |
+| ----------------------------- | ------------------------------------------------------------------------------ |
+| `HAM_DESKTOP_DEV_SERVER_URL`  | URL to load in `devserver` mode (default `http://127.0.0.1:3000`)              |
+| `HAM_DESKTOP_LOAD_MODE`       | `devserver` (default) or `file`                                                |
+| `HAM_DESKTOP_WEB_ROOT`        | Directory containing `index.html` for `file` mode (default `../frontend/dist`) |
+| `HAM_DESKTOP_API_BASE`        | Ham API origin for runtime `getApiBase()`                                      |
+| `HAM_DESKTOP_USE_HASH_ROUTER` | `1` / `true` to force HashRouter (usually auto for `file` mode)                |
 
 ## Windows local-control smoke (dev)
 
@@ -235,6 +235,7 @@ netstat -ano | findstr :8765
 ```
 
 Expected:
+
 - Health returns `200` with `ok: true`.
 - Listener shows `127.0.0.1:8765`.
 - No `0.0.0.0:8765` listener.
@@ -256,6 +257,7 @@ Expected:
 From pairing panel, request escalation with trigger `partial` + explicit confirmation.
 
 Expected:
+
 - status `approved_pending_execution`
 - `machine_execution_available: false`
 - no machine action execution

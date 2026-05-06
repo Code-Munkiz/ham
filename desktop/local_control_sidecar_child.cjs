@@ -1,4 +1,4 @@
-'use strict';
+"use strict";
 
 /**
  * Desktop Local Control Phase 3B — inert sidecar child (stdio only).
@@ -6,14 +6,14 @@
  * Responds to: health, status, shutdown (unknown methods → error).
  */
 
-const ALLOWED = new Set(['health', 'status', 'shutdown']);
+const ALLOWED = new Set(["health", "status", "shutdown"]);
 
 const CAPABILITIES = {
-  browser_automation: 'not_implemented',
-  filesystem_access: 'not_implemented',
-  shell_commands: 'not_implemented',
-  app_window_control: 'not_implemented',
-  mcp_adapters: 'not_implemented',
+  browser_automation: "not_implemented",
+  filesystem_access: "not_implemented",
+  shell_commands: "not_implemented",
+  app_window_control: "not_implemented",
+  mcp_adapters: "not_implemented",
 };
 
 function writeLine(obj) {
@@ -25,67 +25,67 @@ function handleRequest(raw) {
   try {
     req = JSON.parse(raw);
   } catch {
-    writeLine({ ok: false, error: 'invalid_json' });
+    writeLine({ ok: false, error: "invalid_json" });
     return;
   }
-  if (!req || typeof req !== 'object' || Array.isArray(req)) {
-    writeLine({ ok: false, error: 'invalid_request' });
+  if (!req || typeof req !== "object" || Array.isArray(req)) {
+    writeLine({ ok: false, error: "invalid_request" });
     return;
   }
   const method = req.method;
   const id = req.id !== undefined && req.id !== null ? req.id : null;
-  if (typeof method !== 'string' || !ALLOWED.has(method)) {
+  if (typeof method !== "string" || !ALLOWED.has(method)) {
     writeLine({
       ok: false,
-      error: 'method_not_allowed',
-      method: typeof method === 'string' ? method : null,
+      error: "method_not_allowed",
+      method: typeof method === "string" ? method : null,
       id,
     });
     return;
   }
 
-  if (method === 'health') {
+  if (method === "health") {
     writeLine({
       ok: true,
       id,
-      method: 'health',
-      result: { status: 'ok', inert: true },
+      method: "health",
+      result: { status: "ok", inert: true },
     });
     return;
   }
 
-  if (method === 'status') {
+  if (method === "status") {
     writeLine({
       ok: true,
       id,
-      method: 'status',
+      method: "status",
       result: {
-        mode: 'inert_process_shell',
+        mode: "inert_process_shell",
         inbound_network: false,
-        droid_access: 'not_enabled',
+        droid_access: "not_enabled",
         capabilities: { ...CAPABILITIES },
       },
     });
     return;
   }
 
-  if (method === 'shutdown') {
+  if (method === "shutdown") {
     writeLine({
       ok: true,
       id,
-      method: 'shutdown',
+      method: "shutdown",
       result: { stopping: true },
     });
     setImmediate(() => process.exit(0));
   }
 }
 
-let buf = '';
-process.stdin.setEncoding('utf8');
-process.stdin.on('data', (chunk) => {
+let buf = "";
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", (chunk) => {
   buf += chunk;
   let i;
-  while ((i = buf.indexOf('\n')) >= 0) {
+  while ((i = buf.indexOf("\n")) >= 0) {
     const line = buf.slice(0, i).trim();
     buf = buf.slice(i + 1);
     if (line.length === 0) continue;
@@ -93,6 +93,6 @@ process.stdin.on('data', (chunk) => {
   }
 });
 
-process.stdin.on('end', () => {
+process.stdin.on("end", () => {
   process.exit(0);
 });

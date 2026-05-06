@@ -1,58 +1,58 @@
-'use strict';
+"use strict";
 
 /**
  * Desktop Local Control Phase 2 — redacted audit log (JSONL under userData).
  * Events contain only type + ISO timestamp — no paths, env, or secrets.
  */
 
-const AUDIT_SUBDIR = 'audit';
-const EVENTS_FILE = 'events.jsonl';
+const AUDIT_SUBDIR = "audit";
+const EVENTS_FILE = "events.jsonl";
 
 const SAFE_EVENT_TYPES = new Set([
-  'local_control_status_read',
-  'local_control_policy_read',
-  'local_control_audit_status_read',
-  'local_control_kill_switch_status_read',
-  'local_control_kill_switch_engaged',
-  'local_control_sidecar_start_blocked',
-  'local_control_sidecar_status_read',
-  'local_control_sidecar_health_ping',
-  'local_control_sidecar_stop',
-  'local_control_browser_arm',
-  'local_control_browser_start',
-  'local_control_browser_start_blocked',
-  'local_control_browser_navigate',
-  'local_control_browser_navigate_blocked',
-  'local_control_browser_screenshot',
-  'local_control_browser_stop',
-  'local_control_browser_error',
-  'local_control_kill_switch_disengaged_browser_mvp',
-  'local_control_real_browser_arm',
-  'local_control_real_browser_start',
-  'local_control_real_browser_start_blocked',
-  'local_control_real_browser_navigate',
-  'local_control_real_browser_navigate_blocked',
-  'local_control_real_browser_reload',
-  'local_control_real_browser_reload_blocked',
-  'local_control_real_browser_screenshot',
-  'local_control_real_browser_stop',
-  'local_control_real_browser_error',
-  'local_control_real_browser_observe_compact',
-  'local_control_real_browser_wait',
-  'local_control_real_browser_scroll',
-  'local_control_real_browser_candidates',
-  'local_control_real_browser_click_candidate',
-  'local_control_real_browser_click_candidate_blocked',
-  'local_control_real_browser_observe_compact_blocked',
-  'local_control_real_browser_wait_blocked',
-  'local_control_real_browser_scroll_blocked',
-  'local_control_real_browser_candidates_blocked',
-  'local_control_real_browser_click_candidate_gate_blocked',
+  "local_control_status_read",
+  "local_control_policy_read",
+  "local_control_audit_status_read",
+  "local_control_kill_switch_status_read",
+  "local_control_kill_switch_engaged",
+  "local_control_sidecar_start_blocked",
+  "local_control_sidecar_status_read",
+  "local_control_sidecar_health_ping",
+  "local_control_sidecar_stop",
+  "local_control_browser_arm",
+  "local_control_browser_start",
+  "local_control_browser_start_blocked",
+  "local_control_browser_navigate",
+  "local_control_browser_navigate_blocked",
+  "local_control_browser_screenshot",
+  "local_control_browser_stop",
+  "local_control_browser_error",
+  "local_control_kill_switch_disengaged_browser_mvp",
+  "local_control_real_browser_arm",
+  "local_control_real_browser_start",
+  "local_control_real_browser_start_blocked",
+  "local_control_real_browser_navigate",
+  "local_control_real_browser_navigate_blocked",
+  "local_control_real_browser_reload",
+  "local_control_real_browser_reload_blocked",
+  "local_control_real_browser_screenshot",
+  "local_control_real_browser_stop",
+  "local_control_real_browser_error",
+  "local_control_real_browser_observe_compact",
+  "local_control_real_browser_wait",
+  "local_control_real_browser_scroll",
+  "local_control_real_browser_candidates",
+  "local_control_real_browser_click_candidate",
+  "local_control_real_browser_click_candidate_blocked",
+  "local_control_real_browser_observe_compact_blocked",
+  "local_control_real_browser_wait_blocked",
+  "local_control_real_browser_scroll_blocked",
+  "local_control_real_browser_candidates_blocked",
+  "local_control_real_browser_click_candidate_gate_blocked",
 ]);
 
 /** @param {string} userDataPath @param {typeof import('node:path')} path */
 function auditDirPath(userDataPath, path) {
-  return path.join(userDataPath, 'ham-desktop', 'local-control', AUDIT_SUBDIR);
+  return path.join(userDataPath, "ham-desktop", "local-control", AUDIT_SUBDIR);
 }
 
 function eventsFilePath(userDataPath, path) {
@@ -98,7 +98,7 @@ function getAuditStatus(opts) {
       if (st.size === 0) {
         event_count_estimate = 0;
       } else {
-        const raw = fs.readFileSync(file, 'utf8');
+        const raw = fs.readFileSync(file, "utf8");
         const lines = raw.trim().split(/\r?\n/).filter(Boolean);
         event_count_estimate = lines.length;
       }
@@ -110,7 +110,7 @@ function getAuditStatus(opts) {
   }
 
   return {
-    kind: 'ham_desktop_local_control_audit_status',
+    kind: "ham_desktop_local_control_audit_status",
     available,
     writable: available && writable,
     event_count_estimate,
@@ -124,16 +124,16 @@ function getAuditStatus(opts) {
  */
 function appendAuditEvent(opts) {
   const { userDataPath, type, fs, path } = opts;
-  const t = String(type || '').trim();
+  const t = String(type || "").trim();
   if (!SAFE_EVENT_TYPES.has(t)) {
-    return { ok: false, error: 'event_type_not_allowed' };
+    return { ok: false, error: "event_type_not_allowed" };
   }
   const dir = auditDirPath(userDataPath, path);
   const file = eventsFilePath(userDataPath, path);
   try {
     fs.mkdirSync(dir, { recursive: true });
     const line = `${JSON.stringify({ type: t, ts_iso: new Date().toISOString() })}\n`;
-    fs.appendFileSync(file, line, 'utf8');
+    fs.appendFileSync(file, line, "utf8");
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
