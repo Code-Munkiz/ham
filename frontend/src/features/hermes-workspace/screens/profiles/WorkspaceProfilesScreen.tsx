@@ -1,7 +1,5 @@
 /**
- * Upstream: src/routes/profiles.tsx (Profiles | Monitoring) +
- * src/screens/profiles/profiles-screen.tsx (card grid, create flow, activate/details/rename/delete).
- * HAM maps to /api/workspace/profiles (JSON v0). Crew/monitoring is a static bridge panel.
+ * Profiles surface: card grid + create / activate / rename / delete flow.
  */
 import * as React from "react";
 import { Check, Clock, Folder, Pencil, Sparkles, Trash2, UserRound } from "lucide-react";
@@ -47,7 +45,6 @@ function ProfileStat({
 }
 
 export function WorkspaceProfilesScreen() {
-  const [routeTab, setRouteTab] = React.useState<"profiles" | "monitoring">("profiles");
   const [profiles, setProfiles] = React.useState<WorkspaceProfile[]>([]);
   const [defaultId, setDefaultId] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -125,229 +122,173 @@ export function WorkspaceProfilesScreen() {
       style={{ color: "var(--theme-text)", backgroundColor: "var(--theme-bg,transparent)" }}
     >
       <div className="mx-auto w-full max-w-[1200px] px-4 py-6 sm:px-6 lg:px-8">
-        <div className="mb-5 flex gap-1 rounded-lg border border-white/10 bg-black/20 p-1">
-          <button
-            type="button"
-            onClick={() => setRouteTab("profiles")}
-            className={cn(
-              "flex-1 rounded-md px-4 py-2 text-sm font-medium transition-colors",
-              routeTab === "profiles"
-                ? "bg-white/10 text-[var(--theme-text)] shadow-sm"
-                : "text-[var(--theme-muted)] hover:text-[var(--theme-text)]",
-            )}
+        <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-white/10 bg-black/20 p-4 shadow-sm md:flex-row md:items-center md:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <UserRound className="h-5 w-5" />
+              <h1 className="text-lg font-semibold">Profiles</h1>
+            </div>
+            <p className="mt-1 text-sm text-[var(--theme-muted)]">
+              Save model and system-prompt presets per agent persona. Activate one and it becomes
+              the default for new chats.
+            </p>
+          </div>
+          <Button
+            onClick={() => {
+              setCreateOpen(true);
+              setNewName("");
+              setNewEmoji("🤖");
+              setNewModel("ham-local");
+              setNewPrompt("");
+            }}
+            className="gap-2"
           >
-            Profiles
-          </button>
-          <button
-            type="button"
-            onClick={() => setRouteTab("monitoring")}
-            className={cn(
-              "flex-1 rounded-md px-4 py-2 text-sm font-medium transition-colors",
-              routeTab === "monitoring"
-                ? "bg-white/10 text-[var(--theme-text)] shadow-sm"
-                : "text-[var(--theme-muted)] hover:text-[var(--theme-text)]",
-            )}
-          >
-            Monitoring
-          </button>
+            Create profile
+          </Button>
         </div>
 
-        {routeTab === "monitoring" ? (
-          <div className="rounded-2xl border border-white/10 bg-black/20 p-6">
-            <h2 className="text-lg font-semibold">Agent monitoring</h2>
-            <p className="mt-2 text-sm text-[var(--theme-muted)]">
-              Upstream <code className="text-xs">crew-screen.tsx</code> shows live crew status
-              (Hermes agent pool). HAM does not connect to that control plane in this build — this
-              panel is a layout placeholder matching the Profiles route tab.
-            </p>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              {["Local bridge", "Gateway"].map((label) => (
-                <div key={label} className="rounded-lg border border-white/10 bg-black/30 p-4">
-                  <div className="text-xs font-semibold uppercase tracking-wider text-[var(--theme-muted)]">
-                    {label}
-                  </div>
-                  <p className="mt-2 text-sm text-[var(--theme-muted)]">Not connected (HAM v0)</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <>
-            <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-white/10 bg-black/20 p-4 shadow-sm md:flex-row md:items-center md:justify-between">
-              <div>
-                <div className="flex items-center gap-2">
-                  <UserRound className="h-5 w-5" />
-                  <h1 className="text-lg font-semibold">Profiles</h1>
-                </div>
-                <p className="mt-1 text-sm text-[var(--theme-muted)]">
-                  Profiles are served from the HAM Profiles API at{" "}
-                  <span className="font-mono text-xs">/api/workspace/profiles</span> (JSON on the
-                  API host). Upstream stores under{" "}
-                  <span className="font-mono">~/.hermes/profiles</span> — HAM uses{" "}
-                  <span className="font-mono">.ham/workspace_state/profiles.json</span>.
-                </p>
-              </div>
-              <Button
-                onClick={() => {
-                  setCreateOpen(true);
-                  setNewName("");
-                  setNewEmoji("🤖");
-                  setNewModel("ham-local");
-                  setNewPrompt("");
-                }}
-                className="gap-2"
-              >
-                Create profile
-              </Button>
-            </div>
-
-            {err && (
-              <div className="mb-3">
-                <WorkspaceSurfaceStateCard
-                  title="Profiles API unavailable"
-                  description="Profiles could not be loaded. Other routes may still work."
-                  tone="amber"
-                  technicalDetail={err}
-                  primaryAction={
-                    <Button type="button" size="sm" variant="secondary" onClick={() => void load()}>
-                      Retry
-                    </Button>
-                  }
-                />
-              </div>
-            )}
-
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {loading &&
-                Array.from({ length: 3 }).map((_, i) => (
-                  <div
-                    key={i}
-                    className="h-80 animate-pulse rounded-2xl border border-white/10 bg-black/20"
-                  />
-                ))}
-              {!loading &&
-                profiles.map((profile) => {
-                  const b = busy === profile.id;
-                  const isAct = profile.isDefault;
-                  return (
-                    <article
-                      key={profile.id}
-                      className="group relative overflow-hidden rounded-2xl border border-white/10 bg-black/25 shadow-sm"
-                    >
-                      {isAct && (
-                        <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-emerald-400 via-emerald-500 to-emerald-400" />
-                      )}
-                      <div className="flex flex-col items-center pt-6 pb-1">
-                        <div className="relative">
-                          <div
-                            className={cn(
-                              "rounded-full p-1",
-                              isAct
-                                ? "bg-gradient-to-br from-emerald-400 via-emerald-500 to-emerald-500 shadow-lg shadow-emerald-500/20"
-                                : "bg-gradient-to-br from-white/20 to-white/5",
-                            )}
-                          >
-                            <div
-                              className={cn(
-                                "flex size-20 items-center justify-center rounded-full border-2 text-3xl",
-                                isAct ? "border-white bg-black/30" : "border-white/10 bg-black/40",
-                              )}
-                            >
-                              {profile.emoji || "🤖"}
-                            </div>
-                          </div>
-                          {isAct && (
-                            <div className="absolute -bottom-0.5 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-full border-2 border-[var(--theme-bg)] bg-emerald-600 px-2 py-0.5">
-                              <Check className="h-2.5 w-2.5 text-white" />
-                              <span className="text-[9px] font-bold uppercase tracking-wider text-white">
-                                Active
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                        <h2 className="mt-3 text-center text-lg font-bold">{profile.name}</h2>
-                        <span className="mt-1 inline-block rounded-full bg-white/5 px-2.5 py-0.5 text-[11px] font-medium text-[var(--theme-muted)]">
-                          {profile.model}
-                        </span>
-                      </div>
-                      <div className="mx-4 mt-4 grid grid-cols-4 divide-x divide-white/10 rounded-xl border border-white/10 bg-black/30">
-                        <ProfileStat label="Skills" value={0} />
-                        <ProfileStat label="Sessions" value={0} />
-                        <ProfileStat label="Model" value={profile.model || "—"} truncate />
-                        <ProfileStat label="Env" value="—" />
-                      </div>
-                      <div className="mx-4 mt-3 flex items-center justify-center gap-1.5 text-xs text-[var(--theme-muted)]">
-                        <Clock className="h-3 w-3" />
-                        {fmtDate(profile.updatedAt)}
-                      </div>
-                      <div className="mt-4 flex border-t border-white/10 text-xs font-semibold">
-                        <button
-                          type="button"
-                          onClick={() => void activate(profile.id)}
-                          disabled={isAct || b}
-                          className={cn(
-                            "flex flex-1 items-center justify-center gap-1 border-r border-white/10 py-2.5",
-                            isAct
-                              ? "cursor-default text-white/20"
-                              : "text-[var(--theme-text)] hover:bg-white/5",
-                          )}
-                        >
-                          <Sparkles className="h-3.5 w-3.5" />
-                          Activate
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setDetails(profile)}
-                          className="flex flex-1 items-center justify-center gap-1 border-r border-white/10 py-2.5 text-[var(--theme-text)] hover:bg-white/5"
-                        >
-                          <Folder className="h-3.5 w-3.5" />
-                          Details
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setRename(profile);
-                            setRenameVal(profile.name);
-                          }}
-                          className="flex flex-1 items-center justify-center gap-1 border-r border-white/10 py-2.5 text-[var(--theme-text)] hover:bg-white/5"
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                          Rename
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void del(profile)}
-                          disabled={isAct || b}
-                          className={cn(
-                            "flex flex-1 items-center justify-center gap-1 py-2.5",
-                            isAct
-                              ? "cursor-default text-white/20"
-                              : "text-red-400 hover:bg-red-950/20",
-                          )}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                          Delete
-                        </button>
-                      </div>
-                    </article>
-                  );
-                })}
-            </div>
-
-            {!loading && profiles.length === 0 && !err && (
-              <div className="mt-4 rounded-2xl border border-dashed border-white/15 bg-black/20 p-8 text-center">
-                <p className="text-sm font-medium text-[var(--theme-text)]">No profiles yet</p>
-                <p className="mt-2 text-sm text-[var(--theme-muted)]">
-                  Create a profile to save model and system prompt defaults. Storage is empty but
-                  the API is connected; active label:{" "}
-                  <span className="font-semibold">{activeName}</span>.
-                </p>
-                <Button type="button" className="mt-4" onClick={() => setCreateOpen(true)}>
-                  Create profile
+        {err && (
+          <div className="mb-3">
+            <WorkspaceSurfaceStateCard
+              title="Profiles API unavailable"
+              description="Profiles could not be loaded. Other routes may still work."
+              tone="amber"
+              technicalDetail={err}
+              primaryAction={
+                <Button type="button" size="sm" variant="secondary" onClick={() => void load()}>
+                  Retry
                 </Button>
-              </div>
-            )}
-          </>
+              }
+            />
+          </div>
+        )}
+
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {loading &&
+            Array.from({ length: 3 }).map((_, i) => (
+              <div
+                key={i}
+                className="h-80 animate-pulse rounded-2xl border border-white/10 bg-black/20"
+              />
+            ))}
+          {!loading &&
+            profiles.map((profile) => {
+              const b = busy === profile.id;
+              const isAct = profile.isDefault;
+              return (
+                <article
+                  key={profile.id}
+                  className="group relative overflow-hidden rounded-2xl border border-white/10 bg-black/25 shadow-sm"
+                >
+                  {isAct && (
+                    <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-emerald-400 via-emerald-500 to-emerald-400" />
+                  )}
+                  <div className="flex flex-col items-center pt-6 pb-1">
+                    <div className="relative">
+                      <div
+                        className={cn(
+                          "rounded-full p-1",
+                          isAct
+                            ? "bg-gradient-to-br from-emerald-400 via-emerald-500 to-emerald-500 shadow-lg shadow-emerald-500/20"
+                            : "bg-gradient-to-br from-white/20 to-white/5",
+                        )}
+                      >
+                        <div
+                          className={cn(
+                            "flex size-20 items-center justify-center rounded-full border-2 text-3xl",
+                            isAct ? "border-white bg-black/30" : "border-white/10 bg-black/40",
+                          )}
+                        >
+                          {profile.emoji || "🤖"}
+                        </div>
+                      </div>
+                      {isAct && (
+                        <div className="absolute -bottom-0.5 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-full border-2 border-[var(--theme-bg)] bg-emerald-600 px-2 py-0.5">
+                          <Check className="h-2.5 w-2.5 text-white" />
+                          <span className="text-[9px] font-bold uppercase tracking-wider text-white">
+                            Active
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    <h2 className="mt-3 text-center text-lg font-bold">{profile.name}</h2>
+                    <span className="mt-1 inline-block rounded-full bg-white/5 px-2.5 py-0.5 text-[11px] font-medium text-[var(--theme-muted)]">
+                      {profile.model}
+                    </span>
+                  </div>
+                  <div className="mx-4 mt-4 grid grid-cols-4 divide-x divide-white/10 rounded-xl border border-white/10 bg-black/30">
+                    <ProfileStat label="Skills" value={0} />
+                    <ProfileStat label="Sessions" value={0} />
+                    <ProfileStat label="Model" value={profile.model || "—"} truncate />
+                    <ProfileStat label="Env" value="—" />
+                  </div>
+                  <div className="mx-4 mt-3 flex items-center justify-center gap-1.5 text-xs text-[var(--theme-muted)]">
+                    <Clock className="h-3 w-3" />
+                    {fmtDate(profile.updatedAt)}
+                  </div>
+                  <div className="mt-4 flex border-t border-white/10 text-xs font-semibold">
+                    <button
+                      type="button"
+                      onClick={() => void activate(profile.id)}
+                      disabled={isAct || b}
+                      className={cn(
+                        "flex flex-1 items-center justify-center gap-1 border-r border-white/10 py-2.5",
+                        isAct
+                          ? "cursor-default text-white/20"
+                          : "text-[var(--theme-text)] hover:bg-white/5",
+                      )}
+                    >
+                      <Sparkles className="h-3.5 w-3.5" />
+                      Activate
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDetails(profile)}
+                      className="flex flex-1 items-center justify-center gap-1 border-r border-white/10 py-2.5 text-[var(--theme-text)] hover:bg-white/5"
+                    >
+                      <Folder className="h-3.5 w-3.5" />
+                      Details
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRename(profile);
+                        setRenameVal(profile.name);
+                      }}
+                      className="flex flex-1 items-center justify-center gap-1 border-r border-white/10 py-2.5 text-[var(--theme-text)] hover:bg-white/5"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                      Rename
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void del(profile)}
+                      disabled={isAct || b}
+                      className={cn(
+                        "flex flex-1 items-center justify-center gap-1 py-2.5",
+                        isAct ? "cursor-default text-white/20" : "text-red-400 hover:bg-red-950/20",
+                      )}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Delete
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
+        </div>
+
+        {!loading && profiles.length === 0 && !err && (
+          <div className="mt-4 rounded-2xl border border-dashed border-white/15 bg-black/20 p-8 text-center">
+            <p className="text-sm font-medium text-[var(--theme-text)]">No profiles yet</p>
+            <p className="mt-2 text-sm text-[var(--theme-muted)]">
+              Create a profile to save model and system prompt defaults. Storage is empty but the
+              API is connected; active label: <span className="font-semibold">{activeName}</span>.
+            </p>
+            <Button type="button" className="mt-4" onClick={() => setCreateOpen(true)}>
+              Create profile
+            </Button>
+          </div>
         )}
 
         {createOpen && (
@@ -359,7 +300,7 @@ export function WorkspaceProfilesScreen() {
               <div className="border-b border-white/10 px-6 py-4">
                 <h3 className="text-base font-semibold">Create profile</h3>
                 <p className="text-xs text-[var(--theme-muted)]">
-                  Name & model (HAM v0; upstream wizard has 3 steps)
+                  Save a name, emoji, model, and system prompt.
                 </p>
               </div>
               <div className="space-y-3 px-6 py-4">
