@@ -213,46 +213,81 @@ class SqliteChatSessionStore:
         offset: int = 0,
     ) -> list[ChatSessionSummary]:
         with self._lock:
+            # Static SQL only (no f-strings / dynamic WHERE fragments) for tooling safety.
             if workspace_id is not None:
-                where_sql = (
-                    "(? IS NULL OR s.user_id = ?) "
-                    "AND (? IS NULL OR s.workspace_id = ?)"
-                )
-                where_params: tuple[Any, ...] = (user_id, user_id, workspace_id, workspace_id)
+                rows = self._conn.execute(
+                    """
+                    SELECT
+                        s.session_id,
+                        s.created_at,
+                        s.user_id,
+                        s.workspace_id,
+                        COUNT(t.id) AS turn_count,
+                        (
+                            SELECT t2.content FROM turns t2
+                            WHERE t2.session_id = s.session_id AND t2.role = 'user'
+                            ORDER BY t2.seq ASC LIMIT 1
+                        ) AS first_user_content
+                    FROM sessions s
+                    LEFT JOIN turns t ON t.session_id = s.session_id
+                    WHERE (? IS NULL OR s.user_id = ?)
+                      AND (? IS NULL OR s.workspace_id = ?)
+                    GROUP BY s.session_id
+                    HAVING turn_count > 0
+                    ORDER BY s.created_at DESC
+                    LIMIT ? OFFSET ?
+                    """,
+                    (user_id, user_id, workspace_id, workspace_id, limit, offset),
+                ).fetchall()
             elif unscoped_actor_user_id is not None:
-                where_sql = (
-                    "((s.user_id IS NULL AND s.workspace_id IS NULL) OR s.user_id = ?)"
-                )
-                where_params = (unscoped_actor_user_id,)
+                rows = self._conn.execute(
+                    """
+                    SELECT
+                        s.session_id,
+                        s.created_at,
+                        s.user_id,
+                        s.workspace_id,
+                        COUNT(t.id) AS turn_count,
+                        (
+                            SELECT t2.content FROM turns t2
+                            WHERE t2.session_id = s.session_id AND t2.role = 'user'
+                            ORDER BY t2.seq ASC LIMIT 1
+                        ) AS first_user_content
+                    FROM sessions s
+                    LEFT JOIN turns t ON t.session_id = s.session_id
+                    WHERE (s.user_id IS NULL AND s.workspace_id IS NULL) OR s.user_id = ?
+                    GROUP BY s.session_id
+                    HAVING turn_count > 0
+                    ORDER BY s.created_at DESC
+                    LIMIT ? OFFSET ?
+                    """,
+                    (unscoped_actor_user_id, limit, offset),
+                ).fetchall()
             else:
-                where_sql = (
-                    "(? IS NULL OR s.user_id = ?) "
-                    "AND (? IS NULL OR s.workspace_id = ?)"
-                )
-                where_params = (user_id, user_id, workspace_id, workspace_id)
-            rows = self._conn.execute(
-                f"""
-                SELECT
-                    s.session_id,
-                    s.created_at,
-                    s.user_id,
-                    s.workspace_id,
-                    COUNT(t.id) AS turn_count,
-                    (
-                        SELECT t2.content FROM turns t2
-                        WHERE t2.session_id = s.session_id AND t2.role = 'user'
-                        ORDER BY t2.seq ASC LIMIT 1
-                    ) AS first_user_content
-                FROM sessions s
-                LEFT JOIN turns t ON t.session_id = s.session_id
-                WHERE {where_sql}
-                GROUP BY s.session_id
-                HAVING turn_count > 0
-                ORDER BY s.created_at DESC
-                LIMIT ? OFFSET ?
-                """,
-                (*where_params, limit, offset),
-            ).fetchall()
+                rows = self._conn.execute(
+                    """
+                    SELECT
+                        s.session_id,
+                        s.created_at,
+                        s.user_id,
+                        s.workspace_id,
+                        COUNT(t.id) AS turn_count,
+                        (
+                            SELECT t2.content FROM turns t2
+                            WHERE t2.session_id = s.session_id AND t2.role = 'user'
+                            ORDER BY t2.seq ASC LIMIT 1
+                        ) AS first_user_content
+                    FROM sessions s
+                    LEFT JOIN turns t ON t.session_id = s.session_id
+                    WHERE (? IS NULL OR s.user_id = ?)
+                      AND (? IS NULL OR s.workspace_id = ?)
+                    GROUP BY s.session_id
+                    HAVING turn_count > 0
+                    ORDER BY s.created_at DESC
+                    LIMIT ? OFFSET ?
+                    """,
+                    (user_id, user_id, workspace_id, workspace_id, limit, offset),
+                ).fetchall()
             out: list[ChatSessionSummary] = []
             for r in rows:
                 raw = str(r["first_user_content"] or "")
