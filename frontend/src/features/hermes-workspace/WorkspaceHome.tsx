@@ -19,8 +19,8 @@ export function WorkspaceHome() {
             HAM's Workspace
           </p>
           <p className="mt-2 max-w-lg text-sm leading-relaxed text-white/45">
-            Operator-facing workspace: chat, files, skills, and settings share the same HAM API and
-            local runtime; some sections are still staging placeholders.
+            Mission control for HAM. Talk to the agent, browse your repo, drive a terminal, and
+            steer your social channels — one workspace, one rail.
           </p>
         </div>
 
@@ -31,7 +31,7 @@ export function WorkspaceHome() {
               Sessions
             </p>
             <p className="mt-1 text-[12px] text-white/38">
-              Search and list will bind to the HAM session adapter.
+              Every conversation, one click away. Resume from the rail.
             </p>
           </div>
           <Link
@@ -43,7 +43,7 @@ export function WorkspaceHome() {
               Chat
             </p>
             <p className="mt-1 text-[12px] text-white/40 group-hover:text-white/55">
-              Open the workspace chat surface (stream wiring next).
+              Streamed answers, persistent sessions, full repo context.
             </p>
           </Link>
           <Link
@@ -55,7 +55,7 @@ export function WorkspaceHome() {
               Social
             </p>
             <p className="mt-1 text-[12px] text-white/40 group-hover:text-white/55">
-              Read-only provider status for X and future social platforms.
+              Plan, draft, and approve posts with policy guardrails.
             </p>
           </Link>
           <div className="rounded-xl border border-[color:var(--ham-workspace-line)] bg-[#040d14]/60 p-4 text-left">
@@ -64,8 +64,7 @@ export function WorkspaceHome() {
               Surface map
             </p>
             <p className="mt-1 text-[12px] text-white/38">
-              Main + Knowledge nav items in the rail are present; most routes are UI placeholders
-              until their adapters are shipped.
+              Every workspace surface, one rail. Jump to chat, files, terminal, jobs, or skills.
             </p>
           </div>
         </div>
