@@ -1,0 +1,13 @@
+# Build outputs / packaged installers
+dist-pack/
+build/
+
+# Dependencies / lockfiles (Prettier should never reformat these)
+node_modules/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Hand-curated config snippets shipped verbatim with installers
+curated/*.snippet
+default-public-api.json
