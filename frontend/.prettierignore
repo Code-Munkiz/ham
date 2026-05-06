@@ -1,0 +1,33 @@
+# Build outputs / generated artifacts
+dist/
+build/
+coverage/
+.vite/
+.vercel/
+
+# Dependencies / lockfiles (Prettier should never reformat these)
+node_modules/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Static assets that ship as-is
+public/
+*.min.js
+*.min.css
+*.map
+
+# Environment templates (formatted manually with comments)
+.env*
+
+# Generated test summaries / scratch
+test-results/
+playwright-report/
+.tsbuildinfo
+
+# vendored shadcn primitives (already excluded from knip; keep diffs minimal)
+src/components/ui/
+
+# desktop-downloads manifest is hand-curated JSON co-owned with desktop release pipeline
+src/lib/ham/desktop-downloads.manifest.json
+public/desktop-downloads.json
