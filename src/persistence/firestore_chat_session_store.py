@@ -181,6 +181,7 @@ class FirestoreChatSessionStore:
         *,
         user_id: str | None = None,
         workspace_id: str | None = None,
+        unscoped_actor_user_id: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[ChatSessionSummary]:
@@ -197,10 +198,18 @@ class FirestoreChatSessionStore:
                 doc_workspace_id = (
                     str(data.get("workspace_id")) if data.get("workspace_id") is not None else None
                 )
-                if user_id is not None and doc_user_id != user_id:
-                    continue
-                if workspace_id is not None and doc_workspace_id != workspace_id:
-                    continue
+                if workspace_id is not None:
+                    if user_id is not None and doc_user_id != user_id:
+                        continue
+                    if doc_workspace_id != workspace_id:
+                        continue
+                elif unscoped_actor_user_id is not None:
+                    is_legacy = data.get("user_id") is None and data.get("workspace_id") is None
+                    if not is_legacy and doc_user_id != unscoped_actor_user_id:
+                        continue
+                else:
+                    if user_id is not None and doc_user_id != user_id:
+                        continue
                 tc = int(data.get("turn_count", 0))
                 if tc <= 0:
                     continue

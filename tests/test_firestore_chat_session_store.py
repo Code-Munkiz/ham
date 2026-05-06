@@ -220,3 +220,15 @@ def test_firestore_legacy_sessions_remain_unscoped_but_hidden_from_scoped_lists(
     assert {s.session_id for s in store.list_sessions()} == {legacy, scoped}
     assert [s.session_id for s in store.list_sessions(user_id="user-a", workspace_id="ws-1")] == [scoped]
     assert legacy not in {s.session_id for s in store.list_sessions(workspace_id="ws-1")}
+
+
+def test_firestore_unscoped_actor_sees_legacy_and_own_sessions_only() -> None:
+    fake = _FakeFirestoreClient()
+    store = FirestoreChatSessionStore("sessions", client=fake)  # type: ignore[arg-type]
+    legacy = _create_with_turn(store, "legacy")
+    mine = _create_with_turn(store, "mine", user_id="user-a", workspace_id="ws-1")
+    other = _create_with_turn(store, "other", user_id="user-b", workspace_id="ws-1")
+
+    visible = store.list_sessions(unscoped_actor_user_id="user-a")
+    assert {s.session_id for s in visible} == {legacy, mine}
+    assert other not in {s.session_id for s in visible}

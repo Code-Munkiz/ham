@@ -83,6 +83,7 @@ class ChatSessionStore(Protocol):
         *,
         user_id: str | None = None,
         workspace_id: str | None = None,
+        unscoped_actor_user_id: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[ChatSessionSummary]: ...
@@ -190,16 +191,26 @@ class InMemoryChatSessionStore:
         *,
         user_id: str | None = None,
         workspace_id: str | None = None,
+        unscoped_actor_user_id: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[ChatSessionSummary]:
         with self._lock:
-            items = [
-                rec
-                for rec in self._sessions.values()
-                if (user_id is None or rec.user_id == user_id)
-                and (workspace_id is None or rec.workspace_id == workspace_id)
-            ]
+            items: list[ChatSessionRecord] = []
+            for rec in self._sessions.values():
+                if workspace_id is not None:
+                    if rec.workspace_id != workspace_id:
+                        continue
+                    if user_id is not None and rec.user_id != user_id:
+                        continue
+                elif unscoped_actor_user_id is not None:
+                    is_legacy = rec.user_id is None and rec.workspace_id is None
+                    if not is_legacy and rec.user_id != unscoped_actor_user_id:
+                        continue
+                else:
+                    if user_id is not None and rec.user_id != user_id:
+                        continue
+                items.append(rec)
             items = sorted(items, key=lambda r: r.session_id, reverse=True)
             page = items[offset : offset + limit]
             out: list[ChatSessionSummary] = []
