@@ -151,3 +151,19 @@ jobs:
         continue-on-error: true
         working-directory: frontend
         run: npm run knip
+
+  desktop-format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - name: npm ci
+        working-directory: desktop
+        run: npm ci
+      - name: Check desktop formatting
+        working-directory: desktop
+        run: npm run format:check
