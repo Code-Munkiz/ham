@@ -39,7 +39,13 @@ afterEach(() => {
 describe("getMe", () => {
   it("returns parsed payload on 200", async () => {
     const me = {
-      user: { user_id: "u_1", email: null, display_name: null, photo_url: null, primary_org_id: null },
+      user: {
+        user_id: "u_1",
+        email: null,
+        display_name: null,
+        photo_url: null,
+        primary_org_id: null,
+      },
       orgs: [],
       workspaces: [],
       default_workspace_id: null,
@@ -68,9 +74,7 @@ describe("getMe", () => {
   });
 
   it("falls back to a generic message when the body is empty", async () => {
-    global.fetch = vi.fn(
-      async () => new Response("", { status: 502 }),
-    ) as typeof fetch;
+    global.fetch = vi.fn(async () => new Response("", { status: 502 })) as typeof fetch;
     try {
       await getMe();
       throw new Error("expected throw");

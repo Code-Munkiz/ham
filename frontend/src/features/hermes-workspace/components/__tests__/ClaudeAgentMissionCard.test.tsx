@@ -75,7 +75,9 @@ describe("ClaudeAgentMissionCard", () => {
 
   it("shows loading state when mission is running", async () => {
     let resolvePromise: (v: Response) => void;
-    const pending = new Promise<Response>((resolve) => { resolvePromise = resolve; });
+    const pending = new Promise<Response>((resolve) => {
+      resolvePromise = resolve;
+    });
     vi.mocked(HamApi.postClaudeAgentMission).mockReturnValue(pending);
 
     render(<ClaudeAgentMissionCard />);
@@ -91,7 +93,9 @@ describe("ClaudeAgentMissionCard", () => {
   });
 
   it("calls mission endpoint without X-HAM-SMOKE-TOKEN", async () => {
-    vi.mocked(HamApi.postClaudeAgentMission).mockResolvedValue(mockFetchResponse(MOCK_SUCCESS_RESPONSE));
+    vi.mocked(HamApi.postClaudeAgentMission).mockResolvedValue(
+      mockFetchResponse(MOCK_SUCCESS_RESPONSE),
+    );
 
     render(<ClaudeAgentMissionCard />);
     fireEvent.click(screen.getByTestId("run-claude-mission-btn"));
@@ -104,7 +108,9 @@ describe("ClaudeAgentMissionCard", () => {
   });
 
   it("renders success result with mission_ok true", async () => {
-    vi.mocked(HamApi.postClaudeAgentMission).mockResolvedValue(mockFetchResponse(MOCK_SUCCESS_RESPONSE));
+    vi.mocked(HamApi.postClaudeAgentMission).mockResolvedValue(
+      mockFetchResponse(MOCK_SUCCESS_RESPONSE),
+    );
 
     render(<ClaudeAgentMissionCard />);
     fireEvent.click(screen.getByTestId("run-claude-mission-btn"));
@@ -118,7 +124,9 @@ describe("ClaudeAgentMissionCard", () => {
   });
 
   it("renders acceptance criteria with count 3", async () => {
-    vi.mocked(HamApi.postClaudeAgentMission).mockResolvedValue(mockFetchResponse(MOCK_SUCCESS_RESPONSE));
+    vi.mocked(HamApi.postClaudeAgentMission).mockResolvedValue(
+      mockFetchResponse(MOCK_SUCCESS_RESPONSE),
+    );
 
     render(<ClaudeAgentMissionCard />);
     fireEvent.click(screen.getByTestId("run-claude-mission-btn"));
@@ -135,7 +143,9 @@ describe("ClaudeAgentMissionCard", () => {
   });
 
   it("renders failure result with safe blocker message", async () => {
-    vi.mocked(HamApi.postClaudeAgentMission).mockResolvedValue(mockFetchResponse(MOCK_FAILURE_RESPONSE));
+    vi.mocked(HamApi.postClaudeAgentMission).mockResolvedValue(
+      mockFetchResponse(MOCK_FAILURE_RESPONSE),
+    );
 
     render(<ClaudeAgentMissionCard />);
     fireEvent.click(screen.getByTestId("run-claude-mission-btn"));
@@ -150,7 +160,9 @@ describe("ClaudeAgentMissionCard", () => {
   it("renders connect-first message on 400 CONNECT_CLAUDE_AGENT_REQUIRED", async () => {
     vi.mocked(HamApi.postClaudeAgentMission).mockResolvedValue(
       mockFetchResponse(
-        { detail: { code: "CONNECT_CLAUDE_AGENT_REQUIRED", message: "Connect Claude Agent first." } },
+        {
+          detail: { code: "CONNECT_CLAUDE_AGENT_REQUIRED", message: "Connect Claude Agent first." },
+        },
         400,
       ),
     );
@@ -166,7 +178,9 @@ describe("ClaudeAgentMissionCard", () => {
   });
 
   it("does not expose raw keys or tokens in rendered output", async () => {
-    vi.mocked(HamApi.postClaudeAgentMission).mockResolvedValue(mockFetchResponse(MOCK_SUCCESS_RESPONSE));
+    vi.mocked(HamApi.postClaudeAgentMission).mockResolvedValue(
+      mockFetchResponse(MOCK_SUCCESS_RESPONSE),
+    );
 
     const { container } = render(<ClaudeAgentMissionCard />);
     fireEvent.click(screen.getByTestId("run-claude-mission-btn"));

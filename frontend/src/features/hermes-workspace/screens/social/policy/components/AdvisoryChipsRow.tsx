@@ -19,9 +19,7 @@ export function AdvisoryChipsRow({
   if (!reasons || reasons.length === 0) return null;
   return (
     <div className={`flex flex-wrap items-center gap-1.5 ${className ?? ""}`.trim()}>
-      {label ? (
-        <span className="text-xs font-medium text-muted-foreground">{label}</span>
-      ) : null}
+      {label ? <span className="text-xs font-medium text-muted-foreground">{label}</span> : null}
       {reasons.map((code) => (
         <AdvisoryChip key={code} code={code} />
       ))}

@@ -60,20 +60,13 @@ export const EMOJI_LABELS: Record<EmojiPolicy, string> = {
 
 /** D.2 advisory code → operator-facing label. */
 export const ADVISORY_LABELS: Record<SocialPolicyAdvisoryCode, string> = {
-  policy_document_missing:
-    "No SocialPolicy on disk yet — saving the editor will create one.",
-  policy_provider_unmapped:
-    "This provider is not mapped in the SocialPolicy.",
-  policy_posting_mode_off:
-    "Posting mode is off in the SocialPolicy for this provider.",
-  policy_reply_mode_off:
-    "Reply mode is off in the SocialPolicy for this provider.",
-  policy_target_label_disabled:
-    "This delivery target is disabled in the SocialPolicy.",
-  policy_live_autonomy_not_armed:
-    "Live autonomy is not armed for this provider.",
-  policy_action_not_allowed:
-    "This action is not in the SocialPolicy's allowed action list.",
+  policy_document_missing: "No SocialPolicy on disk yet — saving the editor will create one.",
+  policy_provider_unmapped: "This provider is not mapped in the SocialPolicy.",
+  policy_posting_mode_off: "Posting mode is off in the SocialPolicy for this provider.",
+  policy_reply_mode_off: "Reply mode is off in the SocialPolicy for this provider.",
+  policy_target_label_disabled: "This delivery target is disabled in the SocialPolicy.",
+  policy_live_autonomy_not_armed: "Live autonomy is not armed for this provider.",
+  policy_action_not_allowed: "This action is not in the SocialPolicy's allowed action list.",
 };
 
 /** Server error code → friendly message. */
@@ -84,8 +77,7 @@ export const ERROR_LABELS: Record<SocialPolicyServerError["code"], string> = {
     "Server rejected the operator write token. Check the token with your operator.",
   SOCIAL_POLICY_WRITES_DISABLED:
     "Policy writes are disabled on the server. Ask your operator to enable HAM_SOCIAL_POLICY_WRITE_TOKEN.",
-  SOCIAL_POLICY_PHRASE_INVALID:
-    "Confirmation phrase did not match. Type it exactly as shown.",
+  SOCIAL_POLICY_PHRASE_INVALID: "Confirmation phrase did not match. Type it exactly as shown.",
   SOCIAL_POLICY_LIVE_AUTONOMY_DISABLED:
     "Live autonomy changes are disabled — the editor never asks for this. Reload and re-preview.",
   SOCIAL_POLICY_LIVE_AUTONOMY_PHRASE_INVALID:
@@ -96,16 +88,11 @@ export const ERROR_LABELS: Record<SocialPolicyServerError["code"], string> = {
     "Server rejected the apply payload. Fix the highlighted fields and re-preview.",
   SOCIAL_POLICY_PREVIEW_INVALID:
     "Server rejected the preview payload. Fix the highlighted fields and try again.",
-  SOCIAL_POLICY_DOCUMENT_INVALID:
-    "Server could not read the existing policy document.",
-  SOCIAL_POLICY_BACKUP_NOT_FOUND:
-    "Backup not found.",
-  SOCIAL_POLICY_ROLLBACK_INVALID:
-    "Rollback request rejected by the server.",
-  SOCIAL_POLICY_ROLLBACK_PHRASE_INVALID:
-    "Rollback confirmation phrase did not match.",
-  UNKNOWN:
-    "Unexpected server error.",
+  SOCIAL_POLICY_DOCUMENT_INVALID: "Server could not read the existing policy document.",
+  SOCIAL_POLICY_BACKUP_NOT_FOUND: "Backup not found.",
+  SOCIAL_POLICY_ROLLBACK_INVALID: "Rollback request rejected by the server.",
+  SOCIAL_POLICY_ROLLBACK_PHRASE_INVALID: "Rollback confirmation phrase did not match.",
+  UNKNOWN: "Unexpected server error.",
 };
 
 /** Static UI strings reused by multiple components. */
@@ -129,12 +116,9 @@ export const UI_TEXT = {
     "The policy document on disk is not currently valid. The editor is showing defaults; saving will create a fresh valid document.",
   writesDisabledBanner:
     "Policy writes are disabled on the server. Apply will not succeed until your operator enables them.",
-  liveAutonomyReadOnly:
-    "Live autonomy is armed elsewhere — not editable here.",
-  liveAutonomyReadOnlyOff:
-    "Live autonomy is not armed — flipping it requires a separate flow.",
-  personaReadOnly:
-    "Persona reference is read-only in this editor.",
+  liveAutonomyReadOnly: "Live autonomy is armed elsewhere — not editable here.",
+  liveAutonomyReadOnlyOff: "Live autonomy is not armed — flipping it requires a separate flow.",
+  personaReadOnly: "Persona reference is read-only in this editor.",
   applyChecklistTitle: "Pre-flight checklist",
   applyPhraseLabel: "Type the confirmation phrase exactly to save",
   applyTokenLabel: "Operator write token (Bearer)",

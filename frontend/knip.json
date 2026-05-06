@@ -1,20 +1,9 @@
 {
   "$schema": "https://unpkg.com/knip@5/schema.json",
-  "entry": [
-    "index.html"
-  ],
-  "project": [
-    "src/**/*.{ts,tsx}",
-    "scripts/**/*.{ts,mjs}"
-  ],
-  "ignore": [
-    "src/components/ui/**"
-  ],
-  "ignoreDependencies": [
-    "autoprefixer",
-    "tailwindcss",
-    "@testing-library/react"
-  ],
+  "entry": ["index.html"],
+  "project": ["src/**/*.{ts,tsx}", "scripts/**/*.{ts,mjs}"],
+  "ignore": ["src/components/ui/**"],
+  "ignoreDependencies": ["autoprefixer", "tailwindcss", "@testing-library/react"],
   "vitest": {
     "config": ["vitest.config.ts"],
     "entry": ["src/**/__tests__/**/*.test.{ts,tsx}"]

@@ -9,15 +9,23 @@ type WorkspaceSettingsSideNavProps = {
   className?: string;
 };
 
-export function WorkspaceSettingsSideNav({ activeSection, className }: WorkspaceSettingsSideNavProps) {
+export function WorkspaceSettingsSideNav({
+  activeSection,
+  className,
+}: WorkspaceSettingsSideNavProps) {
   const { pathname } = useLocation();
-  const onMcp = pathname === "/workspace/settings/mcp" || pathname.endsWith("/workspace/settings/mcp");
+  const onMcp =
+    pathname === "/workspace/settings/mcp" || pathname.endsWith("/workspace/settings/mcp");
 
   return (
     <div className={cn("flex min-h-0 min-w-0 flex-col gap-4", className)}>
       <div className="hidden flex-col gap-1 border-b border-white/[0.06] pb-3 md:flex">
-        <p className="px-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">Settings</p>
-        <p className="px-1 text-[11px] text-white/45">Same order and labels as upstream Hermes Workspace settings.</p>
+        <p className="px-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">
+          Settings
+        </p>
+        <p className="px-1 text-[11px] text-white/45">
+          Same order and labels as upstream Hermes Workspace settings.
+        </p>
       </div>
 
       <nav

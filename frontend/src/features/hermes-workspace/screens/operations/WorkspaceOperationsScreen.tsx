@@ -68,7 +68,9 @@ const CRON_PRESETS: { label: string; expr: string }[] = [
 ];
 
 function stripEmojiPrefix(name: string) {
-  const t = name.replace(/^\p{Extended_Pictographic}[\uFE0F\u200D\p{Extended_Pictographic}]*/u, "").trim();
+  const t = name
+    .replace(/^\p{Extended_Pictographic}[\uFE0F\u200D\p{Extended_Pictographic}]*/u, "")
+    .trim();
   return t || name;
 }
 
@@ -86,7 +88,11 @@ export function WorkspaceOperationsScreen() {
   const [newEmoji, setNewEmoji] = React.useState("🤖");
   const [newPrompt, setNewPrompt] = React.useState("");
   const [settingsOpen, setSettingsOpen] = React.useState(false);
-  const [sDraft, setSDraft] = React.useState({ defaultModel: "ham-local", outputsRetention: 50, notes: "" });
+  const [sDraft, setSDraft] = React.useState({
+    defaultModel: "ham-local",
+    outputsRetention: 50,
+    notes: "",
+  });
   const [detail, setDetail] = React.useState<WorkspaceAgent | null>(null);
   const [formName, setFormName] = React.useState("");
   const [formModel, setFormModel] = React.useState("");
@@ -101,7 +107,9 @@ export function WorkspaceOperationsScreen() {
   const [chatDraft, setChatDraft] = React.useState("");
   const [cronPanelFor, setCronPanelFor] = React.useState<string | null>(null);
   const [managedLiveRefresh, setManagedLiveRefresh] = React.useState(0);
-  const [latestManagedAssistantPreview, setLatestManagedAssistantPreview] = React.useState<string | null>(null);
+  const [latestManagedAssistantPreview, setLatestManagedAssistantPreview] = React.useState<
+    string | null
+  >(null);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -185,10 +193,14 @@ export function WorkspaceOperationsScreen() {
   const onCreate = async () => {
     if (!newName.trim()) return;
     setBusy("new");
-    const { agent, error: err } = await workspaceOperationsAdapter.createAgent(newName.trim(), newModel, {
-      emoji: newEmoji.trim() || "🤖",
-      systemPrompt: newPrompt,
-    });
+    const { agent, error: err } = await workspaceOperationsAdapter.createAgent(
+      newName.trim(),
+      newModel,
+      {
+        emoji: newEmoji.trim() || "🤖",
+        systemPrompt: newPrompt,
+      },
+    );
     setBusy(null);
     if (err) setError(err);
     else {
@@ -208,7 +220,10 @@ export function WorkspaceOperationsScreen() {
   const onAddScheduled = async () => {
     if (!jobName.trim()) return;
     setBusy("job");
-    const { error: err } = await workspaceOperationsAdapter.createScheduled(jobName.trim(), jobCron);
+    const { error: err } = await workspaceOperationsAdapter.createScheduled(
+      jobName.trim(),
+      jobCron,
+    );
     setBusy(null);
     if (err) setError(err);
     else {
@@ -246,12 +261,18 @@ export function WorkspaceOperationsScreen() {
 
   const recentActivity = React.useMemo(() => allOutputLines.slice(0, 12), [allOutputLines]);
 
-  const focusAgent = React.useMemo(() => agents.find((a) => a.id === focusId) ?? null, [agents, focusId]);
+  const focusAgent = React.useMemo(
+    () => agents.find((a) => a.id === focusId) ?? null,
+    [agents, focusId],
+  );
 
   const sendChat = async () => {
     if (!focusId || !chatDraft.trim()) return;
     setBusy(`chat-${focusId}`);
-    const { error: err } = await workspaceOperationsAdapter.appendMessage(focusId, chatDraft.trim());
+    const { error: err } = await workspaceOperationsAdapter.appendMessage(
+      focusId,
+      chatDraft.trim(),
+    );
     setBusy(null);
     setChatDraft("");
     if (err) setError(err);
@@ -383,7 +404,13 @@ export function WorkspaceOperationsScreen() {
               </Button>
             }
             secondaryAction={
-              <Button type="button" size="sm" variant="ghost" className="text-[var(--theme-muted)]" asChild>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="text-[var(--theme-muted)]"
+                asChild
+              >
                 <Link to="/workspace/chat">Open workspace chat</Link>
               </Button>
             }
@@ -392,7 +419,9 @@ export function WorkspaceOperationsScreen() {
 
         {addJobOpen && (
           <div className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-4 shadow-[0_20px_50px_var(--theme-shadow)]">
-            <p className="text-xs font-semibold uppercase tracking-wider text-[var(--theme-muted)]">New scheduled job</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-[var(--theme-muted)]">
+              New scheduled job
+            </p>
             <div className="mt-2 flex flex-wrap items-end gap-2">
               <input
                 className="hww-input h-8 max-w-xs rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 text-xs text-[var(--theme-text)]"
@@ -408,12 +437,25 @@ export function WorkspaceOperationsScreen() {
               />
               <div className="flex flex-wrap gap-1">
                 {CRON_PRESETS.map((p) => (
-                  <Button key={p.expr} type="button" size="sm" variant="secondary" className="h-7 text-[10px]" onClick={() => setJobCron(p.expr)}>
+                  <Button
+                    key={p.expr}
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    className="h-7 text-[10px]"
+                    onClick={() => setJobCron(p.expr)}
+                  >
                     {p.label}
                   </Button>
                 ))}
               </div>
-              <Button type="button" size="sm" className="h-8" onClick={() => void onAddScheduled()} disabled={!!busy}>
+              <Button
+                type="button"
+                size="sm"
+                className="h-8"
+                onClick={() => void onAddScheduled()}
+                disabled={!!busy}
+              >
                 Save
               </Button>
             </div>
@@ -423,22 +465,33 @@ export function WorkspaceOperationsScreen() {
         {view === "outputs" && !loading && (
           <div className="hww-scroll min-h-[40vh] overflow-auto rounded-3xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-5 shadow-[0_20px_60px_var(--theme-shadow)]">
             <div className="border-b border-[var(--theme-border)]/80 pb-4">
-              <p className="text-xs font-semibold uppercase tracking-wider text-[var(--theme-muted)]">Latest agent output</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-[var(--theme-muted)]">
+                Latest agent output
+              </p>
               {latestManagedAssistantPreview ? (
-                <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-[var(--theme-text)]">{latestManagedAssistantPreview}</p>
+                <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-[var(--theme-text)]">
+                  {latestManagedAssistantPreview}
+                </p>
               ) : (
                 <p className="mt-2 text-sm text-[var(--theme-muted)]">
                   No final artifact yet. Live agent activity is shown above.
                 </p>
               )}
             </div>
-            <p className="mt-4 text-xs font-semibold uppercase tracking-wider text-[var(--theme-muted)]">Full outputs (newest first)</p>
+            <p className="mt-4 text-xs font-semibold uppercase tracking-wider text-[var(--theme-muted)]">
+              Full outputs (newest first)
+            </p>
             <div className="mt-3 space-y-2">
               {allOutputLines.length === 0 ? (
-                <p className="text-sm text-[var(--theme-muted)]">No orchestrator output lines recorded for workspace agents.</p>
+                <p className="text-sm text-[var(--theme-muted)]">
+                  No orchestrator output lines recorded for workspace agents.
+                </p>
               ) : (
                 allOutputLines.map((l) => (
-                  <div key={`${l.id}-${l.at}-${l.line.slice(0, 20)}`} className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] p-3">
+                  <div
+                    key={`${l.id}-${l.at}-${l.line.slice(0, 20)}`}
+                    className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] p-3"
+                  >
                     <p className="text-[10px] text-[var(--theme-accent)]">
                       {l.agent} · {fmt(l.at)}
                     </p>
@@ -452,28 +505,49 @@ export function WorkspaceOperationsScreen() {
 
         {view === "overview" && !loading && (
           <>
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22 }}>
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.22 }}
+            >
               <article className="flex min-h-[220px] flex-col rounded-[1.75rem] border border-[var(--theme-border)] border-l-4 border-l-[var(--theme-accent)] bg-[var(--theme-card)] p-5 shadow-[0_24px_80px_var(--theme-shadow)]">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div>
-                    <h2 className="text-base font-semibold text-[var(--theme-text)]">Orchestrator</h2>
+                    <h2 className="text-base font-semibold text-[var(--theme-text)]">
+                      Orchestrator
+                    </h2>
                     <p className="mt-1 text-sm text-[var(--theme-muted)]">
                       {agents.length} agents · {activeCount} active · {jobs.length} scheduled
                     </p>
                     <p className="mt-2 text-xs text-[var(--theme-muted-2)]">
-                      Default model: <span className="font-medium text-[var(--theme-text)]">{settings?.defaultModel ?? "—"}</span>
+                      Default model:{" "}
+                      <span className="font-medium text-[var(--theme-text)]">
+                        {settings?.defaultModel ?? "—"}
+                      </span>
                     </p>
                   </div>
                   <div className="flex w-full min-w-[200px] max-w-sm flex-col items-stretch gap-2 md:w-72">
                     <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--theme-bg)]">
-                      <div className="h-full rounded-full bg-[var(--theme-accent)]" style={{ width: `${activePct}%` }} />
+                      <div
+                        className="h-full rounded-full bg-[var(--theme-accent)]"
+                        style={{ width: `${activePct}%` }}
+                      />
                     </div>
-                    <p className="text-right text-[10px] text-[var(--theme-muted)]">Active share of roster</p>
+                    <p className="text-right text-[10px] text-[var(--theme-muted)]">
+                      Active share of roster
+                    </p>
                   </div>
                 </div>
                 <div className="mt-4 flex min-h-0 flex-1 flex-col justify-center rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-5 text-center">
-                  <p className="text-sm text-[var(--theme-muted)]">Gateway chat session — open the workspace chat route for the full composer.</p>
-                  <Button type="button" className="mt-3 self-center bg-[var(--theme-accent)] text-[color-mix(in_srgb,var(--theme-text)_8%,#041208)]" size="sm" asChild>
+                  <p className="text-sm text-[var(--theme-muted)]">
+                    Gateway chat session — open the workspace chat route for the full composer.
+                  </p>
+                  <Button
+                    type="button"
+                    className="mt-3 self-center bg-[var(--theme-accent)] text-[color-mix(in_srgb,var(--theme-text)_8%,#041208)]"
+                    size="sm"
+                    asChild
+                  >
                     <Link to="/workspace/chat" className="inline-flex items-center gap-1.5">
                       Open workspace chat
                       <ArrowRight className="h-3.5 w-3.5" />
@@ -492,7 +566,8 @@ export function WorkspaceOperationsScreen() {
                   <Sparkles className="mx-auto mb-2 h-6 w-6 text-[var(--theme-warning)]" />
                   <p className="text-sm font-medium text-[var(--theme-text)]">No agents yet</p>
                   <p className="mt-2 text-sm text-[var(--theme-muted)]">
-                    Create an agent with <strong>New Agent</strong>, or launch a mission from Conductor to populate the roster when your workflow creates agents.
+                    Create an agent with <strong>New Agent</strong>, or launch a mission from
+                    Conductor to populate the roster when your workflow creates agents.
                   </p>
                 </div>
               )}
@@ -523,14 +598,17 @@ export function WorkspaceOperationsScreen() {
                         <div className="absolute left-0 flex items-center">
                           <button
                             type="button"
-                            aria-label={cronN > 0 ? `Cron: ${ag.cronExpr || "on"}` : "No agent cron"}
+                            aria-label={
+                              cronN > 0 ? `Cron: ${ag.cronExpr || "on"}` : "No agent cron"
+                            }
                             onClick={(e) => {
                               e.stopPropagation();
                               setCronPanelFor((c) => (c === ag.id ? null : ag.id));
                             }}
                             className={cn(
                               "inline-flex h-8 shrink-0 items-center gap-1 rounded-lg px-1.5 text-[var(--theme-muted)] transition-colors hover:bg-[var(--theme-bg)] hover:text-[var(--theme-text)]",
-                              cronPanelFor === ag.id && "bg-[var(--theme-bg)] text-[var(--theme-text)]",
+                              cronPanelFor === ag.id &&
+                                "bg-[var(--theme-bg)] text-[var(--theme-text)]",
                             )}
                           >
                             <Clock className="h-3.5 w-3.5" strokeWidth={2} />
@@ -593,14 +671,19 @@ export function WorkspaceOperationsScreen() {
                       </div>
 
                       <div className="flex flex-col items-center gap-1 px-2 py-2 text-center">
-                        <div className="flex size-12 shrink-0 items-center justify-center text-3xl leading-none" aria-hidden>
+                        <div
+                          className="flex size-12 shrink-0 items-center justify-center text-3xl leading-none"
+                          aria-hidden
+                        >
                           {em}
                         </div>
                         <p className="w-full truncate text-[11px] text-[var(--theme-muted)]">
                           {ag.systemPrompt ? ag.systemPrompt : "No system prompt (HAM v0)."}
                         </p>
                         <p className="w-full truncate text-[10px] text-[var(--theme-muted)]/85">
-                          {ag.cronEnabled ? `Cron · ${ag.cronExpr || "expr"}` : "Manual & messages only"}
+                          {ag.cronEnabled
+                            ? `Cron · ${ag.cronExpr || "expr"}`
+                            : "Manual & messages only"}
                         </p>
                       </div>
 
@@ -624,10 +707,11 @@ export function WorkspaceOperationsScreen() {
                                   checked={ag.cronEnabled}
                                   onChange={async (e) => {
                                     setBusy(ag.id);
-                                    const { error: err } = await workspaceOperationsAdapter.patchAgent(ag.id, {
-                                      cronEnabled: e.target.checked,
-                                      cronExpr: ag.cronExpr,
-                                    });
+                                    const { error: err } =
+                                      await workspaceOperationsAdapter.patchAgent(ag.id, {
+                                        cronEnabled: e.target.checked,
+                                        cronExpr: ag.cronExpr,
+                                      });
                                     setBusy(null);
                                     if (err) setError(err);
                                     else void load();
@@ -635,7 +719,9 @@ export function WorkspaceOperationsScreen() {
                                 />
                                 Enable cron for this agent
                               </label>
-                              <p className="mt-1 font-mono text-[10px] text-[var(--theme-muted)]">{ag.cronExpr || "—"}</p>
+                              <p className="mt-1 font-mono text-[10px] text-[var(--theme-muted)]">
+                                {ag.cronExpr || "—"}
+                              </p>
                               <Button
                                 type="button"
                                 variant="secondary"
@@ -654,13 +740,18 @@ export function WorkspaceOperationsScreen() {
                       </AnimatePresence>
 
                       <div className="mt-auto min-h-0 flex-1 border-t border-[var(--theme-border)] pt-2">
-                        <p className="mb-1 text-[9px] font-semibold uppercase text-[var(--theme-muted)]">Recent output</p>
+                        <p className="mb-1 text-[9px] font-semibold uppercase text-[var(--theme-muted)]">
+                          Recent output
+                        </p>
                         <div className="hww-scroll max-h-[100px] space-y-1 overflow-y-auto text-left text-[10px] text-[var(--theme-text)]">
                           {lastLines.length === 0 ? (
                             <p className="text-[var(--theme-muted)]">—</p>
                           ) : (
                             lastLines.map((o) => (
-                              <div key={`${o.at}`} className="line-clamp-2 rounded-lg border border-[var(--theme-border)]/60 bg-[var(--theme-bg)] p-1.5">
+                              <div
+                                key={`${o.at}`}
+                                className="line-clamp-2 rounded-lg border border-[var(--theme-border)]/60 bg-[var(--theme-bg)] p-1.5"
+                              >
                                 <HwwText text={o.line} />
                               </div>
                             ))
@@ -687,7 +778,9 @@ export function WorkspaceOperationsScreen() {
 
             <section className="rounded-3xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-5 shadow-[0_24px_80px_var(--theme-shadow)]">
               <h2 className="text-lg font-semibold text-[var(--theme-text)]">Recent Activity</h2>
-              <p className="mt-1 text-sm text-[var(--theme-muted-2)]">Latest outputs across the team</p>
+              <p className="mt-1 text-sm text-[var(--theme-muted-2)]">
+                Latest outputs across the team
+              </p>
               <div className="mt-4 space-y-2">
                 {recentActivity.length > 0 ? (
                   recentActivity.map((l) => {
@@ -699,10 +792,14 @@ export function WorkspaceOperationsScreen() {
                       >
                         <p className="text-sm text-[var(--theme-text)]">
                           <span className="mr-1">{agMeta?.emoji ?? "🤖"}</span>
-                          <span className="font-medium">{agMeta ? stripEmojiPrefix(agMeta.name) : l.agent}:</span>{" "}
+                          <span className="font-medium">
+                            {agMeta ? stripEmojiPrefix(agMeta.name) : l.agent}:
+                          </span>{" "}
                           <span className="line-clamp-2 text-[var(--theme-muted-2)]">{l.line}</span>
                         </p>
-                        <span className="shrink-0 text-sm text-[var(--theme-muted)]">{fmtRelative(l.at)}</span>
+                        <span className="shrink-0 text-sm text-[var(--theme-muted)]">
+                          {fmtRelative(l.at)}
+                        </span>
                       </div>
                     );
                   })
@@ -718,28 +815,38 @@ export function WorkspaceOperationsScreen() {
               <div className="border-b border-[var(--theme-border)] pb-2">
                 <h2 className="text-sm font-semibold text-[var(--theme-text)]">Team bridge</h2>
                 <p className="text-xs text-[var(--theme-muted-2)]">
-                  HAM v0: messages go through <code className="text-[var(--theme-muted)]">/message</code> (synthetic echo)
+                  HAM v0: messages go through{" "}
+                  <code className="text-[var(--theme-muted)]">/message</code> (synthetic echo)
                 </p>
               </div>
               <div className="mt-2 flex min-h-0 flex-col gap-2 md:grid md:grid-cols-[1fr,18rem] md:items-stretch">
                 <div className="hww-scroll min-h-[140px] max-h-48 space-y-1.5 overflow-auto rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] p-2">
-                    {focusAgent ? (
+                  {focusAgent ? (
                     focusAgent.outputs
                       .slice()
                       .sort((a, b) => a.at - b.at)
                       .map((o) => (
-                        <div key={`${o.at}-${o.line.slice(0, 16)}`} className="rounded-lg border border-[var(--theme-border)]/50 p-1.5 text-[10px] text-[var(--theme-text)]">
+                        <div
+                          key={`${o.at}-${o.line.slice(0, 16)}`}
+                          className="rounded-lg border border-[var(--theme-border)]/50 p-1.5 text-[10px] text-[var(--theme-text)]"
+                        >
                           <HwwText text={o.line} />
                         </div>
                       ))
                   ) : (
-                    <p className="p-2 text-sm text-[var(--theme-muted)]">Click an agent card to focus, or open settings for full edits.</p>
+                    <p className="p-2 text-sm text-[var(--theme-muted)]">
+                      Click an agent card to focus, or open settings for full edits.
+                    </p>
                   )}
                 </div>
                 <div className="flex flex-col justify-end gap-1 rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] p-2">
                   <input
                     className="h-9 w-full rounded-lg border border-[var(--theme-border)] bg-[var(--theme-card)] px-2 text-xs text-[var(--theme-text)] placeholder:text-[var(--theme-muted)]"
-                    placeholder={focusId ? "Message the focused agent…" : "Click a card above to focus an agent"}
+                    placeholder={
+                      focusId
+                        ? "Message the focused agent…"
+                        : "Click a card above to focus an agent"
+                    }
                     value={chatDraft}
                     onChange={(e) => setChatDraft(e.target.value)}
                     onKeyDown={(e) => {
@@ -768,7 +875,9 @@ export function WorkspaceOperationsScreen() {
 
             {jobs.length > 0 && (
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-[var(--theme-muted)]">Schedules &amp; cron registry</p>
+                <p className="text-xs font-semibold uppercase tracking-wider text-[var(--theme-muted)]">
+                  Schedules &amp; cron registry
+                </p>
                 <ul className="mt-2 flex flex-wrap gap-2">
                   {jobs.map((j) => (
                     <li
@@ -777,14 +886,19 @@ export function WorkspaceOperationsScreen() {
                     >
                       <Clock className="h-3.5 w-3.5 shrink-0 text-[var(--theme-warning)]" />
                       <span className="min-w-0 truncate font-medium">{j.name}</span>
-                      <code className="shrink-0 text-[10px] text-[var(--theme-accent)]">{j.cronExpr}</code>
+                      <code className="shrink-0 text-[10px] text-[var(--theme-accent)]">
+                        {j.cronExpr}
+                      </code>
                       <label className="ml-auto flex items-center gap-1 text-[10px] text-[var(--theme-muted)]">
                         <input
                           type="checkbox"
                           checked={j.enabled}
                           onChange={async (e) => {
                             setBusy(j.id);
-                            const { error: err } = await workspaceOperationsAdapter.patchScheduled(j.id, { enabled: e.target.checked });
+                            const { error: err } = await workspaceOperationsAdapter.patchScheduled(
+                              j.id,
+                              { enabled: e.target.checked },
+                            );
                             setBusy(null);
                             if (err) setError(err);
                             else void load();
@@ -800,7 +914,9 @@ export function WorkspaceOperationsScreen() {
                         onClick={async () => {
                           if (!window.confirm("Delete scheduled job?")) return;
                           setBusy(j.id);
-                          const { error: err } = await workspaceOperationsAdapter.deleteScheduled(j.id);
+                          const { error: err } = await workspaceOperationsAdapter.deleteScheduled(
+                            j.id,
+                          );
                           setBusy(null);
                           if (err) setError(err);
                           else void load();
@@ -818,7 +934,11 @@ export function WorkspaceOperationsScreen() {
       </section>
 
       {newOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3" role="dialog" style={HWS_PARITY_THEME}>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3"
+          role="dialog"
+          style={HWS_PARITY_THEME}
+        >
           <div className="w-full max-w-md rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-4 shadow-xl">
             <h2 className="flex items-center gap-1.5 text-sm font-semibold text-[var(--theme-text)]">
               <Bot className="h-4 w-4 text-[var(--theme-accent)]" />
@@ -872,7 +992,12 @@ export function WorkspaceOperationsScreen() {
               <Button type="button" size="sm" variant="ghost" onClick={() => setNewOpen(false)}>
                 Cancel
               </Button>
-              <Button type="button" size="sm" onClick={() => void onCreate()} disabled={!newName.trim() || !!busy}>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => void onCreate()}
+                disabled={!newName.trim() || !!busy}
+              >
                 Create
               </Button>
             </div>
@@ -881,7 +1006,11 @@ export function WorkspaceOperationsScreen() {
       )}
 
       {detail && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3" role="dialog" style={HWS_PARITY_THEME}>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3"
+          role="dialog"
+          style={HWS_PARITY_THEME}
+        >
           <div className="hww-scroll max-h-[min(90vh,640px)] w-full max-w-lg overflow-auto rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-4 shadow-xl">
             <h2 className="flex items-center gap-1.5 text-sm font-semibold text-[var(--theme-text)]">
               <span className="text-xl" aria-hidden>
@@ -932,7 +1061,11 @@ export function WorkspaceOperationsScreen() {
                 />
               </label>
               <label className="flex items-center gap-2 text-[var(--theme-muted)]">
-                <input type="checkbox" checked={formCronOn} onChange={(e) => setFormCronOn(e.target.checked)} />
+                <input
+                  type="checkbox"
+                  checked={formCronOn}
+                  onChange={(e) => setFormCronOn(e.target.checked)}
+                />
                 Cron
               </label>
               <label className="text-[var(--theme-muted)]">
@@ -945,13 +1078,22 @@ export function WorkspaceOperationsScreen() {
               </label>
               <div className="flex flex-wrap gap-1">
                 {CRON_PRESETS.map((p) => (
-                  <Button key={p.expr} type="button" size="sm" variant="secondary" className="h-6 text-[9px]" onClick={() => setFormCron(p.expr)}>
+                  <Button
+                    key={p.expr}
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    className="h-6 text-[9px]"
+                    onClick={() => setFormCron(p.expr)}
+                  >
                     {p.label}
                   </Button>
                 ))}
               </div>
             </div>
-            <p className="mt-2 text-[10px] text-[var(--theme-muted)]">Output buffer ({detail.outputs.length} lines)</p>
+            <p className="mt-2 text-[10px] text-[var(--theme-muted)]">
+              Output buffer ({detail.outputs.length} lines)
+            </p>
             <div className="mt-1 max-h-32 overflow-auto rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] p-2">
               {detail.outputs.length === 0 ? (
                 "—"
@@ -992,7 +1134,11 @@ export function WorkspaceOperationsScreen() {
       )}
 
       {settingsOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3" role="dialog" style={HWS_PARITY_THEME}>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3"
+          role="dialog"
+          style={HWS_PARITY_THEME}
+        >
           <div className="w-full max-w-md rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-4 shadow-xl">
             <h2 className="text-sm font-semibold text-[var(--theme-text)]">Team settings</h2>
             <div className="mt-2 grid gap-2 text-xs">
@@ -1016,7 +1162,9 @@ export function WorkspaceOperationsScreen() {
                   type="number"
                   className="mt-0.5 w-full rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-text)]"
                   value={sDraft.outputsRetention}
-                  onChange={(e) => setSDraft((s) => ({ ...s, outputsRetention: Number(e.target.value) }))}
+                  onChange={(e) =>
+                    setSDraft((s) => ({ ...s, outputsRetention: Number(e.target.value) }))
+                  }
                 />
               </label>
               <label className="text-[var(--theme-muted)]">
@@ -1029,17 +1177,26 @@ export function WorkspaceOperationsScreen() {
               </label>
             </div>
             <div className="mt-3 flex justify-end gap-2">
-              <Button type="button" size="sm" variant="ghost" onClick={() => setSettingsOpen(false)}>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => setSettingsOpen(false)}
+              >
                 Cancel
               </Button>
-              <Button type="button" size="sm" onClick={() => void saveOpsSettings()} disabled={!!busy}>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => void saveOpsSettings()}
+                disabled={!!busy}
+              >
                 Save
               </Button>
             </div>
           </div>
         </div>
       )}
-
     </main>
   );
 }

@@ -62,23 +62,25 @@ export function LocalMachineConnectCta({
 
   const lastResult = last;
 
-  const successUi =
-    lastResult?.ok ? (
-      <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2.5 text-[12px] text-emerald-100/95">
-        <p className="font-medium">Connected to this machine at {lastResult.base}</p>
-        {lastResult.health.workspaceRootPath ? (
-          <p className="mt-1.5 text-[11px] text-white/60">
-            Filesystem root: <span className="font-mono text-[11px] text-emerald-200/80">{lastResult.health.workspaceRootPath}</span>
-          </p>
-        ) : null}
-        {lastResult.health.broadFilesystemAccess && lastResult.health.workspaceRootPath ? (
-          <p className="mt-1 text-[11px] text-amber-200/80">
-            Broad filesystem access: {lastResult.health.workspaceRootPath}
-          </p>
-        ) : null}
-        <p className="mt-1.5 break-all font-mono text-[10px] text-white/40">{lastResult.testedUrl}</p>
-      </div>
-    ) : null;
+  const successUi = lastResult?.ok ? (
+    <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2.5 text-[12px] text-emerald-100/95">
+      <p className="font-medium">Connected to this machine at {lastResult.base}</p>
+      {lastResult.health.workspaceRootPath ? (
+        <p className="mt-1.5 text-[11px] text-white/60">
+          Filesystem root:{" "}
+          <span className="font-mono text-[11px] text-emerald-200/80">
+            {lastResult.health.workspaceRootPath}
+          </span>
+        </p>
+      ) : null}
+      {lastResult.health.broadFilesystemAccess && lastResult.health.workspaceRootPath ? (
+        <p className="mt-1 text-[11px] text-amber-200/80">
+          Broad filesystem access: {lastResult.health.workspaceRootPath}
+        </p>
+      ) : null}
+      <p className="mt-1.5 break-all font-mono text-[10px] text-white/40">{lastResult.testedUrl}</p>
+    </div>
+  ) : null;
 
   let failureUi: React.ReactNode = null;
   if (lastResult && lastResult.ok === false) {
@@ -90,18 +92,18 @@ export function LocalMachineConnectCta({
             <p className="font-medium">Wrong service on a local port</p>
             <p className="text-[11px] leading-relaxed text-amber-100/75">
               {err.message} Stop the other app or use a free port. We only treat a response as HAM
-              when <span className="font-mono text-[10px]">{HAM_WORKSPACE_HEALTH_PATH}</span> returns the
-              expected JSON.
+              when <span className="font-mono text-[10px]">{HAM_WORKSPACE_HEALTH_PATH}</span>{" "}
+              returns the expected JSON.
             </p>
           </>
         ) : (
           <>
             <p className="font-medium">Local HAM is not running or the browser blocked it</p>
             <p className="text-[11px] leading-relaxed text-amber-100/70">
-              Start the local API, then <strong>Retry</strong>. If the API is already up from current{" "}
-              <span className="font-mono text-[10px]">main</span>, a public page calling{" "}
-              <span className="font-mono text-[10px]">http://127.0.0.1</span> can still be blocked: allow
-              this origin, or restart the server so CORS and private-network preflight include{" "}
+              Start the local API, then <strong>Retry</strong>. If the API is already up from
+              current <span className="font-mono text-[10px]">main</span>, a public page calling{" "}
+              <span className="font-mono text-[10px]">http://127.0.0.1</span> can still be blocked:
+              allow this origin, or restart the server so CORS and private-network preflight include{" "}
               <span className="font-mono text-[10px] break-all text-white/80">
                 {origin || "this page’s origin"}
               </span>
@@ -110,7 +112,9 @@ export function LocalMachineConnectCta({
           </>
         )}
         <details className="text-[11px] text-amber-100/50">
-          <summary className="cursor-pointer text-[11px] text-amber-200/70">Start script (copy), then retry</summary>
+          <summary className="cursor-pointer text-[11px] text-amber-200/70">
+            Start script (copy), then retry
+          </summary>
           <pre className="mt-2 max-h-40 overflow-auto rounded border border-white/10 bg-black/30 p-2 font-mono text-[10px] text-white/70">
             {getLocalConnectSetupScript()}
           </pre>
@@ -118,7 +122,13 @@ export function LocalMachineConnectCta({
             <Button type="button" size="sm" variant="secondary" onClick={() => void copyScript()}>
               Copy PowerShell
             </Button>
-            <Button type="button" size="sm" variant="outline" onClick={() => void runConnect()} disabled={working}>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => void runConnect()}
+              disabled={working}
+            >
               {working ? "Retrying…" : "Retry connection"}
             </Button>
           </div>
@@ -136,8 +146,9 @@ export function LocalMachineConnectCta({
     >
       {variant === "card" ? (
         <p className="text-[13px] leading-relaxed text-white/60">
-          Connect this browser to the HAM API running on <strong className="text-white/80">this computer</strong>. Files and
-          Terminal use that process only; cloud APIs cannot read your disk.
+          Connect this browser to the HAM API running on{" "}
+          <strong className="text-white/80">this computer</strong>. Files and Terminal use that
+          process only; cloud APIs cannot read your disk.
         </p>
       ) : null}
       <div className="mt-3 flex flex-wrap gap-2">

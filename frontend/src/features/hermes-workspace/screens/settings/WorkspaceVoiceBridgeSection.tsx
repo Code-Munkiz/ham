@@ -97,21 +97,27 @@ export function WorkspaceVoiceBridgeSection({ catalog }: Props) {
   return (
     <WorkspaceSettingsReadOnlyCard>
       <div className="mb-1">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">Settings</p>
+        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">
+          Settings
+        </p>
       </div>
       <WorkspaceSettingsSectionHeader
         title="Voice"
         subtitle="Text-to-speech and speech-to-text — saved on the Ham API."
-        badge={<WorkspaceSettingsCapabilityBadge tone="ok">HAM API</WorkspaceSettingsCapabilityBadge>}
+        badge={
+          <WorkspaceSettingsCapabilityBadge tone="ok">HAM API</WorkspaceSettingsCapabilityBadge>
+        }
       />
       <p className="mt-4 text-[12px] leading-relaxed text-white/50">
         Preferences persist via{" "}
-        <span className="font-mono text-white/65">GET/PATCH /api/workspace/voice-settings</span>. Chat dictation uses{" "}
-        <span className="font-mono text-white/65">POST /api/chat/transcribe</span> when the API host sets{" "}
-        <span className="font-mono text-white/65">HAM_TRANSCRIPTION_*</span> — there is no local Whisper path in Ham.
-        Text-to-speech uses <span className="font-mono text-white/65">POST /api/tts/generate</span> (Edge engine on the
-        server). <span className="font-mono text-white/65">HAM_TTS_ENABLED=0</span> disables synthesis globally regardless
-        of these toggles.
+        <span className="font-mono text-white/65">GET/PATCH /api/workspace/voice-settings</span>.
+        Chat dictation uses{" "}
+        <span className="font-mono text-white/65">POST /api/chat/transcribe</span> when the API host
+        sets <span className="font-mono text-white/65">HAM_TRANSCRIPTION_*</span> — there is no
+        local Whisper path in Ham. Text-to-speech uses{" "}
+        <span className="font-mono text-white/65">POST /api/tts/generate</span> (Edge engine on the
+        server). <span className="font-mono text-white/65">HAM_TTS_ENABLED=0</span> disables
+        synthesis globally regardless of these toggles.
       </p>
 
       {saveError ? (
@@ -279,8 +285,8 @@ export function WorkspaceVoiceBridgeSection({ catalog }: Props) {
 
       {catalog ? (
         <p className="mt-4 text-[11px] text-white/35">
-          Text chat gateway: {isDashboardChatGatewayReady(catalog) ? "ready" : "not ready"} (GET /api/models) —
-          unrelated to Voice persistence.
+          Text chat gateway: {isDashboardChatGatewayReady(catalog) ? "ready" : "not ready"} (GET
+          /api/models) — unrelated to Voice persistence.
         </p>
       ) : null}
     </WorkspaceSettingsReadOnlyCard>

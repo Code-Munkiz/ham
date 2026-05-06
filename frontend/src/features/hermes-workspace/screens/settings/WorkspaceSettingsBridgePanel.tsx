@@ -43,7 +43,9 @@ function useModelsCatalog() {
 
 function useOsColorScheme(): string {
   const [scheme, setScheme] = React.useState<string>(() =>
-    typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light",
+    typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches
+      ? "dark"
+      : "light",
   );
   React.useEffect(() => {
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
@@ -69,7 +71,11 @@ export function WorkspaceSettingsBridgePanel({ section }: WorkspaceSettingsBridg
           <WorkspaceSettingsSectionHeader
             title="Agent behavior"
             subtitle="Upstream Hermes configures instruction budgets, tools, and agent defaults in HermesConfigSection (activeView agent). HAM can chat through the configured gateway, but persisting Hermes-style agent policy from this UI is not wired."
-            badge={<WorkspaceSettingsCapabilityBadge tone="amber">Hermes bridge required</WorkspaceSettingsCapabilityBadge>}
+            badge={
+              <WorkspaceSettingsCapabilityBadge tone="amber">
+                Hermes bridge required
+              </WorkspaceSettingsCapabilityBadge>
+            }
           />
           <div className="mt-6">
             <WorkspaceSettingsFieldRow
@@ -90,7 +96,9 @@ export function WorkspaceSettingsBridgePanel({ section }: WorkspaceSettingsBridg
                 />
               </>
             ) : err ? (
-              <WorkspaceSettingsUnavailableNote>Could not load HAM API snapshot: {err}</WorkspaceSettingsUnavailableNote>
+              <WorkspaceSettingsUnavailableNote>
+                Could not load HAM API snapshot: {err}
+              </WorkspaceSettingsUnavailableNote>
             ) : (
               <WorkspaceSettingsFieldRow label="HAM API snapshot" value="Loading…" />
             )}
@@ -109,12 +117,18 @@ export function WorkspaceSettingsBridgePanel({ section }: WorkspaceSettingsBridg
           <div className="mt-6">
             {catalog ? (
               <>
-                <WorkspaceSettingsFieldRow label="Gateway mode" value={catalog.gateway_mode || "—"} />
+                <WorkspaceSettingsFieldRow
+                  label="Gateway mode"
+                  value={catalog.gateway_mode || "—"}
+                />
                 <WorkspaceSettingsFieldRow
                   label="OpenRouter chat ready"
                   value={formatYesNo(catalog.openrouter_chat_ready)}
                 />
-                <WorkspaceSettingsFieldRow label="HTTP gateway ready" value={formatYesNo(catalog.http_chat_ready)} />
+                <WorkspaceSettingsFieldRow
+                  label="HTTP gateway ready"
+                  value={formatYesNo(catalog.http_chat_ready)}
+                />
                 <WorkspaceSettingsFieldRow
                   label="HTTP primary model"
                   value={catalog.http_chat_model_primary ?? "—"}
@@ -135,14 +149,15 @@ export function WorkspaceSettingsBridgePanel({ section }: WorkspaceSettingsBridg
               </>
             ) : err ? (
               <WorkspaceSettingsUnavailableNote>
-                Could not load routing snapshot from the HAM API: {err}. Smart routing detail is unavailable until the
-                models endpoint responds.
+                Could not load routing snapshot from the HAM API: {err}. Smart routing detail is
+                unavailable until the models endpoint responds.
               </WorkspaceSettingsUnavailableNote>
             ) : (
               <WorkspaceSettingsFieldRow label="HAM API snapshot" value="Loading…" />
             )}
             <p className="mt-4 text-[11px] text-white/35">
-              Routing policy changes are not available in this workspace UI; they remain on the Ham server configuration.
+              Routing policy changes are not available in this workspace UI; they remain on the Ham
+              server configuration.
             </p>
           </div>
         </WorkspaceSettingsReadOnlyCard>
@@ -157,7 +172,11 @@ export function WorkspaceSettingsBridgePanel({ section }: WorkspaceSettingsBridg
           <WorkspaceSettingsSectionHeader
             title="Appearance"
             subtitle="Upstream uses WorkspaceThemePicker and workspace accent controls. HAM workspace chrome follows the main app theme; a dedicated workspace-only theme editor is not wired."
-            badge={<WorkspaceSettingsCapabilityBadge>Partial (local signal)</WorkspaceSettingsCapabilityBadge>}
+            badge={
+              <WorkspaceSettingsCapabilityBadge>
+                Partial (local signal)
+              </WorkspaceSettingsCapabilityBadge>
+            }
           />
           <div className="mt-6">
             <WorkspaceSettingsFieldRow
@@ -180,7 +199,11 @@ export function WorkspaceSettingsBridgePanel({ section }: WorkspaceSettingsBridg
           <WorkspaceSettingsSectionHeader
             title="Chat"
             subtitle="Upstream ChatDisplaySection controls tool messages, reasoning blocks, composer width, and enter-key behavior. Those preferences are not split into this workspace settings screen in HAM yet."
-            badge={<WorkspaceSettingsCapabilityBadge tone="amber">Hermes bridge required</WorkspaceSettingsCapabilityBadge>}
+            badge={
+              <WorkspaceSettingsCapabilityBadge tone="amber">
+                Hermes bridge required
+              </WorkspaceSettingsCapabilityBadge>
+            }
           />
           <div className="mt-6">
             <WorkspaceSettingsFieldRow
@@ -205,7 +228,11 @@ export function WorkspaceSettingsBridgePanel({ section }: WorkspaceSettingsBridg
           <WorkspaceSettingsSectionHeader
             title="Notifications"
             subtitle="Upstream toggles alerts, usage thresholds, and smart suggestions. HAM uses different server-side notification channels; there is no Hermes-parity notification matrix in this UI yet."
-            badge={<WorkspaceSettingsCapabilityBadge tone="amber">Not wired</WorkspaceSettingsCapabilityBadge>}
+            badge={
+              <WorkspaceSettingsCapabilityBadge tone="amber">
+                Not wired
+              </WorkspaceSettingsCapabilityBadge>
+            }
           />
           <div className="mt-6">
             <WorkspaceSettingsFieldRow
@@ -223,7 +250,11 @@ export function WorkspaceSettingsBridgePanel({ section }: WorkspaceSettingsBridg
           <WorkspaceSettingsSectionHeader
             title="Language"
             subtitle="Upstream exposes locale labels and setLocale. HAM dashboard language is not switched from this workspace settings page."
-            badge={<WorkspaceSettingsCapabilityBadge tone="amber">Not wired</WorkspaceSettingsCapabilityBadge>}
+            badge={
+              <WorkspaceSettingsCapabilityBadge tone="amber">
+                Not wired
+              </WorkspaceSettingsCapabilityBadge>
+            }
           />
           <div className="mt-6">
             <WorkspaceSettingsFieldRow

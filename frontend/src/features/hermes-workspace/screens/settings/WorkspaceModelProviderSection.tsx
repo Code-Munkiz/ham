@@ -40,13 +40,13 @@ function OpenRouterChatModelsReference() {
     <div id="openrouter-models" className="mt-8 scroll-mt-28">
       <h3 className="text-sm font-semibold text-white/90">OpenRouter chat models</h3>
       <p className="mt-1 text-[13px] leading-relaxed text-white/45">
-        Browse chat-capable models your API exposes (OpenRouter public list is fetched server-side with a short
-        cache). API keys are never sent to the browser.
+        Browse chat-capable models your API exposes (OpenRouter public list is fetched server-side
+        with a short cache). API keys are never sent to the browser.
       </p>
       {orMeta?.remote_fetch_failed ? (
         <p className="mt-2 text-[12px] leading-snug text-amber-200/85">
-          The API could not refresh the OpenRouter model list just now. Tier shortcuts (Auto, Premium, …) still
-          work; try again after checking API connectivity.
+          The API could not refresh the OpenRouter model list just now. Tier shortcuts (Auto,
+          Premium, …) still work; try again after checking API connectivity.
         </p>
       ) : null}
       <div className="mt-3 max-h-80 overflow-y-auto rounded-lg border border-white/[0.08] bg-black/20">
@@ -62,7 +62,9 @@ function OpenRouterChatModelsReference() {
             {chat.map((row) => (
               <tr key={row.id}>
                 <td className="px-3 py-1.5 align-top">{row.label}</td>
-                <td className="px-3 py-1.5 align-top font-mono text-[11px] text-white/55">{row.id}</td>
+                <td className="px-3 py-1.5 align-top font-mono text-[11px] text-white/55">
+                  {row.id}
+                </td>
                 <td className="px-3 py-1.5 align-top tabular-nums text-white/55">
                   {row.context_length != null ? row.context_length.toLocaleString() : "—"}
                 </td>
@@ -85,7 +87,8 @@ export function WorkspaceModelProviderSection() {
       <section className="hww-set-card rounded-2xl border border-white/[0.08] bg-white/[0.02] p-5 shadow-none md:p-6">
         <h2 className="text-base font-semibold text-[#e8eef8]">Model &amp; provider</h2>
         <p className="mt-1.5 text-[13px] leading-relaxed text-white/45">
-          Store Cursor and other provider credentials on the API; routing and models follow your Ham server settings.
+          Store Cursor and other provider credentials on the API; routing and models follow your Ham
+          server settings.
         </p>
         <div className="mt-6">
           <ApiKeysPanel variant="workspace" />
@@ -94,7 +97,9 @@ export function WorkspaceModelProviderSection() {
       </section>
       <section className="hww-set-card rounded-2xl border border-white/[0.08] bg-white/[0.02] p-5 shadow-none md:p-6">
         <h3 className="text-sm font-semibold text-white/90">Context &amp; memory</h3>
-        <p className="mt-1 text-[13px] leading-relaxed text-white/45">Live snapshot from the context engine for this workspace root.</p>
+        <p className="mt-1 text-[13px] leading-relaxed text-white/45">
+          Live snapshot from the context engine for this workspace root.
+        </p>
         <div className="mt-4">
           <ContextAndMemoryPanel variant="workspace" />
         </div>

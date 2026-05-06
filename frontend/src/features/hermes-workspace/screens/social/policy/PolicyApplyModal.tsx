@@ -117,9 +117,7 @@ export function PolicyApplyModal({
                 {UI_TEXT.cancelButton}
               </Button>
               {onReloadAndKeepEdits ? (
-                <Button onClick={onReloadAndKeepEdits}>
-                  {UI_TEXT.reloadAndKeepEdits}
-                </Button>
+                <Button onClick={onReloadAndKeepEdits}>{UI_TEXT.reloadAndKeepEdits}</Button>
               ) : null}
             </div>
           </div>
@@ -137,11 +135,7 @@ export function PolicyApplyModal({
               <ul className="space-y-1 text-xs">
                 {checklist.map((c) => (
                   <li key={c.label} className="flex items-center gap-2">
-                    <span
-                      className={
-                        c.ok ? "text-green-600" : "text-destructive"
-                      }
-                    >
+                    <span className={c.ok ? "text-green-600" : "text-destructive"}>
                       {c.ok ? "✓" : "✗"}
                     </span>
                     <span>{c.label}</span>

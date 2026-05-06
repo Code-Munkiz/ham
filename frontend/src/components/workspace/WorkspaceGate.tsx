@@ -109,7 +109,11 @@ export function WorkspaceGate({ children, loadingFallback }: WorkspaceGateProps)
                   </p>
                 ) : null}
                 <p className="mt-2 break-words">{ctx.state.message}</p>
-                {ctx.state.code ? <p className="mt-1">Code: <span className="font-mono">{ctx.state.code}</span></p> : null}
+                {ctx.state.code ? (
+                  <p className="mt-1">
+                    Code: <span className="font-mono">{ctx.state.code}</span>
+                  </p>
+                ) : null}
               </details>
             ) : null}
             <div className="flex flex-wrap gap-2 pt-1">

@@ -35,7 +35,9 @@ export function savePendingCursorAgentSessionSnapshot(
   }
 }
 
-export function loadPendingCursorAgentSessionSnapshot(sessionId: string): Record<string, unknown> | null {
+export function loadPendingCursorAgentSessionSnapshot(
+  sessionId: string,
+): Record<string, unknown> | null {
   try {
     const raw = sessionStorage.getItem(keyForSession(sessionId));
     if (!raw?.trim()) return null;

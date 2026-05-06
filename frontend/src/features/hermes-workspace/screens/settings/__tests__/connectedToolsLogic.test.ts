@@ -26,7 +26,14 @@ const STATUS_LABELS: Record<ToolStatus, string> = {
   unknown: "Unknown",
 };
 
-const STATUS_GROUP_ORDER: ToolStatus[] = ["ready", "needs_sign_in", "not_found", "off", "error", "unknown"];
+const STATUS_GROUP_ORDER: ToolStatus[] = [
+  "ready",
+  "needs_sign_in",
+  "not_found",
+  "off",
+  "error",
+  "unknown",
+];
 
 function groupTools(tools: ToolEntry[]): Record<string, ToolEntry[]> {
   const groups: Record<string, ToolEntry[]> = {};
@@ -43,16 +50,88 @@ function applyToggle(tools: ToolEntry[], id: string, enabled: boolean): ToolEntr
   return tools.map((t) => (t.id === id ? { ...t, enabled } : t));
 }
 
-const DEV_SPEAK_WORDS = ["SDK", "CLI", "PATH", "adapter", "provider registry", "bridge", "local runtime", "environment variable"];
+const DEV_SPEAK_WORDS = [
+  "SDK",
+  "CLI",
+  "PATH",
+  "adapter",
+  "provider registry",
+  "bridge",
+  "local runtime",
+  "environment variable",
+];
 
 const MOCK_TOOLS: ToolEntry[] = [
-  { id: "openrouter", label: "OpenRouter", category: "model", status: "ready", enabled: true, source: "cloud", capabilities: ["chat"], setup_hint: null },
-  { id: "cursor", label: "Cursor", category: "coding", status: "needs_sign_in", enabled: false, source: "cloud", capabilities: ["plan"], setup_hint: "Add your Cursor API key in Settings to connect." },
-  { id: "ai_studio", label: "AI Studio", category: "model", status: "unknown", enabled: false, source: "cloud", capabilities: [], setup_hint: "AI Studio integration is not yet available." },
-  { id: "antigravity", label: "Antigravity", category: "coding", status: "unknown", enabled: false, source: "unknown", capabilities: [], setup_hint: "Antigravity integration is not yet available." },
-  { id: "git", label: "Git", category: "repo", status: "not_found", enabled: false, source: "this_computer", capabilities: ["version_control"], setup_hint: "Connect this computer to detect Git." },
-  { id: "node", label: "Node", category: "local_tool", status: "not_found", enabled: false, source: "this_computer", capabilities: [], setup_hint: "Connect this computer to detect Node." },
-  { id: "factory_droid", label: "Factory Droid", category: "coding", status: "ready", enabled: true, source: "cloud", capabilities: ["edit_code"], setup_hint: null },
+  {
+    id: "openrouter",
+    label: "OpenRouter",
+    category: "model",
+    status: "ready",
+    enabled: true,
+    source: "cloud",
+    capabilities: ["chat"],
+    setup_hint: null,
+  },
+  {
+    id: "cursor",
+    label: "Cursor",
+    category: "coding",
+    status: "needs_sign_in",
+    enabled: false,
+    source: "cloud",
+    capabilities: ["plan"],
+    setup_hint: "Add your Cursor API key in Settings to connect.",
+  },
+  {
+    id: "ai_studio",
+    label: "AI Studio",
+    category: "model",
+    status: "unknown",
+    enabled: false,
+    source: "cloud",
+    capabilities: [],
+    setup_hint: "AI Studio integration is not yet available.",
+  },
+  {
+    id: "antigravity",
+    label: "Antigravity",
+    category: "coding",
+    status: "unknown",
+    enabled: false,
+    source: "unknown",
+    capabilities: [],
+    setup_hint: "Antigravity integration is not yet available.",
+  },
+  {
+    id: "git",
+    label: "Git",
+    category: "repo",
+    status: "not_found",
+    enabled: false,
+    source: "this_computer",
+    capabilities: ["version_control"],
+    setup_hint: "Connect this computer to detect Git.",
+  },
+  {
+    id: "node",
+    label: "Node",
+    category: "local_tool",
+    status: "not_found",
+    enabled: false,
+    source: "this_computer",
+    capabilities: [],
+    setup_hint: "Connect this computer to detect Node.",
+  },
+  {
+    id: "factory_droid",
+    label: "Factory Droid",
+    category: "coding",
+    status: "ready",
+    enabled: true,
+    source: "cloud",
+    capabilities: ["edit_code"],
+    setup_hint: null,
+  },
 ];
 
 describe("Connected Tools — grouping", () => {
@@ -141,7 +220,11 @@ describe("Connected Tools — user-facing labels avoid dev-speak", () => {
 
 describe("Connected Tools — cloud mode awareness", () => {
   it("cloud mode scan_available=false means UI does not claim local scan happened", () => {
-    const cloudResponse = { tools: MOCK_TOOLS, scan_available: false, scan_hint: "Connect this computer to scan local tools." };
+    const cloudResponse = {
+      tools: MOCK_TOOLS,
+      scan_available: false,
+      scan_hint: "Connect this computer to scan local tools.",
+    };
     expect(cloudResponse.scan_available).toBe(false);
     expect(cloudResponse.scan_hint).toBeTruthy();
   });

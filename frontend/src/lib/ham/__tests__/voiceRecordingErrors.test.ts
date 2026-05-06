@@ -12,9 +12,7 @@ import { mapMediaStreamErrorToUserMessage } from "@/lib/ham/voiceRecordingErrors
 describe("mapMediaStreamErrorToUserMessage", () => {
   it("returns the no-microphone copy for NotFoundError", () => {
     const out = mapMediaStreamErrorToUserMessage({ name: "NotFoundError" });
-    expect(out).toBe(
-      "No microphone was found. Connect or enable a microphone, then try again.",
-    );
+    expect(out).toBe("No microphone was found. Connect or enable a microphone, then try again.");
   });
 
   it("returns the permission-blocked copy for NotAllowedError", () => {
@@ -33,9 +31,7 @@ describe("mapMediaStreamErrorToUserMessage", () => {
 
   it("returns the unsupported copy for TypeError", () => {
     const out = mapMediaStreamErrorToUserMessage({ name: "TypeError" });
-    expect(out).toBe(
-      "Microphone recording is not supported in this browser context.",
-    );
+    expect(out).toBe("Microphone recording is not supported in this browser context.");
   });
 
   it("returns the secure-context copy when the message mentions secure context", () => {
@@ -43,9 +39,7 @@ describe("mapMediaStreamErrorToUserMessage", () => {
       name: "Whatever",
       message: "Cannot use this API outside a secure context",
     });
-    expect(out).toBe(
-      "Voice input requires a secure (HTTPS) connection in this browser.",
-    );
+    expect(out).toBe("Voice input requires a secure (HTTPS) connection in this browser.");
   });
 
   it("falls back to the generic copy for null", () => {

@@ -17,7 +17,8 @@ export const SOCIAL_COPY = {
   activityRecentSuggestions: "Recent suggestions",
   activitySafetyRelevant: "Safety-relevant activity",
   activityTelemetryDetailsTitle: "Delivery and audit counts (technical)",
-  activityTelemetryDetailsSummary: "Session snapshot metrics for support — not needed for daily operation",
+  activityTelemetryDetailsSummary:
+    "Session snapshot metrics for support — not needed for daily operation",
   setupHostTokenTechnicalTitle: "Runtime host & credentials (technical)",
   setupHostTokenTechnicalSummary: "Token names and bridge details for operators",
   telegramPacingTechnicalTitle: "Telegram pacing internals (technical)",
@@ -34,5 +35,6 @@ export const SOCIAL_COPY = {
   technicalProofWarning:
     "Technical proof for debugging and audit. Not needed for normal operation.",
   digestProtectionTitle: "Digest protection",
-  voiceLockPlain: "Ham’s voice is fingerprinted so previews and sends stay tied to the same persona.",
+  voiceLockPlain:
+    "Ham’s voice is fingerprinted so previews and sends stay tied to the same persona.",
 } as const;

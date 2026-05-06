@@ -40,8 +40,12 @@ describe("loadContextMemorySnapshot", () => {
     const localCwd = "/explicit/local/root";
     const deps = {
       isLocalRuntimeConfigured: () => true,
-      fetchLocalWorkspaceHealth: vi.fn().mockResolvedValue({ ok: true, workspaceRootConfigured: true }),
-      fetchLocalWorkspaceContextSnapshot: vi.fn().mockResolvedValue({ ...basePayload(localCwd), context_source: "local" }),
+      fetchLocalWorkspaceHealth: vi
+        .fn()
+        .mockResolvedValue({ ok: true, workspaceRootConfigured: true }),
+      fetchLocalWorkspaceContextSnapshot: vi
+        .fn()
+        .mockResolvedValue({ ...basePayload(localCwd), context_source: "local" }),
       fetchProjectContextEngine: vi.fn(),
       fetchContextEngine: vi.fn(),
     };
@@ -74,7 +78,9 @@ describe("loadContextMemorySnapshot", () => {
     const cloudCwd = "/cloud/global";
     const deps = {
       isLocalRuntimeConfigured: () => true,
-      fetchLocalWorkspaceHealth: vi.fn().mockResolvedValue({ ok: true, workspaceRootConfigured: false }),
+      fetchLocalWorkspaceHealth: vi
+        .fn()
+        .mockResolvedValue({ ok: true, workspaceRootConfigured: false }),
       fetchLocalWorkspaceContextSnapshot: vi.fn(),
       fetchProjectContextEngine: vi.fn().mockRejectedValue(new Error("no project")),
       fetchContextEngine: vi.fn().mockResolvedValue(basePayload(cloudCwd)),
@@ -89,7 +95,9 @@ describe("loadContextMemorySnapshot", () => {
     const cloudCwd = "/after/fallback";
     const deps = {
       isLocalRuntimeConfigured: () => true,
-      fetchLocalWorkspaceHealth: vi.fn().mockResolvedValue({ ok: true, workspaceRootConfigured: true }),
+      fetchLocalWorkspaceHealth: vi
+        .fn()
+        .mockResolvedValue({ ok: true, workspaceRootConfigured: true }),
       fetchLocalWorkspaceContextSnapshot: vi.fn().mockRejectedValue(new Error("503")),
       fetchProjectContextEngine: vi.fn(),
       fetchContextEngine: vi.fn().mockResolvedValue(basePayload(cloudCwd)),
@@ -114,8 +122,12 @@ describe("shouldGateContextMemorySettingsMutations", () => {
 
 describe("isLocalContextEnginePayload", () => {
   it("detects local context_source", () => {
-    expect(isLocalContextEnginePayload({ ...basePayload("/x"), context_source: "local" })).toBe(true);
-    expect(isLocalContextEnginePayload({ ...basePayload("/x"), context_source: "cloud" })).toBe(false);
+    expect(isLocalContextEnginePayload({ ...basePayload("/x"), context_source: "local" })).toBe(
+      true,
+    );
+    expect(isLocalContextEnginePayload({ ...basePayload("/x"), context_source: "cloud" })).toBe(
+      false,
+    );
     expect(isLocalContextEnginePayload(null)).toBe(false);
   });
 });

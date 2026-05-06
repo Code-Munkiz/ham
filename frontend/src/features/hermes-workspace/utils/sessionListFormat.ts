@@ -32,7 +32,10 @@ export function sessionCardTitle(preview: string | null | undefined): string {
  * One subtitle line: turn count + last activity time. No raw ISO, no full UUID
  * (IDs stay in the URL for routing only).
  */
-export function sessionCardSubtitle(turnCount: number, createdAt: string | null | undefined): string {
+export function sessionCardSubtitle(
+  turnCount: number,
+  createdAt: string | null | undefined,
+): string {
   const parts: string[] = [];
   if (turnCount > 0) {
     parts.push(`${turnCount} turn${turnCount === 1 ? "" : "s"}`);

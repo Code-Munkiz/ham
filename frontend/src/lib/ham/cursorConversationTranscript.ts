@@ -21,7 +21,10 @@ function extractTextFromUnknown(x: unknown): string {
   if (typeof x === "string") return x;
   if (x == null) return "";
   if (Array.isArray(x)) {
-    return x.map((p) => extractTextFromUnknown(p)).filter((s) => s.length > 0).join("\n");
+    return x
+      .map((p) => extractTextFromUnknown(p))
+      .filter((s) => s.length > 0)
+      .join("\n");
   }
   const r = asRecord(x);
   if (r) {
@@ -32,9 +35,7 @@ function extractTextFromUnknown(x: unknown): string {
       (typeof r.content === "string" ? readString(r.content) : null);
     if (t) return t;
     if (Array.isArray(r.content)) {
-      const fromParts = r.content
-        .map((p) => extractTextFromUnknown(p))
-        .filter((s) => s.length > 0);
+      const fromParts = r.content.map((p) => extractTextFromUnknown(p)).filter((s) => s.length > 0);
       if (fromParts.length) return fromParts.join("\n");
     }
     if (r.content && typeof r.content === "object") {
@@ -84,9 +85,7 @@ function messageObjectToLine(msg: unknown, index: number): CursorTranscriptLine 
   const body =
     readString(o.text) ??
     readString(o.content) ??
-    (typeof o.content === "object" && o.content
-      ? extractTextFromUnknown(o.content)
-      : null) ??
+    (typeof o.content === "object" && o.content ? extractTextFromUnknown(o.content) : null) ??
     (Array.isArray(o.parts) ? extractTextFromUnknown(o.parts) : null) ??
     "";
 

@@ -76,12 +76,7 @@ export interface RunRecord {
 }
 
 /** Matches `src/bridge/contracts.py` BridgeStatus */
-export type BridgeStatus =
-  | 'rejected'
-  | 'executed'
-  | 'failed'
-  | 'timed_out'
-  | 'partial';
+export type BridgeStatus = "rejected" | "executed" | "failed" | "timed_out" | "partial";
 
 /** Matches `src/bridge/contracts.py` PolicyDecision */
 export interface PolicyDecision {
@@ -91,11 +86,7 @@ export interface PolicyDecision {
 }
 
 /** Matches `src/bridge/contracts.py` CommandState */
-export type CommandState =
-  | 'executed'
-  | 'failed'
-  | 'timed_out'
-  | 'skipped';
+export type CommandState = "executed" | "failed" | "timed_out" | "skipped";
 
 /**
  * Matches `src/bridge/contracts.py` CommandEvidence
@@ -140,7 +131,7 @@ export interface BridgeResult {
 
 /** Bridge completed command execution successfully (green-path for inspect runs). */
 export function isBridgeSuccess(b: BridgeResult): boolean {
-  return b.status === 'executed';
+  return b.status === "executed";
 }
 
 export interface HermesReview {
@@ -437,7 +428,7 @@ export function getChatGatewayReadinessToken(
 /** From `GET /api/cursor/credentials-status` — never includes the full secret. */
 export interface CursorCredentialsStatus {
   configured: boolean;
-  source: 'ui' | 'env' | 'none';
+  source: "ui" | "env" | "none";
   masked_preview: string | null;
   api_key_name: string | null;
   user_email: string | null;
@@ -512,8 +503,8 @@ export type ActivityEventSource =
 
 export interface ActivityEvent {
   id: string;
-  type: 'run_event' | 'warning' | 'persistence_warning' | 'review_outcome' | 'runtime_event';
-  level: 'info' | 'warn' | 'error';
+  type: "run_event" | "warning" | "persistence_warning" | "review_outcome" | "runtime_event";
+  level: "info" | "warn" | "error";
   message: string;
   timestamp: string;
   /** When set, identifies the system that produced the event. */
@@ -527,7 +518,7 @@ export interface Agent {
   role: string;
   model: string;
   provider: string;
-  status: 'Ready' | 'Needs Setup' | 'Working' | 'Offline';
+  status: "Ready" | "Needs Setup" | "Working" | "Offline";
   keyConnected: boolean;
   assignedTools: string[];
   description?: string;
@@ -540,11 +531,11 @@ export interface Agent {
   communicationStyle?: string;
 
   // Model Config
-  reasoningDepth?: 'Fast' | 'Balanced' | 'Deep';
+  reasoningDepth?: "Fast" | "Balanced" | "Deep";
   contextSize?: string;
 
   // Behavior & Safety
-  autonomyLevel?: 'Supervised' | 'Semi-Auto' | 'Full Auto';
+  autonomyLevel?: "Supervised" | "Semi-Auto" | "Full Auto";
   safeMode?: boolean;
   requireApprovalFor?: string[];
   allowlist?: string;
@@ -560,7 +551,7 @@ export interface ApiKey {
   id: string;
   provider: string;
   maskedKey: string;
-  status: 'Connected' | 'Error' | 'Inactive';
+  status: "Connected" | "Error" | "Inactive";
   assignedAgents: string[];
 }
 

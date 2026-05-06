@@ -7,7 +7,9 @@ import type {
   SocialPolicyServerError,
 } from "../lib/policyTypes";
 
-function previewFixture(overrides: Partial<SocialPolicyPreviewResponse> = {}): SocialPolicyPreviewResponse {
+function previewFixture(
+  overrides: Partial<SocialPolicyPreviewResponse> = {},
+): SocialPolicyPreviewResponse {
   return {
     effective_before: {} as never,
     effective_after: {} as never,

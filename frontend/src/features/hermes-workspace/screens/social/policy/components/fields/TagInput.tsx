@@ -81,9 +81,7 @@ export function TagInput({
             </button>
           </Badge>
         ))}
-        {value.length === 0 ? (
-          <span className="text-xs text-muted-foreground">none</span>
-        ) : null}
+        {value.length === 0 ? <span className="text-xs text-muted-foreground">none</span> : null}
       </div>
       <div className="flex gap-2">
         <Input

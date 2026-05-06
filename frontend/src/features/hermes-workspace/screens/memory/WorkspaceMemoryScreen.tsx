@@ -8,10 +8,7 @@ import { BookOpen, Brain, ChevronDown, ChevronUp, Pencil, Search } from "lucide-
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
-import {
-  workspaceMemoryAdapter,
-  type WorkspaceMemoryItem,
-} from "../../adapters/memoryAdapter";
+import { workspaceMemoryAdapter, type WorkspaceMemoryItem } from "../../adapters/memoryAdapter";
 import { WorkspaceSurfaceStateCard } from "../../components/workspaceSurfaceChrome";
 
 type FileMeta = { path: string; name: string; size: number; modified: string };
@@ -35,7 +32,11 @@ function formatBytes(n: number): string {
 function formatMod(iso: string): string {
   const t = Date.parse(iso);
   if (Number.isNaN(t)) return iso;
-  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" }).format(t);
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(t);
 }
 
 function highlightMatch(text: string, query: string): { text: string; hit: boolean }[] {
@@ -86,7 +87,9 @@ function StateBox({ label, error }: { label: string; error?: boolean }) {
       )}
     >
       {error ? (
-        <span className="max-w-full whitespace-pre-wrap break-words text-left leading-relaxed">{label}</span>
+        <span className="max-w-full whitespace-pre-wrap break-words text-left leading-relaxed">
+          {label}
+        </span>
       ) : (
         label
       )}
@@ -190,7 +193,9 @@ function MemoryEditorPanel({
                 >
                   Cancel
                 </button>
-                {hasUnsaved ? <span className="inline-block size-2 rounded-full bg-amber-400" title="Unsaved" /> : null}
+                {hasUnsaved ? (
+                  <span className="inline-block size-2 rounded-full bg-amber-400" title="Unsaved" />
+                ) : null}
               </>
             ) : (
               <button
@@ -215,7 +220,10 @@ function MemoryEditorPanel({
         {item && !listLoading && !err && isEditing && (
           <div
             className="h-full min-h-[200px] rounded-xl p-2"
-            style={{ border: "1px solid var(--theme-border)", backgroundColor: "var(--theme-card)" }}
+            style={{
+              border: "1px solid var(--theme-border)",
+              backgroundColor: "var(--theme-card)",
+            }}
           >
             <textarea
               value={draft}
@@ -231,7 +239,13 @@ function MemoryEditorPanel({
           </div>
         )}
         {item && !listLoading && !err && !isEditing && (
-          <div className="rounded-xl" style={{ border: "1px solid var(--theme-border)", backgroundColor: "var(--theme-card)" }}>
+          <div
+            className="rounded-xl"
+            style={{
+              border: "1px solid var(--theme-border)",
+              backgroundColor: "var(--theme-card)",
+            }}
+          >
             <div className="font-mono text-xs">
               {lines.map((line, index) => {
                 const n = index + 1;
@@ -302,7 +316,7 @@ export function WorkspaceMemoryScreen() {
     });
   }, [items]);
 
-  const selectedItem = selectedPath ? byPath.get(selectedPath) ?? null : null;
+  const selectedItem = selectedPath ? (byPath.get(selectedPath) ?? null) : null;
   const content = selectedItem?.body ?? "";
   const lines = React.useMemo(() => content.split(/\r?\n/), [content]);
   const hasUnsaved = isEditing && draft !== content;
@@ -378,7 +392,10 @@ export function WorkspaceMemoryScreen() {
 
   if (bridgeError && !loading && items.length === 0) {
     return (
-      <div className="hws-root flex h-full min-h-0 flex-col p-4" style={{ backgroundColor: "var(--theme-bg)" }}>
+      <div
+        className="hws-root flex h-full min-h-0 flex-col p-4"
+        style={{ backgroundColor: "var(--theme-bg)" }}
+      >
         <WorkspaceSurfaceStateCard
           title="Memory API is not available in this HAM deployment."
           description="Other workspace features may still work. Memory is served from the HAM API at /api/workspace/memory — not the local Files/Terminal connection."
@@ -395,8 +412,15 @@ export function WorkspaceMemoryScreen() {
   }
 
   return (
-    <div className="hws-root flex h-full min-h-0 flex-col" style={{ backgroundColor: "var(--theme-bg)" }}>
-      <Tabs value={routeTab} onValueChange={(v) => setRouteTab(v as "memory" | "knowledge")} className="flex h-full min-h-0 flex-col">
+    <div
+      className="hws-root flex h-full min-h-0 flex-col"
+      style={{ backgroundColor: "var(--theme-bg)" }}
+    >
+      <Tabs
+        value={routeTab}
+        onValueChange={(v) => setRouteTab(v as "memory" | "knowledge")}
+        className="flex h-full min-h-0 flex-col"
+      >
         <div
           className="shrink-0 border-b px-3 pt-3 md:px-4 md:pt-4"
           style={{ borderColor: "var(--theme-border)" }}
@@ -417,7 +441,10 @@ export function WorkspaceMemoryScreen() {
           </TabsList>
         </div>
 
-        <TabsContent value="knowledge" className="m-0 min-h-0 flex-1 overflow-auto focus-visible:outline-none">
+        <TabsContent
+          value="knowledge"
+          className="m-0 min-h-0 flex-1 overflow-auto focus-visible:outline-none"
+        >
           <div className="p-4 md:p-6">
             <div className="mx-auto max-w-2xl rounded-2xl border border-dashed border-white/15 bg-black/20 p-6 text-center">
               <div className="mb-2 flex justify-center gap-2 text-[var(--theme-muted)]">
@@ -425,30 +452,41 @@ export function WorkspaceMemoryScreen() {
               </div>
               <h2 className="text-lg font-semibold text-[var(--theme-text)]">Knowledge</h2>
               <p className="mt-2 text-sm text-[var(--theme-muted)]">
-                Upstream maps this tab to a local/remote wiki (see <code className="text-xs">knowledge-browser-screen</code>).
-                HAM does not expose <code className="text-xs">/api/knowledge</code> in this build — no wiki tree or graph here.
+                Upstream maps this tab to a local/remote wiki (see{" "}
+                <code className="text-xs">knowledge-browser-screen</code>). HAM does not expose{" "}
+                <code className="text-xs">/api/knowledge</code> in this build — no wiki tree or
+                graph here.
               </p>
             </div>
           </div>
         </TabsContent>
 
         <TabsContent value="memory" className="m-0 min-h-0 flex-1 focus-visible:outline-none">
-          <div className="flex h-full min-h-0 flex-col" style={{ backgroundColor: "var(--theme-bg)" }}>
+          <div
+            className="flex h-full min-h-0 flex-col"
+            style={{ backgroundColor: "var(--theme-bg)" }}
+          >
             <div
               className="shrink-0 px-3 py-2 md:px-4"
               style={{ borderBottom: "1px solid var(--theme-border)" }}
             >
               <h2 className="text-sm font-semibold text-[var(--theme-text)]">Memory browser</h2>
               <p className="mt-0.5 text-xs text-[var(--theme-muted)]">
-                Search and edit entries stored by the HAM Memory API. This is not Memory Heist sync — JSON v0 on the API
-                host only.
+                Search and edit entries stored by the HAM Memory API. This is not Memory Heist sync
+                — JSON v0 on the API host only.
               </p>
             </div>
-            <div className="shrink-0 px-3 py-3 md:px-4" style={{ borderBottom: "1px solid var(--theme-border)" }}>
+            <div
+              className="shrink-0 px-3 py-3 md:px-4"
+              style={{ borderBottom: "1px solid var(--theme-border)" }}
+            >
               <div className="flex items-center gap-3">
                 <div
                   className="inline-flex size-9 items-center justify-center rounded-xl"
-                  style={{ border: "1px solid var(--theme-border)", backgroundColor: "var(--theme-card)" }}
+                  style={{
+                    border: "1px solid var(--theme-border)",
+                    backgroundColor: "var(--theme-card)",
+                  }}
                 >
                   <Brain className="h-4 w-4" />
                 </div>
@@ -514,7 +552,11 @@ export function WorkspaceMemoryScreen() {
                     Memory files ({fileItems.length})
                   </span>
                   <span className="md:hidden text-[var(--theme-muted)]">
-                    {mobileFilesOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                    {mobileFilesOpen ? (
+                      <ChevronUp className="h-4 w-4" />
+                    ) : (
+                      <ChevronDown className="h-4 w-4" />
+                    )}
                   </span>
                 </button>
 
@@ -545,7 +587,11 @@ export function WorkspaceMemoryScreen() {
                               {highlightMatch(result.text, searchTerm).map((part, i) => (
                                 <span
                                   key={i}
-                                  className={part.hit ? "rounded bg-yellow-500/20 px-0.5 text-yellow-100" : undefined}
+                                  className={
+                                    part.hit
+                                      ? "rounded bg-yellow-500/20 px-0.5 text-yellow-100"
+                                      : undefined
+                                  }
                                 >
                                   {part.text || " "}
                                 </span>
@@ -558,7 +604,10 @@ export function WorkspaceMemoryScreen() {
                   </div>
                 ) : (
                   <div
-                    className={cn("min-h-0 flex-1 px-2 pb-2", !mobileFilesOpen && "hidden md:block")}
+                    className={cn(
+                      "min-h-0 flex-1 px-2 pb-2",
+                      !mobileFilesOpen && "hidden md:block",
+                    )}
                   >
                     <div className="max-h-72 space-y-1 overflow-y-auto pr-1 md:h-full md:max-h-none">
                       {loading && (
@@ -568,8 +617,13 @@ export function WorkspaceMemoryScreen() {
                       )}
                       {!loading && fileItems.length === 0 && (
                         <div className="space-y-1.5 rounded-lg border border-dashed border-white/15 px-3 py-3 text-xs text-[var(--theme-muted)]">
-                          <p className="font-medium text-[var(--theme-text)]">No memory entries yet</p>
-                          <p>Memory storage is connected, but no entries are available. Use New to create a note.</p>
+                          <p className="font-medium text-[var(--theme-text)]">
+                            No memory entries yet
+                          </p>
+                          <p>
+                            Memory storage is connected, but no entries are available. Use New to
+                            create a note.
+                          </p>
                         </div>
                       )}
                       {!loading &&

@@ -8,8 +8,7 @@ import {
   type HamDesktopLocalControlStatus,
 } from "@/lib/ham/desktopBundleBridge";
 
-const SPEC_HREF =
-  "https://github.com/Code-Munkiz/ham/blob/main/docs/desktop/local_control_v1.md";
+const SPEC_HREF = "https://github.com/Code-Munkiz/ham/blob/main/docs/desktop/local_control_v1.md";
 const SIDECAR_SPEC_HREF =
   "https://github.com/Code-Munkiz/ham/blob/main/docs/desktop/local_control_sidecar_protocol_v1.md";
 
@@ -80,7 +79,11 @@ export function DesktopLocalControlStatusCard() {
         api.getStatus(),
         new Promise<HamDesktopLocalControlStatus>((_, reject) => {
           window.setTimeout(() => {
-            reject(new Error("Local Control status timed out — main process may be busy. Try again or restart HAM Desktop."));
+            reject(
+              new Error(
+                "Local Control status timed out — main process may be busy. Try again or restart HAM Desktop.",
+              ),
+            );
           }, STATUS_INVOKE_TIMEOUT_MS);
         }),
       ]);
@@ -159,7 +162,9 @@ export function DesktopLocalControlStatusCard() {
   const onArmBrowser = async () => {
     const api = getHamDesktopLocalControlApi();
     if (!isDesktopMethod(api, "armBrowserOnlyControl")) {
-      setErr(`Local Control: desktop bridge missing arm (embedded browser). ${DESKTOP_BRIDGE_HINT}`);
+      setErr(
+        `Local Control: desktop bridge missing arm (embedded browser). ${DESKTOP_BRIDGE_HINT}`,
+      );
       return;
     }
     setBrowserBusy(true);
@@ -183,7 +188,9 @@ export function DesktopLocalControlStatusCard() {
     setBrowserBusy(true);
     setErr(null);
     try {
-      const r = await api.releaseKillSwitchForBrowserMvp(HAM_DESKTOP_BROWSER_MVP_KILL_SWITCH_RELEASE);
+      const r = await api.releaseKillSwitchForBrowserMvp(
+        HAM_DESKTOP_BROWSER_MVP_KILL_SWITCH_RELEASE,
+      );
       if (r && !r.ok) setErr("Release kill switch failed (confirm token rejected).");
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Release kill switch failed");
@@ -196,7 +203,9 @@ export function DesktopLocalControlStatusCard() {
   const onBrowserStart = async () => {
     const api = getHamDesktopLocalControlApi();
     if (!isDesktopMethod(api, "startBrowserSession")) {
-      setErr(`Local Control: desktop bridge missing start (embedded browser). ${DESKTOP_BRIDGE_HINT}`);
+      setErr(
+        `Local Control: desktop bridge missing start (embedded browser). ${DESKTOP_BRIDGE_HINT}`,
+      );
       return;
     }
     setBrowserBusy(true);
@@ -260,7 +269,9 @@ export function DesktopLocalControlStatusCard() {
   const onBrowserStop = async () => {
     const api = getHamDesktopLocalControlApi();
     if (!isDesktopMethod(api, "stopBrowserSession")) {
-      setErr(`Local Control: desktop bridge missing stop (embedded browser). ${DESKTOP_BRIDGE_HINT}`);
+      setErr(
+        `Local Control: desktop bridge missing stop (embedded browser). ${DESKTOP_BRIDGE_HINT}`,
+      );
       return;
     }
     setBrowserBusy(true);
@@ -279,7 +290,9 @@ export function DesktopLocalControlStatusCard() {
   const onArmRealBrowser = async () => {
     const api = getHamDesktopLocalControlApi();
     if (!isDesktopMethod(api, "armRealBrowserControl")) {
-      setErr(`Local Control: desktop bridge missing arm (managed Chromium). ${DESKTOP_BRIDGE_HINT}`);
+      setErr(
+        `Local Control: desktop bridge missing arm (managed Chromium). ${DESKTOP_BRIDGE_HINT}`,
+      );
       return;
     }
     setRealBrowserBusy(true);
@@ -303,7 +316,9 @@ export function DesktopLocalControlStatusCard() {
     setRealBrowserBusy(true);
     setErr(null);
     try {
-      const r = await api.releaseKillSwitchForBrowserMvp(HAM_DESKTOP_BROWSER_MVP_KILL_SWITCH_RELEASE);
+      const r = await api.releaseKillSwitchForBrowserMvp(
+        HAM_DESKTOP_BROWSER_MVP_KILL_SWITCH_RELEASE,
+      );
       if (r && !r.ok) setErr("Release kill switch failed (confirm token rejected).");
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Release kill switch failed");
@@ -316,7 +331,9 @@ export function DesktopLocalControlStatusCard() {
   const onRealBrowserStart = async () => {
     const api = getHamDesktopLocalControlApi();
     if (!isDesktopMethod(api, "startRealBrowserSession")) {
-      setErr(`Local Control: desktop bridge missing start (managed Chromium). ${DESKTOP_BRIDGE_HINT}`);
+      setErr(
+        `Local Control: desktop bridge missing start (managed Chromium). ${DESKTOP_BRIDGE_HINT}`,
+      );
       return;
     }
     setRealBrowserBusy(true);
@@ -352,7 +369,9 @@ export function DesktopLocalControlStatusCard() {
   const onRealBrowserNavigate = async () => {
     const api = getHamDesktopLocalControlApi();
     if (!isDesktopMethod(api, "navigateRealBrowser")) {
-      setErr(`Local Control: desktop bridge missing navigate (managed Chromium). ${DESKTOP_BRIDGE_HINT}`);
+      setErr(
+        `Local Control: desktop bridge missing navigate (managed Chromium). ${DESKTOP_BRIDGE_HINT}`,
+      );
       return;
     }
     setRealBrowserBusy(true);
@@ -372,7 +391,9 @@ export function DesktopLocalControlStatusCard() {
   const onRealBrowserReload = async () => {
     const api = getHamDesktopLocalControlApi();
     if (!isDesktopMethod(api, "reloadRealBrowser")) {
-      setErr(`Local Control: desktop bridge missing reload (managed Chromium). ${DESKTOP_BRIDGE_HINT}`);
+      setErr(
+        `Local Control: desktop bridge missing reload (managed Chromium). ${DESKTOP_BRIDGE_HINT}`,
+      );
       return;
     }
     setRealBrowserBusy(true);
@@ -392,7 +413,9 @@ export function DesktopLocalControlStatusCard() {
   const onRealBrowserScreenshot = async () => {
     const api = getHamDesktopLocalControlApi();
     if (!isDesktopMethod(api, "captureRealBrowserScreenshot")) {
-      setErr(`Local Control: desktop bridge missing screenshot (managed Chromium). ${DESKTOP_BRIDGE_HINT}`);
+      setErr(
+        `Local Control: desktop bridge missing screenshot (managed Chromium). ${DESKTOP_BRIDGE_HINT}`,
+      );
       return;
     }
     setRealBrowserBusy(true);
@@ -416,7 +439,9 @@ export function DesktopLocalControlStatusCard() {
   const onRealBrowserStop = async () => {
     const api = getHamDesktopLocalControlApi();
     if (!isDesktopMethod(api, "stopRealBrowserSession")) {
-      setErr(`Local Control: desktop bridge missing stop (managed Chromium). ${DESKTOP_BRIDGE_HINT}`);
+      setErr(
+        `Local Control: desktop bridge missing stop (managed Chromium). ${DESKTOP_BRIDGE_HINT}`,
+      );
       return;
     }
     setRealBrowserBusy(true);
@@ -442,8 +467,17 @@ export function DesktopLocalControlStatusCard() {
     setErr(null);
     try {
       const r = await api.startSidecar();
-      if (r && typeof r === "object" && "ok" in r && r.ok === false && "blocked" in r && r.blocked) {
-        setErr("Start blocked: kill switch is engaged (default). Inert sidecar cannot start until policy allows.");
+      if (
+        r &&
+        typeof r === "object" &&
+        "ok" in r &&
+        r.ok === false &&
+        "blocked" in r &&
+        r.blocked
+      ) {
+        setErr(
+          "Start blocked: kill switch is engaged (default). Inert sidecar cannot start until policy allows.",
+        );
       }
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Start sidecar failed");
@@ -478,11 +512,13 @@ export function DesktopLocalControlStatusCard() {
         <span className="text-white/50"> Phase 4B</span>: managed local{" "}
         <span className="text-white/45">Chromium/Chrome</span> with a{" "}
         <span className="text-white/50">HAM-only profile</span>,{" "}
-        <span className="text-white/45">127.0.0.1-only CDP</span> — <span className="text-white/45">Linux dev + Windows</span>{" "}
-        builds; same navigate / status / screenshot / stop gates as 4A policy.
-        Default deny; <span className="text-white/50">arm</span> the slice you need, then{" "}
-        <span className="text-white/50">release kill switch</span> (audited token) before starting. No attach to your
-        default profile, no shell, filesystem, MCP, Droid, Cloud Run, or <span className="text-white/45">/api/browser</span>.
+        <span className="text-white/45">127.0.0.1-only CDP</span> —{" "}
+        <span className="text-white/45">Linux dev + Windows</span> builds; same navigate / status /
+        screenshot / stop gates as 4A policy. Default deny;{" "}
+        <span className="text-white/50">arm</span> the slice you need, then{" "}
+        <span className="text-white/50">release kill switch</span> (audited token) before starting.
+        No attach to your default profile, no shell, filesystem, MCP, Droid, Cloud Run, or{" "}
+        <span className="text-white/45">/api/browser</span>.
       </p>
 
       <div className="flex flex-wrap gap-2">
@@ -514,7 +550,9 @@ export function DesktopLocalControlStatusCard() {
         <button
           type="button"
           onClick={() => void onStartSidecar()}
-          disabled={loading || sidecarBusy || !status?.sidecar.start_allowed || !!status?.sidecar.running}
+          disabled={
+            loading || sidecarBusy || !status?.sidecar.start_allowed || !!status?.sidecar.running
+          }
           title={
             status && !status.sidecar.start_allowed
               ? "Start is blocked while the kill switch is engaged (default)."
@@ -526,9 +564,9 @@ export function DesktopLocalControlStatusCard() {
         </button>
       </div>
       <p className="text-[8px] text-white/25 leading-relaxed">
-        Engage kill switch clears <span className="text-white/40">both</span> browser arms and blocks sessions. Kill-switch
-        release uses the same audited browser MVP token for embedded and managed-Chromium paths (not a generic “enable
-        all local control”).
+        Engage kill switch clears <span className="text-white/40">both</span> browser arms and
+        blocks sessions. Kill-switch release uses the same audited browser MVP token for embedded
+        and managed-Chromium paths (not a generic “enable all local control”).
       </p>
 
       <div className="rounded-lg border border-white/10 bg-black/40 p-4 space-y-3">
@@ -536,8 +574,8 @@ export function DesktopLocalControlStatusCard() {
           Phase 4A browser-only session (Linux)
         </div>
         <p className="text-[9px] text-white/35 leading-relaxed">
-          Audit log records arm / release / navigate / screenshot / stop — never full URLs with query strings in audit
-          lines; screenshots stay in this panel only.
+          Audit log records arm / release / navigate / screenshot / stop — never full URLs with
+          query strings in audit lines; screenshots stay in this panel only.
         </p>
         <div className="flex flex-wrap gap-2">
           <button
@@ -577,7 +615,12 @@ export function DesktopLocalControlStatusCard() {
           <button
             type="button"
             onClick={() => void onBrowserStop()}
-            disabled={loading || browserBusy || !status?.browser_mvp?.supported || !status?.browser_mvp.session_running}
+            disabled={
+              loading ||
+              browserBusy ||
+              !status?.browser_mvp?.supported ||
+              !status?.browser_mvp.session_running
+            }
             className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-white/10 text-[10px] font-black uppercase tracking-widest text-white/60 hover:border-amber-500/30 disabled:opacity-40"
           >
             Stop browser session
@@ -644,7 +687,9 @@ export function DesktopLocalControlStatusCard() {
             </div>
             <div className="flex flex-wrap gap-x-2">
               <dt className="text-white/35">Display URL</dt>
-              <dd className="font-mono text-[9px] break-all">{status.browser_mvp.display_url || "—"}</dd>
+              <dd className="font-mono text-[9px] break-all">
+                {status.browser_mvp.display_url || "—"}
+              </dd>
             </div>
             <div className="flex flex-wrap gap-x-2">
               <dt className="text-white/35">Title</dt>
@@ -652,7 +697,9 @@ export function DesktopLocalControlStatusCard() {
             </div>
             <div className="flex flex-wrap gap-x-2">
               <dt className="text-white/35">Loopback URLs</dt>
-              <dd>{status.browser_mvp.allow_loopback ? "allowed in policy" : "blocked (default)"}</dd>
+              <dd>
+                {status.browser_mvp.allow_loopback ? "allowed in policy" : "blocked (default)"}
+              </dd>
             </div>
           </dl>
         ) : null}
@@ -673,14 +720,16 @@ export function DesktopLocalControlStatusCard() {
           Real browser control — managed browser (guarded)
         </div>
         <p className="text-[9px] text-white/35 leading-relaxed">
-          HAM spawns a <span className="text-white/50">dedicated Chromium/Chrome profile</span> under desktop userData
-          (never your default profile). Debugging listens on <span className="text-white/50">127.0.0.1 only</span> with a
-          random port — not exposed beyond localhost.           The window may briefly show{" "}
-          <span className="text-white/45 font-mono">about:blank</span> or Chromium vendor branding on first paint;
-          after <span className="text-white/50">Start</span>, HAM loads the URL in the field below when it is http(s).{" "}
-          <span className="text-white/50">Reload</span> refreshes the current page only (no new URL) — explicit,
-          panel-only actions; not your default browser and not invokable from Shop.
-          Same https-only rules as Phase 4A; loopback blocked unless policy allows.
+          HAM spawns a <span className="text-white/50">dedicated Chromium/Chrome profile</span>{" "}
+          under desktop userData (never your default profile). Debugging listens on{" "}
+          <span className="text-white/50">127.0.0.1 only</span> with a random port — not exposed
+          beyond localhost. The window may briefly show{" "}
+          <span className="text-white/45 font-mono">about:blank</span> or Chromium vendor branding
+          on first paint; after <span className="text-white/50">Start</span>, HAM loads the URL in
+          the field below when it is http(s). <span className="text-white/50">Reload</span>{" "}
+          refreshes the current page only (no new URL) — explicit, panel-only actions; not your
+          default browser and not invokable from Shop. Same https-only rules as Phase 4A; loopback
+          blocked unless policy allows.
         </p>
         <div className="flex flex-wrap gap-2">
           <button
@@ -721,7 +770,10 @@ export function DesktopLocalControlStatusCard() {
             type="button"
             onClick={() => void onRealBrowserStop()}
             disabled={
-              loading || realBrowserBusy || !status?.browser_real?.supported || !status?.browser_real.session_running
+              loading ||
+              realBrowserBusy ||
+              !status?.browser_real?.supported ||
+              !status?.browser_real.session_running
             }
             className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-white/10 text-[10px] font-black uppercase tracking-widest text-white/60 hover:border-amber-500/30 disabled:opacity-40"
           >
@@ -785,7 +837,9 @@ export function DesktopLocalControlStatusCard() {
           <dl className="grid gap-1.5 text-[10px] text-white/50">
             <div className="flex flex-wrap gap-x-2">
               <dt className="text-white/35">Supported</dt>
-              <dd>{status.browser_real.supported ? "yes (platform supports managed browser)" : "no"}</dd>
+              <dd>
+                {status.browser_real.supported ? "yes (platform supports managed browser)" : "no"}
+              </dd>
             </div>
             <div className="flex flex-wrap gap-x-2">
               <dt className="text-white/35">Availability</dt>
@@ -827,7 +881,9 @@ export function DesktopLocalControlStatusCard() {
             </div>
             <div className="flex flex-wrap gap-x-2">
               <dt className="text-white/35">Display URL</dt>
-              <dd className="font-mono text-[9px] break-all">{status.browser_real.display_url || "—"}</dd>
+              <dd className="font-mono text-[9px] break-all">
+                {status.browser_real.display_url || "—"}
+              </dd>
             </div>
             <div className="flex flex-wrap gap-x-2">
               <dt className="text-white/35">Title</dt>
@@ -835,13 +891,17 @@ export function DesktopLocalControlStatusCard() {
             </div>
             <div className="flex flex-wrap gap-x-2">
               <dt className="text-white/35">Loopback URLs</dt>
-              <dd>{status.browser_real.allow_loopback ? "allowed in policy" : "blocked (default)"}</dd>
+              <dd>
+                {status.browser_real.allow_loopback ? "allowed in policy" : "blocked (default)"}
+              </dd>
             </div>
           </dl>
         ) : null}
         {realScreenshotDataUrl ? (
           <div className="space-y-1">
-            <div className="text-[9px] text-white/35">Last real-browser screenshot (local preview)</div>
+            <div className="text-[9px] text-white/35">
+              Last real-browser screenshot (local preview)
+            </div>
             <img
               src={realScreenshotDataUrl}
               alt="Managed Chromium screenshot"
@@ -868,7 +928,9 @@ export function DesktopLocalControlStatusCard() {
             <dt className="text-white/35 shrink-0">Kill switch</dt>
             <dd>
               {status.kill_switch.engaged ? "engaged" : "disengaged"} ·{" "}
-              <span className="font-mono text-[10px] text-white/45">{status.kill_switch.reason}</span>
+              <span className="font-mono text-[10px] text-white/45">
+                {status.kill_switch.reason}
+              </span>
             </dd>
           </div>
           <div className="flex flex-wrap gap-x-2">
@@ -895,7 +957,8 @@ export function DesktopLocalControlStatusCard() {
           <div className="flex flex-wrap gap-x-2">
             <dt className="text-white/35 shrink-0">Audit log</dt>
             <dd>
-              available: {status.audit.available ? "yes" : "no"} · writable: {status.audit.writable ? "yes" : "no"}
+              available: {status.audit.available ? "yes" : "no"} · writable:{" "}
+              {status.audit.writable ? "yes" : "no"}
               {status.audit.event_count_estimate != null
                 ? ` · events (est.): ${status.audit.event_count_estimate}`
                 : ""}{" "}
@@ -913,18 +976,20 @@ export function DesktopLocalControlStatusCard() {
           <div className="flex flex-wrap gap-x-2">
             <dt className="text-white/35 shrink-0">Sidecar</dt>
             <dd className="text-[10px] leading-relaxed">
-              implemented: {status.sidecar.implemented ? "yes (inert shell)" : "no"} · {status.sidecar.mode} · running:{" "}
-              {status.sidecar.running ? "yes" : "no"} · transport:{" "}
+              implemented: {status.sidecar.implemented ? "yes (inert shell)" : "no"} ·{" "}
+              {status.sidecar.mode} · running: {status.sidecar.running ? "yes" : "no"} · transport:{" "}
               <span className="font-mono text-white/45">{status.sidecar.transport}</span> · health:{" "}
-              <span className="font-mono text-white/45">{status.sidecar.health}</span> · start allowed:{" "}
-              {status.sidecar.start_allowed ? "yes" : "no"}
+              <span className="font-mono text-white/45">{status.sidecar.health}</span> · start
+              allowed: {status.sidecar.start_allowed ? "yes" : "no"}
               {status.sidecar.blocked_reason ? (
                 <>
                   {" "}
-                  · blocked: <span className="font-mono text-white/45">{status.sidecar.blocked_reason}</span>
+                  · blocked:{" "}
+                  <span className="font-mono text-white/45">{status.sidecar.blocked_reason}</span>
                 </>
               ) : null}{" "}
-              · inbound network: {status.sidecar.inbound_network ? "yes" : "no"} · Droid: {status.sidecar.droid_access}
+              · inbound network: {status.sidecar.inbound_network ? "yes" : "no"} · Droid:{" "}
+              {status.sidecar.droid_access}
             </dd>
           </div>
           <div className="flex flex-wrap gap-x-2">
@@ -941,7 +1006,9 @@ export function DesktopLocalControlStatusCard() {
           {status.warnings.length ? (
             <div className="flex flex-wrap gap-x-2">
               <dt className="text-white/35 shrink-0">Warnings</dt>
-              <dd className="font-mono text-[10px] text-amber-200/80">{status.warnings.join(", ")}</dd>
+              <dd className="font-mono text-[10px] text-amber-200/80">
+                {status.warnings.join(", ")}
+              </dd>
             </div>
           ) : null}
         </dl>

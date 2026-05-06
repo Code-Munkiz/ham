@@ -42,9 +42,7 @@ export function WorkspaceMobileTabBar() {
       <ul className="flex max-w-full items-stretch justify-start gap-0.5 overflow-x-auto px-0.5">
         {MOBILE_TABS.map((item) => {
           const IC = item.icon;
-          const isActive = Boolean(
-            matchPath({ path: item.to, end: item.end ?? false }, pathname),
-          );
+          const isActive = Boolean(matchPath({ path: item.to, end: item.end ?? false }, pathname));
           return (
             <li key={item.to} className="shrink-0">
               <NavLink
@@ -56,7 +54,10 @@ export function WorkspaceMobileTabBar() {
                 )}
               >
                 <IC
-                  className={cn("h-[18px] w-[18px] shrink-0", isActive ? "opacity-100" : "opacity-70")}
+                  className={cn(
+                    "h-[18px] w-[18px] shrink-0",
+                    isActive ? "opacity-100" : "opacity-70",
+                  )}
                   strokeWidth={1.5}
                 />
                 <span className="max-w-14 truncate">{item.label}</span>

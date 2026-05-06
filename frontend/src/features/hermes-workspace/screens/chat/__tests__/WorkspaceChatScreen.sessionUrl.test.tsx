@@ -28,7 +28,8 @@ vi.mock("@/lib/ham/api", async (importOriginal) => {
   const mod = await importOriginal<typeof import("@/lib/ham/api")>();
   return {
     ...mod,
-    fetchChatSession: (...args: Parameters<typeof mod.fetchChatSession>) => fetchChatSessionMock(...args),
+    fetchChatSession: (...args: Parameters<typeof mod.fetchChatSession>) =>
+      fetchChatSessionMock(...args),
   };
 });
 

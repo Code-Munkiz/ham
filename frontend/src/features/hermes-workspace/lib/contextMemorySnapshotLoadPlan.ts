@@ -27,7 +27,9 @@ export type ContextMemorySnapshotLoadOutcome = {
 };
 
 /** True when cloud settings Preview/Apply must not run against this view. */
-export function shouldGateContextMemorySettingsMutations(source: ContextMemorySnapshotSource | null): boolean {
+export function shouldGateContextMemorySettingsMutations(
+  source: ContextMemorySnapshotSource | null,
+): boolean {
   return source === "local";
 }
 

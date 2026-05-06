@@ -39,17 +39,13 @@ export function SafetyRulesFields({
         <div className="flex items-center justify-between rounded-md border border-border/40 p-3">
           <div>
             <Label htmlFor="safety__block_links">Block links</Label>
-            <p className="text-xs text-muted-foreground">
-              Refuse outputs that contain URLs.
-            </p>
+            <p className="text-xs text-muted-foreground">Refuse outputs that contain URLs.</p>
           </div>
           <Switch
             id="safety__block_links"
             checked={value.block_links}
             disabled={disabled}
-            onCheckedChange={(checked) =>
-              onChange({ ...value, block_links: checked === true })
-            }
+            onCheckedChange={(checked) => onChange({ ...value, block_links: checked === true })}
           />
         </div>
         <div className="flex flex-col gap-1.5">
@@ -93,7 +89,8 @@ export function SafetyRulesFields({
             }}
           />
           <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
-            {SAFETY_BOUNDS.consecutive_failure_stop.min} – {SAFETY_BOUNDS.consecutive_failure_stop.max}
+            {SAFETY_BOUNDS.consecutive_failure_stop.min} –{" "}
+            {SAFETY_BOUNDS.consecutive_failure_stop.max}
           </p>
         </div>
         <div className="flex flex-col gap-1.5">

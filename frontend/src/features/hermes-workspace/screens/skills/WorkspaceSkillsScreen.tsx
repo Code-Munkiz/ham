@@ -76,7 +76,9 @@ function SkillsGrid({
     return (
       <div className="rounded-xl border border-dashed border-white/15 bg-black/20 px-4 py-8 text-center">
         <p className="text-sm font-medium text-[var(--theme-text)]">{emptyTitle}</p>
-        <p className="mt-1 max-w-sm mx-auto text-xs text-[var(--theme-muted)]">{emptyDescription}</p>
+        <p className="mt-1 max-w-sm mx-auto text-xs text-[var(--theme-muted)]">
+          {emptyDescription}
+        </p>
       </div>
     );
   }
@@ -93,8 +95,12 @@ function SkillsGrid({
             <div className="mb-2 flex items-start justify-between gap-2">
               <div className="min-w-0 space-y-1">
                 <div className="text-lg leading-none">{skill.icon}</div>
-                <h3 className="truncate text-sm font-semibold text-[var(--theme-text)]">{skill.name}</h3>
-                <p className="line-clamp-2 text-xs text-[var(--theme-muted)]">{skill.description}</p>
+                <h3 className="truncate text-sm font-semibold text-[var(--theme-text)]">
+                  {skill.name}
+                </h3>
+                <p className="line-clamp-2 text-xs text-[var(--theme-muted)]">
+                  {skill.description}
+                </p>
               </div>
             </div>
             <div className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-white/10 pt-3">
@@ -123,7 +129,12 @@ function SkillsGrid({
                     Uninstall
                   </Button>
                 ) : null}
-                <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => onOpen(skill)}>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 text-xs"
+                  onClick={() => onOpen(skill)}
+                >
                   Details
                 </Button>
               </div>
@@ -156,17 +167,21 @@ export function WorkspaceSkillsScreen() {
   const [page, setPage] = React.useState(1);
   const pageSize = 30;
 
-  const [catPayload, setCatPayload] = React.useState<Awaited<
-    ReturnType<typeof workspaceSkillsAdapter.hermesStaticCatalog>
-  >["data"]>(null);
-  const [catLive, setCatLive] = React.useState<Awaited<
-    ReturnType<typeof workspaceSkillsAdapter.hermesLiveOverlay>
-  >["overlay"]>(null);
+  const [catPayload, setCatPayload] =
+    React.useState<Awaited<ReturnType<typeof workspaceSkillsAdapter.hermesStaticCatalog>>["data"]>(
+      null,
+    );
+  const [catLive, setCatLive] =
+    React.useState<Awaited<ReturnType<typeof workspaceSkillsAdapter.hermesLiveOverlay>>["overlay"]>(
+      null,
+    );
   const [catLoading, setCatLoading] = React.useState(false);
   const [catErr, setCatErr] = React.useState<string | null>(null);
   const [catalogSearch, setCatalogSearch] = React.useState("");
   const [catalogPage, setCatalogPage] = React.useState(1);
-  const [hermesDetail, setHermesDetail] = React.useState<HermesSkillCatalogEntryDetail | null>(null);
+  const [hermesDetail, setHermesDetail] = React.useState<HermesSkillCatalogEntryDetail | null>(
+    null,
+  );
   const [hermesDetailErr, setHermesDetailErr] = React.useState<string | null>(null);
   const [hermesDetailBusy, setHermesDetailBusy] = React.useState(false);
 
@@ -278,7 +293,10 @@ export function WorkspaceSkillsScreen() {
     setErr(null);
     try {
       if (kind === "install") {
-        const { error } = await workspaceSkillsAdapter.patch(id, { installed: true, enabled: true });
+        const { error } = await workspaceSkillsAdapter.patch(id, {
+          installed: true,
+          enabled: true,
+        });
         if (error) setErr(error);
       } else if (kind === "uninstall") {
         if (BUILTIN.has(id)) {
@@ -301,7 +319,9 @@ export function WorkspaceSkillsScreen() {
     setHermesDetailBusy(true);
     setHermesDetail(null);
     setHermesDetailErr(null);
-    const { entry, error, bridge } = await workspaceSkillsAdapter.hermesStaticCatalogEntry(e.catalog_id);
+    const { entry, error, bridge } = await workspaceSkillsAdapter.hermesStaticCatalogEntry(
+      e.catalog_id,
+    );
     setHermesDetailBusy(false);
     if (bridge.status === "pending") {
       setHermesDetailErr(bridge.detail);
@@ -318,13 +338,19 @@ export function WorkspaceSkillsScreen() {
     <div className="hws-root min-h-full overflow-y-auto" style={{ color: "var(--theme-text)" }}>
       <div className="mx-auto flex w-full max-w-[1200px] flex-col gap-5 px-4 py-6 sm:px-6 lg:px-8">
         <header className="rounded-2xl border border-white/10 bg-black/20 p-4 backdrop-blur-md">
-          <p className="text-xs font-medium uppercase tracking-wide text-[var(--theme-muted)]">HAM's Workspace</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-[var(--theme-muted)]">
+            HAM's Workspace
+          </p>
           <h1 className="text-balance text-2xl font-medium sm:text-3xl">Skills Browser</h1>
           <p className="mt-1 max-w-2xl text-pretty text-sm text-[var(--theme-muted)] sm:text-base">
             <strong>Installed</strong> uses the workspace JSON store via{" "}
-            <code className="text-xs opacity-80">/api/workspace/skills</code>. <strong>Catalog</strong> is the read-only
-            Hermes static catalog and live install overlay (same data as the{" "}
-            <Link to="/workspace/skills" className="text-emerald-400/90 underline-offset-2 hover:underline">
+            <code className="text-xs opacity-80">/api/workspace/skills</code>.{" "}
+            <strong>Catalog</strong> is the read-only Hermes static catalog and live install overlay
+            (same data as the{" "}
+            <Link
+              to="/workspace/skills"
+              className="text-emerald-400/90 underline-offset-2 hover:underline"
+            >
               Skills
             </Link>{" "}
             surface), server-side only.
@@ -352,7 +378,8 @@ export function WorkspaceSkillsScreen() {
 
             <TabsContent value="installed" className="mt-0 space-y-3 outline-none">
               <p className="text-xs text-[var(--theme-muted)]">
-                Workspace-local skills and toggles. Add custom entries or manage built-ins when present.
+                Workspace-local skills and toggles. Add custom entries or manage built-ins when
+                present.
               </p>
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end sm:gap-3">
                 <input
@@ -386,7 +413,9 @@ export function WorkspaceSkillsScreen() {
               {err ? (
                 <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100/90">
                   <p className="font-medium">Skills API unavailable</p>
-                  <p className="mt-1 whitespace-pre-wrap break-words leading-relaxed opacity-95">{err}</p>
+                  <p className="mt-1 whitespace-pre-wrap break-words leading-relaxed opacity-95">
+                    {err}
+                  </p>
                 </div>
               ) : null}
 
@@ -404,8 +433,8 @@ export function WorkspaceSkillsScreen() {
 
             <TabsContent value="catalog" className="mt-0 space-y-3 outline-none">
               <p className="text-xs text-[var(--theme-muted)]">
-                Read-only Hermes runtime skills catalog. Installing on a remote host is not available from this browser;
-                this view mirrors the Capabilities page catalog.
+                Read-only Hermes runtime skills catalog. Installing on a remote host is not
+                available from this browser; this view mirrors the Capabilities page catalog.
               </p>
               {catPayload?.upstream ? (
                 <p className="text-[10px] text-[var(--theme-muted)]">
@@ -418,8 +447,8 @@ export function WorkspaceSkillsScreen() {
               ) : null}
               {catLive ? (
                 <p className="text-[10px] text-[var(--theme-muted)]">
-                  Live overlay: status {catLive.status} · rows {catLive.live_count} · linked {catLive.linked_count} ·
-                  catalog-only {catLive.catalog_only_count}
+                  Live overlay: status {catLive.status} · rows {catLive.live_count} · linked{" "}
+                  {catLive.linked_count} · catalog-only {catLive.catalog_only_count}
                 </p>
               ) : null}
 
@@ -442,7 +471,8 @@ export function WorkspaceSkillsScreen() {
                 <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100/90">
                   <p className="font-medium">Catalog unavailable</p>
                   <p className="mt-1 whitespace-pre-wrap break-words opacity-95">
-                    {catErr} Use Capabilities in the main app to verify server catalog configuration.
+                    {catErr} Use Capabilities in the main app to verify server catalog
+                    configuration.
                   </p>
                 </div>
               ) : null}
@@ -475,7 +505,9 @@ export function WorkspaceSkillsScreen() {
                           >
                             {primaryHermesCatalogLabel(e)}
                           </h3>
-                          <p className="line-clamp-3 text-xs text-[var(--theme-muted)]">{e.summary || "—"}</p>
+                          <p className="line-clamp-3 text-xs text-[var(--theme-muted)]">
+                            {e.summary || "—"}
+                          </p>
                         </div>
                         <div className="mt-auto flex flex-wrap items-center gap-1.5 border-t border-white/10 pt-3">
                           <span
@@ -515,7 +547,9 @@ export function WorkspaceSkillsScreen() {
               ) : null}
 
               {!catLoading && catPayload && catalogFiltered.length === 0 ? (
-                <p className="text-center text-sm text-[var(--theme-muted)]">No catalog entries match this filter.</p>
+                <p className="text-center text-sm text-[var(--theme-muted)]">
+                  No catalog entries match this filter.
+                </p>
               ) : null}
             </TabsContent>
           </Tabs>
@@ -525,11 +559,17 @@ export function WorkspaceSkillsScreen() {
           <footer className="flex flex-col gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm text-[var(--theme-muted)] tabular-nums sm:flex-row sm:items-center sm:justify-between">
             <span>{installedViews.length.toLocaleString()} total skills</span>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-              <Link to="/workspace/chat" className="text-emerald-400/90 underline-offset-2 hover:underline">
+              <Link
+                to="/workspace/chat"
+                className="text-emerald-400/90 underline-offset-2 hover:underline"
+              >
                 Open workspace chat
               </Link>
               <span className="text-white/20">·</span>
-              <Link to="/workspace/settings" className="text-emerald-400/90 underline-offset-2 hover:underline">
+              <Link
+                to="/workspace/settings"
+                className="text-emerald-400/90 underline-offset-2 hover:underline"
+              >
                 Settings
               </Link>
             </div>
@@ -598,7 +638,9 @@ export function WorkspaceSkillsScreen() {
               </p>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-              <p className="whitespace-pre-wrap text-sm text-neutral-200">{selected.description || "—"}</p>
+              <p className="whitespace-pre-wrap text-sm text-neutral-200">
+                {selected.description || "—"}
+              </p>
               <p className="mt-4 text-xs text-[var(--theme-muted)]">
                 Source: <code className="text-xs opacity-80">{selected.sourcePath}</code>
               </p>
@@ -623,7 +665,9 @@ export function WorkspaceSkillsScreen() {
                 {hermesDetail ? hermesDetail.display_name : "Skill details"}
               </h2>
               {hermesDetail ? (
-                <p className="mt-1 font-mono text-xs text-[var(--theme-muted)]">{hermesDetail.catalog_id}</p>
+                <p className="mt-1 font-mono text-xs text-[var(--theme-muted)]">
+                  {hermesDetail.catalog_id}
+                </p>
               ) : null}
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 text-sm">
@@ -631,7 +675,9 @@ export function WorkspaceSkillsScreen() {
               {hermesDetailErr ? <p className="text-amber-200/90">{hermesDetailErr}</p> : null}
               {hermesDetail ? (
                 <div className="space-y-3">
-                  <p className="whitespace-pre-wrap text-neutral-200">{hermesDetail.summary || "—"}</p>
+                  <p className="whitespace-pre-wrap text-neutral-200">
+                    {hermesDetail.summary || "—"}
+                  </p>
                   {hermesDetail.platforms.length ? (
                     <p className="text-xs text-[var(--theme-muted)]">
                       Platforms: {hermesDetail.platforms.join(", ")}
@@ -639,7 +685,9 @@ export function WorkspaceSkillsScreen() {
                   ) : null}
                   {hermesDetail.detail ? (
                     <div className="rounded-lg border border-white/10 bg-black/20 p-3 text-xs">
-                      <p className="text-[var(--theme-muted)]">{hermesDetail.detail.provenance_note}</p>
+                      <p className="text-[var(--theme-muted)]">
+                        {hermesDetail.detail.provenance_note}
+                      </p>
                       {hermesDetail.detail.warnings.length ? (
                         <ul className="mt-2 list-disc pl-4 text-amber-200/80">
                           {hermesDetail.detail.warnings.map((w) => (

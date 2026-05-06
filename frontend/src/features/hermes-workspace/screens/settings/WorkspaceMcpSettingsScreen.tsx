@@ -17,8 +17,8 @@ export function WorkspaceMcpSettingsScreen() {
           <h1 className="text-lg font-semibold text-[#e8eef8]">MCP Servers</h1>
           <p className="mt-1 max-w-2xl text-[13px] text-white/45">
             Upstream file route <span className="font-mono text-white/50">/settings/mcp</span> (
-            <span className="font-mono">McpSettingsScreen</span> in repomix). HAM reuses the tools &amp; extensions
-            surface; no new transport.
+            <span className="font-mono">McpSettingsScreen</span> in repomix). HAM reuses the tools
+            &amp; extensions surface; no new transport.
           </p>
           <div className="mt-6 max-w-4xl">
             <ToolsAndExtensionsPanel />

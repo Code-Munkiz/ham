@@ -6,7 +6,10 @@
  * older sessions — not used for new sends (new sends prefer v2 after upload).
  */
 import type { HamChatExecutionMode, HamOperatorResult, HamUiAction } from "@/lib/ham/api";
-import { tryParseHamChatUserV1String, tryParseHamChatUserV2String } from "@/lib/ham/chatUserContent";
+import {
+  tryParseHamChatUserV1String,
+  tryParseHamChatUserV2String,
+} from "@/lib/ham/chatUserContent";
 import {
   formatAttachmentByteSize,
   type WorkspaceComposerAttachment,
@@ -53,7 +56,9 @@ export function workspaceInspectorSafeLink(path: string): string | null {
   return null;
 }
 
-export function composerAttachmentRows(attachments: WorkspaceComposerAttachment[]): ChatInspectorFileRow[] {
+export function composerAttachmentRows(
+  attachments: WorkspaceComposerAttachment[],
+): ChatInspectorFileRow[] {
   return attachments
     .filter((a) => !a.error)
     .map((a) => ({
@@ -144,10 +149,18 @@ export function extractTranscriptAttachmentRows(messages: HwwMsgRow[]): ChatInsp
   return out;
 }
 
-function summarizeUiAction(a: HamUiAction): { title: string; typeLabel: string; navigateTo: string | null } {
+function summarizeUiAction(a: HamUiAction): {
+  title: string;
+  typeLabel: string;
+  navigateTo: string | null;
+} {
   switch (a.type) {
     case "navigate":
-      return { title: truncate(a.path, 56), typeLabel: "Navigate", navigateTo: workspaceInspectorSafeLink(a.path) };
+      return {
+        title: truncate(a.path, 56),
+        typeLabel: "Navigate",
+        navigateTo: workspaceInspectorSafeLink(a.path),
+      };
     case "open_settings": {
       const tab = a.tab?.trim();
       return {
@@ -162,7 +175,12 @@ function summarizeUiAction(a: HamUiAction): { title: string; typeLabel: string; 
       return { title: truncate(a.message, 64), typeLabel: `Toast (${a.level})`, navigateTo: null };
     case "toggle_control_panel":
       return {
-        title: a.open === undefined || a.open === null ? "Toggle panel" : a.open ? "Open panel" : "Close panel",
+        title:
+          a.open === undefined || a.open === null
+            ? "Toggle panel"
+            : a.open
+              ? "Open panel"
+              : "Close panel",
         typeLabel: "Control panel",
         navigateTo: null,
       };

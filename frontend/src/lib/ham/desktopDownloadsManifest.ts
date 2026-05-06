@@ -122,7 +122,9 @@ export function manifestToDownloadCtas(manifest: DesktopDownloadsManifest): Desk
   });
 }
 
-export async function fetchDesktopDownloadsManifest(signal?: AbortSignal): Promise<DesktopDownloadsManifest | null> {
+export async function fetchDesktopDownloadsManifest(
+  signal?: AbortSignal,
+): Promise<DesktopDownloadsManifest | null> {
   const url = publicAssetUrl("desktop-downloads.json");
   try {
     const res = await fetch(url, { signal, credentials: "same-origin", cache: "no-store" });

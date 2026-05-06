@@ -32,14 +32,14 @@ function valuesEqual(a: unknown, b: unknown): boolean {
   return false;
 }
 
-function walk(
-  before: unknown,
-  after: unknown,
-  path: string,
-  out: SocialPolicyDiffEntry[],
-): void {
+function walk(before: unknown, after: unknown, path: string, out: SocialPolicyDiffEntry[]): void {
   if (valuesEqual(before, after)) return;
-  if (Array.isArray(before) || Array.isArray(after) || !isPlainObject(before) || !isPlainObject(after)) {
+  if (
+    Array.isArray(before) ||
+    Array.isArray(after) ||
+    !isPlainObject(before) ||
+    !isPlainObject(after)
+  ) {
     out.push({ path, before, after });
     return;
   }

@@ -53,11 +53,7 @@ export function WorkspaceChatAttachmentPreview({
             <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden strokeWidth={2} />
           </div>
         ) : showImg ? (
-          <img
-            src={attachment.payload}
-            alt=""
-            className="h-full w-full object-cover"
-          />
+          <img src={attachment.payload} alt="" className="h-full w-full object-cover" />
         ) : (
           <div className="flex h-full w-full items-center justify-center text-white/50">
             {attachment.kind === "video" ? (
@@ -124,7 +120,12 @@ export function WorkspaceChatAttachmentPreviewList({
 }: WorkspaceChatAttachmentPreviewListProps) {
   if (attachments.length === 0) return null;
   return (
-    <div className={cn("mb-2 flex w-full max-w-[56rem] flex-wrap items-start gap-1.5 md:pl-1", className)}>
+    <div
+      className={cn(
+        "mb-2 flex w-full max-w-[56rem] flex-wrap items-start gap-1.5 md:pl-1",
+        className,
+      )}
+    >
       {attachments.map((a) => (
         <WorkspaceChatAttachmentPreview
           key={a.id}

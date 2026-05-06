@@ -156,16 +156,13 @@ export function WorkspaceProfilesScreen() {
           <div className="rounded-2xl border border-white/10 bg-black/20 p-6">
             <h2 className="text-lg font-semibold">Agent monitoring</h2>
             <p className="mt-2 text-sm text-[var(--theme-muted)]">
-              Upstream <code className="text-xs">crew-screen.tsx</code> shows live crew status (Hermes agent pool).
-              HAM does not connect to that control plane in this build — this panel is a layout placeholder matching the
-              Profiles route tab.
+              Upstream <code className="text-xs">crew-screen.tsx</code> shows live crew status
+              (Hermes agent pool). HAM does not connect to that control plane in this build — this
+              panel is a layout placeholder matching the Profiles route tab.
             </p>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               {["Local bridge", "Gateway"].map((label) => (
-                <div
-                  key={label}
-                  className="rounded-lg border border-white/10 bg-black/30 p-4"
-                >
+                <div key={label} className="rounded-lg border border-white/10 bg-black/30 p-4">
                   <div className="text-xs font-semibold uppercase tracking-wider text-[var(--theme-muted)]">
                     {label}
                   </div>
@@ -183,8 +180,10 @@ export function WorkspaceProfilesScreen() {
                   <h1 className="text-lg font-semibold">Profiles</h1>
                 </div>
                 <p className="mt-1 text-sm text-[var(--theme-muted)]">
-                  Profiles are served from the HAM Profiles API at <span className="font-mono text-xs">/api/workspace/profiles</span>{" "}
-                  (JSON on the API host). Upstream stores under <span className="font-mono">~/.hermes/profiles</span> — HAM uses{" "}
+                  Profiles are served from the HAM Profiles API at{" "}
+                  <span className="font-mono text-xs">/api/workspace/profiles</span> (JSON on the
+                  API host). Upstream stores under{" "}
+                  <span className="font-mono">~/.hermes/profiles</span> — HAM uses{" "}
                   <span className="font-mono">.ham/workspace_state/profiles.json</span>.
                 </p>
               </div>
@@ -221,7 +220,10 @@ export function WorkspaceProfilesScreen() {
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {loading &&
                 Array.from({ length: 3 }).map((_, i) => (
-                  <div key={i} className="h-80 animate-pulse rounded-2xl border border-white/10 bg-black/20" />
+                  <div
+                    key={i}
+                    className="h-80 animate-pulse rounded-2xl border border-white/10 bg-black/20"
+                  />
                 ))}
               {!loading &&
                 profiles.map((profile) => {
@@ -257,7 +259,9 @@ export function WorkspaceProfilesScreen() {
                           {isAct && (
                             <div className="absolute -bottom-0.5 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-full border-2 border-[var(--theme-bg)] bg-emerald-600 px-2 py-0.5">
                               <Check className="h-2.5 w-2.5 text-white" />
-                              <span className="text-[9px] font-bold uppercase tracking-wider text-white">Active</span>
+                              <span className="text-[9px] font-bold uppercase tracking-wider text-white">
+                                Active
+                              </span>
                             </div>
                           )}
                         </div>
@@ -334,8 +338,9 @@ export function WorkspaceProfilesScreen() {
               <div className="mt-4 rounded-2xl border border-dashed border-white/15 bg-black/20 p-8 text-center">
                 <p className="text-sm font-medium text-[var(--theme-text)]">No profiles yet</p>
                 <p className="mt-2 text-sm text-[var(--theme-muted)]">
-                  Create a profile to save model and system prompt defaults. Storage is empty but the API is connected;
-                  active label: <span className="font-semibold">{activeName}</span>.
+                  Create a profile to save model and system prompt defaults. Storage is empty but
+                  the API is connected; active label:{" "}
+                  <span className="font-semibold">{activeName}</span>.
                 </p>
                 <Button type="button" className="mt-4" onClick={() => setCreateOpen(true)}>
                   Create profile
@@ -353,7 +358,9 @@ export function WorkspaceProfilesScreen() {
             >
               <div className="border-b border-white/10 px-6 py-4">
                 <h3 className="text-base font-semibold">Create profile</h3>
-                <p className="text-xs text-[var(--theme-muted)]">Name & model (HAM v0; upstream wizard has 3 steps)</p>
+                <p className="text-xs text-[var(--theme-muted)]">
+                  Name & model (HAM v0; upstream wizard has 3 steps)
+                </p>
               </div>
               <div className="space-y-3 px-6 py-4">
                 <input
@@ -424,7 +431,9 @@ export function WorkspaceProfilesScreen() {
                 <p className="text-sm text-[var(--theme-muted)]">{details.model}</p>
               </div>
               <div className="max-h-[60vh] overflow-y-auto px-5 py-4">
-                <pre className="whitespace-pre-wrap font-mono text-xs text-neutral-200">{details.systemPrompt || "—"}</pre>
+                <pre className="whitespace-pre-wrap font-mono text-xs text-neutral-200">
+                  {details.systemPrompt || "—"}
+                </pre>
               </div>
               <div className="flex justify-end border-t border-white/10 px-5 py-3">
                 <Button type="button" onClick={() => setDetails(null)}>

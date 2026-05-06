@@ -4,7 +4,9 @@
  */
 export function isHermesWorkspaceEnabled(): boolean {
   const v = import.meta.env.VITE_ENABLE_HERMES_WORKSPACE;
-  const s = String(v ?? "").toLowerCase().trim();
+  const s = String(v ?? "")
+    .toLowerCase()
+    .trim();
   return s === "1" || s === "true" || s === "yes" || s === "on";
 }
 

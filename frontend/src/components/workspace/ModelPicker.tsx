@@ -45,17 +45,21 @@ export function ModelPicker({ currentModel, onSelect }: ModelPickerProps) {
         }}
         className={cn(
           "flex items-center justify-between w-full p-2 pl-3 bg-white/[0.02] border rounded text-[10px] font-bold text-white/60 transition-all uppercase tracking-widest",
-          isOpen ? "border-[#FF6B00] bg-white/[0.04]" : "border-white/5 hover:border-white/20"
+          isOpen ? "border-[#FF6B00] bg-white/[0.04]" : "border-white/5 hover:border-white/20",
         )}
       >
         <span className="truncate">{currentModel}</span>
-        <ChevronDown className={cn("h-3.5 w-3.5 text-white/20 transition-transform", isOpen && "rotate-180")} />
+        <ChevronDown
+          className={cn("h-3.5 w-3.5 text-white/20 transition-transform", isOpen && "rotate-180")}
+        />
       </button>
 
       {isOpen && (
         <div className="absolute top-full left-0 w-full mt-2 bg-[#0d0d0d] border border-white/10 rounded-lg shadow-2xl z-50 py-2 animate-in fade-in slide-in-from-top-1 duration-200">
           <div className="px-3 py-1 mb-1">
-             <span className="text-[8px] font-black text-white/20 uppercase tracking-[0.4em]">Select Model</span>
+            <span className="text-[8px] font-black text-white/20 uppercase tracking-[0.4em]">
+              Select Model
+            </span>
           </div>
           <div className="max-h-48 overflow-y-auto scrollbar-hide">
             {MODELS.map((model) => (
@@ -68,9 +72,9 @@ export function ModelPicker({ currentModel, onSelect }: ModelPickerProps) {
                 }}
                 className={cn(
                   "flex items-center justify-between w-full px-4 py-2 text-[9px] font-bold uppercase tracking-widest transition-colors",
-                  currentModel === model.name 
-                    ? "text-[#FF6B00] bg-[#FF6B00]/5" 
-                    : "text-white/40 hover:text-white hover:bg-white/5"
+                  currentModel === model.name
+                    ? "text-[#FF6B00] bg-[#FF6B00]/5"
+                    : "text-white/40 hover:text-white hover:bg-white/5",
                 )}
               >
                 <span>{model.name}</span>
@@ -79,8 +83,10 @@ export function ModelPicker({ currentModel, onSelect }: ModelPickerProps) {
             ))}
           </div>
           <div className="mt-2 pt-2 border-t border-white/5 px-4 flex items-center gap-2">
-             <Sparkles className="h-3 w-3 text-[#FF6B00]/40" />
-             <span className="text-[8px] font-bold text-white/10 uppercase tracking-widest italic">Optimization ready</span>
+            <Sparkles className="h-3 w-3 text-[#FF6B00]/40" />
+            <span className="text-[8px] font-bold text-white/10 uppercase tracking-widest italic">
+              Optimization ready
+            </span>
           </div>
         </div>
       )}

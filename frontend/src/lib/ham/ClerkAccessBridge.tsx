@@ -64,12 +64,11 @@ export function ClerkAccessBridge({ children }: { children: React.ReactNode }) {
     };
   }, [isLoaded, isSignedIn]);
 
-  const value = React.useMemo(
-    () => ({ restricted, checking }),
-    [restricted, checking],
-  );
+  const value = React.useMemo(() => ({ restricted, checking }), [restricted, checking]);
 
   return (
-    <HamDeploymentAccessContext.Provider value={value}>{children}</HamDeploymentAccessContext.Provider>
+    <HamDeploymentAccessContext.Provider value={value}>
+      {children}
+    </HamDeploymentAccessContext.Provider>
   );
 }

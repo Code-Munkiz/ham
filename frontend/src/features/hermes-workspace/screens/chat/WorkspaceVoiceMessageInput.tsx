@@ -147,8 +147,7 @@ export function WorkspaceVoiceMessageInput(props: WorkspaceVoiceMessageInputProp
   });
 
   const liveSupported = React.useMemo(() => Boolean(speechRecognitionCtor()), []);
-  const resolvedMode: DictationMode =
-    mode === "auto" ? (liveSupported ? "live" : "record") : mode;
+  const resolvedMode: DictationMode = mode === "auto" ? (liveSupported ? "live" : "record") : mode;
 
   React.useEffect(() => {
     if (!menu) return;
@@ -312,7 +311,14 @@ export function WorkspaceVoiceMessageInput(props: WorkspaceVoiceMessageInputProp
       if (now - lastStopRequestAtRef.current < 250) return;
       lastStopRequestAtRef.current = now;
       pushVoiceDebug({
-        event: source === "pointerdown" ? "voice.stop.pointerdown" : source === "escape" ? "voice.stop.escape" : source === "banner_click" ? "voice.stop.banner_click" : "voice.stop.click",
+        event:
+          source === "pointerdown"
+            ? "voice.stop.pointerdown"
+            : source === "escape"
+              ? "voice.stop.escape"
+              : source === "banner_click"
+                ? "voice.stop.banner_click"
+                : "voice.stop.click",
         source,
         component: "WorkspaceVoiceMessageInput",
         voiceInstanceId: voiceInstanceId.current,
@@ -392,7 +398,9 @@ export function WorkspaceVoiceMessageInput(props: WorkspaceVoiceMessageInputProp
       data-hww-voice-instance={voiceInstanceId.current}
       data-hww-voice-state={active ? (isLiveListening ? "live" : "recording") : "idle"}
     >
-      {!compact && error ? <div className="recording-error recording-error--stacked">{error}</div> : null}
+      {!compact && error ? (
+        <div className="recording-error recording-error--stacked">{error}</div>
+      ) : null}
 
       {audioBlob && !hidePreview ? (
         <div className="audio-preview">
@@ -484,7 +492,7 @@ export function WorkspaceVoiceMessageInput(props: WorkspaceVoiceMessageInputProp
                 aria-label="Stop voice recording"
                 data-hww-voice-button="stop-pill"
                 data-hww-voice-instance={voiceInstanceId.current}
-                    data-hww-voice-state={isRecording ? "recording" : "idle"}
+                data-hww-voice-state={isRecording ? "recording" : "idle"}
               >
                 Stop
               </button>

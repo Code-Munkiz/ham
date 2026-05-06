@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@900&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Montserrat:wght@900&display=swap");
 @import "tailwindcss";
 
 @theme {
@@ -9,23 +9,23 @@
   /* Industrial High-Contrast Palette */
   --color-background: #ffffff;
   --color-foreground: #000000;
-  --color-primary: #FF6B00; /* International Orange */
+  --color-primary: #ff6b00; /* International Orange */
   --color-primary-foreground: #000000;
   --color-secondary: #000000;
-  --color-secondary-foreground: #FF6B00;
+  --color-secondary-foreground: #ff6b00;
   --color-muted: #f3f3f3;
   --color-muted-foreground: #666666;
-  --color-accent: #FF6B00;
+  --color-accent: #ff6b00;
   --color-accent-foreground: #000000;
   --color-border: #000000;
   --color-input: #000000;
-  --color-ring: #FF6B00;
+  --color-ring: #ff6b00;
 
   /* Custom theme extensions */
   --sidebar-bg: #000000;
   --success: #10b981;
-  --warning: #FF6B00;
-  
+  --warning: #ff6b00;
+
   /* Industrial Effects */
   --glass-bg: rgba(255, 107, 0, 0.05);
   --glass-border: rgba(0, 0, 0, 0.1);
@@ -42,8 +42,12 @@
 }
 
 @keyframes drift {
-  from { transform: translateX(-10%); }
-  to { transform: translateX(10%); }
+  from {
+    transform: translateX(-10%);
+  }
+  to {
+    transform: translateX(10%);
+  }
 }
 
 .animate-drift {
@@ -85,4 +89,3 @@
       );
   }
 }
-

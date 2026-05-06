@@ -18,9 +18,7 @@ import { WorkspaceShell } from "../WorkspaceShell";
 import { workspaceSessionAdapter } from "../workspaceAdapters";
 import type { HamWorkspaceContextValue } from "@/lib/ham/HamWorkspaceContext";
 
-function baseCtx(
-  overrides: Partial<HamWorkspaceContextValue> = {},
-): HamWorkspaceContextValue {
+function baseCtx(overrides: Partial<HamWorkspaceContextValue> = {}): HamWorkspaceContextValue {
   return {
     state: { status: "auth_required" },
     workspaces: [],
@@ -76,9 +74,9 @@ describe("WorkspaceShell auth gating", () => {
   });
 
   it("does not load chat sessions while Clerk is signed out", async () => {
-    const list = vi.spyOn(workspaceSessionAdapter, "list").mockRejectedValue(
-      new Error("HTTP 401 Authorization: Bearer <Clerk session JWT> required"),
-    );
+    const list = vi
+      .spyOn(workspaceSessionAdapter, "list")
+      .mockRejectedValue(new Error("HTTP 401 Authorization: Bearer <Clerk session JWT> required"));
     mockUseHamWorkspace.mockReturnValue(baseCtx());
 
     renderShell();
@@ -112,9 +110,12 @@ describe("WorkspaceShell auth gating", () => {
   });
 
   it("clears stale session list and ignores old workspace list responses after switching workspaces", async () => {
-    let resolveA: (value: Awaited<ReturnType<typeof workspaceSessionAdapter.list>>) => void = () => {};
-    const list = vi.spyOn(workspaceSessionAdapter, "list").mockImplementation(
-      (_limit = 50, _offset = 0, workspaceId?: string | null) => {
+    let resolveA: (
+      value: Awaited<ReturnType<typeof workspaceSessionAdapter.list>>,
+    ) => void = () => {};
+    const list = vi
+      .spyOn(workspaceSessionAdapter, "list")
+      .mockImplementation((_limit = 50, _offset = 0, workspaceId?: string | null) => {
         if (workspaceId === "ws_a") {
           return new Promise((resolve) => {
             resolveA = resolve;
@@ -130,8 +131,7 @@ describe("WorkspaceShell auth gating", () => {
             },
           ],
         });
-      },
-    );
+      });
 
     mockUseHamWorkspace.mockReturnValue(readyCtx("ws_a"));
     const view = renderShell();

@@ -34,7 +34,10 @@ export function ActionsAllowedToggle({
       {SUPPORTED_POSTING_ACTIONS.map((act) => {
         const id = `${idPrefix}__action_${act}`;
         return (
-          <div key={act} className="flex items-center justify-between rounded-md border border-border/40 p-3">
+          <div
+            key={act}
+            className="flex items-center justify-between rounded-md border border-border/40 p-3"
+          >
             <Label htmlFor={id} className="text-sm capitalize">
               {POSTING_ACTION_LABELS[act]}
             </Label>

@@ -58,7 +58,12 @@ export function WorkspaceXtermHost({ tabId, isActive, isMobile, onReady, onPtyDa
       fontSize: 13,
       lineHeight: 1.2,
       fontFamily: "ui-monospace, Consolas, 'Cascadia Mono', 'Segoe UI Mono', monospace",
-      theme: { background: BG, foreground: FORE, cursor: CURSOR, selectionBackground: "rgba(234, 88, 12, 0.35)" },
+      theme: {
+        background: BG,
+        foreground: FORE,
+        cursor: CURSOR,
+        selectionBackground: "rgba(234, 88, 12, 0.35)",
+      },
       disableStdin: isMobileRef.current,
     });
     const fit = new FitAddon();

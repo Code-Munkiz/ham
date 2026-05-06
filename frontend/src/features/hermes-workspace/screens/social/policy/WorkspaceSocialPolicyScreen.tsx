@@ -163,8 +163,7 @@ export function WorkspaceSocialPolicyScreen(): React.ReactElement {
       const res = await loadHistory();
       setHistory(res.backups ?? []);
     } catch (err) {
-      const msg =
-        err instanceof SocialPolicyApiError ? err.message : "Failed to load history.";
+      const msg = err instanceof SocialPolicyApiError ? err.message : "Failed to load history.";
       setHistoryError(msg);
     } finally {
       setHistoryLoading(false);
@@ -233,7 +232,10 @@ export function WorkspaceSocialPolicyScreen(): React.ReactElement {
     setApplyOpen(true);
   }
 
-  async function onSubmitApply(input: { confirmationPhrase: string; writeToken: string }): Promise<void> {
+  async function onSubmitApply(input: {
+    confirmationPhrase: string;
+    writeToken: string;
+  }): Promise<void> {
     if (!preview || !editedDoc) return;
     if (preview.live_autonomy_change) return;
     if (input.confirmationPhrase !== APPLY_CONFIRMATION_PHRASE) return;
@@ -310,9 +312,7 @@ export function WorkspaceSocialPolicyScreen(): React.ReactElement {
         <div className="flex flex-wrap items-center gap-2">
           {endpoint ? (
             <>
-              <Badge variant="outline">
-                rev {endpoint.revision.slice(0, 12)}…
-              </Badge>
+              <Badge variant="outline">rev {endpoint.revision.slice(0, 12)}…</Badge>
               <Badge variant={endpoint.exists ? "secondary" : "outline"}>
                 {endpoint.exists ? "policy on disk" : "no policy on disk"}
               </Badge>
@@ -378,9 +378,7 @@ export function WorkspaceSocialPolicyScreen(): React.ReactElement {
             <PolicyDiffView
               preview={preview}
               applyDisabled={
-                preview.diff.length === 0 ||
-                preview.live_autonomy_change ||
-                !writesEnabled
+                preview.diff.length === 0 || preview.live_autonomy_change || !writesEnabled
               }
               applyDisabledReason={
                 preview.live_autonomy_change
@@ -406,11 +404,7 @@ export function WorkspaceSocialPolicyScreen(): React.ReactElement {
         </TabsContent>
 
         <TabsContent value="audit">
-          <PolicyAuditPanel
-            audits={audits}
-            loading={auditLoading}
-            errorMessage={auditError}
-          />
+          <PolicyAuditPanel audits={audits} loading={auditLoading} errorMessage={auditError} />
         </TabsContent>
       </Tabs>
 
@@ -434,4 +428,3 @@ export function WorkspaceSocialPolicyScreen(): React.ReactElement {
     </div>
   );
 }
-

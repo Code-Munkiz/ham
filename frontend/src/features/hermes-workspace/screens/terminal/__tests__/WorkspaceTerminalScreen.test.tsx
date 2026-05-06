@@ -39,9 +39,7 @@ describe("WorkspaceTerminalScreen empty state (PR-1)", () => {
     renderScreen();
 
     expect(screen.getByRole("heading", { name: /terminal/i })).toBeInTheDocument();
-    expect(
-      screen.getByText("Terminal requires a connected runtime."),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Terminal requires a connected runtime.")).toBeInTheDocument();
     expect(
       screen.getByText("Connect HAM Desktop or enable developer mode to use terminal features."),
     ).toBeInTheDocument();

@@ -34,8 +34,8 @@ export default function Landing() {
   const [typingDone, setTypingDone] = React.useState(false);
   const [cursorOn, setCursorOn] = React.useState(true);
 
-  const [desktopManifest, setDesktopManifest] = React.useState<DesktopDownloadsManifest | null>(() =>
-    embeddedParsedDesktopDownloadsManifest(),
+  const [desktopManifest, setDesktopManifest] = React.useState<DesktopDownloadsManifest | null>(
+    () => embeddedParsedDesktopDownloadsManifest(),
   );
 
   React.useEffect(() => {
@@ -114,7 +114,9 @@ export default function Landing() {
         className="min-h-screen w-full bg-black flex flex-col items-center justify-center gap-10 px-6 py-12 selection:bg-[#FF6B00]/30"
         role="presentation"
       >
-        <div className={`${imageFrameClassName} border-white/5 shadow-[0_0_60px_rgba(255,107,0,0.08)]`}>
+        <div
+          className={`${imageFrameClassName} border-white/5 shadow-[0_0_60px_rgba(255,107,0,0.08)]`}
+        >
           {hamImg}
         </div>
         {typewriterLine}

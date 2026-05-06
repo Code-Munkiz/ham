@@ -33,8 +33,8 @@ export function HermesOperatorConnectionStrip({ snapshot, className }: Props) {
             API-side operator connection
           </div>
           <p className="text-[8px] text-white/25 leading-snug pl-5">
-            Read-only: Ham API host CLI + <span className="font-mono">HERMES_GATEWAY_*</span> probe. Desktop Hermes
-            checks live under Settings.
+            Read-only: Ham API host CLI + <span className="font-mono">HERMES_GATEWAY_*</span> probe.
+            Desktop Hermes checks live under Settings.
           </p>
         </div>
         <div className="flex flex-wrap gap-2 text-[9px] font-black uppercase tracking-widest">
@@ -61,7 +61,9 @@ export function HermesOperatorConnectionStrip({ snapshot, className }: Props) {
 
       <div className="grid sm:grid-cols-2 gap-3">
         <div className="rounded-lg border border-white/[0.06] bg-black/30 p-3 space-y-1">
-          <p className="text-[8px] font-black uppercase tracking-widest text-white/25">Ham API — CLI probe</p>
+          <p className="text-[8px] font-black uppercase tracking-widest text-white/25">
+            Ham API — CLI probe
+          </p>
           <div className="flex items-start gap-2">
             {cliOk ? (
               <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400/90 mt-0.5" />
@@ -69,10 +71,18 @@ export function HermesOperatorConnectionStrip({ snapshot, className }: Props) {
               <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400/90 mt-0.5" />
             )}
             <div className="space-y-0.5 min-w-0">
-              <p className={cn("font-mono text-[11px]", cliOk ? "text-emerald-200/90" : "text-amber-200/85")}>
+              <p
+                className={cn(
+                  "font-mono text-[11px]",
+                  cliOk ? "text-emerald-200/90" : "text-amber-200/85",
+                )}
+              >
                 {summary.cli_probe}
                 {summary.cli_version_line ? (
-                  <span className="block text-[10px] text-white/45 truncate" title={summary.cli_version_line}>
+                  <span
+                    className="block text-[10px] text-white/45 truncate"
+                    title={summary.cli_version_line}
+                  >
                     {summary.cli_version_line}
                   </span>
                 ) : null}
@@ -82,7 +92,9 @@ export function HermesOperatorConnectionStrip({ snapshot, className }: Props) {
         </div>
 
         <div className="rounded-lg border border-white/[0.06] bg-black/30 p-3 space-y-1">
-          <p className="text-[8px] font-black uppercase tracking-widest text-white/25">Ham API — HTTP gateway</p>
+          <p className="text-[8px] font-black uppercase tracking-widest text-white/25">
+            Ham API — HTTP gateway
+          </p>
           <div className="flex items-start gap-2">
             {httpOk ? (
               <CheckCircle2
@@ -100,7 +112,8 @@ export function HermesOperatorConnectionStrip({ snapshot, className }: Props) {
                 http === "healthy" && "text-emerald-200/90",
                 http === "degraded" && "text-amber-200/80",
                 http === "not_configured" && "text-white/40",
-                (http === "unreachable" || http === "auth_required" || http === "unknown") && "text-amber-200/85",
+                (http === "unreachable" || http === "auth_required" || http === "unknown") &&
+                  "text-amber-200/85",
               )}
             >
               {http}
@@ -111,7 +124,8 @@ export function HermesOperatorConnectionStrip({ snapshot, className }: Props) {
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[9px] text-white/40 font-mono">
         <span>
-          <span className="text-white/25">chat_gateway_mode</span> {summary.ham_chat_gateway_mode ?? "—"}
+          <span className="text-white/25">chat_gateway_mode</span>{" "}
+          {summary.ham_chat_gateway_mode ?? "—"}
         </span>
         <span className="text-white/15">|</span>
         <span title={snapshot_meta.captured_at}>
@@ -121,7 +135,9 @@ export function HermesOperatorConnectionStrip({ snapshot, className }: Props) {
         <span>
           TTL {Math.round(snapshot_meta.ttl_seconds)}s
           {snapshot_meta.has_degraded ? (
-            <span className="text-amber-400/80 ml-1">· {snapshot_meta.degraded_capabilities_count} degraded</span>
+            <span className="text-amber-400/80 ml-1">
+              · {snapshot_meta.degraded_capabilities_count} degraded
+            </span>
           ) : null}
         </span>
       </div>

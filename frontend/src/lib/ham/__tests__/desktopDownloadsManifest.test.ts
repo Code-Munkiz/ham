@@ -12,8 +12,7 @@ import {
   type DesktopDownloadsManifest,
 } from "@/lib/ham/desktopDownloadsManifest";
 
-const VALID_HTTPS_URL =
-  "https://example.invalid/ham-desktop-1.0.0.AppImage";
+const VALID_HTTPS_URL = "https://example.invalid/ham-desktop-1.0.0.AppImage";
 
 function validManifest(): DesktopDownloadsManifest {
   return {

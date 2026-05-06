@@ -36,13 +36,14 @@ export function CapabilityBundleCard({
   onCopyId,
 }: CapabilityBundleCardProps) {
   const readOnly =
-    bundle.mutability === "read_only" ||
-    bundle.mutability === "launch_via_existing_apis_only";
+    bundle.mutability === "read_only" || bundle.mutability === "launch_via_existing_apis_only";
   return (
     <div
       className={cn(
         "flex flex-col p-6 bg-[#0a0a0a] border rounded-xl transition-all",
-        selected ? "border-[#FF6B00]/50 ring-1 ring-[#FF6B00]/20" : "border-white/5 hover:border-[#FF6B00]/35",
+        selected
+          ? "border-[#FF6B00]/50 ring-1 ring-[#FF6B00]/20"
+          : "border-white/5 hover:border-[#FF6B00]/35",
       )}
     >
       <div className="flex justify-between items-start gap-4 mb-3">
@@ -55,10 +56,7 @@ export function CapabilityBundleCard({
           </p>
         </div>
         <ChevronRight
-          className={cn(
-            "h-4 w-4 shrink-0",
-            selected ? "text-[#FF6B00]" : "text-white/20",
-          )}
+          className={cn("h-4 w-4 shrink-0", selected ? "text-[#FF6B00]" : "text-white/20")}
         />
       </div>
       <div className="flex flex-wrap gap-2 mb-3">

@@ -25,11 +25,7 @@ import {
   TONE_VALUES,
   TOKEN_SHAPE_RE,
 } from "./policyConstants";
-import type {
-  PostingCaps,
-  ReplyCaps,
-  SocialPolicyDoc,
-} from "./policyTypes";
+import type { PostingCaps, ReplyCaps, SocialPolicyDoc } from "./policyTypes";
 
 export interface PolicyValidationIssue {
   /** Dot-path to the offending field. */
@@ -61,7 +57,11 @@ function checkInt(
   }
 }
 
-function checkPostingCaps(prefix: string, caps: PostingCaps, issues: PolicyValidationIssue[]): void {
+function checkPostingCaps(
+  prefix: string,
+  caps: PostingCaps,
+  issues: PolicyValidationIssue[],
+): void {
   checkInt(caps.max_per_day, `${prefix}.max_per_day`, POSTING_CAP_BOUNDS.max_per_day, issues);
   checkInt(caps.max_per_run, `${prefix}.max_per_run`, POSTING_CAP_BOUNDS.max_per_run, issues);
   checkInt(
@@ -175,7 +175,11 @@ export function validatePolicy(doc: SocialPolicyDoc | null | undefined): PolicyV
   }
 
   // persona ref — read-only in editor; still validate shape.
-  if (!doc.persona || typeof doc.persona.persona_id !== "string" || doc.persona.persona_id.trim() === "") {
+  if (
+    !doc.persona ||
+    typeof doc.persona.persona_id !== "string" ||
+    doc.persona.persona_id.trim() === ""
+  ) {
     issues.push({ path: "persona.persona_id", reason: "required" });
   } else if (!TAG_SLUG_RE.test(doc.persona.persona_id.trim())) {
     issues.push({ path: "persona.persona_id", reason: "must be a lower-case slug" });

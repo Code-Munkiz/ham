@@ -10,13 +10,7 @@ export function WorkspaceHome() {
       <div className="mx-auto w-full max-w-3xl">
         <div className="mb-8 flex flex-col items-center text-center sm:mb-10">
           <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-white/10 bg-[#0a1218]/85 shadow-[0_16px_48px_rgba(0,0,0,0.4)]">
-            <img
-              src={logoSrc}
-              alt=""
-              className="h-12 w-12 object-contain"
-              width={48}
-              height={48}
-            />
+            <img src={logoSrc} alt="" className="h-12 w-12 object-contain" width={48} height={48} />
           </div>
           <h1 className="text-2xl font-semibold tracking-tight text-white/95 sm:text-3xl">
             Dashboard
@@ -25,8 +19,8 @@ export function WorkspaceHome() {
             HAM's Workspace
           </p>
           <p className="mt-2 max-w-lg text-sm leading-relaxed text-white/45">
-            Operator-facing workspace: chat, files, skills, and settings share the same HAM API and local runtime;
-            some sections are still staging placeholders.
+            Operator-facing workspace: chat, files, skills, and settings share the same HAM API and
+            local runtime; some sections are still staging placeholders.
           </p>
         </div>
 
@@ -66,10 +60,12 @@ export function WorkspaceHome() {
           </Link>
           <div className="rounded-xl border border-[color:var(--ham-workspace-line)] bg-[#040d14]/60 p-4 text-left">
             <Layers className="mb-2 h-4 w-4 text-white/40" strokeWidth={1.5} />
-            <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-white/50">Surface map</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-white/50">
+              Surface map
+            </p>
             <p className="mt-1 text-[12px] text-white/38">
-              Main + Knowledge nav items in the rail are present; most routes are UI placeholders until
-              their adapters are shipped.
+              Main + Knowledge nav items in the rail are present; most routes are UI placeholders
+              until their adapters are shipped.
             </p>
           </div>
         </div>

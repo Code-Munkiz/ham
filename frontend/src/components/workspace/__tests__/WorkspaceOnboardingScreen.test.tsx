@@ -52,13 +52,7 @@ afterEach(() => {
 describe("WorkspaceOnboardingScreen", () => {
   it("disables submit until the name is non-empty", () => {
     const onCreate = vi.fn();
-    render(
-      <WorkspaceOnboardingScreen
-        user={baseUser}
-        orgs={[]}
-        onCreate={onCreate as never}
-      />,
-    );
+    render(<WorkspaceOnboardingScreen user={baseUser} orgs={[]} onCreate={onCreate as never} />);
     const submit = screen.getByRole("button", { name: /create workspace/i });
     expect(submit).toBeDisabled();
     fireEvent.change(screen.getByLabelText(/name/i), { target: { value: "Hi" } });
@@ -67,13 +61,7 @@ describe("WorkspaceOnboardingScreen", () => {
 
   it("calls onCreate with trimmed name", async () => {
     const onCreate = vi.fn().mockResolvedValue(summary());
-    render(
-      <WorkspaceOnboardingScreen
-        user={baseUser}
-        orgs={[]}
-        onCreate={onCreate}
-      />,
-    );
+    render(<WorkspaceOnboardingScreen user={baseUser} orgs={[]} onCreate={onCreate} />);
     fireEvent.change(screen.getByLabelText(/name/i), { target: { value: "  Solo  " } });
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: /create workspace/i }));
@@ -104,13 +92,7 @@ describe("WorkspaceOnboardingScreen", () => {
       "slug 'solo' is already taken in this scope.",
     );
     const onCreate = vi.fn().mockRejectedValue(err);
-    render(
-      <WorkspaceOnboardingScreen
-        user={baseUser}
-        orgs={[]}
-        onCreate={onCreate}
-      />,
-    );
+    render(<WorkspaceOnboardingScreen user={baseUser} orgs={[]} onCreate={onCreate} />);
     fireEvent.change(screen.getByLabelText(/name/i), { target: { value: "Solo" } });
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: /create workspace/i }));
@@ -123,11 +105,7 @@ describe("WorkspaceOnboardingScreen", () => {
   it("offers cancel only when allowDismiss is set", () => {
     const onDismiss = vi.fn();
     const { rerender } = render(
-      <WorkspaceOnboardingScreen
-        user={baseUser}
-        orgs={[]}
-        onCreate={vi.fn() as never}
-      />,
+      <WorkspaceOnboardingScreen user={baseUser} orgs={[]} onCreate={vi.fn() as never} />,
     );
     expect(screen.queryByRole("button", { name: /cancel/i })).toBeNull();
     rerender(

@@ -8,7 +8,10 @@ import {
   type TaskSummary,
   type WorkspaceTask,
 } from "../../adapters/tasksAdapter";
-import { WorkspaceSurfaceHeader, WorkspaceSurfaceStateCard } from "../../components/workspaceSurfaceChrome";
+import {
+  WorkspaceSurfaceHeader,
+  WorkspaceSurfaceStateCard,
+} from "../../components/workspaceSurfaceChrome";
 
 const COLUMNS: { id: TaskStatus; label: string }[] = [
   { id: "todo", label: "To do" },
@@ -189,7 +192,9 @@ export function WorkspaceTasksScreen() {
               key={k}
               className="rounded border border-white/10 bg-black/30 px-2 py-1.5 text-center"
             >
-              <div className="text-[9px] font-semibold uppercase tracking-wide text-white/40">{k}</div>
+              <div className="text-[9px] font-semibold uppercase tracking-wide text-white/40">
+                {k}
+              </div>
               <div className="text-sm font-semibold text-white/90">{v}</div>
             </div>
           ))}
@@ -240,13 +245,16 @@ export function WorkspaceTasksScreen() {
           {searchApplied ? (
             <>
               <p className="font-medium text-white/90">No tasks match</p>
-              <p className="mt-2 text-xs leading-relaxed">Clear the filter or add a task in a column.</p>
+              <p className="mt-2 text-xs leading-relaxed">
+                Clear the filter or add a task in a column.
+              </p>
             </>
           ) : (
             <>
               <p className="font-medium text-white/90">No tasks yet</p>
               <p className="mt-2 text-xs leading-relaxed">
-                Create a task from a column, or launch a mission when your deployment writes tasks to the board.
+                Create a task from a column, or launch a mission when your deployment writes tasks
+                to the board.
               </p>
             </>
           )}
@@ -298,7 +306,10 @@ export function WorkspaceTasksScreen() {
       </div>
 
       {dialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3" role="dialog">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3"
+          role="dialog"
+        >
           <div className="w-full max-w-md rounded border border-white/20 bg-[#0a1216] p-3 shadow-xl">
             <div className="mb-2 flex items-center justify-between">
               <h2 className="text-sm font-semibold text-white/90">

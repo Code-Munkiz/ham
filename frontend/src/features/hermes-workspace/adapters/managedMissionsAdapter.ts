@@ -31,7 +31,9 @@ export function managedMissionFeedPollDelayMs(
 ): number {
   const terminal = lifecycle ? isManagedMissionLifecycleTerminal(lifecycle) : false;
   if (terminal) {
-    return documentHidden ? MANAGED_MISSION_FEED_POLL_MS_TERMINAL_HIDDEN : MANAGED_MISSION_FEED_POLL_MS_TERMINAL_VISIBLE;
+    return documentHidden
+      ? MANAGED_MISSION_FEED_POLL_MS_TERMINAL_HIDDEN
+      : MANAGED_MISSION_FEED_POLL_MS_TERMINAL_VISIBLE;
   }
   return documentHidden ? MANAGED_MISSION_FEED_POLL_MS_HIDDEN : MANAGED_MISSION_FEED_POLL_MS_ACTIVE;
 }
@@ -203,7 +205,9 @@ export async function fetchManagedMissionDetail(missionRegistryId: string): Prom
     return { mission: null, error: "Missing mission id", httpStatus: null };
   }
   try {
-    const res = await hamApiFetch(`${BASE}/missions/${encodeURIComponent(id)}`, { credentials: "include" });
+    const res = await hamApiFetch(`${BASE}/missions/${encodeURIComponent(id)}`, {
+      credentials: "include",
+    });
     const text = await res.text();
     if (!res.ok) {
       return { mission: null, error: parseErrorBody(res.status, text), httpStatus: res.status };
@@ -268,7 +272,10 @@ export async function fetchManagedMissionFeed(missionRegistryId: string): Promis
   }
 }
 
-export async function postManagedMissionMessage(missionRegistryId: string, message: string): Promise<{
+export async function postManagedMissionMessage(
+  missionRegistryId: string,
+  message: string,
+): Promise<{
   ok: boolean;
   reasonCode: string | null;
   error: string | null;
@@ -276,8 +283,20 @@ export async function postManagedMissionMessage(missionRegistryId: string, messa
 }> {
   const id = missionRegistryId.trim();
   const msg = message.trim();
-  if (!id) return { ok: false, reasonCode: "mission_not_found", error: "Missing mission id", httpStatus: null };
-  if (!msg) return { ok: false, reasonCode: "mission_followup_not_supported", error: "Message is empty", httpStatus: null };
+  if (!id)
+    return {
+      ok: false,
+      reasonCode: "mission_not_found",
+      error: "Missing mission id",
+      httpStatus: null,
+    };
+  if (!msg)
+    return {
+      ok: false,
+      reasonCode: "mission_followup_not_supported",
+      error: "Message is empty",
+      httpStatus: null,
+    };
   try {
     const res = await hamApiFetch(`${BASE}/missions/${encodeURIComponent(id)}/messages`, {
       method: "POST",
@@ -287,7 +306,12 @@ export async function postManagedMissionMessage(missionRegistryId: string, messa
     });
     const text = await res.text();
     if (!res.ok) {
-      return { ok: false, reasonCode: null, error: parseErrorBody(res.status, text), httpStatus: res.status };
+      return {
+        ok: false,
+        reasonCode: null,
+        error: parseErrorBody(res.status, text),
+        httpStatus: res.status,
+      };
     }
     const data = JSON.parse(text) as { ok?: boolean; reason_code?: string | null };
     return {
@@ -297,7 +321,12 @@ export async function postManagedMissionMessage(missionRegistryId: string, messa
       httpStatus: res.status,
     };
   } catch (e) {
-    return { ok: false, reasonCode: null, error: e instanceof Error ? e.message : String(e), httpStatus: null };
+    return {
+      ok: false,
+      reasonCode: null,
+      error: e instanceof Error ? e.message : String(e),
+      httpStatus: null,
+    };
   }
 }
 
@@ -309,10 +338,17 @@ export async function fetchManagedMissionTruth(missionRegistryId: string): Promi
   const id = missionRegistryId.trim();
   if (!id) return { truth: null, error: "Missing mission id", httpStatus: null };
   try {
-    const res = await hamApiFetch(`${BASE}/missions/${encodeURIComponent(id)}/truth`, { credentials: "include" });
+    const res = await hamApiFetch(`${BASE}/missions/${encodeURIComponent(id)}/truth`, {
+      credentials: "include",
+    });
     const text = await res.text();
-    if (!res.ok) return { truth: null, error: parseErrorBody(res.status, text), httpStatus: res.status };
-    return { truth: JSON.parse(text) as ManagedMissionTruthPayload, error: null, httpStatus: res.status };
+    if (!res.ok)
+      return { truth: null, error: parseErrorBody(res.status, text), httpStatus: res.status };
+    return {
+      truth: JSON.parse(text) as ManagedMissionTruthPayload,
+      error: null,
+      httpStatus: res.status,
+    };
   } catch (e) {
     return { truth: null, error: e instanceof Error ? e.message : String(e), httpStatus: null };
   }
@@ -330,10 +366,19 @@ export async function fetchManagedMissionCorrelation(missionRegistryId: string):
       credentials: "include",
     });
     const text = await res.text();
-    if (!res.ok) return { correlation: null, error: parseErrorBody(res.status, text), httpStatus: res.status };
-    return { correlation: JSON.parse(text) as ManagedMissionCorrelationPayload, error: null, httpStatus: res.status };
+    if (!res.ok)
+      return { correlation: null, error: parseErrorBody(res.status, text), httpStatus: res.status };
+    return {
+      correlation: JSON.parse(text) as ManagedMissionCorrelationPayload,
+      error: null,
+      httpStatus: res.status,
+    };
   } catch (e) {
-    return { correlation: null, error: e instanceof Error ? e.message : String(e), httpStatus: null };
+    return {
+      correlation: null,
+      error: e instanceof Error ? e.message : String(e),
+      httpStatus: null,
+    };
   }
 }
 
@@ -341,11 +386,22 @@ export async function patchManagedMissionBoard(
   missionRegistryId: string,
   mission_board_state: ManagedMissionBoardState,
   writeToken: string,
-): Promise<{ ok: boolean; mission: ManagedMissionSnapshot | null; error: string | null; httpStatus: number | null }> {
+): Promise<{
+  ok: boolean;
+  mission: ManagedMissionSnapshot | null;
+  error: string | null;
+  httpStatus: number | null;
+}> {
   const id = missionRegistryId.trim();
   const tok = writeToken.trim();
   if (!id) return { ok: false, mission: null, error: "Missing mission id", httpStatus: null };
-  if (!tok) return { ok: false, mission: null, error: "HAM_MANAGED_MISSION_WRITE_TOKEN required", httpStatus: null };
+  if (!tok)
+    return {
+      ok: false,
+      mission: null,
+      error: "HAM_MANAGED_MISSION_WRITE_TOKEN required",
+      httpStatus: null,
+    };
   try {
     const headers = new Headers({ "Content-Type": "application/json" });
     await applyHamOperatorSecretHeaders(headers, tok);
@@ -356,11 +412,27 @@ export async function patchManagedMissionBoard(
       body: JSON.stringify({ mission_board_state }),
     });
     const text = await res.text();
-    if (!res.ok) return { ok: false, mission: null, error: parseErrorBody(res.status, text), httpStatus: res.status };
+    if (!res.ok)
+      return {
+        ok: false,
+        mission: null,
+        error: parseErrorBody(res.status, text),
+        httpStatus: res.status,
+      };
     const data = JSON.parse(text) as { ok?: boolean; mission?: ManagedMissionSnapshot };
-    return { ok: data.ok === true, mission: data.mission ?? null, error: null, httpStatus: res.status };
+    return {
+      ok: data.ok === true,
+      mission: data.mission ?? null,
+      error: null,
+      httpStatus: res.status,
+    };
   } catch (e) {
-    return { ok: false, mission: null, error: e instanceof Error ? e.message : String(e), httpStatus: null };
+    return {
+      ok: false,
+      mission: null,
+      error: e instanceof Error ? e.message : String(e),
+      httpStatus: null,
+    };
   }
 }
 
@@ -371,7 +443,8 @@ export async function postManagedMissionHermesAdvisory(
   const id = missionRegistryId.trim();
   const tok = writeToken.trim();
   if (!id) return { ok: false, error: "Missing mission id", httpStatus: null };
-  if (!tok) return { ok: false, error: "HAM_MANAGED_MISSION_WRITE_TOKEN required", httpStatus: null };
+  if (!tok)
+    return { ok: false, error: "HAM_MANAGED_MISSION_WRITE_TOKEN required", httpStatus: null };
   try {
     const headers = new Headers();
     await applyHamOperatorSecretHeaders(headers, tok);
@@ -381,7 +454,8 @@ export async function postManagedMissionHermesAdvisory(
       credentials: "include",
     });
     const text = await res.text();
-    if (!res.ok) return { ok: false, error: parseErrorBody(res.status, text), httpStatus: res.status };
+    if (!res.ok)
+      return { ok: false, error: parseErrorBody(res.status, text), httpStatus: res.status };
     const data = JSON.parse(text) as { ok?: boolean };
     return { ok: data.ok === true, error: null, httpStatus: res.status };
   } catch (e) {
@@ -396,7 +470,13 @@ export async function cancelManagedMission(missionRegistryId: string): Promise<{
   httpStatus: number | null;
 }> {
   const id = missionRegistryId.trim();
-  if (!id) return { ok: false, reasonCode: "mission_not_found", error: "Missing mission id", httpStatus: null };
+  if (!id)
+    return {
+      ok: false,
+      reasonCode: "mission_not_found",
+      error: "Missing mission id",
+      httpStatus: null,
+    };
   try {
     const res = await hamApiFetch(`${BASE}/missions/${encodeURIComponent(id)}/cancel`, {
       method: "POST",
@@ -404,7 +484,12 @@ export async function cancelManagedMission(missionRegistryId: string): Promise<{
     });
     const text = await res.text();
     if (!res.ok) {
-      return { ok: false, reasonCode: null, error: parseErrorBody(res.status, text), httpStatus: res.status };
+      return {
+        ok: false,
+        reasonCode: null,
+        error: parseErrorBody(res.status, text),
+        httpStatus: res.status,
+      };
     }
     const data = JSON.parse(text) as { ok?: boolean; reason_code?: string | null };
     return {
@@ -414,6 +499,11 @@ export async function cancelManagedMission(missionRegistryId: string): Promise<{
       httpStatus: res.status,
     };
   } catch (e) {
-    return { ok: false, reasonCode: null, error: e instanceof Error ? e.message : String(e), httpStatus: null };
+    return {
+      ok: false,
+      reasonCode: null,
+      error: e instanceof Error ? e.message : String(e),
+      httpStatus: null,
+    };
   }
 }

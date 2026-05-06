@@ -232,9 +232,7 @@ export type HamDesktopWebBridgeTrustedConnectResult =
   | { ok: true; status: string; already_connected?: boolean }
   | { ok: false; error: string };
 
-export type HamDesktopWebBridgeRevokeResult =
-  | { ok: true }
-  | { ok: false; error?: string };
+export type HamDesktopWebBridgeRevokeResult = { ok: true } | { ok: false; error?: string };
 
 export type HamDesktopWebBridgeReadTrustedStatusResult =
   | ({ ok: true } & Record<string, unknown>)
@@ -270,7 +268,9 @@ export type HamDesktopWebBridgeApi = {
   trustedConnect: () => Promise<HamDesktopWebBridgeTrustedConnectResult>;
   revoke: () => Promise<HamDesktopWebBridgeRevokeResult>;
   getPairingConfig: () => Promise<Record<string, unknown>>;
-  setPairingConfig: (payload: { pairing_code_ttl_sec?: number }) => Promise<Record<string, unknown>>;
+  setPairingConfig: (payload: {
+    pairing_code_ttl_sec?: number;
+  }) => Promise<Record<string, unknown>>;
   readTrustedStatus: () => Promise<HamDesktopWebBridgeReadTrustedStatusResult>;
   browserIntent: (
     payload: HamDesktopWebBridgeBrowserIntentPayload,
@@ -304,7 +304,9 @@ export type HamDesktopLocalControlApi = {
   realBrowserWaitMs: (ms: number) => Promise<HamDesktopRealBrowserWaitResult>;
   realBrowserScrollVertical: (deltaY: number) => Promise<HamDesktopRealBrowserScrollResult>;
   realBrowserEnumerateClickCandidates: () => Promise<HamDesktopRealBrowserEnumerateCandidatesResult>;
-  realBrowserClickCandidate: (candidateId: string) => Promise<HamDesktopRealBrowserClickCandidateResult>;
+  realBrowserClickCandidate: (
+    candidateId: string,
+  ) => Promise<HamDesktopRealBrowserClickCandidateResult>;
   stopRealBrowserSession: () => Promise<HamDesktopBrowserSessionResult>;
   /** Local web bridge — trusted connect + pairing config; no token fields in TS surface. */
   webBridge?: HamDesktopWebBridgeApi;
@@ -346,6 +348,7 @@ export function getHamDesktopLocalControlApi(): HamDesktopLocalControlApi | null
 export function getHamDesktopWebBridgeApi(): HamDesktopWebBridgeApi | null {
   const lc = getHamDesktopLocalControlApi();
   const w = lc?.webBridge;
-  if (!w || typeof w.trustedConnect !== "function" || typeof w.getStatus !== "function") return null;
+  if (!w || typeof w.trustedConnect !== "function" || typeof w.getStatus !== "function")
+    return null;
   return w;
 }

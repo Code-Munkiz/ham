@@ -24,7 +24,10 @@ const CANON: Record<string, ActivityEventSource> = {
 };
 
 function normalizeMetaSource(raw: string): ActivityEventSource | null {
-  const k = raw.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  const k = raw
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
   if (k in CANON) return CANON[k]!;
   if (k in LABELS) return k as ActivityEventSource;
   return null;

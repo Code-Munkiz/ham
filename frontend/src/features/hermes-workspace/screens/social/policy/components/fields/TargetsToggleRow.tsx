@@ -41,7 +41,10 @@ export function TargetsToggleRow({
       {SUPPORTED_TARGET_LABELS.map((lbl) => {
         const id = `${idPrefix}__target_${lbl}`;
         return (
-          <div key={lbl} className="flex items-start justify-between gap-3 rounded-md border border-border/40 p-3">
+          <div
+            key={lbl}
+            className="flex items-start justify-between gap-3 rounded-md border border-border/40 p-3"
+          >
             <div className="flex-1">
               <Label htmlFor={id} className="text-sm">
                 {lbl}

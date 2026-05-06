@@ -9,15 +9,13 @@ import { Link } from "react-router-dom";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { HermesSkillCatalogEntry, HermesSkillCatalogEntryDetail, HermesSkillsInstalledResponse } from "@/lib/ham/api";
-import {
-  workspaceMemoryAdapter,
-  type WorkspaceMemoryItem,
-} from "../../adapters/memoryAdapter";
-import {
-  workspaceSkillsAdapter,
-  type WorkspaceSkill,
-} from "../../adapters/skillsAdapter";
+import type {
+  HermesSkillCatalogEntry,
+  HermesSkillCatalogEntryDetail,
+  HermesSkillsInstalledResponse,
+} from "@/lib/ham/api";
+import { workspaceMemoryAdapter, type WorkspaceMemoryItem } from "../../adapters/memoryAdapter";
+import { workspaceSkillsAdapter, type WorkspaceSkill } from "../../adapters/skillsAdapter";
 import { primaryHermesCatalogLabel } from "../../lib/workspaceHumanLabels";
 import type { WorkspaceInspectorEvent } from "./workspaceInspectorEvents";
 import {
@@ -264,7 +262,9 @@ function MemoryTabBody({ state, onRetry }: { state: MemoryInspectorState; onRetr
         ))}
       </ul>
       {state.items.length > 12 ? (
-        <p className="px-3 py-2 text-[10px] text-white/40">+{state.items.length - 12} more in Memory</p>
+        <p className="px-3 py-2 text-[10px] text-white/40">
+          +{state.items.length - 12} more in Memory
+        </p>
       ) : null}
       <InspectorLinkRow to="/workspace/memory">Open Memory</InspectorLinkRow>
     </div>
@@ -291,7 +291,8 @@ function SkillsTabBody({
 
   const openCatalogDetail = async (catalogId: string) => {
     setCatDetail({ catalogId, loading: true, entry: null, error: null });
-    const { entry, error, bridge } = await workspaceSkillsAdapter.hermesStaticCatalogEntry(catalogId);
+    const { entry, error, bridge } =
+      await workspaceSkillsAdapter.hermesStaticCatalogEntry(catalogId);
     if (bridge.status === "pending") {
       setCatDetail({ catalogId, loading: false, entry: null, error: bridge.detail });
       return;
@@ -375,15 +376,17 @@ function SkillsTabBody({
         </p>
       ) : null}
       <div className="border-b border-white/[0.06] px-3 py-2">
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-white/45">Installed / workspace</p>
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-white/45">
+          Installed / workspace
+        </p>
       </div>
 
       {!hasInstalled ? (
         <div className="p-3">
           <p className="text-[12px] leading-relaxed text-white/70">No skills installed yet.</p>
           <p className="mt-1.5 text-[11px] leading-relaxed text-white/50">
-            Enable built-ins or add custom skills on the Skills page. Hermes catalog entries below are read-only until
-            linked on the server.
+            Enable built-ins or add custom skills on the Skills page. Hermes catalog entries below
+            are read-only until linked on the server.
           </p>
         </div>
       ) : (
@@ -396,7 +399,9 @@ function SkillsTabBody({
                 <p className="truncate text-[12px] font-medium text-white/[0.88]">{s.name}</p>
                 <div className="mt-1 flex flex-wrap items-center gap-1">
                   {builtin ? (
-                    <span className="rounded bg-sky-500/15 px-1.5 py-0.5 text-[9px] text-sky-200/85">built-in</span>
+                    <span className="rounded bg-sky-500/15 px-1.5 py-0.5 text-[9px] text-sky-200/85">
+                      built-in
+                    </span>
                   ) : (
                     <span className="rounded bg-violet-500/15 px-1.5 py-0.5 text-[9px] text-violet-200/85">
                       workspace
@@ -408,14 +413,18 @@ function SkillsTabBody({
                   <span
                     className={cn(
                       "rounded px-1.5 py-0.5 text-[9px]",
-                      s.enabled ? "bg-emerald-500/15 text-emerald-200/85" : "bg-white/[0.08] text-white/45",
+                      s.enabled
+                        ? "bg-emerald-500/15 text-emerald-200/85"
+                        : "bg-white/[0.08] text-white/45",
                     )}
                   >
                     {s.enabled ? "enabled" : "disabled"}
                   </span>
                 </div>
                 {s.description ? (
-                  <p className="mt-1 line-clamp-2 text-[10px] text-white/45">{truncate(s.description, 100)}</p>
+                  <p className="mt-1 line-clamp-2 text-[10px] text-white/45">
+                    {truncate(s.description, 100)}
+                  </p>
                 ) : null}
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   <Button
@@ -446,16 +455,21 @@ function SkillsTabBody({
         </ul>
       )}
       {hasInstalled && installedList.length > 16 ? (
-        <p className="px-3 py-2 text-[10px] text-white/40">+{installedList.length - 16} more in Skills</p>
+        <p className="px-3 py-2 text-[10px] text-white/40">
+          +{installedList.length - 16} more in Skills
+        </p>
       ) : null}
 
       <div className="border-t border-white/[0.06]">
-        <p className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-white/45">Hermes catalog</p>
+        <p className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-white/45">
+          Hermes catalog
+        </p>
       </div>
 
       {catalogCount != null ? (
         <p className="border-b border-white/[0.06] px-3 py-2 text-[10px] text-white/50">
-          <span className="font-medium text-white/65">{catalogCount}</span> catalog entries available
+          <span className="font-medium text-white/65">{catalogCount}</span> catalog entries
+          available
           {catalogSource ? (
             <>
               {" "}
@@ -501,13 +515,15 @@ function SkillsTabBody({
           ))}
         </ul>
       ) : catalogCount != null && !catalogError ? (
-        <p className="px-3 py-2 text-[10px] text-white/45">No preview rows (empty catalog payload).</p>
+        <p className="px-3 py-2 text-[10px] text-white/45">
+          No preview rows (empty catalog payload).
+        </p>
       ) : null}
 
       <p className="border-t border-white/[0.06] px-3 py-2 text-[10px] leading-relaxed text-white/40">
-        Installing catalog-only entries as workspace skills requires the full Skills page and server-backed items (
-        <span className="font-mono">/api/workspace/skills</span>). There is no Hermes VM or external hub call from the
-        browser here.
+        Installing catalog-only entries as workspace skills requires the full Skills page and
+        server-backed items (<span className="font-mono">/api/workspace/skills</span>). There is no
+        Hermes VM or external hub call from the browser here.
       </p>
 
       <InspectorLinkRow to="/workspace/skills">Open Skills</InspectorLinkRow>
@@ -530,15 +546,25 @@ function SkillsTabBody({
                 <h4 className="text-sm font-semibold text-white/90">
                   Catalog: {primaryHermesCatalogLabel({ catalog_id: catDetail.catalogId })}
                 </h4>
-                <p className="mt-0.5 truncate font-mono text-[10px] text-white/45">{catDetail.catalogId}</p>
+                <p className="mt-0.5 truncate font-mono text-[10px] text-white/45">
+                  {catDetail.catalogId}
+                </p>
               </div>
-              <Button type="button" variant="ghost" size="sm" className="h-7 text-[11px]" onClick={() => setCatDetail(null)}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 text-[11px]"
+                onClick={() => setCatDetail(null)}
+              >
                 Close
               </Button>
             </div>
             {catDetail.loading ? <p className="mt-3 text-[12px] text-white/50">Loading…</p> : null}
             {catDetail.error ? (
-              <p className="mt-3 whitespace-pre-wrap text-[11px] text-amber-200/80">{catDetail.error}</p>
+              <p className="mt-3 whitespace-pre-wrap text-[11px] text-amber-200/80">
+                {catDetail.error}
+              </p>
             ) : null}
             {catDetail.entry ? (
               <div className="mt-3 space-y-2 text-[11px] text-white/70">
@@ -549,7 +575,9 @@ function SkillsTabBody({
                   <p className="leading-relaxed text-white/60">{catDetail.entry.summary}</p>
                 ) : null}
                 {catDetail.entry.detail?.provenance_note ? (
-                  <p className="text-[10px] text-white/45">{catDetail.entry.detail.provenance_note}</p>
+                  <p className="text-[10px] text-white/45">
+                    {catDetail.entry.detail.provenance_note}
+                  </p>
                 ) : null}
               </div>
             ) : null}
@@ -581,7 +609,9 @@ function ArtifactsTabBody({ rows }: { rows: ChatInspectorArtifactRow[] }) {
             <span className="rounded bg-violet-500/15 px-1.5 py-0.5 text-[9px] text-violet-200/85">
               {r.typeLabel}
             </span>
-            <span className="rounded bg-white/[0.08] px-1.5 py-0.5 text-[9px] text-white/50">{r.source}</span>
+            <span className="rounded bg-white/[0.08] px-1.5 py-0.5 text-[9px] text-white/50">
+              {r.source}
+            </span>
             <span
               className={cn(
                 "rounded px-1.5 py-0.5 text-[9px]",
@@ -596,7 +626,9 @@ function ArtifactsTabBody({ rows }: { rows: ChatInspectorArtifactRow[] }) {
             </span>
           </div>
           {r.detail ? (
-            <p className="mt-1 whitespace-pre-wrap break-words text-[10px] text-amber-200/70">{r.detail}</p>
+            <p className="mt-1 whitespace-pre-wrap break-words text-[10px] text-amber-200/70">
+              {r.detail}
+            </p>
           ) : null}
           <div className="mt-1.5 flex flex-wrap items-center gap-2">
             <span className="text-[9px] text-white/35">{formatClock(r.atIso)}</span>
@@ -649,8 +681,7 @@ export function WorkspaceChatInspectorPanel({
         workspaceSkillsAdapter.hermesStaticCatalog(),
         workspaceSkillsAdapter.hermesLiveOverlay(),
       ]).then(([cat, live]) => {
-        const catalogCount =
-          cat.data != null ? cat.data.count ?? cat.data.entries.length : null;
+        const catalogCount = cat.data != null ? (cat.data.count ?? cat.data.entries.length) : null;
         const catalogSource = cat.data?.source ?? null;
         const catalogPreview =
           cat.data != null && Array.isArray(cat.data.entries) && cat.data.entries.length > 0
@@ -699,7 +730,9 @@ export function WorkspaceChatInspectorPanel({
         <div className="min-w-0">
           <h2 className="text-sm font-semibold text-white/90">Inspector</h2>
           {sessionId ? (
-            <p className="mt-0.5 truncate text-[10px] text-white/45">This chat is saved on the server</p>
+            <p className="mt-0.5 truncate text-[10px] text-white/45">
+              This chat is saved on the server
+            </p>
           ) : (
             <p className="mt-0.5 text-[10px] text-white/45">Start chatting to create a session</p>
           )}
@@ -737,7 +770,9 @@ export function WorkspaceChatInspectorPanel({
               }}
               className={cn(
                 "shrink-0 px-2.5 py-2.5 text-[11px] font-medium transition-colors",
-                active ? "border-b-2 text-[#ffb27a]" : "border-b-2 border-transparent text-white/45 hover:text-white/75",
+                active
+                  ? "border-b-2 text-[#ffb27a]"
+                  : "border-b-2 border-transparent text-white/45 hover:text-white/75",
               )}
               style={
                 active
@@ -754,18 +789,22 @@ export function WorkspaceChatInspectorPanel({
       <div className="hww-scroll min-h-0 flex-1 overflow-y-auto">
         {activeTab === "activity" ? <ActivityBody events={events} /> : null}
         {activeTab === "artifacts" ? <ArtifactsTabBody rows={artifactRows} /> : null}
-        {activeTab === "memory" ? (
-          <MemoryTabBody state={memoryState} onRetry={loadMemory} />
-        ) : null}
+        {activeTab === "memory" ? <MemoryTabBody state={memoryState} onRetry={loadMemory} /> : null}
         {activeTab === "skills" ? (
-          <SkillsTabBody state={skillsState} onRetry={loadSkills} onReloadAfterAction={loadSkills} />
+          <SkillsTabBody
+            state={skillsState}
+            onRetry={loadSkills}
+            onReloadAfterAction={loadSkills}
+          />
         ) : null}
         {activeTab === "agent_activity" ? (
           agentActivity != null ? (
             agentActivity
           ) : (
             <div className="p-3">
-              <p className="text-[12px] leading-relaxed text-white/60">No mission context for this chat.</p>
+              <p className="text-[12px] leading-relaxed text-white/60">
+                No mission context for this chat.
+              </p>
               <p className="mt-1.5 text-[11px] leading-relaxed text-white/45">
                 Open a mission-scoped chat to see provider status and the live mission feed here.
               </p>

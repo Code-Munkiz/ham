@@ -59,7 +59,10 @@ import {
   fetchLocalWorkspaceHealth,
   isLocalRuntimeConfigured,
 } from "@/features/hermes-workspace/adapters/localRuntime";
-import { loadContextMemorySnapshot, shouldGateContextMemorySettingsMutations } from "@/features/hermes-workspace/lib/contextMemorySnapshotLoadPlan";
+import {
+  loadContextMemorySnapshot,
+  shouldGateContextMemorySettingsMutations,
+} from "@/features/hermes-workspace/lib/contextMemorySnapshotLoadPlan";
 import { useOptionalWorkspaceHamProject } from "@/features/hermes-workspace/WorkspaceHamProjectContext";
 
 export type SettingsPanelVisualVariant = "default" | "workspace";
@@ -161,7 +164,9 @@ export function ApiKeysPanel({ variant = "default" }: { variant?: SettingsPanelV
               <Key className={cn("h-4 w-4", w ? "text-[#5eead4]/90" : "text-[#FF6B00]")} />
               <h3
                 className={cn(
-                  w ? "text-sm font-semibold text-[#e8eef8]" : "text-[13px] font-black uppercase italic tracking-[0.2em] text-white",
+                  w
+                    ? "text-sm font-semibold text-[#e8eef8]"
+                    : "text-[13px] font-black uppercase italic tracking-[0.2em] text-white",
                 )}
               >
                 Cursor API key
@@ -170,20 +175,23 @@ export function ApiKeysPanel({ variant = "default" }: { variant?: SettingsPanelV
             <p
               className={cn(
                 "max-w-2xl leading-relaxed",
-                w ? "text-[13px] text-white/45" : "text-[10px] font-bold uppercase tracking-widest text-white/35",
+                w
+                  ? "text-[13px] text-white/45"
+                  : "text-[10px] font-bold uppercase tracking-widest text-white/35",
               )}
             >
-              {w
-                ? "Used for cloud agents and model calls through the Ham API. The key is stored on the server; team members with access can rotate it from here."
-                : (
-                    <>
-                      Ham proxies Cursor Cloud Agents (<span className="font-mono text-white/50">GET/POST /v0/*</span>) with
-                      this key. Stored only on the API host filesystem (see path below). Set{" "}
-                      <span className="font-mono text-white/45">HAM_CURSOR_CREDENTIALS_FILE</span> on Cloud Run/Docker with a
-                      mounted volume so the key survives restarts. Anyone with access to this Settings page can rotate the
-                      team key.
-                    </>
-                  )}
+              {w ? (
+                "Used for cloud agents and model calls through the Ham API. The key is stored on the server; team members with access can rotate it from here."
+              ) : (
+                <>
+                  Ham proxies Cursor Cloud Agents (
+                  <span className="font-mono text-white/50">GET/POST /v0/*</span>) with this key.
+                  Stored only on the API host filesystem (see path below). Set{" "}
+                  <span className="font-mono text-white/45">HAM_CURSOR_CREDENTIALS_FILE</span> on
+                  Cloud Run/Docker with a mounted volume so the key survives restarts. Anyone with
+                  access to this Settings page can rotate the team key.
+                </>
+              )}
             </p>
           </div>
           <button
@@ -209,7 +217,13 @@ export function ApiKeysPanel({ variant = "default" }: { variant?: SettingsPanelV
         )}
 
         {loading && !status && (
-          <p className={cn(w ? "text-[13px] text-white/40" : "text-[10px] font-bold uppercase tracking-widest text-white/25")}>
+          <p
+            className={cn(
+              w
+                ? "text-[13px] text-white/40"
+                : "text-[10px] font-bold uppercase tracking-widest text-white/25",
+            )}
+          >
             Loading key status…
           </p>
         )}
@@ -222,12 +236,20 @@ export function ApiKeysPanel({ variant = "default" }: { variant?: SettingsPanelV
                 w ? "border-white/[0.06] bg-white/[0.02]" : "border-white/5 bg-black/40",
               )}
             >
-              <div className={cn(w ? "text-xs font-medium text-white/50" : "text-[9px] font-black uppercase tracking-widest text-white/25")}>
+              <div
+                className={cn(
+                  w
+                    ? "text-xs font-medium text-white/50"
+                    : "text-[9px] font-black uppercase tracking-widest text-white/25",
+                )}
+              >
                 Key source
               </div>
               <div
                 className={cn(
-                  w ? "text-sm font-medium text-[#99f6e4]/95" : "text-[12px] font-black uppercase tracking-tight text-[#FF6B00]",
+                  w
+                    ? "text-sm font-medium text-[#99f6e4]/95"
+                    : "text-[12px] font-black uppercase tracking-tight text-[#FF6B00]",
                 )}
               >
                 {sourceLabel}
@@ -244,31 +266,56 @@ export function ApiKeysPanel({ variant = "default" }: { variant?: SettingsPanelV
                 w ? "border-white/[0.06] bg-white/[0.02]" : "border-white/5 bg-black/40",
               )}
             >
-              <div className={cn(w ? "text-xs font-medium text-white/50" : "text-[9px] font-black uppercase tracking-widest text-white/25")}>
+              <div
+                className={cn(
+                  w
+                    ? "text-xs font-medium text-white/50"
+                    : "text-[9px] font-black uppercase tracking-widest text-white/25",
+                )}
+              >
                 Account
               </div>
               {status.error && !status.user_email ? (
                 <div className="text-[13px] font-medium text-amber-400/90">{status.error}</div>
               ) : (
                 <>
-                  <div className={cn("text-white", w ? "text-sm font-medium" : "text-[12px] font-black")}>
+                  <div
+                    className={cn(
+                      "text-white",
+                      w ? "text-sm font-medium" : "text-[12px] font-black",
+                    )}
+                  >
                     {status.api_key_name ?? "—"}{" "}
                     <span
                       className={cn(
-                        w ? "text-white/40" : "text-[10px] font-bold uppercase tracking-widest text-white/30",
+                        w
+                          ? "text-white/40"
+                          : "text-[10px] font-bold uppercase tracking-widest text-white/30",
                       )}
                     >
                       {w ? "" : "(key name)"}
                     </span>
                   </div>
-                  <div className={cn("break-all text-white/60", w ? "text-sm" : "text-[11px] font-mono")}>
+                  <div
+                    className={cn(
+                      "break-all text-white/60",
+                      w ? "text-sm" : "text-[11px] font-mono",
+                    )}
+                  >
                     {status.user_email ?? "—"}{" "}
                     {!w && (
-                      <span className="text-[9px] font-bold uppercase tracking-widest text-white/25">(account)</span>
+                      <span className="text-[9px] font-bold uppercase tracking-widest text-white/25">
+                        (account)
+                      </span>
                     )}
                   </div>
                   {status.key_created_at && (
-                    <div className={cn("text-white/40", w ? "text-xs" : "text-[9px] font-bold uppercase tracking-wider")}>
+                    <div
+                      className={cn(
+                        "text-white/40",
+                        w ? "text-xs" : "text-[9px] font-bold uppercase tracking-wider",
+                      )}
+                    >
                       Issued: {status.key_created_at}
                     </div>
                   )}
@@ -285,14 +332,27 @@ export function ApiKeysPanel({ variant = "default" }: { variant?: SettingsPanelV
               w ? "border-white/[0.06] bg-white/[0.02]" : "border-white/5 bg-black/30",
             )}
           >
-            <div className={cn(w ? "text-xs font-medium text-white/50" : "text-[9px] font-black uppercase tracking-widest text-white/25")}>
+            <div
+              className={cn(
+                w
+                  ? "text-xs font-medium text-white/50"
+                  : "text-[9px] font-black uppercase tracking-widest text-white/25",
+              )}
+            >
               File on server
             </div>
-            <div className={cn("break-all text-white/55", w ? "text-xs font-mono" : "text-[10px] font-mono")}>
+            <div
+              className={cn(
+                "break-all text-white/55",
+                w ? "text-xs font-mono" : "text-[10px] font-mono",
+              )}
+            >
               {status.storage_path}
             </div>
             {status.storage_override_env ? (
-              <div className="text-xs text-emerald-400/80">Override: HAM_CURSOR_CREDENTIALS_FILE is set</div>
+              <div className="text-xs text-emerald-400/80">
+                Override: HAM_CURSOR_CREDENTIALS_FILE is set
+              </div>
             ) : null}
           </div>
         )}
@@ -306,13 +366,20 @@ export function ApiKeysPanel({ variant = "default" }: { variant?: SettingsPanelV
           >
             <div
               className={cn(
-                w ? "text-xs font-medium text-white/50" : "text-[9px] font-black uppercase tracking-widest text-white/25",
+                w
+                  ? "text-xs font-medium text-white/50"
+                  : "text-[9px] font-black uppercase tracking-widest text-white/25",
               )}
             >
               {w ? "What this key is used for" : "What uses this key (backend, this deployment)"}
             </div>
             <ul
-              className={cn("space-y-2 text-white/55", w ? "text-[13px] font-normal normal-case" : "text-[10px] font-bold uppercase tracking-wider text-white/45")}
+              className={cn(
+                "space-y-2 text-white/55",
+                w
+                  ? "text-[13px] font-normal normal-case"
+                  : "text-[10px] font-bold uppercase tracking-wider text-white/45",
+              )}
             >
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500/90 shrink-0 mt-0.5" />
@@ -326,15 +393,16 @@ export function ApiKeysPanel({ variant = "default" }: { variant?: SettingsPanelV
                 <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500/90 shrink-0 mt-0.5" />
                 <span>
                   <span className="text-white/70">Run cloud agent / missions</span> — Ham{" "}
-                  <span className="font-mono text-white/50">POST /api/cursor/agents/launch</span> → Cursor{" "}
-                  <span className="font-mono text-white/50">POST /v0/agents</span>
+                  <span className="font-mono text-white/50">POST /api/cursor/agents/launch</span> →
+                  Cursor <span className="font-mono text-white/50">POST /v0/agents</span>
                 </span>
               </li>
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500/90 shrink-0 mt-0.5" />
                 <span>
-                  <span className="text-white/70">CI hooks and automation</span> — same launch URL with a bearer-less
-                  server-to-server call to your Ham API (Basic auth key is server-side only).
+                  <span className="text-white/70">CI hooks and automation</span> — same launch URL
+                  with a bearer-less server-to-server call to your Ham API (Basic auth key is
+                  server-side only).
                 </span>
               </li>
               <li className="text-[9px] font-bold text-white/30 normal-case tracking-normal pl-6 border-l border-white/10 ml-1">
@@ -373,7 +441,12 @@ export function ApiKeysPanel({ variant = "default" }: { variant?: SettingsPanelV
                 Test models
               </button>
               {!status.configured && (
-                <span className={cn("text-white/40", w ? "text-xs" : "text-[9px] font-bold uppercase tracking-widest")}>
+                <span
+                  className={cn(
+                    "text-white/40",
+                    w ? "text-xs" : "text-[9px] font-bold uppercase tracking-widest",
+                  )}
+                >
                   Add a key first
                 </span>
               )}
@@ -397,7 +470,9 @@ export function ApiKeysPanel({ variant = "default" }: { variant?: SettingsPanelV
           <label
             className={cn(
               "block",
-              w ? "text-xs font-medium text-white/50" : "text-[9px] font-black uppercase tracking-widest text-white/30",
+              w
+                ? "text-xs font-medium text-white/50"
+                : "text-[9px] font-black uppercase tracking-widest text-white/30",
             )}
           >
             New key (replaces saved)
@@ -454,26 +529,36 @@ export function ApiKeysPanel({ variant = "default" }: { variant?: SettingsPanelV
       >
         <div className="flex items-center gap-2">
           <Globe className={cn("h-4 w-4", w ? "text-white/40" : "text-white/25")} />
-          <h4 className={cn(w ? "text-sm font-medium text-white/80" : "text-[11px] font-black uppercase tracking-widest text-white/60")}>
+          <h4
+            className={cn(
+              w
+                ? "text-sm font-medium text-white/80"
+                : "text-[11px] font-black uppercase tracking-widest text-white/60",
+            )}
+          >
             OpenRouter (chat)
           </h4>
         </div>
         <p
           className={cn(
             "leading-relaxed",
-            w ? "text-[13px] text-white/45" : "text-[10px] font-bold uppercase tracking-widest text-white/30",
+            w
+              ? "text-[13px] text-white/45"
+              : "text-[10px] font-bold uppercase tracking-widest text-white/30",
           )}
         >
           {w ? (
             <>
-              When the API uses the OpenRouter gateway, set keys in the environment; see the Connection page for
-              variable names. Cursor and OpenRouter can both be configured.
+              When the API uses the OpenRouter gateway, set keys in the environment; see the
+              Connection page for variable names. Cursor and OpenRouter can both be configured.
             </>
           ) : (
             <>
-              Dashboard chat still uses <span className="font-mono text-white/45">HERMES_GATEWAY_MODE=openrouter</span> and{" "}
-              <span className="font-mono text-white/45">OPENROUTER_API_KEY</span> unless you change the gateway on the API
-              host. Cursor and OpenRouter can both be configured; wiring chat to Composer is a separate gateway mode.
+              Dashboard chat still uses{" "}
+              <span className="font-mono text-white/45">HERMES_GATEWAY_MODE=openrouter</span> and{" "}
+              <span className="font-mono text-white/45">OPENROUTER_API_KEY</span> unless you change
+              the gateway on the API host. Cursor and OpenRouter can both be configured; wiring chat
+              to Composer is a separate gateway mode.
             </>
           )}
         </p>
@@ -481,10 +566,12 @@ export function ApiKeysPanel({ variant = "default" }: { variant?: SettingsPanelV
 
       {!w && (
         <div className="space-y-2 rounded-lg border border-dashed border-white/5 bg-black/20 p-5">
-          <div className="text-[10px] font-black uppercase tracking-widest text-white/25">Roadmap</div>
+          <div className="text-[10px] font-black uppercase tracking-widest text-white/25">
+            Roadmap
+          </div>
           <p className="text-[10px] font-bold uppercase tracking-wider text-white/35">
-            <span className="text-white/50">Local Composer</span> — Node SDK / sidecar for repo-on-disk workflows (separate
-            from Cloud Agents REST above).
+            <span className="text-white/50">Local Composer</span> — Node SDK / sidecar for
+            repo-on-disk workflows (separate from Cloud Agents REST above).
           </p>
         </div>
       )}
@@ -493,21 +580,27 @@ export function ApiKeysPanel({ variant = "default" }: { variant?: SettingsPanelV
 }
 
 /** Read-only .env name table; used in full Settings and in Workspace "Connection" (repomix Connection tips reference env on disk). */
-export function EnvironmentReadonlyPanel({ variant = "default" }: { variant?: SettingsPanelVisualVariant }) {
+export function EnvironmentReadonlyPanel({
+  variant = "default",
+}: {
+  variant?: SettingsPanelVisualVariant;
+}) {
   const w = variant === "workspace";
   return (
     <div className="space-y-5">
       {!w && (
         <div className="space-y-3 rounded-xl border border-white/10 bg-black/40 p-5">
           <h4 className="text-[11px] font-bold text-white/50">
-            <span className="text-[#FF6B00] text-[10px] font-black uppercase tracking-widest">Secrets</span> — use{" "}
-            <span className="font-mono text-white/60">API Keys</span> in Model &amp; provider for provider tokens. This
-            page lists <span className="italic text-white/40">names</span> only so you know what Ham reads from the
-            process environment (mostly model routing).
+            <span className="text-[#FF6B00] text-[10px] font-black uppercase tracking-widest">
+              Secrets
+            </span>{" "}
+            — use <span className="font-mono text-white/60">API Keys</span> in Model &amp; provider
+            for provider tokens. This page lists <span className="italic text-white/40">names</span>{" "}
+            only so you know what Ham reads from the process environment (mostly model routing).
           </h4>
           <p className="text-[10px] font-bold uppercase tracking-widest text-white/25">
-            Copy <span className="font-mono">.env.example</span> → <span className="font-mono">.env</span> at the repo root;
-            restart CLI / API after edits.
+            Copy <span className="font-mono">.env.example</span> →{" "}
+            <span className="font-mono">.env</span> at the repo root; restart CLI / API after edits.
           </p>
         </div>
       )}
@@ -587,13 +680,18 @@ export function EnvironmentReadonlyPanel({ variant = "default" }: { variant?: Se
                 <td
                   className={cn(
                     "px-4 py-2.5",
-                    w ? "text-xs text-white/50" : "text-[10px] font-bold uppercase tracking-widest text-white/35",
+                    w
+                      ? "text-xs text-white/50"
+                      : "text-[10px] font-bold uppercase tracking-widest text-white/35",
                   )}
                 >
                   {row.kind}
                 </td>
                 <td
-                  className={cn("px-4 py-2.5 leading-snug", w ? "text-[13px] text-white/45" : "text-[10px] text-white/40")}
+                  className={cn(
+                    "px-4 py-2.5 leading-snug",
+                    w ? "text-[13px] text-white/45" : "text-[10px] text-white/40",
+                  )}
                 >
                   {row.role}
                 </td>
@@ -604,17 +702,19 @@ export function EnvironmentReadonlyPanel({ variant = "default" }: { variant?: Se
       </div>
       <p
         className={cn(
-          w ? "text-xs text-white/30" : "text-[9px] font-bold uppercase tracking-widest text-white/20",
+          w
+            ? "text-xs text-white/30"
+            : "text-[9px] font-bold uppercase tracking-widest text-white/20",
         )}
       >
-        {w
-          ? "Server-backed env inspection (GET /api/env/names) is not wired yet; names are documented only."
-          : (
-              <>
-                Alpha: no live env inspection — add server-backed <span className="font-mono">GET /api/env/names</span> later if
-                needed.
-              </>
-            )}
+        {w ? (
+          "Server-backed env inspection (GET /api/env/names) is not wired yet; names are documented only."
+        ) : (
+          <>
+            Alpha: no live env inspection — add server-backed{" "}
+            <span className="font-mono">GET /api/env/names</span> later if needed.
+          </>
+        )}
       </p>
     </div>
   );
@@ -639,7 +739,9 @@ export function ToolsAndExtensionsPanel() {
           </div>
           <div className="h-px mx-8 flex-1 bg-white/5" />
           <div className="flex items-center gap-3">
-            <span className="text-[8px] font-black uppercase tracking-widest text-white/10">Active Pool: 6/7</span>
+            <span className="text-[8px] font-black uppercase tracking-widest text-white/10">
+              Active Pool: 6/7
+            </span>
             <div className="h-1 w-12 overflow-hidden rounded-full bg-white/5">
               <div className="h-full w-[85%] bg-[#FF6B00]" />
             </div>
@@ -714,7 +816,9 @@ export function ToolsAndExtensionsPanel() {
               </div>
               <div className="min-w-0 flex-1 space-y-1">
                 <div className="flex items-center gap-2">
-                  <span className="truncate text-[11px] font-black uppercase tracking-widest text-white">{tool.name}</span>
+                  <span className="truncate text-[11px] font-black uppercase tracking-widest text-white">
+                    {tool.name}
+                  </span>
                   <div
                     className={cn(
                       "rounded-[2px] px-1.5 py-0.5 text-[7px] font-black uppercase tracking-tighter",
@@ -733,13 +837,17 @@ export function ToolsAndExtensionsPanel() {
                 </p>
               </div>
               <div className="hidden min-w-[100px] flex-col items-center gap-1 border-l border-white/5 px-4 md:flex">
-                <span className="text-[7px] font-black uppercase tracking-widest text-white/10">Load State</span>
+                <span className="text-[7px] font-black uppercase tracking-widest text-white/10">
+                  Load State
+                </span>
                 <span className="text-[9px] font-mono font-bold uppercase tracking-tighter italic text-[#FF6B00]/60">
                   {tool.load}
                 </span>
               </div>
               <div className="hidden min-w-[120px] flex-col items-end gap-1 border-l border-white/5 px-4 md:flex">
-                <span className="text-[7px] font-black uppercase tracking-widest text-white/10">Assignment</span>
+                <span className="text-[7px] font-black uppercase tracking-widest text-white/10">
+                  Assignment
+                </span>
                 <span className="whitespace-nowrap text-[9px] font-black uppercase tracking-tighter italic text-white/40">
                   {tool.scope}
                 </span>
@@ -789,7 +897,9 @@ export function ToolsAndExtensionsPanel() {
               className="group flex items-center gap-2 rounded border border-[#FF6B00]/20 bg-[#FF6B00]/5 px-3 py-1.5 text-[#FF6B00] hover:bg-[#FF6B00]/10"
             >
               <Plus className="h-3 w-3" />
-              <span className="text-[9px] font-black uppercase tracking-widest italic leading-none">Add Extension</span>
+              <span className="text-[9px] font-black uppercase tracking-widest italic leading-none">
+                Add Extension
+              </span>
             </button>
             <div className="h-px flex-1 bg-white/5" />
           </div>
@@ -842,7 +952,9 @@ export function ToolsAndExtensionsPanel() {
               </div>
               <div className="min-w-0 flex-1 space-y-1">
                 <div className="flex items-center gap-2">
-                  <span className="text-[11px] font-black uppercase tracking-widest text-white">{ext.name}</span>
+                  <span className="text-[11px] font-black uppercase tracking-widest text-white">
+                    {ext.name}
+                  </span>
                   <span className="rounded-[2px] border border-[#FF6B00]/10 bg-[#FF6B00]/5 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-widest italic text-[#FF6B00]/60">
                     {ext.type}
                   </span>
@@ -852,7 +964,9 @@ export function ToolsAndExtensionsPanel() {
                 </p>
               </div>
               <div className="hidden min-w-[80px] flex-col items-center gap-1 border-l border-white/5 px-4 md:flex">
-                <span className="text-[7px] font-black uppercase tracking-widest text-white/10">Version</span>
+                <span className="text-[7px] font-black uppercase tracking-widest text-white/10">
+                  Version
+                </span>
                 <span className="text-[9px] font-mono font-bold uppercase tracking-tighter italic text-white/20">
                   {ext.version}
                 </span>
@@ -984,7 +1098,9 @@ function AllowlistedWorkspaceSettings({
         if (!cancelled) setProjectId(id);
       } catch (e) {
         if (!cancelled) {
-          setProjectErr(e instanceof Error ? e.message : "Could not resolve project for this workspace.");
+          setProjectErr(
+            e instanceof Error ? e.message : "Could not resolve project for this workspace.",
+          );
         }
       }
     })();
@@ -1078,7 +1194,9 @@ function AllowlistedWorkspaceSettings({
       : "border-white/10 bg-black/50 text-[11px] font-mono focus:ring-[#FF6B00]/50",
   );
 
-  const fieldLbl = w ? "text-xs font-medium text-white/50" : "text-[9px] font-black text-white/35 uppercase tracking-widest";
+  const fieldLbl = w
+    ? "text-xs font-medium text-white/50"
+    : "text-[9px] font-black text-white/35 uppercase tracking-widest";
 
   if (contextSnapshotLocal) {
     return (
@@ -1090,14 +1208,22 @@ function AllowlistedWorkspaceSettings({
       >
         <h4
           className={cn(
-            w ? "text-sm font-medium text-white/85" : "text-[11px] font-black uppercase italic tracking-widest text-[#FF6B00]",
+            w
+              ? "text-sm font-medium text-white/85"
+              : "text-[11px] font-black uppercase italic tracking-widest text-[#FF6B00]",
           )}
         >
           Project settings writes
         </h4>
-        <p className={cn("max-w-2xl leading-relaxed", w ? "text-[13px] text-white/45" : "text-[10px] text-white/35")}>
-          Cloud settings changes are unavailable while viewing this computer&apos;s project snapshot. Preview and apply
-          always use your linked cloud project, not the folder shown above.
+        <p
+          className={cn(
+            "max-w-2xl leading-relaxed",
+            w ? "text-[13px] text-white/45" : "text-[10px] text-white/35",
+          )}
+        >
+          Cloud settings changes are unavailable while viewing this computer&apos;s project
+          snapshot. Preview and apply always use your linked cloud project, not the folder shown
+          above.
         </p>
       </div>
     );
@@ -1114,7 +1240,9 @@ function AllowlistedWorkspaceSettings({
         <div>
           <h4
             className={cn(
-              w ? "text-sm font-medium text-white/85" : "text-[11px] font-black uppercase italic tracking-widest text-[#FF6B00]",
+              w
+                ? "text-sm font-medium text-white/85"
+                : "text-[11px] font-black uppercase italic tracking-widest text-[#FF6B00]",
             )}
           >
             Project settings writes
@@ -1122,20 +1250,24 @@ function AllowlistedWorkspaceSettings({
           <p
             className={cn(
               "mt-2 max-w-2xl leading-relaxed",
-              w ? "text-[13px] text-white/40" : "text-[9px] font-bold uppercase tracking-widest text-white/30",
+              w
+                ? "text-[13px] text-white/40"
+                : "text-[9px] font-bold uppercase tracking-widest text-white/30",
             )}
           >
             {w ? (
               <>
-                Writes <span className="font-mono text-sm text-white/50">.ham/settings.json</span> on the server with
-                validation, backup, and audit. Preview is open; apply needs a one-time write token in this session (not
-                stored in the bundle).
+                Writes <span className="font-mono text-sm text-white/50">.ham/settings.json</span>{" "}
+                on the server with validation, backup, and audit. Preview is open; apply needs a
+                one-time write token in this session (not stored in the bundle).
               </>
             ) : (
               <>
-                Writes only <span className="font-mono">.ham/settings.json</span> on the server (merge with validation,
-                backup, audit). Matches <span className="font-mono">POST .../settings/preview|apply</span>. Preview is
-                unauthenticated; apply uses your token for this browser session only (not stored in the app bundle).
+                Writes only <span className="font-mono">.ham/settings.json</span> on the server
+                (merge with validation, backup, audit). Matches{" "}
+                <span className="font-mono">POST .../settings/preview|apply</span>. Preview is
+                unauthenticated; apply uses your token for this browser session only (not stored in
+                the app bundle).
               </>
             )}
           </p>
@@ -1160,7 +1292,13 @@ function AllowlistedWorkspaceSettings({
         </div>
       )}
       {!projectId && !projectErr && (
-        <div className={cn(w ? "text-sm text-white/40" : "text-[10px] font-bold uppercase tracking-widest text-white/35")}>
+        <div
+          className={cn(
+            w
+              ? "text-sm text-white/40"
+              : "text-[10px] font-bold uppercase tracking-widest text-white/35",
+          )}
+        >
           Resolving project…
         </div>
       )}
@@ -1168,27 +1306,57 @@ function AllowlistedWorkspaceSettings({
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <div>
           <label className={fieldLbl}>session_compaction_max_tokens</label>
-          <input className={inputCls} value={sessionMax} onChange={(e) => setSessionMax(e.target.value)} inputMode="numeric" />
+          <input
+            className={inputCls}
+            value={sessionMax}
+            onChange={(e) => setSessionMax(e.target.value)}
+            inputMode="numeric"
+          />
         </div>
         <div>
           <label className={fieldLbl}>session_compaction_preserve</label>
-          <input className={inputCls} value={sessionPreserve} onChange={(e) => setSessionPreserve(e.target.value)} inputMode="numeric" />
+          <input
+            className={inputCls}
+            value={sessionPreserve}
+            onChange={(e) => setSessionPreserve(e.target.value)}
+            inputMode="numeric"
+          />
         </div>
         <div>
           <label className={fieldLbl}>session_tool_prune_chars</label>
-          <input className={inputCls} value={toolPrune} onChange={(e) => setToolPrune(e.target.value)} inputMode="numeric" />
+          <input
+            className={inputCls}
+            value={toolPrune}
+            onChange={(e) => setToolPrune(e.target.value)}
+            inputMode="numeric"
+          />
         </div>
         <div>
           <label className={fieldLbl}>architect_instruction_chars</label>
-          <input className={inputCls} value={archChars} onChange={(e) => setArchChars(e.target.value)} inputMode="numeric" />
+          <input
+            className={inputCls}
+            value={archChars}
+            onChange={(e) => setArchChars(e.target.value)}
+            inputMode="numeric"
+          />
         </div>
         <div>
           <label className={fieldLbl}>commander_instruction_chars</label>
-          <input className={inputCls} value={cmdChars} onChange={(e) => setCmdChars(e.target.value)} inputMode="numeric" />
+          <input
+            className={inputCls}
+            value={cmdChars}
+            onChange={(e) => setCmdChars(e.target.value)}
+            inputMode="numeric"
+          />
         </div>
         <div>
           <label className={fieldLbl}>critic_instruction_chars</label>
-          <input className={inputCls} value={criticChars} onChange={(e) => setCriticChars(e.target.value)} inputMode="numeric" />
+          <input
+            className={inputCls}
+            value={criticChars}
+            onChange={(e) => setCriticChars(e.target.value)}
+            inputMode="numeric"
+          />
         </div>
       </div>
 
@@ -1251,7 +1419,12 @@ function AllowlistedWorkspaceSettings({
             base_revision: {preview.base_revision.slice(0, 16)}… → {preview.write_target}
           </div>
           {preview.warnings.length > 0 && (
-            <ul className={cn("list-disc space-y-1 pl-4 text-amber-400/90", w ? "text-sm" : "text-[10px]")}>
+            <ul
+              className={cn(
+                "list-disc space-y-1 pl-4 text-amber-400/90",
+                w ? "text-sm" : "text-[10px]",
+              )}
+            >
               {preview.warnings.map((war) => (
                 <li key={war}>{war}</li>
               ))}
@@ -1259,14 +1432,10 @@ function AllowlistedWorkspaceSettings({
           )}
           {preview.diff.length > 0 && (
             <div className="overflow-x-auto">
-              <table
-                className={cn("w-full text-left font-mono", w ? "text-xs" : "text-[9px]")}
-              >
+              <table className={cn("w-full text-left font-mono", w ? "text-xs" : "text-[9px]")}>
                 <thead>
                   <tr
-                    className={cn(
-                      w ? "text-white/40" : "text-white/35 uppercase tracking-tighter",
-                    )}
+                    className={cn(w ? "text-white/40" : "text-white/35 uppercase tracking-tighter")}
                   >
                     <th className="py-1 pr-2">path</th>
                     <th className="py-1 pr-2">old</th>
@@ -1291,7 +1460,11 @@ function AllowlistedWorkspaceSettings({
   );
 }
 
-export function ContextAndMemoryPanel({ variant = "default" }: { variant?: SettingsPanelVisualVariant }) {
+export function ContextAndMemoryPanel({
+  variant = "default",
+}: {
+  variant?: SettingsPanelVisualVariant;
+}) {
   const w = variant === "workspace";
   const wsProject = useOptionalWorkspaceHamProject();
   const hamProjectId = wsProject?.hamProjectId ?? null;
@@ -1300,7 +1473,9 @@ export function ContextAndMemoryPanel({ variant = "default" }: { variant?: Setti
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
   /** "local" = connected machine snapshot; "project" / "global" = cloud API */
-  const [snapshotSource, setSnapshotSource] = React.useState<"local" | "project" | "global" | null>(null);
+  const [snapshotSource, setSnapshotSource] = React.useState<"local" | "project" | "global" | null>(
+    null,
+  );
   const [fallbackNote, setFallbackNote] = React.useState<string | null>(null);
 
   const load = React.useCallback(async () => {
@@ -1356,21 +1531,27 @@ export function ContextAndMemoryPanel({ variant = "default" }: { variant?: Setti
           <p
             className={cn(
               "leading-relaxed",
-              w ? "text-[13px] text-white/45" : "text-[10px] font-bold uppercase tracking-widest text-white/30",
+              w
+                ? "text-[13px] text-white/45"
+                : "text-[10px] font-bold uppercase tracking-widest text-white/30",
             )}
           >
             {w ? (
               <>
-                Project memory snapshot: when your connected folder is available on this computer, this panel prefers
-                that folder. Otherwise it uses your linked cloud project, or the global cloud API view.
+                Project memory snapshot: when your connected folder is available on this computer,
+                this panel prefers that folder. Otherwise it uses your linked cloud project, or the
+                global cloud API view.
               </>
             ) : (
               <>
-                Live snapshot from <span className="font-mono text-[#FF6B00]/80">GET /api/context-engine</span> or, when
-                a Hermes workspace project id is available,{" "}
-                <span className="font-mono text-[#FF6B00]/80">GET /api/projects/{"{id}"}/context-engine</span>. Vite dev
-                proxies <span className="font-mono">/api</span> to FastAPI; production uses{" "}
-                <span className="font-mono">VITE_HAM_API_BASE</span>.
+                Live snapshot from{" "}
+                <span className="font-mono text-[#FF6B00]/80">GET /api/context-engine</span> or,
+                when a Hermes workspace project id is available,{" "}
+                <span className="font-mono text-[#FF6B00]/80">
+                  GET /api/projects/{"{id}"}/context-engine
+                </span>
+                . Vite dev proxies <span className="font-mono">/api</span> to FastAPI; production
+                uses <span className="font-mono">VITE_HAM_API_BASE</span>.
               </>
             )}
           </p>
@@ -1395,8 +1576,8 @@ export function ContextAndMemoryPanel({ variant = "default" }: { variant?: Setti
         <div className="space-y-2 rounded-xl border border-emerald-500/25 bg-emerald-500/[0.06] p-4 text-[13px] leading-relaxed text-emerald-50/90">
           <p className="font-medium text-emerald-100/95">This computer</p>
           <p className="text-emerald-100/80">
-            This panel is showing your connected project folder on this computer. Chat still uses the cloud app in this
-            version.
+            This panel is showing your connected project folder on this computer. Chat still uses
+            the cloud app in this version.
           </p>
         </div>
       )}
@@ -1409,43 +1590,59 @@ export function ContextAndMemoryPanel({ variant = "default" }: { variant?: Setti
             : "border-amber-500/20 bg-amber-500/[0.04] p-5 text-[9px] font-bold uppercase tracking-wide text-amber-100/70",
         )}
       >
-        <p className={cn(w ? "font-medium text-amber-50/95" : "text-[10px] font-black tracking-widest text-amber-200/90")}>
-          {w ? "What the Cloud snapshot means" : "What this snapshot means (hosted &amp; containers)"}
+        <p
+          className={cn(
+            w
+              ? "font-medium text-amber-50/95"
+              : "text-[10px] font-black tracking-widest text-amber-200/90",
+          )}
+        >
+          {w
+            ? "What the Cloud snapshot means"
+            : "What this snapshot means (hosted &amp; containers)"}
         </p>
         <ul
           className={cn(
             "list-disc space-y-1.5 pl-4",
-            w ? "text-[12px] text-amber-100/75" : "text-[9px] font-semibold normal-case tracking-normal text-amber-100/65",
+            w
+              ? "text-[12px] text-amber-100/75"
+              : "text-[9px] font-semibold normal-case tracking-normal text-amber-100/65",
           )}
         >
           {w ? (
             <>
               <li>
-                The global cloud view reflects the cloud API process folder (hosted deployments often use something like{" "}
-                <span className="font-mono text-amber-200/70">/app</span>), not a path on your laptop.
+                The global cloud view reflects the cloud API process folder (hosted deployments
+                often use something like <span className="font-mono text-amber-200/70">/app</span>),
+                not a path on your laptop.
               </li>
               <li>
-                Many cloud images omit a <span className="font-mono text-amber-200/70">.git</span> tree, so &quot;Git
-                unavailable&quot; there is expected — it does <strong className="font-semibold">not</strong> mean project
-                memory is broken.
+                Many cloud images omit a <span className="font-mono text-amber-200/70">.git</span>{" "}
+                tree, so &quot;Git unavailable&quot; there is expected — it does{" "}
+                <strong className="font-semibold">not</strong> mean project memory is broken.
               </li>
-              <li>Link a workspace project to prefer that cloud project&apos;s folder when the cloud host can read it.</li>
+              <li>
+                Link a workspace project to prefer that cloud project&apos;s folder when the cloud
+                host can read it.
+              </li>
             </>
           ) : (
             <>
               <li>
-                The <span className="font-mono">global</span> route reflects the API process working directory (often
-                something like <span className="font-mono">/app</span> on Cloud Run), not your laptop path.
+                The <span className="font-mono">global</span> route reflects the API process working
+                directory (often something like <span className="font-mono">/app</span> on Cloud
+                Run), not your laptop path.
               </li>
               <li>
                 Many images omit <span className="font-mono">.git</span> (e.g. via{" "}
                 <span className="font-mono">.dockerignore</span>
-                ), so &quot;Git unavailable&quot; there is expected — it does <strong className="font-semibold">not</strong>{" "}
-                mean <span className="font-mono">memory_heist</span> is broken.
+                ), so &quot;Git unavailable&quot; there is expected — it does{" "}
+                <strong className="font-semibold">not</strong> mean{" "}
+                <span className="font-mono">memory_heist</span> is broken.
               </li>
               <li>
-                Open the Hermes workspace chat once to link a project id; the Context &amp; Memory panel then prefers the
-                project-scoped route when the API can read that root.
+                Open the Hermes workspace chat once to link a project id; the Context &amp; Memory
+                panel then prefers the project-scoped route when the API can read that root.
               </li>
             </>
           )}
@@ -1479,7 +1676,8 @@ export function ContextAndMemoryPanel({ variant = "default" }: { variant?: Setti
               <span className="font-medium text-white/65">Source: </span>
               {snapshotSource === "local" && (
                 <span>
-                  Connected folder on this computer (local Ham API with a configured project folder).
+                  Connected folder on this computer (local Ham API with a configured project
+                  folder).
                 </span>
               )}
               {snapshotSource === "project" && <span>Linked cloud project folder.</span>}
@@ -1500,7 +1698,9 @@ export function ContextAndMemoryPanel({ variant = "default" }: { variant?: Setti
                 <>
                   <span className="text-emerald-400/90">project</span>
                   {" · "}
-                  <span className="text-white/55">GET /api/projects/{hamProjectId}/context-engine</span>
+                  <span className="text-white/55">
+                    GET /api/projects/{hamProjectId}/context-engine
+                  </span>
                 </>
               ) : (
                 <>
@@ -1516,7 +1716,9 @@ export function ContextAndMemoryPanel({ variant = "default" }: { variant?: Setti
       )}
 
       {error && (
-        <div className="rounded-xl border border-red-500/30 bg-red-500/5 p-4 text-[13px] text-red-300/90">{error}</div>
+        <div className="rounded-xl border border-red-500/30 bg-red-500/5 p-4 text-[13px] text-red-300/90">
+          {error}
+        </div>
       )}
 
       {loading && !data && !error && (
@@ -1539,11 +1741,20 @@ export function ContextAndMemoryPanel({ variant = "default" }: { variant?: Setti
             )}
           >
             <div
-              className={cn(w ? "text-xs font-medium text-white/50" : "text-[9px] font-black uppercase tracking-widest text-white/25")}
+              className={cn(
+                w
+                  ? "text-xs font-medium text-white/50"
+                  : "text-[9px] font-black uppercase tracking-widest text-white/25",
+              )}
             >
               Working directory
             </div>
-            <div className={cn("break-all font-mono leading-relaxed text-white/75", w ? "text-sm" : "text-[11px]")}>
+            <div
+              className={cn(
+                "break-all font-mono leading-relaxed text-white/75",
+                w ? "text-sm" : "text-[11px]",
+              )}
+            >
               {data.cwd}
             </div>
             <div
@@ -1564,11 +1775,14 @@ export function ContextAndMemoryPanel({ variant = "default" }: { variant?: Setti
               <p
                 className={cn(
                   "leading-relaxed",
-                  w ? "text-xs text-white/40" : "text-[9px] font-bold uppercase tracking-wide text-white/30",
+                  w
+                    ? "text-xs text-white/40"
+                    : "text-[9px] font-bold uppercase tracking-wide text-white/30",
                 )}
               >
-                Without a <span className="font-mono">.git</span> directory in the scanned tree (common in slim deploy
-                images), git-sized fields below may be zero. Configuration and instruction sampling still work.
+                Without a <span className="font-mono">.git</span> directory in the scanned tree
+                (common in slim deploy images), git-sized fields below may be zero. Configuration
+                and instruction sampling still work.
               </p>
             )}
           </div>
@@ -1589,12 +1803,16 @@ export function ContextAndMemoryPanel({ variant = "default" }: { variant?: Setti
                   key={key}
                   className={cn(
                     "space-y-3 rounded-xl border p-5",
-                    w ? "border-white/[0.08] bg-white/[0.02]" : "space-y-4 border border-white/5 bg-black/40 p-6 shadow-xl",
+                    w
+                      ? "border-white/[0.08] bg-white/[0.02]"
+                      : "space-y-4 border border-white/5 bg-black/40 p-6 shadow-xl",
                   )}
                 >
                   <div
                     className={cn(
-                      w ? "text-sm font-medium text-white/90" : "text-[10px] font-black uppercase italic tracking-widest text-[#FF6B00]",
+                      w
+                        ? "text-sm font-medium text-white/90"
+                        : "text-[10px] font-black uppercase italic tracking-widest text-[#FF6B00]",
                     )}
                   >
                     {label}
@@ -1603,20 +1821,28 @@ export function ContextAndMemoryPanel({ variant = "default" }: { variant?: Setti
                     <div
                       className={cn(
                         "flex justify-between gap-2",
-                        w ? "text-xs text-white/50" : "text-[10px] font-bold uppercase tracking-wider text-white/35",
+                        w
+                          ? "text-xs text-white/50"
+                          : "text-[10px] font-bold uppercase tracking-wider text-white/35",
                       )}
                     >
                       <span>Assembled (rendered)</span>
-                      <span className="shrink-0 font-mono text-white/65">{assembled.toLocaleString()} chars</span>
+                      <span className="shrink-0 font-mono text-white/65">
+                        {assembled.toLocaleString()} chars
+                      </span>
                     </div>
                     <div
-                      className={cn("h-2 overflow-hidden rounded-full border border-white/10 bg-white/5")}
+                      className={cn(
+                        "h-2 overflow-hidden rounded-full border border-white/10 bg-white/5",
+                      )}
                       title={barTitle}
                     >
                       <div
                         className={cn(
                           "h-full",
-                          w ? "bg-[#5eead4]/70" : "bg-[#FF6B00]/80 shadow-[0_0_12px_rgba(255,107,0,0.35)]",
+                          w
+                            ? "bg-[#5eead4]/70"
+                            : "bg-[#FF6B00]/80 shadow-[0_0_12px_rgba(255,107,0,0.35)]",
                           overCeiling && (w ? "bg-amber-400/85" : "bg-amber-500/90"),
                         )}
                         style={{ width: `${barWidthPct}%` }}
@@ -1625,11 +1851,14 @@ export function ContextAndMemoryPanel({ variant = "default" }: { variant?: Setti
                     <p
                       className={cn(
                         "leading-relaxed",
-                        w ? "text-xs text-white/35" : "text-[9px] font-bold uppercase tracking-wide text-white/25",
+                        w
+                          ? "text-xs text-white/35"
+                          : "text-[9px] font-bold uppercase tracking-wide text-white/25",
                       )}
                     >
-                      Instruction budget {instructionBudget.toLocaleString()} chars · Diff cap {diffCap.toLocaleString()} ·
-                      Combined ceiling {combinedCeiling.toLocaleString()}{" "}
+                      Instruction budget {instructionBudget.toLocaleString()} chars · Diff cap{" "}
+                      {diffCap.toLocaleString()} · Combined ceiling{" "}
+                      {combinedCeiling.toLocaleString()}{" "}
                       {!w && (
                         <>
                           (<span className="font-mono">swarm_agency</span> per-role)
@@ -1657,38 +1886,55 @@ export function ContextAndMemoryPanel({ variant = "default" }: { variant?: Setti
             <div
               className={cn(
                 "space-y-3 rounded-xl border p-5",
-                w ? "border-white/[0.08] bg-white/[0.02]" : "space-y-4 border border-white/5 bg-black/40 p-6",
+                w
+                  ? "border-white/[0.08] bg-white/[0.02]"
+                  : "space-y-4 border border-white/5 bg-black/40 p-6",
               )}
             >
               <h4
                 className={cn(
-                  w ? "text-sm font-medium text-white/85" : "text-[11px] font-black uppercase italic tracking-widest text-white",
+                  w
+                    ? "text-sm font-medium text-white/85"
+                    : "text-[11px] font-black uppercase italic tracking-widest text-white",
                 )}
               >
                 Session memory
               </h4>
-              <dl className={cn("space-y-2 font-mono text-white/60", w ? "text-sm" : "text-[10px]")}>
+              <dl
+                className={cn("space-y-2 font-mono text-white/60", w ? "text-sm" : "text-[10px]")}
+              >
                 <div className="flex justify-between gap-4">
-                  <dt className={w ? "text-white/40" : "text-white/30 uppercase tracking-tighter"}>compact_max_tokens</dt>
+                  <dt className={w ? "text-white/40" : "text-white/30 uppercase tracking-tighter"}>
+                    compact_max_tokens
+                  </dt>
                   <dd>{data.session_memory.compact_max_tokens}</dd>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <dt className={w ? "text-white/40" : "text-white/30 uppercase tracking-tighter"}>compact_preserve</dt>
+                  <dt className={w ? "text-white/40" : "text-white/30 uppercase tracking-tighter"}>
+                    compact_preserve
+                  </dt>
                   <dd>{data.session_memory.compact_preserve}</dd>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <dt className={w ? "text-white/40" : "text-white/30 uppercase tracking-tighter"}>tool_prune_chars</dt>
+                  <dt className={w ? "text-white/40" : "text-white/30 uppercase tracking-tighter"}>
+                    tool_prune_chars
+                  </dt>
                   <dd>{data.session_memory.tool_prune_chars}</dd>
                 </div>
               </dl>
               <p
                 className={cn(
-                  w ? "text-xs text-white/35" : "text-[9px] font-bold uppercase tracking-widest leading-relaxed text-white/25",
+                  w
+                    ? "text-xs text-white/35"
+                    : "text-[9px] font-bold uppercase tracking-widest leading-relaxed text-white/25",
                 )}
               >
-                {w ? "From merged project config (memory_heist)." : (
+                {w ? (
+                  "From merged project config (memory_heist)."
+                ) : (
                   <>
-                    From merged config via <span className="font-mono">memory_heist</span> section (see JSON below).
+                    From merged config via <span className="font-mono">memory_heist</span> section
+                    (see JSON below).
                   </>
                 )}
               </p>
@@ -1696,27 +1942,39 @@ export function ContextAndMemoryPanel({ variant = "default" }: { variant?: Setti
             <div
               className={cn(
                 "space-y-3 rounded-xl border p-5",
-                w ? "border-white/[0.08] bg-white/[0.02]" : "space-y-4 border border-white/5 bg-black/40 p-6",
+                w
+                  ? "border-white/[0.08] bg-white/[0.02]"
+                  : "space-y-4 border border-white/5 bg-black/40 p-6",
               )}
             >
               <h4
                 className={cn(
-                  w ? "text-sm font-medium text-white/85" : "text-[11px] font-black uppercase italic tracking-widest text-white",
+                  w
+                    ? "text-sm font-medium text-white/85"
+                    : "text-[11px] font-black uppercase italic tracking-widest text-white",
                 )}
               >
                 Module defaults
               </h4>
-              <dl className={cn("space-y-2 font-mono text-white/60", w ? "text-sm" : "text-[10px]")}>
+              <dl
+                className={cn("space-y-2 font-mono text-white/60", w ? "text-sm" : "text-[10px]")}
+              >
                 <div className="flex justify-between gap-4">
-                  <dt className={w ? "text-white/40" : "text-white/30 uppercase tracking-tighter"}>max_instruction_file_chars</dt>
+                  <dt className={w ? "text-white/40" : "text-white/30 uppercase tracking-tighter"}>
+                    max_instruction_file_chars
+                  </dt>
                   <dd>{data.module_defaults.max_instruction_file_chars}</dd>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <dt className={w ? "text-white/40" : "text-white/30 uppercase tracking-tighter"}>max_total_instruction_chars</dt>
+                  <dt className={w ? "text-white/40" : "text-white/30 uppercase tracking-tighter"}>
+                    max_total_instruction_chars
+                  </dt>
                   <dd>{data.module_defaults.max_total_instruction_chars}</dd>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <dt className={w ? "text-white/40" : "text-white/30 uppercase tracking-tighter"}>max_diff_chars</dt>
+                  <dt className={w ? "text-white/40" : "text-white/30 uppercase tracking-tighter"}>
+                    max_diff_chars
+                  </dt>
                   <dd>{data.module_defaults.max_diff_chars}</dd>
                 </div>
               </dl>
@@ -1726,28 +1984,39 @@ export function ContextAndMemoryPanel({ variant = "default" }: { variant?: Setti
           <div
             className={cn(
               "space-y-2 rounded-xl border p-5",
-              w ? "border-white/[0.08] bg-white/[0.02]" : "space-y-3 border border-white/5 bg-black/40 p-6",
+              w
+                ? "border-white/[0.08] bg-white/[0.02]"
+                : "space-y-3 border border-white/5 bg-black/40 p-6",
             )}
           >
             <h4
               className={cn(
-                w ? "text-sm font-medium text-white/85" : "text-[11px] font-black uppercase italic tracking-widest text-white",
+                w
+                  ? "text-sm font-medium text-white/85"
+                  : "text-[11px] font-black uppercase italic tracking-widest text-white",
               )}
             >
               Git snapshot sizes
             </h4>
             <p
               className={cn(
-                w ? "text-xs text-white/40" : "text-[9px] font-bold uppercase tracking-widest text-white/25",
+                w
+                  ? "text-xs text-white/40"
+                  : "text-[9px] font-bold uppercase tracking-widest text-white/25",
               )}
             >
               Character counts only; raw diff and log are not returned by the API.
             </p>
             <dl
-              className={cn("grid grid-cols-3 gap-4 font-mono text-white/60", w ? "text-sm" : "text-[10px]")}
+              className={cn(
+                "grid grid-cols-3 gap-4 font-mono text-white/60",
+                w ? "text-sm" : "text-[10px]",
+              )}
             >
               <div>
-                <dt className={w ? "text-white/40" : "text-[9px] uppercase text-white/30"}>status</dt>
+                <dt className={w ? "text-white/40" : "text-[9px] uppercase text-white/30"}>
+                  status
+                </dt>
                 <dd>{data.git.status_chars}</dd>
               </div>
               <div>
@@ -1765,22 +2034,32 @@ export function ContextAndMemoryPanel({ variant = "default" }: { variant?: Setti
             <div
               className={cn(
                 "space-y-2 rounded-xl border p-5",
-                w ? "border-white/[0.08] bg-white/[0.02]" : "space-y-3 border border-white/5 bg-black/40 p-6",
+                w
+                  ? "border-white/[0.08] bg-white/[0.02]"
+                  : "space-y-3 border border-white/5 bg-black/40 p-6",
               )}
             >
               <h4
                 className={cn(
-                  w ? "text-sm font-medium text-white/85" : "text-[11px] font-black uppercase italic tracking-widest text-white",
+                  w
+                    ? "text-sm font-medium text-white/85"
+                    : "text-[11px] font-black uppercase italic tracking-widest text-white",
                 )}
               >
                 Loaded config files
               </h4>
               <ul
-                className={cn("space-y-2 break-all font-mono text-white/50", w ? "text-xs" : "text-[10px]")}
+                className={cn(
+                  "space-y-2 break-all font-mono text-white/50",
+                  w ? "text-xs" : "text-[10px]",
+                )}
               >
                 {data.config_sources.map((s) => (
                   <li key={s.path}>
-                    <span className={w ? "text-[#5eead4]/80" : "text-[#FF6B00]/60"}>[{s.source}]</span> {s.path}
+                    <span className={w ? "text-[#5eead4]/80" : "text-[#FF6B00]/60"}>
+                      [{s.source}]
+                    </span>{" "}
+                    {s.path}
                   </li>
                 ))}
               </ul>
@@ -1791,21 +2070,26 @@ export function ContextAndMemoryPanel({ variant = "default" }: { variant?: Setti
             <div
               className={cn(
                 "space-y-2 rounded-xl border p-5",
-                w ? "border-white/[0.08] bg-white/[0.02]" : "space-y-3 border border-white/5 bg-black/40 p-6",
+                w
+                  ? "border-white/[0.08] bg-white/[0.02]"
+                  : "space-y-3 border border-white/5 bg-black/40 p-6",
               )}
             >
               <h4
                 className={cn(
-                  w ? "text-sm font-medium text-white/85" : "text-[11px] font-black uppercase italic tracking-widest text-white",
+                  w
+                    ? "text-sm font-medium text-white/85"
+                    : "text-[11px] font-black uppercase italic tracking-widest text-white",
                 )}
               >
                 Instruction files
               </h4>
-              <ul className={cn("space-y-1.5 font-mono text-white/50", w ? "text-xs" : "text-[10px]")}>
+              <ul
+                className={cn("space-y-1.5 font-mono text-white/50", w ? "text-xs" : "text-[10px]")}
+              >
                 {data.instruction_files.map((f) => (
                   <li key={`${f.scope}:${f.relative_path}`}>
-                    {f.relative_path}{" "}
-                    <span className="text-white/25">({f.scope})</span>
+                    {f.relative_path} <span className="text-white/25">({f.scope})</span>
                   </li>
                 ))}
               </ul>
@@ -1815,12 +2099,16 @@ export function ContextAndMemoryPanel({ variant = "default" }: { variant?: Setti
           <div
             className={cn(
               "space-y-2 rounded-xl border p-5",
-              w ? "border-white/[0.08] bg-white/[0.02]" : "space-y-2 border border-white/5 bg-black/40 p-6",
+              w
+                ? "border-white/[0.08] bg-white/[0.02]"
+                : "space-y-2 border border-white/5 bg-black/40 p-6",
             )}
           >
             <h4
               className={cn(
-                w ? "text-sm font-medium text-white/85" : "text-[11px] font-black uppercase italic tracking-widest text-white",
+                w
+                  ? "text-sm font-medium text-white/85"
+                  : "text-[11px] font-black uppercase italic tracking-widest text-white",
               )}
             >
               Merged <span className="font-mono">memory_heist</span> keys
@@ -1828,12 +2116,17 @@ export function ContextAndMemoryPanel({ variant = "default" }: { variant?: Setti
             {Object.keys(data.memory_heist_section).length === 0 ? (
               <p
                 className={cn(
-                  w ? "text-sm text-white/40" : "text-[10px] font-bold uppercase tracking-widest text-white/25",
+                  w
+                    ? "text-sm text-white/40"
+                    : "text-[10px] font-bold uppercase tracking-widest text-white/25",
                 )}
               >
-                {w ? "No custom keys; defaults apply." : (
+                {w ? (
+                  "No custom keys; defaults apply."
+                ) : (
                   <>
-                    No keys under <span className="font-mono">memory_heist</span> in merged JSON (defaults apply).
+                    No keys under <span className="font-mono">memory_heist</span> in merged JSON
+                    (defaults apply).
                   </>
                 )}
               </p>
@@ -1841,7 +2134,9 @@ export function ContextAndMemoryPanel({ variant = "default" }: { variant?: Setti
               <pre
                 className={cn(
                   "max-h-40 overflow-y-auto overflow-x-auto rounded-lg border font-mono text-white/45",
-                  w ? "border-white/[0.08] bg-black/20 p-3 text-xs" : "border border-white/5 bg-black/50 p-3 text-[9px]",
+                  w
+                    ? "border-white/[0.08] bg-black/20 p-3 text-xs"
+                    : "border border-white/5 bg-black/50 p-3 text-[9px]",
                 )}
               >
                 {JSON.stringify(data.memory_heist_section, null, 2)}
@@ -1917,9 +2212,7 @@ const settingsStructure = [
 ];
 
 /** Valid `tab` query values for `/settings?tab=…`. */
-export function normalizeSettingsTabParam(
-  tab: string | null | undefined,
-): SettingsSubSectionId {
+export function normalizeSettingsTabParam(tab: string | null | undefined): SettingsSubSectionId {
   let t = tab;
   if (t === "mission-history") {
     t = "execution-history";
@@ -1927,9 +2220,7 @@ export function normalizeSettingsTabParam(
   if (t === "workforce-profiles") {
     t = "api-keys";
   }
-  const ok = settingsStructure
-    .flatMap((g) => g.items)
-    .some((i) => i.id === t);
+  const ok = settingsStructure.flatMap((g) => g.items).some((i) => i.id === t);
   return ok ? (t as SettingsSubSectionId) : "api-keys";
 }
 
@@ -1947,44 +2238,44 @@ export function UnifiedSettings({
     <div className="flex h-full w-full min-w-0 bg-[#050505] font-sans">
       {/* Internal Settings Sub-Nav */}
       {!hideInternalNav ? (
-      <div className={cn(
-        "w-64 border-r border-white/5 p-8 flex flex-col gap-10 overflow-y-auto shrink-0",
-        variant === "page" ? "bg-transparent" : "bg-[#0c0c0c]"
-      )}>
-        {settingsStructure.map((group) => (
-          <div key={group.group} className="space-y-4">
-            <h4 className="px-3 text-[9px] font-black text-white/20 uppercase tracking-[0.4em] italic leading-none">
-              {group.group}
-            </h4>
-            <div className="space-y-1">
-              {group.items.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => onSubSegmentChange(item.id as SettingsSubSectionId)}
-                  className={cn(
-                    "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all text-left group",
-                    activeSubSegment === item.id
-                      ? "bg-[#FF6B00]/10 text-[#FF6B00]"
-                      : "text-white/30 hover:text-white hover:bg-white/[0.03]"
-                  )}
-                >
-                  <item.icon
+        <div
+          className={cn(
+            "w-64 border-r border-white/5 p-8 flex flex-col gap-10 overflow-y-auto shrink-0",
+            variant === "page" ? "bg-transparent" : "bg-[#0c0c0c]",
+          )}
+        >
+          {settingsStructure.map((group) => (
+            <div key={group.group} className="space-y-4">
+              <h4 className="px-3 text-[9px] font-black text-white/20 uppercase tracking-[0.4em] italic leading-none">
+                {group.group}
+              </h4>
+              <div className="space-y-1">
+                {group.items.map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => onSubSegmentChange(item.id as SettingsSubSectionId)}
                     className={cn(
-                      "h-3.5 w-3.5",
+                      "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all text-left group",
                       activeSubSegment === item.id
-                        ? "text-[#FF6B00]"
-                        : "text-white/20"
+                        ? "bg-[#FF6B00]/10 text-[#FF6B00]"
+                        : "text-white/30 hover:text-white hover:bg-white/[0.03]",
                     )}
-                  />
-                  <span className="text-[10px] font-black uppercase tracking-widest whitespace-nowrap">
-                    {item.label}
-                  </span>
-                </button>
-              ))}
+                  >
+                    <item.icon
+                      className={cn(
+                        "h-3.5 w-3.5",
+                        activeSubSegment === item.id ? "text-[#FF6B00]" : "text-white/20",
+                      )}
+                    />
+                    <span className="text-[10px] font-black uppercase tracking-widest whitespace-nowrap">
+                      {item.label}
+                    </span>
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
       ) : null}
 
       {/* Sub-Settings Content Area */}
@@ -2003,25 +2294,35 @@ export function UnifiedSettings({
             <p className="text-[11px] font-bold text-white/20 uppercase tracking-[0.2em] italic max-w-2xl">
               {activeSubSegment === "environment" ? (
                 <>
-                  Read-only reference for local <span className="font-mono text-white/35">.env</span> variables. Edit the file on disk; values are never shown here (alpha).
+                  Read-only reference for local{" "}
+                  <span className="font-mono text-white/35">.env</span> variables. Edit the file on
+                  disk; values are never shown here (alpha).
                 </>
               ) : activeSubSegment === "desktop-bundle" ? (
                 <>
-                  Desktop-side: curated defaults, a local <span className="font-mono text-white/35">hermes</span> check,
-                  allowlisted preset runs, and (when the app reaches the API) a read-only API strip. This is not the
+                  Desktop-side: curated defaults, a local{" "}
+                  <span className="font-mono text-white/35">hermes</span> check, allowlisted preset
+                  runs, and (when the app reaches the API) a read-only API strip. This is not the
                   same host as the Ham API by default. No silent installs.
                 </>
               ) : (
-                <>Industrial grade {activeSubSegment.replace("-", " ")} configuration for secure HAM operations.</>
+                <>
+                  Industrial grade {activeSubSegment.replace("-", " ")} configuration for secure HAM
+                  operations.
+                </>
               )}
             </p>
           </div>
 
           <div className="space-y-10">
             {/* --- CONFIGURATION PAGES --- */}
-            {["api-keys", "environment", "tools-extensions", "context-memory", "desktop-bundle"].includes(
-              activeSubSegment,
-            ) && (
+            {[
+              "api-keys",
+              "environment",
+              "tools-extensions",
+              "context-memory",
+              "desktop-bundle",
+            ].includes(activeSubSegment) && (
               <div className="space-y-6">
                 {activeSubSegment === "api-keys" && <ApiKeysPanel />}
 
@@ -2039,117 +2340,232 @@ export function UnifiedSettings({
             {["kernel-health", "diagnostics"].includes(activeSubSegment) && (
               <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                   {[
-                      { label: "Kernel Version", value: "2.5.0-HAM", status: "Operational", trend: "Stable" },
-                      { label: "Active Workers", value: "154 Units", status: "Optimal", trend: "Nominal" },
-                      { label: "Bridge Latency", value: "12ms", status: "Accelerated", trend: "High Speed" },
-                      { label: "Memory Pressure", value: "14%", status: "Safe", trend: "Liquid Content" },
-                      { label: "Provider Sync", value: "3/3 Active", status: "Aligned", trend: "Synchronized" },
-                      { label: "Resource Load", value: "48%", status: "Balanced", trend: "Managed" },
-                   ].map((metric, i) => (
-                      <div key={i} className="p-6 bg-[#0c0c0c] border border-white/5 rounded-xl space-y-4 hover:border-white/20 transition-all">
-                         <div className="flex justify-between items-start">
-                            <span className="text-[10px] font-black text-white/20 uppercase tracking-widest leading-none">{metric.label}</span>
-                            <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse shadow-[0_0_10px_rgba(34,197,94,0.5)]" />
-                         </div>
-                         <div className="space-y-1">
-                            <div className="text-xl font-black text-white italic tracking-tighter leading-none">{metric.value}</div>
-                            <div className="flex items-center gap-2">
-                               <span className="text-[9px] font-black text-[#FF6B00] uppercase italic tracking-widest">{metric.status}</span>
-                               <span className="text-[8px] font-bold text-white/10 uppercase tracking-widest">{metric.trend}</span>
-                            </div>
-                         </div>
+                  {[
+                    {
+                      label: "Kernel Version",
+                      value: "2.5.0-HAM",
+                      status: "Operational",
+                      trend: "Stable",
+                    },
+                    {
+                      label: "Active Workers",
+                      value: "154 Units",
+                      status: "Optimal",
+                      trend: "Nominal",
+                    },
+                    {
+                      label: "Bridge Latency",
+                      value: "12ms",
+                      status: "Accelerated",
+                      trend: "High Speed",
+                    },
+                    {
+                      label: "Memory Pressure",
+                      value: "14%",
+                      status: "Safe",
+                      trend: "Liquid Content",
+                    },
+                    {
+                      label: "Provider Sync",
+                      value: "3/3 Active",
+                      status: "Aligned",
+                      trend: "Synchronized",
+                    },
+                    { label: "Resource Load", value: "48%", status: "Balanced", trend: "Managed" },
+                  ].map((metric, i) => (
+                    <div
+                      key={i}
+                      className="p-6 bg-[#0c0c0c] border border-white/5 rounded-xl space-y-4 hover:border-white/20 transition-all"
+                    >
+                      <div className="flex justify-between items-start">
+                        <span className="text-[10px] font-black text-white/20 uppercase tracking-widest leading-none">
+                          {metric.label}
+                        </span>
+                        <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse shadow-[0_0_10px_rgba(34,197,94,0.5)]" />
                       </div>
-                   ))}
+                      <div className="space-y-1">
+                        <div className="text-xl font-black text-white italic tracking-tighter leading-none">
+                          {metric.value}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[9px] font-black text-[#FF6B00] uppercase italic tracking-widest">
+                            {metric.status}
+                          </span>
+                          <span className="text-[8px] font-bold text-white/10 uppercase tracking-widest">
+                            {metric.trend}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
 
                 <div className="p-10 bg-black/40 border border-white/10 rounded-2xl relative overflow-hidden group">
-                   <div className="absolute inset-0 bg-gradient-to-r from-[#FF6B00]/5 to-transparent skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-[2000ms] ease-in-out" />
-                   <div className="space-y-6 relative z-10 text-center">
-                      <div className="h-1 w-1 bg-[#FF6B00] mx-auto rounded-full" />
-                      <div className="space-y-2">
-                         <h4 className="text-[12px] font-black text-white uppercase italic tracking-[0.4em]">Run Deep Sector Scan</h4>
-                         <p className="text-[10px] font-bold text-white/20 uppercase tracking-[0.2em] italic max-w-sm mx-auto leading-relaxed">Initiate a full-system audit of bridge connections and memory registers.</p>
-                      </div>
-                      <button className="px-10 py-3 bg-[#FF6B00]/10 border border-[#FF6B00]/40 text-[10px] font-black text-[#FF6B00] uppercase tracking-[0.3em] italic hover:bg-[#FF6B00] hover:text-black transition-all rounded shadow-xl">Start System Diagnostics</button>
-                   </div>
+                  <div className="absolute inset-0 bg-gradient-to-r from-[#FF6B00]/5 to-transparent skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-[2000ms] ease-in-out" />
+                  <div className="space-y-6 relative z-10 text-center">
+                    <div className="h-1 w-1 bg-[#FF6B00] mx-auto rounded-full" />
+                    <div className="space-y-2">
+                      <h4 className="text-[12px] font-black text-white uppercase italic tracking-[0.4em]">
+                        Run Deep Sector Scan
+                      </h4>
+                      <p className="text-[10px] font-bold text-white/20 uppercase tracking-[0.2em] italic max-w-sm mx-auto leading-relaxed">
+                        Initiate a full-system audit of bridge connections and memory registers.
+                      </p>
+                    </div>
+                    <button className="px-10 py-3 bg-[#FF6B00]/10 border border-[#FF6B00]/40 text-[10px] font-black text-[#FF6B00] uppercase tracking-[0.3em] italic hover:bg-[#FF6B00] hover:text-black transition-all rounded shadow-xl">
+                      Start System Diagnostics
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
 
             {/* --- HISTORY / AUDIT PAGES --- */}
-            {["execution-history", "system-logs", "context-audit", "bridge-dump"].includes(activeSubSegment) && (
+            {["execution-history", "system-logs", "context-audit", "bridge-dump"].includes(
+              activeSubSegment,
+            ) && (
               <div className="space-y-8 animate-in fade-in slide-in-from-left-4 duration-700">
                 <div className="flex items-center justify-between px-6 py-4 bg-white/[0.02] border border-white/10 rounded-xl">
-                   <div className="flex items-center gap-4">
-                      <History className="h-4 w-4 text-[#FF6B00]" />
-                      <span className="text-[11px] font-black text-white uppercase tracking-widest italic">Live Audit Stream</span>
-                   </div>
-                   <div className="flex items-center gap-4">
-                      <div className="flex items-center gap-2 px-3 py-1 bg-black/40 border border-white/5 rounded text-[9px] font-black text-white/20 uppercase tracking-widest">
-                         <FileSearch className="h-3 w-3" /> Filter Log Level
-                      </div>
-                      <div className="text-[9px] font-black text-[#FF6B00] uppercase tracking-widest underline underline-offset-4 cursor-pointer">Export Payload</div>
-                   </div>
+                  <div className="flex items-center gap-4">
+                    <History className="h-4 w-4 text-[#FF6B00]" />
+                    <span className="text-[11px] font-black text-white uppercase tracking-widest italic">
+                      Live Audit Stream
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2 px-3 py-1 bg-black/40 border border-white/5 rounded text-[9px] font-black text-white/20 uppercase tracking-widest">
+                      <FileSearch className="h-3 w-3" /> Filter Log Level
+                    </div>
+                    <div className="text-[9px] font-black text-[#FF6B00] uppercase tracking-widest underline underline-offset-4 cursor-pointer">
+                      Export Payload
+                    </div>
+                  </div>
                 </div>
 
                 <div className="bg-[#0c0c0c] border border-white/5 rounded-xl divide-y divide-white/5 overflow-hidden shadow-2xl">
-                   {[
-                      { time: "05:12:04", action: "BRIDGE_RE_SYNC", actor: "Kernel", result: "COMPLETE", detail: "Rotated 154 worker heartbeat keys." },
-                      { time: "05:10:55", action: "MEMORY_FLUSH", actor: "System", result: "NOMINAL", detail: "Purged 3.4GB of stale cache registers." },
-                      { time: "05:08:21", action: "ID_VERIFY", actor: "Security", result: "SECURE", detail: "Verified user ham-admin82 through biometric bridge." },
-                      { time: "05:04:12", action: "UNIT_REALLOCATE", actor: "Kernel", result: "ALIGNED", detail: "Moved 4 units from extraction to logic core." },
-                      { time: "04:59:33", action: "TOOL_CALIBRATE", actor: "Chipset", result: "ACCELERATED", detail: "Optimized Code Interpreter for v3 architecture." },
-                   ].map((log, i) => (
-                      <div key={i} className="flex grid grid-cols-12 gap-8 items-center px-8 py-6 hover:bg-white/[0.02] transition-colors group">
-                         <div className="col-span-1 text-[10px] font-mono text-white/20 whitespace-nowrap">{log.time}</div>
-                         <div className="col-span-3 text-[11px] font-black text-[#FF6B00]/80 uppercase italic tracking-widest leading-none group-hover:text-[#FF6B00] transition-colors">{log.action}</div>
-                         <div className="col-span-2 text-[9px] font-black text-white/20 uppercase tracking-[0.2em]">{log.actor}</div>
-                         <div className="col-span-4 text-[11px] font-bold text-white/40 italic leading-relaxed">{log.detail}</div>
-                         <div className="col-span-2 text-right">
-                            <span className="text-[10px] font-black px-3 py-1 rounded-full bg-green-500/10 border border-green-500/20 text-green-500/60 uppercase">{log.result}</span>
-                         </div>
+                  {[
+                    {
+                      time: "05:12:04",
+                      action: "BRIDGE_RE_SYNC",
+                      actor: "Kernel",
+                      result: "COMPLETE",
+                      detail: "Rotated 154 worker heartbeat keys.",
+                    },
+                    {
+                      time: "05:10:55",
+                      action: "MEMORY_FLUSH",
+                      actor: "System",
+                      result: "NOMINAL",
+                      detail: "Purged 3.4GB of stale cache registers.",
+                    },
+                    {
+                      time: "05:08:21",
+                      action: "ID_VERIFY",
+                      actor: "Security",
+                      result: "SECURE",
+                      detail: "Verified user ham-admin82 through biometric bridge.",
+                    },
+                    {
+                      time: "05:04:12",
+                      action: "UNIT_REALLOCATE",
+                      actor: "Kernel",
+                      result: "ALIGNED",
+                      detail: "Moved 4 units from extraction to logic core.",
+                    },
+                    {
+                      time: "04:59:33",
+                      action: "TOOL_CALIBRATE",
+                      actor: "Chipset",
+                      result: "ACCELERATED",
+                      detail: "Optimized Code Interpreter for v3 architecture.",
+                    },
+                  ].map((log, i) => (
+                    <div
+                      key={i}
+                      className="flex grid grid-cols-12 gap-8 items-center px-8 py-6 hover:bg-white/[0.02] transition-colors group"
+                    >
+                      <div className="col-span-1 text-[10px] font-mono text-white/20 whitespace-nowrap">
+                        {log.time}
                       </div>
-                   ))}
+                      <div className="col-span-3 text-[11px] font-black text-[#FF6B00]/80 uppercase italic tracking-widest leading-none group-hover:text-[#FF6B00] transition-colors">
+                        {log.action}
+                      </div>
+                      <div className="col-span-2 text-[9px] font-black text-white/20 uppercase tracking-[0.2em]">
+                        {log.actor}
+                      </div>
+                      <div className="col-span-4 text-[11px] font-bold text-white/40 italic leading-relaxed">
+                        {log.detail}
+                      </div>
+                      <div className="col-span-2 text-right">
+                        <span className="text-[10px] font-black px-3 py-1 rounded-full bg-green-500/10 border border-green-500/20 text-green-500/60 uppercase">
+                          {log.result}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
 
             {/* --- JOBS / OTHERS --- */}
             {activeSubSegment === "jobs" && (
-               <div className="space-y-8">
-                  <div className="p-12 bg-black/40 border border-[#FF6B00]/20 border-dashed rounded-3xl flex flex-col items-center justify-center text-center space-y-8 animate-in zoom-in-95 duration-700">
-                     <div className="h-20 w-20 bg-black/60 border border-white/5 rounded-full flex items-center justify-center relative group overflow-hidden">
-                        <div className="absolute inset-0 bg-[#FF6B00]/2 animate-pulse" />
-                        <Calendar className="h-8 w-8 text-white/10 relative z-10" />
-                     </div>
-                     <div className="space-y-3 relative z-10">
-                        <h3 className="text-xl font-black text-white uppercase italic tracking-[0.3em]">SCHEDULER_OFFLINE</h3>
-                        <p className="text-[11px] font-bold text-white/20 uppercase tracking-[0.2em] max-w-sm mx-auto leading-relaxed italic">The automated task scheduler is currently set to manual override. Scheduled jobs will be surfaced here in HAM v3.2.</p>
-                     </div>
-                     <button className="px-10 py-3 bg-white/5 border border-white/10 text-[10px] font-black text-white/20 uppercase tracking-widest rounded transition-all hover:bg-white/10 hover:text-white group">
-                        Define Cron Directive <Plus className="ml-2 h-3.5 w-3.5 inline group-hover:text-[#FF6B00] transition-colors" />
-                     </button>
+              <div className="space-y-8">
+                <div className="p-12 bg-black/40 border border-[#FF6B00]/20 border-dashed rounded-3xl flex flex-col items-center justify-center text-center space-y-8 animate-in zoom-in-95 duration-700">
+                  <div className="h-20 w-20 bg-black/60 border border-white/5 rounded-full flex items-center justify-center relative group overflow-hidden">
+                    <div className="absolute inset-0 bg-[#FF6B00]/2 animate-pulse" />
+                    <Calendar className="h-8 w-8 text-white/10 relative z-10" />
                   </div>
-               </div>
+                  <div className="space-y-3 relative z-10">
+                    <h3 className="text-xl font-black text-white uppercase italic tracking-[0.3em]">
+                      SCHEDULER_OFFLINE
+                    </h3>
+                    <p className="text-[11px] font-bold text-white/20 uppercase tracking-[0.2em] max-w-sm mx-auto leading-relaxed italic">
+                      The automated task scheduler is currently set to manual override. Scheduled
+                      jobs will be surfaced here in HAM v3.2.
+                    </p>
+                  </div>
+                  <button className="px-10 py-3 bg-white/5 border border-white/10 text-[10px] font-black text-white/20 uppercase tracking-widest rounded transition-all hover:bg-white/10 hover:text-white group">
+                    Define Cron Directive{" "}
+                    <Plus className="ml-2 h-3.5 w-3.5 inline group-hover:text-[#FF6B00] transition-colors" />
+                  </button>
+                </div>
+              </div>
             )}
 
             {/* General Placeholder for everything else */}
-            {!["api-keys", "environment", "tools-extensions", "context-memory", "desktop-bundle", "kernel-health", "diagnostics", "execution-history", "system-logs", "context-audit", "bridge-dump", "jobs"].includes(activeSubSegment) && (
+            {![
+              "api-keys",
+              "environment",
+              "tools-extensions",
+              "context-memory",
+              "desktop-bundle",
+              "kernel-health",
+              "diagnostics",
+              "execution-history",
+              "system-logs",
+              "context-audit",
+              "bridge-dump",
+              "jobs",
+            ].includes(activeSubSegment) && (
               <div className="space-y-10">
                 <div className="p-16 bg-black/20 border border-white/5 border-dashed rounded-2xl flex flex-col items-center justify-center text-center space-y-8 group transition-all hover:bg-black/40">
                   <div className="h-16 w-16 rounded-2xl bg-white/[0.02] border border-white/5 flex items-center justify-center transition-transform group-hover:scale-110">
                     <Zap className="h-6 w-6 text-white/10 group-hover:text-[#FF6B00]" />
                   </div>
                   <div className="space-y-3">
-                    <h3 className="text-lg font-black text-white/40 uppercase italic tracking-[0.3em] group-hover:text-white transition-colors leading-none">calibration_active</h3>
+                    <h3 className="text-lg font-black text-white/40 uppercase italic tracking-[0.3em] group-hover:text-white transition-colors leading-none">
+                      calibration_active
+                    </h3>
                     <p className="text-[11px] font-bold text-white/10 group-hover:text-white/20 uppercase tracking-[0.4em] max-w-sm mx-auto transition-colors leading-relaxed">
-                      The {activeLabel} subsystem is currently being optimized for high-throughput bridge operations.
+                      The {activeLabel} subsystem is currently being optimized for high-throughput
+                      bridge operations.
                     </p>
                   </div>
                   <div className="flex items-center gap-3 opacity-40">
                     <div className="h-1.5 w-1.5 rounded-full bg-[#FF6B00] animate-pulse" />
-                    <span className="text-[9px] font-black text-white/20 uppercase tracking-[0.5em]">awaiting telemetry</span>
+                    <span className="text-[9px] font-black text-white/20 uppercase tracking-[0.5em]">
+                      awaiting telemetry
+                    </span>
                   </div>
                 </div>
               </div>

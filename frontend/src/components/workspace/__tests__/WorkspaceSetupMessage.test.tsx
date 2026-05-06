@@ -30,18 +30,10 @@ describe("WorkspaceSetupMessage", () => {
   it("shows sign-in-required copy and actions", () => {
     const onRetry = vi.fn();
     const onSignIn = vi.fn();
-    render(
-      <WorkspaceSetupMessage
-        mode="auth_required"
-        onRetry={onRetry}
-        onSignIn={onSignIn}
-      />,
-    );
+    render(<WorkspaceSetupMessage mode="auth_required" onRetry={onRetry} onSignIn={onSignIn} />);
 
     expect(screen.getByText("Sign in required")).toBeInTheDocument();
-    expect(
-      screen.getByText("Please sign in to load your HAM workspace."),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Please sign in to load your HAM workspace.")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
     fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
@@ -55,7 +47,9 @@ describe("WorkspaceSetupMessage", () => {
 
     expect(screen.getByText("Authentication is not configured")).toBeInTheDocument();
     expect(
-      screen.getByText("Workspace sign-in is temporarily unavailable. Refresh or contact your workspace admin."),
+      screen.getByText(
+        "Workspace sign-in is temporarily unavailable. Refresh or contact your workspace admin.",
+      ),
     ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Sign in" })).not.toBeInTheDocument();
     expectNoHostedUnsafeCopy();

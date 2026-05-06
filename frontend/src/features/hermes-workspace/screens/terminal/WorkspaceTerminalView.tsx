@@ -32,10 +32,21 @@ function short(s: string, n: number) {
   return s.length > n ? s.slice(0, n) + "…" : s;
 }
 
-export function WorkspaceTerminalView({ mode, onMinimize, onClosePanel, className }: WorkspaceTerminalViewProps) {
-  const [tabs, setTabs] = React.useState<TabModel[]>([{ id: newTabId(), title: "Shell", sessionId: null }]);
+export function WorkspaceTerminalView({
+  mode,
+  onMinimize,
+  onClosePanel,
+  className,
+}: WorkspaceTerminalViewProps) {
+  const [tabs, setTabs] = React.useState<TabModel[]>([
+    { id: newTabId(), title: "Shell", sessionId: null },
+  ]);
   const [activeId, setActiveId] = React.useState(() => tabs[0]!.id);
-  const [contextMenu, setContextMenu] = React.useState<{ x: number; y: number; tabId: string } | null>(null);
+  const [contextMenu, setContextMenu] = React.useState<{
+    x: number;
+    y: number;
+    tabId: string;
+  } | null>(null);
   const [bridgeLine, setBridgeLine] = React.useState<string | null>(null);
   const [isMobile, setIsMobile] = React.useState(false);
   const terminalAreaRef = React.useRef<HTMLDivElement | null>(null);
@@ -374,7 +385,10 @@ export function WorkspaceTerminalView({ mode, onMinimize, onClosePanel, classNam
   };
 
   return (
-    <div className={cn("flex h-full min-h-0 min-w-0 flex-col", className)} style={{ background: BG }}>
+    <div
+      className={cn("flex h-full min-h-0 min-w-0 flex-col", className)}
+      style={{ background: BG }}
+    >
       <div
         className="flex h-9 shrink-0 items-center justify-between border-b border-white/10 px-0.5"
         style={{ background: "#141414" }}
@@ -393,7 +407,9 @@ export function WorkspaceTerminalView({ mode, onMinimize, onClosePanel, classNam
                   }}
                   className={cn(
                     "relative border border-transparent px-2.5 py-1.5 text-left text-[11px] text-white/70",
-                    isAct ? "border-b-0 border-white/10 bg-[#0d0d0d] text-white/95" : "hover:bg-white/[0.04]",
+                    isAct
+                      ? "border-b-0 border-white/10 bg-[#0d0d0d] text-white/95"
+                      : "hover:bg-white/[0.04]",
                   )}
                 >
                   {short(t.title, 20)}
@@ -493,7 +509,11 @@ export function WorkspaceTerminalView({ mode, onMinimize, onClosePanel, classNam
         </div>
       </div>
 
-      <div ref={terminalAreaRef} className="relative min-h-0 flex-1 overflow-hidden" data-ham-term-viewport>
+      <div
+        ref={terminalAreaRef}
+        className="relative min-h-0 flex-1 overflow-hidden"
+        data-ham-term-viewport
+      >
         {tabs.map((t) => {
           const isThisActive = t.id === activeId;
           return (
