@@ -29,35 +29,35 @@ import { WorkspaceGate } from "@/components/workspace/WorkspaceGate";
 export function WorkspaceApp() {
   return (
     <WorkspaceHamProjectProvider>
-    <VoiceWorkspaceSettingsProvider>
-    <div className="hww-outer h-full min-h-0 w-full min-w-0">
-      <WorkspaceShell>
-        <WorkspaceGate>
-          <Routes>
-            <Route index element={<WorkspaceHome />} />
-            <Route path="chat" element={<WorkspaceChatScreen />} />
-            <Route path="files" element={<WorkspaceFilesScreen />} />
-            <Route path="terminal" element={<WorkspaceTerminalScreen />} />
-            <Route path="settings/mcp" element={<WorkspaceMcpSettingsScreen />} />
-            <Route
-              path="settings/providers"
-              element={<Navigate to="/workspace/settings?section=hermes" replace />}
-            />
-            <Route path="settings" element={<WorkspaceSettingsScreen />} />
-            <Route path="jobs" element={<WorkspaceJobsScreen />} />
-            <Route path="tasks" element={<WorkspaceTasksScreen />} />
-            <Route path="conductor" element={<WorkspaceConductorScreen />} />
-            <Route path="operations" element={<WorkspaceOperationsScreen />} />
-            <Route path="social/policy" element={<WorkspaceSocialPolicyScreen />} />
-            <Route path="social" element={<WorkspaceSocialScreen />} />
-            <Route path="memory" element={<WorkspaceMemoryScreen />} />
-            <Route path="skills" element={<WorkspaceSkillsScreen />} />
-            <Route path="profiles" element={<WorkspaceProfilesScreen />} />
-          </Routes>
-        </WorkspaceGate>
-      </WorkspaceShell>
-    </div>
-    </VoiceWorkspaceSettingsProvider>
+      <VoiceWorkspaceSettingsProvider>
+        <div className="hww-outer h-full min-h-0 w-full min-w-0">
+          <WorkspaceShell>
+            <WorkspaceGate>
+              <Routes>
+                <Route index element={<WorkspaceHome />} />
+                <Route path="chat" element={<WorkspaceChatScreen />} />
+                <Route path="files" element={<WorkspaceFilesScreen />} />
+                <Route path="terminal" element={<WorkspaceTerminalScreen />} />
+                <Route path="settings/mcp" element={<WorkspaceMcpSettingsScreen />} />
+                <Route
+                  path="settings/providers"
+                  element={<Navigate to="/workspace/settings?section=hermes" replace />}
+                />
+                <Route path="settings" element={<WorkspaceSettingsScreen />} />
+                <Route path="jobs" element={<WorkspaceJobsScreen />} />
+                <Route path="tasks" element={<WorkspaceTasksScreen />} />
+                <Route path="conductor" element={<WorkspaceConductorScreen />} />
+                <Route path="operations" element={<WorkspaceOperationsScreen />} />
+                <Route path="social/policy" element={<WorkspaceSocialPolicyScreen />} />
+                <Route path="social" element={<WorkspaceSocialScreen />} />
+                <Route path="memory" element={<WorkspaceMemoryScreen />} />
+                <Route path="skills" element={<WorkspaceSkillsScreen />} />
+                <Route path="profiles" element={<WorkspaceProfilesScreen />} />
+              </Routes>
+            </WorkspaceGate>
+          </WorkspaceShell>
+        </div>
+      </VoiceWorkspaceSettingsProvider>
     </WorkspaceHamProjectProvider>
   );
 }

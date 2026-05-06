@@ -57,7 +57,9 @@ export function WorkspaceSettingsFieldRow({
     <div className="flex flex-col gap-1 border-b border-white/[0.06] py-3 last:border-b-0">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <span className="text-[13px] text-white/65">{label}</span>
-        <span className="max-w-[min(100%,28rem)] text-right font-mono text-[12px] text-white/80">{value}</span>
+        <span className="max-w-[min(100%,28rem)] text-right font-mono text-[12px] text-white/80">
+          {value}
+        </span>
       </div>
       {hint ? <p className="text-[11px] leading-snug text-white/35">{hint}</p> : null}
     </div>

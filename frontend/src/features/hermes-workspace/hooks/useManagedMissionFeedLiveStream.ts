@@ -33,14 +33,20 @@ function sortEvents(events: ManagedMissionFeedEvent[]): ManagedMissionFeedEvent[
   return [...events].sort((a, b) => `${a.time}\t${a.id}`.localeCompare(`${b.time}\t${b.id}`));
 }
 
-function mergeEventsDedup(existing: ManagedMissionFeedEvent[], add: ManagedMissionFeedEvent[]): ManagedMissionFeedEvent[] {
+function mergeEventsDedup(
+  existing: ManagedMissionFeedEvent[],
+  add: ManagedMissionFeedEvent[],
+): ManagedMissionFeedEvent[] {
   const m = new Map<string, ManagedMissionFeedEvent>();
   for (const e of existing) m.set(e.id, e);
   for (const e of add) m.set(e.id, e);
   return sortEvents(Array.from(m.values())).slice(-120);
 }
 
-function applyMissionEventRow(prev: ManagedMissionFeedPayload | null, row: ManagedMissionFeedEvent): ManagedMissionFeedPayload | null {
+function applyMissionEventRow(
+  prev: ManagedMissionFeedPayload | null,
+  row: ManagedMissionFeedEvent,
+): ManagedMissionFeedPayload | null {
   if (!prev) return null;
   return { ...prev, events: mergeEventsDedup(prev.events, [row]) };
 }
@@ -74,11 +80,17 @@ export function useManagedMissionFeedLiveStream(
   feedScrollAnchorRef: React.RefObject<HTMLDivElement | null>;
 } {
   const refreshSignal = options?.refreshSignal ?? 0;
-  const trimmed = React.useMemo(() => String(missionRegistryId || "").trim() || null, [missionRegistryId]);
+  const trimmed = React.useMemo(
+    () => String(missionRegistryId || "").trim() || null,
+    [missionRegistryId],
+  );
 
   const [feed, setFeed] = React.useState<ManagedMissionFeedPayload | null>(null);
   const [error, setError] = React.useState<string | null>(null);
-  const [banner, setBanner] = React.useState<ManagedMissionFeedStreamBanner>({ phase: "idle", label: "" });
+  const [banner, setBanner] = React.useState<ManagedMissionFeedStreamBanner>({
+    phase: "idle",
+    label: "",
+  });
   const [firstPollDone, setFirstPollDone] = React.useState(false);
 
   const latestFeedRef = React.useRef<ManagedMissionFeedPayload | null>(null);
@@ -119,7 +131,10 @@ export function useManagedMissionFeedLiveStream(
     };
 
     const delayForPoll = (): number =>
-      managedMissionFeedPollDelayMs(latestFeedRef.current?.lifecycle, document.visibilityState === "hidden");
+      managedMissionFeedPollDelayMs(
+        latestFeedRef.current?.lifecycle,
+        document.visibilityState === "hidden",
+      );
 
     const schedulePoll = () => {
       clearPoll();
@@ -145,7 +160,8 @@ export function useManagedMissionFeedLiveStream(
       if (lastId) lastEventIdRef.current = lastId;
       setFirstPollDone(true);
       const nativeOk =
-        payload.provider_projection?.native_realtime_stream === true && payload.provider_projection?.status === "ok";
+        payload.provider_projection?.native_realtime_stream === true &&
+        payload.provider_projection?.status === "ok";
       setBanner((b) =>
         b.phase === "ended"
           ? b
@@ -153,7 +169,9 @@ export function useManagedMissionFeedLiveStream(
             ? { phase: "reconnecting", label: "Reconnecting live feed…" }
             : {
                 phase: nativeOk ? "live" : "poll_only",
-                label: nativeOk ? "Live SDK stream active · HAM SSE" : "SDK stream unavailable — using REST refresh",
+                label: nativeOk
+                  ? "Live SDK stream active · HAM SSE"
+                  : "SDK stream unavailable — using REST refresh",
               },
       );
       if (terminalFromFeed(payload)) setBanner({ phase: "ended", label: "Mission completed" });
@@ -207,14 +225,18 @@ export function useManagedMissionFeedLiveStream(
 
     const ingestSnapshot = (snap: ManagedMissionFeedPayload) => {
       if (!snap?.mission_id) return;
-      setFeed((prev) => ({ ...snap, events: mergeEventsDedup(prev?.events ?? [], snap.events ?? []) }));
+      setFeed((prev) => ({
+        ...snap,
+        events: mergeEventsDedup(prev?.events ?? [], snap.events ?? []),
+      }));
       const mergedLatest = mergeEventsDedup(latestFeedRef.current?.events ?? [], snap.events ?? []);
       latestFeedRef.current = { ...snap, events: mergedLatest };
       for (const ev of mergedLatest) seenEventIdsRef.current.add(ev.id);
       const lid = mergedLatest.at(-1)?.id;
       if (lid) lastEventIdRef.current = lid;
       const nativeOk =
-        snap.provider_projection?.native_realtime_stream === true && snap.provider_projection?.status === "ok";
+        snap.provider_projection?.native_realtime_stream === true &&
+        snap.provider_projection?.status === "ok";
       setBanner({
         phase: terminalFromFeed(snap) ? "ended" : nativeOk ? "live" : "poll_only",
         label: terminalFromFeed(snap)
@@ -235,9 +257,11 @@ export function useManagedMissionFeedLiveStream(
       const anchor = feedScrollAnchorRef.current;
       const host = anchor?.parentElement;
       const nearBottom = host ? host.scrollHeight - host.scrollTop - host.clientHeight < 80 : true;
-      if (nearBottom && anchor) queueMicrotask(() => anchor.scrollIntoView({ block: "end", behavior: "smooth" }));
+      if (nearBottom && anchor)
+        queueMicrotask(() => anchor.scrollIntoView({ block: "end", behavior: "smooth" }));
 
-      if ((row.kind ?? "") === "completed") setBanner({ phase: "ended", label: "Mission completed" });
+      if ((row.kind ?? "") === "completed")
+        setBanner({ phase: "ended", label: "Mission completed" });
     };
 
     const applyMsg = (msg: SseMessage) => {
@@ -273,7 +297,8 @@ export function useManagedMissionFeedLiveStream(
         try {
           const proj = JSON.parse(msg.data);
           setFeed((prev) => (prev ? { ...prev, provider_projection: proj } : prev));
-          if (latestFeedRef.current) latestFeedRef.current = { ...latestFeedRef.current, provider_projection: proj };
+          if (latestFeedRef.current)
+            latestFeedRef.current = { ...latestFeedRef.current, provider_projection: proj };
           if (proj?.native_realtime_stream === true && proj?.status === "ok")
             setBanner({ phase: "live", label: "Live SDK stream active · HAM SSE" });
         } catch {
@@ -299,7 +324,9 @@ export function useManagedMissionFeedLiveStream(
 
         try {
           setBanner((b) =>
-            b.phase === "ended" ? b : { phase: "connecting", label: "Connecting live mission feed…" },
+            b.phase === "ended"
+              ? b
+              : { phase: "connecting", label: "Connecting live mission feed…" },
           );
 
           const path = `/api/cursor/managed/missions/${encodeURIComponent(trimmed as string)}/feed/stream`;

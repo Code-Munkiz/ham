@@ -7,7 +7,9 @@ export type WorkspaceHamProjectContextValue = {
   setHamProjectId: (id: string | null) => void;
 };
 
-const WorkspaceHamProjectContext = React.createContext<WorkspaceHamProjectContextValue | null>(null);
+const WorkspaceHamProjectContext = React.createContext<WorkspaceHamProjectContextValue | null>(
+  null,
+);
 
 export function WorkspaceHamProjectProvider({ children }: { children: React.ReactNode }) {
   const [hamProjectId, setState] = React.useState<string | null>(() => {
@@ -37,7 +39,11 @@ export function WorkspaceHamProjectProvider({ children }: { children: React.Reac
     [hamProjectId, setHamProjectId],
   );
 
-  return <WorkspaceHamProjectContext.Provider value={value}>{children}</WorkspaceHamProjectContext.Provider>;
+  return (
+    <WorkspaceHamProjectContext.Provider value={value}>
+      {children}
+    </WorkspaceHamProjectContext.Provider>
+  );
 }
 
 export function useWorkspaceHamProject(): WorkspaceHamProjectContextValue {

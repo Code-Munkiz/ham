@@ -142,7 +142,10 @@ export function buildHamApiStatusUrl(): string {
  * Clerk session on `Authorization` when present; otherwise legacy `Authorization: Bearer` for HAM secrets.
  * When both are needed, sets `X-Ham-Operator-Authorization` for the HAM token.
  */
-export async function applyHamOperatorSecretHeaders(headers: Headers, hamBearerToken: string): Promise<void> {
+export async function applyHamOperatorSecretHeaders(
+  headers: Headers,
+  hamBearerToken: string,
+): Promise<void> {
   await mergeClerkAuthBearerIfNeeded(headers);
   const ham = hamBearerToken.trim();
   if (!ham) return;
@@ -404,7 +407,9 @@ export async function fetchVoiceSettings(): Promise<HamVoiceSettingsPayload> {
 }
 
 /** PATCH /api/workspace/voice-settings — partial updates; returns normalized saved settings. */
-export async function patchVoiceSettings(patch: HamVoiceSettingsPatch): Promise<HamVoiceSettingsPayload> {
+export async function patchVoiceSettings(
+  patch: HamVoiceSettingsPatch,
+): Promise<HamVoiceSettingsPayload> {
   const res = await hamApiFetch("/api/workspace/voice-settings", {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
@@ -414,7 +419,8 @@ export async function patchVoiceSettings(patch: HamVoiceSettingsPatch): Promise<
     let detail = `HTTP ${res.status}`;
     try {
       const j = (await res.json()) as { detail?: unknown };
-      if (j.detail !== undefined) detail = typeof j.detail === "string" ? j.detail : JSON.stringify(j.detail);
+      if (j.detail !== undefined)
+        detail = typeof j.detail === "string" ? j.detail : JSON.stringify(j.detail);
     } catch {
       /* ignore */
     }
@@ -620,7 +626,9 @@ export async function postCursorAgentSync(agentId: string): Promise<ManagedMissi
     method: "POST",
   });
   if (res.status === 404) {
-    throw new Error("No managed mission for this Cloud Agent. Try after a managed launch is recorded.");
+    throw new Error(
+      "No managed mission for this Cloud Agent. Try after a managed launch is recorded.",
+    );
   }
   if (!res.ok) {
     const msg = (await readFastApiDetail(res)) ?? `HTTP ${res.status}`;
@@ -723,7 +731,9 @@ export async function fetchManagedDeployHookStatus(
   agentId?: string | null,
 ): Promise<ManagedDeployHookStatusPayload> {
   const q = agentId?.trim() ? new URLSearchParams({ agent_id: agentId.trim() }) : null;
-  const res = await hamApiFetch(q ? `/api/cursor/managed/deploy-hook?${q.toString()}` : "/api/cursor/managed/deploy-hook");
+  const res = await hamApiFetch(
+    q ? `/api/cursor/managed/deploy-hook?${q.toString()}` : "/api/cursor/managed/deploy-hook",
+  );
   if (!res.ok) return { configured: false };
   return res.json() as Promise<ManagedDeployHookStatusPayload>;
 }
@@ -882,7 +892,9 @@ export type VercelManagedDeployStatus = {
   vercel_mapping?: VercelListMapping;
 };
 
-export async function fetchVercelManagedDeployStatus(agentId: string): Promise<VercelManagedDeployStatus> {
+export async function fetchVercelManagedDeployStatus(
+  agentId: string,
+): Promise<VercelManagedDeployStatus> {
   const q = new URLSearchParams({ agent_id: agentId.trim() });
   const res = await hamApiFetch(`/api/cursor/managed/vercel/deploy-status?${q.toString()}`);
   if (!res.ok) {
@@ -893,7 +905,12 @@ export async function fetchVercelManagedDeployStatus(agentId: string): Promise<V
 }
 
 /** GET /api/cursor/managed/vercel/post-deploy-validation — server-side HTTP probe (deployment URL from Vercel match only). */
-export type PostDeployValidationState = "not_attempted" | "pending" | "passed" | "failed" | "inconclusive";
+export type PostDeployValidationState =
+  | "not_attempted"
+  | "pending"
+  | "passed"
+  | "failed"
+  | "inconclusive";
 
 export type VercelPostDeployValidationPayload = {
   state: PostDeployValidationState;
@@ -923,7 +940,9 @@ export async function fetchVercelPostDeployValidation(
 ): Promise<VercelPostDeployValidationResponse> {
   const q = new URLSearchParams({ agent_id: agentId.trim() });
   if (options?.force) q.set("force", "true");
-  const res = await hamApiFetch(`/api/cursor/managed/vercel/post-deploy-validation?${q.toString()}`);
+  const res = await hamApiFetch(
+    `/api/cursor/managed/vercel/post-deploy-validation?${q.toString()}`,
+  );
   if (!res.ok) {
     const detail = (await readFastApiDetail(res)) ?? `HTTP ${res.status}`;
     throw new Error(detail);
@@ -939,7 +958,8 @@ export async function postManagedDeployHook(agentId: string): Promise<ManagedDep
     body: JSON.stringify({ agent_id: agentId.trim() }),
   });
   if (res.status === 503) {
-    const detail = (await readFastApiDetail(res)) ?? "Deploy hook is not configured on the API host.";
+    const detail =
+      (await readFastApiDetail(res)) ?? "Deploy hook is not configured on the API host.";
     return {
       ok: false,
       outcome: "not_configured",
@@ -1271,10 +1291,7 @@ export async function closeBrowserSession(sessionId: string, ownerKey: string): 
   }
 }
 
-export async function captureBrowserScreenshot(
-  sessionId: string,
-  ownerKey: string,
-): Promise<Blob> {
+export async function captureBrowserScreenshot(sessionId: string, ownerKey: string): Promise<Blob> {
   const res = await hamApiFetch(
     `/api/browser/sessions/${encodeURIComponent(sessionId)}/screenshot`,
     {
@@ -1386,9 +1403,7 @@ export async function postCursorAgentFollowup(
   return res.json() as Promise<Record<string, unknown>>;
 }
 
-export async function fetchProjectContextEngine(
-  projectId: string,
-): Promise<ContextEnginePayload> {
+export async function fetchProjectContextEngine(projectId: string): Promise<ContextEnginePayload> {
   const res = await hamApiFetch(`/api/projects/${encodeURIComponent(projectId)}/context-engine`);
   if (!res.ok) {
     const structured = await hamApiErrorDetailMessage(res);
@@ -1548,9 +1563,7 @@ function messageFromFastApiDetail(detail: unknown): string | null {
   if (Array.isArray(detail)) {
     const parts = detail
       .map((x) =>
-        typeof x === "object" && x !== null && "msg" in x
-          ? String((x as { msg: string }).msg)
-          : "",
+        typeof x === "object" && x !== null && "msg" in x ? String((x as { msg: string }).msg) : "",
       )
       .filter(Boolean);
     return parts.length ? parts.join("; ") : null;
@@ -1632,7 +1645,10 @@ export async function fetchChatSessions(
   offset = 0,
   workspaceId?: string | null,
 ): Promise<{ sessions: ChatSessionSummary[] }> {
-  const path = appendWorkspaceIdToPath(`/api/chat/sessions?limit=${limit}&offset=${offset}`, workspaceId);
+  const path = appendWorkspaceIdToPath(
+    `/api/chat/sessions?limit=${limit}&offset=${offset}`,
+    workspaceId,
+  );
   const res = await hamApiFetch(path);
   if (!res.ok) {
     const target = apiUrl(path);
@@ -1649,7 +1665,10 @@ export async function fetchChatSession(
   sessionId: string,
   workspaceId?: string | null,
 ): Promise<ChatSessionDetail> {
-  const path = appendWorkspaceIdToPath(`/api/chat/sessions/${encodeURIComponent(sessionId)}`, workspaceId);
+  const path = appendWorkspaceIdToPath(
+    `/api/chat/sessions/${encodeURIComponent(sessionId)}`,
+    workspaceId,
+  );
   const res = await hamApiFetch(path);
   if (!res.ok) {
     if (res.status === 404) throw new Error("Session not found");
@@ -1659,8 +1678,14 @@ export async function fetchChatSession(
 }
 
 /** Delete persisted chat transcript for a session (`session_id` only; server-side store). */
-export async function deleteChatSession(sessionId: string, workspaceId?: string | null): Promise<void> {
-  const path = appendWorkspaceIdToPath(`/api/chat/sessions/${encodeURIComponent(sessionId)}`, workspaceId);
+export async function deleteChatSession(
+  sessionId: string,
+  workspaceId?: string | null,
+): Promise<void> {
+  const path = appendWorkspaceIdToPath(
+    `/api/chat/sessions/${encodeURIComponent(sessionId)}`,
+    workspaceId,
+  );
   const res = await hamApiFetch(path, { method: "DELETE" });
   if (!res.ok) {
     if (res.status === 404) throw new Error("Session not found");
@@ -1692,7 +1717,9 @@ export async function fetchChatContextMeters(opts: {
   return (await res.json()) as ChatContextMetersPayload;
 }
 
-export async function fetchChatCapabilities(modelId: string | null): Promise<ChatCapabilitiesPayload> {
+export async function fetchChatCapabilities(
+  modelId: string | null,
+): Promise<ChatCapabilitiesPayload> {
   const qp = modelId?.trim() ? `?model_id=${encodeURIComponent(modelId.trim())}` : "";
   const res = await hamApiFetch(`/api/chat/capabilities${qp}`);
   if (!res.ok) {
@@ -1708,7 +1735,10 @@ export async function downloadChatSessionPdf(
   sessionId: string,
   workspaceId?: string | null,
 ): Promise<void> {
-  const path = appendWorkspaceIdToPath(`/api/chat/sessions/${encodeURIComponent(sessionId)}/export.pdf`, workspaceId);
+  const path = appendWorkspaceIdToPath(
+    `/api/chat/sessions/${encodeURIComponent(sessionId)}/export.pdf`,
+    workspaceId,
+  );
   const res = await hamApiFetch(path);
   if (!res.ok) {
     if (res.status === 404) throw new Error("Session not found");
@@ -1753,7 +1783,10 @@ export async function appendChatSessionTurns(
   turns: ChatSessionTurn[],
   workspaceId?: string | null,
 ): Promise<{ session_id: string; messages: HamChatMessage[] }> {
-  const path = appendWorkspaceIdToPath(`/api/chat/sessions/${encodeURIComponent(sessionId)}/turns`, workspaceId);
+  const path = appendWorkspaceIdToPath(
+    `/api/chat/sessions/${encodeURIComponent(sessionId)}/turns`,
+    workspaceId,
+  );
   const res = await hamApiFetch(path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1989,7 +2022,10 @@ export async function postChatStream(
 /**
  * Multipart voice clip → server-side OpenAI transcription; appends returned text in the UI.
  */
-export async function postChatTranscribe(audio: Blob, filename: string = "dictation.webm"): Promise<string> {
+export async function postChatTranscribe(
+  audio: Blob,
+  filename: string = "dictation.webm",
+): Promise<string> {
   const fd = new FormData();
   fd.append("file", audio, filename);
   const headers = new Headers();
@@ -2002,7 +2038,10 @@ export async function postChatTranscribe(audio: Blob, filename: string = "dictat
     } catch {
       detail = undefined;
     }
-    const d = typeof detail === "object" && detail !== null ? (detail as { detail?: unknown }).detail : undefined;
+    const d =
+      typeof detail === "object" && detail !== null
+        ? (detail as { detail?: unknown }).detail
+        : undefined;
     if (fastApiStructuredErrorCode(d) === "HAM_EMAIL_RESTRICTION") {
       throw new HamAccessRestrictedError(
         messageFromFastApiDetail(d) ?? "Access restricted for this Ham deployment.",
@@ -2013,15 +2052,12 @@ export async function postChatTranscribe(audio: Blob, filename: string = "dictat
       res.status === 503 &&
       (errCode === "TRANSCRIPTION_NOT_CONFIGURED" || errCode === "TRANSCRIPTION_PROVIDER_REJECTED")
     ) {
-      throw new Error(
-        "Transcription failed. Check HAM transcription configuration.",
-      );
+      throw new Error("Transcription failed. Check HAM transcription configuration.");
     }
     if (res.status === 502 && errCode === "TRANSCRIPTION_UPSTREAM_FAILED") {
       throw new Error("Transcription failed. Check HAM transcription configuration.");
     }
-    const msg =
-      messageFromFastApiDetail(d) ?? `Transcription failed (HTTP ${res.status}).`;
+    const msg = messageFromFastApiDetail(d) ?? `Transcription failed (HTTP ${res.status}).`;
     throw new Error(msg);
   }
   const data = (await res.json()) as { text?: string };
@@ -2392,9 +2428,7 @@ export async function fetchCapabilityDirectoryBundle(
   );
   if (!res.ok) {
     const msg = await detailMessageFromResponse(res);
-    throw new Error(
-      msg || `capability-directory/bundles/${bundleId}: HTTP ${res.status}`,
-    );
+    throw new Error(msg || `capability-directory/bundles/${bundleId}: HTTP ${res.status}`);
   }
   return res.json() as Promise<CapabilityDirectoryBundleResponse>;
 }
@@ -2466,7 +2500,9 @@ export async function fetchCapabilityLibraryWriteStatus(): Promise<CapabilityLib
   return res.json() as Promise<CapabilityLibraryWriteStatus>;
 }
 
-export async function fetchCapabilityLibrary(projectId: string): Promise<CapabilityLibraryResponse> {
+export async function fetchCapabilityLibrary(
+  projectId: string,
+): Promise<CapabilityLibraryResponse> {
   const res = await hamApiFetch(
     `/api/capability-library/library?project_id=${encodeURIComponent(projectId)}`,
   );
@@ -2750,17 +2786,14 @@ export async function postSettingsApply(
 }> {
   const headers = new Headers({ "Content-Type": "application/json" });
   await applyHamOperatorSecretHeaders(headers, bearerToken);
-  const res = await fetch(
-    apiUrl(`/api/projects/${encodeURIComponent(projectId)}/settings/apply`),
-    {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        changes,
-        base_revision: baseRevision,
-      }),
-    },
-  );
+  const res = await fetch(apiUrl(`/api/projects/${encodeURIComponent(projectId)}/settings/apply`), {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      changes,
+      base_revision: baseRevision,
+    }),
+  });
   if (!res.ok) {
     const msg = await detailMessageFromResponse(res);
     throw new Error(msg || `settings apply failed (HTTP ${res.status})`);

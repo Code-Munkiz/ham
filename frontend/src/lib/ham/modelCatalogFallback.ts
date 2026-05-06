@@ -1,7 +1,6 @@
 import type { ModelCatalogPayload } from "./types";
 
-const CURSOR_NOTE =
-  "Dashboard chat is OpenRouter-backed; Cursor models use Cloud Agents API.";
+const CURSOR_NOTE = "Dashboard chat is OpenRouter-backed; Cursor models use Cloud Agents API.";
 
 /**
  * Shown when `GET /api/models` fails (API down, CORS, or wrong VITE_HAM_API_BASE).
@@ -33,7 +32,8 @@ export const CLIENT_MODEL_CATALOG_FALLBACK: ModelCatalogPayload = {
       provider: "openrouter",
       description: "Unified access via Ham chat gateway (when API is reachable).",
       supports_chat: false,
-      disabled_reason: "Could not load catalog from Ham API. Check VITE_HAM_API_BASE and that FastAPI is running.",
+      disabled_reason:
+        "Could not load catalog from Ham API. Check VITE_HAM_API_BASE and that FastAPI is running.",
     },
     {
       id: "tier:auto",

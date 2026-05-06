@@ -38,7 +38,8 @@ export function tryParseHamChatUserV2String(raw: string): HamChatUserContentV2 |
   if (!t.startsWith("{")) return null;
   try {
     const o = JSON.parse(t) as unknown;
-    if (!o || typeof o !== "object" || (o as HamChatUserContentV2).h !== HAM_CHAT_USER_V2) return null;
+    if (!o || typeof o !== "object" || (o as HamChatUserContentV2).h !== HAM_CHAT_USER_V2)
+      return null;
     return o as HamChatUserContentV2;
   } catch {
     return null;
@@ -50,7 +51,8 @@ export function tryParseHamChatUserV1String(raw: string): HamChatUserContentV1 |
   if (!t.startsWith("{")) return null;
   try {
     const o = JSON.parse(t) as unknown;
-    if (!o || typeof o !== "object" || (o as HamChatUserContentV1).h !== HAM_CHAT_USER_V1) return null;
+    if (!o || typeof o !== "object" || (o as HamChatUserContentV1).h !== HAM_CHAT_USER_V1)
+      return null;
     return o as HamChatUserContentV1;
   } catch {
     return null;

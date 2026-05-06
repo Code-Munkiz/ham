@@ -1,4 +1,4 @@
-import { RunRecord, BackendRecord, ActivityEvent, Agent, ApiKey } from './types';
+import { RunRecord, BackendRecord, ActivityEvent, Agent, ApiKey } from "./types";
 
 export const MOCK_BACKENDS: BackendRecord[] = [
   {
@@ -6,22 +6,22 @@ export const MOCK_BACKENDS: BackendRecord[] = [
     version: "1.4.2",
     display_name: "AWS Lambda (US-East-1)",
     metadata: { runtime: "node20", memory: "1024MB" },
-    is_default: true
+    is_default: true,
   },
   {
     id: "k8s-pod-executor",
     version: "0.9.5",
     display_name: "Kubernetes Runner",
     metadata: { cluster: "prod-cluster-01", namespace: "ham-runners" },
-    is_default: false
+    is_default: false,
   },
   {
     id: "local-pty-bridge",
     version: "3.0.0",
     display_name: "Local PTY Bridge",
     metadata: { mode: "interactive" },
-    is_default: false
-  }
+    is_default: false,
+  },
 ];
 
 export const MOCK_RUNS: RunRecord[] = [
@@ -87,7 +87,10 @@ export const MOCK_RUNS: RunRecord[] = [
     },
     hermes_review: {
       ok: true,
-      notes: ["Repository is clean of immediate high-risk secrets.", "Recommend periodic rotation of environment placeholders."],
+      notes: [
+        "Repository is clean of immediate high-risk secrets.",
+        "Recommend periodic rotation of environment placeholders.",
+      ],
       code: "REVIEW_PASSED",
     },
   },
@@ -136,7 +139,10 @@ export const MOCK_RUNS: RunRecord[] = [
     },
     hermes_review: {
       ok: false,
-      notes: ["Performance degradation detected at 8k RPS.", "Memory pressure on auth-svc-pod-2 suspected."],
+      notes: [
+        "Performance degradation detected at 8k RPS.",
+        "Memory pressure on auth-svc-pod-2 suspected.",
+      ],
       code: "THRESHOLD_EXCEEDED",
       context: "Auth service memory reached 95% capacity during ramp-up.",
     },
@@ -153,9 +159,11 @@ export const MOCK_AGENTS: Agent[] = [
     status: "Ready",
     keyConnected: true,
     assignedTools: ["Git Inspector", "File System", "Code Parser"],
-    description: "Specializes in writing high-quality TypeScript and React code with a focus on durability and clean architecture.",
+    description:
+      "Specializes in writing high-quality TypeScript and React code with a focus on durability and clean architecture.",
     notes: "Currently working on the workbench overhaul.",
-    systemPrompt: "You are a lead systems architect and senior engineer. Your goal is to implement robust, well-tested, and clean code. Always prioritize readability and performance. Use modern TypeScript patterns.",
+    systemPrompt:
+      "You are a lead systems architect and senior engineer. Your goal is to implement robust, well-tested, and clean code. Always prioritize readability and performance. Use modern TypeScript patterns.",
     traits: ["methodical", "concise", "security-focused"],
     knowledgeAreas: ["TypeScript", "React", "API Design", "Testing"],
     communicationStyle: "Technical & Precise",
@@ -166,7 +174,7 @@ export const MOCK_AGENTS: Agent[] = [
     requireApprovalFor: ["File deletion", "Git push/commit", "Shell commands"],
     memoryEnabled: true,
     memoryScope: "This Project",
-    knowledgeSources: [{ name: "HAM Core Docs", id: "ks_01" }]
+    knowledgeSources: [{ name: "HAM Core Docs", id: "ks_01" }],
   },
   {
     id: "agt_02",
@@ -177,11 +185,12 @@ export const MOCK_AGENTS: Agent[] = [
     status: "Ready",
     keyConnected: true,
     assignedTools: ["Neural Auditor", "Diff Analysis"],
-    description: "Evaluates pull requests for security vulnerabilities, architectural consistency, and performance bottlenecks.",
+    description:
+      "Evaluates pull requests for security vulnerabilities, architectural consistency, and performance bottlenecks.",
     notes: "Aggressive on security policies.",
     traits: ["meticulous", "critical", "security-first"],
     communicationStyle: "Minimal / Terse",
-    reasoningDepth: "Deep"
+    reasoningDepth: "Deep",
   },
   {
     id: "agt_03",
@@ -192,10 +201,11 @@ export const MOCK_AGENTS: Agent[] = [
     status: "Needs Setup",
     keyConnected: false,
     assignedTools: ["Web Search"],
-    description: "Finds documentation, external libraries, and technical solutions for complex engineering problems.",
+    description:
+      "Finds documentation, external libraries, and technical solutions for complex engineering problems.",
     notes: "Awaiting API key verification.",
     communicationStyle: "Detailed & Educational",
-    reasoningDepth: "Fast"
+    reasoningDepth: "Fast",
   },
   {
     id: "agt_04",
@@ -206,10 +216,11 @@ export const MOCK_AGENTS: Agent[] = [
     status: "Ready",
     keyConnected: true,
     assignedTools: ["Project Graph", "Dependency Mapper"],
-    description: "Breaks down high-level user requests into actionable technical tasks for the rest of the team.",
+    description:
+      "Breaks down high-level user requests into actionable technical tasks for the rest of the team.",
     notes: "Primary entry point for system directives.",
     communicationStyle: "Conversational",
-    autonomyLevel: "Supervised"
+    autonomyLevel: "Supervised",
   },
   {
     id: "agt_05",
@@ -220,12 +231,13 @@ export const MOCK_AGENTS: Agent[] = [
     status: "Working",
     keyConnected: true,
     assignedTools: ["Vitest Runner", "Playwright Bridge"],
-    description: "Ensures the application works as expected by generating and running comprehensive test suites.",
+    description:
+      "Ensures the application works as expected by generating and running comprehensive test suites.",
     notes: "Validating the new ModelPicker component.",
     traits: ["thorough", "edge-case-obsessed"],
     autonomyLevel: "Full Auto",
-    safeMode: false
-  }
+    safeMode: false,
+  },
 ];
 
 export const MOCK_KEYS: ApiKey[] = [
@@ -234,22 +246,22 @@ export const MOCK_KEYS: ApiKey[] = [
     provider: "Anthropic",
     maskedKey: "sk-ant-••••••••••••••••••••••••",
     status: "Connected",
-    assignedAgents: ["Builder", "Coordinator"]
+    assignedAgents: ["Builder", "Coordinator"],
   },
   {
     id: "key_02",
     provider: "OpenAI",
     maskedKey: "sk-proj-••••••••••••••••••••••••",
     status: "Connected",
-    assignedAgents: ["Reviewer", "QA"]
+    assignedAgents: ["Reviewer", "QA"],
   },
   {
     id: "key_03",
     provider: "Perplexity",
     maskedKey: "pplx-••••••••••••••••••••••••",
     status: "Inactive",
-    assignedAgents: ["Researcher"]
-  }
+    assignedAgents: ["Researcher"],
+  },
 ];
 
 export const MOCK_ACTIVITY: ActivityEvent[] = [
@@ -259,7 +271,7 @@ export const MOCK_ACTIVITY: ActivityEvent[] = [
     level: "info",
     source: "ham",
     message: "Run run_881a2b completed successfully using profile security-audit-v1.",
-    timestamp: new Date(Date.now() - 3600000).toISOString()
+    timestamp: new Date(Date.now() - 3600000).toISOString(),
   },
   {
     id: "evt_02",
@@ -267,7 +279,7 @@ export const MOCK_ACTIVITY: ActivityEvent[] = [
     level: "warn",
     source: "droid",
     message: "Malformed file skip: .DS_Store could not be parsed as UTF-8 in run_881a2b.",
-    timestamp: new Date(Date.now() - 3650000).toISOString()
+    timestamp: new Date(Date.now() - 3650000).toISOString(),
   },
   {
     id: "evt_03",
@@ -275,7 +287,7 @@ export const MOCK_ACTIVITY: ActivityEvent[] = [
     level: "error",
     source: "ham",
     message: "Hermes Review FAILED for run_992c3d: THRESHOLD_EXCEEDED.",
-    timestamp: new Date(Date.now() - 7200000).toISOString()
+    timestamp: new Date(Date.now() - 7200000).toISOString(),
   },
   {
     id: "evt_04",
@@ -283,7 +295,7 @@ export const MOCK_ACTIVITY: ActivityEvent[] = [
     level: "warn",
     source: "cloud_agent",
     message: "Artifact persistence delayed for run_992c3d due to backend latency.",
-    timestamp: new Date(Date.now() - 7100000).toISOString()
+    timestamp: new Date(Date.now() - 7100000).toISOString(),
   },
   {
     id: "evt_05",
@@ -291,7 +303,7 @@ export const MOCK_ACTIVITY: ActivityEvent[] = [
     level: "info",
     source: "cursor",
     message: "Cursor task linked to session ses_3f9a1 (repository index refreshed).",
-    timestamp: new Date(Date.now() - 1800000).toISOString()
+    timestamp: new Date(Date.now() - 1800000).toISOString(),
   },
   {
     id: "evt_06",
@@ -299,14 +311,15 @@ export const MOCK_ACTIVITY: ActivityEvent[] = [
     level: "info",
     source: "factory_ai",
     message: "Factory pipeline batch fp_12 queued; worker capacity OK.",
-    timestamp: new Date(Date.now() - 900000).toISOString()
+    timestamp: new Date(Date.now() - 900000).toISOString(),
   },
   {
     id: "evt_07",
     type: "runtime_event",
     level: "warn",
-    message: "Legacy event shape (no source field) — should display UNKNOWN in UI until backfilled.",
+    message:
+      "Legacy event shape (no source field) — should display UNKNOWN in UI until backfilled.",
     timestamp: new Date(Date.now() - 600000).toISOString(),
-    metadata: { note: "intentional missing source" }
-  }
+    metadata: { note: "intentional missing source" },
+  },
 ];

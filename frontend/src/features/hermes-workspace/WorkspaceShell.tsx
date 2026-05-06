@@ -118,11 +118,7 @@ function WorkspaceSideNav({
   const [workspaceNavOpen, setWorkspaceNavOpen] = React.useState(true);
   const [knowledgeNavOpen, setKnowledgeNavOpen] = React.useState(true);
 
-  const sectionToggle = (
-    label: string,
-    open: boolean,
-    onToggle: () => void,
-  ) =>
+  const sectionToggle = (label: string, open: boolean, onToggle: () => void) =>
     c ? null : (
       <button
         type="button"
@@ -131,7 +127,11 @@ function WorkspaceSideNav({
         aria-expanded={open}
       >
         <span>{label}</span>
-        {open ? <ChevronDown className="h-3.5 w-3.5 opacity-70" /> : <ChevronRight className="h-3.5 w-3.5 opacity-70" />}
+        {open ? (
+          <ChevronDown className="h-3.5 w-3.5 opacity-70" />
+        ) : (
+          <ChevronRight className="h-3.5 w-3.5 opacity-70" />
+        )}
       </button>
     );
   const filteredSessions = React.useMemo(() => {
@@ -141,7 +141,10 @@ function WorkspaceSideNav({
       const preview = (s.preview || "").toLowerCase();
       const date = (s.created_at || "").toLowerCase();
       return (
-        id.includes(q) || preview.includes(q) || date.includes(q) || String(s.turn_count).includes(q)
+        id.includes(q) ||
+        preview.includes(q) ||
+        date.includes(q) ||
+        String(s.turn_count).includes(q)
       );
     });
   }, [sessions, q]);
@@ -241,7 +244,9 @@ function WorkspaceSideNav({
                     : "border-white/[0.04] bg-black/20 text-white/70 hover:border-white/10 hover:bg-white/[0.04]",
                 )}
               >
-                <p className="line-clamp-2 text-[11px] leading-snug text-white/85">{sessionCardTitle(s.preview)}</p>
+                <p className="line-clamp-2 text-[11px] leading-snug text-white/85">
+                  {sessionCardTitle(s.preview)}
+                </p>
                 {sub ? <p className="mt-0.5 truncate text-[10px] text-white/45">{sub}</p> : null}
               </Link>
               {onDeleteSession ? (
@@ -273,10 +278,16 @@ function WorkspaceSideNav({
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <div
-        className={cn("mb-4 flex items-center justify-between gap-1 px-0.5", c && "mb-2 flex-col gap-2")}
+        className={cn(
+          "mb-4 flex items-center justify-between gap-1 px-0.5",
+          c && "mb-2 flex-col gap-2",
+        )}
       >
         <div
-          className={cn("flex min-w-0 items-center", c ? "w-full flex-col justify-center" : "gap-2")}
+          className={cn(
+            "flex min-w-0 items-center",
+            c ? "w-full flex-col justify-center" : "gap-2",
+          )}
         >
           <img
             src={brandLogoSrc}
@@ -285,9 +296,7 @@ function WorkspaceSideNav({
             width={28}
             height={28}
           />
-          <div
-            className={cn("min-w-0", c && "hidden")}
-          >
+          <div className={cn("min-w-0", c && "hidden")}>
             <p className="truncate text-[10px] font-semibold uppercase tracking-[0.12em] text-white/80">
               {isChatRoute ? "Chat" : "HAM's Workspace"}
             </p>
@@ -302,7 +311,11 @@ function WorkspaceSideNav({
               aria-label={c ? "Expand sidebar" : "Collapse sidebar"}
               title={c ? "Expand sidebar" : "Collapse sidebar"}
             >
-              {c ? <PanelLeft className="h-4 w-4" strokeWidth={1.5} /> : <PanelLeftClose className="h-4 w-4" strokeWidth={1.5} />}
+              {c ? (
+                <PanelLeft className="h-4 w-4" strokeWidth={1.5} />
+              ) : (
+                <PanelLeftClose className="h-4 w-4" strokeWidth={1.5} />
+              )}
             </button>
           ) : null}
           {showClose && onClose ? (
@@ -415,9 +428,7 @@ function WorkspaceSideNav({
           {sectionToggle("Knowledge", knowledgeNavOpen, () => setKnowledgeNavOpen((v) => !v))}
           {knowledgeNavOpen ? knowledgeNav : null}
           <div className="hww-side-section">Sessions</div>
-          {expandedSessionsContent(
-            "mb-2 max-h-44 min-h-0 space-y-1 overflow-y-auto pr-0.5",
-          )}
+          {expandedSessionsContent("mb-2 max-h-44 min-h-0 space-y-1 overflow-y-auto pr-0.5")}
         </>
       )}
 
@@ -471,11 +482,7 @@ function WorkspaceSideNav({
               height={32}
               aria-hidden
             />
-            <span
-              className={cn("text-[11px] font-medium text-white/40", c && "sr-only")}
-            >
-              HAM
-            </span>
+            <span className={cn("text-[11px] font-medium text-white/40", c && "sr-only")}>HAM</span>
           </a>
         ) : (
           <Link
@@ -496,11 +503,7 @@ function WorkspaceSideNav({
               height={32}
               aria-hidden
             />
-            <span
-              className={cn("text-[11px] font-medium text-white/40", c && "sr-only")}
-            >
-              HAM
-            </span>
+            <span className={cn("text-[11px] font-medium text-white/40", c && "sr-only")}>HAM</span>
           </Link>
         )}
       </div>
@@ -548,7 +551,8 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
 
   const [deletingSessionId, setDeletingSessionId] = React.useState<string | null>(null);
   const canLoadSessions = hamWorkspace.state.status === "ready";
-  const activeWorkspaceId = hamWorkspace.state.status === "ready" ? hamWorkspace.state.activeWorkspaceId : null;
+  const activeWorkspaceId =
+    hamWorkspace.state.status === "ready" ? hamWorkspace.state.activeWorkspaceId : null;
   const sessionsRequestSeqRef = React.useRef(0);
 
   const loadSessions = React.useCallback(async () => {
@@ -590,7 +594,11 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
   const handleDeleteSession = React.useCallback(
     async (sid: string) => {
       if (!canLoadSessions) return;
-      if (!globalThis.confirm("Delete this chat thread? Server-stored messages for this session will be removed.")) {
+      if (
+        !globalThis.confirm(
+          "Delete this chat thread? Server-stored messages for this session will be removed.",
+        )
+      ) {
         return;
       }
       setDeletingSessionId(sid);
@@ -726,7 +734,10 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           {children}
           {isWorkspaceChat && terminalDockVisible ? (
-            <div className="shrink-0 border-t border-white/[0.06] bg-[#030a0f]/90" data-testid="hww-chat-terminal-dock">
+            <div
+              className="shrink-0 border-t border-white/[0.06] bg-[#030a0f]/90"
+              data-testid="hww-chat-terminal-dock"
+            >
               {chatTerminalDockOpen ? (
                 <div className="h-[min(14rem,38vh)] min-h-0 w-full">
                   <WorkspaceTerminalView

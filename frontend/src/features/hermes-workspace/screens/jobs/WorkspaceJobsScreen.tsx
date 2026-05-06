@@ -14,7 +14,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { workspaceJobsAdapter, type WorkspaceJob } from "../../adapters/jobsAdapter";
-import { WorkspaceSurfaceHeader, WorkspaceSurfaceStateCard } from "../../components/workspaceSurfaceChrome";
+import {
+  WorkspaceSurfaceHeader,
+  WorkspaceSurfaceStateCard,
+} from "../../components/workspaceSurfaceChrome";
 
 function fmt(ts: number) {
   return new Date(ts * 1000).toLocaleString();
@@ -132,11 +135,7 @@ export function WorkspaceJobsScreen() {
   const filteredHint = searchApplied ? (
     <span className="text-[11px] text-white/50">
       Filtered by <span className="text-amber-200/80">&quot;{searchApplied}&quot;</span>
-      <button
-        type="button"
-        className="ml-2 underline"
-        onClick={clearFilter}
-      >
+      <button type="button" className="ml-2 underline" onClick={clearFilter}>
         Clear
       </button>
     </span>
@@ -162,7 +161,12 @@ export function WorkspaceJobsScreen() {
               <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
               Refresh
             </Button>
-            <Button type="button" size="sm" className="h-7 gap-1" onClick={() => setNewOpen((v) => !v)}>
+            <Button
+              type="button"
+              size="sm"
+              className="h-7 gap-1"
+              onClick={() => setNewOpen((v) => !v)}
+            >
               <Plus className="h-3.5 w-3.5" />
               New job
             </Button>
@@ -180,7 +184,13 @@ export function WorkspaceJobsScreen() {
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && applySearch()}
           />
-          <Button type="button" size="sm" variant="ghost" className="h-6 text-[10px]" onClick={applySearch}>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-6 text-[10px]"
+            onClick={applySearch}
+          >
             Search
           </Button>
         </div>
@@ -207,7 +217,12 @@ export function WorkspaceJobsScreen() {
             <Button type="button" size="sm" variant="ghost" onClick={() => setNewOpen(false)}>
               Cancel
             </Button>
-            <Button type="button" size="sm" onClick={() => void onCreate()} disabled={!newName.trim() || actionBusy === "new"}>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => void onCreate()}
+              disabled={!newName.trim() || actionBusy === "new"}
+            >
               Create
             </Button>
           </div>
@@ -236,9 +251,7 @@ export function WorkspaceJobsScreen() {
       )}
 
       <div className="mt-3 min-h-0 flex-1 overflow-y-auto pr-0.5">
-        {loading && jobs.length === 0 && (
-          <p className="text-[11px] text-white/40">Loading…</p>
-        )}
+        {loading && jobs.length === 0 && <p className="text-[11px] text-white/40">Loading…</p>}
         {!loading && jobs.length === 0 && !error && (
           <div className="rounded-xl border border-dashed border-white/15 bg-black/20 px-4 py-8 text-center text-sm text-white/50">
             {searchApplied ? (
@@ -250,7 +263,8 @@ export function WorkspaceJobsScreen() {
               <>
                 <p className="font-medium text-white/85">No jobs scheduled yet</p>
                 <p className="mt-2 text-xs leading-relaxed">
-                  Create a job to automate a recurring workflow. Data is stored by the HAM API when the route is available.
+                  Create a job to automate a recurring workflow. Data is stored by the HAM API when
+                  the route is available.
                 </p>
                 <Button type="button" size="sm" className="mt-4" onClick={() => setNewOpen(true)}>
                   New job
@@ -263,14 +277,13 @@ export function WorkspaceJobsScreen() {
           {jobs.map((j) => {
             const open = expanded.has(j.id);
             return (
-              <li
-                key={j.id}
-                className="rounded border border-white/[0.07] bg-black/25 p-2"
-              >
+              <li key={j.id} className="rounded border border-white/[0.07] bg-black/25 p-2">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-mono text-white/30">{j.id.slice(0, 8)}</span>
+                      <span className="text-[10px] font-mono text-white/30">
+                        {j.id.slice(0, 8)}
+                      </span>
                       <span
                         className={cn(
                           "rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase",
@@ -283,7 +296,9 @@ export function WorkspaceJobsScreen() {
                       </span>
                     </div>
                     <h2 className="text-sm font-medium text-white/90">{j.name}</h2>
-                    {j.description ? <p className="text-[11px] text-white/45">{j.description}</p> : null}
+                    {j.description ? (
+                      <p className="text-[11px] text-white/45">{j.description}</p>
+                    ) : null}
                   </div>
                   <div className="flex flex-wrap justify-end gap-1">
                     <Button
@@ -346,7 +361,11 @@ export function WorkspaceJobsScreen() {
                   className="mt-1 flex items-center gap-0.5 text-[10px] text-white/40 hover:text-white/60"
                   onClick={() => toggleExpand(j.id)}
                 >
-                  {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                  {open ? (
+                    <ChevronDown className="h-3.5 w-3.5" />
+                  ) : (
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  )}
                   Run history ({j.runs.length})
                 </button>
                 {open && (

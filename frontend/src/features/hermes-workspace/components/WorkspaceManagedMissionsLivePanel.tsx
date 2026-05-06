@@ -139,8 +139,15 @@ function DetailField({
 }) {
   return (
     <div className="border-b border-[var(--theme-border)]/70 py-2 last:border-b-0">
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-muted)]">{label}</p>
-      <p className={cn("mt-0.5 text-sm text-[var(--theme-text)] break-words", mono && "font-mono text-xs")}>
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-muted)]">
+        {label}
+      </p>
+      <p
+        className={cn(
+          "mt-0.5 text-sm text-[var(--theme-text)] break-words",
+          mono && "font-mono text-xs",
+        )}
+      >
         {value ?? "—"}
       </p>
     </div>
@@ -154,13 +161,19 @@ type Props = {
   onMissionTranscriptDigest?: (preview: string | null) => void;
 };
 
-function ThinkingTranscriptChunk({ item }: { item: Extract<MissionTranscriptItem, { type: "thinking" }> }) {
+function ThinkingTranscriptChunk({
+  item,
+}: {
+  item: Extract<MissionTranscriptItem, { type: "thinking" }>;
+}) {
   const [open, setOpen] = React.useState(false);
   const long = (item.text || "").length > 200;
   if (!long) {
     return (
       <div className="rounded-lg border border-[var(--theme-border)]/60 bg-[var(--theme-card)]/40 px-2.5 py-1.5">
-        <p className="whitespace-pre-wrap text-xs leading-relaxed text-[var(--theme-muted)]">{item.text}</p>
+        <p className="whitespace-pre-wrap text-xs leading-relaxed text-[var(--theme-muted)]">
+          {item.text}
+        </p>
       </div>
     );
   }
@@ -176,7 +189,9 @@ function ThinkingTranscriptChunk({ item }: { item: Extract<MissionTranscriptItem
         </span>
       </button>
       {open ? (
-        <p className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-[var(--theme-muted)]">{item.text}</p>
+        <p className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-[var(--theme-muted)]">
+          {item.text}
+        </p>
       ) : (
         <p className="mt-1 truncate text-[11px] text-[var(--theme-muted)]/85">
           {item.text.length <= 120 ? item.text : `${item.text.slice(0, 120)}…`}
@@ -200,8 +215,13 @@ function LiveMissionFeedTranscript({
         if (block.type === "assistant") {
           const rcDisp = formatTranscriptReasonCodeForDisplay(block.reasonCode);
           return (
-            <div key={block.id} className="rounded-lg border border-[var(--theme-border)]/80 bg-[var(--theme-card)] px-3 py-2">
-              <p className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--theme-text)]">{block.text}</p>
+            <div
+              key={block.id}
+              className="rounded-lg border border-[var(--theme-border)]/80 bg-[var(--theme-card)] px-3 py-2"
+            >
+              <p className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--theme-text)]">
+                {block.text}
+              </p>
               <p className="mt-1 text-[10px] text-[var(--theme-muted)]">
                 <span className="text-[var(--theme-muted-2)]">{fmtIsoLocal(block.updatedAt)}</span>
                 {rcDisp ? (
@@ -217,12 +237,20 @@ function LiveMissionFeedTranscript({
             </div>
           );
         }
-        if (block.type === "thinking") return <ThinkingTranscriptChunk key={block.id} item={block} />;
+        if (block.type === "thinking")
+          return <ThinkingTranscriptChunk key={block.id} item={block} />;
         if (block.type === "user") {
           return (
-            <div key={block.id} className="rounded-lg border border-sky-500/20 bg-sky-500/5 px-2.5 py-1.5">
-              <p className="whitespace-pre-wrap text-xs leading-relaxed text-[var(--theme-text)]">{block.text}</p>
-              <p className="mt-0.5 text-[10px] text-[var(--theme-muted-2)]">{fmtIsoLocal(block.time)} · user</p>
+            <div
+              key={block.id}
+              className="rounded-lg border border-sky-500/20 bg-sky-500/5 px-2.5 py-1.5"
+            >
+              <p className="whitespace-pre-wrap text-xs leading-relaxed text-[var(--theme-text)]">
+                {block.text}
+              </p>
+              <p className="mt-0.5 text-[10px] text-[var(--theme-muted-2)]">
+                {fmtIsoLocal(block.time)} · user
+              </p>
             </div>
           );
         }
@@ -234,25 +262,43 @@ function LiveMissionFeedTranscript({
             >
               <span className="text-[var(--theme-muted)]">tool</span>
               <span className="font-sans">{block.label}</span>
-              {block.time ? <span className="ml-auto shrink-0 text-[10px] text-[var(--theme-muted)]/80">{fmtIsoLocal(block.time)}</span> : null}
+              {block.time ? (
+                <span className="ml-auto shrink-0 text-[10px] text-[var(--theme-muted)]/80">
+                  {fmtIsoLocal(block.time)}
+                </span>
+              ) : null}
             </div>
           );
         }
         if (block.type === "status") {
           const rcDisp = formatTranscriptReasonCodeForDisplay(block.reasonCode);
           return (
-            <div key={block.id} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-[var(--theme-muted)]">
+            <div
+              key={block.id}
+              className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-[var(--theme-muted)]"
+            >
               <span className="text-[var(--theme-text)]">{block.label}</span>
-              {block.time ? <span className="text-[var(--theme-muted)]/80">{fmtIsoLocal(block.time)}</span> : null}
-              {rcDisp ? <span className="font-mono text-[10px] text-[var(--theme-muted)]/70">{rcDisp}</span> : null}
+              {block.time ? (
+                <span className="text-[var(--theme-muted)]/80">{fmtIsoLocal(block.time)}</span>
+              ) : null}
+              {rcDisp ? (
+                <span className="font-mono text-[10px] text-[var(--theme-muted)]/70">{rcDisp}</span>
+              ) : null}
             </div>
           );
         }
         return (
-          <div key={block.id} className="flex flex-wrap gap-2 text-[11px] text-[var(--theme-muted)]">
+          <div
+            key={block.id}
+            className="flex flex-wrap gap-2 text-[11px] text-[var(--theme-muted)]"
+          >
             <span className="font-mono text-[10px] uppercase tracking-wider">{block.label}</span>
-            {block.detail ? <span className="text-[var(--theme-text)]/90">{block.detail}</span> : null}
-            {block.time ? <span className="text-[var(--theme-muted)]/70">{fmtIsoLocal(block.time)}</span> : null}
+            {block.detail ? (
+              <span className="text-[var(--theme-text)]/90">{block.detail}</span>
+            ) : null}
+            {block.time ? (
+              <span className="text-[var(--theme-muted)]/70">{fmtIsoLocal(block.time)}</span>
+            ) : null}
           </div>
         );
       })}
@@ -261,7 +307,10 @@ function LiveMissionFeedTranscript({
   );
 }
 
-export function WorkspaceManagedMissionsLivePanel({ refreshSignal, onMissionTranscriptDigest }: Props) {
+export function WorkspaceManagedMissionsLivePanel({
+  refreshSignal,
+  onMissionTranscriptDigest,
+}: Props) {
   const [missions, setMissions] = React.useState<ManagedMissionSnapshot[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -273,7 +322,8 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, onMissionTran
   const [detailLoading, setDetailLoading] = React.useState(false);
   const [detailError, setDetailError] = React.useState<string | null>(null);
   const [truthPayload, setTruthPayload] = React.useState<ManagedMissionTruthPayload | null>(null);
-  const [correlationPayload, setCorrelationPayload] = React.useState<ManagedMissionCorrelationPayload | null>(null);
+  const [correlationPayload, setCorrelationPayload] =
+    React.useState<ManagedMissionCorrelationPayload | null>(null);
   const [missionWriteToken, setMissionWriteToken] = React.useState("");
   const [hermesBusy, setHermesBusy] = React.useState(false);
   const [boardBusy, setBoardBusy] = React.useState(false);
@@ -283,7 +333,8 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, onMissionTran
   const [actionError, setActionError] = React.useState<string | null>(null);
   const [selectedMissionId, setSelectedMissionId] = React.useState<string | null>(null);
   /** /truth for the list-selected mission (same payload as detail dialog; no static copy). */
-  const [overviewTruthPayload, setOverviewTruthPayload] = React.useState<ManagedMissionTruthPayload | null>(null);
+  const [overviewTruthPayload, setOverviewTruthPayload] =
+    React.useState<ManagedMissionTruthPayload | null>(null);
 
   React.useEffect(() => {
     if (!selectedMissionId) {
@@ -310,7 +361,11 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, onMissionTran
 
   const fullMissionTranscriptItems = React.useMemo(() => {
     const ev = selectedFeed?.events ?? [];
-    return missionFeedTranscriptFromEvents(ev, selectedFeed?.lifecycle ?? null, selectedFeedBanner.phase);
+    return missionFeedTranscriptFromEvents(
+      ev,
+      selectedFeed?.lifecycle ?? null,
+      selectedFeedBanner.phase,
+    );
   }, [selectedFeed?.events, selectedFeed?.lifecycle, selectedFeedBanner.phase]);
 
   const displayedMissionTranscriptItems = React.useMemo(
@@ -467,7 +522,11 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, onMissionTran
       return;
     }
     if (!r.ok) {
-      setActionError(r.reasonCode === "cancel_not_supported" ? "Stop is not supported for this provider yet." : (r.reasonCode || "Stop request was not accepted."));
+      setActionError(
+        r.reasonCode === "cancel_not_supported"
+          ? "Stop is not supported for this provider yet."
+          : r.reasonCode || "Stop request was not accepted.",
+      );
     }
     await load();
     await refetchSelectedFeed();
@@ -515,7 +574,13 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, onMissionTran
             tone="amber"
             technicalDetail={httpStatus != null ? `[${httpStatus}] ${error}` : error}
             primaryAction={
-              <Button type="button" size="sm" variant="secondary" onClick={() => void load()} disabled={loading}>
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                onClick={() => void load()}
+                disabled={loading}
+              >
                 Retry
               </Button>
             }
@@ -530,7 +595,9 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, onMissionTran
       {!error && !loading && missions.length === 0 ? (
         <div className="mt-4 rounded-2xl border border-dashed border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-6 text-center text-sm text-[var(--theme-muted)]">
           <p className="font-medium text-[var(--theme-text)]">No Cloud Agent missions yet</p>
-          <p className="mt-2">Launch a mission from Chat or Conductor and it will appear here with live progress.</p>
+          <p className="mt-2">
+            Launch a mission from Chat or Conductor and it will appear here with live progress.
+          </p>
         </div>
       ) : null}
 
@@ -550,7 +617,8 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, onMissionTran
             </thead>
             <tbody>
               {missions.map((m) => {
-                const repo = [m.repository_observed, m.ref_observed].filter(Boolean).join(" @ ") || "—";
+                const repo =
+                  [m.repository_observed, m.ref_observed].filter(Boolean).join(" @ ") || "—";
                 const agentOk = Boolean(m.cursor_agent_id?.trim());
                 const rowBusy = syncAgentId === m.cursor_agent_id;
                 const rowCancelBusy = cancelMissionId === m.mission_registry_id;
@@ -566,7 +634,9 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, onMissionTran
                     <td className="px-3 py-2 align-top">{lifecyclePill(m.mission_lifecycle)}</td>
                     <td className="px-3 py-2 align-top">{boardLanePill(m.mission_board_state)}</td>
                     <td className="max-w-[240px] px-3 py-2 align-top">
-                      <p className="line-clamp-1 text-sm font-medium text-[var(--theme-text)]">{missionTitle(m)}</p>
+                      <p className="line-clamp-1 text-sm font-medium text-[var(--theme-text)]">
+                        {missionTitle(m)}
+                      </p>
                       <p className="mt-1 line-clamp-1 text-xs text-[var(--theme-muted)]">
                         {providerLabel(m)} · {missionCheckpointLabel(m)}
                       </p>
@@ -575,8 +645,13 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, onMissionTran
                       <span className="line-clamp-2">{repo}</span>
                     </td>
                     <td className="px-3 py-2 align-top">
-                      <p className="font-mono text-[11px] text-[var(--theme-text)]">{shortId(m.cursor_agent_id)}</p>
-                      <p className="mt-1 font-mono text-[10px] text-[var(--theme-muted)]" title={m.mission_registry_id}>
+                      <p className="font-mono text-[11px] text-[var(--theme-text)]">
+                        {shortId(m.cursor_agent_id)}
+                      </p>
+                      <p
+                        className="mt-1 font-mono text-[10px] text-[var(--theme-muted)]"
+                        title={m.mission_registry_id}
+                      >
                         {shortId(m.mission_registry_id)}
                       </p>
                     </td>
@@ -603,7 +678,11 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, onMissionTran
                             disabled={!!syncAgentId}
                             onClick={() => void runSync(m.cursor_agent_id)}
                           >
-                            {rowBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCw className="h-3 w-3" />}
+                            {rowBusy ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <RotateCw className="h-3 w-3" />
+                            )}
                             Sync
                           </Button>
                         ) : null}
@@ -616,7 +695,11 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, onMissionTran
                           title="Request stop"
                           onClick={() => void runCancel(m.mission_registry_id)}
                         >
-                          {rowCancelBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Square className="h-3 w-3" />}
+                          {rowCancelBusy ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Square className="h-3 w-3" />
+                          )}
                           Stop
                         </Button>
                         {isBcCursorAgentId(m.cursor_agent_id) ? (
@@ -652,22 +735,30 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, onMissionTran
       {!error && missions.length > 0 ? (
         <div className="mt-4 rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3">
           <div className="flex items-center justify-between gap-2">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-muted)]">Live mission feed</p>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-muted)]">
+              Live mission feed
+            </p>
             {selectedMissionId ? (
-              <span className="font-mono text-[10px] text-[var(--theme-muted-2)]">{shortId(selectedMissionId)}</span>
+              <span className="font-mono text-[10px] text-[var(--theme-muted-2)]">
+                {shortId(selectedMissionId)}
+              </span>
             ) : null}
           </div>
           {selectedFeedBanner.phase !== "idle" && selectedFeedBanner.label ? (
-            <p className="mt-2 text-[10px] leading-snug text-[var(--theme-muted-2)]">{selectedFeedBanner.label}</p>
+            <p className="mt-2 text-[10px] leading-snug text-[var(--theme-muted-2)]">
+              {selectedFeedBanner.label}
+            </p>
           ) : selectedFeed?.provider_projection?.mode === "rest_projection" ? (
             <p className="mt-2 text-[10px] text-[var(--theme-muted-2)]">
-              Provider updates via REST refresh. Native provider realtime stream is unavailable in this integration.
+              Provider updates via REST refresh. Native provider realtime stream is unavailable in
+              this integration.
             </p>
           ) : null}
           {overviewTruthPayload?.rows?.length ? (
             <details className="mt-2 rounded-xl border border-[var(--theme-border)]/70 bg-[var(--theme-card)]/35 px-2.5 py-1.5">
               <summary className="cursor-pointer list-none text-[10px] font-medium text-[var(--theme-muted)] [&::-webkit-details-marker]:hidden">
-                Who owns what <span className="font-normal text-[var(--theme-muted-2)]">(HAM /truth)</span>
+                Who owns what{" "}
+                <span className="font-normal text-[var(--theme-muted-2)]">(HAM /truth)</span>
               </summary>
               <div className="mt-2 max-h-[min(200px,28vh)] overflow-auto rounded-lg border border-[var(--theme-border)]/50">
                 <table className="w-full min-w-[480px] border-collapse text-left text-[10px]">
@@ -680,9 +771,16 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, onMissionTran
                   </thead>
                   <tbody>
                     {overviewTruthPayload.rows.map((row) => (
-                      <tr key={row.topic} className="border-b border-[var(--theme-border)]/50 align-top last:border-b-0">
-                        <td className="px-2 py-1.5 font-medium text-[var(--theme-text)]">{row.topic}</td>
-                        <td className="px-2 py-1.5 text-[var(--theme-muted-2)]">{row.cursor_owns}</td>
+                      <tr
+                        key={row.topic}
+                        className="border-b border-[var(--theme-border)]/50 align-top last:border-b-0"
+                      >
+                        <td className="px-2 py-1.5 font-medium text-[var(--theme-text)]">
+                          {row.topic}
+                        </td>
+                        <td className="px-2 py-1.5 text-[var(--theme-muted-2)]">
+                          {row.cursor_owns}
+                        </td>
                         <td className="px-2 py-1.5 text-[var(--theme-muted-2)]">{row.ham_owns}</td>
                       </tr>
                     ))}
@@ -729,14 +827,25 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, onMissionTran
             onClick={(ev) => ev.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-3">
-              <h3 id="managed-mission-detail-title" className="text-base font-semibold text-[var(--theme-text)]">
+              <h3
+                id="managed-mission-detail-title"
+                className="text-base font-semibold text-[var(--theme-text)]"
+              >
                 Mission details
               </h3>
-              <Button type="button" size="sm" variant="ghost" className="h-8 px-2 text-[var(--theme-muted)]" onClick={closeDetail}>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-8 px-2 text-[var(--theme-muted)]"
+                onClick={closeDetail}
+              >
                 Close
               </Button>
             </div>
-            <p className="mt-1 text-xs text-[var(--theme-muted-2)]">Review mission progress, outputs, and technical metadata.</p>
+            <p className="mt-1 text-xs text-[var(--theme-muted-2)]">
+              Review mission progress, outputs, and technical metadata.
+            </p>
 
             {detailLoading ? (
               <p className="mt-6 flex items-center gap-2 text-sm text-[var(--theme-muted)]">
@@ -769,9 +878,16 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, onMissionTran
                         </thead>
                         <tbody>
                           {truthPayload.rows.map((row) => (
-                            <tr key={row.topic} className="border-b border-[var(--theme-border)]/60 align-top last:border-b-0">
-                              <td className="py-2 pr-2 font-medium text-[var(--theme-text)]">{row.topic}</td>
-                              <td className="py-2 pr-2 text-[var(--theme-muted-2)]">{row.cursor_owns}</td>
+                            <tr
+                              key={row.topic}
+                              className="border-b border-[var(--theme-border)]/60 align-top last:border-b-0"
+                            >
+                              <td className="py-2 pr-2 font-medium text-[var(--theme-text)]">
+                                {row.topic}
+                              </td>
+                              <td className="py-2 pr-2 text-[var(--theme-muted-2)]">
+                                {row.cursor_owns}
+                              </td>
                               <td className="py-2 text-[var(--theme-muted-2)]">{row.ham_owns}</td>
                             </tr>
                           ))}
@@ -793,16 +909,24 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, onMissionTran
                     <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-muted)]">
                       Control plane correlation
                     </p>
-                    <p className="mt-2 text-sm text-[var(--theme-muted-2)]">{correlationPayload.hint}</p>
+                    <p className="mt-2 text-sm text-[var(--theme-muted-2)]">
+                      {correlationPayload.hint}
+                    </p>
                     {correlationPayload.control_plane_run ? (
                       <div className="mt-3 grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
                         <DetailField
                           label="Run status"
-                          value={String((correlationPayload.control_plane_run as { status?: string }).status ?? "—")}
+                          value={String(
+                            (correlationPayload.control_plane_run as { status?: string }).status ??
+                              "—",
+                          )}
                         />
                         <DetailField
                           label="Summary"
-                          value={String((correlationPayload.control_plane_run as { summary?: string | null }).summary ?? "—")}
+                          value={String(
+                            (correlationPayload.control_plane_run as { summary?: string | null })
+                              .summary ?? "—",
+                          )}
                         />
                       </div>
                     ) : null}
@@ -814,7 +938,8 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, onMissionTran
                     Operator tools (server token)
                   </p>
                   <p className="mt-1 text-xs text-[var(--theme-muted-2)]">
-                    Paste the same value as <span className="font-mono">HAM_MANAGED_MISSION_WRITE_TOKEN</span> on the API
+                    Paste the same value as{" "}
+                    <span className="font-mono">HAM_MANAGED_MISSION_WRITE_TOKEN</span> on the API
                     host. Stored in this browser tab only (sessionStorage).
                   </p>
                   <input
@@ -839,12 +964,15 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, onMissionTran
                     </Button>
                   </div>
                   <p className="mt-2 text-[11px] text-[var(--theme-muted)]">
-                    Advisory only — stored on the mission row; does not change Cursor lifecycle or provider status.
+                    Advisory only — stored on the mission row; does not change Cursor lifecycle or
+                    provider status.
                   </p>
                 </div>
 
                 <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-muted)]">Board lane</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-muted)]">
+                    Board lane
+                  </p>
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     {boardLanePill(d.mission_board_state)}
                     <Button
@@ -879,21 +1007,31 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, onMissionTran
                     </Button>
                   </div>
                   <p className="mt-2 text-[11px] text-[var(--theme-muted)]">
-                    Operator labels only — not a mission queue graph. Terminal lifecycle moves Active → Archive
-                    automatically when observed.
+                    Operator labels only — not a mission queue graph. Terminal lifecycle moves
+                    Active → Archive automatically when observed.
                   </p>
                 </div>
 
                 <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-muted)]">Summary</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-muted)]">
+                    Summary
+                  </p>
                   <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <DetailField label="Status" value={lifecyclePill(d.mission_lifecycle)} />
                     <DetailField label="Board lane" value={boardLanePill(d.mission_board_state)} />
                     <DetailField label="Provider" value={providerLabel(d)} />
                     <DetailField label="Mission" value={missionTitle(d)} />
                     <DetailField label="Latest checkpoint" value={missionCheckpointLabel(d)} />
-                    <DetailField label="Repo / ref" value={[d.repository_observed, d.ref_observed].filter(Boolean).join(" @ ") || "—"} />
-                    <DetailField label="Updated" value={fmtIsoLocal(d.last_server_observed_at || d.updated_at)} />
+                    <DetailField
+                      label="Repo / ref"
+                      value={
+                        [d.repository_observed, d.ref_observed].filter(Boolean).join(" @ ") || "—"
+                      }
+                    />
+                    <DetailField
+                      label="Updated"
+                      value={fmtIsoLocal(d.last_server_observed_at || d.updated_at)}
+                    />
                     <DetailField label="Mission id" value={d.mission_registry_id} mono />
                     <DetailField label="Agent id" value={d.cursor_agent_id} mono />
                   </div>
@@ -905,16 +1043,33 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, onMissionTran
                       Last Hermes advisory
                     </p>
                     <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      <DetailField label="Triggered" value={fmtIsoLocal(d.hermes_advisory_triggered_at)} />
-                      <DetailField label="Ok (advisory)" value={d.hermes_advisory_ok == null ? "—" : d.hermes_advisory_ok ? "true" : "false"} />
-                      <DetailField label="Stale hint" value={d.hermes_advisory_stale ? "Consider re-running advisory." : "—"} />
+                      <DetailField
+                        label="Triggered"
+                        value={fmtIsoLocal(d.hermes_advisory_triggered_at)}
+                      />
+                      <DetailField
+                        label="Ok (advisory)"
+                        value={
+                          d.hermes_advisory_ok == null
+                            ? "—"
+                            : d.hermes_advisory_ok
+                              ? "true"
+                              : "false"
+                        }
+                      />
+                      <DetailField
+                        label="Stale hint"
+                        value={d.hermes_advisory_stale ? "Consider re-running advisory." : "—"}
+                      />
                       <DetailField label="Notes" value={d.hermes_advisory_notes ?? "—"} />
                     </div>
                   </div>
                 ) : null}
 
                 <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-muted)]">Progress</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-muted)]">
+                    Progress
+                  </p>
                   <div className="mt-2 space-y-2">
                     {(d.progress_events || []).length === 0 ? (
                       <p className="text-sm text-[var(--theme-muted-2)]">
@@ -924,8 +1079,13 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, onMissionTran
                       </p>
                     ) : (
                       (d.progress_events || []).map((ev, idx) => (
-                        <div key={`${ev.at || "na"}-${ev.label || "progress"}-${idx}`} className="rounded-lg border border-[var(--theme-border)]/80 bg-[var(--theme-card)] px-3 py-2">
-                          <p className="text-sm text-[var(--theme-text)]">{ev.label || "Progress update"}</p>
+                        <div
+                          key={`${ev.at || "na"}-${ev.label || "progress"}-${idx}`}
+                          className="rounded-lg border border-[var(--theme-border)]/80 bg-[var(--theme-card)] px-3 py-2"
+                        >
+                          <p className="text-sm text-[var(--theme-text)]">
+                            {ev.label || "Progress update"}
+                          </p>
                           <p className="mt-1 text-xs text-[var(--theme-muted)]">
                             {fmtIsoLocal(ev.at || null)}
                             {ev.value ? ` · ${ev.value}` : ""}
@@ -937,17 +1097,32 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, onMissionTran
                 </div>
 
                 <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-muted)]">Outputs and artifacts</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-muted)]">
+                    Outputs and artifacts
+                  </p>
                   <div className="mt-2 space-y-2">
                     {d.outputs_available && (d.artifacts || []).length > 0 ? (
                       (d.artifacts || []).map((a, idx) => (
-                        <div key={`${a.kind || "artifact"}-${idx}`} className="flex items-center justify-between gap-2 rounded-lg border border-[var(--theme-border)]/80 bg-[var(--theme-card)] px-3 py-2">
+                        <div
+                          key={`${a.kind || "artifact"}-${idx}`}
+                          className="flex items-center justify-between gap-2 rounded-lg border border-[var(--theme-border)]/80 bg-[var(--theme-card)] px-3 py-2"
+                        >
                           <div>
-                            <p className="text-sm text-[var(--theme-text)]">{a.title || "Artifact"}</p>
-                            <p className="text-xs text-[var(--theme-muted)]">{a.kind || "output"}</p>
+                            <p className="text-sm text-[var(--theme-text)]">
+                              {a.title || "Artifact"}
+                            </p>
+                            <p className="text-xs text-[var(--theme-muted)]">
+                              {a.kind || "output"}
+                            </p>
                           </div>
                           {a.url ? (
-                            <Button type="button" size="sm" variant="secondary" className="h-7 border border-[var(--theme-border)] px-2 text-[11px]" asChild>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="secondary"
+                              className="h-7 border border-[var(--theme-border)] px-2 text-[11px]"
+                              asChild
+                            >
                               <a href={a.url} target="_blank" rel="noreferrer">
                                 Open
                               </a>
@@ -956,13 +1131,17 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, onMissionTran
                         </div>
                       ))
                     ) : d.mission_lifecycle === "open" ? (
-                      <p className="text-sm text-[var(--theme-muted-2)]">Waiting for the agent to report outputs…</p>
+                      <p className="text-sm text-[var(--theme-muted-2)]">
+                        Waiting for the agent to report outputs…
+                      </p>
                     ) : d.mission_lifecycle === "failed" ? (
                       <p className="text-sm text-[var(--theme-muted-2)]">
                         Mission failed{d.error_summary ? `: ${d.error_summary}` : "."}
                       </p>
                     ) : d.mission_lifecycle === "succeeded" ? (
-                      <p className="text-sm text-[var(--theme-muted-2)]">Mission completed, but no output artifacts were reported.</p>
+                      <p className="text-sm text-[var(--theme-muted-2)]">
+                        Mission completed, but no output artifacts were reported.
+                      </p>
                     ) : (
                       <p className="text-sm text-[var(--theme-muted-2)]">No outputs yet.</p>
                     )}
@@ -974,24 +1153,56 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, onMissionTran
                     Technical details
                   </summary>
                   <div className="mt-2 space-y-1">
-                    <DetailField label="Managed by" value={d.mission_handling === "managed" ? "HAM (managed)" : "HAM"} />
-                    <DetailField label="Deploy approval mode" value={d.mission_deploy_approval_mode ?? "—"} />
-                    <DetailField label="Control plane run id" value={d.control_plane_ham_run_id ?? "—"} mono />
+                    <DetailField
+                      label="Managed by"
+                      value={d.mission_handling === "managed" ? "HAM (managed)" : "HAM"}
+                    />
+                    <DetailField
+                      label="Deploy approval mode"
+                      value={d.mission_deploy_approval_mode ?? "—"}
+                    />
+                    <DetailField
+                      label="Control plane run id"
+                      value={d.control_plane_ham_run_id ?? "—"}
+                      mono
+                    />
                     <DetailField label="Branch (launch)" value={d.branch_name_launch ?? "—"} />
                     <DetailField label="Repo key" value={d.repo_key ?? "—"} mono />
                     <DetailField label="Uplink id" value={d.uplink_id ?? "—"} mono />
-                    <DetailField label="Cursor status (last observed)" value={d.cursor_status_last_observed ?? "—"} mono />
-                    <DetailField label="Status reason" value={d.status_reason_last_observed ?? "—"} />
+                    <DetailField
+                      label="Cursor status (last observed)"
+                      value={d.cursor_status_last_observed ?? "—"}
+                      mono
+                    />
+                    <DetailField
+                      label="Status reason"
+                      value={d.status_reason_last_observed ?? "—"}
+                    />
                     <DetailField label="Review headline" value={d.last_review_headline ?? "—"} />
                     <DetailField label="Review severity" value={d.last_review_severity ?? "—"} />
-                    <DetailField label="Deploy state (observed)" value={d.last_deploy_state_observed ?? "—"} />
-                    <DetailField label="Vercel mapping tier" value={d.last_vercel_mapping_tier ?? "—"} />
+                    <DetailField
+                      label="Deploy state (observed)"
+                      value={d.last_deploy_state_observed ?? "—"}
+                    />
+                    <DetailField
+                      label="Vercel mapping tier"
+                      value={d.last_vercel_mapping_tier ?? "—"}
+                    />
                     <DetailField label="Hook outcome" value={d.last_hook_outcome ?? "—"} />
-                    <DetailField label="Post-deploy state" value={d.last_post_deploy_state ?? "—"} />
-                    <DetailField label="Post-deploy reason code" value={d.last_post_deploy_reason_code ?? "—"} />
+                    <DetailField
+                      label="Post-deploy state"
+                      value={d.last_post_deploy_state ?? "—"}
+                    />
+                    <DetailField
+                      label="Post-deploy reason code"
+                      value={d.last_post_deploy_reason_code ?? "—"}
+                    />
                     <DetailField label="Created" value={fmtIsoLocal(d.created_at)} />
                     <DetailField label="Updated" value={fmtIsoLocal(d.updated_at)} />
-                    <DetailField label="Last server observed" value={fmtIsoLocal(d.last_server_observed_at)} />
+                    <DetailField
+                      label="Last server observed"
+                      value={fmtIsoLocal(d.last_server_observed_at)}
+                    />
                   </div>
                 </details>
               </div>
@@ -1000,7 +1211,13 @@ export function WorkspaceManagedMissionsLivePanel({ refreshSignal, onMissionTran
             {d?.cursor_agent_id?.trim() && !detailLoading ? (
               <div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-[var(--theme-border)] pt-4">
                 {isBcCursorAgentId(d.cursor_agent_id) ? (
-                  <Button type="button" size="sm" variant="secondary" className="border border-[var(--theme-border)]" asChild>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    className="border border-[var(--theme-border)]"
+                    asChild
+                  >
                     <a
                       href={cursorCloudAgentWebHref(String(d.cursor_agent_id).trim())}
                       target="_blank"

@@ -45,10 +45,9 @@ export const workspaceMemoryAdapter = {
     archived = false,
   ): Promise<{ items: WorkspaceMemoryItem[]; bridge: MemoryBridge }> {
     try {
-      const res = await hamApiFetch(
-        `${BASE}/items${qs({ q: q?.trim() || undefined, archived })}`,
-        { credentials: "include" },
-      );
+      const res = await hamApiFetch(`${BASE}/items${qs({ q: q?.trim() || undefined, archived })}`, {
+        credentials: "include",
+      });
       if (!res.ok) return { items: [], bridge: workspaceApiPending("memory", res) };
       const data = await readJson<{ items?: WorkspaceMemoryItem[] }>(res);
       return { items: Array.isArray(data.items) ? data.items : [], bridge: { status: "ready" } };
@@ -71,7 +70,11 @@ export const workspaceMemoryAdapter = {
         body: JSON.stringify(body),
       });
       if (!res.ok)
-        return { item: null, bridge: workspaceApiPending("memory", res), error: `HTTP ${res.status}` };
+        return {
+          item: null,
+          bridge: workspaceApiPending("memory", res),
+          error: `HTTP ${res.status}`,
+        };
       return { item: (await res.json()) as WorkspaceMemoryItem, bridge: { status: "ready" } };
     } catch (e) {
       return {
@@ -100,7 +103,11 @@ export const workspaceMemoryAdapter = {
         body: JSON.stringify(body),
       });
       if (!res.ok)
-        return { item: null, bridge: workspaceApiPending("memory", res), error: `HTTP ${res.status}` };
+        return {
+          item: null,
+          bridge: workspaceApiPending("memory", res),
+          error: `HTTP ${res.status}`,
+        };
       return { item: (await res.json()) as WorkspaceMemoryItem, bridge: { status: "ready" } };
     } catch (e) {
       return {
@@ -117,10 +124,19 @@ export const workspaceMemoryAdapter = {
         method: "DELETE",
         credentials: "include",
       });
-      if (res.status !== 204) return { ok: false, bridge: workspaceApiPending("memory", res), error: `HTTP ${res.status}` };
+      if (res.status !== 204)
+        return {
+          ok: false,
+          bridge: workspaceApiPending("memory", res),
+          error: `HTTP ${res.status}`,
+        };
       return { ok: true, bridge: { status: "ready" } };
     } catch (e) {
-      return { ok: false, bridge: workspaceApiPending("memory", null, e), error: e instanceof Error ? e.message : String(e) };
+      return {
+        ok: false,
+        bridge: workspaceApiPending("memory", null, e),
+        error: e instanceof Error ? e.message : String(e),
+      };
     }
   },
 } as const;

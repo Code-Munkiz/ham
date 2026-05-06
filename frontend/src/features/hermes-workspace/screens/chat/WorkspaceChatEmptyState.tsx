@@ -66,8 +66,12 @@ export function WorkspaceChatEmptyState({ onSuggestionClick }: WorkspaceChatEmpt
         <p className="hww-chat-micro-label mb-2 text-[11px] font-medium uppercase tracking-[0.12em] text-white/50">
           HAM's Workspace
         </p>
-        <h2 className="text-2xl font-semibold tracking-tight text-[#e8eef8] md:text-3xl">Begin a session</h2>
-        <p className="mt-3 text-sm text-white/40">Agent chat · live tools · memory · full observability</p>
+        <h2 className="text-2xl font-semibold tracking-tight text-[#e8eef8] md:text-3xl">
+          Begin a session
+        </h2>
+        <p className="mt-3 text-sm text-white/40">
+          Agent chat · live tools · memory · full observability
+        </p>
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           {WORKSPACE_CHAT_SUGGESTIONS.map((suggestion) => {
             const Icon = suggestion.icon;

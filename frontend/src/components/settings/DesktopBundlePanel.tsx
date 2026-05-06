@@ -1,5 +1,13 @@
 import * as React from "react";
-import { Orbit, RefreshCw, ExternalLink, Package, AlertCircle, CheckCircle2, Terminal } from "lucide-react";
+import {
+  Orbit,
+  RefreshCw,
+  ExternalLink,
+  Package,
+  AlertCircle,
+  CheckCircle2,
+  Terminal,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { isHamDesktopShell } from "@/lib/ham/desktopConfig";
 import { getDesktopBundleApi, type HermesPresetRunResult } from "@/lib/ham/desktopBundleBridge";
@@ -30,21 +38,18 @@ export function DesktopBundlePanel() {
   const [presetOut, setPresetOut] = React.useState<HermesPresetRunResult | null>(null);
   const [presetLoading, setPresetLoading] = React.useState<HermesDesktopPresetId | null>(null);
 
-  const runPreset = React.useCallback(
-    async (id: HermesDesktopPresetId) => {
-      const b = getDesktopBundleApi();
-      if (!b?.runHermesPreset) return;
-      setPresetLoading(id);
-      setPresetOut(null);
-      try {
-        const r = await b.runHermesPreset(id);
-        setPresetOut(r);
-      } finally {
-        setPresetLoading(null);
-      }
-    },
-    [],
-  );
+  const runPreset = React.useCallback(async (id: HermesDesktopPresetId) => {
+    const b = getDesktopBundleApi();
+    if (!b?.runHermesPreset) return;
+    setPresetLoading(id);
+    setPresetOut(null);
+    try {
+      const r = await b.runHermesPreset(id);
+      setPresetOut(r);
+    } finally {
+      setPresetLoading(null);
+    }
+  }, []);
 
   const load = React.useCallback(async () => {
     if (!bundle) return;
@@ -90,8 +95,9 @@ export function DesktopBundlePanel() {
           <h3 className="text-sm font-black uppercase tracking-widest">HAM + Hermes bundle</h3>
         </div>
         <p className="text-xs text-white/40 leading-relaxed">
-          The curated Hermes setup guide and CLI check run inside the <span className="text-white/60">HAM Desktop</span>{" "}
-          Electron app. In the web dashboard, use the same repo docs and install Hermes on your host manually.
+          The curated Hermes setup guide and CLI check run inside the{" "}
+          <span className="text-white/60">HAM Desktop</span> Electron app. In the web dashboard, use
+          the same repo docs and install Hermes on your host manually.
         </p>
         <a
           className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-[#FF6B00] hover:underline"
@@ -109,10 +115,14 @@ export function DesktopBundlePanel() {
     <div className="space-y-8 max-w-3xl">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <p className="text-[11px] text-white/45 leading-relaxed">
-          Shipped <span className="text-white/60">curated</span> docs and default skill <span className="font-mono">catalog_id</span>{" "}
-          pins. The <span className="text-white/50">local</span> <span className="font-mono">hermes</span> binary (below) is separate from
-          Ham API <span className="font-mono">HERMES_GATEWAY_*</span> (used for <span className="font-mono">/api/chat</span> when
-          <span className="font-mono"> http</span> mode). TTY menus stay in a real terminal; see Command Center for Path B limits.
+          Shipped <span className="text-white/60">curated</span> docs and default skill{" "}
+          <span className="font-mono">catalog_id</span> pins. The{" "}
+          <span className="text-white/50">local</span> <span className="font-mono">hermes</span>{" "}
+          binary (below) is separate from Ham API{" "}
+          <span className="font-mono">HERMES_GATEWAY_*</span> (used for{" "}
+          <span className="font-mono">/api/chat</span> when
+          <span className="font-mono"> http</span> mode). TTY menus stay in a real terminal; see
+          Command Center for Path B limits.
         </p>
         <button
           type="button"
@@ -136,12 +146,14 @@ export function DesktopBundlePanel() {
         <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-[11px] text-amber-200/80 flex items-start gap-2">
           <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
           <span>
-            Ham API snapshot unavailable ({apiSnapErr}). Is the API running and <span className="font-mono">VITE_HAM_API</span>{" "}
-            correct?
+            Ham API snapshot unavailable ({apiSnapErr}). Is the API running and{" "}
+            <span className="font-mono">VITE_HAM_API</span> correct?
           </span>
         </div>
       ) : null}
-      {apiSnapshot?.operator_connection ? <HermesOperatorConnectionStrip snapshot={apiSnapshot} /> : null}
+      {apiSnapshot?.operator_connection ? (
+        <HermesOperatorConnectionStrip snapshot={apiSnapshot} />
+      ) : null}
 
       <DesktopLocalControlStatusCard />
 
@@ -187,9 +199,10 @@ export function DesktopBundlePanel() {
             Allowlisted checks (desktop-side)
           </div>
           <p className="text-[9px] text-white/30 leading-relaxed">
-            Verification only — not arbitrary command execution. Fixed argv in the Electron main process (no free-form
-            input). Binary: <span className="font-mono">hermes</span> on PATH or <span className="font-mono">HAM_HERMES_CLI_PATH</span>.
-            Capped output; future PTY / full TUI control is roadmap-only.
+            Verification only — not arbitrary command execution. Fixed argv in the Electron main
+            process (no free-form input). Binary: <span className="font-mono">hermes</span> on PATH
+            or <span className="font-mono">HAM_HERMES_CLI_PATH</span>. Capped output; future PTY /
+            full TUI control is roadmap-only.
           </p>
           <div className="flex flex-wrap gap-2">
             {HERMES_DESKTOP_PRESET_IDS.map((id) => {
@@ -233,7 +246,9 @@ export function DesktopBundlePanel() {
               ) : (
                 <p className="text-[10px] text-amber-200/85 font-mono">
                   {presetOut.error}
-                  {presetOut.code ? <span className="text-white/30"> · {presetOut.code}</span> : null}
+                  {presetOut.code ? (
+                    <span className="text-white/30"> · {presetOut.code}</span>
+                  ) : null}
                 </p>
               )}
             </div>
@@ -242,7 +257,9 @@ export function DesktopBundlePanel() {
       ) : null}
 
       <div className="rounded-xl border border-white/10 bg-[#0c0c0c] p-5 space-y-3">
-        <h4 className="text-[10px] font-black uppercase tracking-widest text-white/35">Default curated skill IDs</h4>
+        <h4 className="text-[10px] font-black uppercase tracking-widest text-white/35">
+          Default curated skill IDs
+        </h4>
         {curated?.catalog_ids?.length ? (
           <ul className="list-disc pl-5 space-y-1 font-mono text-[10px] text-white/55">
             {curated.catalog_ids.map((id) => (
@@ -250,7 +267,9 @@ export function DesktopBundlePanel() {
             ))}
           </ul>
         ) : (
-          <p className="text-xs text-white/30">No list loaded. Re-check after fixing bundle files.</p>
+          <p className="text-xs text-white/30">
+            No list loaded. Re-check after fixing bundle files.
+          </p>
         )}
         <p className="text-[9px] text-white/25 uppercase tracking-widest">
           Install via Hermes; HAM lists these as suggestions only.
@@ -259,7 +278,9 @@ export function DesktopBundlePanel() {
 
       {snippet ? (
         <div className="rounded-xl border border-white/10 bg-[#0c0c0c] p-5 space-y-2">
-          <h4 className="text-[10px] font-black uppercase tracking-widest text-white/35">Ham API env snippet (example)</h4>
+          <h4 className="text-[10px] font-black uppercase tracking-widest text-white/35">
+            Ham API env snippet (example)
+          </h4>
           <pre className="text-[9px] font-mono text-white/45 whitespace-pre-wrap overflow-x-auto p-3 rounded bg-black/50 border border-white/5">
             {snippet}
           </pre>

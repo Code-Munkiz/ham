@@ -20,7 +20,11 @@ import {
   isLocalRuntimeConfigured,
   type LocalRuntimeHealthPayload,
 } from "../../adapters/localRuntime";
-import { workspaceFileAdapter, type FileBridgeState, type WorkspaceFileEntry } from "../../adapters/filesAdapter";
+import {
+  workspaceFileAdapter,
+  type FileBridgeState,
+  type WorkspaceFileEntry,
+} from "../../adapters/filesAdapter";
 import { workspaceFileEntryLabels } from "../../lib/workspaceHumanLabels";
 
 const ROOT_LABEL = "Workspace";
@@ -79,9 +83,11 @@ function mergeAtPath(
   });
 }
 
-type PromptState =
-  | { mode: "rename" | "new-file" | "new-folder"; targetPath: string; defaultValue?: string }
-  | null;
+type PromptState = {
+  mode: "rename" | "new-file" | "new-folder";
+  targetPath: string;
+  defaultValue?: string;
+} | null;
 
 type Ctx = { x: number; y: number; entry: WorkspaceFileEntry } | null;
 
@@ -91,7 +97,10 @@ export function WorkspaceFilesScreen() {
   const [collapsed, setCollapsed] = React.useState(false);
   const [isMobile, setIsMobile] = React.useState(false);
   const [entries, setEntries] = React.useState<WorkspaceFileEntry[]>([]);
-  const [bridge, setBridge] = React.useState<FileBridgeState>({ status: "pending", detail: "Loading file tree…" });
+  const [bridge, setBridge] = React.useState<FileBridgeState>({
+    status: "pending",
+    detail: "Loading file tree…",
+  });
   const [loading, setLoading] = React.useState(true);
   const [search, setSearch] = React.useState("");
   const [expanded, setExpanded] = React.useState<Set<string>>(() => new Set());
@@ -182,7 +191,10 @@ function ready() {
     (bridge.localCode === "unreachable" || bridge.localCode === "wrong_api") &&
     !loading;
   const noEnvRoot =
-    !loading && bridge.status === "ready" && Boolean(fsHealth) && fsHealth?.workspaceRootConfigured === false;
+    !loading &&
+    bridge.status === "ready" &&
+    Boolean(fsHealth) &&
+    fsHealth?.workspaceRootConfigured === false;
 
   const openPrompt = (state: NonNullable<PromptState>) => {
     setPromptState(state);
@@ -212,7 +224,11 @@ function ready() {
       }
     } else {
       const nextPath = promptState.targetPath ? `${promptState.targetPath}/${value}` : value;
-      const r = await workspaceFileAdapter.postJson({ action: "write", path: nextPath, content: "" });
+      const r = await workspaceFileAdapter.postJson({
+        action: "write",
+        path: nextPath,
+        content: "",
+      });
       if (!r.ok) {
         setBridge(r.bridge);
       }
@@ -239,7 +255,9 @@ function ready() {
   const handleDownload = (entry: WorkspaceFileEntry) => {
     const url = workspaceFileAdapter.buildDownloadUrl(entry.path);
     if (!url) {
-      window.alert("Local runtime is not connected. Set the URL in Workspace → Settings → Connection.");
+      window.alert(
+        "Local runtime is not connected. Set the URL in Workspace → Settings → Connection.",
+      );
       return;
     }
     const a = document.createElement("a");
@@ -392,20 +410,30 @@ function ready() {
         >
           {entry.type === "folder" ? (
             <ChevronRight
-              className={cn("h-3.5 w-3.5 shrink-0 text-white/50 transition-transform", isEx && "rotate-90")}
+              className={cn(
+                "h-3.5 w-3.5 shrink-0 text-white/50 transition-transform",
+                isEx && "rotate-90",
+              )}
             />
           ) : (
             <span className="w-3.5 shrink-0" />
           )}
-          {entry.type === "folder" ? <Folder className="h-4 w-4 shrink-0 text-[#7eb8ff]/90" /> : null}
+          {entry.type === "folder" ? (
+            <Folder className="h-4 w-4 shrink-0 text-[#7eb8ff]/90" />
+          ) : null}
           {entry.type === "file" ? <File className="h-4 w-4 shrink-0 text-white/55" /> : null}
           <span className="flex min-w-0 flex-1 flex-col items-start">
             <span className="truncate">{label}</span>
-            {technical ? <span className="truncate font-mono text-[10px] text-white/40">{technical}</span> : null}
+            {technical ? (
+              <span className="truncate font-mono text-[10px] text-white/40">{technical}</span>
+            ) : null}
           </span>
         </button>
         {entry.type === "folder" && isEx && loadingFolder === entry.path ? (
-          <p className="pl-[1.5rem] text-[11px] text-white/40" style={{ paddingLeft: 10 + (depth + 1) * 12 }}>
+          <p
+            className="pl-[1.5rem] text-[11px] text-white/40"
+            style={{ paddingLeft: 10 + (depth + 1) * 12 }}
+          >
             Loading…
           </p>
         ) : null}
@@ -428,7 +456,9 @@ function ready() {
         <aside
           className={cn(
             "hww-files-explorer border-r border-[color:var(--ham-workspace-line)] bg-[#050d12]/90 transition-[width,opacity] duration-200",
-            collapsed ? "w-0 overflow-hidden border-0 p-0 opacity-0" : "w-[min(100%,280px)] shrink-0 opacity-100",
+            collapsed
+              ? "w-0 overflow-hidden border-0 p-0 opacity-0"
+              : "w-[min(100%,280px)] shrink-0 opacity-100",
           )}
         >
           <div className="flex h-11 items-center justify-between border-b border-[color:var(--ham-workspace-line)] px-2.5">
@@ -488,7 +518,9 @@ function ready() {
               <p className="px-2 py-1 text-[11px] text-white/45">Loading…</p>
             ) : disconnected ? (
               <div className="px-1.5 py-2">
-                <p className="px-1 text-[12px] font-medium text-white/80">Connect to browse local files</p>
+                <p className="px-1 text-[12px] font-medium text-white/80">
+                  Connect to browse local files
+                </p>
                 <p className="mt-1 px-1 text-[11px] leading-relaxed text-white/45">
                   Files and Terminal use the HAM process on this computer, not Cloud Run.
                 </p>
@@ -504,8 +536,13 @@ function ready() {
               </div>
             ) : localError ? (
               <div className="px-1.5 py-2">
-                <p className="px-1 text-[12px] text-amber-200/85">Could not use the saved local URL. Try again below.</p>
-                <p className="mt-1 px-1 break-words text-[10px] text-amber-200/60" title={bridge.detail}>
+                <p className="px-1 text-[12px] text-amber-200/85">
+                  Could not use the saved local URL. Try again below.
+                </p>
+                <p
+                  className="mt-1 px-1 break-words text-[10px] text-amber-200/60"
+                  title={bridge.detail}
+                >
                   {bridge.detail}
                 </p>
                 <div className="mt-2">
@@ -519,7 +556,9 @@ function ready() {
                 </div>
               </div>
             ) : !entries.length && bridge.status === "pending" ? (
-              <p className="px-2 py-2 text-[11px] leading-relaxed text-white/45">No file tree yet. Check the local API.</p>
+              <p className="px-2 py-2 text-[11px] leading-relaxed text-white/45">
+                No file tree yet. Check the local API.
+              </p>
             ) : !entries.length && bridge.status === "ready" ? (
               <div className="px-2 py-4 text-center text-[12px] text-white/50">
                 <p className="mb-2">Workspace is empty</p>
@@ -567,7 +606,8 @@ function ready() {
             <div className="min-w-0">
               <h1 className="truncate text-sm font-medium text-white/90 md:text-base">Files</h1>
               <p className="hidden text-[12px] text-white/40 sm:line-clamp-1 sm:text-[13px]">
-                Files are served by the local HAM API from the configured filesystem root on this machine.
+                Files are served by the local HAM API from the configured filesystem root on this
+                machine.
               </p>
             </div>
             {fsHealth?.broadFilesystemAccess && fsHealth.workspaceRootPath ? (
@@ -582,7 +622,10 @@ function ready() {
               {readPath && filePreviewKind === "text" ? (
                 <>
                   {saveState === "error" && saveError ? (
-                    <span className="max-w-[min(12rem,40vw)] truncate text-[10px] text-red-300/90" title={saveError}>
+                    <span
+                      className="max-w-[min(12rem,40vw)] truncate text-[10px] text-red-300/90"
+                      title={saveError}
+                    >
                       {saveError}
                     </span>
                   ) : null}
@@ -611,7 +654,10 @@ function ready() {
                 </>
               ) : null}
               {bridge.status === "pending" && bridge.localCode ? (
-                <span className="max-w-[min(10rem,35vw)] truncate text-[10px] text-amber-200/80" title={bridge.detail}>
+                <span
+                  className="max-w-[min(10rem,35vw)] truncate text-[10px] text-amber-200/80"
+                  title={bridge.detail}
+                >
                   {bridge.localCode === "unconfigured" ? "Local runtime" : "Local error"}
                 </span>
               ) : bridge.status === "pending" ? (
@@ -639,7 +685,9 @@ function ready() {
             ) : null}
             {disconnected ? (
               <div className="mb-2 space-y-2 rounded-lg border border-amber-500/25 bg-amber-500/10 p-2 text-[12px] text-amber-100/90">
-                <p className="px-1 font-medium">Connect this machine to open the editor and browse files.</p>
+                <p className="px-1 font-medium">
+                  Connect this machine to open the editor and browse files.
+                </p>
                 <LocalMachineConnectCta
                   variant="compact"
                   onSuccess={() => void refresh()}
@@ -665,9 +713,10 @@ function ready() {
               <div className="mb-2 rounded-lg border border-sky-500/25 bg-sky-500/10 px-3 py-2.5 text-[12px] text-sky-100/90">
                 <p className="font-medium">Local runtime reachable — optional filesystem root</p>
                 <p className="mt-1 text-[11px] text-sky-100/80">
-                  Local runtime connected, but <span className="font-mono">HAM_WORKSPACE_ROOT</span> is not set on the API. Set it to
-                  a project path or a broad path (e.g. <span className="font-mono">C:\</span> for operator mode). The API is using
-                  the repo sandbox until then.
+                  Local runtime connected, but <span className="font-mono">HAM_WORKSPACE_ROOT</span>{" "}
+                  is not set on the API. Set it to a project path or a broad path (e.g.{" "}
+                  <span className="font-mono">C:\</span> for operator mode). The API is using the
+                  repo sandbox until then.
                 </p>
               </div>
             ) : null}
@@ -685,7 +734,9 @@ function ready() {
                     className="max-h-[min(70vh,36rem)] max-w-full rounded-lg border border-white/[0.08] object-contain"
                   />
                 ) : (
-                  <p className="text-center text-[13px] text-white/55">Connect the local runtime to preview images.</p>
+                  <p className="text-center text-[13px] text-white/55">
+                    Connect the local runtime to preview images.
+                  </p>
                 )}
                 <Button
                   type="button"
@@ -706,7 +757,8 @@ function ready() {
             ) : filePreviewKind === "unsupported" && readPath ? (
               <div className="flex min-h-[220px] flex-col items-center justify-center gap-3 rounded-lg border border-white/[0.08] bg-[#040a0f]/80 p-6 text-center">
                 <p className="max-w-sm text-[13px] leading-relaxed text-white/70">
-                  In-browser preview is not available for this file type. Download the file or open it in another app.
+                  In-browser preview is not available for this file type. Download the file or open
+                  it in another app.
                 </p>
                 <p className="font-mono text-[11px] text-white/45">{readPath}</p>
                 <Button
@@ -747,7 +799,9 @@ function ready() {
               />
             )}
             {!readPath && !previewPath ? (
-              <p className="pointer-events-none absolute bottom-3 left-3 text-[11px] text-white/30">No file selected</p>
+              <p className="pointer-events-none absolute bottom-3 left-3 text-[11px] text-white/30">
+                No file selected
+              </p>
             ) : null}
           </div>
         </main>
@@ -851,10 +905,17 @@ function ready() {
       ) : null}
 
       {promptState ? (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" role="dialog">
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+          role="dialog"
+        >
           <div className="w-full max-w-sm rounded-xl border border-white/10 bg-[#0a141b] p-4 shadow-2xl">
             <h2 className="text-sm font-semibold text-white/90">
-              {promptState.mode === "rename" ? "Rename" : promptState.mode === "new-folder" ? "New folder" : "New file"}
+              {promptState.mode === "rename"
+                ? "Rename"
+                : promptState.mode === "new-folder"
+                  ? "New folder"
+                  : "New file"}
             </h2>
             <input
               value={promptValue}

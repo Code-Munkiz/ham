@@ -83,7 +83,9 @@ export function formatAttachmentByteSize(bytes: number): string {
   return `${(kb / 1024).toFixed(1)} MB`;
 }
 
-export function revokeWorkspaceComposerAttachmentPreviews(list: WorkspaceComposerAttachment[]): void {
+export function revokeWorkspaceComposerAttachmentPreviews(
+  list: WorkspaceComposerAttachment[],
+): void {
   for (const a of list) {
     const p = a.payload;
     if (p.startsWith("blob:")) {
@@ -109,7 +111,8 @@ function mimeForFile(file: File): string {
   if (ext === ".md" || ext === ".markdown") return "text/markdown";
   if (ext === ".doc") return "application/msword";
   if (ext === ".xls") return "application/vnd.ms-excel";
-  if (ext === ".docx") return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  if (ext === ".docx")
+    return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
   if (ext === ".xlsx") return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
   if (ext === ".csv") return "text/csv";
   if (ext === ".mp4") return "video/mp4";
@@ -121,7 +124,10 @@ function mimeForFile(file: File): string {
 function isAllowedSpreadsheetFile(file: File): boolean {
   const ext = fileExtensionLower(file.name);
   const m = mimeForFile(file).toLowerCase();
-  if (ext === ".xlsx" || m === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") {
+  if (
+    ext === ".xlsx" ||
+    m === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+  ) {
     return true;
   }
   if (ext === ".csv" || m === "text/csv" || m === "application/csv") {

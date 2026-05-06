@@ -1,4 +1,4 @@
-import * as React from 'react';
+import * as React from "react";
 
 interface WorkspaceContextType {
   activeTask: string;
@@ -24,7 +24,9 @@ interface WorkspaceContextType {
 const WorkspaceContext = React.createContext<WorkspaceContextType | undefined>(undefined);
 
 export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
-  const [activeTask, setActiveTask] = React.useState("REFINING THE WORKBENCH CORE ARCHITECTURE TO SUPPORT SPLIT-VIEW MODES.");
+  const [activeTask, setActiveTask] = React.useState(
+    "REFINING THE WORKBENCH CORE ARCHITECTURE TO SUPPORT SPLIT-VIEW MODES.",
+  );
   const [isControlPanelOpen, setIsControlPanelOpen] = React.useState(false);
   const [showContextBudget, setShowContextBudget] = React.useState(true);
 
@@ -36,22 +38,24 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       instructions: 12500,
       git: 15400,
       tree: 4800,
-      session: 15500
-    }
+      session: 15500,
+    },
   };
 
   return (
-    <WorkspaceContext.Provider value={{ 
-      activeTask, 
-      setActiveTask, 
-      isControlPanelOpen, 
-      setIsControlPanelOpen,
-      workspaceName: "ham-workbench-v2",
-      branch: "main",
-      showContextBudget,
-      setShowContextBudget,
-      contextUsage
-    }}>
+    <WorkspaceContext.Provider
+      value={{
+        activeTask,
+        setActiveTask,
+        isControlPanelOpen,
+        setIsControlPanelOpen,
+        workspaceName: "ham-workbench-v2",
+        branch: "main",
+        showContextBudget,
+        setShowContextBudget,
+        contextUsage,
+      }}
+    >
       {children}
     </WorkspaceContext.Provider>
   );
@@ -60,7 +64,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 export function useWorkspace() {
   const context = React.useContext(WorkspaceContext);
   if (context === undefined) {
-    throw new Error('useWorkspace must be used within a WorkspaceProvider');
+    throw new Error("useWorkspace must be used within a WorkspaceProvider");
   }
   return context;
 }

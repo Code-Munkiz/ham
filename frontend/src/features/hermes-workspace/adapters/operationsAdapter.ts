@@ -78,10 +78,19 @@ export const workspaceOperationsAdapter = {
           systemPrompt: opts?.systemPrompt,
         }),
       });
-      if (!res.ok) return { agent: null, bridge: workspaceApiPending("operations", res), error: `HTTP ${res.status}` };
+      if (!res.ok)
+        return {
+          agent: null,
+          bridge: workspaceApiPending("operations", res),
+          error: `HTTP ${res.status}`,
+        };
       return { agent: (await res.json()) as WorkspaceAgent, bridge: { status: "ready" } };
     } catch (e) {
-      return { agent: null, bridge: workspaceApiPending("operations", null, e), error: e instanceof Error ? e.message : String(e) };
+      return {
+        agent: null,
+        bridge: workspaceApiPending("operations", null, e),
+        error: e instanceof Error ? e.message : String(e),
+      };
     }
   },
 
@@ -103,40 +112,91 @@ export const workspaceOperationsAdapter = {
         credentials: "include",
         body: JSON.stringify(body),
       });
-      if (!res.ok) return { agent: null, bridge: workspaceApiPending("operations", res), error: `HTTP ${res.status}` };
+      if (!res.ok)
+        return {
+          agent: null,
+          bridge: workspaceApiPending("operations", res),
+          error: `HTTP ${res.status}`,
+        };
       return { agent: (await res.json()) as WorkspaceAgent, bridge: { status: "ready" } };
     } catch (e) {
-      return { agent: null, bridge: workspaceApiPending("operations", null, e), error: e instanceof Error ? e.message : String(e) };
+      return {
+        agent: null,
+        bridge: workspaceApiPending("operations", null, e),
+        error: e instanceof Error ? e.message : String(e),
+      };
     }
   },
 
-  async deleteAgent(id: string): Promise<{ ok: boolean; bridge: OperationsBridge; error?: string }> {
+  async deleteAgent(
+    id: string,
+  ): Promise<{ ok: boolean; bridge: OperationsBridge; error?: string }> {
     try {
-      const res = await hamApiFetch(`${BASE}/agents/${encodeURIComponent(id)}`, { method: "DELETE", credentials: "include" });
-      if (res.status !== 204) return { ok: false, bridge: workspaceApiPending("operations", res), error: `HTTP ${res.status}` };
+      const res = await hamApiFetch(`${BASE}/agents/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (res.status !== 204)
+        return {
+          ok: false,
+          bridge: workspaceApiPending("operations", res),
+          error: `HTTP ${res.status}`,
+        };
       return { ok: true, bridge: { status: "ready" } };
     } catch (e) {
-      return { ok: false, bridge: workspaceApiPending("operations", null, e), error: e instanceof Error ? e.message : String(e) };
+      return {
+        ok: false,
+        bridge: workspaceApiPending("operations", null, e),
+        error: e instanceof Error ? e.message : String(e),
+      };
     }
   },
 
-  async play(id: string): Promise<{ agent: WorkspaceAgent | null; bridge: OperationsBridge; error?: string }> {
+  async play(
+    id: string,
+  ): Promise<{ agent: WorkspaceAgent | null; bridge: OperationsBridge; error?: string }> {
     try {
-      const res = await hamApiFetch(`${BASE}/agents/${encodeURIComponent(id)}/play`, { method: "POST", credentials: "include" });
-      if (!res.ok) return { agent: null, bridge: workspaceApiPending("operations", res), error: (await res.text()) || `HTTP ${res.status}` };
+      const res = await hamApiFetch(`${BASE}/agents/${encodeURIComponent(id)}/play`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok)
+        return {
+          agent: null,
+          bridge: workspaceApiPending("operations", res),
+          error: (await res.text()) || `HTTP ${res.status}`,
+        };
       return { agent: (await res.json()) as WorkspaceAgent, bridge: { status: "ready" } };
     } catch (e) {
-      return { agent: null, bridge: workspaceApiPending("operations", null, e), error: e instanceof Error ? e.message : String(e) };
+      return {
+        agent: null,
+        bridge: workspaceApiPending("operations", null, e),
+        error: e instanceof Error ? e.message : String(e),
+      };
     }
   },
 
-  async pause(id: string): Promise<{ agent: WorkspaceAgent | null; bridge: OperationsBridge; error?: string }> {
+  async pause(
+    id: string,
+  ): Promise<{ agent: WorkspaceAgent | null; bridge: OperationsBridge; error?: string }> {
     try {
-      const res = await hamApiFetch(`${BASE}/agents/${encodeURIComponent(id)}/pause`, { method: "POST", credentials: "include" });
-      if (!res.ok) return { agent: null, bridge: workspaceApiPending("operations", res), error: (await res.text()) || `HTTP ${res.status}` };
+      const res = await hamApiFetch(`${BASE}/agents/${encodeURIComponent(id)}/pause`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok)
+        return {
+          agent: null,
+          bridge: workspaceApiPending("operations", res),
+          error: (await res.text()) || `HTTP ${res.status}`,
+        };
       return { agent: (await res.json()) as WorkspaceAgent, bridge: { status: "ready" } };
     } catch (e) {
-      return { agent: null, bridge: workspaceApiPending("operations", null, e), error: e instanceof Error ? e.message : String(e) };
+      return {
+        agent: null,
+        bridge: workspaceApiPending("operations", null, e),
+        error: e instanceof Error ? e.message : String(e),
+      };
     }
   },
 
@@ -151,10 +211,19 @@ export const workspaceOperationsAdapter = {
         credentials: "include",
         body: JSON.stringify({ message }),
       });
-      if (!res.ok) return { agent: null, bridge: workspaceApiPending("operations", res), error: (await res.text()) || `HTTP ${res.status}` };
+      if (!res.ok)
+        return {
+          agent: null,
+          bridge: workspaceApiPending("operations", res),
+          error: (await res.text()) || `HTTP ${res.status}`,
+        };
       return { agent: (await res.json()) as WorkspaceAgent, bridge: { status: "ready" } };
     } catch (e) {
-      return { agent: null, bridge: workspaceApiPending("operations", null, e), error: e instanceof Error ? e.message : String(e) };
+      return {
+        agent: null,
+        bridge: workspaceApiPending("operations", null, e),
+        error: e instanceof Error ? e.message : String(e),
+      };
     }
   },
 
@@ -163,7 +232,10 @@ export const workspaceOperationsAdapter = {
       const res = await hamApiFetch(`${BASE}/scheduled-jobs`, { credentials: "include" });
       if (!res.ok) return { jobs: [], bridge: workspaceApiPending("operations", res) };
       const data = await readJson<{ scheduledJobs?: ScheduledJob[] }>(res);
-      return { jobs: Array.isArray(data.scheduledJobs) ? data.scheduledJobs : [], bridge: { status: "ready" } };
+      return {
+        jobs: Array.isArray(data.scheduledJobs) ? data.scheduledJobs : [],
+        bridge: { status: "ready" },
+      };
     } catch (e) {
       return { jobs: [], bridge: workspaceApiPending("operations", null, e) };
     }
@@ -180,20 +252,43 @@ export const workspaceOperationsAdapter = {
         credentials: "include",
         body: JSON.stringify({ name, cronExpr, enabled: true }),
       });
-      if (!res.ok) return { job: null, bridge: workspaceApiPending("operations", res), error: `HTTP ${res.status}` };
+      if (!res.ok)
+        return {
+          job: null,
+          bridge: workspaceApiPending("operations", res),
+          error: `HTTP ${res.status}`,
+        };
       return { job: (await res.json()) as ScheduledJob, bridge: { status: "ready" } };
     } catch (e) {
-      return { job: null, bridge: workspaceApiPending("operations", null, e), error: e instanceof Error ? e.message : String(e) };
+      return {
+        job: null,
+        bridge: workspaceApiPending("operations", null, e),
+        error: e instanceof Error ? e.message : String(e),
+      };
     }
   },
 
-  async deleteScheduled(id: string): Promise<{ ok: boolean; bridge: OperationsBridge; error?: string }> {
+  async deleteScheduled(
+    id: string,
+  ): Promise<{ ok: boolean; bridge: OperationsBridge; error?: string }> {
     try {
-      const res = await hamApiFetch(`${BASE}/scheduled-jobs/${encodeURIComponent(id)}`, { method: "DELETE", credentials: "include" });
-      if (res.status !== 204) return { ok: false, bridge: workspaceApiPending("operations", res), error: `HTTP ${res.status}` };
+      const res = await hamApiFetch(`${BASE}/scheduled-jobs/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (res.status !== 204)
+        return {
+          ok: false,
+          bridge: workspaceApiPending("operations", res),
+          error: `HTTP ${res.status}`,
+        };
       return { ok: true, bridge: { status: "ready" } };
     } catch (e) {
-      return { ok: false, bridge: workspaceApiPending("operations", null, e), error: e instanceof Error ? e.message : String(e) };
+      return {
+        ok: false,
+        bridge: workspaceApiPending("operations", null, e),
+        error: e instanceof Error ? e.message : String(e),
+      };
     }
   },
 
@@ -208,10 +303,19 @@ export const workspaceOperationsAdapter = {
         credentials: "include",
         body: JSON.stringify(body),
       });
-      if (!res.ok) return { job: null, bridge: workspaceApiPending("operations", res), error: `HTTP ${res.status}` };
+      if (!res.ok)
+        return {
+          job: null,
+          bridge: workspaceApiPending("operations", res),
+          error: `HTTP ${res.status}`,
+        };
       return { job: (await res.json()) as ScheduledJob, bridge: { status: "ready" } };
     } catch (e) {
-      return { job: null, bridge: workspaceApiPending("operations", null, e), error: e instanceof Error ? e.message : String(e) };
+      return {
+        job: null,
+        bridge: workspaceApiPending("operations", null, e),
+        error: e instanceof Error ? e.message : String(e),
+      };
     }
   },
 
@@ -236,11 +340,20 @@ export const workspaceOperationsAdapter = {
         credentials: "include",
         body: JSON.stringify(body),
       });
-      if (!res.ok) return { settings: null, bridge: workspaceApiPending("operations", res), error: `HTTP ${res.status}` };
+      if (!res.ok)
+        return {
+          settings: null,
+          bridge: workspaceApiPending("operations", res),
+          error: `HTTP ${res.status}`,
+        };
       const data = await readJson<{ settings?: OperationsSettings }>(res);
       return { settings: data.settings ?? null, bridge: { status: "ready" } };
     } catch (e) {
-      return { settings: null, bridge: workspaceApiPending("operations", null, e), error: e instanceof Error ? e.message : String(e) };
+      return {
+        settings: null,
+        bridge: workspaceApiPending("operations", null, e),
+        error: e instanceof Error ? e.message : String(e),
+      };
     }
   },
 } as const;

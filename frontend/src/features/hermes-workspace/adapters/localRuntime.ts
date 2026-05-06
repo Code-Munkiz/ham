@@ -10,7 +10,10 @@ import type { ContextEnginePayload } from "@/lib/ham/types";
 const STORAGE_KEY = "hww.localRuntimeBase";
 
 /** Suggested input placeholders only — not used until the user saves. */
-export const LOCAL_RUNTIME_SUGGESTIONS = ["http://127.0.0.1:8001", "http://127.0.0.1:8000"] as const;
+export const LOCAL_RUNTIME_SUGGESTIONS = [
+  "http://127.0.0.1:8001",
+  "http://127.0.0.1:8000",
+] as const;
 
 /**
  * Tried in order by “Connect local machine” — must be absolute origins (not paths).
@@ -65,7 +68,9 @@ export function setLocalRuntimeBase(value: string | null): void {
   } catch {
     /* ignore */
   }
-  window.dispatchEvent(new CustomEvent("hww-local-runtime-changed", { detail: { base: getLocalRuntimeBase() } }));
+  window.dispatchEvent(
+    new CustomEvent("hww-local-runtime-changed", { detail: { base: getLocalRuntimeBase() } }),
+  );
 }
 
 export function isLocalRuntimeConfigured(): boolean {
@@ -160,7 +165,11 @@ export async function fetchLocalWorkspaceContextSnapshot(): Promise<ContextEngin
         ? (body as { detail?: unknown }).detail
         : null;
     const msg =
-      d && typeof d === "object" && d !== null && "message" in d && typeof (d as { message: unknown }).message === "string"
+      d &&
+      typeof d === "object" &&
+      d !== null &&
+      "message" in d &&
+      typeof (d as { message: unknown }).message === "string"
         ? (d as { message: string }).message
         : `Local context snapshot failed (${res.status})`;
     throw new Error(msg);
@@ -282,9 +291,7 @@ export function getBrowserPageOrigin(): string {
  * PowerShell to run HAM on Windows from a clone. Path is a hint; user should edit
  * to their own repo directory.
  */
-export function getLocalConnectSetupScript(
-  hamRepoPath = "C:\\Projects\\GoHam\\ham",
-): string {
+export function getLocalConnectSetupScript(hamRepoPath = "C:\\Projects\\GoHam\\ham"): string {
   return `cd ${hamRepoPath}
 git pull origin main
 $env:HAM_WORKSPACE_ROOT = "C:\\"
@@ -295,7 +302,8 @@ python -m uvicorn src.api.server:app --host 127.0.0.1 --port 8001`;
  * @param inputUrl — when set, tests this origin (e.g. unsaved text field). When omitted, uses `getLocalRuntimeBase()`.
  */
 export async function testLocalRuntime(inputUrl?: string | null): Promise<LocalRuntimeTestResult> {
-  const base = inputUrl != null && String(inputUrl).trim() ? normalizeBase(inputUrl) : getLocalRuntimeBase();
+  const base =
+    inputUrl != null && String(inputUrl).trim() ? normalizeBase(inputUrl) : getLocalRuntimeBase();
   if (!base) {
     return { ok: false, message: "Local runtime URL is not set or invalid", testedUrl: "" };
   }

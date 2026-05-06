@@ -18,7 +18,9 @@ function s(x: unknown): string | null {
 /**
  * Flattens common Cursor agent object fields into labeled lines.
  */
-export function buildReadableAgentFields(agent: Record<string, unknown> | null): AgentReadableField[] {
+export function buildReadableAgentFields(
+  agent: Record<string, unknown> | null,
+): AgentReadableField[] {
   if (!agent) return [];
   const out: AgentReadableField[] = [];
   const push = (label: string, value: string | null | undefined) => {
@@ -43,7 +45,9 @@ export function buildReadableAgentFields(agent: Record<string, unknown> | null):
   push("Created", s(agent["createdAt"] ?? agent["created_at"]));
   push("Updated", s(agent["updatedAt"] ?? agent["updated_at"]));
   if (out.length === 0) {
-    return [{ label: "Payload", value: "No common fields were recognized; use raw JSON (toggle)." }];
+    return [
+      { label: "Payload", value: "No common fields were recognized; use raw JSON (toggle)." },
+    ];
   }
   return out;
 }

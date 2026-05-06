@@ -24,7 +24,10 @@ import { WorkspaceModelProviderSection } from "./WorkspaceModelProviderSection";
  */
 export function WorkspaceSettingsScreen() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const section = parseWorkspaceSettingsSection(searchParams.get("section"), searchParams.get("tab"));
+  const section = parseWorkspaceSettingsSection(
+    searchParams.get("section"),
+    searchParams.get("tab"),
+  );
 
   React.useEffect(() => {
     const rawS = searchParams.get("section");
@@ -48,8 +51,9 @@ export function WorkspaceSettingsScreen() {
         return (
           <div className="space-y-6">
             <p className="text-[13px] leading-relaxed text-white/45">
-              Upstream <span className="text-white/70">Display</span> maps to Hermes UI density and related toggles. In
-              HAM, the local desktop / Hermes bundle surface is closest to that intent.
+              Upstream <span className="text-white/70">Display</span> maps to Hermes UI density and
+              related toggles. In HAM, the local desktop / Hermes bundle surface is closest to that
+              intent.
             </p>
             <DesktopBundlePanel />
           </div>
@@ -69,7 +73,11 @@ export function WorkspaceSettingsScreen() {
             <WorkspaceSettingsSectionHeader
               title="MCP servers"
               subtitle="Upstream uses a dedicated MCP route. HAM mirrors that with a full MCP tools page; this section entry is a shortcut — server installation and writes stay on that screen."
-              badge={<WorkspaceSettingsCapabilityBadge>Managed in MCP page</WorkspaceSettingsCapabilityBadge>}
+              badge={
+                <WorkspaceSettingsCapabilityBadge>
+                  Managed in MCP page
+                </WorkspaceSettingsCapabilityBadge>
+              }
             />
             <p className="mt-4 text-[13px] leading-relaxed text-white/45">
               Open{" "}
@@ -79,7 +87,8 @@ export function WorkspaceSettingsScreen() {
               >
                 MCP servers
               </Link>{" "}
-              for tools, extensions, and allowlisted configuration (read-only vs low-risk flows per HAM policy).
+              for tools, extensions, and allowlisted configuration (read-only vs low-risk flows per
+              HAM policy).
             </p>
           </WorkspaceSettingsReadOnlyCard>
         );
@@ -95,9 +104,7 @@ export function WorkspaceSettingsScreen() {
           activeSection={section}
           className="shrink-0 border-b border-white/[0.06] bg-[#060b10] px-3 py-2 md:max-w-[min(16rem,38vw)] md:border-b-0 md:border-r md:py-4"
         />
-        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4 md:p-6">
-          {main}
-        </div>
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4 md:p-6">{main}</div>
       </div>
     </div>
   );

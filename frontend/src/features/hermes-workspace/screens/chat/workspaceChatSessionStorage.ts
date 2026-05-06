@@ -11,7 +11,9 @@ export function workspaceLastSessionStorageKey(workspaceId: string | null | unde
   return wid ? `${WORKSPACE_LAST_SESSION_KEY_PREFIX}${wid}` : LEGACY_LAST_SESSION_KEY;
 }
 
-export function readWorkspaceLastChatSessionId(workspaceId: string | null | undefined): string | null {
+export function readWorkspaceLastChatSessionId(
+  workspaceId: string | null | undefined,
+): string | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = window.localStorage.getItem(workspaceLastSessionStorageKey(workspaceId));

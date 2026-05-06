@@ -66,6 +66,11 @@ def _clear_x_creds(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv(var, raising=False)
 
 
+def _collapse_ws(text: str) -> str:
+    """Collapse whitespace so substring checks survive Prettier-wrapped JSX text."""
+    return " ".join(text.split())
+
+
 def _isolate_journal(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> tuple[Path, Path]:
     journal = tmp_path / "execution_journal.jsonl"
     audit = tmp_path / "audit.jsonl"
@@ -2496,8 +2501,10 @@ def test_social_ui_contains_telegram_run_once_dry_run_preview_without_live_contr
 
 
 def test_social_ui_contains_telegram_inbound_preview_without_reply_controls() -> None:
-    screen = Path("frontend/src/features/hermes-workspace/screens/social/WorkspaceSocialScreen.tsx").read_text(
-        encoding="utf-8"
+    screen = _collapse_ws(
+        Path("frontend/src/features/hermes-workspace/screens/social/WorkspaceSocialScreen.tsx").read_text(
+            encoding="utf-8"
+        )
     )
     adapter = Path("frontend/src/features/hermes-workspace/adapters/socialAdapter.ts").read_text(encoding="utf-8")
     assert "Check Telegram inbox" in screen
@@ -2510,8 +2517,10 @@ def test_social_ui_contains_telegram_inbound_preview_without_reply_controls() ->
 
 
 def test_social_ui_contains_telegram_reactive_confirmed_reply_controls_without_raw_payloads() -> None:
-    screen = Path("frontend/src/features/hermes-workspace/screens/social/WorkspaceSocialScreen.tsx").read_text(
-        encoding="utf-8"
+    screen = _collapse_ws(
+        Path("frontend/src/features/hermes-workspace/screens/social/WorkspaceSocialScreen.tsx").read_text(
+            encoding="utf-8"
+        )
     )
     adapter = Path("frontend/src/features/hermes-workspace/adapters/socialAdapter.ts").read_text(encoding="utf-8")
     assert "Find reply opportunities" in screen

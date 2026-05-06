@@ -28,10 +28,7 @@ import {
   getHamApiOriginLabel,
   isLikelyHamApiFetchNetworkFailure,
 } from "./api";
-import {
-  readActiveWorkspaceId,
-  writeActiveWorkspaceId,
-} from "./hamWorkspaceStorage";
+import { readActiveWorkspaceId, writeActiveWorkspaceId } from "./hamWorkspaceStorage";
 
 // ---------------------------------------------------------------------------
 // State machine
@@ -121,10 +118,7 @@ function chooseActiveWorkspaceId(
   return null;
 }
 
-function deriveStateFromMe(
-  me: HamMeResponse,
-  storedId: string | null,
-): HamWorkspaceState {
+function deriveStateFromMe(me: HamMeResponse, storedId: string | null): HamWorkspaceState {
   if (me.workspaces.length === 0) {
     return { status: "onboarding", me };
   }
@@ -169,14 +163,9 @@ function classifyError(err: unknown): HamWorkspaceState {
   };
 }
 
-function selectActiveSummary(
-  state: HamWorkspaceState,
-): HamWorkspaceSummary | null {
+function selectActiveSummary(state: HamWorkspaceState): HamWorkspaceSummary | null {
   if (state.status !== "ready" || !state.activeWorkspaceId) return null;
-  return (
-    state.me.workspaces.find((w) => w.workspace_id === state.activeWorkspaceId) ||
-    null
-  );
+  return state.me.workspaces.find((w) => w.workspace_id === state.activeWorkspaceId) || null;
 }
 
 // ---------------------------------------------------------------------------
@@ -191,16 +180,13 @@ export function HamWorkspaceProvider({
   const [state, setState] = React.useState<HamWorkspaceState>({ status: "idle" });
   const inflightRef = React.useRef<Promise<void> | null>(null);
 
-  const persistSelection = React.useCallback(
-    (userId: string, workspaceId: string | null) => {
-      try {
-        writeActiveWorkspaceId(userId, workspaceId);
-      } catch {
-        /* storage is best-effort */
-      }
-    },
-    [],
-  );
+  const persistSelection = React.useCallback((userId: string, workspaceId: string | null) => {
+    try {
+      writeActiveWorkspaceId(userId, workspaceId);
+    } catch {
+      /* storage is best-effort */
+    }
+  }, []);
 
   const refresh = React.useCallback(async (): Promise<void> => {
     if (hostedAuth) {
@@ -220,7 +206,13 @@ export function HamWorkspaceProvider({
     if (inflightRef.current) {
       return inflightRef.current;
     }
-    setState((prev) => (prev.status === "idle" ? { status: "loading" } : prev.status === "error" ? { status: "loading" } : { status: "loading" }));
+    setState((prev) =>
+      prev.status === "idle"
+        ? { status: "loading" }
+        : prev.status === "error"
+          ? { status: "loading" }
+          : { status: "loading" },
+    );
     const p = (async () => {
       try {
         const me = await apiGetMe();
@@ -269,9 +261,7 @@ export function HamWorkspaceProvider({
         const stored = readActiveWorkspaceId(me.user.user_id);
         // Prefer the freshly-created workspace as the new active id.
         const newId = resp.workspace.workspace_id;
-        const exists = me.workspaces.some(
-          (w) => w.workspace_id === newId && w.status === "active",
-        );
+        const exists = me.workspaces.some((w) => w.workspace_id === newId && w.status === "active");
         const activeWorkspaceId = exists
           ? newId
           : chooseActiveWorkspaceId(me.workspaces, me.default_workspace_id, stored);
@@ -343,14 +333,10 @@ export function HamWorkspaceProvider({
 
   const value = React.useMemo<HamWorkspaceContextValue>(() => {
     const workspaces =
-      state.status === "ready" || state.status === "onboarding"
-        ? state.me.workspaces
-        : [];
+      state.status === "ready" || state.status === "onboarding" ? state.me.workspaces : [];
     const active = selectActiveSummary(state);
     const authMode =
-      state.status === "ready" || state.status === "onboarding"
-        ? state.me.auth_mode
-        : null;
+      state.status === "ready" || state.status === "onboarding" ? state.me.auth_mode : null;
     const hasPerm = (perm: string) => Boolean(active?.perms.includes(perm));
     return {
       state,
@@ -365,7 +351,15 @@ export function HamWorkspaceProvider({
       patchActiveWorkspace,
       hasPerm,
     };
-  }, [state, hostedAuth, openSignIn, refresh, selectWorkspace, createWorkspace, patchActiveWorkspace]);
+  }, [
+    state,
+    hostedAuth,
+    openSignIn,
+    refresh,
+    selectWorkspace,
+    createWorkspace,
+    patchActiveWorkspace,
+  ]);
 
   return <HamWorkspaceContext.Provider value={value}>{children}</HamWorkspaceContext.Provider>;
 }

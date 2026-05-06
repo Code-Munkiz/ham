@@ -149,9 +149,21 @@ export type XAuditSummary = {
   mutation_attempted: boolean;
 };
 
-export type SocialMessagingRuntimeState = "connected" | "connecting" | "retrying" | "fatal" | "stopped" | "unknown";
+export type SocialMessagingRuntimeState =
+  | "connected"
+  | "connecting"
+  | "retrying"
+  | "fatal"
+  | "stopped"
+  | "unknown";
 export type TelegramMode = "polling" | "polling_default" | "webhook" | "unset";
-export type TelegramPlatformState = "connected" | "retrying" | "fatal" | "stopped" | "unknown" | "not_reported";
+export type TelegramPlatformState =
+  | "connected"
+  | "retrying"
+  | "fatal"
+  | "stopped"
+  | "unknown"
+  | "not_reported";
 
 export type SocialMessagingRuntimeStatus = {
   configured: boolean;
@@ -643,7 +655,11 @@ async function postPreview<T>(path: string, body: Record<string, unknown> = {}):
 export const socialAdapter = {
   description: "HAM /api/social — read-only social provider status",
 
-  async loadSnapshot(): Promise<{ snapshot: SocialSnapshot | null; bridge: SocialBridge; error?: string }> {
+  async loadSnapshot(): Promise<{
+    snapshot: SocialSnapshot | null;
+    bridge: SocialBridge;
+    error?: string;
+  }> {
     try {
       const [
         providers,
@@ -704,10 +720,16 @@ export const socialAdapter = {
     }
   },
 
-  async previewInboxDiscovery(): Promise<{ preview: SocialPreviewResponse | null; bridge: SocialBridge; error?: string }> {
+  async previewInboxDiscovery(): Promise<{
+    preview: SocialPreviewResponse | null;
+    bridge: SocialBridge;
+    error?: string;
+  }> {
     try {
       return {
-        preview: await postPreview<SocialPreviewResponse>(`${BASE}/providers/x/reactive/inbox/preview`),
+        preview: await postPreview<SocialPreviewResponse>(
+          `${BASE}/providers/x/reactive/inbox/preview`,
+        ),
         bridge: { status: "ready" },
       };
     } catch (e) {
@@ -724,9 +746,12 @@ export const socialAdapter = {
   ): Promise<{ preview: SocialPreviewResponse | null; bridge: SocialBridge; error?: string }> {
     try {
       return {
-        preview: await postPreview<SocialPreviewResponse>(`${BASE}/providers/x/reactive/batch/dry-run`, {
-          candidates,
-        }),
+        preview: await postPreview<SocialPreviewResponse>(
+          `${BASE}/providers/x/reactive/batch/dry-run`,
+          {
+            candidates,
+          },
+        ),
         bridge: { status: "ready" },
       };
     } catch (e) {
@@ -738,10 +763,16 @@ export const socialAdapter = {
     }
   },
 
-  async previewBroadcastPreflight(): Promise<{ preview: SocialPreviewResponse | null; bridge: SocialBridge; error?: string }> {
+  async previewBroadcastPreflight(): Promise<{
+    preview: SocialPreviewResponse | null;
+    bridge: SocialBridge;
+    error?: string;
+  }> {
     try {
       return {
-        preview: await postPreview<SocialPreviewResponse>(`${BASE}/providers/x/broadcast/preflight`),
+        preview: await postPreview<SocialPreviewResponse>(
+          `${BASE}/providers/x/broadcast/preflight`,
+        ),
         bridge: { status: "ready" },
       };
     } catch (e) {
@@ -753,10 +784,16 @@ export const socialAdapter = {
     }
   },
 
-  async previewTelegramMessage(): Promise<{ preview: TelegramMessagePreviewResponse | null; bridge: SocialBridge; error?: string }> {
+  async previewTelegramMessage(): Promise<{
+    preview: TelegramMessagePreviewResponse | null;
+    bridge: SocialBridge;
+    error?: string;
+  }> {
     try {
       return {
-        preview: await postPreview<TelegramMessagePreviewResponse>(`${BASE}/providers/telegram/messages/preview`),
+        preview: await postPreview<TelegramMessagePreviewResponse>(
+          `${BASE}/providers/telegram/messages/preview`,
+        ),
         bridge: { status: "ready" },
       };
     } catch (e) {
@@ -771,13 +808,20 @@ export const socialAdapter = {
   async previewTelegramActivity(input?: {
     activityKind?: "status_update" | "test_activity";
     clientRequestId?: string;
-  }): Promise<{ preview: TelegramActivityPreviewResponse | null; bridge: SocialBridge; error?: string }> {
+  }): Promise<{
+    preview: TelegramActivityPreviewResponse | null;
+    bridge: SocialBridge;
+    error?: string;
+  }> {
     try {
       return {
-        preview: await postPreview<TelegramActivityPreviewResponse>(`${BASE}/providers/telegram/activity/preview`, {
-          activity_kind: input?.activityKind ?? "test_activity",
-          client_request_id: input?.clientRequestId,
-        }),
+        preview: await postPreview<TelegramActivityPreviewResponse>(
+          `${BASE}/providers/telegram/activity/preview`,
+          {
+            activity_kind: input?.activityKind ?? "test_activity",
+            client_request_id: input?.clientRequestId,
+          },
+        ),
         bridge: { status: "ready" },
       };
     } catch (e) {
@@ -792,13 +836,20 @@ export const socialAdapter = {
   async previewTelegramActivityRunOnce(input?: {
     activityKind?: "status_update" | "test_activity";
     clientRequestId?: string;
-  }): Promise<{ preview: TelegramActivityRunOncePreviewResponse | null; bridge: SocialBridge; error?: string }> {
+  }): Promise<{
+    preview: TelegramActivityRunOncePreviewResponse | null;
+    bridge: SocialBridge;
+    error?: string;
+  }> {
     try {
       return {
-        preview: await postPreview<TelegramActivityRunOncePreviewResponse>(`${BASE}/providers/telegram/activity/run-once/preview`, {
-          activity_kind: input?.activityKind ?? "test_activity",
-          client_request_id: input?.clientRequestId,
-        }),
+        preview: await postPreview<TelegramActivityRunOncePreviewResponse>(
+          `${BASE}/providers/telegram/activity/run-once/preview`,
+          {
+            activity_kind: input?.activityKind ?? "test_activity",
+            client_request_id: input?.clientRequestId,
+          },
+        ),
         bridge: { status: "ready" },
       };
     } catch (e) {
@@ -810,14 +861,22 @@ export const socialAdapter = {
     }
   },
 
-  async previewTelegramInbound(): Promise<{ preview: TelegramInboundPreviewResponse | null; bridge: SocialBridge; error?: string }> {
+  async previewTelegramInbound(): Promise<{
+    preview: TelegramInboundPreviewResponse | null;
+    bridge: SocialBridge;
+    error?: string;
+  }> {
     try {
       const res = await hamApiFetch(`${BASE}/providers/telegram/inbound/preview`, {
         method: "GET",
         credentials: "include",
       });
-      if (!res.ok) return { preview: null, bridge: { status: "pending", detail: `HTTP ${res.status}` } };
-      return { preview: (await res.json()) as TelegramInboundPreviewResponse, bridge: { status: "ready" } };
+      if (!res.ok)
+        return { preview: null, bridge: { status: "pending", detail: `HTTP ${res.status}` } };
+      return {
+        preview: (await res.json()) as TelegramInboundPreviewResponse,
+        bridge: { status: "ready" },
+      };
     } catch (e) {
       return {
         preview: null,
@@ -827,10 +886,17 @@ export const socialAdapter = {
     }
   },
 
-  async previewTelegramReactiveReplies(): Promise<{ preview: TelegramReactiveRepliesPreviewResponse | null; bridge: SocialBridge; error?: string }> {
+  async previewTelegramReactiveReplies(): Promise<{
+    preview: TelegramReactiveRepliesPreviewResponse | null;
+    bridge: SocialBridge;
+    error?: string;
+  }> {
     try {
       return {
-        preview: await postPreview<TelegramReactiveRepliesPreviewResponse>(`${BASE}/providers/telegram/reactive/replies/preview`, {}),
+        preview: await postPreview<TelegramReactiveRepliesPreviewResponse>(
+          `${BASE}/providers/telegram/reactive/replies/preview`,
+          {},
+        ),
         bridge: { status: "ready" },
       };
     } catch (e) {
@@ -848,7 +914,11 @@ export const socialAdapter = {
     inboundId: string;
     operatorToken: string;
     clientRequestId?: string;
-  }): Promise<{ apply: TelegramReactiveReplyApplyResponse | null; bridge: SocialBridge; error?: string }> {
+  }): Promise<{
+    apply: TelegramReactiveReplyApplyResponse | null;
+    bridge: SocialBridge;
+    error?: string;
+  }> {
     try {
       const res = await hamApiFetch(`${BASE}/providers/telegram/reactive/replies/apply`, {
         method: "POST",
@@ -875,7 +945,10 @@ export const socialAdapter = {
         }
         return { apply: null, bridge: { status: "pending", detail }, error: detail };
       }
-      return { apply: (await res.json()) as TelegramReactiveReplyApplyResponse, bridge: { status: "ready" } };
+      return {
+        apply: (await res.json()) as TelegramReactiveReplyApplyResponse,
+        bridge: { status: "ready" },
+      };
     } catch (e) {
       return {
         apply: null,
@@ -891,7 +964,11 @@ export const socialAdapter = {
     operatorToken: string;
     activityKind?: "status_update" | "test_activity";
     clientRequestId?: string;
-  }): Promise<{ apply: TelegramActivityApplyResponse | null; bridge: SocialBridge; error?: string }> {
+  }): Promise<{
+    apply: TelegramActivityApplyResponse | null;
+    bridge: SocialBridge;
+    error?: string;
+  }> {
     try {
       const res = await hamApiFetch(`${BASE}/providers/telegram/activity/apply`, {
         method: "POST",
@@ -918,7 +995,10 @@ export const socialAdapter = {
         }
         return { apply: null, bridge: { status: "pending", detail }, error: detail };
       }
-      return { apply: (await res.json()) as TelegramActivityApplyResponse, bridge: { status: "ready" } };
+      return {
+        apply: (await res.json()) as TelegramActivityApplyResponse,
+        bridge: { status: "ready" },
+      };
     } catch (e) {
       return {
         apply: null,
@@ -934,7 +1014,11 @@ export const socialAdapter = {
     operatorToken: string;
     messageIntent?: "greeting" | "announcement" | "test_message";
     clientRequestId?: string;
-  }): Promise<{ apply: TelegramMessageApplyResponse | null; bridge: SocialBridge; error?: string }> {
+  }): Promise<{
+    apply: TelegramMessageApplyResponse | null;
+    bridge: SocialBridge;
+    error?: string;
+  }> {
     try {
       const res = await hamApiFetch(`${BASE}/providers/telegram/messages/apply`, {
         method: "POST",
@@ -961,7 +1045,10 @@ export const socialAdapter = {
         }
         return { apply: null, bridge: { status: "pending", detail }, error: detail };
       }
-      return { apply: (await res.json()) as TelegramMessageApplyResponse, bridge: { status: "ready" } };
+      return {
+        apply: (await res.json()) as TelegramMessageApplyResponse,
+        bridge: { status: "ready" },
+      };
     } catch (e) {
       return {
         apply: null,
@@ -976,7 +1063,11 @@ export const socialAdapter = {
     confirmationPhrase: string;
     operatorToken: string;
     clientRequestId?: string;
-  }): Promise<{ apply: SocialReactiveReplyApplyResponse | null; bridge: SocialBridge; error?: string }> {
+  }): Promise<{
+    apply: SocialReactiveReplyApplyResponse | null;
+    bridge: SocialBridge;
+    error?: string;
+  }> {
     try {
       const res = await hamApiFetch(`${BASE}/providers/x/reactive/reply/apply`, {
         method: "POST",
@@ -1002,7 +1093,10 @@ export const socialAdapter = {
         }
         throw new Error(detail);
       }
-      return { apply: (await res.json()) as SocialReactiveReplyApplyResponse, bridge: { status: "ready" } };
+      return {
+        apply: (await res.json()) as SocialReactiveReplyApplyResponse,
+        bridge: { status: "ready" },
+      };
     } catch (e) {
       return {
         apply: null,
@@ -1017,7 +1111,11 @@ export const socialAdapter = {
     confirmationPhrase: string;
     operatorToken: string;
     clientRequestId?: string;
-  }): Promise<{ apply: SocialReactiveBatchApplyResponse | null; bridge: SocialBridge; error?: string }> {
+  }): Promise<{
+    apply: SocialReactiveBatchApplyResponse | null;
+    bridge: SocialBridge;
+    error?: string;
+  }> {
     try {
       const res = await hamApiFetch(`${BASE}/providers/x/reactive/batch/apply`, {
         method: "POST",
@@ -1043,7 +1141,10 @@ export const socialAdapter = {
         }
         throw new Error(detail);
       }
-      return { apply: (await res.json()) as SocialReactiveBatchApplyResponse, bridge: { status: "ready" } };
+      return {
+        apply: (await res.json()) as SocialReactiveBatchApplyResponse,
+        bridge: { status: "ready" },
+      };
     } catch (e) {
       return {
         apply: null,
@@ -1058,7 +1159,11 @@ export const socialAdapter = {
     confirmationPhrase: string;
     operatorToken: string;
     clientRequestId?: string;
-  }): Promise<{ apply: SocialBroadcastApplyResponse | null; bridge: SocialBridge; error?: string }> {
+  }): Promise<{
+    apply: SocialBroadcastApplyResponse | null;
+    bridge: SocialBridge;
+    error?: string;
+  }> {
     try {
       const res = await hamApiFetch(`${BASE}/providers/x/broadcast/apply`, {
         method: "POST",
@@ -1084,7 +1189,10 @@ export const socialAdapter = {
         }
         throw new Error(detail);
       }
-      return { apply: (await res.json()) as SocialBroadcastApplyResponse, bridge: { status: "ready" } };
+      return {
+        apply: (await res.json()) as SocialBroadcastApplyResponse,
+        bridge: { status: "ready" },
+      };
     } catch (e) {
       return {
         apply: null,

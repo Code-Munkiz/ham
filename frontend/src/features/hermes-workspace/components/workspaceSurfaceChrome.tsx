@@ -31,7 +31,12 @@ export function WorkspaceSurfaceHeader({
     >
       <div className="min-w-0">
         {eyebrow ? (
-          <p className={cn("text-[10px] font-semibold uppercase tracking-[0.2em]", variant === "dark" ? "text-white/45" : "")}>
+          <p
+            className={cn(
+              "text-[10px] font-semibold uppercase tracking-[0.2em]",
+              variant === "dark" ? "text-white/45" : "",
+            )}
+          >
             {eyebrow}
           </p>
         ) : null}
@@ -76,7 +81,9 @@ export function WorkspaceSurfaceStateCard({
       )}
     >
       <h2 className="text-base font-semibold leading-snug">{title}</h2>
-      {description ? <p className="mt-2 max-w-prose leading-relaxed opacity-95">{description}</p> : null}
+      {description ? (
+        <p className="mt-2 max-w-prose leading-relaxed opacity-95">{description}</p>
+      ) : null}
       {technicalDetail ? (
         <pre className="mt-3 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-white/10 bg-black/20 p-3 text-[11px] leading-relaxed opacity-90">
           {technicalDetail}

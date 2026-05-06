@@ -67,9 +67,7 @@ export const workspaceTerminalAdapter = {
     return localRuntimeWsUrl(rel);
   },
 
-  async createSession(
-    _tabId: string,
-  ): Promise<{
+  async createSession(_tabId: string): Promise<{
     sessionId: string | null;
     transport: "pty" | "pipe" | null;
     streamPath: string | null;
@@ -106,7 +104,10 @@ export const workspaceTerminalAdapter = {
     }
   },
 
-  async sendInput(sessionId: string, data: string): Promise<{ ok: boolean; bridge: TerminalBridgeState }> {
+  async sendInput(
+    sessionId: string,
+    data: string,
+  ): Promise<{ ok: boolean; bridge: TerminalBridgeState }> {
     if (!isLocalRuntimeConfigured()) {
       return { ok: false, bridge: bridgeUnconfigured() };
     }
@@ -114,11 +115,14 @@ export const workspaceTerminalAdapter = {
       return { ok: false, bridge: bridgeUnconfigured() };
     }
     try {
-      const res = await localRuntimeFetch(`${TBASE}/sessions/${encodeURIComponent(sessionId)}/input`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ data }),
-      });
+      const res = await localRuntimeFetch(
+        `${TBASE}/sessions/${encodeURIComponent(sessionId)}/input`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ data }),
+        },
+      );
       if (!res.ok) {
         return { ok: false, bridge: bridgeFromHttp(res) };
       }
@@ -137,11 +141,14 @@ export const workspaceTerminalAdapter = {
       return { ok: false, bridge: bridgeUnconfigured() };
     }
     try {
-      const res = await localRuntimeFetch(`${TBASE}/sessions/${encodeURIComponent(sessionId)}/resize`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cols, rows }),
-      });
+      const res = await localRuntimeFetch(
+        `${TBASE}/sessions/${encodeURIComponent(sessionId)}/resize`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cols, rows }),
+        },
+      );
       if (!res.ok) {
         return { ok: false, bridge: bridgeFromHttp(res) };
       }

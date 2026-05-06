@@ -8,7 +8,12 @@ import * as React from "react";
 import { ArrowUp, Link2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { ChatContextMetersPayload, ChatCapabilitiesPayload, ModelCatalogItem, ModelCatalogPayload } from "@/lib/ham/types";
+import type {
+  ChatContextMetersPayload,
+  ChatCapabilitiesPayload,
+  ModelCatalogItem,
+  ModelCatalogPayload,
+} from "@/lib/ham/types";
 import { isDashboardChatGatewayReady } from "@/lib/ham/types";
 import { WorkspaceVoiceMessageInput } from "./WorkspaceVoiceMessageInput";
 import { toast } from "sonner";
@@ -92,7 +97,9 @@ const COMPOSER_MENU_FOOTER_HINT =
   "Docs/spreadsheets text-extracted; videos stored only (no transcript yet). OCR/video vision not yet.";
 
 /** Tooltip-only: full honesty without bloating the menu panel. */
-function attachMenuCapabilityTitle(caps: ChatCapabilitiesPayload | null | undefined): string | null {
+function attachMenuCapabilityTitle(
+  caps: ChatCapabilitiesPayload | null | undefined,
+): string | null {
   if (!caps) return null;
   const lines = [...(caps.limitations ?? [])];
   if (caps.notes?.trim()) lines.push(caps.notes.trim());
@@ -209,23 +216,20 @@ export function WorkspaceChatComposer({
   const [voiceState, setVoiceState] = React.useState<VoiceUiState>("idle");
   const [voiceBanner, setVoiceBanner] = React.useState<string | null>(null);
   const [isDragging, setIsDragging] = React.useState(false);
-  const transitionVoiceState = React.useCallback(
-    (next: VoiceUiState, reason: string) => {
-      setVoiceState((prev) => {
-        if (prev === next) return prev;
-        pushVoiceDebug({
-          event: "voice.state.transition",
-          component: "WorkspaceChatComposer",
-          composerInstanceId: composerInstanceId.current,
-          from: prev,
-          to: next,
-          reason,
-        });
-        return next;
+  const transitionVoiceState = React.useCallback((next: VoiceUiState, reason: string) => {
+    setVoiceState((prev) => {
+      if (prev === next) return prev;
+      pushVoiceDebug({
+        event: "voice.state.transition",
+        component: "WorkspaceChatComposer",
+        composerInstanceId: composerInstanceId.current,
+        from: prev,
+        to: next,
+        reason,
       });
-    },
-    [],
-  );
+      return next;
+    });
+  }, []);
 
   const [liveListening, setLiveListening] = React.useState(false);
   const liveBaseDraftRef = React.useRef<string>("");
@@ -376,8 +380,9 @@ export function WorkspaceChatComposer({
     });
   }, [voiceState, voiceTranscribing]);
 
-  const showModel =
-    Boolean(catalog && catalog.gateway_mode === "openrouter" && chatModelCandidates(catalog).length > 0);
+  const showModel = Boolean(
+    catalog && catalog.gateway_mode === "openrouter" && chatModelCandidates(catalog).length > 0,
+  );
   const gatewayOk = isDashboardChatGatewayReady(catalog);
   const modelPill = primaryModelPillText(catalog, modelId);
   const modelDetail = modelDetailTitle(catalog, modelId, chatCapabilities);
@@ -393,11 +398,7 @@ export function WorkspaceChatComposer({
   const normalSendReady =
     gatewayOk && (value.trim() || (attachments.length > 0 && !hasAttachErrOnly));
   const canSend =
-    !allAttachmentsFailed &&
-    !uploadsPending &&
-    normalSendReady &&
-    !sending &&
-    !voiceBusy;
+    !allAttachmentsFailed && !uploadsPending && normalSendReady && !sending && !voiceBusy;
 
   const sendButtonTitle = React.useMemo(() => {
     if (canSend) return "Send message (Enter)";
@@ -432,7 +433,8 @@ export function WorkspaceChatComposer({
 
   const placeholder = React.useMemo(() => {
     if (voiceTranscribing) return "Transcribing…";
-    if (!gatewayOk && catalog && !sending) return "Chat gateway not ready — check the API model settings.";
+    if (!gatewayOk && catalog && !sending)
+      return "Chat gateway not ready — check the API model settings.";
     if (showModel) {
       const macLike =
         typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/.test(navigator.userAgent || "");
@@ -556,31 +558,37 @@ export function WorkspaceChatComposer({
     liveCommittedDraftRef.current = prior ? `${prior} ${clean}` : clean;
   }, []);
 
-  const captureComposerPointer = React.useCallback((ev: React.SyntheticEvent) => {
-    const target = ev.target as HTMLElement | null;
-    if (!target) return;
-    pushVoiceDebug({
-      event: "voice.capture.pointer",
-      component: "WorkspaceChatComposer",
-      composerInstanceId: composerInstanceId.current,
-      targetTag: target.tagName,
-      targetClass: target.className,
-      voiceState,
-    });
-  }, [voiceState]);
+  const captureComposerPointer = React.useCallback(
+    (ev: React.SyntheticEvent) => {
+      const target = ev.target as HTMLElement | null;
+      if (!target) return;
+      pushVoiceDebug({
+        event: "voice.capture.pointer",
+        component: "WorkspaceChatComposer",
+        composerInstanceId: composerInstanceId.current,
+        targetTag: target.tagName,
+        targetClass: target.className,
+        voiceState,
+      });
+    },
+    [voiceState],
+  );
 
-  const captureComposerClick = React.useCallback((ev: React.SyntheticEvent) => {
-    const target = ev.target as HTMLElement | null;
-    if (!target) return;
-    pushVoiceDebug({
-      event: "voice.capture.click",
-      component: "WorkspaceChatComposer",
-      composerInstanceId: composerInstanceId.current,
-      targetTag: target.tagName,
-      targetClass: target.className,
-      voiceState,
-    });
-  }, [voiceState]);
+  const captureComposerClick = React.useCallback(
+    (ev: React.SyntheticEvent) => {
+      const target = ev.target as HTMLElement | null;
+      if (!target) return;
+      pushVoiceDebug({
+        event: "voice.capture.click",
+        component: "WorkspaceChatComposer",
+        composerInstanceId: composerInstanceId.current,
+        targetTag: target.tagName,
+        targetClass: target.className,
+        voiceState,
+      });
+    },
+    [voiceState],
+  );
 
   return (
     <div
@@ -661,7 +669,9 @@ export function WorkspaceChatComposer({
               ) : voiceTranscribing || voiceStopping ? (
                 <>
                   <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-emerald-300" />
-                  <span className="text-emerald-200/90">{voiceStopping ? "Stopping…" : "Transcribing…"}</span>
+                  <span className="text-emerald-200/90">
+                    {voiceStopping ? "Stopping…" : "Transcribing…"}
+                  </span>
                 </>
               ) : (
                 <>
@@ -716,10 +726,12 @@ export function WorkspaceChatComposer({
           {(catalog?.gateway_mode || "").trim().toLowerCase() === "mock" &&
           chatCapabilities?.generation?.supports_video_generation ? (
             <p className="mx-2.5 mb-1 text-[11px] leading-snug text-amber-200/75 md:mx-3.5">
-              Mock chat gateway: <span className="font-medium text-amber-100/90">Send</span> queues a Comfy
-              video from your prompt (same as{" "}
+              Mock chat gateway: <span className="font-medium text-amber-100/90">Send</span> queues
+              a Comfy video from your prompt (same as{" "}
               <span className="font-medium text-amber-100/90">+ → Generate video</span>). Use{" "}
-              <span className="font-mono text-[10px] text-amber-100/85">HERMES_GATEWAY_MODE=openrouter</span>{" "}
+              <span className="font-mono text-[10px] text-amber-100/85">
+                HERMES_GATEWAY_MODE=openrouter
+              </span>{" "}
               for normal assistant replies instead.
             </p>
           ) : null}
@@ -828,7 +840,9 @@ export function WorkspaceChatComposer({
                   compact
                   hidePreview
                   mode={sttMode}
-                  disabled={sending || voiceTranscribing || disabled || sttDictationEnabled === false}
+                  disabled={
+                    sending || voiceTranscribing || disabled || sttDictationEnabled === false
+                  }
                   disabledReason={
                     sttDictationEnabled === false
                       ? sttUnavailableReason ||

@@ -44,16 +44,31 @@ export const knowledgeNavItems: KnowledgeNavItem[] = [
 const MOBILE_TITLE_RULES: { test: (p: string) => boolean; title: string }[] = [
   { test: (p) => p === "/workspace/chat" || p.startsWith("/workspace/chat/"), title: "Chat" },
   { test: (p) => p === "/workspace/files" || p.startsWith("/workspace/files/"), title: "Files" },
-  { test: (p) => p === "/workspace/terminal" || p.startsWith("/workspace/terminal/"), title: "Terminal" },
+  {
+    test: (p) => p === "/workspace/terminal" || p.startsWith("/workspace/terminal/"),
+    title: "Terminal",
+  },
   { test: (p) => p === "/workspace/jobs" || p.startsWith("/workspace/jobs/"), title: "Jobs" },
   { test: (p) => p === "/workspace/tasks" || p.startsWith("/workspace/tasks/"), title: "Tasks" },
-  { test: (p) => p === "/workspace/conductor" || p.startsWith("/workspace/conductor/"), title: "Conductor" },
-  { test: (p) => p === "/workspace/operations" || p.startsWith("/workspace/operations/"), title: "Operations" },
+  {
+    test: (p) => p === "/workspace/conductor" || p.startsWith("/workspace/conductor/"),
+    title: "Conductor",
+  },
+  {
+    test: (p) => p === "/workspace/operations" || p.startsWith("/workspace/operations/"),
+    title: "Operations",
+  },
   { test: (p) => p === "/workspace/social" || p.startsWith("/workspace/social/"), title: "Social" },
   { test: (p) => p === "/workspace/memory" || p.startsWith("/workspace/memory/"), title: "Memory" },
   { test: (p) => p === "/workspace/skills" || p.startsWith("/workspace/skills/"), title: "Skills" },
-  { test: (p) => p === "/workspace/profiles" || p.startsWith("/workspace/profiles/"), title: "Profiles" },
-  { test: (p) => p === "/workspace/settings" || p.startsWith("/workspace/settings/"), title: "Settings" },
+  {
+    test: (p) => p === "/workspace/profiles" || p.startsWith("/workspace/profiles/"),
+    title: "Profiles",
+  },
+  {
+    test: (p) => p === "/workspace/settings" || p.startsWith("/workspace/settings/"),
+    title: "Settings",
+  },
 ];
 
 /**

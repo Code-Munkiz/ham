@@ -188,27 +188,19 @@ describe("mapCoreReadiness", () => {
 
 describe("derivePostingFrequencyProduct", () => {
   it("returns 'Off' when the broadcast lane is disabled", () => {
-    expect(
-      derivePostingFrequencyProduct(
-        xStatus({ broadcast_lane_enabled: false }),
-      ),
-    ).toBe("Off");
+    expect(derivePostingFrequencyProduct(xStatus({ broadcast_lane_enabled: false }))).toBe("Off");
   });
 
   it("returns 'Custom' when caps fall outside the standard band", () => {
     // broadcast_daily_cap <= 0 forces the 'custom' branch
-    expect(
-      derivePostingFrequencyProduct(
-        xStatus({ caps: { broadcast_daily_cap: 0 } }),
-      ),
-    ).toBe("Custom");
+    expect(derivePostingFrequencyProduct(xStatus({ caps: { broadcast_daily_cap: 0 } }))).toBe(
+      "Custom",
+    );
 
     // per-run cap >3 also forces 'custom'
-    expect(
-      derivePostingFrequencyProduct(
-        xStatus({ caps: { broadcast_per_run_cap: 5 } }),
-      ),
-    ).toBe("Custom");
+    expect(derivePostingFrequencyProduct(xStatus({ caps: { broadcast_per_run_cap: 5 } }))).toBe(
+      "Custom",
+    );
   });
 
   it("returns a banded value (Low/Standard/High) when caps are within range", () => {
@@ -220,24 +212,16 @@ describe("derivePostingFrequencyProduct", () => {
 
 describe("deriveReplyVolumeProduct", () => {
   it("returns 'Off' when the reactive lane is disabled", () => {
-    expect(
-      deriveReplyVolumeProduct(
-        xStatus({ reactive_lane_enabled: false }),
-      ),
-    ).toBe("Off");
+    expect(deriveReplyVolumeProduct(xStatus({ reactive_lane_enabled: false }))).toBe("Off");
   });
 
   it("returns 'Custom' when reply caps exceed the standard envelope", () => {
     expect(
-      deriveReplyVolumeProduct(
-        xStatus({ caps: { reactive_max_replies_per_hour: 100 } }),
-      ),
+      deriveReplyVolumeProduct(xStatus({ caps: { reactive_max_replies_per_hour: 100 } })),
     ).toBe("Custom");
 
     expect(
-      deriveReplyVolumeProduct(
-        xStatus({ caps: { reactive_min_seconds_between_replies: 1 } }),
-      ),
+      deriveReplyVolumeProduct(xStatus({ caps: { reactive_min_seconds_between_replies: 1 } })),
     ).toBe("Custom");
   });
 

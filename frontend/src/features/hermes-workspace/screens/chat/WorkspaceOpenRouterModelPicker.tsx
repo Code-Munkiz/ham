@@ -140,7 +140,9 @@ export function WorkspaceOpenRouterModelPicker({
                     ) : null}
                   </DropdownMenu.Item>
                 ))}
-                {restShown.length > 0 ? <DropdownMenu.Separator className="my-1 h-px bg-white/[0.08]" /> : null}
+                {restShown.length > 0 ? (
+                  <DropdownMenu.Separator className="my-1 h-px bg-white/[0.08]" />
+                ) : null}
               </>
             ) : null}
             {!q && restShown.length > 0 ? (
@@ -163,7 +165,9 @@ export function WorkspaceOpenRouterModelPicker({
                 <span className="min-w-0 flex-1 truncate">
                   <span className="font-medium">{m.label || m.id}</span>
                   {m.id !== (m.label || "") ? (
-                    <span className="mt-0.5 block truncate font-mono text-[10px] text-white/35">{m.id}</span>
+                    <span className="mt-0.5 block truncate font-mono text-[10px] text-white/35">
+                      {m.id}
+                    </span>
                   ) : null}
                 </span>
                 {modelId === m.id ? (
@@ -172,7 +176,9 @@ export function WorkspaceOpenRouterModelPicker({
               </DropdownMenu.Item>
             ))}
             {(q ? filtered : restShown).length === 0 ? (
-              <div className="px-2 py-6 text-center text-[12px] text-white/45">No matching models.</div>
+              <div className="px-2 py-6 text-center text-[12px] text-white/45">
+                No matching models.
+              </div>
             ) : null}
           </div>
           <div className="border-t border-white/[0.08] px-2 py-2">

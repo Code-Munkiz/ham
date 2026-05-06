@@ -29,7 +29,11 @@ import {
   type HamChatExecutionMode,
 } from "@/lib/ham/api";
 import { CLIENT_MODEL_CATALOG_FALLBACK } from "@/lib/ham/modelCatalogFallback";
-import type { ChatCapabilitiesPayload, ChatContextMetersPayload, ModelCatalogPayload } from "@/lib/ham/types";
+import type {
+  ChatCapabilitiesPayload,
+  ChatContextMetersPayload,
+  ModelCatalogPayload,
+} from "@/lib/ham/types";
 import { applyHamUiActions } from "@/lib/ham/applyUiActions";
 import type { HamChatStreamAuth } from "@/lib/ham/api";
 import type { HamChatUserContentV1, HamChatUserContentV2 } from "@/lib/ham/chatUserContent";
@@ -47,7 +51,11 @@ import {
 } from "../../adapters/managedMissionsAdapter";
 import { useManagedMissionFeedLiveStream } from "../../hooks/useManagedMissionFeedLiveStream";
 import { cursorCloudAgentWebHref, isBcCursorAgentId } from "../../utils/cursorCloudAgentWeb";
-import { formatTranscriptReasonCodeForDisplay, missionFeedTranscriptFromEvents, type MissionTranscriptItem } from "../../utils/missionFeedTranscript";
+import {
+  formatTranscriptReasonCodeForDisplay,
+  missionFeedTranscriptFromEvents,
+  type MissionTranscriptItem,
+} from "../../utils/missionFeedTranscript";
 import { MANAGED_MISSION_CHAT_OWNERSHIP_HINT } from "../../lib/managedMissionOwnershipCopy";
 import { useVoiceWorkspaceSettingsOptional } from "../../voice/VoiceWorkspaceSettingsContext";
 import { WorkspaceChatEmptyState } from "./WorkspaceChatEmptyState";
@@ -58,7 +66,10 @@ import type {
   ComposerGenerateImageState,
   ComposerGenerateVideoState,
 } from "./WorkspaceChatComposerActionsMenu";
-import { parseWorkspaceCreativeImageIntent, parseWorkspaceImageGenerationIntent } from "./imageGenerationIntent";
+import {
+  parseWorkspaceCreativeImageIntent,
+  parseWorkspaceImageGenerationIntent,
+} from "./imageGenerationIntent";
 import { useWorkspaceHamProject } from "../../WorkspaceHamProjectContext";
 import { WorkspaceChatInspectorPanel } from "./WorkspaceChatInspectorPanel";
 import {
@@ -85,7 +96,10 @@ import { Button } from "@/components/ui/button";
 import { hamWorkspaceLogoUrl } from "@/lib/ham/publicAssets";
 import { cn } from "@/lib/utils";
 import { isHamDesktopShell } from "@/lib/ham/desktopConfig";
-import { getHamDesktopLocalControlApi, getHamDesktopWebBridgeApi } from "@/lib/ham/desktopBundleBridge";
+import {
+  getHamDesktopLocalControlApi,
+  getHamDesktopWebBridgeApi,
+} from "@/lib/ham/desktopBundleBridge";
 import {
   readWorkspaceLastChatSessionId,
   writeWorkspaceLastChatSessionId,
@@ -192,7 +206,11 @@ function fmtMissionFeedIsoBrief(iso: string | null | undefined): string {
   });
 }
 
-function ChatThinkingTranscriptChunk({ item }: { item: Extract<MissionTranscriptItem, { type: "thinking" }> }) {
+function ChatThinkingTranscriptChunk({
+  item,
+}: {
+  item: Extract<MissionTranscriptItem, { type: "thinking" }>;
+}) {
   const [open, setOpen] = React.useState(false);
   const long = (item.text || "").length > 200;
   if (!long) {
@@ -212,7 +230,9 @@ function ChatThinkingTranscriptChunk({ item }: { item: Extract<MissionTranscript
         Thinking{item.status === "streaming" ? " (streaming)" : ""} · {open ? "hide" : "show"}
       </button>
       {open ? (
-        <p className="mt-1 whitespace-pre-wrap text-[11px] leading-relaxed text-white/55">{item.text}</p>
+        <p className="mt-1 whitespace-pre-wrap text-[11px] leading-relaxed text-white/55">
+          {item.text}
+        </p>
       ) : (
         <p className="mt-1 truncate text-[11px] text-white/45">
           {item.text.length <= 120 ? item.text : `${item.text.slice(0, 120)}…`}
@@ -235,8 +255,13 @@ function ChatMissionFeedTranscript({
         if (block.type === "assistant") {
           const rcDisp = formatTranscriptReasonCodeForDisplay(block.reasonCode);
           return (
-            <div key={block.id} className="rounded border border-white/[0.06] bg-white/[0.03] px-2 py-1.5">
-              <p className="whitespace-pre-wrap text-[12px] leading-snug text-white/[0.88]">{block.text}</p>
+            <div
+              key={block.id}
+              className="rounded border border-white/[0.06] bg-white/[0.03] px-2 py-1.5"
+            >
+              <p className="whitespace-pre-wrap text-[12px] leading-snug text-white/[0.88]">
+                {block.text}
+              </p>
               <p className="mt-0.5 text-[10px] leading-relaxed text-white/40">
                 {fmtMissionFeedIsoBrief(block.updatedAt)}
                 {rcDisp ? ` · ${rcDisp}` : ""}
@@ -245,12 +270,20 @@ function ChatMissionFeedTranscript({
             </div>
           );
         }
-        if (block.type === "thinking") return <ChatThinkingTranscriptChunk key={block.id} item={block} />;
+        if (block.type === "thinking")
+          return <ChatThinkingTranscriptChunk key={block.id} item={block} />;
         if (block.type === "user") {
           return (
-            <div key={block.id} className="rounded border border-white/[0.06] bg-white/[0.04] px-2 py-1">
-              <p className="whitespace-pre-wrap text-[11px] leading-relaxed text-white/[0.85]">{block.text}</p>
-              <p className="mt-0.5 text-[10px] leading-relaxed text-white/40">{fmtMissionFeedIsoBrief(block.time)} · user</p>
+            <div
+              key={block.id}
+              className="rounded border border-white/[0.06] bg-white/[0.04] px-2 py-1"
+            >
+              <p className="whitespace-pre-wrap text-[11px] leading-relaxed text-white/[0.85]">
+                {block.text}
+              </p>
+              <p className="mt-0.5 text-[10px] leading-relaxed text-white/40">
+                {fmtMissionFeedIsoBrief(block.time)} · user
+              </p>
             </div>
           );
         }
@@ -262,7 +295,9 @@ function ChatMissionFeedTranscript({
             >
               <span className="text-white/35">tool</span>
               <span className="font-sans text-white/65">{block.label}</span>
-              {block.time ? <span className="ml-auto text-white/30">{fmtMissionFeedIsoBrief(block.time)}</span> : null}
+              {block.time ? (
+                <span className="ml-auto text-white/30">{fmtMissionFeedIsoBrief(block.time)}</span>
+              ) : null}
             </div>
           );
         }
@@ -271,7 +306,9 @@ function ChatMissionFeedTranscript({
           return (
             <div key={block.id} className="flex flex-wrap gap-x-2 text-[10px] text-white/45">
               <span className="text-white/60">{block.label}</span>
-              {block.time ? <span className="text-white/30">{fmtMissionFeedIsoBrief(block.time)}</span> : null}
+              {block.time ? (
+                <span className="text-white/30">{fmtMissionFeedIsoBrief(block.time)}</span>
+              ) : null}
               {rcDisp ? <span className="font-mono text-white/30">{rcDisp}</span> : null}
             </div>
           );
@@ -339,7 +376,9 @@ function isLikelyBrowserTask(text: string): boolean {
 function isFollowUpBrowserInstruction(text: string): boolean {
   const t = text.trim().toLowerCase();
   if (!t) return false;
-  return /\b(click|scroll|type|select|open that|what do you see|what does this page|read the page)\b/.test(t);
+  return /\b(click|scroll|type|select|open that|what do you see|what does this page|read the page)\b/.test(
+    t,
+  );
 }
 
 function buildSafeSearchUrl(text: string): string {
@@ -412,8 +451,12 @@ function parseLocalCopilotPrimitive(text: string): LocalCopilotPrimitiveIntent |
   const t = text.trim();
   const lower = t.toLowerCase();
   if (!lower) return null;
-  if (/\b(observe|what do you see|what's on the page|read this page)\b/.test(lower)) return { action: "observe" };
-  const waitMatch = /\bwait\s+(\d+(?:\.\d+)?)\s*(ms|millisecond|milliseconds|s|sec|secs|second|seconds)?\b/i.exec(t);
+  if (/\b(observe|what do you see|what's on the page|read this page)\b/.test(lower))
+    return { action: "observe" };
+  const waitMatch =
+    /\bwait\s+(\d+(?:\.\d+)?)\s*(ms|millisecond|milliseconds|s|sec|secs|second|seconds)?\b/i.exec(
+      t,
+    );
   if (waitMatch) {
     const amount = Number(waitMatch[1] || "0");
     const unit = String(waitMatch[2] || "s").toLowerCase();
@@ -447,16 +490,19 @@ function parseLocalCopilotPrimitive(text: string): LocalCopilotPrimitiveIntent |
   }
   const typeIntoMatch = /\btype\s+(.+?)\s+into\s+(.+)$/i.exec(t);
   if (typeIntoMatch) {
-    const targetRaw = String(typeIntoMatch[2] || "").trim().toLowerCase();
+    const targetRaw = String(typeIntoMatch[2] || "")
+      .trim()
+      .toLowerCase();
     const defaultSearchSelector =
       'input[type="search"],input[name*="search" i],input[aria-label*="search" i],input[name="q" i],input[id*="search" i],textarea';
-    const normalizedSelector =
-      /\b(search|search box|search field)\b/.test(targetRaw)
-        ? defaultSearchSelector
-        : targetRaw;
+    const normalizedSelector = /\b(search|search box|search field)\b/.test(targetRaw)
+      ? defaultSearchSelector
+      : targetRaw;
     return {
       action: "type_into_field",
-      text: String(typeIntoMatch[1] || "").trim().replace(/^["']|["']$/g, ""),
+      text: String(typeIntoMatch[1] || "")
+        .trim()
+        .replace(/^["']|["']$/g, ""),
       selector: normalizedSelector,
     };
   }
@@ -464,7 +510,9 @@ function parseLocalCopilotPrimitive(text: string): LocalCopilotPrimitiveIntent |
   if (typeMatch) {
     return {
       action: "type_into_field",
-      text: String(typeMatch[1] || "").trim().replace(/^["']|["']$/g, ""),
+      text: String(typeMatch[1] || "")
+        .trim()
+        .replace(/^["']|["']$/g, ""),
       selector:
         'input[type="search"],input[name*="search" i],input[aria-label*="search" i],input[name="q" i],input[id*="search" i],textarea',
     };
@@ -472,7 +520,16 @@ function parseLocalCopilotPrimitive(text: string): LocalCopilotPrimitiveIntent |
   const clickMatch = /\bclick(?:\s+the)?\s*(first|second|third|fourth|\d+)?/i.exec(t);
   if (clickMatch) {
     const raw = String(clickMatch[1] || "first").toLowerCase();
-    const n = raw === "first" ? 1 : raw === "second" ? 2 : raw === "third" ? 3 : raw === "fourth" ? 4 : Number(raw);
+    const n =
+      raw === "first"
+        ? 1
+        : raw === "second"
+          ? 2
+          : raw === "third"
+            ? 3
+            : raw === "fourth"
+              ? 4
+              : Number(raw);
     return { action: "click_candidate", ordinal: Number.isFinite(n) && n > 0 ? n : 1 };
   }
   return null;
@@ -490,9 +547,13 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   const navigate = useNavigate();
   const desktopShell = isHamDesktopShell();
   const executionEnvironment: "desktop" | "web" = desktopShell ? "desktop" : "web";
-  const chatScreenInstanceId = React.useRef(`chat-screen-${Math.random().toString(36).slice(2, 9)}`);
+  const chatScreenInstanceId = React.useRef(
+    `chat-screen-${Math.random().toString(36).slice(2, 9)}`,
+  );
   const [searchParams] = useSearchParams();
-  const missionIdFromQuery = embedMode ? null : (searchParams.get("mission_id") || "").trim() || null;
+  const missionIdFromQuery = embedMode
+    ? null
+    : (searchParams.get("mission_id") || "").trim() || null;
   const {
     feed: missionFeed,
     refetch: refetchMissionFeed,
@@ -503,9 +564,14 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
 
   const displayedMissionFeedTranscript = React.useMemo(() => {
     const ev = missionFeed?.events ?? [];
-    return missionFeedTranscriptFromEvents(ev, missionFeed?.lifecycle ?? null, missionFeedBanner.phase).slice(-5);
+    return missionFeedTranscriptFromEvents(
+      ev,
+      missionFeed?.lifecycle ?? null,
+      missionFeedBanner.phase,
+    ).slice(-5);
   }, [missionFeed?.events, missionFeed?.lifecycle, missionFeedBanner.phase]);
-  const activeWorkspaceId = hamWorkspace.state.status === "ready" ? hamWorkspace.state.activeWorkspaceId : null;
+  const activeWorkspaceId =
+    hamWorkspace.state.status === "ready" ? hamWorkspace.state.activeWorkspaceId : null;
   const workspaceRestoreScope = activeWorkspaceId?.trim() || "__legacy__";
 
   const [messages, setMessages] = React.useState<HwwMsgRow[]>([]);
@@ -532,9 +598,12 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   const [voiceTranscribing, setVoiceTranscribing] = React.useState(false);
   const [inspectorOpen, setInspectorOpen] = React.useState(false);
   const [pdfExporting, setPdfExporting] = React.useState(false);
-  const [chatCapabilities, setChatCapabilities] = React.useState<ChatCapabilitiesPayload | null>(null);
+  const [chatCapabilities, setChatCapabilities] = React.useState<ChatCapabilitiesPayload | null>(
+    null,
+  );
   const [chatCapabilitiesLoading, setChatCapabilitiesLoading] = React.useState(true);
-  const [contextMetersPayload, setContextMetersPayload] = React.useState<ChatContextMetersPayload | null>(null);
+  const [contextMetersPayload, setContextMetersPayload] =
+    React.useState<ChatContextMetersPayload | null>(null);
   const [imageGenInFlight, setImageGenInFlight] = React.useState(false);
   const [videoGenInFlight, setVideoGenInFlight] = React.useState(false);
   const [inspectorEvents, setInspectorEvents] = React.useState<WorkspaceInspectorEvent[]>([]);
@@ -614,12 +683,10 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   const sttEnabledBySetting = voiceWs?.payload?.settings.stt.enabled ?? true;
   const sttMode = voiceWs?.payload?.settings.stt.mode ?? "record";
   const sttRuntimeAvailable = voiceWs?.payload?.capabilities.stt.available ?? true;
-  const sttDictationEnabled =
-    sttEnabledBySetting && (sttMode !== "record" || sttRuntimeAvailable);
-  const sttUnavailableReason =
-    !sttEnabledBySetting
-      ? "Speech-to-text is off — enable it in Workspace → Settings → Voice."
-      : sttMode === "record" && !sttRuntimeAvailable
+  const sttDictationEnabled = sttEnabledBySetting && (sttMode !== "record" || sttRuntimeAvailable);
+  const sttUnavailableReason = !sttEnabledBySetting
+    ? "Speech-to-text is off — enable it in Workspace → Settings → Voice."
+    : sttMode === "record" && !sttRuntimeAvailable
       ? "Speech-to-text is not configured on this HAM API host."
       : null;
 
@@ -675,7 +742,9 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         setGohamModalPhase("connected");
         desktopWebBridgeTrustedRef.current = true;
         setGohamBridgeLinked(true);
-        setGohamModalDetail(r.already_connected ? "Already linked." : "Connected for this session.");
+        setGohamModalDetail(
+          r.already_connected ? "Already linked." : "Connected for this session.",
+        );
       } else {
         setGohamModalPhase("failed");
         setGohamModalDetail(
@@ -934,7 +1003,11 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         role: "assistant",
         content: "",
         timestamp: timeStr(),
-        generatedVideoCard: { kind: "loading", promptPreview: apiPrompt.slice(0, 280), phase: "queued" },
+        generatedVideoCard: {
+          kind: "loading",
+          promptPreview: apiPrompt.slice(0, 280),
+          phase: "queued",
+        },
       };
       setMessages((prev) => [...prev, userRow, assistantLoading]);
       setVideoGenInFlight(true);
@@ -1152,7 +1225,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   React.useEffect(() => {
     if (!catalog?.items?.length) return;
     const first = catalog.items.find((i) => i.supports_chat);
-    setModelId((prev) => prev ?? (first?.id ?? null));
+    setModelId((prev) => prev ?? first?.id ?? null);
   }, [catalog]);
 
   React.useEffect(() => {
@@ -1287,7 +1360,10 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
           setInspectorEvents([]);
           setArtifactRows([]);
         }
-        toast.error("Could not open this chat session.", { id: `hww-session-load-fail-${sid}`, duration: 6000 });
+        toast.error("Could not open this chat session.", {
+          id: `hww-session-load-fail-${sid}`,
+          duration: 6000,
+        });
       } finally {
         if (!requestStillCurrent()) return;
         setLoadingSession(false);
@@ -1325,7 +1401,13 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     if (!embedMode && !missionIdFromQuery) {
       navigate({ pathname: "/workspace/chat", search: "" }, { replace: true });
     }
-  }, [activeWorkspaceId, embedMode, missionIdFromQuery, navigate, revokeAllChatAttachmentLocalBlobs]);
+  }, [
+    activeWorkspaceId,
+    embedMode,
+    missionIdFromQuery,
+    navigate,
+    revokeAllChatAttachmentLocalBlobs,
+  ]);
 
   React.useEffect(() => {
     const sessionParamWhileSwitching = embedMode
@@ -1451,7 +1533,8 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       }
       const staged = await fileToWorkspaceAttachment(f);
       if (staged === null) {
-        const isImgGuess = /^image\//i.test(f.type || "") || /\.(jpe?g|png|gif|webp)$/i.test(f.name || "");
+        const isImgGuess =
+          /^image\//i.test(f.type || "") || /\.(jpe?g|png|gif|webp)$/i.test(f.name || "");
         const cap = isImgGuess ? MAX_WORKSPACE_IMAGE_BYTES : MAX_WORKSPACE_DOCUMENT_BYTES;
         toast.error(
           `“${f.name || "file"}” is too large (max ${formatAttachmentByteSize(cap)} for ${isImgGuess ? "images" : "documents"}).`,
@@ -1503,7 +1586,9 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         toast.error(msg);
         setAttachments((prev) =>
           prev.map((row) =>
-            row.id !== localId ? row : { ...row, uploadPhase: "failed", error: msg, pendingSource: f },
+            row.id !== localId
+              ? row
+              : { ...row, uploadPhase: "failed", error: msg, pendingSource: f },
           ),
         );
       }
@@ -1561,14 +1646,19 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
           : `Upload failed for "${(uploadFile?.name ?? file.name) || "file"}".`;
       toast.error(msg);
       setAttachments((prev) =>
-        prev.map((a) => (a.id !== localId ? a : { ...a, uploadPhase: "failed", error: msg, pendingSource: file })),
+        prev.map((a) =>
+          a.id !== localId ? a : { ...a, uploadPhase: "failed", error: msg, pendingSource: file },
+        ),
       );
     }
   }, []);
 
-  const resolveLocalAttachmentPreview = React.useCallback((attachmentServerId: string): string | undefined => {
-    return chatAttachmentLocalBlobByServerIdRef.current.get(attachmentServerId);
-  }, []);
+  const resolveLocalAttachmentPreview = React.useCallback(
+    (attachmentServerId: string): string | undefined => {
+      return chatAttachmentLocalBlobByServerIdRef.current.get(attachmentServerId);
+    },
+    [],
+  );
 
   const handleVoiceBlob = React.useCallback(async (blob: Blob) => {
     pushVoiceDebug({
@@ -1624,11 +1714,12 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
 
   const send = React.useCallback(
     async (outboundUser: string | HamChatUserContentV1 | HamChatUserContentV2) => {
-      const isV1 = typeof outboundUser === "object" && outboundUser && outboundUser.h === "ham_chat_user_v1";
-      const isV2 = typeof outboundUser === "object" && outboundUser && outboundUser.h === "ham_chat_user_v2";
-      const displayContent = isV1 || isV2
-        ? JSON.stringify(outboundUser)
-        : (outboundUser as string).trim();
+      const isV1 =
+        typeof outboundUser === "object" && outboundUser && outboundUser.h === "ham_chat_user_v1";
+      const isV2 =
+        typeof outboundUser === "object" && outboundUser && outboundUser.h === "ham_chat_user_v2";
+      const displayContent =
+        isV1 || isV2 ? JSON.stringify(outboundUser) : (outboundUser as string).trim();
       if (!isV1 && !isV2 && !(outboundUser as string).trim()) return;
       if (isV1 && !(outboundUser as HamChatUserContentV1).images?.length) return;
       if (isV2 && !(outboundUser as HamChatUserContentV2).attachments?.length) return;
@@ -1667,11 +1758,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
           ? `Mission follow-up failed: ${result.error}`
           : missionFollowupMessageForReason(result.reasonCode, result.ok);
         setMessages((prev) =>
-          prev.map((m) =>
-            m.id === assistantPlaceId
-              ? { ...m, content: assistantMessage }
-              : m,
-          ),
+          prev.map((m) => (m.id === assistantPlaceId ? { ...m, content: assistantMessage } : m)),
         );
         const [mFresh] = await Promise.all([
           fetchManagedMissionDetail(missionModeId),
@@ -1786,22 +1873,19 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       );
       const finalizeLocalBrowserTurn = async (assistantContent: string) => {
         setMessages((prev) =>
-          prev.map((m) =>
-            m.id === assistantPlaceId
-              ? { ...m, content: assistantContent }
-              : m,
-          ),
+          prev.map((m) => (m.id === assistantPlaceId ? { ...m, content: assistantContent } : m)),
         );
         await persistLocalDesktopTurn(displayContent, assistantContent, sessionId);
         setSending(false);
       };
-      const plainOutbound =
-        typeof outboundUser === "string" ? (outboundUser as string).trim() : "";
+      const plainOutbound = typeof outboundUser === "string" ? (outboundUser as string).trim() : "";
       const browserTaskRequested = outboundPlain && isLikelyBrowserTask(plainOutbound);
       if (desktopShell && browserTaskRequested) {
         const webBridgeApi = getHamDesktopWebBridgeApi();
         if (!webBridgeApi || typeof webBridgeApi.browserIntent !== "function") {
-          await finalizeLocalBrowserTurn("Local browser bridge is unavailable in this build. Reconnect GOHAM and retry.");
+          await finalizeLocalBrowserTurn(
+            "Local browser bridge is unavailable in this build. Reconnect GOHAM and retry.",
+          );
           setInspectorEvents((prev) =>
             appendInspectorEvent(prev, {
               atIso: new Date().toISOString(),
@@ -1856,7 +1940,9 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         if (primitiveIntent) {
           try {
             if (primitiveIntent.action === "blocked_coordinate") {
-              await finalizeLocalBrowserTurn("Coordinate clicks are blocked. Ask me to observe and click a listed candidate.");
+              await finalizeLocalBrowserTurn(
+                "Coordinate clicks are blocked. Ask me to observe and click a listed candidate.",
+              );
               return;
             }
             if (primitiveIntent.action === "observe") {
@@ -1875,16 +1961,28 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
                 await finalizeLocalBrowserTurn(localBrowserFailureMessage(reason));
                 return;
               }
-              const candidates = Array.isArray((observe as Record<string, unknown>).browser_bridge &&
-                typeof (observe as Record<string, unknown>).browser_bridge === "object" &&
-                Array.isArray(((observe as Record<string, unknown>).browser_bridge as Record<string, unknown>).click_candidates)
-                ? (((observe as Record<string, unknown>).browser_bridge as Record<string, unknown>).click_candidates as Array<{ id?: string }>)
-                : [])
-                ? ((((observe as Record<string, unknown>).browser_bridge as Record<string, unknown>).click_candidates as Array<{ id?: string }>).filter((c) => typeof c?.id === "string") as Array<{ id: string }>)
+              const candidates = Array.isArray(
+                (observe as Record<string, unknown>).browser_bridge &&
+                  typeof (observe as Record<string, unknown>).browser_bridge === "object" &&
+                  Array.isArray(
+                    ((observe as Record<string, unknown>).browser_bridge as Record<string, unknown>)
+                      .click_candidates,
+                  )
+                  ? ((
+                      (observe as Record<string, unknown>).browser_bridge as Record<string, unknown>
+                    ).click_candidates as Array<{ id?: string }>)
+                  : [],
+              )
+                ? ((
+                    ((observe as Record<string, unknown>).browser_bridge as Record<string, unknown>)
+                      .click_candidates as Array<{ id?: string }>
+                  ).filter((c) => typeof c?.id === "string") as Array<{ id: string }>)
                 : [];
               liveCopilotCandidatesRef.current = candidates;
               browserSessionFollowThroughRef.current = true;
-              await finalizeLocalBrowserTurn(`Observed locally. Found ${candidates.length} clickable candidates.`);
+              await finalizeLocalBrowserTurn(
+                `Observed locally. Found ${candidates.length} clickable candidates.`,
+              );
               return;
             }
             if (primitiveIntent.action === "click_candidate") {
@@ -1893,15 +1991,39 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
                 const observe = await webBridgeApi.browserIntent({
                   intent_id: `desktop-goham-${Date.now()}`,
                   action: "observe",
-                  client_context: { source: "desktop_goham", original_prompt: "refresh_candidates" },
+                  client_context: {
+                    source: "desktop_goham",
+                    original_prompt: "refresh_candidates",
+                  },
                 });
                 if (observe.ok) {
-                  const extracted = Array.isArray((observe as Record<string, unknown>).browser_bridge &&
-                    typeof (observe as Record<string, unknown>).browser_bridge === "object" &&
-                    Array.isArray(((observe as Record<string, unknown>).browser_bridge as Record<string, unknown>).click_candidates)
-                    ? (((observe as Record<string, unknown>).browser_bridge as Record<string, unknown>).click_candidates as Array<{ id?: string }>)
-                    : [])
-                    ? ((((observe as Record<string, unknown>).browser_bridge as Record<string, unknown>).click_candidates as Array<{ id?: string }>).filter((c) => typeof c?.id === "string") as Array<{ id: string }>)
+                  const extracted = Array.isArray(
+                    (observe as Record<string, unknown>).browser_bridge &&
+                      typeof (observe as Record<string, unknown>).browser_bridge === "object" &&
+                      Array.isArray(
+                        (
+                          (observe as Record<string, unknown>).browser_bridge as Record<
+                            string,
+                            unknown
+                          >
+                        ).click_candidates,
+                      )
+                      ? ((
+                          (observe as Record<string, unknown>).browser_bridge as Record<
+                            string,
+                            unknown
+                          >
+                        ).click_candidates as Array<{ id?: string }>)
+                      : [],
+                  )
+                    ? ((
+                        (
+                          (observe as Record<string, unknown>).browser_bridge as Record<
+                            string,
+                            unknown
+                          >
+                        ).click_candidates as Array<{ id?: string }>
+                      ).filter((c) => typeof c?.id === "string") as Array<{ id: string }>)
                     : [];
                   liveCopilotCandidatesRef.current = extracted;
                   candidates = extracted;
@@ -1910,7 +2032,9 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
               const idx = Math.max(0, primitiveIntent.ordinal - 1);
               const candidateId = candidates[idx]?.id || candidates[0]?.id || "";
               if (!candidateId) {
-                await finalizeLocalBrowserTurn("No safe clickable candidates yet. Ask me to observe first.");
+                await finalizeLocalBrowserTurn(
+                  "No safe clickable candidates yet. Ask me to observe first.",
+                );
                 return;
               }
               const clicked = await webBridgeApi.browserIntent({
@@ -2024,7 +2148,11 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
             await finalizeLocalBrowserTurn(localBrowserFailureMessage(reason));
             return;
           }
-        } else if (!providedUrl && activeBrowserSession && isFollowUpBrowserInstruction(plainOutbound)) {
+        } else if (
+          !providedUrl &&
+          activeBrowserSession &&
+          isFollowUpBrowserInstruction(plainOutbound)
+        ) {
           browserSessionFollowThroughRef.current = true;
         } else {
           const targetUrl = providedUrl || buildSafeSearchUrl(plainOutbound);
@@ -2041,9 +2169,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
             if (browserIntent.ok) {
               browserSessionFollowThroughRef.current = true;
               await finalizeLocalBrowserTurn(
-                providedUrl
-                  ? "Opening that locally."
-                  : "Opening that locally. I found the page.",
+                providedUrl ? "Opening that locally." : "Opening that locally. I found the page.",
               );
               setInspectorEvents((prev) =>
                 appendInspectorEvent(prev, {
@@ -2112,7 +2238,10 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
             messages: [
               {
                 role: "user",
-                content: isV1 || isV2 ? (outboundUser as HamChatUserContentV1 | HamChatUserContentV2) : (outboundUser as string).trim(),
+                content:
+                  isV1 || isV2
+                    ? (outboundUser as HamChatUserContentV1 | HamChatUserContentV2)
+                    : (outboundUser as string).trim(),
               },
             ],
             ...(chatModelIdForApi ? { model_id: chatModelIdForApi } : {}),
@@ -2151,7 +2280,9 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
             onDelta: (delta) => {
               if (!requestStillCurrent()) return;
               setMessages((prev) =>
-                prev.map((m) => (m.id === assistantPlaceId ? { ...m, content: m.content + delta } : m)),
+                prev.map((m) =>
+                  m.id === assistantPlaceId ? { ...m, content: m.content + delta } : m,
+                ),
               );
             },
           },
@@ -2161,15 +2292,10 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         setSessionId(res.session_id);
         writeWorkspaceLastChatSessionId(requestWorkspaceId, res.session_id);
         setExecutionMode(res.execution_mode ?? null);
-        browserSessionFollowThroughRef.current =
-          res.execution_mode?.selected_mode === "browser";
-        const normalizedMessages =
-          res.messages.some((m) => m.role === "user")
-            ? res.messages
-            : [
-                { role: "user" as const, content: displayContent },
-                ...res.messages,
-              ];
+        browserSessionFollowThroughRef.current = res.execution_mode?.selected_mode === "browser";
+        const normalizedMessages = res.messages.some((m) => m.role === "user")
+          ? res.messages
+          : [{ role: "user" as const, content: displayContent }, ...res.messages];
         setMessages((prev) => {
           revokeGeneratedMediaBlobUrlsFromMessages(prev);
           const next = normalizedMessages.map((m, i) => ({
@@ -2194,9 +2320,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
               session_id: res.session_id,
               message_count: res.messages.length,
               assistant_char_count: assistantChars,
-              ...(res.gateway_error?.code
-                ? { gateway_code: res.gateway_error.code }
-                : {}),
+              ...(res.gateway_error?.code ? { gateway_code: res.gateway_error.code } : {}),
             },
           }),
         );
@@ -2275,7 +2399,10 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
               status: "error",
               summary: `Stream error: ${safeMsg}`,
               meta: {
-                code: err instanceof HamAccessRestrictedError ? "HAM_EMAIL_RESTRICTION" : "stream_error",
+                code:
+                  err instanceof HamAccessRestrictedError
+                    ? "HAM_EMAIL_RESTRICTION"
+                    : "stream_error",
               },
             }),
           );
@@ -2458,7 +2585,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     const uploadsPending = attachments.some((a) => a.uploadPhase === "uploading");
     const supportsVideo = Boolean(
       chatCapabilities?.generation?.supports_video_generation ||
-        chatCapabilities?.generation?.supports_text_to_video,
+      chatCapabilities?.generation?.supports_text_to_video,
     );
     const provider = String(
       chatCapabilities?.generation?.media_generation_provider ||
@@ -2514,16 +2641,16 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         return;
       }
       if (attachments.length > 0 && usable.length === 0) {
-        toast.error("Every attachment failed or is invalid — remove errors or retry uploads, then try again.");
+        toast.error(
+          "Every attachment failed or is invalid — remove errors or retry uploads, then try again.",
+        );
         return;
       }
       if (usable.length > 0) {
         if (usable.every((a) => a.serverId)) {
           const missionEarly = String(missionIdFromQuery || "").trim();
           const imageRef =
-            trimmed.length > 0
-              ? usable.find((a) => a.kind === "image" && a.serverId)
-              : undefined;
+            trimmed.length > 0 ? usable.find((a) => a.kind === "image" && a.serverId) : undefined;
           const creative =
             trimmed.length > 0 && imageRef?.serverId
               ? parseWorkspaceCreativeImageIntent(trimmed, { hasImageAttachment: true })
@@ -2659,7 +2786,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       const supportsComposerVideo =
         Boolean(
           chatCapabilities?.generation?.supports_video_generation ||
-            chatCapabilities?.generation?.supports_text_to_video,
+          chatCapabilities?.generation?.supports_text_to_video,
         ) && String(missionIdFromQuery || "").trim().length === 0;
 
       if (
@@ -2759,8 +2886,8 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     : missionModeActive
       ? "Mission chat"
       : !sessionId
-      ? "New session"
-      : "Chat";
+        ? "New session"
+        : "Chat";
   const last = messages[messages.length - 1];
   const isStreaming =
     sending &&
@@ -2816,12 +2943,15 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
             </p>
           </div>
           <p className="text-[10px] leading-relaxed text-white/40">
-            {missionContext.repository_observed || "—"} @ {missionContext.ref_observed || "default"} · mission{" "}
+            {missionContext.repository_observed || "—"} @ {missionContext.ref_observed || "default"}{" "}
+            · mission{" "}
             <span className="font-mono text-white/45" title={missionContext.mission_registry_id}>
               {shortId(missionContext.mission_registry_id)}
             </span>
             <span className="text-white/35"> · agent </span>
-            <span className="font-mono text-white/45">{shortId(missionContext.cursor_agent_id)}</span>
+            <span className="font-mono text-white/45">
+              {shortId(missionContext.cursor_agent_id)}
+            </span>
             {isBcCursorAgentId(missionContext.cursor_agent_id) ? (
               <a
                 href={cursorCloudAgentWebHref(String(missionContext.cursor_agent_id).trim())}
@@ -2835,9 +2965,13 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
               </a>
             ) : null}
           </p>
-          <p className="text-[10px] leading-relaxed text-white/40">{MANAGED_MISSION_CHAT_OWNERSHIP_HINT}</p>
+          <p className="text-[10px] leading-relaxed text-white/40">
+            {MANAGED_MISSION_CHAT_OWNERSHIP_HINT}
+          </p>
           {missionFeedBanner.phase !== "idle" && missionFeedBanner.label ? (
-            <p className="text-[10px] leading-relaxed text-emerald-200/85">{missionFeedBanner.label}</p>
+            <p className="text-[10px] leading-relaxed text-emerald-200/85">
+              {missionFeedBanner.label}
+            </p>
           ) : missionFeed?.provider_projection?.mode === "rest_projection" ? (
             <p className="text-[10px] leading-relaxed text-white/45">
               Mission feed: REST refresh only (not a live provider stream).
@@ -2853,13 +2987,17 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
           ) : missionFeedInitialLoading ? (
             <p className="text-[10px] leading-relaxed text-white/40">Loading mission feed…</p>
           ) : (
-            <p className="text-[10px] leading-relaxed text-white/40">Waiting for mission feed updates…</p>
+            <p className="text-[10px] leading-relaxed text-white/40">
+              Waiting for mission feed updates…
+            </p>
           )}
         </div>
       </div>
     ) : (
       <div className="p-3">
-        <p className="text-[12px] leading-relaxed text-white/60">Mission context is not available.</p>
+        <p className="text-[12px] leading-relaxed text-white/60">
+          Mission context is not available.
+        </p>
       </div>
     )
   ) : null;
@@ -2877,8 +3015,12 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
               height={32}
             />
             <div className="min-w-0">
-              <h1 className="text-[15px] font-semibold tracking-tight text-white/[0.95]">{headerTitle}</h1>
-              <p className="mt-0.5 truncate text-[11px] leading-snug text-white/50">{headerSubtitle}</p>
+              <h1 className="text-[15px] font-semibold tracking-tight text-white/[0.95]">
+                {headerTitle}
+              </h1>
+              <p className="mt-0.5 truncate text-[11px] leading-snug text-white/50">
+                {headerSubtitle}
+              </p>
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
@@ -2910,14 +3052,18 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
           className="hww-scroll flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto"
         >
           {loadingSession ? (
-            <div className="flex flex-1 items-center justify-center py-12 text-sm text-white/40">Loading…</div>
+            <div className="flex flex-1 items-center justify-center py-12 text-sm text-white/40">
+              Loading…
+            </div>
           ) : sessionLoadFailed ? (
             <div className="flex flex-1 flex-col items-center justify-center px-4 py-10">
               <div
                 className="w-full max-w-md rounded-xl border border-amber-500/25 bg-[#040d14]/90 px-5 py-5 text-left shadow-lg"
                 role="alert"
               >
-                <h2 className="text-[14px] font-semibold text-amber-100/95">Could not open this session</h2>
+                <h2 className="text-[14px] font-semibold text-amber-100/95">
+                  Could not open this session
+                </h2>
                 <p className="mt-2 text-[13px] leading-relaxed text-white/70">{loadErr}</p>
                 {staleSessionParam ? (
                   <p className="mt-2 text-[11px] text-white/45">
@@ -2947,9 +3093,9 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
                   </Button>
                 </div>
                 <p className="mt-4 text-[11px] leading-relaxed text-white/35">
-                  The sidebar stays available — pick another session or start fresh. If this link is old, the API may
-                  have been redeployed; chat history on Cloud Run defaults to ephemeral storage unless configured
-                  otherwise.
+                  The sidebar stays available — pick another session or start fresh. If this link is
+                  old, the API may have been redeployed; chat history on Cloud Run defaults to
+                  ephemeral storage unless configured otherwise.
                 </p>
               </div>
             </div>
@@ -3039,18 +3185,24 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
             aria-labelledby="ham-goham-desktop-heading"
           >
             <div className="border-b border-white/[0.08] pb-3">
-              <h2 id="ham-goham-desktop-heading" className="text-[15px] font-semibold text-white/[0.95]">
+              <h2
+                id="ham-goham-desktop-heading"
+                className="text-[15px] font-semibold text-white/[0.95]"
+              >
                 GOHAM · Local web bridge
               </h2>
               <p className="mt-1 text-[11px] leading-snug text-white/50">
-                One-click trusted connect uses the packaged desktop preload path — no manual pairing code here.
+                One-click trusted connect uses the packaged desktop preload path — no manual pairing
+                code here.
               </p>
             </div>
             <div className="mt-3 space-y-3">
               {gohamModalPhase === "checking" || gohamModalPhase === "connecting" ? (
                 <p className="flex items-center gap-2 text-[12px] text-emerald-100/85">
                   <Loader2 className="h-4 w-4 shrink-0 animate-spin opacity-95" aria-hidden />
-                  {gohamModalPhase === "checking" ? "Checking status…" : "Connecting trusted session…"}
+                  {gohamModalPhase === "checking"
+                    ? "Checking status…"
+                    : "Connecting trusted session…"}
                 </p>
               ) : null}
               {gohamModalPhase === "blocked" ? (

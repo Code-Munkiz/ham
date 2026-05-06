@@ -25,7 +25,10 @@ export function useManagedMissionFeedPoll(
   refetch: () => Promise<ManagedMissionFeedPayload | null>;
 } {
   const refreshSignal = options?.refreshSignal ?? 0;
-  const trimmed = React.useMemo(() => String(missionRegistryId || "").trim() || null, [missionRegistryId]);
+  const trimmed = React.useMemo(
+    () => String(missionRegistryId || "").trim() || null,
+    [missionRegistryId],
+  );
 
   const [feed, setFeed] = React.useState<ManagedMissionFeedPayload | null>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -58,7 +61,10 @@ export function useManagedMissionFeedPoll(
     };
 
     const delayForNext = (): number =>
-      managedMissionFeedPollDelayMs(latestFeedRef.current?.lifecycle, document.visibilityState === "hidden");
+      managedMissionFeedPollDelayMs(
+        latestFeedRef.current?.lifecycle,
+        document.visibilityState === "hidden",
+      );
 
     const schedule = () => {
       clearTimer();

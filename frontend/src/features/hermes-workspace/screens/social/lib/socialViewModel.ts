@@ -23,7 +23,12 @@ export type ProductFrequency = "Off" | "Low" | "Standard" | "High" | "Custom";
 
 export type ProductReplyVolume = "Off" | "Low" | "Standard" | "High" | "Custom";
 
-export type ProductProviderReadiness = "Ready" | "Needs setup" | "Limited" | "Blocked" | "Coming soon";
+export type ProductProviderReadiness =
+  | "Ready"
+  | "Needs setup"
+  | "Limited"
+  | "Blocked"
+  | "Coming soon";
 
 export function fourModeToProduct(mode: FourMode): ProductMode {
   if (mode === "Preview") return "Preview only";
@@ -44,7 +49,9 @@ function modeToReplyVolumeHeuristic(mode: FourMode): ProductReplyVolume {
   return "High";
 }
 
-export function mapCoreReadiness(r: "ready" | "limited" | "blocked" | "setup_required"): ProductProviderReadiness {
+export function mapCoreReadiness(
+  r: "ready" | "limited" | "blocked" | "setup_required",
+): ProductProviderReadiness {
   if (r === "ready") return "Ready";
   if (r === "setup_required") return "Needs setup";
   if (r === "limited") return "Limited";
@@ -52,7 +59,10 @@ export function mapCoreReadiness(r: "ready" | "limited" | "blocked" | "setup_req
 }
 
 /** Combines catalog provider card with deep readiness for product copy. */
-export function resolveProviderReadiness(snapshot: SocialSnapshot, channelId: "x" | "telegram" | "discord"): ProductProviderReadiness {
+export function resolveProviderReadiness(
+  snapshot: SocialSnapshot,
+  channelId: "x" | "telegram" | "discord",
+): ProductProviderReadiness {
   const card = snapshot.providers.find((p) => p.id === channelId);
   if (card?.coming_soon || card?.status === "coming_soon") return "Coming soon";
   if (card?.status === "blocked") return "Blocked";
@@ -120,7 +130,10 @@ export type ChannelProductTruth = {
   nextHint: string;
 };
 
-function channelNextHint(snapshot: SocialSnapshot, channelId: "x" | "telegram" | "discord"): string {
+function channelNextHint(
+  snapshot: SocialSnapshot,
+  channelId: "x" | "telegram" | "discord",
+): string {
   if (snapshot.xStatus.emergency_stop.enabled && channelId === "x") {
     return "Clear emergency stop before live X posting or replies.";
   }
@@ -128,22 +141,31 @@ function channelNextHint(snapshot: SocialSnapshot, channelId: "x" | "telegram" |
     const first = snapshot.xSetupSummary.recommended_next_steps[0];
     if (snapshot.xStatus.overall_readiness === "setup_required" && first) return first;
     if (snapshot.xStatus.overall_readiness === "limited" && first) return first;
-    if (snapshot.xSetupSummary.ready_for_dry_run) return "Run a broadcast preflight or inbox preview on X.";
+    if (snapshot.xSetupSummary.ready_for_dry_run)
+      return "Run a broadcast preflight or inbox preview on X.";
     return "Finish X setup to unlock previews and sends.";
   }
   if (channelId === "telegram") {
-    const first = snapshot.telegramStatus.recommended_next_steps[0] || snapshot.telegramSetup.recommended_next_steps[0];
+    const first =
+      snapshot.telegramStatus.recommended_next_steps[0] ||
+      snapshot.telegramSetup.recommended_next_steps[0];
     if (snapshot.telegramStatus.overall_readiness === "setup_required" && first) return first;
     if (snapshot.telegramStatus.overall_readiness === "limited" && first) return first;
-    if (snapshot.telegramCapabilities.preview_available) return "Preview a Telegram message or check inbox.";
+    if (snapshot.telegramCapabilities.preview_available)
+      return "Preview a Telegram message or check inbox.";
     return "Finish Telegram bot and gateway setup.";
   }
-  const first = snapshot.discordStatus.recommended_next_steps[0] || snapshot.discordSetup.recommended_next_steps[0];
+  const first =
+    snapshot.discordStatus.recommended_next_steps[0] ||
+    snapshot.discordSetup.recommended_next_steps[0];
   if (snapshot.discordStatus.overall_readiness === "setup_required" && first) return first;
   return "Discord is preview-only for now; follow setup guidance.";
 }
 
-export function deriveChannelProductTruth(snapshot: SocialSnapshot, channelId: "x" | "telegram" | "discord"): ChannelProductTruth {
+export function deriveChannelProductTruth(
+  snapshot: SocialSnapshot,
+  channelId: "x" | "telegram" | "discord",
+): ChannelProductTruth {
   const readiness = resolveProviderReadiness(snapshot, channelId);
   if (channelId === "x") {
     const x = snapshot.xStatus;
@@ -153,9 +175,12 @@ export function deriveChannelProductTruth(snapshot: SocialSnapshot, channelId: "
     const postAuto = postM === "Autopilot";
     const replyAuto = replyM === "Autopilot";
     let autopilotLine = "Posts and replies follow approval or preview gates.";
-    if (postAuto && replyAuto) autopilotLine = "Posts and replies can run on autopilot within safety caps.";
-    else if (postAuto) autopilotLine = "Posting can autopilot; replies still follow your reply mode.";
-    else if (replyAuto) autopilotLine = "Replies can autopilot; posting still follows your posting mode.";
+    if (postAuto && replyAuto)
+      autopilotLine = "Posts and replies can run on autopilot within safety caps.";
+    else if (postAuto)
+      autopilotLine = "Posting can autopilot; replies still follow your reply mode.";
+    else if (replyAuto)
+      autopilotLine = "Replies can autopilot; posting still follows your posting mode.";
     return {
       channelId,
       readiness,
@@ -223,7 +248,11 @@ export function deriveSafetyProductLines(snapshot: SocialSnapshot): string[] {
   const lines: string[] = ["Safety checks on"];
   if (persona.read_only) lines.push("Voice locked to the canonical persona");
   lines.push("Approval required for live sends");
-  lines.push(snapshot.xStatus.emergency_stop.enabled ? "Emergency stop on (X sends paused)" : "Emergency stop off");
+  lines.push(
+    snapshot.xStatus.emergency_stop.enabled
+      ? "Emergency stop on (X sends paused)"
+      : "Emergency stop off",
+  );
   lines.push(
     snapshot.xCapabilities.live_apply_available
       ? "Live actions gated (operator token + confirmation)"
@@ -241,7 +270,9 @@ export type PersonaProductStatus = {
 export function derivePersonaProductStatus(persona: SocialPersona): PersonaProductStatus {
   return {
     headline: persona.display_name,
-    detail: persona.read_only ? "Voice is locked; edits happen outside this cockpit." : "Persona can be edited via your usual workflow.",
+    detail: persona.read_only
+      ? "Voice is locked; edits happen outside this cockpit."
+      : "Persona can be edited via your usual workflow.",
     voiceLocked: Boolean(persona.read_only),
   };
 }
@@ -251,7 +282,9 @@ export function deriveNextRecommendedAction(snapshot: SocialSnapshot): string {
     return "Turn off emergency stop for X when you are ready for live sends again.";
   }
   const xFirst = snapshot.xSetupSummary.recommended_next_steps[0];
-  const tgFirst = snapshot.telegramStatus.recommended_next_steps[0] || snapshot.telegramSetup.recommended_next_steps[0];
+  const tgFirst =
+    snapshot.telegramStatus.recommended_next_steps[0] ||
+    snapshot.telegramSetup.recommended_next_steps[0];
 
   if (snapshot.telegramStatus.overall_readiness === "blocked") {
     return tgFirst || "Fix Telegram connection — open Channels → Telegram → Setup.";
@@ -272,7 +305,9 @@ export function deriveNextRecommendedAction(snapshot: SocialSnapshot): string {
     return xFirst || "Review X limits or optional setup gaps.";
   }
   if (snapshot.discordStatus.overall_readiness === "setup_required") {
-    const dFirst = snapshot.discordStatus.recommended_next_steps[0] || snapshot.discordSetup.recommended_next_steps[0];
+    const dFirst =
+      snapshot.discordStatus.recommended_next_steps[0] ||
+      snapshot.discordSetup.recommended_next_steps[0];
     return dFirst || "Complete Discord setup steps.";
   }
   return "Preview an X post or check Telegram inbox to see the next safe step.";
@@ -283,16 +318,25 @@ export function deriveWhatHamCanDoNow(snapshot: SocialSnapshot): string[] {
   if (snapshot.xStatus.emergency_stop.enabled) {
     lines.push("Review X status and drafts only — live X sends stay paused.");
   } else {
-    if (snapshot.xSetupSummary.ready_for_dry_run) lines.push("Preview X broadcasts and scan the reply inbox.");
-    if (snapshot.xSetupSummary.ready_for_confirmed_live_reply && snapshot.xCapabilities.reactive_reply_apply_available) {
+    if (snapshot.xSetupSummary.ready_for_dry_run)
+      lines.push("Preview X broadcasts and scan the reply inbox.");
+    if (
+      snapshot.xSetupSummary.ready_for_confirmed_live_reply &&
+      snapshot.xCapabilities.reactive_reply_apply_available
+    ) {
       lines.push("Send a confirmed X reply when you have an approved preview.");
     }
-    if (snapshot.xSetupSummary.ready_for_broadcast && snapshot.xCapabilities.broadcast_apply_available) {
+    if (
+      snapshot.xSetupSummary.ready_for_broadcast &&
+      snapshot.xCapabilities.broadcast_apply_available
+    ) {
       lines.push("Send a confirmed X post when you have an approved preview.");
     }
   }
-  if (snapshot.telegramCapabilities.preview_available) lines.push("Draft and preview Telegram outbound messages.");
-  if (snapshot.telegramCapabilities.inbound_available) lines.push("Inspect Telegram inbox and suggested replies.");
+  if (snapshot.telegramCapabilities.preview_available)
+    lines.push("Draft and preview Telegram outbound messages.");
+  if (snapshot.telegramCapabilities.inbound_available)
+    lines.push("Inspect Telegram inbox and suggested replies.");
   const discord = snapshot.providers.find((p: SocialProvider) => p.id === "discord");
   if (discord && !discord.coming_soon) lines.push("Check Discord setup and preview-only guidance.");
   return lines.length ? lines : ["Complete channel setup, then refresh status."];
@@ -306,7 +350,8 @@ export function deriveWhatNeedsSetup(snapshot: SocialSnapshot): string[] {
       lines.push(`${p.label}: coming soon.`);
       continue;
     }
-    if (p.status === "setup_required") lines.push(`${p.label}: finish setup before full operation.`);
+    if (p.status === "setup_required")
+      lines.push(`${p.label}: finish setup before full operation.`);
     if (p.status === "blocked") lines.push(`${p.label}: blocked — see readiness messages.`);
   }
   if (snapshot.xStatus.overall_readiness === "setup_required") {
@@ -354,7 +399,8 @@ export function derivePostFrequencyBand(x: XProviderStatus): FrequencyBand {
 }
 
 export function telegramPostingMode(cap: TelegramCapabilities): FourMode {
-  if (!cap.preview_available && !cap.live_message_available && !cap.activity_apply_available) return "Off";
+  if (!cap.preview_available && !cap.live_message_available && !cap.activity_apply_available)
+    return "Off";
   if (cap.preview_available && !cap.live_apply_available) return "Preview";
   if (cap.live_apply_available) return "Approval required";
   return "Preview";
@@ -416,11 +462,7 @@ export type ChannelSafetyHints = {
 };
 
 export function personaSafetyHints(persona: SocialPersona): ChannelSafetyHints {
-  const blob = [
-    ...persona.prohibited_content,
-    ...persona.safety_boundaries,
-    ...persona.tone_rules,
-  ]
+  const blob = [...persona.prohibited_content, ...persona.safety_boundaries, ...persona.tone_rules]
     .join(" ")
     .toLowerCase();
   return {
@@ -456,7 +498,17 @@ export function discordSafetyHints(persona: SocialPersona): ChannelSafetyHints {
 /** Human-readable excerpt from journal-ish records; avoids default JSON in primary UI. */
 export function formatLooseRecordSummary(record: Record<string, unknown> | null): string | null {
   if (!record) return null;
-  const keys = ["text", "message_text", "content", "body", "summary", "title", "output", "tweet_text", "reply_text"];
+  const keys = [
+    "text",
+    "message_text",
+    "content",
+    "body",
+    "summary",
+    "title",
+    "output",
+    "tweet_text",
+    "reply_text",
+  ];
   for (const k of keys) {
     const v = record[k];
     if (typeof v === "string" && v.trim()) return v.trim();
@@ -466,8 +518,10 @@ export function formatLooseRecordSummary(record: Record<string, unknown> | null)
 
 export function operatingModeSummary(snapshot: SocialSnapshot): string {
   const st = deriveHamgomoonStatus(snapshot);
-  if (st === "Paused") return "Emergency stop is on — sending is paused until you turn it off in runtime config.";
-  if (st === "Needs setup") return "One or more channels still need setup before Ham can run at full strength.";
+  if (st === "Paused")
+    return "Emergency stop is on — sending is paused until you turn it off in runtime config.";
+  if (st === "Needs setup")
+    return "One or more channels still need setup before Ham can run at full strength.";
   return "Ham is running with previews first, confirmed sends second, and voice locked to the canonical persona.";
 }
 
@@ -493,13 +547,19 @@ export function deriveVoiceBoundariesOverviewLine(persona: SocialPersona): strin
 }
 
 /** Telegram: governor.allowed — no timestamps; use in primary operate UI. */
-export function telegramPacingProductPill(allowed: boolean): { label: string; tone: "ok" | "warn" } {
+export function telegramPacingProductPill(allowed: boolean): {
+  label: string;
+  tone: "ok" | "warn";
+} {
   if (allowed) return { label: "Ready to continue", tone: "ok" };
   return { label: "Ham is pacing sends", tone: "warn" };
 }
 
 /** Telegram: stricter line when a live/approval step is in scope. */
-export function telegramApprovalWindowProductPill(allowed: boolean): { label: string; tone: "ok" | "warn" } {
+export function telegramApprovalWindowProductPill(allowed: boolean): {
+  label: string;
+  tone: "ok" | "warn";
+} {
   if (allowed) return { label: "Ready for operator approval", tone: "ok" };
   return { label: "Waiting for the next safe send window", tone: "warn" };
 }
@@ -518,7 +578,10 @@ export function buildSocialProductTruth(snapshot: SocialSnapshot): SocialProduct
 }
 
 /** Operator-facing line for X preview cards (no API field names). */
-export function friendlyXPreviewStatus(preview: SocialPreviewResponse): { label: string; tone: "ok" | "warn" | "danger" | "muted" } {
+export function friendlyXPreviewStatus(preview: SocialPreviewResponse): {
+  label: string;
+  tone: "ok" | "warn" | "danger" | "muted";
+} {
   if (preview.status === "blocked") return { label: "Held by safety", tone: "warn" };
   if (preview.status === "failed") return { label: "Needs attention", tone: "danger" };
   if (preview.proposal_digest) return { label: "Ready for your approval path", tone: "ok" };

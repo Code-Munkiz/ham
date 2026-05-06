@@ -12,9 +12,7 @@ vi.mock("@/lib/ham/HamWorkspaceContext", () => ({
 import { HamWorkspaceTopbarPill } from "@/components/layout/HamWorkspaceTopbarPill";
 import type { HamWorkspaceContextValue } from "@/lib/ham/HamWorkspaceContext";
 
-function baseCtx(
-  overrides: Partial<HamWorkspaceContextValue> = {},
-): HamWorkspaceContextValue {
+function baseCtx(overrides: Partial<HamWorkspaceContextValue> = {}): HamWorkspaceContextValue {
   return {
     state: { status: "setup_needed" },
     workspaces: [],
@@ -62,9 +60,7 @@ describe("HamWorkspaceTopbarPill", () => {
     render(<HamWorkspaceTopbarPill />);
     fireEvent.click(screen.getByRole("button", { name: /setup needed/i }));
 
-    expect(
-      screen.getByRole("dialog", { name: /workspace unavailable/i }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: /workspace unavailable/i })).toBeInTheDocument();
     expect(screen.getByText("Workspace unavailable")).toBeInTheDocument();
     expect(
       screen.getByText(
@@ -100,9 +96,7 @@ describe("HamWorkspaceTopbarPill", () => {
     fireEvent.click(screen.getByRole("button", { name: /sign in/i }));
 
     expect(screen.getByText("Sign in required")).toBeInTheDocument();
-    expect(
-      screen.getByText("Please sign in to load your HAM workspace."),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Please sign in to load your HAM workspace.")).toBeInTheDocument();
     const signInButtons = screen.getAllByRole("button", { name: /^sign in$/i });
     fireEvent.click(signInButtons[signInButtons.length - 1]);
     expect(openSignIn).toHaveBeenCalledTimes(1);
@@ -122,7 +116,9 @@ describe("HamWorkspaceTopbarPill", () => {
 
     expect(screen.getByText("Authentication is not configured")).toBeInTheDocument();
     expect(
-      screen.getByText("Workspace sign-in is temporarily unavailable. Refresh or contact your workspace admin."),
+      screen.getByText(
+        "Workspace sign-in is temporarily unavailable. Refresh or contact your workspace admin.",
+      ),
     ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^sign in$/i })).not.toBeInTheDocument();
     expectNoHostedUnsafeCopy();

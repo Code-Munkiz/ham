@@ -190,10 +190,16 @@ export function WorkspaceChatComposerActionsMenu({
               >
                 <span className="flex w-full items-center justify-between gap-1.5 font-medium leading-tight text-white/92">
                   Add files
-                  <ChevronRight className="h-3 w-3 shrink-0 opacity-40" aria-hidden strokeWidth={2} />
+                  <ChevronRight
+                    className="h-3 w-3 shrink-0 opacity-40"
+                    aria-hidden
+                    strokeWidth={2}
+                  />
                 </span>
                 <span className="text-[10px] font-normal leading-snug text-white/42">
-                  {attachDisabled ? attachDisabledReason ?? "Unavailable" : "Images, docs, spreadsheets, MP4/MOV/WebM"}
+                  {attachDisabled
+                    ? (attachDisabledReason ?? "Unavailable")
+                    : "Images, docs, spreadsheets, MP4/MOV/WebM"}
                 </span>
               </button>
               <div className="mx-2 my-0.5 h-px bg-white/[0.07]" role="separator" />
@@ -216,9 +222,16 @@ export function WorkspaceChatComposerActionsMenu({
               >
                 <span className="flex w-full items-center gap-1.5 font-medium leading-tight text-white/92">
                   {generateVideo.busy ? (
-                    <Loader2 className="h-3 w-3 shrink-0 animate-spin text-emerald-300/90" aria-hidden />
+                    <Loader2
+                      className="h-3 w-3 shrink-0 animate-spin text-emerald-300/90"
+                      aria-hidden
+                    />
                   ) : (
-                    <Clapperboard className="h-3 w-3 shrink-0 opacity-75" aria-hidden strokeWidth={2} />
+                    <Clapperboard
+                      className="h-3 w-3 shrink-0 opacity-75"
+                      aria-hidden
+                      strokeWidth={2}
+                    />
                   )}
                   Generate video
                 </span>
@@ -246,9 +259,16 @@ export function WorkspaceChatComposerActionsMenu({
               >
                 <span className="flex w-full items-center gap-1.5 font-medium leading-tight text-white/92">
                   {generateImage.busy ? (
-                    <Loader2 className="h-3 w-3 shrink-0 animate-spin text-emerald-300/90" aria-hidden />
+                    <Loader2
+                      className="h-3 w-3 shrink-0 animate-spin text-emerald-300/90"
+                      aria-hidden
+                    />
                   ) : (
-                    <ImagePlus className="h-3 w-3 shrink-0 opacity-75" aria-hidden strokeWidth={2} />
+                    <ImagePlus
+                      className="h-3 w-3 shrink-0 opacity-75"
+                      aria-hidden
+                      strokeWidth={2}
+                    />
                   )}
                   Generate image
                 </span>
@@ -276,13 +296,18 @@ export function WorkspaceChatComposerActionsMenu({
               >
                 <span className="flex w-full items-center gap-1.5 font-medium leading-tight text-white/92">
                   {exportPdf.busy ? (
-                    <Loader2 className="h-3 w-3 shrink-0 animate-spin text-emerald-300/90" aria-hidden />
+                    <Loader2
+                      className="h-3 w-3 shrink-0 animate-spin text-emerald-300/90"
+                      aria-hidden
+                    />
                   ) : (
                     <FileDown className="h-3 w-3 shrink-0 opacity-75" aria-hidden strokeWidth={2} />
                   )}
                   Export PDF
                 </span>
-                <span className="text-[10px] font-normal leading-snug text-white/42">{exportHint}</span>
+                <span className="text-[10px] font-normal leading-snug text-white/42">
+                  {exportHint}
+                </span>
               </button>
               {menuFooterHint?.trim() ? (
                 <p className="mx-2 mb-1 mt-0.5 border-t border-white/[0.06] px-0.5 pt-1.5 text-[9px] leading-snug text-white/32">

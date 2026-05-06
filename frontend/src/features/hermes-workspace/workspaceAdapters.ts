@@ -64,7 +64,8 @@ export const workspaceSessionAdapter = {
   list: (limit = 50, offset = 0, workspaceId?: string | null) =>
     fetchChatSessions(limit, offset, workspaceId),
   get: (sessionId: string, workspaceId?: string | null) => fetchChatSession(sessionId, workspaceId),
-  delete: (sessionId: string, workspaceId?: string | null) => deleteChatSession(sessionId, workspaceId),
+  delete: (sessionId: string, workspaceId?: string | null) =>
+    deleteChatSession(sessionId, workspaceId),
 } as const;
 
 export { workspaceFileAdapter } from "./adapters/filesAdapter";

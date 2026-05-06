@@ -206,9 +206,7 @@ describe("previewPolicy", () => {
         },
       }),
     );
-    await expect(
-      previewPolicy({ changes: { policy: SAMPLE_DOC } }),
-    ).rejects.toMatchObject({
+    await expect(previewPolicy({ changes: { policy: SAMPLE_DOC } })).rejects.toMatchObject({
       code: "SOCIAL_POLICY_PREVIEW_INVALID",
       status: 422,
     });
@@ -265,8 +263,7 @@ describe("applyPolicy", () => {
       writeToken: "TOKEN_VALUE_5678",
     });
     const req = recorded[0];
-    const authPair =
-      req.headers["authorization"] ?? req.headers["x-ham-operator-authorization"];
+    const authPair = req.headers["authorization"] ?? req.headers["x-ham-operator-authorization"];
     expect(authPair).toBe("Bearer TOKEN_VALUE_5678");
   });
 

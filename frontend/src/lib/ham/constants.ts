@@ -7,12 +7,7 @@ export const AVAILABLE_MODELS = [
   "Llama 3 70B",
 ];
 
-export const AVAILABLE_PROVIDERS = [
-  "Anthropic",
-  "OpenAI",
-  "Perplexity",
-  "Local/Ollama",
-];
+export const AVAILABLE_PROVIDERS = ["Anthropic", "OpenAI", "Perplexity", "Local/Ollama"];
 
 export const ALL_TOOLS = [
   { name: "Git Inspector", icon: "GitBranch" },

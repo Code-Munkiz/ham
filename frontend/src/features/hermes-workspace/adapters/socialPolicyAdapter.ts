@@ -56,14 +56,8 @@ async function readError(res: Response): Promise<SocialPolicyServerError> {
     };
   }
   const detail =
-    raw && typeof raw === "object" && "detail" in raw
-      ? (raw as { detail: unknown }).detail
-      : raw;
-  if (
-    detail &&
-    typeof detail === "object" &&
-    "error" in (detail as Record<string, unknown>)
-  ) {
+    raw && typeof raw === "object" && "detail" in raw ? (raw as { detail: unknown }).detail : raw;
+  if (detail && typeof detail === "object" && "error" in (detail as Record<string, unknown>)) {
     const errObj = (detail as { error?: unknown }).error;
     if (errObj && typeof errObj === "object") {
       const code = (errObj as { code?: unknown }).code;
@@ -81,9 +75,7 @@ async function readError(res: Response): Promise<SocialPolicyServerError> {
     status: res.status,
     code: "UNKNOWN",
     message:
-      typeof detail === "string"
-        ? detail
-        : `HTTP ${res.status} ${res.statusText || ""}`.trim(),
+      typeof detail === "string" ? detail : `HTTP ${res.status} ${res.statusText || ""}`.trim(),
   };
 }
 

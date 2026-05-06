@@ -23,9 +23,7 @@ import { WorkspaceShell } from "../WorkspaceShell";
 import { workspaceSessionAdapter } from "../workspaceAdapters";
 import type { HamWorkspaceContextValue } from "@/lib/ham/HamWorkspaceContext";
 
-function readyCtx(
-  overrides: Partial<HamWorkspaceContextValue> = {},
-): HamWorkspaceContextValue {
+function readyCtx(overrides: Partial<HamWorkspaceContextValue> = {}): HamWorkspaceContextValue {
   return {
     state: {
       status: "ready",

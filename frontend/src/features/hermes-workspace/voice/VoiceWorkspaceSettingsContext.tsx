@@ -59,7 +59,9 @@ export function VoiceWorkspaceSettingsProvider(props: { children: React.ReactNod
   );
 
   return (
-    <VoiceWorkspaceSettingsContext.Provider value={value}>{props.children}</VoiceWorkspaceSettingsContext.Provider>
+    <VoiceWorkspaceSettingsContext.Provider value={value}>
+      {props.children}
+    </VoiceWorkspaceSettingsContext.Provider>
   );
 }
 

@@ -20,7 +20,9 @@
   border-right: 1px solid var(--ham-workspace-line, rgba(255, 255, 255, 0.08));
   background: rgba(8, 17, 24, 0.78);
   backdrop-filter: blur(8px);
-  transition: width 0.2s ease, padding 0.2s ease;
+  transition:
+    width 0.2s ease,
+    padding 0.2s ease;
 }
 
 .hww-sidebar--collapsed {

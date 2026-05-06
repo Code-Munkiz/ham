@@ -83,9 +83,7 @@ export function WorkspaceOnboardingScreen({
   };
 
   const wrapperClasses =
-    variant === "fullscreen"
-      ? "flex h-full w-full items-center justify-center p-6"
-      : "p-2";
+    variant === "fullscreen" ? "flex h-full w-full items-center justify-center p-6" : "p-2";
 
   return (
     <div className={wrapperClasses} data-testid="workspace-onboarding">
@@ -98,8 +96,8 @@ export function WorkspaceOnboardingScreen({
             {variant === "fullscreen" ? "Create your first workspace" : "New workspace"}
           </h2>
           <p className="mt-1 text-white/65">
-            A workspace is a tenant boundary for chats, agents, jobs, and
-            artifacts. You can create more later.
+            A workspace is a tenant boundary for chats, agents, jobs, and artifacts. You can create
+            more later.
           </p>
         </div>
         <form className="space-y-3" onSubmit={handleSubmit}>
@@ -129,12 +127,11 @@ export function WorkspaceOnboardingScreen({
                 disabled={submitting}
                 className="h-4 w-4 rounded border-white/30 text-[#ff6b00] focus:ring-white/40"
               />
-              <Label
-                htmlFor="ham-workspace-org-scoped"
-                className="text-sm text-white/80"
-              >
+              <Label htmlFor="ham-workspace-org-scoped" className="text-sm text-white/80">
                 Create under{" "}
-                <span className="font-medium text-white">{candidateAdminOrgs[0]?.name ?? defaultOrgId}</span>
+                <span className="font-medium text-white">
+                  {candidateAdminOrgs[0]?.name ?? defaultOrgId}
+                </span>
               </Label>
             </div>
           ) : null}
@@ -156,7 +153,12 @@ export function WorkspaceOnboardingScreen({
                 Cancel
               </Button>
             ) : null}
-            <Button type="submit" size="sm" disabled={!canSubmit} className="bg-[#ff6b00] text-black hover:bg-[#ff8533]">
+            <Button
+              type="submit"
+              size="sm"
+              disabled={!canSubmit}
+              className="bg-[#ff6b00] text-black hover:bg-[#ff8533]"
+            >
               {submitting ? "Creating…" : "Create workspace"}
             </Button>
           </div>

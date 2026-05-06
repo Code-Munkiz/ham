@@ -85,7 +85,9 @@ function MeterRing({
           />
         ) : null}
       </svg>
-      <span className="mt-0.5 text-[8px] font-semibold uppercase tracking-wide text-white/35">{label}</span>
+      <span className="mt-0.5 text-[8px] font-semibold uppercase tracking-wide text-white/35">
+        {label}
+      </span>
     </div>
   );
 }
@@ -115,7 +117,9 @@ function buildThisTurnTooltip(m: ChatContextThisTurnMeter | null): string {
 function buildWorkspaceTooltip(m: ChatContextWorkspaceMeter | null): string {
   if (!m) return "Workspace — unavailable\nOpen Context & memory when connected.";
   const pct = pctFromRatio(m.fill_ratio);
-  const role = m.bottleneck_role ? `${m.bottleneck_role} role is tightest` : "Instruction assembly vs budget";
+  const role = m.bottleneck_role
+    ? `${m.bottleneck_role} role is tightest`
+    : "Instruction assembly vs budget";
   const lines = [
     `Workspace · ${pct}% full (${m.source})`,
     `${m.used.toLocaleString()} / ${m.limit.toLocaleString()} chars`,
@@ -155,7 +159,11 @@ export function ContextMeterCluster({ payload, enabled }: ContextMeterClusterPro
   const thPct = th ? pctFromRatio(th.fill_ratio) : null;
 
   return (
-    <div className="flex shrink-0 items-center gap-0.5 md:gap-1" role="group" aria-label="Context meters">
+    <div
+      className="flex shrink-0 items-center gap-0.5 md:gap-1"
+      role="group"
+      aria-label="Context meters"
+    >
       <button
         type="button"
         title={buildThisTurnTooltip(turn)}

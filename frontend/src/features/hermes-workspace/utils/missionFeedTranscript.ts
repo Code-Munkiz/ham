@@ -113,7 +113,9 @@ export function postJoinTranscriptText(text: string): string {
 }
 
 /** Hide internal provider projection reason codes in the UI. */
-export function formatTranscriptReasonCodeForDisplay(code: string | undefined | null): string | undefined {
+export function formatTranscriptReasonCodeForDisplay(
+  code: string | undefined | null,
+): string | undefined {
   if (code == null) return undefined;
   const c = String(code).trim();
   if (!c) return undefined;
@@ -160,7 +162,8 @@ function compactStatusLabel(ev: ManagedMissionFeedEvent): string {
   const msg = (ev.message || "").trim();
   const k = (ev.kind || "").trim();
   /** Flatten duplicate-looking provider_status labels */
-  if (k.toLowerCase() === "provider_status" && msg) return msg.length > 120 ? `${msg.slice(0, 117)}…` : msg;
+  if (k.toLowerCase() === "provider_status" && msg)
+    return msg.length > 120 ? `${msg.slice(0, 117)}…` : msg;
   if (msg) return msg.length > 120 ? `${msg.slice(0, 117)}…` : msg;
   return ev.kind || "Event";
 }
@@ -181,7 +184,9 @@ export type MissionFeedTranscriptBannerPhase =
   | "ended";
 
 /** Collapse consecutive identical PROVIDER_STATUS / heartbeat-style rows into one transcript line with a repeat count. */
-export function collapseAdjacentDuplicateTranscriptNoise(items: MissionTranscriptItem[]): MissionTranscriptItem[] {
+export function collapseAdjacentDuplicateTranscriptNoise(
+  items: MissionTranscriptItem[],
+): MissionTranscriptItem[] {
   type Run =
     | { kind: "status"; base: MissionTranscriptItem & { type: "status" }; count: number }
     | { kind: "raw"; base: MissionTranscriptItem & { type: "raw" }; count: number };
@@ -196,7 +201,7 @@ export function collapseAdjacentDuplicateTranscriptNoise(items: MissionTranscrip
       return `r:${lab}|${d}`;
     }
     return null;
-  }
+  };
 
   const finishRun = (run: Run | null): MissionTranscriptItem[] => {
     if (!run) return [];
@@ -268,7 +273,9 @@ export function collapseAdjacentDuplicateTranscriptNoise(items: MissionTranscrip
  *
  * Correct order elsewhere: ``buildMissionFeedTranscript`` → ``collapseAdjacentDuplicateTranscriptNoise`` → ``applyTranscriptStreamingHints`` → slice.
  */
-export function buildMissionFeedTranscript(events: ManagedMissionFeedEvent[]): MissionTranscriptItem[] {
+export function buildMissionFeedTranscript(
+  events: ManagedMissionFeedEvent[],
+): MissionTranscriptItem[] {
   const ordered = sortedEvents(events);
   const out: MissionTranscriptItem[] = [];
 
@@ -442,14 +449,17 @@ export function applyTranscriptStreamingHints(
   const tail = base[lastIdx];
   if (tail.type !== "assistant" && tail.type !== "thinking") {
     return base.map((it) => {
-      if (it.type === "assistant" || it.type === "thinking") return { ...it, status: "complete" as const };
+      if (it.type === "assistant" || it.type === "thinking")
+        return { ...it, status: "complete" as const };
       return it;
     });
   }
 
   return base.map((it, idx) => {
     if (it.type !== "assistant" && it.type !== "thinking") return it;
-    return idx === lastIdx ? { ...it, status: "streaming" as const } : { ...it, status: "complete" as const };
+    return idx === lastIdx
+      ? { ...it, status: "streaming" as const }
+      : { ...it, status: "complete" as const };
   });
 }
 
@@ -465,7 +475,10 @@ export function missionFeedTranscriptFromEvents(
 }
 
 /** Latest assistant text for Operations Outputs digest (truncated); uses finalized transcript rows. */
-export function latestAssistantPreviewFromTranscript(items: MissionTranscriptItem[], maxLen = 800): string | null {
+export function latestAssistantPreviewFromTranscript(
+  items: MissionTranscriptItem[],
+  maxLen = 800,
+): string | null {
   for (let i = items.length - 1; i >= 0; i--) {
     const it = items[i];
     if (it.type !== "assistant") continue;

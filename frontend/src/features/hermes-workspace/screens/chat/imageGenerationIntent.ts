@@ -55,13 +55,18 @@ function analysisBlockedForAny(s: string): boolean {
 function remainderLooksReferential(prompt: string): boolean {
   const t = prompt.trim().toLowerCase();
   if (!t) return true;
-  if (/\b(this|that|these|those|attached|uploaded)\s+(image|screenshot|picture|file)\b/.test(t)) return true;
+  if (/\b(this|that|these|those|attached|uploaded)\s+(image|screenshot|picture|file)\b/.test(t))
+    return true;
   if (/\b(from|above|below)\s+the\s+(image|screenshot|picture)\b/.test(t)) return true;
   return false;
 }
 
 function normalizePrompt(prompt: string): string {
-  return prompt.replace(/\s+/g, " ").trim().replace(/^["'"\u201c]+|["'"\u201d]+$/g, "").trim();
+  return prompt
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^["'"\u201c]+|["'"\u201d]+$/g, "")
+    .trim();
 }
 
 function drawRemainderLooksVisualArtistic(raw: string): boolean {
@@ -143,9 +148,13 @@ function parseTextToImagePrompt(raw: string): string | null {
   const trimmed = raw.trim();
   if (trimmed.length < 8) return null;
 
-  const logoStandalone = trimmed.match(/^\s*(?:please\s+)?(?:generate|create|make)\s+(?:an?\s+)?logo\s+/i);
+  const logoStandalone = trimmed.match(
+    /^\s*(?:please\s+)?(?:generate|create|make)\s+(?:an?\s+)?logo\s+/i,
+  );
   if (logoStandalone) {
-    const prompt = normalizePrompt(trimmed.replace(/^\s*(?:please\s+)?(?:generate|create|make)\s+(?:an?\s+)?logo\s+/i, ""));
+    const prompt = normalizePrompt(
+      trimmed.replace(/^\s*(?:please\s+)?(?:generate|create|make)\s+(?:an?\s+)?logo\s+/i, ""),
+    );
     if (prompt.length >= 2 && !remainderLooksReferential(prompt)) {
       return prompt.slice(0, 8000);
     }

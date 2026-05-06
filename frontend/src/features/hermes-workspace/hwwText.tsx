@@ -66,7 +66,9 @@ function renderBlock(text: string, bIdx: number) {
       out.push(
         <div key={`b${bIdx}u${li}`} className="ml-1 flex gap-1.5 text-[11px] text-white/75">
           <span className="text-amber-400/80">•</span>
-          <span className="min-w-0 flex-1">{renderInline(line.replace(/^[-*]\s+/, ""), `b${bIdx}l${li}`)}</span>
+          <span className="min-w-0 flex-1">
+            {renderInline(line.replace(/^[-*]\s+/, ""), `b${bIdx}l${li}`)}
+          </span>
         </div>,
       );
       return;
@@ -76,7 +78,10 @@ function renderBlock(text: string, bIdx: number) {
       return;
     }
     out.push(
-      <p key={`b${bIdx}p${li}`} className="whitespace-pre-wrap text-[11px] leading-relaxed text-white/80">
+      <p
+        key={`b${bIdx}p${li}`}
+        className="whitespace-pre-wrap text-[11px] leading-relaxed text-white/80"
+      >
         {renderInline(line, `b${bIdx}p${li}i`)}
       </p>,
     );

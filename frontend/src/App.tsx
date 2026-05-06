@@ -18,7 +18,9 @@ import { getHamDesktopConfig, isHamDesktopShell } from "./lib/ham/desktopConfig"
 import { WorkspaceApp } from "./features/hermes-workspace";
 import { primaryChatPath } from "./features/hermes-workspace/workspaceFlags";
 
-const clerkPublishableKey = (import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined)?.trim();
+const clerkPublishableKey = (
+  import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined
+)?.trim();
 
 /** Web: marketing landing. Desktop shell: go straight to chat (no landing hero). */
 function HomeRoute() {
@@ -121,10 +123,7 @@ function ClerkHostedApp() {
   );
   return (
     <ClerkAccessBridge>
-      <AppProviders
-        hostedAuth={hostedAuth}
-        openSignIn={openSignIn}
-      >
+      <AppProviders hostedAuth={hostedAuth} openSignIn={openSignIn}>
         <AppRoutes />
       </AppProviders>
     </ClerkAccessBridge>

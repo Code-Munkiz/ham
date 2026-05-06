@@ -46,8 +46,7 @@ export function WorkspaceSetupMessage({
               Developer details
             </summary>
             <p className="mt-2 text-amber-50/90">
-              For local development without Clerk, set a local bypass before starting
-              the API.
+              For local development without Clerk, set a local bypass before starting the API.
             </p>
             <pre className="mt-2 overflow-x-auto rounded border border-amber-300/20 bg-black/25 p-2">
               <code>{`export HAM_LOCAL_DEV_WORKSPACE_BYPASS=true\npython3 scripts/run_local_api.py`}</code>
@@ -58,12 +57,7 @@ export function WorkspaceSetupMessage({
         {onRetry || onSignIn ? (
           <div className="flex flex-wrap gap-2">
             {onSignIn ? (
-              <Button
-                variant="default"
-                size="sm"
-                onClick={onSignIn}
-                type="button"
-              >
+              <Button variant="default" size="sm" onClick={onSignIn} type="button">
                 Sign in
               </Button>
             ) : null}

@@ -41,8 +41,7 @@ function mockTool(
 ) {
   const status = overrides.status ?? "unknown";
   const connection =
-    overrides.connection ??
-    (status === "ready" ? "on" : status === "error" ? "error" : "off");
+    overrides.connection ?? (status === "ready" ? "on" : status === "error" ? "error" : "off");
   return {
     id,
     label: overrides.label ?? id,
@@ -136,9 +135,9 @@ describe("WorkspaceConnectedToolsSection", () => {
 
   it("loads tools via fetchWorkspaceTools (not raw same-origin fetch)", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch");
-    const spy = vi.spyOn(HamApi, "fetchWorkspaceTools").mockResolvedValue(
-      new Response(JSON.stringify(buildDefaultPayload()), { status: 200 }),
-    );
+    const spy = vi
+      .spyOn(HamApi, "fetchWorkspaceTools")
+      .mockResolvedValue(new Response(JSON.stringify(buildDefaultPayload()), { status: 200 }));
     render(<WorkspaceConnectedToolsSection />);
     await waitFor(() => expect(screen.getByText("Connected tools")).toBeInTheDocument());
     expect(spy).toHaveBeenCalledTimes(1);
@@ -154,9 +153,9 @@ describe("WorkspaceConnectedToolsSection", () => {
     vi.spyOn(HamApi, "fetchWorkspaceTools").mockResolvedValue(
       new Response(JSON.stringify(listPayload), { status: 200 }),
     );
-    const scanSpy = vi.spyOn(HamApi, "scanWorkspaceTools").mockResolvedValue(
-      new Response(JSON.stringify(listPayload), { status: 200 }),
-    );
+    const scanSpy = vi
+      .spyOn(HamApi, "scanWorkspaceTools")
+      .mockResolvedValue(new Response(JSON.stringify(listPayload), { status: 200 }));
     render(<WorkspaceConnectedToolsSection />);
     await waitFor(() => expect(screen.getByText("Scan again")).toBeInTheDocument());
     fireEvent.click(screen.getByText("Scan again"));
@@ -276,9 +275,9 @@ describe("WorkspaceConnectedToolsSection", () => {
 
   it("connect success refetches tools (connect response has no tools array)", async () => {
     const payload = buildDefaultPayload();
-    const fetchSpy = vi.spyOn(HamApi, "fetchWorkspaceTools").mockResolvedValue(
-      new Response(JSON.stringify(payload), { status: 200 }),
-    );
+    const fetchSpy = vi
+      .spyOn(HamApi, "fetchWorkspaceTools")
+      .mockResolvedValue(new Response(JSON.stringify(payload), { status: 200 }));
     vi.spyOn(HamApi, "connectWorkspaceTool").mockResolvedValue(
       new Response(
         JSON.stringify({

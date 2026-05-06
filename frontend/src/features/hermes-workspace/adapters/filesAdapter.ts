@@ -38,7 +38,8 @@ function bridgeFromHttp(res: Response): FileBridgeState {
   if (res.status === 404) {
     return {
       status: "pending",
-      detail: "Wrong API — /api/workspace/files is missing. Check that the Local runtime URL is your Ham FastAPI origin.",
+      detail:
+        "Wrong API — /api/workspace/files is missing. Check that the Local runtime URL is your Ham FastAPI origin.",
       localCode: "wrong_api",
     };
   }
@@ -112,14 +113,20 @@ export const workspaceFileAdapter = {
       }
       return { ok: true, bridge: { status: "ready" } };
     } catch (e) {
-      return { ok: false, bridge: bridgeFromError(e), error: e instanceof Error ? e.message : String(e) };
+      return {
+        ok: false,
+        bridge: bridgeFromError(e),
+        error: e instanceof Error ? e.message : String(e),
+      };
     }
   },
 
   /**
    * Multipart upload: FormData with `file` and optional `path` (target folder, relative to workspace root).
    */
-  async postFormData(form: FormData): Promise<{ ok: boolean; bridge: FileBridgeState; error?: string }> {
+  async postFormData(
+    form: FormData,
+  ): Promise<{ ok: boolean; bridge: FileBridgeState; error?: string }> {
     if (!isLocalRuntimeConfigured()) {
       return { ok: false, bridge: bridgeUnconfigured() };
     }
@@ -133,7 +140,11 @@ export const workspaceFileAdapter = {
       }
       return { ok: true, bridge: { status: "ready" } };
     } catch (e) {
-      return { ok: false, bridge: bridgeFromError(e), error: e instanceof Error ? e.message : String(e) };
+      return {
+        ok: false,
+        bridge: bridgeFromError(e),
+        error: e instanceof Error ? e.message : String(e),
+      };
     }
   },
 
@@ -158,7 +169,7 @@ export const workspaceFileAdapter = {
         return { text: null, bridge: bridgeFromHttp(res) };
       }
       const data = (await res.json()) as { content?: string; text?: string };
-      const text = typeof data.content === "string" ? data.content : data.text ?? null;
+      const text = typeof data.content === "string" ? data.content : (data.text ?? null);
       return { text, bridge: { status: "ready" } };
     } catch (e) {
       return {

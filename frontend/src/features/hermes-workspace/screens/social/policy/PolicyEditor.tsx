@@ -11,7 +11,12 @@ import {
   REPLY_CAP_FIELDS,
   SUPPORTED_PROVIDER_IDS,
 } from "./lib/policyConstants";
-import { AUTOPILOT_MODE_LABELS, PROVIDER_LABELS, PROVIDER_MODE_LABELS, UI_TEXT } from "./lib/policyCopy";
+import {
+  AUTOPILOT_MODE_LABELS,
+  PROVIDER_LABELS,
+  PROVIDER_MODE_LABELS,
+  UI_TEXT,
+} from "./lib/policyCopy";
 import { diffPolicy, hasPolicyChanges } from "./lib/policyDiff";
 import { validatePolicy } from "./lib/policyValidate";
 import type {
@@ -48,10 +53,7 @@ export function PolicyEditor({
   writesEnabled,
 }: PolicyEditorProps): React.ReactElement {
   const validation = React.useMemo(() => validatePolicy(editedDoc), [editedDoc]);
-  const localDiff = React.useMemo(
-    () => diffPolicy(loadedDoc, editedDoc),
-    [loadedDoc, editedDoc],
-  );
+  const localDiff = React.useMemo(() => diffPolicy(loadedDoc, editedDoc), [loadedDoc, editedDoc]);
   const dirty = hasPolicyChanges(loadedDoc, editedDoc);
   const canPreview = !disabled && validation.ok && dirty;
 
@@ -100,9 +102,7 @@ export function PolicyEditor({
               <Badge variant="secondary">
                 {editedDoc.persona.persona_id} v{editedDoc.persona.persona_version}
               </Badge>
-              <span className="text-xs text-muted-foreground">
-                {UI_TEXT.personaReadOnly}
-              </span>
+              <span className="text-xs text-muted-foreground">{UI_TEXT.personaReadOnly}</span>
             </div>
           </div>
         </CardContent>
@@ -268,7 +268,8 @@ export function PolicyEditor({
             <ul className="space-y-1 text-sm">
               {validation.issues.map((issue) => (
                 <li key={`${issue.path}__${issue.reason}`}>
-                  <code className="text-xs">{issue.path}</code>{" — "}
+                  <code className="text-xs">{issue.path}</code>
+                  {" — "}
                   <span className="text-destructive">{issue.reason}</span>
                 </li>
               ))}
@@ -284,9 +285,7 @@ export function PolicyEditor({
           ) : (
             <span className="text-muted-foreground">{UI_TEXT.noChanges}</span>
           )}
-          {!writesEnabled ? (
-            <Badge variant="warning">Writes disabled on server</Badge>
-          ) : null}
+          {!writesEnabled ? <Badge variant="warning">Writes disabled on server</Badge> : null}
         </div>
         <div className="flex gap-2">
           <Button variant="outline" disabled={!dirty || disabled} onClick={onReset}>

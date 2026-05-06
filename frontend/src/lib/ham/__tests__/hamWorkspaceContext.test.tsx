@@ -12,9 +12,8 @@ import { WorkspaceGate } from "@/components/workspace/WorkspaceGate";
 import { WORKSPACE_API_UNREACHABLE_USER_COPY } from "@/components/workspace/workspaceApiUnreachableCopy";
 
 vi.mock("@/lib/ham/workspaceApi", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/ham/workspaceApi")>(
-    "@/lib/ham/workspaceApi",
-  );
+  const actual =
+    await vi.importActual<typeof import("@/lib/ham/workspaceApi")>("@/lib/ham/workspaceApi");
   return {
     ...actual,
     getMe: vi.fn(),
@@ -31,11 +30,7 @@ import {
   type HamWorkspaceSummary,
 } from "@/lib/ham/workspaceApi";
 import * as api from "@/lib/ham/workspaceApi";
-import {
-  HamWorkspaceProvider,
-  useHamWorkspace,
-  __TEST__,
-} from "@/lib/ham/HamWorkspaceContext";
+import { HamWorkspaceProvider, useHamWorkspace, __TEST__ } from "@/lib/ham/HamWorkspaceContext";
 import { activeWorkspaceStorageKey } from "@/lib/ham/hamWorkspaceStorage";
 
 const mockedGetMe = api.getMe as unknown as ReturnType<typeof vi.fn>;
@@ -59,7 +54,10 @@ function summary(overrides: Partial<HamWorkspaceSummary> = {}): HamWorkspaceSumm
   };
 }
 
-function meWith(workspaces: HamWorkspaceSummary[], opts: Partial<HamMeResponse> = {}): HamMeResponse {
+function meWith(
+  workspaces: HamWorkspaceSummary[],
+  opts: Partial<HamMeResponse> = {},
+): HamMeResponse {
   return {
     user: {
       user_id: "u_alice",
@@ -110,17 +108,18 @@ describe("HamWorkspaceProvider initial fetch", () => {
       expect(result.current.state.status).toBe("ready");
     });
     expect(result.current.active?.workspace_id).toBe("ws_only");
-    expect(window.localStorage.getItem(activeWorkspaceStorageKey("u_alice"))).toBe(
-      "ws_only",
-    );
+    expect(window.localStorage.getItem(activeWorkspaceStorageKey("u_alice"))).toBe("ws_only");
   });
 
   it("uses default_workspace_id when multiple are returned and storage is empty", async () => {
     const ws_a = summary({ workspace_id: "ws_a", name: "Alpha" });
-    const ws_b = summary({ workspace_id: "ws_b", name: "Beta", role: "member", perms: ["workspace:read"] });
-    mockedGetMe.mockResolvedValue(
-      meWith([ws_a, ws_b], { default_workspace_id: "ws_b" }),
-    );
+    const ws_b = summary({
+      workspace_id: "ws_b",
+      name: "Beta",
+      role: "member",
+      perms: ["workspace:read"],
+    });
+    mockedGetMe.mockResolvedValue(meWith([ws_a, ws_b], { default_workspace_id: "ws_b" }));
     const { result } = renderHook(() => useHamWorkspace(), { wrapper: withProvider() });
     await waitFor(() => expect(result.current.state.status).toBe("ready"));
     expect(result.current.active?.workspace_id).toBe("ws_b");
@@ -130,9 +129,7 @@ describe("HamWorkspaceProvider initial fetch", () => {
     window.localStorage.setItem(activeWorkspaceStorageKey("u_alice"), "ws_a");
     const ws_a = summary({ workspace_id: "ws_a" });
     const ws_b = summary({ workspace_id: "ws_b" });
-    mockedGetMe.mockResolvedValue(
-      meWith([ws_a, ws_b], { default_workspace_id: "ws_b" }),
-    );
+    mockedGetMe.mockResolvedValue(meWith([ws_a, ws_b], { default_workspace_id: "ws_b" }));
     const { result } = renderHook(() => useHamWorkspace(), { wrapper: withProvider() });
     await waitFor(() => expect(result.current.state.status).toBe("ready"));
     expect(result.current.active?.workspace_id).toBe("ws_a");
@@ -300,9 +297,7 @@ describe("selectWorkspace", () => {
       result.current.selectWorkspace("ws_b");
     });
     expect(result.current.active?.workspace_id).toBe("ws_b");
-    expect(
-      window.localStorage.getItem(activeWorkspaceStorageKey("u_alice")),
-    ).toBe("ws_b");
+    expect(window.localStorage.getItem(activeWorkspaceStorageKey("u_alice"))).toBe("ws_b");
   });
 
   it("ignores selection of an unknown workspace id", async () => {

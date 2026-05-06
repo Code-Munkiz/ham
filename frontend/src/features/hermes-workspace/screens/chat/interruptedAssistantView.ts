@@ -1,5 +1,6 @@
 export const INTERRUPTED_SUFFIX = "\n\nConnection interrupted. Ask me to continue.";
-export const INTERRUPTED_EMPTY = "Connection interrupted before any content was saved. Ask me to continue.";
+export const INTERRUPTED_EMPTY =
+  "Connection interrupted before any content was saved. Ask me to continue.";
 
 export type InterruptedAssistantView = {
   visibleContent: string;

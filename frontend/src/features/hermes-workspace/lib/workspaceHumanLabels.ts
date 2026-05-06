@@ -47,7 +47,10 @@ function looksLikeRawCatalogToken(s: string): boolean {
  * Human-readable primary line for a Hermes static catalog row.
  * Prefers API `display_name` when it is clearly not a duplicate of the raw id.
  */
-export function primaryHermesCatalogLabel(entry: { catalog_id: string; display_name?: string }): string {
+export function primaryHermesCatalogLabel(entry: {
+  catalog_id: string;
+  display_name?: string;
+}): string {
   const id = entry.catalog_id?.trim() ?? "";
   const fromId = humanizeHermesCatalogId(id);
   const dn = entry.display_name?.trim() ?? "";

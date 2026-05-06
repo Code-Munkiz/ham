@@ -36,9 +36,7 @@ export function PolicyDiffView({
       <CardHeader>
         <CardTitle className="flex items-center justify-between">
           <span>Preview</span>
-          <Badge variant="outline">
-            base {preview.base_revision.slice(0, 12)}…
-          </Badge>
+          <Badge variant="outline">base {preview.base_revision.slice(0, 12)}…</Badge>
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
@@ -54,8 +52,8 @@ export function PolicyDiffView({
 
         {preview.live_autonomy_change ? (
           <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
-            Live autonomy change detected in the diff. The editor cannot save
-            this — reset and re-edit.
+            Live autonomy change detected in the diff. The editor cannot save this — reset and
+            re-edit.
           </div>
         ) : null}
 

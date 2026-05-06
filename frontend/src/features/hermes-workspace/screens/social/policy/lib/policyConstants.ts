@@ -75,10 +75,8 @@ export const REPLY_CAP_FIELDS = {
   batchMaxPerRun: "batch_max_per_run",
 } as const;
 
-export type PostingCapField =
-  (typeof POSTING_CAP_FIELDS)[keyof typeof POSTING_CAP_FIELDS];
-export type ReplyCapField =
-  (typeof REPLY_CAP_FIELDS)[keyof typeof REPLY_CAP_FIELDS];
+export type PostingCapField = (typeof POSTING_CAP_FIELDS)[keyof typeof POSTING_CAP_FIELDS];
+export type ReplyCapField = (typeof REPLY_CAP_FIELDS)[keyof typeof REPLY_CAP_FIELDS];
 
 export const SAFETY_BOUNDS = {
   blocked_topics_max_count: 32,

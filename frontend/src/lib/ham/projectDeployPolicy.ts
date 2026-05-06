@@ -17,7 +17,10 @@ export function getProjectDefaultDeployPolicy(p: ProjectRecord): ProjectDefaultD
   return "off";
 }
 
-export const PROJECT_DEFAULT_DEPLOY_POLICY_OPTIONS: { value: ProjectDefaultDeployPolicy; label: string }[] = [
+export const PROJECT_DEFAULT_DEPLOY_POLICY_OPTIONS: {
+  value: ProjectDefaultDeployPolicy;
+  label: string;
+}[] = [
   { value: "off", label: "Off" },
   { value: "audit", label: "Audit" },
   { value: "soft", label: "Soft" },

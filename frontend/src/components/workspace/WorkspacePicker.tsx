@@ -145,7 +145,9 @@ export function WorkspacePicker({
   // `text-foreground` token resolves to black (see `src/index.css`).
   const menuClassName = cn(
     "overflow-hidden rounded-xl border border-white/15 bg-[#0b1620] text-sm text-white/90 shadow-2xl shadow-black/55",
-    anchorRef ? "fixed z-[300]" : "absolute left-0 top-full z-[300] mt-2 w-[min(18rem,calc(100vw-1rem))]",
+    anchorRef
+      ? "fixed z-[300]"
+      : "absolute left-0 top-full z-[300] mt-2 w-[min(18rem,calc(100vw-1rem))]",
   );
 
   const menuInner = (
