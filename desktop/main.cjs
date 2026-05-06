@@ -1,11 +1,11 @@
-'use strict';
+"use strict";
 
-const { app, BrowserWindow, ipcMain, Menu, shell } = require('electron');
-const { execFile } = require('node:child_process');
-const path = require('node:path');
-const fs = require('node:fs');
+const { app, BrowserWindow, ipcMain, Menu, shell } = require("electron");
+const { execFile } = require("node:child_process");
+const path = require("node:path");
+const fs = require("node:fs");
 
-const { buildLocalControlStatus } = require('./local_control_status.cjs');
+const { buildLocalControlStatus } = require("./local_control_status.cjs");
 const {
   loadPolicy,
   getPolicyStatusPayload,
@@ -13,26 +13,35 @@ const {
   armBrowserOnlyControl,
   armRealBrowserControl,
   disengageKillSwitchForBrowserMvp,
-} = require('./local_control_policy.cjs');
-const { getAuditStatus, appendAuditEvent } = require('./local_control_audit.cjs');
-const { buildSidecarStatus } = require('./local_control_sidecar_status.cjs');
-const { createSidecarManager, defaultChildScriptPath } = require('./local_control_sidecar_manager.cjs');
-const { createBrowserMvpController, browserActionGates } = require('./local_control_browser_mvp.cjs');
-const { createRealBrowserCdpController, realBrowserActionGates } = require('./local_control_browser_real_cdp.cjs');
-const { createLocalControlWebBridge } = require('./local_control_web_bridge.cjs');
+} = require("./local_control_policy.cjs");
+const { getAuditStatus, appendAuditEvent } = require("./local_control_audit.cjs");
+const { buildSidecarStatus } = require("./local_control_sidecar_status.cjs");
+const {
+  createSidecarManager,
+  defaultChildScriptPath,
+} = require("./local_control_sidecar_manager.cjs");
+const {
+  createBrowserMvpController,
+  browserActionGates,
+} = require("./local_control_browser_mvp.cjs");
+const {
+  createRealBrowserCdpController,
+  realBrowserActionGates,
+} = require("./local_control_browser_real_cdp.cjs");
+const { createLocalControlWebBridge } = require("./local_control_web_bridge.cjs");
 const {
   localWebBridgeEnabled: computeLocalWebBridgeEnabled,
   localWebBridgeDisabledReason,
-} = require('./local_control_web_bridge_enablement.cjs');
+} = require("./local_control_web_bridge_enablement.cjs");
 const {
   DEFAULT_PAIRING_CODE_TTL_MS,
   DEFAULT_TOKEN_TTL_MS,
   MIN_PAIRING_CODE_TTL_MS,
   MAX_PAIRING_CODE_TTL_MS,
-} = require('./local_control_web_bridge_pairing.cjs');
-const { runStartupDesktopUpdatePrompt } = require('./desktop_updates.cjs');
+} = require("./local_control_web_bridge_pairing.cjs");
+const { runStartupDesktopUpdatePrompt } = require("./desktop_updates.cjs");
 
-const CONFIG_FILENAME = 'ham-desktop-config.json';
+const CONFIG_FILENAME = "ham-desktop-config.json";
 
 /** Main BrowserWindow reference for dialogs (startup update prompt). */
 let mainWindowSingleton = null;
@@ -47,11 +56,11 @@ let rendererConfigPayload = {};
  */
 function readPersistedConfig() {
   try {
-    const p = path.join(app.getPath('userData'), CONFIG_FILENAME);
+    const p = path.join(app.getPath("userData"), CONFIG_FILENAME);
     if (!fs.existsSync(p)) return {};
-    const raw = fs.readFileSync(p, 'utf8');
+    const raw = fs.readFileSync(p, "utf8");
     const j = JSON.parse(raw);
-    return j && typeof j === 'object' ? j : {};
+    return j && typeof j === "object" ? j : {};
   } catch {
     return {};
   }
@@ -60,40 +69,38 @@ function readPersistedConfig() {
 /** Shipped next to main.cjs (asar in packaged, repo file in dev) — default API origin fallback. */
 function readBundledPublicApiDefault() {
   try {
-    const p = path.join(__dirname, 'default-public-api.json');
-    if (!fs.existsSync(p)) return '';
-    const j = JSON.parse(fs.readFileSync(p, 'utf8'));
-    return typeof j.apiBase === 'string' ? j.apiBase.trim() : '';
+    const p = path.join(__dirname, "default-public-api.json");
+    if (!fs.existsSync(p)) return "";
+    const j = JSON.parse(fs.readFileSync(p, "utf8"));
+    return typeof j.apiBase === "string" ? j.apiBase.trim() : "";
   } catch {
-    return '';
+    return "";
   }
 }
 
 function defaultLoadMode() {
-  const fromEnv = (process.env.HAM_DESKTOP_LOAD_MODE || '').trim().toLowerCase();
+  const fromEnv = (process.env.HAM_DESKTOP_LOAD_MODE || "").trim().toLowerCase();
   if (fromEnv) return fromEnv;
-  return app.isPackaged ? 'file' : 'devserver';
+  return app.isPackaged ? "file" : "devserver";
 }
 
 function buildRendererConfig() {
   const persisted = readPersistedConfig();
-  const envApi = (process.env.HAM_DESKTOP_API_BASE || '').trim();
+  const envApi = (process.env.HAM_DESKTOP_API_BASE || "").trim();
   const envHash =
-    process.env.HAM_DESKTOP_USE_HASH_ROUTER === '1' ||
-    process.env.HAM_DESKTOP_USE_HASH_ROUTER === 'true';
+    process.env.HAM_DESKTOP_USE_HASH_ROUTER === "1" ||
+    process.env.HAM_DESKTOP_USE_HASH_ROUTER === "true";
 
   const bundledDefault = readBundledPublicApiDefault();
   let apiBase =
     envApi ||
-    (typeof persisted.apiBase === 'string' ? persisted.apiBase.trim() : '') ||
+    (typeof persisted.apiBase === "string" ? persisted.apiBase.trim() : "") ||
     bundledDefault;
   let useHashRouter =
-    envHash ||
-    persisted.useHashRouter === true ||
-    persisted.useHashRouter === 'true';
+    envHash || persisted.useHashRouter === true || persisted.useHashRouter === "true";
 
   const loadMode = defaultLoadMode();
-  if (loadMode === 'file') {
+  if (loadMode === "file") {
     useHashRouter = true;
   }
 
@@ -105,39 +112,39 @@ function buildRendererConfig() {
 }
 
 function resolveWebRoot() {
-  const fromEnv = (process.env.HAM_DESKTOP_WEB_ROOT || '').trim();
+  const fromEnv = (process.env.HAM_DESKTOP_WEB_ROOT || "").trim();
   if (fromEnv) return path.resolve(fromEnv);
   if (app.isPackaged) {
-    return path.join(process.resourcesPath, 'renderer');
+    return path.join(process.resourcesPath, "renderer");
   }
-  return path.resolve(__dirname, '..', 'frontend', 'dist');
+  return path.resolve(__dirname, "..", "frontend", "dist");
 }
 
 /** Bundled docs + default skill pins (shipped in app asar). */
 function resolveCuratedDir() {
-  return path.join(__dirname, 'curated');
+  return path.join(__dirname, "curated");
 }
 
 const CURATED_FILE_ALLOWLIST = new Set([
-  'README.md',
-  'default-curated-skills.json',
-  'ham-api-env.snippet',
+  "README.md",
+  "default-curated-skills.json",
+  "ham-api-env.snippet",
 ]);
 
 /** Preset id -> argv (after binary). No free-form user argv (security). */
 const HERMES_PRESET_ARGV = {
-  version: ['--version'],
-  plugins_list: ['plugins', 'list'],
-  mcp_list: ['mcp', 'list'],
+  version: ["--version"],
+  plugins_list: ["plugins", "list"],
+  mcp_list: ["mcp", "list"],
 };
 
 const HERMES_PRESET_TIMEOUT_MS = 25_000;
 const HERMES_PRESET_MAX_CHARS = 32_000;
 
 function resolveHermesBinary() {
-  const p = (process.env.HAM_HERMES_CLI_PATH || '').trim();
+  const p = (process.env.HAM_HERMES_CLI_PATH || "").trim();
   if (p) return p;
-  return 'hermes';
+  return "hermes";
 }
 
 /**
@@ -147,9 +154,9 @@ function resolveHermesBinary() {
  * >}
  */
 function runHermesPreset(preset) {
-  const key = String(preset || '').trim();
+  const key = String(preset || "").trim();
   if (!Object.prototype.hasOwnProperty.call(HERMES_PRESET_ARGV, key)) {
-    return Promise.resolve({ ok: false, error: 'unknown preset', preset: key });
+    return Promise.resolve({ ok: false, error: "unknown preset", preset: key });
   }
   const extra = HERMES_PRESET_ARGV[key];
   const bin = resolveHermesBinary();
@@ -167,43 +174,48 @@ function runHermesPreset(preset) {
       (err, stdout, stderr) => {
         if (err) {
           const e = err;
-          if (e.killed && e.signal === 'SIGTERM') {
-            resolve({ ok: false, error: 'timeout', preset: key, code: 'ETIMEDOUT' });
+          if (e.killed && e.signal === "SIGTERM") {
+            resolve({ ok: false, error: "timeout", preset: key, code: "ETIMEDOUT" });
             return;
           }
-          if (e.code === 'ETIMEDOUT' || e.code === 'ESRCH') {
-            resolve({ ok: false, error: err.message || 'timeout', preset: key, code: String(e.code) });
-            return;
-          }
-          if (e.code === 'ENOENT') {
+          if (e.code === "ETIMEDOUT" || e.code === "ESRCH") {
             resolve({
               ok: false,
-              error: 'Hermes binary not found (PATH or HAM_HERMES_CLI_PATH).',
+              error: err.message || "timeout",
               preset: key,
-              code: 'ENOENT',
+              code: String(e.code),
             });
             return;
           }
-          if (e.code === 'ENOBUFS') {
-            resolve({ ok: false, error: 'output too large', preset: key, code: 'ENOBUFS' });
+          if (e.code === "ENOENT") {
+            resolve({
+              ok: false,
+              error: "Hermes binary not found (PATH or HAM_HERMES_CLI_PATH).",
+              preset: key,
+              code: "ENOENT",
+            });
+            return;
+          }
+          if (e.code === "ENOBUFS") {
+            resolve({ ok: false, error: "output too large", preset: key, code: "ENOBUFS" });
             return;
           }
         }
-        let out = String(stdout || '');
-        let serr = String(stderr || '');
+        let out = String(stdout || "");
+        let serr = String(stderr || "");
         let truncated = false;
         if (out.length + serr.length > HERMES_PRESET_MAX_CHARS * 2) {
           truncated = true;
           if (out.length > HERMES_PRESET_MAX_CHARS) {
-            out = out.slice(0, HERMES_PRESET_MAX_CHARS) + '\n… [stdout truncated]';
+            out = out.slice(0, HERMES_PRESET_MAX_CHARS) + "\n… [stdout truncated]";
           }
           if (serr.length > HERMES_PRESET_MAX_CHARS) {
-            serr = serr.slice(0, HERMES_PRESET_MAX_CHARS) + '\n… [stderr truncated]';
+            serr = serr.slice(0, HERMES_PRESET_MAX_CHARS) + "\n… [stderr truncated]";
           }
         }
         let exitCode = 0;
         if (err) {
-          if (typeof err.code === 'number' && !Number.isNaN(err.code)) {
+          if (typeof err.code === "number" && !Number.isNaN(err.code)) {
             exitCode = err.code;
           } else {
             exitCode = 1;
@@ -218,7 +230,7 @@ function runHermesPreset(preset) {
           exitCode,
           truncated,
         });
-      }
+      },
     );
   });
 }
@@ -229,12 +241,15 @@ function runHermesPreset(preset) {
 function probeHermesCli() {
   return new Promise((resolve) => {
     execFile(
-      'hermes',
-      ['--version'],
+      "hermes",
+      ["--version"],
       { timeout: 12_000, env: process.env, windowsHide: true },
       (err, stdout) => {
         if (err) {
-          const code = err && typeof err === 'object' && 'code' in err ? String(/** @type {NodeJS.ErrnoException} */ (err).code) : '';
+          const code =
+            err && typeof err === "object" && "code" in err
+              ? String(/** @type {NodeJS.ErrnoException} */ (err).code)
+              : "";
           resolve({
             ok: false,
             error: err.message || String(err),
@@ -242,12 +257,12 @@ function probeHermesCli() {
           });
           return;
         }
-        const line = String(stdout || '')
+        const line = String(stdout || "")
           .trim()
           .split(/\r?\n/)[0]
           .trim();
-        resolve({ ok: true, versionLine: line || 'hermes' });
-      }
+        resolve({ ok: true, versionLine: line || "hermes" });
+      },
     );
   });
 }
@@ -258,24 +273,24 @@ function createWindow() {
   const win = new BrowserWindow({
     width: 1280,
     height: 800,
-    backgroundColor: '#000000',
+    backgroundColor: "#000000",
     autoHideMenuBar: true,
     webPreferences: {
-      preload: path.join(__dirname, 'preload.cjs'),
+      preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
     },
   });
 
-  const loadMode = rendererConfigPayload.loadMode || 'devserver';
+  const loadMode = rendererConfigPayload.loadMode || "devserver";
 
-  if (loadMode === 'file') {
+  if (loadMode === "file") {
     const root = resolveWebRoot();
-    const indexHtml = path.join(root, 'index.html');
+    const indexHtml = path.join(root, "index.html");
     void win.loadFile(indexHtml);
   } else {
-    const url = (process.env.HAM_DESKTOP_DEV_SERVER_URL || 'http://127.0.0.1:3000').trim();
+    const url = (process.env.HAM_DESKTOP_DEV_SERVER_URL || "http://127.0.0.1:3000").trim();
     void win.loadURL(url);
   }
 
@@ -283,39 +298,43 @@ function createWindow() {
   return win;
 }
 
-ipcMain.on('ham-desktop:get-config-sync', (event) => {
+ipcMain.on("ham-desktop:get-config-sync", (event) => {
   event.returnValue = rendererConfigPayload;
 });
 
-ipcMain.handle('ham-desktop:hermes-cli-probe', () => probeHermesCli());
+ipcMain.handle("ham-desktop:hermes-cli-probe", () => probeHermesCli());
 
-ipcMain.handle('ham-desktop:hermes-preset', (event, preset) => runHermesPreset(preset));
+ipcMain.handle("ham-desktop:hermes-preset", (event, preset) => runHermesPreset(preset));
 
-ipcMain.handle('ham-desktop:read-curated-file', (event, name) => {
-  const base = String(name || '').replace(/[/\\]/g, '');
+ipcMain.handle("ham-desktop:read-curated-file", (event, name) => {
+  const base = String(name || "").replace(/[/\\]/g, "");
   if (!CURATED_FILE_ALLOWLIST.has(base)) {
-    return { ok: false, error: 'file not allowed' };
+    return { ok: false, error: "file not allowed" };
   }
   const p = path.join(resolveCuratedDir(), base);
   if (!p.startsWith(resolveCuratedDir())) {
-    return { ok: false, error: 'path rejected' };
+    return { ok: false, error: "path rejected" };
   }
   try {
-    const text = fs.readFileSync(p, 'utf8');
+    const text = fs.readFileSync(p, "utf8");
     return { ok: true, name: base, text };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
 });
 
-ipcMain.handle('ham-desktop:open-hermes-upstream-docs', () => {
-  const u = (process.env.HAM_HERMES_UPSTREAM_URL || 'https://github.com/NousResearch/hermes-agent').trim();
-  return shell.openExternal(u || 'https://github.com/NousResearch/hermes-agent').then(() => ({ ok: true }));
+ipcMain.handle("ham-desktop:open-hermes-upstream-docs", () => {
+  const u = (
+    process.env.HAM_HERMES_UPSTREAM_URL || "https://github.com/NousResearch/hermes-agent"
+  ).trim();
+  return shell
+    .openExternal(u || "https://github.com/NousResearch/hermes-agent")
+    .then(() => ({ ok: true }));
 });
 
 function localControlPaths() {
   return {
-    userDataPath: app.getPath('userData'),
+    userDataPath: app.getPath("userData"),
     platform: process.platform,
     fs,
     path,
@@ -327,7 +346,7 @@ function withTimeoutMs(promise, ms) {
   return Promise.race([
     promise,
     new Promise((_, reject) => {
-      const t = setTimeout(() => reject(new Error('local_control_ipc_timeout')), ms);
+      const t = setTimeout(() => reject(new Error("local_control_ipc_timeout")), ms);
       t.unref?.();
     }),
   ]);
@@ -371,11 +390,11 @@ let realBrowserSingleton = null;
 /** @type {ReturnType<typeof createLocalControlWebBridge> | null} */
 let localWebBridgeSingleton = null;
 const localWebBridgeAuditRing = [];
-let localWebBridgeTrustedToken = '';
+let localWebBridgeTrustedToken = "";
 
 function mapWebBridgeBlockedReason(reason) {
-  if (reason === 'real_browser_automation_off') return 'real_browser_automation_off';
-  return reason || 'browser_blocked';
+  if (reason === "real_browser_automation_off") return "real_browser_automation_off";
+  return reason || "browser_blocked";
 }
 
 async function executeLocalWebBridgeBrowserIntent(payload) {
@@ -390,11 +409,11 @@ async function executeLocalWebBridgeBrowserIntent(payload) {
   if (!g.ok) {
     return {
       ok: false,
-      status: 'blocked',
+      status: "blocked",
       error: mapWebBridgeBlockedReason(g.reason),
       reason_code: mapWebBridgeBlockedReason(g.reason),
       browser_bridge: {
-        status: 'blocked',
+        status: "blocked",
         summary: mapWebBridgeBlockedReason(g.reason),
         step_count: 0,
         mutation_detected: false,
@@ -406,16 +425,14 @@ async function executeLocalWebBridgeBrowserIntent(payload) {
   const start = await rb.startSession();
   if (!start || start.ok !== true) {
     const reasonCode =
-      start && typeof start.error === 'string' && start.error
-        ? start.error
-        : 'start_failed';
+      start && typeof start.error === "string" && start.error ? start.error : "start_failed";
     return {
       ok: false,
-      status: 'failed',
+      status: "failed",
       error: reasonCode,
       reason_code: reasonCode,
       browser_bridge: {
-        status: 'failed',
+        status: "failed",
         summary: reasonCode,
         step_count: 0,
         mutation_detected: false,
@@ -423,47 +440,48 @@ async function executeLocalWebBridgeBrowserIntent(payload) {
       http_status: 409,
     };
   }
-  const action = String(payload && payload.action ? payload.action : '').trim();
-  if (action === 'navigate_and_capture') {
-    const nav = await rb.navigate(String(payload.url || ''), {
+  const action = String(payload && payload.action ? payload.action : "").trim();
+  if (action === "navigate_and_capture") {
+    const nav = await rb.navigate(String(payload.url || ""), {
       allow_loopback: policy.real_browser_allow_loopback === true,
     });
     if (!nav || nav.ok !== true) {
-      const reasonCode = nav && nav.error === 'scheme_not_allowed'
-        ? 'url_policy_blocked'
-        : nav && nav.error === 'url_loopback_blocked'
-          ? 'url_policy_blocked'
-          : nav && nav.error === 'url_local_network_blocked'
-            ? 'url_policy_blocked'
-            : nav && nav.error === 'url_private_network_blocked'
-              ? 'url_policy_blocked'
-              : nav && typeof nav.error === 'string' && nav.error
-                ? nav.error
-                : 'navigate_failed';
+      const reasonCode =
+        nav && nav.error === "scheme_not_allowed"
+          ? "url_policy_blocked"
+          : nav && nav.error === "url_loopback_blocked"
+            ? "url_policy_blocked"
+            : nav && nav.error === "url_local_network_blocked"
+              ? "url_policy_blocked"
+              : nav && nav.error === "url_private_network_blocked"
+                ? "url_policy_blocked"
+                : nav && typeof nav.error === "string" && nav.error
+                  ? nav.error
+                  : "navigate_failed";
       return {
         ok: false,
-        status: 'failed',
+        status: "failed",
         error: reasonCode,
         reason_code: reasonCode,
         browser_bridge: {
-          status: 'failed',
+          status: "failed",
           summary: reasonCode,
           step_count: 1,
           mutation_detected: false,
         },
-        http_status: reasonCode === 'url_policy_blocked' ? 403 : 409,
+        http_status: reasonCode === "url_policy_blocked" ? 403 : 409,
       };
     }
     const shot = await rb.screenshot();
-    if (!shot || shot.ok !== true || typeof shot.data_url !== 'string') {
+    if (!shot || shot.ok !== true || typeof shot.data_url !== "string") {
       const reasonCode =
-        shot && typeof shot.error === 'string' && shot.error ? shot.error : 'screenshot_failed';
+        shot && typeof shot.error === "string" && shot.error ? shot.error : "screenshot_failed";
       return {
         ok: true,
-        status: 'partial',
+        status: "partial",
         reason_code: reasonCode,
         browser_bridge: {
-          status: 'partial',
+          status: "partial",
           summary: reasonCode,
           step_count: 2,
           mutation_detected: false,
@@ -473,10 +491,10 @@ async function executeLocalWebBridgeBrowserIntent(payload) {
     }
     return {
       ok: true,
-      status: 'executed',
+      status: "executed",
       browser_bridge: {
-        status: 'executed',
-        summary: 'navigated + captured',
+        status: "executed",
+        summary: "navigated + captured",
         step_count: 2,
         mutation_detected: false,
         screenshot_data_url: shot.data_url,
@@ -484,89 +502,149 @@ async function executeLocalWebBridgeBrowserIntent(payload) {
       http_status: 200,
     };
   }
-  if (action === 'observe') {
+  if (action === "observe") {
     const obs = await rb.observeCompact();
     if (!obs || obs.ok !== true) {
-      const reasonCode = obs && typeof obs.error === 'string' ? obs.error : 'observe_failed';
-      return { ok: false, status: 'failed', error: reasonCode, reason_code: reasonCode, http_status: 409 };
+      const reasonCode = obs && typeof obs.error === "string" ? obs.error : "observe_failed";
+      return {
+        ok: false,
+        status: "failed",
+        error: reasonCode,
+        reason_code: reasonCode,
+        http_status: 409,
+      };
     }
     const candidates = await rb.enumerateClickCandidates();
     return {
       ok: true,
-      status: 'executed',
+      status: "executed",
       browser_bridge: {
-        status: 'executed',
-        summary: 'observed',
+        status: "executed",
+        summary: "observed",
         observe: obs,
         click_candidates: candidates && candidates.ok === true ? candidates.candidates : [],
       },
       http_status: 200,
     };
   }
-  if (action === 'click_candidate') {
-    const out = await rb.clickCandidate(String(payload && payload.candidate_id ? payload.candidate_id : ''));
+  if (action === "click_candidate") {
+    const out = await rb.clickCandidate(
+      String(payload && payload.candidate_id ? payload.candidate_id : ""),
+    );
     if (!out || out.ok !== true) {
-      const reasonCode = out && typeof out.error === 'string' ? out.error : 'click_failed';
-      return { ok: false, status: 'failed', error: reasonCode, reason_code: reasonCode, http_status: 409 };
-    }
-    return { ok: true, status: 'executed', browser_bridge: { status: 'executed', summary: 'clicked_candidate' }, http_status: 200 };
-  }
-  if (action === 'scroll') {
-    const out = await rb.scrollVerticalBounded(Number(payload && payload.delta_y ? payload.delta_y : 0));
-    if (!out || out.ok !== true) {
-      const reasonCode = out && typeof out.error === 'string' ? out.error : 'scroll_failed';
-      return { ok: false, status: 'failed', error: reasonCode, reason_code: reasonCode, http_status: 409 };
+      const reasonCode = out && typeof out.error === "string" ? out.error : "click_failed";
+      return {
+        ok: false,
+        status: "failed",
+        error: reasonCode,
+        reason_code: reasonCode,
+        http_status: 409,
+      };
     }
     return {
       ok: true,
-      status: 'executed',
-      browser_bridge: { status: 'executed', summary: 'scrolled', delta_applied: out.delta_applied },
+      status: "executed",
+      browser_bridge: { status: "executed", summary: "clicked_candidate" },
       http_status: 200,
     };
   }
-  if (action === 'type_into_field') {
-    const out = await rb.typeIntoFieldSafe(
-      String(payload && payload.selector ? payload.selector : ''),
-      String(payload && payload.text ? payload.text : ''),
-      { clear_first: payload && payload.clear_first !== false },
+  if (action === "scroll") {
+    const out = await rb.scrollVerticalBounded(
+      Number(payload && payload.delta_y ? payload.delta_y : 0),
     );
     if (!out || out.ok !== true) {
-      const reasonCode = out && typeof out.error === 'string' ? out.error : 'type_failed';
-      return { ok: false, status: 'failed', error: reasonCode, reason_code: reasonCode, http_status: 409 };
+      const reasonCode = out && typeof out.error === "string" ? out.error : "scroll_failed";
+      return {
+        ok: false,
+        status: "failed",
+        error: reasonCode,
+        reason_code: reasonCode,
+        http_status: 409,
+      };
     }
     return {
       ok: true,
-      status: 'executed',
+      status: "executed",
+      browser_bridge: { status: "executed", summary: "scrolled", delta_applied: out.delta_applied },
+      http_status: 200,
+    };
+  }
+  if (action === "type_into_field") {
+    const out = await rb.typeIntoFieldSafe(
+      String(payload && payload.selector ? payload.selector : ""),
+      String(payload && payload.text ? payload.text : ""),
+      { clear_first: payload && payload.clear_first !== false },
+    );
+    if (!out || out.ok !== true) {
+      const reasonCode = out && typeof out.error === "string" ? out.error : "type_failed";
+      return {
+        ok: false,
+        status: "failed",
+        error: reasonCode,
+        reason_code: reasonCode,
+        http_status: 409,
+      };
+    }
+    return {
+      ok: true,
+      status: "executed",
       browser_bridge: {
-        status: 'executed',
-        summary: 'typed_into_field',
+        status: "executed",
+        summary: "typed_into_field",
         chars: Number(out.chars) || 0,
       },
       http_status: 200,
     };
   }
-  if (action === 'key_press') {
-    const out = await rb.pressSafeKey(String(payload && payload.key ? payload.key : ''));
+  if (action === "key_press") {
+    const out = await rb.pressSafeKey(String(payload && payload.key ? payload.key : ""));
     if (!out || out.ok !== true) {
-      const reasonCode = out && typeof out.error === 'string' ? out.error : 'key_press_failed';
-      return { ok: false, status: 'failed', error: reasonCode, reason_code: reasonCode, http_status: 409 };
-    }
-    return { ok: true, status: 'executed', browser_bridge: { status: 'executed', summary: 'key_pressed', key: out.key }, http_status: 200 };
-  }
-  if (action === 'wait') {
-    const out = await rb.waitBoundedMs(Number(payload && payload.wait_ms ? payload.wait_ms : 0));
-    if (!out || out.ok !== true) {
-      const reasonCode = out && typeof out.error === 'string' ? out.error : 'wait_failed';
-      return { ok: false, status: 'failed', error: reasonCode, reason_code: reasonCode, http_status: 409 };
+      const reasonCode = out && typeof out.error === "string" ? out.error : "key_press_failed";
+      return {
+        ok: false,
+        status: "failed",
+        error: reasonCode,
+        reason_code: reasonCode,
+        http_status: 409,
+      };
     }
     return {
       ok: true,
-      status: 'executed',
-      browser_bridge: { status: 'executed', summary: 'waited', waited_ms: Number(out.waited_ms) || 0 },
+      status: "executed",
+      browser_bridge: { status: "executed", summary: "key_pressed", key: out.key },
       http_status: 200,
     };
   }
-  return { ok: false, status: 'failed', error: 'invalid_intent', reason_code: 'invalid_intent', http_status: 400 };
+  if (action === "wait") {
+    const out = await rb.waitBoundedMs(Number(payload && payload.wait_ms ? payload.wait_ms : 0));
+    if (!out || out.ok !== true) {
+      const reasonCode = out && typeof out.error === "string" ? out.error : "wait_failed";
+      return {
+        ok: false,
+        status: "failed",
+        error: reasonCode,
+        reason_code: reasonCode,
+        http_status: 409,
+      };
+    }
+    return {
+      ok: true,
+      status: "executed",
+      browser_bridge: {
+        status: "executed",
+        summary: "waited",
+        waited_ms: Number(out.waited_ms) || 0,
+      },
+      http_status: 200,
+    };
+  }
+  return {
+    ok: false,
+    status: "failed",
+    error: "invalid_intent",
+    reason_code: "invalid_intent",
+    http_status: 400,
+  };
 }
 
 async function executeLocalWebBridgeMachineEscalationRequest(payload) {
@@ -580,71 +658,71 @@ async function executeLocalWebBridgeMachineEscalationRequest(payload) {
   if (policy.kill_switch.engaged) {
     return {
       ok: false,
-      error: 'kill_switch_engaged',
-      reason_code: 'kill_switch_engaged',
-      status: 'denied',
+      error: "kill_switch_engaged",
+      reason_code: "kill_switch_engaged",
+      status: "denied",
       http_status: 403,
     };
   }
   if (!(policy.real_browser_control_armed === true || policy.browser_control_armed === true)) {
     return {
       ok: false,
-      error: 'local_control_not_armed',
-      reason_code: 'local_control_not_armed',
-      status: 'denied',
+      error: "local_control_not_armed",
+      reason_code: "local_control_not_armed",
+      status: "denied",
       http_status: 403,
     };
   }
-  if (String(payload.escalated_from || '').trim() !== 'browser') {
+  if (String(payload.escalated_from || "").trim() !== "browser") {
     return {
       ok: false,
-      error: 'browser_context_required',
-      reason_code: 'browser_context_required',
-      status: 'denied',
+      error: "browser_context_required",
+      reason_code: "browser_context_required",
+      status: "denied",
       http_status: 409,
     };
   }
-  const trigger = String(payload.trigger || '').trim();
-  if (trigger !== 'partial' && trigger !== 'blocked' && trigger !== 'browser_insufficient') {
+  const trigger = String(payload.trigger || "").trim();
+  if (trigger !== "partial" && trigger !== "blocked" && trigger !== "browser_insufficient") {
     return {
       ok: false,
-      error: 'trigger_not_allowed',
-      reason_code: 'trigger_not_allowed',
-      status: 'denied',
+      error: "trigger_not_allowed",
+      reason_code: "trigger_not_allowed",
+      status: "denied",
       http_status: 400,
     };
   }
   if (payload.user_confirmed !== true) {
     return {
       ok: false,
-      error: 'user_confirmation_required',
-      reason_code: 'user_confirmation_required',
-      status: 'denied',
+      error: "user_confirmation_required",
+      reason_code: "user_confirmation_required",
+      status: "denied",
       http_status: 409,
     };
   }
-  const requestedScope = String(payload.requested_scope || '').trim();
-  if (requestedScope && requestedScope !== 'narrow_task') {
+  const requestedScope = String(payload.requested_scope || "").trim();
+  if (requestedScope && requestedScope !== "narrow_task") {
     return {
       ok: false,
-      error: 'requested_scope_not_allowed',
-      reason_code: 'requested_scope_not_allowed',
-      status: 'denied',
+      error: "requested_scope_not_allowed",
+      reason_code: "requested_scope_not_allowed",
+      status: "denied",
       http_status: 400,
     };
   }
   appendAuditEvent({
     userDataPath: c.userDataPath,
-    type: 'local_control_machine_escalation_requested',
+    type: "local_control_machine_escalation_requested",
     fs: c.fs,
     path: c.path,
   });
   return {
     ok: true,
-    selected_mode: 'machine',
-    escalated_from: 'browser',
+    selected_mode: "machine",
+    escalated_from: "browser",
     escalation_trigger: trigger,
-    status: 'approved_pending_execution',
+    status: "approved_pending_execution",
     machine_execution_available: false,
     http_status: 200,
   };
@@ -671,18 +749,18 @@ function localWebBridgeEnabled() {
 
 function getLocalWebBridge() {
   if (!localWebBridgeSingleton) {
-    const bridgePort = Number(process.env.HAM_LOCAL_WEB_BRIDGE_PORT || '0');
+    const bridgePort = Number(process.env.HAM_LOCAL_WEB_BRIDGE_PORT || "0");
     localWebBridgeSingleton = createLocalControlWebBridge({
       port: Number.isFinite(bridgePort) ? bridgePort : 0,
       executeBrowserIntent: executeLocalWebBridgeBrowserIntent,
       executeMachineEscalationRequest: executeLocalWebBridgeMachineEscalationRequest,
       emitAudit: (event) => {
         const safe = {
-          event: String(event && event.event ? event.event : 'bridge_event'),
+          event: String(event && event.event ? event.event : "bridge_event"),
           timestamp: new Date().toISOString(),
-          origin: String(event && event.origin ? event.origin : ''),
-          session_id: String(event && event.session_id ? event.session_id : ''),
-          reason_code: String(event && event.reason_code ? event.reason_code : ''),
+          origin: String(event && event.origin ? event.origin : ""),
+          session_id: String(event && event.session_id ? event.session_id : ""),
+          reason_code: String(event && event.reason_code ? event.reason_code : ""),
         };
         localWebBridgeAuditRing.push(safe);
         if (localWebBridgeAuditRing.length > 200) {
@@ -701,7 +779,7 @@ function localWebBridgeDefaults() {
   });
   return {
     ok: true,
-    bridge_version: 'v1',
+    bridge_version: "v1",
     enabled: false,
     disabled_reason: disabledReason || null,
     running: false,
@@ -722,7 +800,7 @@ function localWebBridgeDefaults() {
 }
 
 /** Local Control Phase 2 — full status; appends redacted audit line. */
-ipcMain.handle('ham-desktop:local-control-get-status', async () => {
+ipcMain.handle("ham-desktop:local-control-get-status", async () => {
   const c = localControlPaths();
   const rb = getRealBrowser();
   let browserRealSnapshot = rb.getStatus();
@@ -749,14 +827,14 @@ ipcMain.handle('ham-desktop:local-control-get-status', async () => {
   });
   appendAuditEvent({
     userDataPath: c.userDataPath,
-    type: 'local_control_status_read',
+    type: "local_control_status_read",
     fs: c.fs,
     path: c.path,
   });
   return st;
 });
 
-ipcMain.handle('ham-desktop:local-control-get-policy-status', () => {
+ipcMain.handle("ham-desktop:local-control-get-policy-status", () => {
   const c = localControlPaths();
   const { policy, persisted } = loadPolicy({
     userDataPath: c.userDataPath,
@@ -766,14 +844,14 @@ ipcMain.handle('ham-desktop:local-control-get-policy-status', () => {
   });
   appendAuditEvent({
     userDataPath: c.userDataPath,
-    type: 'local_control_policy_read',
+    type: "local_control_policy_read",
     fs: c.fs,
     path: c.path,
   });
   return getPolicyStatusPayload(policy, { persisted });
 });
 
-ipcMain.handle('ham-desktop:local-control-get-audit-status', () => {
+ipcMain.handle("ham-desktop:local-control-get-audit-status", () => {
   const c = localControlPaths();
   const st = getAuditStatus({
     userDataPath: c.userDataPath,
@@ -782,14 +860,14 @@ ipcMain.handle('ham-desktop:local-control-get-audit-status', () => {
   });
   appendAuditEvent({
     userDataPath: c.userDataPath,
-    type: 'local_control_audit_status_read',
+    type: "local_control_audit_status_read",
     fs: c.fs,
     path: c.path,
   });
   return st;
 });
 
-ipcMain.handle('ham-desktop:local-control-get-kill-switch-status', () => {
+ipcMain.handle("ham-desktop:local-control-get-kill-switch-status", () => {
   const c = localControlPaths();
   const { policy } = loadPolicy({
     userDataPath: c.userDataPath,
@@ -799,19 +877,19 @@ ipcMain.handle('ham-desktop:local-control-get-kill-switch-status', () => {
   });
   appendAuditEvent({
     userDataPath: c.userDataPath,
-    type: 'local_control_kill_switch_status_read',
+    type: "local_control_kill_switch_status_read",
     fs: c.fs,
     path: c.path,
   });
   return {
-    kind: 'ham_desktop_local_control_kill_switch_status',
+    kind: "ham_desktop_local_control_kill_switch_status",
     engaged: policy.kill_switch.engaged,
     reason: policy.kill_switch.reason,
   };
 });
 
 /** Phase 3B — live sidecar status (inert child optional); read-only payload. */
-ipcMain.handle('ham-desktop:local-control-get-sidecar-status', () => {
+ipcMain.handle("ham-desktop:local-control-get-sidecar-status", () => {
   const c = localControlPaths();
   const { policy } = loadPolicy({
     userDataPath: c.userDataPath,
@@ -821,7 +899,7 @@ ipcMain.handle('ham-desktop:local-control-get-sidecar-status', () => {
   });
   appendAuditEvent({
     userDataPath: c.userDataPath,
-    type: 'local_control_sidecar_status_read',
+    type: "local_control_sidecar_status_read",
     fs: c.fs,
     path: c.path,
   });
@@ -831,7 +909,7 @@ ipcMain.handle('ham-desktop:local-control-get-sidecar-status', () => {
   });
 });
 
-ipcMain.handle('ham-desktop:local-control-sidecar-start', async () => {
+ipcMain.handle("ham-desktop:local-control-sidecar-start", async () => {
   const c = localControlPaths();
   const { policy } = loadPolicy({
     userDataPath: c.userDataPath,
@@ -842,15 +920,15 @@ ipcMain.handle('ham-desktop:local-control-sidecar-start', async () => {
   return getSidecarManager().start({ killSwitchEngaged: policy.kill_switch.engaged });
 });
 
-ipcMain.handle('ham-desktop:local-control-sidecar-stop', async () => {
+ipcMain.handle("ham-desktop:local-control-sidecar-stop", async () => {
   return getSidecarManager().stop();
 });
 
-ipcMain.handle('ham-desktop:local-control-sidecar-health', async () => {
+ipcMain.handle("ham-desktop:local-control-sidecar-health", async () => {
   const c = localControlPaths();
   appendAuditEvent({
     userDataPath: c.userDataPath,
-    type: 'local_control_sidecar_health_ping',
+    type: "local_control_sidecar_health_ping",
     fs: c.fs,
     path: c.path,
   });
@@ -858,7 +936,7 @@ ipcMain.handle('ham-desktop:local-control-sidecar-health', async () => {
 });
 
 /** Engage only — idempotent; persists safer policy; never disengages. */
-ipcMain.handle('ham-desktop:local-control-engage-kill-switch', () => {
+ipcMain.handle("ham-desktop:local-control-engage-kill-switch", () => {
   const c = localControlPaths();
   const r = engageKillSwitch({
     userDataPath: c.userDataPath,
@@ -868,7 +946,7 @@ ipcMain.handle('ham-desktop:local-control-engage-kill-switch', () => {
   });
   appendAuditEvent({
     userDataPath: c.userDataPath,
-    type: 'local_control_kill_switch_engaged',
+    type: "local_control_kill_switch_engaged",
     fs: c.fs,
     path: c.path,
   });
@@ -880,7 +958,7 @@ ipcMain.handle('ham-desktop:local-control-engage-kill-switch', () => {
 });
 
 /** Phase 4A — narrow browser MVP (Electron BrowserWindow in main). */
-ipcMain.handle('ham-desktop:local-control-browser-arm', () => {
+ipcMain.handle("ham-desktop:local-control-browser-arm", () => {
   const c = localControlPaths();
   armBrowserOnlyControl({
     userDataPath: c.userDataPath,
@@ -890,14 +968,14 @@ ipcMain.handle('ham-desktop:local-control-browser-arm', () => {
   });
   appendAuditEvent({
     userDataPath: c.userDataPath,
-    type: 'local_control_browser_arm',
+    type: "local_control_browser_arm",
     fs: c.fs,
     path: c.path,
   });
   return { ok: true };
 });
 
-ipcMain.handle('ham-desktop:local-control-browser-release-kill-switch', (event, token) => {
+ipcMain.handle("ham-desktop:local-control-browser-release-kill-switch", (event, token) => {
   const c = localControlPaths();
   const r = disengageKillSwitchForBrowserMvp({
     userDataPath: c.userDataPath,
@@ -909,7 +987,7 @@ ipcMain.handle('ham-desktop:local-control-browser-release-kill-switch', (event, 
   if (r.ok) {
     appendAuditEvent({
       userDataPath: c.userDataPath,
-      type: 'local_control_kill_switch_disengaged_browser_mvp',
+      type: "local_control_kill_switch_disengaged_browser_mvp",
       fs: c.fs,
       path: c.path,
     });
@@ -917,7 +995,7 @@ ipcMain.handle('ham-desktop:local-control-browser-release-kill-switch', (event, 
   return r;
 });
 
-ipcMain.handle('ham-desktop:local-control-get-browser-status', () => {
+ipcMain.handle("ham-desktop:local-control-get-browser-status", () => {
   const c = localControlPaths();
   const { policy } = loadPolicy({
     userDataPath: c.userDataPath,
@@ -928,7 +1006,7 @@ ipcMain.handle('ham-desktop:local-control-get-browser-status', () => {
   const snap = getBrowserMvp().getStatus();
   const g = browserActionGates(policy, c.platform);
   return {
-    kind: 'ham_desktop_local_control_browser_mvp_public',
+    kind: "ham_desktop_local_control_browser_mvp_public",
     running: snap.running,
     title: snap.title,
     display_url: snap.display_url,
@@ -939,7 +1017,7 @@ ipcMain.handle('ham-desktop:local-control-get-browser-status', () => {
   };
 });
 
-ipcMain.handle('ham-desktop:local-control-browser-start-session', async () => {
+ipcMain.handle("ham-desktop:local-control-browser-start-session", async () => {
   const c = localControlPaths();
   const { policy } = loadPolicy({
     userDataPath: c.userDataPath,
@@ -951,7 +1029,7 @@ ipcMain.handle('ham-desktop:local-control-browser-start-session', async () => {
   if (!g.ok) {
     appendAuditEvent({
       userDataPath: c.userDataPath,
-      type: 'local_control_browser_start_blocked',
+      type: "local_control_browser_start_blocked",
       fs: c.fs,
       path: c.path,
     });
@@ -959,7 +1037,7 @@ ipcMain.handle('ham-desktop:local-control-browser-start-session', async () => {
   }
   appendAuditEvent({
     userDataPath: c.userDataPath,
-    type: 'local_control_browser_start',
+    type: "local_control_browser_start",
     fs: c.fs,
     path: c.path,
   });
@@ -968,15 +1046,15 @@ ipcMain.handle('ham-desktop:local-control-browser-start-session', async () => {
   } catch {
     appendAuditEvent({
       userDataPath: c.userDataPath,
-      type: 'local_control_browser_error',
+      type: "local_control_browser_error",
       fs: c.fs,
       path: c.path,
     });
-    return { ok: false, error: 'start_failed' };
+    return { ok: false, error: "start_failed" };
   }
 });
 
-ipcMain.handle('ham-desktop:local-control-browser-navigate', async (event, url) => {
+ipcMain.handle("ham-desktop:local-control-browser-navigate", async (event, url) => {
   const c = localControlPaths();
   const { policy } = loadPolicy({
     userDataPath: c.userDataPath,
@@ -988,7 +1066,7 @@ ipcMain.handle('ham-desktop:local-control-browser-navigate', async (event, url) 
   if (!g.ok) {
     appendAuditEvent({
       userDataPath: c.userDataPath,
-      type: 'local_control_browser_navigate_blocked',
+      type: "local_control_browser_navigate_blocked",
       fs: c.fs,
       path: c.path,
     });
@@ -996,26 +1074,26 @@ ipcMain.handle('ham-desktop:local-control-browser-navigate', async (event, url) 
   }
   appendAuditEvent({
     userDataPath: c.userDataPath,
-    type: 'local_control_browser_navigate',
+    type: "local_control_browser_navigate",
     fs: c.fs,
     path: c.path,
   });
   try {
-    return await getBrowserMvp().navigate(String(url || ''), {
+    return await getBrowserMvp().navigate(String(url || ""), {
       allow_loopback: policy.browser_allow_loopback === true,
     });
   } catch {
     appendAuditEvent({
       userDataPath: c.userDataPath,
-      type: 'local_control_browser_error',
+      type: "local_control_browser_error",
       fs: c.fs,
       path: c.path,
     });
-    return { ok: false, error: 'navigate_failed' };
+    return { ok: false, error: "navigate_failed" };
   }
 });
 
-ipcMain.handle('ham-desktop:local-control-browser-screenshot', async () => {
+ipcMain.handle("ham-desktop:local-control-browser-screenshot", async () => {
   const c = localControlPaths();
   const { policy } = loadPolicy({
     userDataPath: c.userDataPath,
@@ -1029,7 +1107,7 @@ ipcMain.handle('ham-desktop:local-control-browser-screenshot', async () => {
   }
   appendAuditEvent({
     userDataPath: c.userDataPath,
-    type: 'local_control_browser_screenshot',
+    type: "local_control_browser_screenshot",
     fs: c.fs,
     path: c.path,
   });
@@ -1038,21 +1116,21 @@ ipcMain.handle('ham-desktop:local-control-browser-screenshot', async () => {
   } catch {
     appendAuditEvent({
       userDataPath: c.userDataPath,
-      type: 'local_control_browser_error',
+      type: "local_control_browser_error",
       fs: c.fs,
       path: c.path,
     });
-    return { ok: false, error: 'screenshot_failed' };
+    return { ok: false, error: "screenshot_failed" };
   }
 });
 
-ipcMain.handle('ham-desktop:local-control-browser-stop-session', () => {
+ipcMain.handle("ham-desktop:local-control-browser-stop-session", () => {
   const c = localControlPaths();
   const running = getBrowserMvp().getStatus().running;
   if (running) {
     appendAuditEvent({
       userDataPath: c.userDataPath,
-      type: 'local_control_browser_stop',
+      type: "local_control_browser_stop",
       fs: c.fs,
       path: c.path,
     });
@@ -1061,7 +1139,7 @@ ipcMain.handle('ham-desktop:local-control-browser-stop-session', () => {
 });
 
 /** Phase 4B — managed Chromium + localhost CDP (Linux + Windows). */
-ipcMain.handle('ham-desktop:local-control-browser-real-arm', () => {
+ipcMain.handle("ham-desktop:local-control-browser-real-arm", () => {
   const c = localControlPaths();
   armRealBrowserControl({
     userDataPath: c.userDataPath,
@@ -1071,14 +1149,14 @@ ipcMain.handle('ham-desktop:local-control-browser-real-arm', () => {
   });
   appendAuditEvent({
     userDataPath: c.userDataPath,
-    type: 'local_control_real_browser_arm',
+    type: "local_control_real_browser_arm",
     fs: c.fs,
     path: c.path,
   });
   return { ok: true };
 });
 
-ipcMain.handle('ham-desktop:local-control-get-browser-real-status', async () => {
+ipcMain.handle("ham-desktop:local-control-get-browser-real-status", async () => {
   const c = localControlPaths();
   const { policy } = loadPolicy({
     userDataPath: c.userDataPath,
@@ -1095,10 +1173,10 @@ ipcMain.handle('ham-desktop:local-control-get-browser-real-status', async () => 
   }
   const g = realBrowserActionGates(policy, c.platform);
   return {
-    kind: 'ham_desktop_local_control_browser_real_public',
+    kind: "ham_desktop_local_control_browser_real_public",
     running: snap.running,
-    title: snap.title || '',
-    display_url: snap.display_url || '',
+    title: snap.title || "",
+    display_url: snap.display_url || "",
     armed: policy.real_browser_control_armed === true,
     allow_loopback: policy.real_browser_allow_loopback === true,
     managed_profile: true,
@@ -1108,7 +1186,7 @@ ipcMain.handle('ham-desktop:local-control-get-browser-real-status', async () => 
   };
 });
 
-ipcMain.handle('ham-desktop:local-control-browser-real-start-session', async () => {
+ipcMain.handle("ham-desktop:local-control-browser-real-start-session", async () => {
   const c = localControlPaths();
   const { policy } = loadPolicy({
     userDataPath: c.userDataPath,
@@ -1120,7 +1198,7 @@ ipcMain.handle('ham-desktop:local-control-browser-real-start-session', async () 
   if (!g.ok) {
     appendAuditEvent({
       userDataPath: c.userDataPath,
-      type: 'local_control_real_browser_start_blocked',
+      type: "local_control_real_browser_start_blocked",
       fs: c.fs,
       path: c.path,
     });
@@ -1128,7 +1206,7 @@ ipcMain.handle('ham-desktop:local-control-browser-real-start-session', async () 
   }
   appendAuditEvent({
     userDataPath: c.userDataPath,
-    type: 'local_control_real_browser_start',
+    type: "local_control_real_browser_start",
     fs: c.fs,
     path: c.path,
   });
@@ -1137,16 +1215,16 @@ ipcMain.handle('ham-desktop:local-control-browser-real-start-session', async () 
   } catch (e) {
     appendAuditEvent({
       userDataPath: c.userDataPath,
-      type: 'local_control_real_browser_error',
+      type: "local_control_real_browser_error",
       fs: c.fs,
       path: c.path,
     });
     const detail = e instanceof Error ? e.message : String(e);
-    return { ok: false, error: 'start_failed', detail };
+    return { ok: false, error: "start_failed", detail };
   }
 });
 
-ipcMain.handle('ham-desktop:local-control-browser-real-navigate', async (event, url) => {
+ipcMain.handle("ham-desktop:local-control-browser-real-navigate", async (event, url) => {
   const c = localControlPaths();
   const { policy } = loadPolicy({
     userDataPath: c.userDataPath,
@@ -1158,7 +1236,7 @@ ipcMain.handle('ham-desktop:local-control-browser-real-navigate', async (event, 
   if (!g.ok) {
     appendAuditEvent({
       userDataPath: c.userDataPath,
-      type: 'local_control_real_browser_navigate_blocked',
+      type: "local_control_real_browser_navigate_blocked",
       fs: c.fs,
       path: c.path,
     });
@@ -1166,26 +1244,26 @@ ipcMain.handle('ham-desktop:local-control-browser-real-navigate', async (event, 
   }
   appendAuditEvent({
     userDataPath: c.userDataPath,
-    type: 'local_control_real_browser_navigate',
+    type: "local_control_real_browser_navigate",
     fs: c.fs,
     path: c.path,
   });
   try {
-    return await getRealBrowser().navigate(String(url || ''), {
+    return await getRealBrowser().navigate(String(url || ""), {
       allow_loopback: policy.real_browser_allow_loopback === true,
     });
   } catch {
     appendAuditEvent({
       userDataPath: c.userDataPath,
-      type: 'local_control_real_browser_error',
+      type: "local_control_real_browser_error",
       fs: c.fs,
       path: c.path,
     });
-    return { ok: false, error: 'navigate_failed' };
+    return { ok: false, error: "navigate_failed" };
   }
 });
 
-ipcMain.handle('ham-desktop:local-control-browser-real-reload', async () => {
+ipcMain.handle("ham-desktop:local-control-browser-real-reload", async () => {
   const c = localControlPaths();
   const { policy } = loadPolicy({
     userDataPath: c.userDataPath,
@@ -1197,7 +1275,7 @@ ipcMain.handle('ham-desktop:local-control-browser-real-reload', async () => {
   if (!g.ok) {
     appendAuditEvent({
       userDataPath: c.userDataPath,
-      type: 'local_control_real_browser_reload_blocked',
+      type: "local_control_real_browser_reload_blocked",
       fs: c.fs,
       path: c.path,
     });
@@ -1205,7 +1283,7 @@ ipcMain.handle('ham-desktop:local-control-browser-real-reload', async () => {
   }
   appendAuditEvent({
     userDataPath: c.userDataPath,
-    type: 'local_control_real_browser_reload',
+    type: "local_control_real_browser_reload",
     fs: c.fs,
     path: c.path,
   });
@@ -1214,15 +1292,15 @@ ipcMain.handle('ham-desktop:local-control-browser-real-reload', async () => {
   } catch {
     appendAuditEvent({
       userDataPath: c.userDataPath,
-      type: 'local_control_real_browser_error',
+      type: "local_control_real_browser_error",
       fs: c.fs,
       path: c.path,
     });
-    return { ok: false, error: 'reload_failed' };
+    return { ok: false, error: "reload_failed" };
   }
 });
 
-ipcMain.handle('ham-desktop:local-control-browser-real-screenshot', async () => {
+ipcMain.handle("ham-desktop:local-control-browser-real-screenshot", async () => {
   const c = localControlPaths();
   const { policy } = loadPolicy({
     userDataPath: c.userDataPath,
@@ -1236,7 +1314,7 @@ ipcMain.handle('ham-desktop:local-control-browser-real-screenshot', async () => 
   }
   appendAuditEvent({
     userDataPath: c.userDataPath,
-    type: 'local_control_real_browser_screenshot',
+    type: "local_control_real_browser_screenshot",
     fs: c.fs,
     path: c.path,
   });
@@ -1245,16 +1323,16 @@ ipcMain.handle('ham-desktop:local-control-browser-real-screenshot', async () => 
   } catch {
     appendAuditEvent({
       userDataPath: c.userDataPath,
-      type: 'local_control_real_browser_error',
+      type: "local_control_real_browser_error",
       fs: c.fs,
       path: c.path,
     });
-    return { ok: false, error: 'screenshot_failed' };
+    return { ok: false, error: "screenshot_failed" };
   }
 });
 
 /** Real browser — compact observe / bounded wait / scroll / enumerated click (Phase 4B; no planner API). */
-ipcMain.handle('ham-desktop:local-control-browser-real-observe-compact', async () => {
+ipcMain.handle("ham-desktop:local-control-browser-real-observe-compact", async () => {
   const c = localControlPaths();
   const { policy } = loadPolicy({
     userDataPath: c.userDataPath,
@@ -1266,7 +1344,7 @@ ipcMain.handle('ham-desktop:local-control-browser-real-observe-compact', async (
   if (!g.ok) {
     appendAuditEvent({
       userDataPath: c.userDataPath,
-      type: 'local_control_real_browser_observe_compact_blocked',
+      type: "local_control_real_browser_observe_compact_blocked",
       fs: c.fs,
       path: c.path,
     });
@@ -1274,7 +1352,7 @@ ipcMain.handle('ham-desktop:local-control-browser-real-observe-compact', async (
   }
   appendAuditEvent({
     userDataPath: c.userDataPath,
-    type: 'local_control_real_browser_observe_compact',
+    type: "local_control_real_browser_observe_compact",
     fs: c.fs,
     path: c.path,
   });
@@ -1283,15 +1361,15 @@ ipcMain.handle('ham-desktop:local-control-browser-real-observe-compact', async (
   } catch {
     appendAuditEvent({
       userDataPath: c.userDataPath,
-      type: 'local_control_real_browser_error',
+      type: "local_control_real_browser_error",
       fs: c.fs,
       path: c.path,
     });
-    return { ok: false, error: 'observe_failed' };
+    return { ok: false, error: "observe_failed" };
   }
 });
 
-ipcMain.handle('ham-desktop:local-control-browser-real-wait', async (event, ms) => {
+ipcMain.handle("ham-desktop:local-control-browser-real-wait", async (event, ms) => {
   const c = localControlPaths();
   const { policy } = loadPolicy({
     userDataPath: c.userDataPath,
@@ -1303,7 +1381,7 @@ ipcMain.handle('ham-desktop:local-control-browser-real-wait', async (event, ms) 
   if (!g.ok) {
     appendAuditEvent({
       userDataPath: c.userDataPath,
-      type: 'local_control_real_browser_wait_blocked',
+      type: "local_control_real_browser_wait_blocked",
       fs: c.fs,
       path: c.path,
     });
@@ -1311,7 +1389,7 @@ ipcMain.handle('ham-desktop:local-control-browser-real-wait', async (event, ms) 
   }
   appendAuditEvent({
     userDataPath: c.userDataPath,
-    type: 'local_control_real_browser_wait',
+    type: "local_control_real_browser_wait",
     fs: c.fs,
     path: c.path,
   });
@@ -1320,15 +1398,15 @@ ipcMain.handle('ham-desktop:local-control-browser-real-wait', async (event, ms) 
   } catch {
     appendAuditEvent({
       userDataPath: c.userDataPath,
-      type: 'local_control_real_browser_error',
+      type: "local_control_real_browser_error",
       fs: c.fs,
       path: c.path,
     });
-    return { ok: false, error: 'wait_failed' };
+    return { ok: false, error: "wait_failed" };
   }
 });
 
-ipcMain.handle('ham-desktop:local-control-browser-real-scroll', async (event, deltaY) => {
+ipcMain.handle("ham-desktop:local-control-browser-real-scroll", async (event, deltaY) => {
   const c = localControlPaths();
   const { policy } = loadPolicy({
     userDataPath: c.userDataPath,
@@ -1340,7 +1418,7 @@ ipcMain.handle('ham-desktop:local-control-browser-real-scroll', async (event, de
   if (!g.ok) {
     appendAuditEvent({
       userDataPath: c.userDataPath,
-      type: 'local_control_real_browser_scroll_blocked',
+      type: "local_control_real_browser_scroll_blocked",
       fs: c.fs,
       path: c.path,
     });
@@ -1348,7 +1426,7 @@ ipcMain.handle('ham-desktop:local-control-browser-real-scroll', async (event, de
   }
   appendAuditEvent({
     userDataPath: c.userDataPath,
-    type: 'local_control_real_browser_scroll',
+    type: "local_control_real_browser_scroll",
     fs: c.fs,
     path: c.path,
   });
@@ -1357,15 +1435,15 @@ ipcMain.handle('ham-desktop:local-control-browser-real-scroll', async (event, de
   } catch {
     appendAuditEvent({
       userDataPath: c.userDataPath,
-      type: 'local_control_real_browser_error',
+      type: "local_control_real_browser_error",
       fs: c.fs,
       path: c.path,
     });
-    return { ok: false, error: 'scroll_failed' };
+    return { ok: false, error: "scroll_failed" };
   }
 });
 
-ipcMain.handle('ham-desktop:local-control-browser-real-enumerate-candidates', async () => {
+ipcMain.handle("ham-desktop:local-control-browser-real-enumerate-candidates", async () => {
   const c = localControlPaths();
   const { policy } = loadPolicy({
     userDataPath: c.userDataPath,
@@ -1377,7 +1455,7 @@ ipcMain.handle('ham-desktop:local-control-browser-real-enumerate-candidates', as
   if (!g.ok) {
     appendAuditEvent({
       userDataPath: c.userDataPath,
-      type: 'local_control_real_browser_candidates_blocked',
+      type: "local_control_real_browser_candidates_blocked",
       fs: c.fs,
       path: c.path,
     });
@@ -1385,7 +1463,7 @@ ipcMain.handle('ham-desktop:local-control-browser-real-enumerate-candidates', as
   }
   appendAuditEvent({
     userDataPath: c.userDataPath,
-    type: 'local_control_real_browser_candidates',
+    type: "local_control_real_browser_candidates",
     fs: c.fs,
     path: c.path,
   });
@@ -1394,67 +1472,73 @@ ipcMain.handle('ham-desktop:local-control-browser-real-enumerate-candidates', as
   } catch {
     appendAuditEvent({
       userDataPath: c.userDataPath,
-      type: 'local_control_real_browser_error',
+      type: "local_control_real_browser_error",
       fs: c.fs,
       path: c.path,
     });
-    return { ok: false, error: 'candidates_failed' };
+    return { ok: false, error: "candidates_failed" };
   }
 });
 
-ipcMain.handle('ham-desktop:local-control-browser-real-click-candidate', async (event, candidateId) => {
-  const c = localControlPaths();
-  const { policy } = loadPolicy({
-    userDataPath: c.userDataPath,
-    platform: c.platform,
-    fs: c.fs,
-    path: c.path,
-  });
-  const g = realBrowserActionGates(policy, c.platform);
-  if (!g.ok) {
-    appendAuditEvent({
+ipcMain.handle(
+  "ham-desktop:local-control-browser-real-click-candidate",
+  async (event, candidateId) => {
+    const c = localControlPaths();
+    const { policy } = loadPolicy({
       userDataPath: c.userDataPath,
-      type: 'local_control_real_browser_click_candidate_gate_blocked',
+      platform: c.platform,
       fs: c.fs,
       path: c.path,
     });
-    return { ok: false, blocked: true, reason: g.reason };
-  }
-  appendAuditEvent({
-    userDataPath: c.userDataPath,
-    type: 'local_control_real_browser_click_candidate',
-    fs: c.fs,
-    path: c.path,
-  });
-  try {
-    const out = await getRealBrowser().clickCandidate(candidateId);
-    if (!out.ok && (out.error === 'click_blocked' || out.error === 'invisible' || out.error === 'offscreen')) {
+    const g = realBrowserActionGates(policy, c.platform);
+    if (!g.ok) {
       appendAuditEvent({
         userDataPath: c.userDataPath,
-        type: 'local_control_real_browser_click_candidate_blocked',
+        type: "local_control_real_browser_click_candidate_gate_blocked",
         fs: c.fs,
         path: c.path,
       });
+      return { ok: false, blocked: true, reason: g.reason };
     }
-    return out;
-  } catch {
     appendAuditEvent({
       userDataPath: c.userDataPath,
-      type: 'local_control_real_browser_error',
+      type: "local_control_real_browser_click_candidate",
       fs: c.fs,
       path: c.path,
     });
-    return { ok: false, error: 'click_failed' };
-  }
-});
+    try {
+      const out = await getRealBrowser().clickCandidate(candidateId);
+      if (
+        !out.ok &&
+        (out.error === "click_blocked" || out.error === "invisible" || out.error === "offscreen")
+      ) {
+        appendAuditEvent({
+          userDataPath: c.userDataPath,
+          type: "local_control_real_browser_click_candidate_blocked",
+          fs: c.fs,
+          path: c.path,
+        });
+      }
+      return out;
+    } catch {
+      appendAuditEvent({
+        userDataPath: c.userDataPath,
+        type: "local_control_real_browser_error",
+        fs: c.fs,
+        path: c.path,
+      });
+      return { ok: false, error: "click_failed" };
+    }
+  },
+);
 
-ipcMain.handle('ham-desktop:local-control-browser-real-stop-session', () => {
+ipcMain.handle("ham-desktop:local-control-browser-real-stop-session", () => {
   const c = localControlPaths();
   const running = getRealBrowser().getStatus().running;
   if (running) {
     appendAuditEvent({
       userDataPath: c.userDataPath,
-      type: 'local_control_real_browser_stop',
+      type: "local_control_real_browser_stop",
       fs: c.fs,
       path: c.path,
     });
@@ -1462,14 +1546,14 @@ ipcMain.handle('ham-desktop:local-control-browser-real-stop-session', () => {
   return getRealBrowser().stopSession();
 });
 
-ipcMain.handle('ham-desktop:local-control-web-bridge-status', () => {
+ipcMain.handle("ham-desktop:local-control-web-bridge-status", () => {
   if (!localWebBridgeEnabled()) return localWebBridgeDefaults();
   const bridge = getLocalWebBridge();
   const snap = bridge.getStatusSnapshotTrusted();
   if (localWebBridgeTrustedToken) {
     const status = bridge.readStatusTrusted({ token: localWebBridgeTrustedToken });
     if (!status.ok) {
-      localWebBridgeTrustedToken = '';
+      localWebBridgeTrustedToken = "";
       return {
         ...snap,
         paired: false,
@@ -1480,139 +1564,147 @@ ipcMain.handle('ham-desktop:local-control-web-bridge-status', () => {
   return snap;
 });
 
-ipcMain.handle('ham-desktop:local-control-web-bridge-pairing-get', () => {
+ipcMain.handle("ham-desktop:local-control-web-bridge-pairing-get", () => {
   if (!localWebBridgeEnabled()) return localWebBridgeDefaults().pairing;
   return getLocalWebBridge().getPairingConfig();
 });
 
-ipcMain.handle('ham-desktop:local-control-web-bridge-pairing-set', (event, payload) => {
+ipcMain.handle("ham-desktop:local-control-web-bridge-pairing-set", (event, payload) => {
   if (!localWebBridgeEnabled()) return localWebBridgeDefaults().pairing;
   const ttlSec =
-    payload && typeof payload === 'object' && 'pairing_code_ttl_sec' in payload
+    payload && typeof payload === "object" && "pairing_code_ttl_sec" in payload
       ? Number(payload.pairing_code_ttl_sec)
       : Number.NaN;
   return getLocalWebBridge().setPairingCodeTtlSec(ttlSec);
 });
 
-ipcMain.handle('ham-desktop:local-control-web-bridge-pairing-issue', () => {
+ipcMain.handle("ham-desktop:local-control-web-bridge-pairing-issue", () => {
   if (!localWebBridgeEnabled()) {
-    return { ok: false, error: 'bridge_disabled' };
+    return { ok: false, error: "bridge_disabled" };
   }
   const issued = getLocalWebBridge().issuePairingCode();
   return {
     ok: true,
-    code: String(issued.code || ''),
+    code: String(issued.code || ""),
     expires_at_ms: Number(issued.expires_at_ms || 0),
   };
 });
 
-ipcMain.handle('ham-desktop:local-control-web-bridge-pairing-exchange', (event, payload) => {
-  if (!localWebBridgeEnabled()) return { ok: false, error: 'bridge_disabled' };
+ipcMain.handle("ham-desktop:local-control-web-bridge-pairing-exchange", (event, payload) => {
+  if (!localWebBridgeEnabled()) return { ok: false, error: "bridge_disabled" };
   const bridge = getLocalWebBridge();
   const pairingCode =
-    payload && typeof payload === 'object' && 'pairing_code' in payload
-      ? String(payload.pairing_code || '').trim()
-      : '';
-  if (!pairingCode) return { ok: false, error: 'pairing_code_required' };
+    payload && typeof payload === "object" && "pairing_code" in payload
+      ? String(payload.pairing_code || "").trim()
+      : "";
+  if (!pairingCode) return { ok: false, error: "pairing_code_required" };
   const out = bridge.exchangePairingCodeTrusted({
     pairing_code: pairingCode,
     client_nonce:
-      payload && typeof payload === 'object' && 'client_nonce' in payload
-        ? String(payload.client_nonce || '').trim()
-        : '',
+      payload && typeof payload === "object" && "client_nonce" in payload
+        ? String(payload.client_nonce || "").trim()
+        : "",
   });
-  if (!out.ok) return { ok: false, error: out.reason_code || 'pairing_exchange_failed' };
-  localWebBridgeTrustedToken = String(out.access_token || '');
+  if (!out.ok) return { ok: false, error: out.reason_code || "pairing_exchange_failed" };
+  localWebBridgeTrustedToken = String(out.access_token || "");
   return {
     ok: true,
     expires_in_sec: Number(out.expires_in_sec || 0),
-    session_id: String(out.session_id || ''),
+    session_id: String(out.session_id || ""),
     scopes: Array.isArray(out.scopes) ? out.scopes : [],
   };
 });
 
-ipcMain.handle('ham-desktop:local-control-web-bridge-status-read', () => {
-  if (!localWebBridgeEnabled()) return { ok: false, error: 'bridge_disabled' };
-  if (!localWebBridgeTrustedToken) return { ok: false, error: 'token_missing' };
+ipcMain.handle("ham-desktop:local-control-web-bridge-status-read", () => {
+  if (!localWebBridgeEnabled()) return { ok: false, error: "bridge_disabled" };
+  if (!localWebBridgeTrustedToken) return { ok: false, error: "token_missing" };
   const bridge = getLocalWebBridge();
   const status = bridge.readStatusTrusted({ token: localWebBridgeTrustedToken });
   if (!status.ok) {
-    localWebBridgeTrustedToken = '';
-    return { ok: false, error: status.error || 'status_read_failed' };
+    localWebBridgeTrustedToken = "";
+    return { ok: false, error: status.error || "status_read_failed" };
   }
   return status;
 });
 
-ipcMain.handle('ham-desktop:local-control-web-bridge-pairing-revoke', () => {
-  if (!localWebBridgeEnabled()) return { ok: false, error: 'bridge_disabled' };
-  if (!localWebBridgeTrustedToken) return { ok: false, error: 'token_missing' };
+ipcMain.handle("ham-desktop:local-control-web-bridge-pairing-revoke", () => {
+  if (!localWebBridgeEnabled()) return { ok: false, error: "bridge_disabled" };
+  if (!localWebBridgeTrustedToken) return { ok: false, error: "token_missing" };
   const bridge = getLocalWebBridge();
   const revoked = bridge.revokeTrustedToken({ token: localWebBridgeTrustedToken });
-  localWebBridgeTrustedToken = '';
-  return revoked ? { ok: true } : { ok: false, error: 'revoke_failed' };
+  localWebBridgeTrustedToken = "";
+  return revoked ? { ok: true } : { ok: false, error: "revoke_failed" };
 });
 
-ipcMain.handle('ham-desktop:local-control-web-bridge-browser-intent', async (event, payload) => {
-  if (!localWebBridgeEnabled()) return { ok: false, error: 'bridge_disabled', reason_code: 'bridge_disabled' };
-  if (!localWebBridgeTrustedToken) return { ok: false, error: 'token_missing', reason_code: 'token_missing' };
+ipcMain.handle("ham-desktop:local-control-web-bridge-browser-intent", async (event, payload) => {
+  if (!localWebBridgeEnabled())
+    return { ok: false, error: "bridge_disabled", reason_code: "bridge_disabled" };
+  if (!localWebBridgeTrustedToken)
+    return { ok: false, error: "token_missing", reason_code: "token_missing" };
   const bridge = getLocalWebBridge();
   try {
     await bridge.start();
   } catch {
-    return { ok: false, error: 'bridge_start_failed', reason_code: 'bridge_start_failed' };
+    return { ok: false, error: "bridge_start_failed", reason_code: "bridge_start_failed" };
   }
   const out = await bridge.executeBrowserIntentTrusted({
     token: localWebBridgeTrustedToken,
     payload,
   });
-  if (out && out.ok === false && (out.error === 'token_expired' || out.error === 'token_invalid' || out.error === 'token_revoked')) {
-    localWebBridgeTrustedToken = '';
+  if (
+    out &&
+    out.ok === false &&
+    (out.error === "token_expired" ||
+      out.error === "token_invalid" ||
+      out.error === "token_revoked")
+  ) {
+    localWebBridgeTrustedToken = "";
   }
   return out;
 });
 
-ipcMain.handle('ham-desktop:local-control-web-bridge-trusted-connect', async () => {
-  if (!localWebBridgeEnabled()) return { ok: false, error: 'bridge_disabled' };
+ipcMain.handle("ham-desktop:local-control-web-bridge-trusted-connect", async () => {
+  if (!localWebBridgeEnabled()) return { ok: false, error: "bridge_disabled" };
   const bridge = getLocalWebBridge();
   try {
     await bridge.start();
   } catch {
-    return { ok: false, error: 'bridge_start_failed' };
+    return { ok: false, error: "bridge_start_failed" };
   }
   if (localWebBridgeTrustedToken) {
     const status = bridge.readStatusTrusted({ token: localWebBridgeTrustedToken });
-    if (status.ok) return { ok: true, status: 'connected', already_connected: true };
-    localWebBridgeTrustedToken = '';
+    if (status.ok) return { ok: true, status: "connected", already_connected: true };
+    localWebBridgeTrustedToken = "";
   }
   const issued = bridge.issuePairingCode();
   const exchanged = bridge.exchangePairingCodeTrusted({
-    pairing_code: String(issued.code || ''),
+    pairing_code: String(issued.code || ""),
     client_nonce: `trusted-${Date.now()}`,
   });
   if (!exchanged.ok) {
-    return { ok: false, error: exchanged.reason_code || 'pairing_exchange_failed' };
+    return { ok: false, error: exchanged.reason_code || "pairing_exchange_failed" };
   }
-  localWebBridgeTrustedToken = String(exchanged.access_token || '');
+  localWebBridgeTrustedToken = String(exchanged.access_token || "");
   const status = bridge.readStatusTrusted({ token: localWebBridgeTrustedToken });
   if (!status.ok) {
-    localWebBridgeTrustedToken = '';
-    return { ok: false, error: status.error || 'status_read_failed' };
+    localWebBridgeTrustedToken = "";
+    return { ok: false, error: status.error || "status_read_failed" };
   }
-  return { ok: true, status: 'connected', already_connected: false };
+  return { ok: true, status: "connected", already_connected: false };
 });
 
-app.on('before-quit', () => {
+app.on("before-quit", () => {
   if (sidecarManagerSingleton) void sidecarManagerSingleton.stop();
   if (browserMvpSingleton) browserMvpSingleton.stopSession();
   if (realBrowserSingleton) realBrowserSingleton.stopSession();
   if (localWebBridgeSingleton) void localWebBridgeSingleton.stop();
-  localWebBridgeTrustedToken = '';
+  localWebBridgeTrustedToken = "";
 });
 
 app.whenReady().then(() => {
   // Native File/Edit/View menu uses the OS theme (often light on Linux) — drop it for a darker shell.
   // macOS keeps the default menu so app/window semantics stay familiar.
-  if (process.platform !== 'darwin') {
+  if (process.platform !== "darwin") {
     Menu.setApplicationMenu(null);
   }
 
@@ -1628,11 +1720,11 @@ app.whenReady().then(() => {
       });
   }
 
-  app.on('activate', () => {
+  app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
 
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
+app.on("window-all-closed", () => {
+  if (process.platform !== "darwin") app.quit();
 });

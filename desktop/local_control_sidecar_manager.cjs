@@ -1,7 +1,7 @@
-'use strict';
+"use strict";
 
-const { spawn } = require('node:child_process');
-const path = require('node:path');
+const { spawn } = require("node:child_process");
+const path = require("node:path");
 
 const HEALTH_TIMEOUT_MS = 5000;
 const SHUTDOWN_WAIT_MS = 4000;
@@ -24,7 +24,7 @@ function createSidecarManager(opts) {
   const pending = new Map();
 
   function record(type) {
-    if (typeof onAuditEvent === 'function') onAuditEvent(type);
+    if (typeof onAuditEvent === "function") onAuditEvent(type);
   }
 
   function getSnapshot() {
@@ -52,7 +52,7 @@ function createSidecarManager(opts) {
     } catch {
       return;
     }
-    const id = msg && typeof msg === 'object' && 'id' in msg ? String(msg.id) : null;
+    const id = msg && typeof msg === "object" && "id" in msg ? String(msg.id) : null;
     if (id == null || !pending.has(id)) return;
     const p = pending.get(id);
     pending.delete(id);
@@ -61,12 +61,12 @@ function createSidecarManager(opts) {
   }
 
   function attachStdout(stdout) {
-    let buf = '';
-    stdout.setEncoding('utf8');
-    stdout.on('data', (chunk) => {
+    let buf = "";
+    stdout.setEncoding("utf8");
+    stdout.on("data", (chunk) => {
       buf += chunk;
       let idx;
-      while ((idx = buf.indexOf('\n')) >= 0) {
+      while ((idx = buf.indexOf("\n")) >= 0) {
         const line = buf.slice(0, idx).trim();
         buf = buf.slice(idx + 1);
         handleLine(line);
@@ -80,14 +80,14 @@ function createSidecarManager(opts) {
    */
   function request(method, timeoutMs) {
     if (!proc || !proc.stdin || !running) {
-      return Promise.reject(new Error('not_running'));
+      return Promise.reject(new Error("not_running"));
     }
     const id = `sc-${++seq}`;
     const payload = `${JSON.stringify({ method, id })}\n`;
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         pending.delete(id);
-        reject(new Error('timeout'));
+        reject(new Error("timeout"));
       }, timeoutMs);
       pending.set(id, { resolve, reject, timer });
       try {
@@ -106,8 +106,8 @@ function createSidecarManager(opts) {
    */
   async function start(policyGate) {
     if (policyGate.killSwitchEngaged) {
-      record('local_control_sidecar_start_blocked');
-      return { ok: false, blocked: true, reason: 'kill_switch_engaged' };
+      record("local_control_sidecar_start_blocked");
+      return { ok: false, blocked: true, reason: "kill_switch_engaged" };
     }
     if (running && proc && !proc.killed) {
       return { ok: true };
@@ -115,49 +115,49 @@ function createSidecarManager(opts) {
 
     const env = { ...process.env };
     if (process.versions.electron) {
-      env.ELECTRON_RUN_AS_NODE = '1';
+      env.ELECTRON_RUN_AS_NODE = "1";
     }
 
     try {
       const childProc = spawn(process.execPath, [childScriptPath], {
         env,
-        stdio: ['pipe', 'pipe', 'pipe'],
+        stdio: ["pipe", "pipe", "pipe"],
         windowsHide: true,
       });
       proc = childProc;
       running = true;
       healthLast = null;
 
-      childProc.on('exit', () => {
-        rejectAllPending('exited');
+      childProc.on("exit", () => {
+        rejectAllPending("exited");
         tearDownProc();
         healthLast = null;
       });
-      childProc.on('error', () => {
-        rejectAllPending('spawn_error');
+      childProc.on("error", () => {
+        rejectAllPending("spawn_error");
         tearDownProc();
-        healthLast = 'error';
+        healthLast = "error";
       });
 
       attachStdout(childProc.stdout);
 
-      const healthResp = await request('health', HEALTH_TIMEOUT_MS);
+      const healthResp = await request("health", HEALTH_TIMEOUT_MS);
       if (!healthResp || !healthResp.ok) {
         try {
-          childProc.kill('SIGTERM');
+          childProc.kill("SIGTERM");
         } catch {
           /* ignore */
         }
         tearDownProc();
-        healthLast = 'error';
-        return { ok: false, error: 'health_handshake_failed' };
+        healthLast = "error";
+        return { ok: false, error: "health_handshake_failed" };
       }
-      healthLast = 'ok';
+      healthLast = "ok";
       return { ok: true };
     } catch {
       tearDownProc();
-      healthLast = 'error';
-      return { ok: false, error: 'spawn_failed' };
+      healthLast = "error";
+      return { ok: false, error: "spawn_failed" };
     }
   }
 
@@ -168,28 +168,28 @@ function createSidecarManager(opts) {
     if (!proc || !running) {
       return { ok: true, idempotent: true };
     }
-    record('local_control_sidecar_stop');
+    record("local_control_sidecar_stop");
     const p = proc;
     await new Promise((resolve) => {
       const done = () => resolve(undefined);
       const t = setTimeout(() => {
         try {
-          p.kill('SIGTERM');
+          p.kill("SIGTERM");
         } catch {
           /* ignore */
         }
         done();
       }, SHUTDOWN_WAIT_MS);
-      p.once('exit', () => {
+      p.once("exit", () => {
         clearTimeout(t);
         done();
       });
       try {
-        p.stdin.write(`${JSON.stringify({ method: 'shutdown', id: `sd-${++seq}` })}\n`);
+        p.stdin.write(`${JSON.stringify({ method: "shutdown", id: `sd-${++seq}` })}\n`);
       } catch {
         clearTimeout(t);
         try {
-          p.kill('SIGTERM');
+          p.kill("SIGTERM");
         } catch {
           /* ignore */
         }
@@ -206,19 +206,19 @@ function createSidecarManager(opts) {
    */
   async function pingHealth() {
     if (!proc || !running) {
-      return { ok: false, reason: 'not_running' };
+      return { ok: false, reason: "not_running" };
     }
     try {
-      const healthResp = await request('health', HEALTH_TIMEOUT_MS);
+      const healthResp = await request("health", HEALTH_TIMEOUT_MS);
       if (healthResp && healthResp.ok) {
-        healthLast = 'ok';
+        healthLast = "ok";
         return { ok: true, result: healthResp.result };
       }
-      healthLast = 'error';
-      return { ok: false, reason: 'health_failed' };
+      healthLast = "error";
+      return { ok: false, reason: "health_failed" };
     } catch {
-      healthLast = 'error';
-      return { ok: false, reason: 'health_error' };
+      healthLast = "error";
+      return { ok: false, reason: "health_error" };
     }
   }
 
@@ -231,7 +231,7 @@ function createSidecarManager(opts) {
 }
 
 function defaultChildScriptPath() {
-  return path.join(__dirname, 'local_control_sidecar_child.cjs');
+  return path.join(__dirname, "local_control_sidecar_child.cjs");
 }
 
 module.exports = {

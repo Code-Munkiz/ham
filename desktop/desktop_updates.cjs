@@ -1,14 +1,14 @@
-'use strict';
+"use strict";
 
-const { shell, dialog } = require('electron');
+const { shell, dialog } = require("electron");
 
 const DEFAULT_MANIFEST_URL =
-  'https://raw.githubusercontent.com/Code-Munkiz/ham/main/frontend/public/desktop-downloads.json';
+  "https://raw.githubusercontent.com/Code-Munkiz/ham/main/frontend/public/desktop-downloads.json";
 
 function isHttpsUrl(uString) {
   try {
     const u = new URL(uString);
-    return u.protocol === 'https:' && u.hostname.endsWith('github.com');
+    return u.protocol === "https:" && u.hostname.endsWith("github.com");
   } catch {
     return false;
   }
@@ -20,17 +20,17 @@ function isHttpsUrl(uString) {
 function isTrustedManifestURL(uString) {
   try {
     const u = new URL(uString);
-    if (u.protocol !== 'https:') return false;
-    if (u.hostname !== 'raw.githubusercontent.com') return false;
+    if (u.protocol !== "https:") return false;
+    if (u.hostname !== "raw.githubusercontent.com") return false;
     const p = u.pathname;
-    return p.startsWith('/Code-Munkiz/ham/') && p.endsWith('/desktop-downloads.json');
+    return p.startsWith("/Code-Munkiz/ham/") && p.endsWith("/desktop-downloads.json");
   } catch {
     return false;
   }
 }
 
 function manifestUrlFromEnv() {
-  const raw = (process.env.HAM_DESKTOP_DOWNLOADS_MANIFEST_URL || '').trim();
+  const raw = (process.env.HAM_DESKTOP_DOWNLOADS_MANIFEST_URL || "").trim();
   return raw || DEFAULT_MANIFEST_URL;
 }
 
@@ -56,26 +56,26 @@ function semverGt(a, b) {
 }
 
 function isPlatformEntry(v) {
-  if (!v || typeof v !== 'object') return false;
+  if (!v || typeof v !== "object") return false;
   return (
-    typeof v.label === 'string' &&
-    typeof v.arch === 'string' &&
-    typeof v.type === 'string' &&
-    typeof v.version === 'string' &&
-    typeof v.url === 'string' &&
-    v.url.startsWith('https://')
+    typeof v.label === "string" &&
+    typeof v.arch === "string" &&
+    typeof v.type === "string" &&
+    typeof v.version === "string" &&
+    typeof v.url === "string" &&
+    v.url.startsWith("https://")
   );
 }
 
 /** @returns {object|null} */
 function parseDownloadsManifest(raw) {
-  if (!raw || typeof raw !== 'object') return null;
+  if (!raw || typeof raw !== "object") return null;
   /** @type {Record<string, unknown>} */
   const root = raw;
   if (root.schema_version !== 1) return null;
-  if (typeof root.channel !== 'string' || typeof root.distribution !== 'string') return null;
+  if (typeof root.channel !== "string" || typeof root.distribution !== "string") return null;
   const platRaw = root.platforms;
-  if (!platRaw || typeof platRaw !== 'object') return null;
+  if (!platRaw || typeof platRaw !== "object") return null;
   /** @type {Record<string, unknown>} */
   const plat = platRaw;
 
@@ -90,10 +90,9 @@ function parseDownloadsManifest(raw) {
       type: o.type,
       version: o.version,
       url: o.url,
-      sha256:
-        typeof o.sha256 === 'string' ? o.sha256 : o.sha256 === null ? null : undefined,
+      sha256: typeof o.sha256 === "string" ? o.sha256 : o.sha256 === null ? null : undefined,
       release_page_url:
-        typeof o.release_page_url === 'string'
+        typeof o.release_page_url === "string"
           ? o.release_page_url
           : o.release_page_url === null
             ? null
@@ -101,17 +100,17 @@ function parseDownloadsManifest(raw) {
     };
   }
 
-  const pLinux = pick('linux');
-  const pWin = pick('windows');
-  const pMac = pick('macos');
+  const pLinux = pick("linux");
+  const pWin = pick("windows");
+  const pMac = pick("macos");
   if (pLinux === false || pWin === false || pMac === false) return null;
 
   return {
     schema_version: 1,
     channel: root.channel,
     distribution: root.distribution,
-    build_date: typeof root.build_date === 'string' ? root.build_date : undefined,
-    summary: typeof root.summary === 'string' ? root.summary : undefined,
+    build_date: typeof root.build_date === "string" ? root.build_date : undefined,
+    summary: typeof root.summary === "string" ? root.summary : undefined,
     platforms: {
       linux: pLinux,
       windows: pWin,
@@ -122,12 +121,12 @@ function parseDownloadsManifest(raw) {
 
 function electronPlatformKey() {
   switch (process.platform) {
-    case 'win32':
-      return 'windows';
-    case 'linux':
-      return 'linux';
-    case 'darwin':
-      return 'macos';
+    case "win32":
+      return "windows";
+    case "linux":
+      return "linux";
+    case "darwin":
+      return "macos";
     default:
       return null;
   }
@@ -141,16 +140,16 @@ function electronPlatformKey() {
  */
 async function runStartupDesktopUpdatePrompt(opts) {
   const { parentWindow, app } = opts;
-  if (!app || typeof app.isPackaged !== 'boolean') return;
+  if (!app || typeof app.isPackaged !== "boolean") return;
 
   if (!app.isPackaged) {
-    if ((process.env.HAM_DESKTOP_UPDATE_CHECK || '').trim() !== '1') return;
-  } else if ((process.env.HAM_DESKTOP_UPDATE_CHECK || '').trim() === '0') return;
+    if ((process.env.HAM_DESKTOP_UPDATE_CHECK || "").trim() !== "1") return;
+  } else if ((process.env.HAM_DESKTOP_UPDATE_CHECK || "").trim() === "0") return;
 
   const urlRaw = manifestUrlFromEnv();
   if (!isTrustedManifestURL(urlRaw)) {
     console.warn(
-      '[ham-desktop] HAM_DESKTOP_DOWNLOADS_MANIFEST_URL ignored (not trusted) — skipping update check.',
+      "[ham-desktop] HAM_DESKTOP_DOWNLOADS_MANIFEST_URL ignored (not trusted) — skipping update check.",
     );
     return;
   }
@@ -179,12 +178,12 @@ async function runStartupDesktopUpdatePrompt(opts) {
   if (!manifest || !manifest.platforms) return;
 
   const key = electronPlatformKey();
-  if (!key || key === 'macos') return;
+  if (!key || key === "macos") return;
 
   const entry = manifest.platforms[key];
-  if (!entry || typeof entry.version !== 'string') return;
+  if (!entry || typeof entry.version !== "string") return;
 
-  const current = typeof app.getVersion === 'function' ? String(app.getVersion()).trim() : '';
+  const current = typeof app.getVersion === "function" ? String(app.getVersion()).trim() : "";
   if (!current) return;
 
   if (!semverGt(entry.version, current)) return;
@@ -193,23 +192,23 @@ async function runStartupDesktopUpdatePrompt(opts) {
   const detail =
     `Installed: ${current}\n` +
     `Latest published (${key} · ${manifest.channel}): ${entry.version}\n\n` +
-    'Update opens the release/downloads page in your browser. Replace the portable .exe or AppImage manually — ' +
-    'this build does not download or swap binaries in the background.';
+    "Update opens the release/downloads page in your browser. Replace the portable .exe or AppImage manually — " +
+    "this build does not download or swap binaries in the background.";
 
   const preferred =
-    typeof entry.release_page_url === 'string' && isHttpsUrl(entry.release_page_url)
+    typeof entry.release_page_url === "string" && isHttpsUrl(entry.release_page_url)
       ? entry.release_page_url
       : entry.url;
-  const openLink = preferred.startsWith('https://') ? preferred : '';
+  const openLink = preferred.startsWith("https://") ? preferred : "";
 
   /** @type {import('electron').MessageBoxSyncOptions | import('electron').MessageBoxOptions} */
   const box = {
-    type: 'info',
-    buttons: ['Update', 'Later'],
+    type: "info",
+    buttons: ["Update", "Later"],
     defaultId: 0,
     cancelId: 1,
-    title: 'HAM Desktop',
-    message: `A newer download is listed for ${key.replace('windows', 'Windows').replace('linux', 'Linux')} (${publishLabel}).`,
+    title: "HAM Desktop",
+    message: `A newer download is listed for ${key.replace("windows", "Windows").replace("linux", "Linux")} (${publishLabel}).`,
     detail,
   };
 

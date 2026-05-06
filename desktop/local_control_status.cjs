@@ -1,28 +1,34 @@
-'use strict';
+"use strict";
 
 /**
  * Desktop Local Control — read-only status/doctor payload (main process).
  * Phase 2: policy / audit / kill-switch skeleton; paths are never returned (booleans only under `paths`).
  */
 
-const { loadPolicy, getPolicyStatusPayload } = require('./local_control_policy.cjs');
-const { getAuditStatus } = require('./local_control_audit.cjs');
-const { buildSidecarStatus, createIdleSidecarManagerView } = require('./local_control_sidecar_status.cjs');
-const { browserActionGates } = require('./local_control_browser_mvp.cjs');
-const { realBrowserActionGates, isRealBrowserRuntimeDiscoverable } = require('./local_control_browser_real_cdp.cjs');
+const { loadPolicy, getPolicyStatusPayload } = require("./local_control_policy.cjs");
+const { getAuditStatus } = require("./local_control_audit.cjs");
+const {
+  buildSidecarStatus,
+  createIdleSidecarManagerView,
+} = require("./local_control_sidecar_status.cjs");
+const { browserActionGates } = require("./local_control_browser_mvp.cjs");
+const {
+  realBrowserActionGates,
+  isRealBrowserRuntimeDiscoverable,
+} = require("./local_control_browser_real_cdp.cjs");
 
 const SCHEMA_VERSION = 6;
-const PHASE = 'browser_real_4b';
+const PHASE = "browser_real_4b";
 
 /** @param {string} platform process.platform */
 function platformDerived(platform) {
-  if (platform === 'linux') {
-    return { supported_platform: true, platform_status: 'linux_first' };
+  if (platform === "linux") {
+    return { supported_platform: true, platform_status: "linux_first" };
   }
-  if (platform === 'win32') {
-    return { supported_platform: true, platform_status: 'windows_planned' };
+  if (platform === "win32") {
+    return { supported_platform: true, platform_status: "windows_planned" };
   }
-  return { supported_platform: false, platform_status: 'unsupported' };
+  return { supported_platform: false, platform_status: "unsupported" };
 }
 
 /**
@@ -37,13 +43,22 @@ function platformDerived(platform) {
  * @param {{ running: boolean, title: string, display_url: string }} [opts.browserRealSnapshot]
  */
 function buildLocalControlStatus(opts) {
-  const { platform, userDataPath, security, fs, path, sidecarManager, browserMvpGetStatus, browserRealSnapshot } = opts;
+  const {
+    platform,
+    userDataPath,
+    security,
+    fs,
+    path,
+    sidecarManager,
+    browserMvpGetStatus,
+    browserRealSnapshot,
+  } = opts;
   const mgr = sidecarManager || createIdleSidecarManagerView();
   const browserSnap =
-    typeof browserMvpGetStatus === 'function'
+    typeof browserMvpGetStatus === "function"
       ? browserMvpGetStatus()
-      : { running: false, title: '', display_url: '' };
-  const realSnap = browserRealSnapshot || { running: false, title: '', display_url: '' };
+      : { running: false, title: "", display_url: "" };
+  const realSnap = browserRealSnapshot || { running: false, title: "", display_url: "" };
   const warnings = [];
 
   let user_data_writable = false;
@@ -51,10 +66,10 @@ function buildLocalControlStatus(opts) {
     fs.accessSync(userDataPath, fs.constants.W_OK);
     user_data_writable = true;
   } catch {
-    warnings.push('user_data_not_writable');
+    warnings.push("user_data_not_writable");
   }
 
-  const auditRoot = path.join(userDataPath, 'ham-desktop', 'local-control', 'audit');
+  const auditRoot = path.join(userDataPath, "ham-desktop", "local-control", "audit");
   let audit_log_dir_writable = false;
   try {
     if (fs.existsSync(auditRoot)) {
@@ -64,12 +79,12 @@ function buildLocalControlStatus(opts) {
       audit_log_dir_writable = user_data_writable;
     }
   } catch {
-    warnings.push('audit_dir_not_writable');
+    warnings.push("audit_dir_not_writable");
   }
 
   const derived = platformDerived(platform);
   if (!derived.supported_platform) {
-    warnings.push('platform_out_of_scope');
+    warnings.push("platform_out_of_scope");
   }
 
   const { policy, persisted } = loadPolicy({ userDataPath, platform, fs, path });
@@ -79,7 +94,7 @@ function buildLocalControlStatus(opts) {
   const rg = realBrowserActionGates(policy, platform);
 
   return {
-    kind: 'ham_desktop_local_control_status',
+    kind: "ham_desktop_local_control_status",
     schema_version: SCHEMA_VERSION,
     available: true,
     enabled: false,
@@ -107,46 +122,46 @@ function buildLocalControlStatus(opts) {
       manager: mgr,
     }),
     browser_mvp: {
-      kind: 'ham_desktop_local_control_browser_mvp_status',
-      supported: platform === 'linux',
+      kind: "ham_desktop_local_control_browser_mvp_status",
+      supported: platform === "linux",
       armed: policy.browser_control_armed === true,
       allow_loopback: policy.browser_allow_loopback === true,
       session_running: browserSnap.running,
-      title: browserSnap.title || '',
-      display_url: browserSnap.display_url || '',
+      title: browserSnap.title || "",
+      display_url: browserSnap.display_url || "",
       gate_blocked_reason: bg.ok ? null : bg.reason,
     },
     browser_real: {
-      kind: 'ham_desktop_local_control_browser_real_status',
-      supported: platform === 'linux' || platform === 'win32',
+      kind: "ham_desktop_local_control_browser_real_status",
+      supported: platform === "linux" || platform === "win32",
       armed: policy.real_browser_control_armed === true,
       allow_loopback: policy.real_browser_allow_loopback === true,
       managed_profile: true,
       cdp_localhost_only: true,
       uses_default_profile: false,
       session_running: realSnap.running,
-      title: realSnap.title || '',
-      display_url: realSnap.display_url || '',
+      title: realSnap.title || "",
+      display_url: realSnap.display_url || "",
       gate_blocked_reason: rg.ok ? null : rg.reason,
     },
     capabilities: {
-      browser_automation: platform === 'linux' ? 'available_guarded' : 'not_implemented',
+      browser_automation: platform === "linux" ? "available_guarded" : "not_implemented",
       real_browser_cdp:
-        (platform === 'linux' || platform === 'win32') && isRealBrowserRuntimeDiscoverable(platform)
-          ? 'available_guarded'
-          : 'not_implemented',
-      filesystem_access: 'not_implemented',
-      shell_commands: 'not_implemented',
-      app_window_control: 'not_implemented',
-      mcp_adapters: 'not_implemented',
+        (platform === "linux" || platform === "win32") && isRealBrowserRuntimeDiscoverable(platform)
+          ? "available_guarded"
+          : "not_implemented",
+      filesystem_access: "not_implemented",
+      shell_commands: "not_implemented",
+      app_window_control: "not_implemented",
+      mcp_adapters: "not_implemented",
     },
     warnings,
     non_goals: [
-      'Phase 4A: embedded Electron BrowserWindow MVP (proof); Phase 4B: managed Chromium + localhost CDP only',
-      'no attach to operator default browser profile; no cookie/header extraction; no paths in renderer',
-      'no Playwright sidecar; no /api/browser; no War Room',
-      'no shell, filesystem, app, or MCP local control',
-      'no cloud-run browser control plane',
+      "Phase 4A: embedded Electron BrowserWindow MVP (proof); Phase 4B: managed Chromium + localhost CDP only",
+      "no attach to operator default browser profile; no cookie/header extraction; no paths in renderer",
+      "no Playwright sidecar; no /api/browser; no War Room",
+      "no shell, filesystem, app, or MCP local control",
+      "no cloud-run browser control plane",
     ],
   };
 }
