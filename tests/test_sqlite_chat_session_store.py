@@ -87,6 +87,17 @@ def test_sqlite_legacy_sessions_remain_unscoped_but_hidden_from_scoped_lists(tmp
     assert legacy not in {s.session_id for s in store.list_sessions(workspace_id="ws-1")}
 
 
+def test_sqlite_unscoped_actor_sees_legacy_and_own_sessions_only(tmp_path: Path) -> None:
+    store = SqliteChatSessionStore(tmp_path / "unscoped_actor.db")
+    legacy = _create_with_turn(store, "legacy")
+    mine = _create_with_turn(store, "mine", user_id="user-a", workspace_id="ws-1")
+    other = _create_with_turn(store, "other", user_id="user-b", workspace_id="ws-1")
+
+    visible = store.list_sessions(unscoped_actor_user_id="user-a")
+    assert {s.session_id for s in visible} == {legacy, mine}
+    assert other not in {s.session_id for s in visible}
+
+
 def test_sqlite_migration_adds_scope_columns_to_existing_db(tmp_path: Path) -> None:
     db = tmp_path / "migrate.db"
     conn = sqlite3.connect(db)

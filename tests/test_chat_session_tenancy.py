@@ -269,6 +269,28 @@ def test_cross_user_session_access_is_not_found(
     assert res.json()["detail"]["error"]["code"] == "SESSION_NOT_FOUND"
 
 
+def test_list_sessions_without_workspace_hides_other_users_scoped_sessions(
+    chat_store: InMemoryChatSessionStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression: unscoped GET /api/chat/sessions must not enumerate other tenants' sessions."""
+    legacy = chat_store.create_session()
+    chat_store.append_turns(legacy, [ChatTurn(role="user", content="legacy")])
+    victim = chat_store.create_session(user_id="user_a", workspace_id="ws_a")
+    chat_store.append_turns(victim, [ChatTurn(role="user", content="secret")])
+
+    with _install_auth(monkeypatch):
+        res = client.get(
+            "/api/chat/sessions",
+            headers={"Authorization": "Bearer user-b.jwt"},
+        )
+
+    assert res.status_code == 200, res.text
+    ids = {row["session_id"] for row in res.json()["sessions"]}
+    assert victim not in ids
+    assert legacy in ids
+
+
 def test_legacy_unscoped_session_access_remains_compatible(
     chat_store: InMemoryChatSessionStore,
 ) -> None:

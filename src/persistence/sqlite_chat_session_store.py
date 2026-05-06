@@ -208,12 +208,30 @@ class SqliteChatSessionStore:
         *,
         user_id: str | None = None,
         workspace_id: str | None = None,
+        unscoped_actor_user_id: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[ChatSessionSummary]:
         with self._lock:
+            if workspace_id is not None:
+                where_sql = (
+                    "(? IS NULL OR s.user_id = ?) "
+                    "AND (? IS NULL OR s.workspace_id = ?)"
+                )
+                where_params: tuple[Any, ...] = (user_id, user_id, workspace_id, workspace_id)
+            elif unscoped_actor_user_id is not None:
+                where_sql = (
+                    "((s.user_id IS NULL AND s.workspace_id IS NULL) OR s.user_id = ?)"
+                )
+                where_params = (unscoped_actor_user_id,)
+            else:
+                where_sql = (
+                    "(? IS NULL OR s.user_id = ?) "
+                    "AND (? IS NULL OR s.workspace_id = ?)"
+                )
+                where_params = (user_id, user_id, workspace_id, workspace_id)
             rows = self._conn.execute(
-                """
+                f"""
                 SELECT
                     s.session_id,
                     s.created_at,
@@ -227,14 +245,13 @@ class SqliteChatSessionStore:
                     ) AS first_user_content
                 FROM sessions s
                 LEFT JOIN turns t ON t.session_id = s.session_id
-                WHERE (? IS NULL OR s.user_id = ?)
-                  AND (? IS NULL OR s.workspace_id = ?)
+                WHERE {where_sql}
                 GROUP BY s.session_id
                 HAVING turn_count > 0
                 ORDER BY s.created_at DESC
                 LIMIT ? OFFSET ?
                 """,
-                (user_id, user_id, workspace_id, workspace_id, limit, offset),
+                (*where_params, limit, offset),
             ).fetchall()
             out: list[ChatSessionSummary] = []
             for r in rows:

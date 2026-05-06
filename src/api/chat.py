@@ -979,11 +979,17 @@ async def list_chat_sessions(
     ham_actor = enforce_clerk_session_and_email_for_request(authorization, route="list_chat_sessions")
     workspace_scope = _normalized_workspace_id(workspace_id)
     user_scope = _scoped_user_id(ham_actor, workspace_scope)
+    unscoped_actor_user_id = (
+        ham_actor.user_id
+        if ham_actor is not None and workspace_scope is None
+        else None
+    )
     clamped_limit = max(1, min(limit, 100))
     clamped_offset = max(0, offset)
     items = _chat_store.list_sessions(
         user_id=user_scope,
         workspace_id=workspace_scope,
+        unscoped_actor_user_id=unscoped_actor_user_id,
         limit=clamped_limit,
         offset=clamped_offset,
     )
