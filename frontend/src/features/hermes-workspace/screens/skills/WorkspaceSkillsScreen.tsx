@@ -343,17 +343,16 @@ export function WorkspaceSkillsScreen() {
           </p>
           <h1 className="text-balance text-2xl font-medium sm:text-3xl">Skills Browser</h1>
           <p className="mt-1 max-w-2xl text-pretty text-sm text-[var(--theme-muted)] sm:text-base">
-            <strong>Installed</strong> uses the workspace JSON store via{" "}
-            <code className="text-xs opacity-80">/api/workspace/skills</code>.{" "}
-            <strong>Catalog</strong> is the read-only Hermes static catalog and live install overlay
-            (same data as the{" "}
+            <strong>Installed</strong> lists skills saved for this workspace.{" "}
+            <strong>Catalog</strong> is the Hermes runtime library for browsing and installing when
+            your environment supports it—same listings as{" "}
             <Link
               to="/workspace/skills"
               className="text-emerald-400/90 underline-offset-2 hover:underline"
             >
               Skills
             </Link>{" "}
-            surface), server-side only.
+            in the main workspace.
           </p>
         </header>
 
@@ -424,7 +423,7 @@ export function WorkspaceSkillsScreen() {
                 loading={loading}
                 actionId={actionId}
                 emptyTitle="No skills in this deployment yet"
-                emptyDescription="Add a custom skill, or use built-ins from /api/workspace/skills on this host."
+                emptyDescription="Add a custom skill, or enable built-ins if your deployment provides them."
                 onOpen={setSelected}
                 onUninstall={(id) => void runAction("uninstall", id)}
                 onToggle={(id, en) => void runAction("toggle", id, en)}
@@ -433,8 +432,8 @@ export function WorkspaceSkillsScreen() {
 
             <TabsContent value="catalog" className="mt-0 space-y-3 outline-none">
               <p className="text-xs text-[var(--theme-muted)]">
-                Read-only Hermes runtime skills catalog. Installing on a remote host is not
-                available from this browser; this view mirrors the Capabilities page catalog.
+                Browse the Hermes runtime library. Install options show up when your setup supports
+                them; listings align with Capabilities elsewhere in HAM.
               </p>
               {catPayload?.upstream ? (
                 <p className="text-[10px] text-[var(--theme-muted)]">

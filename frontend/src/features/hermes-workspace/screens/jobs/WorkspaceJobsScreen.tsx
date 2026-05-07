@@ -147,7 +147,7 @@ export function WorkspaceJobsScreen() {
         variant="dark"
         eyebrow="Workspace"
         title="Jobs"
-        subtitle="Scheduled and on-demand jobs from the HAM Jobs API (/api/workspace/jobs). Run history is stored as JSON on the API host — not the local Files runtime."
+        subtitle="Schedule and run automations from your workspace—definitions and history stay with this deployment so nothing lives only in the browser."
         actions={
           <>
             <Button
@@ -232,8 +232,8 @@ export function WorkspaceJobsScreen() {
       {error && (
         <WorkspaceSurfaceStateCard
           className="border-white/10 bg-amber-500/10 text-amber-100/90"
-          title="Jobs API is not available"
-          description="Job definitions require the HAM jobs routes on your deployment."
+          title="Can't load jobs"
+          description="Jobs aren't available for this workspace yet. Retry, or confirm your deployment has jobs enabled."
           tone="amber"
           technicalDetail={error}
           primaryAction={
@@ -263,8 +263,8 @@ export function WorkspaceJobsScreen() {
               <>
                 <p className="font-medium text-white/85">No jobs scheduled yet</p>
                 <p className="mt-2 text-xs leading-relaxed">
-                  Create a job to automate a recurring workflow. Data is stored by the HAM API when
-                  the route is available.
+                  Create a job to automate a recurring workflow—your schedules and runs sync to this
+                  workspace once jobs are enabled.
                 </p>
                 <Button type="button" size="sm" className="mt-4" onClick={() => setNewOpen(true)}>
                   New job
