@@ -153,7 +153,7 @@ export function WorkspaceTasksScreen() {
         variant="dark"
         eyebrow="Workspace"
         title="Tasks"
-        subtitle="Task board and summary from the HAM Tasks API (/api/workspace/tasks + /summary). Kanban columns map to server-backed status — not local Files."
+        subtitle="A shared task board with live summaries—everyone sees the same columns and counts in this workspace."
         actions={
           <>
             <Button
@@ -221,8 +221,8 @@ export function WorkspaceTasksScreen() {
       {error && (
         <WorkspaceSurfaceStateCard
           className="border-white/10 bg-amber-500/10 text-amber-100/90"
-          title="Tasks API is not available"
-          description="The task board needs /api/workspace/tasks on your HAM API."
+          title="Can't load tasks"
+          description="Tasks aren't available for this workspace yet. Retry, or confirm your deployment has tasks enabled."
           tone="amber"
           technicalDetail={error}
           primaryAction={
