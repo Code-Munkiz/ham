@@ -1,19 +1,11 @@
 {
   "schema_version": 1,
   "channel": "internal",
-  "build_date": "2026-04-29",
+  "build_date": "2026-05-06",
   "distribution": "unsigned_internal",
-  "summary": "Desktop builds are test/internal distributions and are not code-signed. Linux and Windows may track different semver when a tagged release publishes Linux artifacts but not Windows (see GitHub release notes).",
+  "summary": "Desktop builds are Windows-first internal distributions and are not code-signed.",
   "platforms": {
-    "linux": {
-      "label": "Linux",
-      "arch": "x64",
-      "type": "AppImage",
-      "version": "0.1.4",
-      "url": "https://github.com/Code-Munkiz/ham/releases/download/desktop-v0.1.4/HAM.Desktop-0.1.4.AppImage",
-      "sha256": "c1d0589cc75fca11202c959322c1a6a4c8f86f29f5233cfc0040ea24e9322952",
-      "release_page_url": "https://github.com/Code-Munkiz/ham/releases/tag/desktop-v0.1.4"
-    },
+    "linux": null,
     "windows": {
       "label": "Windows",
       "arch": "x64",
