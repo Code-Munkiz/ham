@@ -7,24 +7,67 @@ import pytest
 from src.ham.harness_capabilities import (
     HARNESS_CAPABILITIES,
     IMPLEMENTED_PROVIDERS,
+    PLANNED_CANDIDATE_PROVIDERS,
     all_harness_capability_providers,
     get_harness_capability,
+    is_provider_launchable,
 )
 from src.persistence.control_plane_run import ControlPlaneProvider
 
 
 def test_registry_keys_and_implemented() -> None:
-    assert set(all_harness_capability_providers()) == {"cursor_cloud_agent", "factory_droid", "opencode_cli"}
+    assert set(all_harness_capability_providers()) == {
+        "cursor_cloud_agent",
+        "factory_droid",
+        "claude_code",
+        "opencode_cli",
+    }
     assert IMPLEMENTED_PROVIDERS == {"cursor_cloud_agent", "factory_droid"}
+    assert PLANNED_CANDIDATE_PROVIDERS == {"claude_code", "opencode_cli"}
     oc = get_harness_capability("opencode_cli")
     assert oc is not None
     assert oc.implemented is False
     assert oc.registry_status == "planned_candidate"
+    cc = get_harness_capability("claude_code")
+    assert cc is not None
+    assert cc.implemented is False
+    assert cc.registry_status == "planned_candidate"
     for p in ControlPlaneProvider:
         row = get_harness_capability(p.value)
         assert row is not None
         assert row.implemented is True
         assert row.audit_sink is not None
+
+
+def test_planned_candidates_have_no_audit_sink_or_runtime_seam() -> None:
+    """Planned rows must not advertise an audit sink (no ControlPlaneProviderAuditRef value yet)."""
+    for key in PLANNED_CANDIDATE_PROVIDERS:
+        row = get_harness_capability(key)
+        assert row is not None, key
+        assert row.implemented is False, key
+        assert row.audit_sink is None, key
+        assert row.harness_family == "local_cli_planned", key
+
+
+def test_planned_candidates_not_in_control_plane_enum() -> None:
+    """Planned candidates must not appear in ControlPlaneProvider until an adapter PR lands."""
+    enum_values = {p.value for p in ControlPlaneProvider}
+    for key in PLANNED_CANDIDATE_PROVIDERS:
+        assert key not in enum_values, key
+
+
+def test_planned_candidates_are_not_launchable() -> None:
+    """is_provider_launchable() must return False for planned candidates and unknown keys."""
+    for key in PLANNED_CANDIDATE_PROVIDERS:
+        assert is_provider_launchable(key) is False, key
+    assert is_provider_launchable("nope_harness") is False
+    assert is_provider_launchable("") is False
+
+
+def test_implemented_providers_are_launchable() -> None:
+    """The two implemented providers must remain launchable."""
+    assert is_provider_launchable("cursor_cloud_agent") is True
+    assert is_provider_launchable("factory_droid") is True
 
 
 def test_get_unknown_returns_none() -> None:
