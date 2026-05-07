@@ -66,7 +66,7 @@ Hosted browser command center on Vercel, talking to Cloud Run API. Primary navig
 
 ### Positioning recap
 
-Electron, Windows-first today. `desktop/` ships local-control modules (browser-real CDP, sidecar, audit, web-bridge, preload contract). Tag-driven release pipeline produces signed-and-verified Windows portable + NSIS installers via `.github/workflows/desktop-release.yml`.
+Electron, Windows-first today. `desktop/` ships local-control modules (browser-real CDP, sidecar, audit, web-bridge, preload contract). Tag-driven **`.github/workflows/desktop-release.yml`** publishes **unsigned internal** **Windows x64 portable** `.exe` + SHA-256 sidecars — **not** NSIS (maintainer-only via `npm run pack:win:nsis`). Canonical matrix: **[`docs/desktop/SUPPORT_MATRIX.md`](desktop/SUPPORT_MATRIX.md)**.
 
 ### Finish-line checklist
 
@@ -75,9 +75,9 @@ Electron, Windows-first today. `desktop/` ships local-control modules (browser-r
 | Electron Windows-first app | ✅ | `desktop/main.cjs`, `desktop/preload.cjs`, electron-builder Windows targets in `desktop/package.json` |
 | Local control surface | ✅ | `desktop/local_control_*.cjs` (status / policy / audit / sidecar / browser real-CDP / web-bridge); 99 tests pass via `npm --prefix desktop run test:local-control` |
 | Local files / browser / computer-control boundary | ✅ | Documented in [`desktop/local_control_v1.md`](desktop/local_control_v1.md) and [`capabilities/computer_control_pack_v1.md`](capabilities/computer_control_pack_v1.md) |
-| Desktop release / download path | ✅ | `.github/workflows/desktop-release.yml` builds portable + NSIS on `desktop-v*` tag; SHA256 sidecar + GitHub Release notes |
+| Desktop release / download path | ✅ | `.github/workflows/desktop-release.yml` builds **Windows portable** on `desktop-v*` tag; `.exe` + `.sha256` on GitHub Release; manifest + matrix in **[`SUPPORT_MATRIX.md`](desktop/SUPPORT_MATRIX.md)** |
 | GoHAM local-mode permissions | 🟡 | Implemented in code (kill-switch, audit hooks, web-bridge enablement) but **not consolidated** into one human-readable permission doc. Finish-line PR: single `docs/desktop/goham_permissions.md` summarizing prompts, kill-switch, audit boundary |
-| Unsupported / stale Linux installer expectations | 🟡 | [`HAM_THREE_LANE_ARCHITECTURE.md`](HAM_THREE_LANE_ARCHITECTURE.md) already says "Windows-first; do not imply Linux installers." Finish-line PR: ensure `README.md`, `desktop/README.md`, and any `*INSTALLER*.md` echo the same line |
+| Unsupported / stale Linux installer expectations | ✅ | Manifest `platforms.linux` is `null` (PR #211); [`SUPPORT_MATRIX.md`](desktop/SUPPORT_MATRIX.md) + `desktop/README.md` + [`RELEASE_PIPELINE.md`](desktop/RELEASE_PIPELINE.md) aligned — spot-check repo root if new installer docs appear |
 | Formatter baseline | ✅ | `desktop/.prettierrc.json` + CI `format:check` blocking (PRs #202 / #203 / #204) |
 | Type checker | ⏳ | Desktop is plain CommonJS `.cjs` with no JSDoc-typed boundary. Not on the immediate finish line; tracked as future work, **not** this PR |
 
@@ -89,13 +89,12 @@ Electron, Windows-first today. `desktop/` ships local-control modules (browser-r
 
 ### Remaining gaps
 
-- **Support matrix doc**: explicit table showing Windows = supported, macOS = "not yet" or "best-effort dev", Linux = "not a product path".
 - **GoHAM permission model**: what the user is consenting to, what the kill-switch covers, what is logged.
 - **Stale Linux references**: any older README / docs paragraphs that imply a shipping Linux installer should be retired or labeled archival.
 
 ### PR-sized next steps (desktop lane)
 
-1. `docs(desktop): add Windows-first support matrix` — single table, links from `desktop/README.md` + [`HAM_THREE_LANE_ARCHITECTURE.md`](HAM_THREE_LANE_ARCHITECTURE.md).
+1. ~~`docs(desktop): add Windows-first support matrix`~~ — landed as **[`SUPPORT_MATRIX.md`](desktop/SUPPORT_MATRIX.md)** (linked from `desktop/README.md` + architecture doc).
 2. `docs(desktop): consolidate GoHAM local-mode permissions` — collect today's kill-switch / audit / bridge enablement copy into one operator-readable doc.
 3. `docs(desktop): retire stale Linux-installer prose` — search-and-narrow, archive into `docs/archive/` if needed.
 
@@ -151,7 +150,7 @@ These are the places where lanes touch and where wrong copy or wrong default fla
 | **Hermes called from the browser** | Old SPA prototypes that hit gateway URLs directly | Server-side adapter pattern is enforced in `src/api/chat.py`; browser only knows `/api/chat` |
 | **GoHAM autonomy without consent UI** | High-autonomy local/browser flows | Today gated by desktop kill-switch + audit hooks; user-facing permission summary doc is the next step |
 | **Cursor Cloud Agent overwriting `main`** | VM force-push incident (2026-04) | `MAIN_PUSH_REQUIRES_OWNER_LOCAL_CONTEXT` policy in [`AGENTS.md`](../AGENTS.md); branch protection still pending |
-| **Linux installer rumours** | Old README paragraphs, screenshots | Architecture doc says Windows-first; full prose audit pending |
+| **Linux installer rumours** | Old README paragraphs, screenshots | **[`SUPPORT_MATRIX.md`](desktop/SUPPORT_MATRIX.md)** + Windows-first architecture copy; spot-check **repo root** if new installer claims appear |
 | **Social posts shipped without operator approval** | HAMgomoon / `HAM_X` paths | All live social actions stay behind explicit operator approvals; safety-gate index pending |
 | **Secrets leaked via OpenAPI / docs / logs** | Generated OpenAPI snapshots, log dumps | OpenAPI exporter sets safe mock env defaults; gitleaks runs on every PR + push; redact() applied in social delivery log |
 
@@ -208,7 +207,7 @@ Avoid premature commitments — these are explicit "wait" items.
 The order below is intentionally **docs-first**. Every step is small, reversible, and unblocks the next.
 
 1. **Web lane UX / product-truth cleanup** — settings + Hermes operator-strip copy audit; ensure no surface implies "the browser sees the laptop" without naming the bridge. *(Docs only.)*
-2. **Desktop support matrix + local-control permission docs** — single Windows-first matrix, plus a consolidated GoHAM permission summary referencing existing kill-switch / audit / web-bridge code paths. *(Docs only.)*
+2. **Desktop support matrix** — landed as [`desktop/SUPPORT_MATRIX.md`](desktop/SUPPORT_MATRIX.md). **GoHAM local-control permission docs** — consolidated summary still pending. *(Docs only.)*
 3. **Cloud agent execution / audit boundary docs** — one-pager mapping each log sink to canonical-vs-advisory, plus the safety-gate index for social / autonomy approval surfaces. *(Docs only.)*
 4. **GoHAM permission model doc** — ties web + desktop + cloud copy together so high-autonomy flows have one canonical operator page. *(Docs only.)*
 5. **Implementation PRs per lane** — only after the four docs land. Each lane gets its own scoped PRs (e.g. frontend ESLint, desktop type checker baseline, cloud audit boundary helpers). No omnibus PRs.
@@ -231,6 +230,7 @@ Each numbered step above is intended to be **one PR**, not a milestone.
 - [`MISSION_AWARE_FEED_CONTROLS.md`](MISSION_AWARE_FEED_CONTROLS.md) — `mission_registry_id` scoping
 - [`HERMES_GATEWAY_CONTRACT.md`](HERMES_GATEWAY_CONTRACT.md) — server-side adapter contract
 - [`desktop/local_control_v1.md`](desktop/local_control_v1.md) — desktop local-control product path
+- [`desktop/SUPPORT_MATRIX.md`](desktop/SUPPORT_MATRIX.md) — Windows-first packaged desktop matrix
 - [`capabilities/computer_control_pack_v1.md`](capabilities/computer_control_pack_v1.md) — control-plane semantics
 - [`api/README.md`](api/README.md) — committed OpenAPI snapshot + regen instructions
 - [`AGENTS.md`](../AGENTS.md) — Cloud Agent Git policy and PR hygiene

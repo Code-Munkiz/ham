@@ -19,8 +19,9 @@ Linux and Windows artifacts **do not duplicate** the chat interface. `electron-b
 
 ### Download manifest · update prompts
 
+- **Support matrix:** what is published vs dev-only is summarized in **[`docs/desktop/SUPPORT_MATRIX.md`](../docs/desktop/SUPPORT_MATRIX.md)** (Windows-first; **`platforms.linux` / `platforms.macos`** are **`null`** in the manifest today).
 - Canonical download metadata (`channel`, SHA-256 fingerprints, artifact URLs aligned with GitHub Releases) ships as **`frontend/public/desktop-downloads.json`**. Keep the embedded **`frontend/src/lib/ham/desktop-downloads.manifest.json`** copy in sync so the landing page has a deterministic first paint and TypeScript can compile against the same blob.
-- On startup, **`desktop/desktop_updates.cjs`** compares **packaged** `app.getVersion()` against the **matching OS entry** (`linux`/`windows`; mac unsupported for now). If the manifest lists a **newer semver**, the user gets **Update** / **Later** — **Update** opens the **`release_page_url`** (fallback: direct `url`) in the browser. There is **no** built-in updater or silent reinstall.
+- On startup, **`desktop/desktop_updates.cjs`** compares **packaged** `app.getVersion()` to the manifest entry for **this OS** when one exists. **Windows** reads **`platforms.windows`**; **Linux** and **macOS** have **no** published row today (`null`) — **no** update prompt on those platforms from the manifest. If a **newer semver** is listed for the active platform, the user gets **Update** / **Later** — **Update** opens **`release_page_url`** (fallback: direct **`url`**) in the browser. There is **no** built-in updater or silent reinstall.
 - Trusted fetch defaults to `https://raw.githubusercontent.com/Code-Munkiz/ham/main/frontend/public/desktop-downloads.json`. Override via **`HAM_DESKTOP_DOWNLOADS_MANIFEST_URL`** if you maintain a fork; non-HTTPS / non-allowlisted URLs are refused. **`HAM_DESKTOP_UPDATE_CHECK=0`** skips the prompt; **`HAM_DESKTOP_UPDATE_CHECK=1`** forces checks even during **unpackaged** desktop dev (otherwise dev skips to avoid noisy dialogs).
 
 ### CI note

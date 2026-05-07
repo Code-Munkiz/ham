@@ -41,6 +41,7 @@ No single lane replaces the others. Mis-aligning expectations (for example “th
 - **Windows x64** builds and **tag-driven** desktop release automation exist; **do not** imply **Linux desktop installers** or a supported **Linux desktop app** path in product copy (see operator CLI notes and desktop docs).
 - **Electron** remains relevant for **Windows / Mac / shared desktop** direction where applicable; **do not** revive **Linux-specific desktop app/demo** paths as product.
 - **High-autonomy local/browser behavior** should be discussed as **GoHAM mode** (see [Naming / product truth](#naming--product-truth)), not as a vague “agent mode.”
+- **Shipping / downloads:** see **[`desktop/SUPPORT_MATRIX.md`](desktop/SUPPORT_MATRIX.md)** (Windows portable today; Linux/macOS packaged paths explicitly out of scope).
 
 ---
 
@@ -110,7 +111,7 @@ Small, **PR-sized** follow-ups (not commitments—prioritize with the team):
 
 1. Add a **visual three-lane diagram** once the wording stabilizes.
 2. **Clarify workspace / local runtime** UX copy where users confuse Cloud Run disk with local disk.
-3. **Desktop shipping/support matrix** (Windows today; macOS/Linux stance explicit).
+3. ~~**Desktop shipping/support matrix** (Windows today; macOS/Linux stance explicit)~~ — **[`desktop/SUPPORT_MATRIX.md`](desktop/SUPPORT_MATRIX.md)**.
 4. **Browser/computer-control boundary** one-pager cross-linking desktop local control vs hosted `/api/browser*`.
 5. **Harden GoHAM permission model docs** before expanding **high-autonomy** flows.
 6. **Clean up stale docs** that imply unsupported **Linux desktop** installers or paths.
@@ -121,5 +122,6 @@ Small, **PR-sized** follow-ups (not commitments—prioritize with the team):
 
 - [`VISION.md`](../VISION.md), [`AGENTS.md`](../AGENTS.md) — pillars and repo index  
 - [`DEPLOY_CLOUD_RUN.md`](DEPLOY_CLOUD_RUN.md), [`DEPLOY_HANDOFF.md`](DEPLOY_HANDOFF.md) — hosted deploy  
+- [`desktop/SUPPORT_MATRIX.md`](desktop/SUPPORT_MATRIX.md) — Windows-first packaged desktop matrix  
 - [`desktop/local_control_v1.md`](desktop/local_control_v1.md) — desktop local control product path  
 - [`capabilities/computer_control_pack_v1.md`](capabilities/computer_control_pack_v1.md) — control-plane semantics  
