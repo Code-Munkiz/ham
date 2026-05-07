@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import {
+  Bot,
   Brain,
   Briefcase,
   CheckSquare,
@@ -31,6 +32,7 @@ export const mainNavItems: MainNavItem[] = [
   { to: "/workspace/tasks", label: "Tasks", icon: CheckSquare },
   { to: "/workspace/conductor", label: "Conductor", icon: Waypoints },
   { to: "/workspace/operations", label: "Operations", icon: Network },
+  { to: "/workspace/coding-agents", label: "Coding agents", icon: Bot },
   { to: "/workspace/social", label: "Social", icon: Share2 },
   { to: "/workspace/settings", label: "Settings", icon: Settings },
 ];
@@ -57,6 +59,10 @@ const MOBILE_TITLE_RULES: { test: (p: string) => boolean; title: string }[] = [
   {
     test: (p) => p === "/workspace/operations" || p.startsWith("/workspace/operations/"),
     title: "Operations",
+  },
+  {
+    test: (p) => p === "/workspace/coding-agents" || p.startsWith("/workspace/coding-agents/"),
+    title: "Coding agents",
   },
   { test: (p) => p === "/workspace/social" || p.startsWith("/workspace/social/"), title: "Social" },
   { test: (p) => p === "/workspace/memory" || p.startsWith("/workspace/memory/"), title: "Memory" },

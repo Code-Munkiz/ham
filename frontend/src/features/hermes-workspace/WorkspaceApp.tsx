@@ -12,6 +12,7 @@ import { WorkspaceTasksScreen } from "./screens/tasks/WorkspaceTasksScreen";
 import { WorkspaceConductorScreen } from "./screens/conductor/WorkspaceConductorScreen";
 import { WorkspaceMemoryScreen } from "./screens/memory/WorkspaceMemoryScreen";
 import { WorkspaceOperationsScreen } from "./screens/operations/WorkspaceOperationsScreen";
+import { WorkspaceCodingAgentsScreen } from "./screens/coding-agents/WorkspaceCodingAgentsScreen";
 import { WorkspaceProfilesScreen } from "./screens/profiles/WorkspaceProfilesScreen";
 import { WorkspaceSkillsScreen } from "./screens/skills/WorkspaceSkillsScreen";
 import { WorkspaceSocialScreen } from "./screens/social/WorkspaceSocialScreen";
@@ -48,6 +49,7 @@ export function WorkspaceApp() {
                 <Route path="tasks" element={<WorkspaceTasksScreen />} />
                 <Route path="conductor" element={<WorkspaceConductorScreen />} />
                 <Route path="operations" element={<WorkspaceOperationsScreen />} />
+                <Route path="coding-agents" element={<WorkspaceCodingAgentsScreen />} />
                 <Route path="social/policy" element={<WorkspaceSocialPolicyScreen />} />
                 <Route path="social" element={<WorkspaceSocialScreen />} />
                 <Route path="memory" element={<WorkspaceMemoryScreen />} />
