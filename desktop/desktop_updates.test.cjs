@@ -30,16 +30,16 @@ describe("desktop_updates manifest parsing", () => {
     channel: "internal",
     distribution: "unsigned_internal",
     platforms: {
-      linux: {
-        label: "Linux",
+      linux: null,
+      windows: {
+        label: "Windows",
         arch: "x64",
-        type: "AppImage",
-        version: "0.1.4",
-        url: "https://github.com/Code-Munkiz/ham/releases/download/foo/bar.AppImage",
+        type: "Portable",
+        version: "0.1.10",
+        url: "https://github.com/Code-Munkiz/ham/releases/download/foo/bar.exe",
         sha256: "abc",
         release_page_url: "https://github.com/Code-Munkiz/ham/releases/tag/foo",
       },
-      windows: null,
       macos: null,
     },
   };
@@ -47,13 +47,28 @@ describe("desktop_updates manifest parsing", () => {
   it("accepts canonical shape with nullable platforms", () => {
     const p = parseDownloadsManifest(structuredClone(good));
     assert.ok(p);
+    assert.equal(p.platforms.windows.version, "0.1.10");
+    assert.equal(p.platforms.linux, null);
+    assert.equal(p.platforms.macos, null);
+  });
+
+  it("preserves parser-level acceptance of a populated linux entry for forward compat", () => {
+    const j = structuredClone(good);
+    j.platforms.linux = {
+      label: "Linux",
+      arch: "x64",
+      type: "AppImage",
+      version: "0.1.4",
+      url: "https://github.com/Code-Munkiz/ham/releases/download/foo/bar.AppImage",
+    };
+    const p = parseDownloadsManifest(j);
+    assert.ok(p);
     assert.equal(p.platforms.linux.version, "0.1.4");
-    assert.equal(p.platforms.windows, null);
   });
 
   it("rejects bad url scheme", () => {
     const j = structuredClone(good);
-    j.platforms.linux.url = "http://insecure/";
+    j.platforms.windows.url = "http://insecure/";
     assert.equal(parseDownloadsManifest(j), null);
   });
 
@@ -86,7 +101,31 @@ describe("desktop_updates trust URLs", () => {
 });
 
 describe("electronPlatformKey sanity", () => {
-  it("maps win32/linux/darwin strings", () => {
-    assert.equal(typeof electronPlatformKey(), "string");
+  const orig = process.platform;
+  function setPlatform(p) {
+    Object.defineProperty(process, "platform", { value: p, configurable: true });
+  }
+  afterEach(() => {
+    Object.defineProperty(process, "platform", { value: orig, configurable: true });
+  });
+
+  it("maps win32 → windows", () => {
+    setPlatform("win32");
+    assert.equal(electronPlatformKey(), "windows");
+  });
+
+  it("maps darwin → macos", () => {
+    setPlatform("darwin");
+    assert.equal(electronPlatformKey(), "macos");
+  });
+
+  it("returns null on linux (no Linux update prompt)", () => {
+    setPlatform("linux");
+    assert.equal(electronPlatformKey(), null);
+  });
+
+  it("returns null on unknown platforms", () => {
+    setPlatform("freebsd");
+    assert.equal(electronPlatformKey(), null);
   });
 });

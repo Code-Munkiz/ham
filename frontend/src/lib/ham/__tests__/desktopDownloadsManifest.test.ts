@@ -12,7 +12,7 @@ import {
   type DesktopDownloadsManifest,
 } from "@/lib/ham/desktopDownloadsManifest";
 
-const VALID_HTTPS_URL = "https://example.invalid/ham-desktop-1.0.0.AppImage";
+const VALID_HTTPS_URL = "https://example.invalid/ham-desktop-1.0.0-Win-x64-Portable.exe";
 
 function validManifest(): DesktopDownloadsManifest {
   return {
@@ -21,16 +21,16 @@ function validManifest(): DesktopDownloadsManifest {
     distribution: "github",
     summary: "v1.0.0",
     platforms: {
-      linux: {
-        label: "Linux AppImage",
-        arch: "x86_64",
-        type: "AppImage",
+      linux: null,
+      windows: {
+        label: "Windows",
+        arch: "x64",
+        type: "Portable",
         version: "1.0.0",
         url: VALID_HTTPS_URL,
         sha256: "abc123",
         release_page_url: "https://example.invalid/releases/v1.0.0",
       },
-      windows: null,
       macos: null,
     },
   };
@@ -86,9 +86,28 @@ describe("parseDesktopDownloadsManifest", () => {
     expect(out?.schema_version).toBe(1);
     expect(out?.channel).toBe("stable");
     expect(out?.distribution).toBe("github");
-    expect(out?.platforms.linux?.url).toBe(VALID_HTTPS_URL);
-    expect(out?.platforms.windows).toBeNull();
+    expect(out?.platforms.linux).toBeNull();
+    expect(out?.platforms.windows?.url).toBe(VALID_HTTPS_URL);
     expect(out?.platforms.macos).toBeNull();
+  });
+
+  it("preserves parser-level acceptance of a populated linux entry for forward compat", () => {
+    const out = parseDesktopDownloadsManifest({
+      ...validManifest(),
+      platforms: {
+        linux: {
+          label: "Linux",
+          arch: "x86_64",
+          type: "AppImage",
+          version: "1.0.0",
+          url: "https://example.invalid/ham-desktop-1.0.0.AppImage",
+        },
+        windows: null,
+        macos: null,
+      },
+    });
+    expect(out).not.toBeNull();
+    expect(out?.platforms.linux?.type).toBe("AppImage");
   });
 });
 
@@ -98,13 +117,32 @@ describe("manifestToDownloadCtas", () => {
     expect(ctas.map((c) => c.platform)).toEqual(["windows", "macos"]);
   });
 
-  it("marks Windows/macOS availability from manifest; ignores Linux for CTAs", () => {
+  it("marks Windows available from manifest; macOS unavailable when null; ignores Linux for CTAs", () => {
     const ctas = manifestToDownloadCtas(validManifest());
     const byPlatform = Object.fromEntries(ctas.map((c) => [c.platform, c]));
-    expect(byPlatform.windows.available).toBe(false);
-    expect(byPlatform.windows.href).toBe("");
+    expect(byPlatform.windows.available).toBe(true);
+    expect(byPlatform.windows.href).toBe(VALID_HTTPS_URL);
     expect(byPlatform.macos.available).toBe(false);
     expect(byPlatform.macos.href).toBe("");
+    expect(ctas.find((c) => c.platform === "linux")).toBeUndefined();
+  });
+
+  it("ignores a populated linux entry — only Windows + macOS reach the landing CTAs", () => {
+    const ctas = manifestToDownloadCtas({
+      ...validManifest(),
+      platforms: {
+        linux: {
+          label: "Linux",
+          arch: "x86_64",
+          type: "AppImage",
+          version: "1.0.0",
+          url: "https://example.invalid/ham-desktop-1.0.0.AppImage",
+        },
+        windows: null,
+        macos: null,
+      },
+    });
+    expect(ctas.map((c) => c.platform)).toEqual(["windows", "macos"]);
     expect(ctas.find((c) => c.platform === "linux")).toBeUndefined();
   });
 

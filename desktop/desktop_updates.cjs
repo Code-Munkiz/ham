@@ -123,8 +123,6 @@ function electronPlatformKey() {
   switch (process.platform) {
     case "win32":
       return "windows";
-    case "linux":
-      return "linux";
     case "darwin":
       return "macos";
     default:
@@ -192,7 +190,7 @@ async function runStartupDesktopUpdatePrompt(opts) {
   const detail =
     `Installed: ${current}\n` +
     `Latest published (${key} · ${manifest.channel}): ${entry.version}\n\n` +
-    "Update opens the release/downloads page in your browser. Replace the portable .exe or AppImage manually — " +
+    "Update opens the release/downloads page in your browser. Replace the portable .exe manually — " +
     "this build does not download or swap binaries in the background.";
 
   const preferred =
@@ -208,7 +206,7 @@ async function runStartupDesktopUpdatePrompt(opts) {
     defaultId: 0,
     cancelId: 1,
     title: "HAM Desktop",
-    message: `A newer download is listed for ${key.replace("windows", "Windows").replace("linux", "Linux")} (${publishLabel}).`,
+    message: `A newer download is listed for ${key.replace("windows", "Windows")} (${publishLabel}).`,
     detail,
   };
 
