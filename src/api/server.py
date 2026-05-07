@@ -49,6 +49,7 @@ from src.api.workspace_profiles import router as workspace_profiles_router
 from src.api.workspace_files import resolve_workspace_context_snapshot_root
 from src.api.workspace_skills import router as workspace_skills_router
 from src.api.workspace_tools import router as workspace_tools_router
+from src.api.coding_agents import router as coding_agents_router
 from src.api.control_plane_runs import router as control_plane_runs_router
 from src.ham.agent_profiles import agents_config_from_merged
 from src.ham.clerk_auth import HamActor, clerk_authorization_is_clerk_session
@@ -128,6 +129,7 @@ app.include_router(goham_planner_router)
 app.include_router(project_settings_router)
 app.include_router(social_router)
 app.include_router(social_policy_router)
+app.include_router(coding_agents_router)
 app.include_router(control_plane_runs_router)
 app.include_router(models_catalog_router)
 app.include_router(workspace_health_router)
@@ -186,6 +188,7 @@ async def root() -> dict[str, Any]:
         "chat_stream": "/api/chat/stream",
         "settings_write_status": "/api/settings/write-status",
         "project_agents": "/api/projects/{project_id}/agents",
+        "coding_agent_providers": "/api/coding-agents/providers",
         "control_plane_runs": "/api/control-plane-runs?project_id=<id>",
         "capability_directory": "/api/capability-directory",
         "capability_directory_bundles": "/api/capability-directory/bundles",

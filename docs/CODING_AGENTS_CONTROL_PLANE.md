@@ -375,6 +375,7 @@ This file does **not** ship any of the above.
 | [`HAM_THREE_LANE_FINISH_LINE.md`](HAM_THREE_LANE_FINISH_LINE.md) | Lane 3 (cloud / hosted agent) product-truth checklist. |
 | [`AGENTS.md`](../AGENTS.md) | Cloud Agent / HAM VM Git policy and PR hygiene. |
 | [`VISION.md`](../VISION.md) | Pillars, GoHAM framing, stable bets. |
+| `src/api/coding_agents.py` (`GET /api/coding-agents/providers`) | Read-only hosted projection of the capability registry; no launch surface. |
 
 ---
 
