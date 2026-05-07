@@ -2,14 +2,16 @@
 Read-only harness capability registry (vocabulary only).
 
 This module mirrors ``docs/HARNESS_PROVIDER_CONTRACT.md`` — no dispatch, no provider
-runtime imports, and no OpenCode (or other) launch implementation.
+runtime imports, and no Claude Code / OpenCode (or other) launch implementation.
 
-The ``opencode_cli`` row stays ``planned_candidate`` until real-host verification
-(``docs/OPENCODE_VERIFICATION.md``) and a go/conditional-go decision; do not treat it
-as implemented in HAM before that.
+The ``claude_code`` and ``opencode_cli`` rows stay ``planned_candidate`` until a
+provider adapter PR lands. ``opencode_cli`` further depends on real-host verification
+(``docs/OPENCODE_VERIFICATION.md``) and a go/conditional-go decision; do not treat
+either as implemented in HAM before that.
 
 Planned / candidate rows use ``registry_status=planned_candidate`` and ``implemented=False``;
 ``ControlPlaneRun`` / ``ControlPlaneProvider`` may not include such providers until wired.
+See ``docs/CODING_AGENTS_CONTROL_PLANE.md`` for the cockpit-level vocabulary.
 """
 
 from __future__ import annotations
@@ -101,6 +103,31 @@ def _rows() -> dict[str, HarnessCapabilityRow]:
             status_mapping="droid_outcome_to_ham_status (control_plane_run.py)",
             topology_note="Local droid exec on registered project root; allowlisted workflows.",
         ),
+        "claude_code": HarnessCapabilityRow(
+            provider="claude_code",
+            display_name="Claude Code (planned)",
+            harness_family="local_cli_planned",
+            registry_status="planned_candidate",
+            implemented=False,
+            requires_local_root=True,
+            requires_remote_repo=False,
+            # Intended v1 per cockpit vocabulary — not launchable in HAM until implemented.
+            # The existing claude_agent_sdk readiness path under src/api/workspace_tools.py
+            # and src/ham/worker_adapters/claude_agent_adapter.py is workspace-tool readiness,
+            # not a coding-agent control-plane provider.
+            supports_operator_preview=False,
+            supports_operator_launch=False,
+            supports_status_poll=False,
+            supports_follow_up=False,
+            returns_stable_external_id=False,
+            requires_provider_side_auth=True,
+            audit_sink=None,
+            digest_family="TBD (not wired)",
+            base_revision_source="TBD (not wired)",
+            status_mapping="TBD exit- or event-based; not map_cursor_raw_status",
+            topology_note="Planned: local Claude Code CLI subprocess on a registered project root. "
+            "Not in ControlPlaneProvider enum; no HAM runtime; not launchable.",
+        ),
         "opencode_cli": HarnessCapabilityRow(
             provider="opencode_cli",
             display_name="OpenCode CLI (planned)",
@@ -109,7 +136,9 @@ def _rows() -> dict[str, HarnessCapabilityRow]:
             implemented=False,
             requires_local_root=True,
             requires_remote_repo=False,
-            # Intended v1 per architecture planning — not available in HAM until implemented
+            # Intended v1 per architecture planning — not available in HAM until implemented;
+            # operator preview / launch flags reflect the v1 intent only and stay gated by
+            # ``implemented=False`` until a real adapter lands.
             supports_operator_preview=True,
             supports_operator_launch=True,
             supports_status_poll=False,
@@ -130,6 +159,9 @@ HARNESS_CAPABILITIES: Final[Mapping[str, HarnessCapabilityRow]] = MappingProxyTy
 IMPLEMENTED_PROVIDERS: Final[frozenset[str]] = frozenset(
     k for k, v in HARNESS_CAPABILITIES.items() if v.implemented
 )
+PLANNED_CANDIDATE_PROVIDERS: Final[frozenset[str]] = frozenset(
+    k for k, v in HARNESS_CAPABILITIES.items() if v.registry_status == "planned_candidate"
+)
 
 
 def get_harness_capability(provider: str) -> HarnessCapabilityRow | None:
@@ -142,6 +174,22 @@ def all_harness_capability_providers() -> tuple[str, ...]:
     return tuple(sorted(HARNESS_CAPABILITIES.keys()))
 
 
+def is_provider_launchable(provider: str) -> bool:
+    """
+    True only when an ``implemented`` row advertises operator launch.
+
+    Planned candidates (``claude_code``, ``opencode_cli``) always return False,
+    independent of any forward-looking flags inside the row, because no adapter
+    or ``ControlPlaneProvider`` enum value backs them yet.
+    """
+    row = get_harness_capability(provider)
+    if row is None:
+        return False
+    if not row.implemented:
+        return False
+    return bool(row.supports_operator_launch)
+
+
 __all__ = [
     "AuditSinkLiteral",
     "HarnessCapabilityRow",
@@ -149,6 +197,8 @@ __all__ = [
     "RegistryStatus",
     "HARNESS_CAPABILITIES",
     "IMPLEMENTED_PROVIDERS",
+    "PLANNED_CANDIDATE_PROVIDERS",
     "get_harness_capability",
     "all_harness_capability_providers",
+    "is_provider_launchable",
 ]

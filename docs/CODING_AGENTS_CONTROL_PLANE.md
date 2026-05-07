@@ -291,11 +291,13 @@ Claude Code is referenced via the **Claude Agent SDK** readiness path
 in `src/api/workspace_tools.py` and
 `src/ham/worker_adapters/claude_agent_adapter.py` (presence-only auth
 hints + optional gated one-shot smoke). That is **workspace-tool
-readiness**, **not** a coding-agent control-plane provider. There is
-**no** `claude_code` value in `ControlPlaneProvider`, **no** capability
-row in `src/ham/harness_capabilities.py`, and **no** adapter module
-under `src/ham/`. The cockpit names it as planned so a future PR can
-add the enum value, capability row, and adapter module honestly.
+readiness**, **not** a coding-agent control-plane provider. A
+`claude_code` row now exists in `src/ham/harness_capabilities.py` as a
+`planned_candidate` (vocabulary only, `implemented=False`,
+`supports_operator_launch=False`), but there is **no** `claude_code`
+value in `ControlPlaneProvider` and **no** adapter module under
+`src/ham/`. The cockpit names it as planned so a future PR can add the
+enum value and adapter module honestly.
 
 **Why OpenCode is listed as planned**
 
