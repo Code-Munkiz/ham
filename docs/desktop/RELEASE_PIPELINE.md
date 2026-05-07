@@ -38,9 +38,11 @@ electron-builder emits (see `desktop/package.json` → `build.win.*`):
 
 6. Deploy web(Vercel) so `public/desktop-downloads.json` updates for landing + **`raw.githubusercontent.com`** eventual consistency for Electron’s update check fetch.
 
-### Linux AppImage rows in the manifest
+### Manifest platforms (Windows-first)
 
-**Not built by this workflow today.** Repo policy ([`desktop/README.md`](../../desktop/README.md)): Linux **AppImage / deb electron-builder targets are not published from this CI** (`pack:linux` removed). Existing manifest Linux entries describe **prior** uploads; refresh them only when you publish Linux artifacts elsewhere. Re-introducing **`pack:linux`** is a deliberate packaging decision, then add a **`matrix`** job or parallel workflow.
+**This workflow publishes Windows portable `.exe` + `.sha256` only** — see **[`SUPPORT_MATRIX.md`](SUPPORT_MATRIX.md)**. It does **not** build **NSIS** installers.
+
+Maintainers edit **`frontend/public/desktop-downloads.json`** (and the bundled twin) manually after a tag. Today **`platforms.windows`** holds the portable artifact; **`platforms.linux`** and **`platforms.macos`** are **`null`** — there is **no** Linux desktop row to refresh from this pipeline. Restoring Linux or macOS **packaged** artifacts would be a deliberate product + CI decision (new targets and jobs), not implied by older Release files.
 
 ### Checksum strategy
 
@@ -66,12 +68,12 @@ electron-builder emits (see `desktop/package.json` → `build.win.*`):
 Fill after review:
 
 ```text
-Pipeline status: READY_TO_IMPLEMENT_RELEASE_PIPELINE (Windows tag-only) /
+Pipeline status: READY_TO_IMPLEMENT_RELEASE_PIPELINE (Windows portable tag-only) /
                   KEEP_MANUAL_RELEASE_FOR_NOW /
                   NO_GO
 
-Linux AppImage CI: defer until pack targets restored
+Non-Windows packaged desktop: not published from this repo (see SUPPORT_MATRIX.md)
 Manifest auto-merge: KEEP_MANUAL (documented above)
 ```
 
-Current recommendation: **`READY_TO_IMPLEMENT_RELEASE_PIPELINE`** for **Windows** **tag pushes** **`+`** **manual manifest** **`—`** **`Linux`** **AppImage CI** ⇒ **`KEEP_MANUAL_RELEASE_FOR_NOW`** **until packaging restored**.
+Current recommendation: **`READY_TO_IMPLEMENT_RELEASE_PIPELINE`** for **Windows portable** **tag pushes** **`+`** **manual manifest** update afterward. **NSIS** and **non-Windows** packaged desktops stay **out of this workflow** until explicitly scoped.
