@@ -370,6 +370,11 @@ async function readFastApiDetail(res: Response): Promise<string | null> {
     const j = (await res.json()) as { detail?: unknown };
     const d = j?.detail;
     if (typeof d === "string") return d;
+    if (typeof d === "object" && d !== null) {
+      const err = (d as { error?: { message?: string } }).error;
+      const msg = err?.message?.trim();
+      if (msg) return msg;
+    }
     if (typeof d === "object" && d !== null && "detail" in d) {
       return String((d as { detail?: string }).detail ?? "");
     }
@@ -684,7 +689,7 @@ export function shortenHamApiErrorMessage(raw: string, maxLen = 120): string {
 export async function launchCursorAgent(
   body: LaunchCursorAgentRequest,
 ): Promise<Record<string, unknown>> {
-  const res = await fetch(apiUrl("/api/cursor/agents/launch"), {
+  const res = await hamApiFetch("/api/cursor/agents/launch", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
