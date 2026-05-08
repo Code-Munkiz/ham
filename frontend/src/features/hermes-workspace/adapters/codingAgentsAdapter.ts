@@ -13,9 +13,11 @@
 import {
   fetchCursorCredentialsStatus,
   launchCursorAgent,
+  shortenHamApiErrorMessage,
   type LaunchCursorAgentRequest,
 } from "@/lib/ham/api";
 import type { CursorCredentialsStatus } from "@/lib/ham/types";
+import { CODING_AGENT_LABELS } from "@/features/hermes-workspace/screens/coding-agents/codingAgentLabels";
 
 /** Normie-friendly readiness for the single launchable provider in MVP. */
 export type CodingAgentReadiness = "ready" | "needs_setup";
@@ -28,6 +30,31 @@ const CURSOR_TERMINAL_OK = new Set(["FINISHED", "COMPLETED", "SUCCEEDED", "SUCCE
 
 /** Strings the API may return when a Cursor Cloud Agent run has clearly failed. */
 const CURSOR_TERMINAL_FAIL = new Set(["FAILED", "ERROR", "ERRORED", "CANCELLED", "CANCELED"]);
+
+/** Map raw launch errors to normie-friendly copy (no status codes or API paths in primary UI). */
+export function userFacingLaunchFailureMessage(raw: string): string {
+  const normalized = raw.replace(/\s+/g, " ").trim();
+  const t = normalized.toLowerCase();
+  if (
+    t.includes("clerk_session_required") ||
+    t.includes("ham_clerk_require_auth") ||
+    t.includes("ham_clerk_enforce_email")
+  ) {
+    return CODING_AGENT_LABELS.launchSessionAuthorizeHelp;
+  }
+  if (
+    t.includes("rejected this api key") ||
+    (t.includes("cursor") && t.includes("rejected") && t.includes("api key"))
+  ) {
+    return CODING_AGENT_LABELS.launchCursorConnectionHelp;
+  }
+  const shortened = shortenHamApiErrorMessage(normalized);
+  const st = shortened.toLowerCase();
+  if (st === "http 401" || /\b401\b/.test(st)) {
+    return CODING_AGENT_LABELS.launchCursorConnectionHelp;
+  }
+  return shortened;
+}
 
 /**
  * Map any cursor-side status string to the friendly run status used in
@@ -196,10 +223,11 @@ export async function launchNewCodingTask(input: NewCodingTaskFormInput): Promis
     const id = typeof resp.id === "string" && resp.id.trim() ? resp.id.trim() : null;
     return { ok: true, cursorAgentId: id, errorMessage: null };
   } catch (e) {
+    const raw = e instanceof Error ? e.message : String(e);
     return {
       ok: false,
       cursorAgentId: null,
-      errorMessage: e instanceof Error ? e.message : String(e),
+      errorMessage: userFacingLaunchFailureMessage(raw),
     };
   }
 }

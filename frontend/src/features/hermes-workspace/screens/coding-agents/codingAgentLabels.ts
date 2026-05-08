@@ -48,6 +48,11 @@ export const CODING_AGENT_LABELS = {
 
   launchedToast: "Launched. Track progress under Operations.",
   launchFailedToast: "Couldn't launch. Check the details and try again.",
+  /** After a failed launch when Cursor credentials are invalid or rejected upstream. */
+  launchCursorConnectionHelp:
+    "Cursor rejected the launch. Check the Cursor connection in Settings.",
+  /** When Ham could not authorize the request (session). */
+  launchSessionAuthorizeHelp: "We could not authorize that launch. Sign in again, then try again.",
 
   validationProjectRequired: "Pick a project.",
   validationRepositoryRequired: "Repository URL is required.",

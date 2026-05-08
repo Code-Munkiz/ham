@@ -27,6 +27,11 @@ describe("CODING_AGENT_LABELS — locked product copy", () => {
     expect(CODING_AGENT_LABELS.statusFailed).toBe("Failed");
   });
 
+  it("uses friendly copy for launch failures", () => {
+    expect(CODING_AGENT_LABELS.launchCursorConnectionHelp).toContain("Settings");
+    expect(CODING_AGENT_LABELS.launchSessionAuthorizeHelp).toContain("Sign in");
+  });
+
   it("never leaks internal vocabulary in any public-facing label", () => {
     const banned = [
       "ControlPlaneRun",

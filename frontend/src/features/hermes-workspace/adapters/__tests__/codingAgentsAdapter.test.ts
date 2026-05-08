@@ -1,12 +1,16 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import * as api from "@/lib/ham/api";
 import {
   buildLaunchRequest,
   buildPreview,
   deriveCodingAgentRunStatus,
   deriveCursorReadiness,
+  launchNewCodingTask,
+  userFacingLaunchFailureMessage,
   validateNewCodingTaskForm,
   type NewCodingTaskFormInput,
 } from "@/features/hermes-workspace/adapters/codingAgentsAdapter";
+import { CODING_AGENT_LABELS } from "@/features/hermes-workspace/screens/coding-agents/codingAgentLabels";
 import type { CursorCredentialsStatus } from "@/lib/ham/types";
 
 const VALIDATION_COPY = {
@@ -41,6 +45,10 @@ function credentialsStatus(
     ...overrides,
   };
 }
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 // ---------------------------------------------------------------------------
 // Readiness
@@ -233,5 +241,53 @@ describe("buildPreview", () => {
     const p = buildPreview(input({ taskPrompt: long }));
     expect(p.taskPromptPreview.length).toBeLessThanOrEqual(600);
     expect(p.taskPromptPreview.endsWith("…")).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Launch UX (normie errors + auth parity with credentials-status)
+// ---------------------------------------------------------------------------
+
+describe("userFacingLaunchFailureMessage", () => {
+  it("maps Cursor API key rejection to Settings copy (no 401 in output)", () => {
+    const msg = userFacingLaunchFailureMessage("Cursor rejected this API key (401).");
+    expect(msg).toBe(CODING_AGENT_LABELS.launchCursorConnectionHelp);
+    expect(msg.toLowerCase()).not.toContain("401");
+  });
+
+  it("maps Clerk session gate copy to sign-in guidance", () => {
+    expect(userFacingLaunchFailureMessage("Code: CLERK_SESSION_REQUIRED — use Bearer token")).toBe(
+      CODING_AGENT_LABELS.launchSessionAuthorizeHelp,
+    );
+  });
+
+  it("maps bare HTTP 401 fallback to Cursor connection copy", () => {
+    expect(userFacingLaunchFailureMessage("HTTP 401")).toBe(
+      CODING_AGENT_LABELS.launchCursorConnectionHelp,
+    );
+  });
+
+  it("passes through other errors shortened", () => {
+    expect(userFacingLaunchFailureMessage("Cursor launch error: rate limited")).toContain("rate");
+  });
+});
+
+describe("launchNewCodingTask", () => {
+  it("returns agent id on success", async () => {
+    vi.spyOn(api, "launchCursorAgent").mockResolvedValue({ id: "bc-win" });
+    const out = await launchNewCodingTask(input());
+    expect(out.ok).toBe(true);
+    expect(out.cursorAgentId).toBe("bc-win");
+    expect(out.errorMessage).toBeNull();
+  });
+
+  it("returns friendly copy when launch rejects credentials", async () => {
+    vi.spyOn(api, "launchCursorAgent").mockRejectedValue(
+      new Error("Cursor rejected this API key (401)."),
+    );
+    const out = await launchNewCodingTask(input());
+    expect(out.ok).toBe(false);
+    expect(out.cursorAgentId).toBeNull();
+    expect(out.errorMessage).toBe(CODING_AGENT_LABELS.launchCursorConnectionHelp);
   });
 });
