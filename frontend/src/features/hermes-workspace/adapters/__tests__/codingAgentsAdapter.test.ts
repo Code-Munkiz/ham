@@ -8,9 +8,11 @@ import {
   deriveCursorReadiness,
   deriveDroidRunStatus,
   droidRunStatusLabel,
+  fetchDroidAuditRunsForProject,
   launchDroidAuditFlow,
   launchNewCodingTask,
   previewDroidAuditFlow,
+  userFacingDroidPreviewFailureMessage,
   userFacingLaunchFailureMessage,
   validateNewCodingTaskForm,
   validateNewDroidAuditForm,
@@ -403,12 +405,135 @@ describe("previewDroidAuditFlow", () => {
     }
   });
 
-  it("returns shortened error message on failure", async () => {
+  it("returns generic friendly message on unmapped failure (never raw error text)", async () => {
     vi.spyOn(api, "previewDroidAudit").mockRejectedValue(new Error("boom"));
     const out = await previewDroidAuditFlow(auditInput());
     expect(out.ok).toBe(false);
     if (out.ok === false) {
-      expect(out.errorMessage).toContain("boom");
+      expect(out.errorMessage).toBe(CODING_AGENT_LABELS.auditPreviewFailed);
+      expect(out.errorMessage).not.toContain("boom");
+      expect(out.errorMessage).not.toContain("HTTP");
+      expect(out.errorMessage).not.toContain("/api/");
+    }
+  });
+
+  it("maps 404 / Not Found to auditDeploymentNotReady", async () => {
+    vi.spyOn(api, "previewDroidAudit").mockRejectedValue(new Error("Not Found"));
+    const out = await previewDroidAuditFlow(auditInput());
+    expect(out.ok).toBe(false);
+    if (out.ok === false) {
+      expect(out.errorMessage).toBe(CODING_AGENT_LABELS.auditDeploymentNotReady);
+    }
+  });
+
+  it("maps 422 to auditPreviewValidationFailed", async () => {
+    vi.spyOn(api, "previewDroidAudit").mockRejectedValue(new Error("HTTP 422"));
+    const out = await previewDroidAuditFlow(auditInput());
+    expect(out.ok).toBe(false);
+    if (out.ok === false) {
+      expect(out.errorMessage).toBe(CODING_AGENT_LABELS.auditPreviewValidationFailed);
+    }
+  });
+
+  it("maps Clerk session errors to sign-in copy", async () => {
+    vi.spyOn(api, "previewDroidAudit").mockRejectedValue(
+      new Error("CLERK_SESSION_REQUIRED — use Bearer token"),
+    );
+    const out = await previewDroidAuditFlow(auditInput());
+    expect(out.ok).toBe(false);
+    if (out.ok === false) {
+      expect(out.errorMessage).toBe(CODING_AGENT_LABELS.launchSessionAuthorizeHelp);
+    }
+  });
+});
+
+describe("userFacingDroidPreviewFailureMessage", () => {
+  it.each([
+    ["Not Found"],
+    ["HTTP 404"],
+    ["404 — PROJECT_NOT_FOUND"],
+    ["DROID_AUDIT_WORKFLOW_MISSING"],
+  ])("maps %s to deployment-not-ready copy", (raw) => {
+    expect(userFacingDroidPreviewFailureMessage(raw)).toBe(
+      CODING_AGENT_LABELS.auditDeploymentNotReady,
+    );
+  });
+
+  it.each([["HTTP 422"], ["validation error: project_id"], ["422 Unprocessable Entity"]])(
+    "maps %s to preview-validation-failed copy",
+    (raw) => {
+      expect(userFacingDroidPreviewFailureMessage(raw)).toBe(
+        CODING_AGENT_LABELS.auditPreviewValidationFailed,
+      );
+    },
+  );
+
+  it("never returns raw HTTP / Not Found / API path text", () => {
+    const samples = ["HTTP 500", "EOF", "Not Found", "HTTP 422", "/api/droid/preview"];
+    for (const raw of samples) {
+      const msg = userFacingDroidPreviewFailureMessage(raw);
+      expect(msg.toLowerCase()).not.toContain("http 5");
+      expect(msg.toLowerCase()).not.toContain("not found");
+      expect(msg).not.toContain("/api/");
+    }
+  });
+});
+
+describe("fetchDroidAuditRunsForProject", () => {
+  it("does not call the API when projectId is null/empty (avoids 422)", async () => {
+    const spy = vi.spyOn(api, "fetchDroidAuditRuns").mockResolvedValue([]);
+    const out = await fetchDroidAuditRunsForProject(null);
+    expect(spy).not.toHaveBeenCalled();
+    expect(out.ok).toBe(true);
+    if (out.ok === true) {
+      expect(out.runs).toEqual([]);
+      expect(out.reason).toBe("no_project");
+    }
+  });
+
+  it("does not call the API for whitespace-only projectId", async () => {
+    const spy = vi.spyOn(api, "fetchDroidAuditRuns").mockResolvedValue([]);
+    const out = await fetchDroidAuditRunsForProject("   ");
+    expect(spy).not.toHaveBeenCalled();
+    expect(out.ok).toBe(true);
+    if (out.ok === true) {
+      expect(out.reason).toBe("no_project");
+    }
+  });
+
+  it("calls the API with project_id when provided", async () => {
+    const spy = vi.spyOn(api, "fetchDroidAuditRuns").mockImplementation(async (projectId, opts) => {
+      expect(projectId).toBe("project.demo");
+      expect(opts?.limit).toBe(25);
+      return [];
+    });
+    const out = await fetchDroidAuditRunsForProject("project.demo");
+    expect(spy).toHaveBeenCalled();
+    expect(out.ok).toBe(true);
+    if (out.ok === true) {
+      expect(out.runs).toEqual([]);
+      expect("reason" in out ? out.reason : undefined).toBeUndefined();
+    }
+  });
+
+  it("trims project_id before passing to API", async () => {
+    let received: string | null | undefined = undefined;
+    vi.spyOn(api, "fetchDroidAuditRuns").mockImplementation(async (projectId) => {
+      received = projectId;
+      return [];
+    });
+    await fetchDroidAuditRunsForProject("  project.demo  ");
+    expect(received).toBe("project.demo");
+  });
+
+  it("maps any thrown error to friendly auditRunsLoadFailed (never raw text)", async () => {
+    vi.spyOn(api, "fetchDroidAuditRuns").mockRejectedValue(new Error("HTTP 422"));
+    const out = await fetchDroidAuditRunsForProject("project.demo");
+    expect(out.ok).toBe(false);
+    if (out.ok === false) {
+      expect(out.errorMessage).toBe(CODING_AGENT_LABELS.auditRunsLoadFailed);
+      expect(out.errorMessage).not.toContain("422");
+      expect(out.errorMessage).not.toContain("HTTP");
     }
   });
 });
@@ -437,7 +562,7 @@ describe("launchDroidAuditFlow", () => {
     expect(out.hamRunId).toBe("11111111-1111-1111-1111-111111111111");
   });
 
-  it("propagates blocking_reason on failure payload", async () => {
+  it("masks server blocking_reason behind friendly copy (never leaks raw exec details)", async () => {
     vi.spyOn(api, "launchDroidAudit").mockResolvedValue({
       kind: "droid_audit_launch",
       project_id: "project.demo",
@@ -457,6 +582,22 @@ describe("launchDroidAuditFlow", () => {
       baseRevision: "rev-1",
     });
     expect(out.ok).toBe(false);
-    expect(out.errorMessage).toContain("failed");
+    expect(out.errorMessage).toBe(CODING_AGENT_LABELS.auditPreviewFailed);
+    expect(out.errorMessage).not.toContain("exit");
+    expect(out.errorMessage).not.toContain("droid exec");
+  });
+
+  it("maps thrown 404 from launch to deployment-not-ready copy", async () => {
+    vi.spyOn(api, "launchDroidAudit").mockRejectedValue(new Error("Not Found"));
+    const out = await launchDroidAuditFlow(auditInput(), {
+      projectId: "project.demo",
+      projectName: "Demo",
+      taskPromptPreview: "audit",
+      summaryPreview: "",
+      proposalDigest: "a".repeat(64),
+      baseRevision: "rev-1",
+    });
+    expect(out.ok).toBe(false);
+    expect(out.errorMessage).toBe(CODING_AGENT_LABELS.auditDeploymentNotReady);
   });
 });

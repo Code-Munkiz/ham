@@ -20,6 +20,7 @@ export function CodingAgentRunsList({
 }) {
   const [runs, setRuns] = React.useState<ControlPlaneRunPublic[]>([]);
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
+  const [noProject, setNoProject] = React.useState<boolean>(!projectId);
   const [loading, setLoading] = React.useState(true);
 
   const refresh = React.useCallback(async () => {
@@ -28,9 +29,11 @@ export function CodingAgentRunsList({
     if (out.ok === true) {
       setRuns(out.runs);
       setErrorMessage(null);
+      setNoProject(out.reason === "no_project");
     } else {
       setErrorMessage(out.errorMessage);
       setRuns([]);
+      setNoProject(false);
     }
     setLoading(false);
   }, [projectId]);
@@ -58,7 +61,17 @@ export function CodingAgentRunsList({
         </Button>
       </header>
       {errorMessage && <p className="text-xs text-amber-300/90">{errorMessage}</p>}
-      {!loading && runs.length === 0 && !errorMessage && (
+      {!loading && runs.length === 0 && !errorMessage && noProject && (
+        <div className="rounded-xl border border-dashed border-[var(--theme-border)] bg-[var(--theme-bg)] p-3">
+          <p className="text-sm font-medium text-[var(--theme-text)]">
+            {CODING_AGENT_LABELS.auditNoProjectTitle}
+          </p>
+          <p className="mt-1 text-xs text-[var(--theme-muted)]">
+            {CODING_AGENT_LABELS.auditNoProjectBody}
+          </p>
+        </div>
+      )}
+      {!loading && runs.length === 0 && !errorMessage && !noProject && (
         <div className="rounded-xl border border-dashed border-[var(--theme-border)] bg-[var(--theme-bg)] p-3">
           <p className="text-sm font-medium text-[var(--theme-text)]">
             {CODING_AGENT_LABELS.auditNoRunsTitle}

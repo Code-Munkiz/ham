@@ -37,6 +37,14 @@ describe("CODING_AGENT_LABELS — locked product copy", () => {
     expect(CODING_AGENT_LABELS.chooserDroidTitle).toContain("Factory Droid");
   });
 
+  it("uses friendly copy for audit failure / no-project / load-failed states", () => {
+    expect(CODING_AGENT_LABELS.auditNoProjectTitle.toLowerCase()).toContain("project");
+    expect(CODING_AGENT_LABELS.auditDeploymentNotReady.toLowerCase()).toContain("deployment");
+    expect(CODING_AGENT_LABELS.auditPreviewFailed.toLowerCase()).toContain("try again");
+    expect(CODING_AGENT_LABELS.auditPreviewValidationFailed.toLowerCase()).toContain("try again");
+    expect(CODING_AGENT_LABELS.auditRunsLoadFailed.toLowerCase()).toContain("try again");
+  });
+
   it("uses friendly copy for launch failures", () => {
     expect(CODING_AGENT_LABELS.launchCursorConnectionHelp).toContain("Settings");
     expect(CODING_AGENT_LABELS.launchSessionAuthorizeHelp).toContain("Sign in");
@@ -65,6 +73,14 @@ describe("CODING_AGENT_LABELS — locked product copy", () => {
       "HAM_CURSOR_AGENT_LAUNCH_TOKEN",
       "HAM_DROID_EXEC_TOKEN",
       "/api/",
+      "safe_edit_low",
+      "workflow_id",
+      "requires_launch_token",
+      "base_revision",
+      "REGISTRY_REVISION",
+      "HTTP 404",
+      "HTTP 422",
+      "Not Found",
     ];
     for (const [key, value] of Object.entries(CODING_AGENT_LABELS)) {
       for (const term of banned) {

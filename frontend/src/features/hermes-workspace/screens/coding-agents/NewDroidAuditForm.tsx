@@ -3,12 +3,12 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { ProjectRecord } from "@/lib/ham/types";
 import {
-  buildDroidAuditPreviewView,
+  launchDroidAuditFlow,
+  previewDroidAuditFlow,
   validateNewDroidAuditForm,
   type DroidAuditPreview,
   type NewDroidAuditFormInput,
 } from "../../adapters/codingAgentsAdapter";
-import { previewDroidAudit, launchDroidAudit } from "@/lib/ham/api";
 import { CODING_AGENT_LABELS } from "./codingAgentLabels";
 
 interface AuditFormState {
@@ -55,41 +55,30 @@ export function NewDroidAuditForm({
     setErrors(v.errors);
     if (!v.ok) return;
     setErrorMessage(null);
-    try {
-      const payload = await previewDroidAudit({
-        project_id: input.projectId,
-        user_prompt: input.taskPrompt,
-      });
-      setPreview(buildDroidAuditPreviewView(payload));
-      setStage("preview");
-    } catch (e) {
-      setErrorMessage(e instanceof Error ? e.message : String(e));
+    const out = await previewDroidAuditFlow(input);
+    if (out.ok === false) {
+      setErrorMessage(out.errorMessage);
+      return;
     }
+    setPreview(out.preview);
+    setStage("preview");
   }
 
   async function approve() {
     if (!preview) return;
     setStage("launching");
     setErrorMessage(null);
-    try {
-      const payload = await launchDroidAudit({
-        project_id: form.projectId,
-        user_prompt: form.taskPrompt,
-        proposal_digest: preview.proposalDigest,
-        base_revision: preview.baseRevision,
-        confirmed: true,
-      });
-      if (!payload.ok) {
-        setErrorMessage(payload.blocking_reason ?? CODING_AGENT_LABELS.launchFailedToast);
-        setStage("preview");
-        return;
-      }
-      setStage("launched");
-      onLaunched(payload.ham_run_id ?? null);
-    } catch (e) {
-      setErrorMessage(e instanceof Error ? e.message : String(e));
+    const out = await launchDroidAuditFlow(
+      { projectId: form.projectId, taskPrompt: form.taskPrompt },
+      preview,
+    );
+    if (!out.ok) {
+      setErrorMessage(out.errorMessage ?? CODING_AGENT_LABELS.auditPreviewFailed);
       setStage("preview");
+      return;
     }
+    setStage("launched");
+    onLaunched(out.hamRunId);
   }
 
   if (stage === "preview" || stage === "launching") {

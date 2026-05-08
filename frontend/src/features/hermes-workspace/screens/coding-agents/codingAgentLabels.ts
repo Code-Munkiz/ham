@@ -46,6 +46,19 @@ export const CODING_AGENT_LABELS = {
   auditLaunchedToast: "Audit started. Track progress below.",
   auditNoRunsTitle: "No audits yet",
   auditNoRunsBody: "Approve a new audit to see it here.",
+  /** Shown when no project is selected for the audits list. */
+  auditNoProjectTitle: "Pick a project to see audits",
+  auditNoProjectBody: "Choose a project, then we'll show recent audits for it here.",
+  /** Shown when the audits list could not load for any reason. Never includes raw HTTP/path text. */
+  auditRunsLoadFailed: "Couldn't load recent audits. Try again.",
+  /** Mapped from preview/launch 404 — service hasn't picked up the new lane yet. */
+  auditDeploymentNotReady:
+    "Factory Droid audit is not available in this deployment yet. Try again after the service finishes updating.",
+  /** Mapped from preview validation issues. Never leaks Pydantic / FastAPI detail. */
+  auditPreviewValidationFailed:
+    "We couldn't review that audit. Check your project and prompt, then try again.",
+  /** Generic preview/launch failure — keeps the user moving without raw error text. */
+  auditPreviewFailed: "Factory Droid could not start the audit. Please try again.",
 
   formProjectLabel: "Project",
   formProjectPlaceholder: "Pick a project",

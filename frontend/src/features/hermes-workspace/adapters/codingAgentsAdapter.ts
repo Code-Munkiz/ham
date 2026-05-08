@@ -301,6 +301,38 @@ export interface DroidAuditLaunchOutcome {
   payload: DroidAuditLaunchPayload | null;
 }
 
+/**
+ * Map any raw error string thrown by the audit preview/launch HTTP layer to
+ * normie-friendly copy. The mapper deliberately swallows raw HTTP codes,
+ * FastAPI detail strings, and API path segments so the screen never renders
+ * "HTTP 422", "Not Found", or "/api/..." to the user.
+ */
+export function userFacingDroidPreviewFailureMessage(raw: string): string {
+  const t = (raw ?? "").toLowerCase();
+  if (
+    t.includes("clerk_session_required") ||
+    t.includes("ham_clerk_require_auth") ||
+    t.includes("ham_clerk_enforce_email")
+  ) {
+    return CODING_AGENT_LABELS.launchSessionAuthorizeHelp;
+  }
+  // 404 from the deployed API means the audit lane has not rolled out to the host yet
+  // (route returns FastAPI default `{"detail":"Not Found"}`), or the project does not exist.
+  if (
+    t.includes("not found") ||
+    /\b404\b/.test(t) ||
+    t.includes("project_not_found") ||
+    t.includes("droid_audit_workflow_missing")
+  ) {
+    return CODING_AGENT_LABELS.auditDeploymentNotReady;
+  }
+  // 422 from FastAPI / Pydantic validation: don't leak field names or schemas.
+  if (/\b422\b/.test(t) || t.includes("validation error") || t.includes("requires_confirmation")) {
+    return CODING_AGENT_LABELS.auditPreviewValidationFailed;
+  }
+  return CODING_AGENT_LABELS.auditPreviewFailed;
+}
+
 export async function previewDroidAuditFlow(
   input: NewDroidAuditFormInput,
 ): Promise<{ ok: true; preview: DroidAuditPreview } | { ok: false; errorMessage: string }> {
@@ -312,7 +344,7 @@ export async function previewDroidAuditFlow(
     return { ok: true, preview: buildDroidAuditPreviewView(payload) };
   } catch (e) {
     const raw = e instanceof Error ? e.message : String(e);
-    return { ok: false, errorMessage: shortenHamApiErrorMessage(raw) };
+    return { ok: false, errorMessage: userFacingDroidPreviewFailureMessage(raw) };
   }
 }
 
@@ -331,7 +363,7 @@ export async function launchDroidAuditFlow(
     return {
       ok: payload.ok,
       hamRunId: payload.ham_run_id,
-      errorMessage: payload.ok ? null : (payload.blocking_reason ?? null),
+      errorMessage: payload.ok ? null : CODING_AGENT_LABELS.auditPreviewFailed,
       payload,
     };
   } catch (e) {
@@ -339,7 +371,7 @@ export async function launchDroidAuditFlow(
     return {
       ok: false,
       hamRunId: null,
-      errorMessage: shortenHamApiErrorMessage(raw),
+      errorMessage: userFacingDroidPreviewFailureMessage(raw),
       payload: null,
     };
   }
@@ -373,14 +405,30 @@ export function droidRunStatusLabel(status: DroidAuditRunStatus): string {
   }
 }
 
+/**
+ * Fetch recent Factory Droid audits for one project.
+ *
+ * - When ``projectId`` is empty/null we deliberately do **not** call the API:
+ *   the runs endpoint requires a registered project id, so calling without
+ *   one would surface a generic 422 to the user. Instead we return a typed
+ *   no-project signal so the UI can render a friendly empty state.
+ * - All other errors are mapped to friendly copy; raw HTTP codes, FastAPI
+ *   detail strings, and API path segments never reach the UI.
+ */
 export async function fetchDroidAuditRunsForProject(
   projectId: string | null,
-): Promise<{ ok: true; runs: ControlPlaneRunPublic[] } | { ok: false; errorMessage: string }> {
+): Promise<
+  | { ok: true; runs: ControlPlaneRunPublic[]; reason?: "no_project" }
+  | { ok: false; errorMessage: string }
+> {
+  const trimmed = (projectId ?? "").trim();
+  if (!trimmed) {
+    return { ok: true, runs: [], reason: "no_project" };
+  }
   try {
-    const runs = await fetchDroidAuditRuns(projectId ?? null, { limit: 25 });
+    const runs = await fetchDroidAuditRuns(trimmed, { limit: 25 });
     return { ok: true, runs };
-  } catch (e) {
-    const raw = e instanceof Error ? e.message : String(e);
-    return { ok: false, errorMessage: shortenHamApiErrorMessage(raw) };
+  } catch {
+    return { ok: false, errorMessage: CODING_AGENT_LABELS.auditRunsLoadFailed };
   }
 }
