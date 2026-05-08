@@ -95,6 +95,12 @@ export function WorkspaceCodingAgentsScreen() {
       setProjects([]);
     } else {
       setProjects(p.projects);
+      setAuditProjectId((current) => {
+        if (current && p.projects.some((proj) => proj.id === current)) {
+          return current;
+        }
+        return p.projects[0]?.id ?? null;
+      });
     }
     setReadinessLoading(false);
   }, []);
