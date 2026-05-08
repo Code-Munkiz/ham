@@ -24,6 +24,28 @@ export const CODING_AGENT_LABELS = {
   statusInProgress: "In progress",
   statusComplete: "Complete",
   statusFailed: "Failed",
+  statusRunning: "Running",
+  statusNeedsAttention: "Needs attention",
+
+  chooserTitle: "Pick a coding agent",
+  chooserSubtitle: "Different agents are good at different things. Pick what fits this task.",
+  chooserCursorTitle: "Cursor — start a coding task",
+  chooserCursorBody:
+    "Hand off a freeform coding task to Cursor in the cloud. Best when you want changes made for you.",
+  chooserDroidTitle: "Factory Droid — audit your repository",
+  chooserDroidBody:
+    "Run an approved read-only audit on a project. Best when you want findings, not changes.",
+
+  auditTitle: "Factory Droid audit",
+  auditCta: "New audit",
+  auditTaskLabel: "What should we look at?",
+  auditTaskPlaceholder:
+    "Describe what you want audited. For example: review for security risks, or summarize how the auth flow works.",
+  auditReadOnlyPill: "Read-only — no files will be changed.",
+  auditPreviewIntro: "This is what we'll look at when you approve.",
+  auditLaunchedToast: "Audit started. Track progress below.",
+  auditNoRunsTitle: "No audits yet",
+  auditNoRunsBody: "Approve a new audit to see it here.",
 
   formProjectLabel: "Project",
   formProjectPlaceholder: "Pick a project",
@@ -60,7 +82,7 @@ export const CODING_AGENT_LABELS = {
 
   /** Secondary mention only — never primary. */
   comingSoonNote:
-    "More coding agents are on the way. For now, Cursor is the only launchable one from this screen.",
+    "More coding agents are on the way. Today you can hand off to Cursor or run an approved audit with Factory Droid.",
 } as const;
 
 export type CodingAgentLabels = typeof CODING_AGENT_LABELS;

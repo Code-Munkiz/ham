@@ -1,14 +1,21 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as api from "@/lib/ham/api";
 import {
+  buildDroidAuditPreviewView,
   buildLaunchRequest,
   buildPreview,
   deriveCodingAgentRunStatus,
   deriveCursorReadiness,
+  deriveDroidRunStatus,
+  droidRunStatusLabel,
+  launchDroidAuditFlow,
   launchNewCodingTask,
+  previewDroidAuditFlow,
   userFacingLaunchFailureMessage,
   validateNewCodingTaskForm,
+  validateNewDroidAuditForm,
   type NewCodingTaskFormInput,
+  type NewDroidAuditFormInput,
 } from "@/features/hermes-workspace/adapters/codingAgentsAdapter";
 import { CODING_AGENT_LABELS } from "@/features/hermes-workspace/screens/coding-agents/codingAgentLabels";
 import type { CursorCredentialsStatus } from "@/lib/ham/types";
@@ -289,5 +296,167 @@ describe("launchNewCodingTask", () => {
     expect(out.ok).toBe(false);
     expect(out.cursorAgentId).toBeNull();
     expect(out.errorMessage).toBe(CODING_AGENT_LABELS.launchCursorConnectionHelp);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Factory Droid — read-only audit lane
+// ---------------------------------------------------------------------------
+
+const AUDIT_VALIDATION_COPY = {
+  validationProjectRequired: "Pick a project.",
+  validationTaskRequired: "Describe what you want audited.",
+};
+
+function auditInput(overrides: Partial<NewDroidAuditFormInput> = {}): NewDroidAuditFormInput {
+  return {
+    projectId: "project.demo",
+    taskPrompt: "Audit security and architecture risks.",
+    ...overrides,
+  };
+}
+
+describe("validateNewDroidAuditForm", () => {
+  it("accepts a project + non-empty prompt", () => {
+    const v = validateNewDroidAuditForm(auditInput(), AUDIT_VALIDATION_COPY);
+    expect(v.ok).toBe(true);
+  });
+
+  it("rejects missing project id", () => {
+    const v = validateNewDroidAuditForm(auditInput({ projectId: " " }), AUDIT_VALIDATION_COPY);
+    expect(v.ok).toBe(false);
+    expect(v.errors.projectId).toBe(AUDIT_VALIDATION_COPY.validationProjectRequired);
+  });
+
+  it("rejects empty prompt", () => {
+    const v = validateNewDroidAuditForm(auditInput({ taskPrompt: "" }), AUDIT_VALIDATION_COPY);
+    expect(v.ok).toBe(false);
+    expect(v.errors.taskPrompt).toBe(AUDIT_VALIDATION_COPY.validationTaskRequired);
+  });
+});
+
+describe("deriveDroidRunStatus", () => {
+  it.each([["running"], ["RUNNING"], ["in_progress"]])("treats %s as running", (raw) => {
+    expect(deriveDroidRunStatus(raw)).toBe("running");
+  });
+  it.each([["succeeded"], ["complete"], ["completed"], ["ok"]])("treats %s as complete", (raw) => {
+    expect(deriveDroidRunStatus(raw)).toBe("complete");
+  });
+  it.each([["failed"], ["error"], ["errored"], ["cancelled"]])("treats %s as failed", (raw) => {
+    expect(deriveDroidRunStatus(raw)).toBe("failed");
+  });
+  it.each([["unknown"], [""], [null], [undefined], ["weird-state"]])(
+    "treats %s as needs_attention (never claims complete)",
+    (raw) => {
+      expect(deriveDroidRunStatus(raw as string | null | undefined)).toBe("needs_attention");
+    },
+  );
+});
+
+describe("droidRunStatusLabel", () => {
+  it("maps each status to the agreed friendly label", () => {
+    expect(droidRunStatusLabel("running")).toBe(CODING_AGENT_LABELS.statusRunning);
+    expect(droidRunStatusLabel("complete")).toBe(CODING_AGENT_LABELS.statusComplete);
+    expect(droidRunStatusLabel("failed")).toBe(CODING_AGENT_LABELS.statusFailed);
+    expect(droidRunStatusLabel("needs_attention")).toBe(CODING_AGENT_LABELS.statusNeedsAttention);
+  });
+});
+
+describe("buildDroidAuditPreviewView", () => {
+  it("trims and truncates the prompt for preview display", () => {
+    const long = "z".repeat(1_500);
+    const view = buildDroidAuditPreviewView({
+      kind: "droid_audit_preview",
+      project_id: "project.demo",
+      project_name: "Demo",
+      user_prompt: long,
+      summary_preview: "  some summary  ",
+      proposal_digest: "0".repeat(64),
+      base_revision: "rev-1",
+      is_readonly: true,
+      mutates: false,
+    });
+    expect(view.taskPromptPreview.length).toBeLessThanOrEqual(600);
+    expect(view.taskPromptPreview.endsWith("…")).toBe(true);
+    expect(view.summaryPreview).toBe("some summary");
+    expect(view.projectName).toBe("Demo");
+  });
+});
+
+describe("previewDroidAuditFlow", () => {
+  it("returns ok preview on success", async () => {
+    vi.spyOn(api, "previewDroidAudit").mockResolvedValue({
+      kind: "droid_audit_preview",
+      project_id: "project.demo",
+      project_name: "Demo",
+      user_prompt: "audit",
+      summary_preview: "summary",
+      proposal_digest: "a".repeat(64),
+      base_revision: "rev-1",
+      is_readonly: true,
+      mutates: false,
+    });
+    const out = await previewDroidAuditFlow(auditInput());
+    expect(out.ok).toBe(true);
+    if (out.ok) {
+      expect(out.preview.proposalDigest).toBe("a".repeat(64));
+    }
+  });
+
+  it("returns shortened error message on failure", async () => {
+    vi.spyOn(api, "previewDroidAudit").mockRejectedValue(new Error("boom"));
+    const out = await previewDroidAuditFlow(auditInput());
+    expect(out.ok).toBe(false);
+    if (out.ok === false) {
+      expect(out.errorMessage).toContain("boom");
+    }
+  });
+});
+
+describe("launchDroidAuditFlow", () => {
+  it("returns ham_run_id on success", async () => {
+    vi.spyOn(api, "launchDroidAudit").mockResolvedValue({
+      kind: "droid_audit_launch",
+      project_id: "project.demo",
+      ok: true,
+      ham_run_id: "11111111-1111-1111-1111-111111111111",
+      control_plane_status: "succeeded",
+      summary: "audit ok",
+      blocking_reason: null,
+      is_readonly: true,
+    });
+    const out = await launchDroidAuditFlow(auditInput(), {
+      projectId: "project.demo",
+      projectName: "Demo",
+      taskPromptPreview: "audit",
+      summaryPreview: "",
+      proposalDigest: "a".repeat(64),
+      baseRevision: "rev-1",
+    });
+    expect(out.ok).toBe(true);
+    expect(out.hamRunId).toBe("11111111-1111-1111-1111-111111111111");
+  });
+
+  it("propagates blocking_reason on failure payload", async () => {
+    vi.spyOn(api, "launchDroidAudit").mockResolvedValue({
+      kind: "droid_audit_launch",
+      project_id: "project.demo",
+      ok: false,
+      ham_run_id: null,
+      control_plane_status: "failed",
+      summary: null,
+      blocking_reason: "droid exec failed (exit 7)",
+      is_readonly: true,
+    });
+    const out = await launchDroidAuditFlow(auditInput(), {
+      projectId: "project.demo",
+      projectName: "Demo",
+      taskPromptPreview: "audit",
+      summaryPreview: "",
+      proposalDigest: "a".repeat(64),
+      baseRevision: "rev-1",
+    });
+    expect(out.ok).toBe(false);
+    expect(out.errorMessage).toContain("failed");
   });
 });

@@ -715,6 +715,103 @@ export function cloudAgentIdFromLaunchResponse(payload: Record<string, unknown>)
   return typeof id === "string" && id.trim() ? id.trim() : null;
 }
 
+/** Server preview shape for the read-only repository audit lane. */
+export interface DroidAuditPreviewPayload {
+  kind: "droid_audit_preview";
+  project_id: string;
+  project_name: string;
+  user_prompt: string;
+  summary_preview: string;
+  proposal_digest: string;
+  base_revision: string;
+  is_readonly: true;
+  mutates: false;
+}
+
+/** Server launch shape for the read-only repository audit lane. */
+export interface DroidAuditLaunchPayload {
+  kind: "droid_audit_launch";
+  project_id: string;
+  ok: boolean;
+  ham_run_id: string | null;
+  control_plane_status: string | null;
+  summary: string | null;
+  blocking_reason: string | null;
+  is_readonly: true;
+}
+
+export interface DroidAuditPreviewRequest {
+  project_id: string;
+  user_prompt: string;
+}
+
+export interface DroidAuditLaunchRequest {
+  project_id: string;
+  user_prompt: string;
+  proposal_digest: string;
+  base_revision: string;
+  confirmed: boolean;
+}
+
+export async function previewDroidAudit(
+  body: DroidAuditPreviewRequest,
+): Promise<DroidAuditPreviewPayload> {
+  const res = await hamApiFetch("/api/droid/preview", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      project_id: body.project_id.trim(),
+      user_prompt: body.user_prompt.trim(),
+    }),
+  });
+  if (!res.ok) {
+    const detail = (await readFastApiDetail(res)) ?? `HTTP ${res.status}`;
+    throw new Error(shortenHamApiErrorMessage(detail));
+  }
+  return res.json() as Promise<DroidAuditPreviewPayload>;
+}
+
+export async function launchDroidAudit(
+  body: DroidAuditLaunchRequest,
+): Promise<DroidAuditLaunchPayload> {
+  const res = await hamApiFetch("/api/droid/launch", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      project_id: body.project_id.trim(),
+      user_prompt: body.user_prompt.trim(),
+      proposal_digest: body.proposal_digest,
+      base_revision: body.base_revision,
+      confirmed: Boolean(body.confirmed),
+    }),
+  });
+  if (!res.ok) {
+    const detail = (await readFastApiDetail(res)) ?? `HTTP ${res.status}`;
+    throw new Error(shortenHamApiErrorMessage(detail));
+  }
+  return res.json() as Promise<DroidAuditLaunchPayload>;
+}
+
+/** First frontend consumer of `GET /api/control-plane-runs` for the audit lane. */
+export async function fetchDroidAuditRuns(
+  projectId: string | null,
+  opts?: { limit?: number; signal?: AbortSignal },
+): Promise<Array<import("./types").ControlPlaneRunPublic>> {
+  const params = new URLSearchParams();
+  params.set("provider", "factory_droid");
+  if (projectId && projectId.trim()) params.set("project_id", projectId.trim());
+  if (opts?.limit) params.set("limit", String(opts.limit));
+  const res = await hamApiFetch(`/api/control-plane-runs?${params.toString()}`, {
+    signal: opts?.signal,
+  });
+  if (!res.ok) {
+    const detail = (await readFastApiDetail(res)) ?? `HTTP ${res.status}`;
+    throw new Error(shortenHamApiErrorMessage(detail));
+  }
+  const body = (await res.json()) as { runs?: Array<import("./types").ControlPlaneRunPublic> };
+  return Array.isArray(body.runs) ? body.runs : [];
+}
+
 export type VercelHookMapping = {
   repo_key: string | null;
   mapping_tier: "mapped" | "global" | "unavailable";

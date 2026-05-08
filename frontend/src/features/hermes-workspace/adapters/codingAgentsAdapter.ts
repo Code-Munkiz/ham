@@ -12,11 +12,16 @@
 
 import {
   fetchCursorCredentialsStatus,
+  fetchDroidAuditRuns,
   launchCursorAgent,
+  launchDroidAudit,
+  previewDroidAudit,
   shortenHamApiErrorMessage,
+  type DroidAuditLaunchPayload,
+  type DroidAuditPreviewPayload,
   type LaunchCursorAgentRequest,
 } from "@/lib/ham/api";
-import type { CursorCredentialsStatus } from "@/lib/ham/types";
+import type { ControlPlaneRunPublic, CursorCredentialsStatus } from "@/lib/ham/types";
 import { CODING_AGENT_LABELS } from "@/features/hermes-workspace/screens/coding-agents/codingAgentLabels";
 
 /** Normie-friendly readiness for the single launchable provider in MVP. */
@@ -229,5 +234,153 @@ export async function launchNewCodingTask(input: NewCodingTaskFormInput): Promis
       cursorAgentId: null,
       errorMessage: userFacingLaunchFailureMessage(raw),
     };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Factory Droid — read-only repository audit lane
+// ---------------------------------------------------------------------------
+//
+// Distinct from Cursor: not a freeform agent. The audit lane only exposes the
+// approved read-only workflow on the server. The frontend never sees workflow
+// ids, registry revisions, or token gates, so the UI cannot widen the scope.
+
+/** Friendly run status used for both Cursor and Factory Droid runs. */
+export type DroidAuditRunStatus = "running" | "complete" | "failed" | "needs_attention";
+
+/** Inputs captured by the audit form (project + freeform "what to look at"). */
+export interface NewDroidAuditFormInput {
+  projectId: string;
+  taskPrompt: string;
+}
+
+export interface NewDroidAuditValidation {
+  ok: boolean;
+  errors: { projectId?: string; taskPrompt?: string };
+}
+
+export function validateNewDroidAuditForm(
+  input: NewDroidAuditFormInput,
+  copy: { validationProjectRequired: string; validationTaskRequired: string },
+): NewDroidAuditValidation {
+  const errors: NewDroidAuditValidation["errors"] = {};
+  if (!input.projectId.trim()) errors.projectId = copy.validationProjectRequired;
+  if (!input.taskPrompt.trim()) errors.taskPrompt = copy.validationTaskRequired;
+  return { ok: Object.keys(errors).length === 0, errors };
+}
+
+const AUDIT_PROMPT_MAX = 600;
+
+export interface DroidAuditPreview {
+  projectId: string;
+  projectName: string;
+  taskPromptPreview: string;
+  summaryPreview: string;
+  proposalDigest: string;
+  baseRevision: string;
+}
+
+export function buildDroidAuditPreviewView(payload: DroidAuditPreviewPayload): DroidAuditPreview {
+  const prompt = payload.user_prompt.trim();
+  const truncated =
+    prompt.length > AUDIT_PROMPT_MAX ? `${prompt.slice(0, AUDIT_PROMPT_MAX - 1)}…` : prompt;
+  return {
+    projectId: payload.project_id,
+    projectName: payload.project_name,
+    taskPromptPreview: truncated,
+    summaryPreview: (payload.summary_preview ?? "").trim(),
+    proposalDigest: payload.proposal_digest,
+    baseRevision: payload.base_revision,
+  };
+}
+
+export interface DroidAuditLaunchOutcome {
+  ok: boolean;
+  hamRunId: string | null;
+  errorMessage: string | null;
+  payload: DroidAuditLaunchPayload | null;
+}
+
+export async function previewDroidAuditFlow(
+  input: NewDroidAuditFormInput,
+): Promise<{ ok: true; preview: DroidAuditPreview } | { ok: false; errorMessage: string }> {
+  try {
+    const payload = await previewDroidAudit({
+      project_id: input.projectId,
+      user_prompt: input.taskPrompt,
+    });
+    return { ok: true, preview: buildDroidAuditPreviewView(payload) };
+  } catch (e) {
+    const raw = e instanceof Error ? e.message : String(e);
+    return { ok: false, errorMessage: shortenHamApiErrorMessage(raw) };
+  }
+}
+
+export async function launchDroidAuditFlow(
+  input: NewDroidAuditFormInput,
+  preview: DroidAuditPreview,
+): Promise<DroidAuditLaunchOutcome> {
+  try {
+    const payload = await launchDroidAudit({
+      project_id: input.projectId,
+      user_prompt: input.taskPrompt,
+      proposal_digest: preview.proposalDigest,
+      base_revision: preview.baseRevision,
+      confirmed: true,
+    });
+    return {
+      ok: payload.ok,
+      hamRunId: payload.ham_run_id,
+      errorMessage: payload.ok ? null : (payload.blocking_reason ?? null),
+      payload,
+    };
+  } catch (e) {
+    const raw = e instanceof Error ? e.message : String(e);
+    return {
+      ok: false,
+      hamRunId: null,
+      errorMessage: shortenHamApiErrorMessage(raw),
+      payload: null,
+    };
+  }
+}
+
+/**
+ * HAM `ControlPlaneRun` `status` is one of: `running`, `succeeded`, `failed`,
+ * `unknown`. Map to friendly labels. Anything we don't recognize is shown as
+ * "Needs attention" so the user can investigate, not "Complete".
+ */
+export function deriveDroidRunStatus(rawStatus: string | null | undefined): DroidAuditRunStatus {
+  const s = (rawStatus ?? "").trim().toLowerCase();
+  if (!s) return "needs_attention";
+  if (s === "running" || s === "in_progress") return "running";
+  if (s === "succeeded" || s === "complete" || s === "completed" || s === "ok") return "complete";
+  if (s === "failed" || s === "error" || s === "errored" || s === "cancelled") return "failed";
+  return "needs_attention";
+}
+
+/** Friendly label for a Factory Droid run row in the audits list. */
+export function droidRunStatusLabel(status: DroidAuditRunStatus): string {
+  switch (status) {
+    case "running":
+      return CODING_AGENT_LABELS.statusRunning;
+    case "complete":
+      return CODING_AGENT_LABELS.statusComplete;
+    case "failed":
+      return CODING_AGENT_LABELS.statusFailed;
+    default:
+      return CODING_AGENT_LABELS.statusNeedsAttention;
+  }
+}
+
+export async function fetchDroidAuditRunsForProject(
+  projectId: string | null,
+): Promise<{ ok: true; runs: ControlPlaneRunPublic[] } | { ok: false; errorMessage: string }> {
+  try {
+    const runs = await fetchDroidAuditRuns(projectId ?? null, { limit: 25 });
+    return { ok: true, runs };
+  } catch (e) {
+    const raw = e instanceof Error ? e.message : String(e);
+    return { ok: false, errorMessage: shortenHamApiErrorMessage(raw) };
   }
 }

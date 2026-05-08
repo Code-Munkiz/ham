@@ -1,6 +1,6 @@
 import * as React from "react";
 import { Link } from "react-router-dom";
-import { Bot, Plus, RefreshCw } from "lucide-react";
+import { Bot, Plus, RefreshCw, ScanLine } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -20,9 +20,12 @@ import {
   type NewCodingTaskFormInput,
 } from "../../adapters/codingAgentsAdapter";
 import { CodingAgentReadinessPill } from "./CodingAgentReadinessPill";
+import { CodingAgentChooser, type CodingAgentLane } from "./CodingAgentChooser";
+import { NewDroidAuditForm } from "./NewDroidAuditForm";
+import { CodingAgentRunsList } from "./CodingAgentRunsList";
 import { CODING_AGENT_LABELS } from "./codingAgentLabels";
 
-type Stage = "idle" | "form" | "preview" | "launching" | "launched";
+type Stage = "idle" | "chooser" | "form" | "preview" | "launching" | "launched" | "audit";
 
 interface FormState {
   projectId: string;
@@ -71,6 +74,8 @@ export function WorkspaceCodingAgentsScreen() {
 
   const [preview, setPreview] = React.useState<CodingTaskPreview | null>(null);
   const [launchedAgentId, setLaunchedAgentId] = React.useState<string | null>(null);
+  const [auditRunsRefreshKey, setAuditRunsRefreshKey] = React.useState(0);
+  const [auditProjectId, setAuditProjectId] = React.useState<string | null>(null);
 
   const refresh = React.useCallback(async () => {
     setReadinessLoading(true);
@@ -98,6 +103,10 @@ export function WorkspaceCodingAgentsScreen() {
     void refresh();
   }, [refresh]);
 
+  const droidReady = projects.length > 0;
+  const cursorLaunchable = readiness === "ready" && projects.length > 0;
+  const showChooser = cursorLaunchable && droidReady;
+
   const startNewTask = () => {
     setForm({
       ...EMPTY_FORM,
@@ -106,7 +115,22 @@ export function WorkspaceCodingAgentsScreen() {
     setErrors({});
     setPreview(null);
     setLaunchedAgentId(null);
-    setStage("form");
+    if (showChooser) {
+      setStage("chooser");
+      return;
+    }
+    if (cursorLaunchable) {
+      setStage("form");
+      return;
+    }
+    if (droidReady) {
+      setStage("audit");
+      return;
+    }
+  };
+
+  const pickLane = (next: CodingAgentLane) => {
+    setStage(next === "cursor" ? "form" : "audit");
   };
 
   const cancel = () => {
@@ -143,7 +167,7 @@ export function WorkspaceCodingAgentsScreen() {
     setStage("launched");
   };
 
-  const launchDisabled = readiness !== "ready" || readinessLoading || projects.length === 0;
+  const launchDisabled = readinessLoading || projects.length === 0;
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col gap-3 p-3 md:p-4">
@@ -182,6 +206,7 @@ export function WorkspaceCodingAgentsScreen() {
         readiness={readiness}
         readinessError={readinessError}
         readinessLoading={readinessLoading}
+        droidReady={droidReady}
       />
 
       {projectsError && (
@@ -198,7 +223,7 @@ export function WorkspaceCodingAgentsScreen() {
         />
       )}
 
-      {!readinessLoading && readiness !== "ready" && (
+      {!readinessLoading && readiness !== "ready" && !droidReady && (
         <WorkspaceSurfaceStateCard
           title={CODING_AGENT_LABELS.setupNeededTitle}
           description={CODING_AGENT_LABELS.setupNeededBody}
@@ -221,6 +246,28 @@ export function WorkspaceCodingAgentsScreen() {
               <Link to="/workspace/settings">{CODING_AGENT_LABELS.setupNeededOpenSettings}</Link>
             </Button>
           }
+        />
+      )}
+
+      {stage === "chooser" && (
+        <CodingAgentChooser
+          cursorReady={cursorLaunchable}
+          droidReady={droidReady}
+          onPick={pickLane}
+          onCancel={cancel}
+        />
+      )}
+
+      {stage === "audit" && (
+        <NewDroidAuditForm
+          projects={projects}
+          onCancel={cancel}
+          onLaunched={(_hamRunId) => {
+            toast.success(CODING_AGENT_LABELS.auditLaunchedToast, { duration: 6_000 });
+            setAuditProjectId(form.projectId || null);
+            setAuditRunsRefreshKey((k) => k + 1);
+            setStage("idle");
+          }}
         />
       )}
 
@@ -286,8 +333,12 @@ export function WorkspaceCodingAgentsScreen() {
         />
       )}
 
-      {stage === "idle" && readiness === "ready" && projects.length > 0 && (
+      {stage === "idle" && projects.length > 0 && (cursorLaunchable || droidReady) && (
         <IdleHero onStart={startNewTask} />
+      )}
+
+      {droidReady && (stage === "idle" || stage === "launched") && (
+        <CodingAgentRunsList projectId={auditProjectId} refreshKey={auditRunsRefreshKey} />
       )}
 
       <p className="mt-auto text-[10px] leading-relaxed text-[var(--theme-muted)]">
@@ -305,22 +356,32 @@ function ProviderRow({
   readiness,
   readinessError,
   readinessLoading,
+  droidReady,
 }: {
   readiness: CodingAgentReadiness;
   readinessError: string | null;
   readinessLoading: boolean;
+  droidReady: boolean;
 }) {
   return (
     <section className="flex flex-wrap items-center gap-3 rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-card)] px-4 py-3 shadow-[0_12px_40px_var(--theme-shadow)]">
-      <Bot className="h-4 w-4 text-[var(--theme-accent)]" />
-      <span className="text-sm font-semibold text-[var(--theme-text)]">Cursor</span>
-      {readinessLoading ? (
-        <span className="text-[10px] uppercase tracking-wider text-[var(--theme-muted)]">
-          Checking…
-        </span>
-      ) : (
-        <CodingAgentReadinessPill readiness={readiness} />
-      )}
+      <div className="flex items-center gap-2">
+        <Bot className="h-4 w-4 text-[var(--theme-accent)]" />
+        <span className="text-sm font-semibold text-[var(--theme-text)]">Cursor</span>
+        {readinessLoading ? (
+          <span className="text-[10px] uppercase tracking-wider text-[var(--theme-muted)]">
+            Checking…
+          </span>
+        ) : (
+          <CodingAgentReadinessPill readiness={readiness} />
+        )}
+      </div>
+      <span className="text-[var(--theme-muted)]">·</span>
+      <div className="flex items-center gap-2">
+        <ScanLine className="h-4 w-4 text-[var(--theme-accent)]" />
+        <span className="text-sm font-semibold text-[var(--theme-text)]">Factory Droid</span>
+        <CodingAgentReadinessPill readiness={droidReady ? "ready" : "needs_setup"} />
+      </div>
       {readinessError && <span className="text-[11px] text-amber-300/80">{readinessError}</span>}
     </section>
   );
