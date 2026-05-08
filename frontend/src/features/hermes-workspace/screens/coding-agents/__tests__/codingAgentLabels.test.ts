@@ -25,6 +25,16 @@ describe("CODING_AGENT_LABELS — locked product copy", () => {
     expect(CODING_AGENT_LABELS.statusInProgress).toBe("In progress");
     expect(CODING_AGENT_LABELS.statusComplete).toBe("Complete");
     expect(CODING_AGENT_LABELS.statusFailed).toBe("Failed");
+    expect(CODING_AGENT_LABELS.statusRunning).toBe("Running");
+    expect(CODING_AGENT_LABELS.statusNeedsAttention).toBe("Needs attention");
+  });
+
+  it("uses the agreed audit-flow labels", () => {
+    expect(CODING_AGENT_LABELS.auditTitle).toBe("Factory Droid audit");
+    expect(CODING_AGENT_LABELS.auditCta).toBe("New audit");
+    expect(CODING_AGENT_LABELS.auditReadOnlyPill).toContain("Read-only");
+    expect(CODING_AGENT_LABELS.chooserCursorTitle).toContain("Cursor");
+    expect(CODING_AGENT_LABELS.chooserDroidTitle).toContain("Factory Droid");
   });
 
   it("uses friendly copy for launch failures", () => {
