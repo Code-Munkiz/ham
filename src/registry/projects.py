@@ -12,3 +12,7 @@ class ProjectRecord(BaseModel):
     root: str
     description: str = ""
     metadata: dict[str, Any] = Field(default_factory=dict)
+    # Build Lane (Factory Droid mutating workflow) — disabled by default.
+    # Stored persistently but not yet exposed through any router or UI.
+    build_lane_enabled: bool = False
+    github_repo: str | None = None

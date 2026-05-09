@@ -143,6 +143,56 @@ def droid_outcome_to_ham_status(
     return "unknown", "droid:ambiguous_outcome"
 
 
+# Build Lane (Factory Droid mutating workflow) terminal post-exec outcomes.
+# Persisted on `ControlPlaneRun.build_outcome`; not yet emitted by any executor.
+DroidBuildOutcome = Literal[
+    "pr_opened",
+    "nothing_to_change",
+    "push_blocked",
+    "pr_failed",
+]
+
+DROID_BUILD_OUTCOMES: tuple[str, ...] = (
+    "pr_opened",
+    "nothing_to_change",
+    "push_blocked",
+    "pr_failed",
+)
+
+
+def droid_build_outcome_to_ham_status(
+    *,
+    outcome: str | None,
+    ok: bool,
+    timed_out: bool,
+    exit_code: int | None,
+    had_runner_body: bool,
+) -> tuple[ControlPlaneStatus, str]:
+    """
+    Map a Build-Lane post-exec outcome to HAM lifecycle.
+
+    Falls back to :func:`droid_outcome_to_ham_status` when ``outcome`` is missing,
+    so a Build run without a reported post-exec step still produces a sane status.
+    """
+    if timed_out:
+        return "failed", "droid_build:timed_out"
+    if outcome == "pr_opened":
+        return "succeeded", "droid_build:pr_opened"
+    if outcome == "nothing_to_change":
+        return "succeeded", "droid_build:nothing_to_change"
+    if outcome == "push_blocked":
+        return "failed", "droid_build:push_blocked"
+    if outcome == "pr_failed":
+        return "failed", "droid_build:pr_failed"
+    base_status, base_reason = droid_outcome_to_ham_status(
+        ok=ok,
+        timed_out=timed_out,
+        exit_code=exit_code,
+        had_runner_body=had_runner_body,
+    )
+    return base_status, f"droid_build:{base_reason}"
+
+
 class ControlPlaneProviderAuditRef(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -189,6 +239,12 @@ class ControlPlaneRun(BaseModel):
     last_provider_status: str | None = None
     audit_ref: ControlPlaneAuditRef | None = None
     project_root: str | None = None
+    # Build Lane (Factory Droid mutating workflow) — persisted but not yet
+    # exposed through any router or UI; populated only by a future Build executor.
+    pr_url: str | None = None
+    pr_branch: str | None = None
+    pr_commit_sha: str | None = None
+    build_outcome: DroidBuildOutcome | None = None
 
     @field_validator("last_provider_status", mode="before")
     @classmethod

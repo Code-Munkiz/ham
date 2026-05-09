@@ -215,3 +215,82 @@ def test_ensure_default_cursor_metadata_creates_default_project_when_missing(
     assert created.root == "/app"
     assert created.metadata.get("cursor_cloud_repository") == "Code-Munkiz/ham"
     assert created.metadata.get("cursor_cloud_ref") == "main"
+
+
+# --------------------------------------------------------------------------
+# Build Lane persistence (P1 — fields land dark; no router/UI uses them yet).
+# --------------------------------------------------------------------------
+
+
+def test_make_record_defaults_build_lane_disabled(store: ProjectStore):
+    """make_record must not silently enable the Build Lane on new projects."""
+    r = store.make_record(name="App", root="/tmp/build-lane-default")
+    assert r.build_lane_enabled is False
+    assert r.github_repo is None
+
+
+def test_register_preserves_build_lane_enabled_and_github_repo(store: ProjectStore):
+    r = ProjectRecord(
+        id="project.bl-aaaaaa",
+        name="bl",
+        root="/tmp/bl",
+        build_lane_enabled=True,
+        github_repo="Code-Munkiz/ham",
+    )
+    store.register(r)
+    out = store.get_project(r.id)
+    assert out is not None
+    assert out.build_lane_enabled is True
+    assert out.github_repo == "Code-Munkiz/ham"
+
+
+def test_persists_build_lane_fields_across_instances(tmp_path: Path):
+    path = tmp_path / "projects.json"
+    s1 = ProjectStore(store_path=path)
+    r = ProjectRecord(
+        id="project.bl-bbbbbb",
+        name="bl2",
+        root="/tmp/bl2",
+        build_lane_enabled=True,
+        github_repo="Code-Munkiz/ham",
+    )
+    s1.register(r)
+    s2 = ProjectStore(store_path=path)
+    out = s2.get_project(r.id)
+    assert out is not None
+    assert out.build_lane_enabled is True
+    assert out.github_repo == "Code-Munkiz/ham"
+
+
+def test_legacy_record_without_build_fields_loads_with_defaults(tmp_path: Path):
+    """Records written before P1 lacked these fields; they must still load."""
+    path = tmp_path / "projects.json"
+    legacy = {
+        "projects": [
+            {
+                "id": "project.legacy-zzzzzz",
+                "version": "1.0.0",
+                "name": "legacy",
+                "root": "/tmp/legacy",
+                "description": "",
+                "metadata": {},
+            }
+        ]
+    }
+    path.write_text(json.dumps(legacy), encoding="utf-8")
+    store = ProjectStore(store_path=path)
+    rows = store.list_projects()
+    assert len(rows) == 1
+    assert rows[0].id == "project.legacy-zzzzzz"
+    assert rows[0].build_lane_enabled is False
+    assert rows[0].github_repo is None
+
+
+def test_register_round_trip_from_make_record_keeps_defaults(store: ProjectStore):
+    """The most common path (make_record + register + reload) must keep the lane off."""
+    r = store.make_record(name="Plain", root="/tmp/plain-build")
+    store.register(r)
+    out = store.get_project(r.id)
+    assert out is not None
+    assert out.build_lane_enabled is False
+    assert out.github_repo is None
