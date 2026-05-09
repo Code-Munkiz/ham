@@ -21,6 +21,9 @@ describe("WorkspaceMobileTabBar", () => {
     );
 
     expect(screen.queryByRole("link", { name: "Chat" })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Social" })).toHaveAttribute("href", "/workspace/social");
+    expect(screen.getByRole("link", { name: "Social" })).toHaveAttribute(
+      "href",
+      "/workspace/social",
+    );
   });
 });

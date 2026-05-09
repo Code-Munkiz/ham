@@ -132,8 +132,7 @@ export function WorkspaceOnboardingScreen({
           {showInstructionsField ? (
             <div className="space-y-1.5">
               <Label htmlFor="ham-workspace-instructions" className="text-white/85">
-                Instructions{" "}
-                <span className="font-normal text-white/45">(optional)</span>
+                Instructions <span className="font-normal text-white/45">(optional)</span>
               </Label>
               <textarea
                 id="ham-workspace-instructions"
