@@ -145,7 +145,7 @@ export function WorkspaceOpenRouterModelPicker({
                     <span className="shrink-0 pl-2 text-[10px] text-emerald-300/90">✓</span>
                   ) : null}
                 </DropdownMenu.Item>
-                {(quickShown.length > 0 || restShown.length > 0 || q) ? (
+                {quickShown.length > 0 || restShown.length > 0 || q ? (
                   <DropdownMenu.Separator className="my-1 h-px bg-white/[0.08]" />
                 ) : null}
               </>
