@@ -86,10 +86,10 @@ type SideNavOptions = {
 
 function sideNavClass(isActive: boolean, iconOnly: boolean, chatAccent?: boolean) {
   return cn(
-    "flex font-medium text-[13px] transition-colors",
+    "box-border flex font-medium text-[13px] transition-colors",
     iconOnly
-      ? "w-full items-center justify-center rounded-lg p-2.5"
-      : "items-center gap-2.5 rounded-lg px-2.5 py-2.5",
+      ? "size-9 shrink-0 items-center justify-center rounded-lg p-0"
+      : "w-full items-center gap-2.5 rounded-lg px-2.5 py-2.5",
     chatAccent && iconOnly
       ? "border border-[#c45c12]/30 shadow-[inset_0_0_0_1px_rgba(255,120,50,0.12)] text-[#e8eef8]"
       : null,
@@ -145,7 +145,10 @@ function WorkspaceSideNav({
 
   const topPrimaryNav = (
     <nav
-      className={cn("flex shrink-0 flex-col", c ? "items-center gap-1.5" : "gap-0.5")}
+      className={cn(
+        "flex shrink-0 flex-col",
+        c ? "w-full max-w-full items-center gap-1.5" : "gap-0.5",
+      )}
       aria-label="Workspace primary"
     >
       {primaryRailItems.map((item) => {
@@ -185,7 +188,8 @@ function WorkspaceSideNav({
       onClick={onNavigate}
       className={() =>
         cn(
-          "inline-flex shrink-0 items-center justify-center rounded-lg p-2.5 font-medium transition-colors",
+          "box-border inline-flex shrink-0 items-center justify-center rounded-lg font-medium transition-colors",
+          c ? "size-9 p-0" : "p-2.5",
           pathMatchesSettingsRail(pathname)
             ? "bg-white/[0.1] text-[#e8eef8] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]"
             : "text-white/45 hover:bg-white/[0.05] hover:text-white/88",
@@ -285,17 +289,17 @@ function WorkspaceSideNav({
   };
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+    <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col", c && "max-w-full overflow-x-hidden")}>
       <div
         className={cn(
-          "mb-4 flex items-center justify-between gap-1 px-0.5",
-          c && "mb-2 flex-col gap-2",
+          "mb-4 flex max-w-full items-center justify-between gap-1 px-0.5",
+          c && "mb-2 w-full max-w-full flex-col items-center gap-2",
         )}
       >
         <div
           className={cn(
             "flex min-w-0 items-center",
-            c ? "w-full flex-col justify-center" : "gap-2",
+            c ? "w-full max-w-full flex-col items-center justify-center" : "gap-2",
           )}
         >
           <img
@@ -311,7 +315,12 @@ function WorkspaceSideNav({
             </p>
           </div>
         </div>
-        <div className={cn("flex shrink-0 items-center gap-0.5", c && "w-full justify-center")}>
+        <div
+          className={cn(
+            "flex shrink-0 items-center gap-0.5",
+            c && "w-full max-w-full justify-center",
+          )}
+        >
           {!showClose && onToggleLayoutCollapse ? (
             <button
               type="button"
@@ -405,23 +414,23 @@ function WorkspaceSideNav({
           )}
         </div>
       ) : (
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <div className="mb-2 flex shrink-0 flex-col items-center">
+        <div className="flex min-h-0 min-w-0 max-w-full flex-1 flex-col items-center overflow-x-hidden">
+          <div className="mb-2 flex w-full max-w-full shrink-0 flex-col items-center">
             <button
               type="button"
               onClick={expand}
-              className="rounded-lg p-2.5 text-white/70 transition-colors hover:bg-white/[0.05] hover:text-white/88"
+              className="box-border flex size-9 shrink-0 items-center justify-center rounded-lg p-0 text-white/70 transition-colors hover:bg-white/[0.05] hover:text-white/88"
               aria-label="Expand sidebar to search sessions"
               title="Expand sidebar to search sessions"
             >
               <Search className="h-4 w-4" strokeWidth={1.5} />
             </button>
           </div>
-          <div className="mb-1 flex shrink-0 flex-col items-center">
+          <div className="mb-1 flex w-full max-w-full shrink-0 flex-col items-center">
             <Link
               to="/workspace/chat"
               onClick={onNavigate}
-              className="flex w-full items-center justify-center rounded-lg border border-[#c45c12]/40 bg-gradient-to-b from-white/[0.08] to-black/25 p-2.5 text-white/90 shadow-[inset_0_0_0_1px_rgba(255,120,50,0.12)] transition hover:border-[#c45c12]/60"
+              className="box-border flex size-9 shrink-0 items-center justify-center rounded-lg border border-[#c45c12]/40 bg-gradient-to-b from-white/[0.08] to-black/25 text-white/90 shadow-[inset_0_0_0_1px_rgba(255,120,50,0.12)] transition hover:border-[#c45c12]/60"
               title="New session"
               aria-label="New session"
             >
@@ -429,11 +438,11 @@ function WorkspaceSideNav({
             </Link>
           </div>
           {!sessionsError ? (
-            <div className="mb-2 flex shrink-0 flex-col items-center">
+            <div className="mb-2 flex w-full max-w-full shrink-0 flex-col items-center">
               <Link
                 to="/workspace/chat"
                 onClick={onNavigate}
-                className="flex w-full items-center justify-center rounded-lg border border-white/[0.06] bg-black/20 p-2.5 text-white/50 transition hover:bg-white/[0.05] hover:text-white/85"
+                className="box-border flex size-9 shrink-0 items-center justify-center rounded-lg border border-white/[0.06] bg-black/20 text-white/50 transition hover:bg-white/[0.05] hover:text-white/85"
                 title="Workspace chat and sessions (expand to browse the list)"
                 aria-label="Workspace chat and sessions"
               >
@@ -443,7 +452,7 @@ function WorkspaceSideNav({
             </div>
           ) : null}
           {sessionsError ? (
-            <div className="mb-2 w-full shrink-0 text-center text-[9px] text-amber-200/90">
+            <div className="mb-2 w-full max-w-full shrink-0 px-0.5 text-center text-[9px] text-amber-200/90">
               <button
                 type="button"
                 onClick={() => {
@@ -459,7 +468,12 @@ function WorkspaceSideNav({
       )}
 
       <nav
-        className="mt-auto flex shrink-0 flex-row items-center justify-between gap-2 border-t border-white/[0.06] px-0.5 pt-3"
+        className={cn(
+          "mt-auto flex w-full max-w-full shrink-0 border-t border-white/[0.06] pt-3",
+          c
+            ? "flex-col items-center gap-2 px-0"
+            : "flex-row items-center justify-between gap-2 px-0.5",
+        )}
         aria-label="Workspace utilities"
       >
         {settingsFooterControl}
@@ -470,8 +484,10 @@ function WorkspaceSideNav({
             rel="noopener noreferrer"
             onClick={onNavigate}
             className={cn(
-              "flex shrink-0 items-center gap-2 rounded-lg px-1.5 py-1.5 text-white/50 transition-colors hover:bg-white/[0.05] hover:text-[#a5f3fc]/95",
-              c ? "justify-center" : "justify-end",
+              "box-border flex shrink-0 items-center rounded-lg text-white/50 transition-colors hover:bg-white/[0.05] hover:text-[#a5f3fc]/95",
+              c
+                ? "size-9 justify-center p-0"
+                : "gap-2 px-1.5 py-1.5 justify-end",
             )}
             title="Go to HAM landing"
             aria-label="Go to HAM landing"
@@ -479,9 +495,9 @@ function WorkspaceSideNav({
             <img
               src={brandLogoSrc}
               alt=""
-              className="h-8 w-8 shrink-0 object-contain"
-              width={32}
-              height={32}
+              className={cn("shrink-0 object-contain", c ? "h-7 w-7" : "h-8 w-8")}
+              width={c ? 28 : 32}
+              height={c ? 28 : 32}
               aria-hidden
             />
             <span className={cn("max-w-[5.5rem] truncate text-[11px] font-medium text-white/40", c && "sr-only")}>
@@ -493,8 +509,10 @@ function WorkspaceSideNav({
             to={landingHref}
             onClick={onNavigate}
             className={cn(
-              "flex shrink-0 items-center gap-2 rounded-lg px-1.5 py-1.5 text-white/50 transition-colors hover:bg-white/[0.05] hover:text-[#a5f3fc]/95",
-              c ? "justify-center" : "justify-end",
+              "box-border flex shrink-0 items-center rounded-lg text-white/50 transition-colors hover:bg-white/[0.05] hover:text-[#a5f3fc]/95",
+              c
+                ? "size-9 justify-center p-0"
+                : "gap-2 px-1.5 py-1.5 justify-end",
             )}
             title="Go to HAM landing"
             aria-label="Go to HAM landing"
@@ -502,9 +520,9 @@ function WorkspaceSideNav({
             <img
               src={brandLogoSrc}
               alt=""
-              className="h-8 w-8 shrink-0 object-contain"
-              width={32}
-              height={32}
+              className={cn("shrink-0 object-contain", c ? "h-7 w-7" : "h-8 w-8")}
+              width={c ? 28 : 32}
+              height={c ? 28 : 32}
               aria-hidden
             />
             <span className={cn("max-w-[5.5rem] truncate text-[11px] font-medium text-white/40", c && "sr-only")}>
@@ -774,8 +792,8 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
       {/* Desktop sidebar */}
       <aside
         className={cn(
-          "hww-sidebar hww-scroll hidden min-h-0 min-w-0 flex-col px-3 py-4 md:flex",
-          sidebarCollapsed && "hww-sidebar--collapsed",
+          "hww-sidebar hww-scroll hidden min-h-0 min-w-0 flex-col py-4 md:flex",
+          sidebarCollapsed ? "hww-sidebar--collapsed" : "px-3",
         )}
       >
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
