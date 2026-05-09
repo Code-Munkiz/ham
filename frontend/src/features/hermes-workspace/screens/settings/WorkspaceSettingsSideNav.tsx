@@ -2,6 +2,7 @@ import * as React from "react";
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { UPSTREAM_SETTINGS_NAV_ITEMS } from "./workspaceSettingsNavData";
+import { knowledgeSettingsLinks } from "../../workspaceNavConfig";
 import type { UpstreamSettingsNavId } from "./workspaceSettingsNavData";
 
 type WorkspaceSettingsSideNavProps = {
@@ -56,6 +57,24 @@ export function WorkspaceSettingsSideNav({
             <Link
               key={item.id}
               to={`/workspace/settings?section=${encodeURIComponent(item.id)}`}
+              replace
+              className={cn(
+                "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-semibold transition-colors",
+                active
+                  ? "border-white/20 bg-white/[0.08] text-[#e8eef8]"
+                  : "border-white/[0.08] bg-black/20 text-white/45 hover:border-white/15 hover:text-white/75",
+              )}
+            >
+              {item.label}
+            </Link>
+          );
+        })}
+        {knowledgeSettingsLinks.map((item) => {
+          const active = pathname === item.to || pathname.startsWith(`${item.to}/`);
+          return (
+            <Link
+              key={item.to}
+              to={item.to}
               replace
               className={cn(
                 "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-semibold transition-colors",
@@ -123,6 +142,38 @@ export function WorkspaceSettingsSideNav({
           );
         })}
       </nav>
+
+      <div className="hidden border-t border-white/[0.06] pt-3 md:block">
+        <p className="mb-1.5 px-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">
+          Knowledge
+        </p>
+        <nav className="flex min-h-0 flex-col gap-0.5" aria-label="Workspace knowledge">
+          {knowledgeSettingsLinks.map((item) => {
+            const active = pathname === item.to || pathname.startsWith(`${item.to}/`);
+            return (
+              <Link
+                key={item.to}
+                to={item.to}
+                replace
+                className={cn(
+                  "relative rounded-lg px-3 py-2 text-left text-sm transition-colors",
+                  active
+                    ? "bg-[color-mix(in_srgb,#c45c18_14%,transparent)] font-semibold text-[#ffb27a]"
+                    : "text-white/45 hover:bg-white/[0.05] hover:text-white/85",
+                )}
+              >
+                {active ? (
+                  <span
+                    aria-hidden
+                    className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-[#ffb27a]"
+                  />
+                ) : null}
+                <span className="pl-1">{item.label}</span>
+              </Link>
+            );
+          })}
+        </nav>
+      </div>
     </div>
   );
 }

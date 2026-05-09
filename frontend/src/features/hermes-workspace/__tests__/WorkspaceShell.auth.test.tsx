@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -147,6 +147,7 @@ describe("WorkspaceShell auth gating", () => {
     );
 
     await waitFor(() => expect(list).toHaveBeenCalledWith(50, 0, "ws_b"));
+    fireEvent.click(screen.getByRole("button", { name: "Expand sidebar" }));
     expect(await screen.findByText("Workspace B session")).toBeInTheDocument();
 
     resolveA({

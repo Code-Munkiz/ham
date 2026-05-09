@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { WorkspaceShell } from "./WorkspaceShell";
 import { WorkspaceHome } from "./WorkspaceHome";
 import { WorkspaceChatScreen } from "./screens/chat";
@@ -22,6 +22,11 @@ import { VoiceWorkspaceSettingsProvider } from "./voice/VoiceWorkspaceSettingsCo
 import { WorkspaceHamProjectProvider } from "./WorkspaceHamProjectContext";
 import { WorkspaceGate } from "@/components/workspace/WorkspaceGate";
 
+function WorkspaceChatFirstIndex() {
+  const { search } = useLocation();
+  return <Navigate to={`/workspace/chat${search}`} replace />;
+}
+
 /**
  * Hermes Workspace surface (`/workspace/*`). Not gated on `VITE_ENABLE_HERMES_WORKSPACE` (routing);
  * that flag is only for non-route toggles. `/legacy-chat` redirects to `/workspace/chat`.
@@ -35,7 +40,8 @@ export function WorkspaceApp() {
           <WorkspaceShell>
             <WorkspaceGate>
               <Routes>
-                <Route index element={<WorkspaceHome />} />
+                <Route index element={<WorkspaceChatFirstIndex />} />
+                <Route path="projects" element={<WorkspaceHome />} />
                 <Route path="chat" element={<WorkspaceChatScreen />} />
                 <Route path="files" element={<WorkspaceFilesScreen />} />
                 <Route path="terminal" element={<WorkspaceTerminalScreen />} />

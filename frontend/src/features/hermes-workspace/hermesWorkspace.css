@@ -26,9 +26,9 @@
 }
 
 .hww-sidebar--collapsed {
-  width: 3.5rem;
-  min-width: 3.5rem;
-  max-width: 3.5rem;
+  width: 3.25rem;
+  min-width: 3.25rem;
+  max-width: 3.25rem;
   padding-left: 0.35rem;
   padding-right: 0.35rem;
   align-items: center;

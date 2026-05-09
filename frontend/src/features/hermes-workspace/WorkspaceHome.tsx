@@ -13,7 +13,7 @@ export function WorkspaceHome() {
             <img src={logoSrc} alt="" className="h-12 w-12 object-contain" width={48} height={48} />
           </div>
           <h1 className="text-2xl font-semibold tracking-tight text-white/95 sm:text-3xl">
-            Dashboard
+            Projects
           </h1>
           <p className="mt-1 text-[12px] font-medium uppercase tracking-[0.14em] text-white/32">
             HAM's Workspace

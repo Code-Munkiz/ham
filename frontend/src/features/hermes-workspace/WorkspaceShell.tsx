@@ -1,8 +1,6 @@
 import * as React from "react";
 import { Link, NavLink, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
-  ChevronDown,
-  ChevronRight,
   ChevronsUp,
   Menu,
   MessageSquare,
@@ -17,7 +15,16 @@ import {
 import { cn } from "@/lib/utils";
 import { hamWorkspaceLogoUrl } from "@/lib/ham/publicAssets";
 import { Button } from "@/components/ui/button";
-import { knowledgeNavItems, mainNavItems, workspacePathTitle } from "./workspaceNavConfig";
+import {
+  libraryNavItems,
+  libraryRailMeta,
+  pathMatchesLibraryRoute,
+  pathMatchesSettingsRail,
+  primaryRailItems,
+  settingsRailItem,
+  workspacePathTitle,
+} from "./workspaceNavConfig";
+import { WorkspaceLibraryFlyoutContext, useWorkspaceLibraryFlyout } from "./workspaceLibraryFlyoutContext";
 import { workspaceSessionAdapter } from "./workspaceAdapters";
 import type { ChatSessionSummary } from "./workspaceTypes";
 import { sessionCardSubtitle, sessionCardTitle } from "./utils/sessionListFormat";
@@ -72,18 +79,20 @@ type SideNavOptions = {
   sessionFilter: string;
   onSessionFilterChange: (q: string) => void;
   activeSessionId: string | null;
-  /** When on `/workspace/chat`, sessions lead the rail (upstream ChatSidebar pattern). */
   isChatRoute: boolean;
   deletingSessionId: string | null;
   onDeleteSession?: (sessionId: string) => void;
 };
 
-function sideNavClass(isActive: boolean, iconOnly: boolean) {
+function sideNavClass(isActive: boolean, iconOnly: boolean, chatAccent?: boolean) {
   return cn(
     "flex font-medium text-[13px] transition-colors",
     iconOnly
       ? "w-full items-center justify-center rounded-lg p-2.5"
       : "items-center gap-2.5 rounded-lg px-2.5 py-2.5",
+    chatAccent && iconOnly
+      ? "border border-[#c45c12]/30 shadow-[inset_0_0_0_1px_rgba(255,120,50,0.12)] text-[#e8eef8]"
+      : null,
     isActive
       ? "bg-white/[0.1] text-[#e8eef8] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]"
       : "text-white/45 hover:bg-white/[0.05] hover:text-white/88",
@@ -115,25 +124,10 @@ function WorkspaceSideNav({
   const expand = onExpandFromCollapsed ?? (() => undefined);
 
   const q = sessionFilter.trim().toLowerCase();
-  const [workspaceNavOpen, setWorkspaceNavOpen] = React.useState(true);
-  const [knowledgeNavOpen, setKnowledgeNavOpen] = React.useState(true);
+  const { pathname } = useLocation();
+  const libFlyout = useWorkspaceLibraryFlyout();
+  const LibraryIcon = libraryRailMeta.icon;
 
-  const sectionToggle = (label: string, open: boolean, onToggle: () => void) =>
-    c ? null : (
-      <button
-        type="button"
-        onClick={onToggle}
-        className="hww-side-section shrink-0 flex w-full items-center justify-between text-left"
-        aria-expanded={open}
-      >
-        <span>{label}</span>
-        {open ? (
-          <ChevronDown className="h-3.5 w-3.5 opacity-70" />
-        ) : (
-          <ChevronRight className="h-3.5 w-3.5 opacity-70" />
-        )}
-      </button>
-    );
   const filteredSessions = React.useMemo(() => {
     if (!q) return sessions;
     return sessions.filter((s) => {
@@ -149,45 +143,60 @@ function WorkspaceSideNav({
     });
   }, [sessions, q]);
 
-  const mainNav = (
+  const topPrimaryNav = (
     <nav
-      className={cn("mb-4 flex flex-col", c ? "items-center gap-1" : "gap-0.5")}
-      aria-label="Main"
+      className={cn("flex shrink-0 flex-col", c ? "items-center gap-1.5" : "gap-0.5")}
+      aria-label="Workspace primary"
     >
-      {mainNavItems.map((item) => (
-        <NavLink
-          key={item.to}
-          to={item.to}
-          end={item.end ?? false}
-          onClick={onNavigate}
-          className={({ isActive }) => sideNavClass(isActive, c)}
-          title={item.label}
-        >
-          <item.icon className="h-4 w-4 shrink-0 opacity-90" strokeWidth={1.5} />
-          {c ? <span className="sr-only">{item.label}</span> : item.label}
-        </NavLink>
-      ))}
+      {primaryRailItems.map((item) => {
+        const isChat = item.to === "/workspace/chat";
+        return (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            end={item.end ?? false}
+            onClick={onNavigate}
+            className={({ isActive }) => sideNavClass(isActive, c, isChat && c)}
+            title={item.label}
+          >
+            <item.icon className="h-[18px] w-[18px] shrink-0 opacity-90" strokeWidth={1.5} />
+            {c ? <span className="sr-only">{item.label}</span> : item.label}
+          </NavLink>
+        );
+      })}
+      <button
+        type="button"
+        onClick={() => libFlyout?.toggleLibrary()}
+        className={sideNavClass(pathMatchesLibraryRoute(pathname), c)}
+        aria-label={libraryRailMeta.label}
+        title={libraryRailMeta.label}
+        aria-expanded={Boolean(libFlyout?.libraryOpen)}
+        aria-haspopup="dialog"
+      >
+        <LibraryIcon className="h-[18px] w-[18px] shrink-0 opacity-90" strokeWidth={1.5} />
+        {c ? <span className="sr-only">{libraryRailMeta.label}</span> : libraryRailMeta.label}
+      </button>
     </nav>
   );
 
-  const knowledgeNav = (
-    <nav
-      className={cn("mb-3 flex flex-col", c ? "items-center gap-1" : "gap-0.5")}
-      aria-label="Knowledge"
+  const settingsFooterControl = (
+    <NavLink
+      to={settingsRailItem.to}
+      onClick={onNavigate}
+      className={() =>
+        cn(
+          "inline-flex shrink-0 items-center justify-center rounded-lg p-2.5 font-medium transition-colors",
+          pathMatchesSettingsRail(pathname)
+            ? "bg-white/[0.1] text-[#e8eef8] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]"
+            : "text-white/45 hover:bg-white/[0.05] hover:text-white/88",
+        )
+      }
+      title={settingsRailItem.label}
+      aria-label={settingsRailItem.label}
     >
-      {knowledgeNavItems.map((item) => (
-        <NavLink
-          key={item.to}
-          to={item.to}
-          onClick={onNavigate}
-          className={({ isActive }) => sideNavClass(isActive, c)}
-          title={item.label}
-        >
-          <item.icon className="h-4 w-4 shrink-0 opacity-90" strokeWidth={1.5} />
-          {c ? <span className="sr-only">{item.label}</span> : item.label}
-        </NavLink>
-      ))}
-    </nav>
+      <settingsRailItem.icon className="h-[18px] w-[18px] shrink-0 opacity-90" strokeWidth={1.5} />
+      <span className="sr-only">{settingsRailItem.label}</span>
+    </NavLink>
   );
 
   const expandedSessionsContent = (ulClass: string) => {
@@ -337,10 +346,14 @@ function WorkspaceSideNav({
         </div>
       )}
 
-      {c ? null : (
-        <>
-          <div className="hww-side-section">{isChatRoute ? "Search" : "Find session"}</div>
-          <div className="mb-2">
+      {/* Primary nav: fixed slot directly under header / pill on every route */}
+      {topPrimaryNav}
+
+      {/* Route-specific: session search + list (does not push primary nav) */}
+      {!c ? (
+        <div className="mt-3 flex min-h-0 min-w-0 flex-1 flex-col gap-2 border-t border-white/[0.06] pt-3">
+          <div className="hww-side-section shrink-0">{isChatRoute ? "Search" : "Find session"}</div>
+          <div className="shrink-0">
             <label className="sr-only" htmlFor="hww-workspace-search">
               Filter sessions
             </label>
@@ -361,36 +374,7 @@ function WorkspaceSideNav({
               />
             </div>
           </div>
-        </>
-      )}
-
-      {c ? (
-        <div className="mb-2 flex flex-col items-center">
-          <button
-            type="button"
-            onClick={expand}
-            className="text-white/45 hover rounded-lg p-2.5 text-white/70 transition-colors hover:bg-white/[0.05]"
-            aria-label="Expand sidebar to search sessions"
-            title="Expand sidebar to search sessions"
-          >
-            <Search className="h-4 w-4" strokeWidth={1.5} />
-          </button>
-        </div>
-      ) : null}
-
-      <div className={c ? "mb-1 flex flex-col items-center" : "mb-3"}>
-        {c ? (
-          <Link
-            to="/workspace/chat"
-            onClick={onNavigate}
-            className="flex w-full items-center justify-center rounded-lg border border-[#c45c12]/40 bg-gradient-to-b from-white/[0.08] to-black/25 p-2.5 text-white/90 shadow-[inset_0_0_0_1px_rgba(255,120,50,0.12)] transition hover:border-[#c45c12]/60"
-            title="New session"
-            aria-label="New session"
-          >
-            <Plus className="h-4 w-4" strokeWidth={2} />
-          </Link>
-        ) : (
-          <>
+          <div className="shrink-0">
             <Link
               to="/workspace/chat"
               onClick={onNavigate}
@@ -399,68 +383,86 @@ function WorkspaceSideNav({
               <Plus className="h-3.5 w-3.5" strokeWidth={2} />
               New session
             </Link>
-          </>
-        )}
-      </div>
-
-      {c ? (
-        <>
-          {mainNav}
-          {knowledgeNav}
-        </>
-      ) : isChatRoute ? (
-        <>
-          <div className="hww-side-section">Sessions</div>
-          <div className="mb-1 flex min-h-0 min-w-0 flex-1 flex-col">
-            {expandedSessionsContent(
-              "min-h-0 flex-1 space-y-1 overflow-y-auto pr-0.5 [scrollbar-gutter:stable]",
-            )}
           </div>
-          {sectionToggle("Workspace", workspaceNavOpen, () => setWorkspaceNavOpen((v) => !v))}
-          {workspaceNavOpen ? mainNav : null}
-          {sectionToggle("Knowledge", knowledgeNavOpen, () => setKnowledgeNavOpen((v) => !v))}
-          {knowledgeNavOpen ? knowledgeNav : null}
-        </>
+          {isChatRoute ? (
+            <>
+              <div className="hww-side-section shrink-0">Sessions</div>
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                {expandedSessionsContent(
+                  "min-h-0 flex-1 space-y-1 overflow-y-auto pr-0.5 [scrollbar-gutter:stable]",
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="hww-side-section shrink-0">Sessions</div>
+              <div className="min-h-0 shrink-0">
+                {expandedSessionsContent(
+                  "max-h-44 min-h-0 space-y-1 overflow-y-auto pr-0.5 [scrollbar-gutter:stable]",
+                )}
+              </div>
+            </>
+          )}
+        </div>
       ) : (
-        <>
-          {sectionToggle("Workspace", workspaceNavOpen, () => setWorkspaceNavOpen((v) => !v))}
-          {workspaceNavOpen ? mainNav : null}
-          {sectionToggle("Knowledge", knowledgeNavOpen, () => setKnowledgeNavOpen((v) => !v))}
-          {knowledgeNavOpen ? knowledgeNav : null}
-          <div className="hww-side-section">Sessions</div>
-          {expandedSessionsContent("mb-2 max-h-44 min-h-0 space-y-1 overflow-y-auto pr-0.5")}
-        </>
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <div className="mb-2 flex shrink-0 flex-col items-center">
+            <button
+              type="button"
+              onClick={expand}
+              className="rounded-lg p-2.5 text-white/70 transition-colors hover:bg-white/[0.05] hover:text-white/88"
+              aria-label="Expand sidebar to search sessions"
+              title="Expand sidebar to search sessions"
+            >
+              <Search className="h-4 w-4" strokeWidth={1.5} />
+            </button>
+          </div>
+          <div className="mb-1 flex shrink-0 flex-col items-center">
+            <Link
+              to="/workspace/chat"
+              onClick={onNavigate}
+              className="flex w-full items-center justify-center rounded-lg border border-[#c45c12]/40 bg-gradient-to-b from-white/[0.08] to-black/25 p-2.5 text-white/90 shadow-[inset_0_0_0_1px_rgba(255,120,50,0.12)] transition hover:border-[#c45c12]/60"
+              title="New session"
+              aria-label="New session"
+            >
+              <Plus className="h-4 w-4" strokeWidth={2} />
+            </Link>
+          </div>
+          {!sessionsError ? (
+            <div className="mb-2 flex shrink-0 flex-col items-center">
+              <Link
+                to="/workspace/chat"
+                onClick={onNavigate}
+                className="flex w-full items-center justify-center rounded-lg border border-white/[0.06] bg-black/20 p-2.5 text-white/50 transition hover:bg-white/[0.05] hover:text-white/85"
+                title="Workspace chat and sessions (expand to browse the list)"
+                aria-label="Workspace chat and sessions"
+              >
+                <MessageSquare className="h-4 w-4" strokeWidth={1.5} />
+                <span className="sr-only">Browse sessions in expanded sidebar</span>
+              </Link>
+            </div>
+          ) : null}
+          {sessionsError ? (
+            <div className="mb-2 w-full shrink-0 text-center text-[9px] text-amber-200/90">
+              <button
+                type="button"
+                onClick={() => {
+                  onSessionsRetry();
+                }}
+                className="text-[#ffb27a]/90 underline"
+              >
+                Session error
+              </button>
+            </div>
+          ) : null}
+        </div>
       )}
 
-      {c && !sessionsError ? (
-        <div className="mb-2 flex flex-col items-center">
-          <Link
-            to="/workspace/chat"
-            onClick={onNavigate}
-            className="flex w-full items-center justify-center rounded-lg border border-white/[0.06] bg-black/20 p-2.5 text-white/50 transition hover:bg-white/[0.05] hover:text-white/85"
-            title="Workspace chat and sessions (expand to browse the list)"
-            aria-label="Workspace chat and sessions"
-          >
-            <MessageSquare className="h-4 w-4" strokeWidth={1.5} />
-            <span className="sr-only">Browse sessions in expanded sidebar</span>
-          </Link>
-        </div>
-      ) : null}
-      {c && sessionsError ? (
-        <div className="mb-2 w-full text-center text-[9px] text-amber-200/90">
-          <button
-            type="button"
-            onClick={() => {
-              onSessionsRetry();
-            }}
-            className="text-[#ffb27a]/90 underline"
-          >
-            Session error
-          </button>
-        </div>
-      ) : null}
-
-      <div className="mt-auto border-t border-white/[0.06] pt-3">
+      <nav
+        className="mt-auto flex shrink-0 flex-row items-center justify-between gap-2 border-t border-white/[0.06] px-0.5 pt-3"
+        aria-label="Workspace utilities"
+      >
+        {settingsFooterControl}
         {landingIsExternal ? (
           <a
             href={landingHref}
@@ -468,8 +470,8 @@ function WorkspaceSideNav({
             rel="noopener noreferrer"
             onClick={onNavigate}
             className={cn(
-              "flex items-center gap-2 rounded-lg px-2 py-2 text-white/50 transition-colors hover:bg-white/[0.05] hover:text-[#a5f3fc]/95",
-              c ? "justify-center" : "md:justify-start",
+              "flex shrink-0 items-center gap-2 rounded-lg px-1.5 py-1.5 text-white/50 transition-colors hover:bg-white/[0.05] hover:text-[#a5f3fc]/95",
+              c ? "justify-center" : "justify-end",
             )}
             title="Go to HAM landing"
             aria-label="Go to HAM landing"
@@ -482,15 +484,17 @@ function WorkspaceSideNav({
               height={32}
               aria-hidden
             />
-            <span className={cn("text-[11px] font-medium text-white/40", c && "sr-only")}>HAM</span>
+            <span className={cn("max-w-[5.5rem] truncate text-[11px] font-medium text-white/40", c && "sr-only")}>
+              HAM
+            </span>
           </a>
         ) : (
           <Link
             to={landingHref}
             onClick={onNavigate}
             className={cn(
-              "flex items-center gap-2 rounded-lg px-2 py-2 text-white/50 transition-colors hover:bg-white/[0.05] hover:text-[#a5f3fc]/95",
-              c ? "justify-center" : "md:justify-start",
+              "flex shrink-0 items-center gap-2 rounded-lg px-1.5 py-1.5 text-white/50 transition-colors hover:bg-white/[0.05] hover:text-[#a5f3fc]/95",
+              c ? "justify-center" : "justify-end",
             )}
             title="Go to HAM landing"
             aria-label="Go to HAM landing"
@@ -503,11 +507,75 @@ function WorkspaceSideNav({
               height={32}
               aria-hidden
             />
-            <span className={cn("text-[11px] font-medium text-white/40", c && "sr-only")}>HAM</span>
+            <span className={cn("max-w-[5.5rem] truncate text-[11px] font-medium text-white/40", c && "sr-only")}>
+              HAM
+            </span>
           </Link>
         )}
-      </div>
+      </nav>
     </div>
+  );
+}
+
+function WorkspaceLibraryFlyout({
+  open,
+  onOpenChange,
+  sidebarCollapsed,
+  onItemNavigate,
+}: {
+  open: boolean;
+  onOpenChange: (next: boolean) => void;
+  sidebarCollapsed: boolean;
+  onItemNavigate?: () => void;
+}) {
+  const navigate = useNavigate();
+  if (!open) return null;
+
+  const close = () => onOpenChange(false);
+
+  const pick = (to: string) => {
+    onItemNavigate?.();
+    navigate(to);
+    close();
+  };
+
+  return (
+    <>
+      <button
+        type="button"
+        className="fixed inset-0 z-[55] bg-black/45 md:bg-black/25"
+        aria-label="Close library menu"
+        onClick={close}
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={libraryRailMeta.label}
+        className={cn(
+          "fixed z-[60] overflow-hidden rounded-xl border border-white/[0.12] bg-[#050e14]/98 py-2 shadow-[0_24px_80px_rgba(0,0,0,0.55)] backdrop-blur-md",
+          "max-md:left-3 max-md:right-3 max-md:top-14 max-md:w-auto",
+          "md:w-[min(18rem,calc(100vw-2rem))]",
+          sidebarCollapsed ? "md:left-[3.25rem] md:top-20" : "md:left-[260px] md:top-20",
+        )}
+      >
+        <p className="mb-1.5 border-b border-white/[0.06] px-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/45">
+          Library
+        </p>
+        <nav className="flex flex-col gap-0.5 px-1.5" aria-label="Library tools">
+          {libraryNavItems.map((item) => (
+            <button
+              key={item.to}
+              type="button"
+              onClick={() => pick(item.to)}
+              className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] text-white/80 transition-colors hover:bg-white/[0.06]"
+            >
+              <item.icon className="h-4 w-4 shrink-0 opacity-90" strokeWidth={1.5} aria-hidden />
+              {item.label}
+            </button>
+          ))}
+        </nav>
+      </div>
+    </>
   );
 }
 
@@ -518,11 +586,23 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
   const [searchParams] = useSearchParams();
   const [sidebarCollapsed, setSidebarCollapsed] = React.useState(() => {
     try {
-      return localStorage.getItem(HWW_SIDEBAR_COLLAPSE_KEY) === "1";
+      const v = localStorage.getItem(HWW_SIDEBAR_COLLAPSE_KEY);
+      if (v === "0") return false;
+      if (v === "1") return true;
+      return true;
     } catch {
-      return false;
+      return true;
     }
   });
+  const [libraryFlyoutOpen, setLibraryFlyoutOpen] = React.useState(false);
+  const libraryFlyoutCtx = React.useMemo(
+    () => ({
+      openLibrary: () => setLibraryFlyoutOpen(true),
+      toggleLibrary: () => setLibraryFlyoutOpen((v) => !v),
+      libraryOpen: libraryFlyoutOpen,
+    }),
+    [libraryFlyoutOpen],
+  );
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   /**
    * SHELL-015 — docked terminal strip on chat route.
@@ -629,7 +709,17 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
 
   React.useEffect(() => {
     setDrawerOpen(false);
+    setLibraryFlyoutOpen(false);
   }, [location.pathname]);
+
+  React.useEffect(() => {
+    if (!libraryFlyoutOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setLibraryFlyoutOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [libraryFlyoutOpen]);
 
   React.useEffect(() => {
     if (isWorkspaceChat) setWorkspaceChatPanelOpen(false);
@@ -665,7 +755,8 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
   }, [sidebarCollapsed, setSidebarPersist]);
 
   return (
-    <div className="hww-root flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden md:flex-row">
+    <WorkspaceLibraryFlyoutContext.Provider value={libraryFlyoutCtx}>
+      <div className="hww-root flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden md:flex-row">
       {/* Mobile top bar (upstream-style compact header) */}
       <header className="hww-mobile-header z-20 flex h-12 shrink-0 items-center justify-between border-b border-[color:var(--ham-workspace-line)] bg-[#040d14]/90 px-3 backdrop-blur-sm md:hidden">
         <button
@@ -782,6 +873,13 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
         open={workspaceChatPanelOpen && canLoadSessions}
         onClose={() => setWorkspaceChatPanelOpen(false)}
       />
+      <WorkspaceLibraryFlyout
+        open={libraryFlyoutOpen}
+        onOpenChange={setLibraryFlyoutOpen}
+        sidebarCollapsed={sidebarCollapsed}
+        onItemNavigate={() => setDrawerOpen(false)}
+      />
     </div>
+    </WorkspaceLibraryFlyoutContext.Provider>
   );
 }
