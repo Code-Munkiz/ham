@@ -386,7 +386,9 @@ export function WorkspaceChatComposer({
   const gm = catalog ? (catalog.gateway_mode || "").toLowerCase() : "";
   const byokOr = catalog?.openrouter_user_byok_connected === true;
   const showModel = Boolean(
-    catalog && chatModelCandidates(catalog).length > 0 && (gm === "openrouter" || (gm === "http" && byokOr)),
+    catalog &&
+    chatModelCandidates(catalog).length > 0 &&
+    (gm === "openrouter" || (gm === "http" && byokOr)),
   );
   const gatewayOk = isDashboardChatGatewayReady(catalog);
   const modelPill = primaryModelPillText(catalog, modelId);
