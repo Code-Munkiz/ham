@@ -83,7 +83,10 @@ export function WorkspaceOpenRouterModelPicker({
   const renderRow = (m: ModelCatalogItem) => {
     const failed = failedModelIds?.has(m.id) ?? false;
     const canSelect = m.supports_chat;
-    const hint = [m.disabled_reason, failed ? "OpenRouter rejected this model on a recent turn." : null]
+    const hint = [
+      m.disabled_reason,
+      failed ? "OpenRouter rejected this model on a recent turn." : null,
+    ]
       .filter(Boolean)
       .join(" — ");
     return (
@@ -108,7 +111,9 @@ export function WorkspaceOpenRouterModelPicker({
             ) : null}
           </span>
           {m.id !== (m.label || "") ? (
-            <span className="mt-0.5 block truncate font-mono text-[10px] text-white/35">{m.id}</span>
+            <span className="mt-0.5 block truncate font-mono text-[10px] text-white/35">
+              {m.id}
+            </span>
           ) : null}
           {!canSelect && m.disabled_reason ? (
             <span className="mt-0.5 block text-[10px] text-white/40">{m.disabled_reason}</span>
