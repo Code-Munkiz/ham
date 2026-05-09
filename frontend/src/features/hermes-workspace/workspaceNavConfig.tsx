@@ -20,11 +20,10 @@ import {
 export type MainNavItem = { to: string; label: string; icon: LucideIcon; end?: boolean };
 
 /**
- * Hermes Workspace IA: primary rail + Library flyout (under `/workspace/*`).
- * `/workspace` index redirects to `/workspace/chat`; `/workspace/projects` hosts the former dashboard.
+ * Hermes Workspace IA: persistent primary rail (Chat, Social, Coding agents) + Library flyout.
+ * `/workspace` index redirects to `/workspace/chat`. `/workspace/projects` lives under Library (first item).
  */
 export const primaryRailItems: MainNavItem[] = [
-  { to: "/workspace/projects", label: "Projects", icon: LayoutDashboard, end: true },
   { to: "/workspace/chat", label: "Chat", icon: MessageSquare },
   { to: "/workspace/social", label: "Social", icon: Share2 },
   { to: "/workspace/coding-agents", label: "Coding agents", icon: Bot },
@@ -38,8 +37,9 @@ export const settingsRailItem: MainNavItem = {
 
 export const libraryRailMeta = { label: "Library", icon: Library } as const;
 
-/** Operator / advanced tools — surfaced from Library flyout only (routes unchanged). */
+/** Library flyout — Projects first, then operator surfaces (routes unchanged). */
 export const libraryNavItems: MainNavItem[] = [
+  { to: "/workspace/projects", label: "Projects", icon: LayoutDashboard, end: true },
   { to: "/workspace/files", label: "Files", icon: FolderOpen },
   { to: "/workspace/terminal", label: "Terminal", icon: Terminal },
   { to: "/workspace/jobs", label: "Jobs", icon: Briefcase },

@@ -3,7 +3,6 @@ import { Link, NavLink, useLocation, useNavigate, useSearchParams } from "react-
 import {
   ChevronsUp,
   Menu,
-  MessageSquare,
   PanelLeft,
   PanelLeftClose,
   Plus,
@@ -71,7 +70,6 @@ type SideNavOptions = {
   /** Desktop only: icon rail; mobile drawer always expanded. */
   layoutCollapsed: boolean;
   onToggleLayoutCollapse?: () => void;
-  onExpandFromCollapsed?: () => void;
   sessions: ChatSessionSummary[];
   sessionsLoading: boolean;
   sessionsError: string | null;
@@ -105,7 +103,6 @@ function WorkspaceSideNav({
   onClose,
   layoutCollapsed,
   onToggleLayoutCollapse,
-  onExpandFromCollapsed,
   sessions,
   sessionsLoading,
   sessionsError,
@@ -121,7 +118,6 @@ function WorkspaceSideNav({
   const landingHref = hamLandingHref();
   const landingIsExternal = isAbsoluteHttpUrl(landingHref);
   const c = layoutCollapsed;
-  const expand = onExpandFromCollapsed ?? (() => undefined);
 
   const q = sessionFilter.trim().toLowerCase();
   const { pathname } = useLocation();
@@ -358,10 +354,12 @@ function WorkspaceSideNav({
       {/* Primary nav: fixed slot directly under header / pill on every route */}
       {topPrimaryNav}
 
-      {/* Route-specific: session search + list (does not push primary nav) */}
-      {!c ? (
+      {/* Chat-only secondary: search + sessions (expanded sidebar only) */}
+      {c ? (
+        <div className="min-h-0 flex-1 shrink-0" aria-hidden />
+      ) : isChatRoute ? (
         <div className="mt-3 flex min-h-0 min-w-0 flex-1 flex-col gap-2 border-t border-white/[0.06] pt-3">
-          <div className="hww-side-section shrink-0">{isChatRoute ? "Search" : "Find session"}</div>
+          <div className="hww-side-section shrink-0">Search</div>
           <div className="shrink-0">
             <label className="sr-only" htmlFor="hww-workspace-search">
               Filter sessions
@@ -393,78 +391,15 @@ function WorkspaceSideNav({
               New session
             </Link>
           </div>
-          {isChatRoute ? (
-            <>
-              <div className="hww-side-section shrink-0">Sessions</div>
-              <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-                {expandedSessionsContent(
-                  "min-h-0 flex-1 space-y-1 overflow-y-auto pr-0.5 [scrollbar-gutter:stable]",
-                )}
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="hww-side-section shrink-0">Sessions</div>
-              <div className="min-h-0 shrink-0">
-                {expandedSessionsContent(
-                  "max-h-44 min-h-0 space-y-1 overflow-y-auto pr-0.5 [scrollbar-gutter:stable]",
-                )}
-              </div>
-            </>
-          )}
+          <div className="hww-side-section shrink-0">Sessions</div>
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            {expandedSessionsContent(
+              "min-h-0 flex-1 space-y-1 overflow-y-auto pr-0.5 [scrollbar-gutter:stable]",
+            )}
+          </div>
         </div>
       ) : (
-        <div className="flex min-h-0 min-w-0 max-w-full flex-1 flex-col items-center overflow-x-hidden">
-          <div className="mb-2 flex w-full max-w-full shrink-0 flex-col items-center">
-            <button
-              type="button"
-              onClick={expand}
-              className="box-border flex size-9 shrink-0 items-center justify-center rounded-lg p-0 text-white/70 transition-colors hover:bg-white/[0.05] hover:text-white/88"
-              aria-label="Expand sidebar to search sessions"
-              title="Expand sidebar to search sessions"
-            >
-              <Search className="h-4 w-4" strokeWidth={1.5} />
-            </button>
-          </div>
-          <div className="mb-1 flex w-full max-w-full shrink-0 flex-col items-center">
-            <Link
-              to="/workspace/chat"
-              onClick={onNavigate}
-              className="box-border flex size-9 shrink-0 items-center justify-center rounded-lg border border-[#c45c12]/40 bg-gradient-to-b from-white/[0.08] to-black/25 text-white/90 shadow-[inset_0_0_0_1px_rgba(255,120,50,0.12)] transition hover:border-[#c45c12]/60"
-              title="New session"
-              aria-label="New session"
-            >
-              <Plus className="h-4 w-4" strokeWidth={2} />
-            </Link>
-          </div>
-          {!sessionsError ? (
-            <div className="mb-2 flex w-full max-w-full shrink-0 flex-col items-center">
-              <Link
-                to="/workspace/chat"
-                onClick={onNavigate}
-                className="box-border flex size-9 shrink-0 items-center justify-center rounded-lg border border-white/[0.06] bg-black/20 text-white/50 transition hover:bg-white/[0.05] hover:text-white/85"
-                title="Workspace chat and sessions (expand to browse the list)"
-                aria-label="Workspace chat and sessions"
-              >
-                <MessageSquare className="h-4 w-4" strokeWidth={1.5} />
-                <span className="sr-only">Browse sessions in expanded sidebar</span>
-              </Link>
-            </div>
-          ) : null}
-          {sessionsError ? (
-            <div className="mb-2 w-full max-w-full shrink-0 px-0.5 text-center text-[9px] text-amber-200/90">
-              <button
-                type="button"
-                onClick={() => {
-                  onSessionsRetry();
-                }}
-                className="text-[#ffb27a]/90 underline"
-              >
-                Session error
-              </button>
-            </div>
-          ) : null}
-        </div>
+        <div className="min-h-0 flex-1 shrink-0" aria-hidden />
       )}
 
       <nav
@@ -801,9 +736,6 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
             {...sessionNavProps}
             layoutCollapsed={sidebarCollapsed}
             onToggleLayoutCollapse={onToggleSidebar}
-            onExpandFromCollapsed={() => {
-              setSidebarPersist(false);
-            }}
           />
         </div>
       </aside>

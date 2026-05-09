@@ -1,12 +1,11 @@
 import * as React from "react";
 import { NavLink, matchPath, useLocation } from "react-router-dom";
-import { Bot, LayoutDashboard, Library, MessageSquare, Settings, Share2 } from "lucide-react";
+import { Bot, Library, MessageSquare, Settings, Share2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { pathMatchesLibraryRoute, pathMatchesSettingsRail } from "./workspaceNavConfig";
 import { useWorkspaceLibraryFlyout } from "./workspaceLibraryFlyoutContext";
 
 const MOBILE_PRIMARY_LINKS: { to: string; label: string; end?: boolean; icon: React.ElementType }[] = [
-  { to: "/workspace/projects", label: "Proj", end: true, icon: LayoutDashboard },
   { to: "/workspace/chat", label: "Chat", icon: MessageSquare },
   { to: "/workspace/social", label: "Social", icon: Share2 },
   { to: "/workspace/coding-agents", label: "Agents", icon: Bot },
