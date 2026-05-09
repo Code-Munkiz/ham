@@ -43,6 +43,8 @@ Canonical architecture and agent context live at the repo root: [`VISION.md`](..
 3. [`HAM_CLOUD_AGENT_ROUTING_SMOKE.md`](HAM_CLOUD_AGENT_ROUTING_SMOKE.md) — Workspace chat routing smoke.
 4. Examples: [`examples/managed_cloud_agent_phases/README.md`](examples/managed_cloud_agent_phases/README.md) — curl fixtures for Phase A–D APIs.
 
+**Also load early (topic pointers):** [`GAPS.md`](../GAPS.md) (tracked gaps vs [`VISION.md`](../VISION.md)). **Command Center, Activity, Capabilities, or desktop Hermes copy:** [`TEAM_HERMES_STATUS.md`](TEAM_HERMES_STATUS.md). **Context Engine compaction / hardening:** [`HAM_HARDENING_REMEDIATION.md`](HAM_HARDENING_REMEDIATION.md).
+
 SDK bridge attaches to existing `bc-*` agents; **`HAM_CURSOR_SDK_BRIDGE_ENABLED`** toggles bridge vs REST projection; HAM `/feed` stays the browser contract (no Cursor API calls from the browser).
 
 ## Operations and deploy
