@@ -190,6 +190,8 @@ def _gateway_status_code(code: str) -> int:
         return 400
     if code == "CONFIG_ERROR":
         return 500
+    if code == "OPENROUTER_MODEL_REJECTED":
+        return 502
     return 502
 
 

@@ -28,6 +28,7 @@ const candidates = [
     supports_chat: true,
     disabled_reason: null,
     openrouter_model: "openrouter/openai/gpt-4o-mini",
+    composer_model_band: "recommended" as const,
   },
 ];
 

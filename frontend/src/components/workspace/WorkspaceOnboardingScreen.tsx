@@ -8,6 +8,7 @@
  * membership.
  */
 import * as React from "react";
+import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,6 +31,10 @@ export interface WorkspaceOnboardingScreenProps {
   allowDismiss?: boolean;
   /** Tighter layout for embedded dialog vs full-screen first-run. */
   variant?: "fullscreen" | "dialog";
+  /** Maps to API `description` when non-empty (dialog-style create flow). */
+  showInstructionsField?: boolean;
+  /** Honest UX when tools cannot attach at create time (no persistence). */
+  showConnectedToolsHint?: boolean;
 }
 
 function adminOrgs(orgs: HamMeOrg[]): HamMeOrg[] {
@@ -43,10 +48,13 @@ export function WorkspaceOnboardingScreen({
   onDismiss,
   allowDismiss,
   variant = "fullscreen",
+  showInstructionsField,
+  showConnectedToolsHint,
 }: WorkspaceOnboardingScreenProps) {
   const candidateAdminOrgs = React.useMemo(() => adminOrgs(orgs), [orgs]);
   const defaultOrgId = candidateAdminOrgs[0]?.org_id ?? user.primary_org_id ?? null;
   const [name, setName] = React.useState("");
+  const [instructions, setInstructions] = React.useState("");
   const [orgScoped, setOrgScoped] = React.useState<boolean>(
     Boolean(candidateAdminOrgs.length && defaultOrgId),
   );
@@ -65,6 +73,10 @@ export function WorkspaceOnboardingScreen({
       const body: HamCreateWorkspaceBody = { name: trimmedName };
       if (orgScoped && defaultOrgId) {
         body.org_id = defaultOrgId;
+      }
+      const trimmedInstructions = instructions.trim();
+      if (showInstructionsField && trimmedInstructions.length > 0) {
+        body.description = trimmedInstructions;
       }
       await onCreate(body);
       // Caller's HamWorkspaceProvider transitions to "ready"; nothing else
@@ -103,7 +115,7 @@ export function WorkspaceOnboardingScreen({
         <form className="space-y-3" onSubmit={handleSubmit}>
           <div className="space-y-1.5">
             <Label htmlFor="ham-workspace-name" className="text-white/85">
-              Name
+              {variant === "dialog" || showInstructionsField ? "Workspace name" : "Name"}
             </Label>
             <Input
               id="ham-workspace-name"
@@ -117,6 +129,43 @@ export function WorkspaceOnboardingScreen({
               className="border-white/20 bg-black/35 text-white placeholder:text-white/40 focus-visible:ring-white/35"
             />
           </div>
+          {showInstructionsField ? (
+            <div className="space-y-1.5">
+              <Label htmlFor="ham-workspace-instructions" className="text-white/85">
+                Instructions <span className="font-normal text-white/45">(optional)</span>
+              </Label>
+              <textarea
+                id="ham-workspace-instructions"
+                value={instructions}
+                onChange={(e) => setInstructions(e.target.value)}
+                placeholder="How should HAM behave in this workspace?"
+                maxLength={4000}
+                disabled={submitting}
+                rows={4}
+                data-testid="ham-workspace-instructions"
+                className="flex min-h-[80px] w-full rounded-md border border-white/20 bg-black/35 px-3 py-2 text-sm text-white placeholder:text-white/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/35 disabled:cursor-not-allowed disabled:opacity-50"
+              />
+            </div>
+          ) : null}
+          {showConnectedToolsHint ? (
+            <div
+              className="rounded-lg border border-white/12 bg-white/[0.04] px-3 py-2.5 text-[11px] leading-relaxed text-white/65"
+              data-testid="ham-workspace-connected-tools-hint"
+            >
+              <p className="font-medium text-white/80">Connected tools</p>
+              <p className="mt-1">
+                Tools cannot be attached during creation yet. Connect them after creating this
+                workspace under{" "}
+                <Link
+                  to="/workspace/settings"
+                  className="font-medium text-[#ffb27a]/95 underline-offset-2 hover:underline"
+                >
+                  Settings → Connected tools
+                </Link>
+                .
+              </p>
+            </div>
+          ) : null}
           {candidateAdminOrgs.length > 0 ? (
             <div className="flex items-center gap-2 rounded-md border border-white/15 bg-white/[0.06] p-2">
               <input

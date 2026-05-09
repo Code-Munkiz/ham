@@ -2,6 +2,7 @@ import type { HamChatUserContentV1, HamChatUserContentV2 } from "./chatUserConte
 import type {
   ContextEnginePayload,
   CursorCredentialsStatus,
+  HamChatComposerPreferencePayload,
   HamTtsHealthPayload,
   HamVoiceSettingsPayload,
   HamVoiceSettingsPatch,
@@ -432,6 +433,43 @@ export async function patchVoiceSettings(
     throw new Error(detail);
   }
   return res.json() as Promise<HamVoiceSettingsPayload>;
+}
+
+/** GET persisted chat composer model preference for a workspace (effective id only; mirrors server routing). */
+export async function fetchChatComposerPreference(
+  workspaceId: string,
+): Promise<HamChatComposerPreferencePayload> {
+  const id = encodeURIComponent(workspaceId.trim());
+  const res = await hamApiFetch(`/api/workspaces/${id}/chat-composer-preference`);
+  if (!res.ok) {
+    throw new Error(`chat composer preference: HTTP ${res.status}`);
+  }
+  return res.json() as Promise<HamChatComposerPreferencePayload>;
+}
+
+/** PUT chat composer model preference (`null` = Hermes / gateway default). */
+export async function putChatComposerPreference(
+  workspaceId: string,
+  body: { model_id: string | null },
+): Promise<HamChatComposerPreferencePayload> {
+  const id = encodeURIComponent(workspaceId.trim());
+  const res = await hamApiFetch(`/api/workspaces/${id}/chat-composer-preference`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    let detail = `HTTP ${res.status}`;
+    try {
+      const j = (await res.json()) as { detail?: unknown };
+      if (j.detail !== undefined)
+        detail = typeof j.detail === "string" ? j.detail : JSON.stringify(j.detail);
+    } catch {
+      /* ignore */
+    }
+    throw new Error(detail);
+  }
+  return res.json() as Promise<HamChatComposerPreferencePayload>;
 }
 
 /** GET /api/hermes-hub — gateway + Hermes skills capabilities; no fake Hermes inventory. */

@@ -42,8 +42,11 @@ export function HermesOperatorConnectionStrip({ snapshot, className }: Props) {
             Operations
           </Link>
           <span className="text-white/15">·</span>
-          <Link to="/workspace" className="text-white/45 hover:text-[#FF6B00] hover:underline">
-            Dashboard
+          <Link
+            to="/workspace/projects"
+            className="text-white/45 hover:text-[#FF6B00] hover:underline"
+          >
+            Projects
           </Link>
           {desktop ? (
             <>

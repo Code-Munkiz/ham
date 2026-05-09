@@ -6,14 +6,14 @@
  * in error. The pill **never** prevents the underlying page from mounting.
  */
 import * as React from "react";
-import { createPortal } from "react-dom";
+import { Plus } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 import { cn } from "@/lib/utils";
 
 import { useHamWorkspace } from "@/lib/ham/HamWorkspaceContext";
-import type { HamCreateWorkspaceBody } from "@/lib/ham/workspaceApi";
 
-import { WorkspaceOnboardingScreen } from "@/components/workspace/WorkspaceOnboardingScreen";
+import { WorkspaceCreateWorkspaceDialog } from "@/components/workspace/WorkspaceCreateWorkspaceDialog";
 import { WorkspacePicker } from "@/components/workspace/WorkspacePicker";
 import { WORKSPACE_API_UNREACHABLE_USER_COPY } from "@/components/workspace/workspaceApiUnreachableCopy";
 
@@ -24,6 +24,7 @@ export interface HamWorkspaceTopbarPillProps {
 
 export function HamWorkspaceTopbarPill({ className }: HamWorkspaceTopbarPillProps) {
   const ctx = useHamWorkspace();
+  const navigate = useNavigate();
   const pillAnchorRef = React.useRef<HTMLDivElement>(null);
   const [pickerOpen, setPickerOpen] = React.useState(false);
   const [createOpen, setCreateOpen] = React.useState(false);
@@ -129,67 +130,87 @@ export function HamWorkspaceTopbarPill({ className }: HamWorkspaceTopbarPillProp
     if (interactive) setPickerOpen((v) => !v);
   };
 
-  const handleCreate = async (body: HamCreateWorkspaceBody) => {
-    const ws = await ctx.createWorkspace(body);
-    setCreateOpen(false);
-    return ws;
-  };
+  const readySplitPill = ctx.state.status === "ready";
 
-  React.useEffect(() => {
-    if (!createOpen) return;
-    function onKey(ev: KeyboardEvent) {
-      if (ev.key === "Escape") setCreateOpen(false);
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [createOpen]);
+  const pillAriaHasPopup =
+    ctx.state.status === "ready" || ctx.state.status === "onboarding"
+      ? "menu"
+      : ctx.state.status === "setup_needed" ||
+          ctx.state.status === "auth_not_configured" ||
+          ctx.state.status === "auth_required" ||
+          ctx.state.status === "error"
+        ? "dialog"
+        : undefined;
 
-  // Build user/orgs reference for onboarding dialog. Falls back gracefully
-  // when state is loading.
-  const me =
-    ctx.state.status === "ready" || ctx.state.status === "onboarding" ? ctx.state.me : null;
+  const pillAriaExpanded =
+    ctx.state.status === "ready" || ctx.state.status === "onboarding"
+      ? pickerOpen
+      : ctx.state.status === "setup_needed" ||
+          ctx.state.status === "auth_not_configured" ||
+          ctx.state.status === "auth_required" ||
+          ctx.state.status === "error"
+        ? detailsOpen
+        : undefined;
 
   return (
     <>
       <div ref={pillAnchorRef} className={cn("relative pointer-events-auto", className)}>
-        <button
-          type="button"
-          data-testid="ham-workspace-pill"
-          onClick={onPillClick}
-          className={cn(
-            "flex min-h-8 w-full max-w-full items-center gap-2 rounded-lg border px-3 py-1.5 text-left text-xs font-semibold backdrop-blur transition-colors",
-            pillClass,
-            interactive ? "cursor-pointer" : "",
-          )}
-          aria-haspopup={
-            ctx.state.status === "ready" || ctx.state.status === "onboarding"
-              ? "menu"
-              : ctx.state.status === "setup_needed" ||
-                  ctx.state.status === "auth_not_configured" ||
-                  ctx.state.status === "auth_required" ||
-                  ctx.state.status === "error"
-                ? "dialog"
-                : undefined
-          }
-          aria-expanded={
-            ctx.state.status === "ready" || ctx.state.status === "onboarding"
-              ? pickerOpen
-              : ctx.state.status === "setup_needed" ||
-                  ctx.state.status === "auth_not_configured" ||
-                  ctx.state.status === "auth_required" ||
-                  ctx.state.status === "error"
-                ? detailsOpen
-                : undefined
-          }
-        >
-          <span className={cn("inline-block h-1.5 w-1.5 rounded-full", dotClass)} />
-          <span className="min-w-0 flex-1 truncate">{baseLabel}</span>
-          {ctx.active?.role ? (
-            <span className="shrink-0 rounded bg-white/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-white/75">
-              {ctx.active.role}
-            </span>
-          ) : null}
-        </button>
+        {readySplitPill ? (
+          <div
+            className={cn(
+              "flex min-h-8 w-full max-w-full items-stretch overflow-hidden rounded-lg border text-xs font-semibold backdrop-blur transition-colors",
+              pillClass,
+            )}
+            role="group"
+            aria-label="Active workspace"
+          >
+            <button
+              type="button"
+              data-testid="ham-workspace-pill"
+              onClick={onPillClick}
+              className={cn(
+                "flex min-w-0 flex-1 items-center gap-2 border-0 bg-transparent px-3 py-1.5 text-left text-inherit outline-none ring-offset-2 ring-offset-[#040d14] focus-visible:ring-2 focus-visible:ring-white/35",
+                interactive ? "cursor-pointer" : "",
+              )}
+              aria-haspopup={pillAriaHasPopup}
+              aria-expanded={pillAriaExpanded}
+            >
+              <span className={cn("inline-block h-1.5 w-1.5 shrink-0 rounded-full", dotClass)} />
+              <span className="min-w-0 flex-1 truncate">{baseLabel}</span>
+            </button>
+            <button
+              type="button"
+              data-testid="ham-workspace-pill-create"
+              aria-label="Create workspace"
+              title="Create workspace"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setPickerOpen(false);
+                setCreateOpen(true);
+              }}
+              className="flex shrink-0 items-center justify-center border-0 border-l border-white/15 bg-transparent px-2.5 py-1 text-inherit outline-none ring-offset-2 ring-offset-[#040d14] hover:bg-white/[0.08] focus-visible:ring-2 focus-visible:ring-white/35"
+            >
+              <Plus className="h-4 w-4 shrink-0 opacity-90" strokeWidth={2} aria-hidden />
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            data-testid="ham-workspace-pill"
+            onClick={onPillClick}
+            className={cn(
+              "flex min-h-8 w-full max-w-full items-center gap-2 rounded-lg border px-3 py-1.5 text-left text-xs font-semibold backdrop-blur transition-colors",
+              pillClass,
+              interactive ? "cursor-pointer" : "",
+            )}
+            aria-haspopup={pillAriaHasPopup}
+            aria-expanded={pillAriaExpanded}
+          >
+            <span className={cn("inline-block h-1.5 w-1.5 rounded-full", dotClass)} />
+            <span className="min-w-0 flex-1 truncate">{baseLabel}</span>
+          </button>
+        )}
         {detailsOpen ? (
           <div
             role="dialog"
@@ -319,30 +340,11 @@ export function HamWorkspaceTopbarPill({ className }: HamWorkspaceTopbarPillProp
           />
         ) : null}
       </div>
-      {createOpen && me && typeof document !== "undefined"
-        ? createPortal(
-            <div
-              className="fixed inset-0 z-[400] flex items-center justify-center bg-black/70 p-4"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="ham-workspace-create-title"
-              data-testid="ham-workspace-create-dialog"
-              onClick={(ev) => {
-                if (ev.target === ev.currentTarget) setCreateOpen(false);
-              }}
-            >
-              <WorkspaceOnboardingScreen
-                user={me.user}
-                orgs={me.orgs}
-                onCreate={handleCreate}
-                onDismiss={() => setCreateOpen(false)}
-                allowDismiss
-                variant="dialog"
-              />
-            </div>,
-            document.body,
-          )
-        : null}
+      <WorkspaceCreateWorkspaceDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onCreated={() => navigate("/workspace/chat")}
+      />
     </>
   );
 }

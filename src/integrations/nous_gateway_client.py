@@ -81,6 +81,11 @@ def format_gateway_error_user_message(exc: GatewayCallError) -> str:
         )
     if exc.code == "UPSTREAM_REJECTED":
         return "The model gateway rejected the request. Try again or contact support if it continues."
+    if exc.code == "OPENROUTER_MODEL_REJECTED":
+        return (
+            "OpenRouter rejected the selected model. Switch back to Hermes Agent / Default "
+            "or choose a recommended model."
+        )
     if exc.code == "INVALID_REQUEST":
         return exc.message
     if exc.code == "CONFIG_ERROR":
@@ -288,6 +293,11 @@ def stream_chat_turn(
             lower = msg.lower()
             if "timeout" in lower or "timed out" in lower:
                 raise GatewayCallError("UPSTREAM_TIMEOUT", msg) from exc
+            if bypass_http:
+                raise GatewayCallError(
+                    "OPENROUTER_MODEL_REJECTED",
+                    "OpenRouter rejected the selected model for BYOK chat.",
+                ) from exc
             raise GatewayCallError("UPSTREAM_REJECTED", msg) from exc
 
     # User BYOK bypass: authenticated OpenRouter completions while global gateway stays http (Hermes).

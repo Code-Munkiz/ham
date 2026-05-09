@@ -262,3 +262,66 @@ def test_openrouter_public_fetch_hits_network_at_most_once_per_ttl(monkeypatch: 
     second_ids = {x["id"] for x in second["items"]}
     assert first_ids == second_ids
     assert "openai/ham-fetch-1" in first_ids
+
+
+def test_composer_model_band_recommended_when_openrouter_ready(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HERMES_GATEWAY_MODE", "openrouter")
+    monkeypatch.setenv("OPENROUTER_API_KEY", _FAKE_OR_KEY)
+    monkeypatch.delenv("HAM_CURSOR_CREDENTIALS_FILE", raising=False)
+    monkeypatch.delenv("CURSOR_API_KEY", raising=False)
+    payload = mc.build_catalog_payload()
+    or_default = next(x for x in payload["items"] if x["id"] == "openrouter:default")
+    assert or_default.get("supports_chat") is True
+    assert or_default.get("composer_model_band") == "recommended"
+
+
+def test_composer_model_band_allowlisted_dynamic_vs_experimental(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HERMES_GATEWAY_MODE", "openrouter")
+    monkeypatch.setenv("OPENROUTER_API_KEY", _FAKE_OR_KEY)
+
+    fake_rows = [
+        {
+            "id": "openai/gpt-4o-mini",
+            "label": "Mini",
+            "tag": "API",
+            "tier": None,
+            "provider": "openai",
+            "description": "test",
+            "supports_chat": True,
+            "disabled_reason": None,
+            "openrouter_model": "openrouter/openai/gpt-4o-mini",
+        },
+        {
+            "id": "vendor/weird",
+            "label": "Weird",
+            "tag": "API",
+            "tier": None,
+            "provider": "vendor",
+            "description": "test",
+            "supports_chat": True,
+            "disabled_reason": None,
+            "openrouter_model": "openrouter/vendor/weird",
+        },
+    ]
+    monkeypatch.setattr(mc, "_fetch_openrouter_public_models_from_network", lambda: (list(fake_rows), False))
+
+    payload = mc.build_catalog_payload()
+    by_id = {x["id"]: x for x in payload["items"]}
+    assert by_id["openai/gpt-4o-mini"].get("composer_model_band") == "recommended"
+    assert by_id["vendor/weird"].get("composer_model_band") == "experimental"
+
+
+def test_sanitize_openrouter_marks_non_text_input_row() -> None:
+    data = {
+        "data": [
+            {
+                "id": "vid/vision-only",
+                "name": "Vision",
+                "architecture": {"input_modalities": ["image"], "output_modalities": ["text"]},
+            },
+        ],
+    }
+    rows = mc._sanitize_openrouter_models_payload(data)
+    assert len(rows) == 1
+    assert rows[0]["supports_chat"] is False
+    assert "text" in (rows[0].get("disabled_reason") or "").lower()
