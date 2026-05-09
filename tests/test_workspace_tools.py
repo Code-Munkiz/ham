@@ -793,6 +793,59 @@ class TestVersionFieldDefaults:
             )
 
 
+class TestOpenAiTranscriptionToolStatus:
+    """Connected Tools row for STT must match ``/api/chat/transcribe`` key resolution."""
+
+    def _actor(self) -> HamActor:
+        return HamActor(
+            user_id="user_stt_test",
+            org_id=None,
+            session_id="sess_stt",
+            email="stt-test@example.com",
+            permissions=frozenset(),
+            org_role=None,
+            raw_permission_claim=None,
+        )
+
+    def test_ready_when_platform_openai_transcription_configured(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setenv("HAM_TRANSCRIPTION_PROVIDER", "openai")
+        monkeypatch.setenv("HAM_TRANSCRIPTION_API_KEY", "sk-proj-" + ("b" * 48))
+
+        async def _actor_dep() -> HamActor:
+            return self._actor()
+
+        fastapi_app.dependency_overrides[get_ham_clerk_actor] = _actor_dep
+        try:
+            r = client.get("/api/workspace/tools")
+        finally:
+            fastapi_app.dependency_overrides.pop(get_ham_clerk_actor, None)
+
+        assert r.status_code == 200
+        stt = next(t for t in r.json()["tools"] if t["id"] == "openai_transcription")
+        assert stt["status"] == "ready"
+        assert stt["enabled"] is True
+
+    def test_needs_sign_in_when_no_platform_or_byok(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.delenv("HAM_TRANSCRIPTION_PROVIDER", raising=False)
+        monkeypatch.delenv("HAM_TRANSCRIPTION_API_KEY", raising=False)
+
+        async def _actor_dep() -> HamActor:
+            return self._actor()
+
+        fastapi_app.dependency_overrides[get_ham_clerk_actor] = _actor_dep
+        try:
+            r = client.get("/api/workspace/tools")
+        finally:
+            fastapi_app.dependency_overrides.pop(get_ham_clerk_actor, None)
+
+        assert r.status_code == 200
+        stt = next(t for t in r.json()["tools"] if t["id"] == "openai_transcription")
+        assert stt["status"] == "needs_sign_in"
+        assert stt["enabled"] is False
+
+
 class TestScanInvalidatesClaudeCache:
     """The scan endpoint must invalidate the Claude SDK detection cache."""
 

@@ -43,6 +43,7 @@ from pydantic import BaseModel, Field
 from src.api.clerk_gate import get_ham_clerk_actor
 from src.api.models_catalog import build_catalog_payload
 from src.ham.clerk_auth import HamActor, clerk_authorization_is_clerk_session
+from src.ham.transcription_config import transcription_runtime_configured
 from src.ham.workspace_tool_key_validation import (
     validate_anthropic_api_key,
     validate_cursor_api_key,
@@ -500,8 +501,11 @@ def _comfyui_status(cloud: bool) -> ToolStatus:
 
 
 def _openai_transcription_tool_status(actor: HamActor | None = None) -> ToolStatus:
-    """User BYOK ``openai_transcription`` credential (``/api/chat/transcribe``)."""
+    """Match ``/api/chat/transcribe``: BYOK Connected Tool first, else platform ``HAM_TRANSCRIPTION_*``."""
     if actor and has_connected_tool_credential_record(actor, "openai_transcription"):
+        return ToolStatus.ready
+    configured, _ = transcription_runtime_configured(actor)
+    if configured:
         return ToolStatus.ready
     return ToolStatus.needs_sign_in
 
