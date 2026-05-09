@@ -92,6 +92,8 @@ type WorkspaceChatComposerProps = {
   /** When true, show context meter rings before voice/send. */
   contextMetersEnabled?: boolean;
   contextMetersPayload?: ChatContextMetersPayload | null;
+  /** Models that failed with OPENROUTER_MODEL_REJECTED this session (picker hint only). */
+  failedChatModelIds?: ReadonlySet<string> | null;
 };
 
 const COMPOSER_MENU_FOOTER_HINT =
@@ -134,9 +136,9 @@ function attachMenuDisabledReason(
 
 type VoiceUiState = "idle" | "recording" | "live" | "stopping" | "transcribing" | "error";
 
-function chatModelCandidates(c: ModelCatalogPayload | null): ModelCatalogItem[] {
+function chatModelPickerRows(c: ModelCatalogPayload | null): ModelCatalogItem[] {
   if (!c?.items?.length) return [];
-  return c.items.filter((x) => x.supports_chat);
+  return c.items.filter((x) => !x.id.startsWith("cursor:"));
 }
 
 function primaryModelPillText(
@@ -215,6 +217,7 @@ export function WorkspaceChatComposer({
   generateVideo,
   contextMetersEnabled = false,
   contextMetersPayload = null,
+  failedChatModelIds = null,
 }: WorkspaceChatComposerProps) {
   const [voiceState, setVoiceState] = React.useState<VoiceUiState>("idle");
   const [voiceBanner, setVoiceBanner] = React.useState<string | null>(null);
@@ -385,9 +388,11 @@ export function WorkspaceChatComposer({
 
   const gm = catalog ? (catalog.gateway_mode || "").toLowerCase() : "";
   const byokOr = catalog?.openrouter_user_byok_connected === true;
+  const pickerRows = chatModelPickerRows(catalog);
   const showModel = Boolean(
-    catalog && chatModelCandidates(catalog).length > 0 && (gm === "openrouter" || (gm === "http" && byokOr)),
+    catalog && pickerRows.length > 0 && (gm === "openrouter" || gm === "http" || gm === "mock"),
   );
+  const byokPickerActive = gm === "http" && byokOr === true && Boolean(modelId);
   const gatewayOk = isDashboardChatGatewayReady(catalog);
   const modelPill = primaryModelPillText(catalog, modelId);
   const modelDetail = modelDetailTitle(catalog, modelId, chatCapabilities);
@@ -813,12 +818,14 @@ export function WorkspaceChatComposer({
               {showModel ? (
                 <WorkspaceOpenRouterModelPicker
                   catalog={catalog!}
-                  candidates={chatModelCandidates(catalog!)}
+                  candidates={pickerRows}
                   modelId={modelId}
                   onModelIdChange={onModelIdChange}
                   disabled={sending}
                   title={modelDetail}
                   triggerRef={modelPickerTriggerRef}
+                  byokPickerActive={byokPickerActive}
+                  failedModelIds={failedChatModelIds}
                 />
               ) : modelPill ? (
                 <span

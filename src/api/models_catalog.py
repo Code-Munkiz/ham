@@ -86,6 +86,24 @@ _FALLBACK_CURSOR_SLUGS: list[str] = [
 ]
 
 
+def get_gateway_mode_for_chat() -> str:
+    """Public gateway mode for chat routing / preference logic (same as internal ``_gateway_mode``)."""
+    return _gateway_mode()
+
+
+# Conservative allowlist for "Recommended" band in composer (extend as needed).
+_RECOMMENDED_DYNAMIC_OPENROUTER_IDS: frozenset[str] = frozenset(
+    {
+        "openai/gpt-4o-mini",
+        "openai/gpt-4o",
+        "anthropic/claude-3.5-sonnet",
+        "anthropic/claude-3.5-haiku",
+        "google/gemini-2.0-flash-001",
+        "meta-llama/llama-3.3-70b-instruct",
+    }
+)
+
+
 def _gateway_mode() -> str:
     raw = (os.environ.get("HERMES_GATEWAY_MODE") or "").strip().lower()
     if raw == "mock":
@@ -235,6 +253,17 @@ def _pricing_hint(raw: Any) -> str | None:
     return pp or cc
 
 
+def _text_input_modality_allows_chat(row: dict[str, Any]) -> bool:
+    arch = row.get("architecture")
+    if not isinstance(arch, dict):
+        return True
+    ins = arch.get("input_modalities")
+    if not isinstance(ins, list) or not ins:
+        return True
+    lowered = {str(x).lower() for x in ins}
+    return "text" in lowered
+
+
 def _model_row_likely_chat_capable(row: dict[str, Any]) -> bool:
     mid = str(row.get("id") or "").lower()
     if "text-embedding" in mid or mid.endswith("embedding"):
@@ -278,6 +307,12 @@ def _sanitize_openrouter_models_payload(data: dict[str, Any]) -> list[dict[str, 
             context_length = int(ctx) if ctx is not None else None
         except (TypeError, ValueError):
             context_length = None
+        if not _text_input_modality_allows_chat(m):
+            chat_eligible = False
+            disabled_chat = "Not text-in compatible."
+        else:
+            chat_eligible = True
+            disabled_chat = None
         family = mid.split("/", 1)[0] if "/" in mid else "openrouter"
         pricing = _pricing_hint(m.get("pricing"))
         out.append(
@@ -288,8 +323,8 @@ def _sanitize_openrouter_models_payload(data: dict[str, Any]) -> list[dict[str, 
                 "tier": None,
                 "provider": family,
                 "description": description or f"OpenRouter model `{mid}`.",
-                "supports_chat": True,
-                "disabled_reason": None,
+                "supports_chat": chat_eligible,
+                "disabled_reason": disabled_chat,
                 "openrouter_model": _normalize_openrouter_litellm_model(mid),
                 "context_length": context_length,
                 "pricing_display": pricing,
@@ -499,6 +534,19 @@ def _slug_row(slug: str) -> dict[str, Any]:
     }
 
 
+def _with_composer_model_band(row: dict[str, Any]) -> dict[str, Any]:
+    mid = str(row.get("id") or "")
+    if mid.startswith("cursor:"):
+        return dict(row)
+    if not row.get("supports_chat"):
+        return {**row, "composer_model_band": "experimental"}
+    if mid in ("openrouter:default", "tier:auto", "tier:premium"):
+        return {**row, "composer_model_band": "recommended"}
+    if mid in _RECOMMENDED_DYNAMIC_OPENROUTER_IDS:
+        return {**row, "composer_model_band": "recommended"}
+    return {**row, "composer_model_band": "experimental"}
+
+
 def build_catalog_payload(ham_actor: HamActor | None = None) -> dict[str, Any]:
     slugs = _fetch_cursor_slugs()
     source: Literal["cursor_api", "fallback"] = "cursor_api" if slugs else "fallback"
@@ -592,7 +640,7 @@ def build_catalog_payload(ham_actor: HamActor | None = None) -> dict[str, Any]:
         "byok_openrouter": byok_meta,
     }
 
-    items = openrouter_items + dyn_rows + cursor_items
+    items = [_with_composer_model_band(x) for x in openrouter_items + dyn_rows + cursor_items]
     http_primary = (os.environ.get("HERMES_GATEWAY_MODEL") or "").strip() or None
     http_fallback = (os.environ.get("HAM_CHAT_FALLBACK_MODEL") or "").strip() or None
     return {

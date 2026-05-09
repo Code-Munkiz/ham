@@ -223,6 +223,34 @@ def test_chat_stream_gateway_failure_done_with_safe_assistant_and_signal(
     assert "rejected" in body.lower() or "gateway" in body.lower()
 
 
+def test_chat_stream_openrouter_model_rejected_done_with_safe_assistant_and_signal(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def failing_stream(*_a, **_k):
+        raise GatewayCallError(
+            "OPENROUTER_MODEL_REJECTED",
+            "secret-provider-body-do-not-show-users",
+            http_status=400,
+        )
+
+    monkeypatch.setattr("src.api.chat.stream_chat_turn", failing_stream)
+
+    res = client.post(
+        "/api/chat/stream",
+        json={"messages": [{"role": "user", "content": "x"}]},
+    )
+    assert res.status_code == 200
+    events = _parse_ndjson(res.text)
+    assert events[-1]["type"] == "done"
+    done = events[-1]
+    assert done.get("gateway_error") == {"code": "OPENROUTER_MODEL_REJECTED"}
+    msgs = done["messages"]
+    assistants = [m for m in msgs if m["role"] == "assistant"]
+    assert len(assistants) == 1
+    body = msgs[-1]["content"]
+    assert "secret-provider" not in body.lower()
+
+
 def test_chat_stream_done_includes_active_agent_meta(
     mock_mode: None, isolated_home: Path, tmp_path: Path,
 ) -> None:

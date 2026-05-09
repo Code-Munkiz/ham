@@ -13,6 +13,7 @@ import {
   createChatSession,
   downloadChatSessionPdf,
   ensureProjectIdForWorkspaceRoot,
+  fetchChatComposerPreference,
   fetchChatCapabilities,
   fetchChatContextMeters,
   fetchContextEngine,
@@ -22,6 +23,7 @@ import {
   fetchModelsCatalog,
   HamAccessRestrictedError,
   HamChatStreamIncompleteError,
+  putChatComposerPreference,
   postChatTranscribe,
   postChatUploadAttachment,
   postHamGeneratedImage,
@@ -586,6 +588,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   const [missionLoading, setMissionLoading] = React.useState(false);
   const [missionError, setMissionError] = React.useState<string | null>(null);
   const [modelId, setModelId] = React.useState<string | null>(null);
+  const [failedChatModelIds, setFailedChatModelIds] = React.useState<string[]>([]);
   const executionModePreference: "auto" | "browser" | "machine" | "chat" = "auto";
   const [executionMode, setExecutionMode] = React.useState<HamChatExecutionMode | null>(null);
   const [projectId, setProjectId] = React.useState<string | null>(null);
@@ -641,6 +644,14 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   React.useEffect(() => {
     activeWorkspaceIdRef.current = activeWorkspaceId;
   }, [activeWorkspaceId]);
+
+  const composerPrefSaveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelComposerPrefSaveTimer = React.useCallback(() => {
+    if (composerPrefSaveTimerRef.current !== null) {
+      clearTimeout(composerPrefSaveTimerRef.current);
+      composerPrefSaveTimerRef.current = null;
+    }
+  }, []);
 
   const revokeAllChatAttachmentLocalBlobs = React.useCallback(() => {
     for (const u of chatAttachmentLocalBlobByServerIdRef.current.values()) {
@@ -828,6 +839,31 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     (catalog?.gateway_mode === "http" && catalog?.openrouter_user_byok_connected === true)
       ? modelId
       : null;
+
+  const handleComposerModelIdChange = React.useCallback(
+    (id: string | null) => {
+      setModelId(id);
+      const ws = activeWorkspaceIdRef.current?.trim();
+      if (!ws) return;
+      cancelComposerPrefSaveTimer();
+      composerPrefSaveTimerRef.current = setTimeout(() => {
+        composerPrefSaveTimerRef.current = null;
+        void (async () => {
+          try {
+            const out = await putChatComposerPreference(ws, { model_id: id });
+            if (out.cleared) setModelId(out.model_id ?? null);
+          } catch (e) {
+            toast.error(e instanceof Error ? e.message : "Could not save model preference.", {
+              duration: 8000,
+            });
+          }
+        })();
+      }, 450);
+    },
+    [cancelComposerPrefSaveTimer],
+  );
+
+  React.useEffect(() => () => cancelComposerPrefSaveTimer(), [cancelComposerPrefSaveTimer]);
 
   const refreshContextMeters = React.useCallback(
     async (sessionOverride?: string | null) => {
@@ -1227,10 +1263,35 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   }, []);
 
   React.useEffect(() => {
-    if (!catalog?.items?.length) return;
-    const first = catalog.items.find((i) => i.supports_chat);
-    setModelId((prev) => prev ?? first?.id ?? null);
-  }, [catalog]);
+    const ws = activeWorkspaceId?.trim();
+    if (!ws || !catalog?.items?.length) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const p = await fetchChatComposerPreference(ws);
+        if (cancelled) return;
+        let next = p.model_id ?? null;
+        const gm = (catalog.gateway_mode || "").toLowerCase();
+        if (next == null && gm === "openrouter") {
+          next =
+            catalog.items.find((i) => i.supports_chat && !i.id.startsWith("cursor:"))?.id ?? null;
+        }
+        setModelId(next);
+      } catch {
+        if (cancelled) return;
+        const gm = (catalog.gateway_mode || "").toLowerCase();
+        if (gm === "openrouter") {
+          const first = catalog.items.find((i) => i.supports_chat && !i.id.startsWith("cursor:"));
+          setModelId(first?.id ?? null);
+        } else {
+          setModelId(null);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeWorkspaceId, catalog]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -1385,6 +1446,8 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     if (prev === activeWorkspaceId) return;
     previousActiveWorkspaceIdRef.current = activeWorkspaceId;
     suppressSessionQueryUntilNavigationRef.current = true;
+    cancelComposerPrefSaveTimer();
+    setFailedChatModelIds([]);
 
     streamTurnSessionRef.current = null;
     lastSessionRestoreScopeRef.current = null;
@@ -1411,6 +1474,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     missionIdFromQuery,
     navigate,
     revokeAllChatAttachmentLocalBlobs,
+    cancelComposerPrefSaveTimer,
   ]);
 
   React.useEffect(() => {
@@ -2328,6 +2392,31 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
             },
           }),
         );
+        if (res.gateway_error?.code === "OPENROUTER_MODEL_REJECTED") {
+          const mid = chatModelIdForApi;
+          if (mid) {
+            setFailedChatModelIds((prev) => (prev.includes(mid) ? prev : [...prev, mid]));
+          }
+          toast.error(
+            "OpenRouter rejected the selected model. Switch back to Hermes Agent / Default or choose a recommended model.",
+            {
+              action: {
+                label: "Use Hermes default",
+                onClick: () => {
+                  cancelComposerPrefSaveTimer();
+                  setModelId(null);
+                  const w = activeWorkspaceIdRef.current?.trim();
+                  if (w) {
+                    void putChatComposerPreference(w, { model_id: null }).then((out) => {
+                      if (out.cleared) setModelId(out.model_id ?? null);
+                    });
+                  }
+                },
+              },
+              duration: 12_000,
+            },
+          );
+        }
         applyHamUiActions(res.actions ?? [], {
           navigate,
           setIsControlPanelOpen: () => {},
@@ -2465,6 +2554,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       modelId,
       runWorkspaceImageGeneration,
       refreshContextMeters,
+      cancelComposerPrefSaveTimer,
     ],
   );
 
@@ -3140,7 +3230,8 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
             onRetryAttachmentUpload={(lid) => void handleRetryAttachmentUpload(lid)}
             catalog={catalog}
             modelId={modelId}
-            onModelIdChange={setModelId}
+            onModelIdChange={handleComposerModelIdChange}
+            failedChatModelIds={new Set(failedChatModelIds)}
             sttDictationEnabled={sttDictationEnabled}
             sttUnavailableReason={sttUnavailableReason}
             sttMode={sttMode}

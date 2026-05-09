@@ -157,8 +157,11 @@ _workspace_routes_enabled = (
     in ("1", "true", "yes", "on")
 )
 if _workspace_routes_enabled:
+    from src.api.workspace_chat_composer_preference import router as workspace_chat_composer_preference_router
+
     app.include_router(me_router)
     app.include_router(workspaces_router)
+    app.include_router(workspace_chat_composer_preference_router)
 
 _store = RunStore()
 

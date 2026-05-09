@@ -178,6 +178,8 @@ export interface ModelCatalogItem {
   context_length?: number | null;
   /** Short pricing summary derived from provider metadata (no secrets). */
   pricing_display?: string | null;
+  /** Composer UI band: Recommended (tiers + allowlist) vs Experimental (other chat-capable OpenRouter ids). */
+  composer_model_band?: "recommended" | "experimental";
 }
 
 /** Response from `GET /api/tts/health` — TTS enabled and mounted (no network probe). */
@@ -214,6 +216,13 @@ export interface HamVoiceSettingsPayload {
 export type HamVoiceSettingsPatch = {
   tts?: Partial<{ enabled: boolean; provider: "edge"; voice: string }>;
   stt?: Partial<{ enabled: boolean; provider: "openai"; mode: "auto" | "live" | "record" }>;
+};
+
+/** GET/PUT `/api/workspaces/{id}/chat-composer-preference` — no secrets. */
+export type HamChatComposerPreferencePayload = {
+  kind: "ham_chat_composer_preference";
+  model_id: string | null;
+  cleared?: boolean;
 };
 
 /** Response from `GET /api/models`. */

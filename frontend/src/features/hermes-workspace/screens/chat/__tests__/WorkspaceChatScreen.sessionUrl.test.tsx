@@ -30,6 +30,14 @@ vi.mock("@/lib/ham/api", async (importOriginal) => {
     ...mod,
     fetchChatSession: (...args: Parameters<typeof mod.fetchChatSession>) =>
       fetchChatSessionMock(...args),
+    fetchChatComposerPreference: vi.fn(async () => ({
+      kind: "ham_chat_composer_preference" as const,
+      model_id: null,
+    })),
+    putChatComposerPreference: vi.fn(async (_workspaceId: string, body: { model_id: string | null }) => ({
+      kind: "ham_chat_composer_preference" as const,
+      model_id: body.model_id,
+    })),
   };
 });
 
