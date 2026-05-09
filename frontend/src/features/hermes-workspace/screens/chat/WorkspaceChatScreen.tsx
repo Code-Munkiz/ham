@@ -823,7 +823,11 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     }
   }, []);
 
-  const chatModelIdForApi = catalog?.gateway_mode === "openrouter" ? modelId : null;
+  const chatModelIdForApi =
+    catalog?.gateway_mode === "openrouter" ||
+    (catalog?.gateway_mode === "http" && catalog?.openrouter_user_byok_connected === true)
+      ? modelId
+      : null;
 
   const refreshContextMeters = React.useCallback(
     async (sessionOverride?: string | null) => {

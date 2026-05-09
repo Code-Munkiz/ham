@@ -83,11 +83,7 @@ from src.ham.execution_mode import (
     resolve_execution_mode,
 )
 from src.ham.operator_audit import append_operator_action_audit
-from src.ham.transcription_config import (
-    transcription_api_key,
-    transcription_provider,
-    transcription_runtime_configured,
-)
+from src.ham.transcription_config import resolve_transcription_openai_api_key_for_actor
 from src.ham.ui_actions import split_assistant_ui_actions, ui_actions_system_instructions
 from src.integrations.nous_gateway_client import (
     GatewayCallError,
@@ -95,9 +91,11 @@ from src.integrations.nous_gateway_client import (
     format_gateway_error_user_message,
     stream_chat_turn,
 )
+from src.llm_client import openrouter_api_key_is_plausible
 from src.memory_heist import browser_policy_from_config, discover_config
 from src.metadata_stamps import ScanMode
 from src.persistence.chat_session_store import ChatTurn, build_chat_session_store
+from src.persistence.connected_tool_credentials import resolve_connected_tool_secret_plaintext
 from src.persistence.project_store import get_project_store
 
 router = APIRouter(tags=["chat"])
@@ -485,52 +483,138 @@ def _append_workbench_to_messages(
     return out
 
 
-def _resolve_openrouter_model_override(body: ChatRequest) -> str | None:
-    if body.model_id and (os.environ.get("HERMES_GATEWAY_MODE") or "").strip().lower() != "openrouter":
+def _resolve_chat_openrouter_route(
+    *,
+    body: ChatRequest,
+    ham_actor: HamActor | None,
+) -> tuple[str | None, str | None, bool]:
+    """Return (liteLLM model override, user OpenRouter hint key, bypass Hermes-http for LiteLLM)."""
+
+    gw = (os.environ.get("HERMES_GATEWAY_MODE") or "").strip().lower()
+    hinted_key = ""
+    if ham_actor is not None:
+        hinted_key = (resolve_connected_tool_secret_plaintext(ham_actor, "openrouter") or "").strip()
+
+    user_key_ready = bool(hinted_key and openrouter_api_key_is_plausible(hinted_key))
+    mid_raw = body.model_id
+    mid_stripped = str(mid_raw).strip() if mid_raw else ""
+
+    if gw == "http":
+        if not mid_stripped:
+            return None, hinted_key if user_key_ready else None, False
+        if ham_actor is None:
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "error": {
+                        "code": "CONNECT_OPENROUTER_REQUIRED",
+                        "message": (
+                            "Sign in and connect OpenRouter under Workspace → Connected Tools "
+                            "before choosing this model alongside the Hermes HTTP gateway."
+                        ),
+                    },
+                },
+            )
+        if not user_key_ready:
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "error": {
+                        "code": "CONNECT_OPENROUTER_REQUIRED",
+                        "message": (
+                            "Connect OpenRouter under Workspace → Connected Tools to use per-model "
+                            "dashboard chat."
+                        ),
+                    },
+                },
+            )
+
+        try:
+            model_override = resolve_model_id_for_chat(mid_stripped, ham_actor)
+        except ValueError as exc:
+            code = str(exc)
+            if code == "CURSOR_MODEL_NOT_CHAT_ENABLED":
+                raise HTTPException(
+                    status_code=422,
+                    detail={
+                        "error": {
+                            "code": "CURSOR_MODEL_NOT_CHAT_ENABLED",
+                            "message": "Cursor API models are not available for dashboard chat; pick OpenRouter.",
+                        },
+                    },
+                ) from exc
+            if code == "MODEL_NOT_AVAILABLE_FOR_CHAT":
+                raise HTTPException(
+                    status_code=422,
+                    detail={
+                        "error": {
+                            "code": "MODEL_NOT_AVAILABLE_FOR_CHAT",
+                            "message": "Selected model is not available for chat (gateway or configuration).",
+                        },
+                    },
+                ) from exc
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "error": {
+                        "code": "UNKNOWN_MODEL_ID",
+                        "message": "Unknown model_id for chat.",
+                    },
+                },
+            ) from exc
+        return model_override, hinted_key, True
+
+    if gw == "openrouter":
+        if not mid_stripped:
+            return None, hinted_key if user_key_ready else None, False
+        try:
+            model_override = resolve_model_id_for_chat(mid_stripped, ham_actor)
+        except ValueError as exc:
+            code = str(exc)
+            if code == "CURSOR_MODEL_NOT_CHAT_ENABLED":
+                raise HTTPException(
+                    status_code=422,
+                    detail={
+                        "error": {
+                            "code": "CURSOR_MODEL_NOT_CHAT_ENABLED",
+                            "message": "Cursor API models are not available for dashboard chat; pick OpenRouter.",
+                        },
+                    },
+                ) from exc
+            if code == "MODEL_NOT_AVAILABLE_FOR_CHAT":
+                raise HTTPException(
+                    status_code=422,
+                    detail={
+                        "error": {
+                            "code": "MODEL_NOT_AVAILABLE_FOR_CHAT",
+                            "message": "Selected model is not available for chat (gateway or configuration).",
+                        },
+                    },
+                ) from exc
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "error": {
+                        "code": "UNKNOWN_MODEL_ID",
+                        "message": "Unknown model_id for chat.",
+                    },
+                },
+            ) from exc
+
+        return model_override, hinted_key if user_key_ready else None, False
+
+    if mid_stripped:
         raise HTTPException(
             status_code=422,
             detail={
                 "error": {
                     "code": "MODEL_SELECTION_REQUIRES_OPENROUTER",
-                    "message": "Per-request model selection requires HERMES_GATEWAY_MODE=openrouter on the API host.",
-                }
+                    "message": "Per-request model selection requires gateway mode http "
+                    "(BYOK route) or HERMES_GATEWAY_MODE=openrouter on the API host.",
+                },
             },
         )
-    if not body.model_id or not str(body.model_id).strip():
-        return None
-    try:
-        return resolve_model_id_for_chat(body.model_id)
-    except ValueError as exc:
-        code = str(exc)
-        if code == "CURSOR_MODEL_NOT_CHAT_ENABLED":
-            raise HTTPException(
-                status_code=422,
-                detail={
-                    "error": {
-                        "code": "CURSOR_MODEL_NOT_CHAT_ENABLED",
-                        "message": "Cursor API models are not available for dashboard chat; pick OpenRouter or a tier preset.",
-                    }
-                },
-            ) from exc
-        if code == "MODEL_NOT_AVAILABLE_FOR_CHAT":
-            raise HTTPException(
-                status_code=422,
-                detail={
-                    "error": {
-                        "code": "MODEL_NOT_AVAILABLE_FOR_CHAT",
-                        "message": "Selected model is not available for chat (gateway or configuration).",
-                    }
-                },
-            ) from exc
-        raise HTTPException(
-            status_code=422,
-            detail={
-                "error": {
-                    "code": "UNKNOWN_MODEL_ID",
-                    "message": "Unknown model_id for chat.",
-                }
-            },
-        ) from exc
+    return None, None, False
 
 
 def _resolve_project_root_for_chat(project_id: str | None) -> Path | None:
@@ -846,7 +930,7 @@ def _messages_for_completion(
     attachment_user_id: str | None = None,
     llm_attachment_user_id: str | None = None,
     authenticated_actor_user_id: str | None = None,
-) -> tuple[str, list[dict[str, Any]], str | None, dict[str, Any] | None, str]:
+) -> tuple[str, list[dict[str, Any]], dict[str, Any] | None, str]:
     sid, llm_messages, active_meta, last_user_plain = _prepare_chat_session(
         body,
         user_id=user_id,
@@ -854,9 +938,8 @@ def _messages_for_completion(
         llm_attachment_user_id=llm_attachment_user_id,
         authenticated_actor_user_id=authenticated_actor_user_id,
     )
-    or_override = _resolve_openrouter_model_override(body)
     llm_messages = _append_workbench_to_messages(llm_messages, body)
-    return sid, llm_messages, or_override, active_meta, last_user_plain
+    return sid, llm_messages, active_meta, last_user_plain
 
 
 def _with_interrupted_note(content: str) -> str:
@@ -902,7 +985,7 @@ def get_chat_context_meters(
         authenticated_actor_user_id=ham_actor.user_id if ham_actor is not None else None,
     )
     turns = rec.turns
-    cat = build_catalog_payload()
+    cat = build_catalog_payload(ham_actor)
     raw_items = cat.get("items")
     items = raw_items if isinstance(raw_items, list) else []
     model_limit, _from_cat = resolve_model_context_tokens(model_id, items)
@@ -1201,12 +1284,16 @@ async def post_chat(
     )
     store = _chat_store
     aid = ham_actor.user_id if ham_actor is not None else None
-    sid, llm_messages, or_override, active_meta, last_user_plain = _messages_for_completion(
+    sid, llm_messages, active_meta, last_user_plain = _messages_for_completion(
         body,
         user_id=_scoped_user_id(ham_actor, _normalized_workspace_id(body.workspace_id)),
         attachment_user_id=aid,
         llm_attachment_user_id=aid,
         authenticated_actor_user_id=aid,
+    )
+    or_override, litellm_hint_key, litellm_http_bypass = _resolve_chat_openrouter_route(
+        body=body,
+        ham_actor=ham_actor,
     )
     execution_mode = _execution_mode_payload(body, last_user_plain=last_user_plain)
     execution_mode = _apply_browser_bridge_for_turn(
@@ -1252,6 +1339,8 @@ async def post_chat(
         assistant_raw = complete_chat_turn(
             llm_messages,
             openrouter_model_override=or_override,
+            openrouter_litellm_api_key=litellm_hint_key,
+            force_openrouter_litellm_route=litellm_http_bypass,
         )
     except GatewayCallError as exc:
         raise HTTPException(
@@ -1289,12 +1378,16 @@ def post_chat_stream(
     )
     store = _chat_store
     aid = ham_actor.user_id if ham_actor is not None else None
-    sid, llm_messages, or_override, stream_active_meta, last_user_plain = _messages_for_completion(
+    sid, llm_messages, stream_active_meta, last_user_plain = _messages_for_completion(
         body,
         user_id=_scoped_user_id(ham_actor, _normalized_workspace_id(body.workspace_id)),
         attachment_user_id=aid,
         llm_attachment_user_id=aid,
         authenticated_actor_user_id=aid,
+    )
+    or_override, litellm_hint_key, litellm_http_bypass = _resolve_chat_openrouter_route(
+        body=body,
+        ham_actor=ham_actor,
     )
     if not _claim_stream_session(sid):
         raise HTTPException(
@@ -1414,6 +1507,8 @@ def post_chat_stream(
                         for part in stream_chat_turn(
                             stream_msgs,
                             openrouter_model_override=or_override,
+                            openrouter_litellm_api_key=litellm_hint_key,
+                            force_openrouter_litellm_route=litellm_http_bypass,
                         ):
                             pieces.append(part)
                             chars_since_checkpoint += len(part)
@@ -1574,21 +1669,22 @@ async def post_chat_transcribe(
     file: UploadFile = File(...),
 ) -> TranscribeResponse:
     """Multipart audio → OpenAI transcription; same Clerk gate as chat when enabled."""
-    _resolve_chat_clerk_context(
+    ham_actor, _op = _resolve_chat_clerk_context(
         authorization,
         x_ham_operator_authorization,
         route="post_chat_transcribe",
     )
-    configured, _reason = transcription_runtime_configured()
-    provider = transcription_provider()
-    api_key = transcription_api_key()
-    if not configured:
+    transcription_key = resolve_transcription_openai_api_key_for_actor(ham_actor)
+    if not transcription_key:
         raise HTTPException(
             status_code=503,
             detail={
                 "error": {
-                    "code": "TRANSCRIPTION_NOT_CONFIGURED",
-                    "message": "Transcription is not configured on this HAM API host.",
+                    "code": "CONNECT_STT_PROVIDER_REQUIRED",
+                    "message": (
+                        "STT_NOT_CONFIGURED: connect OpenAI (transcription) in Workspace → Connected Tools, "
+                        "or ask your operator to set HAM_TRANSCRIPTION_PROVIDER and HAM_TRANSCRIPTION_API_KEY on the API host."
+                    ),
                 },
             },
         )
@@ -1634,7 +1730,7 @@ async def post_chat_transcribe(
     model = (os.environ.get("HAM_TRANSCRIPTION_MODEL") or "gpt-4o-mini-transcribe").strip()
     try:
         text = await _transcribe_with_openai(
-            api_key=api_key,
+            api_key=transcription_key,
             audio=audio,
             filename=file.filename or "dictation.webm",
             content_type=file.content_type or "audio/webm",
@@ -1652,7 +1748,7 @@ async def post_chat_transcribe(
         _LOG.warning(
             "Transcription upstream rejected request",
             extra={
-                "provider": provider,
+                "provider": "openai",
                 "status_code": status,
                 "error_type": error_type or "unknown",
             },
@@ -1680,7 +1776,7 @@ async def post_chat_transcribe(
         _LOG.warning(
             "Transcription upstream request error",
             extra={
-                "provider": provider,
+                "provider": "openai",
                 "error_type": type(exc).__name__,
             },
         )

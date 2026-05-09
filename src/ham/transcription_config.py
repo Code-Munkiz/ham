@@ -3,6 +3,9 @@ from __future__ import annotations
 
 import os
 
+from src.ham.clerk_auth import HamActor
+from src.persistence.connected_tool_credentials import resolve_connected_tool_secret_plaintext
+
 
 _PLACEHOLDER_TOKENS = (
     "placeholder",
@@ -41,11 +44,24 @@ def is_placeholder_transcription_key(raw: str) -> bool:
     return False
 
 
-def transcription_runtime_configured() -> tuple[bool, str | None]:
-    provider = transcription_provider()
-    key = transcription_api_key()
-    if provider != "openai":
-        return False, "not_configured"
-    if is_placeholder_transcription_key(key):
-        return False, "not_configured"
-    return True, None
+def resolve_transcription_openai_api_key_for_actor(actor: HamActor | None) -> str | None:
+    """User BYOK Connected Tool first; else platform ``HAM_TRANSCRIPTION_*`` when configured."""
+    if actor is not None:
+        u = resolve_connected_tool_secret_plaintext(actor, "openai_transcription")
+        if u and not is_placeholder_transcription_key(u):
+            return u.strip()
+    if transcription_provider() != "openai":
+        return None
+    pk = transcription_api_key()
+    if is_placeholder_transcription_key(pk):
+        return None
+    return pk.strip()
+
+
+def transcription_runtime_configured(
+    actor: HamActor | None = None,
+) -> tuple[bool, str | None]:
+    key = resolve_transcription_openai_api_key_for_actor(actor)
+    if key:
+        return True, None
+    return False, "not_configured"

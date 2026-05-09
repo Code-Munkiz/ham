@@ -222,6 +222,8 @@ export interface ModelCatalogPayload {
   source: string;
   gateway_mode: string;
   openrouter_chat_ready: boolean;
+  /** True when Clerk user has Connected Tools OpenRouter credential (BYOK). */
+  openrouter_user_byok_connected?: boolean;
   /** True when HERMES_GATEWAY_MODE=http and HERMES_GATEWAY_BASE_URL is non-empty. */
   http_chat_ready?: boolean;
   /** True when dashboard chat can run (OpenRouter path ready, or HTTP gateway configured, or mock). */

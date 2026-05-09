@@ -10,6 +10,11 @@ import httpx
 from fastapi import APIRouter, Depends
 
 from src.api.clerk_gate import get_ham_clerk_actor
+from src.ham.clerk_auth import HamActor
+from src.persistence.connected_tool_credentials import (
+    has_connected_tool_credential_record,
+    resolve_connected_tool_secret_plaintext,
+)
 
 from src.llm_client import (
     get_default_model,
@@ -33,6 +38,9 @@ _OPENROUTER_MODELS_CACHE: dict[str, Any] = {
     "items": None,  # None before first fetch in eligible mode; list afterward
     "fetch_failed": False,
 }
+
+_BYOK_MODEL_LOCK = threading.Lock()
+_BYOK_MODEL_CACHE: dict[str, dict[str, Any]] = {}
 
 CURSOR_CHAT_DISABLED_REASON = (
     "Dashboard chat is OpenRouter-backed only. Cursor API models are listed for alignment; "
@@ -131,6 +139,17 @@ def _openrouter_composer_row_chat() -> tuple[bool, str | None]:
     return (False, _FALLBACK_OPENROUTER_TIERS_DISABLED)
 
 
+def _composer_openrouter_tier_visibility(actor: HamActor | None) -> tuple[bool, str | None]:
+    """Composer tier rows Chat-enabled when gateway openrouter, or Clerk BYOK exists in http gateway."""
+    plat_chat, plat_reason = _openrouter_composer_row_chat()
+    if plat_chat:
+        return True, None
+    gw = _gateway_mode()
+    if gw == "http" and actor and has_connected_tool_credential_record(actor, "openrouter"):
+        return True, None
+    return plat_chat, plat_reason
+
+
 def _http_chat_ready() -> bool:
     return _gateway_mode() == "http" and bool(
         (os.environ.get("HERMES_GATEWAY_BASE_URL") or "").strip(),
@@ -152,6 +171,8 @@ def reset_openrouter_catalog_cache_for_tests() -> None:
         _OPENROUTER_MODELS_CACHE["monotonic_at"] = 0.0
         _OPENROUTER_MODELS_CACHE["items"] = None
         _OPENROUTER_MODELS_CACHE["fetch_failed"] = False
+    with _BYOK_MODEL_LOCK:
+        _BYOK_MODEL_CACHE.clear()
 
 
 def _pricing_hint(raw: Any) -> str | None:
@@ -197,32 +218,10 @@ def _model_row_likely_chat_capable(row: dict[str, Any]) -> bool:
     return True
 
 
-def _fetch_openrouter_public_models_from_network() -> tuple[list[dict[str, Any]], bool]:
-    """
-    Pull OpenRouter /api/v1/models using server-side OPENROUTER_API_KEY.
-    Returns (sanitized catalog rows, fetch_failed).
-    """
-    key = (os.environ.get("OPENROUTER_API_KEY") or "").strip()
-    if not key or not openrouter_api_key_is_plausible(key):
-        return [], False
-    try:
-        with httpx.Client(timeout=25.0) as client:
-            resp = client.get(
-                _OPENROUTER_MODELS_URL,
-                headers={"Authorization": f"Bearer {key}"},
-            )
-    except httpx.RequestError:
-        return [], True
-    if resp.status_code != 200:
-        return [], True
-    try:
-        data = resp.json()
-    except (ValueError, TypeError):
-        return [], True
+def _sanitize_openrouter_models_payload(data: dict[str, Any]) -> list[dict[str, Any]]:
     raw_list = data.get("data")
     if not isinstance(raw_list, list):
-        return [], True
-
+        return []
     out: list[dict[str, Any]] = []
     for m in raw_list:
         if not isinstance(m, dict):
@@ -265,7 +264,109 @@ def _fetch_openrouter_public_models_from_network() -> tuple[list[dict[str, Any]]
             },
         )
     out.sort(key=lambda r: (str(r.get("label") or "").lower(), r.get("id") or ""))
-    return out, False
+    return out
+
+
+def _fetch_openrouter_models_with_api_key(api_key: str) -> tuple[list[dict[str, Any]], bool]:
+    ak = api_key.strip()
+    if not ak or not openrouter_api_key_is_plausible(ak):
+        return [], False
+    try:
+        with httpx.Client(timeout=25.0) as client:
+            resp = client.get(
+                _OPENROUTER_MODELS_URL,
+                headers={"Authorization": f"Bearer {ak}"},
+            )
+    except httpx.RequestError:
+        return [], True
+    if resp.status_code != 200:
+        return [], True
+    try:
+        data = resp.json()
+    except (ValueError, TypeError):
+        return [], True
+    if not isinstance(data, dict):
+        return [], True
+    rows = _sanitize_openrouter_models_payload(data)
+    return rows, False
+
+
+def _fetch_openrouter_public_models_from_network() -> tuple[list[dict[str, Any]], bool]:
+    """Pull OpenRouter /api/v1/models using platform ``OPENROUTER_API_KEY``."""
+    platform_key = (os.environ.get("OPENROUTER_API_KEY") or "").strip()
+    return _fetch_openrouter_models_with_api_key(platform_key)
+
+
+def _cached_byok_openrouter_dynamic_rows(actor: HamActor | None) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    meta: dict[str, Any] = {
+        "remote_models_fetched": False,
+        "remote_model_count": 0,
+        "remote_fetch_failed": False,
+        "cache_ttl_sec": int(_OPENROUTER_MODELS_TTL_SEC),
+        "byok_namespace": True,
+    }
+    if actor is None or not has_connected_tool_credential_record(actor, "openrouter"):
+        return [], meta
+
+    key = resolve_connected_tool_secret_plaintext(actor, "openrouter") or ""
+    if not key or not openrouter_api_key_is_plausible(key):
+        return [], meta
+
+    uid = str(actor.user_id).strip()
+    now = time.monotonic()
+    with _BYOK_MODEL_LOCK:
+        entry = _BYOK_MODEL_CACHE.get(uid)
+        if entry and (now - float(entry["monotonic_at"])) < _OPENROUTER_MODELS_TTL_SEC:
+            rows = list(entry["items"])  # type: ignore[list-item]
+            meta["remote_models_fetched"] = True
+            meta["remote_model_count"] = len(rows)
+            meta["remote_fetch_failed"] = bool(entry.get("fetch_failed"))
+            return rows, meta
+
+    rows, failed = _fetch_openrouter_models_with_api_key(key)
+    with _BYOK_MODEL_LOCK:
+        _BYOK_MODEL_CACHE[uid] = {
+            "monotonic_at": now,
+            "items": list(rows),
+            "fetch_failed": failed,
+        }
+    meta["remote_models_fetched"] = True
+    meta["remote_model_count"] = len(rows)
+    meta["remote_fetch_failed"] = failed
+    return rows, meta
+
+
+def _merge_dynamic_items(
+    *,
+    precedence_first: list[dict[str, Any]],
+    precedence_second: list[dict[str, Any]],
+    composer_chat_enabled: bool,
+    gated_reason: str | None,
+) -> list[dict[str, Any]]:
+    """Merge deduped by catalog ``id``. First wins; gated rows downgrade second copy."""
+    if not composer_chat_enabled:
+        gated = []
+        merged = [*precedence_first, *precedence_second]
+        for r in merged:
+            gated.append({**r, "supports_chat": False, "disabled_reason": gated_reason})
+        seen: dict[str, dict[str, Any]] = {}
+        for row in gated:
+            rid = str(row.get("id") or "")
+            if rid and rid not in seen:
+                seen[rid] = row
+        return list(seen.values())
+
+    merged_map: dict[str, dict[str, Any]] = {}
+    for bundle in (precedence_second, precedence_first):
+        for row in bundle:
+            rid = str(row.get("id") or "").strip()
+            if not rid:
+                continue
+            merged_map[rid] = dict(row)
+
+    merged_list = list(merged_map.values())
+    merged_list.sort(key=lambda r: (str(r.get("label") or "").lower(), str(r.get("id") or "")))
+    return merged_list
 
 
 def _cached_openrouter_dynamic_rows(
@@ -366,7 +467,7 @@ def _slug_row(slug: str) -> dict[str, Any]:
     }
 
 
-def build_catalog_payload() -> dict[str, Any]:
+def build_catalog_payload(ham_actor: HamActor | None = None) -> dict[str, Any]:
     slugs = _fetch_cursor_slugs()
     source: Literal["cursor_api", "fallback"] = "cursor_api" if slugs else "fallback"
     if not slugs:
@@ -393,9 +494,13 @@ def build_catalog_payload() -> dict[str, Any]:
 
     gw = _gateway_mode()
     or_ready = gw == "openrouter" and _openrouter_path_disabled_reason() is None
-    or_row_chat, or_row_reason = _openrouter_composer_row_chat()
+    tier_chat, tier_reason = _composer_openrouter_tier_visibility(ham_actor)
     http_ready = _http_chat_ready()
     dashboard_chat_ready = or_ready or http_ready or (gw == "mock")
+
+    connected_or = bool(
+        ham_actor and has_connected_tool_credential_record(ham_actor, "openrouter"),
+    )
 
     openrouter_items: list[dict[str, Any]] = [
         {
@@ -405,8 +510,8 @@ def build_catalog_payload() -> dict[str, Any]:
             "tier": None,
             "provider": "openrouter",
             "description": "Unified access via Ham chat gateway (OpenRouter).",
-            "supports_chat": or_row_chat,
-            "disabled_reason": or_row_reason,
+            "supports_chat": tier_chat,
+            "disabled_reason": tier_reason,
             "openrouter_model": resolve_openrouter_model_name_for_chat(),
         },
         {
@@ -416,8 +521,8 @@ def build_catalog_payload() -> dict[str, Any]:
             "tier": "auto",
             "provider": "openrouter",
             "description": "Efficiency-oriented default (DEFAULT_MODEL / gateway default).",
-            "supports_chat": or_row_chat,
-            "disabled_reason": or_row_reason,
+            "supports_chat": tier_chat,
+            "disabled_reason": tier_reason,
             "openrouter_model": _normalize_openrouter_litellm_model(
                 get_default_model().strip(),
             ),
@@ -429,8 +534,8 @@ def build_catalog_payload() -> dict[str, Any]:
             "tier": "premium",
             "provider": "openrouter",
             "description": "Higher-capability default (HAM_CHAT_PREMIUM_MODEL or HERMES_GATEWAY_MODEL).",
-            "supports_chat": or_row_chat,
-            "disabled_reason": or_row_reason,
+            "supports_chat": tier_chat,
+            "disabled_reason": tier_reason,
             "openrouter_model": _normalize_openrouter_litellm_model(
                 (
                     (os.environ.get("HAM_CHAT_PREMIUM_MODEL") or "").strip()
@@ -441,12 +546,26 @@ def build_catalog_payload() -> dict[str, Any]:
         },
     ]
 
-    dyn_rows, or_cat_meta = _cached_openrouter_dynamic_rows(
+    byok_dyn, byok_meta = _cached_byok_openrouter_dynamic_rows(ham_actor)
+
+    plat_dyn, plat_cat_meta = _cached_openrouter_dynamic_rows(
         gateway_mode=gw,
         openrouter_chat_ready=or_ready,
-        composer_row_chat=or_row_chat,
-        composer_disabled_reason=or_row_reason,
+        composer_row_chat=tier_chat,
+        composer_disabled_reason=tier_reason,
     )
+
+    dyn_rows = _merge_dynamic_items(
+        precedence_first=byok_dyn,
+        precedence_second=plat_dyn,
+        composer_chat_enabled=tier_chat,
+        gated_reason=tier_reason,
+    )
+    merged_meta = {
+        **plat_cat_meta,
+        "byok_openrouter": byok_meta,
+    }
+
     items = openrouter_items + dyn_rows + cursor_items
     http_primary = (os.environ.get("HERMES_GATEWAY_MODEL") or "").strip() or None
     http_fallback = (os.environ.get("HAM_CHAT_FALLBACK_MODEL") or "").strip() or None
@@ -455,15 +574,19 @@ def build_catalog_payload() -> dict[str, Any]:
         "source": source,
         "gateway_mode": gw,
         "openrouter_chat_ready": or_ready,
+        "openrouter_user_byok_connected": connected_or,
         "http_chat_ready": http_ready,
         "dashboard_chat_ready": dashboard_chat_ready,
         "http_chat_model_primary": http_primary,
         "http_chat_model_fallback": http_fallback,
-        "openrouter_catalog": or_cat_meta,
+        "openrouter_catalog": merged_meta,
     }
 
 
-def resolve_model_id_for_chat(model_id: str | None) -> str | None:
+def resolve_model_id_for_chat(
+    model_id: str | None,
+    ham_actor: HamActor | None = None,
+) -> str | None:
     """
     Return LiteLLM model string for OpenRouter, or None to use gateway default.
     Raises ValueError if model_id is set but not allowed for chat (e.g. cursor:*).
@@ -473,7 +596,7 @@ def resolve_model_id_for_chat(model_id: str | None) -> str | None:
     mid = str(model_id).strip()
     if mid.startswith("cursor:"):
         raise ValueError("CURSOR_MODEL_NOT_CHAT_ENABLED")
-    payload = build_catalog_payload()
+    payload = build_catalog_payload(ham_actor)
     for it in payload["items"]:
         if it.get("id") == mid:
             if not it.get("supports_chat"):
@@ -486,6 +609,7 @@ def resolve_model_id_for_chat(model_id: str | None) -> str | None:
 
 
 @router.get("/models")
-async def get_models_catalog() -> dict[str, Any]:
+async def get_models_catalog(_actor: object = Depends(get_ham_clerk_actor)) -> dict[str, Any]:
     """Composer catalog: OpenRouter chat-capable rows + Cursor slugs (chat disabled)."""
-    return build_catalog_payload()
+    actor = _actor if isinstance(_actor, HamActor) else None
+    return build_catalog_payload(ham_actor=actor)

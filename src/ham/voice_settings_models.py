@@ -8,6 +8,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from models.edge_tts_wrapper import TextToSpeechEngine
+from src.ham.clerk_auth import HamActor
 from src.ham.transcription_config import transcription_runtime_configured
 
 
@@ -111,9 +112,9 @@ def merge_voice_settings(current: dict[str, Any], patch: VoiceSettingsPatchBody)
     return SavedVoiceSettings.model_validate(merged)
 
 
-def capabilities_payload() -> dict[str, Any]:
+def capabilities_payload(actor: HamActor | None = None) -> dict[str, Any]:
     tts_ok = _tts_env_available()
-    stt_ok, stt_reason = transcription_runtime_configured()
+    stt_ok, stt_reason = transcription_runtime_configured(actor)
     voices = [
         {"id": vid, "label": VOICE_DISPLAY_LABELS.get(vid, vid)}
         for vid in sorted(ALLOWED_EDGE_VOICES)

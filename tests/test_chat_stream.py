@@ -404,7 +404,7 @@ def test_transcribe_not_configured(mock_mode: None, monkeypatch: pytest.MonkeyPa
     monkeypatch.setenv("HAM_TRANSCRIPTION_PROVIDER", "")
     r = client.post("/api/chat/transcribe", files={"file": ("d.webm", b"\x00\x01", "audio/webm")})
     assert r.status_code == 503
-    assert r.json()["detail"]["error"]["code"] == "TRANSCRIPTION_NOT_CONFIGURED"
+    assert r.json()["detail"]["error"]["code"] == "CONNECT_STT_PROVIDER_REQUIRED"
 
 
 def test_transcribe_openai_without_key(mock_mode: None, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -422,7 +422,7 @@ def test_transcribe_openai_placeholder_key_not_configured(
     r = client.post("/api/chat/transcribe", files={"file": ("d.webm", b"x", "audio/webm")})
     assert r.status_code == 503
     j = r.json()
-    assert j["detail"]["error"]["code"] == "TRANSCRIPTION_NOT_CONFIGURED"
+    assert j["detail"]["error"]["code"] == "CONNECT_STT_PROVIDER_REQUIRED"
 
 
 def test_transcribe_upload_too_large(mock_mode: None, monkeypatch: pytest.MonkeyPatch) -> None:

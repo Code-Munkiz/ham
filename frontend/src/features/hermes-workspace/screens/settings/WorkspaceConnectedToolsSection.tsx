@@ -98,6 +98,10 @@ const TOOL_KEY_HELP: Record<string, { label: string; url: string }> = {
     url: "https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token",
   },
   cursor: { label: "Get your Cursor API key", url: "https://cursor.com/docs/cloud-agent/api" },
+  openai_transcription: {
+    label: "Create an OpenAI API key",
+    url: "https://platform.openai.com/api-keys",
+  },
 };
 
 export function WorkspaceConnectedToolsSection() {

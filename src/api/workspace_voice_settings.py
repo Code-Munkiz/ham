@@ -50,7 +50,7 @@ def get_voice_settings(
 ) -> dict[str, Any]:
     scope = _scope_key(_actor)
     merged = merge_voice_settings(_load_saved(scope), VoiceSettingsPatchBody())
-    caps = capabilities_payload()
+    caps = capabilities_payload(_actor)
     return {
         "kind": "ham_voice_settings",
         "settings": merged.model_dump(),
@@ -75,7 +75,7 @@ def patch_voice_settings(
     except Exception as e:
         raise HTTPException(status_code=503, detail="Voice settings could not be saved") from e
 
-    caps = capabilities_payload()
+    caps = capabilities_payload(_actor)
     return {
         "kind": "ham_voice_settings",
         "settings": SavedVoiceSettings.model_validate(blob).model_dump(),

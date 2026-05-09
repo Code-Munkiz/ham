@@ -11,6 +11,11 @@ plaintext in Firestore, never returned by the HTTP API.
 Local dev fallback (``HAM_CONNECTED_TOOLS_CREDENTIAL_BACKEND=file``) continues
 plain file-backed storage under ``~/.ham/workspace_tool_credentials.json``.
 
+**Cursor Connected Tool** stores the Cursor API key in the server/instance ``cursor_credentials``
+file (platform-scoped); it is **not** partitioned per Clerk user. Per-user SaaS isolation
+claims apply to Firestore-backed tools (OpenRouter, GitHub, Claude Agent, OpenAI transcription),
+not Cursor, until migrated.
+
 Internal-only (optional): gated ``POST /api/workspace/tools/claude_agent_sdk/smoke``
 when ``HAM_CLAUDE_AGENT_SMOKE_ENABLED`` is on; not linked from the default
 dashboard UI.
@@ -42,6 +47,7 @@ from src.ham.workspace_tool_key_validation import (
     validate_anthropic_api_key,
     validate_cursor_api_key,
     validate_github_token,
+    validate_openai_transcription_api_key,
     validate_openrouter_api_key,
 )
 from src.ham.worker_adapters.claude_agent_adapter import (
@@ -101,6 +107,10 @@ TOOL_CONNECT_HELP: dict[str, dict[str, str]] = {
     "cursor": {
         "label": "Get your Cursor API key",
         "url": "https://cursor.com/docs/cloud-agent/api",
+    },
+    "openai_transcription": {
+        "label": "Create an OpenAI API key",
+        "url": "https://platform.openai.com/api-keys",
     },
 }
 
@@ -350,10 +360,12 @@ def _is_cloud_mode() -> bool:
     )
 
 
-def _openrouter_chat_ready_from_catalog() -> bool:
+def _openrouter_chat_ready_from_catalog(actor: HamActor | None = None) -> bool:
     try:
-        catalog = build_catalog_payload()
-        return bool(catalog.get("openrouter_chat_ready"))
+        catalog = build_catalog_payload(ham_actor=actor)
+        if bool(catalog.get("openrouter_chat_ready")):
+            return True
+        return bool(catalog.get("openrouter_user_byok_connected"))
     except Exception:
         return False
 
@@ -361,7 +373,7 @@ def _openrouter_chat_ready_from_catalog() -> bool:
 def _openrouter_status(actor: HamActor | None = None) -> ToolStatus:
     if actor and has_connected_tool_credential_record(actor, "openrouter"):
         return ToolStatus.ready
-    if _openrouter_chat_ready_from_catalog():
+    if _openrouter_chat_ready_from_catalog(actor):
         return ToolStatus.ready
     raw = normalized_openrouter_api_key()
     if raw and openrouter_api_key_is_plausible(raw):
@@ -487,6 +499,13 @@ def _comfyui_status(cloud: bool) -> ToolStatus:
     return ToolStatus.not_found
 
 
+def _openai_transcription_tool_status(actor: HamActor | None = None) -> ToolStatus:
+    """User BYOK ``openai_transcription`` credential (``/api/chat/transcribe``)."""
+    if actor and has_connected_tool_credential_record(actor, "openai_transcription"):
+        return ToolStatus.ready
+    return ToolStatus.needs_sign_in
+
+
 def _tool_enabled_for_status(status: ToolStatus) -> bool:
     return status == ToolStatus.ready
 
@@ -503,6 +522,7 @@ def _build_tool_registry(actor: HamActor | None = None) -> list[ToolEntry]:
     claude_agent_status, claude_agent_hint, claude_agent_version = _claude_agent_status_and_meta(
         actor,
     )
+    oai_stt_status = _openai_transcription_tool_status(actor)
 
     tools: list[ToolEntry] = [
         ToolEntry(
@@ -578,6 +598,21 @@ def _build_tool_registry(actor: HamActor | None = None) -> list[ToolEntry]:
             connect_kind=ConnectKind.api_key,
             version=claude_agent_version,
             credential_preview=get_connected_tool_masked_preview(actor, "claude_agent_sdk"),
+            last_checked_at=now,
+            safe_actions=["check_status", "connect", "disconnect"],
+        ),
+        ToolEntry(
+            id="openai_transcription",
+            label="OpenAI (transcription)",
+            category=ToolCategory.media,
+            status=oai_stt_status,
+            connection=_connection_for_status(oai_stt_status),
+            enabled=_tool_enabled_for_status(oai_stt_status),
+            source=ToolSource.cloud,
+            capabilities=["speech_to_text"],
+            setup_hint="Paste an OpenAI API key for server-side speech-to-text.",
+            connect_kind=ConnectKind.api_key,
+            credential_preview=get_connected_tool_masked_preview(actor, "openai_transcription"),
             last_checked_at=now,
             safe_actions=["check_status", "connect", "disconnect"],
         ),
@@ -841,7 +876,7 @@ def workspace_tool_connect(
         raise HTTPException(status_code=404, detail="Unknown tool.")
 
     secret = (body.api_key or body.access_token or "").strip()
-    supported = {"openrouter", "github", "claude_agent_sdk", "cursor"}
+    supported = {"openrouter", "github", "claude_agent_sdk", "cursor", "openai_transcription"}
 
     if tool_id not in supported:
         return _connect_not_supported_response()
@@ -934,6 +969,24 @@ def workspace_tool_connect(
         _LOG.info("claude_agent_sdk connect: saved (key not logged)")
         return ToolConnectSuccessResponse(credential_preview=prev)
 
+    if tool_id == "openai_transcription":
+        if not validate_openai_transcription_api_key(secret):
+            _LOG.info("openai_transcription connect: validation failed (key not logged)")
+            return _invalid_key_response(tool_id)
+        try:
+            prev = save_connected_tool_secret(actor, "openai_transcription", secret)
+        except ConnectedCredentialSaveFailed:
+            return JSONResponse(
+                status_code=503,
+                content=ToolConnectFailResponse(
+                    error_code="CREDENTIAL_STORE_FAILED",
+                    message="Could not save this credential on the server. Ask your operator.",
+                    help=_help(tool_id),
+                ).model_dump(),
+            )
+        _LOG.info("openai_transcription connect: saved (key not logged)")
+        return ToolConnectSuccessResponse(credential_preview=prev)
+
     if tool_id == "cursor":
         if not validate_cursor_api_key(secret):
             _LOG.info("cursor tool connect: validation failed (key not logged)")
@@ -1008,6 +1061,21 @@ def workspace_tool_disconnect(
             )
         reset_claude_agent_readiness_cache()
         _LOG.info("claude_agent_sdk disconnect: cleared stored credential if present")
+        return ToolDisconnectSuccessResponse()
+
+    if tool_id == "openai_transcription":
+        try:
+            delete_connected_tool_secret(actor, "openai_transcription")
+        except ConnectedCredentialSaveFailed:
+            return JSONResponse(
+                status_code=503,
+                content=ToolConnectFailResponse(
+                    error_code="CREDENTIAL_STORE_FAILED",
+                    message="Could not remove this credential on the server. Ask your operator.",
+                    help=_help(tool_id),
+                ).model_dump(),
+            )
+        _LOG.info("openai_transcription disconnect: cleared stored credential if present")
         return ToolDisconnectSuccessResponse()
 
     return JSONResponse(

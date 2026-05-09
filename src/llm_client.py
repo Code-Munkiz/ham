@@ -92,6 +92,7 @@ def complete_chat_messages_openrouter(
     messages: list[dict[str, Any]],
     *,
     model_override: str | None = None,
+    api_key_override: str | None = None,
 ) -> str:
     """
     Multi-turn chat completion via OpenRouter (LiteLLM).
@@ -102,7 +103,11 @@ def complete_chat_messages_openrouter(
     ``model_override`` must be a LiteLLM-ready id (e.g. ``openrouter/minimax/minimax-m2.5:free``).
     """
     return "".join(
-        stream_chat_messages_openrouter(messages, model_override=model_override),
+        stream_chat_messages_openrouter(
+            messages,
+            model_override=model_override,
+            api_key_override=api_key_override,
+        ),
     ).strip()
 
 
@@ -110,6 +115,7 @@ def stream_chat_messages_openrouter(
     messages: list[dict[str, Any]],
     *,
     model_override: str | None = None,
+    api_key_override: str | None = None,
 ):
     """Streaming chat completion via OpenRouter (LiteLLM). Yields content deltas (str)."""
     import litellm
@@ -118,7 +124,8 @@ def stream_chat_messages_openrouter(
         raise ValueError("messages must not be empty")
 
     configure_litellm_env()
-    api_key = normalized_openrouter_api_key()
+    raw_override = (api_key_override or "").strip()
+    api_key = raw_override if raw_override else normalized_openrouter_api_key()
     if not api_key:
         raise RuntimeError("OPENROUTER_API_KEY is not set")
     if not openrouter_api_key_is_plausible(api_key):

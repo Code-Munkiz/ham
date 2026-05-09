@@ -1,9 +1,9 @@
 """Connected Tools credential resolution — Firestore encrypted or file-backed (dev legacy).
 
 When workspace Firestore backend is enabled (``HAM_CONNECTED_TOOLS_CREDENTIAL_BACKEND=auto``
-default), credentials for ``openrouter``, ``github``, and ``claude_agent_sdk`` are stored
-encrypted in Firestore keyed by Clerk ``user_id``. Plaintext never leaves decrypt paths
-inside the API container.
+default), credentials for ``openrouter``, ``github``, ``claude_agent_sdk``, and
+``openai_transcription`` are stored encrypted in Firestore keyed by Clerk ``user_id``.
+Plaintext never leaves decrypt paths inside the API container.
 
 Operators set ``HAM_CONNECTED_TOOLS_CREDENTIAL_ENCRYPTION_KEY`` (Fernet).
 
@@ -30,18 +30,21 @@ from src.persistence.workspace_tool_credentials import (
     clear_anthropic_api_key,
     clear_github_token,
     clear_openrouter_api_key,
+    clear_openai_transcription_api_key,
     get_stored_anthropic_api_key,
     get_stored_github_token,
     get_stored_openrouter_api_key,
+    get_stored_openai_transcription_api_key,
     save_anthropic_api_key,
     save_github_token,
     save_openrouter_api_key,
+    save_openai_transcription_api_key,
 )
 
 _LOG = logging.getLogger(__name__)
 
 _SUPPORTED_TOOLS: Final[frozenset[str]] = frozenset(
-    {"openrouter", "github", "claude_agent_sdk"}
+    {"openrouter", "github", "claude_agent_sdk", "openai_transcription"}
 )
 
 
@@ -80,6 +83,8 @@ def _save_file_fallback(tool_id: str, secret: str) -> None:
         save_github_token(secret)
     elif tool_id == "claude_agent_sdk":
         save_anthropic_api_key(secret)
+    elif tool_id == "openai_transcription":
+        save_openai_transcription_api_key(secret)
     else:  # pragma: no cover
         raise ValueError(tool_id)
 
@@ -91,6 +96,8 @@ def _clear_file_fallback(tool_id: str) -> None:
         clear_github_token()
     elif tool_id == "claude_agent_sdk":
         clear_anthropic_api_key()
+    elif tool_id == "openai_transcription":
+        clear_openai_transcription_api_key()
 
 
 def _read_file_fallback_secret(tool_id: str) -> str | None:
@@ -100,6 +107,8 @@ def _read_file_fallback_secret(tool_id: str) -> str | None:
         return get_stored_github_token()
     if tool_id == "claude_agent_sdk":
         return get_stored_anthropic_api_key()
+    if tool_id == "openai_transcription":
+        return get_stored_openai_transcription_api_key()
     return None
 
 
@@ -192,6 +201,9 @@ def delete_connected_tool_secret(actor: HamActor | None, tool_id: str) -> bool:
             changed = True
     elif tool_id == "claude_agent_sdk":
         if clear_anthropic_api_key():
+            changed = True
+    elif tool_id == "openai_transcription":
+        if clear_openai_transcription_api_key():
             changed = True
     return changed
 

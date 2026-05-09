@@ -59,6 +59,11 @@ def get_stored_anthropic_api_key() -> str | None:
     return k or None
 
 
+def get_stored_openai_transcription_api_key() -> str | None:
+    k = (_load_raw().get("openai_transcription_api_key") or "").strip()
+    return k or None
+
+
 def resolve_claude_agent_anthropic_api_key() -> str | None:
     """Anthropic API key — **without** per-user Clerk context (legacy / tests).
 
@@ -114,6 +119,15 @@ def save_anthropic_api_key(api_key: str) -> None:
     _atomic_write(data)
 
 
+def save_openai_transcription_api_key(api_key: str) -> None:
+    key = api_key.strip()
+    if not key:
+        raise ValueError("api_key must be non-empty")
+    data = _load_raw()
+    data["openai_transcription_api_key"] = key
+    _atomic_write(data)
+
+
 def clear_openrouter_api_key() -> bool:
     data = _load_raw()
     if "openrouter_api_key" not in data:
@@ -137,6 +151,15 @@ def clear_anthropic_api_key() -> bool:
     if "anthropic_api_key" not in data:
         return False
     del data["anthropic_api_key"]
+    _atomic_write(data)
+    return True
+
+
+def clear_openai_transcription_api_key() -> bool:
+    data = _load_raw()
+    if "openai_transcription_api_key" not in data:
+        return False
+    del data["openai_transcription_api_key"]
     _atomic_write(data)
     return True
 

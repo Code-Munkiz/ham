@@ -240,6 +240,8 @@ def stream_chat_turn(
     *,
     timeout_sec: float = DEFAULT_TIMEOUT_SEC,
     openrouter_model_override: str | None = None,
+    openrouter_litellm_api_key: str | None = None,
+    force_openrouter_litellm_route: bool = False,
 ) -> Iterator[str]:
     """
     Stream one completion as content deltas (OpenAI-style ``delta.content`` chunks).
@@ -251,20 +253,33 @@ def stream_chat_turn(
         raise GatewayCallError("INVALID_REQUEST", "messages must not be empty")
 
     mode = _resolve_mode()
-    if mode == "mock":
-        text = _mock_assistant_text(messages)
-        step = max(1, min(16, len(text) // 8 or 1))
-        for i in range(0, len(text), step):
-            yield text[i : i + step]
-        return
 
-    if mode == "openrouter":
+    def _yield_openrouter_litellm(*, bypass_http: bool) -> Iterator[str]:
+        from src.llm_client import normalized_openrouter_api_key, openrouter_api_key_is_plausible
         from src.llm_client import stream_chat_messages_openrouter
 
+        hinted = (openrouter_litellm_api_key or "").strip()
+        if bypass_http:
+            if not hinted or not openrouter_api_key_is_plausible(hinted):
+                raise GatewayCallError(
+                    "CONFIG_ERROR",
+                    "Connected OpenRouter key required for BYOK dashboard chat.",
+                )
+            resolved = hinted
+        elif hinted and openrouter_api_key_is_plausible(hinted):
+            resolved = hinted
+        else:
+            resolved = normalized_openrouter_api_key()
+        if not resolved or not openrouter_api_key_is_plausible(resolved):
+            raise GatewayCallError(
+                "CONFIG_ERROR",
+                "OPENROUTER_API_KEY is not set or is not plausible for dashboard chat.",
+            )
         try:
             yield from stream_chat_messages_openrouter(
                 messages,
                 model_override=openrouter_model_override,
+                api_key_override=resolved,
             )
         except RuntimeError as exc:
             raise GatewayCallError("CONFIG_ERROR", str(exc)) from exc
@@ -274,6 +289,21 @@ def stream_chat_turn(
             if "timeout" in lower or "timed out" in lower:
                 raise GatewayCallError("UPSTREAM_TIMEOUT", msg) from exc
             raise GatewayCallError("UPSTREAM_REJECTED", msg) from exc
+
+    # User BYOK bypass: authenticated OpenRouter completions while global gateway stays http (Hermes).
+    if force_openrouter_litellm_route:
+        yield from _yield_openrouter_litellm(bypass_http=True)
+        return
+
+    if mode == "mock":
+        text = _mock_assistant_text(messages)
+        step = max(1, min(16, len(text) // 8 or 1))
+        for i in range(0, len(text), step):
+            yield text[i : i + step]
+        return
+
+    if mode == "openrouter":
+        yield from _yield_openrouter_litellm(bypass_http=False)
         return
 
     base = (os.environ.get("HERMES_GATEWAY_BASE_URL") or "").strip().rstrip("/")
@@ -327,6 +357,8 @@ def complete_chat_turn(
     *,
     timeout_sec: float = DEFAULT_TIMEOUT_SEC,
     openrouter_model_override: str | None = None,
+    openrouter_litellm_api_key: str | None = None,
+    force_openrouter_litellm_route: bool = False,
 ) -> str:
     """
     Run one non-streaming completion. `messages` are OpenAI-style dicts with role + content.
@@ -339,5 +371,7 @@ def complete_chat_turn(
             messages,
             timeout_sec=timeout_sec,
             openrouter_model_override=openrouter_model_override,
+            openrouter_litellm_api_key=openrouter_litellm_api_key,
+            force_openrouter_litellm_route=force_openrouter_litellm_route,
         ),
     ).strip()

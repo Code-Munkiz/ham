@@ -87,3 +87,22 @@ def validate_cursor_api_key(api_key: str) -> bool:
         return r.status_code == 200
     except httpx.HTTPError:
         return False
+
+
+def validate_openai_transcription_api_key(api_key: str) -> bool:
+    """OpenAI key valid for API (used for STT). ``GET /v1/models`` with Bearer auth."""
+    k = (api_key or "").strip()
+    if not k.startswith("sk-") or len(k) < 20 or any(c in k for c in "\n\r\t"):
+        return False
+    if k.lower().startswith("sk-test"):
+        return False
+    try:
+        r = httpx.get(
+            "https://api.openai.com/v1/models",
+            headers={"Authorization": f"Bearer {k}"},
+            params={"limit": 1},
+            timeout=25.0,
+        )
+        return r.status_code == 200
+    except httpx.HTTPError:
+        return False

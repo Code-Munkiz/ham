@@ -14,6 +14,7 @@ import type {
   ModelCatalogItem,
   ModelCatalogPayload,
 } from "@/lib/ham/types";
+import { humanizeHermesCatalogId } from "@/features/hermes-workspace/lib/workspaceHumanLabels";
 import { isDashboardChatGatewayReady } from "@/lib/ham/types";
 import { WorkspaceVoiceMessageInput } from "./WorkspaceVoiceMessageInput";
 import { toast } from "sonner";
@@ -150,7 +151,9 @@ function primaryModelPillText(
   }
   const m = (catalog.gateway_mode || "").toLowerCase();
   if (m === "http" && catalog.http_chat_model_primary) {
-    return catalog.http_chat_model_primary;
+    const raw = catalog.http_chat_model_primary.trim();
+    const nicer = humanizeHermesCatalogId(raw);
+    return nicer || raw;
   }
   const first = catalog.items.find((i) => i.supports_chat);
   return first ? first.label || first.id : null;
@@ -380,8 +383,10 @@ export function WorkspaceChatComposer({
     });
   }, [voiceState, voiceTranscribing]);
 
+  const gm = catalog ? (catalog.gateway_mode || "").toLowerCase() : "";
+  const byokOr = catalog?.openrouter_user_byok_connected === true;
   const showModel = Boolean(
-    catalog && catalog.gateway_mode === "openrouter" && chatModelCandidates(catalog).length > 0,
+    catalog && chatModelCandidates(catalog).length > 0 && (gm === "openrouter" || (gm === "http" && byokOr)),
   );
   const gatewayOk = isDashboardChatGatewayReady(catalog);
   const modelPill = primaryModelPillText(catalog, modelId);
