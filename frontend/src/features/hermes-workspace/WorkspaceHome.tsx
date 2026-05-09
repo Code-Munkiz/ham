@@ -99,14 +99,15 @@ export function WorkspaceHome() {
           <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-white/10 bg-[#0a1218]/85 shadow-[0_16px_48px_rgba(0,0,0,0.4)]">
             <img src={logoSrc} alt="" className="h-12 w-12 object-contain" width={48} height={48} />
           </div>
-          <h1 className="text-2xl font-semibold tracking-tight text-white/95 sm:text-3xl">Projects</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-white/95 sm:text-3xl">
+            Projects
+          </h1>
           <p className="mt-1 text-[12px] font-medium uppercase tracking-[0.14em] text-white/32">
             HAM&apos;s Workspace
           </p>
           <p className="mt-2 max-w-lg text-sm leading-relaxed text-white/45">
-            Your workspaces and quick links. Open{' '}
-            <span className="text-white/55">Library</span> in the sidebar for files, terminal, jobs,
-            and more.
+            Your workspaces and quick links. Open <span className="text-white/55">Library</span> in
+            the sidebar for files, terminal, jobs, and more.
           </p>
         </div>
 

@@ -23,7 +23,10 @@ import {
   settingsRailItem,
   workspacePathTitle,
 } from "./workspaceNavConfig";
-import { WorkspaceLibraryFlyoutContext, useWorkspaceLibraryFlyout } from "./workspaceLibraryFlyoutContext";
+import {
+  WorkspaceLibraryFlyoutContext,
+  useWorkspaceLibraryFlyout,
+} from "./workspaceLibraryFlyoutContext";
 import { workspaceSessionAdapter } from "./workspaceAdapters";
 import type { ChatSessionSummary } from "./workspaceTypes";
 import { sessionCardSubtitle, sessionCardTitle } from "./utils/sessionListFormat";
@@ -285,7 +288,9 @@ function WorkspaceSideNav({
   };
 
   return (
-    <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col", c && "max-w-full overflow-x-hidden")}>
+    <div
+      className={cn("flex min-h-0 min-w-0 flex-1 flex-col", c && "max-w-full overflow-x-hidden")}
+    >
       <div
         className={cn(
           "mb-4 flex max-w-full items-center justify-between gap-1 px-0.5",
@@ -420,9 +425,7 @@ function WorkspaceSideNav({
             onClick={onNavigate}
             className={cn(
               "box-border flex shrink-0 items-center rounded-lg text-white/50 transition-colors hover:bg-white/[0.05] hover:text-[#a5f3fc]/95",
-              c
-                ? "size-9 justify-center p-0"
-                : "gap-2 px-1.5 py-1.5 justify-end",
+              c ? "size-9 justify-center p-0" : "gap-2 px-1.5 py-1.5 justify-end",
             )}
             title="Go to HAM landing"
             aria-label="Go to HAM landing"
@@ -435,7 +438,12 @@ function WorkspaceSideNav({
               height={c ? 28 : 32}
               aria-hidden
             />
-            <span className={cn("max-w-[5.5rem] truncate text-[11px] font-medium text-white/40", c && "sr-only")}>
+            <span
+              className={cn(
+                "max-w-[5.5rem] truncate text-[11px] font-medium text-white/40",
+                c && "sr-only",
+              )}
+            >
               HAM
             </span>
           </a>
@@ -445,9 +453,7 @@ function WorkspaceSideNav({
             onClick={onNavigate}
             className={cn(
               "box-border flex shrink-0 items-center rounded-lg text-white/50 transition-colors hover:bg-white/[0.05] hover:text-[#a5f3fc]/95",
-              c
-                ? "size-9 justify-center p-0"
-                : "gap-2 px-1.5 py-1.5 justify-end",
+              c ? "size-9 justify-center p-0" : "gap-2 px-1.5 py-1.5 justify-end",
             )}
             title="Go to HAM landing"
             aria-label="Go to HAM landing"
@@ -460,7 +466,12 @@ function WorkspaceSideNav({
               height={c ? 28 : 32}
               aria-hidden
             />
-            <span className={cn("max-w-[5.5rem] truncate text-[11px] font-medium text-white/40", c && "sr-only")}>
+            <span
+              className={cn(
+                "max-w-[5.5rem] truncate text-[11px] font-medium text-white/40",
+                c && "sr-only",
+              )}
+            >
               HAM
             </span>
           </Link>
@@ -710,126 +721,126 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
   return (
     <WorkspaceLibraryFlyoutContext.Provider value={libraryFlyoutCtx}>
       <div className="hww-root flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden md:flex-row">
-      {/* Mobile top bar (upstream-style compact header) */}
-      <header className="hww-mobile-header z-20 flex h-12 shrink-0 items-center justify-between border-b border-[color:var(--ham-workspace-line)] bg-[#040d14]/90 px-3 backdrop-blur-sm md:hidden">
-        <button
-          type="button"
-          onClick={() => setDrawerOpen(true)}
-          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 text-white/75 transition-colors hover:bg-white/[0.06]"
-          aria-label="Open workspace menu"
-        >
-          <Menu className="h-5 w-5" strokeWidth={1.5} />
-        </button>
-        <span className="text-[13px] font-medium text-white/88">{pageTitle}</span>
-        <span className="w-9" aria-hidden />
-      </header>
-
-      {/* Desktop sidebar */}
-      <aside
-        className={cn(
-          "hww-sidebar hww-scroll hidden min-h-0 min-w-0 flex-col py-4 md:flex",
-          sidebarCollapsed ? "hww-sidebar--collapsed" : "px-3",
-        )}
-      >
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <WorkspaceSideNav
-            {...sessionNavProps}
-            layoutCollapsed={sidebarCollapsed}
-            onToggleLayoutCollapse={onToggleSidebar}
-          />
-        </div>
-      </aside>
-
-      {/* Mobile drawer + backdrop */}
-      {drawerOpen ? (
-        <>
+        {/* Mobile top bar (upstream-style compact header) */}
+        <header className="hww-mobile-header z-20 flex h-12 shrink-0 items-center justify-between border-b border-[color:var(--ham-workspace-line)] bg-[#040d14]/90 px-3 backdrop-blur-sm md:hidden">
           <button
             type="button"
-            className="fixed inset-0 z-40 bg-black/55 backdrop-blur-sm md:hidden"
-            aria-label="Close menu"
-            onClick={() => setDrawerOpen(false)}
-          />
-          <aside
-            className="hww-drawer hww-scroll fixed left-0 top-0 z-50 flex h-full w-[min(88vw,290px)] min-w-0 flex-col overflow-y-auto border-r border-[color:var(--ham-workspace-line)] bg-[#040d14]/98 px-3 py-4 shadow-2xl md:hidden"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Workspace navigation"
+            onClick={() => setDrawerOpen(true)}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 text-white/75 transition-colors hover:bg-white/[0.06]"
+            aria-label="Open workspace menu"
           >
-            <WorkspaceSideNav
-              showClose
-              onClose={() => setDrawerOpen(false)}
-              onNavigate={() => setDrawerOpen(false)}
-              layoutCollapsed={false}
-              {...sessionNavProps}
-            />
-          </aside>
-        </>
-      ) : null}
+            <Menu className="h-5 w-5" strokeWidth={1.5} />
+          </button>
+          <span className="text-[13px] font-medium text-white/88">{pageTitle}</span>
+          <span className="w-9" aria-hidden />
+        </header>
 
-      <div
-        className={cn(
-          "hww-main flex min-h-0 min-w-0 flex-1 flex-col border-[color:var(--ham-workspace-line)] bg-[#030a10]/40 md:border-l",
-          !isWorkspaceChat && "max-md:pb-[var(--hww-tabbar-h,3.5rem)]",
-        )}
-      >
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-          {children}
-          {isWorkspaceChat && terminalDockVisible ? (
-            <div
-              className="shrink-0 border-t border-white/[0.06] bg-[#030a0f]/90"
-              data-testid="hww-chat-terminal-dock"
+        {/* Desktop sidebar */}
+        <aside
+          className={cn(
+            "hww-sidebar hww-scroll hidden min-h-0 min-w-0 flex-col py-4 md:flex",
+            sidebarCollapsed ? "hww-sidebar--collapsed" : "px-3",
+          )}
+        >
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <WorkspaceSideNav
+              {...sessionNavProps}
+              layoutCollapsed={sidebarCollapsed}
+              onToggleLayoutCollapse={onToggleSidebar}
+            />
+          </div>
+        </aside>
+
+        {/* Mobile drawer + backdrop */}
+        {drawerOpen ? (
+          <>
+            <button
+              type="button"
+              className="fixed inset-0 z-40 bg-black/55 backdrop-blur-sm md:hidden"
+              aria-label="Close menu"
+              onClick={() => setDrawerOpen(false)}
+            />
+            <aside
+              className="hww-drawer hww-scroll fixed left-0 top-0 z-50 flex h-full w-[min(88vw,290px)] min-w-0 flex-col overflow-y-auto border-r border-[color:var(--ham-workspace-line)] bg-[#040d14]/98 px-3 py-4 shadow-2xl md:hidden"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Workspace navigation"
             >
-              {chatTerminalDockOpen ? (
-                <div className="h-[min(14rem,38vh)] min-h-0 w-full">
-                  <WorkspaceTerminalView
-                    mode="panel"
-                    onMinimize={() => {
-                      setChatTerminalDockOpen(false);
-                    }}
-                    onClosePanel={() => {
-                      setChatTerminalDockOpen(false);
-                    }}
-                  />
-                </div>
-              ) : (
-                <div className="flex items-center justify-between gap-2 px-3 py-1.5">
-                  <div className="flex min-w-0 items-center gap-2 text-[11px] text-white/45">
-                    <Terminal className="h-3.5 w-3.5 shrink-0 opacity-80" strokeWidth={1.5} />
-                    <span className="truncate">Local terminal</span>
+              <WorkspaceSideNav
+                showClose
+                onClose={() => setDrawerOpen(false)}
+                onNavigate={() => setDrawerOpen(false)}
+                layoutCollapsed={false}
+                {...sessionNavProps}
+              />
+            </aside>
+          </>
+        ) : null}
+
+        <div
+          className={cn(
+            "hww-main flex min-h-0 min-w-0 flex-1 flex-col border-[color:var(--ham-workspace-line)] bg-[#030a10]/40 md:border-l",
+            !isWorkspaceChat && "max-md:pb-[var(--hww-tabbar-h,3.5rem)]",
+          )}
+        >
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+            {children}
+            {isWorkspaceChat && terminalDockVisible ? (
+              <div
+                className="shrink-0 border-t border-white/[0.06] bg-[#030a0f]/90"
+                data-testid="hww-chat-terminal-dock"
+              >
+                {chatTerminalDockOpen ? (
+                  <div className="h-[min(14rem,38vh)] min-h-0 w-full">
+                    <WorkspaceTerminalView
+                      mode="panel"
+                      onMinimize={() => {
+                        setChatTerminalDockOpen(false);
+                      }}
+                      onClosePanel={() => {
+                        setChatTerminalDockOpen(false);
+                      }}
+                    />
                   </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="secondary"
-                    className="h-7 gap-1.5 px-2.5 text-[11px] text-white/88"
-                    onClick={() => {
-                      setChatTerminalDockOpen(true);
-                    }}
-                  >
-                    <ChevronsUp className="h-3.5 w-3.5 opacity-80" strokeWidth={2} />
-                    Open
-                  </Button>
-                </div>
-              )}
-            </div>
-          ) : null}
+                ) : (
+                  <div className="flex items-center justify-between gap-2 px-3 py-1.5">
+                    <div className="flex min-w-0 items-center gap-2 text-[11px] text-white/45">
+                      <Terminal className="h-3.5 w-3.5 shrink-0 opacity-80" strokeWidth={1.5} />
+                      <span className="truncate">Local terminal</span>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      className="h-7 gap-1.5 px-2.5 text-[11px] text-white/88"
+                      onClick={() => {
+                        setChatTerminalDockOpen(true);
+                      }}
+                    >
+                      <ChevronsUp className="h-3.5 w-3.5 opacity-80" strokeWidth={2} />
+                      Open
+                    </Button>
+                  </div>
+                )}
+              </div>
+            ) : null}
+          </div>
         </div>
+        <WorkspaceMobileTabBar />
+        {!isWorkspaceChat && canLoadSessions ? (
+          <WorkspaceChatFloatingToggle onOpen={() => setWorkspaceChatPanelOpen(true)} />
+        ) : null}
+        <WorkspaceChatPanel
+          open={workspaceChatPanelOpen && canLoadSessions}
+          onClose={() => setWorkspaceChatPanelOpen(false)}
+        />
+        <WorkspaceLibraryFlyout
+          open={libraryFlyoutOpen}
+          onOpenChange={setLibraryFlyoutOpen}
+          sidebarCollapsed={sidebarCollapsed}
+          onItemNavigate={() => setDrawerOpen(false)}
+        />
       </div>
-      <WorkspaceMobileTabBar />
-      {!isWorkspaceChat && canLoadSessions ? (
-        <WorkspaceChatFloatingToggle onOpen={() => setWorkspaceChatPanelOpen(true)} />
-      ) : null}
-      <WorkspaceChatPanel
-        open={workspaceChatPanelOpen && canLoadSessions}
-        onClose={() => setWorkspaceChatPanelOpen(false)}
-      />
-      <WorkspaceLibraryFlyout
-        open={libraryFlyoutOpen}
-        onOpenChange={setLibraryFlyoutOpen}
-        sidebarCollapsed={sidebarCollapsed}
-        onItemNavigate={() => setDrawerOpen(false)}
-      />
-    </div>
     </WorkspaceLibraryFlyoutContext.Provider>
   );
 }

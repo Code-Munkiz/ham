@@ -5,7 +5,12 @@ import { cn } from "@/lib/utils";
 import { pathMatchesLibraryRoute, pathMatchesSettingsRail } from "./workspaceNavConfig";
 import { useWorkspaceLibraryFlyout } from "./workspaceLibraryFlyoutContext";
 
-const MOBILE_PRIMARY_LINKS: { to: string; label: string; end?: boolean; icon: React.ElementType }[] = [
+const MOBILE_PRIMARY_LINKS: {
+  to: string;
+  label: string;
+  end?: boolean;
+  icon: React.ElementType;
+}[] = [
   { to: "/workspace/chat", label: "Chat", icon: MessageSquare },
   { to: "/workspace/social", label: "Social", icon: Share2 },
   { to: "/workspace/coding-agents", label: "Agents", icon: Bot },
@@ -65,10 +70,7 @@ export function WorkspaceMobileTabBar() {
             aria-haspopup="dialog"
           >
             <Library
-              className={cn(
-                "h-[18px] w-[18px] shrink-0",
-                libActive ? "opacity-100" : "opacity-70",
-              )}
+              className={cn("h-[18px] w-[18px] shrink-0", libActive ? "opacity-100" : "opacity-70")}
               strokeWidth={1.5}
             />
             <span className="max-w-14 truncate">Library</span>
@@ -79,7 +81,9 @@ export function WorkspaceMobileTabBar() {
             to="/workspace/settings"
             className={cn(
               "flex h-12 min-w-14 flex-col items-center justify-center gap-0.5 rounded-lg px-1.5 text-[8px] font-medium",
-              pathMatchesSettingsRail(pathname) ? "text-[#ffb27a]" : "text-white/40 hover:text-white/65",
+              pathMatchesSettingsRail(pathname)
+                ? "text-[#ffb27a]"
+                : "text-white/40 hover:text-white/65",
             )}
           >
             <Settings
