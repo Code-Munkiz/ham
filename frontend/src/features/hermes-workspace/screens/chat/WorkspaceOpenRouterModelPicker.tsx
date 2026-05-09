@@ -16,11 +16,18 @@ function quickPickIds(candidates: ModelCatalogItem[]): string[] {
   return ordered.slice(0, 5).map((m) => m.id);
 }
 
-function selectedLabel(candidates: ModelCatalogItem[], modelId: string | null): string {
+function selectedLabel(
+  catalog: ModelCatalogPayload,
+  candidates: ModelCatalogItem[],
+  modelId: string | null,
+): string {
   if (modelId) {
     const row = candidates.find((m) => m.id === modelId);
     if (row) return row.label || row.id;
     return modelId;
+  }
+  if ((catalog.gateway_mode || "").toLowerCase() === "http") {
+    return "Hermes Agent / Default";
   }
   const first = candidates[0];
   return first ? first.label || first.id : "Model";
@@ -70,7 +77,8 @@ export function WorkspaceOpenRouterModelPicker({
     return candidates.filter((m) => !quickIds.has(m.id));
   }, [candidates, filtered, quickIds, q]);
 
-  const label = selectedLabel(candidates, modelId);
+  const gatewayMode = (catalog.gateway_mode || "").toLowerCase();
+  const label = selectedLabel(catalog, candidates, modelId);
 
   return (
     <DropdownMenu.Root
@@ -120,6 +128,28 @@ export function WorkspaceOpenRouterModelPicker({
             />
           </div>
           <div className="max-h-[min(340px,50vh)] overflow-y-auto px-1 py-1">
+            {gatewayMode === "http" ? (
+              <>
+                <div className="px-2 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wide text-white/40">
+                  Gateway default
+                </div>
+                <DropdownMenu.Item
+                  className={cn(
+                    "flex cursor-pointer select-none rounded-md px-2 py-1.5 text-[12px] text-emerald-100/95 outline-none",
+                    "focus:bg-emerald-500/15 data-[highlighted]:bg-emerald-500/15",
+                  )}
+                  onSelect={() => onModelIdChange(null)}
+                >
+                  <span className="min-w-0 flex-1 truncate">Hermes Agent / Default</span>
+                  {modelId === null ? (
+                    <span className="shrink-0 pl-2 text-[10px] text-emerald-300/90">✓</span>
+                  ) : null}
+                </DropdownMenu.Item>
+                {(quickShown.length > 0 || restShown.length > 0 || q) ? (
+                  <DropdownMenu.Separator className="my-1 h-px bg-white/[0.08]" />
+                ) : null}
+              </>
+            ) : null}
             {!q && quickShown.length > 0 ? (
               <>
                 <div className="px-2 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wide text-white/40">

@@ -156,6 +156,38 @@ def _http_chat_ready() -> bool:
     )
 
 
+def _looks_like_openrouter_provider_model(raw: str) -> bool:
+    v = raw.strip()
+    if not v:
+        return False
+    if v.startswith("openrouter/"):
+        return True
+    return "/" in v
+
+
+def _catalog_openrouter_default_model(gateway_mode: str) -> str:
+    """
+    Model backing ``openrouter:default`` in the picker.
+
+    In ``http`` gateway mode this must stay OpenRouter-native and must not inherit
+    Hermes HTTP upstream aliases like ``hermes-agent``.
+    """
+    if gateway_mode == "openrouter":
+        return resolve_openrouter_model_name_for_chat()
+    return _normalize_openrouter_litellm_model(get_default_model().strip())
+
+
+def _catalog_openrouter_premium_model(gateway_mode: str) -> str:
+    """Model backing ``tier:premium`` with safe fallback in HTTP gateway mode."""
+    explicit = (os.environ.get("HAM_CHAT_PREMIUM_MODEL") or "").strip()
+    if explicit:
+        return _normalize_openrouter_litellm_model(explicit)
+    gw_model = (os.environ.get("HERMES_GATEWAY_MODEL") or "").strip()
+    if gateway_mode == "openrouter" and _looks_like_openrouter_provider_model(gw_model):
+        return _normalize_openrouter_litellm_model(gw_model)
+    return _normalize_openrouter_litellm_model("anthropic/claude-3.5-sonnet")
+
+
 def _normalize_openrouter_litellm_model(raw: str) -> str:
     r = raw.strip()
     if not r:
@@ -512,7 +544,7 @@ def build_catalog_payload(ham_actor: HamActor | None = None) -> dict[str, Any]:
             "description": "Unified access via Ham chat gateway (OpenRouter).",
             "supports_chat": tier_chat,
             "disabled_reason": tier_reason,
-            "openrouter_model": resolve_openrouter_model_name_for_chat(),
+            "openrouter_model": _catalog_openrouter_default_model(gw),
         },
         {
             "id": "tier:auto",
@@ -536,13 +568,7 @@ def build_catalog_payload(ham_actor: HamActor | None = None) -> dict[str, Any]:
             "description": "Higher-capability default (HAM_CHAT_PREMIUM_MODEL or HERMES_GATEWAY_MODEL).",
             "supports_chat": tier_chat,
             "disabled_reason": tier_reason,
-            "openrouter_model": _normalize_openrouter_litellm_model(
-                (
-                    (os.environ.get("HAM_CHAT_PREMIUM_MODEL") or "").strip()
-                    or (os.environ.get("HERMES_GATEWAY_MODEL") or "").strip()
-                    or "anthropic/claude-3.5-sonnet"
-                ),
-            ),
+            "openrouter_model": _catalog_openrouter_premium_model(gw),
         },
     ]
 

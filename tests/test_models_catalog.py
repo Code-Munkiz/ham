@@ -6,6 +6,7 @@ import json
 import pytest
 
 from src.api import models_catalog as mc
+from src.ham.clerk_auth import HamActor
 from src.llm_client import get_default_model, resolve_openrouter_model_name_for_chat
 
 
@@ -133,6 +134,35 @@ def test_hermes_gateway_model_overrides_default_for_chat_resolution(monkeypatch:
     monkeypatch.setenv("DEFAULT_MODEL", "minimax/minimax-m2.5:free")
     monkeypatch.setenv("HERMES_GATEWAY_MODEL", "openai/gpt-4o-mini")
     assert resolve_openrouter_model_name_for_chat() == "openrouter/openai/gpt-4o-mini"
+
+
+def test_http_byok_default_and_premium_do_not_inherit_hermes_agent_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("HERMES_GATEWAY_MODE", "http")
+    monkeypatch.setenv("HERMES_GATEWAY_BASE_URL", "https://hermes.invalid")
+    monkeypatch.setenv("HERMES_GATEWAY_MODEL", "hermes-agent")
+    monkeypatch.delenv("HAM_CHAT_PREMIUM_MODEL", raising=False)
+    monkeypatch.setenv("DEFAULT_MODEL", "openai/gpt-4o-mini")
+
+    actor = HamActor(
+        user_id="u-http-byok",
+        org_id=None,
+        session_id=None,
+        email="u-http-byok@example.com",
+        permissions=frozenset(),
+        org_role=None,
+        raw_permission_claim=None,
+    )
+    monkeypatch.setattr(mc, "has_connected_tool_credential_record", lambda _a, _t: True)
+
+    payload = mc.build_catalog_payload(ham_actor=actor)
+    default_row = next(x for x in payload["items"] if x["id"] == "openrouter:default")
+    premium_row = next(x for x in payload["items"] if x["id"] == "tier:premium")
+    assert default_row["openrouter_model"] == "openrouter/openai/gpt-4o-mini"
+    assert premium_row["openrouter_model"] == "openrouter/anthropic/claude-3.5-sonnet"
+    assert default_row["openrouter_model"] != "openrouter/hermes-agent"
+    assert premium_row["openrouter_model"] != "openrouter/hermes-agent"
 
 
 _HAM_PHASE1_ROW: list[dict] = [
