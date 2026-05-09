@@ -88,8 +88,14 @@ describe("WorkspaceHome", () => {
     expect(screen.getByRole("heading", { name: "Acme Lab" })).toBeInTheDocument();
     expect(screen.getByText(/acme-lab/i)).toBeInTheDocument();
     expect(screen.getByText(/Primary workspace/i)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Open chat/i })).toHaveAttribute("href", "/workspace/chat");
-    expect(screen.getByRole("link", { name: /Open files/i })).toHaveAttribute("href", "/workspace/files");
+    expect(screen.getByRole("link", { name: /Open chat/i })).toHaveAttribute(
+      "href",
+      "/workspace/chat",
+    );
+    expect(screen.getByRole("link", { name: /Open files/i })).toHaveAttribute(
+      "href",
+      "/workspace/files",
+    );
     expect(screen.getByRole("link", { name: /Open terminal/i })).toHaveAttribute(
       "href",
       "/workspace/terminal",
