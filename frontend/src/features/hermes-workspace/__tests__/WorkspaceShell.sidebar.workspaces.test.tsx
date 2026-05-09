@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const { mockUseHamWorkspace } = vi.hoisted(() => ({
@@ -18,14 +18,26 @@ vi.mock("@/components/workspace/WorkspaceCreateWorkspaceDialog", () => ({
   WorkspaceCreateWorkspaceDialog: ({
     open,
     onOpenChange,
+    onCreated,
   }: {
     open: boolean;
     onOpenChange: (v: boolean) => void;
+    onCreated?: (w: unknown) => void;
   }) =>
     open ? (
       <div data-testid="ham-workspace-create-dialog">
         <button type="button" onClick={() => onOpenChange(false)}>
           Cancel
+        </button>
+        <button
+          type="button"
+          data-testid="mock-shell-create-success"
+          onClick={() => {
+            onCreated?.({ workspace_id: "ws_new" });
+            onOpenChange(false);
+          }}
+        >
+          Finish create
         </button>
       </div>
     ) : null,
@@ -97,12 +109,20 @@ function readyCtx(
   });
 }
 
+function RouteProbe() {
+  const loc = useLocation();
+  return <span data-testid="shell-route-path">{loc.pathname}</span>;
+}
+
 function renderShell(initialPath = "/workspace/chat") {
   return render(
     <MemoryRouter initialEntries={[initialPath]}>
-      <WorkspaceShell>
-        <div>workspace child</div>
-      </WorkspaceShell>
+      <>
+        <RouteProbe />
+        <WorkspaceShell>
+          <div>workspace child</div>
+        </WorkspaceShell>
+      </>
     </MemoryRouter>,
   );
 }
@@ -131,7 +151,7 @@ describe("WorkspaceShell workspace sidebar", () => {
     expect(screen.queryByRole("link", { name: "Chat" })).not.toBeInTheDocument();
   });
 
-  it("shows workspace search copy and New workspace when expanded", async () => {
+  it("shows workspace search, list, and pill create control when expanded (no full-width New workspace)", async () => {
     mockUseHamWorkspace.mockReturnValue(
       readyCtx("ws_a", [ws("ws_a", "Alpha"), ws("ws_b", "Beta")]),
     );
@@ -142,10 +162,13 @@ describe("WorkspaceShell workspace sidebar", () => {
     const search = await screen.findByTestId("hww-workspace-search");
     expect(search).toHaveAttribute("placeholder", "Search workspaces…");
 
-    expect(screen.getByRole("button", { name: "New workspace" })).toBeInTheDocument();
+    expect(screen.queryByTestId("hww-new-workspace")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "New workspace" })).not.toBeInTheDocument();
+    expect(screen.getByTestId("ham-workspace-pill-create")).toBeInTheDocument();
+    expect(screen.getByText("Workspaces")).toBeInTheDocument();
   });
 
-  it("opens create modal from New workspace", async () => {
+  it("opens create modal from the pill + control", async () => {
     mockUseHamWorkspace.mockReturnValue(
       readyCtx("ws_a", [ws("ws_a", "Alpha"), ws("ws_b", "Beta")]),
     );
@@ -153,7 +176,7 @@ describe("WorkspaceShell workspace sidebar", () => {
 
     await waitFor(() => expect(screen.getByText("workspace child")).toBeInTheDocument());
 
-    fireEvent.click(screen.getByRole("button", { name: "New workspace" }));
+    fireEvent.click(screen.getByTestId("ham-workspace-pill-create"));
 
     await waitFor(() =>
       expect(screen.getByTestId("ham-workspace-create-dialog")).toBeInTheDocument(),
@@ -163,6 +186,26 @@ describe("WorkspaceShell workspace sidebar", () => {
 
     await waitFor(() =>
       expect(screen.queryByTestId("ham-workspace-create-dialog")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("after successful create navigates to /workspace/chat (not settings)", async () => {
+    mockUseHamWorkspace.mockReturnValue(
+      readyCtx("ws_a", [ws("ws_a", "Alpha"), ws("ws_b", "Beta")]),
+    );
+    renderShell("/workspace/settings");
+
+    await waitFor(() => expect(screen.getByText("workspace child")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByTestId("ham-workspace-pill-create"));
+    await waitFor(() =>
+      expect(screen.getByTestId("ham-workspace-create-dialog")).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByTestId("mock-shell-create-success"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("shell-route-path")).toHaveTextContent("/workspace/chat"),
     );
   });
 
@@ -192,7 +235,8 @@ describe("WorkspaceShell workspace sidebar", () => {
     fireEvent.click(screen.getByRole("button", { name: "Collapse sidebar" }));
 
     expect(screen.queryByTestId("hww-workspace-search")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "New workspace" })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("hww-new-workspace")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("ham-workspace-pill")).not.toBeInTheDocument();
 
     const primary = screen.getByRole("navigation", { name: "Workspace primary" });
     expect(primary.querySelector('a[href="/workspace/chat"]')).toBeNull();
@@ -205,7 +249,7 @@ describe("WorkspaceShell workspace sidebar", () => {
     await waitFor(() => expect(screen.getByText("workspace child")).toBeInTheDocument());
 
     expect(screen.queryByTestId("hww-workspace-search")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "New workspace" })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("hww-new-workspace")).not.toBeInTheDocument();
   });
 
   it("still renders children on /workspace/chat", async () => {

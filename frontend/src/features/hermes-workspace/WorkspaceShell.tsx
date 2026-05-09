@@ -1,6 +1,6 @@
 import * as React from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { ChevronsUp, Menu, PanelLeft, PanelLeftClose, Plus, Search, Terminal, X } from "lucide-react";
+import { ChevronsUp, Menu, PanelLeft, PanelLeftClose, Search, Terminal, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { hamWorkspaceLogoUrl } from "@/lib/ham/publicAssets";
 import { Button } from "@/components/ui/button";
@@ -19,7 +19,6 @@ import { WorkspaceChatFloatingToggle } from "./components/WorkspaceChatFloatingT
 import { WorkspaceChatPanel } from "./components/WorkspaceChatPanel";
 import { WorkspaceTerminalView } from "./screens/terminal/WorkspaceTerminalView";
 import { HamWorkspaceTopbarPill } from "@/components/layout/HamWorkspaceTopbarPill";
-import { WorkspaceCreateWorkspaceDialog } from "@/components/workspace/WorkspaceCreateWorkspaceDialog";
 import { useHamWorkspace } from "@/lib/ham/HamWorkspaceContext";
 import type { HamWorkspaceSummary } from "@/lib/ham/workspaceApi";
 import { isLocalRuntimeConfigured } from "./adapters/localRuntime";
@@ -63,7 +62,6 @@ type SideNavOptions = {
   workspaceFilter: string;
   onWorkspaceFilterChange: (q: string) => void;
   onSelectWorkspace: (workspaceId: string) => void;
-  onOpenCreateWorkspace: () => void;
   isChatRoute: boolean;
 };
 
@@ -91,7 +89,6 @@ function WorkspaceSideNav({
   workspaceFilter,
   onWorkspaceFilterChange,
   onSelectWorkspace,
-  onOpenCreateWorkspace,
   isChatRoute,
 }: SideNavOptions) {
   const brandLogoSrc = hamWorkspaceLogoUrl();
@@ -175,8 +172,9 @@ function WorkspaceSideNav({
     if (!workspaces.length) {
       return (
         <p className="mb-1 px-0.5 text-[11px] leading-relaxed text-white/45">
-          No workspaces yet. Use{" "}
-          <span className="font-medium text-white/55">New workspace</span> above to create one.
+          No workspaces yet. Use the{" "}
+          <span className="font-medium text-white/55">+ Create workspace</span> control next to your
+          workspace name above.
         </p>
       );
     }
@@ -315,20 +313,6 @@ function WorkspaceSideNav({
                   />
                 </div>
               </div>
-              <div className="shrink-0">
-                <button
-                  type="button"
-                  data-testid="hww-new-workspace"
-                  onClick={() => {
-                    onOpenCreateWorkspace();
-                    onNavigate?.();
-                  }}
-                  className="flex w-full items-center justify-center gap-2 rounded-lg border border-[#c45c12]/35 bg-gradient-to-b from-white/[0.08] to-black/25 py-2.5 text-[12px] font-semibold text-white/90 shadow-[inset_0_0_0_1px_rgba(255,120,50,0.12)] transition hover:border-[#c45c12]/55 hover:from-white/[0.1]"
-                >
-                  <Plus className="h-3.5 w-3.5" strokeWidth={2} />
-                  New workspace
-                </button>
-              </div>
               <div className="hww-side-section shrink-0">Workspaces</div>
               <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                 {expandedWorkspaceList(
@@ -338,7 +322,9 @@ function WorkspaceSideNav({
             </>
           ) : (
             <p className="shrink-0 px-0.5 text-[11px] leading-relaxed text-white/45">
-              Sign in and load a workspace to search, create, and switch workspaces here.
+              Sign in and load a workspace to search and switch workspaces here. Use{" "}
+              <span className="font-medium text-white/55">+ Create workspace</span> next to your
+              workspace when signed in.
             </p>
           )}
         </div>
@@ -514,7 +500,6 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
   const terminalDockVisible = hasLocalRuntime || developerModeEnabled;
   const [workspaceChatPanelOpen, setWorkspaceChatPanelOpen] = React.useState(false);
   const [workspaceFilter, setWorkspaceFilter] = React.useState("");
-  const [sidebarCreateOpen, setSidebarCreateOpen] = React.useState(false);
 
   const canUseWorkspaceSidebar =
     hamWorkspace.state.status === "ready" || hamWorkspace.state.status === "onboarding";
@@ -555,7 +540,6 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
       }
       navigate("/workspace/chat");
     },
-    onOpenCreateWorkspace: () => setSidebarCreateOpen(true),
     isChatRoute: isWorkspaceChat,
   };
 
@@ -693,11 +677,6 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
         onOpenChange={setLibraryFlyoutOpen}
         sidebarCollapsed={sidebarCollapsed}
         onItemNavigate={() => setDrawerOpen(false)}
-      />
-      <WorkspaceCreateWorkspaceDialog
-        open={sidebarCreateOpen}
-        onOpenChange={setSidebarCreateOpen}
-        onCreated={() => navigate("/workspace/chat")}
       />
     </div>
     </WorkspaceLibraryFlyoutContext.Provider>
