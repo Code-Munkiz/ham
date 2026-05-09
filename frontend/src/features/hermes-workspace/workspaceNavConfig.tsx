@@ -5,7 +5,6 @@ import {
   CheckSquare,
   LayoutDashboard,
   Library,
-  MessageSquare,
   Network,
   Share2,
   FolderOpen,
@@ -20,11 +19,10 @@ import {
 export type MainNavItem = { to: string; label: string; icon: LucideIcon; end?: boolean };
 
 /**
- * Hermes Workspace IA: persistent primary rail (Chat, Social, Coding agents) + Library flyout.
+ * Hermes Workspace IA: persistent primary rail (Social, Coding agents) + Library flyout.
  * `/workspace` index redirects to `/workspace/chat`. `/workspace/projects` lives under Library (first item).
  */
 export const primaryRailItems: MainNavItem[] = [
-  { to: "/workspace/chat", label: "Chat", icon: MessageSquare },
   { to: "/workspace/social", label: "Social", icon: Share2 },
   { to: "/workspace/coding-agents", label: "Coding agents", icon: Bot },
 ];

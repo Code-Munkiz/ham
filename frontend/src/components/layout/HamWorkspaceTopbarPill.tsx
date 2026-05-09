@@ -6,14 +6,12 @@
  * in error. The pill **never** prevents the underlying page from mounting.
  */
 import * as React from "react";
-import { createPortal } from "react-dom";
 
 import { cn } from "@/lib/utils";
 
 import { useHamWorkspace } from "@/lib/ham/HamWorkspaceContext";
-import type { HamCreateWorkspaceBody } from "@/lib/ham/workspaceApi";
 
-import { WorkspaceOnboardingScreen } from "@/components/workspace/WorkspaceOnboardingScreen";
+import { WorkspaceCreateWorkspaceDialog } from "@/components/workspace/WorkspaceCreateWorkspaceDialog";
 import { WorkspacePicker } from "@/components/workspace/WorkspacePicker";
 import { WORKSPACE_API_UNREACHABLE_USER_COPY } from "@/components/workspace/workspaceApiUnreachableCopy";
 
@@ -128,26 +126,6 @@ export function HamWorkspaceTopbarPill({ className }: HamWorkspaceTopbarPillProp
     }
     if (interactive) setPickerOpen((v) => !v);
   };
-
-  const handleCreate = async (body: HamCreateWorkspaceBody) => {
-    const ws = await ctx.createWorkspace(body);
-    setCreateOpen(false);
-    return ws;
-  };
-
-  React.useEffect(() => {
-    if (!createOpen) return;
-    function onKey(ev: KeyboardEvent) {
-      if (ev.key === "Escape") setCreateOpen(false);
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [createOpen]);
-
-  // Build user/orgs reference for onboarding dialog. Falls back gracefully
-  // when state is loading.
-  const me =
-    ctx.state.status === "ready" || ctx.state.status === "onboarding" ? ctx.state.me : null;
 
   return (
     <>
@@ -319,30 +297,7 @@ export function HamWorkspaceTopbarPill({ className }: HamWorkspaceTopbarPillProp
           />
         ) : null}
       </div>
-      {createOpen && me && typeof document !== "undefined"
-        ? createPortal(
-            <div
-              className="fixed inset-0 z-[400] flex items-center justify-center bg-black/70 p-4"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="ham-workspace-create-title"
-              data-testid="ham-workspace-create-dialog"
-              onClick={(ev) => {
-                if (ev.target === ev.currentTarget) setCreateOpen(false);
-              }}
-            >
-              <WorkspaceOnboardingScreen
-                user={me.user}
-                orgs={me.orgs}
-                onCreate={handleCreate}
-                onDismiss={() => setCreateOpen(false)}
-                allowDismiss
-                variant="dialog"
-              />
-            </div>,
-            document.body,
-          )
-        : null}
+      <WorkspaceCreateWorkspaceDialog open={createOpen} onOpenChange={setCreateOpen} />
     </>
   );
 }

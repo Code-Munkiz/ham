@@ -20,7 +20,6 @@ vi.mock("../screens/terminal/WorkspaceTerminalView", () => ({
 }));
 
 import { WorkspaceShell } from "../WorkspaceShell";
-import { workspaceSessionAdapter } from "../workspaceAdapters";
 import type { HamWorkspaceContextValue } from "@/lib/ham/HamWorkspaceContext";
 
 function readyCtx(overrides: Partial<HamWorkspaceContextValue> = {}): HamWorkspaceContextValue {
@@ -68,7 +67,6 @@ function renderShell() {
 describe("WorkspaceShell chat terminal dock gating (PR-1)", () => {
   beforeEach(() => {
     localStorage.clear();
-    vi.spyOn(workspaceSessionAdapter, "list").mockResolvedValue({ sessions: [] });
     mockUseHamWorkspace.mockReturnValue(readyCtx());
   });
 
