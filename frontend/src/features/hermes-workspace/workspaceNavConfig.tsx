@@ -73,7 +73,10 @@ export function pathMatchesSettingsRail(pathname: string): boolean {
 }
 
 const MOBILE_TITLE_RULES: { test: (p: string) => boolean; title: string }[] = [
-  { test: (p) => p === "/workspace/projects" || p.startsWith("/workspace/projects/"), title: "Projects" },
+  {
+    test: (p) => p === "/workspace/projects" || p.startsWith("/workspace/projects/"),
+    title: "Projects",
+  },
   { test: (p) => p === "/workspace/chat" || p.startsWith("/workspace/chat/"), title: "Chat" },
   { test: (p) => p === "/workspace/files" || p.startsWith("/workspace/files/"), title: "Files" },
   {
