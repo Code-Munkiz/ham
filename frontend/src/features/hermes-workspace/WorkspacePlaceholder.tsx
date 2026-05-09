@@ -31,8 +31,8 @@ export function WorkspacePlaceholderPage({ title, description }: WorkspacePlaceh
           </div>
         </div>
         <p className="text-center text-[12px] text-white/40">
-          <Link to="/workspace" className="text-[#ffb27a]/90 hover:text-[#ffc896]">
-            ← Back to workspace dashboard
+          <Link to="/workspace/projects" className="text-[#ffb27a]/90 hover:text-[#ffc896]">
+            ← Back to projects
           </Link>
         </p>
       </div>
