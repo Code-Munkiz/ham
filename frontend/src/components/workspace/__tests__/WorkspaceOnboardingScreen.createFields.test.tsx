@@ -10,21 +10,22 @@ describe("WorkspaceOnboardingScreen extended create fields", () => {
     render(
       <MemoryRouter>
         <WorkspaceOnboardingScreen
-        user={{
-          user_id: "u1",
-          email: "a@b.com",
-          display_name: null,
-          photo_url: null,
-          primary_org_id: null,
-        }}
-        orgs={[]}
-        onCreate={onCreate}
-        variant="dialog"
-        allowDismiss
-        onDismiss={() => {}}
-        showInstructionsField
-        showConnectedToolsHint
-      />,
+          user={{
+            user_id: "u1",
+            email: "a@b.com",
+            display_name: null,
+            photo_url: null,
+            primary_org_id: null,
+          }}
+          orgs={[]}
+          onCreate={onCreate}
+          variant="dialog"
+          allowDismiss
+          onDismiss={() => {}}
+          showInstructionsField
+          showConnectedToolsHint
+        />
+        ,
       </MemoryRouter>,
     );
 
