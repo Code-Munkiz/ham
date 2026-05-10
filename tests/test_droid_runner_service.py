@@ -421,3 +421,192 @@ def test_argv_blocked_writes_audit_row(
     assert row["status"] == "blocked"
     assert row["blocked_code"] == "ARGV_REJECTED"
     assert row["workflow_id"] == "readonly_repo_audit"
+
+
+# ---------------------------------------------------------------------------
+# Build Lane (P2 dark): mode="build" argv extras, default behavior unchanged.
+# ---------------------------------------------------------------------------
+
+
+def test_validate_build_mode_requires_auto_low(tmp_path) -> None:
+    root = tmp_path / "r"
+    root.mkdir()
+    # Argv is missing --auto low (auto=False).
+    err = validate_remote_droid_argv(
+        _valid_argv(str(root.resolve()), auto=False),
+        expected_cwd=root,
+        mode="build",
+    )
+    assert err and "Build mode requires `--auto low`" in err
+
+
+def test_validate_build_mode_requires_output_format_json(tmp_path) -> None:
+    root = tmp_path / "r"
+    root.mkdir()
+    # Manually build argv that omits --output-format entirely.
+    argv = [
+        "droid",
+        "exec",
+        "--cwd",
+        str(root.resolve()),
+        "--auto",
+        "low",
+        "build prompt",
+    ]
+    err = validate_remote_droid_argv(argv, expected_cwd=root, mode="build")
+    assert err and "Build mode requires `--output-format json`" in err
+
+
+def test_validate_build_mode_accepts_full_argv(tmp_path) -> None:
+    root = tmp_path / "r"
+    root.mkdir()
+    err = validate_remote_droid_argv(
+        _valid_argv(str(root.resolve()), auto=True),
+        expected_cwd=root,
+        mode="build",
+    )
+    assert err is None
+
+
+def test_validate_audit_mode_unchanged_no_auto_required(tmp_path) -> None:
+    """Default/audit mode must keep accepting argv without --auto low (regression guard)."""
+    root = tmp_path / "r"
+    root.mkdir()
+    assert (
+        validate_remote_droid_argv(
+            _valid_argv(str(root.resolve()), auto=False),
+            expected_cwd=root,
+        )
+        is None
+    )
+    assert (
+        validate_remote_droid_argv(
+            _valid_argv(str(root.resolve()), auto=False),
+            expected_cwd=root,
+            mode="audit",
+        )
+        is None
+    )
+
+
+def test_runner_build_mode_missing_auto_returns_422(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+    runner_audit_path,
+) -> None:
+    monkeypatch.setenv("HAM_DROID_RUNNER_SERVICE_TOKEN", "secret")
+    root = tmp_path / "r"
+    root.mkdir()
+    r = client.post(
+        "/v1/ham/droid-exec",
+        json={
+            "argv": _valid_argv(str(root.resolve()), auto=False),
+            "cwd": str(root.resolve()),
+            "timeout_sec": 30,
+            "mode": "build",
+        },
+        headers={"Authorization": "Bearer secret"},
+    )
+    assert r.status_code == 422
+    body = r.json()
+    assert body["detail"]["error"]["code"] == "ARGV_REJECTED"
+    assert "auto" in body["detail"]["error"]["message"].lower()
+    row = json.loads(
+        Path(str(runner_audit_path)).read_text(encoding="utf-8").strip().splitlines()[-1]
+    )
+    assert row["status"] == "blocked"
+    assert row["blocked_code"] == "ARGV_REJECTED"
+    assert row["mode"] == "build"
+
+
+@patch("src.ham.droid_runner.service.droid_executor")
+def test_runner_build_mode_full_argv_executes(
+    mock_ex: object,
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+    runner_audit_path,
+) -> None:
+    monkeypatch.setenv("HAM_DROID_RUNNER_SERVICE_TOKEN", "secret")
+    root = tmp_path / "r"
+    root.mkdir()
+    argv = _valid_argv(str(root.resolve()), auto=True)
+    mock_ex.return_value = DroidExecutionRecord(
+        argv=argv,
+        working_dir=str(root.resolve()),
+        exit_code=0,
+        timed_out=False,
+        stdout="{}",
+        stderr="",
+        stdout_truncated=False,
+        stderr_truncated=False,
+        started_at="t0",
+        ended_at="t1",
+        duration_ms=11,
+    )
+    r = client.post(
+        "/v1/ham/droid-exec",
+        json={
+            "argv": argv,
+            "cwd": str(root.resolve()),
+            "timeout_sec": 30,
+            "mode": "build",
+            "workflow_id": "safe_edit_low",
+        },
+        headers={"Authorization": "Bearer secret"},
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["mode"] == "build"
+    # Audit row carries the mode for diagnostics.
+    row = json.loads(
+        Path(str(runner_audit_path)).read_text(encoding="utf-8").strip().splitlines()[-1]
+    )
+    assert row["status"] == "executed"
+    assert row["mode"] == "build"
+
+
+@patch("src.ham.droid_runner.service.droid_executor")
+def test_runner_default_mode_omits_mode_in_audit_and_response(
+    mock_ex: object,
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+    runner_audit_path,
+) -> None:
+    """No regression: default-mode requests still execute and audit identically."""
+    monkeypatch.setenv("HAM_DROID_RUNNER_SERVICE_TOKEN", "secret")
+    root = tmp_path / "r"
+    root.mkdir()
+    argv = _valid_argv(str(root.resolve()))
+    mock_ex.return_value = DroidExecutionRecord(
+        argv=argv,
+        working_dir=str(root.resolve()),
+        exit_code=0,
+        timed_out=False,
+        stdout="{}",
+        stderr="",
+        stdout_truncated=False,
+        stderr_truncated=False,
+        started_at="t0",
+        ended_at="t1",
+        duration_ms=22,
+    )
+    r = client.post(
+        "/v1/ham/droid-exec",
+        json={
+            "argv": argv,
+            "cwd": str(root.resolve()),
+            "timeout_sec": 30,
+        },
+        headers={"Authorization": "Bearer secret"},
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert "mode" not in data
+    row = json.loads(
+        Path(str(runner_audit_path)).read_text(encoding="utf-8").strip().splitlines()[-1]
+    )
+    assert "mode" not in row
+    assert row["status"] == "executed"

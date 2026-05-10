@@ -8,6 +8,7 @@ or misconfigured API cannot turn this endpoint into a generic shell gateway.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 # Exact-match forbidden tokens (any position in argv).
 _FORBIDDEN_EXACT = frozenset(
@@ -19,8 +20,26 @@ _FORBIDDEN_EXACT = frozenset(
 _MAX_ARGV_LEN = 256
 _MAX_ARG_STR_LEN = 200_000
 
+# Optional caller-declared request mode. ``None`` / ``"audit"`` preserve legacy
+# (Phase 1) behavior; ``"build"`` adds Build-Lane–specific argv requirements.
+RequestMode = Literal["audit", "build"]
 
-def validate_remote_droid_argv(argv: list[str], *, expected_cwd: Path) -> str | None:
+
+def _argv_has_flag_with_value(argv: list[str], flag: str, value: str) -> bool:
+    """True iff ``argv`` contains ``flag`` immediately followed by ``value``."""
+    n = len(argv)
+    for i in range(n - 1):
+        if argv[i] == flag and argv[i + 1] == value:
+            return True
+    return False
+
+
+def validate_remote_droid_argv(  # noqa: C901 — intentional flat sequential validator.
+    argv: list[str],
+    *,
+    expected_cwd: Path,
+    mode: RequestMode | None = None,
+) -> str | None:
     """
     Return a human-readable rejection reason, or None if argv is acceptable.
 
@@ -110,5 +129,11 @@ def validate_remote_droid_argv(argv: list[str], *, expected_cwd: Path) -> str | 
     prompt = argv[-1]
     if prompt.startswith("--"):
         return "Final argv element (prompt) must not start with `--`."
+
+    if mode == "build":
+        if not _argv_has_flag_with_value(argv, "--auto", "low"):
+            return "Build mode requires `--auto low`."
+        if not _argv_has_flag_with_value(argv, "--output-format", "json"):
+            return "Build mode requires `--output-format json`."
 
     return None

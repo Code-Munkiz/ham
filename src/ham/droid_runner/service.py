@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, FastAPI, Header, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
@@ -21,7 +21,7 @@ from src.ham.droid_runner.allowed_roots import (
     cwd_allowlist_violation_message,
     load_allowed_roots_from_env,
 )
-from src.ham.droid_runner.argv_validate import validate_remote_droid_argv
+from src.ham.droid_runner.argv_validate import RequestMode, validate_remote_droid_argv
 from src.ham.droid_runner.runner_audit import append_runner_audit_line
 from src.tools.droid_executor import DroidExecutionRecord, droid_executor
 
@@ -52,6 +52,10 @@ class DroidExecRequest(BaseModel):
     session_id: str | None = Field(default=None, max_length=128)
     project_id: str | None = Field(default=None, max_length=180)
     proposal_digest: str | None = Field(default=None, max_length=80)
+    # Optional Build-Lane request mode. Default ``None`` keeps legacy (Phase 1)
+    # audit behavior unchanged; ``"build"`` adds extra argv requirements but does
+    # not change execution itself in P2 — no router consumes it yet.
+    mode: Literal["audit", "build"] | None = Field(default=None)
 
 
 def _parse_stdout_json(stdout: str) -> dict[str, Any] | None:
@@ -111,6 +115,8 @@ def _metadata_response_fields(body: DroidExecRequest, runner_request_id: str) ->
         out["project_id"] = body.project_id
     if body.proposal_digest is not None:
         out["proposal_digest"] = body.proposal_digest
+    if body.mode is not None:
+        out["mode"] = body.mode
     return out
 
 
@@ -129,26 +135,27 @@ def _audit_base(
     execution_ok: bool | None = None,
     failure_kind: str | None = None,
 ) -> None:
-    append_runner_audit_line(
-        {
-            "runner_request_id": runner_request_id,
-            "status": status,
-            "cwd_requested": cwd_requested[:8192],
-            "cwd_normalized": cwd_normalized,
-            "workflow_id": body.workflow_id,
-            "project_id": body.project_id,
-            "session_id": body.session_id,
-            "proposal_digest": body.proposal_digest,
-            "ham_audit_id": body.audit_id,
-            "blocked_code": blocked_code,
-            "blocked_reason": blocked_reason,
-            "exit_code": exit_code,
-            "duration_ms": duration_ms,
-            "timed_out": timed_out,
-            "execution_ok": execution_ok,
-            "failure_kind": failure_kind,
-        }
-    )
+    row: dict[str, Any] = {
+        "runner_request_id": runner_request_id,
+        "status": status,
+        "cwd_requested": cwd_requested[:8192],
+        "cwd_normalized": cwd_normalized,
+        "workflow_id": body.workflow_id,
+        "project_id": body.project_id,
+        "session_id": body.session_id,
+        "proposal_digest": body.proposal_digest,
+        "ham_audit_id": body.audit_id,
+        "blocked_code": blocked_code,
+        "blocked_reason": blocked_reason,
+        "exit_code": exit_code,
+        "duration_ms": duration_ms,
+        "timed_out": timed_out,
+        "execution_ok": execution_ok,
+        "failure_kind": failure_kind,
+    }
+    if body.mode is not None:
+        row["mode"] = body.mode
+    append_runner_audit_line(row)
 
 
 router = APIRouter(prefix="/v1/ham", tags=["ham-droid-runner"])
@@ -234,7 +241,8 @@ def post_droid_exec(
             },
         )
 
-    v_err = validate_remote_droid_argv(body.argv, expected_cwd=cwd_path)
+    argv_mode: RequestMode | None = body.mode
+    v_err = validate_remote_droid_argv(body.argv, expected_cwd=cwd_path, mode=argv_mode)
     if v_err:
         _audit_base(
             body=body,
