@@ -174,12 +174,97 @@ export type ContextMeterClusterProps = {
   payload: ChatContextMetersPayload | null;
   enabled: boolean;
   density?: ContextMeterClusterDensity;
+  /** `rings`: three separate meters. `pulse`: compact System Pulse chip with combined tooltip. */
+  layout?: "rings" | "pulse";
 };
+
+function dotClassForColor(c: ChatContextMeterColor | undefined): string {
+  switch (c) {
+    case "green":
+      return "bg-emerald-400/90 shadow-[0_0_10px_rgba(52,211,153,0.35)]";
+    case "amber":
+      return "bg-amber-400/90 shadow-[0_0_10px_rgba(251,191,36,0.28)]";
+    case "red":
+      return "bg-red-400/90 shadow-[0_0_12px_rgba(248,113,113,0.38)]";
+    default:
+      return "bg-white/25";
+  }
+}
+
+function SystemPulseChip({
+  payload,
+  turn,
+  ws,
+  th,
+  turnPct,
+}: {
+  payload: ChatContextMetersPayload | null;
+  turn: ChatContextThisTurnMeter | null;
+  ws: ChatContextWorkspaceMeter | null;
+  th: ChatContextThreadMeter | null;
+  turnPct: number | null;
+}) {
+  const combinedTitle = [
+    buildThisTurnTooltip(turn),
+    "",
+    buildWorkspaceTooltip(ws),
+    "",
+    buildThreadTooltip(th),
+    "",
+    "Tip: open Workspace → Settings → Model / provider to adjust routing surfaces.",
+  ].join("\n");
+
+  const turnC = turn ? mapApiColor(turn.color) : "gray";
+  const wsC = ws ? mapApiColor(ws.color) : "gray";
+  const thC = th ? mapApiColor(th.color) : "gray";
+
+  return (
+    <button
+      type="button"
+      data-hww-system-pulse="true"
+      title={combinedTitle}
+      aria-label={combinedTitle.replace(/\n/g, ". ")}
+      className={cn(
+        "hww-system-pulse flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-white/[0.1] bg-black/35 px-2 text-[10px] font-mono uppercase tracking-wide text-white/75",
+        "outline-none ring-offset-2 ring-offset-[#030a10] hover:bg-white/[0.06] focus-visible:ring-2 focus-visible:ring-emerald-400/40",
+      )}
+    >
+      <span className="select-none text-white/40">Sys</span>
+      <span className="flex items-center gap-0.5" aria-hidden>
+        <span
+          className={cn(
+            "inline-block h-2 w-2 rounded-full",
+            dotClassForColor(turnC),
+            !payload?.enabled || !turn ? "opacity-40" : null,
+          )}
+        />
+        <span
+          className={cn(
+            "inline-block h-2 w-2 rounded-full",
+            dotClassForColor(wsC),
+            !payload?.enabled || !ws ? "opacity-40" : null,
+          )}
+        />
+        <span
+          className={cn(
+            "inline-block h-2 w-2 rounded-full",
+            dotClassForColor(thC),
+            !payload?.enabled || !th ? "opacity-40" : null,
+          )}
+        />
+      </span>
+      <span className="tabular-nums text-white/55" aria-hidden>
+        {payload?.enabled && turnPct != null ? `${turnPct}%` : "—"}
+      </span>
+    </button>
+  );
+}
 
 export function ContextMeterCluster({
   payload,
   enabled,
   density = "comfortable",
+  layout = "rings",
 }: ContextMeterClusterProps) {
   const navigate = useNavigate();
   if (!enabled) return null;
@@ -192,6 +277,20 @@ export function ContextMeterCluster({
   const wsPct = ws ? pctFromRatio(ws.fill_ratio) : null;
   const thPct = th ? pctFromRatio(th.fill_ratio) : null;
 
+  if (layout === "pulse") {
+    return (
+      <div className="flex shrink-0 items-center" data-hww-meter-cluster="pulse">
+        <SystemPulseChip
+          payload={payload}
+          turn={turn}
+          ws={ws}
+          th={th}
+          turnPct={payload?.enabled ? turnPct : null}
+        />
+      </div>
+    );
+  }
+
   const dim = DIMS[density];
 
   return (
@@ -199,6 +298,7 @@ export function ContextMeterCluster({
       className={cn("flex shrink-0 items-center", dim.gapClass)}
       role="group"
       aria-label="Context meters"
+      data-hww-meter-cluster="rings"
     >
       <button
         type="button"

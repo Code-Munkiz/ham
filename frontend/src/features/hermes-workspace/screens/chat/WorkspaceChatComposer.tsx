@@ -337,7 +337,7 @@ export function WorkspaceChatComposer({
       const w = readOuterWidthPx();
       let next: ComposerToolbarDensity = "comfortable";
       if (w > 0 && w < 400) next = "tight";
-      else if (w > 0 && w < 460) next = "compact";
+      else if (w > 0 && w < 500) next = "compact";
       setComposerToolbarDensity((prev) => (prev === next ? prev : next));
     };
     const ro = new ResizeObserver(() => {
@@ -461,6 +461,28 @@ export function WorkspaceChatComposer({
     if (sttMode === "live") return "Live dictation (right-click for mode)";
     return "Auto dictation (right-click for mode)";
   }, [sttMode, voiceTranscribing]);
+
+  const contextAccent = React.useMemo((): "red" | "amber" | "green" | null => {
+    if (!contextMetersEnabled || !contextMetersPayload?.enabled) return null;
+    const cols = [
+      contextMetersPayload.this_turn?.color,
+      contextMetersPayload.workspace?.color,
+      contextMetersPayload.thread?.color,
+    ];
+    if (cols.includes("red")) return "red";
+    if (cols.includes("amber")) return "amber";
+    if (cols.includes("green")) return "green";
+    return null;
+  }, [contextMetersEnabled, contextMetersPayload]);
+
+  const deckBorder = React.useMemo(() => {
+    if (contextAccent === "red") return "1px solid rgba(248, 113, 113, 0.22)";
+    if (contextAccent === "amber") return "1px solid rgba(251, 191, 36, 0.2)";
+    if (contextAccent === "green") return "1px solid rgba(16, 185, 129, 0.2)";
+    return "1px solid rgba(16, 185, 129, 0.14)";
+  }, [contextAccent]);
+
+  const meterLayout = composerToolbarDensity === "comfortable" ? "rings" : "pulse";
 
   const placeholder = React.useMemo(() => {
     if (voiceTranscribing) return "Transcribing…";
@@ -621,6 +643,258 @@ export function WorkspaceChatComposer({
     [voiceState],
   );
 
+  const leftDeckControls = (
+    <>
+      {gohamDesktopChip ? (
+        <button
+          type="button"
+          onClick={gohamDesktopChip.onOpenModal}
+          disabled={Boolean(sending || voiceBusy || disabled || gohamDesktopChip.busy)}
+          title={
+            gohamDesktopChip.linked
+              ? "GOHAM linked — local web bridge (trusted). Open status."
+              : "GOHAM — trusted local-control web bridge connect"
+          }
+          className={cn(
+            "mr-1 flex shrink-0 items-center gap-1 rounded-full border font-semibold uppercase tracking-wide transition-colors disabled:opacity-45",
+            composerToolbarDensity === "comfortable" && "px-2.5 py-1 text-[10px]",
+            composerToolbarDensity === "compact" && "px-2 py-0.5 text-[9px]",
+            composerToolbarDensity === "tight" && "px-1.5 py-0.5 text-[9px]",
+            gohamDesktopChip.linked
+              ? "border-emerald-400/35 bg-emerald-500/[0.12] text-emerald-100/90 hover:bg-emerald-500/20"
+              : "border-white/[0.12] bg-white/[0.06] text-white/70 hover:bg-white/[0.1]",
+          )}
+          aria-label="GOHAM local web bridge"
+          data-ham-goham-chip="desktop"
+        >
+          {gohamDesktopChip.busy ? (
+            <Loader2 className="h-3 w-3 shrink-0 animate-spin opacity-95" aria-hidden />
+          ) : (
+            <Link2 className="h-3 w-3 shrink-0 opacity-90" aria-hidden />
+          )}
+          <span className={composerToolbarDensity === "tight" ? "sr-only" : undefined}>GOHAM</span>
+        </button>
+      ) : null}
+      <WorkspaceChatComposerActionsMenu
+        onFiles={handleAddFiles}
+        attachDisabled={sending || voiceBusy || disabled || uploadsPending}
+        attachDisabledReason={attachMenuDisabledReason(
+          uploadsPending,
+          voiceBusy,
+          sending,
+          disabled,
+        )}
+        attachDetailsTitle={attachDetailsTitle}
+        menuFooterHint={COMPOSER_MENU_FOOTER_HINT}
+        generateImage={generateImage}
+        generateVideo={generateVideo}
+        exportPdf={exportPdf}
+      />
+      {value.length >= 100 ? (
+        <span
+          className="hidden min-w-0 text-[10px] tabular-nums text-white/30 select-none sm:inline"
+          title="Approximate token count"
+        >
+          ~{Math.ceil(value.length / 4)} tokens
+        </span>
+      ) : null}
+      <div data-hww-model-pill className="min-w-0">
+        {showModel ? (
+          <WorkspaceOpenRouterModelPicker
+            catalog={catalog!}
+            candidates={pickerRows}
+            modelId={modelId}
+            onModelIdChange={onModelIdChange}
+            disabled={sending}
+            title={modelDetail}
+            triggerRef={modelPickerTriggerRef}
+            byokPickerActive={byokPickerActive}
+            failedModelIds={failedChatModelIds}
+            layoutDensity={composerToolbarDensity}
+          />
+        ) : modelPill ? (
+          <span
+            className={cn(
+              "ml-0.5 inline-flex min-w-0 items-center rounded-full bg-emerald-500/10 font-mono text-emerald-200/80",
+              composerToolbarDensity === "comfortable" &&
+                "max-w-[10rem] px-2.5 py-1 text-[11px] md:max-w-[16rem] md:text-[12px]",
+              composerToolbarDensity === "compact" &&
+                "max-w-[min(9rem,50vw)] px-2 py-0.5 text-[10px]",
+              composerToolbarDensity === "tight" &&
+                "min-w-0 max-w-full flex-1 px-1.5 py-0.5 text-[10px]",
+            )}
+            title={modelDetail ?? modelPill ?? undefined}
+          >
+            <span className="truncate">{modelPill}</span>
+          </span>
+        ) : null}
+      </div>
+    </>
+  );
+
+  const rightDeckActions = (
+    <>
+      {contextMetersEnabled ? (
+        <ContextMeterCluster
+          payload={contextMetersPayload}
+          enabled
+          density={composerToolbarDensity}
+          layout={meterLayout}
+        />
+      ) : null}
+      <div
+        className={cn(
+          "flex shrink-0 items-center",
+          composerToolbarDensity === "comfortable" && "h-10",
+          composerToolbarDensity === "compact" && "h-9",
+          composerToolbarDensity === "tight" && "h-8",
+          voiceTranscribing && "pointer-events-none opacity-55",
+        )}
+        title={micColumnTitle}
+      >
+        <WorkspaceVoiceMessageInput
+          compact
+          hidePreview
+          mode={sttMode}
+          disabled={sending || voiceTranscribing || disabled || sttDictationEnabled === false}
+          disabledReason={
+            sttDictationEnabled === false
+              ? sttUnavailableReason ||
+                "Speech-to-text is off — enable it in Workspace → Settings → Voice."
+              : voiceTranscribing
+                ? "Transcribing…"
+                : undefined
+          }
+          onRecordingChange={(isRecording) => {
+            if (liveListening) {
+              return;
+            }
+            pushVoiceDebug({
+              event: "voice.child.isRecording.signal",
+              component: "WorkspaceChatComposer",
+              composerInstanceId: composerInstanceId.current,
+              isRecording,
+              voiceState,
+              stopRequested: stopRequestedRef.current,
+            });
+            if (isRecording) {
+              if (
+                stopRequestedRef.current ||
+                voiceState === "stopping" ||
+                voiceState === "transcribing"
+              ) {
+                pushVoiceDebug({
+                  event: "voice.state.blocked_bounce",
+                  component: "WorkspaceChatComposer",
+                  composerInstanceId: composerInstanceId.current,
+                  attempted: "recording",
+                  voiceState,
+                  stopRequested: stopRequestedRef.current,
+                });
+                return;
+              }
+              transitionVoiceState("recording", "recorder_started");
+              return;
+            }
+            pushVoiceDebug({
+              event: "voice.recorder.onstop",
+              component: "WorkspaceChatComposer",
+              composerInstanceId: composerInstanceId.current,
+            });
+            clearStopTimeout();
+            if (voiceTranscribing) {
+              transitionVoiceState("transcribing", "recorder_stopped_transcribe");
+            } else {
+              transitionVoiceState("idle", "recorder_stopped");
+              stopRequestedRef.current = false;
+            }
+          }}
+          onStartRequested={() => {
+            stopRequestedRef.current = false;
+            clearStopTimeout();
+          }}
+          onStopRequested={() => {
+            beginStopRequest("stop_requested");
+            pushVoiceDebug({
+              event: "voice.recorder.stop.called",
+              component: "WorkspaceChatComposer",
+              composerInstanceId: composerInstanceId.current,
+              source: "stop_button_or_escape",
+            });
+          }}
+          onVoiceRecorderErrorChange={setVoiceBanner}
+          onStopRecorderReady={(handler) => {
+            stopVoiceRecorderRef.current = handler;
+          }}
+          onVoiceError={(err) => {
+            setVoiceBanner(err);
+            transitionVoiceState("error", "recorder_error");
+            stopRequestedRef.current = false;
+            clearStopTimeout();
+          }}
+          onVoiceMessage={(blob) => {
+            void onVoiceBlob(blob);
+          }}
+          onModeChange={(mode) => {
+            void onSttModeChange?.(mode);
+          }}
+          onLiveListeningChange={(active) => {
+            setLiveListening(active);
+            if (!active) {
+              onChange(composeLiveDraft());
+            } else {
+              liveBaseDraftRef.current = value;
+              liveCommittedDraftRef.current = "";
+              liveInterimDraftRef.current = "";
+            }
+          }}
+          onLiveInterimChange={(interim) => {
+            liveInterimDraftRef.current = interim;
+            onChange(composeLiveDraft());
+          }}
+          onLiveFinalText={(text) => {
+            appendLiveFinalChunk(text);
+            liveInterimDraftRef.current = "";
+            onChange(composeLiveDraft());
+          }}
+          onLiveError={(message) => {
+            setVoiceBanner(message);
+            transitionVoiceState("error", "live_dictation_error");
+            setLiveListening(false);
+          }}
+        />
+      </div>
+      <Button
+        type="submit"
+        size="icon"
+        disabled={!canSend}
+        title={sendButtonTitle}
+        className={cn(
+          "shrink-0 rounded-full border border-emerald-400/15 bg-gradient-to-b from-emerald-600 to-emerald-900 text-white shadow-md hover:from-emerald-500 hover:to-emerald-800 disabled:opacity-40",
+          composerToolbarDensity === "comfortable" && "h-10 w-10 min-h-10 min-w-10",
+          composerToolbarDensity === "compact" && "h-9 w-9 min-h-9 min-w-9",
+          composerToolbarDensity === "tight" && "h-8 w-8 min-h-8 min-w-8",
+        )}
+        aria-label="Send"
+        data-hww-command-send
+      >
+        {sending ? (
+          <span
+            className={cn(
+              "animate-pulse rounded-full bg-white/80",
+              composerToolbarDensity === "comfortable" ? "h-4 w-4" : "h-3.5 w-3.5",
+            )}
+          />
+        ) : (
+          <ArrowUp
+            className={composerToolbarDensity === "comfortable" ? "h-4 w-4" : "h-3.5 w-3.5"}
+            strokeWidth={2.2}
+          />
+        )}
+      </Button>
+    </>
+  );
+
   return (
     <div
       ref={outerRef}
@@ -642,7 +916,7 @@ export function WorkspaceChatComposer({
       >
         <div
           className={cn(
-            "relative flex min-w-0 flex-col overflow-hidden rounded-3xl",
+            "relative box-border flex min-w-0 flex-col overflow-hidden rounded-3xl",
             "text-[#e8eef3] shadow-[0_1px_0_rgba(255,255,255,0.04)_inset,0_8px_28px_rgba(0,0,0,0.32)]",
             isDragging
               ? "ring-2 ring-emerald-400/35"
@@ -650,8 +924,9 @@ export function WorkspaceChatComposer({
           )}
           style={{
             background: "linear-gradient(180deg, #0a1814 0%, #050f0c 100%)",
-            border: "1px solid rgba(16, 185, 129, 0.14)",
+            border: deckBorder,
           }}
+          data-hww-command-deck
           onDragEnter={onDragEnter}
           onDragLeave={onDragLeave}
           onDragOver={onDragOver}
@@ -725,34 +1000,90 @@ export function WorkspaceChatComposer({
             </div>
           )}
 
-          <div className="px-2.5 pb-0 pt-2.5 md:px-3.5 md:pt-3">
-            <label htmlFor="hww-chat-composer" className="sr-only">
-              Message
-            </label>
-            <textarea
-              ref={textareaRef}
-              id="hww-chat-composer"
-              value={value}
-              onChange={(e) => onChange(e.target.value)}
-              onPaste={(e) => {
-                if (!onPasteFiles || disabled || sending || voiceBusy || uploadsPending) return;
-                const dt = e.clipboardData;
-                const files = collectComposerPasteFiles(dt);
-                if (files.length === 0) return;
-                e.preventDefault();
-                onPasteFiles(files);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
+          <div
+            className={cn(
+              "hww-command-deck box-border min-w-0 border-t border-white/[0.08]",
+              composerToolbarDensity === "tight"
+                ? "flex flex-col gap-0"
+                : "grid min-w-0 grid-cols-[minmax(0,max-content)_minmax(0,1fr)_minmax(0,max-content)] items-end gap-x-2 gap-y-1 px-2.5 pb-2 pt-2 md:px-3.5 md:pb-2.5 md:pt-2.5",
+            )}
+          >
+            {composerToolbarDensity !== "tight" ? (
+              <div
+                data-hww-command-left
+                className="flex min-w-0 max-w-full flex-col gap-1 md:flex-row md:flex-wrap md:items-center md:gap-0.5 lg:gap-1"
+              >
+                {leftDeckControls}
+              </div>
+            ) : null}
+
+            <div
+              className={cn(
+                "min-w-0",
+                composerToolbarDensity === "tight"
+                  ? "px-2.5 pb-1 pt-2.5 md:px-3.5"
+                  : "w-full min-w-0 pb-0.5",
+              )}
+            >
+              <label htmlFor="hww-chat-composer" className="sr-only">
+                Message
+              </label>
+              <textarea
+                ref={textareaRef}
+                id="hww-chat-composer"
+                value={value}
+                onChange={(e) => onChange(e.target.value)}
+                onPaste={(e) => {
+                  if (!onPasteFiles || disabled || sending || voiceBusy || uploadsPending) return;
+                  const dt = e.clipboardData;
+                  const files = collectComposerPasteFiles(dt);
+                  if (files.length === 0) return;
                   e.preventDefault();
-                  if (canSend) onSubmit();
-                }
-              }}
-              rows={1}
-              disabled={disabled || sending || voiceTranscribing}
-              placeholder={placeholder}
-              className="w-full min-h-[44px] max-h-[240px] resize-none border-0 bg-transparent px-1 py-1 text-[13px] leading-[1.45] text-[#e8eef3] outline-none placeholder:text-white/40 focus:ring-0 focus:outline-none [box-shadow:none] overflow-x-hidden overflow-y-hidden"
-            />
+                  onPasteFiles(files);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    if (canSend) onSubmit();
+                  }
+                }}
+                rows={1}
+                disabled={disabled || sending || voiceTranscribing}
+                placeholder={placeholder}
+                className="hww-command-textarea box-border w-full min-h-[44px] max-h-[240px] resize-none border-0 bg-transparent px-1 py-1 text-[13px] leading-[1.45] text-[#e8eef3] outline-none placeholder:text-white/40 focus:ring-0 focus:outline-none [box-shadow:none] overflow-x-hidden"
+              />
+            </div>
+
+            {composerToolbarDensity !== "tight" ? (
+              <div
+                data-hww-command-controls
+                data-hww-action-buttons
+                className={cn(
+                  "flex shrink-0 items-center justify-end gap-0.5 overflow-x-hidden md:gap-1",
+                  composerToolbarDensity === "comfortable" ? "h-10" : "h-9",
+                )}
+              >
+                {rightDeckActions}
+              </div>
+            ) : null}
+
+            {composerToolbarDensity === "tight" ? (
+              <div
+                data-hww-command-controls
+                data-hww-action-buttons
+                className="flex min-w-0 flex-wrap items-center gap-1 border-t border-white/[0.06] px-1.5 py-1.5"
+              >
+                <div
+                  data-hww-command-left
+                  className="flex min-w-0 flex-1 flex-wrap items-center gap-0.5 [&>*]:max-w-full"
+                >
+                  {leftDeckControls}
+                </div>
+                <div className="ml-auto flex min-w-0 shrink-0 items-center gap-0.5">
+                  {rightDeckActions}
+                </div>
+              </div>
+            ) : null}
           </div>
 
           {(catalog?.gateway_mode || "").trim().toLowerCase() === "mock" &&
@@ -784,277 +1115,6 @@ export function WorkspaceChatComposer({
               </button>
             </div>
           ) : null}
-
-          <div
-            className={cn(
-              "flex w-full min-w-0 gap-1.5 border-t border-white/[0.08]",
-              composerToolbarDensity === "tight"
-                ? "flex-col items-stretch py-2 pl-1.5 pr-1.5"
-                : "min-h-[48px] flex-row items-center justify-between px-1.5 py-1.5 md:gap-2 md:px-2.5 md:py-2",
-            )}
-          >
-            <div
-              className={cn(
-                "flex min-w-0 items-center gap-0.5 md:gap-1",
-                composerToolbarDensity === "tight"
-                  ? "w-full min-w-0 flex-1 flex-wrap [&>*]:max-w-full"
-                  : "flex-1",
-                composerToolbarDensity === "compact" && "gap-0.5",
-              )}
-            >
-              {gohamDesktopChip ? (
-                <button
-                  type="button"
-                  onClick={gohamDesktopChip.onOpenModal}
-                  disabled={Boolean(sending || voiceBusy || disabled || gohamDesktopChip.busy)}
-                  title={
-                    gohamDesktopChip.linked
-                      ? "GOHAM linked — local web bridge (trusted). Open status."
-                      : "GOHAM — trusted local-control web bridge connect"
-                  }
-                  className={cn(
-                    "mr-1 flex shrink-0 items-center gap-1 rounded-full border font-semibold uppercase tracking-wide transition-colors disabled:opacity-45",
-                    composerToolbarDensity === "comfortable" && "px-2.5 py-1 text-[10px]",
-                    composerToolbarDensity === "compact" && "px-2 py-0.5 text-[9px]",
-                    composerToolbarDensity === "tight" && "px-1.5 py-0.5 text-[9px]",
-                    gohamDesktopChip.linked
-                      ? "border-emerald-400/35 bg-emerald-500/[0.12] text-emerald-100/90 hover:bg-emerald-500/20"
-                      : "border-white/[0.12] bg-white/[0.06] text-white/70 hover:bg-white/[0.1]",
-                  )}
-                  aria-label="GOHAM local web bridge"
-                  data-ham-goham-chip="desktop"
-                >
-                  {gohamDesktopChip.busy ? (
-                    <Loader2 className="h-3 w-3 shrink-0 animate-spin opacity-95" aria-hidden />
-                  ) : (
-                    <Link2 className="h-3 w-3 shrink-0 opacity-90" aria-hidden />
-                  )}
-                  GOHAM
-                </button>
-              ) : null}
-              <WorkspaceChatComposerActionsMenu
-                onFiles={handleAddFiles}
-                attachDisabled={sending || voiceBusy || disabled || uploadsPending}
-                attachDisabledReason={attachMenuDisabledReason(
-                  uploadsPending,
-                  voiceBusy,
-                  sending,
-                  disabled,
-                )}
-                attachDetailsTitle={attachDetailsTitle}
-                menuFooterHint={COMPOSER_MENU_FOOTER_HINT}
-                generateImage={generateImage}
-                generateVideo={generateVideo}
-                exportPdf={exportPdf}
-              />
-              {value.length >= 100 ? (
-                <span
-                  className="hidden min-w-0 text-[10px] tabular-nums text-white/30 select-none sm:inline"
-                  title="Approximate token count"
-                >
-                  ~{Math.ceil(value.length / 4)} tokens
-                </span>
-              ) : null}
-              {showModel ? (
-                <WorkspaceOpenRouterModelPicker
-                  catalog={catalog!}
-                  candidates={pickerRows}
-                  modelId={modelId}
-                  onModelIdChange={onModelIdChange}
-                  disabled={sending}
-                  title={modelDetail}
-                  triggerRef={modelPickerTriggerRef}
-                  byokPickerActive={byokPickerActive}
-                  failedModelIds={failedChatModelIds}
-                  layoutDensity={composerToolbarDensity}
-                />
-              ) : modelPill ? (
-                <span
-                  className={cn(
-                    "ml-0.5 inline-flex min-w-0 items-center rounded-full bg-emerald-500/10 font-mono text-emerald-200/80",
-                    composerToolbarDensity === "comfortable" &&
-                      "max-w-[10rem] px-2.5 py-1 text-[11px] md:max-w-[16rem] md:text-[12px]",
-                    composerToolbarDensity === "compact" &&
-                      "max-w-[min(9rem,50vw)] px-2 py-0.5 text-[10px]",
-                    composerToolbarDensity === "tight" &&
-                      "min-w-0 max-w-full flex-1 px-1.5 py-0.5 text-[10px]",
-                  )}
-                  title={modelDetail ?? modelPill ?? undefined}
-                >
-                  <span className="truncate">{modelPill}</span>
-                </span>
-              ) : null}
-            </div>
-
-            <div
-              className={cn(
-                "relative z-[5] flex shrink-0 items-center overflow-x-hidden",
-                composerToolbarDensity === "comfortable" && "h-10 gap-0.5 md:gap-1",
-                composerToolbarDensity === "compact" && "h-9 gap-0.5",
-                composerToolbarDensity === "tight" &&
-                  "h-auto w-full min-w-0 justify-end gap-0.5 pt-1",
-              )}
-            >
-              {contextMetersEnabled ? (
-                <ContextMeterCluster
-                  payload={contextMetersPayload}
-                  enabled
-                  density={composerToolbarDensity}
-                />
-              ) : null}
-              <div
-                className={cn(
-                  "flex shrink-0 items-center",
-                  composerToolbarDensity === "comfortable" && "h-10",
-                  composerToolbarDensity === "compact" && "h-9",
-                  composerToolbarDensity === "tight" && "h-8",
-                  voiceTranscribing && "pointer-events-none opacity-55",
-                )}
-                title={micColumnTitle}
-              >
-                <WorkspaceVoiceMessageInput
-                  compact
-                  hidePreview
-                  mode={sttMode}
-                  disabled={
-                    sending || voiceTranscribing || disabled || sttDictationEnabled === false
-                  }
-                  disabledReason={
-                    sttDictationEnabled === false
-                      ? sttUnavailableReason ||
-                        "Speech-to-text is off — enable it in Workspace → Settings → Voice."
-                      : voiceTranscribing
-                        ? "Transcribing…"
-                        : undefined
-                  }
-                  onRecordingChange={(isRecording) => {
-                    if (liveListening) {
-                      return;
-                    }
-                    pushVoiceDebug({
-                      event: "voice.child.isRecording.signal",
-                      component: "WorkspaceChatComposer",
-                      composerInstanceId: composerInstanceId.current,
-                      isRecording,
-                      voiceState,
-                      stopRequested: stopRequestedRef.current,
-                    });
-                    if (isRecording) {
-                      if (
-                        stopRequestedRef.current ||
-                        voiceState === "stopping" ||
-                        voiceState === "transcribing"
-                      ) {
-                        pushVoiceDebug({
-                          event: "voice.state.blocked_bounce",
-                          component: "WorkspaceChatComposer",
-                          composerInstanceId: composerInstanceId.current,
-                          attempted: "recording",
-                          voiceState,
-                          stopRequested: stopRequestedRef.current,
-                        });
-                        return;
-                      }
-                      transitionVoiceState("recording", "recorder_started");
-                      return;
-                    }
-                    pushVoiceDebug({
-                      event: "voice.recorder.onstop",
-                      component: "WorkspaceChatComposer",
-                      composerInstanceId: composerInstanceId.current,
-                    });
-                    clearStopTimeout();
-                    if (voiceTranscribing) {
-                      transitionVoiceState("transcribing", "recorder_stopped_transcribe");
-                    } else {
-                      transitionVoiceState("idle", "recorder_stopped");
-                      stopRequestedRef.current = false;
-                    }
-                  }}
-                  onStartRequested={() => {
-                    stopRequestedRef.current = false;
-                    clearStopTimeout();
-                  }}
-                  onStopRequested={() => {
-                    beginStopRequest("stop_requested");
-                    pushVoiceDebug({
-                      event: "voice.recorder.stop.called",
-                      component: "WorkspaceChatComposer",
-                      composerInstanceId: composerInstanceId.current,
-                      source: "stop_button_or_escape",
-                    });
-                  }}
-                  onVoiceRecorderErrorChange={setVoiceBanner}
-                  onStopRecorderReady={(handler) => {
-                    stopVoiceRecorderRef.current = handler;
-                  }}
-                  onVoiceError={(err) => {
-                    setVoiceBanner(err);
-                    transitionVoiceState("error", "recorder_error");
-                    stopRequestedRef.current = false;
-                    clearStopTimeout();
-                  }}
-                  onVoiceMessage={(blob) => {
-                    void onVoiceBlob(blob);
-                  }}
-                  onModeChange={(mode) => {
-                    void onSttModeChange?.(mode);
-                  }}
-                  onLiveListeningChange={(active) => {
-                    setLiveListening(active);
-                    if (!active) {
-                      onChange(composeLiveDraft());
-                    } else {
-                      liveBaseDraftRef.current = value;
-                      liveCommittedDraftRef.current = "";
-                      liveInterimDraftRef.current = "";
-                    }
-                  }}
-                  onLiveInterimChange={(interim) => {
-                    liveInterimDraftRef.current = interim;
-                    onChange(composeLiveDraft());
-                  }}
-                  onLiveFinalText={(text) => {
-                    appendLiveFinalChunk(text);
-                    liveInterimDraftRef.current = "";
-                    onChange(composeLiveDraft());
-                  }}
-                  onLiveError={(message) => {
-                    setVoiceBanner(message);
-                    transitionVoiceState("error", "live_dictation_error");
-                    setLiveListening(false);
-                  }}
-                />
-              </div>
-              <Button
-                type="submit"
-                size="icon"
-                disabled={!canSend}
-                title={sendButtonTitle}
-                className={cn(
-                  "shrink-0 rounded-full border border-emerald-400/15 bg-gradient-to-b from-emerald-600 to-emerald-900 text-white shadow-md hover:from-emerald-500 hover:to-emerald-800 disabled:opacity-40",
-                  composerToolbarDensity === "comfortable" && "h-10 w-10",
-                  composerToolbarDensity === "compact" && "h-9 w-9",
-                  composerToolbarDensity === "tight" && "h-8 w-8",
-                )}
-                aria-label="Send"
-              >
-                {sending ? (
-                  <span
-                    className={cn(
-                      "animate-pulse rounded-full bg-white/80",
-                      composerToolbarDensity === "comfortable" ? "h-4 w-4" : "h-3.5 w-3.5",
-                    )}
-                  />
-                ) : (
-                  <ArrowUp
-                    className={composerToolbarDensity === "comfortable" ? "h-4 w-4" : "h-3.5 w-3.5"}
-                    strokeWidth={2.2}
-                  />
-                )}
-              </Button>
-            </div>
-          </div>
         </div>
       </form>
     </div>

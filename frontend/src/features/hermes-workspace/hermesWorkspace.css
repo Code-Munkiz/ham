@@ -160,3 +160,35 @@
   background: rgba(255, 255, 255, 0.08);
   border-color: rgba(196, 92, 18, 0.35);
 }
+
+/* Command Deck — chat composer textarea scrollbar + containment */
+.hww-command-textarea {
+  box-sizing: border-box;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+
+.hww-command-textarea::-webkit-scrollbar {
+  width: 5px;
+}
+
+.hww-command-textarea::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .hww-system-pulse {
+    animation: hww-system-pulse-hud 3.2s ease-in-out infinite;
+  }
+}
+
+@keyframes hww-system-pulse-hud {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
+  50% {
+    box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.14);
+  }
+}

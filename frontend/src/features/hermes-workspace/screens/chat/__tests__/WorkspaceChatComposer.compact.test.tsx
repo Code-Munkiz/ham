@@ -146,7 +146,7 @@ describe("WorkspaceChatComposer narrow layout", () => {
     vi.restoreAllMocks();
   });
 
-  it("exposes compact density when outer width is below 460px", async () => {
+  it("exposes compact density when outer width is below 500px", async () => {
     renderAtWidth(420);
     const outer = document.querySelector(".hww-chat-composer-outer");
     expect(outer).toBeTruthy();
@@ -156,7 +156,20 @@ describe("WorkspaceChatComposer narrow layout", () => {
     expect(screen.getByRole("button", { name: "Model" })).toBeInTheDocument();
     expect(screen.getByTestId("hww-mock-mic")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Send" })).toBeInTheDocument();
-    expect(screen.getByRole("group", { name: "Context meters" })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(document.querySelector('[data-hww-system-pulse="true"]')).toBeTruthy();
+    });
+  });
+
+  it("uses separate rings when width is comfortable", async () => {
+    renderAtWidth(520);
+    const outer = document.querySelector(".hww-chat-composer-outer");
+    await waitFor(() => {
+      expect(outer?.getAttribute("data-hww-composer-density")).toBe("comfortable");
+    });
+    await waitFor(() => {
+      expect(document.querySelector('[data-hww-meter-cluster="rings"]')).toBeTruthy();
+    });
   });
 
   it("exposes tight density when outer width is below 400px", async () => {
@@ -166,5 +179,6 @@ describe("WorkspaceChatComposer narrow layout", () => {
     await waitFor(() => {
       expect(outer?.getAttribute("data-hww-composer-density")).toBe("tight");
     });
+    expect(screen.getByRole("button", { name: /Model:/i })).toBeInTheDocument();
   });
 });

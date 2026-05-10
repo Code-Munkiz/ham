@@ -2,8 +2,9 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
-const { fetchWorkspaceToolsMock } = vi.hoisted(() => ({
+const { fetchWorkspaceToolsMock, isLocalRuntimeConfiguredMock } = vi.hoisted(() => ({
   fetchWorkspaceToolsMock: vi.fn(),
+  isLocalRuntimeConfiguredMock: vi.fn(() => false),
 }));
 
 vi.mock("@/lib/ham/api", async (importOriginal) => {
@@ -15,7 +16,11 @@ vi.mock("@/lib/ham/api", async (importOriginal) => {
 });
 
 vi.mock("../../adapters/localRuntime", () => ({
-  isLocalRuntimeConfigured: () => false,
+  isLocalRuntimeConfigured: () => isLocalRuntimeConfiguredMock(),
+}));
+
+vi.mock("../../screens/terminal/WorkspaceTerminalView", () => ({
+  WorkspaceTerminalView: () => <div data-testid="hww-terminal-surface-mock" />,
 }));
 
 import { WorkspaceWorkbench } from "../WorkspaceWorkbench";
@@ -34,6 +39,7 @@ function toolsOk() {
 describe("WorkspaceWorkbench", () => {
   beforeEach(() => {
     fetchWorkspaceToolsMock.mockResolvedValue(toolsOk());
+    isLocalRuntimeConfiguredMock.mockReturnValue(false);
   });
 
   it("select Preview by default and switches panel content", () => {
@@ -77,9 +83,8 @@ describe("WorkspaceWorkbench", () => {
     expect(screen.queryByTestId("hww-workbench-tab-github")).toBeNull();
 
     fireEvent.click(screen.getByTestId("hww-workbench-tab-terminal"));
-    expect(screen.getByText(/Full embedded terminal in this pane is/i)).toBeInTheDocument();
-    const termLink = screen.getByTestId("hww-workbench-terminal-open");
-    expect(termLink).toHaveAttribute("href", "/workspace/terminal");
+    expect(screen.getByText(/Terminal requires a connected runtime/i)).toBeInTheDocument();
+    expect(screen.queryByTestId("hww-workbench-terminal-embed")).toBeNull();
 
     fireEvent.click(screen.getByTestId("hww-workbench-tab-settings"));
     const settingsPanel = screen.getByTestId("hww-workbench-panel-settings");
@@ -88,6 +93,18 @@ describe("WorkspaceWorkbench", () => {
     expect(
       screen.getByText(/Use Connected Tools for Git-related integration/i),
     ).toBeInTheDocument();
+  });
+
+  it("embeds the terminal surface when a local runtime is configured", () => {
+    isLocalRuntimeConfiguredMock.mockReturnValue(true);
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByTestId("hww-workbench-tab-terminal"));
+    expect(screen.getByTestId("hww-workbench-terminal-embed")).toBeInTheDocument();
+    expect(screen.getByTestId("hww-terminal-surface-mock")).toBeInTheDocument();
   });
 
   it("Add project source opens shared dialog from code and storage tabs", async () => {
