@@ -52,6 +52,7 @@ from src.api.workspace_tools import router as workspace_tools_router
 from src.api.coding_agents import router as coding_agents_router
 from src.api.control_plane_runs import router as control_plane_runs_router
 from src.api.droid_audit import router as droid_audit_router
+from src.api.droid_build import router as droid_build_router
 from src.ham.agent_profiles import agents_config_from_merged
 from src.ham.clerk_auth import HamActor, clerk_authorization_is_clerk_session
 from src.memory_heist import context_engine_dashboard_payload, discover_config
@@ -133,6 +134,7 @@ app.include_router(social_policy_router)
 app.include_router(coding_agents_router)
 app.include_router(control_plane_runs_router)
 app.include_router(droid_audit_router)
+app.include_router(droid_build_router)
 app.include_router(models_catalog_router)
 app.include_router(workspace_health_router)
 app.include_router(workspace_files_router)
