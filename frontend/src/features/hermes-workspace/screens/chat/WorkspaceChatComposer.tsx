@@ -6,7 +6,6 @@
 
 import * as React from "react";
 import { ArrowUp, Link2, Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type {
   ChatContextMetersPayload,
@@ -254,7 +253,25 @@ export function WorkspaceChatComposer({
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
   const modelPickerTriggerRef = React.useRef<HTMLButtonElement>(null);
   const dragDepthRef = React.useRef(0);
+  const commandDeckRef = React.useRef<HTMLDivElement>(null);
   const TEXTAREA_MAX_PX = 240;
+
+  const [composerDensity, setComposerDensity] = React.useState<"comfortable" | "compact" | "tight">(
+    "comfortable",
+  );
+
+  React.useEffect(() => {
+    const el = commandDeckRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(([entry]) => {
+      const w = entry?.contentRect?.width ?? 0;
+      if (w > 0 && w < 360) setComposerDensity("tight");
+      else if (w >= 360 && w < 520) setComposerDensity("compact");
+      else setComposerDensity("comfortable");
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const clearStopTimeout = React.useCallback(() => {
     if (stopTimeoutRef.current) {
@@ -620,15 +637,15 @@ export function WorkspaceChatComposer({
       >
         <div
           className={cn(
-            "relative flex min-w-0 flex-col overflow-hidden rounded-3xl",
-            "text-[#e8eef3] shadow-[0_1px_0_rgba(255,255,255,0.04)_inset,0_8px_28px_rgba(0,0,0,0.32)]",
+            "relative flex w-full min-w-0 flex-col overflow-hidden rounded-2xl",
+            "text-[#e8eef3] shadow-[0_1px_0_rgba(255,255,255,0.05)_inset,0_10px_32px_rgba(0,0,0,0.38)]",
             isDragging
-              ? "ring-2 ring-emerald-400/35"
-              : "ring-1 ring-emerald-950/30 focus-within:ring-2 focus-within:ring-emerald-500/25",
+              ? "ring-1 ring-emerald-400/40"
+              : "ring-1 ring-white/[0.08] focus-within:ring-1 focus-within:ring-white/[0.14]",
           )}
           style={{
-            background: "linear-gradient(180deg, #0a1814 0%, #050f0c 100%)",
-            border: "1px solid rgba(16, 185, 129, 0.14)",
+            background: "linear-gradient(180deg, #0a1218 0%, #050a0f 100%)",
+            border: "1px solid rgba(255, 255, 255, 0.1)",
           }}
           onDragEnter={onDragEnter}
           onDragLeave={onDragLeave}
@@ -729,7 +746,7 @@ export function WorkspaceChatComposer({
               rows={1}
               disabled={disabled || sending || voiceTranscribing}
               placeholder={placeholder}
-              className="w-full min-h-[44px] max-h-[240px] resize-none border-0 bg-transparent px-1 py-1 text-[13px] leading-[1.45] text-[#e8eef3] outline-none placeholder:text-white/40 focus:ring-0 focus:outline-none [box-shadow:none] overflow-x-hidden overflow-y-hidden"
+              className="hww-chat-composer-textarea w-full min-h-[44px] max-h-[240px] resize-none border-0 bg-transparent px-1 py-1 text-[13px] leading-[1.45] text-[#e8eef3] outline-none placeholder:text-white/40 focus:ring-0 focus:outline-none [box-shadow:none] overflow-x-hidden overflow-y-auto"
             />
           </div>
 
@@ -763,8 +780,13 @@ export function WorkspaceChatComposer({
             </div>
           ) : null}
 
-          <div className="flex min-h-[48px] items-center justify-between gap-1.5 border-t border-white/[0.08] px-1.5 py-1.5 md:gap-2 md:px-2.5 md:py-2">
-            <div className="flex min-w-0 flex-1 items-center gap-0.5 md:gap-1">
+          <div
+            ref={commandDeckRef}
+            data-hww-command-deck
+            data-hww-composer-density={composerDensity}
+            className="flex min-h-[44px] max-h-[44px] min-w-[288px] items-center gap-1.5 border-t border-white/[0.07] px-1.5 py-1 md:gap-2 md:px-2"
+          >
+            <div className="flex min-w-0 flex-1 items-center gap-1 md:gap-1.5">
               {gohamDesktopChip ? (
                 <button
                   type="button"
@@ -837,13 +859,13 @@ export function WorkspaceChatComposer({
               ) : null}
             </div>
 
-            <div className="relative z-[5] flex h-10 shrink-0 items-center gap-0.5 md:gap-1">
+            <div className="relative z-[5] flex h-9 min-h-[36px] shrink-0 items-center gap-1">
               {contextMetersEnabled ? (
                 <ContextMeterCluster payload={contextMetersPayload} enabled />
               ) : null}
               <div
                 className={cn(
-                  "flex h-10 shrink-0 items-center",
+                  "flex h-9 min-h-[36px] shrink-0 items-center justify-center",
                   voiceTranscribing && "pointer-events-none opacity-55",
                 )}
                 title={micColumnTitle}
@@ -962,20 +984,29 @@ export function WorkspaceChatComposer({
                   }}
                 />
               </div>
-              <Button
+              <button
                 type="submit"
-                size="icon"
                 disabled={!canSend}
                 title={sendButtonTitle}
-                className="h-10 w-10 shrink-0 rounded-full border border-emerald-400/15 bg-gradient-to-b from-emerald-600 to-emerald-900 text-white shadow-md hover:from-emerald-500 hover:to-emerald-800 disabled:opacity-40"
+                className={cn(
+                  "inline-flex h-9 min-h-[36px] w-9 shrink-0 items-center justify-center rounded-[10px] border border-white/[0.1]",
+                  "bg-white/[0.03] text-white/55 outline-none ring-offset-2 ring-offset-[#05080c]",
+                  "transition-[box-shadow,background-color,color,border-color]",
+                  canSend &&
+                    !sending &&
+                    "border-emerald-400/[0.38] bg-emerald-500/[0.08] text-emerald-50/95 shadow-[0_0_14px_rgba(16,185,129,0.16)]",
+                  "hover:bg-emerald-500/14 hover:border-emerald-400/45 hover:text-emerald-50 hover:shadow-[0_0_16px_rgba(16,185,129,0.22)]",
+                  "focus-visible:ring-2 focus-visible:ring-emerald-400/35 disabled:pointer-events-none disabled:opacity-[0.42] disabled:shadow-none",
+                )}
                 aria-label="Send"
+                data-hww-composer-send
               >
                 {sending ? (
-                  <span className="h-4 w-4 animate-pulse rounded-full bg-white/80" />
+                  <span className="h-3.5 w-3.5 animate-pulse rounded-full bg-white/75" />
                 ) : (
-                  <ArrowUp className="h-4 w-4" strokeWidth={2.2} />
+                  <ArrowUp className="h-4 w-4" strokeWidth={2.1} />
                 )}
-              </Button>
+              </button>
             </div>
           </div>
         </div>

@@ -146,7 +146,7 @@ export function WorkspaceChatComposerActionsMenu({
         variant="ghost"
         size="icon"
         className={cn(
-          "h-10 w-10 shrink-0 rounded-lg text-white/55 hover:bg-white/[0.08] hover:text-[#7dd3fc]",
+          "h-9 w-9 shrink-0 rounded-[10px] text-white/55 hover:bg-white/[0.08] hover:text-[#7dd3fc]",
           open && "bg-white/[0.08] text-[#7dd3fc]",
         )}
         onClick={() => setOpen((o) => !o)}
@@ -155,7 +155,7 @@ export function WorkspaceChatComposerActionsMenu({
         aria-haspopup="menu"
         title="Add files, generate image/video, or export PDF"
       >
-        <Plus className="h-5 w-5" strokeWidth={1.5} />
+        <Plus className="h-[18px] w-[18px]" strokeWidth={1.5} />
       </Button>
       {open && anchorRect && typeof document !== "undefined"
         ? createPortal(

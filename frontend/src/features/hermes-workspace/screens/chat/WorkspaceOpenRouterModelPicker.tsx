@@ -145,9 +145,9 @@ export function WorkspaceOpenRouterModelPicker({
           title={title ?? undefined}
           aria-label="Model"
           className={cn(
-            "hww-input ml-0.5 flex h-10 min-h-10 max-w-[min(22rem,85vw)] shrink items-center justify-between gap-1 rounded-md border-0",
-            "bg-emerald-500/10 px-2 py-1 text-left text-[11px] font-normal text-emerald-200/90 hover:bg-emerald-500/16",
-            "md:max-w-[min(26rem,90vw)] md:py-1.5 md:pl-2.5 md:pr-2 md:text-[12px]",
+            "hww-input ml-0.5 flex h-9 min-h-9 max-w-[min(22rem,85vw)] shrink items-center justify-between gap-1 rounded-[10px] border-0",
+            "bg-emerald-500/10 px-2 py-0 text-left text-[11px] font-normal text-emerald-200/90 hover:bg-emerald-500/16",
+            "md:max-w-[min(26rem,90vw)] md:h-9 md:text-[12px]",
           )}
         >
           <span className="min-w-0 flex-1 truncate">{label}</span>

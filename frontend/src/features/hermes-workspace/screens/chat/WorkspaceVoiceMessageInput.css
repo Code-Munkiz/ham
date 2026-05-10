@@ -32,21 +32,40 @@
 .voice-message-input-container--compact .mic-button {
   position: relative;
   z-index: 30;
-  width: 44px;
-  height: 44px;
-  min-width: 44px;
-  min-height: 44px;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  border-radius: 10px;
   pointer-events: auto;
   box-shadow: none;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(167, 139, 250, 0.22);
+  color: rgba(233, 213, 255, 0.92);
 }
 
-.voice-message-input-container--compact .mic-button:hover {
-  transform: scale(1.05);
+.voice-message-input-container--compact .recording-active .mic-button:not(:disabled) {
+  border-color: rgba(244, 63, 94, 0.42);
+  background: rgba(244, 63, 94, 0.1);
+  color: rgba(254, 226, 226, 0.96);
+  box-shadow: 0 0 12px rgba(244, 63, 94, 0.2);
+}
+
+.voice-message-input-container--compact .mic-button:hover:not(:disabled) {
+  transform: translateY(-0.5px);
+  background: rgba(139, 92, 246, 0.12);
+  border-color: rgba(167, 139, 250, 0.42);
+  box-shadow: 0 0 14px rgba(139, 92, 246, 0.22);
+}
+
+.voice-message-input-container--compact .mic-button:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 0 10px rgba(139, 92, 246, 0.18);
 }
 
 .voice-message-input-container--compact .mic-button svg {
-  width: 18px;
-  height: 18px;
+  width: 17px;
+  height: 17px;
 }
 
 /* Composer row: avoid a second “row” beside the textarea (duration/stop); shell already shows recording status. */

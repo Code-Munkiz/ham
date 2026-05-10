@@ -9,3 +9,14 @@
  * tests in a follow-up.
  */
 import "@testing-library/jest-dom/vitest";
+
+/** jsdom lacks ResizeObserver; workspace composer and other panels use layout observers. */
+class ResizeObserverStub {
+  observe(): void {}
+  unobserve(): void {}
+  disconnect(): void {}
+}
+
+if (typeof globalThis.ResizeObserver === "undefined") {
+  globalThis.ResizeObserver = ResizeObserverStub as unknown as typeof ResizeObserver;
+}
