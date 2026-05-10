@@ -42,6 +42,8 @@ type WorkspaceOpenRouterModelPickerProps = {
   byokPickerActive?: boolean;
   /** Model ids that recently failed with `OPENROUTER_MODEL_REJECTED` (session UX only). */
   failedModelIds?: ReadonlySet<string> | null;
+  /** Narrow command-column layouts: shrink trigger + tighten truncation. */
+  layoutDensity?: "comfortable" | "compact" | "tight";
 };
 
 export function WorkspaceOpenRouterModelPicker({
@@ -54,6 +56,7 @@ export function WorkspaceOpenRouterModelPicker({
   triggerRef,
   byokPickerActive = false,
   failedModelIds = null,
+  layoutDensity = "comfortable",
 }: WorkspaceOpenRouterModelPickerProps) {
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
@@ -145,9 +148,14 @@ export function WorkspaceOpenRouterModelPicker({
           title={title ?? undefined}
           aria-label="Model"
           className={cn(
-            "hww-input ml-0.5 flex h-10 min-h-10 max-w-[min(22rem,85vw)] shrink items-center justify-between gap-1 rounded-md border-0",
-            "bg-emerald-500/10 px-2 py-1 text-left text-[11px] font-normal text-emerald-200/90 hover:bg-emerald-500/16",
-            "md:max-w-[min(26rem,90vw)] md:py-1.5 md:pl-2.5 md:pr-2 md:text-[12px]",
+            "hww-input ml-0.5 flex shrink items-center justify-between gap-1 rounded-md border-0",
+            "bg-emerald-500/10 text-left font-normal text-emerald-200/90 hover:bg-emerald-500/16",
+            layoutDensity === "comfortable" &&
+              "h-10 min-h-10 max-w-[min(22rem,85vw)] px-2 py-1 text-[11px] md:max-w-[min(26rem,90vw)] md:py-1.5 md:pl-2.5 md:pr-2 md:text-[12px]",
+            layoutDensity === "compact" &&
+              "h-9 min-h-9 max-w-[min(16rem,72vw)] px-1.5 py-0.5 text-[10px] md:max-w-[min(20rem,82vw)]",
+            layoutDensity === "tight" &&
+              "h-8 min-h-8 min-w-0 max-w-full flex-1 px-1.5 py-0.5 text-[10px]",
           )}
         >
           <span className="min-w-0 flex-1 truncate">{label}</span>

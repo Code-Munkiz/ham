@@ -1,6 +1,6 @@
 import * as React from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { ChevronsUp, Menu, PanelLeft, PanelLeftClose, Search, Terminal, X } from "lucide-react";
+import { Menu, PanelLeft, PanelLeftClose, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { hamWorkspaceLogoUrl } from "@/lib/ham/publicAssets";
 import { Button } from "@/components/ui/button";
@@ -20,21 +20,9 @@ import {
 import { WorkspaceMobileTabBar } from "./WorkspaceMobileTabBar";
 import { WorkspaceChatFloatingToggle } from "./components/WorkspaceChatFloatingToggle";
 import { WorkspaceChatPanel } from "./components/WorkspaceChatPanel";
-import { WorkspaceTerminalView } from "./screens/terminal/WorkspaceTerminalView";
 import { HamWorkspaceTopbarPill } from "@/components/layout/HamWorkspaceTopbarPill";
 import { useHamWorkspace } from "@/lib/ham/HamWorkspaceContext";
 import type { HamWorkspaceSummary } from "@/lib/ham/workspaceApi";
-import { isLocalRuntimeConfigured } from "./adapters/localRuntime";
-
-/**
- * Build-time opt-in for dev-only surfaces (`VITE_HAM_SHOW_LOCAL_DEV_HINTS=true`).
- * Same flag used by `HamWorkspaceTopbarPill` and `WorkspaceGate`. Does **not**
- * gate `import.meta.env.DEV` here so power users can keep the runtime-only dock
- * available in production builds when they explicitly enable it.
- */
-function isWorkspaceDeveloperModeEnabled(): boolean {
-  return (import.meta.env.VITE_HAM_SHOW_LOCAL_DEV_HINTS as string | undefined) === "true";
-}
 
 const HWW_SIDEBAR_COLLAPSE_KEY = "hww.sidebar.collapsed";
 
@@ -497,20 +485,6 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
     [libraryFlyoutOpen],
   );
   const [drawerOpen, setDrawerOpen] = React.useState(false);
-  /**
-   * SHELL-015 — docked terminal strip on chat route.
-   * Hidden by default for hosted users with no paired local runtime; revealed
-   * once `isLocalRuntimeConfigured()` is true or developer mode is enabled.
-   */
-  const [chatTerminalDockOpen, setChatTerminalDockOpen] = React.useState(false);
-  const [hasLocalRuntime, setHasLocalRuntime] = React.useState(() => isLocalRuntimeConfigured());
-  React.useEffect(() => {
-    const sync = () => setHasLocalRuntime(isLocalRuntimeConfigured());
-    window.addEventListener("hww-local-runtime-changed", sync);
-    return () => window.removeEventListener("hww-local-runtime-changed", sync);
-  }, []);
-  const developerModeEnabled = isWorkspaceDeveloperModeEnabled();
-  const terminalDockVisible = hasLocalRuntime || developerModeEnabled;
   const [workspaceChatPanelOpen, setWorkspaceChatPanelOpen] = React.useState(false);
   const [workspaceFilter, setWorkspaceFilter] = React.useState("");
 
@@ -634,48 +608,7 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
             !isWorkspaceChat && "max-md:pb-[var(--hww-tabbar-h,3.5rem)]",
           )}
         >
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-            {children}
-            {isWorkspaceChat && terminalDockVisible ? (
-              <div
-                className="shrink-0 border-t border-white/[0.06] bg-[#030a0f]/90"
-                data-testid="hww-chat-terminal-dock"
-              >
-                {chatTerminalDockOpen ? (
-                  <div className="h-[min(14rem,38vh)] min-h-0 w-full">
-                    <WorkspaceTerminalView
-                      mode="panel"
-                      onMinimize={() => {
-                        setChatTerminalDockOpen(false);
-                      }}
-                      onClosePanel={() => {
-                        setChatTerminalDockOpen(false);
-                      }}
-                    />
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-between gap-2 px-3 py-1.5">
-                    <div className="flex min-w-0 items-center gap-2 text-[11px] text-white/45">
-                      <Terminal className="h-3.5 w-3.5 shrink-0 opacity-80" strokeWidth={1.5} />
-                      <span className="truncate">Local terminal</span>
-                    </div>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="secondary"
-                      className="h-7 gap-1.5 px-2.5 text-[11px] text-white/88"
-                      onClick={() => {
-                        setChatTerminalDockOpen(true);
-                      }}
-                    >
-                      <ChevronsUp className="h-3.5 w-3.5 opacity-80" strokeWidth={2} />
-                      Open
-                    </Button>
-                  </div>
-                )}
-              </div>
-            ) : null}
-          </div>
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">{children}</div>
         </div>
         <WorkspaceMobileTabBar />
         {!isWorkspaceChat && hamWorkspace.state.status === "ready" ? (

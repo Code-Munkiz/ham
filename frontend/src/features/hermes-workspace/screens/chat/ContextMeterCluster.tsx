@@ -11,11 +11,34 @@ import type {
   ChatContextThisTurnMeter,
   ChatContextWorkspaceMeter,
 } from "@/lib/ham/types";
+import { cn } from "@/lib/utils";
 
-const RING_SIZE = 36;
-const STROKE = 3;
-const R = (RING_SIZE - STROKE) / 2 - 1;
-const C = 2 * Math.PI * R;
+/** Drives ring sizes / spacing in `WorkspaceChatComposer` narrow layouts. */
+export type ContextMeterClusterDensity = "comfortable" | "compact" | "tight";
+
+const DIMS: Record<
+  ContextMeterClusterDensity,
+  { ring: number; stroke: number; labelClass: string; gapClass: string }
+> = {
+  comfortable: {
+    ring: 36,
+    stroke: 3,
+    labelClass: "mt-0.5 text-[8px] font-semibold uppercase tracking-wide text-white/35",
+    gapClass: "gap-0.5 md:gap-1",
+  },
+  compact: {
+    ring: 28,
+    stroke: 2.5,
+    labelClass: "mt-0.5 text-[7px] font-semibold uppercase tracking-wide text-white/35",
+    gapClass: "gap-0.5",
+  },
+  tight: {
+    ring: 22,
+    stroke: 2,
+    labelClass: "mt-px text-[6px] font-semibold uppercase tracking-wide text-white/35",
+    gapClass: "gap-0",
+  },
+};
 
 function strokeForColor(c: ChatContextMeterColor | undefined): string {
   switch (c) {
@@ -35,59 +58,65 @@ function MeterRing({
   pct,
   color,
   unavailable,
+  ringSize,
+  strokeWidth,
+  labelClass,
 }: {
   label: string;
   pct: number | null;
   color: ChatContextMeterColor | undefined;
   unavailable?: boolean;
+  ringSize: number;
+  strokeWidth: number;
+  labelClass: string;
 }) {
   const u = unavailable || pct === null;
   const p = u ? 0 : Math.max(0, Math.min(100, pct));
+  const R = (ringSize - strokeWidth) / 2 - 1;
+  const C = 2 * Math.PI * R;
   const dash = C * (1 - p / 100);
   return (
     <div className="relative flex flex-col items-center">
       <svg
-        width={RING_SIZE}
-        height={RING_SIZE}
-        viewBox={`0 0 ${RING_SIZE} ${RING_SIZE}`}
+        width={ringSize}
+        height={ringSize}
+        viewBox={`0 0 ${ringSize} ${ringSize}`}
         className="shrink-0"
         aria-hidden
       >
         <circle
-          cx={RING_SIZE / 2}
-          cy={RING_SIZE / 2}
+          cx={ringSize / 2}
+          cy={ringSize / 2}
           r={R}
           fill="none"
           className="stroke-white/[0.12]"
-          strokeWidth={STROKE}
+          strokeWidth={strokeWidth}
         />
         {!u ? (
           <circle
-            cx={RING_SIZE / 2}
-            cy={RING_SIZE / 2}
+            cx={ringSize / 2}
+            cy={ringSize / 2}
             r={R}
             fill="none"
             className={`${strokeForColor(color)} transition-[stroke-dashoffset]`}
-            strokeWidth={STROKE}
+            strokeWidth={strokeWidth}
             strokeLinecap="round"
             strokeDasharray={`${C} ${C}`}
             strokeDashoffset={dash}
-            transform={`rotate(-90 ${RING_SIZE / 2} ${RING_SIZE / 2})`}
+            transform={`rotate(-90 ${ringSize / 2} ${ringSize / 2})`}
           />
         ) : null}
         {u ? (
           <circle
-            cx={RING_SIZE / 2}
-            cy={RING_SIZE / 2}
-            r={R - 4}
+            cx={ringSize / 2}
+            cy={ringSize / 2}
+            r={R - Math.max(2, strokeWidth)}
             fill="currentColor"
             className="text-white/[0.06]"
           />
         ) : null}
       </svg>
-      <span className="mt-0.5 text-[8px] font-semibold uppercase tracking-wide text-white/35">
-        {label}
-      </span>
+      <span className={labelClass}>{label}</span>
     </div>
   );
 }
@@ -144,9 +173,14 @@ function buildThreadTooltip(m: ChatContextThreadMeter | null): string {
 export type ContextMeterClusterProps = {
   payload: ChatContextMetersPayload | null;
   enabled: boolean;
+  density?: ContextMeterClusterDensity;
 };
 
-export function ContextMeterCluster({ payload, enabled }: ContextMeterClusterProps) {
+export function ContextMeterCluster({
+  payload,
+  enabled,
+  density = "comfortable",
+}: ContextMeterClusterProps) {
   const navigate = useNavigate();
   if (!enabled) return null;
 
@@ -158,9 +192,11 @@ export function ContextMeterCluster({ payload, enabled }: ContextMeterClusterPro
   const wsPct = ws ? pctFromRatio(ws.fill_ratio) : null;
   const thPct = th ? pctFromRatio(th.fill_ratio) : null;
 
+  const dim = DIMS[density];
+
   return (
     <div
-      className="flex shrink-0 items-center gap-0.5 md:gap-1"
+      className={cn("flex shrink-0 items-center", dim.gapClass)}
       role="group"
       aria-label="Context meters"
     >
@@ -175,6 +211,9 @@ export function ContextMeterCluster({ payload, enabled }: ContextMeterClusterPro
           pct={payload?.enabled ? turnPct : null}
           color={turn ? mapApiColor(turn.color) : "gray"}
           unavailable={!payload?.enabled || !turn}
+          ringSize={dim.ring}
+          strokeWidth={dim.stroke}
+          labelClass={dim.labelClass}
         />
       </button>
       <button
@@ -189,6 +228,9 @@ export function ContextMeterCluster({ payload, enabled }: ContextMeterClusterPro
           pct={payload?.enabled ? wsPct : null}
           color={ws ? mapApiColor(ws.color) : "gray"}
           unavailable={!payload?.enabled || !ws}
+          ringSize={dim.ring}
+          strokeWidth={dim.stroke}
+          labelClass={dim.labelClass}
         />
       </button>
       <button
@@ -202,6 +244,9 @@ export function ContextMeterCluster({ payload, enabled }: ContextMeterClusterPro
           pct={payload?.enabled ? thPct : null}
           color={th ? mapApiColor(th.color) : "gray"}
           unavailable={!payload?.enabled || !th}
+          ringSize={dim.ring}
+          strokeWidth={dim.stroke}
+          labelClass={dim.labelClass}
         />
       </button>
     </div>
