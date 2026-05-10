@@ -626,7 +626,6 @@ export function WorkspaceChatComposer({
   }, [contextAccent]);
 
   const meterLayout = composerToolbarDensity === "comfortable" ? "rings" : "pulse";
-  const deckRowAlign = composerToolbarDensity === "comfortable" ? "items-end" : "items-center";
 
   const placeholder = React.useMemo(() => {
     if (voiceTranscribing) return "Transcribing…";
@@ -636,9 +635,9 @@ export function WorkspaceChatComposer({
       const macLike =
         typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/.test(navigator.userAgent || "");
       const mod = macLike ? "⌘⇧M" : "Ctrl+Shift+M";
-      return `Ask anything... (↵ to send · ⇧↵ new line · ${mod} switch model)`;
+      return `Ask anything... (↵ to send · ⇧↵\nnew line · ${mod} switch model)`;
     }
-    return "Ask anything... (↵ to send · ⇧↵ new line)";
+    return "Ask anything... (↵ to send · ⇧↵\nnew line)";
   }, [catalog, gatewayOk, sending, showModel, voiceTranscribing]);
 
   React.useEffect(() => {
@@ -1149,29 +1148,13 @@ export function WorkspaceChatComposer({
 
           <div
             className={cn(
-              "hww-command-deck box-border min-w-0 max-w-full overflow-x-hidden border-t border-white/[0.08]",
+              "hww-command-deck box-border flex min-w-0 max-w-full flex-col gap-0 overflow-x-hidden border-t border-white/[0.08]",
               composerToolbarDensity === "comfortable" && "hww-command-deck--comfortable",
               composerToolbarDensity === "compact" && "hww-command-deck--compact",
               composerToolbarDensity === "tight" && "hww-command-deck--tight",
-              composerToolbarDensity === "tight"
-                ? "flex flex-col gap-0"
-                : cn(
-                    "grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] gap-x-2 gap-y-1 px-2.5 pb-2 pt-2 md:gap-x-2.5 md:px-4 md:pb-2.5 md:pt-2.5",
-                    deckRowAlign,
-                  ),
             )}
-            data-hww-command-deck-layout={composerToolbarDensity === "tight" ? "stacked" : "triple"}
+            data-hww-command-deck-layout="stacked"
           >
-            {composerToolbarDensity !== "tight" ? (
-              <div
-                data-hww-command-deck-left
-                data-hww-command-left
-                className="flex min-w-0 max-w-[min(100%,22rem)] shrink-0 flex-row flex-nowrap items-center gap-1 overflow-hidden md:max-w-[min(100%,26rem)]"
-              >
-                {leftDeckControls}
-              </div>
-            ) : null}
-
             <div
               ref={textareaWrapRef}
               data-hww-command-input-slot
@@ -1179,7 +1162,7 @@ export function WorkspaceChatComposer({
                 "flex min-h-0 min-w-0 w-full max-w-full flex-col self-stretch",
                 composerToolbarDensity === "tight"
                   ? "px-2.5 pb-1 pt-2.5 md:px-3.5"
-                  : "justify-end pb-px",
+                  : "px-2.5 pb-2 pt-2 md:px-4 md:pb-2 md:pt-2.5",
               )}
             >
               <label htmlFor="hww-chat-composer" className="sr-only">
@@ -1211,34 +1194,40 @@ export function WorkspaceChatComposer({
               />
             </div>
 
-            {composerToolbarDensity !== "tight" ? (
+            <div
+              data-hww-command-controls
+              data-hww-action-buttons
+              className={cn(
+                "flex min-w-0 w-full flex-wrap items-end gap-x-1 gap-y-1 overflow-x-hidden border-t",
+                composerToolbarDensity === "tight"
+                  ? "border-white/[0.06] px-1.5 py-1.5"
+                  : "gap-x-2 border-white/[0.08] px-2.5 pb-2 pt-2 md:gap-x-2.5 md:px-4 md:pb-2.5 md:pt-2.5",
+              )}
+            >
+              <div
+                data-hww-command-deck-left
+                data-hww-command-left
+                className={cn(
+                  "flex min-w-0 shrink-0 flex-row flex-nowrap items-center gap-1 overflow-hidden",
+                  composerToolbarDensity !== "tight"
+                    ? "max-w-[min(100%,22rem)] md:max-w-[min(100%,26rem)]"
+                    : "min-w-0 flex-1 flex-wrap items-center gap-0.5 [&>*]:max-w-full",
+                )}
+              >
+                {leftDeckControls}
+              </div>
               <div
                 data-hww-command-deck-actions
-                data-hww-command-controls
-                data-hww-action-buttons
-                className="flex min-h-8 shrink-0 flex-wrap items-end justify-end gap-x-1 gap-y-1 overflow-x-hidden pl-1.5 pr-2.5 md:pl-2 md:pr-3.5"
+                className={cn(
+                  "flex min-h-8 shrink-0 flex-wrap items-end justify-end gap-x-1 gap-y-1 overflow-x-hidden",
+                  composerToolbarDensity !== "tight"
+                    ? "ml-auto pl-1.5 pr-2.5 md:pl-2 md:pr-3.5"
+                    : "ml-auto",
+                )}
               >
                 {rightDeckActions}
               </div>
-            ) : null}
-
-            {composerToolbarDensity === "tight" ? (
-              <div
-                data-hww-command-controls
-                data-hww-action-buttons
-                className="flex min-w-0 flex-wrap items-center gap-1 border-t border-white/[0.06] px-1.5 py-1.5"
-              >
-                <div
-                  data-hww-command-left
-                  className="flex min-w-0 flex-1 flex-wrap items-center gap-0.5 [&>*]:max-w-full"
-                >
-                  {leftDeckControls}
-                </div>
-                <div className="ml-auto flex min-w-0 shrink-0 items-end gap-0.5">
-                  {rightDeckActions}
-                </div>
-              </div>
-            ) : null}
+            </div>
           </div>
 
           {(catalog?.gateway_mode || "").trim().toLowerCase() === "mock" &&
