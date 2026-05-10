@@ -633,14 +633,11 @@ export function WorkspaceChatComposer({
     if (voiceTranscribing) return "Transcribing…";
     if (!gatewayOk && catalog && !sending)
       return "Chat gateway not ready — check the API model settings.";
-    if (showModel) {
-      const macLike =
-        typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/.test(navigator.userAgent || "");
-      const mod = macLike ? "⌘⇧M" : "Ctrl+Shift+M";
-      return `Ask anything... (↵ to send · ⇧↵ new line · ${mod} switch model)`;
-    }
-    return "Ask anything... (↵ to send · ⇧↵ new line)";
-  }, [catalog, gatewayOk, sending, showModel, voiceTranscribing]);
+    const macLike =
+      typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/.test(navigator.userAgent || "");
+    const mod = macLike ? "⌘⇧M" : "Ctrl+Shift+M";
+    return `Ask anything... (↵ to send · ⇧↵ new line · ${mod} switch model)`;
+  }, [catalog, gatewayOk, sending, voiceTranscribing]);
 
   React.useEffect(() => {
     if (!showModel) return;
@@ -808,7 +805,7 @@ export function WorkspaceChatComposer({
           className={cn(
             "inline-flex min-w-0 items-center rounded-full border border-white/[0.08] bg-transparent font-mono text-emerald-200/85",
             composerToolbarDensity === "comfortable" &&
-              "max-w-[min(18rem,calc(100vw-8rem))] px-3 py-1.5 text-[12px] md:max-w-[min(22rem,calc(100vw-10rem))]",
+              "max-w-[min(14rem,calc(100vw-10rem))] px-2 py-0.5 text-[10px] md:max-w-[min(18rem,calc(100vw-12rem))] md:text-[11px]",
             composerToolbarDensity === "compact" &&
               "max-w-[min(11rem,45vw)] px-2 py-0.5 text-[10px] md:max-w-[min(14rem,50vw)]",
             composerToolbarDensity === "tight" &&
@@ -877,8 +874,14 @@ export function WorkspaceChatComposer({
           ~{Math.ceil(value.length / 4)} tokens
         </span>
       ) : null}
-      {composerToolbarDensity === "tight" ? (
-        <div data-hww-model-pill className="min-w-0">
+      {showModel || modelPill ? (
+        <div
+          data-hww-model-pill
+          className={cn(
+            "min-w-0 shrink-0",
+            composerToolbarDensity === "tight" && "min-w-0 max-w-full flex-1 basis-[8rem]",
+          )}
+        >
           {deckModelPickers}
         </div>
       ) : null}
@@ -1167,9 +1170,9 @@ export function WorkspaceChatComposer({
                 : cn(
                     "grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto]",
                     composerToolbarDensity === "comfortable" &&
-                      "gap-x-2 gap-y-1.5 px-3 py-3 md:gap-x-4 md:gap-y-2 md:px-5 md:py-3.5",
+                      "gap-x-1.5 gap-y-1 px-2.5 py-1.5 md:gap-x-2.5 md:gap-y-1 md:px-3 md:py-2",
                     composerToolbarDensity === "compact" &&
-                      "gap-x-2 gap-y-1 px-2.5 py-2.5 md:gap-x-3 md:px-4 md:py-3",
+                      "gap-x-1.5 gap-y-0.5 px-2 py-1.5 md:gap-x-2 md:px-3 md:py-1.5",
                     deckRowAlign,
                   ),
             )}
@@ -1179,7 +1182,7 @@ export function WorkspaceChatComposer({
               <div
                 data-hww-command-deck-left
                 data-hww-command-left
-                className="flex min-w-0 max-w-[min(100%,17rem)] shrink-0 flex-row flex-nowrap items-center gap-1 overflow-hidden md:max-w-[min(100%,20rem)]"
+                className="flex min-w-0 max-w-[min(100%,22rem)] shrink-0 flex-row flex-wrap items-center gap-1 overflow-hidden md:max-w-[min(100%,30rem)]"
               >
                 {leftDeckControls}
               </div>
@@ -1192,7 +1195,7 @@ export function WorkspaceChatComposer({
                 "flex min-h-0 min-w-0 w-full max-w-full",
                 composerToolbarDensity === "tight"
                   ? "flex-col self-stretch px-2.5 pb-1 pt-2.5 md:px-3.5"
-                  : "flex-row flex-wrap items-start gap-x-2 gap-y-1 self-center md:gap-x-2.5",
+                  : "",
               )}
             >
               <label htmlFor="hww-chat-composer" className="sr-only">
@@ -1221,25 +1224,12 @@ export function WorkspaceChatComposer({
                 disabled={disabled || sending || voiceTranscribing}
                 placeholder={placeholder}
                 className={cn(
-                  "hww-command-textarea box-border w-full resize-none border-0 bg-transparent leading-[1.45] text-[#e8eef3] outline-none placeholder:text-white/40 focus:ring-0 focus:outline-none [box-shadow:none] overflow-x-hidden max-h-[240px]",
+                  "hww-command-textarea box-border w-full resize-none border-0 bg-transparent text-[13px] leading-[1.45] text-[#e8eef3] outline-none placeholder:text-white/40 focus:ring-0 focus:outline-none [box-shadow:none] overflow-x-hidden max-h-[240px]",
                   composerToolbarDensity === "tight"
-                    ? "min-h-[44px] px-1 py-1 text-[13px]"
-                    : composerToolbarDensity === "comfortable"
-                      ? "min-h-[52px] min-w-0 flex-1 px-1 py-3 pl-1 pr-1.5 text-[14px]"
-                      : "min-h-[46px] min-w-0 flex-1 px-1 py-2.5 pl-0.5 pr-1 text-[13px]",
+                    ? "min-h-[44px] px-1 py-1"
+                    : "min-h-[42px] px-1 py-2 pl-0.5 pr-1",
                 )}
               />
-              {composerToolbarDensity !== "tight" && (showModel || modelPill) ? (
-                <div
-                  data-hww-model-pill
-                  className={cn(
-                    "flex shrink-0 items-center pb-px",
-                    composerToolbarDensity === "comfortable" ? "pt-3" : "pt-2.5",
-                  )}
-                >
-                  {deckModelPickers}
-                </div>
-              ) : null}
             </div>
 
             {composerToolbarDensity !== "tight" ? (
@@ -1247,7 +1237,7 @@ export function WorkspaceChatComposer({
                 data-hww-command-deck-actions
                 data-hww-command-controls
                 data-hww-action-buttons
-                className="flex min-h-10 shrink-0 items-center justify-end gap-1 overflow-x-hidden overflow-y-visible pl-2 pr-2.5 md:min-h-11 md:pl-2.5 md:pr-4"
+                className="flex min-h-8 shrink-0 items-center justify-end gap-1 overflow-x-hidden overflow-y-visible pl-1.5 pr-2 md:pl-2 md:pr-3"
               >
                 {rightDeckActions}
               </div>
