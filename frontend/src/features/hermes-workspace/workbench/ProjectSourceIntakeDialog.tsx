@@ -29,7 +29,9 @@ export type ProjectSourceIntakeDialogProps = {
   onOpenChange: (open: boolean) => void;
 };
 
-function githubConnectionFromPayload(data: ToolDiscoveryResponse | null): "on" | "off" | "error" | null {
+function githubConnectionFromPayload(
+  data: ToolDiscoveryResponse | null,
+): "on" | "off" | "error" | null {
   if (!data?.tools) return null;
   const gh = data.tools.find((t) => t.id === "github");
   if (!gh) return null;
@@ -122,9 +124,7 @@ export function ProjectSourceIntakeDialog({ open, onOpenChange }: ProjectSourceI
       const meta = await postChatUploadAttachment(file);
       appendStatus(`Chat attachment stored: ${meta.filename} (${meta.kind})`);
     } catch (e) {
-      appendStatus(
-        `Chat attachment failed: ${e instanceof Error ? e.message : String(e)}`,
-      );
+      appendStatus(`Chat attachment failed: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setChatBusy(false);
     }
@@ -170,12 +170,13 @@ export function ProjectSourceIntakeDialog({ open, onOpenChange }: ProjectSourceI
 
         <div className="mt-4 space-y-4 text-[12px] leading-relaxed text-white/70">
           <section className="rounded-lg border border-white/[0.08] bg-black/25 p-3">
-            <h3 className="text-[12px] font-semibold text-white/88">Upload files (local workspace)</h3>
+            <h3 className="text-[12px] font-semibold text-white/88">
+              Upload files (local workspace)
+            </h3>
             <p className="mt-1 text-[11px] text-white/45">
-              Writes through your{" "}
-              <span className="text-white/55">connected local HAM API</span> into{" "}
-              <span className="font-medium text-white/60">HAM_WORKSPACE_ROOT</span> (or the sandbox
-              root). Files appear in{" "}
+              Writes through your <span className="text-white/55">connected local HAM API</span>{" "}
+              into <span className="font-medium text-white/60">HAM_WORKSPACE_ROOT</span> (or the
+              sandbox root). Files appear in{" "}
               <Link
                 to="/workspace/files"
                 className="text-[#7dd3fc] underline-offset-2 hover:underline"
@@ -222,11 +223,12 @@ export function ProjectSourceIntakeDialog({ open, onOpenChange }: ProjectSourceI
           </section>
 
           <section className="rounded-lg border border-white/[0.08] bg-black/25 p-3">
-            <h3 className="text-[12px] font-semibold text-white/88">Upload files (chat attachment)</h3>
+            <h3 className="text-[12px] font-semibold text-white/88">
+              Upload files (chat attachment)
+            </h3>
             <p className="mt-1 text-[11px] text-white/45">
-              Uses{" "}
-              <span className="font-medium text-white/60">POST /api/chat/attachments</span>. Stored
-              for use with chat messages —{" "}
+              Uses <span className="font-medium text-white/60">POST /api/chat/attachments</span>.
+              Stored for use with chat messages —{" "}
               <span className="text-white/50">not a full project mount on disk.</span>
             </p>
             <input
@@ -254,7 +256,13 @@ export function ProjectSourceIntakeDialog({ open, onOpenChange }: ProjectSourceI
             <p className="mt-1 text-[11px] text-white/45">
               ZIP extraction and bulk project ingest are not implemented in the API.
             </p>
-            <Button type="button" size="sm" variant="secondary" disabled className="mt-2 text-[11px]">
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              disabled
+              className="mt-2 text-[11px]"
+            >
               Upload ZIP — Coming soon
             </Button>
           </section>
@@ -281,7 +289,10 @@ export function ProjectSourceIntakeDialog({ open, onOpenChange }: ProjectSourceI
             )}
             <div className="mt-2 flex flex-wrap gap-2">
               <Button type="button" size="sm" variant="secondary" asChild className="text-[11px]">
-                <Link to={WORKBENCH_CONNECTED_TOOLS_HREF} data-testid="hww-project-source-connected-tools-link">
+                <Link
+                  to={WORKBENCH_CONNECTED_TOOLS_HREF}
+                  data-testid="hww-project-source-connected-tools-link"
+                >
                   Open Connected Tools
                 </Link>
               </Button>

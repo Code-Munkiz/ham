@@ -44,15 +44,13 @@ describe("WorkspaceWorkbench", () => {
       </MemoryRouter>,
     );
     expect(screen.getByTestId("hww-workbench-panel-preview")).toBeInTheDocument();
-    expect(
-      screen.getByTestId("hww-workbench-tab-preview").getAttribute("data-active"),
-    ).toBe("true");
+    expect(screen.getByTestId("hww-workbench-tab-preview").getAttribute("data-active")).toBe(
+      "true",
+    );
 
     fireEvent.click(screen.getByTestId("hww-workbench-tab-code"));
     expect(screen.getByTestId("hww-workbench-panel-code")).toBeInTheDocument();
-    expect(
-      screen.getByTestId("hww-workbench-tab-code").getAttribute("data-active"),
-    ).toBe("true");
+    expect(screen.getByTestId("hww-workbench-tab-code").getAttribute("data-active")).toBe("true");
   });
 
   it("Share and Publish are disabled (not wired)", () => {
