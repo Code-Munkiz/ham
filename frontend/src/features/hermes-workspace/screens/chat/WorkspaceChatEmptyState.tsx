@@ -7,6 +7,7 @@ import * as React from "react";
 import { motion } from "motion/react";
 import { Brain, Code, Puzzle } from "lucide-react";
 import { hamWorkspaceLogoUrl } from "@/lib/ham/publicAssets";
+import { CodingPlanPanel } from "./coding-plan/CodingPlanPanel";
 
 export type SuggestionChip = {
   label: string;
@@ -37,6 +38,7 @@ export const WORKSPACE_CHAT_SUGGESTIONS: SuggestionChip[] = [
 
 export function WorkspaceChatEmptyState() {
   const avatarSrc = hamWorkspaceLogoUrl();
+  const [showCodingPlan, setShowCodingPlan] = React.useState(false);
 
   return (
     <motion.div
@@ -72,6 +74,20 @@ export function WorkspaceChatEmptyState() {
           Use the scrolling starter prompts above the composer to jump in—they send the same quick
           actions as before.
         </p>
+        <div className="mt-6 w-full max-w-md">
+          {showCodingPlan ? (
+            <CodingPlanPanel onClose={() => setShowCodingPlan(false)} />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowCodingPlan(true)}
+              className="text-[11px] font-medium text-cyan-300/85 hover:text-cyan-200"
+              data-hww-coding-plan-open
+            >
+              Plan with coding agents
+            </button>
+          )}
+        </div>
       </div>
     </motion.div>
   );

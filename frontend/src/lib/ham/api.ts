@@ -830,6 +830,95 @@ export async function launchDroidAudit(
   return res.json() as Promise<DroidAuditLaunchPayload>;
 }
 
+/**
+ * Public preview shape for `POST /api/coding/conductor/preview` (Phase 2A).
+ *
+ * Read-only: the conductor classifies the user's prompt and ranks provider
+ * candidates. It NEVER launches an agent. The frontend chat card uses this
+ * payload to surface "HAM recommends provider X because ..." copy with safe
+ * blocker hints and alternatives. The shape never carries internal workflow
+ * ids, runner URLs, env-name strings, argv, or secret values — those are
+ * stripped server-side before this payload is built.
+ */
+export type CodingConductorProviderKind =
+  | "no_agent"
+  | "factory_droid_audit"
+  | "factory_droid_build"
+  | "cursor_cloud"
+  | "claude_code";
+
+export type CodingConductorOutputKind = "answer" | "report" | "pull_request" | "mission";
+
+export type CodingConductorApprovalKind = "none" | "confirm" | "confirm_and_accept_pr";
+
+export interface CodingConductorCandidate {
+  provider: CodingConductorProviderKind;
+  label: string;
+  available: boolean;
+  reason: string;
+  blockers: string[];
+  confidence: number;
+  output_kind: CodingConductorOutputKind;
+  requires_operator: boolean;
+  requires_confirmation: boolean;
+  will_modify_code: boolean;
+  will_open_pull_request: boolean;
+}
+
+export interface CodingConductorProjectFlags {
+  found: boolean;
+  project_id: string | null;
+  build_lane_enabled: boolean;
+  has_github_repo: boolean;
+}
+
+export interface CodingConductorPreviewPayload {
+  kind: "coding_conductor_preview";
+  preview_id: string;
+  task_kind: string;
+  task_confidence: number;
+  chosen: CodingConductorCandidate | null;
+  candidates: CodingConductorCandidate[];
+  blockers: string[];
+  recommendation_reason: string;
+  requires_approval: boolean;
+  approval_kind: CodingConductorApprovalKind;
+  project: CodingConductorProjectFlags;
+  is_operator: boolean;
+}
+
+export interface CodingConductorPreviewRequest {
+  user_prompt: string;
+  project_id?: string | null;
+  preferred_provider?: CodingConductorProviderKind | null;
+}
+
+/**
+ * Preview-only conductor call. Never launches a provider; the response is
+ * a recommendation surface for the chat plan card. Throws on non-200 with
+ * a short, human-readable message.
+ */
+export async function previewCodingConductor(
+  body: CodingConductorPreviewRequest,
+): Promise<CodingConductorPreviewPayload> {
+  const trimmed = body.user_prompt.trim();
+  const projectId = body.project_id?.trim() || undefined;
+  const preferred = body.preferred_provider ?? undefined;
+  const payload: Record<string, unknown> = { user_prompt: trimmed };
+  if (projectId) payload.project_id = projectId;
+  if (preferred) payload.preferred_provider = preferred;
+  const res = await hamApiFetch("/api/coding/conductor/preview", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const detail = (await readFastApiDetail(res)) ?? `HTTP ${res.status}`;
+    throw new Error(shortenHamApiErrorMessage(detail));
+  }
+  return res.json() as Promise<CodingConductorPreviewPayload>;
+}
+
 /** First frontend consumer of `GET /api/control-plane-runs` for the audit lane. */
 export async function fetchDroidAuditRuns(
   projectId: string | null,
