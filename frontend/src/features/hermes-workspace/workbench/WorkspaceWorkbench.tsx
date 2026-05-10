@@ -12,12 +12,17 @@ import {
   FolderOpen,
   GitBranch,
   MoreHorizontal,
+  Plus,
   Send,
   Settings2,
   Share2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import {
+  ProjectSourceIntakeDialog,
+  WORKBENCH_CONNECTED_TOOLS_HREF,
+} from "./ProjectSourceIntakeDialog";
 
 export type WorkspaceWorkbenchTabId =
   | "preview"
@@ -38,6 +43,7 @@ const TABS: Array<{ id: WorkspaceWorkbenchTabId; label: string; icon: typeof Eye
 
 export function WorkspaceWorkbench() {
   const [activeTab, setActiveTab] = React.useState<WorkspaceWorkbenchTabId>("preview");
+  const [projectSourceOpen, setProjectSourceOpen] = React.useState(false);
 
   return (
     <aside
@@ -160,12 +166,19 @@ export function WorkspaceWorkbench() {
         className="hww-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-3"
       >
         {activeTab === "preview" ? <WorkbenchPreviewPanel /> : null}
-        {activeTab === "code" ? <WorkbenchCodePanel /> : null}
+        {activeTab === "code" ? (
+          <WorkbenchCodePanel onAddProjectSource={() => setProjectSourceOpen(true)} />
+        ) : null}
         {activeTab === "database" ? <WorkbenchDatabasePanel /> : null}
-        {activeTab === "storage" ? <WorkbenchStoragePanel /> : null}
-        {activeTab === "github" ? <WorkbenchGithubPanel /> : null}
+        {activeTab === "storage" ? (
+          <WorkbenchStoragePanel onAddProjectSource={() => setProjectSourceOpen(true)} />
+        ) : null}
+        {activeTab === "github" ? (
+          <WorkbenchGithubPanel onAddProjectSource={() => setProjectSourceOpen(true)} />
+        ) : null}
         {activeTab === "settings" ? <WorkbenchSettingsPanel /> : null}
       </div>
+      <ProjectSourceIntakeDialog open={projectSourceOpen} onOpenChange={setProjectSourceOpen} />
     </aside>
   );
 }
@@ -186,9 +199,28 @@ function WorkbenchPreviewPanel() {
   );
 }
 
-function WorkbenchCodePanel() {
+function AddProjectSourceButton({ onClick }: { onClick: () => void }) {
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant="secondary"
+      className="gap-1.5 text-[11px]"
+      data-testid="hww-add-project-source"
+      onClick={onClick}
+    >
+      <Plus className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+      Add project source
+    </Button>
+  );
+}
+
+function WorkbenchCodePanel({ onAddProjectSource }: { onAddProjectSource: () => void }) {
   return (
     <MutedPanel>
+      <div className="flex flex-wrap items-center gap-2">
+        <AddProjectSourceButton onClick={onAddProjectSource} />
+      </div>
       <div className="grid min-h-[180px] gap-2 rounded-lg border border-white/[0.08] bg-black/25 md:grid-cols-2">
         <div className="border-b border-white/[0.06] p-2 md:border-b-0 md:border-r md:border-white/[0.06]">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-white/40">
@@ -202,14 +234,16 @@ function WorkbenchCodePanel() {
         </div>
       </div>
       <p className="text-white/55">
-        Import a project or connect GitHub to inspect code. You can also open the{" "}
+        Use <span className="font-medium text-white/65">Add project source</span> to upload to your
+        local workspace (when configured) or attach a file for chat. Open the{" "}
         <Link
           to="/workspace/files"
           className="font-medium text-[#7dd3fc] underline-offset-2 hover:underline"
         >
           Files
         </Link>{" "}
-        workspace route when available.
+        route to browse disk after uploads. Full project intake and automatic repo import are not
+        connected here yet.
       </p>
     </MutedPanel>
   );
@@ -228,53 +262,47 @@ function WorkbenchDatabasePanel() {
   );
 }
 
-function WorkbenchStoragePanel() {
+function WorkbenchStoragePanel({ onAddProjectSource }: { onAddProjectSource: () => void }) {
   return (
     <MutedPanel>
       <p className="text-[13px] font-medium text-white/88">File storage</p>
       <p className="text-white/55">
-        Project-wide storage and ZIP ingestion are not wired yet. Composer attachments are separate
-        from this panel.
+        No cloud project blob store yet. Use{" "}
+        <span className="font-medium text-white/65">Add project source</span> for local workspace
+        uploads (local API) or chat attachments. ZIP ingestion is not supported.
       </p>
       <div className="flex flex-wrap gap-2 pt-1">
-        <Button type="button" size="sm" variant="secondary" disabled className="text-[11px]">
-          Upload files — Coming soon
-        </Button>
+        <AddProjectSourceButton onClick={onAddProjectSource} />
         <Button type="button" size="sm" variant="secondary" disabled className="text-[11px]">
           Upload ZIP — Coming soon
-        </Button>
-        <Button type="button" size="sm" variant="secondary" disabled className="text-[11px]">
-          View uploaded assets — Coming soon
         </Button>
       </div>
     </MutedPanel>
   );
 }
 
-function WorkbenchGithubPanel() {
+function WorkbenchGithubPanel({ onAddProjectSource }: { onAddProjectSource: () => void }) {
   return (
     <MutedPanel>
       <p className="text-[13px] font-medium text-white/88">GitHub</p>
       <p className="text-white/55">
-        Repository import and URL paste are placeholders only — no import runs from this UI yet.
-        Use{" "}
+        Connect a token under{" "}
         <Link
-          to="/workspace/settings?section=tools"
+          to={WORKBENCH_CONNECTED_TOOLS_HREF}
           className="font-medium text-[#7dd3fc] underline-offset-2 hover:underline"
+          data-testid="hww-github-connected-tools-link"
         >
           Connected Tools
-        </Link>{" "}
-        in settings when your workspace supports it.
+        </Link>
+        . Clone/import from a repo URL is not wired in this UI.
       </p>
       <div className="flex flex-wrap gap-2 pt-1">
-        <Button type="button" size="sm" variant="secondary" disabled className="text-[11px]">
-          Connect GitHub — Coming soon
+        <AddProjectSourceButton onClick={onAddProjectSource} />
+        <Button type="button" size="sm" variant="secondary" asChild className="text-[11px]">
+          <Link to={WORKBENCH_CONNECTED_TOOLS_HREF}>Open Connected Tools</Link>
         </Button>
         <Button type="button" size="sm" variant="secondary" disabled className="text-[11px]">
           Import repository — Coming soon
-        </Button>
-        <Button type="button" size="sm" variant="secondary" disabled className="text-[11px]">
-          Paste repo URL — Coming soon
         </Button>
       </div>
     </MutedPanel>
