@@ -69,9 +69,10 @@ const DIMS: Record<
   { ring: number; stroke: number; labelClass: string; gapClass: string }
 > = {
   comfortable: {
-    ring: 36,
-    stroke: 3,
-    labelClass: "mt-0.5 text-[8px] font-semibold uppercase tracking-wide text-white/35",
+    ring: 32,
+    stroke: 2.5,
+    labelClass:
+      "mt-px translate-y-[0.5px] text-[7px] font-semibold uppercase leading-none tracking-wide text-white/35",
     gapClass: "gap-0.5 md:gap-1",
   },
   compact: {

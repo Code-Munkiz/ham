@@ -1216,7 +1216,7 @@ export function WorkspaceChatComposer({
                 data-hww-command-deck-actions
                 data-hww-command-controls
                 data-hww-action-buttons
-                className="flex h-8 min-h-8 shrink-0 items-center justify-end gap-1 overflow-x-hidden pl-1.5 pr-2.5 md:pl-2 md:pr-3.5"
+                className="flex min-h-8 shrink-0 items-end justify-end gap-1 overflow-x-hidden overflow-y-visible pl-1.5 pr-2.5 pb-px pt-px md:pl-2 md:pr-3.5"
               >
                 {rightDeckActions}
               </div>
@@ -1234,7 +1234,7 @@ export function WorkspaceChatComposer({
                 >
                   {leftDeckControls}
                 </div>
-                <div className="ml-auto flex min-w-0 shrink-0 items-center gap-0.5">
+                <div className="ml-auto flex min-w-0 shrink-0 items-end gap-0.5">
                   {rightDeckActions}
                 </div>
               </div>

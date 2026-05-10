@@ -6,7 +6,7 @@
 
 import * as React from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ExternalLink, Loader2, PanelRight, PanelRightClose } from "lucide-react";
+import { ExternalLink, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   appendChatSessionTurns,
@@ -73,7 +73,6 @@ import {
   parseWorkspaceImageGenerationIntent,
 } from "./imageGenerationIntent";
 import { useWorkspaceHamProject } from "../../WorkspaceHamProjectContext";
-import { WorkspaceChatInspectorPanel } from "./WorkspaceChatInspectorPanel";
 import { WorkspaceWorkbench } from "../../workbench/WorkspaceWorkbench";
 import {
   appendInspectorEvent,
@@ -96,7 +95,6 @@ import {
   type WorkspaceComposerAttachment,
 } from "./composerAttachmentHelpers";
 import { Button } from "@/components/ui/button";
-import { hamWorkspaceLogoUrl } from "@/lib/ham/publicAssets";
 import { cn } from "@/lib/utils";
 import { isHamDesktopShell } from "@/lib/ham/desktopConfig";
 import {
@@ -616,7 +614,6 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   const [splitResizePointerDown, setSplitResizePointerDown] = React.useState(false);
   const [isDesktopSplitLayout, setIsDesktopSplitLayout] = React.useState(false);
 
-  const [inspectorOpen, setInspectorOpen] = React.useState(false);
   const [pdfExporting, setPdfExporting] = React.useState(false);
   const [chatCapabilities, setChatCapabilities] = React.useState<ChatCapabilitiesPayload | null>(
     null,
@@ -3235,51 +3232,11 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
           data-hww-chat-header-session-load-failed={sessionLoadFailed ? "true" : "false"}
           className="hww-chat-header flex min-h-[52px] shrink-0 items-center justify-between gap-3 border-b border-white/[0.06] bg-[#040d14]/80 px-4 py-2.5 backdrop-blur-sm md:px-8"
         >
-          <div className="flex min-w-0 flex-1 items-center gap-2.5">
-            <img
-              src={hamWorkspaceLogoUrl()}
-              alt=""
-              className="h-8 w-8 shrink-0 object-contain opacity-95"
-              width={32}
-              height={32}
-            />
-            <span className="sr-only">
-              {headerTitle}. {headerSubtitle}
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="sr-only">{headerSubtitle}</span>
+            <span className="min-w-0 truncate text-[12px] font-semibold tracking-tight text-white/90">
+              {headerTitle}
             </span>
-            {missionModeActive ? (
-              <span className="max-w-[min(100%,12rem)] truncate text-[11px] font-medium text-emerald-200/95">
-                Mission chat
-              </span>
-            ) : sessionLoadFailed ? (
-              <span className="text-[11px] font-semibold tracking-tight text-amber-100/95">
-                Session unavailable
-              </span>
-            ) : null}
-          </div>
-          <div className="flex shrink-0 items-center gap-1.5">
-            <button
-              type="button"
-              data-testid="hww-chat-inspector-tab"
-              data-active={inspectorOpen ? "true" : "false"}
-              onClick={() => {
-                setInspectorOpen((o) => !o);
-              }}
-              className={cn(
-                "inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1.5 text-[11px] font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-emerald-400/30",
-                inspectorOpen
-                  ? "bg-emerald-500/15 text-[#e8eef8] shadow-[inset_0_0_0_1px_rgba(16,185,129,0.25),0_0_16px_rgba(16,185,129,0.08)]"
-                  : "text-white/45 hover:bg-white/[0.06] hover:text-white/75",
-              )}
-              aria-pressed={inspectorOpen}
-              title={inspectorOpen ? "Close inspector" : "Open inspector"}
-            >
-              {inspectorOpen ? (
-                <PanelRightClose className="h-3.5 w-3.5 opacity-90" strokeWidth={1.5} />
-              ) : (
-                <PanelRight className="h-3.5 w-3.5 opacity-90" strokeWidth={1.5} />
-              )}
-              <span className="hidden sm:inline select-none">Inspector</span>
-            </button>
           </div>
         </header>
         <div className="grid min-h-0 min-w-0 max-w-full flex-1 grid-rows-[minmax(0,1fr)_auto] overflow-x-hidden">
@@ -3287,6 +3244,14 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
             ref={listWrapRef}
             className="hww-chat-command-feed hww-scroll flex min-h-0 min-w-0 max-w-full flex-col overflow-x-hidden overflow-y-auto px-3 md:px-6"
           >
+            {missionModeActive ? (
+              <div
+                data-testid="hww-chat-mission-activity"
+                className="sticky top-0 z-[1] shrink-0 border-b border-white/[0.06] bg-[#030b11]/95 py-2 backdrop-blur-sm md:bg-[#030b11]/90"
+              >
+                {missionAgentActivityContent}
+              </div>
+            ) : null}
             {loadingSession ? (
               <div className="flex flex-1 items-center justify-center py-12 text-sm text-white/40">
                 Loading…
@@ -3551,47 +3516,15 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
           </div>
         </>
       ) : null}
-      {inspectorOpen ? (
-        <>
-          <button
-            type="button"
-            className="fixed inset-0 z-20 bg-black/50 md:hidden"
-            onClick={() => {
-              setInspectorOpen(false);
-            }}
-            aria-label="Close inspector"
-          />
-          <div
-            className={cn(
-              "z-30 flex max-h-full overflow-hidden shadow-2xl",
-              "fixed right-0 top-0 h-full md:static md:z-auto md:h-full md:min-h-0 md:shadow-none",
-              "w-full md:min-w-[420px] md:flex-1 md:max-w-none",
-            )}
-          >
-            <WorkspaceChatInspectorPanel
-              sessionId={sessionId}
-              events={inspectorEvents}
-              artifactRows={artifactRows}
-              executionMode={executionMode}
-              agentActivity={missionAgentActivityContent}
-              fillColumn
-              onClose={() => {
-                setInspectorOpen(false);
-              }}
-            />
-          </div>
-        </>
-      ) : (
-        <div
-          data-testid="hww-workbench-panel-slot"
-          className={cn(
-            "relative z-0 flex min-h-0 w-full min-w-0 flex-col overflow-x-hidden",
-            "min-h-[260px] max-h-[48vh] md:max-h-none md:h-full md:min-h-0 md:min-w-[420px] md:flex-1",
-          )}
-        >
-          <WorkspaceWorkbench />
-        </div>
-      )}
+      <div
+        data-testid="hww-workbench-panel-slot"
+        className={cn(
+          "relative z-0 flex min-h-0 w-full min-w-0 flex-col overflow-x-hidden",
+          "min-h-[260px] max-h-[48vh] md:max-h-none md:h-full md:min-h-0 md:min-w-[420px] md:flex-1",
+        )}
+      >
+        <WorkspaceWorkbench />
+      </div>
     </div>
   );
 }

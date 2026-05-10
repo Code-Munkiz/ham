@@ -1,6 +1,6 @@
 /**
- * Local terminal is not docked on `/workspace/chat` — use Workbench Terminal tab
- * and `/workspace/terminal` instead.
+ * Local terminal is not docked on `/workspace/chat` — open the dedicated
+ * `/workspace/terminal` route from workspace nav instead.
  */
 import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";

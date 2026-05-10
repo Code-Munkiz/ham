@@ -1,8 +1,8 @@
 /**
- * /workspace/chat shell polish: header copy, inspector tab chrome, quick prompts scrollbar, toolbar icons.
+ * /workspace/chat shell polish: header copy, mission strip chrome, quick prompts scrollbar, toolbar icons.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 
 const { mockUseHamWorkspace, fetchChatSessionMock } = vi.hoisted(() => ({
@@ -176,20 +176,14 @@ describe("WorkspaceChatScreen shell polish", () => {
     expect(screen.getByTestId("hww-chat-header-compact")).toBeInTheDocument();
   });
 
-  it("styles Inspector like a workbench tab and opens the inspector surface (no workbench slot)", async () => {
+  it("keeps workbench visible alongside chat header (inspector toggle removed)", async () => {
     renderChat("/workspace/chat?session=sid_shell");
     await waitFor(() => expect(screen.getByTestId("hww-command-panel")).toBeInTheDocument());
 
-    const tab = screen.getByTestId("hww-chat-inspector-tab");
-    expect(tab.getAttribute("data-active")).toBe("false");
-    expect(tab.className).toMatch(/rounded-md/);
-    expect(tab.className).toMatch(/text-white\/45/);
+    expect(screen.queryByTestId("hww-chat-inspector-tab")).not.toBeInTheDocument();
 
-    fireEvent.click(tab);
-    await waitFor(() => expect(screen.getByTestId("hww-inspector-panel")).toBeInTheDocument());
-    expect(tab.getAttribute("data-active")).toBe("true");
-    expect(tab.className).toMatch(/bg-emerald-500\/15/);
-    expect(screen.queryByTestId("hww-workbench")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId("hww-workbench")).toBeInTheDocument());
+    expect(screen.getByTestId("hww-workbench-tab-preview")).toBeInTheDocument();
   });
 
   it("anchors quick prompts with hidden scrollbar class and shows scroll-next only when overflowing", async () => {
@@ -226,7 +220,7 @@ describe("WorkspaceChatScreen shell polish", () => {
   it("workbench tab strip remains unchanged without GitHub", async () => {
     renderChat("/workspace/chat?session=sid_wb");
     await waitFor(() =>
-      expect(screen.getByTestId("hww-workbench-tab-terminal")).toBeInTheDocument(),
+      expect(screen.getByTestId("hww-workbench-tab-storage")).toBeInTheDocument(),
     );
     expect(screen.queryByTestId("hww-workbench-tab-github")).not.toBeInTheDocument();
     expect(screen.getByTestId("hww-workbench-tab-preview")).toBeInTheDocument();
