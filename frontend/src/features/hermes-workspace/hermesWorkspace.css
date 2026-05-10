@@ -161,11 +161,34 @@
   border-color: rgba(196, 92, 18, 0.35);
 }
 
+/* Command split — transcript scroll must hide horizontal bleed from wide chips/deck internals */
+.hww-root .hww-chat-command-feed.hww-scroll {
+  overflow-x: hidden;
+}
+
 /* Command Deck — chat composer textarea scrollbar + containment */
 .hww-command-textarea {
   box-sizing: border-box;
   scrollbar-gutter: stable;
   scrollbar-width: thin;
+}
+
+.hww-chat-composer-outer[data-hww-composer-density],
+[data-hww-command-deck],
+[data-hww-composer-quick-tips],
+[data-testid="hww-command-panel"] .hww-chat-empty {
+  max-width: 100%;
+}
+
+/* Starter prompt strip — horizontal scroll without native scrollbar chrome */
+.hww-root .hww-composer-quick-tips-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.hww-root .hww-composer-quick-tips-scroll::-webkit-scrollbar {
+  display: none;
+  height: 0;
 }
 
 .hww-command-textarea::-webkit-scrollbar {

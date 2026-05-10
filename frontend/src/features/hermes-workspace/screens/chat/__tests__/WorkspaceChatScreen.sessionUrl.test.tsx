@@ -148,7 +148,10 @@ describe("WorkspaceChatScreen session URL + workspace switch", () => {
     mockUseHamWorkspace.mockReturnValue(readyCtx("ws_b"));
     view.rerender(chatRouteTree());
 
-    await waitFor(() => expect(screen.getByText("New session")).toBeInTheDocument());
+    await waitFor(() => {
+      const header = view.container.querySelector('[data-testid="hww-chat-header-compact"]');
+      expect(header?.querySelector(".sr-only")?.textContent).toMatch(/New session/i);
+    });
 
     expect(fetchChatSessionMock).not.toHaveBeenCalledWith("sid_for_a", "ws_b");
   });

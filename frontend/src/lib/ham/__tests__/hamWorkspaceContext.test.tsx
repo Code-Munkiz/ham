@@ -90,6 +90,8 @@ function withHostedProvider(
 }
 
 beforeEach(() => {
+  vi.unstubAllEnvs();
+  vi.stubEnv("VITE_HAM_LOCAL_DEV_WORKSPACE_BYPASS", "");
   window.localStorage.clear();
   mockedGetMe.mockReset();
   mockedCreate.mockReset();
