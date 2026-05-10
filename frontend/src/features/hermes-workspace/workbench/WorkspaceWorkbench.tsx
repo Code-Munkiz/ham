@@ -1,6 +1,6 @@
 /**
  * HAM-native command-center workbench (right pane on /workspace/chat).
- * Placeholders and disabled actions only — no fake GitHub, preview, publish, or storage behavior.
+ * Preview / Share / Publish remain placeholders until product wiring lands.
  */
 import * as React from "react";
 import { Link } from "react-router-dom";
@@ -23,6 +23,12 @@ import { ProjectSourceIntakeDialog } from "./ProjectSourceIntakeDialog";
 import { LocalMachineConnectCta } from "../components/LocalMachineConnectCta";
 import { isLocalRuntimeConfigured } from "../adapters/localRuntime";
 import { WorkspaceTerminalView } from "../screens/terminal/WorkspaceTerminalView";
+import { WorkbenchProjectSettingsPanel } from "./WorkbenchProjectSettingsPanel";
+
+export type WorkspaceWorkbenchProps = {
+  /** Binds embedded settings/deep-links to the active Ham project from chat routing. */
+  projectId?: string | null;
+};
 
 export type WorkspaceWorkbenchTabId =
   | "preview"
@@ -41,7 +47,7 @@ const TABS: Array<{ id: WorkspaceWorkbenchTabId; label: string; icon: typeof Eye
   { id: "settings", label: "Settings", icon: Settings2 },
 ];
 
-export function WorkspaceWorkbench() {
+export function WorkspaceWorkbench({ projectId = null }: WorkspaceWorkbenchProps) {
   const [activeTab, setActiveTab] = React.useState<WorkspaceWorkbenchTabId>("preview");
   const [projectSourceOpen, setProjectSourceOpen] = React.useState(false);
   const tabStripRef = React.useRef<HTMLDivElement | null>(null);
@@ -203,7 +209,7 @@ export function WorkspaceWorkbench() {
           <WorkbenchStoragePanel onAddProjectSource={() => setProjectSourceOpen(true)} />
         ) : null}
         {activeTab === "terminal" ? <WorkbenchTerminalPanel /> : null}
-        {activeTab === "settings" ? <WorkbenchSettingsPanel /> : null}
+        {activeTab === "settings" ? <WorkbenchProjectSettingsPanel projectId={projectId} /> : null}
       </div>
       <ProjectSourceIntakeDialog open={projectSourceOpen} onOpenChange={setProjectSourceOpen} />
     </aside>
@@ -349,70 +355,5 @@ function WorkbenchTerminalPanel() {
     >
       <WorkspaceTerminalView mode="embedded" className="min-h-0 flex-1" />
     </div>
-  );
-}
-
-function SettingsLinkRow({ title, subtitle, to }: { title: string; subtitle: string; to: string }) {
-  return (
-    <div className="rounded-lg border border-white/[0.06] bg-black/20 px-3 py-2.5">
-      <p className="text-[12px] font-medium text-white/85">{title}</p>
-      <p className="mt-1 text-[11px] text-white/45">{subtitle}</p>
-      <Link
-        to={to}
-        className="mt-2 inline-flex text-[11px] font-medium text-[#7dd3fc] underline-offset-2 hover:underline"
-      >
-        Open in settings →
-      </Link>
-    </div>
-  );
-}
-
-function WorkbenchSettingsPanel() {
-  return (
-    <MutedPanel>
-      <p className="text-[13px] font-medium text-white/88">Settings</p>
-      <p className="text-white/55">
-        Full settings live in the workspace Settings app. Links below open the real routes — no
-        duplicate persistence here.
-      </p>
-      <div className="grid gap-2 pt-1">
-        <SettingsLinkRow
-          title="General"
-          subtitle="Display bundle and workspace-facing toggles."
-          to="/workspace/settings?section=display"
-        />
-        <SettingsLinkRow
-          title="Model / provider"
-          subtitle="Models, API routing, and provider configuration."
-          to="/workspace/settings?section=hermes"
-        />
-        <SettingsLinkRow
-          title="System instructions"
-          subtitle="Agent behavior and instruction surfaces."
-          to="/workspace/settings?section=agent"
-        />
-        <SettingsLinkRow
-          title="Connected tools"
-          subtitle="Integrations and tool allowlists."
-          to="/workspace/settings?section=tools"
-        />
-        <SettingsLinkRow
-          title="Secrets"
-          subtitle="Keys and environment configuration (managed in Settings)."
-          to="/workspace/settings?section=connection"
-        />
-        <SettingsLinkRow
-          title="GitHub"
-          subtitle="Use Connected Tools for Git-related integration."
-          to="/workspace/settings?section=tools"
-        />
-        <div className="rounded-lg border border-white/[0.06] bg-black/20 px-3 py-2.5">
-          <p className="text-[12px] font-medium text-white/85">Usage</p>
-          <p className="mt-1 text-[11px] text-white/45">
-            Usage reporting is not surfaced in this workbench yet.
-          </p>
-        </div>
-      </div>
-    </MutedPanel>
   );
 }

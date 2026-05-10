@@ -104,7 +104,22 @@ const TOOL_KEY_HELP: Record<string, { label: string; url: string }> = {
   },
 };
 
-export function WorkspaceConnectedToolsSection() {
+const DEFAULT_CONNECTED_TOOLS_HEADING = "Connected tools";
+const DEFAULT_CONNECTED_TOOLS_SUBTITLE =
+  "Services and tools HAM can use for your projects. Each row shows whether it is connected (On or Off). Turn the switch On only after you connect — pasted keys stay on the server and are not stored in your browser.";
+
+export type WorkspaceConnectedToolsSectionProps = {
+  /** When set, only these tool ids are shown after fetch (embedded workbench subsets). */
+  visibleToolIds?: readonly string[] | null;
+  heading?: string;
+  subtitle?: string;
+};
+
+export function WorkspaceConnectedToolsSection({
+  visibleToolIds = null,
+  heading = DEFAULT_CONNECTED_TOOLS_HEADING,
+  subtitle = DEFAULT_CONNECTED_TOOLS_SUBTITLE,
+}: WorkspaceConnectedToolsSectionProps = {}) {
   const [data, setData] = React.useState<ToolDiscoveryResponse | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -161,9 +176,15 @@ export function WorkspaceConnectedToolsSection() {
     }));
   }, [data, effectiveEnabled]);
 
+  const toolsAfterScope = React.useMemo(() => {
+    const allow = visibleToolIds && visibleToolIds.length ? new Set(visibleToolIds) : null;
+    if (!allow) return toolsWithEffective;
+    return toolsWithEffective.filter((t) => allow.has(t.id));
+  }, [toolsWithEffective, visibleToolIds]);
+
   const groupedTools = React.useMemo(() => {
     const groups: Record<ToolConnection, ToolEntry[]> = { on: [], off: [], error: [] };
-    for (const t of toolsWithEffective) {
+    for (const t of toolsAfterScope) {
       groups[connectionFromTool(t)].push(t);
     }
     const ordered: Partial<Record<ToolConnection, ToolEntry[]>> = {};
@@ -171,7 +192,7 @@ export function WorkspaceConnectedToolsSection() {
       if (groups[c].length > 0) ordered[c] = groups[c];
     }
     return ordered;
-  }, [toolsWithEffective]);
+  }, [toolsAfterScope]);
 
   const postConnect = async (toolId: string, body: Record<string, string>) => {
     setConnectBusy(toolId);
@@ -248,7 +269,7 @@ export function WorkspaceConnectedToolsSection() {
   if (loading && !data) {
     return (
       <div className="space-y-4">
-        <h2 className="text-base font-semibold text-white/90">Connected tools</h2>
+        <h2 className="text-base font-semibold text-white/90">{heading}</h2>
         <p className="text-[13px] text-white/40">Loading...</p>
       </div>
     );
@@ -257,7 +278,7 @@ export function WorkspaceConnectedToolsSection() {
   if (error && !data) {
     return (
       <div className="space-y-4">
-        <h2 className="text-base font-semibold text-white/90">Connected tools</h2>
+        <h2 className="text-base font-semibold text-white/90">{heading}</h2>
         <p className="text-[13px] text-red-400">{error}</p>
         <button
           type="button"
@@ -273,12 +294,8 @@ export function WorkspaceConnectedToolsSection() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-base font-semibold text-white/90">Connected tools</h2>
-        <p className="mt-1 text-[13px] leading-relaxed text-white/45">
-          Services and tools HAM can use for your projects. Each row shows whether it is connected
-          (On or Off). Turn the switch On only after you connect — pasted keys stay on the server
-          and are not stored in your browser.
-        </p>
+        <h2 className="text-base font-semibold text-white/90">{heading}</h2>
+        <p className="mt-1 text-[13px] leading-relaxed text-white/45">{subtitle}</p>
       </div>
 
       {data && !data.scan_available && data.scan_hint && (
@@ -301,7 +318,7 @@ export function WorkspaceConnectedToolsSection() {
           type="button"
           onClick={() => {
             const next: Record<string, boolean | undefined> = { ...toggleOverrides };
-            toolsWithEffective.forEach((t) => {
+            toolsAfterScope.forEach((t) => {
               if (canSelectAllEnable(t)) {
                 next[t.id] = true;
               }
@@ -316,7 +333,7 @@ export function WorkspaceConnectedToolsSection() {
           type="button"
           onClick={() => {
             const next: Record<string, boolean | undefined> = { ...toggleOverrides };
-            toolsWithEffective.forEach((t) => {
+            toolsAfterScope.forEach((t) => {
               next[t.id] = false;
             });
             setToggleOverrides(next);

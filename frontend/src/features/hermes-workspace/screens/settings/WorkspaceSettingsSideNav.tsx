@@ -25,7 +25,7 @@ export function WorkspaceSettingsSideNav({
           Settings
         </p>
         <p className="px-1 text-[11px] text-white/45">
-          Same order and labels as upstream Hermes Workspace settings.
+          Hermes Workspace upstream order, plus HAM-only Usage &amp; Billing.
         </p>
       </div>
 

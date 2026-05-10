@@ -3589,7 +3589,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
             "min-h-[260px] max-h-[48vh] md:max-h-none md:h-full md:min-h-0 md:min-w-[420px] md:flex-1",
           )}
         >
-          <WorkspaceWorkbench />
+          <WorkspaceWorkbench projectId={projectId} />
         </div>
       )}
     </div>

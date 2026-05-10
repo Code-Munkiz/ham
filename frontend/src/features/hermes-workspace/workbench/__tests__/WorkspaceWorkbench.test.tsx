@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
 const { fetchWorkspaceToolsMock, isLocalRuntimeConfiguredMock } = vi.hoisted(() => ({
@@ -68,7 +68,7 @@ describe("WorkspaceWorkbench", () => {
     expect(screen.getByTestId("hww-workbench-publish")).toBeDisabled();
   });
 
-  it("placeholders avoid claiming live preview or database connections", () => {
+  it("embedded settings lists integrations with connect UI", async () => {
     render(
       <MemoryRouter>
         <WorkspaceWorkbench />
@@ -86,13 +86,36 @@ describe("WorkspaceWorkbench", () => {
     expect(screen.getByText(/Terminal requires a connected runtime/i)).toBeInTheDocument();
     expect(screen.queryByTestId("hww-workbench-terminal-embed")).toBeNull();
 
+    fireEvent.click(screen.getByTestId("hww-workbench-tab-storage"));
+    const storagePanel = screen.getByTestId("hww-workbench-panel-storage");
+    expect(within(storagePanel).getByTestId("hww-add-project-source")).toBeInTheDocument();
+    expect(screen.getByText(/No cloud project blob store yet/i)).toBeInTheDocument();
+
     fireEvent.click(screen.getByTestId("hww-workbench-tab-settings"));
     const settingsPanel = screen.getByTestId("hww-workbench-panel-settings");
     expect(settingsPanel).toBeInTheDocument();
-    expect(settingsPanel.textContent).toMatch(/Connected tools/);
-    expect(
-      screen.getByText(/Use Connected Tools for Git-related integration/i),
-    ).toBeInTheDocument();
+    expect(screen.getByTestId("hww-workbench-settings-nav-models")).toBeInTheDocument();
+    expect(screen.getByText(/No project pinned/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("hww-workbench-settings-nav-integrations"));
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Connected tools" })).toBeInTheDocument();
+    });
+  });
+
+  it("Workbench settings Usage links to full-screen Usage & Billing with optional project_id", () => {
+    render(
+      <MemoryRouter initialEntries={["/workspace/chat"]}>
+        <WorkspaceWorkbench projectId="proj_abc" />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByTestId("hww-workbench-tab-settings"));
+    fireEvent.click(screen.getByTestId("hww-workbench-settings-nav-usage"));
+    const usageLink = screen.getByTestId("hww-workbench-usage-full-settings");
+    expect(usageLink).toHaveAttribute(
+      "href",
+      "/workspace/settings?section=usage&project_id=proj_abc",
+    );
   });
 
   it("embeds the terminal surface when a local runtime is configured", () => {
