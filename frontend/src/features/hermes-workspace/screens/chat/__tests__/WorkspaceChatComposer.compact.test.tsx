@@ -171,9 +171,8 @@ describe("WorkspaceChatComposer narrow layout", () => {
       expect(document.querySelector('[data-hww-meter-cluster="rings"]')).toBeTruthy();
     });
     const deck = document.querySelector(".hww-command-deck");
-    expect(deck?.getAttribute("data-hww-command-deck-layout")).toBe("triple");
-    expect(deck?.className).toMatch(/items-center/);
-    expect(deck?.className).toMatch(/minmax\(0,1fr\)/);
+    expect(deck?.getAttribute("data-hww-command-deck-layout")).toBe("input-toolbar");
+    expect(deck?.className).toMatch(/flex-col/);
     expect(document.querySelector("[data-hww-command-input-slot]")).toBeTruthy();
     expect(document.querySelector("[data-hww-command-deck-actions]")).toBeTruthy();
   });
@@ -185,8 +184,8 @@ describe("WorkspaceChatComposer narrow layout", () => {
       expect(outer?.getAttribute("data-hww-composer-density")).toBe("compact");
     });
     const deck = document.querySelector(".hww-command-deck");
-    expect(deck?.getAttribute("data-hww-command-deck-layout")).toBe("triple");
-    expect(deck?.className).toMatch(/items-center/);
+    expect(deck?.getAttribute("data-hww-command-deck-layout")).toBe("input-toolbar");
+    expect(deck?.className).toMatch(/flex-col/);
   });
 
   it("exposes tight density when outer width is below 400px", async () => {

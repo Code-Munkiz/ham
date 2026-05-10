@@ -625,11 +625,6 @@ export function WorkspaceChatComposer({
     return "1px solid rgba(16, 185, 129, 0.14)";
   }, [contextAccent]);
 
-  const meterLayout = composerToolbarDensity === "comfortable" ? "rings" : "pulse";
-  /** Single baseline for textarea, model pill, rings, mic, send (no bottom-heavy items-end clipping). */
-  const deckRowAlign = "items-center";
-
-  const placeholder = React.useMemo(() => {
     if (voiceTranscribing) return "Transcribing…";
     if (!gatewayOk && catalog && !sending)
       return "Chat gateway not ready — check the API model settings.";
@@ -1167,98 +1162,128 @@ export function WorkspaceChatComposer({
               composerToolbarDensity === "tight" && "hww-command-deck--tight",
               composerToolbarDensity === "tight"
                 ? "flex flex-col gap-0"
-                : cn(
-                    "grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto]",
-                    composerToolbarDensity === "comfortable" &&
-                      "gap-x-1.5 gap-y-1 px-2.5 py-1.5 md:gap-x-2.5 md:gap-y-1 md:px-3 md:py-2",
-                    composerToolbarDensity === "compact" &&
-                      "gap-x-1.5 gap-y-0.5 px-2 py-1.5 md:gap-x-2 md:px-3 md:py-1.5",
-                    deckRowAlign,
-                  ),
+                : "flex min-w-0 flex-col gap-0",
             )}
-            data-hww-command-deck-layout={composerToolbarDensity === "tight" ? "stacked" : "triple"}
+            data-hww-command-deck-layout={
+              composerToolbarDensity === "tight" ? "stacked" : "input-toolbar"
+            }
           >
             {composerToolbarDensity !== "tight" ? (
-              <div
-                data-hww-command-deck-left
-                data-hww-command-left
-                className="flex min-w-0 max-w-[min(100%,22rem)] shrink-0 flex-row flex-wrap items-center gap-1 overflow-hidden md:max-w-[min(100%,30rem)]"
-              >
-                {leftDeckControls}
-              </div>
-            ) : null}
-
-            <div
-              ref={textareaWrapRef}
-              data-hww-command-input-slot
-              className={cn(
-                "flex min-h-0 min-w-0 w-full max-w-full",
-                composerToolbarDensity === "tight"
-                  ? "flex-col self-stretch px-2.5 pb-1 pt-2.5 md:px-3.5"
-                  : "",
-              )}
-            >
-              <label htmlFor="hww-chat-composer" className="sr-only">
-                Message
-              </label>
-              <textarea
-                ref={textareaRef}
-                id="hww-chat-composer"
-                value={value}
-                onChange={(e) => onChange(e.target.value)}
-                onPaste={(e) => {
-                  if (!onPasteFiles || disabled || sending || voiceBusy || uploadsPending) return;
-                  const dt = e.clipboardData;
-                  const files = collectComposerPasteFiles(dt);
-                  if (files.length === 0) return;
-                  e.preventDefault();
-                  onPasteFiles(files);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    if (canSend) onSubmit();
-                  }
-                }}
-                rows={1}
-                disabled={disabled || sending || voiceTranscribing}
-                placeholder={placeholder}
-                className={cn(
-                  "hww-command-textarea box-border w-full resize-none border-0 bg-transparent text-[13px] leading-[1.45] text-[#e8eef3] outline-none placeholder:text-white/40 focus:ring-0 focus:outline-none [box-shadow:none] overflow-x-hidden max-h-[240px]",
-                  composerToolbarDensity === "tight"
-                    ? "min-h-[44px] px-1 py-1"
-                    : "min-h-[42px] px-1 py-2 pl-0.5 pr-1",
-                )}
-              />
-            </div>
-
-            {composerToolbarDensity !== "tight" ? (
-              <div
-                data-hww-command-deck-actions
-                data-hww-command-controls
-                data-hww-action-buttons
-                className="flex min-h-8 shrink-0 items-center justify-end gap-1 overflow-x-hidden overflow-y-visible pl-1.5 pr-2 md:pl-2 md:pr-3"
-              >
-                {rightDeckActions}
-              </div>
+              <>
+                <div
+                  ref={textareaWrapRef}
+                  data-hww-command-input-slot
+                  className={cn(
+                    "min-h-0 min-w-0 w-full px-2.5 pb-1 pt-2 md:px-3 md:pt-2.5 md:pb-1",
+                    composerToolbarDensity === "compact" && "px-2 py-1.5 md:px-2.5",
+                  )}
+                >
+                  <label htmlFor="hww-chat-composer" className="sr-only">
+                    Message
+                  </label>
+                  <textarea
+                    ref={textareaRef}
+                    id="hww-chat-composer"
+                    value={value}
+                    onChange={(e) => onChange(e.target.value)}
+                    onPaste={(e) => {
+                      if (!onPasteFiles || disabled || sending || voiceBusy || uploadsPending) return;
+                      const dt = e.clipboardData;
+                      const files = collectComposerPasteFiles(dt);
+                      if (files.length === 0) return;
+                      e.preventDefault();
+                      onPasteFiles(files);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        if (canSend) onSubmit();
+                      }
+                    }}
+                    rows={1}
+                    disabled={disabled || sending || voiceTranscribing}
+                    placeholder={placeholder}
+                    className="hww-command-textarea box-border min-h-[42px] w-full resize-none border-0 bg-transparent px-1 py-1 text-[13px] leading-[1.45] text-[#e8eef3] outline-none placeholder:text-white/40 focus:ring-0 focus:outline-none [box-shadow:none] overflow-x-hidden max-h-[240px] md:py-1.5"
+                  />
+                </div>
+                <div
+                  className={cn(
+                    "flex min-h-10 w-full min-w-0 shrink-0 items-center justify-between gap-2 border-t border-white/[0.08]",
+                    "px-2.5 py-1.5 md:px-3 md:py-2",
+                    composerToolbarDensity === "compact" && "min-h-9 py-1.5 md:py-1.5",
+                  )}
+                >
+                  <div
+                    data-hww-command-deck-left
+                    data-hww-command-left
+                    className="flex min-h-10 min-w-0 flex-[1_1_0] flex-row flex-wrap items-center gap-1 overflow-hidden md:min-h-[2.5rem]"
+                  >
+                    {leftDeckControls}
+                  </div>
+                  <div
+                    data-hww-command-deck-actions
+                    data-hww-command-controls
+                    data-hww-action-buttons
+                    className="flex min-h-10 shrink-0 items-center justify-end gap-1 overflow-x-hidden md:min-h-[2.5rem]"
+                  >
+                    {rightDeckActions}
+                  </div>
+                </div>
+              </>
             ) : null}
 
             {composerToolbarDensity === "tight" ? (
-              <div
-                data-hww-command-controls
-                data-hww-action-buttons
-                className="flex min-w-0 flex-wrap items-center gap-1 border-t border-white/[0.06] px-1.5 py-1.5"
-              >
+              <>
                 <div
-                  data-hww-command-left
-                  className="flex min-w-0 flex-1 flex-wrap items-center gap-0.5 [&>*]:max-w-full"
+                  ref={textareaWrapRef}
+                  data-hww-command-input-slot
+                  className="flex min-h-0 min-w-0 w-full max-w-full flex-col self-stretch px-2.5 pb-1 pt-2.5 md:px-3.5"
                 >
-                  {leftDeckControls}
+                  <label htmlFor="hww-chat-composer" className="sr-only">
+                    Message
+                  </label>
+                  <textarea
+                    ref={textareaRef}
+                    id="hww-chat-composer"
+                    value={value}
+                    onChange={(e) => onChange(e.target.value)}
+                    onPaste={(e) => {
+                      if (!onPasteFiles || disabled || sending || voiceBusy || uploadsPending) return;
+                      const dt = e.clipboardData;
+                      const files = collectComposerPasteFiles(dt);
+                      if (files.length === 0) return;
+                      e.preventDefault();
+                      onPasteFiles(files);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        if (canSend) onSubmit();
+                      }
+                    }}
+                    rows={1}
+                    disabled={disabled || sending || voiceTranscribing}
+                    placeholder={placeholder}
+                    className="hww-command-textarea box-border min-h-[44px] w-full resize-none border-0 bg-transparent px-1 py-1 text-[13px] leading-[1.45] text-[#e8eef3] outline-none placeholder:text-white/40 focus:ring-0 focus:outline-none [box-shadow:none] overflow-x-hidden max-h-[240px]"
+                  />
                 </div>
-                <div className="ml-auto flex min-w-0 shrink-0 items-end gap-0.5">
-                  {rightDeckActions}
+                <div
+                  data-hww-command-controls
+                  data-hww-action-buttons
+                  className="flex min-w-0 flex-wrap items-center gap-1 border-t border-white/[0.06] px-1.5 py-1.5"
+                >
+                  <div
+                    data-hww-command-deck-left
+                    data-hww-command-left
+                    className="flex min-w-0 flex-1 flex-wrap items-center gap-0.5 [&>*]:max-w-full"
+                  >
+                    {leftDeckControls}
+                  </div>
+                  <div className="ml-auto flex min-w-0 shrink-0 items-center gap-0.5">
+                    {rightDeckActions}
+                  </div>
                 </div>
-              </div>
+              </>
             ) : null}
           </div>
 
