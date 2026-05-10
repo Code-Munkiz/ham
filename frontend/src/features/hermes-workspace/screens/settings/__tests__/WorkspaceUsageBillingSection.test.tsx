@@ -20,7 +20,10 @@ describe("Workspace Usage & Billing settings", () => {
       within(root).getByText(/Track workspace usage, credits, and upcoming metering surfaces\./),
     ).toBeInTheDocument();
 
-    expect(within(root).getByRole("tab", { name: /^Tasks$/ })).toHaveAttribute("aria-selected", "true");
+    expect(within(root).getByRole("tab", { name: /^Tasks$/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
 
     expect(within(root).getByText(/^HAM Preview$/)).toBeInTheDocument();
     expect(within(root).getByText(/^Preview$/)).toBeInTheDocument();
@@ -32,9 +35,7 @@ describe("Workspace Usage & Billing settings", () => {
 
     expect(within(root).getByTestId("hww-usage-history-empty")).toBeInTheDocument();
     expect(within(root).getByText(/No usage events yet\./)).toBeInTheDocument();
-    expect(
-      within(root).getByText(/Once metering connects, agent tasks/i),
-    ).toBeInTheDocument();
+    expect(within(root).getByText(/Once metering connects, agent tasks/i)).toBeInTheDocument();
     expect(
       within(root).queryByText(/stripe.*connected.*payment confirmed/i),
     ).not.toBeInTheDocument();
@@ -53,7 +54,10 @@ describe("Workspace Usage & Billing settings", () => {
     expect(screen.getByTestId("hww-usage-tab-panel-tasks")).toBeInTheDocument();
 
     fireEvent.click(within(root).getByRole("tab", { name: /^Apps$/ }));
-    expect(within(root).getByRole("tab", { name: /^Apps$/ })).toHaveAttribute("aria-selected", "true");
+    expect(within(root).getByRole("tab", { name: /^Apps$/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
     expect(screen.getByTestId("hww-usage-tab-panel-apps")).toBeInTheDocument();
     expect(screen.queryByTestId("hww-usage-tab-panel-tasks")).not.toBeInTheDocument();
 

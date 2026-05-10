@@ -17,15 +17,7 @@ const TABS: ReadonlyArray<{ id: UsageCategoryTabId; label: string }> = [
 
 const BILLING_DISABLED_TITLE = "Billing is not connected in this build yet.";
 
-function StubStat({
-  title,
-  value,
-  subtitle,
-}: {
-  title: string;
-  value: string;
-  subtitle: string;
-}) {
+function StubStat({ title, value, subtitle }: { title: string; value: string; subtitle: string }) {
   return (
     <div
       className="rounded-xl border border-white/[0.06] bg-black/22 px-3 py-3"
@@ -214,7 +206,9 @@ export function WorkspaceUsageBillingSection() {
                   <HelpCircle className="h-3.5 w-3.5" aria-hidden />
                 </span>
               </div>
-              <span className="text-[13px] font-semibold tabular-nums text-white/82">Not metered</span>
+              <span className="text-[13px] font-semibold tabular-nums text-white/82">
+                Not metered
+              </span>
               <div className="basis-full pt-3 text-[11px] text-white/45">
                 Usage ledger is not connected in this build — no pooled HAM credits to spend.
               </div>
@@ -235,7 +229,8 @@ export function WorkspaceUsageBillingSection() {
                   <dd className="font-medium text-white/82">Not configured</dd>
                 </div>
                 <p className="text-[11px] text-white/42">
-                  Policy-driven daily refresh bowls are roadmap-only; no midnight auto top-ups wired.
+                  Policy-driven daily refresh bowls are roadmap-only; no midnight auto top-ups
+                  wired.
                 </p>
               </dl>
             </div>
@@ -257,7 +252,8 @@ export function WorkspaceUsageBillingSection() {
             <p className="text-[14px] font-medium text-white/78">No usage events yet.</p>
             <p className="mx-auto mt-2 max-w-md text-[12px] leading-relaxed text-white/45">
               Once metering connects, agent tasks, vendor model calls, local or cloud runtime, app
-              builds, ingestion, and credit adjustments could stream here — today the ledger is idle.
+              builds, ingestion, and credit adjustments could stream here — today the ledger is
+              idle.
             </p>
           </div>
         </section>

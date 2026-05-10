@@ -177,8 +177,7 @@ export function WorkspaceConnectedToolsSection({
   }, [data, effectiveEnabled]);
 
   const toolsAfterScope = React.useMemo(() => {
-    const allow =
-      visibleToolIds && visibleToolIds.length ? new Set(visibleToolIds) : null;
+    const allow = visibleToolIds && visibleToolIds.length ? new Set(visibleToolIds) : null;
     if (!allow) return toolsWithEffective;
     return toolsWithEffective.filter((t) => allow.has(t.id));
   }, [toolsWithEffective, visibleToolIds]);

@@ -209,9 +209,7 @@ export function WorkspaceWorkbench({ projectId = null }: WorkspaceWorkbenchProps
           <WorkbenchStoragePanel onAddProjectSource={() => setProjectSourceOpen(true)} />
         ) : null}
         {activeTab === "terminal" ? <WorkbenchTerminalPanel /> : null}
-        {activeTab === "settings" ? (
-          <WorkbenchProjectSettingsPanel projectId={projectId} />
-        ) : null}
+        {activeTab === "settings" ? <WorkbenchProjectSettingsPanel projectId={projectId} /> : null}
       </div>
       <ProjectSourceIntakeDialog open={projectSourceOpen} onOpenChange={setProjectSourceOpen} />
     </aside>

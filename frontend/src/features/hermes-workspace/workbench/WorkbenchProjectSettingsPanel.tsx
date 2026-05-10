@@ -81,8 +81,8 @@ export function WorkbenchProjectSettingsPanel({
       content = (
         <div className="space-y-4 pb-10">
           <p className="text-[13px] leading-relaxed text-white/45">
-            Desktop bundle density, operator connection strip, and local Hermes controls — same panel
-            as Display in full settings.
+            Desktop bundle density, operator connection strip, and local Hermes controls — same
+            panel as Display in full settings.
           </p>
           <DesktopBundlePanel />
           <FooterLink href={fullSettingsHref("display", projectId)}>
@@ -123,9 +123,9 @@ export function WorkbenchProjectSettingsPanel({
       content = (
         <div className="space-y-4 pb-10">
           <p className="text-[13px] leading-relaxed text-white/45">
-            Environment variable names the API exposes (values never shown here). Operational API keys
-            for chat models live under Model & keys; OAuth-style tool keys land under Integrations or
-            GitHub.
+            Environment variable names the API exposes (values never shown here). Operational API
+            keys for chat models live under Model & keys; OAuth-style tool keys land under
+            Integrations or GitHub.
           </p>
           <section className="hww-set-card rounded-2xl border border-white/[0.08] bg-white/[0.02] p-4 shadow-none md:p-5">
             <h3 className="text-[13px] font-semibold text-white/88">Environment</h3>
@@ -172,16 +172,17 @@ export function WorkbenchProjectSettingsPanel({
                 <p className="text-[13px] font-semibold text-white/88">Payments &amp; revenue</p>
                 <p className="mt-2 text-[12px] leading-relaxed text-white/45">
                   The HAM workspace is for command, chat, and automation — billing for your shipped
-                  product (Stripe Checkout, invoicing, webhooks, etc.) is configured where you deploy
-                  the customer-facing host (for example Vercel or Cloud Run billing integration), not
-                  inside HAM Connected Tools.
+                  product (Stripe Checkout, invoicing, webhooks, etc.) is configured where you
+                  deploy the customer-facing host (for example Vercel or Cloud Run billing
+                  integration), not inside HAM Connected Tools.
                 </p>
               </div>
               <CreditCard className="h-10 w-10 shrink-0 text-white/20" aria-hidden />
             </div>
             <p className="mt-4 text-[11px] text-white/38">
-              If you ship a storefront from this workspace, delegate payment keys to your app&apos;s host
-              and keep HAM integrations limited to Cursor, OpenRouter, GitHub, and similar dev tools.
+              If you ship a storefront from this workspace, delegate payment keys to your app&apos;s
+              host and keep HAM integrations limited to Cursor, OpenRouter, GitHub, and similar dev
+              tools.
             </p>
           </div>
         </div>
@@ -228,10 +229,15 @@ export function WorkbenchProjectSettingsPanel({
               </li>
             </ul>
           </div>
-          <FooterLink href={fullSettingsHref("usage", projectId)} data-testid="hww-workbench-usage-full-settings">
+          <FooterLink
+            href={fullSettingsHref("usage", projectId)}
+            data-testid="hww-workbench-usage-full-settings"
+          >
             Open Usage &amp; Billing in Settings
           </FooterLink>
-          <FooterLink href={`/workspace/jobs${projectId?.trim() ? `?project_id=${encodeURIComponent(projectId.trim())}` : ""}`}>
+          <FooterLink
+            href={`/workspace/jobs${projectId?.trim() ? `?project_id=${encodeURIComponent(projectId.trim())}` : ""}`}
+          >
             Open Jobs for this workspace
           </FooterLink>
         </div>
