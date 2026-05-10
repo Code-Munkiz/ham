@@ -51,6 +51,7 @@ from src.api.workspace_skills import router as workspace_skills_router
 from src.api.workspace_tools import router as workspace_tools_router
 from src.api.coding_agents import router as coding_agents_router
 from src.api.control_plane_runs import router as control_plane_runs_router
+from src.api.coding_readiness import router as coding_readiness_router
 from src.api.droid_audit import router as droid_audit_router
 from src.api.droid_build import router as droid_build_router
 from src.ham.agent_profiles import agents_config_from_merged
@@ -135,6 +136,7 @@ app.include_router(coding_agents_router)
 app.include_router(control_plane_runs_router)
 app.include_router(droid_audit_router)
 app.include_router(droid_build_router)
+app.include_router(coding_readiness_router)
 app.include_router(models_catalog_router)
 app.include_router(workspace_health_router)
 app.include_router(workspace_files_router)
