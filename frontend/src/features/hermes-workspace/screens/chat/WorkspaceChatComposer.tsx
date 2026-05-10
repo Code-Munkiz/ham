@@ -300,12 +300,12 @@ function ComposerQuickTipsBar({
         data-hww-composer-quick-tips-scroll-next
         onClick={scrollStarterPromptsAhead}
         className={cn(
-          "inline-flex size-9 min-h-9 min-w-9 shrink-0 cursor-pointer items-center justify-center rounded-md border text-white/90 outline-none transition",
-          "border-white/[0.14] bg-white/[0.05] hover:border-white/[0.22] hover:bg-white/[0.1] hover:text-white",
+          "inline-flex h-7 min-h-7 w-7 min-w-7 shrink-0 cursor-pointer items-center justify-center rounded-md border text-white/85 outline-none transition",
+          "border-white/[0.12] bg-white/[0.04] hover:border-white/[0.2] hover:bg-white/[0.08] hover:text-white",
           "focus-visible:border-emerald-400/35 focus-visible:ring-2 focus-visible:ring-emerald-400/35 disabled:pointer-events-none disabled:opacity-[0.22]",
         )}
       >
-        <ChevronRight className="h-5 w-5 shrink-0" strokeWidth={2.25} aria-hidden />
+        <ChevronRight className="h-3.5 w-3.5 shrink-0" strokeWidth={2.25} aria-hidden />
       </button>
       <Button
         type="button"

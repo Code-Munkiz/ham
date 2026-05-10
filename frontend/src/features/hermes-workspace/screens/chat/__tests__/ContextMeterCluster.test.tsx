@@ -1,8 +1,8 @@
 /**
  * Context meter cluster — rings + diagnostics HUD (no native title tooltips).
  */
-import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { ContextMeterCluster } from "../ContextMeterCluster";
 import type { ChatContextMetersPayload } from "@/lib/ham/types";
@@ -65,6 +65,29 @@ describe("ContextMeterCluster", () => {
     fireEvent.click(wsBtn);
     expect(await screen.findByText("System diagnostics")).toBeInTheDocument();
     expect(screen.getByText(/9,?000/)).toBeInTheDocument();
+
+    const floating = document.querySelector('[data-hww-diagnostics-hud="floating"]');
+    expect(floating).toBeTruthy();
+    expect(floating?.getAttribute("data-hww-diagnostics-placement")).toMatch(
+      /^(above|below|clamped)$/,
+    );
+    const panel = floating?.querySelector('[data-hww-diagnostics-hud="panel"]');
+    expect(panel).toBeTruthy();
+    expect(panel?.className).toMatch(/bg-\[#070f14]/);
+  });
+
+  it("closes Diagnostics HUD on Escape while open", async () => {
+    render(
+      <MemoryRouter>
+        <ContextMeterCluster payload={sample} enabled />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Open system diagnostics — workspace" }));
+    expect(await screen.findByText("System diagnostics")).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: "Escape", bubbles: true });
+    await waitFor(() => {
+      expect(screen.queryByText("System diagnostics")).not.toBeInTheDocument();
+    });
   });
 
   it("thread section in HUD mentions new chat session", async () => {

@@ -174,14 +174,18 @@ describe("WorkspaceChatScreen shell polish", () => {
     expect(screen.queryByTestId("hww-workbench")).not.toBeInTheDocument();
   });
 
-  it("anchors quick prompts with hidden scrollbar class and exposes scroll-next control", async () => {
+  it("anchors quick prompts with hidden scrollbar class and exposes compact scroll-next control", async () => {
     const { container } = renderChat("/workspace/chat?session=sid_tips");
     await waitFor(() => expect(screen.getByTestId("hww-command-panel")).toBeInTheDocument());
 
     const scroll = container.querySelector("[data-hww-composer-quick-tips-scroll]");
     expect(scroll?.classList.contains("hww-composer-quick-tips-scroll")).toBe(true);
     expect(await screen.findByRole("toolbar", { name: "Starter prompts" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Show more starter prompts" })).toBeTruthy();
+
+    const nextBtn = screen.getByRole("button", { name: "Show more starter prompts" });
+    expect(nextBtn).toBeTruthy();
+    expect(nextBtn.className).toMatch(/h-7/);
+    expect(nextBtn.className).toMatch(/w-7/);
   });
 
   it("sizes composer toolbar icon actions consistently (attach, mic, send)", async () => {

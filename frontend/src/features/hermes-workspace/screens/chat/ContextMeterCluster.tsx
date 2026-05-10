@@ -17,6 +17,53 @@ import { ContextDiagnosticsHudPanel, pctFromFillRatio } from "./ContextDiagnosti
 /** Drives ring sizes / spacing in `WorkspaceChatComposer` narrow layouts. */
 export type ContextMeterClusterDensity = "comfortable" | "compact" | "tight";
 
+/** Popover positioning for Diagnostics HUD — exported for regression tests only. */
+export function computeDiagnosticsHudPlacement(
+  anchor: Pick<DOMRect, "top" | "bottom" | "left" | "width">,
+  panelW: number,
+  panelH: number,
+  viewport: { width: number; height: number },
+  commandPanel: Pick<DOMRect, "left" | "right"> | null,
+): { top: number; left: number; placement: "above" | "below" | "clamped" } {
+  const HUD_GAP = 8;
+  const HUD_MARGIN = 8;
+  const vh = viewport.height;
+
+  const hMin = HUD_MARGIN;
+  const hMax = Math.max(hMin, vh - panelH - HUD_MARGIN);
+
+  const vw = viewport.width;
+  const cmdL = commandPanel?.left ?? 0;
+  const cmdR = commandPanel?.right ?? vw;
+  const minLeft = cmdL + HUD_MARGIN;
+  const maxRight = cmdR - HUD_MARGIN;
+
+  const aboveTop = anchor.top - panelH - HUD_GAP;
+  const belowTop = anchor.bottom + HUD_GAP;
+
+  const fitsAboveFully = aboveTop >= hMin && aboveTop + panelH <= vh - HUD_MARGIN;
+  const fitsBelowFully = belowTop >= hMin && belowTop + panelH <= vh - HUD_MARGIN;
+
+  let top = aboveTop;
+  let placement: "above" | "below" | "clamped" = "above";
+
+  if (!fitsAboveFully) {
+    if (fitsBelowFully) {
+      top = belowTop;
+      placement = "below";
+    } else {
+      top = Math.max(hMin, Math.min(aboveTop, hMax));
+      placement = "clamped";
+    }
+  }
+
+  const anchorMid = anchor.left + anchor.width / 2;
+  let left = anchorMid - panelW / 2;
+  left = Math.max(minLeft, Math.min(left, maxRight - panelW));
+
+  return { top, left, placement };
+}
+
 const DIMS: Record<
   ContextMeterClusterDensity,
   { ring: number; stroke: number; labelClass: string; gapClass: string }
@@ -260,6 +307,9 @@ function SystemPulseChip({
   );
 }
 
+const HUD_DEFAULT_PANEL_W = 308;
+const HUD_DEFAULT_PANEL_H = 300;
+
 export function ContextMeterCluster({
   payload,
   enabled,
@@ -267,9 +317,16 @@ export function ContextMeterCluster({
   layout = "rings",
 }: ContextMeterClusterProps) {
   const [diagOpen, setDiagOpen] = React.useState(false);
-  const [diagPos, setDiagPos] = React.useState({ top: 0, left: 0 });
+  const [diagPos, setDiagPos] = React.useState({
+    top: 0,
+    left: 0,
+    placement: "above" as "above" | "below" | "clamped",
+  });
   const openFromRef = React.useRef<HTMLElement | null>(null);
   const diagOpenRef = React.useRef(false);
+  const floatingWrapRef = React.useRef<HTMLDivElement | null>(null);
+  /** Bumps whenever the HUD anchor changes while open so placement re-measures. */
+  const [hudLayoutTick, setHudLayoutTick] = React.useState(0);
 
   React.useEffect(() => {
     diagOpenRef.current = diagOpen;
@@ -281,6 +338,44 @@ export function ContextMeterCluster({
     openFromRef.current = null;
   }, []);
 
+  const syncHudPlacement = React.useCallback(() => {
+    const anchorEl = openFromRef.current;
+    const wrap = floatingWrapRef.current;
+    if (!anchorEl || !wrap) return;
+    const anchor = anchorEl.getBoundingClientRect();
+    const panelEl = wrap.querySelector<HTMLElement>('[data-hww-diagnostics-hud="panel"]');
+    const pw = Math.min(panelEl?.offsetWidth || HUD_DEFAULT_PANEL_W, HUD_DEFAULT_PANEL_W);
+    const ph = panelEl?.offsetHeight || HUD_DEFAULT_PANEL_H;
+
+    const cmdRoot = document.querySelector<HTMLElement>('[data-testid="hww-command-panel"]');
+    const cmdRect = cmdRoot?.getBoundingClientRect() ?? null;
+
+    const next = computeDiagnosticsHudPlacement(
+      anchor,
+      pw,
+      ph,
+      { width: window.innerWidth, height: window.innerHeight },
+      cmdRect,
+    );
+    setDiagPos(next);
+  }, []);
+
+  React.useLayoutEffect(() => {
+    if (!diagOpen || !openFromRef.current || !floatingWrapRef.current) return;
+    syncHudPlacement();
+  }, [diagOpen, payload, hudLayoutTick, syncHudPlacement]);
+
+  React.useEffect(() => {
+    if (!diagOpen) return;
+    const onResize = () => syncHudPlacement();
+    window.addEventListener("resize", onResize);
+    window.addEventListener("scroll", onResize, true);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("scroll", onResize, true);
+    };
+  }, [diagOpen, syncHudPlacement]);
+
   const openDiagnostics = React.useCallback(
     (anchor: HTMLElement) => {
       if (diagOpenRef.current && openFromRef.current === anchor) {
@@ -288,13 +383,8 @@ export function ContextMeterCluster({
         return;
       }
       openFromRef.current = anchor;
-      const r = anchor.getBoundingClientRect();
-      const panelW = 308;
-      setDiagPos({
-        top: r.bottom + 8,
-        left: Math.max(8, Math.min(r.left, window.innerWidth - panelW - 8)),
-      });
       diagOpenRef.current = true;
+      setHudLayoutTick((n) => n + 1);
       setDiagOpen(true);
     },
     [closeDiagnostics],
@@ -318,8 +408,8 @@ export function ContextMeterCluster({
       onDoc = (e: MouseEvent) => {
         const t = e.target as Node | null;
         if (!t) return;
-        const panel = document.querySelector('[data-hww-diagnostics-hud="panel"]');
-        if (panel?.contains(t)) return;
+        if (floatingWrapRef.current?.contains(t)) return;
+        if (openFromRef.current?.contains(t)) return;
         closeDiagnostics();
       };
       document.addEventListener("mousedown", onDoc);
@@ -345,8 +435,10 @@ export function ContextMeterCluster({
     diagOpen && typeof document !== "undefined"
       ? createPortal(
           <div
+            ref={floatingWrapRef}
             data-hww-diagnostics-hud="floating"
-            className="pointer-events-auto z-[250]"
+            data-hww-diagnostics-placement={diagPos.placement}
+            className="pointer-events-auto z-[200]"
             style={{ position: "fixed", top: diagPos.top, left: diagPos.left }}
             role="presentation"
           >
