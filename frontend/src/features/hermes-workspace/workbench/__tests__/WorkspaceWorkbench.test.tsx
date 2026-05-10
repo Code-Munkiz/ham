@@ -1,9 +1,42 @@
-import { describe, expect, it } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi, beforeEach } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+
+const { fetchWorkspaceToolsMock } = vi.hoisted(() => ({
+  fetchWorkspaceToolsMock: vi.fn(),
+}));
+
+vi.mock("@/lib/ham/api", async (importOriginal) => {
+  const mod = await importOriginal<typeof import("@/lib/ham/api")>();
+  return {
+    ...mod,
+    fetchWorkspaceTools: (...args: unknown[]) => fetchWorkspaceToolsMock(...args),
+  };
+});
+
+vi.mock("../../adapters/localRuntime", () => ({
+  isLocalRuntimeConfigured: () => false,
+}));
+
 import { WorkspaceWorkbench } from "../WorkspaceWorkbench";
+import { WORKBENCH_CONNECTED_TOOLS_HREF } from "../ProjectSourceIntakeDialog";
+
+function toolsOk() {
+  return new Response(
+    JSON.stringify({
+      tools: [{ id: "github", connection: "off" }],
+      scan_available: true,
+      scan_hint: null,
+    }),
+    { status: 200, headers: { "Content-Type": "application/json" } },
+  );
+}
 
 describe("WorkspaceWorkbench", () => {
+  beforeEach(() => {
+    fetchWorkspaceToolsMock.mockResolvedValue(toolsOk());
+  });
+
   it("select Preview by default and switches panel content", () => {
     render(
       <MemoryRouter>
@@ -30,7 +63,7 @@ describe("WorkspaceWorkbench", () => {
     expect(screen.getByTestId("hww-workbench-publish")).toBeDisabled();
   });
 
-  it("placeholders avoid claiming live or connected behavior", () => {
+  it("placeholders avoid claiming live preview or database connections", () => {
     render(
       <MemoryRouter>
         <WorkspaceWorkbench />
@@ -43,6 +76,36 @@ describe("WorkspaceWorkbench", () => {
     expect(screen.getByText(/not available in this placeholder/i)).toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId("hww-workbench-tab-github"));
-    expect(screen.getByText(/placeholders only/i)).toBeInTheDocument();
+    expect(screen.getByText(/Clone\/import from a repo URL is not wired/i)).toBeInTheDocument();
+  });
+
+  it("Add project source opens shared dialog from code, storage, and github tabs", async () => {
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench />
+      </MemoryRouter>,
+    );
+    for (const tab of ["code", "storage", "github"] as const) {
+      fireEvent.click(screen.getByTestId(`hww-workbench-tab-${tab}`));
+      const buttons = screen.getAllByTestId("hww-add-project-source");
+      expect(buttons.length).toBe(1);
+      fireEvent.click(buttons[0]!);
+      expect(await screen.findByTestId("hww-project-source-dialog")).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Close" }));
+      await waitFor(() => {
+        expect(screen.queryByTestId("hww-project-source-dialog")).not.toBeInTheDocument();
+      });
+    }
+  });
+
+  it("GitHub tab links to Connected Tools settings route", () => {
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByTestId("hww-workbench-tab-github"));
+    const link = screen.getByTestId("hww-github-connected-tools-link");
+    expect(link).toHaveAttribute("href", WORKBENCH_CONNECTED_TOOLS_HREF);
   });
 });
