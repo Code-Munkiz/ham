@@ -252,9 +252,7 @@ function SystemPulseChip({
     (turnPct != null && turnPct >= 95);
 
   const showWorstPct =
-    Boolean(payload?.enabled) &&
-    typeof worst === "number" &&
-    (critical || worst >= 86);
+    Boolean(payload?.enabled) && typeof worst === "number" && (critical || worst >= 86);
 
   return (
     <button
@@ -262,7 +260,9 @@ function SystemPulseChip({
       data-hww-system-pulse="true"
       data-hww-system-pulse-pct-visible={showWorstPct ? "true" : "false"}
       aria-label={
-        showWorstPct ? `Open system diagnostics, worst lane about ${worst}%` : "Open system diagnostics"
+        showWorstPct
+          ? `Open system diagnostics, worst lane about ${worst}%`
+          : "Open system diagnostics"
       }
       aria-haspopup="dialog"
       onClick={(e) => onOpenDiagnostics(e.currentTarget)}

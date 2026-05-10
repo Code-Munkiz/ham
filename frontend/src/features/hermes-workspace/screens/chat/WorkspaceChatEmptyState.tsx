@@ -69,8 +69,8 @@ export function WorkspaceChatEmptyState() {
           Agent chat · live tools · memory · full observability
         </p>
         <p className="mt-8 max-w-sm text-[12px] leading-relaxed text-white/40">
-          Use the scrolling starter prompts above the composer to jump in—they send the same
-          quick actions as before.
+          Use the scrolling starter prompts above the composer to jump in—they send the same quick
+          actions as before.
         </p>
       </div>
     </motion.div>

@@ -225,7 +225,9 @@ describe("WorkspaceChatScreen shell polish", () => {
 
   it("workbench tab strip remains unchanged without GitHub", async () => {
     renderChat("/workspace/chat?session=sid_wb");
-    await waitFor(() => expect(screen.getByTestId("hww-workbench-tab-terminal")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByTestId("hww-workbench-tab-terminal")).toBeInTheDocument(),
+    );
     expect(screen.queryByTestId("hww-workbench-tab-github")).not.toBeInTheDocument();
     expect(screen.getByTestId("hww-workbench-tab-preview")).toBeInTheDocument();
   });

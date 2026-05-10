@@ -626,8 +626,7 @@ export function WorkspaceChatComposer({
   }, [contextAccent]);
 
   const meterLayout = composerToolbarDensity === "comfortable" ? "rings" : "pulse";
-  const deckRowAlign =
-    composerToolbarDensity === "comfortable" ? "items-end" : "items-center";
+  const deckRowAlign = composerToolbarDensity === "comfortable" ? "items-end" : "items-center";
 
   const placeholder = React.useMemo(() => {
     if (voiceTranscribing) return "Transcribing…";
@@ -1033,8 +1032,7 @@ export function WorkspaceChatComposer({
 
   const composerQuickTipsBusy = disabled || sending || voiceBusy || uploadsPending;
   const showComposerQuickTips =
-    !quickTipsDismissed &&
-    Boolean(quickSuggestions?.length && onQuickSuggestion);
+    !quickTipsDismissed && Boolean(quickSuggestions?.length && onQuickSuggestion);
 
   return (
     <div
@@ -1162,9 +1160,7 @@ export function WorkspaceChatComposer({
                     deckRowAlign,
                   ),
             )}
-            data-hww-command-deck-layout={
-              composerToolbarDensity === "tight" ? "stacked" : "triple"
-            }
+            data-hww-command-deck-layout={composerToolbarDensity === "tight" ? "stacked" : "triple"}
           >
             {composerToolbarDensity !== "tight" ? (
               <div
