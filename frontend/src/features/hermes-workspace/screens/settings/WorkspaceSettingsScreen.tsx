@@ -3,7 +3,6 @@ import { Link, useSearchParams } from "react-router-dom";
 import { DesktopBundlePanel } from "@/components/settings/DesktopBundlePanel";
 import { HWS_PARITY_THEME } from "../../workspaceParityTheme";
 import {
-  getDefaultWorkspaceSettingsSection,
   parseWorkspaceSettingsSection,
   type UpstreamSettingsNavId,
 } from "./workspaceSettingsNavData";
@@ -17,6 +16,7 @@ import { WorkspaceSettingsSideNav } from "./WorkspaceSettingsSideNav";
 import { WorkspaceConnectionSection } from "./WorkspaceConnectionSection";
 import { WorkspaceConnectedToolsSection } from "./WorkspaceConnectedToolsSection";
 import { WorkspaceModelProviderSection } from "./WorkspaceModelProviderSection";
+import { WorkspaceUsageBillingSection } from "./WorkspaceUsageBillingSection";
 
 /**
  * `src/routes/settings/index.tsx`: `?section=<SettingsNavId>`, default `hermes` (not connection).
@@ -24,6 +24,7 @@ import { WorkspaceModelProviderSection } from "./WorkspaceModelProviderSection";
  */
 export function WorkspaceSettingsScreen() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const pinnedProjectId = (searchParams.get("project_id") ?? "").trim() || null;
   const section = parseWorkspaceSettingsSection(
     searchParams.get("section"),
     searchParams.get("tab"),
@@ -34,7 +35,10 @@ export function WorkspaceSettingsScreen() {
     const rawT = searchParams.get("tab");
     const next = parseWorkspaceSettingsSection(rawS, rawT);
     if (rawT != null || !rawS || rawS !== next) {
-      setSearchParams({ section: next }, { replace: true });
+      const merged = new URLSearchParams(searchParams);
+      merged.delete("tab");
+      merged.set("section", next);
+      setSearchParams(merged, { replace: true });
     }
   }, [searchParams, setSearchParams]);
 
@@ -45,6 +49,8 @@ export function WorkspaceSettingsScreen() {
         return <WorkspaceConnectionSection />;
       case "tools":
         return <WorkspaceConnectedToolsSection />;
+      case "usage":
+        return <WorkspaceUsageBillingSection />;
       case "hermes":
         return <WorkspaceModelProviderSection />;
       case "display": {
@@ -104,7 +110,21 @@ export function WorkspaceSettingsScreen() {
           activeSection={section}
           className="shrink-0 border-b border-white/[0.06] bg-[#060b10] px-3 py-2 md:max-w-[min(16rem,38vw)] md:border-b-0 md:border-r md:py-4"
         />
-        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4 md:p-6">{main}</div>
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4 md:p-6">
+          {pinnedProjectId ? (
+            <div
+              className="mb-4 rounded-lg border border-emerald-500/20 bg-emerald-500/[0.06] px-3 py-2 text-[11px] leading-snug text-emerald-100/90"
+              data-hww-settings-pinned-project
+            >
+              Workbench chat context · project{" "}
+              <span className="font-mono text-[11px] text-emerald-100/95">{pinnedProjectId}</span>
+              {". "}
+              Provider keys and integrations are still scoped to your HAM account unless the backend
+              adds per-project partitioning.
+            </div>
+          ) : null}
+          {main}
+        </div>
       </div>
     </div>
   );
