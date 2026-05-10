@@ -1,8 +1,8 @@
 /**
- * Context meter cluster — rings + tooltips (native title).
+ * Context meter cluster — rings + diagnostics HUD (no native title tooltips).
  */
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { ContextMeterCluster } from "../ContextMeterCluster";
 import type { ChatContextMetersPayload } from "@/lib/ham/types";
@@ -55,25 +55,26 @@ describe("ContextMeterCluster", () => {
     expect(screen.getByText("Thr")).toBeInTheDocument();
   });
 
-  it("includes numeric line and action in workspace tooltip", () => {
+  it("opens dark diagnostics HUD with workspace numeric detail", async () => {
     render(
       <MemoryRouter>
         <ContextMeterCluster payload={sample} enabled />
       </MemoryRouter>,
     );
-    const ws = screen.getAllByRole("button")[1];
-    const title = ws.getAttribute("title") ?? "";
-    expect(title).toMatch(/9,?000/);
-    expect(title.toLowerCase()).toContain("context");
+    const wsBtn = screen.getByRole("button", { name: "Open system diagnostics — workspace" });
+    fireEvent.click(wsBtn);
+    expect(await screen.findByText("System diagnostics")).toBeInTheDocument();
+    expect(screen.getByText(/9,?000/)).toBeInTheDocument();
   });
 
-  it("thread high includes new chat nudge", () => {
+  it("thread section in HUD mentions new chat session", async () => {
     render(
       <MemoryRouter>
         <ContextMeterCluster payload={sample} enabled />
       </MemoryRouter>,
     );
-    const thr = screen.getAllByRole("button")[2];
-    expect(thr.getAttribute("title") ?? "").toMatch(/new chat session/i);
+    fireEvent.click(screen.getByRole("button", { name: "Open system diagnostics — thread" }));
+    expect(await screen.findByText("System diagnostics")).toBeInTheDocument();
+    expect(screen.getByText(/new chat session/i)).toBeInTheDocument();
   });
 });
