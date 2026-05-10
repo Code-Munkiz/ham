@@ -191,9 +191,7 @@ function WorkbenchCodePanel() {
     <MutedPanel>
       <div className="grid min-h-[180px] gap-2 rounded-lg border border-white/[0.08] bg-black/25 md:grid-cols-2">
         <div className="border-b border-white/[0.06] p-2 md:border-b-0 md:border-r md:border-white/[0.06]">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-white/40">
-            Files
-          </p>
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Files</p>
           <p className="mt-2 text-white/45">Explorer placeholder — no repo mounted.</p>
         </div>
         <div className="p-2">
@@ -256,8 +254,7 @@ function WorkbenchGithubPanel() {
     <MutedPanel>
       <p className="text-[13px] font-medium text-white/88">GitHub</p>
       <p className="text-white/55">
-        Repository import and URL paste are placeholders only — no import runs from this UI yet.
-        Use{" "}
+        Repository import and URL paste are placeholders only — no import runs from this UI yet. Use{" "}
         <Link
           to="/workspace/settings?section=tools"
           className="font-medium text-[#7dd3fc] underline-offset-2 hover:underline"
@@ -281,15 +278,7 @@ function WorkbenchGithubPanel() {
   );
 }
 
-function SettingsLinkRow({
-  title,
-  subtitle,
-  to,
-}: {
-  title: string;
-  subtitle: string;
-  to: string;
-}) {
+function SettingsLinkRow({ title, subtitle, to }: { title: string; subtitle: string; to: string }) {
   return (
     <div className="rounded-lg border border-white/[0.06] bg-black/20 px-3 py-2.5">
       <p className="text-[12px] font-medium text-white/85">{title}</p>
