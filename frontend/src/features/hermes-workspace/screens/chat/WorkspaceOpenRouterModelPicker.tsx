@@ -152,7 +152,7 @@ export function WorkspaceOpenRouterModelPicker({
             "bg-transparent text-left font-normal text-emerald-100/92 shadow-none hover:bg-white/[0.06] hover:text-emerald-50",
             "focus-visible:ring-2 focus-visible:ring-emerald-400/35 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent",
             layoutDensity === "comfortable" &&
-              "h-9 min-h-[36px] max-w-[min(18rem,calc(100vw-8rem))] px-2.5 py-0 text-[11px] md:max-w-[min(22rem,calc(100vw-10rem))] md:text-[12px]",
+              "h-10 min-h-10 max-w-[min(18rem,calc(100vw-8rem))] px-2.5 py-0 text-[12px] md:max-w-[min(22rem,calc(100vw-10rem))]",
             layoutDensity === "compact" &&
               "h-8 min-h-[32px] max-w-[min(11rem,45vw)] px-2 py-0 text-[10px] md:max-w-[min(14rem,50vw)]",
             layoutDensity === "tight" &&

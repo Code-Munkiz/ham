@@ -808,7 +808,7 @@ export function WorkspaceChatComposer({
           className={cn(
             "inline-flex min-w-0 items-center rounded-full border border-white/[0.08] bg-transparent font-mono text-emerald-200/85",
             composerToolbarDensity === "comfortable" &&
-              "max-w-[min(18rem,calc(100vw-8rem))] px-2.5 py-1 text-[11px] md:max-w-[min(22rem,calc(100vw-10rem))] md:text-[12px]",
+              "max-w-[min(18rem,calc(100vw-8rem))] px-3 py-1.5 text-[12px] md:max-w-[min(22rem,calc(100vw-10rem))]",
             composerToolbarDensity === "compact" &&
               "max-w-[min(11rem,45vw)] px-2 py-0.5 text-[10px] md:max-w-[min(14rem,50vw)]",
             composerToolbarDensity === "tight" &&
@@ -1165,7 +1165,11 @@ export function WorkspaceChatComposer({
               composerToolbarDensity === "tight"
                 ? "flex flex-col gap-0"
                 : cn(
-                    "grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] gap-x-2 gap-y-1 px-2.5 py-2 md:gap-x-3 md:px-4",
+                    "grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto]",
+                    composerToolbarDensity === "comfortable" &&
+                      "gap-x-2 gap-y-1.5 px-3 py-3 md:gap-x-4 md:gap-y-2 md:px-5 md:py-3.5",
+                    composerToolbarDensity === "compact" &&
+                      "gap-x-2 gap-y-1 px-2.5 py-2.5 md:gap-x-3 md:px-4 md:py-3",
                     deckRowAlign,
                   ),
             )}
@@ -1217,14 +1221,22 @@ export function WorkspaceChatComposer({
                 disabled={disabled || sending || voiceTranscribing}
                 placeholder={placeholder}
                 className={cn(
-                  "hww-command-textarea box-border w-full resize-none border-0 bg-transparent text-[13px] leading-[1.45] text-[#e8eef3] outline-none placeholder:text-white/40 focus:ring-0 focus:outline-none [box-shadow:none] overflow-x-hidden max-h-[240px]",
+                  "hww-command-textarea box-border w-full resize-none border-0 bg-transparent leading-[1.45] text-[#e8eef3] outline-none placeholder:text-white/40 focus:ring-0 focus:outline-none [box-shadow:none] overflow-x-hidden max-h-[240px]",
                   composerToolbarDensity === "tight"
-                    ? "min-h-[44px] px-1 py-1"
-                    : "min-h-[40px] min-w-0 flex-1 px-1 py-2 pt-2.5 pl-0.5 pr-1",
+                    ? "min-h-[44px] px-1 py-1 text-[13px]"
+                    : composerToolbarDensity === "comfortable"
+                      ? "min-h-[52px] min-w-0 flex-1 px-1 py-3 pl-1 pr-1.5 text-[14px]"
+                      : "min-h-[46px] min-w-0 flex-1 px-1 py-2.5 pl-0.5 pr-1 text-[13px]",
                 )}
               />
               {composerToolbarDensity !== "tight" && (showModel || modelPill) ? (
-                <div data-hww-model-pill className="flex shrink-0 items-center pt-2.5 md:pt-2">
+                <div
+                  data-hww-model-pill
+                  className={cn(
+                    "flex shrink-0 items-center pb-px",
+                    composerToolbarDensity === "comfortable" ? "pt-3" : "pt-2.5",
+                  )}
+                >
                   {deckModelPickers}
                 </div>
               ) : null}
@@ -1235,7 +1247,7 @@ export function WorkspaceChatComposer({
                 data-hww-command-deck-actions
                 data-hww-command-controls
                 data-hww-action-buttons
-                className="flex min-h-9 shrink-0 items-center justify-end gap-1 overflow-x-hidden overflow-y-visible pl-1.5 pr-2.5 md:pl-2 md:pr-3.5"
+                className="flex min-h-10 shrink-0 items-center justify-end gap-1 overflow-x-hidden overflow-y-visible pl-2 pr-2.5 md:min-h-11 md:pl-2.5 md:pr-4"
               >
                 {rightDeckActions}
               </div>
