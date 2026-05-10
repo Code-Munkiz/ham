@@ -113,6 +113,23 @@ function renderChat() {
   );
 }
 
+function mockMatchMedia(matches: boolean) {
+  Object.defineProperty(window, "matchMedia", {
+    writable: true,
+    configurable: true,
+    value: vi.fn().mockImplementation((query: string) => ({
+      matches,
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  });
+}
+
 describe("WorkspaceChatScreen workbench shell", () => {
   beforeEach(() => {
     globalThis.ResizeObserver = class {
@@ -120,6 +137,7 @@ describe("WorkspaceChatScreen workbench shell", () => {
       unobserve(): void {}
       disconnect(): void {}
     } as unknown as typeof ResizeObserver;
+    mockMatchMedia(false);
   });
 
   it("renders workbench and composer in empty session", async () => {
@@ -128,6 +146,34 @@ describe("WorkspaceChatScreen workbench shell", () => {
       expect(screen.getByTestId("hww-workbench")).toBeInTheDocument();
     });
     expect(screen.getByRole("textbox")).toBeInTheDocument();
+  });
+
+  it("shows a resize handle on desktop split layout", async () => {
+    mockMatchMedia(true);
+    renderChat();
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-workbench")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("hww-chat-split-resizer")).toBeInTheDocument();
+  });
+
+  it("does not show resize handle when viewport is below desktop split breakpoint", async () => {
+    mockMatchMedia(false);
+    renderChat();
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-workbench")).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId("hww-chat-split-resizer")).not.toBeInTheDocument();
+  });
+
+  it("switches workbench tabs locally", async () => {
+    renderChat();
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-workbench")).toBeInTheDocument();
+    });
+    expect(screen.getByText("No preview yet.")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("hww-workbench-tab-code"));
+    expect(await screen.findByText("Explorer placeholder — no repo mounted.")).toBeInTheDocument();
   });
 
   it("opening Inspector hides workbench (single right surface)", async () => {
@@ -140,5 +186,20 @@ describe("WorkspaceChatScreen workbench shell", () => {
       expect(screen.queryByTestId("hww-workbench")).not.toBeInTheDocument();
     });
     expect(screen.getByTestId("hww-inspector-panel")).toBeInTheDocument();
+  });
+
+  it("Inspector + desktop split still has only one right surface and resize handle", async () => {
+    mockMatchMedia(true);
+    renderChat();
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-workbench")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("hww-chat-split-resizer")).toBeInTheDocument();
+    fireEvent.click(screen.getByTitle("Open inspector"));
+    await waitFor(() => {
+      expect(screen.queryByTestId("hww-workbench")).not.toBeInTheDocument();
+    });
+    expect(screen.getByTestId("hww-inspector-panel")).toBeInTheDocument();
+    expect(screen.getByTestId("hww-chat-split-resizer")).toBeInTheDocument();
   });
 });
