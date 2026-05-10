@@ -60,10 +60,7 @@ import {
 } from "../../utils/missionFeedTranscript";
 import { MANAGED_MISSION_CHAT_OWNERSHIP_HINT } from "../../lib/managedMissionOwnershipCopy";
 import { useVoiceWorkspaceSettingsOptional } from "../../voice/VoiceWorkspaceSettingsContext";
-import {
-  WorkspaceChatEmptyState,
-  WORKSPACE_CHAT_SUGGESTIONS,
-} from "./WorkspaceChatEmptyState";
+import { WorkspaceChatEmptyState, WORKSPACE_CHAT_SUGGESTIONS } from "./WorkspaceChatEmptyState";
 import { WorkspaceChatMessageList, type HwwMsgRow } from "./WorkspaceChatMessageList";
 import { WorkspaceChatComposer } from "./WorkspaceChatComposer";
 import type {

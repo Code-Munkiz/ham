@@ -163,13 +163,15 @@ describe("WorkspaceChatScreen split containment", () => {
     expect(commandPanel?.contains(workbenchAside!)).toBe(false);
 
     expect(commandPanel?.querySelector(".hww-chat-composer-outer")).toBeTruthy();
-    expect(commandPanel?.querySelector('[data-hww-command-deck]')).toBeTruthy();
-    expect(commandPanel?.querySelector('[data-hww-composer-quick-tips]')).toBeTruthy();
+    expect(commandPanel?.querySelector("[data-hww-command-deck]")).toBeTruthy();
+    expect(commandPanel?.querySelector("[data-hww-composer-quick-tips]")).toBeTruthy();
     expect(commandPanel?.querySelector(".hww-chat-empty")).toBeTruthy();
 
-    expect(screen.getByRole("heading", { name: "Begin a session" }).closest('[data-testid="hww-command-panel"]')).toBe(
-      commandPanel,
-    );
+    expect(
+      screen
+        .getByRole("heading", { name: "Begin a session" })
+        .closest('[data-testid="hww-command-panel"]'),
+    ).toBe(commandPanel);
 
     const composer = commandPanel!.querySelector(".hww-chat-composer-outer");
     expect(composer?.className).not.toMatch(/100vw/i);
@@ -179,9 +181,11 @@ describe("WorkspaceChatScreen split containment", () => {
     expect(deckOuter?.className).toMatch(/overflow-hidden/i);
     const deckInner = deckOuter?.querySelector(".hww-command-deck.box-border");
     expect(deckInner?.className).toMatch(/overflow-x-hidden/i);
-    expect(screen.getByRole("toolbar", { name: "Starter prompts" }).closest('[data-testid="hww-command-panel"]')).toBe(
-      commandPanel,
-    );
+    expect(
+      screen
+        .getByRole("toolbar", { name: "Starter prompts" })
+        .closest('[data-testid="hww-command-panel"]'),
+    ).toBe(commandPanel);
     expect(screen.getByTestId("hww-chat-split-row")).toBeInTheDocument();
   });
 
