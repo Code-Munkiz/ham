@@ -69,3 +69,52 @@ HAM_CORS_ORIGIN_REGEX: "https://.*\\.vercel\\.app"
 # HAM_CHAT_ATTACHMENT_BUCKET: your-project-ham-chat-attachments
 # Optional object prefix (slashes normalized; trailing / added automatically).
 # HAM_CHAT_ATTACHMENT_PREFIX: chat-attachments/
+
+# --- Factory Droid remote runner (RFC1918 only; browser never reaches it) ---
+# When ham-api should delegate `droid` execution to a separate runner VM (e.g. ham-droid-runner-1)
+# instead of running `droid` in-container, set the runner URL and a stable runner id.
+# Use the VM's internal IP (or internal DNS) on the runner port; do NOT include /v1 or any path suffix.
+# Cloud Run reaches the VM over Direct VPC egress or a Serverless VPC connector — the same shape as
+# the private Hermes setup above (see docs/DEPLOY_CLOUD_RUN.md § "Private Hermes on GCE").
+# HAM_DROID_RUNNER_URL: "http://10.0.0.6:8791"
+# Stable runner identifier surfaced in audit / telemetry. Keep short and deployment-scoped.
+# HAM_DROID_RUNNER_ID: "remote-staging"
+# Note: HAM_DROID_RUNNER_TOKEN is the bearer Cloud Run sends with each runner call. It is a
+# Secret Manager binding (deploy with `--set-secrets=HAM_DROID_RUNNER_TOKEN=ham-droid-runner-token:latest`),
+# not a plain env var — never put the value in this YAML. The deploy script
+# (scripts/deploy_ham_api_cloud_run.sh) refuses to deploy without it unless ALLOW_SECRET_DROP=1.
+# HAM_DROID_EXEC_TOKEN is intentionally NOT required yet: it is reserved for the future Factory
+# Droid Build Lane mutation gate and is not consumed by any live route today.
+
+# --- Durable per-user voice + composer preferences ---
+# Default `local` is per-instance JSON under the workspace root → wiped on revision deploy.
+# Set Firestore mode so per-user voice and per-(user, workspace) composer preferences survive
+# revisions and multi-instance Cloud Run. Reuses the same ADC + database credentials as the
+# Firestore workspace/chat stores above; grant the runtime SA roles/datastore.user.
+# HAM_VOICE_SETTINGS_STORE: firestore
+# Optional overrides (defaults: collection ham_voice_settings, project = service project, db = (default)).
+# HAM_VOICE_SETTINGS_FIRESTORE_COLLECTION: ham_voice_settings
+# HAM_VOICE_SETTINGS_FIRESTORE_DATABASE: ham-voice-settings
+# HAM_CHAT_COMPOSER_PREFS_STORE: firestore
+# HAM_CHAT_COMPOSER_PREFS_FIRESTORE_COLLECTION: ham_chat_composer_preferences
+# HAM_CHAT_COMPOSER_PREFS_FIRESTORE_DATABASE: ham-chat-composer-prefs
+
+# --- Connected Tools credentials (BYOK OpenRouter / GitHub / Anthropic / OpenAI STT) ---
+# Default backend reads/writes a per-instance file → BYOK keys vanish on revision deploy / cold start.
+# `auto` selects Firestore whenever HAM_WORKSPACE_STORE_BACKEND=firestore is also set; values are
+# encrypted with a Fernet key before being persisted.
+# HAM_CONNECTED_TOOLS_CREDENTIAL_BACKEND: auto
+# The Fernet encryption key is a Secret Manager binding, never a plain env var. Create
+# `ham-connected-tools-encryption-key` (urlsafe base64 32-byte Fernet material), grant the runtime
+# service account roles/secretmanager.secretAccessor on it, and mount via
+# `--set-secrets=HAM_CONNECTED_TOOLS_CREDENTIAL_ENCRYPTION_KEY=ham-connected-tools-encryption-key:latest`.
+# Without this binding the API rejects connect attempts in Firestore mode (no plaintext-at-rest fallback).
+
+# --- Future durable-backend work (env alone is NOT enough) ---
+# These two stores are still file-only on Cloud Run and have no backend env switch in code today;
+# they require future code changes (Firestore-backed implementations) before they survive revisions:
+#   - ProjectStore (~/.ham/projects.json) — holds Build Lane fields `build_lane_enabled` and `github_repo`.
+#   - ControlPlaneRunStore (~/.ham/control_plane_runs/) — holds `pr_url`, `pr_branch`, `pr_commit_sha`,
+#     `build_outcome`, plus all Cursor + Droid run history.
+# Setting the env vars above does NOT make these durable. Treat any Build Lane router (P3/P4/P5) as
+# blocked on durable-backend code work for both stores; the runner-side P2 work has no such dependency.
