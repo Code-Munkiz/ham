@@ -20,6 +20,7 @@ import {
 import { WorkspaceMobileTabBar } from "./WorkspaceMobileTabBar";
 import { WorkspaceChatFloatingToggle } from "./components/WorkspaceChatFloatingToggle";
 import { WorkspaceChatPanel } from "./components/WorkspaceChatPanel";
+import { WorkspaceSidebarUserTrigger } from "./components/WorkspaceSidebarUserTrigger";
 import { HamWorkspaceTopbarPill } from "@/components/layout/HamWorkspaceTopbarPill";
 import { useHamWorkspace } from "@/lib/ham/HamWorkspaceContext";
 import type { HamWorkspaceSummary } from "@/lib/ham/workspaceApi";
@@ -334,7 +335,10 @@ function WorkspaceSideNav({
         )}
         aria-label="Workspace utilities"
       >
-        {settingsFooterControl}
+        <div className={cn("flex min-w-0 items-center gap-2", c ? "w-full flex-col" : "flex-1")}>
+          {settingsFooterControl}
+          {canUseWorkspaceSidebar ? <WorkspaceSidebarUserTrigger layoutCollapsed={c} /> : null}
+        </div>
         {landingIsExternal ? (
           <a
             href={landingHref}

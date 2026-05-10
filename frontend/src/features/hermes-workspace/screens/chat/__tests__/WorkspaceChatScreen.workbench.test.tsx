@@ -1,5 +1,5 @@
 /**
- * Workbench + Inspector share one right column on desktop; no three-pane layout.
+ * Desktop chat reserves one right column for the workbench (inspector removed from chrome).
  */
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -176,30 +176,22 @@ describe("WorkspaceChatScreen workbench shell", () => {
     expect(await screen.findByText("Explorer placeholder — no repo mounted.")).toBeInTheDocument();
   });
 
-  it("opening Inspector hides workbench (single right surface)", async () => {
+  it("does not surface a header inspector toggle (workbench stays mounted)", async () => {
     renderChat();
     await waitFor(() => {
       expect(screen.getByTestId("hww-workbench")).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByTitle("Open inspector"));
-    await waitFor(() => {
-      expect(screen.queryByTestId("hww-workbench")).not.toBeInTheDocument();
-    });
-    expect(screen.getByTestId("hww-inspector-panel")).toBeInTheDocument();
+    expect(screen.queryByTestId("hww-chat-inspector-tab")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("hww-inspector-panel")).not.toBeInTheDocument();
   });
 
-  it("Inspector + desktop split still has only one right surface and resize handle", async () => {
+  it("desktop split keeps workbench + resize handle without inspector swap", async () => {
     mockMatchMedia(true);
     renderChat();
     await waitFor(() => {
       expect(screen.getByTestId("hww-workbench")).toBeInTheDocument();
     });
     expect(screen.getByTestId("hww-chat-split-resizer")).toBeInTheDocument();
-    fireEvent.click(screen.getByTitle("Open inspector"));
-    await waitFor(() => {
-      expect(screen.queryByTestId("hww-workbench")).not.toBeInTheDocument();
-    });
-    expect(screen.getByTestId("hww-inspector-panel")).toBeInTheDocument();
-    expect(screen.getByTestId("hww-chat-split-resizer")).toBeInTheDocument();
+    expect(screen.queryByTestId("hww-chat-inspector-tab")).not.toBeInTheDocument();
   });
 });

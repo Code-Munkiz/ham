@@ -42,7 +42,7 @@ const TABS: Array<{ id: WorkspaceWorkbenchTabId; label: string; icon: typeof Eye
   { id: "preview", label: "Preview", icon: Eye },
   { id: "code", label: "Code", icon: FileCode },
   { id: "database", label: "Database", icon: Database },
-  { id: "storage", label: "File storage", icon: FolderOpen },
+  { id: "storage", label: "Project source", icon: FolderOpen },
   { id: "terminal", label: "Terminal", icon: Terminal },
   { id: "settings", label: "Settings", icon: Settings2 },
 ];
@@ -296,7 +296,7 @@ function WorkbenchDatabasePanel() {
 function WorkbenchStoragePanel({ onAddProjectSource }: { onAddProjectSource: () => void }) {
   return (
     <MutedPanel>
-      <p className="text-[13px] font-medium text-white/88">File storage</p>
+      <p className="text-[13px] font-medium text-white/88">Project source</p>
       <p className="text-white/55">
         No cloud project blob store yet. Use{" "}
         <span className="font-medium text-white/65">Add project source</span> for local workspace
