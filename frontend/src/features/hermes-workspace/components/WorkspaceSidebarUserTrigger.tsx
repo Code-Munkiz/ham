@@ -46,7 +46,7 @@ export function WorkspaceSidebarUserTrigger({ layoutCollapsed }: { layoutCollaps
         )}
       >
         <span
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-[11px] font-bold text-white shadow-sm"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-emerald-400/30 bg-transparent text-[11px] font-bold text-emerald-400/90"
           aria-hidden
         >
           {initials}

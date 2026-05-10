@@ -166,12 +166,11 @@
   overflow-x: hidden;
 }
 
-/* Command Deck — chat composer textarea scrollbar + containment */
+/* Command Deck — chat composer textarea: scroll without visible OS scrollbar chrome */
 .hww-command-textarea {
   box-sizing: border-box;
-  scrollbar-gutter: stable;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
 .hww-chat-composer-outer[data-hww-composer-density],
@@ -193,12 +192,9 @@
 }
 
 .hww-command-textarea::-webkit-scrollbar {
-  width: 5px;
-}
-
-.hww-command-textarea::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12);
-  border-radius: 999px;
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 @media (prefers-reduced-motion: no-preference) {
