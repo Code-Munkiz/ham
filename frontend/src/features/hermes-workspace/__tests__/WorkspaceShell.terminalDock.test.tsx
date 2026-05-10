@@ -1,7 +1,6 @@
 /**
- * PR-1: hide the docked "Local terminal" strip on `/workspace/chat` for hosted
- * users with no paired local runtime. Existing chat shell still mounts; runtime-
- * connected and developer-mode states keep the dock available.
+ * Local terminal is not docked on `/workspace/chat` — use Workbench Terminal tab
+ * and `/workspace/terminal` instead.
  */
 import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
@@ -13,10 +12,6 @@ const { mockUseHamWorkspace } = vi.hoisted(() => ({
 
 vi.mock("@/lib/ham/HamWorkspaceContext", () => ({
   useHamWorkspace: mockUseHamWorkspace,
-}));
-
-vi.mock("../screens/terminal/WorkspaceTerminalView", () => ({
-  WorkspaceTerminalView: () => null,
 }));
 
 import { WorkspaceShell } from "../WorkspaceShell";
@@ -64,7 +59,7 @@ function renderShell() {
   );
 }
 
-describe("WorkspaceShell chat terminal dock gating (PR-1)", () => {
+describe("WorkspaceShell chat route — no docked local terminal strip", () => {
   beforeEach(() => {
     localStorage.clear();
     mockUseHamWorkspace.mockReturnValue(readyCtx());
@@ -77,36 +72,32 @@ describe("WorkspaceShell chat terminal dock gating (PR-1)", () => {
     localStorage.clear();
   });
 
-  it("does not render the docked terminal strip for hosted users with no local runtime", async () => {
+  it("never renders the docked terminal strip for hosted users with no local runtime", async () => {
     renderShell();
-
     await waitFor(() => {
       expect(screen.getByText("workspace child")).toBeInTheDocument();
     });
     expect(screen.queryByTestId("hww-chat-terminal-dock")).toBeNull();
     expect(screen.queryByText(/Local terminal/i)).toBeNull();
-    expect(screen.queryByText(/Local runtime not connected/i)).toBeNull();
   });
 
-  it("renders the docked terminal strip when a local runtime is configured", async () => {
+  it("does not render the dock when a local runtime is configured in storage", async () => {
     localStorage.setItem("hww.localRuntimeBase", "http://127.0.0.1:8001");
-
     renderShell();
-
     await waitFor(() => {
-      expect(screen.getByTestId("hww-chat-terminal-dock")).toBeInTheDocument();
+      expect(screen.getByText("workspace child")).toBeInTheDocument();
     });
-    expect(screen.getByText("Local terminal")).toBeInTheDocument();
+    expect(screen.queryByTestId("hww-chat-terminal-dock")).toBeNull();
+    expect(screen.queryByText(/Local terminal/i)).toBeNull();
   });
 
-  it("renders the docked terminal strip when developer mode is enabled (no runtime saved)", async () => {
+  it("does not render the dock when developer mode env is enabled", async () => {
     vi.stubEnv("VITE_HAM_SHOW_LOCAL_DEV_HINTS", "true");
-
     renderShell();
-
     await waitFor(() => {
-      expect(screen.getByTestId("hww-chat-terminal-dock")).toBeInTheDocument();
+      expect(screen.getByText("workspace child")).toBeInTheDocument();
     });
-    expect(screen.getByText("Local terminal")).toBeInTheDocument();
+    expect(screen.queryByTestId("hww-chat-terminal-dock")).toBeNull();
+    expect(screen.queryByText(/Local terminal/i)).toBeNull();
   });
 });

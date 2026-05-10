@@ -19,7 +19,6 @@ vi.mock("../../adapters/localRuntime", () => ({
 }));
 
 import { WorkspaceWorkbench } from "../WorkspaceWorkbench";
-import { WORKBENCH_CONNECTED_TOOLS_HREF } from "../ProjectSourceIntakeDialog";
 
 function toolsOk() {
   return new Response(
@@ -75,17 +74,29 @@ describe("WorkspaceWorkbench", () => {
     fireEvent.click(screen.getByTestId("hww-workbench-tab-database"));
     expect(screen.getByText(/not available in this placeholder/i)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByTestId("hww-workbench-tab-github"));
-    expect(screen.getByText(/Clone\/import from a repo URL is not wired/i)).toBeInTheDocument();
+    expect(screen.queryByTestId("hww-workbench-tab-github")).toBeNull();
+
+    fireEvent.click(screen.getByTestId("hww-workbench-tab-terminal"));
+    expect(screen.getByText(/Full embedded terminal in this pane is/i)).toBeInTheDocument();
+    const termLink = screen.getByTestId("hww-workbench-terminal-open");
+    expect(termLink).toHaveAttribute("href", "/workspace/terminal");
+
+    fireEvent.click(screen.getByTestId("hww-workbench-tab-settings"));
+    const settingsPanel = screen.getByTestId("hww-workbench-panel-settings");
+    expect(settingsPanel).toBeInTheDocument();
+    expect(settingsPanel.textContent).toMatch(/Connected tools/);
+    expect(
+      screen.getByText(/Use Connected Tools for Git-related integration/i),
+    ).toBeInTheDocument();
   });
 
-  it("Add project source opens shared dialog from code, storage, and github tabs", async () => {
+  it("Add project source opens shared dialog from code and storage tabs", async () => {
     render(
       <MemoryRouter>
         <WorkspaceWorkbench />
       </MemoryRouter>,
     );
-    for (const tab of ["code", "storage", "github"] as const) {
+    for (const tab of ["code", "storage"] as const) {
       fireEvent.click(screen.getByTestId(`hww-workbench-tab-${tab}`));
       const buttons = screen.getAllByTestId("hww-add-project-source");
       expect(buttons.length).toBe(1);
@@ -96,16 +107,5 @@ describe("WorkspaceWorkbench", () => {
         expect(screen.queryByTestId("hww-project-source-dialog")).not.toBeInTheDocument();
       });
     }
-  });
-
-  it("GitHub tab links to Connected Tools settings route", () => {
-    render(
-      <MemoryRouter>
-        <WorkspaceWorkbench />
-      </MemoryRouter>,
-    );
-    fireEvent.click(screen.getByTestId("hww-workbench-tab-github"));
-    const link = screen.getByTestId("hww-github-connected-tools-link");
-    expect(link).toHaveAttribute("href", WORKBENCH_CONNECTED_TOOLS_HREF);
   });
 });

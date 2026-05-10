@@ -10,26 +10,23 @@ import {
   Eye,
   FileCode,
   FolderOpen,
-  GitBranch,
   MoreHorizontal,
   Plus,
   Send,
   Settings2,
   Share2,
+  Terminal,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import {
-  ProjectSourceIntakeDialog,
-  WORKBENCH_CONNECTED_TOOLS_HREF,
-} from "./ProjectSourceIntakeDialog";
+import { ProjectSourceIntakeDialog } from "./ProjectSourceIntakeDialog";
 
 export type WorkspaceWorkbenchTabId =
   | "preview"
   | "code"
   | "database"
   | "storage"
-  | "github"
+  | "terminal"
   | "settings";
 
 const TABS: Array<{ id: WorkspaceWorkbenchTabId; label: string; icon: typeof Eye }> = [
@@ -37,7 +34,7 @@ const TABS: Array<{ id: WorkspaceWorkbenchTabId; label: string; icon: typeof Eye
   { id: "code", label: "Code", icon: FileCode },
   { id: "database", label: "Database", icon: Database },
   { id: "storage", label: "File storage", icon: FolderOpen },
-  { id: "github", label: "GitHub", icon: GitBranch },
+  { id: "terminal", label: "Terminal", icon: Terminal },
   { id: "settings", label: "Settings", icon: Settings2 },
 ];
 
@@ -173,9 +170,7 @@ export function WorkspaceWorkbench() {
         {activeTab === "storage" ? (
           <WorkbenchStoragePanel onAddProjectSource={() => setProjectSourceOpen(true)} />
         ) : null}
-        {activeTab === "github" ? (
-          <WorkbenchGithubPanel onAddProjectSource={() => setProjectSourceOpen(true)} />
-        ) : null}
+        {activeTab === "terminal" ? <WorkbenchTerminalPanel /> : null}
         {activeTab === "settings" ? <WorkbenchSettingsPanel /> : null}
       </div>
       <ProjectSourceIntakeDialog open={projectSourceOpen} onOpenChange={setProjectSourceOpen} />
@@ -279,28 +274,19 @@ function WorkbenchStoragePanel({ onAddProjectSource }: { onAddProjectSource: () 
   );
 }
 
-function WorkbenchGithubPanel({ onAddProjectSource }: { onAddProjectSource: () => void }) {
+function WorkbenchTerminalPanel() {
   return (
     <MutedPanel>
-      <p className="text-[13px] font-medium text-white/88">GitHub</p>
+      <p className="text-[13px] font-medium text-white/88">Terminal</p>
       <p className="text-white/55">
-        Connect a token under{" "}
-        <Link
-          to={WORKBENCH_CONNECTED_TOOLS_HREF}
-          className="font-medium text-[#7dd3fc] underline-offset-2 hover:underline"
-          data-testid="hww-github-connected-tools-link"
-        >
-          Connected Tools
-        </Link>
-        . Clone/import from a repo URL is not wired in this UI.
+        Terminal is available from the workspace tools. Full embedded terminal in this pane is
+        coming soon.
       </p>
       <div className="flex flex-wrap gap-2 pt-1">
-        <AddProjectSourceButton onClick={onAddProjectSource} />
         <Button type="button" size="sm" variant="secondary" asChild className="text-[11px]">
-          <Link to={WORKBENCH_CONNECTED_TOOLS_HREF}>Open Connected Tools</Link>
-        </Button>
-        <Button type="button" size="sm" variant="secondary" disabled className="text-[11px]">
-          Import repository — Coming soon
+          <Link to="/workspace/terminal" data-testid="hww-workbench-terminal-open">
+            Open terminal route
+          </Link>
         </Button>
       </div>
     </MutedPanel>

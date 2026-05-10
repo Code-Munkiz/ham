@@ -255,6 +255,9 @@ export function WorkspaceChatComposer({
   const modelPickerTriggerRef = React.useRef<HTMLButtonElement>(null);
   const dragDepthRef = React.useRef(0);
   const TEXTAREA_MAX_PX = 240;
+  type ComposerToolbarDensity = "comfortable" | "compact" | "tight";
+  const [composerToolbarDensity, setComposerToolbarDensity] =
+    React.useState<ComposerToolbarDensity>("comfortable");
 
   const clearStopTimeout = React.useCallback(() => {
     if (stopTimeoutRef.current) {
@@ -317,13 +320,31 @@ export function WorkspaceChatComposer({
   React.useLayoutEffect(() => {
     const el = outerRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(() => {
+    const readOuterWidthPx = () => {
+      const self = el.offsetWidth;
+      if (self > 0) return self;
+      const rectW = Math.round(el.getBoundingClientRect()?.width ?? 0);
+      if (rectW > 0) return rectW;
+      const p = el.parentElement;
+      const fromParent = p?.clientWidth ?? 0;
+      return fromParent > 0 ? fromParent : self;
+    };
+    const applyLayoutMetrics = () => {
       const h = el.offsetHeight;
       if (h > 0) {
         document.documentElement.style.setProperty("--hww-chat-composer-height", `${h}px`);
       }
+      const w = readOuterWidthPx();
+      let next: ComposerToolbarDensity = "comfortable";
+      if (w > 0 && w < 400) next = "tight";
+      else if (w > 0 && w < 460) next = "compact";
+      setComposerToolbarDensity((prev) => (prev === next ? prev : next));
+    };
+    const ro = new ResizeObserver(() => {
+      applyLayoutMetrics();
     });
     ro.observe(el);
+    applyLayoutMetrics();
     return () => {
       ro.disconnect();
     };
@@ -603,8 +624,9 @@ export function WorkspaceChatComposer({
   return (
     <div
       ref={outerRef}
-      className="hww-chat-composer-outer pointer-events-auto w-full max-w-[40rem] shrink-0 border-t border-white/[0.06] bg-[#030a10]/90 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-sm md:px-4"
+      className="hww-chat-composer-outer pointer-events-auto w-full shrink-0 border-t border-white/[0.06] bg-[#030a10]/90 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-sm md:px-4"
       data-hww-composer-instance={composerInstanceId.current}
+      data-hww-composer-density={composerToolbarDensity}
       data-voice-recording={voiceRecording ? "true" : "false"}
       data-voice-transcribing={voiceTranscribing ? "true" : "false"}
       data-voice-state={voiceState}
@@ -763,8 +785,23 @@ export function WorkspaceChatComposer({
             </div>
           ) : null}
 
-          <div className="flex min-h-[48px] items-center justify-between gap-1.5 border-t border-white/[0.08] px-1.5 py-1.5 md:gap-2 md:px-2.5 md:py-2">
-            <div className="flex min-w-0 flex-1 items-center gap-0.5 md:gap-1">
+          <div
+            className={cn(
+              "flex w-full min-w-0 gap-1.5 border-t border-white/[0.08]",
+              composerToolbarDensity === "tight"
+                ? "flex-col items-stretch py-2 pl-1.5 pr-1.5"
+                : "min-h-[48px] flex-row items-center justify-between px-1.5 py-1.5 md:gap-2 md:px-2.5 md:py-2",
+            )}
+          >
+            <div
+              className={cn(
+                "flex min-w-0 items-center gap-0.5 md:gap-1",
+                composerToolbarDensity === "tight"
+                  ? "w-full min-w-0 flex-1 flex-wrap [&>*]:max-w-full"
+                  : "flex-1",
+                composerToolbarDensity === "compact" && "gap-0.5",
+              )}
+            >
               {gohamDesktopChip ? (
                 <button
                   type="button"
@@ -776,7 +813,10 @@ export function WorkspaceChatComposer({
                       : "GOHAM — trusted local-control web bridge connect"
                   }
                   className={cn(
-                    "mr-1 flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors disabled:opacity-45",
+                    "mr-1 flex shrink-0 items-center gap-1 rounded-full border font-semibold uppercase tracking-wide transition-colors disabled:opacity-45",
+                    composerToolbarDensity === "comfortable" && "px-2.5 py-1 text-[10px]",
+                    composerToolbarDensity === "compact" && "px-2 py-0.5 text-[9px]",
+                    composerToolbarDensity === "tight" && "px-1.5 py-0.5 text-[9px]",
                     gohamDesktopChip.linked
                       ? "border-emerald-400/35 bg-emerald-500/[0.12] text-emerald-100/90 hover:bg-emerald-500/20"
                       : "border-white/[0.12] bg-white/[0.06] text-white/70 hover:bg-white/[0.1]",
@@ -826,10 +866,19 @@ export function WorkspaceChatComposer({
                   triggerRef={modelPickerTriggerRef}
                   byokPickerActive={byokPickerActive}
                   failedModelIds={failedChatModelIds}
+                  layoutDensity={composerToolbarDensity}
                 />
               ) : modelPill ? (
                 <span
-                  className="ml-0.5 inline-flex min-w-0 max-w-[10rem] items-center rounded-full bg-emerald-500/10 px-2.5 py-1 font-mono text-[11px] text-emerald-200/80 md:max-w-[16rem] md:text-[12px]"
+                  className={cn(
+                    "ml-0.5 inline-flex min-w-0 items-center rounded-full bg-emerald-500/10 font-mono text-emerald-200/80",
+                    composerToolbarDensity === "comfortable" &&
+                      "max-w-[10rem] px-2.5 py-1 text-[11px] md:max-w-[16rem] md:text-[12px]",
+                    composerToolbarDensity === "compact" &&
+                      "max-w-[min(9rem,50vw)] px-2 py-0.5 text-[10px]",
+                    composerToolbarDensity === "tight" &&
+                      "min-w-0 max-w-full flex-1 px-1.5 py-0.5 text-[10px]",
+                  )}
                   title={modelDetail ?? modelPill ?? undefined}
                 >
                   <span className="truncate">{modelPill}</span>
@@ -837,13 +886,28 @@ export function WorkspaceChatComposer({
               ) : null}
             </div>
 
-            <div className="relative z-[5] flex h-10 shrink-0 items-center gap-0.5 md:gap-1">
+            <div
+              className={cn(
+                "relative z-[5] flex shrink-0 items-center overflow-x-hidden",
+                composerToolbarDensity === "comfortable" && "h-10 gap-0.5 md:gap-1",
+                composerToolbarDensity === "compact" && "h-9 gap-0.5",
+                composerToolbarDensity === "tight" &&
+                  "h-auto w-full min-w-0 justify-end gap-0.5 pt-1",
+              )}
+            >
               {contextMetersEnabled ? (
-                <ContextMeterCluster payload={contextMetersPayload} enabled />
+                <ContextMeterCluster
+                  payload={contextMetersPayload}
+                  enabled
+                  density={composerToolbarDensity}
+                />
               ) : null}
               <div
                 className={cn(
-                  "flex h-10 shrink-0 items-center",
+                  "flex shrink-0 items-center",
+                  composerToolbarDensity === "comfortable" && "h-10",
+                  composerToolbarDensity === "compact" && "h-9",
+                  composerToolbarDensity === "tight" && "h-8",
                   voiceTranscribing && "pointer-events-none opacity-55",
                 )}
                 title={micColumnTitle}
@@ -967,13 +1031,26 @@ export function WorkspaceChatComposer({
                 size="icon"
                 disabled={!canSend}
                 title={sendButtonTitle}
-                className="h-10 w-10 shrink-0 rounded-full border border-emerald-400/15 bg-gradient-to-b from-emerald-600 to-emerald-900 text-white shadow-md hover:from-emerald-500 hover:to-emerald-800 disabled:opacity-40"
+                className={cn(
+                  "shrink-0 rounded-full border border-emerald-400/15 bg-gradient-to-b from-emerald-600 to-emerald-900 text-white shadow-md hover:from-emerald-500 hover:to-emerald-800 disabled:opacity-40",
+                  composerToolbarDensity === "comfortable" && "h-10 w-10",
+                  composerToolbarDensity === "compact" && "h-9 w-9",
+                  composerToolbarDensity === "tight" && "h-8 w-8",
+                )}
                 aria-label="Send"
               >
                 {sending ? (
-                  <span className="h-4 w-4 animate-pulse rounded-full bg-white/80" />
+                  <span
+                    className={cn(
+                      "animate-pulse rounded-full bg-white/80",
+                      composerToolbarDensity === "comfortable" ? "h-4 w-4" : "h-3.5 w-3.5",
+                    )}
+                  />
                 ) : (
-                  <ArrowUp className="h-4 w-4" strokeWidth={2.2} />
+                  <ArrowUp
+                    className={composerToolbarDensity === "comfortable" ? "h-4 w-4" : "h-3.5 w-3.5"}
+                    strokeWidth={2.2}
+                  />
                 )}
               </Button>
             </div>
