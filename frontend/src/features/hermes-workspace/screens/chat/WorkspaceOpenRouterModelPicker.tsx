@@ -1,6 +1,6 @@
 import * as React from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Cpu } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -146,7 +146,7 @@ export function WorkspaceOpenRouterModelPicker({
           variant="ghost"
           disabled={disabled}
           title={title ?? undefined}
-          aria-label="Model"
+          aria-label={layoutDensity === "tight" ? `Model: ${label}` : "Model"}
           className={cn(
             "hww-input ml-0.5 flex shrink items-center justify-between gap-1 rounded-md border-0",
             "bg-emerald-500/10 text-left font-normal text-emerald-200/90 hover:bg-emerald-500/16",
@@ -155,17 +155,23 @@ export function WorkspaceOpenRouterModelPicker({
             layoutDensity === "compact" &&
               "h-9 min-h-9 max-w-[min(16rem,72vw)] px-1.5 py-0.5 text-[10px] md:max-w-[min(20rem,82vw)]",
             layoutDensity === "tight" &&
-              "h-8 min-h-8 min-w-0 max-w-full flex-1 px-1.5 py-0.5 text-[10px]",
+              "h-8 min-h-8 w-8 min-w-8 max-w-8 flex-none justify-center px-0 py-0 text-[10px]",
           )}
         >
-          <span className="min-w-0 flex-1 truncate">{label}</span>
+          {layoutDensity === "tight" ? (
+            <Cpu className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
+          ) : (
+            <span className="min-w-0 flex-1 truncate">{label}</span>
+          )}
           <span className="flex shrink-0 items-center gap-0.5">
-            {byokPickerActive ? (
+            {byokPickerActive && layoutDensity !== "tight" ? (
               <span className="shrink-0 rounded border border-emerald-400/35 px-1 text-[9px] font-semibold uppercase tracking-wide text-emerald-200/90">
                 BYOK
               </span>
             ) : null}
-            <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
+            {layoutDensity === "tight" ? null : (
+              <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
+            )}
           </span>
         </Button>
       </DropdownMenu.Trigger>

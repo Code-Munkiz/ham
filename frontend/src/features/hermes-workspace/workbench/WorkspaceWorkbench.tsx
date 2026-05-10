@@ -20,6 +20,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ProjectSourceIntakeDialog } from "./ProjectSourceIntakeDialog";
+import { LocalMachineConnectCta } from "../components/LocalMachineConnectCta";
+import { isLocalRuntimeConfigured } from "../adapters/localRuntime";
+import { WorkspaceTerminalView } from "../screens/terminal/WorkspaceTerminalView";
 
 export type WorkspaceWorkbenchTabId =
   | "preview"
@@ -41,6 +44,24 @@ const TABS: Array<{ id: WorkspaceWorkbenchTabId; label: string; icon: typeof Eye
 export function WorkspaceWorkbench() {
   const [activeTab, setActiveTab] = React.useState<WorkspaceWorkbenchTabId>("preview");
   const [projectSourceOpen, setProjectSourceOpen] = React.useState(false);
+  const tabStripRef = React.useRef<HTMLDivElement | null>(null);
+  const [workbenchTabBarMode, setWorkbenchTabBarMode] = React.useState<"labeled" | "icons">(
+    "labeled",
+  );
+
+  React.useLayoutEffect(() => {
+    const el = tabStripRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const apply = () => {
+      const w = Math.round(el.getBoundingClientRect().width);
+      if (!w) return;
+      setWorkbenchTabBarMode(w < 420 ? "icons" : "labeled");
+    };
+    const ro = new ResizeObserver(() => apply());
+    ro.observe(el);
+    apply();
+    return () => ro.disconnect();
+  }, []);
 
   return (
     <aside
@@ -53,7 +74,12 @@ export function WorkspaceWorkbench() {
       aria-label="Workspace workbench"
     >
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-white/[0.08] px-2.5 py-2">
-        <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto [scrollbar-width:thin]">
+        <div
+          ref={tabStripRef}
+          data-hww-workbench-tab-strip
+          data-hww-workbench-tab-density={workbenchTabBarMode}
+          className="flex min-w-0 flex-1 flex-wrap gap-1 overflow-hidden"
+        >
           {TABS.map((tab) => {
             const active = activeTab === tab.id;
             const Icon = tab.icon;
@@ -63,19 +89,22 @@ export function WorkspaceWorkbench() {
                 type="button"
                 data-testid={`hww-workbench-tab-${tab.id}`}
                 data-active={active ? "true" : "false"}
+                aria-label={tab.label}
+                title={tab.label}
                 onClick={() => {
                   setActiveTab(tab.id);
                 }}
                 className={cn(
-                  "inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1.5 text-[11px] font-medium transition-colors",
+                  "inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1.5 text-[11px] font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/30",
                   active
-                    ? "bg-white/[0.1] text-[#e8eef8]"
+                    ? "bg-emerald-500/15 text-[#e8eef8] shadow-[inset_0_0_0_1px_rgba(16,185,129,0.25),0_0_16px_rgba(16,185,129,0.08)]"
                     : "text-white/45 hover:bg-white/[0.06] hover:text-white/75",
                 )}
-                title={tab.label}
               >
                 <Icon className="h-3.5 w-3.5 opacity-90" strokeWidth={1.5} aria-hidden />
-                <span className="hidden sm:inline">{tab.label}</span>
+                {workbenchTabBarMode === "labeled" ? (
+                  <span className="select-none">{tab.label}</span>
+                ) : null}
               </button>
             );
           })}
@@ -160,7 +189,10 @@ export function WorkspaceWorkbench() {
 
       <div
         data-testid={`hww-workbench-panel-${activeTab}`}
-        className="hww-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-3"
+        className={cn(
+          "hww-scroll min-h-0 flex-1 overflow-x-hidden",
+          activeTab === "terminal" ? "flex flex-col overflow-hidden p-0" : "overflow-y-auto p-3",
+        )}
       >
         {activeTab === "preview" ? <WorkbenchPreviewPanel /> : null}
         {activeTab === "code" ? (
@@ -274,22 +306,49 @@ function WorkbenchStoragePanel({ onAddProjectSource }: { onAddProjectSource: () 
   );
 }
 
+function isWorkspaceDeveloperModeEnabled(): boolean {
+  return (import.meta.env.VITE_HAM_SHOW_LOCAL_DEV_HINTS as string | undefined) === "true";
+}
+
 function WorkbenchTerminalPanel() {
-  return (
-    <MutedPanel>
-      <p className="text-[13px] font-medium text-white/88">Terminal</p>
-      <p className="text-white/55">
-        Terminal is available from the workspace tools. Full embedded terminal in this pane is
-        coming soon.
-      </p>
-      <div className="flex flex-wrap gap-2 pt-1">
-        <Button type="button" size="sm" variant="secondary" asChild className="text-[11px]">
-          <Link to="/workspace/terminal" data-testid="hww-workbench-terminal-open">
-            Open terminal route
-          </Link>
-        </Button>
+  const [hasLocal, setHasLocal] = React.useState(() => isLocalRuntimeConfigured());
+  const developerModeEnabled = isWorkspaceDeveloperModeEnabled();
+
+  React.useEffect(() => {
+    const sync = () => setHasLocal(isLocalRuntimeConfigured());
+    window.addEventListener("hww-local-runtime-changed", sync);
+    return () => window.removeEventListener("hww-local-runtime-changed", sync);
+  }, []);
+
+  if (!hasLocal) {
+    return (
+      <div className="flex h-full min-h-0 flex-col gap-3 p-3 text-[12px] text-white/70">
+        <div>
+          <p className="text-[13px] font-medium text-white/88">Terminal</p>
+          <p className="mt-1 text-white/55">Terminal requires a connected runtime.</p>
+        </div>
+        <p className="text-white/55">
+          Connect HAM Desktop or enable developer mode to use terminal features.
+        </p>
+        {developerModeEnabled ? (
+          <LocalMachineConnectCta
+            variant="card"
+            onSuccess={() => setHasLocal(true)}
+            showOpenFiles
+            showOpenSettings
+          />
+        ) : null}
       </div>
-    </MutedPanel>
+    );
+  }
+
+  return (
+    <div
+      data-testid="hww-workbench-terminal-embed"
+      className="flex h-full min-h-[280px] min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-white/[0.08] bg-[#0d0d0d]"
+    >
+      <WorkspaceTerminalView mode="embedded" className="min-h-0 flex-1" />
+    </div>
   );
 }
 
