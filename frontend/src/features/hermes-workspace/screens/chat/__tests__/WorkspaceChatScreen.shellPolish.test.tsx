@@ -1,7 +1,7 @@
 /**
- * /workspace/chat shell polish: header copy, inspector tab chrome, quick prompts scrollbar, toolbar icons.
+ * /workspace/chat shell polish: header copy, quick prompts strip, toolbar icons.
  */
-import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 
@@ -137,30 +137,12 @@ function renderChat(path = "/workspace/chat") {
 
 describe("WorkspaceChatScreen shell polish", () => {
   beforeEach(() => {
-    const scrollWidthDesc = Object.getOwnPropertyDescriptor(Element.prototype, "scrollWidth");
-    const nativeScrollWidthGet = scrollWidthDesc?.get;
-
-    Object.defineProperty(HTMLElement.prototype, "scrollWidth", {
-      configurable: true,
-      get(this: HTMLElement) {
-        const base =
-          typeof nativeScrollWidthGet === "function" ? nativeScrollWidthGet.call(this) : 0;
-        return this.hasAttribute?.("data-hww-composer-quick-tips-scroll")
-          ? Math.max(base, 5000)
-          : base;
-      },
-    });
-
     globalThis.ResizeObserver = class {
       observe(): void {}
       unobserve(): void {}
       disconnect(): void {}
     } as unknown as typeof ResizeObserver;
     mockMatchMedia(true);
-  });
-
-  afterEach(() => {
-    delete (HTMLElement.prototype as unknown as { scrollWidth?: PropertyDescriptor }).scrollWidth;
   });
 
   it("uses compact header without visible New session title or subtitle paragraph", async () => {
@@ -176,23 +158,16 @@ describe("WorkspaceChatScreen shell polish", () => {
     expect(screen.getByTestId("hww-chat-header-compact")).toBeInTheDocument();
   });
 
-  it("styles Inspector like a workbench tab and opens the inspector surface (no workbench slot)", async () => {
+  it("keeps the right column on the workbench (no inspector header control)", async () => {
     renderChat("/workspace/chat?session=sid_shell");
     await waitFor(() => expect(screen.getByTestId("hww-command-panel")).toBeInTheDocument());
 
-    const tab = screen.getByTestId("hww-chat-inspector-tab");
-    expect(tab.getAttribute("data-active")).toBe("false");
-    expect(tab.className).toMatch(/rounded-md/);
-    expect(tab.className).toMatch(/text-white\/45/);
-
-    fireEvent.click(tab);
-    await waitFor(() => expect(screen.getByTestId("hww-inspector-panel")).toBeInTheDocument());
-    expect(tab.getAttribute("data-active")).toBe("true");
-    expect(tab.className).toMatch(/bg-emerald-500\/15/);
-    expect(screen.queryByTestId("hww-workbench")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("hww-chat-inspector-tab")).not.toBeInTheDocument();
+    expect(screen.getByTestId("hww-workbench-panel-slot")).toBeInTheDocument();
+    expect(screen.getByTestId("hww-workbench")).toBeInTheDocument();
   });
 
-  it("anchors quick prompts with hidden scrollbar class and shows scroll-next only when overflowing", async () => {
+  it("anchors quick prompts with hidden scrollbar and does not render scroll-chevrons", async () => {
     const { container } = renderChat("/workspace/chat?session=sid_tips");
     await waitFor(() => expect(screen.getByTestId("hww-command-panel")).toBeInTheDocument());
 
@@ -200,10 +175,8 @@ describe("WorkspaceChatScreen shell polish", () => {
     expect(scroll?.classList.contains("hww-composer-quick-tips-scroll")).toBe(true);
     expect(await screen.findByRole("toolbar", { name: "Starter prompts" })).toBeTruthy();
 
-    const nextBtn = await screen.findByRole("button", { name: "Show more starter prompts" });
-    expect(nextBtn.getAttribute("data-hww-composer-quick-tips-scroll-next-active")).toBe("true");
-    expect(nextBtn.className).toMatch(/h-6/);
-    expect(nextBtn.className).toMatch(/w-6/);
+    expect(screen.queryByRole("button", { name: "Show more starter prompts" })).toBeNull();
+    expect(container.querySelector("[data-hww-composer-quick-tips-scroll-next]")).toBeNull();
   });
 
   it("sizes composer toolbar icon actions consistently (attach, mic, send)", async () => {
@@ -223,12 +196,12 @@ describe("WorkspaceChatScreen shell polish", () => {
     expect(send?.className).toMatch(/rounded-md/);
   });
 
-  it("workbench tab strip remains unchanged without GitHub", async () => {
+  it("workbench tab strip has no Terminal tab and no GitHub tab", async () => {
     renderChat("/workspace/chat?session=sid_wb");
     await waitFor(() =>
-      expect(screen.getByTestId("hww-workbench-tab-terminal")).toBeInTheDocument(),
+      expect(screen.getByTestId("hww-workbench-tab-preview")).toBeInTheDocument(),
     );
+    expect(screen.queryByTestId("hww-workbench-tab-terminal")).not.toBeInTheDocument();
     expect(screen.queryByTestId("hww-workbench-tab-github")).not.toBeInTheDocument();
-    expect(screen.getByTestId("hww-workbench-tab-preview")).toBeInTheDocument();
   });
 });

@@ -171,22 +171,25 @@ describe("WorkspaceChatComposer narrow layout", () => {
       expect(document.querySelector('[data-hww-meter-cluster="rings"]')).toBeTruthy();
     });
     const deck = document.querySelector(".hww-command-deck");
-    expect(deck?.getAttribute("data-hww-command-deck-layout")).toBe("triple");
-    expect(deck?.className).toMatch(/items-end/);
-    expect(deck?.className).toMatch(/minmax\(0,1fr\)/);
+    expect(deck?.getAttribute("data-hww-command-deck-layout")).toBe("stacked");
+    expect(deck?.className).toMatch(/flex-col/);
+    const toolbar = document.querySelector("[data-hww-command-controls]");
+    expect(toolbar?.className).toMatch(/items-end/);
     expect(document.querySelector("[data-hww-command-input-slot]")).toBeTruthy();
     expect(document.querySelector("[data-hww-command-deck-actions]")).toBeTruthy();
   });
 
-  it("aligns command deck controls to center row when density is compact (pulse)", async () => {
+  it("uses stacked layout with pulse row when density is compact", async () => {
     renderAtWidth(420);
     const outer = document.querySelector(".hww-chat-composer-outer");
     await waitFor(() => {
       expect(outer?.getAttribute("data-hww-composer-density")).toBe("compact");
     });
     const deck = document.querySelector(".hww-command-deck");
-    expect(deck?.getAttribute("data-hww-command-deck-layout")).toBe("triple");
-    expect(deck?.className).toMatch(/items-center/);
+    expect(deck?.getAttribute("data-hww-command-deck-layout")).toBe("stacked");
+    expect(deck?.className).toMatch(/flex-col/);
+    const toolbar = document.querySelector("[data-hww-command-controls]");
+    expect(toolbar?.className).toMatch(/items-end/);
   });
 
   it("exposes tight density when outer width is below 400px", async () => {

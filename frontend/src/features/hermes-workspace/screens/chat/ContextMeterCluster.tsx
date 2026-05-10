@@ -69,9 +69,9 @@ const DIMS: Record<
   { ring: number; stroke: number; labelClass: string; gapClass: string }
 > = {
   comfortable: {
-    ring: 36,
-    stroke: 3,
-    labelClass: "mt-0.5 text-[8px] font-semibold uppercase tracking-wide text-white/35",
+    ring: 28,
+    stroke: 2.5,
+    labelClass: "mt-px text-[7px] font-semibold uppercase leading-none tracking-wide text-white/35",
     gapClass: "gap-0.5 md:gap-1",
   },
   compact: {
@@ -479,10 +479,13 @@ export function ContextMeterCluster({
 
   const dim = DIMS[density];
 
+  const ringMeterButtonClass =
+    "inline-flex shrink-0 rounded-md p-0 text-white/80 outline-none ring-offset-2 ring-offset-[#030a10] hover:bg-white/[0.06] focus-visible:ring-2 focus-visible:ring-emerald-400/40";
+
   return (
     <>
       <div
-        className={cn("flex shrink-0 items-center", dim.gapClass)}
+        className={cn("flex shrink-0 items-end", dim.gapClass)}
         role="group"
         aria-label="Context meters"
         data-hww-meter-cluster="rings"
@@ -492,7 +495,7 @@ export function ContextMeterCluster({
           aria-label="Open system diagnostics — this turn"
           aria-haspopup="dialog"
           onClick={(e) => openDiagnostics(e.currentTarget)}
-          className="rounded-lg p-0.5 text-white/80 outline-none ring-offset-2 ring-offset-[#030a10] hover:bg-white/[0.06] focus-visible:ring-2 focus-visible:ring-emerald-400/40"
+          className={ringMeterButtonClass}
         >
           <MeterRing
             label="Turn"
@@ -510,7 +513,7 @@ export function ContextMeterCluster({
           aria-label="Open system diagnostics — workspace"
           aria-haspopup="dialog"
           onClick={(e) => openDiagnostics(e.currentTarget)}
-          className="rounded-lg p-0.5 text-white/80 outline-none ring-offset-2 ring-offset-[#030a10] hover:bg-white/[0.06] focus-visible:ring-2 focus-visible:ring-emerald-400/40"
+          className={ringMeterButtonClass}
         >
           <MeterRing
             label="Ws"
@@ -528,7 +531,7 @@ export function ContextMeterCluster({
           aria-label="Open system diagnostics — thread"
           aria-haspopup="dialog"
           onClick={(e) => openDiagnostics(e.currentTarget)}
-          className="rounded-lg p-0.5 text-white/80 outline-none ring-offset-2 ring-offset-[#030a10] hover:bg-white/[0.06] focus-visible:ring-2 focus-visible:ring-emerald-400/40"
+          className={ringMeterButtonClass}
         >
           <MeterRing
             label="Thr"

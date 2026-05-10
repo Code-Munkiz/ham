@@ -5,7 +5,7 @@
  */
 
 import * as React from "react";
-import { ArrowUp, ChevronRight, Lightbulb, Link2, Loader2, Sparkles, X } from "lucide-react";
+import { ArrowUp, Lightbulb, Link2, Loader2, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type {
@@ -208,49 +208,12 @@ function ComposerQuickTipsBar({
   onPick: (prompt: string) => void;
   onDismiss: () => void;
 }) {
-  const scrollRef = React.useRef<HTMLDivElement | null>(null);
-  const [canScrollAhead, setCanScrollAhead] = React.useState(false);
-
-  const syncOverflow = React.useCallback(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const { scrollLeft, scrollWidth, clientWidth } = el;
-    const overflow = scrollWidth > clientWidth + 1;
-    const remainder = scrollWidth - scrollLeft - clientWidth;
-    const next = overflow && remainder > 2;
-    setCanScrollAhead(next);
-  }, []);
-
-  React.useLayoutEffect(() => {
-    syncOverflow();
-  }, [syncOverflow, suggestions.length]);
-
-  React.useEffect(() => {
-    const el = scrollRef.current;
-    if (!el || typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver(() => syncOverflow());
-    ro.observe(el);
-    el.addEventListener("scroll", syncOverflow, { passive: true });
-    return () => {
-      ro.disconnect();
-      el.removeEventListener("scroll", syncOverflow);
-    };
-  }, [syncOverflow, suggestions.length]);
-
-  const scrollStarterPromptsAhead = React.useCallback(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const dx = Math.max(120, Math.round(el.clientWidth * 0.65));
-    el.scrollBy({ left: dx, behavior: "smooth" });
-    window.requestAnimationFrame(() => syncOverflow());
-  }, [syncOverflow]);
-
   return (
     <div
       role="toolbar"
       aria-label="Starter prompts"
       data-hww-composer-quick-tips
-      data-hww-composer-quick-tips-overflow={canScrollAhead ? "scrollable" : "idle"}
+      data-hww-composer-quick-tips-overflow="idle"
       className="mb-2 flex min-h-9 max-w-full min-w-0 items-center gap-2 overflow-x-hidden"
     >
       <Lightbulb
@@ -259,7 +222,6 @@ function ComposerQuickTipsBar({
         aria-hidden
       />
       <div
-        ref={scrollRef}
         data-hww-composer-quick-tips-scroll
         className="-mx-0.5 flex min-w-0 flex-1 items-center gap-2 overflow-x-auto overflow-y-hidden hww-composer-quick-tips-scroll"
       >
@@ -292,23 +254,6 @@ function ComposerQuickTipsBar({
           );
         })}
       </div>
-      {canScrollAhead ? (
-        <button
-          type="button"
-          aria-label="Show more starter prompts"
-          title="Scroll starter prompts"
-          data-hww-composer-quick-tips-scroll-next
-          data-hww-composer-quick-tips-scroll-next-active="true"
-          onClick={scrollStarterPromptsAhead}
-          className={cn(
-            "inline-flex h-6 min-h-6 w-6 min-w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border border-white/[0.08] bg-white/[0.03] text-white/80 outline-none transition",
-            "hover:border-white/[0.16] hover:bg-white/[0.06] hover:text-white",
-            "focus-visible:border-emerald-400/35 focus-visible:ring-2 focus-visible:ring-emerald-400/35",
-          )}
-        >
-          <ChevronRight className="h-3 w-3 shrink-0" strokeWidth={2.25} aria-hidden />
-        </button>
-      ) : null}
       <Button
         type="button"
         variant="ghost"
@@ -626,7 +571,6 @@ export function WorkspaceChatComposer({
   }, [contextAccent]);
 
   const meterLayout = composerToolbarDensity === "comfortable" ? "rings" : "pulse";
-  const deckRowAlign = composerToolbarDensity === "comfortable" ? "items-end" : "items-center";
 
   const placeholder = React.useMemo(() => {
     if (voiceTranscribing) return "Transcribing…";
@@ -636,9 +580,9 @@ export function WorkspaceChatComposer({
       const macLike =
         typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/.test(navigator.userAgent || "");
       const mod = macLike ? "⌘⇧M" : "Ctrl+Shift+M";
-      return `Ask anything... (↵ to send · ⇧↵ new line · ${mod} switch model)`;
+      return `Ask anything... (↵ to send · ⇧↵\nnew line · ${mod} switch model)`;
     }
-    return "Ask anything... (↵ to send · ⇧↵ new line)";
+    return "Ask anything... (↵ to send · ⇧↵\nnew line)";
   }, [catalog, gatewayOk, sending, showModel, voiceTranscribing]);
 
   React.useEffect(() => {
@@ -1149,29 +1093,13 @@ export function WorkspaceChatComposer({
 
           <div
             className={cn(
-              "hww-command-deck box-border min-w-0 max-w-full overflow-x-hidden border-t border-white/[0.08]",
+              "hww-command-deck box-border flex min-w-0 max-w-full flex-col gap-0 overflow-x-hidden border-t border-white/[0.08]",
               composerToolbarDensity === "comfortable" && "hww-command-deck--comfortable",
               composerToolbarDensity === "compact" && "hww-command-deck--compact",
               composerToolbarDensity === "tight" && "hww-command-deck--tight",
-              composerToolbarDensity === "tight"
-                ? "flex flex-col gap-0"
-                : cn(
-                    "grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] gap-x-2 gap-y-1 px-2.5 pb-2 pt-2 md:gap-x-2.5 md:px-4 md:pb-2.5 md:pt-2.5",
-                    deckRowAlign,
-                  ),
             )}
-            data-hww-command-deck-layout={composerToolbarDensity === "tight" ? "stacked" : "triple"}
+            data-hww-command-deck-layout="stacked"
           >
-            {composerToolbarDensity !== "tight" ? (
-              <div
-                data-hww-command-deck-left
-                data-hww-command-left
-                className="flex min-w-0 max-w-[min(100%,22rem)] shrink-0 flex-row flex-nowrap items-center gap-1 overflow-hidden md:max-w-[min(100%,26rem)]"
-              >
-                {leftDeckControls}
-              </div>
-            ) : null}
-
             <div
               ref={textareaWrapRef}
               data-hww-command-input-slot
@@ -1179,7 +1107,7 @@ export function WorkspaceChatComposer({
                 "flex min-h-0 min-w-0 w-full max-w-full flex-col self-stretch",
                 composerToolbarDensity === "tight"
                   ? "px-2.5 pb-1 pt-2.5 md:px-3.5"
-                  : "justify-end pb-px",
+                  : "px-2.5 pb-2 pt-2 md:px-4 md:pb-2 md:pt-2.5",
               )}
             >
               <label htmlFor="hww-chat-composer" className="sr-only">
@@ -1207,38 +1135,44 @@ export function WorkspaceChatComposer({
                 rows={1}
                 disabled={disabled || sending || voiceTranscribing}
                 placeholder={placeholder}
-                className="hww-command-textarea box-border w-full resize-none border-0 bg-transparent px-1 py-1 text-[13px] leading-[1.45] text-[#e8eef3] outline-none placeholder:text-white/40 focus:ring-0 focus:outline-none [box-shadow:none] overflow-x-hidden max-h-[240px] min-h-[44px]"
+                className="hww-command-textarea box-border w-full resize-none border-0 bg-transparent px-1 py-1 text-[13px] leading-[1.45] text-[#e8eef3] outline-none placeholder:text-white/40 focus:ring-0 focus:outline-none [box-shadow:none] overflow-x-hidden overflow-y-auto max-h-[240px] min-h-[44px]"
               />
             </div>
 
-            {composerToolbarDensity !== "tight" ? (
+            <div
+              data-hww-command-controls
+              data-hww-action-buttons
+              className={cn(
+                "flex min-w-0 w-full flex-wrap items-end gap-x-1 gap-y-1 overflow-x-hidden border-t",
+                composerToolbarDensity === "tight"
+                  ? "border-white/[0.06] px-1.5 py-1.5"
+                  : "gap-x-2 border-white/[0.08] px-2.5 pb-2 pt-2 md:gap-x-2.5 md:px-4 md:pb-2.5 md:pt-2.5",
+              )}
+            >
+              <div
+                data-hww-command-deck-left
+                data-hww-command-left
+                className={cn(
+                  "flex min-w-0 shrink-0 flex-row flex-nowrap items-center gap-1 overflow-hidden",
+                  composerToolbarDensity !== "tight"
+                    ? "max-w-[min(100%,22rem)] md:max-w-[min(100%,26rem)]"
+                    : "min-w-0 flex-1 flex-wrap items-center gap-0.5 [&>*]:max-w-full",
+                )}
+              >
+                {leftDeckControls}
+              </div>
               <div
                 data-hww-command-deck-actions
-                data-hww-command-controls
-                data-hww-action-buttons
-                className="flex h-8 min-h-8 shrink-0 items-center justify-end gap-1 overflow-x-hidden pl-1.5 pr-2.5 md:pl-2 md:pr-3.5"
+                className={cn(
+                  "flex min-h-8 shrink-0 flex-wrap items-end justify-end gap-x-1 gap-y-1 overflow-x-hidden",
+                  composerToolbarDensity !== "tight"
+                    ? "ml-auto pl-1.5 pr-2.5 md:pl-2 md:pr-3.5"
+                    : "ml-auto",
+                )}
               >
                 {rightDeckActions}
               </div>
-            ) : null}
-
-            {composerToolbarDensity === "tight" ? (
-              <div
-                data-hww-command-controls
-                data-hww-action-buttons
-                className="flex min-w-0 flex-wrap items-center gap-1 border-t border-white/[0.06] px-1.5 py-1.5"
-              >
-                <div
-                  data-hww-command-left
-                  className="flex min-w-0 flex-1 flex-wrap items-center gap-0.5 [&>*]:max-w-full"
-                >
-                  {leftDeckControls}
-                </div>
-                <div className="ml-auto flex min-w-0 shrink-0 items-center gap-0.5">
-                  {rightDeckActions}
-                </div>
-              </div>
-            ) : null}
+            </div>
           </div>
 
           {(catalog?.gateway_mode || "").trim().toLowerCase() === "mock" &&
