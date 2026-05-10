@@ -7,6 +7,7 @@ Spec: `docs/CONTROL_PLANE_RUN.md`
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import sys
@@ -14,9 +15,13 @@ import uuid
 from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+_LOG = logging.getLogger(__name__)
+
+_CONTROL_PLANE_RUN_STORE_BACKEND_ENV = "HAM_CONTROL_PLANE_RUN_STORE_BACKEND"
 
 MAX_LAST_PROVIDER_STATUS = 256
 MAX_SUMMARY_CHARS = 2_000
@@ -256,6 +261,47 @@ def new_ham_run_id() -> str:
     return str(uuid.uuid4())
 
 
+@runtime_checkable
+class ControlPlaneRunStoreProtocol(Protocol):
+    """Backend-agnostic control-plane run store contract.
+
+    Both :class:`ControlPlaneRunStore` (file-backed) and
+    :class:`FirestoreControlPlaneRunStore` satisfy this Protocol. Callers
+    should treat :func:`get_control_plane_run_store` as returning
+    ``ControlPlaneRunStoreProtocol``; the concrete return type is still the
+    file-backed class by default for backward compatibility with existing
+    direct ``ControlPlaneRunStore()`` callsites.
+    """
+
+    def get(self, ham_run_id: str) -> ControlPlaneRun | None: ...
+    def find_by_project_and_external(
+        self,
+        *,
+        project_id: str,
+        provider: str,
+        external_id: str,
+    ) -> ControlPlaneRun | None: ...
+    def find_by_provider_and_external(
+        self,
+        *,
+        provider: str,
+        external_id: str,
+    ) -> ControlPlaneRun | None: ...
+    def list_for_project(
+        self,
+        project_id: str,
+        *,
+        provider: str | None = None,
+        limit: int = 100,
+    ) -> list[ControlPlaneRun]: ...
+    def save(
+        self,
+        run: ControlPlaneRun,
+        *,
+        project_root_for_mirror: str | None = None,
+    ) -> None: ...
+
+
 class ControlPlaneRunStore:
     """File-backed one JSON per ``ham_run_id`` under a server-global directory (default)."""
 
@@ -410,3 +456,51 @@ class ControlPlaneRunStore:
                     os.replace(mtmp, mp)
                 except OSError:
                     pass
+
+
+def build_control_plane_run_store() -> ControlPlaneRunStoreProtocol:
+    """Pick a control-plane run store backend based on env.
+
+    Defaults to the file-backed :class:`ControlPlaneRunStore` so local dev
+    keeps working without any env vars. ``HAM_CONTROL_PLANE_RUN_STORE_BACKEND
+    =firestore`` selects :class:`FirestoreControlPlaneRunStore` (lazy-imported
+    so the SDK is not required for local dev).
+    """
+    backend = (
+        os.environ.get(_CONTROL_PLANE_RUN_STORE_BACKEND_ENV) or ""
+    ).strip().lower()
+    if backend == "firestore":
+        from src.persistence.firestore_control_plane_run_store import (  # noqa: PLC0415
+            FirestoreControlPlaneRunStore,
+        )
+
+        return FirestoreControlPlaneRunStore()
+    if backend not in ("", "file"):
+        _LOG.warning(
+            "Unknown HAM_CONTROL_PLANE_RUN_STORE_BACKEND=%r; "
+            "falling back to file backend.",
+            backend,
+        )
+    return ControlPlaneRunStore()
+
+
+# Process-wide registry. Existing direct ``ControlPlaneRunStore()`` callsites
+# stay file-backed by default; new code can adopt this singleton to pick up
+# the configured backend transparently.
+_cp_run_store_singleton: ControlPlaneRunStoreProtocol | None = None
+
+
+def get_control_plane_run_store() -> ControlPlaneRunStoreProtocol:
+    """Lazy singleton accessor for the configured backend."""
+    global _cp_run_store_singleton
+    if _cp_run_store_singleton is None:
+        _cp_run_store_singleton = build_control_plane_run_store()
+    return _cp_run_store_singleton
+
+
+def set_control_plane_run_store_for_tests(
+    store: ControlPlaneRunStoreProtocol | None,
+) -> None:
+    """Replace the global control-plane run store (``None`` restores lazy default)."""
+    global _cp_run_store_singleton
+    _cp_run_store_singleton = store
