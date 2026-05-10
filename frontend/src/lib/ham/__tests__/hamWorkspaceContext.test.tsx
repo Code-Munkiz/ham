@@ -7,6 +7,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, render, renderHook, screen, waitFor } from "@testing-library/react";
 import * as React from "react";
+import { MemoryRouter } from "react-router-dom";
 
 import { WorkspaceGate } from "@/components/workspace/WorkspaceGate";
 import { WORKSPACE_API_UNREACHABLE_USER_COPY } from "@/components/workspace/workspaceApiUnreachableCopy";
@@ -353,5 +354,72 @@ describe("provider error swallowing", () => {
         </HamWorkspaceProvider>,
       ),
     ).not.toThrow();
+  });
+});
+
+describe("local UI QA bypass (VITE_HAM_LOCAL_DEV_WORKSPACE_BYPASS)", () => {
+  beforeEach(() => {
+    vi.stubEnv("VITE_HAM_LOCAL_DEV_WORKSPACE_BYPASS", "true");
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("hydrates mock workspace without calling getMe when Clerk is not configured", async () => {
+    const { result } = renderHook(() => useHamWorkspace(), {
+      wrapper: withHostedProvider({
+        clerkConfigured: false,
+        isLoaded: true,
+        isSignedIn: false,
+      }),
+    });
+    await waitFor(() => expect(result.current.state.status).toBe("ready"));
+    expect(result.current.workspaces.map((w) => w.slug)).toEqual(["ham-repo"]);
+    expect(result.current.active?.workspace_id).toBe("local-dev-workspace");
+    expect(result.current.authMode).toBe("local_dev_bypass");
+    expect(mockedGetMe).not.toHaveBeenCalled();
+    expect(result.current.hasPerm("workspace:admin")).toBe(true);
+  });
+
+  it("skips bypass when Clerk session is signed in and uses /api/me", async () => {
+    mockedGetMe.mockResolvedValue(meWith([summary()]));
+    const { result } = renderHook(() => useHamWorkspace(), {
+      wrapper: withHostedProvider({
+        clerkConfigured: true,
+        isLoaded: true,
+        isSignedIn: true,
+      }),
+    });
+    await waitFor(() => expect(result.current.state.status).toBe("ready"));
+    expect(mockedGetMe).toHaveBeenCalled();
+    expect(result.current.authMode).toBe("clerk");
+    expect(result.current.active?.workspace_id).toBe("ws_a");
+  });
+});
+
+describe("WorkspaceGate local UI QA bypass", () => {
+  beforeEach(() => {
+    vi.stubEnv("VITE_HAM_LOCAL_DEV_WORKSPACE_BYPASS", "true");
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("renders children instead of Authentication is not configured", async () => {
+    mockedGetMe.mockReset();
+    render(
+      <MemoryRouter>
+        <HamWorkspaceProvider
+          hostedAuth={{ clerkConfigured: false, isLoaded: true, isSignedIn: false }}
+        >
+          <WorkspaceGate>
+            <div data-testid="ui-qa-chat-body">composer-area</div>
+          </WorkspaceGate>
+        </HamWorkspaceProvider>
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(screen.getByTestId("ui-qa-chat-body")).toBeInTheDocument());
+    expect(screen.queryByText(/Authentication is not configured/)).not.toBeInTheDocument();
+    expect(mockedGetMe).not.toHaveBeenCalled();
   });
 });

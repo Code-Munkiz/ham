@@ -543,10 +543,22 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
     setSidebarPersist(!sidebarCollapsed);
   }, [sidebarCollapsed, setSidebarPersist]);
 
+  const showLocalUiQaBanner = hamWorkspace.authMode === "local_dev_bypass";
+
   return (
     <WorkspaceLibraryFlyoutContext.Provider value={libraryFlyoutCtx}>
-      <div className="hww-root flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden md:flex-row">
-        {/* Mobile top bar (upstream-style compact header) */}
+      <div className="hww-root flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden">
+        {showLocalUiQaBanner ? (
+          <div
+            role="status"
+            data-hww-local-dev-workspace-banner
+            className="flex h-7 shrink-0 items-center justify-center border-b border-amber-400/22 bg-amber-500/[0.08] px-3 text-[10px] font-medium tracking-wide text-amber-100/90"
+          >
+            Local dev workspace · UI QA only · not authenticated
+          </div>
+        ) : null}
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
+          {/* Mobile top bar (upstream-style compact header) */}
         <header className="hww-mobile-header z-20 flex h-12 shrink-0 items-center justify-between border-b border-[color:var(--ham-workspace-line)] bg-[#040d14]/90 px-3 backdrop-blur-sm md:hidden">
           <button
             type="button"
@@ -624,7 +636,8 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
           sidebarCollapsed={sidebarCollapsed}
           onItemNavigate={() => setDrawerOpen(false)}
         />
-      </div>
+        </div>
+        </div>
     </WorkspaceLibraryFlyoutContext.Provider>
   );
 }
