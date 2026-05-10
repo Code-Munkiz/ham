@@ -166,16 +166,21 @@
   overflow-x: hidden;
 }
 
-/* Dark native controls next to the composer (prevents light/white scrollbar + stepper chrome). */
+/* Dark native controls next to the composer (prevents light/white scrollbar + stepper chrome).
+   Duplicate .hww-outer + .hww-root anchors so Electron/WebView2 never misses the hint if nesting shifts. */
+.hww-outer .hww-chat-composer-outer,
+.hww-outer [data-hww-command-deck],
 .hww-root .hww-chat-composer-outer,
 .hww-root [data-hww-command-deck] {
   color-scheme: dark;
 }
 
 /* Command Deck — chat composer textarea: scroll without visible OS scrollbar chrome */
+.hww-outer textarea.hww-command-textarea,
 .hww-root textarea.hww-command-textarea {
   box-sizing: border-box;
   scrollbar-width: none;
+  scrollbar-color: transparent transparent;
   -ms-overflow-style: none;
 }
 
@@ -197,6 +202,9 @@
   height: 0;
 }
 
+.hww-outer textarea.hww-command-textarea::-webkit-scrollbar,
+.hww-outer textarea.hww-command-textarea::-webkit-scrollbar-button,
+.hww-outer textarea.hww-command-textarea::-webkit-scrollbar-corner,
 .hww-root textarea.hww-command-textarea::-webkit-scrollbar,
 .hww-root textarea.hww-command-textarea::-webkit-scrollbar-button,
 .hww-root textarea.hww-command-textarea::-webkit-scrollbar-corner {
@@ -206,12 +214,15 @@
 }
 
 /* Kill number spinners if any native input lands in the composer card */
+.hww-outer [data-hww-command-deck] input::-webkit-outer-spin-button,
+.hww-outer [data-hww-command-deck] input::-webkit-inner-spin-button,
 .hww-root [data-hww-command-deck] input::-webkit-outer-spin-button,
 .hww-root [data-hww-command-deck] input::-webkit-inner-spin-button {
   -webkit-appearance: none;
   margin: 0;
 }
 
+.hww-outer [data-hww-command-deck] input[type="number"],
 .hww-root [data-hww-command-deck] input[type="number"] {
   appearance: textfield;
   -moz-appearance: textfield;
