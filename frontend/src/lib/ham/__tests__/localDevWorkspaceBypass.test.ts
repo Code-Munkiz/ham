@@ -90,19 +90,28 @@ describe("localDevWorkspaceBypass", () => {
 
     it("yields false when Clerk user is actively signed in", () => {
       expect(
-        shouldActivateLocalWorkspaceUiBypass({ clerkConfigured: true, isSignedIn: true }, "localhost"),
+        shouldActivateLocalWorkspaceUiBypass(
+          { clerkConfigured: true, isSignedIn: true },
+          "localhost",
+        ),
       ).toBe(false);
     });
 
     it("allows when Clerk is wired but signed out under loopback host", () => {
       expect(
-        shouldActivateLocalWorkspaceUiBypass({ clerkConfigured: true, isSignedIn: false }, "localhost"),
+        shouldActivateLocalWorkspaceUiBypass(
+          { clerkConfigured: true, isSignedIn: false },
+          "localhost",
+        ),
       ).toBe(true);
     });
 
     it("allows when Clerk is not configured", () => {
       expect(
-        shouldActivateLocalWorkspaceUiBypass({ clerkConfigured: false, isSignedIn: false }, "localhost"),
+        shouldActivateLocalWorkspaceUiBypass(
+          { clerkConfigured: false, isSignedIn: false },
+          "localhost",
+        ),
       ).toBe(true);
     });
   });

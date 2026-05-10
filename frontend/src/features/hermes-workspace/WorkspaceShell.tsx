@@ -559,85 +559,85 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
         ) : null}
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
           {/* Mobile top bar (upstream-style compact header) */}
-        <header className="hww-mobile-header z-20 flex h-12 shrink-0 items-center justify-between border-b border-[color:var(--ham-workspace-line)] bg-[#040d14]/90 px-3 backdrop-blur-sm md:hidden">
-          <button
-            type="button"
-            onClick={() => setDrawerOpen(true)}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 text-white/75 transition-colors hover:bg-white/[0.06]"
-            aria-label="Open workspace menu"
-          >
-            <Menu className="h-5 w-5" strokeWidth={1.5} />
-          </button>
-          <span className="text-[13px] font-medium text-white/88">{pageTitle}</span>
-          <span className="w-9" aria-hidden />
-        </header>
-
-        {/* Desktop sidebar */}
-        <aside
-          className={cn(
-            "hww-sidebar hww-scroll hidden min-h-0 min-w-0 flex-col py-4 md:flex",
-            sidebarCollapsed ? "hww-sidebar--collapsed" : "px-3",
-          )}
-        >
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-            <WorkspaceSideNav
-              {...workspaceNavProps}
-              layoutCollapsed={sidebarCollapsed}
-              onToggleLayoutCollapse={onToggleSidebar}
-            />
-          </div>
-        </aside>
-
-        {/* Mobile drawer + backdrop */}
-        {drawerOpen ? (
-          <>
+          <header className="hww-mobile-header z-20 flex h-12 shrink-0 items-center justify-between border-b border-[color:var(--ham-workspace-line)] bg-[#040d14]/90 px-3 backdrop-blur-sm md:hidden">
             <button
               type="button"
-              className="fixed inset-0 z-40 bg-black/55 backdrop-blur-sm md:hidden"
-              aria-label="Close menu"
-              onClick={() => setDrawerOpen(false)}
-            />
-            <aside
-              className="hww-drawer hww-scroll fixed left-0 top-0 z-50 flex h-full w-[min(88vw,290px)] min-w-0 flex-col overflow-y-auto border-r border-[color:var(--ham-workspace-line)] bg-[#040d14]/98 px-3 py-4 shadow-2xl md:hidden"
-              role="dialog"
-              aria-modal="true"
-              aria-label="Workspace navigation"
+              onClick={() => setDrawerOpen(true)}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 text-white/75 transition-colors hover:bg-white/[0.06]"
+              aria-label="Open workspace menu"
             >
-              <WorkspaceSideNav
-                showClose
-                onClose={() => setDrawerOpen(false)}
-                onNavigate={() => setDrawerOpen(false)}
-                layoutCollapsed={false}
-                {...workspaceNavProps}
-              />
-            </aside>
-          </>
-        ) : null}
+              <Menu className="h-5 w-5" strokeWidth={1.5} />
+            </button>
+            <span className="text-[13px] font-medium text-white/88">{pageTitle}</span>
+            <span className="w-9" aria-hidden />
+          </header>
 
-        <div
-          className={cn(
-            "hww-main flex min-h-0 min-w-0 flex-1 flex-col border-[color:var(--ham-workspace-line)] bg-[#030a10]/40 md:border-l",
-            !isWorkspaceChat && "max-md:pb-[var(--hww-tabbar-h,3.5rem)]",
-          )}
-        >
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">{children}</div>
+          {/* Desktop sidebar */}
+          <aside
+            className={cn(
+              "hww-sidebar hww-scroll hidden min-h-0 min-w-0 flex-col py-4 md:flex",
+              sidebarCollapsed ? "hww-sidebar--collapsed" : "px-3",
+            )}
+          >
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+              <WorkspaceSideNav
+                {...workspaceNavProps}
+                layoutCollapsed={sidebarCollapsed}
+                onToggleLayoutCollapse={onToggleSidebar}
+              />
+            </div>
+          </aside>
+
+          {/* Mobile drawer + backdrop */}
+          {drawerOpen ? (
+            <>
+              <button
+                type="button"
+                className="fixed inset-0 z-40 bg-black/55 backdrop-blur-sm md:hidden"
+                aria-label="Close menu"
+                onClick={() => setDrawerOpen(false)}
+              />
+              <aside
+                className="hww-drawer hww-scroll fixed left-0 top-0 z-50 flex h-full w-[min(88vw,290px)] min-w-0 flex-col overflow-y-auto border-r border-[color:var(--ham-workspace-line)] bg-[#040d14]/98 px-3 py-4 shadow-2xl md:hidden"
+                role="dialog"
+                aria-modal="true"
+                aria-label="Workspace navigation"
+              >
+                <WorkspaceSideNav
+                  showClose
+                  onClose={() => setDrawerOpen(false)}
+                  onNavigate={() => setDrawerOpen(false)}
+                  layoutCollapsed={false}
+                  {...workspaceNavProps}
+                />
+              </aside>
+            </>
+          ) : null}
+
+          <div
+            className={cn(
+              "hww-main flex min-h-0 min-w-0 flex-1 flex-col border-[color:var(--ham-workspace-line)] bg-[#030a10]/40 md:border-l",
+              !isWorkspaceChat && "max-md:pb-[var(--hww-tabbar-h,3.5rem)]",
+            )}
+          >
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">{children}</div>
+          </div>
+          <WorkspaceMobileTabBar />
+          {!isWorkspaceChat && hamWorkspace.state.status === "ready" ? (
+            <WorkspaceChatFloatingToggle onOpen={() => setWorkspaceChatPanelOpen(true)} />
+          ) : null}
+          <WorkspaceChatPanel
+            open={workspaceChatPanelOpen && hamWorkspace.state.status === "ready"}
+            onClose={() => setWorkspaceChatPanelOpen(false)}
+          />
+          <WorkspaceLibraryFlyout
+            open={libraryFlyoutOpen}
+            onOpenChange={setLibraryFlyoutOpen}
+            sidebarCollapsed={sidebarCollapsed}
+            onItemNavigate={() => setDrawerOpen(false)}
+          />
         </div>
-        <WorkspaceMobileTabBar />
-        {!isWorkspaceChat && hamWorkspace.state.status === "ready" ? (
-          <WorkspaceChatFloatingToggle onOpen={() => setWorkspaceChatPanelOpen(true)} />
-        ) : null}
-        <WorkspaceChatPanel
-          open={workspaceChatPanelOpen && hamWorkspace.state.status === "ready"}
-          onClose={() => setWorkspaceChatPanelOpen(false)}
-        />
-        <WorkspaceLibraryFlyout
-          open={libraryFlyoutOpen}
-          onOpenChange={setLibraryFlyoutOpen}
-          sidebarCollapsed={sidebarCollapsed}
-          onItemNavigate={() => setDrawerOpen(false)}
-        />
-        </div>
-        </div>
+      </div>
     </WorkspaceLibraryFlyoutContext.Provider>
   );
 }
