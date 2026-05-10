@@ -68,12 +68,11 @@ describe("WorkspaceChatComposer command deck", () => {
       </MemoryRouter>,
     );
     expect(document.querySelector("[data-hww-command-deck]")).toBeTruthy();
-    expect(document.querySelector('[data-hww-composer-density]')).toBeTruthy();
-    const send = document.querySelector('[data-hww-composer-send]');
+    expect(document.querySelector("[data-hww-composer-density]")).toBeTruthy();
+    const send = document.querySelector("[data-hww-command-send]");
     expect(send).toBeTruthy();
-    expect(send?.classList.contains("h-9")).toBe(true);
-    expect(send?.classList.contains("w-9")).toBe(true);
-    expect(send?.querySelector('svg')).toBeTruthy();
+    expect(send?.className).toMatch(/size-9/);
+    expect(send?.querySelector("svg")).toBeTruthy();
   });
 
   it("shows model picker trigger and add actions when gateway exposes models", () => {
