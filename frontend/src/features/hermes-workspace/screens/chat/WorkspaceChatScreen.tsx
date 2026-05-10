@@ -116,6 +116,14 @@ function mapServerAttachmentKind(serverKind: string): WorkspaceComposerAttachmen
 
 const VOICE_DEBUG_FLAG = "ham.voiceDebug";
 
+/** Desktop `/workspace/chat`: command column width (px) vs workbench — drag + `localStorage`. */
+const HWW_CHAT_CMD_PANEL_LS_KEY = "hww.workbench.commandPanelWidth";
+const HWW_CHAT_CMD_PANEL_DEFAULT_PX = 480;
+const HWW_CHAT_CMD_PANEL_MIN_PX = 360;
+const HWW_CHAT_CMD_PANEL_MAX_PX = 720;
+const HWW_WORKBENCH_PANEL_MIN_PX = 420;
+const HWW_CHAT_SPLIT_RESIZER_PX = 6;
+
 function voiceDebugEnabled(): boolean {
   if (typeof window === "undefined") return false;
   try {
@@ -600,6 +608,14 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   }, [attachments]);
 
   const [voiceTranscribing, setVoiceTranscribing] = React.useState(false);
+  const chatSplitRowRef = React.useRef<HTMLDivElement | null>(null);
+  const cmdPanelWidthPxRef = React.useRef(HWW_CHAT_CMD_PANEL_DEFAULT_PX);
+  const [cmdPanelWidthPx, setCmdPanelWidthPx] = React.useState(HWW_CHAT_CMD_PANEL_DEFAULT_PX);
+  cmdPanelWidthPxRef.current = cmdPanelWidthPx;
+  const splitDragRef = React.useRef<{ startX: number; startW: number } | null>(null);
+  const [splitResizePointerDown, setSplitResizePointerDown] = React.useState(false);
+  const [isDesktopSplitLayout, setIsDesktopSplitLayout] = React.useState(false);
+
   const [inspectorOpen, setInspectorOpen] = React.useState(false);
   const [pdfExporting, setPdfExporting] = React.useState(false);
   const [chatCapabilities, setChatCapabilities] = React.useState<ChatCapabilitiesPayload | null>(
@@ -641,6 +657,86 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
    * (404 / "Session unavailable" after create/switch).
    */
   const suppressSessionQueryUntilNavigationRef = React.useRef(false);
+
+  const clampCmdPanelWidthPx = React.useCallback((w: number) => {
+    const clampedBase = Math.min(HWW_CHAT_CMD_PANEL_MAX_PX, Math.max(HWW_CHAT_CMD_PANEL_MIN_PX, w));
+    const row = chatSplitRowRef.current;
+    if (!row) return clampedBase;
+    const total = row.getBoundingClientRect().width;
+    if (total <= 0) return clampedBase;
+    const maxFromBench = total - HWW_WORKBENCH_PANEL_MIN_PX - HWW_CHAT_SPLIT_RESIZER_PX;
+    const ceiling = Math.min(
+      HWW_CHAT_CMD_PANEL_MAX_PX,
+      Math.max(HWW_CHAT_CMD_PANEL_MIN_PX, maxFromBench),
+    );
+    return Math.min(clampedBase, ceiling);
+  }, []);
+
+  React.useEffect(() => {
+    try {
+      const raw = localStorage.getItem(HWW_CHAT_CMD_PANEL_LS_KEY);
+      if (raw) {
+        const n = Number.parseInt(raw, 10);
+        if (Number.isFinite(n)) {
+          setCmdPanelWidthPx(
+            Math.min(HWW_CHAT_CMD_PANEL_MAX_PX, Math.max(HWW_CHAT_CMD_PANEL_MIN_PX, n)),
+          );
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  React.useEffect(() => {
+    const mq = window.matchMedia("(min-width: 768px)");
+    const sync = () => {
+      setIsDesktopSplitLayout(mq.matches);
+    };
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+
+  React.useEffect(() => {
+    if (!isDesktopSplitLayout) return;
+    setCmdPanelWidthPx((prev) => clampCmdPanelWidthPx(prev));
+  }, [isDesktopSplitLayout, clampCmdPanelWidthPx]);
+
+  React.useEffect(() => {
+    if (!isDesktopSplitLayout) return;
+    const onResize = () => {
+      setCmdPanelWidthPx((prev) => clampCmdPanelWidthPx(prev));
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [isDesktopSplitLayout, clampCmdPanelWidthPx]);
+
+  React.useEffect(() => {
+    if (!splitResizePointerDown) return;
+    const onMove = (e: PointerEvent) => {
+      const d = splitDragRef.current;
+      if (!d) return;
+      setCmdPanelWidthPx(clampCmdPanelWidthPx(d.startW + (e.clientX - d.startX)));
+    };
+    const onUp = () => {
+      splitDragRef.current = null;
+      setSplitResizePointerDown(false);
+      try {
+        localStorage.setItem(HWW_CHAT_CMD_PANEL_LS_KEY, String(cmdPanelWidthPxRef.current));
+      } catch {
+        /* ignore */
+      }
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+  }, [splitResizePointerDown, clampCmdPanelWidthPx]);
 
   React.useEffect(() => {
     activeWorkspaceIdRef.current = activeWorkspaceId;
@@ -3097,9 +3193,36 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     )
   ) : null;
 
+  const onChatSplitResizePointerDown = React.useCallback(
+    (e: React.PointerEvent<HTMLButtonElement>) => {
+      if (!isDesktopSplitLayout) return;
+      e.preventDefault();
+      splitDragRef.current = {
+        startX: e.clientX,
+        startW: cmdPanelWidthPxRef.current,
+      };
+      setSplitResizePointerDown(true);
+    },
+    [isDesktopSplitLayout],
+  );
+
   return (
-    <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col md:flex-row">
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+    <div ref={chatSplitRowRef} className="flex min-h-0 w-full min-w-0 flex-1 flex-col md:flex-row">
+      <div
+        className={cn(
+          "flex min-h-0 min-w-0 flex-col",
+          "w-full border-b border-white/[0.06] md:border-b-0 md:border-r md:border-white/[0.08] md:shrink-0",
+        )}
+        style={
+          isDesktopSplitLayout
+            ? {
+                width: cmdPanelWidthPx,
+                minWidth: HWW_CHAT_CMD_PANEL_MIN_PX,
+                maxWidth: HWW_CHAT_CMD_PANEL_MAX_PX,
+              }
+            : undefined
+        }
+      >
         <header className="hww-chat-header flex shrink-0 items-start justify-between gap-3 border-b border-white/[0.06] bg-[#040d14]/80 px-4 py-3 backdrop-blur-sm md:px-8">
           <div className="flex min-w-0 items-start gap-2.5">
             <img
@@ -3261,6 +3384,29 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
           />
         </div>
       </div>
+      {isDesktopSplitLayout ? (
+        <button
+          type="button"
+          data-testid="hww-chat-split-resizer"
+          aria-label="Resize command and workbench panels"
+          title="Drag to resize panels"
+          className={cn(
+            "group flex h-full min-h-0 shrink-0 cursor-col-resize border-0 bg-transparent p-0",
+            "w-[var(--hww-split-resizer)] touch-none select-none flex-col items-stretch justify-stretch",
+            "border-l border-r border-transparent hover:border-white/[0.06]",
+          )}
+          style={{ "--hww-split-resizer": `${HWW_CHAT_SPLIT_RESIZER_PX}px` } as React.CSSProperties}
+          onPointerDown={onChatSplitResizePointerDown}
+        >
+          <span
+            className={cn(
+              "pointer-events-none my-2 w-px flex-1 self-center rounded-full bg-white/[0.14]",
+              "transition-colors group-hover:bg-white/[0.28] group-active:bg-emerald-400/45",
+            )}
+            aria-hidden
+          />
+        </button>
+      ) : null}
       {desktopShell && gohamModalOpen ? (
         <>
           <button
@@ -3397,7 +3543,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
             className={cn(
               "z-30 flex max-h-full overflow-hidden shadow-2xl",
               "fixed right-0 top-0 h-full md:static md:z-auto md:h-full md:min-h-0 md:shadow-none",
-              "md:w-[min(420px,42vw)] md:min-w-[280px] md:max-w-[50%] md:shrink-0",
+              "w-full md:min-w-[420px] md:flex-1 md:max-w-none",
             )}
           >
             <WorkspaceChatInspectorPanel
@@ -3417,7 +3563,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         <div
           className={cn(
             "flex min-h-0 w-full min-w-0 flex-col",
-            "min-h-[260px] max-h-[48vh] md:max-h-none md:h-full md:min-h-0 md:w-[min(420px,42vw)] md:min-w-[280px] md:max-w-[50%] md:shrink-0",
+            "min-h-[260px] max-h-[48vh] md:max-h-none md:h-full md:min-h-0 md:min-w-[420px] md:flex-1",
           )}
         >
           <WorkspaceWorkbench />
