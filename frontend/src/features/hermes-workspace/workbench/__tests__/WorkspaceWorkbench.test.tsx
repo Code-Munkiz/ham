@@ -19,10 +19,6 @@ vi.mock("../../adapters/localRuntime", () => ({
   isLocalRuntimeConfigured: () => isLocalRuntimeConfiguredMock(),
 }));
 
-vi.mock("../../screens/terminal/WorkspaceTerminalView", () => ({
-  WorkspaceTerminalView: () => <div data-testid="hww-terminal-surface-mock" />,
-}));
-
 import { WorkspaceWorkbench } from "../WorkspaceWorkbench";
 
 function toolsOk() {
@@ -81,10 +77,7 @@ describe("WorkspaceWorkbench", () => {
     expect(screen.getByText(/not available in this placeholder/i)).toBeInTheDocument();
 
     expect(screen.queryByTestId("hww-workbench-tab-github")).toBeNull();
-
-    fireEvent.click(screen.getByTestId("hww-workbench-tab-terminal"));
-    expect(screen.getByText(/Terminal requires a connected runtime/i)).toBeInTheDocument();
-    expect(screen.queryByTestId("hww-workbench-terminal-embed")).toBeNull();
+    expect(screen.queryByTestId("hww-workbench-tab-terminal")).toBeNull();
 
     fireEvent.click(screen.getByTestId("hww-workbench-tab-storage"));
     const storagePanel = screen.getByTestId("hww-workbench-panel-storage");
@@ -118,16 +111,13 @@ describe("WorkspaceWorkbench", () => {
     );
   });
 
-  it("embeds the terminal surface when a local runtime is configured", () => {
-    isLocalRuntimeConfiguredMock.mockReturnValue(true);
+  it("does not expose a workbench Terminal tab", () => {
     render(
       <MemoryRouter>
         <WorkspaceWorkbench />
       </MemoryRouter>,
     );
-    fireEvent.click(screen.getByTestId("hww-workbench-tab-terminal"));
-    expect(screen.getByTestId("hww-workbench-terminal-embed")).toBeInTheDocument();
-    expect(screen.getByTestId("hww-terminal-surface-mock")).toBeInTheDocument();
+    expect(screen.queryByTestId("hww-workbench-tab-terminal")).toBeNull();
   });
 
   it("Add project source opens shared dialog from code and storage tabs", async () => {

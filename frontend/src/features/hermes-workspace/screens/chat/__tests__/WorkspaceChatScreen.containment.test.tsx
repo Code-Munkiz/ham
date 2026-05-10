@@ -189,15 +189,16 @@ describe("WorkspaceChatScreen split containment", () => {
     expect(screen.getByTestId("hww-chat-split-row")).toBeInTheDocument();
   });
 
-  it("workbench exposes expected tabs including Terminal without a GitHub tab", async () => {
+  it("workbench tab strip has no Terminal tab and no GitHub tab", async () => {
     renderChat();
     await waitFor(() => {
-      expect(screen.getByTestId("hww-workbench-tab-terminal")).toBeInTheDocument();
+      expect(screen.getByTestId("hww-workbench-tab-preview")).toBeInTheDocument();
     });
+    expect(screen.queryByTestId("hww-workbench-tab-terminal")).not.toBeInTheDocument();
     expect(screen.queryByTestId("hww-workbench-tab-github")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByTestId("hww-workbench-tab-terminal"));
-    expect(await screen.findByText("Terminal requires a connected runtime.")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("hww-workbench-tab-database"));
+    expect(screen.getByTestId("hww-workbench-panel-database")).toBeInTheDocument();
   });
 
   it("composer does not advertise viewport-relative width tokens on roots", async () => {

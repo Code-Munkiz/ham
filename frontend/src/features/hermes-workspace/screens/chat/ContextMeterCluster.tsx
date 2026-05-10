@@ -482,7 +482,7 @@ export function ContextMeterCluster({
   return (
     <>
       <div
-        className={cn("flex shrink-0 items-center", dim.gapClass)}
+        className={cn("flex shrink-0 items-end", dim.gapClass)}
         role="group"
         aria-label="Context meters"
         data-hww-meter-cluster="rings"

@@ -216,12 +216,12 @@ describe("WorkspaceChatScreen shell polish", () => {
     expect(send?.className).toMatch(/rounded-md/);
   });
 
-  it("workbench tab strip remains unchanged without GitHub", async () => {
+  it("workbench tab strip has no Terminal tab and no GitHub tab", async () => {
     renderChat("/workspace/chat?session=sid_wb");
     await waitFor(() =>
-      expect(screen.getByTestId("hww-workbench-tab-terminal")).toBeInTheDocument(),
+      expect(screen.getByTestId("hww-workbench-tab-preview")).toBeInTheDocument(),
     );
+    expect(screen.queryByTestId("hww-workbench-tab-terminal")).not.toBeInTheDocument();
     expect(screen.queryByTestId("hww-workbench-tab-github")).not.toBeInTheDocument();
-    expect(screen.getByTestId("hww-workbench-tab-preview")).toBeInTheDocument();
   });
 });

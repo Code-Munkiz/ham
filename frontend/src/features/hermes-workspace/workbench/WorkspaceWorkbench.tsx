@@ -15,14 +15,10 @@ import {
   Send,
   Settings2,
   Share2,
-  Terminal,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ProjectSourceIntakeDialog } from "./ProjectSourceIntakeDialog";
-import { LocalMachineConnectCta } from "../components/LocalMachineConnectCta";
-import { isLocalRuntimeConfigured } from "../adapters/localRuntime";
-import { WorkspaceTerminalView } from "../screens/terminal/WorkspaceTerminalView";
 import { WorkbenchProjectSettingsPanel } from "./WorkbenchProjectSettingsPanel";
 
 export type WorkspaceWorkbenchProps = {
@@ -30,20 +26,13 @@ export type WorkspaceWorkbenchProps = {
   projectId?: string | null;
 };
 
-export type WorkspaceWorkbenchTabId =
-  | "preview"
-  | "code"
-  | "database"
-  | "storage"
-  | "terminal"
-  | "settings";
+export type WorkspaceWorkbenchTabId = "preview" | "code" | "database" | "storage" | "settings";
 
 const TABS: Array<{ id: WorkspaceWorkbenchTabId; label: string; icon: typeof Eye }> = [
   { id: "preview", label: "Preview", icon: Eye },
   { id: "code", label: "Code", icon: FileCode },
   { id: "database", label: "Database", icon: Database },
   { id: "storage", label: "Project source", icon: FolderOpen },
-  { id: "terminal", label: "Terminal", icon: Terminal },
   { id: "settings", label: "Settings", icon: Settings2 },
 ];
 
@@ -195,10 +184,7 @@ export function WorkspaceWorkbench({ projectId = null }: WorkspaceWorkbenchProps
 
       <div
         data-testid={`hww-workbench-panel-${activeTab}`}
-        className={cn(
-          "hww-scroll min-h-0 flex-1 overflow-x-hidden",
-          activeTab === "terminal" ? "flex flex-col overflow-hidden p-0" : "overflow-y-auto p-3",
-        )}
+        className="hww-scroll min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-3"
       >
         {activeTab === "preview" ? <WorkbenchPreviewPanel /> : null}
         {activeTab === "code" ? (
@@ -208,7 +194,6 @@ export function WorkspaceWorkbench({ projectId = null }: WorkspaceWorkbenchProps
         {activeTab === "storage" ? (
           <WorkbenchStoragePanel onAddProjectSource={() => setProjectSourceOpen(true)} />
         ) : null}
-        {activeTab === "terminal" ? <WorkbenchTerminalPanel /> : null}
         {activeTab === "settings" ? <WorkbenchProjectSettingsPanel projectId={projectId} /> : null}
       </div>
       <ProjectSourceIntakeDialog open={projectSourceOpen} onOpenChange={setProjectSourceOpen} />
@@ -309,51 +294,5 @@ function WorkbenchStoragePanel({ onAddProjectSource }: { onAddProjectSource: () 
         </Button>
       </div>
     </MutedPanel>
-  );
-}
-
-function isWorkspaceDeveloperModeEnabled(): boolean {
-  return (import.meta.env.VITE_HAM_SHOW_LOCAL_DEV_HINTS as string | undefined) === "true";
-}
-
-function WorkbenchTerminalPanel() {
-  const [hasLocal, setHasLocal] = React.useState(() => isLocalRuntimeConfigured());
-  const developerModeEnabled = isWorkspaceDeveloperModeEnabled();
-
-  React.useEffect(() => {
-    const sync = () => setHasLocal(isLocalRuntimeConfigured());
-    window.addEventListener("hww-local-runtime-changed", sync);
-    return () => window.removeEventListener("hww-local-runtime-changed", sync);
-  }, []);
-
-  if (!hasLocal) {
-    return (
-      <div className="flex h-full min-h-0 flex-col gap-3 p-3 text-[12px] text-white/70">
-        <div>
-          <p className="text-[13px] font-medium text-white/88">Terminal</p>
-          <p className="mt-1 text-white/55">Terminal requires a connected runtime.</p>
-        </div>
-        <p className="text-white/55">
-          Connect HAM Desktop or enable developer mode to use terminal features.
-        </p>
-        {developerModeEnabled ? (
-          <LocalMachineConnectCta
-            variant="card"
-            onSuccess={() => setHasLocal(true)}
-            showOpenFiles
-            showOpenSettings
-          />
-        ) : null}
-      </div>
-    );
-  }
-
-  return (
-    <div
-      data-testid="hww-workbench-terminal-embed"
-      className="flex h-full min-h-[280px] min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-white/[0.08] bg-[#0d0d0d]"
-    >
-      <WorkspaceTerminalView mode="embedded" className="min-h-0 flex-1" />
-    </div>
   );
 }
