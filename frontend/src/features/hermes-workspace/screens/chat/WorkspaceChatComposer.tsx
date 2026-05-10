@@ -1003,6 +1003,9 @@ export function WorkspaceChatComposer({
           <div
             className={cn(
               "hww-command-deck box-border min-w-0 border-t border-white/[0.08]",
+              composerToolbarDensity === "comfortable" && "hww-command-deck--comfortable",
+              composerToolbarDensity === "compact" && "hww-command-deck--compact",
+              composerToolbarDensity === "tight" && "hww-command-deck--tight",
               composerToolbarDensity === "tight"
                 ? "flex flex-col gap-0"
                 : "grid min-w-0 grid-cols-[minmax(0,max-content)_minmax(0,1fr)_minmax(0,max-content)] items-end gap-x-2 gap-y-1 px-2.5 pb-2 pt-2 md:px-3.5 md:pb-2.5 md:pt-2.5",
