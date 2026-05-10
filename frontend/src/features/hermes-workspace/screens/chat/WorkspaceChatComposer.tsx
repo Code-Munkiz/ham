@@ -208,11 +208,49 @@ function ComposerQuickTipsBar({
   onPick: (prompt: string) => void;
   onDismiss: () => void;
 }) {
+  const scrollRef = React.useRef<HTMLDivElement | null>(null);
+  const [canScrollAhead, setCanScrollAhead] = React.useState(false);
+
+  const syncOverflow = React.useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const { scrollLeft, scrollWidth, clientWidth } = el;
+    const overflow = scrollWidth > clientWidth + 1;
+    const remainder = scrollWidth - scrollLeft - clientWidth;
+    const next = overflow && remainder > 2;
+    setCanScrollAhead(next);
+  }, []);
+
+  React.useLayoutEffect(() => {
+    syncOverflow();
+  }, [syncOverflow, suggestions.length]);
+
+  React.useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => syncOverflow());
+    ro.observe(el);
+    el.addEventListener("scroll", syncOverflow, { passive: true });
+    return () => {
+      ro.disconnect();
+      el.removeEventListener("scroll", syncOverflow);
+    };
+  }, [syncOverflow, suggestions.length]);
+
+  const scrollStarterPromptsAhead = React.useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const dx = Math.max(120, Math.round(el.clientWidth * 0.65));
+    el.scrollBy({ left: dx, behavior: "smooth" });
+    window.requestAnimationFrame(() => syncOverflow());
+  }, [syncOverflow]);
+
   return (
     <div
       role="toolbar"
       aria-label="Starter prompts"
       data-hww-composer-quick-tips
+      data-hww-composer-quick-tips-overflow={canScrollAhead ? "scrollable" : "idle"}
       className="mb-2 flex min-h-9 max-w-full min-w-0 items-center gap-2 overflow-x-hidden"
     >
       <Lightbulb
@@ -220,7 +258,11 @@ function ComposerQuickTipsBar({
         strokeWidth={1.75}
         aria-hidden
       />
-      <div className="-mx-0.5 flex min-w-0 flex-1 items-center gap-2 overflow-x-auto overflow-y-hidden pb-px [scrollbar-width:thin]">
+      <div
+        ref={scrollRef}
+        data-hww-composer-quick-tips-scroll
+        className="-mx-0.5 flex min-w-0 flex-1 items-center gap-2 overflow-x-auto overflow-y-hidden hww-composer-quick-tips-scroll"
+      >
         <span
           className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-white/[0.09] bg-white/[0.03] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-white/45"
           aria-hidden
@@ -250,12 +292,26 @@ function ComposerQuickTipsBar({
           );
         })}
       </div>
-      <ChevronRight className="hidden h-4 w-4 shrink-0 text-white/35 sm:block" aria-hidden />
+      <button
+        type="button"
+        aria-label="Show more starter prompts"
+        title="Scroll starter prompts"
+        disabled={!canScrollAhead}
+        data-hww-composer-quick-tips-scroll-next
+        onClick={scrollStarterPromptsAhead}
+        className={cn(
+          "inline-flex size-9 min-h-9 min-w-9 shrink-0 cursor-pointer items-center justify-center rounded-md border text-white/90 outline-none transition",
+          "border-white/[0.14] bg-white/[0.05] hover:border-white/[0.22] hover:bg-white/[0.1] hover:text-white",
+          "focus-visible:border-emerald-400/35 focus-visible:ring-2 focus-visible:ring-emerald-400/35 disabled:pointer-events-none disabled:opacity-[0.22]",
+        )}
+      >
+        <ChevronRight className="h-5 w-5 shrink-0" strokeWidth={2.25} aria-hidden />
+      </button>
       <Button
         type="button"
         variant="ghost"
         size="icon"
-        className="h-8 w-8 shrink-0 text-white/50 hover:bg-white/[0.06] hover:text-white"
+        className="size-9 min-h-9 min-w-9 shrink-0 text-white/50 hover:bg-white/[0.06] hover:text-white"
         aria-label="Hide starter prompts"
         title="Hide starter prompts"
         onClick={onDismiss}
@@ -829,7 +885,7 @@ export function WorkspaceChatComposer({
       ) : null}
       <div
         className={cn(
-          "flex h-10 min-h-10 shrink-0 items-center",
+          "flex h-9 min-h-9 shrink-0 items-center",
           voiceTranscribing && "pointer-events-none opacity-55",
         )}
         title={micColumnTitle}
@@ -952,15 +1008,20 @@ export function WorkspaceChatComposer({
         disabled={!canSend}
         title={sendButtonTitle}
         className={cn(
-          "h-10 w-10 min-h-10 min-w-10 shrink-0 rounded-full border border-emerald-400/15 bg-gradient-to-b from-emerald-600 to-emerald-900 text-white shadow-md hover:from-emerald-500 hover:to-emerald-800 disabled:opacity-40",
+          "size-9 min-h-9 min-w-9 shrink-0 rounded-md border border-emerald-400/20 bg-transparent text-emerald-200/85 shadow-none",
+          "hover:border-emerald-400/38 hover:bg-emerald-500/12 hover:text-emerald-50",
+          "focus-visible:border-emerald-400/45 focus-visible:ring-2 focus-visible:ring-emerald-400/30",
+          "disabled:pointer-events-none disabled:opacity-40",
+          canSend && "border-emerald-400/32 text-emerald-100",
         )}
         aria-label="Send"
         data-hww-command-send
+        data-hww-composer-toolbar-icon="send"
       >
         {sending ? (
-          <span className={cn("h-5 w-5 animate-pulse rounded-full bg-white/80")} />
+          <span className={cn("h-3 w-3 animate-pulse rounded-full bg-emerald-200/85")} />
         ) : (
-          <ArrowUp className="h-5 w-5 shrink-0" strokeWidth={2.2} />
+          <ArrowUp className="h-4 w-4 shrink-0" strokeWidth={2.2} />
         )}
       </Button>
     </>
@@ -1147,7 +1208,7 @@ export function WorkspaceChatComposer({
                 data-hww-command-controls
                 data-hww-action-buttons
                 className={cn(
-                  "flex h-10 min-h-10 shrink-0 items-center justify-end gap-0.5 overflow-x-hidden md:gap-1",
+                  "flex h-9 min-h-9 shrink-0 items-center justify-end gap-0.5 overflow-x-hidden md:gap-1",
                 )}
               >
                 {rightDeckActions}

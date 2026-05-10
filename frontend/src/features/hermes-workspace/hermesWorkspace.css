@@ -180,6 +180,17 @@
   max-width: 100%;
 }
 
+/* Starter prompt strip — horizontal scroll without native scrollbar chrome */
+.hww-root .hww-composer-quick-tips-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.hww-root .hww-composer-quick-tips-scroll::-webkit-scrollbar {
+  display: none;
+  height: 0;
+}
+
 .hww-command-textarea::-webkit-scrollbar {
   width: 5px;
 }

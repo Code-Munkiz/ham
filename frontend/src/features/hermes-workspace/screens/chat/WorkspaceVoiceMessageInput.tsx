@@ -465,6 +465,7 @@ export function WorkspaceVoiceMessageInput(props: WorkspaceVoiceMessageInputProp
             data-hww-voice-instance={voiceInstanceId.current}
             data-hww-voice-state={active ? (isLiveListening ? "live" : "recording") : "idle"}
             data-hww-stop-primary={active ? "true" : "false"}
+            data-hww-composer-toolbar-icon="mic"
           >
             {active ? (
               <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
