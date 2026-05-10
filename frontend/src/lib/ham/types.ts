@@ -436,15 +436,33 @@ export function getChatGatewayReadinessToken(
   return "GATEWAY_READY";
 }
 
-/** From `GET /api/cursor/credentials-status` — never includes the full secret. */
+/**
+ * From `GET /api/cursor/credentials-status` — never includes the full secret.
+ *
+ * Two server-side response shapes:
+ * - **Normie**: only `configured`, `status`, `account_label`, `diagnostics_visible: false`.
+ *   Hides env names, file paths, key previews, operator email, and route mapping.
+ * - **Operator** (`HAM_WORKSPACE_OPERATOR_EMAILS` allowlist): adds `diagnostics_visible: true`
+ *   plus `source`, `masked_preview`, `user_email`, `api_key_name`, `key_created_at`,
+ *   `storage_path`, `storage_override_env`, `wired_for`, `error`. All diagnostic fields are
+ *   typed optional so the normie shape type-checks.
+ */
 export interface CursorCredentialsStatus {
   configured: boolean;
-  source: "ui" | "env" | "none";
-  masked_preview: string | null;
-  api_key_name: string | null;
-  user_email: string | null;
-  key_created_at: string | null;
-  error: string | null;
+  /** Normie status pill copy. */
+  status?: "connected" | "needs_setup" | "unavailable";
+  /** Normie account label (e.g. "Connected"); null when not configured. */
+  account_label?: string | null;
+  /** True only for workspace-operator responses; UI uses this to gate the diagnostics drawer. */
+  diagnostics_visible?: boolean;
+
+  // Operator-only diagnostic fields (absent in normie response)
+  source?: "ui" | "env" | "none";
+  masked_preview?: string | null;
+  api_key_name?: string | null;
+  user_email?: string | null;
+  key_created_at?: string | null;
+  error?: string | null;
   /** Server path where UI-saved key is stored (API host filesystem). */
   storage_path?: string;
   /** Set when `HAM_CURSOR_CREDENTIALS_FILE` overrides the default ~/.ham path. */
