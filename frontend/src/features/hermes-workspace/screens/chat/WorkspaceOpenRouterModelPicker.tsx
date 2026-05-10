@@ -148,12 +148,13 @@ export function WorkspaceOpenRouterModelPicker({
           title={title ?? undefined}
           aria-label={layoutDensity === "tight" ? `Model: ${label}` : "Model"}
           className={cn(
-            "hww-input ml-0.5 flex shrink items-center justify-between gap-1 rounded-md border-0",
-            "bg-emerald-500/10 text-left font-normal text-emerald-200/90 hover:bg-emerald-500/16",
+            "hww-input ml-0 flex shrink-0 items-center justify-between gap-1 rounded-md border border-transparent",
+            "bg-transparent text-left font-normal text-emerald-100/92 shadow-none hover:bg-white/[0.06] hover:text-emerald-50",
+            "focus-visible:ring-2 focus-visible:ring-emerald-400/35 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent",
             layoutDensity === "comfortable" &&
-              "h-10 min-h-10 max-w-[min(22rem,85vw)] px-2 py-1 text-[11px] md:max-w-[min(26rem,90vw)] md:py-1.5 md:pl-2.5 md:pr-2 md:text-[12px]",
+              "h-9 min-h-[36px] max-w-[min(18rem,calc(100vw-8rem))] px-2.5 py-0 text-[11px] md:max-w-[min(22rem,calc(100vw-10rem))] md:text-[12px]",
             layoutDensity === "compact" &&
-              "h-9 min-h-9 max-w-[min(16rem,72vw)] px-1.5 py-0.5 text-[10px] md:max-w-[min(20rem,82vw)]",
+              "h-8 min-h-[32px] max-w-[min(11rem,45vw)] px-2 py-0 text-[10px] md:max-w-[min(14rem,50vw)]",
             layoutDensity === "tight" &&
               "h-8 min-h-8 w-8 min-w-8 max-w-8 flex-none justify-center px-0 py-0 text-[10px]",
           )}

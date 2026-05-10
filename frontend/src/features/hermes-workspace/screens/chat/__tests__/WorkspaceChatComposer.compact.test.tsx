@@ -172,7 +172,7 @@ describe("WorkspaceChatComposer narrow layout", () => {
     });
     const deck = document.querySelector(".hww-command-deck");
     expect(deck?.getAttribute("data-hww-command-deck-layout")).toBe("triple");
-    expect(deck?.className).toMatch(/items-end/);
+    expect(deck?.className).toMatch(/items-center/);
     expect(deck?.className).toMatch(/minmax\(0,1fr\)/);
     expect(document.querySelector("[data-hww-command-input-slot]")).toBeTruthy();
     expect(document.querySelector("[data-hww-command-deck-actions]")).toBeTruthy();
