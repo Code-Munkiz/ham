@@ -74,6 +74,7 @@ import {
 } from "./imageGenerationIntent";
 import { useWorkspaceHamProject } from "../../WorkspaceHamProjectContext";
 import { WorkspaceChatInspectorPanel } from "./WorkspaceChatInspectorPanel";
+import { WorkspaceWorkbench } from "../../workbench/WorkspaceWorkbench";
 import {
   appendInspectorEvent,
   patchInspectorEventsSessionId,
@@ -3392,20 +3393,36 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
             }}
             aria-label="Close inspector"
           />
-          <div className="fixed right-0 top-0 z-30 flex h-full max-h-full overflow-hidden shadow-2xl md:static md:z-auto md:shadow-none">
+          <div
+            className={cn(
+              "z-30 flex max-h-full overflow-hidden shadow-2xl",
+              "fixed right-0 top-0 h-full md:static md:z-auto md:h-full md:min-h-0 md:shadow-none",
+              "md:w-[min(420px,42vw)] md:min-w-[280px] md:max-w-[50%] md:shrink-0",
+            )}
+          >
             <WorkspaceChatInspectorPanel
               sessionId={sessionId}
               events={inspectorEvents}
               artifactRows={artifactRows}
               executionMode={executionMode}
               agentActivity={missionAgentActivityContent}
+              fillColumn
               onClose={() => {
                 setInspectorOpen(false);
               }}
             />
           </div>
         </>
-      ) : null}
+      ) : (
+        <div
+          className={cn(
+            "flex min-h-0 w-full min-w-0 flex-col",
+            "min-h-[260px] max-h-[48vh] md:max-h-none md:h-full md:min-h-0 md:w-[min(420px,42vw)] md:min-w-[280px] md:max-w-[50%] md:shrink-0",
+          )}
+        >
+          <WorkspaceWorkbench />
+        </div>
+      )}
     </div>
   );
 }

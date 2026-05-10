@@ -44,6 +44,8 @@ type WorkspaceChatInspectorPanelProps = {
   executionMode: HamChatExecutionMode | null;
   /** Mission-scoped chat: Cursor / Cloud Agent status + live feed (null when not in mission mode). */
   agentActivity: React.ReactNode;
+  /** When true (desktop column beside chat), stretch to parent width instead of fixed sidebar widths. */
+  fillColumn?: boolean;
 };
 
 const SKILL_BUILTIN = new Set(["ham-local-docs", "ham-local-plan"]);
@@ -654,6 +656,7 @@ export function WorkspaceChatInspectorPanel({
   artifactRows,
   executionMode,
   agentActivity,
+  fillColumn = false,
 }: WorkspaceChatInspectorPanelProps) {
   const [activeTab, setActiveTab] = React.useState<TabId>("activity");
   const [memoryState, setMemoryState] = React.useState<MemoryInspectorState>({ status: "idle" });
@@ -716,10 +719,13 @@ export function WorkspaceChatInspectorPanel({
 
   return (
     <aside
+      data-testid="hww-inspector-panel"
       className={cn(
-        "hww-inspector flex h-full min-h-0 w-[min(100vw,22rem)] shrink-0 flex-col overflow-hidden",
+        "hww-inspector flex h-full min-h-0 flex-col overflow-hidden",
+        fillColumn
+          ? "w-[min(100vw,22rem)] shrink-0 md:w-full md:max-w-none md:shrink"
+          : "w-[min(100vw,22rem)] shrink-0 md:w-[min(100vw,350px)]",
         "border-l border-white/[0.08] bg-[#040d14]/95 shadow-[inset_1px_0_0_0_rgba(255,255,255,0.04)]",
-        "md:w-[min(100vw,350px)]",
       )}
       style={{
         boxShadow: "-4px 0 16px rgba(0, 0, 0, 0.2)",
