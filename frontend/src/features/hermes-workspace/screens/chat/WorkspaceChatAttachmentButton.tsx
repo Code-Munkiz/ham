@@ -29,7 +29,7 @@ export function WorkspaceChatAttachmentButton({
       <input
         ref={inputRef}
         type="file"
-        className="sr-only"
+        hidden
         accept={WORKSPACE_ATTACHMENT_ACCEPT}
         multiple
         aria-hidden

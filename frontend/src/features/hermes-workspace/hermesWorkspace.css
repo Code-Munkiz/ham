@@ -166,8 +166,14 @@
   overflow-x: hidden;
 }
 
+/* Dark native controls next to the composer (prevents light/white scrollbar + stepper chrome). */
+.hww-root .hww-chat-composer-outer,
+.hww-root [data-hww-command-deck] {
+  color-scheme: dark;
+}
+
 /* Command Deck — chat composer textarea: scroll without visible OS scrollbar chrome */
-.hww-command-textarea {
+.hww-root textarea.hww-command-textarea {
   box-sizing: border-box;
   scrollbar-width: none;
   -ms-overflow-style: none;
@@ -191,10 +197,24 @@
   height: 0;
 }
 
-.hww-command-textarea::-webkit-scrollbar {
+.hww-root textarea.hww-command-textarea::-webkit-scrollbar,
+.hww-root textarea.hww-command-textarea::-webkit-scrollbar-button,
+.hww-root textarea.hww-command-textarea::-webkit-scrollbar-corner {
   display: none;
   width: 0;
   height: 0;
+}
+
+/* Kill number spinners if any native input lands in the composer card */
+.hww-root [data-hww-command-deck] input::-webkit-outer-spin-button,
+.hww-root [data-hww-command-deck] input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.hww-root [data-hww-command-deck] input[type="number"] {
+  appearance: textfield;
+  -moz-appearance: textfield;
 }
 
 @media (prefers-reduced-motion: no-preference) {
