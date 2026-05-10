@@ -43,6 +43,8 @@ from pydantic import BaseModel, Field
 from src.api.clerk_gate import get_ham_clerk_actor
 from src.api.models_catalog import build_catalog_payload
 from src.ham.clerk_auth import HamActor, clerk_authorization_is_clerk_session
+from src.ham.clerk_operator import actor_is_workspace_operator
+from src.ham.transcription_config import transcription_runtime_configured
 from src.ham.workspace_tool_key_validation import (
     validate_anthropic_api_key,
     validate_cursor_api_key,
@@ -500,8 +502,11 @@ def _comfyui_status(cloud: bool) -> ToolStatus:
 
 
 def _openai_transcription_tool_status(actor: HamActor | None = None) -> ToolStatus:
-    """User BYOK ``openai_transcription`` credential (``/api/chat/transcribe``)."""
+    """Match ``/api/chat/transcribe``: BYOK Connected Tool first, else platform ``HAM_TRANSCRIPTION_*``."""
     if actor and has_connected_tool_credential_record(actor, "openai_transcription"):
+        return ToolStatus.ready
+    configured, _ = transcription_runtime_configured(actor)
+    if configured:
         return ToolStatus.ready
     return ToolStatus.needs_sign_in
 
@@ -523,6 +528,17 @@ def _build_tool_registry(actor: HamActor | None = None) -> list[ToolEntry]:
         actor,
     )
     oai_stt_status = _openai_transcription_tool_status(actor)
+    cursor_is_operator = actor_is_workspace_operator(actor)
+    cursor_safe_actions = (
+        ["check_status", "connect", "disconnect"] if cursor_is_operator else ["check_status"]
+    )
+    cursor_connect_kind = ConnectKind.api_key if cursor_is_operator else ConnectKind.none
+    cursor_credential_preview = _cursor_credential_preview() if cursor_is_operator else None
+    cursor_setup_hint = (
+        "Cursor Cloud Agents from HAM when connected."
+        if cursor_is_operator
+        else "Cursor Cloud Agent is managed by your workspace operator."
+    )
 
     tools: list[ToolEntry] = [
         ToolEntry(
@@ -549,11 +565,11 @@ def _build_tool_registry(actor: HamActor | None = None) -> list[ToolEntry]:
             enabled=_tool_enabled_for_status(cur_status),
             source=ToolSource.cloud,
             capabilities=["plan", "edit_code", "run_tests", "open_pr"],
-            setup_hint="Cursor Cloud Agents from HAM when connected.",
-            connect_kind=ConnectKind.api_key,
-            credential_preview=_cursor_credential_preview(),
+            setup_hint=cursor_setup_hint,
+            connect_kind=cursor_connect_kind,
+            credential_preview=cursor_credential_preview,
             last_checked_at=now,
-            safe_actions=["check_status", "connect", "disconnect"],
+            safe_actions=cursor_safe_actions,
         ),
         ToolEntry(
             id="factory_droid",
@@ -988,6 +1004,19 @@ def workspace_tool_connect(
         return ToolConnectSuccessResponse(credential_preview=prev)
 
     if tool_id == "cursor":
+        if not actor_is_workspace_operator(actor):
+            _LOG.info("cursor tool connect: blocked, caller is not workspace operator")
+            return JSONResponse(
+                status_code=403,
+                content=ToolConnectFailResponse(
+                    error_code="WORKSPACE_OPERATOR_REQUIRED",
+                    message=(
+                        "The Cursor team key is managed by your workspace operator. "
+                        "Ask your operator to rotate it."
+                    ),
+                    help=None,
+                ).model_dump(),
+            )
         if not validate_cursor_api_key(secret):
             _LOG.info("cursor tool connect: validation failed (key not logged)")
             return _invalid_key_response(tool_id)
@@ -1013,6 +1042,19 @@ def workspace_tool_disconnect(
         raise HTTPException(status_code=404, detail="Unknown tool.")
 
     if tool_id == "cursor":
+        if not actor_is_workspace_operator(actor):
+            _LOG.info("cursor tool disconnect: blocked, caller is not workspace operator")
+            return JSONResponse(
+                status_code=403,
+                content=ToolConnectFailResponse(
+                    error_code="WORKSPACE_OPERATOR_REQUIRED",
+                    message=(
+                        "The Cursor team key is managed by your workspace operator. "
+                        "Ask your operator to clear it."
+                    ),
+                    help=None,
+                ).model_dump(),
+            )
         clear_saved_cursor_api_key()
         _LOG.info("cursor tool disconnect: cleared saved file if present")
         return ToolDisconnectSuccessResponse()

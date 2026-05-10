@@ -35,11 +35,7 @@ export const WORKSPACE_CHAT_SUGGESTIONS: SuggestionChip[] = [
   },
 ];
 
-type WorkspaceChatEmptyStateProps = {
-  onSuggestionClick?: (prompt: string) => void;
-};
-
-export function WorkspaceChatEmptyState({ onSuggestionClick }: WorkspaceChatEmptyStateProps) {
+export function WorkspaceChatEmptyState() {
   const avatarSrc = hamWorkspaceLogoUrl();
 
   return (
@@ -47,9 +43,9 @@ export function WorkspaceChatEmptyState({ onSuggestionClick }: WorkspaceChatEmpt
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, ease: "easeOut" }}
-      className="hww-chat-empty flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center px-4 py-8"
+      className="hww-chat-empty flex min-h-0 min-w-0 max-w-full flex-1 flex-col items-center justify-center overflow-x-hidden px-4 py-8"
     >
-      <div className="flex max-w-xl flex-col items-center text-center">
+      <div className="flex max-w-full min-w-0 flex-col items-center text-center">
         <div className="mb-6 flex justify-center">
           {/*
             Same asset + same presentation as the sidebar top brand (`WorkspaceShell`):
@@ -72,22 +68,10 @@ export function WorkspaceChatEmptyState({ onSuggestionClick }: WorkspaceChatEmpt
         <p className="mt-3 text-sm text-white/40">
           Agent chat · live tools · memory · full observability
         </p>
-        <div className="mt-6 flex flex-wrap justify-center gap-2">
-          {WORKSPACE_CHAT_SUGGESTIONS.map((suggestion) => {
-            const Icon = suggestion.icon;
-            return (
-              <button
-                key={suggestion.label}
-                type="button"
-                onClick={() => onSuggestionClick?.(suggestion.prompt)}
-                className="hww-chat-chip flex cursor-pointer items-center gap-2 rounded-md px-3.5 py-2 text-xs font-medium text-[#e2eaf3] transition-all"
-              >
-                <Icon className="h-3.5 w-3.5 text-[#c45c12]/90" strokeWidth={1.5} />
-                {suggestion.label}
-              </button>
-            );
-          })}
-        </div>
+        <p className="mt-8 max-w-sm text-[12px] leading-relaxed text-white/40">
+          Use the scrolling starter prompts above the composer to jump in—they send the same
+          quick actions as before.
+        </p>
       </div>
     </motion.div>
   );

@@ -351,4 +351,47 @@ describe("WorkspaceConnectedToolsSection", () => {
     const input = await screen.findByLabelText(/Paste your API key/i);
     expect(input).toBeInTheDocument();
   });
+
+  it("non-operator cursor row with check_status only hides Connect/Disconnect and shows operator-managed copy", async () => {
+    const payload = buildDefaultPayload();
+    payload.tools = payload.tools.map((t) =>
+      t.id === "cursor"
+        ? mockTool("cursor", {
+            label: "Cursor",
+            category: "coding",
+            status: "ready",
+            connection: "on",
+            enabled: true,
+            connect_kind: "none",
+            credential_preview: null,
+            safe_actions: ["check_status"],
+          })
+        : t,
+    );
+    // Surface the non-operator setup hint that the backend emits for normies.
+    payload.tools = payload.tools.map((t) =>
+      t.id === "cursor"
+        ? {
+            ...t,
+            setup_hint: "Cursor Cloud Agent is managed by your workspace operator.",
+          }
+        : t,
+    );
+    vi.spyOn(HamApi, "fetchWorkspaceTools").mockResolvedValue(
+      new Response(JSON.stringify(payload), { status: 200 }),
+    );
+
+    render(<WorkspaceConnectedToolsSection />);
+    await waitFor(() => expect(screen.getByText("Cursor")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText("Cursor"));
+
+    await waitFor(() =>
+      expect(screen.getByText(/managed by your workspace operator/i)).toBeInTheDocument(),
+    );
+    expect(screen.queryByLabelText(/Paste your API key/i)).toBeNull();
+    expect(screen.queryByLabelText(/Paste your access token/i)).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Connect$/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Disconnect$/i })).toBeNull();
+  });
 });

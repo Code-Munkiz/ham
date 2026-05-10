@@ -60,7 +60,10 @@ import {
 } from "../../utils/missionFeedTranscript";
 import { MANAGED_MISSION_CHAT_OWNERSHIP_HINT } from "../../lib/managedMissionOwnershipCopy";
 import { useVoiceWorkspaceSettingsOptional } from "../../voice/VoiceWorkspaceSettingsContext";
-import { WorkspaceChatEmptyState } from "./WorkspaceChatEmptyState";
+import {
+  WorkspaceChatEmptyState,
+  WORKSPACE_CHAT_SUGGESTIONS,
+} from "./WorkspaceChatEmptyState";
 import { WorkspaceChatMessageList, type HwwMsgRow } from "./WorkspaceChatMessageList";
 import { WorkspaceChatComposer } from "./WorkspaceChatComposer";
 import type {
@@ -74,6 +77,7 @@ import {
 } from "./imageGenerationIntent";
 import { useWorkspaceHamProject } from "../../WorkspaceHamProjectContext";
 import { WorkspaceChatInspectorPanel } from "./WorkspaceChatInspectorPanel";
+import { WorkspaceWorkbench } from "../../workbench/WorkspaceWorkbench";
 import {
   appendInspectorEvent,
   patchInspectorEventsSessionId,
@@ -114,6 +118,14 @@ function mapServerAttachmentKind(serverKind: string): WorkspaceComposerAttachmen
 }
 
 const VOICE_DEBUG_FLAG = "ham.voiceDebug";
+
+/** Desktop `/workspace/chat`: command column width (px) vs workbench — drag + `localStorage`. */
+const HWW_CHAT_CMD_PANEL_LS_KEY = "hww.workbench.commandPanelWidth";
+const HWW_CHAT_CMD_PANEL_DEFAULT_PX = 480;
+const HWW_CHAT_CMD_PANEL_MIN_PX = 360;
+const HWW_CHAT_CMD_PANEL_MAX_PX = 720;
+const HWW_WORKBENCH_PANEL_MIN_PX = 420;
+const HWW_CHAT_SPLIT_RESIZER_PX = 6;
 
 function voiceDebugEnabled(): boolean {
   if (typeof window === "undefined") return false;
@@ -599,6 +611,14 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   }, [attachments]);
 
   const [voiceTranscribing, setVoiceTranscribing] = React.useState(false);
+  const chatSplitRowRef = React.useRef<HTMLDivElement | null>(null);
+  const cmdPanelWidthPxRef = React.useRef(HWW_CHAT_CMD_PANEL_DEFAULT_PX);
+  const [cmdPanelWidthPx, setCmdPanelWidthPx] = React.useState(HWW_CHAT_CMD_PANEL_DEFAULT_PX);
+  cmdPanelWidthPxRef.current = cmdPanelWidthPx;
+  const splitDragRef = React.useRef<{ startX: number; startW: number } | null>(null);
+  const [splitResizePointerDown, setSplitResizePointerDown] = React.useState(false);
+  const [isDesktopSplitLayout, setIsDesktopSplitLayout] = React.useState(false);
+
   const [inspectorOpen, setInspectorOpen] = React.useState(false);
   const [pdfExporting, setPdfExporting] = React.useState(false);
   const [chatCapabilities, setChatCapabilities] = React.useState<ChatCapabilitiesPayload | null>(
@@ -640,6 +660,86 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
    * (404 / "Session unavailable" after create/switch).
    */
   const suppressSessionQueryUntilNavigationRef = React.useRef(false);
+
+  const clampCmdPanelWidthPx = React.useCallback((w: number) => {
+    const clampedBase = Math.min(HWW_CHAT_CMD_PANEL_MAX_PX, Math.max(HWW_CHAT_CMD_PANEL_MIN_PX, w));
+    const row = chatSplitRowRef.current;
+    if (!row) return clampedBase;
+    const total = row.getBoundingClientRect().width;
+    if (total <= 0) return clampedBase;
+    const maxFromBench = total - HWW_WORKBENCH_PANEL_MIN_PX - HWW_CHAT_SPLIT_RESIZER_PX;
+    const ceiling = Math.min(
+      HWW_CHAT_CMD_PANEL_MAX_PX,
+      Math.max(HWW_CHAT_CMD_PANEL_MIN_PX, maxFromBench),
+    );
+    return Math.min(clampedBase, ceiling);
+  }, []);
+
+  React.useEffect(() => {
+    try {
+      const raw = localStorage.getItem(HWW_CHAT_CMD_PANEL_LS_KEY);
+      if (raw) {
+        const n = Number.parseInt(raw, 10);
+        if (Number.isFinite(n)) {
+          setCmdPanelWidthPx(
+            Math.min(HWW_CHAT_CMD_PANEL_MAX_PX, Math.max(HWW_CHAT_CMD_PANEL_MIN_PX, n)),
+          );
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  React.useEffect(() => {
+    const mq = window.matchMedia("(min-width: 768px)");
+    const sync = () => {
+      setIsDesktopSplitLayout(mq.matches);
+    };
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+
+  React.useEffect(() => {
+    if (!isDesktopSplitLayout) return;
+    setCmdPanelWidthPx((prev) => clampCmdPanelWidthPx(prev));
+  }, [isDesktopSplitLayout, clampCmdPanelWidthPx]);
+
+  React.useEffect(() => {
+    if (!isDesktopSplitLayout) return;
+    const onResize = () => {
+      setCmdPanelWidthPx((prev) => clampCmdPanelWidthPx(prev));
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [isDesktopSplitLayout, clampCmdPanelWidthPx]);
+
+  React.useEffect(() => {
+    if (!splitResizePointerDown) return;
+    const onMove = (e: PointerEvent) => {
+      const d = splitDragRef.current;
+      if (!d) return;
+      setCmdPanelWidthPx(clampCmdPanelWidthPx(d.startW + (e.clientX - d.startX)));
+    };
+    const onUp = () => {
+      splitDragRef.current = null;
+      setSplitResizePointerDown(false);
+      try {
+        localStorage.setItem(HWW_CHAT_CMD_PANEL_LS_KEY, String(cmdPanelWidthPxRef.current));
+      } catch {
+        /* ignore */
+      }
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+  }, [splitResizePointerDown, clampCmdPanelWidthPx]);
 
   React.useEffect(() => {
     activeWorkspaceIdRef.current = activeWorkspaceId;
@@ -3096,170 +3196,242 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     )
   ) : null;
 
+  const onChatSplitResizePointerDown = React.useCallback(
+    (e: React.PointerEvent<HTMLButtonElement>) => {
+      if (!isDesktopSplitLayout) return;
+      e.preventDefault();
+      splitDragRef.current = {
+        startX: e.clientX,
+        startW: cmdPanelWidthPxRef.current,
+      };
+      setSplitResizePointerDown(true);
+    },
+    [isDesktopSplitLayout],
+  );
+
   return (
-    <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col md:flex-row">
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <header className="hww-chat-header flex shrink-0 items-start justify-between gap-3 border-b border-white/[0.06] bg-[#040d14]/80 px-4 py-3 backdrop-blur-sm md:px-8">
-          <div className="flex min-w-0 items-start gap-2.5">
+    <div
+      ref={chatSplitRowRef}
+      data-testid="hww-chat-split-row"
+      className="flex min-h-0 w-full min-w-0 flex-1 flex-col md:flex-row"
+    >
+      <div
+        data-testid="hww-command-panel"
+        className={cn(
+          "flex min-h-0 max-w-full min-w-0 flex-1 flex-col overflow-x-hidden md:flex-none",
+          "w-full border-b border-white/[0.06] md:border-b-0 md:border-r md:border-white/[0.08] md:shrink-0 md:overflow-x-hidden",
+        )}
+        style={
+          isDesktopSplitLayout
+            ? {
+                width: cmdPanelWidthPx,
+                minWidth: HWW_CHAT_CMD_PANEL_MIN_PX,
+                maxWidth: HWW_CHAT_CMD_PANEL_MAX_PX,
+              }
+            : undefined
+        }
+      >
+        <header
+          data-testid="hww-chat-header-compact"
+          data-hww-chat-header-compact="true"
+          data-hww-chat-header-mission-active={missionModeActive ? "true" : "false"}
+          data-hww-chat-header-session-load-failed={sessionLoadFailed ? "true" : "false"}
+          className="hww-chat-header flex min-h-[52px] shrink-0 items-center justify-between gap-3 border-b border-white/[0.06] bg-[#040d14]/80 px-4 py-2.5 backdrop-blur-sm md:px-8"
+        >
+          <div className="flex min-w-0 flex-1 items-center gap-2.5">
             <img
               src={hamWorkspaceLogoUrl()}
               alt=""
-              className="mt-0.5 h-8 w-8 shrink-0 object-contain opacity-95"
+              className="h-8 w-8 shrink-0 object-contain opacity-95"
               width={32}
               height={32}
             />
-            <div className="min-w-0">
-              <h1 className="text-[15px] font-semibold tracking-tight text-white/[0.95]">
-                {headerTitle}
-              </h1>
-              <p className="mt-0.5 truncate text-[11px] leading-snug text-white/50">
-                {headerSubtitle}
-              </p>
-            </div>
+            <span className="sr-only">
+              {headerTitle}. {headerSubtitle}
+            </span>
+            {missionModeActive ? (
+              <span className="max-w-[min(100%,12rem)] truncate text-[11px] font-medium text-emerald-200/95">
+                Mission chat
+              </span>
+            ) : sessionLoadFailed ? (
+              <span className="text-[11px] font-semibold tracking-tight text-amber-100/95">
+                Session unavailable
+              </span>
+            ) : null}
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
             <button
               type="button"
+              data-testid="hww-chat-inspector-tab"
+              data-active={inspectorOpen ? "true" : "false"}
               onClick={() => {
                 setInspectorOpen((o) => !o);
               }}
               className={cn(
-                "inline-flex h-9 items-center gap-1 rounded-lg border px-2.5 text-[11px] font-medium transition",
+                "inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1.5 text-[11px] font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-emerald-400/30",
                 inspectorOpen
-                  ? "border-emerald-400/40 bg-emerald-500/10 text-emerald-200/95"
-                  : "border-white/[0.1] bg-white/[0.06] text-white/80 hover:bg-white/[0.09] hover:text-white",
+                  ? "bg-emerald-500/15 text-[#e8eef8] shadow-[inset_0_0_0_1px_rgba(16,185,129,0.25),0_0_16px_rgba(16,185,129,0.08)]"
+                  : "text-white/45 hover:bg-white/[0.06] hover:text-white/75",
               )}
               aria-pressed={inspectorOpen}
               title={inspectorOpen ? "Close inspector" : "Open inspector"}
             >
               {inspectorOpen ? (
-                <PanelRightClose className="h-3.5 w-3.5" strokeWidth={1.5} />
+                <PanelRightClose className="h-3.5 w-3.5 opacity-90" strokeWidth={1.5} />
               ) : (
-                <PanelRight className="h-3.5 w-3.5" strokeWidth={1.5} />
+                <PanelRight className="h-3.5 w-3.5 opacity-90" strokeWidth={1.5} />
               )}
-              <span className="hidden sm:inline">Inspector</span>
+              <span className="hidden sm:inline select-none">Inspector</span>
             </button>
           </div>
         </header>
-        <div
-          ref={listWrapRef}
-          className="hww-scroll flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto"
-        >
-          {loadingSession ? (
-            <div className="flex flex-1 items-center justify-center py-12 text-sm text-white/40">
-              Loading…
-            </div>
-          ) : sessionLoadFailed ? (
-            <div className="flex flex-1 flex-col items-center justify-center px-4 py-10">
-              <div
-                className="w-full max-w-md rounded-xl border border-amber-500/25 bg-[#040d14]/90 px-5 py-5 text-left shadow-lg"
-                role="alert"
-              >
-                <h2 className="text-[14px] font-semibold text-amber-100/95">
-                  Could not open this session
-                </h2>
-                <p className="mt-2 text-[13px] leading-relaxed text-white/70">{loadErr}</p>
-                {staleSessionParam ? (
-                  <p className="mt-2 text-[11px] text-white/45">
-                    If you need help, support can use the link in your browser’s address bar.
-                  </p>
-                ) : null}
-                <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="bg-[#7dd3fc] text-[#040d14] hover:bg-[#a5e9ff]"
-                    onClick={startNew}
-                  >
-                    Start new session
-                  </Button>
-                  <Button type="button" size="sm" variant="secondary" onClick={startNew}>
-                    Back to recent sessions
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="border-white/15 bg-transparent text-white/85 hover:bg-white/[0.06]"
-                    onClick={retryLoadSession}
-                  >
-                    Retry
-                  </Button>
-                </div>
-                <p className="mt-4 text-[11px] leading-relaxed text-white/35">
-                  The sidebar stays available — pick another session or start fresh. If this link is
-                  old, the API may have been redeployed; chat history on Cloud Run defaults to
-                  ephemeral storage unless configured otherwise.
-                </p>
+        <div className="grid min-h-0 min-w-0 max-w-full flex-1 grid-rows-[minmax(0,1fr)_auto] overflow-x-hidden">
+          <div
+            ref={listWrapRef}
+            className="hww-chat-command-feed hww-scroll flex min-h-0 min-w-0 max-w-full flex-col overflow-x-hidden overflow-y-auto px-3 md:px-6"
+          >
+            {loadingSession ? (
+              <div className="flex flex-1 items-center justify-center py-12 text-sm text-white/40">
+                Loading…
               </div>
-            </div>
-          ) : showEmpty ? (
-            <WorkspaceChatEmptyState onSuggestionClick={(prompt) => void send(prompt)} />
-          ) : (
-            <>
-              <WorkspaceChatMessageList
-                messages={messages}
-                isStreaming={isStreaming}
-                resolveLocalAttachmentPreview={resolveLocalAttachmentPreview}
-                onRemoveGeneratedImage={handleRemoveGeneratedImage}
-                onRemoveGeneratedVideo={handleRemoveGeneratedVideo}
-              />
-              <div ref={endRef} className="h-2 shrink-0" />
-            </>
-          )}
-        </div>
-        <div className="flex w-full justify-center px-3 md:px-6">
-          <WorkspaceChatComposer
-            value={input}
-            onChange={setInput}
-            onSubmit={onFormSubmit}
-            disabled={catalogLoading}
-            sending={sending || imageGenInFlight || videoGenInFlight}
-            voiceTranscribing={voiceTranscribing}
-            onVoiceBlob={handleVoiceBlob}
-            attachments={attachments}
-            onAddAttachments={handleAddAttachments}
-            onRemoveAttachment={(id) => {
-              setAttachments((p) => {
-                const dying = p.find((a) => a.id === id);
-                if (dying) revokeWorkspaceComposerAttachmentPreviews([dying]);
-                return p.filter((a) => a.id !== id);
-              });
-            }}
-            onPasteFiles={handleAddAttachments}
-            onRetryAttachmentUpload={(lid) => void handleRetryAttachmentUpload(lid)}
-            catalog={catalog}
-            modelId={modelId}
-            onModelIdChange={handleComposerModelIdChange}
-            failedChatModelIds={new Set(failedChatModelIds)}
-            sttDictationEnabled={sttDictationEnabled}
-            sttUnavailableReason={sttUnavailableReason}
-            sttMode={sttMode}
-            onSttModeChange={handleSttModeChange}
-            gohamDesktopChip={
-              desktopShell && getHamDesktopWebBridgeApi()
-                ? {
-                    linked: gohamBridgeLinked,
-                    busy:
-                      gohamModalOpen &&
-                      (gohamModalPhase === "checking" || gohamModalPhase === "connecting"),
-                    onOpenModal: () => void openGohamDesktopModal(),
-                  }
-                : null
-            }
-            chatCapabilities={chatCapabilities}
-            contextMetersEnabled={chatCapabilities?.context_meters_enabled === true}
-            contextMetersPayload={contextMetersPayload}
-            generateImage={composerGenerateImage}
-            generateVideo={composerGenerateVideo}
-            exportPdf={{
-              onExport: handleExportPdf,
-              busy: pdfExporting,
-              blockedReason: pdfExportBlockedReason,
-            }}
-          />
+            ) : sessionLoadFailed ? (
+              <div className="flex flex-1 flex-col items-center justify-center px-4 py-10">
+                <div
+                  className="w-full max-w-md rounded-xl border border-amber-500/25 bg-[#040d14]/90 px-5 py-5 text-left shadow-lg"
+                  role="alert"
+                >
+                  <h2 className="text-[14px] font-semibold text-amber-100/95">
+                    Could not open this session
+                  </h2>
+                  <p className="mt-2 text-[13px] leading-relaxed text-white/70">{loadErr}</p>
+                  {staleSessionParam ? (
+                    <p className="mt-2 text-[11px] text-white/45">
+                      If you need help, support can use the link in your browser’s address bar.
+                    </p>
+                  ) : null}
+                  <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="bg-[#7dd3fc] text-[#040d14] hover:bg-[#a5e9ff]"
+                      onClick={startNew}
+                    >
+                      Start new session
+                    </Button>
+                    <Button type="button" size="sm" variant="secondary" onClick={startNew}>
+                      Back to recent sessions
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="border-white/15 bg-transparent text-white/85 hover:bg-white/[0.06]"
+                      onClick={retryLoadSession}
+                    >
+                      Retry
+                    </Button>
+                  </div>
+                  <p className="mt-4 text-[11px] leading-relaxed text-white/35">
+                    The sidebar stays available — pick another session or start fresh. If this link
+                    is old, the API may have been redeployed; chat history on Cloud Run defaults to
+                    ephemeral storage unless configured otherwise.
+                  </p>
+                </div>
+              </div>
+            ) : showEmpty ? (
+              <WorkspaceChatEmptyState />
+            ) : (
+              <>
+                <WorkspaceChatMessageList
+                  messages={messages}
+                  isStreaming={isStreaming}
+                  resolveLocalAttachmentPreview={resolveLocalAttachmentPreview}
+                  onRemoveGeneratedImage={handleRemoveGeneratedImage}
+                  onRemoveGeneratedVideo={handleRemoveGeneratedVideo}
+                />
+                <div ref={endRef} className="h-2 shrink-0" />
+              </>
+            )}
+          </div>
+          <div className="flex w-full max-w-full min-w-0 shrink-0 flex-col overflow-x-hidden">
+            <WorkspaceChatComposer
+              quickSuggestions={WORKSPACE_CHAT_SUGGESTIONS}
+              onQuickSuggestion={(prompt) => void send(prompt)}
+              quickTipsResetSignal={sessionId}
+              value={input}
+              onChange={setInput}
+              onSubmit={onFormSubmit}
+              disabled={catalogLoading}
+              sending={sending || imageGenInFlight || videoGenInFlight}
+              voiceTranscribing={voiceTranscribing}
+              onVoiceBlob={handleVoiceBlob}
+              attachments={attachments}
+              onAddAttachments={handleAddAttachments}
+              onRemoveAttachment={(id) => {
+                setAttachments((p) => {
+                  const dying = p.find((a) => a.id === id);
+                  if (dying) revokeWorkspaceComposerAttachmentPreviews([dying]);
+                  return p.filter((a) => a.id !== id);
+                });
+              }}
+              onPasteFiles={handleAddAttachments}
+              onRetryAttachmentUpload={(lid) => void handleRetryAttachmentUpload(lid)}
+              catalog={catalog}
+              modelId={modelId}
+              onModelIdChange={handleComposerModelIdChange}
+              failedChatModelIds={new Set(failedChatModelIds)}
+              sttDictationEnabled={sttDictationEnabled}
+              sttUnavailableReason={sttUnavailableReason}
+              sttMode={sttMode}
+              onSttModeChange={handleSttModeChange}
+              gohamDesktopChip={
+                desktopShell && getHamDesktopWebBridgeApi()
+                  ? {
+                      linked: gohamBridgeLinked,
+                      busy:
+                        gohamModalOpen &&
+                        (gohamModalPhase === "checking" || gohamModalPhase === "connecting"),
+                      onOpenModal: () => void openGohamDesktopModal(),
+                    }
+                  : null
+              }
+              chatCapabilities={chatCapabilities}
+              contextMetersEnabled={chatCapabilities?.context_meters_enabled === true}
+              contextMetersPayload={contextMetersPayload}
+              generateImage={composerGenerateImage}
+              generateVideo={composerGenerateVideo}
+              exportPdf={{
+                onExport: handleExportPdf,
+                busy: pdfExporting,
+                blockedReason: pdfExportBlockedReason,
+              }}
+            />
+          </div>
         </div>
       </div>
+      {isDesktopSplitLayout ? (
+        <button
+          type="button"
+          data-testid="hww-chat-split-resizer"
+          aria-label="Resize command and workbench panels"
+          title="Drag to resize panels"
+          className={cn(
+            "group flex h-full min-h-0 shrink-0 cursor-col-resize border-0 bg-transparent p-0",
+            "w-[var(--hww-split-resizer)] touch-none select-none flex-col items-stretch justify-stretch",
+            "border-l border-r border-transparent hover:border-white/[0.06]",
+          )}
+          style={{ "--hww-split-resizer": `${HWW_CHAT_SPLIT_RESIZER_PX}px` } as React.CSSProperties}
+          onPointerDown={onChatSplitResizePointerDown}
+        >
+          <span
+            className={cn(
+              "pointer-events-none my-2 w-px flex-1 self-center rounded-full bg-white/[0.14]",
+              "transition-colors group-hover:bg-white/[0.28] group-active:bg-emerald-400/45",
+            )}
+            aria-hidden
+          />
+        </button>
+      ) : null}
       {desktopShell && gohamModalOpen ? (
         <>
           <button
@@ -3392,20 +3564,37 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
             }}
             aria-label="Close inspector"
           />
-          <div className="fixed right-0 top-0 z-30 flex h-full max-h-full overflow-hidden shadow-2xl md:static md:z-auto md:shadow-none">
+          <div
+            className={cn(
+              "z-30 flex max-h-full overflow-hidden shadow-2xl",
+              "fixed right-0 top-0 h-full md:static md:z-auto md:h-full md:min-h-0 md:shadow-none",
+              "w-full md:min-w-[420px] md:flex-1 md:max-w-none",
+            )}
+          >
             <WorkspaceChatInspectorPanel
               sessionId={sessionId}
               events={inspectorEvents}
               artifactRows={artifactRows}
               executionMode={executionMode}
               agentActivity={missionAgentActivityContent}
+              fillColumn
               onClose={() => {
                 setInspectorOpen(false);
               }}
             />
           </div>
         </>
-      ) : null}
+      ) : (
+        <div
+          data-testid="hww-workbench-panel-slot"
+          className={cn(
+            "relative z-0 flex min-h-0 w-full min-w-0 flex-col overflow-x-hidden",
+            "min-h-[260px] max-h-[48vh] md:max-h-none md:h-full md:min-h-0 md:min-w-[420px] md:flex-1",
+          )}
+        >
+          <WorkspaceWorkbench />
+        </div>
+      )}
     </div>
   );
 }

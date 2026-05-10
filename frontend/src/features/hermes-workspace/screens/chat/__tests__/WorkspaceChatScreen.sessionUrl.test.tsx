@@ -115,6 +115,20 @@ describe("WorkspaceChatScreen session URL + workspace switch", () => {
       unobserve(): void {}
       disconnect(): void {}
     } as unknown as typeof ResizeObserver;
+    Object.defineProperty(window, "matchMedia", {
+      writable: true,
+      configurable: true,
+      value: vi.fn().mockImplementation((query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    });
     fetchChatSessionMock.mockImplementation(async (sessionId: string) => ({
       session_id: sessionId,
       messages: [],
@@ -134,7 +148,10 @@ describe("WorkspaceChatScreen session URL + workspace switch", () => {
     mockUseHamWorkspace.mockReturnValue(readyCtx("ws_b"));
     view.rerender(chatRouteTree());
 
-    await waitFor(() => expect(screen.getByText("New session")).toBeInTheDocument());
+    await waitFor(() => {
+      const header = view.container.querySelector('[data-testid="hww-chat-header-compact"]');
+      expect(header?.querySelector(".sr-only")?.textContent).toMatch(/New session/i);
+    });
 
     expect(fetchChatSessionMock).not.toHaveBeenCalledWith("sid_for_a", "ws_b");
   });

@@ -161,21 +161,57 @@
   border-color: rgba(196, 92, 18, 0.35);
 }
 
-/* Chat composer textarea — thin scrollbar, no OS resize handle noise */
-.hww-chat-composer-textarea {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
+/* Command split — transcript scroll must hide horizontal bleed from wide chips/deck internals */
+.hww-root .hww-chat-command-feed.hww-scroll {
+  overflow-x: hidden;
 }
 
-.hww-chat-composer-textarea::-webkit-scrollbar {
+/* Command Deck — chat composer textarea scrollbar + containment */
+.hww-command-textarea {
+  box-sizing: border-box;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+
+.hww-chat-composer-outer[data-hww-composer-density],
+[data-hww-command-deck],
+[data-hww-composer-quick-tips],
+[data-testid="hww-command-panel"] .hww-chat-empty {
+  max-width: 100%;
+}
+
+/* Starter prompt strip — horizontal scroll without native scrollbar chrome */
+.hww-root .hww-composer-quick-tips-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.hww-root .hww-composer-quick-tips-scroll::-webkit-scrollbar {
+  display: none;
+  height: 0;
+}
+
+.hww-command-textarea::-webkit-scrollbar {
   width: 5px;
 }
 
-.hww-chat-composer-textarea::-webkit-scrollbar-thumb {
+.hww-command-textarea::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.12);
   border-radius: 999px;
 }
 
-.hww-chat-composer-textarea::-webkit-scrollbar-track {
-  background: transparent;
+@media (prefers-reduced-motion: no-preference) {
+  .hww-system-pulse {
+    animation: hww-system-pulse-hud 3.2s ease-in-out infinite;
+  }
+}
+
+@keyframes hww-system-pulse-hud {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
+  50% {
+    box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.14);
+  }
 }

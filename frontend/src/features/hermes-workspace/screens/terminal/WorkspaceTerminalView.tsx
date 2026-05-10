@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Link } from "react-router-dom";
+import { Link, useHref } from "react-router-dom";
 import { Pencil, PanelLeft, SquareArrowOutUpRight, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -16,7 +16,7 @@ export type TabModel = {
 };
 
 type WorkspaceTerminalViewProps = {
-  mode: "page" | "panel";
+  mode: "page" | "panel" | "embedded";
   onMinimize?: () => void;
   onClosePanel?: () => void;
   className?: string;
@@ -38,6 +38,7 @@ export function WorkspaceTerminalView({
   onClosePanel,
   className,
 }: WorkspaceTerminalViewProps) {
+  const fullTerminalHref = useHref("/workspace/terminal");
   const [tabs, setTabs] = React.useState<TabModel[]>([
     { id: newTabId(), title: "Shell", sessionId: null },
   ]);
@@ -464,6 +465,27 @@ export function WorkspaceTerminalView({
           >
             +
           </Button>
+          {mode === "embedded" ? (
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className="h-7 w-7 text-white/55"
+              asChild
+              title="Open full terminal"
+            >
+              <a
+                href={fullTerminalHref}
+                target="_blank"
+                rel="noreferrer"
+                aria-label="Open full terminal in a new tab"
+                className="inline-flex h-7 w-7 items-center justify-center"
+                data-testid="hww-terminal-popout"
+              >
+                <SquareArrowOutUpRight className="h-4 w-4" />
+              </a>
+            </Button>
+          ) : null}
           {mode === "panel" ? (
             <>
               <Button

@@ -148,433 +148,541 @@ export function ApiKeysPanel({ variant = "default" }: { variant?: SettingsPanelV
         ? "Server environment (CURSOR_API_KEY)"
         : "Not configured";
 
-  return (
-    <div className={cn("space-y-6", w && "hww-settings-panels")}>
-      <div
-        className={cn(
-          "space-y-4",
-          w
-            ? "hww-set-card rounded-2xl border border-white/[0.08] bg-white/[0.03] p-5 shadow-none md:p-6"
-            : "rounded-xl border border-[#FF6B00]/20 bg-black/50 p-6 shadow-xl",
-        )}
-      >
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <Key className={cn("h-4 w-4", w ? "text-[#5eead4]/90" : "text-[#FF6B00]")} />
-              <h3
+  // Normie-safe view: render whenever the API does NOT flag diagnostics_visible.
+  // Covers (a) initial load (status=null), (b) load error, (c) the server's
+  // non-operator response shape. Hides every operator detail (env names, file
+  // paths, key preview, operator email, internal route mapping, rotate/remove
+  // buttons). See src/api/cursor_settings.py for the server-side gate
+  // (HAM_WORKSPACE_OPERATOR_EMAILS).
+  const isOperatorView = status?.diagnostics_visible === true;
+  if (!isOperatorView) {
+    const connected = Boolean(status?.configured);
+    const loadingPlaceholder = loading && !status;
+    return (
+      <div className={cn("space-y-6", w && "hww-settings-panels")}>
+        <div
+          className={cn(
+            "space-y-4",
+            w
+              ? "hww-set-card rounded-2xl border border-white/[0.08] bg-white/[0.03] p-5 shadow-none md:p-6"
+              : "rounded-xl border border-white/10 bg-black/40 p-6",
+          )}
+        >
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Key className={cn("h-4 w-4", w ? "text-[#5eead4]/90" : "text-white/60")} />
+                <h3
+                  className={cn(
+                    w
+                      ? "text-sm font-semibold text-[#e8eef8]"
+                      : "text-[13px] font-semibold text-white",
+                  )}
+                >
+                  Cursor Cloud Agent
+                </h3>
+              </div>
+              <p
                 className={cn(
-                  w
-                    ? "text-sm font-semibold text-[#e8eef8]"
-                    : "text-[13px] font-black uppercase italic tracking-[0.2em] text-white",
+                  "max-w-2xl leading-relaxed",
+                  w ? "text-[13px] text-white/45" : "text-[12px] text-white/55",
                 )}
               >
-                Cursor API key
-              </h3>
+                {loadingPlaceholder
+                  ? "Loading provider status…"
+                  : connected
+                    ? "Connected. Used for Cursor Cloud Agent missions launched from this workspace."
+                    : "Not connected yet. Cursor Cloud Agent missions are unavailable until your workspace operator connects this provider."}
+              </p>
+            </div>
+          </div>
+          {error && !status ? (
+            <div className="rounded-lg border border-amber-300/20 bg-amber-300/[0.04] p-3 text-[12px] text-amber-200/80">
+              Provider status is temporarily unavailable. Refresh in a moment.
+            </div>
+          ) : (
+            !loadingPlaceholder && (
+              <div className="flex flex-wrap items-center gap-3">
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-medium",
+                    connected
+                      ? "border border-emerald-400/30 bg-emerald-400/10 text-emerald-200/90"
+                      : "border border-white/10 bg-white/5 text-white/55",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "h-1.5 w-1.5 rounded-full",
+                      connected ? "bg-emerald-400/80" : "bg-white/30",
+                    )}
+                  />
+                  {connected ? "Connected" : "Needs setup"}
+                </span>
+                {connected ? (
+                  <span className="text-[12px] text-white/45">
+                    Connected (managed by your workspace operator)
+                  </span>
+                ) : (
+                  <span className="text-[12px] text-white/45">
+                    Contact your workspace operator to connect Cursor.
+                  </span>
+                )}
+              </div>
+            )
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={cn("space-y-6", w && "hww-settings-panels")}>
+      <details
+        className={cn(
+          "group rounded-2xl border border-amber-300/15 bg-amber-300/[0.02] p-4",
+          w && "hww-set-card",
+        )}
+      >
+        <summary className="cursor-pointer select-none text-[12px] font-medium text-amber-200/80 [&::marker]:text-amber-200/60 group-open:mb-4">
+          Advanced diagnostics (operator)
+        </summary>
+        <div className="space-y-6">
+          <div
+            className={cn(
+              "space-y-4",
+              w
+                ? "hww-set-card rounded-2xl border border-white/[0.08] bg-white/[0.03] p-5 shadow-none md:p-6"
+                : "rounded-xl border border-[#FF6B00]/20 bg-black/50 p-6 shadow-xl",
+            )}
+          >
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Key className={cn("h-4 w-4", w ? "text-[#5eead4]/90" : "text-[#FF6B00]")} />
+                  <h3
+                    className={cn(
+                      w
+                        ? "text-sm font-semibold text-[#e8eef8]"
+                        : "text-[13px] font-black uppercase italic tracking-[0.2em] text-white",
+                    )}
+                  >
+                    Cursor API key
+                  </h3>
+                </div>
+                <p
+                  className={cn(
+                    "max-w-2xl leading-relaxed",
+                    w
+                      ? "text-[13px] text-white/45"
+                      : "text-[10px] font-bold uppercase tracking-widest text-white/35",
+                  )}
+                >
+                  {w ? (
+                    "Used for cloud agents and model calls through the Ham API. The key is stored on the server; team members with access can rotate it from here."
+                  ) : (
+                    <>
+                      Ham proxies Cursor Cloud Agents (
+                      <span className="font-mono text-white/50">GET/POST /v0/*</span>) with this
+                      key. Stored only on the API host filesystem (see path below). Set{" "}
+                      <span className="font-mono text-white/45">HAM_CURSOR_CREDENTIALS_FILE</span>{" "}
+                      on Cloud Run/Docker with a mounted volume so the key survives restarts. Anyone
+                      with access to this Settings page can rotate the team key.
+                    </>
+                  )}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void load()}
+                disabled={loading || busy}
+                className={cn(
+                  "inline-flex items-center gap-2 rounded-lg border px-3 py-2 transition-colors disabled:opacity-40",
+                  w
+                    ? "border-white/[0.1] text-[12px] font-medium text-white/60 hover:border-white/20 hover:bg-white/[0.04] hover:text-white/90"
+                    : "border-white/10 text-[9px] font-black uppercase tracking-widest text-white/50 hover:border-[#FF6B00]/30 hover:text-[#FF6B00]",
+                )}
+              >
+                <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
+                Refresh
+              </button>
+            </div>
+
+            {error && (
+              <div className="p-3 rounded-lg border border-red-500/30 bg-red-500/5 text-[11px] font-bold text-red-400/90">
+                {error}
+              </div>
+            )}
+
+            {loading && !status && (
+              <p
+                className={cn(
+                  w
+                    ? "text-[13px] text-white/40"
+                    : "text-[10px] font-bold uppercase tracking-widest text-white/25",
+                )}
+              >
+                Loading key status…
+              </p>
+            )}
+
+            {status && (
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div
+                  className={cn(
+                    "space-y-2 rounded-xl border p-4",
+                    w ? "border-white/[0.06] bg-white/[0.02]" : "border-white/5 bg-black/40",
+                  )}
+                >
+                  <div
+                    className={cn(
+                      w
+                        ? "text-xs font-medium text-white/50"
+                        : "text-[9px] font-black uppercase tracking-widest text-white/25",
+                    )}
+                  >
+                    Key source
+                  </div>
+                  <div
+                    className={cn(
+                      w
+                        ? "text-sm font-medium text-[#99f6e4]/95"
+                        : "text-[12px] font-black uppercase tracking-tight text-[#FF6B00]",
+                    )}
+                  >
+                    {sourceLabel}
+                  </div>
+                  {status.configured && status.masked_preview && (
+                    <div className={cn("text-white/45", w ? "text-xs" : "text-[10px] font-mono")}>
+                      Preview: {status.masked_preview}
+                    </div>
+                  )}
+                </div>
+                <div
+                  className={cn(
+                    "space-y-2 rounded-xl border p-4",
+                    w ? "border-white/[0.06] bg-white/[0.02]" : "border-white/5 bg-black/40",
+                  )}
+                >
+                  <div
+                    className={cn(
+                      w
+                        ? "text-xs font-medium text-white/50"
+                        : "text-[9px] font-black uppercase tracking-widest text-white/25",
+                    )}
+                  >
+                    Account
+                  </div>
+                  {status.error && !status.user_email ? (
+                    <div className="text-[13px] font-medium text-amber-400/90">{status.error}</div>
+                  ) : (
+                    <>
+                      <div
+                        className={cn(
+                          "text-white",
+                          w ? "text-sm font-medium" : "text-[12px] font-black",
+                        )}
+                      >
+                        {status.api_key_name ?? "—"}{" "}
+                        <span
+                          className={cn(
+                            w
+                              ? "text-white/40"
+                              : "text-[10px] font-bold uppercase tracking-widest text-white/30",
+                          )}
+                        >
+                          {w ? "" : "(key name)"}
+                        </span>
+                      </div>
+                      <div
+                        className={cn(
+                          "break-all text-white/60",
+                          w ? "text-sm" : "text-[11px] font-mono",
+                        )}
+                      >
+                        {status.user_email ?? "—"}{" "}
+                        {!w && (
+                          <span className="text-[9px] font-bold uppercase tracking-widest text-white/25">
+                            (account)
+                          </span>
+                        )}
+                      </div>
+                      {status.key_created_at && (
+                        <div
+                          className={cn(
+                            "text-white/40",
+                            w ? "text-xs" : "text-[9px] font-bold uppercase tracking-wider",
+                          )}
+                        >
+                          Issued: {status.key_created_at}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {status?.storage_path && (
+              <div
+                className={cn(
+                  "space-y-1 rounded-xl border p-4",
+                  w ? "border-white/[0.06] bg-white/[0.02]" : "border-white/5 bg-black/30",
+                )}
+              >
+                <div
+                  className={cn(
+                    w
+                      ? "text-xs font-medium text-white/50"
+                      : "text-[9px] font-black uppercase tracking-widest text-white/25",
+                  )}
+                >
+                  File on server
+                </div>
+                <div
+                  className={cn(
+                    "break-all text-white/55",
+                    w ? "text-xs font-mono" : "text-[10px] font-mono",
+                  )}
+                >
+                  {status.storage_path}
+                </div>
+                {status.storage_override_env ? (
+                  <div className="text-xs text-emerald-400/80">
+                    Override: HAM_CURSOR_CREDENTIALS_FILE is set
+                  </div>
+                ) : null}
+              </div>
+            )}
+
+            {status?.wired_for && (
+              <div
+                className={cn(
+                  "space-y-3 rounded-xl border p-4",
+                  w ? "border-white/[0.08] bg-white/[0.02]" : "border-[#FF6B00]/15 bg-black/40",
+                )}
+              >
+                <div
+                  className={cn(
+                    w
+                      ? "text-xs font-medium text-white/50"
+                      : "text-[9px] font-black uppercase tracking-widest text-white/25",
+                  )}
+                >
+                  {w
+                    ? "What this key is used for"
+                    : "What uses this key (backend, this deployment)"}
+                </div>
+                <ul
+                  className={cn(
+                    "space-y-2 text-white/55",
+                    w
+                      ? "text-[13px] font-normal normal-case"
+                      : "text-[10px] font-bold uppercase tracking-wider text-white/45",
+                  )}
+                >
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500/90 shrink-0 mt-0.5" />
+                    <span>
+                      <span className="text-white/70">Models list</span> — Ham{" "}
+                      <span className="font-mono text-white/50">GET /api/cursor/models</span> →
+                      Cursor <span className="font-mono text-white/50">GET /v0/models</span>
+                    </span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500/90 shrink-0 mt-0.5" />
+                    <span>
+                      <span className="text-white/70">Run cloud agent / missions</span> — Ham{" "}
+                      <span className="font-mono text-white/50">
+                        POST /api/cursor/agents/launch
+                      </span>{" "}
+                      → Cursor <span className="font-mono text-white/50">POST /v0/agents</span>
+                    </span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500/90 shrink-0 mt-0.5" />
+                    <span>
+                      <span className="text-white/70">CI hooks and automation</span> — same launch
+                      URL with a bearer-less server-to-server call to your Ham API (Basic auth key
+                      is server-side only).
+                    </span>
+                  </li>
+                  <li className="text-[9px] font-bold text-white/30 normal-case tracking-normal pl-6 border-l border-white/10 ml-1">
+                    {status.wired_for.ci_hooks_note}
+                  </li>
+                  <li className="flex items-start gap-2 pt-1 border-t border-white/5">
+                    {status.wired_for.dashboard_chat_uses_cursor ? (
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500/90 shrink-0 mt-0.5" />
+                    ) : (
+                      <span className="text-amber-500/90 font-black shrink-0 w-3.5 text-center">
+                        —
+                      </span>
+                    )}
+                    <span>
+                      <span className="text-white/70">Dashboard chat</span> —{" "}
+                      {status.wired_for.dashboard_chat_uses_cursor ? (
+                        "uses Cursor"
+                      ) : (
+                        <span className="text-amber-500/85">not routed through Cursor REST</span>
+                      )}
+                      . {status.wired_for.dashboard_chat_note}
+                    </span>
+                  </li>
+                </ul>
+                <div className="flex flex-wrap items-center gap-3 pt-1">
+                  <button
+                    type="button"
+                    disabled={modelsBusy || !status.configured}
+                    onClick={() => void onTestModels()}
+                    className={cn(
+                      "inline-flex items-center gap-2 rounded-lg border px-3 py-2 transition-colors disabled:opacity-30",
+                      w
+                        ? "border-white/[0.1] text-[12px] font-medium text-white/70 hover:border-[#5eead4]/30 hover:bg-white/[0.04] hover:text-white"
+                        : "border-[#FF6B00]/35 text-[9px] font-black uppercase tracking-widest text-[#FF6B00] hover:bg-[#FF6B00]/10",
+                    )}
+                  >
+                    <Zap className={cn("h-3.5 w-3.5", modelsBusy && "animate-pulse")} />
+                    Test models
+                  </button>
+                  {!status.configured && (
+                    <span
+                      className={cn(
+                        "text-white/40",
+                        w ? "text-xs" : "text-[9px] font-bold uppercase tracking-widest",
+                      )}
+                    >
+                      Add a key first
+                    </span>
+                  )}
+                </div>
+                {modelsProbe && (
+                  <pre
+                    className={cn(
+                      "whitespace-pre-wrap break-all font-mono text-white/50",
+                      w
+                        ? "max-h-32 overflow-y-auto rounded-lg border border-white/[0.06] bg-black/30 p-3 text-xs"
+                        : "max-h-32 overflow-y-auto rounded border border-white/5 bg-black/50 p-2 text-[9px]",
+                    )}
+                  >
+                    {modelsProbe}
+                  </pre>
+                )}
+              </div>
+            )}
+
+            <div
+              className={cn("space-y-2 border-t border-white/5 pt-2", w && "border-white/[0.06]")}
+            >
+              <label
+                className={cn(
+                  "block",
+                  w
+                    ? "text-xs font-medium text-white/50"
+                    : "text-[9px] font-black uppercase tracking-widest text-white/30",
+                )}
+              >
+                New key (replaces saved)
+              </label>
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <input
+                  type="password"
+                  autoComplete="off"
+                  value={draftKey}
+                  onChange={(e) => setDraftKey(e.target.value)}
+                  placeholder="crsr_…"
+                  className={cn(
+                    "h-11 flex-1 rounded-lg border px-4 font-mono text-[13px] text-white/80 placeholder:text-white/20 focus:outline-none",
+                    w
+                      ? "border-white/[0.1] bg-black/20 focus:border-[#5eead4]/30 focus:ring-1 focus:ring-[#5eead4]/20"
+                      : "border-white/10 bg-black/60 text-[11px] focus:border-[#FF6B00]/40",
+                  )}
+                />
+                <button
+                  type="button"
+                  disabled={busy || !draftKey.trim()}
+                  onClick={() => void onSave()}
+                  className={cn(
+                    "h-11 rounded-lg px-6 text-[12px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-30",
+                    w
+                      ? "bg-[#0f766e] text-white hover:bg-[#0d9488] dark:bg-[#14b8a6]/90"
+                      : "bg-[#FF6B00] text-[10px] font-black uppercase tracking-widest text-black hover:bg-[#ff8534]",
+                  )}
+                >
+                  Save
+                </button>
+              </div>
+              {status?.source === "ui" && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void onClearSaved()}
+                  className={cn(
+                    "text-white/40 transition-colors hover:text-red-300/90",
+                    w ? "text-xs" : "text-[9px] font-black uppercase tracking-widest",
+                  )}
+                >
+                  Remove saved key
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div
+            className={cn(
+              "space-y-3 rounded-xl border p-5",
+              w ? "border-white/[0.08] bg-white/[0.02]" : "border-white/5 bg-white/[0.02]",
+            )}
+          >
+            <div className="flex items-center gap-2">
+              <Globe className={cn("h-4 w-4", w ? "text-white/40" : "text-white/25")} />
+              <h4
+                className={cn(
+                  w
+                    ? "text-sm font-medium text-white/80"
+                    : "text-[11px] font-black uppercase tracking-widest text-white/60",
+                )}
+              >
+                OpenRouter (chat)
+              </h4>
             </div>
             <p
               className={cn(
-                "max-w-2xl leading-relaxed",
+                "leading-relaxed",
                 w
                   ? "text-[13px] text-white/45"
-                  : "text-[10px] font-bold uppercase tracking-widest text-white/35",
+                  : "text-[10px] font-bold uppercase tracking-widest text-white/30",
               )}
             >
               {w ? (
-                "Used for cloud agents and model calls through the Ham API. The key is stored on the server; team members with access can rotate it from here."
+                <>
+                  When the API uses the OpenRouter gateway, set keys in the environment; see the
+                  Connection page for variable names. Cursor and OpenRouter can both be configured.
+                </>
               ) : (
                 <>
-                  Ham proxies Cursor Cloud Agents (
-                  <span className="font-mono text-white/50">GET/POST /v0/*</span>) with this key.
-                  Stored only on the API host filesystem (see path below). Set{" "}
-                  <span className="font-mono text-white/45">HAM_CURSOR_CREDENTIALS_FILE</span> on
-                  Cloud Run/Docker with a mounted volume so the key survives restarts. Anyone with
-                  access to this Settings page can rotate the team key.
+                  Dashboard chat still uses{" "}
+                  <span className="font-mono text-white/45">HERMES_GATEWAY_MODE=openrouter</span>{" "}
+                  and <span className="font-mono text-white/45">OPENROUTER_API_KEY</span> unless you
+                  change the gateway on the API host. Cursor and OpenRouter can both be configured;
+                  wiring chat to Composer is a separate gateway mode.
                 </>
               )}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => void load()}
-            disabled={loading || busy}
-            className={cn(
-              "inline-flex items-center gap-2 rounded-lg border px-3 py-2 transition-colors disabled:opacity-40",
-              w
-                ? "border-white/[0.1] text-[12px] font-medium text-white/60 hover:border-white/20 hover:bg-white/[0.04] hover:text-white/90"
-                : "border-white/10 text-[9px] font-black uppercase tracking-widest text-white/50 hover:border-[#FF6B00]/30 hover:text-[#FF6B00]",
-            )}
-          >
-            <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
-            Refresh
-          </button>
-        </div>
 
-        {error && (
-          <div className="p-3 rounded-lg border border-red-500/30 bg-red-500/5 text-[11px] font-bold text-red-400/90">
-            {error}
-          </div>
-        )}
-
-        {loading && !status && (
-          <p
-            className={cn(
-              w
-                ? "text-[13px] text-white/40"
-                : "text-[10px] font-bold uppercase tracking-widest text-white/25",
-            )}
-          >
-            Loading key status…
-          </p>
-        )}
-
-        {status && (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div
-              className={cn(
-                "space-y-2 rounded-xl border p-4",
-                w ? "border-white/[0.06] bg-white/[0.02]" : "border-white/5 bg-black/40",
-              )}
-            >
-              <div
-                className={cn(
-                  w
-                    ? "text-xs font-medium text-white/50"
-                    : "text-[9px] font-black uppercase tracking-widest text-white/25",
-                )}
-              >
-                Key source
+          {!w && (
+            <div className="space-y-2 rounded-lg border border-dashed border-white/5 bg-black/20 p-5">
+              <div className="text-[10px] font-black uppercase tracking-widest text-white/25">
+                Roadmap
               </div>
-              <div
-                className={cn(
-                  w
-                    ? "text-sm font-medium text-[#99f6e4]/95"
-                    : "text-[12px] font-black uppercase tracking-tight text-[#FF6B00]",
-                )}
-              >
-                {sourceLabel}
-              </div>
-              {status.configured && status.masked_preview && (
-                <div className={cn("text-white/45", w ? "text-xs" : "text-[10px] font-mono")}>
-                  Preview: {status.masked_preview}
-                </div>
-              )}
+              <p className="text-[10px] font-bold uppercase tracking-wider text-white/35">
+                <span className="text-white/50">Local Composer</span> — Node SDK / sidecar for
+                repo-on-disk workflows (separate from Cloud Agents REST above).
+              </p>
             </div>
-            <div
-              className={cn(
-                "space-y-2 rounded-xl border p-4",
-                w ? "border-white/[0.06] bg-white/[0.02]" : "border-white/5 bg-black/40",
-              )}
-            >
-              <div
-                className={cn(
-                  w
-                    ? "text-xs font-medium text-white/50"
-                    : "text-[9px] font-black uppercase tracking-widest text-white/25",
-                )}
-              >
-                Account
-              </div>
-              {status.error && !status.user_email ? (
-                <div className="text-[13px] font-medium text-amber-400/90">{status.error}</div>
-              ) : (
-                <>
-                  <div
-                    className={cn(
-                      "text-white",
-                      w ? "text-sm font-medium" : "text-[12px] font-black",
-                    )}
-                  >
-                    {status.api_key_name ?? "—"}{" "}
-                    <span
-                      className={cn(
-                        w
-                          ? "text-white/40"
-                          : "text-[10px] font-bold uppercase tracking-widest text-white/30",
-                      )}
-                    >
-                      {w ? "" : "(key name)"}
-                    </span>
-                  </div>
-                  <div
-                    className={cn(
-                      "break-all text-white/60",
-                      w ? "text-sm" : "text-[11px] font-mono",
-                    )}
-                  >
-                    {status.user_email ?? "—"}{" "}
-                    {!w && (
-                      <span className="text-[9px] font-bold uppercase tracking-widest text-white/25">
-                        (account)
-                      </span>
-                    )}
-                  </div>
-                  {status.key_created_at && (
-                    <div
-                      className={cn(
-                        "text-white/40",
-                        w ? "text-xs" : "text-[9px] font-bold uppercase tracking-wider",
-                      )}
-                    >
-                      Issued: {status.key_created_at}
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-        )}
-
-        {status?.storage_path && (
-          <div
-            className={cn(
-              "space-y-1 rounded-xl border p-4",
-              w ? "border-white/[0.06] bg-white/[0.02]" : "border-white/5 bg-black/30",
-            )}
-          >
-            <div
-              className={cn(
-                w
-                  ? "text-xs font-medium text-white/50"
-                  : "text-[9px] font-black uppercase tracking-widest text-white/25",
-              )}
-            >
-              File on server
-            </div>
-            <div
-              className={cn(
-                "break-all text-white/55",
-                w ? "text-xs font-mono" : "text-[10px] font-mono",
-              )}
-            >
-              {status.storage_path}
-            </div>
-            {status.storage_override_env ? (
-              <div className="text-xs text-emerald-400/80">
-                Override: HAM_CURSOR_CREDENTIALS_FILE is set
-              </div>
-            ) : null}
-          </div>
-        )}
-
-        {status?.wired_for && (
-          <div
-            className={cn(
-              "space-y-3 rounded-xl border p-4",
-              w ? "border-white/[0.08] bg-white/[0.02]" : "border-[#FF6B00]/15 bg-black/40",
-            )}
-          >
-            <div
-              className={cn(
-                w
-                  ? "text-xs font-medium text-white/50"
-                  : "text-[9px] font-black uppercase tracking-widest text-white/25",
-              )}
-            >
-              {w ? "What this key is used for" : "What uses this key (backend, this deployment)"}
-            </div>
-            <ul
-              className={cn(
-                "space-y-2 text-white/55",
-                w
-                  ? "text-[13px] font-normal normal-case"
-                  : "text-[10px] font-bold uppercase tracking-wider text-white/45",
-              )}
-            >
-              <li className="flex items-start gap-2">
-                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500/90 shrink-0 mt-0.5" />
-                <span>
-                  <span className="text-white/70">Models list</span> — Ham{" "}
-                  <span className="font-mono text-white/50">GET /api/cursor/models</span> → Cursor{" "}
-                  <span className="font-mono text-white/50">GET /v0/models</span>
-                </span>
-              </li>
-              <li className="flex items-start gap-2">
-                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500/90 shrink-0 mt-0.5" />
-                <span>
-                  <span className="text-white/70">Run cloud agent / missions</span> — Ham{" "}
-                  <span className="font-mono text-white/50">POST /api/cursor/agents/launch</span> →
-                  Cursor <span className="font-mono text-white/50">POST /v0/agents</span>
-                </span>
-              </li>
-              <li className="flex items-start gap-2">
-                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500/90 shrink-0 mt-0.5" />
-                <span>
-                  <span className="text-white/70">CI hooks and automation</span> — same launch URL
-                  with a bearer-less server-to-server call to your Ham API (Basic auth key is
-                  server-side only).
-                </span>
-              </li>
-              <li className="text-[9px] font-bold text-white/30 normal-case tracking-normal pl-6 border-l border-white/10 ml-1">
-                {status.wired_for.ci_hooks_note}
-              </li>
-              <li className="flex items-start gap-2 pt-1 border-t border-white/5">
-                {status.wired_for.dashboard_chat_uses_cursor ? (
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500/90 shrink-0 mt-0.5" />
-                ) : (
-                  <span className="text-amber-500/90 font-black shrink-0 w-3.5 text-center">—</span>
-                )}
-                <span>
-                  <span className="text-white/70">Dashboard chat</span> —{" "}
-                  {status.wired_for.dashboard_chat_uses_cursor ? (
-                    "uses Cursor"
-                  ) : (
-                    <span className="text-amber-500/85">not routed through Cursor REST</span>
-                  )}
-                  . {status.wired_for.dashboard_chat_note}
-                </span>
-              </li>
-            </ul>
-            <div className="flex flex-wrap items-center gap-3 pt-1">
-              <button
-                type="button"
-                disabled={modelsBusy || !status.configured}
-                onClick={() => void onTestModels()}
-                className={cn(
-                  "inline-flex items-center gap-2 rounded-lg border px-3 py-2 transition-colors disabled:opacity-30",
-                  w
-                    ? "border-white/[0.1] text-[12px] font-medium text-white/70 hover:border-[#5eead4]/30 hover:bg-white/[0.04] hover:text-white"
-                    : "border-[#FF6B00]/35 text-[9px] font-black uppercase tracking-widest text-[#FF6B00] hover:bg-[#FF6B00]/10",
-                )}
-              >
-                <Zap className={cn("h-3.5 w-3.5", modelsBusy && "animate-pulse")} />
-                Test models
-              </button>
-              {!status.configured && (
-                <span
-                  className={cn(
-                    "text-white/40",
-                    w ? "text-xs" : "text-[9px] font-bold uppercase tracking-widest",
-                  )}
-                >
-                  Add a key first
-                </span>
-              )}
-            </div>
-            {modelsProbe && (
-              <pre
-                className={cn(
-                  "whitespace-pre-wrap break-all font-mono text-white/50",
-                  w
-                    ? "max-h-32 overflow-y-auto rounded-lg border border-white/[0.06] bg-black/30 p-3 text-xs"
-                    : "max-h-32 overflow-y-auto rounded border border-white/5 bg-black/50 p-2 text-[9px]",
-                )}
-              >
-                {modelsProbe}
-              </pre>
-            )}
-          </div>
-        )}
-
-        <div className={cn("space-y-2 border-t border-white/5 pt-2", w && "border-white/[0.06]")}>
-          <label
-            className={cn(
-              "block",
-              w
-                ? "text-xs font-medium text-white/50"
-                : "text-[9px] font-black uppercase tracking-widest text-white/30",
-            )}
-          >
-            New key (replaces saved)
-          </label>
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <input
-              type="password"
-              autoComplete="off"
-              value={draftKey}
-              onChange={(e) => setDraftKey(e.target.value)}
-              placeholder="crsr_…"
-              className={cn(
-                "h-11 flex-1 rounded-lg border px-4 font-mono text-[13px] text-white/80 placeholder:text-white/20 focus:outline-none",
-                w
-                  ? "border-white/[0.1] bg-black/20 focus:border-[#5eead4]/30 focus:ring-1 focus:ring-[#5eead4]/20"
-                  : "border-white/10 bg-black/60 text-[11px] focus:border-[#FF6B00]/40",
-              )}
-            />
-            <button
-              type="button"
-              disabled={busy || !draftKey.trim()}
-              onClick={() => void onSave()}
-              className={cn(
-                "h-11 rounded-lg px-6 text-[12px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-30",
-                w
-                  ? "bg-[#0f766e] text-white hover:bg-[#0d9488] dark:bg-[#14b8a6]/90"
-                  : "bg-[#FF6B00] text-[10px] font-black uppercase tracking-widest text-black hover:bg-[#ff8534]",
-              )}
-            >
-              Save
-            </button>
-          </div>
-          {status?.source === "ui" && (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void onClearSaved()}
-              className={cn(
-                "text-white/40 transition-colors hover:text-red-300/90",
-                w ? "text-xs" : "text-[9px] font-black uppercase tracking-widest",
-              )}
-            >
-              Remove saved key
-            </button>
           )}
         </div>
-      </div>
-
-      <div
-        className={cn(
-          "space-y-3 rounded-xl border p-5",
-          w ? "border-white/[0.08] bg-white/[0.02]" : "border-white/5 bg-white/[0.02]",
-        )}
-      >
-        <div className="flex items-center gap-2">
-          <Globe className={cn("h-4 w-4", w ? "text-white/40" : "text-white/25")} />
-          <h4
-            className={cn(
-              w
-                ? "text-sm font-medium text-white/80"
-                : "text-[11px] font-black uppercase tracking-widest text-white/60",
-            )}
-          >
-            OpenRouter (chat)
-          </h4>
-        </div>
-        <p
-          className={cn(
-            "leading-relaxed",
-            w
-              ? "text-[13px] text-white/45"
-              : "text-[10px] font-bold uppercase tracking-widest text-white/30",
-          )}
-        >
-          {w ? (
-            <>
-              When the API uses the OpenRouter gateway, set keys in the environment; see the
-              Connection page for variable names. Cursor and OpenRouter can both be configured.
-            </>
-          ) : (
-            <>
-              Dashboard chat still uses{" "}
-              <span className="font-mono text-white/45">HERMES_GATEWAY_MODE=openrouter</span> and{" "}
-              <span className="font-mono text-white/45">OPENROUTER_API_KEY</span> unless you change
-              the gateway on the API host. Cursor and OpenRouter can both be configured; wiring chat
-              to Composer is a separate gateway mode.
-            </>
-          )}
-        </p>
-      </div>
-
-      {!w && (
-        <div className="space-y-2 rounded-lg border border-dashed border-white/5 bg-black/20 p-5">
-          <div className="text-[10px] font-black uppercase tracking-widest text-white/25">
-            Roadmap
-          </div>
-          <p className="text-[10px] font-bold uppercase tracking-wider text-white/35">
-            <span className="text-white/50">Local Composer</span> — Node SDK / sidecar for
-            repo-on-disk workflows (separate from Cloud Agents REST above).
-          </p>
-        </div>
-      )}
+      </details>
     </div>
   );
 }

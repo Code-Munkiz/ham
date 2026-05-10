@@ -7,7 +7,7 @@
  *
  * The provider intentionally **never throws during render**: all error paths
  * surface as `state: "error"` so `App.tsx` stays mountable even when the
- * backend is unreachable, the API base is misconfigured, or local-dev bypass
+ * backend is unreachable, the API base is misconfigured, or workspace UI bypass
  * is off.
  */
 import * as React from "react";
@@ -29,6 +29,11 @@ import {
   isLikelyHamApiFetchNetworkFailure,
 } from "./api";
 import { readActiveWorkspaceId, writeActiveWorkspaceId } from "./hamWorkspaceStorage";
+import {
+  buildLocalDevWorkspaceMeResponse,
+  LOCAL_UI_QA_WORKSPACE_ID,
+  shouldActivateLocalWorkspaceUiBypass,
+} from "./localDevWorkspaceBypass";
 
 // ---------------------------------------------------------------------------
 // State machine
@@ -189,6 +194,18 @@ export function HamWorkspaceProvider({
   }, []);
 
   const refresh = React.useCallback(async (): Promise<void> => {
+    if (shouldActivateLocalWorkspaceUiBypass(hostedAuth)) {
+      inflightRef.current = null;
+      const nowIso = new Date().toISOString();
+      const me = buildLocalDevWorkspaceMeResponse(nowIso);
+      persistSelection(me.user.user_id, LOCAL_UI_QA_WORKSPACE_ID);
+      setState({
+        status: "ready",
+        me,
+        activeWorkspaceId: LOCAL_UI_QA_WORKSPACE_ID,
+      });
+      return;
+    }
     if (hostedAuth) {
       if (!hostedAuth.clerkConfigured) {
         setState({ status: "auth_not_configured" });

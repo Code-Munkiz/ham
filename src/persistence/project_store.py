@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import re
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 from pydantic import ValidationError
 
@@ -18,11 +19,40 @@ _DEFAULT_PROJECT_ROOT_ENV = "HAM_DEFAULT_PROJECT_ROOT"
 _DEFAULT_CURSOR_REPOSITORY_ENV = "HAM_DEFAULT_CURSOR_REPOSITORY"
 _DEFAULT_CURSOR_REF_ENV = "HAM_DEFAULT_CURSOR_REF"
 
+_PROJECT_STORE_BACKEND_ENV = "HAM_PROJECT_STORE_BACKEND"  # file|firestore (default file)
+
+_LOG = logging.getLogger(__name__)
+
 
 def _project_id(name: str, root: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "project"
     short_hash = hashlib.sha256(root.encode("utf-8")).hexdigest()[:6]
     return f"project.{slug}-{short_hash}"
+
+
+@runtime_checkable
+class ProjectStoreProtocol(Protocol):
+    """Backend-agnostic project store contract.
+
+    Both :class:`ProjectStore` (file-backed) and :class:`FirestoreProjectStore`
+    satisfy this Protocol. Callers should treat ``get_project_store()`` as
+    returning ``ProjectStoreProtocol`` even though the concrete return type is
+    still ``ProjectStore`` for backward compatibility with existing tests that
+    use ``isinstance(..., ProjectStore)``.
+    """
+
+    def list_projects(self) -> list[ProjectRecord]: ...
+    def get_project(self, project_id: str) -> ProjectRecord | None: ...
+    def register(self, record: ProjectRecord) -> ProjectRecord: ...
+    def remove(self, project_id: str) -> bool: ...
+    def make_record(
+        self,
+        name: str,
+        root: str,
+        description: str = "",
+        metadata: dict[str, Any] | None = None,
+    ) -> ProjectRecord: ...
+    def ensure_default_cursor_metadata(self) -> bool: ...
 
 
 class ProjectStore:
@@ -198,19 +228,42 @@ def _project_name_from_id(project_id: str) -> str:
     return "app"
 
 
+def build_project_store() -> ProjectStoreProtocol:
+    """Pick a project store backend based on ``HAM_PROJECT_STORE_BACKEND``.
+
+    Defaults to the file-backed :class:`ProjectStore` so local dev keeps
+    working without any env vars. ``HAM_PROJECT_STORE_BACKEND=firestore``
+    selects :class:`FirestoreProjectStore` (lazy-imported so the SDK is not
+    required for local dev).
+    """
+    backend = (os.environ.get(_PROJECT_STORE_BACKEND_ENV) or "").strip().lower()
+    if backend == "firestore":
+        from src.persistence.firestore_project_store import (  # noqa: PLC0415
+            FirestoreProjectStore,
+        )
+
+        return FirestoreProjectStore()
+    if backend not in ("", "file"):
+        _LOG.warning(
+            "Unknown HAM_PROJECT_STORE_BACKEND=%r; falling back to file backend.",
+            backend,
+        )
+    return ProjectStore()
+
+
 # Process-wide registry (tests may replace via :func:`set_project_store_for_tests`).
-_store_singleton: ProjectStore | None = None
+_store_singleton: ProjectStoreProtocol | None = None
 
 
-def get_project_store() -> ProjectStore:
+def get_project_store() -> ProjectStoreProtocol:
     global _store_singleton
     if _store_singleton is None:
-        _store_singleton = ProjectStore()
+        _store_singleton = build_project_store()
         _store_singleton.ensure_default_cursor_metadata()
     return _store_singleton
 
 
-def set_project_store_for_tests(store: ProjectStore | None) -> None:
-    """Replace the global :class:`ProjectStore` (``None`` restores lazy default)."""
+def set_project_store_for_tests(store: ProjectStoreProtocol | None) -> None:
+    """Replace the global project store (``None`` restores lazy default)."""
     global _store_singleton
     _store_singleton = store
