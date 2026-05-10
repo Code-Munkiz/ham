@@ -8,21 +8,20 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
-
-from src.api.clerk_gate import get_ham_clerk_actor
 from pydantic import BaseModel, Field
 
-_LOG = logging.getLogger(__name__)
-
+from src.api.clerk_gate import get_ham_clerk_actor
+from src.ham.clerk_auth import HamActor
+from src.ham.clerk_operator import actor_is_workspace_operator
+from src.ham.cursor_agent_workflow import derive_checkpoint_for_cursor_summary
 from src.ham.managed_mission_wiring import (
     create_mission_after_managed_launch,
     observe_mission_from_cursor_payload,
 )
-from src.persistence.managed_mission import ManagedMission, ManagedMissionStore
 from src.persistence.cursor_credentials import (
     clear_saved_cursor_api_key,
     credentials_path_for_display,
@@ -31,13 +30,33 @@ from src.persistence.cursor_credentials import (
     mask_api_key_preview,
     save_cursor_api_key,
 )
-from src.ham.cursor_agent_workflow import derive_checkpoint_for_cursor_summary
+from src.persistence.managed_mission import ManagedMission, ManagedMissionStore
+
+_LOG = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/api/cursor",
     tags=["cursor"],
     dependencies=[Depends(get_ham_clerk_actor)],
 )
+
+
+def _require_workspace_operator(actor: HamActor | None) -> None:
+    if actor_is_workspace_operator(actor):
+        return
+    raise HTTPException(
+        status_code=403,
+        detail={
+            "error": {
+                "code": "WORKSPACE_OPERATOR_REQUIRED",
+                "message": (
+                    "Rotating or clearing the deployment-global Cursor team key requires "
+                    "a workspace operator. Add the caller's email to "
+                    "HAM_WORKSPACE_OPERATOR_EMAILS or contact your workspace operator."
+                ),
+            }
+        },
+    )
 
 
 class CursorApiKeyBody(BaseModel):
@@ -146,15 +165,37 @@ def _wired_for_payload() -> dict[str, Any]:
     }
 
 
+def _normie_status_payload(configured: bool) -> dict[str, Any]:
+    """Normie-safe response shape — no env names, file paths, key previews, or operator email."""
+    return {
+        "kind": "cursor_credentials_status",
+        "configured": configured,
+        "status": "connected" if configured else "needs_setup",
+        "account_label": "Connected" if configured else None,
+        "diagnostics_visible": False,
+    }
+
+
 @router.get("/credentials-status")
-async def credentials_status() -> dict[str, Any]:
+async def credentials_status(
+    actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
+) -> dict[str, Any]:
     """
-    Who this key belongs to (from GET https://api.cursor.com/v0/me).
-    Never returns the full secret.
+    Cursor team-key status.
+
+    Non-operator workspace users see a normie-safe shape (configured + status label only).
+    Workspace operators (``HAM_WORKSPACE_OPERATOR_EMAILS``) see the full diagnostic payload
+    including key source, masked preview, account email, key creation timestamp, server file
+    path, and Ham→Cursor route mapping — never the full secret.
     """
     key = get_effective_cursor_api_key()
+    is_operator = actor_is_workspace_operator(actor)
+    if not is_operator:
+        return _normie_status_payload(configured=bool(key))
+
     src = key_source()
     base = {
+        "diagnostics_visible": True,
         "storage_path": credentials_path_for_display(),
         "storage_override_env": (os.environ.get("HAM_CURSOR_CREDENTIALS_FILE") or "").strip()
         or None,
@@ -210,8 +251,12 @@ async def credentials_status() -> dict[str, Any]:
 
 
 @router.post("/credentials", status_code=204)
-async def set_credentials(body: CursorApiKeyBody) -> None:
-    """Persist a new key for all HAM API users (shared internal deployments)."""
+async def set_credentials(
+    body: CursorApiKeyBody,
+    actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
+) -> None:
+    """Persist a new deployment-global Cursor team key. Workspace operator only."""
+    _require_workspace_operator(actor)
     key = body.api_key.strip()
     try:
         _fetch_cursor_me(key)
@@ -228,8 +273,11 @@ async def set_credentials(body: CursorApiKeyBody) -> None:
 
 
 @router.delete("/credentials", status_code=204)
-async def delete_credentials() -> None:
-    """Remove UI-saved key; effective key falls back to CURSOR_API_KEY env if set."""
+async def delete_credentials(
+    actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
+) -> None:
+    """Remove UI-saved deployment-global Cursor key. Workspace operator only."""
+    _require_workspace_operator(actor)
     clear_saved_cursor_api_key()
 
 
