@@ -104,12 +104,12 @@ function ringProgressClass(
   }
   if (kind === "ws") {
     if (pct >= 100 || api === "red") return "stroke-rose-400";
-    if (pct >= 90) return "stroke-rose-400/80";
+    if (pct >= 92) return "stroke-rose-400/80";
     if (pct >= 70) return "stroke-amber-400/70";
     return "stroke-slate-300/55";
   }
   if (pct >= 100 || api === "red") return "stroke-rose-400";
-  if (pct >= 90) return "stroke-amber-400";
+  if (pct >= 92) return "stroke-amber-400";
   if (pct >= 70) return "stroke-amber-400/65";
   return "stroke-slate-300/55";
 }
@@ -203,13 +203,13 @@ function pulseDotClass(
   }
   if (kind === "ws") {
     if (pct >= 100) return "bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.38)]";
-    if (pct >= 90) return "bg-rose-400/90";
-    if (pct >= 70) return "bg-amber-400/80";
+    if (pct >= 95) return "bg-rose-400/90";
+    if (pct >= 82) return "bg-amber-400/80";
     return "bg-slate-300/60";
   }
   if (pct >= 100) return "bg-rose-500";
-  if (pct >= 90) return "bg-amber-400";
-  if (pct >= 70) return "bg-amber-400/75";
+  if (pct >= 95) return "bg-amber-400";
+  if (pct >= 82) return "bg-amber-400/75";
   return "bg-slate-300/60";
 }
 
@@ -251,21 +251,28 @@ function SystemPulseChip({
     (thPct != null && thPct >= 90) ||
     (turnPct != null && turnPct >= 95);
 
+  const showWorstPct =
+    Boolean(payload?.enabled) &&
+    typeof worst === "number" &&
+    (critical || worst >= 86);
+
   return (
     <button
       type="button"
       data-hww-system-pulse="true"
-      aria-label="Open system diagnostics"
+      data-hww-system-pulse-pct-visible={showWorstPct ? "true" : "false"}
+      aria-label={
+        showWorstPct ? `Open system diagnostics, worst lane about ${worst}%` : "Open system diagnostics"
+      }
       aria-haspopup="dialog"
       onClick={(e) => onOpenDiagnostics(e.currentTarget)}
       className={cn(
-        "hww-system-pulse flex h-8 shrink-0 items-center gap-1.5 rounded-full border bg-black/35 px-2 text-[10px] font-mono uppercase tracking-wide text-white/75",
+        "hww-system-pulse flex h-8 min-h-8 shrink-0 items-center gap-1 rounded-full border bg-black/35 px-1.5 text-[10px] font-mono text-white/72",
         "outline-none ring-offset-2 ring-offset-[#030a10] hover:bg-white/[0.06] focus-visible:ring-2 focus-visible:ring-emerald-400/40",
         critical ? "border-rose-500/35" : "border-white/[0.1]",
       )}
     >
-      <span className="select-none text-white/40">Sys</span>
-      <span className="flex items-center gap-0.5" aria-hidden>
+      <span className="flex shrink-0 items-center gap-0.5" aria-hidden>
         <span
           className={cn(
             "inline-block h-2 w-2 rounded-full transition-opacity",
@@ -300,9 +307,11 @@ function SystemPulseChip({
           )}
         />
       </span>
-      <span className="tabular-nums text-white/55" aria-hidden>
-        {payload?.enabled && worst != null ? `${worst}%` : "—"}
-      </span>
+      {showWorstPct ? (
+        <span className="shrink-0 tabular-nums text-[10px] text-white/50" aria-hidden>
+          {worst}%
+        </span>
+      ) : null}
     </button>
   );
 }

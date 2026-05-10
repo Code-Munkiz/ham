@@ -292,26 +292,28 @@ function ComposerQuickTipsBar({
           );
         })}
       </div>
-      <button
-        type="button"
-        aria-label="Show more starter prompts"
-        title="Scroll starter prompts"
-        disabled={!canScrollAhead}
-        data-hww-composer-quick-tips-scroll-next
-        onClick={scrollStarterPromptsAhead}
-        className={cn(
-          "inline-flex h-7 min-h-7 w-7 min-w-7 shrink-0 cursor-pointer items-center justify-center rounded-md border text-white/85 outline-none transition",
-          "border-white/[0.12] bg-white/[0.04] hover:border-white/[0.2] hover:bg-white/[0.08] hover:text-white",
-          "focus-visible:border-emerald-400/35 focus-visible:ring-2 focus-visible:ring-emerald-400/35 disabled:pointer-events-none disabled:opacity-[0.22]",
-        )}
-      >
-        <ChevronRight className="h-3.5 w-3.5 shrink-0" strokeWidth={2.25} aria-hidden />
-      </button>
+      {canScrollAhead ? (
+        <button
+          type="button"
+          aria-label="Show more starter prompts"
+          title="Scroll starter prompts"
+          data-hww-composer-quick-tips-scroll-next
+          data-hww-composer-quick-tips-scroll-next-active="true"
+          onClick={scrollStarterPromptsAhead}
+          className={cn(
+            "inline-flex h-6 min-h-6 w-6 min-w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border border-white/[0.08] bg-white/[0.03] text-white/80 outline-none transition",
+            "hover:border-white/[0.16] hover:bg-white/[0.06] hover:text-white",
+            "focus-visible:border-emerald-400/35 focus-visible:ring-2 focus-visible:ring-emerald-400/35",
+          )}
+        >
+          <ChevronRight className="h-3 w-3 shrink-0" strokeWidth={2.25} aria-hidden />
+        </button>
+      ) : null}
       <Button
         type="button"
         variant="ghost"
         size="icon"
-        className="size-9 min-h-9 min-w-9 shrink-0 text-white/50 hover:bg-white/[0.06] hover:text-white"
+        className="size-8 min-h-8 min-w-8 shrink-0 text-white/50 hover:bg-white/[0.06] hover:text-white"
         aria-label="Hide starter prompts"
         title="Hide starter prompts"
         onClick={onDismiss}
@@ -624,6 +626,8 @@ export function WorkspaceChatComposer({
   }, [contextAccent]);
 
   const meterLayout = composerToolbarDensity === "comfortable" ? "rings" : "pulse";
+  const deckRowAlign =
+    composerToolbarDensity === "comfortable" ? "items-end" : "items-center";
 
   const placeholder = React.useMemo(() => {
     if (voiceTranscribing) return "Transcribing…";
@@ -885,7 +889,7 @@ export function WorkspaceChatComposer({
       ) : null}
       <div
         className={cn(
-          "flex h-9 min-h-9 shrink-0 items-center",
+          "flex h-8 min-h-8 shrink-0 items-center",
           voiceTranscribing && "pointer-events-none opacity-55",
         )}
         title={micColumnTitle}
@@ -1008,7 +1012,7 @@ export function WorkspaceChatComposer({
         disabled={!canSend}
         title={sendButtonTitle}
         className={cn(
-          "size-9 min-h-9 min-w-9 shrink-0 rounded-md border border-emerald-400/20 bg-transparent text-emerald-200/85 shadow-none",
+          "size-8 min-h-8 min-w-8 shrink-0 rounded-md border border-emerald-400/20 bg-transparent text-emerald-200/85 shadow-none",
           "hover:border-emerald-400/38 hover:bg-emerald-500/12 hover:text-emerald-50",
           "focus-visible:border-emerald-400/45 focus-visible:ring-2 focus-visible:ring-emerald-400/30",
           "disabled:pointer-events-none disabled:opacity-40",
@@ -1019,9 +1023,9 @@ export function WorkspaceChatComposer({
         data-hww-composer-toolbar-icon="send"
       >
         {sending ? (
-          <span className={cn("h-3 w-3 animate-pulse rounded-full bg-emerald-200/85")} />
+          <span className={cn("h-2.5 w-2.5 animate-pulse rounded-full bg-emerald-200/85")} />
         ) : (
-          <ArrowUp className="h-4 w-4 shrink-0" strokeWidth={2.2} />
+          <ArrowUp className="h-3.5 w-3.5 shrink-0" strokeWidth={2.2} />
         )}
       </Button>
     </>
@@ -1153,13 +1157,20 @@ export function WorkspaceChatComposer({
               composerToolbarDensity === "tight" && "hww-command-deck--tight",
               composerToolbarDensity === "tight"
                 ? "flex flex-col gap-0"
-                : "grid min-w-0 grid-cols-[minmax(0,max-content)_minmax(0,1fr)_minmax(0,max-content)] items-end gap-x-2 gap-y-1 px-2.5 pb-2 pt-2 md:px-3.5 md:pb-2.5 md:pt-2.5",
+                : cn(
+                    "grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] gap-x-2 gap-y-1 px-2.5 pb-2 pt-2 md:gap-x-2.5 md:px-4 md:pb-2.5 md:pt-2.5",
+                    deckRowAlign,
+                  ),
             )}
+            data-hww-command-deck-layout={
+              composerToolbarDensity === "tight" ? "stacked" : "triple"
+            }
           >
             {composerToolbarDensity !== "tight" ? (
               <div
+                data-hww-command-deck-left
                 data-hww-command-left
-                className="flex min-w-0 max-w-full flex-col gap-1 md:flex-row md:flex-wrap md:items-center md:gap-0.5 lg:gap-1"
+                className="flex min-w-0 max-w-[min(100%,22rem)] shrink-0 flex-row flex-nowrap items-center gap-1 overflow-hidden md:max-w-[min(100%,26rem)]"
               >
                 {leftDeckControls}
               </div>
@@ -1167,11 +1178,12 @@ export function WorkspaceChatComposer({
 
             <div
               ref={textareaWrapRef}
+              data-hww-command-input-slot
               className={cn(
-                "min-w-0",
+                "flex min-h-0 min-w-0 w-full max-w-full flex-col self-stretch",
                 composerToolbarDensity === "tight"
                   ? "px-2.5 pb-1 pt-2.5 md:px-3.5"
-                  : "min-w-0 w-full pb-0.5",
+                  : "justify-end pb-px",
               )}
             >
               <label htmlFor="hww-chat-composer" className="sr-only">
@@ -1205,11 +1217,10 @@ export function WorkspaceChatComposer({
 
             {composerToolbarDensity !== "tight" ? (
               <div
+                data-hww-command-deck-actions
                 data-hww-command-controls
                 data-hww-action-buttons
-                className={cn(
-                  "flex h-9 min-h-9 shrink-0 items-center justify-end gap-0.5 overflow-x-hidden md:gap-1",
-                )}
+                className="flex h-8 min-h-8 shrink-0 items-center justify-end gap-1 overflow-x-hidden pl-1.5 pr-2.5 md:pl-2 md:pr-3.5"
               >
                 {rightDeckActions}
               </div>

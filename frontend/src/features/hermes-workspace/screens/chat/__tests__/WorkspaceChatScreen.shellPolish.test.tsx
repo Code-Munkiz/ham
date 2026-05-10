@@ -1,7 +1,7 @@
 /**
  * /workspace/chat shell polish: header copy, inspector tab chrome, quick prompts scrollbar, toolbar icons.
  */
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 
@@ -137,12 +137,30 @@ function renderChat(path = "/workspace/chat") {
 
 describe("WorkspaceChatScreen shell polish", () => {
   beforeEach(() => {
+    const scrollWidthDesc = Object.getOwnPropertyDescriptor(Element.prototype, "scrollWidth");
+    const nativeScrollWidthGet = scrollWidthDesc?.get;
+
+    Object.defineProperty(HTMLElement.prototype, "scrollWidth", {
+      configurable: true,
+      get(this: HTMLElement) {
+        const base =
+          typeof nativeScrollWidthGet === "function" ? nativeScrollWidthGet.call(this) : 0;
+        return this.hasAttribute?.("data-hww-composer-quick-tips-scroll")
+          ? Math.max(base, 5000)
+          : base;
+      },
+    });
+
     globalThis.ResizeObserver = class {
       observe(): void {}
       unobserve(): void {}
       disconnect(): void {}
     } as unknown as typeof ResizeObserver;
     mockMatchMedia(true);
+  });
+
+  afterEach(() => {
+    delete (HTMLElement.prototype as unknown as { scrollWidth?: PropertyDescriptor }).scrollWidth;
   });
 
   it("uses compact header without visible New session title or subtitle paragraph", async () => {
@@ -174,7 +192,7 @@ describe("WorkspaceChatScreen shell polish", () => {
     expect(screen.queryByTestId("hww-workbench")).not.toBeInTheDocument();
   });
 
-  it("anchors quick prompts with hidden scrollbar class and exposes compact scroll-next control", async () => {
+  it("anchors quick prompts with hidden scrollbar class and shows scroll-next only when overflowing", async () => {
     const { container } = renderChat("/workspace/chat?session=sid_tips");
     await waitFor(() => expect(screen.getByTestId("hww-command-panel")).toBeInTheDocument());
 
@@ -182,10 +200,10 @@ describe("WorkspaceChatScreen shell polish", () => {
     expect(scroll?.classList.contains("hww-composer-quick-tips-scroll")).toBe(true);
     expect(await screen.findByRole("toolbar", { name: "Starter prompts" })).toBeTruthy();
 
-    const nextBtn = screen.getByRole("button", { name: "Show more starter prompts" });
-    expect(nextBtn).toBeTruthy();
-    expect(nextBtn.className).toMatch(/h-7/);
-    expect(nextBtn.className).toMatch(/w-7/);
+    const nextBtn = await screen.findByRole("button", { name: "Show more starter prompts" });
+    expect(nextBtn.getAttribute("data-hww-composer-quick-tips-scroll-next-active")).toBe("true");
+    expect(nextBtn.className).toMatch(/h-6/);
+    expect(nextBtn.className).toMatch(/w-6/);
   });
 
   it("sizes composer toolbar icon actions consistently (attach, mic, send)", async () => {
@@ -198,10 +216,10 @@ describe("WorkspaceChatScreen shell polish", () => {
     expect(panel?.querySelector('[data-hww-composer-toolbar-icon="send"]')).toBeTruthy();
 
     expect(panel?.querySelector('[data-hww-composer-toolbar-icon="add"]')?.className).toMatch(
-      /size-9/,
+      /size-8/,
     );
     const send = panel?.querySelector("[data-hww-command-send]");
-    expect(send?.className).toMatch(/size-9/);
+    expect(send?.className).toMatch(/size-8/);
     expect(send?.className).toMatch(/rounded-md/);
   });
 
