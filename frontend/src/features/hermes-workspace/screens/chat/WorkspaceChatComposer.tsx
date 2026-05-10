@@ -5,7 +5,7 @@
  */
 
 import * as React from "react";
-import { ArrowUp, Link2, Loader2 } from "lucide-react";
+import { ArrowUp, ChevronRight, Lightbulb, Link2, Loader2, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type {
@@ -31,6 +31,7 @@ import {
 } from "./composerAttachmentHelpers";
 import { ContextMeterCluster } from "./ContextMeterCluster";
 import { WorkspaceOpenRouterModelPicker } from "./WorkspaceOpenRouterModelPicker";
+import type { SuggestionChip } from "./WorkspaceChatEmptyState";
 
 const VOICE_DEBUG_FLAG = "ham.voiceDebug";
 
@@ -94,6 +95,12 @@ type WorkspaceChatComposerProps = {
   contextMetersPayload?: ChatContextMetersPayload | null;
   /** Models that failed with OPENROUTER_MODEL_REJECTED this session (picker hint only). */
   failedChatModelIds?: ReadonlySet<string> | null;
+  /** Horizontally scrolling starter prompts above the deck (similar to Cursor’s AI shortcuts row). */
+  quickSuggestions?: readonly SuggestionChip[] | null;
+  /** Runs when a starter prompt pill is clicked (typically sends the bundled prompt immediately). */
+  onQuickSuggestion?: (prompt: string) => void;
+  /** When this identity changes (e.g. chat session id), the dismissible starter row is shown again. */
+  quickTipsResetSignal?: string | null;
 };
 
 const COMPOSER_MENU_FOOTER_HINT =
@@ -190,6 +197,75 @@ function collectComposerPasteFiles(dt: DataTransfer | null): File[] {
   return out;
 }
 
+function ComposerQuickTipsBar({
+  suggestions,
+  composerBusy,
+  onPick,
+  onDismiss,
+}: {
+  suggestions: readonly SuggestionChip[];
+  composerBusy: boolean;
+  onPick: (prompt: string) => void;
+  onDismiss: () => void;
+}) {
+  return (
+    <div
+      role="toolbar"
+      aria-label="Starter prompts"
+      data-hww-composer-quick-tips
+      className="mb-2 flex min-h-9 max-w-full min-w-0 items-center gap-2 overflow-x-hidden"
+    >
+      <Lightbulb
+        className="my-1 h-4 w-4 shrink-0 text-amber-200/75"
+        strokeWidth={1.75}
+        aria-hidden
+      />
+      <div className="-mx-0.5 flex min-w-0 flex-1 items-center gap-2 overflow-x-auto overflow-y-hidden pb-px [scrollbar-width:thin]">
+        <span
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-white/[0.09] bg-white/[0.03] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-white/45"
+          aria-hidden
+        >
+          <Sparkles className="h-3 w-3 text-sky-300/80" strokeWidth={1.85} aria-hidden />
+          Quick prompts
+        </span>
+        {suggestions.map((s) => {
+          const Icon = s.icon;
+          return (
+            <button
+              key={s.label}
+              type="button"
+              disabled={composerBusy}
+              onClick={() => onPick(s.prompt)}
+              title={s.label}
+              className={cn(
+                "inline-flex max-w-[min(100%,240px)] shrink-0 cursor-pointer items-center gap-2 rounded-full border border-white/[0.1]",
+                "bg-white/[0.04] px-3 py-1.5 text-left text-[11px] font-medium text-[#e4edf4] outline-none ring-emerald-500/30 transition",
+                "hover:border-emerald-500/35 hover:bg-white/[0.07] hover:text-white disabled:cursor-not-allowed disabled:opacity-40",
+                "focus-visible:ring-2",
+              )}
+            >
+              <Icon className="h-3.5 w-3.5 shrink-0 text-emerald-300/85" strokeWidth={1.5} />
+              <span className="min-w-0 truncate">{s.label}</span>
+            </button>
+          );
+        })}
+      </div>
+      <ChevronRight className="hidden h-4 w-4 shrink-0 text-white/35 sm:block" aria-hidden />
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="h-8 w-8 shrink-0 text-white/50 hover:bg-white/[0.06] hover:text-white"
+        aria-label="Hide starter prompts"
+        title="Hide starter prompts"
+        onClick={onDismiss}
+      >
+        <X className="h-4 w-4" strokeWidth={1.75} />
+      </Button>
+    </div>
+  );
+}
+
 export function WorkspaceChatComposer({
   value,
   onChange,
@@ -218,7 +294,11 @@ export function WorkspaceChatComposer({
   contextMetersEnabled = false,
   contextMetersPayload = null,
   failedChatModelIds = null,
+  quickSuggestions = null,
+  onQuickSuggestion,
+  quickTipsResetSignal = null,
 }: WorkspaceChatComposerProps) {
+  const [quickTipsDismissed, setQuickTipsDismissed] = React.useState(false);
   const [voiceState, setVoiceState] = React.useState<VoiceUiState>("idle");
   const [voiceBanner, setVoiceBanner] = React.useState<string | null>(null);
   const [isDragging, setIsDragging] = React.useState(false);
@@ -251,6 +331,7 @@ export function WorkspaceChatComposer({
   const stopRequestedRef = React.useRef(false);
   const stopTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const outerRef = React.useRef<HTMLDivElement>(null);
+  const textareaWrapRef = React.useRef<HTMLDivElement>(null);
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
   const modelPickerTriggerRef = React.useRef<HTMLButtonElement>(null);
   const dragDepthRef = React.useRef(0);
@@ -349,6 +430,10 @@ export function WorkspaceChatComposer({
       ro.disconnect();
     };
   }, [attachments.length, value, voiceRecording, voiceState, voiceTranscribing]);
+
+  React.useEffect(() => {
+    setQuickTipsDismissed(false);
+  }, [quickTipsResetSignal]);
 
   React.useEffect(() => {
     if (voiceRecording) setVoiceBanner(null);
@@ -744,10 +829,7 @@ export function WorkspaceChatComposer({
       ) : null}
       <div
         className={cn(
-          "flex shrink-0 items-center",
-          composerToolbarDensity === "comfortable" && "h-10",
-          composerToolbarDensity === "compact" && "h-9",
-          composerToolbarDensity === "tight" && "h-8",
+          "flex h-10 min-h-10 shrink-0 items-center",
           voiceTranscribing && "pointer-events-none opacity-55",
         )}
         title={micColumnTitle}
@@ -870,35 +952,29 @@ export function WorkspaceChatComposer({
         disabled={!canSend}
         title={sendButtonTitle}
         className={cn(
-          "shrink-0 rounded-full border border-emerald-400/15 bg-gradient-to-b from-emerald-600 to-emerald-900 text-white shadow-md hover:from-emerald-500 hover:to-emerald-800 disabled:opacity-40",
-          composerToolbarDensity === "comfortable" && "h-10 w-10 min-h-10 min-w-10",
-          composerToolbarDensity === "compact" && "h-9 w-9 min-h-9 min-w-9",
-          composerToolbarDensity === "tight" && "h-8 w-8 min-h-8 min-w-8",
+          "h-10 w-10 min-h-10 min-w-10 shrink-0 rounded-full border border-emerald-400/15 bg-gradient-to-b from-emerald-600 to-emerald-900 text-white shadow-md hover:from-emerald-500 hover:to-emerald-800 disabled:opacity-40",
         )}
         aria-label="Send"
         data-hww-command-send
       >
         {sending ? (
-          <span
-            className={cn(
-              "animate-pulse rounded-full bg-white/80",
-              composerToolbarDensity === "comfortable" ? "h-4 w-4" : "h-3.5 w-3.5",
-            )}
-          />
+          <span className={cn("h-5 w-5 animate-pulse rounded-full bg-white/80")} />
         ) : (
-          <ArrowUp
-            className={composerToolbarDensity === "comfortable" ? "h-4 w-4" : "h-3.5 w-3.5"}
-            strokeWidth={2.2}
-          />
+          <ArrowUp className="h-5 w-5 shrink-0" strokeWidth={2.2} />
         )}
       </Button>
     </>
   );
 
+  const composerQuickTipsBusy = disabled || sending || voiceBusy || uploadsPending;
+  const showComposerQuickTips =
+    !quickTipsDismissed &&
+    Boolean(quickSuggestions?.length && onQuickSuggestion);
+
   return (
     <div
       ref={outerRef}
-      className="hww-chat-composer-outer pointer-events-auto w-full shrink-0 border-t border-white/[0.06] bg-[#030a10]/90 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-sm md:px-4"
+      className="hww-chat-composer-outer pointer-events-auto box-border w-full max-w-full min-w-0 shrink-0 overflow-x-hidden border-t border-white/[0.06] bg-[#030a10]/90 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-sm md:px-6"
       data-hww-composer-instance={composerInstanceId.current}
       data-hww-composer-density={composerToolbarDensity}
       data-voice-recording={voiceRecording ? "true" : "false"}
@@ -907,16 +983,24 @@ export function WorkspaceChatComposer({
       onPointerDownCapture={captureComposerPointer}
       onClickCapture={captureComposerClick}
     >
+      {showComposerQuickTips && quickSuggestions && onQuickSuggestion ? (
+        <ComposerQuickTipsBar
+          suggestions={quickSuggestions}
+          composerBusy={composerQuickTipsBusy}
+          onPick={onQuickSuggestion}
+          onDismiss={() => setQuickTipsDismissed(true)}
+        />
+      ) : null}
       <form
         onSubmit={(e) => {
           e.preventDefault();
           onSubmit();
         }}
-        className="w-full md:pl-1"
+        className="w-full max-w-full min-w-0 md:pl-1"
       >
         <div
           className={cn(
-            "relative box-border flex min-w-0 flex-col overflow-hidden rounded-3xl",
+            "relative box-border flex min-w-0 max-w-full flex-col overflow-hidden rounded-3xl",
             "text-[#e8eef3] shadow-[0_1px_0_rgba(255,255,255,0.04)_inset,0_8px_28px_rgba(0,0,0,0.32)]",
             isDragging
               ? "ring-2 ring-emerald-400/35"
@@ -1002,7 +1086,7 @@ export function WorkspaceChatComposer({
 
           <div
             className={cn(
-              "hww-command-deck box-border min-w-0 border-t border-white/[0.08]",
+              "hww-command-deck box-border min-w-0 max-w-full overflow-x-hidden border-t border-white/[0.08]",
               composerToolbarDensity === "comfortable" && "hww-command-deck--comfortable",
               composerToolbarDensity === "compact" && "hww-command-deck--compact",
               composerToolbarDensity === "tight" && "hww-command-deck--tight",
@@ -1021,11 +1105,12 @@ export function WorkspaceChatComposer({
             ) : null}
 
             <div
+              ref={textareaWrapRef}
               className={cn(
                 "min-w-0",
                 composerToolbarDensity === "tight"
                   ? "px-2.5 pb-1 pt-2.5 md:px-3.5"
-                  : "w-full min-w-0 pb-0.5",
+                  : "min-w-0 w-full pb-0.5",
               )}
             >
               <label htmlFor="hww-chat-composer" className="sr-only">
@@ -1053,7 +1138,7 @@ export function WorkspaceChatComposer({
                 rows={1}
                 disabled={disabled || sending || voiceTranscribing}
                 placeholder={placeholder}
-                className="hww-command-textarea box-border w-full min-h-[44px] max-h-[240px] resize-none border-0 bg-transparent px-1 py-1 text-[13px] leading-[1.45] text-[#e8eef3] outline-none placeholder:text-white/40 focus:ring-0 focus:outline-none [box-shadow:none] overflow-x-hidden"
+                className="hww-command-textarea box-border w-full resize-none border-0 bg-transparent px-1 py-1 text-[13px] leading-[1.45] text-[#e8eef3] outline-none placeholder:text-white/40 focus:ring-0 focus:outline-none [box-shadow:none] overflow-x-hidden max-h-[240px] min-h-[44px]"
               />
             </div>
 
@@ -1062,8 +1147,7 @@ export function WorkspaceChatComposer({
                 data-hww-command-controls
                 data-hww-action-buttons
                 className={cn(
-                  "flex shrink-0 items-center justify-end gap-0.5 overflow-x-hidden md:gap-1",
-                  composerToolbarDensity === "comfortable" ? "h-10" : "h-9",
+                  "flex h-10 min-h-10 shrink-0 items-center justify-end gap-0.5 overflow-x-hidden md:gap-1",
                 )}
               >
                 {rightDeckActions}

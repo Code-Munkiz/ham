@@ -60,7 +60,10 @@ import {
 } from "../../utils/missionFeedTranscript";
 import { MANAGED_MISSION_CHAT_OWNERSHIP_HINT } from "../../lib/managedMissionOwnershipCopy";
 import { useVoiceWorkspaceSettingsOptional } from "../../voice/VoiceWorkspaceSettingsContext";
-import { WorkspaceChatEmptyState } from "./WorkspaceChatEmptyState";
+import {
+  WorkspaceChatEmptyState,
+  WORKSPACE_CHAT_SUGGESTIONS,
+} from "./WorkspaceChatEmptyState";
 import { WorkspaceChatMessageList, type HwwMsgRow } from "./WorkspaceChatMessageList";
 import { WorkspaceChatComposer } from "./WorkspaceChatComposer";
 import type {
@@ -3207,11 +3210,16 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   );
 
   return (
-    <div ref={chatSplitRowRef} className="flex min-h-0 w-full min-w-0 flex-1 flex-col md:flex-row">
+    <div
+      ref={chatSplitRowRef}
+      data-testid="hww-chat-split-row"
+      className="flex min-h-0 w-full min-w-0 flex-1 flex-col md:flex-row"
+    >
       <div
+        data-testid="hww-command-panel"
         className={cn(
-          "flex min-h-0 min-w-0 flex-col",
-          "w-full border-b border-white/[0.06] md:border-b-0 md:border-r md:border-white/[0.08] md:shrink-0",
+          "flex min-h-0 max-w-full min-w-0 flex-1 flex-col overflow-x-hidden md:flex-none",
+          "w-full border-b border-white/[0.06] md:border-b-0 md:border-r md:border-white/[0.08] md:shrink-0 md:overflow-x-hidden",
         )}
         style={
           isDesktopSplitLayout
@@ -3265,123 +3273,128 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
             </button>
           </div>
         </header>
-        <div
-          ref={listWrapRef}
-          className="hww-scroll flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto"
-        >
-          {loadingSession ? (
-            <div className="flex flex-1 items-center justify-center py-12 text-sm text-white/40">
-              Loading…
-            </div>
-          ) : sessionLoadFailed ? (
-            <div className="flex flex-1 flex-col items-center justify-center px-4 py-10">
-              <div
-                className="w-full max-w-md rounded-xl border border-amber-500/25 bg-[#040d14]/90 px-5 py-5 text-left shadow-lg"
-                role="alert"
-              >
-                <h2 className="text-[14px] font-semibold text-amber-100/95">
-                  Could not open this session
-                </h2>
-                <p className="mt-2 text-[13px] leading-relaxed text-white/70">{loadErr}</p>
-                {staleSessionParam ? (
-                  <p className="mt-2 text-[11px] text-white/45">
-                    If you need help, support can use the link in your browser’s address bar.
-                  </p>
-                ) : null}
-                <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="bg-[#7dd3fc] text-[#040d14] hover:bg-[#a5e9ff]"
-                    onClick={startNew}
-                  >
-                    Start new session
-                  </Button>
-                  <Button type="button" size="sm" variant="secondary" onClick={startNew}>
-                    Back to recent sessions
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="border-white/15 bg-transparent text-white/85 hover:bg-white/[0.06]"
-                    onClick={retryLoadSession}
-                  >
-                    Retry
-                  </Button>
-                </div>
-                <p className="mt-4 text-[11px] leading-relaxed text-white/35">
-                  The sidebar stays available — pick another session or start fresh. If this link is
-                  old, the API may have been redeployed; chat history on Cloud Run defaults to
-                  ephemeral storage unless configured otherwise.
-                </p>
+        <div className="grid min-h-0 min-w-0 max-w-full flex-1 grid-rows-[minmax(0,1fr)_auto] overflow-x-hidden">
+          <div
+            ref={listWrapRef}
+            className="hww-chat-command-feed hww-scroll flex min-h-0 min-w-0 max-w-full flex-col overflow-x-hidden overflow-y-auto px-3 md:px-6"
+          >
+            {loadingSession ? (
+              <div className="flex flex-1 items-center justify-center py-12 text-sm text-white/40">
+                Loading…
               </div>
-            </div>
-          ) : showEmpty ? (
-            <WorkspaceChatEmptyState onSuggestionClick={(prompt) => void send(prompt)} />
-          ) : (
-            <>
-              <WorkspaceChatMessageList
-                messages={messages}
-                isStreaming={isStreaming}
-                resolveLocalAttachmentPreview={resolveLocalAttachmentPreview}
-                onRemoveGeneratedImage={handleRemoveGeneratedImage}
-                onRemoveGeneratedVideo={handleRemoveGeneratedVideo}
-              />
-              <div ref={endRef} className="h-2 shrink-0" />
-            </>
-          )}
-        </div>
-        <div className="flex w-full justify-center px-3 md:px-6">
-          <WorkspaceChatComposer
-            value={input}
-            onChange={setInput}
-            onSubmit={onFormSubmit}
-            disabled={catalogLoading}
-            sending={sending || imageGenInFlight || videoGenInFlight}
-            voiceTranscribing={voiceTranscribing}
-            onVoiceBlob={handleVoiceBlob}
-            attachments={attachments}
-            onAddAttachments={handleAddAttachments}
-            onRemoveAttachment={(id) => {
-              setAttachments((p) => {
-                const dying = p.find((a) => a.id === id);
-                if (dying) revokeWorkspaceComposerAttachmentPreviews([dying]);
-                return p.filter((a) => a.id !== id);
-              });
-            }}
-            onPasteFiles={handleAddAttachments}
-            onRetryAttachmentUpload={(lid) => void handleRetryAttachmentUpload(lid)}
-            catalog={catalog}
-            modelId={modelId}
-            onModelIdChange={handleComposerModelIdChange}
-            failedChatModelIds={new Set(failedChatModelIds)}
-            sttDictationEnabled={sttDictationEnabled}
-            sttUnavailableReason={sttUnavailableReason}
-            sttMode={sttMode}
-            onSttModeChange={handleSttModeChange}
-            gohamDesktopChip={
-              desktopShell && getHamDesktopWebBridgeApi()
-                ? {
-                    linked: gohamBridgeLinked,
-                    busy:
-                      gohamModalOpen &&
-                      (gohamModalPhase === "checking" || gohamModalPhase === "connecting"),
-                    onOpenModal: () => void openGohamDesktopModal(),
-                  }
-                : null
-            }
-            chatCapabilities={chatCapabilities}
-            contextMetersEnabled={chatCapabilities?.context_meters_enabled === true}
-            contextMetersPayload={contextMetersPayload}
-            generateImage={composerGenerateImage}
-            generateVideo={composerGenerateVideo}
-            exportPdf={{
-              onExport: handleExportPdf,
-              busy: pdfExporting,
-              blockedReason: pdfExportBlockedReason,
-            }}
-          />
+            ) : sessionLoadFailed ? (
+              <div className="flex flex-1 flex-col items-center justify-center px-4 py-10">
+                <div
+                  className="w-full max-w-md rounded-xl border border-amber-500/25 bg-[#040d14]/90 px-5 py-5 text-left shadow-lg"
+                  role="alert"
+                >
+                  <h2 className="text-[14px] font-semibold text-amber-100/95">
+                    Could not open this session
+                  </h2>
+                  <p className="mt-2 text-[13px] leading-relaxed text-white/70">{loadErr}</p>
+                  {staleSessionParam ? (
+                    <p className="mt-2 text-[11px] text-white/45">
+                      If you need help, support can use the link in your browser’s address bar.
+                    </p>
+                  ) : null}
+                  <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="bg-[#7dd3fc] text-[#040d14] hover:bg-[#a5e9ff]"
+                      onClick={startNew}
+                    >
+                      Start new session
+                    </Button>
+                    <Button type="button" size="sm" variant="secondary" onClick={startNew}>
+                      Back to recent sessions
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="border-white/15 bg-transparent text-white/85 hover:bg-white/[0.06]"
+                      onClick={retryLoadSession}
+                    >
+                      Retry
+                    </Button>
+                  </div>
+                  <p className="mt-4 text-[11px] leading-relaxed text-white/35">
+                    The sidebar stays available — pick another session or start fresh. If this link
+                    is old, the API may have been redeployed; chat history on Cloud Run defaults to
+                    ephemeral storage unless configured otherwise.
+                  </p>
+                </div>
+              </div>
+            ) : showEmpty ? (
+              <WorkspaceChatEmptyState />
+            ) : (
+              <>
+                <WorkspaceChatMessageList
+                  messages={messages}
+                  isStreaming={isStreaming}
+                  resolveLocalAttachmentPreview={resolveLocalAttachmentPreview}
+                  onRemoveGeneratedImage={handleRemoveGeneratedImage}
+                  onRemoveGeneratedVideo={handleRemoveGeneratedVideo}
+                />
+                <div ref={endRef} className="h-2 shrink-0" />
+              </>
+            )}
+          </div>
+          <div className="flex w-full max-w-full min-w-0 shrink-0 flex-col overflow-x-hidden">
+            <WorkspaceChatComposer
+              quickSuggestions={WORKSPACE_CHAT_SUGGESTIONS}
+              onQuickSuggestion={(prompt) => void send(prompt)}
+              quickTipsResetSignal={sessionId}
+              value={input}
+              onChange={setInput}
+              onSubmit={onFormSubmit}
+              disabled={catalogLoading}
+              sending={sending || imageGenInFlight || videoGenInFlight}
+              voiceTranscribing={voiceTranscribing}
+              onVoiceBlob={handleVoiceBlob}
+              attachments={attachments}
+              onAddAttachments={handleAddAttachments}
+              onRemoveAttachment={(id) => {
+                setAttachments((p) => {
+                  const dying = p.find((a) => a.id === id);
+                  if (dying) revokeWorkspaceComposerAttachmentPreviews([dying]);
+                  return p.filter((a) => a.id !== id);
+                });
+              }}
+              onPasteFiles={handleAddAttachments}
+              onRetryAttachmentUpload={(lid) => void handleRetryAttachmentUpload(lid)}
+              catalog={catalog}
+              modelId={modelId}
+              onModelIdChange={handleComposerModelIdChange}
+              failedChatModelIds={new Set(failedChatModelIds)}
+              sttDictationEnabled={sttDictationEnabled}
+              sttUnavailableReason={sttUnavailableReason}
+              sttMode={sttMode}
+              onSttModeChange={handleSttModeChange}
+              gohamDesktopChip={
+                desktopShell && getHamDesktopWebBridgeApi()
+                  ? {
+                      linked: gohamBridgeLinked,
+                      busy:
+                        gohamModalOpen &&
+                        (gohamModalPhase === "checking" || gohamModalPhase === "connecting"),
+                      onOpenModal: () => void openGohamDesktopModal(),
+                    }
+                  : null
+              }
+              chatCapabilities={chatCapabilities}
+              contextMetersEnabled={chatCapabilities?.context_meters_enabled === true}
+              contextMetersPayload={contextMetersPayload}
+              generateImage={composerGenerateImage}
+              generateVideo={composerGenerateVideo}
+              exportPdf={{
+                onExport: handleExportPdf,
+                busy: pdfExporting,
+                blockedReason: pdfExportBlockedReason,
+              }}
+            />
+          </div>
         </div>
       </div>
       {isDesktopSplitLayout ? (
@@ -3561,8 +3574,9 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         </>
       ) : (
         <div
+          data-testid="hww-workbench-panel-slot"
           className={cn(
-            "flex min-h-0 w-full min-w-0 flex-col",
+            "relative z-0 flex min-h-0 w-full min-w-0 flex-col overflow-x-hidden",
             "min-h-[260px] max-h-[48vh] md:max-h-none md:h-full md:min-h-0 md:min-w-[420px] md:flex-1",
           )}
         >
