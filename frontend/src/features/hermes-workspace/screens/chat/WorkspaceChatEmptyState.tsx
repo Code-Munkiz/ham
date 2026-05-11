@@ -7,7 +7,6 @@ import * as React from "react";
 import { motion } from "motion/react";
 import { Brain, Code, Puzzle } from "lucide-react";
 import { hamWorkspaceLogoUrl } from "@/lib/ham/publicAssets";
-import { CodingPlanPanel } from "./coding-plan/CodingPlanPanel";
 
 export type SuggestionChip = {
   label: string;
@@ -36,9 +35,13 @@ export const WORKSPACE_CHAT_SUGGESTIONS: SuggestionChip[] = [
   },
 ];
 
-export function WorkspaceChatEmptyState() {
+export type WorkspaceChatEmptyStateProps = {
+  /** Calls through to the main chat composer: focus draft + preview-only conductor (Phase 2C). */
+  onPlanWithCodingAgents?: () => void;
+};
+
+export function WorkspaceChatEmptyState({ onPlanWithCodingAgents }: WorkspaceChatEmptyStateProps) {
   const avatarSrc = hamWorkspaceLogoUrl();
-  const [showCodingPlan, setShowCodingPlan] = React.useState(false);
 
   return (
     <motion.div
@@ -75,18 +78,14 @@ export function WorkspaceChatEmptyState() {
           actions as before.
         </p>
         <div className="mt-6 w-full max-w-md">
-          {showCodingPlan ? (
-            <CodingPlanPanel onClose={() => setShowCodingPlan(false)} />
-          ) : (
-            <button
-              type="button"
-              onClick={() => setShowCodingPlan(true)}
-              className="text-[11px] font-medium text-cyan-300/85 hover:text-cyan-200"
-              data-hww-coding-plan-open
-            >
-              Plan with coding agents
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => onPlanWithCodingAgents?.()}
+            className="text-[11px] font-medium text-cyan-300/85 hover:text-cyan-200"
+            data-hww-coding-plan-open
+          >
+            Plan with coding agents
+          </button>
         </div>
       </div>
     </motion.div>
