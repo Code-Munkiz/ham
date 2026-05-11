@@ -48,7 +48,7 @@ from src.ham.clerk_auth import HamActor
 from src.ham.clerk_operator import actor_is_workspace_operator
 from src.ham.droid_workflows.preview_launch import (
     build_droid_preview,
-    execute_droid_workflow,
+    execute_droid_build_workflow_remote,
     verify_launch_against_preview,
 )
 from src.ham.droid_workflows.registry import REGISTRY_REVISION, get_workflow
@@ -208,17 +208,21 @@ def execute_droid_build_workflow(
     created_by: dict[str, Any] | None,
 ) -> DroidBuildLaunchOutcome:
     """
-    Drive the safe_edit_low workflow and (in production) the post-Droid build lane.
+    Drive the safe_edit_low workflow plus the runner-side Build Lane post-exec.
 
     This function is a deliberate seam: tests patch it directly and assert that
     the gate stack runs *before* it is reached. Production cannot reach it
     today because :func:`_require_droid_exec_token` fails closed unless an
-    operator sets ``HAM_DROID_EXEC_TOKEN`` on the API host. The post-Droid
-    commit / push / PR wiring (``execute_build_lane_post_exec``) is inert in
-    P3 and is exercised only by its own tests against an injected subprocess
-    runner.
+    operator sets ``HAM_DROID_EXEC_TOKEN`` on the API host AND the deployed
+    runner exposes the Build Lane post-exec step.
+
+    The runner is the authority on branch/commit/PR text. This API hands the
+    runner the workflow id, project id, project root, sanitized prompt, and
+    proposal digest; the runner sanitizes its own output, runs ``git`` and
+    ``gh pr create`` under ``shell=False``, refuses sensitive-path changes,
+    refuses to push the base branch, and returns the PR coordinates.
     """
-    launch = execute_droid_workflow(
+    launch = execute_droid_build_workflow_remote(
         workflow_id=_BUILD_WORKFLOW_ID,
         project_root=project_root,
         user_prompt=user_prompt,
@@ -230,12 +234,12 @@ def execute_droid_build_workflow(
         ok=launch.ok,
         ham_run_id=launch.ham_run_id,
         control_plane_status=launch.control_plane_status,
-        pr_url=None,
-        pr_branch=None,
-        pr_commit_sha=None,
-        build_outcome=None,
+        pr_url=launch.pr_url,
+        pr_branch=launch.pr_branch,
+        pr_commit_sha=launch.pr_commit_sha,
+        build_outcome=launch.build_outcome,
         summary=launch.summary,
-        error_summary=launch.blocking_reason,
+        error_summary=launch.build_error_summary or launch.blocking_reason,
     )
 
 

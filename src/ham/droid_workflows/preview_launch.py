@@ -17,14 +17,21 @@ from src.ham.droid_workflows.registry import (
     get_workflow,
     list_workflow_ids,
 )
-from src.integrations.droid_runner_client import RemoteRunnerError, run_droid_argv
+from src.integrations.droid_runner_client import (
+    RemoteRunnerError,
+    run_droid_argv,
+    run_droid_build_argv,
+)
 from src.persistence.control_plane_run import (
+    DROID_BUILD_OUTCOMES,
     ControlPlaneAuditRef,
     ControlPlaneProviderAuditRef,
     ControlPlaneRun,
     ControlPlaneRunStore,
+    DroidBuildOutcome,
     cap_error_summary,
     cap_summary,
+    droid_build_outcome_to_ham_status,
     droid_outcome_to_ham_status,
     new_ham_run_id,
     utc_now_iso,
@@ -631,4 +638,386 @@ def execute_droid_workflow(
         timed_out=rec.timed_out,
         ham_run_id=hid_f,
         control_plane_status=hst if hid_f else None,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Build-lane execution path (mutating; dark/gated; called only by the
+# Build router after every API gate passes and HAM_DROID_EXEC_TOKEN is set).
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class DroidBuildExecutionResult:
+    """Build-lane execution outcome (droid exec + runner Build Lane post-exec)."""
+
+    ok: bool
+    blocking_reason: str | None
+    workflow_id: str
+    audit_id: str | None
+    runner_id: str | None
+    cwd: str | None
+    exit_code: int | None
+    duration_ms: int | None
+    summary: str | None
+    timed_out: bool
+    ham_run_id: str | None
+    control_plane_status: str | None
+    pr_url: str | None
+    pr_branch: str | None
+    pr_commit_sha: str | None
+    build_outcome: DroidBuildOutcome | None
+    build_error_summary: str | None
+
+
+def _coerce_build_outcome(value: object) -> DroidBuildOutcome | None:
+    if value is None:
+        return None
+    s = str(value).strip()
+    if not s:
+        return None
+    if s in DROID_BUILD_OUTCOMES:
+        return s  # type: ignore[return-value]
+    return None
+
+
+def _persist_droid_build_control_plane_run(
+    store: ControlPlaneRunStore,
+    *,
+    project_id: str,
+    workflow_id: str,
+    proposal_digest: str,
+    project_root: Path,
+    created_by: dict[str, Any] | None,
+    status: str,
+    status_reason: str,
+    summary: str | None,
+    error_summary: str | None,
+    session_id: str | None,
+    pr_url: str | None,
+    pr_branch: str | None,
+    pr_commit_sha: str | None,
+    build_outcome: DroidBuildOutcome | None,
+) -> str:
+    now = utc_now_iso()
+    rid = new_ham_run_id()
+    prs = str(project_root.resolve())
+    run = ControlPlaneRun(
+        ham_run_id=rid,
+        provider="factory_droid",
+        action_kind="launch",
+        project_id=project_id,
+        created_by=created_by,
+        created_at=now,
+        updated_at=now,
+        committed_at=now,
+        started_at=now,
+        finished_at=now,
+        last_observed_at=now,
+        status=status,
+        status_reason=status_reason,
+        proposal_digest=proposal_digest,
+        base_revision=REGISTRY_REVISION,
+        external_id=session_id,
+        workflow_id=workflow_id,
+        summary=cap_summary(summary),
+        error_summary=cap_error_summary(error_summary),
+        last_provider_status=None,
+        audit_ref=_droid_control_plane_audit_ref(project_root),
+        project_root=prs,
+        pr_url=pr_url,
+        pr_branch=pr_branch,
+        pr_commit_sha=pr_commit_sha,
+        build_outcome=build_outcome,
+    )
+    store.save(run, project_root_for_mirror=prs)
+    return rid
+
+
+def execute_droid_build_workflow_remote(
+    *,
+    workflow_id: str,
+    project_root: Path,
+    user_prompt: str,
+    project_id: str,
+    proposal_digest: str,
+    created_by: dict[str, Any] | None = None,
+    control_plane_run_store: ControlPlaneRunStore | None = None,
+) -> DroidBuildExecutionResult:
+    """
+    Run the build workflow against a remote runner with ``mode="build"``.
+
+    The runner is responsible for the post-droid commit / push / ``gh pr create``
+    step (``execute_build_lane_post_exec``); this function only forwards the
+    request, persists ``ControlPlaneRun`` with PR fields, and writes a HAM-side
+    audit row. ``run_droid_build_argv`` already requires ``accept_pr=True``
+    (defense in depth — the API gate is still the primary check).
+
+    Never invoked from chat or the audit lane: the only caller is
+    :func:`src.api.droid_build.execute_droid_build_workflow`.
+    """
+    st = control_plane_run_store or ControlPlaneRunStore()
+    digest_key = (proposal_digest or "").strip() or ("0" * 64)
+    pid_s = (project_id or "").strip()
+
+    wf = get_workflow(workflow_id)
+    if wf is None or not wf.mutates or not wf.requires_launch_token:
+        hid: str | None = None
+        if pid_s:
+            pr0 = project_root.expanduser().resolve()
+            hid = _persist_droid_build_control_plane_run(
+                st,
+                project_id=pid_s,
+                workflow_id=workflow_id,
+                proposal_digest=digest_key,
+                project_root=pr0,
+                created_by=created_by,
+                status="failed",
+                status_reason="droid_build:workflow_missing_or_misconfigured",
+                summary=None,
+                error_summary=f"Unknown or non-mutating workflow_id {workflow_id!r}",
+                session_id=None,
+                pr_url=None,
+                pr_branch=None,
+                pr_commit_sha=None,
+                build_outcome=None,
+            )
+        return DroidBuildExecutionResult(
+            ok=False,
+            blocking_reason=f"Unknown or non-mutating workflow_id {workflow_id!r}",
+            workflow_id=workflow_id,
+            audit_id=None,
+            runner_id=_runner_id(),
+            cwd=None,
+            exit_code=None,
+            duration_ms=None,
+            summary=None,
+            timed_out=False,
+            ham_run_id=hid,
+            control_plane_status="failed" if hid else None,
+            pr_url=None,
+            pr_branch=None,
+            pr_commit_sha=None,
+            build_outcome=None,
+            build_error_summary=None,
+        )
+
+    root = project_root.expanduser().resolve()
+    focus = _sanitize_user_focus(user_prompt)
+    try:
+        argv = build_exec_argv(wf, root, focus)
+    except ValueError as exc:
+        hid_ve: str | None = None
+        if pid_s:
+            hid_ve = _persist_droid_build_control_plane_run(
+                st,
+                project_id=pid_s,
+                workflow_id=workflow_id,
+                proposal_digest=digest_key,
+                project_root=root,
+                created_by=created_by,
+                status="failed",
+                status_reason="droid_build:argv_build_error",
+                summary=None,
+                error_summary=str(exc),
+                session_id=None,
+                pr_url=None,
+                pr_branch=None,
+                pr_commit_sha=None,
+                build_outcome=None,
+            )
+        return DroidBuildExecutionResult(
+            ok=False,
+            blocking_reason=str(exc),
+            workflow_id=workflow_id,
+            audit_id=None,
+            runner_id=_runner_id(),
+            cwd=str(root),
+            exit_code=None,
+            duration_ms=None,
+            summary=None,
+            timed_out=False,
+            ham_run_id=hid_ve,
+            control_plane_status="failed" if hid_ve else None,
+            pr_url=None,
+            pr_branch=None,
+            pr_commit_sha=None,
+            build_outcome=None,
+            build_error_summary=None,
+        )
+
+    ham_audit_id = str(uuid.uuid4())
+    try:
+        remote = run_droid_build_argv(
+            argv,
+            cwd=root,
+            timeout_sec=wf.timeout_seconds,
+            accept_pr=True,
+            workflow_id=workflow_id,
+            audit_id=ham_audit_id,
+            project_id=project_id,
+            proposal_digest=proposal_digest,
+        )
+    except RemoteRunnerError as exc:
+        audit_payload = {
+            "workflow_id": workflow_id,
+            "runner_id": _runner_id(),
+            "cwd": str(root),
+            "exit_code": None,
+            "duration_ms": None,
+            "timed_out": False,
+            "summary": str(exc),
+            "stdout": "",
+            "stderr": str(exc),
+            "stdout_truncated": False,
+            "stderr_truncated": False,
+            "parsed_json": None,
+            "session_id": None,
+            "ok": False,
+            "runner_error_code": getattr(exc, "code", None),
+            "audit_id": ham_audit_id,
+            "project_id": project_id,
+            "proposal_digest": proposal_digest,
+            "mode": "build",
+        }
+        audit_id_re = append_droid_audit(root, audit_payload)
+        hid_re: str | None = None
+        if pid_s:
+            hid_re = _persist_droid_build_control_plane_run(
+                st,
+                project_id=pid_s,
+                workflow_id=workflow_id,
+                proposal_digest=digest_key,
+                project_root=root,
+                created_by=created_by,
+                status="failed",
+                status_reason="droid_build:remote_runner",
+                summary=None,
+                error_summary=str(exc),
+                session_id=None,
+                pr_url=None,
+                pr_branch=None,
+                pr_commit_sha=None,
+                build_outcome=None,
+            )
+        return DroidBuildExecutionResult(
+            ok=False,
+            blocking_reason=str(exc),
+            workflow_id=workflow_id,
+            audit_id=audit_id_re,
+            runner_id=_runner_id(),
+            cwd=str(root),
+            exit_code=None,
+            duration_ms=None,
+            summary=str(exc),
+            timed_out=False,
+            ham_run_id=hid_re,
+            control_plane_status="failed" if hid_re else None,
+            pr_url=None,
+            pr_branch=None,
+            pr_commit_sha=None,
+            build_outcome=None,
+            build_error_summary=str(exc),
+        )
+
+    rec = remote.execution
+    parsed, result_text, session_id = parse_droid_json_stdout(rec.stdout)
+    ok_exec = not rec.timed_out and rec.exit_code == 0
+    summary = result_text
+    if summary is None and rec.stderr:
+        summary = rec.stderr[:500]
+    if summary is None and rec.stdout:
+        summary = rec.stdout[:500]
+
+    build_outcome = _coerce_build_outcome(remote.build_outcome)
+    pr_url = remote.pr_url
+    pr_branch = remote.pr_branch
+    pr_commit_sha = remote.pr_commit_sha
+    build_err = remote.build_error_summary
+
+    build_ok = ok_exec and build_outcome in {"pr_opened", "nothing_to_change"}
+    blocking: str | None = None
+    if rec.timed_out:
+        blocking = "droid exec timed out"
+    elif rec.exit_code != 0:
+        blocking = f"droid exec failed (exit {rec.exit_code})"
+    elif not ok_exec:
+        blocking = "droid exec did not succeed"
+    elif build_outcome is None:
+        blocking = "runner did not report a build outcome"
+    elif build_outcome not in {"pr_opened", "nothing_to_change"}:
+        blocking = build_err or f"build lane outcome: {build_outcome}"
+
+    audit_payload = {
+        "workflow_id": workflow_id,
+        "runner_id": _runner_id(),
+        "cwd": str(root),
+        "exit_code": rec.exit_code,
+        "duration_ms": rec.duration_ms,
+        "timed_out": rec.timed_out,
+        "summary": summary,
+        "stdout": rec.stdout,
+        "stderr": rec.stderr,
+        "stdout_truncated": rec.stdout_truncated,
+        "stderr_truncated": rec.stderr_truncated,
+        "parsed_json": parsed,
+        "session_id": session_id,
+        "ok": build_ok,
+        "audit_id": ham_audit_id,
+        "project_id": project_id,
+        "proposal_digest": proposal_digest,
+        "mode": "build",
+        "build_outcome": build_outcome,
+        "pr_url": pr_url,
+        "pr_branch": pr_branch,
+        "pr_commit_sha": pr_commit_sha,
+    }
+    audit_id_f = append_droid_audit(root, audit_payload)
+
+    hst, hsr = droid_build_outcome_to_ham_status(
+        outcome=build_outcome,
+        ok=ok_exec,
+        timed_out=rec.timed_out,
+        exit_code=rec.exit_code,
+        had_runner_body=True,
+    )
+    hid_f: str | None = None
+    if pid_s:
+        err_end = cap_error_summary(blocking) if not build_ok and blocking else None
+        hid_f = _persist_droid_build_control_plane_run(
+            st,
+            project_id=pid_s,
+            workflow_id=workflow_id,
+            proposal_digest=digest_key,
+            project_root=root,
+            created_by=created_by,
+            status=hst,
+            status_reason=hsr,
+            summary=summary,
+            error_summary=err_end,
+            session_id=session_id,
+            pr_url=pr_url,
+            pr_branch=pr_branch,
+            pr_commit_sha=pr_commit_sha,
+            build_outcome=build_outcome,
+        )
+
+    return DroidBuildExecutionResult(
+        ok=build_ok,
+        blocking_reason=blocking,
+        workflow_id=workflow_id,
+        audit_id=audit_id_f,
+        runner_id=_runner_id(),
+        cwd=str(root),
+        exit_code=rec.exit_code,
+        duration_ms=rec.duration_ms,
+        summary=summary,
+        timed_out=rec.timed_out,
+        ham_run_id=hid_f,
+        control_plane_status=hst if hid_f else None,
+        pr_url=pr_url,
+        pr_branch=pr_branch,
+        pr_commit_sha=pr_commit_sha,
+        build_outcome=build_outcome,
+        build_error_summary=build_err,
     )

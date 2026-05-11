@@ -520,14 +520,19 @@ def test_runner_build_mode_missing_auto_returns_422(
     assert row["mode"] == "build"
 
 
+@patch("src.ham.droid_runner.service._run_build_lane")
 @patch("src.ham.droid_runner.service.droid_executor")
 def test_runner_build_mode_full_argv_executes(
     mock_ex: object,
+    mock_build_lane: object,
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
     runner_audit_path,
 ) -> None:
+    """``mode=build`` + ``accept_pr=true`` executes droid then build lane (mocked)."""
+    from src.ham.droid_runner.build_lane import BuildLaneResult
+
     monkeypatch.setenv("HAM_DROID_RUNNER_SERVICE_TOKEN", "secret")
     root = tmp_path / "r"
     root.mkdir()
@@ -545,6 +550,56 @@ def test_runner_build_mode_full_argv_executes(
         ended_at="t1",
         duration_ms=11,
     )
+    mock_build_lane.return_value = BuildLaneResult(
+        build_outcome="pr_opened",
+        pr_url="https://github.com/Code-Munkiz/ham/pull/1234",
+        pr_branch="ham-droid/aabbccdd",
+        pr_commit_sha="deadbeef00000000",
+        error_summary=None,
+    )
+    r = client.post(
+        "/v1/ham/droid-exec",
+        json={
+            "argv": argv,
+            "cwd": str(root.resolve()),
+            "timeout_sec": 30,
+            "mode": "build",
+            "accept_pr": True,
+            "workflow_id": "safe_edit_low",
+        },
+        headers={"Authorization": "Bearer secret"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["mode"] == "build"
+    assert data["build_outcome"] == "pr_opened"
+    assert data["pr_url"] == "https://github.com/Code-Munkiz/ham/pull/1234"
+    assert data["pr_branch"] == "ham-droid/aabbccdd"
+    assert data["pr_commit_sha"] == "deadbeef00000000"
+    row = json.loads(
+        Path(str(runner_audit_path)).read_text(encoding="utf-8").strip().splitlines()[-1]
+    )
+    assert row["status"] == "executed"
+    assert row["mode"] == "build"
+    assert row["build_outcome"] == "pr_opened"
+    # build lane invoked exactly once with the resolved cwd/run.
+    assert mock_build_lane.call_count == 1
+
+
+@patch("src.ham.droid_runner.service._run_build_lane")
+@patch("src.ham.droid_runner.service.droid_executor")
+def test_runner_build_mode_without_accept_pr_is_422_and_skips_droid(
+    mock_ex: object,
+    mock_build_lane: object,
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+    runner_audit_path,
+) -> None:
+    monkeypatch.setenv("HAM_DROID_RUNNER_SERVICE_TOKEN", "secret")
+    root = tmp_path / "r"
+    root.mkdir()
+    argv = _valid_argv(str(root.resolve()), auto=True)
     r = client.post(
         "/v1/ham/droid-exec",
         json={
@@ -556,15 +611,189 @@ def test_runner_build_mode_full_argv_executes(
         },
         headers={"Authorization": "Bearer secret"},
     )
+    assert r.status_code == 422
+    assert r.json()["detail"]["error"]["code"] == "BUILD_MODE_REQUIRES_ACCEPT_PR"
+    # Defense in depth: neither droid nor build lane should have run.
+    assert getattr(mock_ex, "call_count", 0) == 0
+    assert getattr(mock_build_lane, "call_count", 0) == 0
+    row = json.loads(
+        Path(str(runner_audit_path)).read_text(encoding="utf-8").strip().splitlines()[-1]
+    )
+    assert row["status"] == "blocked"
+    assert row["blocked_code"] == "BUILD_MODE_REQUIRES_ACCEPT_PR"
+    assert row["mode"] == "build"
+
+
+@patch("src.ham.droid_runner.service._run_build_lane")
+@patch("src.ham.droid_runner.service.droid_executor")
+def test_runner_build_mode_skips_build_lane_when_droid_fails(
+    mock_ex: object,
+    mock_build_lane: object,
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+    runner_audit_path,
+) -> None:
+    monkeypatch.setenv("HAM_DROID_RUNNER_SERVICE_TOKEN", "secret")
+    root = tmp_path / "r"
+    root.mkdir()
+    argv = _valid_argv(str(root.resolve()), auto=True)
+    mock_ex.return_value = DroidExecutionRecord(
+        argv=argv,
+        working_dir=str(root.resolve()),
+        exit_code=3,
+        timed_out=False,
+        stdout="",
+        stderr="droid failed",
+        stdout_truncated=False,
+        stderr_truncated=False,
+        started_at="t0",
+        ended_at="t1",
+        duration_ms=5,
+    )
+    r = client.post(
+        "/v1/ham/droid-exec",
+        json={
+            "argv": argv,
+            "cwd": str(root.resolve()),
+            "timeout_sec": 30,
+            "mode": "build",
+            "accept_pr": True,
+            "workflow_id": "safe_edit_low",
+        },
+        headers={"Authorization": "Bearer secret"},
+    )
     assert r.status_code == 200
     data = r.json()
-    assert data["mode"] == "build"
-    # Audit row carries the mode for diagnostics.
+    assert data["exit_code"] == 3
+    assert "build_outcome" not in data
+    assert "pr_url" not in data
+    assert mock_build_lane.call_count == 0
     row = json.loads(
         Path(str(runner_audit_path)).read_text(encoding="utf-8").strip().splitlines()[-1]
     )
     assert row["status"] == "executed"
-    assert row["mode"] == "build"
+    assert row["execution_ok"] is False
+    assert "build_outcome" not in row
+
+
+@patch("src.ham.droid_runner.service._run_build_lane")
+@patch("src.ham.droid_runner.service.droid_executor")
+def test_runner_build_mode_nothing_to_change_surfaces_outcome(
+    mock_ex: object,
+    mock_build_lane: object,
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+    runner_audit_path,
+) -> None:
+    from src.ham.droid_runner.build_lane import BuildLaneResult
+
+    monkeypatch.setenv("HAM_DROID_RUNNER_SERVICE_TOKEN", "secret")
+    root = tmp_path / "r"
+    root.mkdir()
+    argv = _valid_argv(str(root.resolve()), auto=True)
+    mock_ex.return_value = DroidExecutionRecord(
+        argv=argv,
+        working_dir=str(root.resolve()),
+        exit_code=0,
+        timed_out=False,
+        stdout="{}",
+        stderr="",
+        stdout_truncated=False,
+        stderr_truncated=False,
+        started_at="t0",
+        ended_at="t1",
+        duration_ms=8,
+    )
+    mock_build_lane.return_value = BuildLaneResult(
+        build_outcome="nothing_to_change",
+        pr_url=None,
+        pr_branch="ham-droid/eeff0011",
+        pr_commit_sha=None,
+        error_summary=None,
+    )
+    r = client.post(
+        "/v1/ham/droid-exec",
+        json={
+            "argv": argv,
+            "cwd": str(root.resolve()),
+            "timeout_sec": 30,
+            "mode": "build",
+            "accept_pr": True,
+            "workflow_id": "safe_edit_low",
+        },
+        headers={"Authorization": "Bearer secret"},
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["build_outcome"] == "nothing_to_change"
+    assert data["pr_url"] is None
+    assert data["pr_branch"] == "ham-droid/eeff0011"
+
+
+@patch("src.ham.droid_runner.service._run_build_lane")
+@patch("src.ham.droid_runner.service.droid_executor")
+def test_runner_build_lane_response_never_leaks_internal_markers(
+    mock_ex: object,
+    mock_build_lane: object,
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    """Build lane response must not echo any forbidden internal markers."""
+    from src.ham.droid_runner.build_lane import BuildLaneResult
+
+    monkeypatch.setenv("HAM_DROID_RUNNER_SERVICE_TOKEN", "secret")
+    root = tmp_path / "r"
+    root.mkdir()
+    argv = _valid_argv(str(root.resolve()), auto=True)
+    mock_ex.return_value = DroidExecutionRecord(
+        argv=argv,
+        working_dir=str(root.resolve()),
+        exit_code=0,
+        timed_out=False,
+        stdout="{}",
+        stderr="",
+        stdout_truncated=False,
+        stderr_truncated=False,
+        started_at="t0",
+        ended_at="t1",
+        duration_ms=4,
+    )
+    mock_build_lane.return_value = BuildLaneResult(
+        build_outcome="pr_opened",
+        pr_url="https://github.com/Code-Munkiz/ham/pull/55",
+        pr_branch="ham-droid/abcd1234",
+        pr_commit_sha="cafebabe",
+        error_summary=None,
+    )
+    r = client.post(
+        "/v1/ham/droid-exec",
+        json={
+            "argv": argv,
+            "cwd": str(root.resolve()),
+            "timeout_sec": 30,
+            "mode": "build",
+            "accept_pr": True,
+            "workflow_id": "safe_edit_low",
+            "pr_title": "ignore me",
+            "pr_body": "ignore me too",
+            "commit_message": "ignore",
+        },
+        headers={"Authorization": "Bearer secret"},
+    )
+    assert r.status_code == 200
+    raw = r.text
+    # The runner is allowed to echo workflow_id back to HAM (callers correlate
+    # on it), but must never echo secret env names or shell-level details.
+    for forbidden in (
+        "HAM_DROID_EXEC_TOKEN",
+        "FACTORY_API_KEY",
+        "HAM_DROID_RUNNER_TOKEN",
+        "--skip-permissions-unsafe",
+    ):
+        assert forbidden not in raw, f"response leaks {forbidden!r}"
 
 
 @patch("src.ham.droid_runner.service.droid_executor")
