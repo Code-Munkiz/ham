@@ -28,7 +28,10 @@ import {
   postChatUploadAttachment,
   postHamGeneratedImage,
   postHamGeneratedVideo,
+  previewCodingConductor,
+  shortenHamApiErrorMessage,
   type HamChatExecutionMode,
+  type CodingConductorPreviewPayload,
 } from "@/lib/ham/api";
 import { CLIENT_MODEL_CATALOG_FALLBACK } from "@/lib/ham/modelCatalogFallback";
 import type {
@@ -63,6 +66,7 @@ import { useVoiceWorkspaceSettingsOptional } from "../../voice/VoiceWorkspaceSet
 import { WorkspaceChatEmptyState, WORKSPACE_CHAT_SUGGESTIONS } from "./WorkspaceChatEmptyState";
 import { WorkspaceChatMessageList, type HwwMsgRow } from "./WorkspaceChatMessageList";
 import { WorkspaceChatComposer } from "./WorkspaceChatComposer";
+import { CodingPlanCard } from "./coding-plan/CodingPlanCard";
 import type {
   ComposerExportPdfState,
   ComposerGenerateImageState,
@@ -600,6 +604,11 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   const executionModePreference: "auto" | "browser" | "machine" | "chat" = "auto";
   const [executionMode, setExecutionMode] = React.useState<HamChatExecutionMode | null>(null);
   const [projectId, setProjectId] = React.useState<string | null>(null);
+  const [codingPlanPreview, setCodingPlanPreview] =
+    React.useState<CodingConductorPreviewPayload | null>(null);
+  const [codingPlanLoading, setCodingPlanLoading] = React.useState(false);
+  const [codingPlanInlineError, setCodingPlanInlineError] = React.useState<string | null>(null);
+  const composerTextareaRef = React.useRef<HTMLTextAreaElement | null>(null);
   const [attachments, setAttachments] = React.useState<WorkspaceComposerAttachment[]>([]);
   const attachmentsRef = React.useRef(attachments);
   React.useEffect(() => {
@@ -2709,6 +2718,39 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     });
   }, [attachments, input, runWorkspaceVideoGeneration]);
 
+  const handlePlanWithCodingAgents = React.useCallback(async () => {
+    setCodingPlanInlineError(null);
+    const draft = input.trim();
+    if (!draft) {
+      setCodingPlanPreview(null);
+      setCodingPlanInlineError("Describe what you want HAM to build or inspect first.");
+      return;
+    }
+    setCodingPlanLoading(true);
+    setCodingPlanPreview(null);
+    try {
+      const payload = await previewCodingConductor({
+        user_prompt: draft,
+        project_id: projectId ?? undefined,
+      });
+      setCodingPlanPreview(payload);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Could not load coding plan.";
+      toast.error(shortenHamApiErrorMessage(msg));
+    } finally {
+      setCodingPlanLoading(false);
+    }
+  }, [input, projectId]);
+
+  React.useEffect(() => {
+    if (input.trim()) setCodingPlanInlineError(null);
+  }, [input]);
+
+  const onEmptyStatePlanWithCodingAgents = React.useCallback(() => {
+    composerTextareaRef.current?.focus();
+    void handlePlanWithCodingAgents();
+  }, [handlePlanWithCodingAgents]);
+
   const composerGenerateImage = React.useMemo((): ComposerGenerateImageState => {
     const uploadsPending = attachments.some((a) => a.uploadPhase === "uploading");
     const supportsGen = Boolean(chatCapabilities?.generation?.supports_image_generation);
@@ -3311,7 +3353,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
                 </div>
               </div>
             ) : showEmpty ? (
-              <WorkspaceChatEmptyState />
+              <WorkspaceChatEmptyState onPlanWithCodingAgents={onEmptyStatePlanWithCodingAgents} />
             ) : (
               <>
                 <WorkspaceChatMessageList
@@ -3326,6 +3368,39 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
             )}
           </div>
           <div className="flex w-full max-w-full min-w-0 shrink-0 flex-col overflow-x-hidden">
+            {(codingPlanLoading || codingPlanInlineError || codingPlanPreview) && (
+              <div
+                className="w-full max-w-full shrink-0 border-t border-white/[0.06] bg-[#050b10]/95 px-3 py-2 md:px-6"
+                data-hww-coding-plan-strip
+              >
+                {codingPlanLoading ? (
+                  <div
+                    className="flex items-center gap-2 text-[11px] text-white/60"
+                    data-hww-coding-plan-loading
+                  >
+                    <Loader2 className="h-4 w-4 shrink-0 animate-spin text-cyan-300/80" />
+                    Planning…
+                  </div>
+                ) : null}
+                {codingPlanInlineError ? (
+                  <p
+                    role="alert"
+                    className="text-[11px] leading-snug text-amber-200/90"
+                    data-hww-coding-plan-validation
+                  >
+                    {codingPlanInlineError}
+                  </p>
+                ) : null}
+                {codingPlanPreview && !codingPlanLoading ? (
+                  <div
+                    className={codingPlanInlineError ? "mt-2" : ""}
+                    data-hww-coding-plan-card-wrap
+                  >
+                    <CodingPlanCard payload={codingPlanPreview} />
+                  </div>
+                ) : null}
+              </div>
+            )}
             <WorkspaceChatComposer
               quickSuggestions={WORKSPACE_CHAT_SUGGESTIONS}
               onQuickSuggestion={(prompt) => void send(prompt)}
@@ -3377,6 +3452,9 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
                 busy: pdfExporting,
                 blockedReason: pdfExportBlockedReason,
               }}
+              composerTextareaRef={composerTextareaRef}
+              onPlanWithCodingAgents={handlePlanWithCodingAgents}
+              codingPlanActionBusy={codingPlanLoading}
             />
           </div>
         </div>

@@ -101,6 +101,12 @@ type WorkspaceChatComposerProps = {
   onQuickSuggestion?: (prompt: string) => void;
   /** When this identity changes (e.g. chat session id), the dismissible starter row is shown again. */
   quickTipsResetSignal?: string | null;
+  /** Main composer textarea — for focus from parent (e.g. empty-state “Plan with coding agents”). */
+  composerTextareaRef?: React.Ref<HTMLTextAreaElement>;
+  /** Preview-only: run conductor on the current composer draft (Phase 2C). */
+  onPlanWithCodingAgents?: () => void | Promise<void>;
+  /** True while `previewCodingConductor` is in flight. */
+  codingPlanActionBusy?: boolean;
 };
 
 const COMPOSER_MENU_FOOTER_HINT =
@@ -300,6 +306,9 @@ export function WorkspaceChatComposer({
   quickSuggestions = null,
   onQuickSuggestion,
   quickTipsResetSignal = null,
+  composerTextareaRef,
+  onPlanWithCodingAgents,
+  codingPlanActionBusy = false,
 }: WorkspaceChatComposerProps) {
   const [quickTipsDismissed, setQuickTipsDismissed] = React.useState(false);
   const [voiceState, setVoiceState] = React.useState<VoiceUiState>("idle");
@@ -336,6 +345,16 @@ export function WorkspaceChatComposer({
   const outerRef = React.useRef<HTMLDivElement>(null);
   const textareaWrapRef = React.useRef<HTMLDivElement>(null);
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
+  const assignTextareaRef = React.useCallback(
+    (el: HTMLTextAreaElement | null) => {
+      textareaRef.current = el;
+      const r = composerTextareaRef;
+      if (!r) return;
+      if (typeof r === "function") r(el);
+      else (r as React.MutableRefObject<HTMLTextAreaElement | null>).current = el;
+    },
+    [composerTextareaRef],
+  );
   const modelPickerTriggerRef = React.useRef<HTMLButtonElement>(null);
   const dragDepthRef = React.useRef(0);
   const TEXTAREA_MAX_PX = 240;
@@ -830,6 +849,35 @@ export function WorkspaceChatComposer({
           layout={meterLayout}
         />
       ) : null}
+      {onPlanWithCodingAgents ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          title="Plan with coding agents — uses the message above"
+          aria-label="Plan with coding agents"
+          data-hww-coding-plan-action
+          disabled={
+            disabled || sending || voiceBusy || uploadsPending || Boolean(codingPlanActionBusy)
+          }
+          className={cn(
+            "h-8 shrink-0 gap-1 border-cyan-400/25 bg-white/[0.02] px-2 text-[11px] font-medium text-cyan-200/90",
+            "hover:border-cyan-400/40 hover:bg-cyan-500/[0.08] hover:text-cyan-50",
+            "disabled:pointer-events-none disabled:opacity-40",
+            composerToolbarDensity === "tight" && "max-w-[7rem] px-1.5",
+          )}
+          onClick={() => void onPlanWithCodingAgents()}
+        >
+          {codingPlanActionBusy ? (
+            <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden />
+          ) : (
+            <Sparkles className="h-3.5 w-3.5 shrink-0 text-cyan-200/85" aria-hidden />
+          )}
+          <span className={cn("min-w-0 truncate", composerToolbarDensity === "tight" && "sr-only")}>
+            Plan with coding agents
+          </span>
+        </Button>
+      ) : null}
       <div
         className={cn(
           "flex h-8 min-h-8 shrink-0 items-center",
@@ -1114,7 +1162,7 @@ export function WorkspaceChatComposer({
                 Message
               </label>
               <textarea
-                ref={textareaRef}
+                ref={assignTextareaRef}
                 id="hww-chat-composer"
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
