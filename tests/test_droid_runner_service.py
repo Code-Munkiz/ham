@@ -531,7 +531,7 @@ def test_runner_build_mode_full_argv_executes(
     runner_audit_path,
 ) -> None:
     """``mode=build`` + ``accept_pr=true`` executes droid then build lane (mocked)."""
-    from src.ham.droid_runner.build_lane import BuildLaneResult
+    from src.ham.droid_runner.build_lane_output import OutputResult
 
     monkeypatch.setenv("HAM_DROID_RUNNER_SERVICE_TOKEN", "secret")
     root = tmp_path / "r"
@@ -550,12 +550,18 @@ def test_runner_build_mode_full_argv_executes(
         ended_at="t1",
         duration_ms=11,
     )
-    mock_build_lane.return_value = BuildLaneResult(
-        build_outcome="pr_opened",
+    mock_build_lane.return_value = OutputResult(
+        target="github_pr",
+        build_outcome="succeeded",
+        target_ref={
+            "pr_url": "https://github.com/Code-Munkiz/ham/pull/1234",
+            "pr_branch": "ham-droid/aabbccdd",
+            "pr_commit_sha": "deadbeef00000000",
+        },
+        error_summary=None,
         pr_url="https://github.com/Code-Munkiz/ham/pull/1234",
         pr_branch="ham-droid/aabbccdd",
         pr_commit_sha="deadbeef00000000",
-        error_summary=None,
     )
     r = client.post(
         "/v1/ham/droid-exec",
@@ -687,7 +693,7 @@ def test_runner_build_mode_nothing_to_change_surfaces_outcome(
     tmp_path,
     runner_audit_path,
 ) -> None:
-    from src.ham.droid_runner.build_lane import BuildLaneResult
+    from src.ham.droid_runner.build_lane_output import OutputResult
 
     monkeypatch.setenv("HAM_DROID_RUNNER_SERVICE_TOKEN", "secret")
     root = tmp_path / "r"
@@ -706,12 +712,14 @@ def test_runner_build_mode_nothing_to_change_surfaces_outcome(
         ended_at="t1",
         duration_ms=8,
     )
-    mock_build_lane.return_value = BuildLaneResult(
+    mock_build_lane.return_value = OutputResult(
+        target="github_pr",
         build_outcome="nothing_to_change",
+        target_ref={"pr_branch": "ham-droid/eeff0011"},
+        error_summary=None,
         pr_url=None,
         pr_branch="ham-droid/eeff0011",
         pr_commit_sha=None,
-        error_summary=None,
     )
     r = client.post(
         "/v1/ham/droid-exec",
@@ -742,7 +750,7 @@ def test_runner_build_lane_response_never_leaks_internal_markers(
     tmp_path,
 ) -> None:
     """Build lane response must not echo any forbidden internal markers."""
-    from src.ham.droid_runner.build_lane import BuildLaneResult
+    from src.ham.droid_runner.build_lane_output import OutputResult
 
     monkeypatch.setenv("HAM_DROID_RUNNER_SERVICE_TOKEN", "secret")
     root = tmp_path / "r"
@@ -761,12 +769,18 @@ def test_runner_build_lane_response_never_leaks_internal_markers(
         ended_at="t1",
         duration_ms=4,
     )
-    mock_build_lane.return_value = BuildLaneResult(
-        build_outcome="pr_opened",
+    mock_build_lane.return_value = OutputResult(
+        target="github_pr",
+        build_outcome="succeeded",
+        target_ref={
+            "pr_url": "https://github.com/Code-Munkiz/ham/pull/55",
+            "pr_branch": "ham-droid/abcd1234",
+            "pr_commit_sha": "cafebabe",
+        },
+        error_summary=None,
         pr_url="https://github.com/Code-Munkiz/ham/pull/55",
         pr_branch="ham-droid/abcd1234",
         pr_commit_sha="cafebabe",
-        error_summary=None,
     )
     r = client.post(
         "/v1/ham/droid-exec",

@@ -649,7 +649,12 @@ def execute_droid_workflow(
 
 @dataclass(frozen=True)
 class DroidBuildExecutionResult:
-    """Build-lane execution outcome (droid exec + runner Build Lane post-exec)."""
+    """Build-lane execution outcome (droid exec + runner Build Lane post-exec).
+
+    ``output_target`` and ``output_ref`` are the target-neutral fields
+    introduced in PR-A; ``pr_*`` are retained for backward compatibility and
+    are populated only when ``output_target == "github_pr"``.
+    """
 
     ok: bool
     blocking_reason: str | None
@@ -668,6 +673,8 @@ class DroidBuildExecutionResult:
     pr_commit_sha: str | None
     build_outcome: DroidBuildOutcome | None
     build_error_summary: str | None
+    output_target: str | None = None
+    output_ref: dict[str, Any] | None = None
 
 
 def _coerce_build_outcome(value: object) -> DroidBuildOutcome | None:
@@ -679,6 +686,39 @@ def _coerce_build_outcome(value: object) -> DroidBuildOutcome | None:
     if s in DROID_BUILD_OUTCOMES:
         return s  # type: ignore[return-value]
     return None
+
+
+def _decide_build_status(
+    *,
+    target: str,
+    ok_exec: bool,
+    timed_out: bool,
+    exit_code: int | None,
+    build_outcome: DroidBuildOutcome | None,
+    build_err: str | None,
+) -> tuple[bool, str | None]:
+    """Compute ``(build_ok, blocking_reason)`` for a build-lane run.
+
+    A build is ``ok`` only when the adapter reported a terminal success state
+    for its target. ``github_pr`` success = ``pr_opened`` / ``nothing_to_change``.
+    ``managed_workspace`` has no success state in PR-A (the stub adapter
+    always returns failure with ``MANAGED_WORKSPACE_NOT_IMPLEMENTED``), so
+    ``build_ok`` is always ``False`` and the blocking message reflects the
+    runner-side error summary when present.
+    """
+    if timed_out:
+        return False, "droid exec timed out"
+    if exit_code != 0:
+        return False, f"droid exec failed (exit {exit_code})"
+    if not ok_exec:
+        return False, "droid exec did not succeed"
+    if target != "github_pr":
+        return False, (build_err or "managed workspace output target not implemented")
+    if build_outcome is None:
+        return False, (build_err or "runner did not report a build outcome")
+    if build_outcome not in {"pr_opened", "nothing_to_change"}:
+        return False, (build_err or f"build lane outcome: {build_outcome}")
+    return True, None
 
 
 def _persist_droid_build_control_plane_run(
@@ -698,6 +738,8 @@ def _persist_droid_build_control_plane_run(
     pr_branch: str | None,
     pr_commit_sha: str | None,
     build_outcome: DroidBuildOutcome | None,
+    output_target: str | None = None,
+    output_ref: dict[str, Any] | None = None,
 ) -> str:
     now = utc_now_iso()
     rid = new_ham_run_id()
@@ -729,6 +771,8 @@ def _persist_droid_build_control_plane_run(
         pr_branch=pr_branch,
         pr_commit_sha=pr_commit_sha,
         build_outcome=build_outcome,
+        output_target=output_target,
+        output_ref=output_ref,
     )
     store.save(run, project_root_for_mirror=prs)
     return rid
@@ -743,6 +787,8 @@ def execute_droid_build_workflow_remote(
     proposal_digest: str,
     created_by: dict[str, Any] | None = None,
     control_plane_run_store: ControlPlaneRunStore | None = None,
+    output_target: str = "github_pr",
+    workspace_id: str | None = None,
 ) -> DroidBuildExecutionResult:
     """
     Run the build workflow against a remote runner with ``mode="build"``.
@@ -781,6 +827,8 @@ def execute_droid_build_workflow_remote(
                 pr_branch=None,
                 pr_commit_sha=None,
                 build_outcome=None,
+                output_target=output_target,
+                output_ref=None,
             )
         return DroidBuildExecutionResult(
             ok=False,
@@ -800,6 +848,8 @@ def execute_droid_build_workflow_remote(
             pr_commit_sha=None,
             build_outcome=None,
             build_error_summary=None,
+            output_target=output_target,
+            output_ref=None,
         )
 
     root = project_root.expanduser().resolve()
@@ -825,6 +875,8 @@ def execute_droid_build_workflow_remote(
                 pr_branch=None,
                 pr_commit_sha=None,
                 build_outcome=None,
+                output_target=output_target,
+                output_ref=None,
             )
         return DroidBuildExecutionResult(
             ok=False,
@@ -844,9 +896,15 @@ def execute_droid_build_workflow_remote(
             pr_commit_sha=None,
             build_outcome=None,
             build_error_summary=None,
+            output_target=output_target,
+            output_ref=None,
         )
 
     ham_audit_id = str(uuid.uuid4())
+    # ``accept_pr`` is meaningful only for the github_pr adapter; the runner
+    # ignores it for managed_workspace (PR-A stub). We still pass ``True`` so
+    # the client-side defense-in-depth check in :func:`run_droid_build_argv`
+    # is satisfied uniformly.
     try:
         remote = run_droid_build_argv(
             argv,
@@ -857,6 +915,8 @@ def execute_droid_build_workflow_remote(
             audit_id=ham_audit_id,
             project_id=project_id,
             proposal_digest=proposal_digest,
+            output_target=output_target,
+            workspace_id=workspace_id,
         )
     except RemoteRunnerError as exc:
         audit_payload = {
@@ -899,6 +959,8 @@ def execute_droid_build_workflow_remote(
                 pr_branch=None,
                 pr_commit_sha=None,
                 build_outcome=None,
+                output_target=output_target,
+                output_ref=None,
             )
         return DroidBuildExecutionResult(
             ok=False,
@@ -918,6 +980,8 @@ def execute_droid_build_workflow_remote(
             pr_commit_sha=None,
             build_outcome=None,
             build_error_summary=str(exc),
+            output_target=output_target,
+            output_ref=None,
         )
 
     rec = remote.execution
@@ -934,19 +998,17 @@ def execute_droid_build_workflow_remote(
     pr_branch = remote.pr_branch
     pr_commit_sha = remote.pr_commit_sha
     build_err = remote.build_error_summary
+    resolved_output_target = (remote.output_target or output_target or "github_pr").strip()
+    resolved_output_ref = remote.output_ref or {}
 
-    build_ok = ok_exec and build_outcome in {"pr_opened", "nothing_to_change"}
-    blocking: str | None = None
-    if rec.timed_out:
-        blocking = "droid exec timed out"
-    elif rec.exit_code != 0:
-        blocking = f"droid exec failed (exit {rec.exit_code})"
-    elif not ok_exec:
-        blocking = "droid exec did not succeed"
-    elif build_outcome is None:
-        blocking = "runner did not report a build outcome"
-    elif build_outcome not in {"pr_opened", "nothing_to_change"}:
-        blocking = build_err or f"build lane outcome: {build_outcome}"
+    build_ok, blocking = _decide_build_status(
+        target=resolved_output_target,
+        ok_exec=ok_exec,
+        timed_out=rec.timed_out,
+        exit_code=rec.exit_code,
+        build_outcome=build_outcome,
+        build_err=build_err,
+    )
 
     audit_payload = {
         "workflow_id": workflow_id,
@@ -971,6 +1033,8 @@ def execute_droid_build_workflow_remote(
         "pr_url": pr_url,
         "pr_branch": pr_branch,
         "pr_commit_sha": pr_commit_sha,
+        "output_target": resolved_output_target,
+        "output_ref": resolved_output_ref,
     }
     audit_id_f = append_droid_audit(root, audit_payload)
 
@@ -1000,6 +1064,8 @@ def execute_droid_build_workflow_remote(
             pr_branch=pr_branch,
             pr_commit_sha=pr_commit_sha,
             build_outcome=build_outcome,
+            output_target=resolved_output_target,
+            output_ref=resolved_output_ref or None,
         )
 
     return DroidBuildExecutionResult(
@@ -1020,4 +1086,6 @@ def execute_droid_build_workflow_remote(
         pr_commit_sha=pr_commit_sha,
         build_outcome=build_outcome,
         build_error_summary=build_err,
+        output_target=resolved_output_target,
+        output_ref=resolved_output_ref or None,
     )

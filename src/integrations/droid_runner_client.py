@@ -187,8 +187,10 @@ class RemoteDroidBuildResult:
     Build-lane runner result.
 
     Wraps the underlying :class:`DroidExecutionRecord` from ``droid exec`` and
-    surfaces the runner's Build Lane post-exec output (``pr_url`` / ``pr_branch``
-    / ``pr_commit_sha`` / ``build_outcome`` / ``build_error_summary``). All
+    surfaces the runner's Build Lane post-exec output. ``pr_url`` / ``pr_branch``
+    / ``pr_commit_sha`` are populated only when the runner selected the
+    ``github_pr`` adapter; for ``managed_workspace`` runs they remain ``None``
+    and the snapshot/preview coordinates live under ``output_ref``. All
     optional fields default to ``None`` so a runner that did not reach the
     post-exec step (e.g. droid exec failed) still produces a well-formed
     record.
@@ -196,7 +198,10 @@ class RemoteDroidBuildResult:
     The ``build_outcome`` value, when present, is one of the strings in
     ``src.persistence.control_plane_run.DROID_BUILD_OUTCOMES``; this module
     keeps it as a plain ``str`` to avoid a runtime dependency cycle between
-    HAM persistence and the integrations seam.
+    HAM persistence and the integrations seam. ``output_target`` mirrors
+    :attr:`src.registry.projects.ProjectRecord.output_target` and is the
+    primary signal for downstream readers (preview_launch, ControlPlaneRun,
+    API response).
     """
 
     execution: DroidExecutionRecord
@@ -206,6 +211,8 @@ class RemoteDroidBuildResult:
     build_outcome: str | None
     build_error_summary: str | None
     runner_request_id: str | None
+    output_target: str | None = None
+    output_ref: dict[str, Any] | None = None
 
 
 def run_droid_build_argv(
@@ -223,6 +230,8 @@ def run_droid_build_argv(
     commit_message: str | None = None,
     pr_title: str | None = None,
     pr_body: str | None = None,
+    output_target: str | None = None,
+    workspace_id: str | None = None,
 ) -> RemoteDroidBuildResult:
     """
     Build-lane variant of :func:`run_droid_argv`.
@@ -273,9 +282,15 @@ def run_droid_build_argv(
         body["pr_title"] = pr_title
     if pr_body is not None:
         body["pr_body"] = pr_body
+    if output_target is not None:
+        body["output_target"] = output_target
+    if workspace_id is not None:
+        body["workspace_id"] = workspace_id
     data = _post_runner_request(url, body, timeout_sec=timeout_sec)
     execution = _execution_record_from_data(data, argv=argv, cwd=cwd)
     rid = data.get("runner_request_id")
+    raw_output_ref = data.get("output_ref")
+    output_ref_val = raw_output_ref if isinstance(raw_output_ref, dict) else None
     return RemoteDroidBuildResult(
         execution=execution,
         pr_url=(data.get("pr_url") or None),
@@ -284,4 +299,6 @@ def run_droid_build_argv(
         build_outcome=(data.get("build_outcome") or None),
         build_error_summary=(data.get("build_error_summary") or None),
         runner_request_id=str(rid) if rid is not None else None,
+        output_target=(data.get("output_target") or None),
+        output_ref=output_ref_val,
     )

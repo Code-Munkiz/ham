@@ -246,10 +246,25 @@ class ControlPlaneRun(BaseModel):
     project_root: str | None = None
     # Build Lane (Factory Droid mutating workflow) — persisted but not yet
     # exposed through any router or UI; populated only by a future Build executor.
+    #
+    # The ``pr_*`` fields predate the output-target abstraction (PR-A) and are
+    # populated only when ``output_target == "github_pr"``. New readers should
+    # prefer ``output_ref`` (an opaque target-specific dict). The PR-shaped
+    # fields are preserved for backward compatibility and are deprecated; they
+    # will be removed once all readers migrate to ``output_ref``.
     pr_url: str | None = None
     pr_branch: str | None = None
     pr_commit_sha: str | None = None
     build_outcome: DroidBuildOutcome | None = None
+    # Output-target abstraction (PR-A): which adapter produced this run and
+    # an opaque target-specific reference. ``output_target`` mirrors
+    # :attr:`src.registry.projects.ProjectRecord.output_target`. ``output_ref``
+    # carries adapter-specific coordinates (e.g. for ``github_pr``:
+    # ``{"pr_url", "pr_branch", "pr_commit_sha"}``; for ``managed_workspace``
+    # in PR-B: ``{"snapshot_id", "parent_snapshot_id", "preview_url",
+    # "changed_paths_count"}``).
+    output_target: str | None = None
+    output_ref: dict[str, Any] | None = None
 
     @field_validator("last_provider_status", mode="before")
     @classmethod

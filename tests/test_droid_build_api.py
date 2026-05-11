@@ -100,12 +100,18 @@ def _register_build_project(
     root: Path,
     build_lane_enabled: bool = True,
     github_repo: str | None = "Code-Munkiz/ham",
+    output_target: str = "github_pr",
 ) -> ProjectRecord:
+    # Default to ``github_pr`` here so existing connected-repo test semantics
+    # continue to hold. Managed-workspace coverage is exercised by explicit
+    # ``output_target="managed_workspace"`` callers and by the
+    # :mod:`tests.test_build_lane_output` suite.
     rec = store.make_record(name=name, root=str(root), description="")
     rec = rec.model_copy(
         update={
             "build_lane_enabled": build_lane_enabled,
             "github_repo": github_repo,
+            "output_target": output_target,
         }
     )
     return store.register(rec)
@@ -122,7 +128,19 @@ def _make_outcome(
     ham_run_id: str | None = "11111111-2222-3333-4444-555555555555",
     control_plane_status: str | None = "succeeded",
     error_summary: str | None = None,
+    output_target: str | None = "github_pr",
+    output_ref: dict[str, Any] | None = None,
 ) -> build_api.DroidBuildLaunchOutcome:
+    if output_ref is None and output_target == "github_pr":
+        output_ref = {
+            k: v
+            for k, v in {
+                "pr_url": pr_url,
+                "pr_branch": pr_branch,
+                "pr_commit_sha": pr_commit_sha,
+            }.items()
+            if v is not None
+        }
     return build_api.DroidBuildLaunchOutcome(
         ok=ok,
         ham_run_id=ham_run_id,
@@ -133,6 +151,8 @@ def _make_outcome(
         build_outcome=build_outcome,  # type: ignore[arg-type]
         summary=summary,
         error_summary=error_summary,
+        output_target=output_target,
+        output_ref=output_ref,
     )
 
 

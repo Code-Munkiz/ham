@@ -25,12 +25,16 @@ from src.ham.droid_runner.allowed_roots import (
 from src.ham.droid_runner.argv_validate import RequestMode, validate_remote_droid_argv
 from src.ham.droid_runner.build_lane import (
     BuildLaneInputs,
-    BuildLaneResult,
     SubprocessRunner,
-    execute_build_lane_post_exec,
     generate_branch_name,
     is_safe_branch_name,
     make_default_runner,
+)
+from src.ham.droid_runner.build_lane_output import (
+    OutputResult,
+    PostExecCommon,
+    neutral_to_legacy_github_outcome,
+    select_output_adapter,
 )
 from src.ham.droid_runner.runner_audit import append_runner_audit_line
 from src.tools.droid_executor import DroidExecutionRecord, droid_executor
@@ -83,6 +87,13 @@ class DroidExecRequest(BaseModel):
     pr_title: str | None = Field(default=None, max_length=200)
     pr_body: str | None = Field(default=None, max_length=8000)
     base_ref: str | None = Field(default=None, max_length=200)
+    # Output-target abstraction (PR-A). ``None`` is treated as ``"github_pr"``
+    # only for backward compatibility with pre-PR-A clients that omit the
+    # field; HAM-API now always sends an explicit target read from the
+    # project record. ``"managed_workspace"`` selects the inert stub adapter
+    # which never opens a PR and always returns ``MANAGED_WORKSPACE_NOT_IMPLEMENTED``.
+    output_target: Literal["managed_workspace", "github_pr"] | None = Field(default=None)
+    workspace_id: str | None = Field(default=None, max_length=180)
 
 
 def _parse_stdout_json(stdout: str) -> dict[str, Any] | None:
@@ -256,44 +267,89 @@ def _compose_pr_body(
     return out
 
 
+def _summary_from_record(record: DroidExecutionRecord) -> str | None:
+    parsed = _parse_stdout_json(record.stdout)
+    text = _droid_result_text(parsed)
+    return text or None
+
+
 def _run_build_lane(
     *,
     body: DroidExecRequest,
     cwd_path: Path,
     record: DroidExecutionRecord,
     runner_request_id: str,
-) -> BuildLaneResult:
-    parsed = _parse_stdout_json(record.stdout)
-    commit_msg, pr_title, body_seed = _resolve_build_text(body, parsed)
-    branch = generate_branch_name()
-    if not is_safe_branch_name(branch):  # pragma: no cover - defense in depth
-        return BuildLaneResult(
-            build_outcome="pr_failed",
-            pr_url=None,
-            pr_branch=None,
-            pr_commit_sha=None,
-            error_summary="generated unsafe branch name",
+) -> OutputResult:
+    """Dispatch the post-exec step through the output-target adapter.
+
+    ``body.output_target`` selects the adapter; ``None`` is treated as
+    ``"github_pr"`` only for back-compat with pre-PR-A clients. The
+    ``github_pr`` adapter receives the PR-shaped :class:`BuildLaneInputs`
+    plus a real :class:`SubprocessRunner`; the ``managed_workspace`` stub
+    ignores both and returns a structured ``MANAGED_WORKSPACE_NOT_IMPLEMENTED``
+    failure.
+    """
+    target = body.output_target or "github_pr"
+    try:
+        adapter = select_output_adapter(target)
+    except ValueError:
+        return OutputResult(
+            target="github_pr",
+            build_outcome="failed",
+            target_ref={},
+            error_summary=f"unknown output_target: {target!r}",
         )
-    base_ref = _safe_one_line(body.base_ref or "", max_chars=200) or "origin/main"
-    pr_body = _compose_pr_body(
-        body=body,
-        base_body=body_seed,
-        branch=branch,
-        runner_request_id=runner_request_id,
-    )
-    inputs = BuildLaneInputs(
+
+    common_summary = _summary_from_record(record)
+
+    if adapter.target == "github_pr":
+        parsed = _parse_stdout_json(record.stdout)
+        commit_msg, pr_title, body_seed = _resolve_build_text(body, parsed)
+        branch = generate_branch_name()
+        if not is_safe_branch_name(branch):  # pragma: no cover - defense in depth
+            return OutputResult(
+                target="github_pr",
+                build_outcome="failed",
+                target_ref={},
+                error_summary="generated unsafe branch name",
+            )
+        base_ref = _safe_one_line(body.base_ref or "", max_chars=200) or "origin/main"
+        pr_body = _compose_pr_body(
+            body=body,
+            base_body=body_seed,
+            branch=branch,
+            runner_request_id=runner_request_id,
+        )
+        pr_inputs = BuildLaneInputs(
+            project_root=cwd_path,
+            branch_name=branch,
+            commit_message=commit_msg,
+            pr_title=pr_title,
+            pr_body=pr_body,
+            base_ref=base_ref,
+        )
+        build_runner: SubprocessRunner = make_default_runner(
+            cwd=cwd_path,
+            timeout_sec=_BUILD_LANE_TIMEOUT_SEC,
+        )
+        common = PostExecCommon(
+            project_id=body.project_id,
+            project_root=cwd_path,
+            summary=common_summary,
+            change_id=runner_request_id,
+            pr_inputs=pr_inputs,
+        )
+        return adapter.emit(common, runner=build_runner)
+
+    # managed_workspace (PR-A: inert stub)
+    common = PostExecCommon(
+        project_id=body.project_id,
         project_root=cwd_path,
-        branch_name=branch,
-        commit_message=commit_msg,
-        pr_title=pr_title,
-        pr_body=pr_body,
-        base_ref=base_ref,
+        summary=common_summary,
+        change_id=runner_request_id,
+        workspace_id=body.workspace_id,
     )
-    build_runner: SubprocessRunner = make_default_runner(
-        cwd=cwd_path,
-        timeout_sec=_BUILD_LANE_TIMEOUT_SEC,
-    )
-    return execute_build_lane_post_exec(inputs, runner=build_runner)
+    return adapter.emit(common, runner=None)
 
 
 def _audit_base(
@@ -442,7 +498,16 @@ def post_droid_exec(
             },
         )
 
-    if body.mode == "build" and not body.accept_pr:
+    # ``accept_pr`` is a github_pr-specific UX confirmation ("you are about to
+    # open a pull request"). For managed_workspace runs there is no PR, so the
+    # gate does not apply; PR-B will introduce its own confirmation field
+    # (``accept_snapshot``) when the managed adapter actually persists state.
+    effective_output_target = body.output_target or "github_pr"
+    if (
+        body.mode == "build"
+        and effective_output_target == "github_pr"
+        and not body.accept_pr
+    ):
         _audit_base(
             body=body,
             runner_request_id=runner_request_id,
@@ -476,8 +541,14 @@ def post_droid_exec(
     if not ok_exec:
         failure_kind = "timeout" if record.timed_out else "non_zero_exit"
 
-    build_result: BuildLaneResult | None = None
-    if body.mode == "build" and body.accept_pr and ok_exec:
+    build_result: OutputResult | None = None
+    # github_pr runs require ``accept_pr=true`` (gated above). managed_workspace
+    # runs skip that gate, so this branch is reached on any ``mode=="build"``
+    # successful execution where the target was resolved.
+    should_run_post_exec = body.mode == "build" and ok_exec and (
+        effective_output_target != "github_pr" or body.accept_pr
+    )
+    if should_run_post_exec:
         try:
             build_result = _run_build_lane(
                 body=body,
@@ -486,13 +557,18 @@ def post_droid_exec(
                 runner_request_id=runner_request_id,
             )
         except Exception as exc:  # noqa: BLE001 - last-ditch guard around subprocess pipeline.
-            build_result = BuildLaneResult(
-                build_outcome="pr_failed",
-                pr_url=None,
-                pr_branch=None,
-                pr_commit_sha=None,
+            build_result = OutputResult(
+                target="github_pr" if effective_output_target == "github_pr" else "managed_workspace",
+                build_outcome="failed",
+                target_ref={},
                 error_summary=f"build lane crashed: {type(exc).__name__}",
             )
+
+    legacy_build_outcome_wire: str | None = None
+    if build_result is not None and build_result.target == "github_pr":
+        legacy_build_outcome_wire = neutral_to_legacy_github_outcome(
+            build_result.build_outcome
+        )
 
     _audit_base(
         body=body,
@@ -505,7 +581,7 @@ def post_droid_exec(
         timed_out=record.timed_out,
         execution_ok=ok_exec,
         failure_kind=failure_kind,
-        build_outcome=build_result.build_outcome if build_result is not None else None,
+        build_outcome=legacy_build_outcome_wire,
     )
 
     out: dict[str, Any] = {
@@ -526,10 +602,17 @@ def post_droid_exec(
     if parsed is not None:
         out["parsed_stdout"] = parsed
     if build_result is not None:
-        out["build_outcome"] = build_result.build_outcome
-        out["pr_url"] = build_result.pr_url
-        out["pr_branch"] = build_result.pr_branch
-        out["pr_commit_sha"] = build_result.pr_commit_sha
+        # New target-neutral fields (PR-A).
+        out["output_target"] = build_result.target
+        out["output_ref"] = dict(build_result.target_ref)
+        # Back-compat: emit the PR-shaped wire fields only for github_pr runs.
+        # Managed-workspace runs leave ``build_outcome`` / ``pr_*`` unset on the
+        # wire; HAM-side readers fall back to ``output_target`` / ``output_ref``.
+        if build_result.target == "github_pr":
+            out["build_outcome"] = legacy_build_outcome_wire
+            out["pr_url"] = build_result.pr_url
+            out["pr_branch"] = build_result.pr_branch
+            out["pr_commit_sha"] = build_result.pr_commit_sha
         if build_result.error_summary:
             out["build_error_summary"] = build_result.error_summary
     return out
