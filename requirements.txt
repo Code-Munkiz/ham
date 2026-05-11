@@ -18,7 +18,7 @@ pypdf>=4.0.0
 python-docx>=1.2.0
 openpyxl>=3.1.0
 # Windows: ConPTY for /api/workspace/terminal
-pywinpty>=2.0.1; sys_platform == "win32"
+pywinpty>=3.0.3; sys_platform == "win32"
 playwright
 PyJWT>=2.8.0
 cryptography>=42.0.0
