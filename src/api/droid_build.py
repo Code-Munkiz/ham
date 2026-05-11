@@ -136,17 +136,26 @@ def _require_build_lane_project(project_id: str) -> Any:
                 }
             },
         )
-    repo = (getattr(rec, "github_repo", None) or "").strip()
-    if not repo:
-        raise HTTPException(
-            status_code=422,
-            detail={
-                "error": {
-                    "code": "BUILD_LANE_PROJECT_MISSING_GITHUB_REPO",
-                    "message": "Project has no github_repo configured for build lane.",
-                }
-            },
-        )
+    # ``github_repo`` is only meaningful (and only required) for the github_pr
+    # output target. Managed-workspace projects intentionally have no
+    # ``github_repo`` and run the inert PR-A stub adapter; their gating lives
+    # at the runner side (``MANAGED_WORKSPACE_NOT_IMPLEMENTED``).
+    target = (getattr(rec, "output_target", None) or "managed_workspace").strip()
+    if target == "github_pr":
+        repo = (getattr(rec, "github_repo", None) or "").strip()
+        if not repo:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "error": {
+                        "code": "BUILD_LANE_PROJECT_MISSING_GITHUB_REPO",
+                        "message": (
+                            "Project uses output_target=github_pr but has no github_repo "
+                            "configured."
+                        ),
+                    }
+                },
+            )
     return rec
 
 
@@ -186,7 +195,13 @@ def _created_by(actor: HamActor | None) -> dict[str, Any] | None:
 
 @dataclass(frozen=True)
 class DroidBuildLaunchOutcome:
-    """In-router shape returned by :func:`execute_droid_build_workflow`."""
+    """In-router shape returned by :func:`execute_droid_build_workflow`.
+
+    ``output_target`` and ``output_ref`` are the target-neutral fields
+    introduced in PR-A. The legacy ``pr_*`` and ``build_outcome`` fields
+    are populated only for ``output_target == "github_pr"`` runs and are
+    retained for backward compatibility.
+    """
 
     ok: bool
     ham_run_id: str | None
@@ -197,6 +212,8 @@ class DroidBuildLaunchOutcome:
     build_outcome: DroidBuildOutcome | None
     summary: str | None
     error_summary: str | None
+    output_target: str | None = None
+    output_ref: dict[str, Any] | None = None
 
 
 def execute_droid_build_workflow(
@@ -206,6 +223,8 @@ def execute_droid_build_workflow(
     user_prompt: str,
     proposal_digest: str,
     created_by: dict[str, Any] | None,
+    output_target: str = "github_pr",
+    workspace_id: str | None = None,
 ) -> DroidBuildLaunchOutcome:
     """
     Drive the safe_edit_low workflow plus the runner-side Build Lane post-exec.
@@ -229,6 +248,8 @@ def execute_droid_build_workflow(
         project_id=project_id,
         proposal_digest=proposal_digest,
         created_by=created_by,
+        output_target=output_target,
+        workspace_id=workspace_id,
     )
     return DroidBuildLaunchOutcome(
         ok=launch.ok,
@@ -240,6 +261,8 @@ def execute_droid_build_workflow(
         build_outcome=launch.build_outcome,
         summary=launch.summary,
         error_summary=launch.build_error_summary or launch.blocking_reason,
+        output_target=launch.output_target,
+        output_ref=launch.output_ref,
     )
 
 
@@ -306,6 +329,10 @@ async def preview_droid_build(
                 }
             },
         )
+    project_output_target = (
+        getattr(rec, "output_target", None) or "managed_workspace"
+    )
+    will_open_pr = project_output_target == "github_pr"
     return {
         "kind": "droid_build_preview",
         "project_id": rec.id,
@@ -315,8 +342,9 @@ async def preview_droid_build(
         "proposal_digest": prev.proposal_digest,
         "base_revision": prev.base_revision,
         "is_readonly": False,
-        "will_open_pull_request": True,
+        "will_open_pull_request": will_open_pr,
         "requires_approval": True,
+        "output_target": project_output_target,
     }
 
 
@@ -336,7 +364,17 @@ async def launch_droid_build(
                 }
             },
         )
-    if not body.accept_pr:
+    _build_workflow_or_500()
+    _require_workspace_operator(ham_actor)
+    rec = _require_build_lane_project(body.project_id)
+    project_output_target = (
+        getattr(rec, "output_target", None) or "managed_workspace"
+    )
+    # ``accept_pr`` is required only when the project's output target opens
+    # a real PR. Managed-workspace projects do not open a PR (PR-A: stub;
+    # PR-B: snapshot); PR-B will introduce its own ``accept_snapshot``
+    # confirmation as appropriate.
+    if project_output_target == "github_pr" and not body.accept_pr:
         raise HTTPException(
             status_code=422,
             detail={
@@ -346,9 +384,6 @@ async def launch_droid_build(
                 }
             },
         )
-    _build_workflow_or_500()
-    _require_workspace_operator(ham_actor)
-    rec = _require_build_lane_project(body.project_id)
     root = Path(rec.root)
     v_err = verify_launch_against_preview(
         workflow_id=_BUILD_WORKFLOW_ID,
@@ -380,6 +415,8 @@ async def launch_droid_build(
         user_prompt=body.user_prompt,
         proposal_digest=body.proposal_digest,
         created_by=_created_by(ham_actor),
+        output_target=project_output_target,
+        workspace_id=getattr(rec, "workspace_id", None),
     )
     return {
         "kind": "droid_build_launch",
@@ -394,8 +431,10 @@ async def launch_droid_build(
         "summary": out.summary,
         "error_summary": out.error_summary if not out.ok else None,
         "is_readonly": False,
-        "will_open_pull_request": True,
+        "will_open_pull_request": project_output_target == "github_pr",
         "requires_approval": True,
+        "output_target": out.output_target or project_output_target,
+        "output_ref": out.output_ref,
     }
 
 
