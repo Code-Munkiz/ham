@@ -124,6 +124,9 @@ INSTRUCTION_DOT_DIR = ".ham"
 INSTRUCTION_DOT_FILES = ("SWARM.md", "instructions.md")
 
 # Instruction file content limits (chars)
+# These constants cap the size of instruction documents loaded into agent prompts
+# to prevent context overflow while preserving critical project guidance.
+# Adjust values carefully: larger values consume more context window token budget.
 MAX_INSTRUCTION_FILE_CHARS = 4_000
 MAX_TOTAL_INSTRUCTION_CHARS = 12_000
 MAX_DIFF_CHARS = 8_000
