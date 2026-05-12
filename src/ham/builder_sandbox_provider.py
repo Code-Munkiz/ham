@@ -8,9 +8,11 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import PurePosixPath
 from typing import Any, Literal, Protocol, runtime_checkable
-from urllib.parse import urlsplit
+from urllib.parse import urljoin, urlsplit
 
 import httpx
+
+from src.ham.builder_cloud_runtime_gcp import safe_proxy_upstream_from_provider
 
 SandboxRuntimeStatus = Literal[
     "queued",
@@ -258,7 +260,7 @@ class E2BSandboxRuntimeProvider:
                 tail = (stderr or stdout or "command failed")[:240]
                 return False, tail
             return True, (stdout or "ok")[:240]
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001  # pylint: disable=broad-exception-caught
             msg = str(exc).strip()
             return False, (msg or "command failed")[:240]
 
@@ -379,7 +381,7 @@ class E2BSandboxRuntimeProvider:
                 )
                 started = True
                 break
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001  # pylint: disable=broad-exception-caught
                 start_error = str(exc)[:240] or start_error
         if not started:
             return SandboxRuntimeState(
@@ -393,17 +395,55 @@ class E2BSandboxRuntimeProvider:
                 }
             )
         preview_url = f"https://{int(port)}-{self._sandbox_id}.e2b.app/"
+        safe_preview_url = safe_proxy_upstream_from_provider(preview_url)
+        if not safe_preview_url:
+            return SandboxRuntimeState(
+                **{
+                    **state.__dict__,
+                    "status": "failed",
+                    "updated_at": _utc_now_iso(),
+                    "error_code": "SANDBOX_PREVIEW_URL_UNSAFE",
+                    "error_message": "Sandbox provider returned an unsafe preview upstream URL.",
+                    "preview_upstream_url": None,
+                }
+            )
         deadline = time.time() + timeout_seconds
         healthy = False
+        unsafe_redirect = False
         while time.time() < deadline:
             try:
-                res = httpx.get(preview_url, timeout=2.5, follow_redirects=True)
-                if res.status_code < 500:
+                res = httpx.get(safe_preview_url, timeout=2.5, follow_redirects=False)
+                if 200 <= res.status_code < 300:
                     healthy = True
                     break
+                if 300 <= res.status_code < 400:
+                    redirect_raw = str(res.headers.get("location") or "").strip()
+                    if not redirect_raw:
+                        continue
+                    redirect_url = urljoin(safe_preview_url, redirect_raw)
+                    safe_redirect = safe_proxy_upstream_from_provider(redirect_url)
+                    if not safe_redirect:
+                        unsafe_redirect = True
+                        break
+                    redirected = httpx.get(safe_redirect, timeout=2.5, follow_redirects=False)
+                    if 200 <= redirected.status_code < 300:
+                        safe_preview_url = safe_redirect
+                        healthy = True
+                        break
             except httpx.HTTPError:
                 pass
             time.sleep(1.5)
+        if unsafe_redirect:
+            return SandboxRuntimeState(
+                **{
+                    **state.__dict__,
+                    "status": "failed",
+                    "updated_at": _utc_now_iso(),
+                    "error_code": "SANDBOX_PREVIEW_UNSAFE_REDIRECT",
+                    "error_message": "Sandbox preview returned an unsafe redirect target.",
+                    "preview_upstream_url": None,
+                }
+            )
         if not healthy:
             return SandboxRuntimeState(
                 **{
@@ -415,14 +455,14 @@ class E2BSandboxRuntimeProvider:
                     "preview_upstream_url": None,
                 }
             )
-        self._preview_url = preview_url
+        self._preview_url = safe_preview_url
         self._last_logs_summary = "Sandbox preview server started and health-validated."
         return SandboxRuntimeState(
             **{
                 **state.__dict__,
                 "status": "ready",
                 "updated_at": _utc_now_iso(),
-                "preview_upstream_url": preview_url,
+                "preview_upstream_url": safe_preview_url,
                 "logs_summary": self._last_logs_summary,
             }
         )
@@ -441,7 +481,7 @@ class E2BSandboxRuntimeProvider:
         if self._sandbox_ref is not None:
             try:
                 self._sandbox_ref.kill()
-            except Exception:  # pragma: no cover - best effort cleanup
+            except Exception:  # pragma: no cover - best effort cleanup  # pylint: disable=broad-exception-caught
                 pass
         return SandboxRuntimeState(**{**state.__dict__, "status": "stopped", "updated_at": _utc_now_iso()})
 
@@ -460,8 +500,9 @@ _PROVIDER_FACTORY_OVERRIDE: list[Any | None] = [None]
 
 
 def build_sandbox_runtime_provider(*, config: SandboxRuntimeConfig) -> SandboxRuntimeProvider:
-    if _PROVIDER_FACTORY_OVERRIDE[0] is not None:
-        return _PROVIDER_FACTORY_OVERRIDE[0](config)
+    override_factory = _PROVIDER_FACTORY_OVERRIDE[0]
+    if callable(override_factory):
+        return override_factory(config)
     if config.dry_run or config.fake_mode_explicit:
         return FakeSandboxRuntimeProvider(provider=config.provider, fake_mode=config.fake_mode)
     if config.provider == "e2b":

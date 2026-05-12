@@ -11,6 +11,7 @@ from src.api.clerk_gate import get_ham_clerk_actor
 from src.api.dependencies.workspace import get_workspace_store
 from src.ham.clerk_auth import HamActor
 from src.ham.builder_sandbox_provider import (
+    E2BSandboxRuntimeProvider,
     SandboxRuntimeConfig,
     SandboxRuntimeState,
     SandboxSourceFile,
@@ -212,6 +213,42 @@ class _InjectedLiveProvider:
         return ("SANDBOX_PROVIDER_ERROR", "Sandbox provider operation failed safely.")
 
 
+class _FakeHttpResponse:
+    def __init__(self, status_code: int, headers: dict[str, str] | None = None) -> None:
+        self.status_code = status_code
+        self.headers = headers or {}
+
+
+class _FakeSandboxCommands:
+    def run(self, *args, **kwargs) -> None:
+        _ = args, kwargs
+
+
+class _FakeSandboxRef:
+    def __init__(self) -> None:
+        self.commands = _FakeSandboxCommands()
+
+
+def _sandbox_state() -> SandboxRuntimeState:
+    return SandboxRuntimeState(
+        provider="e2b",
+        sandbox_id="sandbox_demo",
+        workspace_id="ws_aaaaaaaaaaaaaaaa",
+        project_id="proj_demo",
+        snapshot_id="ssnp_demo",
+        runtime_job_id="crj_demo",
+        status="starting",
+        preview_upstream_url=None,
+        preview_proxy_url=None,
+        logs_summary=None,
+        error_code=None,
+        error_message=None,
+        started_at="2026-01-01T00:00:00Z",
+        updated_at="2026-01-01T00:00:00Z",
+        expires_at=None,
+    )
+
+
 def test_sandbox_provider_disabled_returns_config_missing(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "sandbox_provider")
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_EXPERIMENTS_ENABLED", "true")
@@ -363,3 +400,104 @@ def test_sandbox_provider_live_adapter_timeout_normalizes_without_ready_preview(
     assert body["preview_status"]["status"] != "ready"
     assert body["preview_status"]["preview_url"] is None
     _cleanup()
+
+
+def test_e2b_dependency_declared_in_requirements() -> None:
+    req = Path("requirements.txt").read_text(encoding="utf-8").lower()
+    assert "e2b>=2.21.0" in req
+
+
+def test_sandbox_provider_missing_sdk_fails_closed(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "sandbox_provider")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_EXPERIMENTS_ENABLED", "true")
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_ENABLED", "true")
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_PROVIDER", "e2b")
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_DRY_RUN", "false")
+    monkeypatch.delenv("HAM_BUILDER_SANDBOX_FAKE_MODE", raising=False)
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_API_KEY", "test-secret-api-key")
+    monkeypatch.setattr("src.ham.builder_sandbox_provider.util.find_spec", lambda _name: None)
+    client, ws_id, project_id, snapshot_id = _seed_context(tmp_path)
+    res = client.post(
+        f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime/jobs",
+        json={"source_snapshot_id": snapshot_id},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["job"]["status"] == "failed"
+    assert body["preview_status"]["status"] != "ready"
+    assert body["preview_status"]["preview_url"] is None
+    _cleanup()
+
+
+def test_e2b_healthcheck_direct_success_marks_ready(monkeypatch) -> None:
+    provider = E2BSandboxRuntimeProvider(api_key="test-key")
+    provider._sandbox_ref = _FakeSandboxRef()
+    provider._sandbox_id = "sboxsafe"
+    state = _sandbox_state()
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_START_TIMEOUT_SECONDS", "5")
+    seen: dict[str, bool] = {"follow_redirects": True}
+
+    def _fake_get(url, timeout, follow_redirects):
+        _ = url, timeout
+        seen["follow_redirects"] = follow_redirects
+        return _FakeHttpResponse(200)
+
+    monkeypatch.setattr("src.ham.builder_sandbox_provider.httpx.get", _fake_get)
+    next_state = provider.start_preview_server(state=state, port=3000)
+    assert next_state.status == "ready"
+    assert next_state.preview_upstream_url == "https://3000-sboxsafe.e2b.app/"
+    assert seen["follow_redirects"] is False
+
+
+def test_e2b_healthcheck_unsafe_redirect_fails(monkeypatch) -> None:
+    provider = E2BSandboxRuntimeProvider(api_key="test-key")
+    provider._sandbox_ref = _FakeSandboxRef()
+    provider._sandbox_id = "sboxsafe"
+    state = _sandbox_state()
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_START_TIMEOUT_SECONDS", "5")
+    monkeypatch.setattr(
+        "src.ham.builder_sandbox_provider.httpx.get",
+        lambda url, timeout, follow_redirects: _FakeHttpResponse(
+            302, {"location": "https://evil.example.com/redirect"}
+        ),
+    )
+    next_state = provider.start_preview_server(state=state, port=3000)
+    assert next_state.status == "failed"
+    assert next_state.error_code == "SANDBOX_PREVIEW_UNSAFE_REDIRECT"
+    assert next_state.preview_upstream_url is None
+
+
+def test_e2b_healthcheck_redirect_with_query_fails(monkeypatch) -> None:
+    provider = E2BSandboxRuntimeProvider(api_key="test-key")
+    provider._sandbox_ref = _FakeSandboxRef()
+    provider._sandbox_id = "sboxsafe"
+    state = _sandbox_state()
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_START_TIMEOUT_SECONDS", "5")
+    monkeypatch.setattr(
+        "src.ham.builder_sandbox_provider.httpx.get",
+        lambda url, timeout, follow_redirects: _FakeHttpResponse(
+            302, {"location": "https://3000-sboxsafe.e2b.app/?token=leak"}
+        ),
+    )
+    next_state = provider.start_preview_server(state=state, port=3000)
+    assert next_state.status == "failed"
+    assert next_state.error_code == "SANDBOX_PREVIEW_UNSAFE_REDIRECT"
+    assert next_state.preview_upstream_url is None
+
+
+def test_e2b_healthcheck_non_https_redirect_fails(monkeypatch) -> None:
+    provider = E2BSandboxRuntimeProvider(api_key="test-key")
+    provider._sandbox_ref = _FakeSandboxRef()
+    provider._sandbox_id = "sboxsafe"
+    state = _sandbox_state()
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_START_TIMEOUT_SECONDS", "5")
+    monkeypatch.setattr(
+        "src.ham.builder_sandbox_provider.httpx.get",
+        lambda url, timeout, follow_redirects: _FakeHttpResponse(
+            302, {"location": "http://3000-sboxsafe.e2b.app/"}
+        ),
+    )
+    next_state = provider.start_preview_server(state=state, port=3000)
+    assert next_state.status == "failed"
+    assert next_state.error_code == "SANDBOX_PREVIEW_UNSAFE_REDIRECT"
+    assert next_state.preview_upstream_url is None
