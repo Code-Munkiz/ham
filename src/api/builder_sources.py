@@ -608,6 +608,8 @@ class VisualEditRequestPayload(BaseModel):
     runtime_session_id: str | None = None
     preview_endpoint_id: str | None = None
     route: str | None = None
+    preview_url_kind: Literal["local", "cloud_proxy", "unknown"] | None = None
+    target: dict[str, Any] | None = None
     selector_hints: list[str] = Field(default_factory=list)
     bbox: dict[str, Any] | None = None
     instruction: str
@@ -1017,6 +1019,7 @@ def _sanitize_metadata(raw: dict[str, Any]) -> dict[str, Any]:
 
 def _sanitize_selector_hints(raw: list[str]) -> list[str]:
     safe: list[str] = []
+    seen: set[str] = set()
     for value in raw:
         if len(safe) >= 20:
             break
@@ -1025,7 +1028,11 @@ def _sanitize_selector_hints(raw: list[str]) -> list[str]:
             continue
         if _SENSITIVE_VALUE_RE.search(text):
             continue
-        safe.append(text[:120])
+        normalized = text[:120]
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        safe.append(normalized)
     return safe
 
 
@@ -1034,12 +1041,71 @@ def _sanitize_route(raw_route: str | None) -> str | None:
     if not text:
         return None
     text = text.replace("\r", "").replace("\n", "")
+    if "://" in text:
+        try:
+            parts = urlsplit(text)
+            text = parts.path or "/"
+        except ValueError:
+            text = "/"
+    else:
+        text = text.split("?", 1)[0].split("#", 1)[0]
+    text = text.strip() or "/"
+    if not text.startswith("/"):
+        text = "/" + text
     if len(text) > 240:
         raise HTTPException(
             status_code=422,
             detail={"error": {"code": "VISUAL_EDIT_ROUTE_INVALID", "message": "route is too long."}},
         )
     return text
+
+
+def _sanitize_preview_url_kind(raw: str | None) -> str | None:
+    text = str(raw or "").strip().lower()
+    if not text:
+        return None
+    if text not in {"local", "cloud_proxy", "unknown"}:
+        return "unknown"
+    return text
+
+
+def _sanitize_visual_edit_target(raw: dict[str, Any] | None) -> dict[str, Any] | None:
+    if raw is None:
+        return None
+    safe: dict[str, Any] = {}
+    numeric_fields = ("x", "y", "width", "height", "viewport_width", "viewport_height")
+    for key in numeric_fields:
+        value = raw.get(key)
+        if value is None:
+            continue
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise HTTPException(
+                status_code=422,
+                detail={"error": {"code": "VISUAL_EDIT_TARGET_INVALID", "message": f"{key} must be numeric."}},
+            )
+        num = float(value)
+        if num < 0 or num > 100000:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "error": {
+                        "code": "VISUAL_EDIT_TARGET_INVALID",
+                        "message": f"{key} is out of allowed bounds.",
+                    }
+                },
+            )
+        safe[key] = round(num, 4)
+    device_mode = str(raw.get("device_mode") or "").strip().lower()
+    if device_mode in {"desktop", "mobile"}:
+        safe["device_mode"] = device_mode
+    selector_hints = _sanitize_selector_hints(list(raw.get("selector_hints") or []))
+    if selector_hints:
+        safe["selector_hints"] = selector_hints
+    for text_key in ("element_text", "tag_name", "aria_label"):
+        text = _safe_text(raw.get(text_key), fallback="")
+        if text and not _SENSITIVE_VALUE_RE.search(text):
+            safe[text_key] = text[:160]
+    return safe or None
 
 
 def _sanitize_visual_edit_bbox(raw: dict[str, Any] | None) -> dict[str, float] | None:
@@ -1284,6 +1350,41 @@ def _build_activity_items(*, workspace_id: str, project_id: str) -> list[Builder
                     "phase": job.phase,
                     "job_id": job.id,
                 },
+            )
+        )
+
+    for request in get_builder_visual_edit_request_store().list_visual_edit_requests(
+        workspace_id=workspace_id,
+        project_id=project_id,
+    ):
+        request_status = request.status.strip().lower()
+        if request_status in {"draft", "queued", "processing"}:
+            if request_status == "processing":
+                status = "running"
+            else:
+                status = "queued"
+            title = "Visual edit request saved"
+        elif request_status == "resolved":
+            status = "succeeded"
+            title = "Visual edit request resolved"
+        elif request_status in {"failed", "cancelled"}:
+            status = "failed" if request_status == "failed" else "stopped"
+            title = "Visual edit request closed"
+        else:
+            status = "info"
+            title = "Visual edit request updated"
+        items.append(
+            BuilderActivityItem(
+                id=f"act_{request.id}",
+                kind="runtime_status",
+                status=status,
+                title=title,
+                message=_safe_text(request.instruction, fallback=title),
+                timestamp=request.updated_at,
+                snapshot_id=request.source_snapshot_id,
+                runtime_session_id=request.runtime_session_id,
+                preview_endpoint_id=request.preview_endpoint_id,
+                metadata={"visual_edit_request_id": request.id, "status": request.status},
             )
         )
 
@@ -1707,6 +1808,30 @@ async def create_builder_visual_edit_request(
         project_id=project_id,
         source_snapshot_id=body.source_snapshot_id,
     )
+    target = _sanitize_visual_edit_target(body.target)
+    preview_url_kind = _sanitize_preview_url_kind(body.preview_url_kind)
+    selector_hints = _sanitize_selector_hints(body.selector_hints)
+    target_selector_hints = _sanitize_selector_hints(
+        list((target or {}).get("selector_hints") or []) if target is not None else []
+    )
+    merged_selector_hints = _sanitize_selector_hints(selector_hints + target_selector_hints)
+    bbox = _sanitize_visual_edit_bbox(body.bbox)
+    if bbox is None and target is not None and all(
+        key in target for key in ("x", "y", "width", "height")
+    ):
+        bbox = _sanitize_visual_edit_bbox(
+            {
+                "x": target.get("x"),
+                "y": target.get("y"),
+                "width": target.get("width"),
+                "height": target.get("height"),
+            }
+        )
+    safe_metadata = _sanitize_metadata(body.metadata)
+    if target is not None:
+        safe_metadata["target"] = target
+    if preview_url_kind is not None:
+        safe_metadata["preview_url_kind"] = preview_url_kind
     request = VisualEditRequest(
         workspace_id=ctx.workspace_id,
         project_id=project_id,
@@ -1714,12 +1839,12 @@ async def create_builder_visual_edit_request(
         runtime_session_id=str(body.runtime_session_id or "").strip() or None,
         preview_endpoint_id=str(body.preview_endpoint_id or "").strip() or None,
         route=_sanitize_route(body.route),
-        selector_hints=_sanitize_selector_hints(body.selector_hints),
-        bbox=_sanitize_visual_edit_bbox(body.bbox),
+        selector_hints=merged_selector_hints,
+        bbox=bbox,
         instruction=_sanitize_visual_edit_instruction(body.instruction),
         status=_normalize_visual_edit_status(body.status),
         created_by=actor.user_id if actor is not None else None,
-        metadata=_sanitize_metadata(body.metadata),
+        metadata=safe_metadata,
     )
     saved = get_builder_visual_edit_request_store().upsert_visual_edit_request(request)
     return {

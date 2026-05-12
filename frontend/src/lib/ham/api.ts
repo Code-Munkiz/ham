@@ -382,6 +382,20 @@ export type CreateBuilderVisualEditRequestPayload = {
   runtime_session_id?: string | null;
   preview_endpoint_id?: string | null;
   route?: string | null;
+  preview_url_kind?: "local" | "cloud_proxy" | "unknown";
+  target?: {
+    x?: number;
+    y?: number;
+    width?: number;
+    height?: number;
+    viewport_width?: number;
+    viewport_height?: number;
+    device_mode?: "desktop" | "mobile";
+    selector_hints?: string[];
+    element_text?: string;
+    tag_name?: string;
+    aria_label?: string;
+  } | null;
   selector_hints?: string[];
   bbox?: { x: number; y: number; width: number; height: number } | null;
   instruction: string;
