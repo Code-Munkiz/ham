@@ -883,7 +883,7 @@ def _cloud_runtime_worker_entry() -> BuilderWorkerCapabilityEntry:
     provider_status = get_cloud_runtime_provider_capability_status()
     experiment_status, _ = get_cloud_runtime_experiment_status()
     status = _to_worker_status(provider_status)
-    fit = "Cloud runtime POC control-plane path; no production sandbox lifecycle in this phase."
+    fit = "Cloud runtime control-plane path; production sandbox lifecycle is staged behind provider gates."
     setup = "Set HAM_BUILDER_CLOUD_RUNTIME_PROVIDER=local_mock for safe simulation in dev/test."
     if experiment_status == "experiment_not_enabled":
         setup = (
@@ -897,6 +897,15 @@ def _cloud_runtime_worker_entry() -> BuilderWorkerCapabilityEntry:
             setup = "Set HAM_BUILDER_CLOUD_RUNTIME_GCP_PROJECT and HAM_BUILDER_CLOUD_RUNTIME_GCP_REGION for plan-only POC."
         else:
             setup = "cloud_run_poc is plan-only in this PR. No cloud resources are provisioned by default."
+    elif provider_mode == "sandbox_provider":
+        if provider_status == "disabled":
+            setup = "Set HAM_BUILDER_SANDBOX_ENABLED=true and HAM_BUILDER_SANDBOX_PROVIDER=e2b|daytona."
+        elif provider_status == "needs_connection":
+            setup = "Set HAM_BUILDER_SANDBOX_API_KEY when non-dry-run sandbox provider mode is enabled."
+        elif provider_status == "unavailable":
+            setup = "Choose a supported sandbox provider (e2b or daytona)."
+        else:
+            setup = "Sandbox provider foundation is fake/dry-run capable; live provider calls are deferred."
     return BuilderWorkerCapabilityEntry(
         worker_kind="cloud_runtime_worker",
         provider="builder_cloud_runtime",
@@ -1262,18 +1271,32 @@ def _build_activity_items(*, workspace_id: str, project_id: str) -> list[Builder
 
     for runtime in runtime_store.list_runtime_sessions(workspace_id=workspace_id, project_id=project_id):
         runtime_status = runtime.status.lower().strip()
-        if runtime_status in {"running", "starting", "waiting"}:
-            title = "Local preview connected"
-            status = "ready" if runtime_status == "running" else "running"
-            kind = "runtime_status"
-        elif runtime_status in {"stopped", "expired"}:
-            title = "Local preview disconnected"
-            status = "stopped"
-            kind = "preview_disconnected"
+        if runtime.mode == "cloud":
+            if runtime_status in {"running", "starting", "waiting", "queued", "provisioning"}:
+                title = "Cloud runtime active"
+                status = "ready" if runtime_status == "running" else "running"
+                kind = "runtime_status"
+            elif runtime_status in {"stopped", "expired"}:
+                title = "Cloud runtime stopped"
+                status = "stopped"
+                kind = "preview_disconnected"
+            else:
+                title = "Cloud runtime failed"
+                status = "error"
+                kind = "preview_error"
         else:
-            title = "Local preview runtime error"
-            status = "error"
-            kind = "preview_error"
+            if runtime_status in {"running", "starting", "waiting"}:
+                title = "Local preview connected"
+                status = "ready" if runtime_status == "running" else "running"
+                kind = "runtime_status"
+            elif runtime_status in {"stopped", "expired"}:
+                title = "Local preview disconnected"
+                status = "stopped"
+                kind = "preview_disconnected"
+            else:
+                title = "Local preview runtime error"
+                status = "error"
+                kind = "preview_error"
         items.append(
             BuilderActivityItem(
                 id=f"act_{runtime.id}",
@@ -1290,22 +1313,22 @@ def _build_activity_items(*, workspace_id: str, project_id: str) -> list[Builder
 
     for endpoint in runtime_store.list_preview_endpoints(workspace_id=workspace_id, project_id=project_id):
         endpoint_status = endpoint.status.lower().strip()
+        is_proxy = str(endpoint.access_mode or "").strip().lower() == "proxy"
         if endpoint_status == "ready":
             kind = "preview_connected"
             status = "ready"
-            title = "Local preview connected"
+            title = "Cloud preview proxy ready" if is_proxy else "Local preview connected"
         elif endpoint_status in {"revoked", "unavailable"}:
             kind = "preview_disconnected" if endpoint_status == "revoked" else "preview_error"
             status = "stopped" if endpoint_status == "revoked" else "error"
-            title = (
-                "Local preview disconnected"
-                if endpoint_status == "revoked"
-                else "Preview endpoint unavailable"
-            )
+            if endpoint_status == "revoked":
+                title = "Cloud preview proxy stopped" if is_proxy else "Local preview disconnected"
+            else:
+                title = "Cloud preview proxy unavailable" if is_proxy else "Preview endpoint unavailable"
         else:
             kind = "runtime_status"
             status = "running"
-            title = "Local preview endpoint provisioning"
+            title = "Cloud preview proxy provisioning" if is_proxy else "Local preview endpoint provisioning"
         safe_url = _sanitize_local_preview_url(endpoint.url)
         items.append(
             BuilderActivityItem(

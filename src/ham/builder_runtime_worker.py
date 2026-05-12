@@ -15,11 +15,18 @@ from src.ham.builder_cloud_runtime_gcp import (
     safe_proxy_host_from_upstream,
     safe_proxy_upstream_from_provider,
 )
+from src.ham.builder_sandbox_provider import (
+    FakeSandboxRuntimeProvider,
+    SandboxRuntimeState,
+    load_sandbox_runtime_config,
+    sandbox_preview_host,
+    sandbox_provider_is_supported,
+)
 from src.persistence.builder_runtime_job_store import CloudRuntimeJob
 from src.persistence.builder_source_store import get_builder_source_store
 from src.persistence.builder_runtime_store import PreviewEndpoint, RuntimeSession, get_builder_runtime_store
 
-CloudRuntimeProviderMode = Literal["disabled", "local_mock", "cloud_run_poc"]
+CloudRuntimeProviderMode = Literal["disabled", "local_mock", "cloud_run_poc", "sandbox_provider"]
 
 
 def _utc_now_iso() -> str:
@@ -28,7 +35,7 @@ def _utc_now_iso() -> str:
 
 def get_cloud_runtime_provider_mode() -> CloudRuntimeProviderMode:
     raw = str(os.environ.get("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER") or "").strip().lower()
-    if raw in {"local_mock", "cloud_run_poc"}:
+    if raw in {"local_mock", "cloud_run_poc", "sandbox_provider"}:
         return raw
     return "disabled"
 
@@ -55,6 +62,37 @@ def get_cloud_runtime_experiment_status() -> tuple[str, str]:
         return (
             "provider_ready",
             "Cloud runtime local mock is ready for experimentation.",
+        )
+    if mode == "sandbox_provider":
+        cfg = load_sandbox_runtime_config()
+        if not experiments_enabled:
+            return (
+                "experiment_not_enabled",
+                "Cloud runtime experiments are not enabled in this environment.",
+            )
+        if not cfg.enabled:
+            return (
+                "config_missing",
+                "Cloud sandbox provider is not enabled in this environment.",
+            )
+        if not sandbox_provider_is_supported(cfg.provider):
+            return (
+                "config_missing",
+                "Cloud sandbox provider must be configured to e2b or daytona.",
+            )
+        if not cfg.dry_run and not cfg.api_key_present:
+            return (
+                "config_missing",
+                "Cloud sandbox provider is missing required API key configuration.",
+            )
+        if cfg.dry_run:
+            return (
+                "dry_run_ready",
+                "Cloud sandbox provider dry-run mode is configured and ready.",
+            )
+        return (
+            "provider_ready",
+            "Cloud sandbox provider is configured for fake-provider integration tests.",
         )
     cfg = load_gcp_runtime_config()
     if not experiments_enabled:
@@ -93,6 +131,15 @@ def get_cloud_runtime_provider_capability_status() -> str:
             return "disabled"
         if not cfg.gcp_project_present or not cfg.gcp_region_present:
             return "unavailable"
+        return "available_poc"
+    if mode == "sandbox_provider":
+        cfg = load_sandbox_runtime_config()
+        if not cfg.enabled:
+            return "disabled"
+        if not sandbox_provider_is_supported(cfg.provider):
+            return "unavailable"
+        if not cfg.dry_run and not cfg.api_key_present:
+            return "needs_connection"
         return "available_poc"
     return "disabled"
 
@@ -220,6 +267,19 @@ def get_runtime_job_lifecycle_status(
         if runtime_session is not None and runtime_session.preview_endpoint_id and phase == "running":
             phase = "preview_pending"
             message = "Cloud runtime preview endpoint exists but is not ready yet."
+    elif job.provider == "sandbox_provider":
+        if job.status in {"failed", "unsupported"}:
+            phase = "failed"
+            message = "Cloud sandbox runtime failed."
+        elif runtime_session is not None and runtime_session.preview_endpoint_id:
+            phase = "ready"
+            message = "Cloud sandbox preview proxy is ready."
+        elif job.status == "succeeded":
+            phase = "preview_pending"
+            message = "Cloud sandbox runtime completed dry-run planning. Preview was not started."
+        else:
+            phase = "running"
+            message = "Cloud sandbox runtime is provisioning."
     if runtime_session is not None and runtime_session.status in {"expired", "failed", "unsupported"}:
         phase = "failed" if runtime_session.status != "expired" else "expired"
     return CloudRuntimeLifecycleStatus(
@@ -419,6 +479,247 @@ def execute_cloud_runtime_job(job: CloudRuntimeJob) -> CloudRuntimeExecutionResu
         job.completed_at = _utc_now_iso()
         job.updated_at = job.completed_at
         return CloudRuntimeExecutionResult(job=job, runtime_session=runtime, usage_event=None)
+
+    if mode == "sandbox_provider":
+        if experiment_status == "experiment_not_enabled":
+            job.status = "unsupported"
+            job.phase = "failed"
+            job.error_code = "CLOUD_RUNTIME_EXPERIMENT_NOT_ENABLED"
+            job.error_message = "Cloud runtime experiments are not enabled."
+            job.logs_summary = "No execution performed. Enable experiment mode before sandbox runtime requests."
+            job.completed_at = _utc_now_iso()
+            job.updated_at = job.completed_at
+            return CloudRuntimeExecutionResult(job=job, runtime_session=None, usage_event=None)
+        cfg = load_sandbox_runtime_config()
+        if not cfg.enabled or not sandbox_provider_is_supported(cfg.provider):
+            job.status = "unsupported"
+            job.phase = "failed"
+            job.error_code = "SANDBOX_PROVIDER_CONFIG_MISSING"
+            job.error_message = "Cloud sandbox provider is not configured."
+            job.logs_summary = "No execution performed. Configure sandbox provider settings."
+            job.completed_at = _utc_now_iso()
+            job.updated_at = job.completed_at
+            return CloudRuntimeExecutionResult(job=job, runtime_session=None, usage_event=None)
+        if not cfg.dry_run and not cfg.api_key_present:
+            job.status = "unsupported"
+            job.phase = "failed"
+            job.error_code = "SANDBOX_PROVIDER_API_KEY_MISSING"
+            job.error_message = "Cloud sandbox provider API key is missing."
+            job.logs_summary = "No execution performed. Add API key configuration before non-dry-run requests."
+            job.completed_at = _utc_now_iso()
+            job.updated_at = job.completed_at
+            return CloudRuntimeExecutionResult(job=job, runtime_session=None, usage_event=None)
+        job.phase = "validating_source"
+        job.status = "running"
+        job.updated_at = _utc_now_iso()
+        source_handoff = _resolve_source_handoff(job)
+        job.metadata = {
+            **(job.metadata or {}),
+            "source_handoff": redact_provider_metadata(source_handoff),
+            "source_handoff_status": str(source_handoff.get("handoff_status") or "planned"),
+            "provider_mode": "sandbox_provider",
+            "sandbox_provider": cfg.provider,
+            "dry_run": cfg.dry_run,
+        }
+        if source_handoff.get("handoff_status") == "failed":
+            job.status = "unsupported"
+            job.phase = "failed"
+            job.error_code = str(source_handoff.get("error_code") or "SANDBOX_SOURCE_HANDOFF_FAILED")
+            job.error_message = str(source_handoff.get("error_message") or "Sandbox source handoff failed safely.")
+            job.logs_summary = "Sandbox runtime source handoff failed before provider simulation."
+            job.completed_at = _utc_now_iso()
+            job.updated_at = job.completed_at
+            return CloudRuntimeExecutionResult(job=job, runtime_session=None, usage_event=None)
+        runtime = runtime_store.request_cloud_runtime_session(
+            workspace_id=job.workspace_id,
+            project_id=job.project_id,
+            source_snapshot_id=job.source_snapshot_id,
+            requested_by=job.requested_by,
+            metadata=redact_provider_metadata(
+                {
+                    "provider_mode": "sandbox_provider",
+                    "sandbox_provider": cfg.provider,
+                    "cloud_runtime_job_id": job.id,
+                    "dry_run": cfg.dry_run,
+                }
+            ),
+        )
+        state = SandboxRuntimeState(
+            provider=cfg.provider,
+            sandbox_id=None,
+            workspace_id=job.workspace_id,
+            project_id=job.project_id,
+            snapshot_id=job.source_snapshot_id,
+            runtime_job_id=job.id,
+            status="queued",
+            preview_upstream_url=None,
+            preview_proxy_url=None,
+            logs_summary=None,
+            error_code=None,
+            error_message=None,
+            started_at=_utc_now_iso(),
+            updated_at=_utc_now_iso(),
+            expires_at=None,
+        )
+        if cfg.dry_run:
+            runtime.status = "provisioning"
+            runtime.health = "unknown"
+            runtime.message = (
+                "Cloud sandbox dry-run completed. No live sandbox preview was started."
+            )
+            runtime.updated_at = _utc_now_iso()
+            runtime = runtime_store.upsert_runtime_session(runtime)
+            job.runtime_session_id = runtime.id
+            job.status = "succeeded"
+            job.phase = "completed"
+            job.error_code = None
+            job.error_message = None
+            job.logs_summary = (
+                "sandbox_provider dry-run plan created. No live sandbox execution was performed."
+            )
+            job.completed_at = _utc_now_iso()
+            job.updated_at = job.completed_at
+            usage_event = {
+                "category": "worker_job",
+                "quantity": 1,
+                "unit": "count",
+                "attribution": {
+                    "provider": "builder_cloud_runtime",
+                    "worker_provider": "sandbox_provider",
+                    "source_snapshot_id": job.source_snapshot_id,
+                    "runtime_session_id": runtime.id,
+                },
+                "metadata": {
+                    "event_name": "sandbox_runtime_plan_created",
+                    "job_id": job.id,
+                    "sandbox_provider": cfg.provider,
+                    "dry_run": True,
+                },
+            }
+            return CloudRuntimeExecutionResult(job=job, runtime_session=runtime, usage_event=usage_event)
+        provider = FakeSandboxRuntimeProvider(provider=cfg.provider, fake_mode=cfg.fake_mode)
+        try:
+            state = provider.create_sandbox(state=state, config=cfg)
+            state = provider.upload_source(
+                state=state,
+                source_ref=str(source_handoff.get("source_ref") or ""),
+                artifact_uri=str(source_handoff.get("artifact_uri") or ""),
+            )
+            state = provider.run_command(state=state, command=["npm", "install"], stage="install")
+            state = provider.run_command(
+                state=state,
+                command=["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", str(cfg.default_port)],
+                stage="start",
+            )
+            state = provider.start_preview_server(state=state, port=cfg.default_port)
+        except (RuntimeError, ValueError) as exc:  # pragma: no cover - defensive adapter guard
+            err_code, err_message = provider.normalize_error(error=exc)
+            state = SandboxRuntimeState(
+                **{
+                    **state.__dict__,
+                    "status": "failed",
+                    "updated_at": _utc_now_iso(),
+                    "error_code": err_code,
+                    "error_message": err_message,
+                }
+            )
+        if state.status != "ready":
+            runtime.status = "failed"
+            runtime.health = "unhealthy"
+            runtime.message = state.error_message or "Cloud sandbox provider request failed safely."
+            runtime.updated_at = _utc_now_iso()
+            runtime.metadata = {
+                **(runtime.metadata or {}),
+                "sandbox_provider": cfg.provider,
+                "sandbox_id": state.sandbox_id,
+            }
+            runtime = runtime_store.upsert_runtime_session(runtime)
+            job.runtime_session_id = runtime.id
+            job.status = "failed"
+            job.phase = "failed"
+            job.error_code = state.error_code or "SANDBOX_PROVIDER_ERROR"
+            job.error_message = state.error_message or "Cloud sandbox provider request failed safely."
+            job.logs_summary = provider.get_logs_summary(state=state) or "Sandbox provider simulation failed."
+            job.completed_at = _utc_now_iso()
+            job.updated_at = job.completed_at
+            return CloudRuntimeExecutionResult(job=job, runtime_session=runtime, usage_event=None)
+        preview_endpoint = runtime_store.get_active_preview_endpoint(
+            workspace_id=job.workspace_id,
+            project_id=job.project_id,
+            runtime_session_id=runtime.id,
+        )
+        if preview_endpoint is None:
+            preview_endpoint = PreviewEndpoint(
+                workspace_id=job.workspace_id,
+                project_id=job.project_id,
+                runtime_session_id=runtime.id,
+            )
+        upstream_url = provider.get_preview_url(state=state, port=cfg.default_port)
+        safe_upstream = safe_proxy_upstream_from_provider(upstream_url)
+        if safe_upstream is None:
+            runtime.status = "failed"
+            runtime.health = "unhealthy"
+            runtime.message = "Sandbox provider returned an unsafe preview upstream URL."
+            runtime.updated_at = _utc_now_iso()
+            runtime = runtime_store.upsert_runtime_session(runtime)
+            job.runtime_session_id = runtime.id
+            job.status = "failed"
+            job.phase = "failed"
+            job.error_code = "SANDBOX_PREVIEW_URL_UNSAFE"
+            job.error_message = "Sandbox provider returned an unsafe preview upstream URL."
+            job.logs_summary = provider.get_logs_summary(state=state)
+            job.completed_at = _utc_now_iso()
+            job.updated_at = job.completed_at
+            return CloudRuntimeExecutionResult(job=job, runtime_session=runtime, usage_event=None)
+        preview_endpoint.access_mode = "proxy"
+        preview_endpoint.status = "ready"
+        preview_endpoint.url = safe_upstream
+        preview_endpoint.last_checked_at = _utc_now_iso()
+        preview_endpoint.metadata = {
+            **(preview_endpoint.metadata or {}),
+            "provider": "sandbox_provider",
+            "sandbox_provider": cfg.provider,
+            "sandbox_id": state.sandbox_id,
+            "trusted_proxy_host": sandbox_preview_host(safe_upstream),
+        }
+        preview_endpoint = runtime_store.upsert_preview_endpoint(preview_endpoint)
+        runtime.preview_endpoint_id = preview_endpoint.id
+        runtime.status = "running"
+        runtime.health = "healthy"
+        runtime.message = "Cloud sandbox preview is ready via authenticated cloud proxy."
+        runtime.updated_at = _utc_now_iso()
+        runtime.metadata = {
+            **(runtime.metadata or {}),
+            "sandbox_provider": cfg.provider,
+            "sandbox_id": state.sandbox_id,
+        }
+        runtime = runtime_store.upsert_runtime_session(runtime)
+        job.runtime_session_id = runtime.id
+        job.status = "succeeded"
+        job.phase = "completed"
+        job.error_code = None
+        job.error_message = None
+        job.logs_summary = provider.get_logs_summary(state=state)
+        job.completed_at = _utc_now_iso()
+        job.updated_at = job.completed_at
+        usage_event = {
+            "category": "worker_job",
+            "quantity": 1,
+            "unit": "count",
+            "attribution": {
+                "provider": "builder_cloud_runtime",
+                "worker_provider": "sandbox_provider",
+                "source_snapshot_id": job.source_snapshot_id,
+                "runtime_session_id": runtime.id,
+            },
+            "metadata": {
+                "event_name": "sandbox_runtime_preview_ready",
+                "job_id": job.id,
+                "sandbox_provider": cfg.provider,
+                "dry_run": False,
+            },
+        }
+        return CloudRuntimeExecutionResult(job=job, runtime_session=runtime, usage_event=usage_event)
 
     # local_mock: simulate lifecycle without executing user code.
     job.phase = "running_poc"
