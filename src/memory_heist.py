@@ -136,6 +136,9 @@ MAX_SUMMARY_CHARS = 4_000
 DEFAULT_SESSION_COMPACTION_MAX_TOKENS=***
 DEFAULT_SESSION_COMPACTION_PRESERVE = 4
 DEFAULT_SESSION_TOOL_PRUNE_CHARS = 200
+# Session browser defaults: browser interaction controls including step limits,
+# timeouts, and DOM/output constraints. These ensure browser automation stays
+# within acceptable token budgets and execution time bounds.
 DEFAULT_TOOL_PRUNE_PLACEHOLDER = "[Old tool output cleared to save context space]"
 DEFAULT_BROWSER_MAX_STEPS = 25
 DEFAULT_BROWSER_STEP_TIMEOUT_MS = 10_000
