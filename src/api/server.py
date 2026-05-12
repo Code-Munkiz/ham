@@ -56,6 +56,7 @@ from src.api.workspace_terminal import router as workspace_terminal_router
 from src.api.workspace_tools import router as workspace_tools_router
 from src.api.workspace_voice_settings import router as workspace_voice_settings_router
 from src.api.workspaces import router as workspaces_router
+from src.api.builder_sources import router as builder_sources_router
 from src.ham.agent_profiles import agents_config_from_merged
 from src.ham.clerk_auth import HamActor, clerk_authorization_is_clerk_session
 from src.memory_heist import context_engine_dashboard_payload, discover_config
@@ -154,6 +155,7 @@ app.include_router(workspace_tools_router)
 app.include_router(workspace_profiles_router)
 app.include_router(workspace_operations_router)
 app.include_router(workspace_voice_settings_router)
+app.include_router(builder_sources_router)
 app.include_router(tts_router)
 
 # Phase 1b: multi-user workspace primitive routers, mounted behind a
