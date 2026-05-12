@@ -10,6 +10,12 @@ from src.api.builder_sources import router as builder_sources_router
 from src.api.clerk_gate import get_ham_clerk_actor
 from src.api.dependencies.workspace import get_workspace_store
 from src.ham.clerk_auth import HamActor
+from src.ham.builder_sandbox_provider import (
+    SandboxRuntimeConfig,
+    SandboxRuntimeState,
+    SandboxSourceFile,
+    set_sandbox_runtime_provider_factory_for_tests,
+)
 from src.ham.workspace_models import WorkspaceMember, WorkspaceRecord
 from src.persistence.builder_runtime_job_store import BuilderRuntimeJobStore, set_builder_runtime_job_store_for_tests
 from src.persistence.builder_runtime_store import BuilderRuntimeStore, set_builder_runtime_store_for_tests
@@ -103,6 +109,13 @@ def _seed_context(tmp_path: Path) -> tuple[TestClient, str, str, str]:
             project_source_id=src.id,
             artifact_uri="builder-artifact://bzip_test",
             digest_sha256="a" * 64,
+            manifest={
+                "kind": "inline_text_bundle",
+                "inline_files": {
+                    "package.json": '{"name":"sandbox-test","private":true}',
+                    "src/main.tsx": "console.log('ok');",
+                },
+            },
         )
     )
     src.active_snapshot_id = snap.id
@@ -121,6 +134,82 @@ def _cleanup() -> None:
     set_builder_runtime_store_for_tests(None)
     set_builder_runtime_job_store_for_tests(None)
     set_builder_usage_event_store_for_tests(None)
+    set_sandbox_runtime_provider_factory_for_tests(None)
+
+
+class _InjectedLiveProvider:
+    def __init__(self, *, mode: str = "success") -> None:
+        self.mode = mode
+
+    def create_sandbox(self, *, state: SandboxRuntimeState, config: SandboxRuntimeConfig) -> SandboxRuntimeState:
+        _ = config
+        return state.__class__(
+            **{**state.__dict__, "sandbox_id": "e2b_live_1234", "status": "creating", "updated_at": "2026-01-01T00:00:00Z"}
+        )
+
+    def upload_source(
+        self,
+        *,
+        state: SandboxRuntimeState,
+        source_ref: str,
+        artifact_uri: str,
+        files: list[SandboxSourceFile],
+    ) -> SandboxRuntimeState:
+        _ = source_ref, artifact_uri
+        if not files:
+            return state.__class__(
+                **{
+                    **state.__dict__,
+                    "status": "failed",
+                    "error_code": "SANDBOX_SOURCE_FILES_MISSING",
+                    "error_message": "no files",
+                    "updated_at": "2026-01-01T00:00:00Z",
+                }
+            )
+        return state.__class__(**{**state.__dict__, "status": "uploading", "updated_at": "2026-01-01T00:00:00Z"})
+
+    def run_command(self, *, state: SandboxRuntimeState, command: list[str], stage: str) -> SandboxRuntimeState:
+        _ = command, stage
+        return state.__class__(**{**state.__dict__, "status": "starting", "updated_at": "2026-01-01T00:00:00Z"})
+
+    def start_preview_server(self, *, state: SandboxRuntimeState, port: int) -> SandboxRuntimeState:
+        _ = port
+        if self.mode == "timeout":
+            return state.__class__(
+                **{
+                    **state.__dict__,
+                    "status": "failed",
+                    "error_code": "SANDBOX_PREVIEW_HEALTHCHECK_FAILED",
+                    "error_message": "Sandbox preview did not become reachable before timeout.",
+                    "updated_at": "2026-01-01T00:00:00Z",
+                }
+            )
+        return state.__class__(
+            **{
+                **state.__dict__,
+                "status": "ready",
+                "preview_upstream_url": "https://3000-e2bpreview.e2b.app/",
+                "logs_summary": "preview ready",
+                "updated_at": "2026-01-01T00:00:00Z",
+            }
+        )
+
+    def get_preview_url(self, *, state: SandboxRuntimeState, port: int) -> str | None:
+        _ = port
+        return state.preview_upstream_url
+
+    def get_status(self, *, state: SandboxRuntimeState) -> str:
+        return state.status
+
+    def get_logs_summary(self, *, state: SandboxRuntimeState) -> str | None:
+        return state.logs_summary
+
+    def stop_sandbox(self, *, state: SandboxRuntimeState) -> SandboxRuntimeState:
+        return state
+
+    def normalize_error(self, *, error: Exception) -> tuple[str, str]:
+        _ = error
+        return ("SANDBOX_PROVIDER_ERROR", "Sandbox provider operation failed safely.")
 
 
 def test_sandbox_provider_disabled_returns_config_missing(tmp_path: Path, monkeypatch) -> None:
@@ -153,6 +242,20 @@ def test_sandbox_provider_dry_run_creates_runtime_without_ready_preview(tmp_path
     assert body["runtime_session"]["preview_endpoint_id"] is None
     assert body["preview_status"]["status"] != "ready"
     assert body["preview_status"]["preview_url"] is None
+    _cleanup()
+
+
+def test_sandbox_provider_missing_api_key_reports_config_missing(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "sandbox_provider")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_EXPERIMENTS_ENABLED", "true")
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_ENABLED", "true")
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_PROVIDER", "e2b")
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_DRY_RUN", "false")
+    monkeypatch.delenv("HAM_BUILDER_SANDBOX_API_KEY", raising=False)
+    client, ws_id, project_id, _ = _seed_context(tmp_path)
+    res = client.get(f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime")
+    assert res.status_code == 200, res.text
+    assert res.json()["status"] == "config_missing"
     _cleanup()
 
 
@@ -207,4 +310,56 @@ def test_sandbox_provider_fake_failure_reports_error_without_preview(tmp_path: P
     activity = client.get(f"/api/workspaces/{ws_id}/projects/{project_id}/builder/activity")
     assert activity.status_code == 200
     assert any(row["title"] == "Cloud runtime failed" for row in activity.json()["items"])
+    _cleanup()
+
+
+def test_sandbox_provider_live_adapter_success_returns_proxy_only(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "sandbox_provider")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_EXPERIMENTS_ENABLED", "true")
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_ENABLED", "true")
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_PROVIDER", "e2b")
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_DRY_RUN", "false")
+    monkeypatch.delenv("HAM_BUILDER_SANDBOX_FAKE_MODE", raising=False)
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_API_KEY", "test-secret-api-key")
+    set_sandbox_runtime_provider_factory_for_tests(lambda _cfg: _InjectedLiveProvider(mode="success"))
+    client, ws_id, project_id, snapshot_id = _seed_context(tmp_path)
+    res = client.post(
+        f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime/jobs",
+        json={"source_snapshot_id": snapshot_id},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["job"]["status"] == "succeeded"
+    assert body["runtime_session"]["status"] == "running"
+    assert body["preview_status"]["status"] == "ready"
+    assert body["preview_status"]["preview_url"] == (
+        f"/api/workspaces/{ws_id}/projects/{project_id}/builder/preview-proxy/"
+    )
+    raw = res.text.lower()
+    assert "test-secret-api-key" not in raw
+    assert "3000-e2bpreview.e2b.app" not in raw
+    assert "token=" not in raw
+    _cleanup()
+
+
+def test_sandbox_provider_live_adapter_timeout_normalizes_without_ready_preview(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "sandbox_provider")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_EXPERIMENTS_ENABLED", "true")
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_ENABLED", "true")
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_PROVIDER", "e2b")
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_DRY_RUN", "false")
+    monkeypatch.delenv("HAM_BUILDER_SANDBOX_FAKE_MODE", raising=False)
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_API_KEY", "test-secret-api-key")
+    set_sandbox_runtime_provider_factory_for_tests(lambda _cfg: _InjectedLiveProvider(mode="timeout"))
+    client, ws_id, project_id, snapshot_id = _seed_context(tmp_path)
+    res = client.post(
+        f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime/jobs",
+        json={"source_snapshot_id": snapshot_id},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["job"]["status"] == "failed"
+    assert body["job"]["error_code"] == "SANDBOX_PREVIEW_HEALTHCHECK_FAILED"
+    assert body["preview_status"]["status"] != "ready"
+    assert body["preview_status"]["preview_url"] is None
     _cleanup()
