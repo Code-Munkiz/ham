@@ -8,6 +8,7 @@ from typing import Annotated, Any
 from urllib.parse import urlsplit, urlunsplit
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from pydantic import BaseModel
 
 from src.api.clerk_gate import get_ham_clerk_actor
 from src.api.dependencies.workspace import require_perm
@@ -20,7 +21,7 @@ from src.persistence.builder_source_store import (
     SourceSnapshot,
     get_builder_source_store,
 )
-from src.persistence.builder_runtime_store import get_builder_runtime_store
+from src.persistence.builder_runtime_store import PreviewEndpoint, get_builder_runtime_store
 from src.persistence.project_store import get_project_store
 from src.registry.projects import ProjectRecord
 
@@ -112,6 +113,8 @@ def _sanitize_local_preview_url(raw_url: str | None) -> str | None:
         parts = urlsplit(text)
     except ValueError:
         return None
+    if parts.username or parts.password:
+        return None
     if parts.scheme != "http":
         return None
     host = (parts.hostname or "").strip().lower()
@@ -119,7 +122,8 @@ def _sanitize_local_preview_url(raw_url: str | None) -> str | None:
         return None
     if parts.port is None:
         return None
-    return urlunsplit((parts.scheme, f"{host}:{parts.port}", parts.path or "/", "", ""))
+    netloc_host = f"[{host}]" if ":" in host else host
+    return urlunsplit((parts.scheme, f"{netloc_host}:{parts.port}", parts.path or "/", "", ""))
 
 
 def _derive_preview_status(
@@ -134,7 +138,9 @@ def _derive_preview_status(
     es = str(endpoint_status or "").strip().lower()
     if not rs:
         return ("not_connected", "Local preview runtime is not connected.")
-    if rs in {"failed", "stopped", "expired"}:
+    if rs in {"stopped", "expired"}:
+        return ("not_connected", "Local preview runtime is not connected.")
+    if rs == "failed":
         return ("error", "Local preview runtime is not available.")
     if rh == "unhealthy":
         return ("error", "Local preview runtime is unhealthy.")
@@ -153,6 +159,53 @@ def _derive_preview_status(
     if rs == "running" and es == "ready" and not safe_preview_url:
         return ("error", "Preview URL is unavailable due to safety policy.")
     return ("waiting", "Local preview status is waiting for endpoint readiness.")
+
+
+def _build_preview_status_payload(*, workspace_id: str, project_id: str) -> dict[str, Any]:
+    source_rows = get_builder_source_store().list_project_sources(
+        workspace_id=workspace_id,
+        project_id=project_id,
+    )
+    active_snapshot_id = next((row.active_snapshot_id for row in source_rows if row.active_snapshot_id), None)
+    runtime_store = get_builder_runtime_store()
+    runtime = runtime_store.get_active_runtime_session(
+        workspace_id=workspace_id,
+        project_id=project_id,
+    )
+    endpoint = None
+    if runtime is not None:
+        endpoint = runtime_store.get_active_preview_endpoint(
+            workspace_id=workspace_id,
+            project_id=project_id,
+            runtime_session_id=runtime.id,
+        )
+    safe_preview_url = _sanitize_local_preview_url(endpoint.url if endpoint is not None else None)
+    status, message = _derive_preview_status(
+        runtime_status=runtime.status if runtime is not None else None,
+        runtime_health=runtime.health if runtime is not None else None,
+        endpoint_status=endpoint.status if endpoint is not None else None,
+        safe_preview_url=safe_preview_url,
+    )
+    return {
+        "project_id": project_id,
+        "workspace_id": workspace_id,
+        "mode": "local",
+        "status": status,
+        "health": runtime.health if runtime is not None else "unknown",
+        "preview_url": safe_preview_url if status == "ready" else None,
+        "message": message,
+        "updated_at": runtime.updated_at if runtime is not None else _utc_now_iso(),
+        "source_snapshot_id": runtime.snapshot_id if runtime and runtime.snapshot_id else active_snapshot_id,
+        "runtime_session_id": runtime.id if runtime is not None else None,
+        "preview_endpoint_id": endpoint.id if endpoint is not None else None,
+        "logs_hint": None,
+    }
+
+
+class LocalPreviewRegisterRequest(BaseModel):
+    preview_url: str
+    source_snapshot_id: str | None = None
+    display_name: str | None = None
 
 
 @router.get("/api/workspaces/{workspace_id}/projects/{project_id}/builder/sources")
@@ -212,44 +265,93 @@ async def get_builder_preview_status(
     ctx: Annotated[WorkspaceContext, Depends(require_perm(PERM_WORKSPACE_READ))],
 ) -> dict[str, Any]:
     _project_in_workspace_or_404(project_id=project_id, workspace_id=ctx.workspace_id)
-    source_rows = get_builder_source_store().list_project_sources(
+    return _build_preview_status_payload(workspace_id=ctx.workspace_id, project_id=project_id)
+
+
+@router.post("/api/workspaces/{workspace_id}/projects/{project_id}/builder/local-preview")
+async def register_local_preview(
+    project_id: str,
+    body: LocalPreviewRegisterRequest,
+    ctx: Annotated[WorkspaceContext, Depends(require_perm(PERM_WORKSPACE_WRITE))],
+) -> dict[str, Any]:
+    _project_in_workspace_or_404(project_id=project_id, workspace_id=ctx.workspace_id)
+    safe_preview_url = _sanitize_local_preview_url(body.preview_url)
+    if safe_preview_url is None:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": {
+                    "code": "LOCAL_PREVIEW_URL_INVALID",
+                    "message": "Preview URL must be a safe local loopback http URL without credentials.",
+                }
+            },
+        )
+    source_snapshot_id = body.source_snapshot_id
+    if source_snapshot_id is not None:
+        snapshot_rows = get_builder_source_store().list_source_snapshots(
+            workspace_id=ctx.workspace_id,
+            project_id=project_id,
+        )
+        known_snapshot_ids = {row.id for row in snapshot_rows}
+        if source_snapshot_id not in known_snapshot_ids:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "error": {
+                        "code": "SOURCE_SNAPSHOT_NOT_FOUND",
+                        "message": f"Unknown source_snapshot_id {source_snapshot_id!r} for this project.",
+                    }
+                },
+            )
+    runtime_store = get_builder_runtime_store()
+    runtime = runtime_store.upsert_local_runtime_session(
         workspace_id=ctx.workspace_id,
         project_id=project_id,
+        source_snapshot_id=source_snapshot_id,
+        message=(body.display_name or "").strip() or "Local preview connected.",
     )
-    active_snapshot_id = next((row.active_snapshot_id for row in source_rows if row.active_snapshot_id), None)
-    runtime_rows = get_builder_runtime_store().list_runtime_sessions(
+    endpoint = runtime_store.get_active_preview_endpoint(
         workspace_id=ctx.workspace_id,
         project_id=project_id,
+        runtime_session_id=runtime.id,
     )
-    endpoint_rows = get_builder_runtime_store().list_preview_endpoints(
-        workspace_id=ctx.workspace_id,
-        project_id=project_id,
-    )
-    runtime = runtime_rows[0] if runtime_rows else None
-    endpoint = None
-    if runtime is not None:
-        endpoint = next((row for row in endpoint_rows if row.runtime_session_id == runtime.id), None)
-    safe_preview_url = _sanitize_local_preview_url(endpoint.url if endpoint is not None else None)
-    status, message = _derive_preview_status(
-        runtime_status=runtime.status if runtime is not None else None,
-        runtime_health=runtime.health if runtime is not None else None,
-        endpoint_status=endpoint.status if endpoint is not None else None,
-        safe_preview_url=safe_preview_url,
-    )
+    if endpoint is None:
+        endpoint = PreviewEndpoint(
+            workspace_id=ctx.workspace_id,
+            project_id=project_id,
+            runtime_session_id=runtime.id,
+        )
+    endpoint.url = safe_preview_url
+    endpoint.access_mode = "local_url"
+    endpoint.status = "ready"
+    endpoint.last_checked_at = _utc_now_iso()
+    endpoint = runtime_store.upsert_preview_endpoint(endpoint)
+    runtime.preview_endpoint_id = endpoint.id
+    runtime.updated_at = _utc_now_iso()
+    runtime = runtime_store.upsert_runtime_session(runtime)
     return {
-        "project_id": project_id,
-        "workspace_id": ctx.workspace_id,
-        "mode": "local",
-        "status": status,
-        "health": runtime.health if runtime is not None else "unknown",
-        "preview_url": safe_preview_url if status == "ready" else None,
-        "message": message,
-        "updated_at": runtime.updated_at if runtime is not None else _utc_now_iso(),
-        "source_snapshot_id": runtime.snapshot_id if runtime and runtime.snapshot_id else active_snapshot_id,
-        "runtime_session_id": runtime.id if runtime is not None else None,
-        "preview_endpoint_id": endpoint.id if endpoint is not None else None,
-        "logs_hint": None,
+        "runtime_session": runtime.model_dump(mode="json"),
+        "preview_endpoint": endpoint.model_dump(mode="json"),
+        "preview_status": _build_preview_status_payload(workspace_id=ctx.workspace_id, project_id=project_id),
     }
+
+
+@router.delete("/api/workspaces/{workspace_id}/projects/{project_id}/builder/local-preview")
+async def clear_local_preview(
+    project_id: str,
+    ctx: Annotated[WorkspaceContext, Depends(require_perm(PERM_WORKSPACE_WRITE))],
+) -> dict[str, Any]:
+    _project_in_workspace_or_404(project_id=project_id, workspace_id=ctx.workspace_id)
+    get_builder_runtime_store().clear_local_preview(
+        workspace_id=ctx.workspace_id,
+        project_id=project_id,
+    )
+    status_payload = _build_preview_status_payload(workspace_id=ctx.workspace_id, project_id=project_id)
+    if status_payload["status"] == "error":
+        status_payload["status"] = "not_connected"
+        status_payload["preview_url"] = None
+        status_payload["message"] = "Local preview runtime is not connected."
+    return {"preview_status": status_payload}
 
 
 @router.post("/api/workspaces/{workspace_id}/projects/{project_id}/builder/import-jobs/zip")

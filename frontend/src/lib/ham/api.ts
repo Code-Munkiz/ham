@@ -302,6 +302,12 @@ export type BuilderPreviewStatus = {
   logs_hint: string | null;
 };
 
+export type BuilderLocalPreviewRegisterRequest = {
+  preview_url: string;
+  source_snapshot_id?: string | null;
+  display_name?: string | null;
+};
+
 export async function listBuilderProjectSources(
   workspaceId: string,
   projectId: string,
@@ -404,6 +410,47 @@ export async function getBuilderPreviewStatus(
     throw new Error((await hamApiErrorDetailMessage(res)) || `HTTP ${res.status}`);
   }
   return res.json() as Promise<BuilderPreviewStatus>;
+}
+
+export async function postBuilderLocalPreview(
+  workspaceId: string,
+  projectId: string,
+  body: BuilderLocalPreviewRegisterRequest,
+): Promise<{
+  runtime_session: Record<string, unknown>;
+  preview_endpoint: Record<string, unknown>;
+  preview_status: BuilderPreviewStatus;
+}> {
+  const res = await hamApiFetch(
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/projects/${encodeURIComponent(projectId)}/builder/local-preview`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+  if (!res.ok) {
+    throw new Error((await hamApiErrorDetailMessage(res)) || `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<{
+    runtime_session: Record<string, unknown>;
+    preview_endpoint: Record<string, unknown>;
+    preview_status: BuilderPreviewStatus;
+  }>;
+}
+
+export async function deleteBuilderLocalPreview(
+  workspaceId: string,
+  projectId: string,
+): Promise<{ preview_status: BuilderPreviewStatus }> {
+  const res = await hamApiFetch(
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/projects/${encodeURIComponent(projectId)}/builder/local-preview`,
+    { method: "DELETE" },
+  );
+  if (!res.ok) {
+    throw new Error((await hamApiErrorDetailMessage(res)) || `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<{ preview_status: BuilderPreviewStatus }>;
 }
 
 /** Text-to-image (Phase 2G.1+) — mediated by HAM backend only. */

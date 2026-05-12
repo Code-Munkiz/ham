@@ -22,10 +22,12 @@ import {
   type BuilderPreviewStatus,
   type BuilderProjectSourceRecord,
   type BuilderSourceSnapshotRecord,
+  deleteBuilderLocalPreview,
   getBuilderPreviewStatus,
   listBuilderImportJobs,
   listBuilderProjectSources,
   listBuilderSourceSnapshots,
+  postBuilderLocalPreview,
 } from "@/lib/ham/api";
 import { cn } from "@/lib/utils";
 import { ProjectSourceIntakeDialog } from "./ProjectSourceIntakeDialog";
@@ -245,6 +247,9 @@ function WorkbenchPreviewPanel({
   const [preview, setPreview] = React.useState<BuilderPreviewStatus | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [previewUrlInput, setPreviewUrlInput] = React.useState("http://localhost:3000");
+  const [submitBusy, setSubmitBusy] = React.useState(false);
+  const [disconnectBusy, setDisconnectBusy] = React.useState(false);
 
   const refresh = React.useCallback(async () => {
     const ws = workspaceId?.trim() || "";
@@ -273,6 +278,15 @@ function WorkbenchPreviewPanel({
   }, [refresh]);
 
   const previewUrl = preview?.status === "ready" ? preview.preview_url : null;
+  const ws = workspaceId?.trim() || "";
+  const pid = projectId?.trim() || "";
+  const showConnectForm = Boolean(
+    ws &&
+    pid &&
+    (preview?.status === "not_connected" ||
+      preview?.status === "waiting" ||
+      preview?.status === "error"),
+  );
   return (
     <MutedPanel>
       <div className="flex flex-wrap items-center gap-2">
@@ -302,6 +316,31 @@ function WorkbenchPreviewPanel({
         >
           Open in new tab
         </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          className="text-[11px]"
+          data-testid="hww-preview-disconnect"
+          disabled={!ws || !pid || !preview || preview.status === "not_connected" || disconnectBusy}
+          onClick={() => {
+            if (!ws || !pid) return;
+            setDisconnectBusy(true);
+            setError(null);
+            void deleteBuilderLocalPreview(ws, pid)
+              .then((res) => {
+                setPreview(res.preview_status);
+              })
+              .catch((e) => {
+                setError(e instanceof Error ? e.message : String(e));
+              })
+              .finally(() => {
+                setDisconnectBusy(false);
+              });
+          }}
+        >
+          {disconnectBusy ? "Disconnecting…" : "Disconnect preview"}
+        </Button>
       </div>
       {!workspaceId?.trim() || !projectId?.trim() ? (
         <p className="text-white/55" data-testid="hww-preview-state-no-project">
@@ -321,14 +360,66 @@ function WorkbenchPreviewPanel({
           ) : null}
         </p>
       ) : null}
+      {showConnectForm ? (
+        <form
+          className="space-y-2 rounded-lg border border-white/[0.08] bg-black/25 p-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!ws || !pid) return;
+            setSubmitBusy(true);
+            setError(null);
+            void postBuilderLocalPreview(ws, pid, {
+              preview_url: previewUrlInput,
+              source_snapshot_id: preview?.source_snapshot_id || null,
+            })
+              .then((res) => {
+                setPreview(res.preview_status);
+              })
+              .catch((err) => {
+                setError(err instanceof Error ? err.message : String(err));
+              })
+              .finally(() => {
+                setSubmitBusy(false);
+              });
+          }}
+          data-testid="hww-preview-connect-form"
+        >
+          <p className="text-[11px] text-white/60">
+            Start your app locally, then paste the local preview URL.
+          </p>
+          <input
+            type="url"
+            value={previewUrlInput}
+            onChange={(e) => setPreviewUrlInput(e.target.value)}
+            placeholder="http://localhost:3000"
+            className="w-full rounded-md border border-white/[0.12] bg-black/40 px-2 py-1.5 text-[11px] text-white/90"
+            data-testid="hww-preview-url-input"
+          />
+          <Button
+            type="submit"
+            size="sm"
+            variant="secondary"
+            className="text-[11px]"
+            data-testid="hww-preview-connect-submit"
+            disabled={submitBusy}
+          >
+            {submitBusy ? "Connecting…" : "Connect local preview"}
+          </Button>
+        </form>
+      ) : null}
       {preview?.status === "ready" && previewUrl ? (
-        <iframe
-          title="Local preview"
-          src={previewUrl}
-          className="min-h-[320px] w-full rounded-lg border border-white/[0.12] bg-black/20"
-          data-testid="hww-preview-iframe"
-          sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
-        />
+        <>
+          <div className="rounded-md border border-white/[0.08] bg-black/25 px-2 py-1 text-[11px] text-white/70">
+            Preview URL: <span data-testid="hww-preview-url-value">{previewUrl}</span>
+          </div>
+          <iframe
+            title="Local preview"
+            src={previewUrl}
+            className="min-h-[320px] w-full rounded-lg border border-white/[0.12] bg-black/20"
+            data-testid="hww-preview-iframe"
+            sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
+          />
+        </>
       ) : (
         <p className="text-white/45" data-testid="hww-preview-no-iframe">
           Live preview is not connected yet.
