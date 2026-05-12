@@ -830,6 +830,92 @@ export async function launchDroidAudit(
   return res.json() as Promise<DroidAuditLaunchPayload>;
 }
 
+/** `POST /api/droid/build/preview` — workspace operator only; no workflow id in payload. */
+export interface DroidBuildPreviewPayload {
+  kind: "droid_build_preview";
+  project_id: string;
+  project_name: string;
+  user_prompt: string;
+  summary: string;
+  proposal_digest: string;
+  base_revision: string;
+  is_readonly: boolean;
+  will_open_pull_request: boolean;
+  requires_approval: boolean;
+  output_target: string;
+}
+
+export interface DroidBuildLaunchPayload {
+  kind: "droid_build_launch";
+  project_id: string;
+  ok: boolean;
+  ham_run_id: string | null;
+  control_plane_status: string | null;
+  pr_url: string | null;
+  pr_branch: string | null;
+  pr_commit_sha: string | null;
+  build_outcome: unknown;
+  summary: string | null;
+  error_summary: string | null;
+  is_readonly: boolean;
+  will_open_pull_request: boolean;
+  requires_approval: boolean;
+  output_target?: string;
+  output_ref?: Record<string, unknown> | null;
+}
+
+export interface DroidBuildPreviewRequest {
+  project_id: string;
+  user_prompt: string;
+}
+
+export interface DroidBuildLaunchRequest {
+  project_id: string;
+  user_prompt: string;
+  proposal_digest: string;
+  base_revision: string;
+  confirmed: boolean;
+  accept_pr: boolean;
+}
+
+export async function previewDroidBuild(
+  body: DroidBuildPreviewRequest,
+): Promise<DroidBuildPreviewPayload> {
+  const res = await hamApiFetch("/api/droid/build/preview", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      project_id: body.project_id.trim(),
+      user_prompt: body.user_prompt.trim(),
+    }),
+  });
+  if (!res.ok) {
+    const detail = (await readFastApiDetail(res)) ?? `HTTP ${res.status}`;
+    throw new Error(shortenHamApiErrorMessage(detail));
+  }
+  return res.json() as Promise<DroidBuildPreviewPayload>;
+}
+
+export async function launchDroidBuild(body: DroidBuildLaunchRequest): Promise<DroidBuildLaunchPayload> {
+  const res = await hamApiFetch("/api/droid/build/launch", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      project_id: body.project_id.trim(),
+      user_prompt: body.user_prompt.trim(),
+      proposal_digest: body.proposal_digest,
+      base_revision: body.base_revision,
+      confirmed: Boolean(body.confirmed),
+      accept_pr: Boolean(body.accept_pr),
+    }),
+  });
+  if (!res.ok) {
+    const detail = (await readFastApiDetail(res)) ?? `HTTP ${res.status}`;
+    throw new Error(shortenHamApiErrorMessage(detail));
+  }
+  return res.json() as Promise<DroidBuildLaunchPayload>;
+}
+
 /**
  * Public preview shape for `POST /api/coding/conductor/preview` (Phase 2A).
  *
@@ -870,6 +956,8 @@ export interface CodingConductorProjectFlags {
   project_id: string | null;
   build_lane_enabled: boolean;
   has_github_repo: boolean;
+  output_target?: string | null;
+  has_workspace_id?: boolean;
 }
 
 export interface CodingConductorPreviewPayload {

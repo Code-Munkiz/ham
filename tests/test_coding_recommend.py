@@ -88,13 +88,20 @@ def _readiness(
 
 
 def _project(
-    *, found: bool = True, build_lane_enabled: bool = False, has_github_repo: bool = False
+    *,
+    found: bool = True,
+    build_lane_enabled: bool = False,
+    has_github_repo: bool = False,
+    output_target: str | None = "github_pr",
+    has_workspace_id: bool = False,
 ) -> ProjectFlags:
     return ProjectFlags(
         found=found,
         project_id="project.demo-abc123" if found else None,
         build_lane_enabled=build_lane_enabled,
         has_github_repo=has_github_repo,
+        output_target=output_target,
+        has_workspace_id=has_workspace_id,
     )
 
 

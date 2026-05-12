@@ -252,6 +252,8 @@ async def post_coding_conductor_preview(
             "project_id": snapshot.project.project_id,
             "build_lane_enabled": snapshot.project.build_lane_enabled,
             "has_github_repo": snapshot.project.has_github_repo,
+            "output_target": snapshot.project.output_target,
+            "has_workspace_id": snapshot.project.has_workspace_id,
         },
         "is_operator": is_op,
     }

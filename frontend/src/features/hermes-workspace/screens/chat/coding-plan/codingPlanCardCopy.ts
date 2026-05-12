@@ -22,6 +22,26 @@ export const CODING_PLAN_NO_LAUNCH_FOOTER =
 
 export const CODING_PLAN_LAUNCH_DISABLED_TITLE = "Launch approval is coming in a later step.";
 
+export const MANAGED_BUILD_APPROVAL_HEADLINE =
+  "Approve a managed workspace build";
+
+export const MANAGED_BUILD_APPROVAL_BODY =
+  "HAM will run a low-risk edit pass and capture a managed workspace snapshot you can review before anything is shared.";
+
+export const MANAGED_BUILD_APPROVAL_CHECKBOX =
+  "I approve HAM to create a managed workspace snapshot.";
+
+export const MANAGED_BUILD_PREVIEW_CTA = "Preview this build";
+export const MANAGED_BUILD_PREVIEW_BUSY = "Preparing preview…";
+export const MANAGED_BUILD_LAUNCH_CTA = "Approve and build";
+export const MANAGED_BUILD_LAUNCH_BUSY = "Building snapshot…";
+
+export const MANAGED_BUILD_SUCCESS_HEADLINE = "Managed workspace snapshot ready";
+export const MANAGED_BUILD_FAILURE_HEADLINE = "HAM could not finish the build";
+
+export const MANAGED_BUILD_NO_PR_NOTE =
+  "Managed workspace builds never open a pull request and never push to GitHub.";
+
 const PROVIDER_LABEL: Record<CodingConductorProviderKind, string> = {
   no_agent: "Conversational answer",
   factory_droid_audit: "Read-only audit",
@@ -116,4 +136,6 @@ export const FORBIDDEN_CARD_TOKENS = [
   "cursor_api_key",
   "argv",
   "droid exec",
+  "workflow_id",
+  "registry_revision",
 ] as const;

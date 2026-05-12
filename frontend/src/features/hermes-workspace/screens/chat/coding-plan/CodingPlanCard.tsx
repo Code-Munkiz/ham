@@ -13,11 +13,28 @@ import {
   providerLabelForCard,
   taskKindDisplayForCard,
 } from "./codingPlanCardCopy";
+import { ManagedBuildApprovalPanel } from "./ManagedBuildApprovalPanel";
 
 export type CodingPlanCardProps = {
   payload: CodingConductorPreviewPayload;
+  userPrompt?: string;
   className?: string;
 };
+
+function shouldShowManagedBuildApproval(
+  payload: CodingConductorPreviewPayload,
+): boolean {
+  const chosen = payload.chosen;
+  if (!chosen || chosen.provider !== "factory_droid_build" || !chosen.available) {
+    return false;
+  }
+  const project = payload.project;
+  if (!project.found || !project.project_id) return false;
+  const target = (project.output_target || "").trim();
+  if (target !== "managed_workspace") return false;
+  if (project.has_workspace_id === false) return false;
+  return true;
+}
 
 const BADGE_CLASS =
   "rounded-full border border-white/[0.12] bg-white/[0.04] px-2 py-0.5 text-[10px] uppercase tracking-wide text-white/70";
@@ -82,12 +99,13 @@ function CandidateRow({
  * placeholder so the user understands the next step is intentional, not
  * missing. Tests assert that the placeholder is non-interactive.
  */
-export function CodingPlanCard({ payload, className }: CodingPlanCardProps) {
+export function CodingPlanCard({ payload, userPrompt, className }: CodingPlanCardProps) {
   const chosen = payload.chosen;
   const alts = payload.candidates.filter((c) => c !== chosen);
   const headline = emptyStateHeadlineForCard(payload);
   const taskLabel = taskKindDisplayForCard(payload.task_kind);
   const conf = confidenceBadgeForCard(payload.task_confidence);
+  const showManagedApproval = shouldShowManagedBuildApproval(payload);
 
   const [showAlternatives, setShowAlternatives] = React.useState(false);
 
@@ -183,25 +201,32 @@ export function CodingPlanCard({ payload, className }: CodingPlanCardProps) {
         </div>
       ) : null}
 
-      <footer className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-white/[0.06] pt-2">
-        <p
-          className="text-[10px] leading-snug text-white/45"
-          data-hww-coding-plan="no-launch-footer"
-        >
-          {CODING_PLAN_NO_LAUNCH_FOOTER}
-        </p>
-        <button
-          type="button"
-          disabled
-          aria-disabled="true"
-          title={CODING_PLAN_LAUNCH_DISABLED_TITLE}
-          className="cursor-not-allowed rounded-md border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-[11px] font-medium text-white/40"
-          data-hww-coding-plan="launch-cta-disabled"
-          data-launch-enabled="0"
-        >
-          Approve launch (later step)
-        </button>
-      </footer>
+      {showManagedApproval && payload.project.project_id ? (
+        <ManagedBuildApprovalPanel
+          projectId={payload.project.project_id}
+          userPrompt={userPrompt ?? ""}
+        />
+      ) : (
+        <footer className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-white/[0.06] pt-2">
+          <p
+            className="text-[10px] leading-snug text-white/45"
+            data-hww-coding-plan="no-launch-footer"
+          >
+            {CODING_PLAN_NO_LAUNCH_FOOTER}
+          </p>
+          <button
+            type="button"
+            disabled
+            aria-disabled="true"
+            title={CODING_PLAN_LAUNCH_DISABLED_TITLE}
+            className="cursor-not-allowed rounded-md border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-[11px] font-medium text-white/40"
+            data-hww-coding-plan="launch-cta-disabled"
+            data-launch-enabled="0"
+          >
+            Approve launch (later step)
+          </button>
+        </footer>
+      )}
     </section>
   );
 }
