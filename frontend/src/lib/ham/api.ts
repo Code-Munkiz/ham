@@ -458,12 +458,14 @@ export type BuilderActivityStreamCallbacks = {
 };
 
 export type BuilderCloudRuntimeState =
-  | "queued"
-  | "provisioning"
-  | "running"
+  | "disabled"
+  | "experiment_not_enabled"
+  | "config_missing"
+  | "dry_run_ready"
+  | "provider_ready"
+  | "provider_accepted"
   | "failed"
-  | "expired"
-  | "unsupported";
+  | "expired";
 
 export type BuilderCloudRuntimeStatus = {
   workspace_id: string;
@@ -477,9 +479,17 @@ export type BuilderCloudRuntimeStatus = {
   metadata: Record<string, unknown>;
 };
 
+export type BuilderCloudRuntimeRequestState =
+  | "queued"
+  | "provisioning"
+  | "running"
+  | "failed"
+  | "expired"
+  | "unsupported";
+
 export type BuilderCloudRuntimeRequestPayload = {
   source_snapshot_id?: string | null;
-  status?: BuilderCloudRuntimeState | null;
+  status?: BuilderCloudRuntimeRequestState | null;
   metadata?: Record<string, unknown>;
 };
 
@@ -3803,6 +3813,7 @@ export async function registerHamProject(body: {
   name: string;
   root: string;
   description?: string;
+  metadata?: Record<string, unknown>;
 }): Promise<ProjectRecord> {
   const res = await hamApiFetch("/api/projects", {
     method: "POST",
@@ -3811,7 +3822,7 @@ export async function registerHamProject(body: {
       name: body.name,
       root: body.root,
       description: body.description ?? "",
-      metadata: {},
+      metadata: body.metadata ?? {},
     }),
   });
   if (!res.ok) {
@@ -3825,11 +3836,23 @@ export async function registerHamProject(body: {
  * Find or create a Ham API project whose root matches the context-engine cwd
  * (same path the API uses for GET /api/context-engine).
  */
-export async function ensureProjectIdForWorkspaceRoot(cwd: string): Promise<string> {
+export async function ensureProjectIdForWorkspaceRoot(
+  cwd: string,
+  workspaceId?: string | null,
+): Promise<string> {
   const norm = cwd.replace(/\/$/, "");
+  const workspaceScope = workspaceId?.trim() || null;
   const { projects } = await listHamProjects();
   const hit = projects.find((p) => p.root.replace(/\/$/, "") === norm);
   if (hit) {
+    if (workspaceScope) {
+      const boundWorkspace = String(
+        hit.metadata?.workspace_id || hit.metadata?.workspaceId || "",
+      ).trim();
+      if (!boundWorkspace || boundWorkspace !== workspaceScope) {
+        await patchHamProjectMetadata(hit.id, { workspace_id: workspaceScope });
+      }
+    }
     return hit.id;
   }
   const name = norm.split("/").filter(Boolean).pop() || "workspace";
@@ -3837,6 +3860,7 @@ export async function ensureProjectIdForWorkspaceRoot(cwd: string): Promise<stri
     name,
     root: norm,
     description: "Registered from Ham dashboard (Context & Memory).",
+    metadata: workspaceScope ? { workspace_id: workspaceScope } : {},
   });
   return rec.id;
 }

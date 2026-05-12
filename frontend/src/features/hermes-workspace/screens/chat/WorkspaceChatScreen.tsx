@@ -1421,10 +1421,15 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
 
   React.useEffect(() => {
     let c = false;
+    if (!activeWorkspaceId?.trim()) {
+      setProjectId(null);
+      setHamProjectId(null);
+      return;
+    }
     void (async () => {
       try {
         const ctx = await fetchContextEngine();
-        const id = await ensureProjectIdForWorkspaceRoot(ctx.cwd);
+        const id = await ensureProjectIdForWorkspaceRoot(ctx.cwd, activeWorkspaceId);
         if (!c) {
           setProjectId(id);
           setHamProjectId(id);
@@ -1439,7 +1444,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     return () => {
       c = true;
     };
-  }, [setHamProjectId]);
+  }, [activeWorkspaceId, setHamProjectId]);
 
   React.useEffect(() => {
     let cancelled = false;
