@@ -310,6 +310,8 @@ class VisualEditRequestPayload(BaseModel):
     selector_hints: list[str] = Field(default_factory=list)
     bbox: dict[str, Any] | None = None
     instruction: str
+    status: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class CloudRuntimeRequestPayload(BaseModel):

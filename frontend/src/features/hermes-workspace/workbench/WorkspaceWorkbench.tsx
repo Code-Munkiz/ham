@@ -723,7 +723,9 @@ function WorkbenchPreviewPanel({
         className="space-y-2 rounded-lg border border-white/[0.08] bg-black/25 p-3"
         data-testid="hww-cloud-runtime-section"
       >
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">Cloud runtime</p>
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">
+          Cloud runtime
+        </p>
         <p className="text-[11px] text-white/60">
           Cloud runtime is not provisioned yet. Request tracking is available now; provisioning and
           execution are coming soon.
