@@ -20,16 +20,20 @@ import { Button } from "@/components/ui/button";
 import {
   type BuilderActivityItem,
   type BuilderImportJobRecord,
+  type BuilderVisualEditRequest,
+  type CreateBuilderVisualEditRequestPayload,
   type LocalRunProfilePayload,
   type LocalRunProfileResponse,
   type BuilderPreviewStatus,
   type BuilderProjectSourceRecord,
   type BuilderSourceSnapshotRecord,
+  createBuilderVisualEditRequest,
   deleteBuilderLocalRunProfile,
   deleteBuilderLocalPreview,
   getBuilderActivity,
   getBuilderLocalRunProfile,
   getBuilderPreviewStatus,
+  listBuilderVisualEditRequests,
   listBuilderImportJobs,
   listBuilderProjectSources,
   listBuilderSourceSnapshots,
@@ -262,6 +266,13 @@ function WorkbenchPreviewPanel({
   const [runProfile, setRunProfile] = React.useState<LocalRunProfileResponse | null>(null);
   const [runProfileBusy, setRunProfileBusy] = React.useState(false);
   const [runProfileError, setRunProfileError] = React.useState<string | null>(null);
+  const [visualEditRequests, setVisualEditRequests] = React.useState<BuilderVisualEditRequest[]>([]);
+  const [visualEditInstruction, setVisualEditInstruction] = React.useState("");
+  const [visualEditSelectorHints, setVisualEditSelectorHints] = React.useState("");
+  const [visualEditRoute, setVisualEditRoute] = React.useState("/");
+  const [visualEditBusy, setVisualEditBusy] = React.useState(false);
+  const [visualEditError, setVisualEditError] = React.useState<string | null>(null);
+  const [visualEditNotice, setVisualEditNotice] = React.useState<string | null>(null);
   const [runProfileForm, setRunProfileForm] = React.useState<LocalRunProfilePayload>({
     display_name: "Local run profile",
     working_directory: ".",
@@ -323,6 +334,24 @@ function WorkbenchPreviewPanel({
     }
   }, [workspaceId, projectId]);
 
+  const refreshVisualEditRequests = React.useCallback(async () => {
+    const ws = workspaceId?.trim() || "";
+    const pid = projectId?.trim() || "";
+    if (!ws || !pid) {
+      setVisualEditRequests([]);
+      setVisualEditError(null);
+      return;
+    }
+    try {
+      const payload = await listBuilderVisualEditRequests(ws, pid);
+      setVisualEditRequests(payload.visual_edit_requests || []);
+      setVisualEditError(null);
+    } catch (e) {
+      setVisualEditRequests([]);
+      setVisualEditError(e instanceof Error ? e.message : String(e));
+    }
+  }, [workspaceId, projectId]);
+
   const refresh = React.useCallback(async () => {
     const ws = workspaceId?.trim() || "";
     const pid = projectId?.trim() || "";
@@ -341,6 +370,7 @@ function WorkbenchPreviewPanel({
       setPreview(previewPayload);
       await refreshActivity();
       await refreshRunProfile();
+      await refreshVisualEditRequests();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg);
@@ -348,7 +378,7 @@ function WorkbenchPreviewPanel({
     } finally {
       setLoading(false);
     }
-  }, [workspaceId, projectId, refreshActivity, refreshRunProfile]);
+  }, [workspaceId, projectId, refreshActivity, refreshRunProfile, refreshVisualEditRequests]);
 
   React.useEffect(() => {
     void refresh();
@@ -364,6 +394,7 @@ function WorkbenchPreviewPanel({
       preview?.status === "waiting" ||
       preview?.status === "error"),
   );
+  const visualEditReady = Boolean(ws && pid && preview?.status === "ready" && previewUrl);
   return (
     <MutedPanel>
       <div className="flex flex-wrap items-center gap-2">
@@ -700,6 +731,114 @@ function WorkbenchPreviewPanel({
           Ask HAM to fix — Coming soon
         </Button>
       ) : null}
+      <div
+        className="space-y-2 rounded-lg border border-white/[0.08] bg-black/25 p-3"
+        data-testid="hww-visual-edit-section"
+      >
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">
+          Visual edit request (contract stub)
+        </p>
+        <p className="text-[11px] text-white/60">
+          This only records an edit request contract. It does not run an agent, mutate files, or
+          control the preview.
+        </p>
+        {!visualEditReady ? (
+          <p className="text-[11px] text-white/55" data-testid="hww-visual-edit-disabled-copy">
+            Preview must be ready before saving a visual edit request.
+          </p>
+        ) : (
+          <p className="text-[11px] text-white/55" data-testid="hww-visual-edit-ready-copy">
+            Preview is ready. Submit an instruction to save a visual edit request contract.
+          </p>
+        )}
+        <form
+          className="space-y-2"
+          data-testid="hww-visual-edit-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!visualEditReady || !ws || !pid) {
+              return;
+            }
+            setVisualEditBusy(true);
+            setVisualEditError(null);
+            setVisualEditNotice(null);
+            const payload: CreateBuilderVisualEditRequestPayload = {
+              instruction: visualEditInstruction,
+              route: visualEditRoute || null,
+              selector_hints: visualEditSelectorHints
+                .split(",")
+                .map((value) => value.trim())
+                .filter((value) => value.length > 0),
+              runtime_session_id: preview?.runtime_session_id || null,
+              preview_endpoint_id: preview?.preview_endpoint_id || null,
+              source_snapshot_id: preview?.source_snapshot_id || null,
+              status: "draft",
+            };
+            void createBuilderVisualEditRequest(ws, pid, payload)
+              .then(() => {
+                setVisualEditInstruction("");
+                setVisualEditNotice("Visual edit request saved. Agent execution is not connected yet.");
+                void refreshVisualEditRequests();
+              })
+              .catch((err) => {
+                setVisualEditError(err instanceof Error ? err.message : String(err));
+              })
+              .finally(() => {
+                setVisualEditBusy(false);
+              });
+          }}
+        >
+          <textarea
+            value={visualEditInstruction}
+            onChange={(e) => setVisualEditInstruction(e.target.value)}
+            rows={3}
+            placeholder="Describe the visual change you want."
+            className="w-full rounded-md border border-white/[0.12] bg-black/40 px-2 py-1.5 text-[11px] text-white/90"
+            data-testid="hww-visual-edit-instruction"
+          />
+          <div className="grid gap-2 md:grid-cols-2">
+            <input
+              type="text"
+              value={visualEditRoute}
+              onChange={(e) => setVisualEditRoute(e.target.value)}
+              placeholder="/"
+              className="w-full rounded-md border border-white/[0.12] bg-black/40 px-2 py-1.5 text-[11px] text-white/90"
+              data-testid="hww-visual-edit-route"
+            />
+            <input
+              type="text"
+              value={visualEditSelectorHints}
+              onChange={(e) => setVisualEditSelectorHints(e.target.value)}
+              placeholder="CSS selector hints (comma-separated)"
+              className="w-full rounded-md border border-white/[0.12] bg-black/40 px-2 py-1.5 text-[11px] text-white/90"
+              data-testid="hww-visual-edit-selector-hints"
+            />
+          </div>
+          <Button
+            type="submit"
+            size="sm"
+            variant="secondary"
+            className="text-[11px]"
+            data-testid="hww-visual-edit-submit"
+            disabled={visualEditBusy || !visualEditReady || !visualEditInstruction.trim()}
+          >
+            {visualEditBusy ? "Saving request…" : "Save visual edit request"}
+          </Button>
+        </form>
+        {visualEditError ? (
+          <p className="text-amber-200/90" data-testid="hww-visual-edit-error">
+            Could not save visual edit request: {visualEditError}
+          </p>
+        ) : null}
+        {visualEditNotice ? (
+          <p className="text-emerald-200/90" data-testid="hww-visual-edit-success">
+            {visualEditNotice}
+          </p>
+        ) : null}
+        <p className="text-[11px] text-white/45" data-testid="hww-visual-edit-count">
+          Saved requests: {visualEditRequests.length}
+        </p>
+      </div>
       <div
         className="space-y-2 rounded-lg border border-white/[0.08] bg-black/25 p-3"
         data-testid="hww-preview-activity-section"
