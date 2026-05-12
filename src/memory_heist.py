@@ -147,6 +147,11 @@ DEFAULT_SESSION_TOOL_PRUNE_CHARS = 200
 # Session browser defaults: browser interaction controls including step limits,
 # timeouts, and DOM/output constraints. These ensure browser automation stays
 # within acceptable token budgets and execution time bounds.
+# Each constant controls a different aspect of browser session monitoring:
+# - MAX_STEPS: maximum actions before forcing session timeout/prevent infinite loops
+# - STEP_TIMEOUT_MS: per-action timeout in milliseconds (10s default)
+# - MAX_DOM_CHARS/MAX_CONSOLE_CHARS: caps on captured DOM/html and console output size
+# - MAX_NETWORK_EVENTS: limit network request/response logging
 DEFAULT_TOOL_PRUNE_PLACEHOLDER = "[Old tool output cleared to save context space]"
 DEFAULT_BROWSER_MAX_STEPS = 25
 DEFAULT_BROWSER_STEP_TIMEOUT_MS = 10_000
@@ -486,11 +491,18 @@ class ProjectContext:
     - Git information (status, diff, log)
     - Instruction files (SWARM.md, AGENTS.md, etc.)
     - Merged project config from .ham hierarchy
-    - File system scan results (file count, tree structure)
+    - File system scan results (file_count, tree structure)
     - Platform and date information
     
     All fields except cwd, current_date, and platform_info are optional/empty
     by default to allow partial construction in tests or special cases.
+    
+    Usage notes for maintainers:
+    - Call `ProjectContext.discover()` to build a complete contextual snapshot
+    - The `render()` method converts context to a formatted text block for LLM prompts
+    - Git snapshots are captured once and marked immutable for consistency
+    - For large workspaces, file_count and tree avoid full file content loading
+    - `instruction_files` are discovered hierarchically and deduplicated by content hash
     """
     cwd: Path
     current_date: str
