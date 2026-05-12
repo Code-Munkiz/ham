@@ -188,6 +188,11 @@ def test_list_and_get_jobs_are_scoped_and_sorted(tmp_path: Path, monkeypatch) ->
     second = job_store.upsert_cloud_runtime_job(
         CloudRuntimeJob(workspace_id=ws_id, project_id=project_id, status="failed", phase="failed")
     )
+    # Make ordering deterministic even when jobs are created in the same second.
+    first.updated_at = "2026-01-01T00:00:00Z"
+    second.updated_at = "2026-01-01T00:00:01Z"
+    job_store.upsert_cloud_runtime_job(first)
+    job_store.upsert_cloud_runtime_job(second)
     set_builder_runtime_job_store_for_tests(job_store)
     listed = client.get(f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime/jobs")
     assert listed.status_code == 200
