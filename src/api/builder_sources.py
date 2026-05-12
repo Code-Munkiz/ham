@@ -13,7 +13,7 @@ from typing import Annotated, Any, Literal, cast
 from urllib.parse import urljoin, urlsplit, urlunsplit
 
 import httpx
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi import Request, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -132,6 +132,44 @@ def _project_in_workspace_or_404(*, project_id: str, workspace_id: str) -> Proje
             },
         )
     return record
+
+
+def _source_snapshot_for_project_or_404(
+    *,
+    workspace_id: str,
+    project_id: str,
+    snapshot_id: str,
+) -> SourceSnapshot:
+    _project_in_workspace_or_404(project_id=project_id, workspace_id=workspace_id)
+    sid = str(snapshot_id or "").strip()
+    if not sid:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": {"code": "SNAPSHOT_NOT_FOUND", "message": "Unknown source snapshot."}},
+        )
+    for row in get_builder_source_store().list_source_snapshots(
+        workspace_id=workspace_id,
+        project_id=project_id,
+    ):
+        if row.id == sid:
+            return row
+    raise HTTPException(
+        status_code=404,
+        detail={"error": {"code": "SNAPSHOT_NOT_FOUND", "message": "Unknown source snapshot."}},
+    )
+
+
+_SNAPSHOT_LISTING_CAP = 512
+_SNAPSHOT_CONTENT_MAX_BYTES = 262_144
+
+
+def _artifact_stem_from_uri(artifact_uri: str) -> str | None:
+    text = str(artifact_uri or "").strip()
+    prefix = "builder-artifact://"
+    if text.startswith(prefix):
+        stem = text[len(prefix) :].strip()
+        return stem or None
+    return None
 
 
 def _artifact_root() -> Path:
@@ -1137,6 +1175,9 @@ def _build_activity_items(*, workspace_id: str, project_id: str) -> list[Builder
     items: list[BuilderActivityItem] = []
 
     for job in source_store.list_import_jobs(workspace_id=workspace_id, project_id=project_id):
+        meta = job.metadata or {}
+        custom_title = str(meta.get("activity_title") or "").strip()
+        custom_message = str(meta.get("activity_message") or "").strip()
         title = "Source import queued"
         if job.status == "running":
             title = "Validating source archive"
@@ -1144,7 +1185,11 @@ def _build_activity_items(*, workspace_id: str, project_id: str) -> list[Builder
             title = "Source snapshot created"
         elif job.status == "failed":
             title = "Source import failed"
+        if custom_title:
+            title = custom_title
         message = _safe_text(job.error_message, fallback="Source import failed.") if job.status == "failed" else title
+        if custom_message and job.status != "failed":
+            message = custom_message
         items.append(
             BuilderActivityItem(
                 id=f"act_{job.id}",
@@ -1378,6 +1423,150 @@ async def list_source_snapshots(
         "project_id": project_id,
         "workspace_id": ctx.workspace_id,
         "source_snapshots": [r.model_dump(mode="json") for r in rows],
+    }
+
+
+@router.post("/api/workspaces/{workspace_id}/builder/default-project")
+async def ensure_default_builder_project_route(
+    ctx: Annotated[WorkspaceContext, Depends(require_perm(PERM_WORKSPACE_WRITE))],
+) -> dict[str, Any]:
+    from src.ham.builder_default_project import ensure_default_builder_project as _ensure_default_builder
+
+    rec = _ensure_default_builder(ctx.workspace_id)
+    return {
+        "workspace_id": ctx.workspace_id,
+        "project_id": rec.id,
+        "project": rec.model_dump(mode="json"),
+    }
+
+
+@router.get(
+    "/api/workspaces/{workspace_id}/projects/{project_id}/builder/source-snapshots/{snapshot_id}/files",
+)
+async def list_builder_snapshot_files(
+    project_id: str,
+    snapshot_id: str,
+    ctx: Annotated[WorkspaceContext, Depends(require_perm(PERM_WORKSPACE_READ))],
+) -> dict[str, Any]:
+    snap = _source_snapshot_for_project_or_404(
+        workspace_id=ctx.workspace_id,
+        project_id=project_id,
+        snapshot_id=snapshot_id,
+    )
+    manifest = snap.manifest or {}
+    files_out: list[dict[str, Any]] = []
+    kind = str(manifest.get("kind") or "")
+    if kind == "inline_text_bundle":
+        entries = manifest.get("entries")
+        if isinstance(entries, list):
+            for e in entries[:_SNAPSHOT_LISTING_CAP]:
+                if isinstance(e, dict) and isinstance(e.get("path"), str):
+                    files_out.append(
+                        {"path": e["path"], "size_bytes": int(e.get("size_bytes") or 0)},
+                    )
+    else:
+        entries = manifest.get("entries")
+        if isinstance(entries, list):
+            for e in entries[:_SNAPSHOT_LISTING_CAP]:
+                if isinstance(e, dict) and isinstance(e.get("path"), str):
+                    files_out.append(
+                        {
+                            "path": e["path"],
+                            "size_bytes": int(e.get("size_bytes") or 0),
+                            "is_dir": bool(e.get("is_dir")),
+                        },
+                    )
+    return {
+        "workspace_id": ctx.workspace_id,
+        "project_id": project_id,
+        "source_snapshot_id": snap.id,
+        "files": files_out,
+    }
+
+
+@router.get(
+    "/api/workspaces/{workspace_id}/projects/{project_id}/builder/source-snapshots/{snapshot_id}/files/content",
+)
+async def read_builder_snapshot_file_content(
+    ctx: Annotated[WorkspaceContext, Depends(require_perm(PERM_WORKSPACE_READ))],
+    project_id: str,
+    snapshot_id: str,
+    path: str = Query(..., min_length=1, max_length=2048),
+) -> dict[str, Any]:
+    from src.ham.builder_chat_scaffold import (
+        load_zip_bytes_for_snapshot,
+        read_inline_snapshot_file,
+        read_zip_snapshot_file_bytes,
+    )
+
+    snap = _source_snapshot_for_project_or_404(
+        workspace_id=ctx.workspace_id,
+        project_id=project_id,
+        snapshot_id=snapshot_id,
+    )
+    manifest = snap.manifest or {}
+    kind = str(manifest.get("kind") or "")
+
+
+    if kind == "inline_text_bundle":
+        hit = read_inline_snapshot_file(snapshot=snap, rel_path=path)
+        if hit is None:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "error": {
+                        "code": "FILE_NOT_FOUND",
+                        "message": "File not found in snapshot.",
+                    },
+                },
+            )
+        text, nbytes = hit
+        return {
+            "path": path.replace("\\", "/").lstrip("/"),
+            "encoding": "utf-8",
+            "content": text,
+            "size_bytes": nbytes,
+        }
+    stem = _artifact_stem_from_uri(snap.artifact_uri) or str(
+        (snap.metadata or {}).get("artifact_id") or "",
+    ).strip()
+    if not stem:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": {"code": "ARTIFACT_NOT_FOUND", "message": "Snapshot has no artifact."}},
+        )
+    zbytes = load_zip_bytes_for_snapshot(
+        workspace_id=ctx.workspace_id,
+        project_id=project_id,
+        artifact_id=stem,
+    )
+    if zbytes is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": {"code": "ARTIFACT_NOT_FOUND", "message": "ZIP artifact missing."}},
+        )
+    raw = read_zip_snapshot_file_bytes(
+        zip_bytes=zbytes,
+        rel_path=path,
+        max_out=_SNAPSHOT_CONTENT_MAX_BYTES,
+    )
+    if raw is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": {"code": "FILE_NOT_FOUND", "message": "File not found in archive."}},
+        )
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        raise HTTPException(
+            status_code=415,
+            detail={"error": {"code": "BINARY_FILE", "message": "Binary files are not shown."}},
+        ) from None
+    return {
+        "path": path.replace("\\", "/").lstrip("/"),
+        "encoding": "utf-8",
+        "content": text,
+        "size_bytes": len(raw),
     }
 
 

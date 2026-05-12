@@ -82,6 +82,10 @@ from src.ham.execution_mode import (
     browser_runtime_available,
     resolve_execution_mode,
 )
+from src.ham.builder_chat_hooks import (
+    resolve_effective_chat_project_id,
+    run_builder_happy_path_hook,
+)
 from src.ham.operator_audit import append_operator_action_audit
 from src.ham.transcription_config import resolve_transcription_openai_api_key_for_actor
 from src.ham.ui_actions import split_assistant_ui_actions, ui_actions_system_instructions
@@ -174,6 +178,7 @@ class ChatResponse(BaseModel):
     active_agent: ChatActiveAgentMeta | None = None
     operator_result: dict[str, Any] | None = None
     execution_mode: dict[str, Any] | None = None
+    builder: dict[str, Any] | None = None
 
 
 class ChatSessionAppendTurnIn(BaseModel):
@@ -1292,21 +1297,34 @@ async def post_chat(
     )
     store = _chat_store
     aid = ham_actor.user_id if ham_actor is not None else None
+    effective_pid = resolve_effective_chat_project_id(
+        workspace_id=body.workspace_id,
+        project_id=body.project_id,
+        ham_actor=ham_actor,
+    )
+    body_eff = body.model_copy(update={"project_id": effective_pid or body.project_id})
     sid, llm_messages, active_meta, last_user_plain = _messages_for_completion(
-        body,
+        body_eff,
         user_id=_scoped_user_id(ham_actor, _normalized_workspace_id(body.workspace_id)),
         attachment_user_id=aid,
         llm_attachment_user_id=aid,
         authenticated_actor_user_id=aid,
     )
+    builder_prefix, builder_meta = run_builder_happy_path_hook(
+        workspace_id=body.workspace_id,
+        project_id=(body_eff.project_id or "").strip() or None,
+        session_id=sid,
+        last_user_plain=last_user_plain,
+        ham_actor=ham_actor,
+    )
     or_override, litellm_hint_key, litellm_http_bypass = _resolve_chat_openrouter_route(
         body=body,
         ham_actor=ham_actor,
     )
-    execution_mode = _execution_mode_payload(body, last_user_plain=last_user_plain)
+    execution_mode = _execution_mode_payload(body_eff, last_user_plain=last_user_plain)
     execution_mode = _apply_browser_bridge_for_turn(
         execution_mode=execution_mode,
-        body=body,
+        body=body_eff,
         last_user_plain=last_user_plain,
     )
     if body.enable_operator and body.messages[-1].role == "user":
@@ -1317,7 +1335,7 @@ async def post_chat(
             process_operator_turn(
                 user_text=last_user_plain,
                 project_store=project_store,
-                default_project_id=body.project_id,
+                default_project_id=body_eff.project_id,
                 operator_payload=body.operator,
                 ham_operator_authorization=ham_op_hdr,
                 ham_actor=ham_actor,
@@ -1326,7 +1344,7 @@ async def post_chat(
             else process_agent_router_turn(
                 user_text=last_user_plain,
                 project_store=project_store,
-                default_project_id=body.project_id,
+                default_project_id=body_eff.project_id,
                 ham_operator_authorization=ham_op_hdr,
                 ham_actor=ham_actor,
             )
@@ -1334,6 +1352,8 @@ async def post_chat(
         if op is not None and op.handled:
             _record_operator_audit(body=body, op=op, ham_actor=ham_actor, route="post_chat")
             msg = format_operator_assistant_message(op)
+            if builder_prefix:
+                msg = f"{builder_prefix}{msg}"
             store.append_turns(sid, [ChatTurn(role="assistant", content=msg)])
             return ChatResponse(
                 session_id=sid,
@@ -1342,6 +1362,7 @@ async def post_chat(
                 active_agent=ChatActiveAgentMeta.model_validate(active_meta) if active_meta else None,
                 operator_result=op.model_dump(mode="json"),
                 execution_mode=execution_mode,
+                builder=builder_meta,
             )
     try:
         assistant_raw = complete_chat_turn(
@@ -1361,6 +1382,8 @@ async def post_chat(
         if body.enable_ui_actions
         else (assistant_raw, [])
     )
+    if builder_prefix:
+        assistant_visible = f"{builder_prefix}{assistant_visible}"
     store.append_turns(sid, [ChatTurn(role="assistant", content=assistant_visible)])
     return ChatResponse(
         session_id=sid,
@@ -1369,6 +1392,7 @@ async def post_chat(
         active_agent=ChatActiveAgentMeta.model_validate(active_meta) if active_meta else None,
         operator_result=None,
         execution_mode=execution_mode,
+        builder=builder_meta,
     )
 
 
@@ -1386,12 +1410,25 @@ def post_chat_stream(
     )
     store = _chat_store
     aid = ham_actor.user_id if ham_actor is not None else None
+    effective_pid = resolve_effective_chat_project_id(
+        workspace_id=body.workspace_id,
+        project_id=body.project_id,
+        ham_actor=ham_actor,
+    )
+    body_eff = body.model_copy(update={"project_id": effective_pid or body.project_id})
     sid, llm_messages, stream_active_meta, last_user_plain = _messages_for_completion(
-        body,
+        body_eff,
         user_id=_scoped_user_id(ham_actor, _normalized_workspace_id(body.workspace_id)),
         attachment_user_id=aid,
         llm_attachment_user_id=aid,
         authenticated_actor_user_id=aid,
+    )
+    builder_prefix, builder_meta = run_builder_happy_path_hook(
+        workspace_id=body.workspace_id,
+        project_id=(body_eff.project_id or "").strip() or None,
+        session_id=sid,
+        last_user_plain=last_user_plain,
+        ham_actor=ham_actor,
     )
     or_override, litellm_hint_key, litellm_http_bypass = _resolve_chat_openrouter_route(
         body=body,
@@ -1415,10 +1452,10 @@ def post_chat_stream(
             _release_stream_session(sid)
             stream_lock_claimed = False
 
-    stream_execution_mode = _execution_mode_payload(body, last_user_plain=last_user_plain)
+    stream_execution_mode = _execution_mode_payload(body_eff, last_user_plain=last_user_plain)
     stream_execution_mode = _apply_browser_bridge_for_turn(
         execution_mode=stream_execution_mode,
-        body=body,
+        body=body_eff,
         last_user_plain=last_user_plain,
     )
 
@@ -1431,7 +1468,7 @@ def post_chat_stream(
                 process_operator_turn(
                     user_text=last_user_plain,
                     project_store=project_store,
-                    default_project_id=body.project_id,
+                    default_project_id=body_eff.project_id,
                     operator_payload=body.operator,
                     ham_operator_authorization=ham_op_hdr,
                     ham_actor=ham_actor,
@@ -1440,7 +1477,7 @@ def post_chat_stream(
                 else process_agent_router_turn(
                     user_text=last_user_plain,
                     project_store=project_store,
-                    default_project_id=body.project_id,
+                    default_project_id=body_eff.project_id,
                     ham_operator_authorization=ham_op_hdr,
                     ham_actor=ham_actor,
                 )
@@ -1448,6 +1485,8 @@ def post_chat_stream(
             if op is not None and op.handled:
                 _record_operator_audit(body=body, op=op, ham_actor=ham_actor, route="post_chat_stream")
                 msg = format_operator_assistant_message(op)
+                if builder_prefix:
+                    msg = f"{builder_prefix}{msg}"
                 store.append_turns(sid, [ChatTurn(role="assistant", content=msg)])
                 msgs = store.list_messages(sid)
                 op_dict = op.model_dump(mode="json")
@@ -1465,6 +1504,8 @@ def post_chat_stream(
                         }
                         if stream_active_meta:
                             payload["active_agent"] = stream_active_meta
+                        if builder_meta is not None:
+                            payload["builder"] = builder_meta
                         yield json.dumps(payload) + "\n"
                     finally:
                         release_stream_lock()
@@ -1483,6 +1524,9 @@ def post_chat_stream(
         def ndjson_gen():
             yield json.dumps({"type": "session", "session_id": sid}) + "\n"
             pieces: list[str] = []
+            if builder_prefix:
+                pieces.append(builder_prefix)
+                yield json.dumps({"type": "delta", "text": builder_prefix}) + "\n"
             stream_completed = False
             chars_since_checkpoint = 0
             checkpoint_started = False
@@ -1571,6 +1615,8 @@ def post_chat_stream(
                         }
                         if stream_active_meta:
                             payload_err["active_agent"] = stream_active_meta
+                        if builder_meta is not None:
+                            payload_err["builder"] = builder_meta
                         yield json.dumps(payload_err) + "\n"
                     except KeyError:
                         yield json.dumps(
@@ -1601,6 +1647,8 @@ def post_chat_stream(
                     }
                     if stream_active_meta:
                         payload["active_agent"] = stream_active_meta
+                    if builder_meta is not None:
+                        payload["builder"] = builder_meta
                     yield json.dumps(payload) + "\n"
                 except KeyError:
                     yield json.dumps(

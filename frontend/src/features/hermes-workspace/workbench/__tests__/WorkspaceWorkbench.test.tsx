@@ -93,6 +93,10 @@ function toolsOk() {
   );
 }
 
+function openPreviewDiagnostics() {
+  fireEvent.click(screen.getByText("Advanced / Diagnostics"));
+}
+
 describe("WorkspaceWorkbench", () => {
   beforeEach(() => {
     fetchWorkspaceToolsMock.mockResolvedValue(toolsOk());
@@ -410,12 +414,14 @@ describe("WorkspaceWorkbench", () => {
       </MemoryRouter>,
     );
     await waitFor(() => {
-      expect(screen.getByTestId("hww-preview-status-copy")).toHaveTextContent("not connected");
+      expect(screen.getByTestId("hww-preview-tell-ham")).toBeInTheDocument();
     });
-    expect(screen.getByTestId("hww-preview-no-iframe")).toBeInTheDocument();
     expect(screen.queryByTestId("hww-preview-iframe")).toBeNull();
     expect(screen.getByTestId("hww-preview-open-new-tab")).toBeDisabled();
-    expect(screen.getByTestId("hww-preview-connect-form")).toBeInTheDocument();
+    openPreviewDiagnostics();
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-preview-connect-form")).toBeInTheDocument();
+    });
     expect(screen.getByTestId("hww-preview-activity-section")).toBeInTheDocument();
     expect(screen.getByTestId("hww-preview-activity-stream-copy")).toHaveTextContent(
       "Activity updates live when connected",
@@ -463,6 +469,7 @@ describe("WorkspaceWorkbench", () => {
     await waitFor(() => {
       expect(screen.getByTestId("hww-preview-activity-stream-state")).toHaveTextContent("Live");
     });
+    openPreviewDiagnostics();
     act(() => {
       callbacks?.onActivity({
         workspace_id: "ws_abc",
@@ -490,7 +497,7 @@ describe("WorkspaceWorkbench", () => {
     await waitFor(() => {
       expect(screen.getByTestId("hww-preview-activity-list")).toBeInTheDocument();
     });
-    expect(screen.getByText("Cloud runtime provisioning")).toBeInTheDocument();
+    expect(screen.getAllByText("Cloud runtime provisioning").length).toBeGreaterThan(0);
   });
 
   it("Activity stream fallback shows offline state when stream errors", async () => {
@@ -523,6 +530,7 @@ describe("WorkspaceWorkbench", () => {
         <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
       </MemoryRouter>,
     );
+    openPreviewDiagnostics();
     await waitFor(() => {
       expect(screen.getByTestId("hww-visual-edit-section")).toBeInTheDocument();
     });
@@ -581,6 +589,7 @@ describe("WorkspaceWorkbench", () => {
         <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
       </MemoryRouter>,
     );
+    openPreviewDiagnostics();
     fireEvent.click(await screen.findByTestId("hww-visual-edit-toggle"));
     fireEvent.click(await screen.findByTestId("hww-visual-edit-overlay"), {
       clientX: 120,
@@ -626,6 +635,7 @@ describe("WorkspaceWorkbench", () => {
         <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
       </MemoryRouter>,
     );
+    openPreviewDiagnostics();
     await waitFor(() => {
       expect(screen.getByTestId("hww-local-run-profile-section")).toBeInTheDocument();
     });
@@ -640,6 +650,7 @@ describe("WorkspaceWorkbench", () => {
         <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
       </MemoryRouter>,
     );
+    openPreviewDiagnostics();
     await waitFor(() => {
       expect(screen.getByTestId("hww-cloud-runtime-section")).toBeInTheDocument();
     });
@@ -679,6 +690,7 @@ describe("WorkspaceWorkbench", () => {
         <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
       </MemoryRouter>,
     );
+    openPreviewDiagnostics();
     await waitFor(() => {
       expect(screen.getByTestId("hww-cloud-runtime-request-poc")).toBeInTheDocument();
     });
@@ -724,6 +736,7 @@ describe("WorkspaceWorkbench", () => {
         <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
       </MemoryRouter>,
     );
+    openPreviewDiagnostics();
     await waitFor(() => {
       expect(screen.getByTestId("hww-cloud-runtime-provider-status")).toBeInTheDocument();
     });
@@ -767,6 +780,7 @@ describe("WorkspaceWorkbench", () => {
         <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
       </MemoryRouter>,
     );
+    openPreviewDiagnostics();
     const btn = await screen.findByTestId("hww-cloud-runtime-request-poc");
     fireEvent.click(btn);
     await waitFor(() => {
@@ -787,6 +801,7 @@ describe("WorkspaceWorkbench", () => {
         <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
       </MemoryRouter>,
     );
+    openPreviewDiagnostics();
     await waitFor(() => {
       expect(screen.getByTestId("hww-worker-capability-list")).toBeInTheDocument();
     });
@@ -805,6 +820,7 @@ describe("WorkspaceWorkbench", () => {
         <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
       </MemoryRouter>,
     );
+    openPreviewDiagnostics();
     fireEvent.change(await screen.findByTestId("hww-local-run-profile-dev-command"), {
       target: { value: "npm run dev" },
     });
@@ -855,6 +871,7 @@ describe("WorkspaceWorkbench", () => {
         <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
       </MemoryRouter>,
     );
+    openPreviewDiagnostics();
     await waitFor(() => {
       expect(screen.getByTestId("hww-local-run-profile-clear")).not.toBeDisabled();
     });
@@ -871,6 +888,7 @@ describe("WorkspaceWorkbench", () => {
         <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
       </MemoryRouter>,
     );
+    openPreviewDiagnostics();
     fireEvent.click(await screen.findByTestId("hww-local-run-profile-save"));
     await waitFor(() => {
       expect(screen.getByTestId("hww-local-run-profile-error")).toBeInTheDocument();
@@ -917,6 +935,7 @@ describe("WorkspaceWorkbench", () => {
         <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
       </MemoryRouter>,
     );
+    openPreviewDiagnostics();
     await waitFor(() => {
       expect(screen.getByTestId("hww-preview-activity-list")).toBeInTheDocument();
     });
@@ -951,6 +970,7 @@ describe("WorkspaceWorkbench", () => {
         <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
       </MemoryRouter>,
     );
+    openPreviewDiagnostics();
     await waitFor(() => {
       expect(screen.getByText("Source import failed.")).toBeInTheDocument();
     });
@@ -962,6 +982,7 @@ describe("WorkspaceWorkbench", () => {
         <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
       </MemoryRouter>,
     );
+    openPreviewDiagnostics();
     const input = await screen.findByTestId("hww-preview-url-input");
     fireEvent.change(input, { target: { value: "http://127.0.0.1:5173" } });
     fireEvent.click(screen.getByTestId("hww-preview-connect-submit"));
@@ -1028,7 +1049,7 @@ describe("WorkspaceWorkbench", () => {
     await waitFor(() => {
       expect(screen.getByTestId("hww-preview-state-error")).toBeInTheDocument();
     });
-    expect(screen.getByTestId("hww-preview-no-iframe")).toBeInTheDocument();
+    expect(screen.queryByTestId("hww-preview-iframe")).toBeNull();
   });
 
   it("Unknown project errors render safe guidance copy", async () => {
@@ -1054,6 +1075,7 @@ describe("WorkspaceWorkbench", () => {
         <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
       </MemoryRouter>,
     );
+    openPreviewDiagnostics();
     fireEvent.change(await screen.findByTestId("hww-preview-url-input"), {
       target: { value: "https://example.com" },
     });
@@ -1091,6 +1113,7 @@ describe("WorkspaceWorkbench", () => {
     await waitFor(() => {
       expect(deleteBuilderLocalPreviewMock).toHaveBeenCalledWith("ws_abc", "proj_abc");
     });
+    openPreviewDiagnostics();
     await waitFor(() => {
       expect(screen.getByTestId("hww-preview-connect-form")).toBeInTheDocument();
     });
@@ -1271,6 +1294,43 @@ describe("WorkspaceWorkbench", () => {
     expect(screen.getByTestId("hww-project-source-latest-job")).toHaveTextContent(
       "ZIP_PATH_TRAVERSAL",
     );
+  });
+
+  it("Preview-first Part Z: diagnostics hidden until Advanced is opened", async () => {
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-preview-advanced")).toBeInTheDocument();
+    });
+    const details = screen.getByTestId("hww-preview-advanced") as HTMLDetailsElement;
+    expect(details.open).toBe(false);
+    openPreviewDiagnostics();
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-local-run-profile-form")).toBeInTheDocument();
+      expect(screen.getByTestId("hww-worker-capability-section")).toBeInTheDocument();
+      expect(screen.getByTestId("hww-visual-edit-section")).toBeInTheDocument();
+      expect(screen.getByTestId("hww-visual-edit-target-empty")).toBeInTheDocument();
+    });
+  });
+
+  it("Preview-first Part Z: primary copy does not lead with raw HTTP 404", async () => {
+    getBuilderPreviewStatusMock.mockRejectedValueOnce(new Error("HTTP 404 Not Found"));
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-preview-primary-title")).toHaveTextContent(
+        "Preview could not start.",
+      );
+    });
+    const err = screen.getByTestId("hww-preview-state-error").textContent || "";
+    expect(err.toLowerCase().includes("http 404")).toBe(false);
+    expect(err).toMatch(/not available yet|preview status/i);
   });
 
   it("Preview tab keeps expected labels and no terminal tab", () => {

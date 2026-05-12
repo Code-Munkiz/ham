@@ -630,3 +630,71 @@ def test_builder_worker_capabilities_enforces_scope_and_auth(tmp_path: Path, mon
 
     set_project_store_for_tests(None)
     set_builder_source_store_for_tests(None)
+
+
+def test_builder_default_project_post_idempotent(tmp_path: Path) -> None:
+    ws_store = InMemoryWorkspaceStore()
+    ws_id = "ws_aaaaaaaaaaaaaaaa"
+    _seed_workspace(ws_store, workspace_id=ws_id, org_id="org_a", owner_user_id="user_a", slug="alpha")
+    project_store = ProjectStore(store_path=tmp_path / "projects.json")
+    set_project_store_for_tests(project_store)
+    set_builder_source_store_for_tests(BuilderSourceStore(store_path=tmp_path / "builder_sources.json"))
+    client = TestClient(_build_app(actor=_actor("user_a", org_id="org_a"), ws_store=ws_store))
+    r1 = client.post(f"/api/workspaces/{ws_id}/builder/default-project")
+    assert r1.status_code == 200, r1.text
+    pid = r1.json()["project_id"]
+    assert pid
+    r2 = client.post(f"/api/workspaces/{ws_id}/builder/default-project")
+    assert r2.status_code == 200, r2.text
+    assert r2.json()["project_id"] == pid
+    set_project_store_for_tests(None)
+    set_builder_source_store_for_tests(None)
+
+
+def test_builder_inline_snapshot_files_list_and_content(tmp_path: Path) -> None:
+    ws_store = InMemoryWorkspaceStore()
+    ws_id = "ws_aaaaaaaaaaaaaaaa"
+    _seed_workspace(ws_store, workspace_id=ws_id, org_id="org_a", owner_user_id="user_a", slug="alpha")
+    project_store = ProjectStore(store_path=tmp_path / "projects.json")
+    project = project_store.make_record(name="alpha-project", root=str(tmp_path), metadata={"workspace_id": ws_id})
+    project_store.register(project)
+    set_project_store_for_tests(project_store)
+    builder_store = BuilderSourceStore(store_path=tmp_path / "builder_sources.json")
+    src = ProjectSource(
+        id="psrc_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        workspace_id=ws_id,
+        project_id=project.id,
+        display_name="inline",
+    )
+    builder_store.upsert_project_source(src)
+    snap_id = "ssnp_test123456789012345678901234"
+    snap = SourceSnapshot(
+        id=snap_id,
+        workspace_id=ws_id,
+        project_id=project.id,
+        project_source_id=src.id,
+        manifest={
+            "kind": "inline_text_bundle",
+            "entries": [{"path": "src/App.tsx", "size_bytes": 3}],
+            "inline_files": {"src/App.tsx": "abc"},
+        },
+    )
+    builder_store.upsert_source_snapshot(snap)
+    set_builder_source_store_for_tests(builder_store)
+    client = TestClient(_build_app(actor=_actor("user_a", org_id="org_a"), ws_store=ws_store))
+    r_list = client.get(
+        f"/api/workspaces/{ws_id}/projects/{project.id}/builder/source-snapshots/{snap_id}/files",
+    )
+    assert r_list.status_code == 200, r_list.text
+    body = r_list.json()
+    assert body["source_snapshot_id"] == snap_id
+    assert len(body["files"]) == 1
+    assert body["files"][0]["path"] == "src/App.tsx"
+    r_content = client.get(
+        f"/api/workspaces/{ws_id}/projects/{project.id}/builder/source-snapshots/{snap_id}/files/content",
+        params={"path": "src/App.tsx"},
+    )
+    assert r_content.status_code == 200, r_content.text
+    assert r_content.json()["content"] == "abc"
+    set_project_store_for_tests(None)
+    set_builder_source_store_for_tests(None)

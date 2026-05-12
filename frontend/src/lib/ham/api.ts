@@ -628,6 +628,70 @@ export async function listBuilderSourceSnapshots(
   }>;
 }
 
+export async function ensureBuilderDefaultProject(workspaceId: string): Promise<{
+  workspace_id: string;
+  project_id: string;
+  project: ProjectRecord;
+}> {
+  const res = await hamApiFetch(
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/builder/default-project`,
+    { method: "POST" },
+  );
+  if (!res.ok) {
+    throw new Error((await hamApiErrorDetailMessage(res)) || `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<{
+    workspace_id: string;
+    project_id: string;
+    project: ProjectRecord;
+  }>;
+}
+
+export async function listBuilderSnapshotFiles(
+  workspaceId: string,
+  projectId: string,
+  snapshotId: string,
+): Promise<{
+  workspace_id: string;
+  project_id: string;
+  source_snapshot_id: string;
+  files: Array<{ path: string; size_bytes: number; is_dir?: boolean }>;
+}> {
+  const res = await hamApiFetch(
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/projects/${encodeURIComponent(projectId)}/builder/source-snapshots/${encodeURIComponent(snapshotId)}/files`,
+  );
+  if (!res.ok) {
+    throw new Error((await hamApiErrorDetailMessage(res)) || `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<{
+    workspace_id: string;
+    project_id: string;
+    source_snapshot_id: string;
+    files: Array<{ path: string; size_bytes: number; is_dir?: boolean }>;
+  }>;
+}
+
+export async function getBuilderSnapshotFileContent(
+  workspaceId: string,
+  projectId: string,
+  snapshotId: string,
+  path: string,
+): Promise<{ path: string; content: string; size_bytes: number; encoding: string }> {
+  const q = new URLSearchParams({ path });
+  const res = await hamApiFetch(
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/projects/${encodeURIComponent(projectId)}/builder/source-snapshots/${encodeURIComponent(snapshotId)}/files/content?${q}`,
+  );
+  if (!res.ok) {
+    throw new Error((await hamApiErrorDetailMessage(res)) || `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<{
+    path: string;
+    content: string;
+    size_bytes: number;
+    encoding: string;
+  }>;
+}
+
 export async function listBuilderImportJobs(
   workspaceId: string,
   projectId: string,
@@ -2660,6 +2724,8 @@ export interface HamChatResponse {
   execution_mode?: HamChatExecutionMode | null;
   /** Present on terminal `done` when the model gateway failed after retries; safe text is in `messages`. */
   gateway_error?: { code: string };
+  /** Builder happy-path metadata (intent, scaffold summaries) when workspace chat triggers it. */
+  builder?: Record<string, unknown> | null;
 }
 
 /**
@@ -2969,6 +3035,7 @@ export type HamChatStreamEvent =
       execution_mode?: HamChatExecutionMode | null;
       /** Structured signal when the assistant turn ended in a gateway failure (safe copy in `messages`). */
       gateway_error?: { code: string };
+      builder?: Record<string, unknown> | null;
     }
   | { type: "error"; code: string; message: string };
 
@@ -3095,6 +3162,7 @@ export async function postChatStream(
         active_agent: ev.active_agent ?? undefined,
         operator_result: ev.operator_result ?? undefined,
         execution_mode: ev.execution_mode ?? undefined,
+        builder: ev.builder ?? undefined,
         ...(ev.gateway_error ? { gateway_error: ev.gateway_error } : {}),
       };
       return;
