@@ -90,8 +90,8 @@ class DroidExecRequest(BaseModel):
     # Output-target abstraction (PR-A). ``None`` is treated as ``"github_pr"``
     # only for backward compatibility with pre-PR-A clients that omit the
     # field; HAM-API now always sends an explicit target read from the
-    # project record. ``"managed_workspace"`` selects the inert stub adapter
-    # which never opens a PR and always returns ``MANAGED_WORKSPACE_NOT_IMPLEMENTED``.
+    # project record. ``"managed_workspace"`` selects the snapshot adapter
+    # (no GitHub; requires workspace_id and cwd under /srv/ham-workspaces/managed/...).
     output_target: Literal["managed_workspace", "github_pr"] | None = Field(default=None)
     workspace_id: str | None = Field(default=None, max_length=180)
 
@@ -285,9 +285,9 @@ def _run_build_lane(
     ``body.output_target`` selects the adapter; ``None`` is treated as
     ``"github_pr"`` only for back-compat with pre-PR-A clients. The
     ``github_pr`` adapter receives the PR-shaped :class:`BuildLaneInputs`
-    plus a real :class:`SubprocessRunner`; the ``managed_workspace`` stub
-    ignores both and returns a structured ``MANAGED_WORKSPACE_NOT_IMPLEMENTED``
-    failure.
+    plus a real :class:`SubprocessRunner`. The ``managed_workspace`` adapter
+    snapshots the constrained working directory (workspace_id project layout)
+    to object storage and never invokes ``git`` / ``gh``.
     """
     target = body.output_target or "github_pr"
     try:
@@ -341,7 +341,8 @@ def _run_build_lane(
         )
         return adapter.emit(common, runner=build_runner)
 
-    # managed_workspace (PR-A: inert stub)
+    # managed_workspace: snapshot constrained working directory to object storage.
+
     common = PostExecCommon(
         project_id=body.project_id,
         project_root=cwd_path,

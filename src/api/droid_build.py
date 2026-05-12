@@ -137,9 +137,8 @@ def _require_build_lane_project(project_id: str) -> Any:
             },
         )
     # ``github_repo`` is only meaningful (and only required) for the github_pr
-    # output target. Managed-workspace projects intentionally have no
-    # ``github_repo`` and run the inert PR-A stub adapter; their gating lives
-    # at the runner side (``MANAGED_WORKSPACE_NOT_IMPLEMENTED``).
+    # output target. Managed-workspace projects intentionally have no GitHub repo;
+    # their post-exec path snapshots the runner working tree instead of opening PRs.
     target = (getattr(rec, "output_target", None) or "managed_workspace").strip()
     if target == "github_pr":
         repo = (getattr(rec, "github_repo", None) or "").strip()

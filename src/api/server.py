@@ -11,11 +11,14 @@ from pydantic import BaseModel, Field
 
 from src.api.browser_operator import router as browser_operator_router
 from src.api.browser_runtime import router as browser_runtime_router
-from src.api.chat import router as chat_router
-from src.api.media_generation import router as media_generation_router
 from src.api.capability_directory import router as capability_directory_router
 from src.api.capability_library import router as capability_library_router
+from src.api.chat import router as chat_router
 from src.api.clerk_gate import get_ham_clerk_actor
+from src.api.coding_agents import router as coding_agents_router
+from src.api.coding_conductor import router as coding_conductor_router
+from src.api.coding_readiness import router as coding_readiness_router
+from src.api.control_plane_runs import router as control_plane_runs_router
 from src.api.cursor_managed_deploy import router as cursor_managed_deploy_router
 from src.api.cursor_managed_deploy_approval import router as cursor_managed_deploy_approval_router
 from src.api.cursor_managed_missions import router as cursor_managed_missions_router
@@ -23,38 +26,36 @@ from src.api.cursor_managed_vercel import router as cursor_managed_vercel_router
 from src.api.cursor_settings import router as cursor_settings_router
 from src.api.cursor_skills import router as cursor_skills_router
 from src.api.cursor_subagents import router as cursor_subagents_router
+from src.api.droid_audit import router as droid_audit_router
+from src.api.droid_build import router as droid_build_router
+from src.api.goham_planner import router as goham_planner_router
 from src.api.hermes_gateway import router as hermes_gateway_router
 from src.api.hermes_hub import router as hermes_hub_router
 from src.api.hermes_runtime_inventory import router as hermes_runtime_inventory_router
 from src.api.hermes_skills import router as hermes_skills_router
-from src.api.goham_planner import router as goham_planner_router
+from src.api.me import router as me_router
+from src.api.media_generation import router as media_generation_router
 from src.api.models_catalog import router as models_catalog_router
+from src.api.pna_middleware import private_network_access_middleware
 from src.api.project_settings import router as project_settings_router
+from src.api.project_snapshots import router as project_snapshots_router
 from src.api.social import router as social_router
 from src.api.social_policy import router as social_policy_router
-from src.api.workspace_health import router as workspace_health_router
-from src.api.workspace_files import router as workspace_files_router
-from src.api.workspace_jobs import router as workspace_jobs_router
-from src.api.workspace_tasks import router as workspace_tasks_router
-from src.api.workspace_terminal import router as workspace_terminal_router
+from src.api.tts_endpoint import router as tts_router
 from src.api.workspace_conductor import router as workspace_conductor_router
+from src.api.workspace_files import resolve_workspace_context_snapshot_root
+from src.api.workspace_files import router as workspace_files_router
+from src.api.workspace_health import router as workspace_health_router
+from src.api.workspace_jobs import router as workspace_jobs_router
 from src.api.workspace_memory import router as workspace_memory_router
 from src.api.workspace_operations import router as workspace_operations_router
-from src.api.workspace_voice_settings import router as workspace_voice_settings_router
-from src.api.tts_endpoint import router as tts_router
-from src.api.me import router as me_router
-from src.api.workspaces import router as workspaces_router
-from src.api.pna_middleware import private_network_access_middleware
 from src.api.workspace_profiles import router as workspace_profiles_router
-from src.api.workspace_files import resolve_workspace_context_snapshot_root
 from src.api.workspace_skills import router as workspace_skills_router
+from src.api.workspace_tasks import router as workspace_tasks_router
+from src.api.workspace_terminal import router as workspace_terminal_router
 from src.api.workspace_tools import router as workspace_tools_router
-from src.api.coding_agents import router as coding_agents_router
-from src.api.control_plane_runs import router as control_plane_runs_router
-from src.api.coding_conductor import router as coding_conductor_router
-from src.api.coding_readiness import router as coding_readiness_router
-from src.api.droid_audit import router as droid_audit_router
-from src.api.droid_build import router as droid_build_router
+from src.api.workspace_voice_settings import router as workspace_voice_settings_router
+from src.api.workspaces import router as workspaces_router
 from src.ham.agent_profiles import agents_config_from_merged
 from src.ham.clerk_auth import HamActor, clerk_authorization_is_clerk_session
 from src.memory_heist import context_engine_dashboard_payload, discover_config
@@ -131,6 +132,7 @@ app.include_router(hermes_runtime_inventory_router)
 app.include_router(hermes_skills_router)
 app.include_router(goham_planner_router)
 app.include_router(project_settings_router)
+app.include_router(project_snapshots_router)
 app.include_router(social_router)
 app.include_router(social_policy_router)
 app.include_router(coding_agents_router)
@@ -163,7 +165,9 @@ _workspace_routes_enabled = (
     in ("1", "true", "yes", "on")
 )
 if _workspace_routes_enabled:
-    from src.api.workspace_chat_composer_preference import router as workspace_chat_composer_preference_router
+    from src.api.workspace_chat_composer_preference import (
+        router as workspace_chat_composer_preference_router,
+    )
 
     app.include_router(me_router)
     app.include_router(workspaces_router)

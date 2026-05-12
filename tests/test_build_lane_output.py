@@ -5,8 +5,7 @@ Covers:
 - :class:`OutputAdapter` Protocol satisfied by both concrete adapters.
 - :class:`GithubPrAdapter` parity with :func:`execute_build_lane_post_exec`
   (the GitHub-PR-specific logic remains untouched; the adapter is a thin lift).
-- :class:`ManagedWorkspaceStubAdapter` always returns
-  ``build_outcome="failed"`` with ``error_summary=MANAGED_WORKSPACE_NOT_IMPLEMENTED``.
+- :class:`ManagedWorkspaceAdapter` delegates to the managed snapshot emitter.
 - :func:`select_output_adapter` dispatch (default github_pr; managed_workspace;
   unknown raises ``ValueError``).
 - :func:`neutral_to_legacy_github_outcome` mapping.
@@ -22,11 +21,9 @@ import pytest
 from src.ham.droid_runner.build_lane import BuildLaneInputs
 from src.ham.droid_runner.build_lane_output import (
     BUILD_OUTCOMES,
-    MANAGED_WORKSPACE_NOT_IMPLEMENTED,
     GithubPrAdapter,
-    ManagedWorkspaceStubAdapter,
+    ManagedWorkspaceAdapter,
     OutputAdapter,
-    OutputResult,
     PostExecCommon,
     neutral_to_legacy_github_outcome,
     select_output_adapter,
@@ -70,12 +67,12 @@ def _common(tmp_path: Path, *, pr_inputs: BuildLaneInputs | None = None) -> Post
 
 def test_both_adapters_satisfy_output_adapter_protocol() -> None:
     assert isinstance(GithubPrAdapter(), OutputAdapter)
-    assert isinstance(ManagedWorkspaceStubAdapter(), OutputAdapter)
+    assert isinstance(ManagedWorkspaceAdapter(), OutputAdapter)
 
 
 def test_adapter_target_attribute_values() -> None:
     assert GithubPrAdapter().target == "github_pr"
-    assert ManagedWorkspaceStubAdapter().target == "managed_workspace"
+    assert ManagedWorkspaceAdapter().target == "managed_workspace"
 
 
 # ---------------------------------------------------------------------------
@@ -90,7 +87,7 @@ def test_select_output_adapter_defaults_to_github_pr() -> None:
 
 def test_select_output_adapter_managed_workspace() -> None:
     a = select_output_adapter("managed_workspace")
-    assert isinstance(a, ManagedWorkspaceStubAdapter)
+    assert isinstance(a, ManagedWorkspaceAdapter)
 
 
 def test_select_output_adapter_github_pr_explicit() -> None:
@@ -104,31 +101,14 @@ def test_select_output_adapter_unknown_raises() -> None:
 
 
 # ---------------------------------------------------------------------------
-# ManagedWorkspaceStubAdapter
+# ManagedWorkspaceAdapter (delegates to snapshot emitter)
 # ---------------------------------------------------------------------------
 
 
-def test_managed_stub_returns_not_implemented(tmp_path: Path) -> None:
-    res = ManagedWorkspaceStubAdapter().emit(_common(tmp_path))
-    assert isinstance(res, OutputResult)
-    assert res.target == "managed_workspace"
+def test_managed_adapter_requires_ids(tmp_path: Path) -> None:
+    res = ManagedWorkspaceAdapter().emit(_common(tmp_path))
     assert res.build_outcome == "failed"
-    assert res.error_summary == MANAGED_WORKSPACE_NOT_IMPLEMENTED
-    assert res.target_ref == {}
-    assert res.pr_url is None
-    assert res.pr_branch is None
-    assert res.pr_commit_sha is None
-
-
-def test_managed_stub_ignores_runner(tmp_path: Path) -> None:
-    """The stub performs no IO; passing a runner has no effect."""
-
-    def boom(_argv: tuple[str, ...]) -> subprocess.CompletedProcess[str]:
-        raise AssertionError("stub adapter must not invoke the runner")
-
-    res = ManagedWorkspaceStubAdapter().emit(_common(tmp_path), runner=boom)
-    assert res.build_outcome == "failed"
-    assert res.error_summary == MANAGED_WORKSPACE_NOT_IMPLEMENTED
+    assert res.error_summary is not None
 
 
 # ---------------------------------------------------------------------------
