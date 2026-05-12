@@ -777,7 +777,6 @@ export async function deleteBuilderCloudRuntime(
   }
   return res.json() as Promise<{ cloud_runtime: BuilderCloudRuntimeStatus }>;
 }
-}
 
 /** Text-to-image (Phase 2G.1+) — mediated by HAM backend only. */
 export async function postHamGeneratedImage(body: {
