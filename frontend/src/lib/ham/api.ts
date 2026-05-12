@@ -428,6 +428,21 @@ export type BuilderActivityResponse = {
   items: BuilderActivityItem[];
 };
 
+export type BuilderActivityStreamEvent = {
+  workspace_id: string;
+  project_id: string;
+  connection_state: "live";
+  stream_cursor: string;
+  items: BuilderActivityItem[];
+};
+
+export type BuilderActivityStreamCallbacks = {
+  onActivity: (payload: BuilderActivityStreamEvent) => void;
+  onHeartbeat?: (payload: { ts?: string; connection_state?: string }) => void;
+  onOpen?: () => void;
+  onError?: () => void;
+};
+
 export type BuilderCloudRuntimeState =
   | "queued"
   | "provisioning"
@@ -749,6 +764,36 @@ export async function getBuilderActivity(
     throw new Error((await hamApiErrorDetailMessage(res)) || `HTTP ${res.status}`);
   }
   return res.json() as Promise<BuilderActivityResponse>;
+}
+
+export function subscribeBuilderActivityStream(
+  workspaceId: string,
+  projectId: string,
+  callbacks: BuilderActivityStreamCallbacks,
+): { close: () => void } {
+  const url = `/api/workspaces/${encodeURIComponent(workspaceId)}/projects/${encodeURIComponent(projectId)}/builder/activity/stream`;
+  const stream = new EventSource(url, { withCredentials: true });
+  stream.onopen = () => callbacks.onOpen?.();
+  stream.onerror = () => callbacks.onError?.();
+  stream.addEventListener("activity", (event: MessageEvent<string>) => {
+    try {
+      const payload = JSON.parse(event.data) as BuilderActivityStreamEvent;
+      callbacks.onActivity(payload);
+    } catch {
+      // Ignore malformed stream events and keep fallback polling available.
+    }
+  });
+  stream.addEventListener("heartbeat", (event: MessageEvent<string>) => {
+    try {
+      const payload = JSON.parse(event.data) as { ts?: string; connection_state?: string };
+      callbacks.onHeartbeat?.(payload);
+    } catch {
+      callbacks.onHeartbeat?.({});
+    }
+  });
+  return {
+    close: () => stream.close(),
+  };
 }
 
 export async function listBuilderVisualEditRequests(

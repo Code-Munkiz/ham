@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
 const {
@@ -13,6 +13,7 @@ const {
   getBuilderCloudRuntimeMock,
   listBuilderCloudRuntimeJobsMock,
   getBuilderCloudRuntimeJobStatusMock,
+  subscribeBuilderActivityStreamMock,
   createBuilderCloudRuntimeJobMock,
   getBuilderWorkerCapabilitiesMock,
   getBuilderLocalRunProfileMock,
@@ -33,6 +34,7 @@ const {
   getBuilderCloudRuntimeMock: vi.fn(),
   listBuilderCloudRuntimeJobsMock: vi.fn(),
   getBuilderCloudRuntimeJobStatusMock: vi.fn(),
+  subscribeBuilderActivityStreamMock: vi.fn(),
   createBuilderCloudRuntimeJobMock: vi.fn(),
   getBuilderWorkerCapabilitiesMock: vi.fn(),
   getBuilderLocalRunProfileMock: vi.fn(),
@@ -58,6 +60,8 @@ vi.mock("@/lib/ham/api", async (importOriginal) => {
     listBuilderCloudRuntimeJobs: (...args: unknown[]) => listBuilderCloudRuntimeJobsMock(...args),
     getBuilderCloudRuntimeJobStatus: (...args: unknown[]) =>
       getBuilderCloudRuntimeJobStatusMock(...args),
+    subscribeBuilderActivityStream: (...args: unknown[]) =>
+      subscribeBuilderActivityStreamMock(...args),
     createBuilderCloudRuntimeJob: (...args: unknown[]) => createBuilderCloudRuntimeJobMock(...args),
     getBuilderWorkerCapabilities: (...args: unknown[]) => getBuilderWorkerCapabilitiesMock(...args),
     getBuilderLocalRunProfile: (...args: unknown[]) => getBuilderLocalRunProfileMock(...args),
@@ -375,6 +379,12 @@ describe("WorkspaceWorkbench", () => {
         logs_hint: null,
       },
     });
+    subscribeBuilderActivityStreamMock.mockImplementation(
+      (_workspaceId: string, _projectId: string, callbacks: { onOpen?: () => void }) => {
+        callbacks.onOpen?.();
+        return { close: vi.fn() };
+      },
+    );
   });
 
   it("select Preview by default and switches panel content", () => {
@@ -407,8 +417,87 @@ describe("WorkspaceWorkbench", () => {
     expect(screen.getByTestId("hww-preview-open-new-tab")).toBeDisabled();
     expect(screen.getByTestId("hww-preview-connect-form")).toBeInTheDocument();
     expect(screen.getByTestId("hww-preview-activity-section")).toBeInTheDocument();
+    expect(screen.getByTestId("hww-preview-activity-stream-copy")).toHaveTextContent(
+      "Activity updates live when connected",
+    );
+    expect(screen.getByTestId("hww-preview-activity-stream-state")).toHaveTextContent("Live");
     expect(screen.getByTestId("hww-preview-activity-empty")).toBeInTheDocument();
     expect(screen.queryByText(/build stream/i)).toBeNull();
+  });
+
+  it("Activity stream updates activity items from live events", async () => {
+    let callbacks: { onActivity: (payload: any) => void; onOpen?: () => void } | null = null;
+    subscribeBuilderActivityStreamMock.mockImplementation(
+      (
+        _workspaceId: string,
+        _projectId: string,
+        cb: { onActivity: (payload: any) => void; onOpen?: () => void },
+      ) => {
+        callbacks = cb;
+        cb.onOpen?.();
+        return { close: vi.fn() };
+      },
+    );
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-preview-activity-stream-state")).toHaveTextContent("Live");
+    });
+    act(() => {
+      callbacks?.onActivity({
+        workspace_id: "ws_abc",
+        project_id: "proj_abc",
+        connection_state: "live",
+        stream_cursor: "1:act_demo",
+        items: [
+          {
+            id: "act_demo",
+            kind: "runtime_status",
+            status: "running",
+            title: "Cloud runtime provisioning",
+            message: "Cloud runtime provider accepted request.",
+            timestamp: "2026-01-01T00:00:00Z",
+            source_id: null,
+            snapshot_id: null,
+            import_job_id: null,
+            runtime_session_id: "rtms_1",
+            preview_endpoint_id: null,
+            metadata: {},
+          },
+        ],
+      });
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-preview-activity-list")).toBeInTheDocument();
+    });
+    expect(screen.getByText("Cloud runtime provisioning")).toBeInTheDocument();
+  });
+
+  it("Activity stream fallback shows offline state when stream errors", async () => {
+    subscribeBuilderActivityStreamMock.mockImplementation(
+      (
+        _workspaceId: string,
+        _projectId: string,
+        cb: { onOpen?: () => void; onError?: () => void },
+      ) => {
+        cb.onError?.();
+        return { close: vi.fn() };
+      },
+    );
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-preview-activity-stream-state")).toHaveTextContent(
+        "Offline / refresh manually",
+      );
+    });
+    expect(screen.queryByTestId("hww-preview-activity-list")).toBeNull();
   });
 
   it("Visual edit request stays disabled when preview not ready", async () => {
