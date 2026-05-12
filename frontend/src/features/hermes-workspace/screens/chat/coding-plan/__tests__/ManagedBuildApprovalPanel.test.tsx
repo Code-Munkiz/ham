@@ -164,6 +164,20 @@ describe("ManagedBuildApprovalPanel", () => {
     expect((btn as HTMLButtonElement).disabled).toBe(true);
   });
 
+  it("calls preview endpoint with composer project id and prompt", async () => {
+    previewMock.mockResolvedValueOnce(makePreview({ project_id: "project.scoped-chat" }));
+
+    render(<ManagedBuildApprovalPanel projectId="project.scoped-chat" userPrompt=" Wire tests. " />);
+
+    fireEvent.click(screen.getByRole("button", { name: /preview this build/i }));
+
+    await waitFor(() => expect(previewMock).toHaveBeenCalledTimes(1));
+    expect(previewMock.mock.calls[0]?.[0]).toMatchObject({
+      project_id: "project.scoped-chat",
+      user_prompt: "Wire tests.",
+    });
+  });
+
   it("launch button stays disabled until preview succeeds AND checkbox is ticked", async () => {
     previewMock.mockResolvedValueOnce(makePreview());
 

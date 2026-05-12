@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import type { CodingConductorCandidate, CodingConductorPreviewPayload } from "@/lib/ham/api";
+import { sanitizeConductorUserFacingLine } from "@/lib/ham/conductorUiMessaging";
 import { cn } from "@/lib/utils";
 
 import {
@@ -41,12 +42,15 @@ function CandidateBlockers({ blockers }: { blockers: string[] }) {
   if (!blockers.length) return null;
   return (
     <ul className="mt-1 space-y-0.5 text-[11px] text-amber-200/85" data-hww-coding-plan="blockers">
-      {blockers.map((b, i) => (
-        <li key={`${i}-${b}`} className="flex gap-1.5 leading-snug">
-          <span aria-hidden>•</span>
-          <span>{b}</span>
-        </li>
-      ))}
+      {blockers.map((b, i) => {
+        const safe = sanitizeConductorUserFacingLine(b);
+        return (
+          <li key={`${i}-${safe}`} className="flex gap-1.5 leading-snug">
+            <span aria-hidden>•</span>
+            <span>{safe}</span>
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -165,12 +169,15 @@ export function CodingPlanCard({ payload, userPrompt, className }: CodingPlanCar
           className="mt-3 space-y-0.5 text-[11px] text-amber-200/85"
           data-hww-coding-plan="response-blockers"
         >
-          {payload.blockers.map((b, i) => (
-            <li key={`${i}-${b}`} className="flex gap-1.5 leading-snug">
-              <span aria-hidden>•</span>
-              <span>{b}</span>
-            </li>
-          ))}
+          {payload.blockers.map((b, i) => {
+            const safe = sanitizeConductorUserFacingLine(b);
+            return (
+              <li key={`${i}-${safe}`} className="flex gap-1.5 leading-snug">
+                <span aria-hidden>•</span>
+                <span>{safe}</span>
+              </li>
+            );
+          })}
         </ul>
       ) : null}
 

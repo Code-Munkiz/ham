@@ -50,6 +50,7 @@ import {
   postBuilderLocalPreview,
   saveBuilderLocalRunProfile,
 } from "@/lib/ham/api";
+import { sanitizeWorkbenchProjectAccessMessage } from "@/lib/ham/workbenchProjectMessages";
 import { cn } from "@/lib/utils";
 import { ProjectSourceIntakeDialog } from "./ProjectSourceIntakeDialog";
 import { WorkbenchProjectSettingsPanel } from "./WorkbenchProjectSettingsPanel";
@@ -568,7 +569,7 @@ function WorkbenchPreviewPanel({
       ) : null}
       {error ? (
         <p className="text-amber-200/90" data-testid="hww-preview-state-error">
-          Could not load preview status: {error}
+          Could not load preview status: {sanitizeWorkbenchProjectAccessMessage(error)}
         </p>
       ) : null}
       {preview ? (
@@ -1150,7 +1151,7 @@ function WorkbenchPreviewPanel({
         </p>
         {activityError ? (
           <p className="text-amber-200/90" data-testid="hww-preview-activity-error">
-            Could not load activity: {activityError}
+            Could not load activity: {sanitizeWorkbenchProjectAccessMessage(activityError)}
           </p>
         ) : null}
         {!activityError && activity.length === 0 ? (

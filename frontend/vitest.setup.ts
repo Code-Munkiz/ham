@@ -9,3 +9,34 @@
  * tests in a follow-up.
  */
 import "@testing-library/jest-dom/vitest";
+
+// jsdom does not implement EventSource. The workspace workbench opens activity streams
+// when a workspace + project are bound — stub it so chat screen tests mount cleanly.
+if (typeof globalThis.EventSource === "undefined") {
+  globalThis.EventSource = class EventSourceStub {
+    readonly CONNECTING = 0;
+    readonly OPEN = 1;
+    readonly CLOSED = 2;
+    readonly url: string;
+    readyState = 0;
+    onopen: ((this: EventSource, ev: Event) => unknown) | null = null;
+    onmessage: ((this: EventSource, ev: MessageEvent) => unknown) | null = null;
+    onerror: ((this: EventSource, ev: Event) => unknown) | null = null;
+
+    constructor(url: string | URL, _eventSourceInitDict?: Record<string, unknown>) {
+      this.url = typeof url === "string" ? url : url.toString();
+    }
+
+    addEventListener(_type: string, _listener: EventListenerOrEventListenerObject): void {}
+
+    removeEventListener(_type: string, _listener: EventListenerOrEventListenerObject): void {}
+
+    dispatchEvent(_event: Event): boolean {
+      return true;
+    }
+
+    close(): void {
+      this.readyState = this.CLOSED;
+    }
+  } as unknown as typeof EventSource;
+}

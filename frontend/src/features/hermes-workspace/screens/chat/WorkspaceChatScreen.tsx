@@ -21,6 +21,7 @@ import {
   fetchHamGeneratedMediaMeta,
   fetchHamMediaJobStatus,
   fetchModelsCatalog,
+  listHamProjects,
   HamAccessRestrictedError,
   HamChatStreamIncompleteError,
   putChatComposerPreference,
@@ -62,6 +63,11 @@ import {
   type MissionTranscriptItem,
 } from "../../utils/missionFeedTranscript";
 import { MANAGED_MISSION_CHAT_OWNERSHIP_HINT } from "../../lib/managedMissionOwnershipCopy";
+import { PROJECT_WORKSPACE_GATE_MESSAGE } from "@/lib/ham/projectWorkspaceGateCopy";
+import {
+  pickWorkspaceScopedProjectId,
+  projectRecordsHaveWorkspaceBinding,
+} from "@/lib/ham/workspaceProjectScope";
 import { useVoiceWorkspaceSettingsOptional } from "../../voice/VoiceWorkspaceSettingsContext";
 import { WorkspaceChatEmptyState, WORKSPACE_CHAT_SUGGESTIONS } from "./WorkspaceChatEmptyState";
 import { WorkspaceChatMessageList, type HwwMsgRow } from "./WorkspaceChatMessageList";
@@ -557,7 +563,7 @@ export type WorkspaceChatScreenProps = {
 
 export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   const { embedMode = false } = props;
-  const { setHamProjectId } = useWorkspaceHamProject();
+  const { hamProjectId, setHamProjectId } = useWorkspaceHamProject();
   const hamWorkspace = useHamWorkspace();
   const navigate = useNavigate();
   const desktopShell = isHamDesktopShell();
@@ -1420,26 +1426,43 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   }, [modelId]);
 
   React.useEffect(() => {
-    let c = false;
+    let cancelled = false;
+    const ws = activeWorkspaceId?.trim() || "";
+    if (!ws) {
+      setProjectId(null);
+      return () => {
+        cancelled = true;
+      };
+    }
     void (async () => {
       try {
-        const ctx = await fetchContextEngine();
-        const id = await ensureProjectIdForWorkspaceRoot(ctx.cwd);
-        if (!c) {
-          setProjectId(id);
-          setHamProjectId(id);
+        const { projects } = await listHamProjects();
+        if (cancelled) return;
+
+        let chosen = pickWorkspaceScopedProjectId(ws, projects, hamProjectId);
+        if (!chosen && !projectRecordsHaveWorkspaceBinding(projects)) {
+          const ctx = await fetchContextEngine();
+          if (cancelled) return;
+          chosen = await ensureProjectIdForWorkspaceRoot(ctx.cwd);
+        }
+        if (cancelled) return;
+
+        setProjectId(chosen);
+        if (chosen !== hamProjectId) {
+          setHamProjectId(chosen);
         }
       } catch {
-        if (!c) {
+        if (!cancelled) {
           setProjectId(null);
           setHamProjectId(null);
         }
       }
     })();
+
     return () => {
-      c = true;
+      cancelled = true;
     };
-  }, [setHamProjectId]);
+  }, [activeWorkspaceId, hamProjectId, setHamProjectId]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -2735,6 +2758,11 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       setCodingPlanInlineError("Describe what you want HAM to build or inspect first.");
       return;
     }
+    if (!projectId?.trim()) {
+      setCodingPlanPreview(null);
+      setCodingPlanInlineError(PROJECT_WORKSPACE_GATE_MESSAGE);
+      return;
+    }
     setCodingPlanLoading(true);
     setCodingPlanPreview(null);
     try {
@@ -2759,10 +2787,20 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   // user still has to approve in CodingPlanCard / ManagedBuildApprovalPanel.
   const autoCodingPlanInFlightRef = React.useRef(false);
   const lastAutoCodingPromptRef = React.useRef<string>("");
+
+  React.useEffect(() => {
+    lastAutoCodingPromptRef.current = "";
+  }, [projectId]);
+
   const triggerAutoCodingPlanPreview = React.useCallback(
     async (prompt: string) => {
       const draft = prompt.trim();
       if (!draft) return;
+      if (!projectId?.trim()) {
+        setCodingPlanInlineError(PROJECT_WORKSPACE_GATE_MESSAGE);
+        setCodingPlanPreview(null);
+        return;
+      }
       if (autoCodingPlanInFlightRef.current) return;
       if (lastAutoCodingPromptRef.current === draft) return;
       lastAutoCodingPromptRef.current = draft;
@@ -2789,8 +2827,11 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   );
 
   React.useEffect(() => {
-    if (input.trim()) setCodingPlanInlineError(null);
-  }, [input]);
+    if (!input.trim()) return;
+    // Preserve the workspace project gate until a project is resolved (composer text alone does not fix it).
+    if (codingPlanInlineError === PROJECT_WORKSPACE_GATE_MESSAGE) return;
+    setCodingPlanInlineError(null);
+  }, [input, codingPlanInlineError]);
 
   const onEmptyStatePlanWithCodingAgents = React.useCallback(() => {
     composerTextareaRef.current?.focus();

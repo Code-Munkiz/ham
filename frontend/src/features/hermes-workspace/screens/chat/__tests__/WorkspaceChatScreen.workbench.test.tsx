@@ -2,7 +2,7 @@
  * Desktop chat reserves one right column for the workbench (inspector removed from chrome).
  */
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 
 const { mockUseHamWorkspace, fetchChatSessionMock } = vi.hoisted(() => ({
@@ -40,6 +40,14 @@ vi.mock("@/lib/ham/api", async (importOriginal) => {
         model_id: body.model_id,
       }),
     ),
+    listHamProjects: vi.fn(async () => ({ projects: [] })),
+    fetchContextEngine: vi.fn(
+      async () =>
+        ({
+          cwd: "/tmp/repo",
+        }) as unknown as import("@/lib/ham/types").ContextEnginePayload,
+    ),
+    ensureProjectIdForWorkspaceRoot: vi.fn(async () => null),
   };
 });
 
@@ -145,7 +153,8 @@ describe("WorkspaceChatScreen workbench shell", () => {
     await waitFor(() => {
       expect(screen.getByTestId("hww-workbench")).toBeInTheDocument();
     });
-    expect(screen.getByRole("textbox")).toBeInTheDocument();
+    const command = screen.getByTestId("hww-command-panel");
+    expect(within(command).getByRole("textbox")).toBeInTheDocument();
   });
 
   it("shows a resize handle on desktop split layout", async () => {
@@ -171,7 +180,7 @@ describe("WorkspaceChatScreen workbench shell", () => {
     await waitFor(() => {
       expect(screen.getByTestId("hww-workbench")).toBeInTheDocument();
     });
-    expect(screen.getByText("No preview yet.")).toBeInTheDocument();
+    expect(screen.getByTestId("hww-preview-state-no-project")).toBeInTheDocument();
     fireEvent.click(screen.getByTestId("hww-workbench-tab-code"));
     expect(await screen.findByText("Explorer placeholder — no repo mounted.")).toBeInTheDocument();
   });

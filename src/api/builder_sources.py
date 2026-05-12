@@ -104,7 +104,12 @@ def _project_workspace_id(record: ProjectRecord) -> str | None:
     if raw is None:
         raw = record.metadata.get("workspaceId")
     text = str(raw or "").strip()
-    return text or None
+    if text:
+        return text
+    # Firestore/registry records often set top-level workspace_id without duplicating metadata.
+    top = getattr(record, "workspace_id", None)
+    tail = str(top or "").strip()
+    return tail or None
 
 
 def _project_in_workspace_or_404(*, project_id: str, workspace_id: str) -> ProjectRecord:
