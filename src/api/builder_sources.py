@@ -67,7 +67,7 @@ _ZIP_ERROR_MESSAGES = {
     "ZIP_INVALID": "ZIP archive is invalid or unsafe.",
     "ZIP_EMPTY": "ZIP archive is empty.",
 }
-_PREVIEW_PROXY_ALLOWED_HOST_SUFFIXES = (".run.app",)
+_PREVIEW_PROXY_ALLOWED_HOST_SUFFIXES = (".run.app", ".e2b.app")
 _PREVIEW_PROXY_TIMEOUT_SECONDS = 8.0
 _PREVIEW_PROXY_MAX_BYTES = 2 * 1024 * 1024
 _ACTIVITY_STREAM_MAX_ITEMS = 24
@@ -905,7 +905,7 @@ def _cloud_runtime_worker_entry() -> BuilderWorkerCapabilityEntry:
         elif provider_status == "unavailable":
             setup = "Choose a supported sandbox provider (e2b or daytona)."
         else:
-            setup = "Sandbox provider foundation is fake/dry-run capable; live provider calls are deferred."
+            setup = "Sandbox provider is available. For live E2B, set HAM_BUILDER_SANDBOX_PROVIDER=e2b and disable dry-run."
     return BuilderWorkerCapabilityEntry(
         worker_kind="cloud_runtime_worker",
         provider="builder_cloud_runtime",

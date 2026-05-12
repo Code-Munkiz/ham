@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import zipfile
+from io import BytesIO
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Literal
@@ -16,8 +18,9 @@ from src.ham.builder_cloud_runtime_gcp import (
     safe_proxy_upstream_from_provider,
 )
 from src.ham.builder_sandbox_provider import (
-    FakeSandboxRuntimeProvider,
+    SandboxSourceFile,
     SandboxRuntimeState,
+    build_sandbox_runtime_provider,
     load_sandbox_runtime_config,
     sandbox_preview_host,
     sandbox_provider_is_supported,
@@ -92,7 +95,7 @@ def get_cloud_runtime_experiment_status() -> tuple[str, str]:
             )
         return (
             "provider_ready",
-            "Cloud sandbox provider is configured for fake-provider integration tests.",
+            "Cloud sandbox provider is configured for live runtime experimentation.",
         )
     cfg = load_gcp_runtime_config()
     if not experiments_enabled:
@@ -217,6 +220,65 @@ def _resolve_source_handoff(job: CloudRuntimeJob) -> dict[str, Any]:
         "error_code": None,
         "error_message": None,
     }
+
+
+def _materialize_snapshot_source_files(
+    *,
+    workspace_id: str,
+    project_id: str,
+    snapshot_id: str | None,
+) -> tuple[list[SandboxSourceFile], str | None]:
+    snapshot_value = str(snapshot_id or "").strip()
+    if not snapshot_value:
+        return [], "SANDBOX_SOURCE_SNAPSHOT_MISSING"
+    rows = get_builder_source_store().list_source_snapshots(
+        workspace_id=workspace_id,
+        project_id=project_id,
+    )
+    snapshot = next((row for row in rows if row.id == snapshot_value), None)
+    if snapshot is None:
+        return [], "SOURCE_SNAPSHOT_NOT_FOUND"
+    manifest = snapshot.manifest or {}
+    inline_files = manifest.get("inline_files")
+    if isinstance(inline_files, dict):
+        files: list[SandboxSourceFile] = []
+        for raw_path, raw_text in inline_files.items():
+            if not isinstance(raw_path, str) or not isinstance(raw_text, str):
+                continue
+            rel = raw_path.replace("\\", "/").lstrip("/")
+            if not rel or ".." in rel.split("/"):
+                continue
+            files.append(SandboxSourceFile(path=rel, data=raw_text.encode("utf-8")))
+        return files, None if files else "SANDBOX_SOURCE_FILES_MISSING"
+    artifact_uri = str(snapshot.artifact_uri or "").strip()
+    if not artifact_uri.startswith("builder-artifact://"):
+        return [], "CLOUD_RUNTIME_SOURCE_HANDOFF_MISSING_ARTIFACT"
+    artifact_id = artifact_uri.replace("builder-artifact://", "", 1).strip()
+    if not artifact_id:
+        return [], "CLOUD_RUNTIME_SOURCE_HANDOFF_MISSING_ARTIFACT"
+    from src.ham.builder_chat_scaffold import load_zip_bytes_for_snapshot
+
+    payload = load_zip_bytes_for_snapshot(
+        workspace_id=workspace_id,
+        project_id=project_id,
+        artifact_id=artifact_id,
+    )
+    if payload is None:
+        return [], "CLOUD_RUNTIME_SOURCE_HANDOFF_MISSING_ARTIFACT"
+    files = []
+    try:
+        with zipfile.ZipFile(BytesIO(payload)) as zf:
+            for info in zf.infolist():
+                if info.is_dir():
+                    continue
+                rel = info.filename.replace("\\", "/").lstrip("/")
+                if not rel or ".." in rel.split("/"):
+                    continue
+                data = zf.read(info)
+                files.append(SandboxSourceFile(path=rel, data=data))
+    except (zipfile.BadZipFile, OSError, RuntimeError):
+        return [], "SANDBOX_SOURCE_ARTIFACT_INVALID"
+    return files, None if files else "SANDBOX_SOURCE_FILES_MISSING"
 
 
 def get_runtime_job_lifecycle_status(
@@ -597,13 +659,34 @@ def execute_cloud_runtime_job(job: CloudRuntimeJob) -> CloudRuntimeExecutionResu
                 },
             }
             return CloudRuntimeExecutionResult(job=job, runtime_session=runtime, usage_event=usage_event)
-        provider = FakeSandboxRuntimeProvider(provider=cfg.provider, fake_mode=cfg.fake_mode)
+        source_files, source_files_error = _materialize_snapshot_source_files(
+            workspace_id=job.workspace_id,
+            project_id=job.project_id,
+            snapshot_id=job.source_snapshot_id,
+        )
+        if source_files_error:
+            runtime.status = "failed"
+            runtime.health = "unhealthy"
+            runtime.message = "Cloud sandbox source payload is unavailable."
+            runtime.updated_at = _utc_now_iso()
+            runtime = runtime_store.upsert_runtime_session(runtime)
+            job.runtime_session_id = runtime.id
+            job.status = "failed"
+            job.phase = "failed"
+            job.error_code = source_files_error
+            job.error_message = "Cloud sandbox source payload is unavailable."
+            job.logs_summary = "Sandbox source materialization failed before provider call."
+            job.completed_at = _utc_now_iso()
+            job.updated_at = job.completed_at
+            return CloudRuntimeExecutionResult(job=job, runtime_session=runtime, usage_event=None)
+        provider = build_sandbox_runtime_provider(config=cfg)
         try:
             state = provider.create_sandbox(state=state, config=cfg)
             state = provider.upload_source(
                 state=state,
                 source_ref=str(source_handoff.get("source_ref") or ""),
                 artifact_uri=str(source_handoff.get("artifact_uri") or ""),
+                files=source_files,
             )
             state = provider.run_command(state=state, command=["npm", "install"], stage="install")
             state = provider.run_command(
