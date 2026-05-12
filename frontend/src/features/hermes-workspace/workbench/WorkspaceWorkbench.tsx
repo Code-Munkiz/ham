@@ -450,6 +450,14 @@ function WorkbenchPreviewPanel({
   const cloudRuntimeRequestEnabled = ["available_mock", "available_poc"].includes(
     cloudRuntimeProviderStatus,
   );
+  const cloudRuntimeProviderCopy =
+    cloudRuntimeProviderStatus === "available_poc"
+      ? "Cloud runtime provider is configured for plan-only POC."
+      : cloudRuntimeProviderStatus === "available_mock"
+        ? "Cloud runtime local mock is available for safe control-plane testing."
+        : cloudRuntimeProviderStatus === "unavailable"
+          ? "Provider unavailable: set required GCP config for plan-only mode."
+          : "Provider disabled by default.";
   return (
     <MutedPanel>
       <div className="flex flex-wrap items-center gap-2">
@@ -780,6 +788,9 @@ function WorkbenchPreviewPanel({
         <p className="text-[11px] text-white/55" data-testid="hww-cloud-runtime-provider-status">
           Provider: {cloudRuntimeProviderStatus.replace("_", " ")}
         </p>
+        <p className="text-[11px] text-white/55" data-testid="hww-cloud-runtime-provider-copy">
+          {cloudRuntimeProviderCopy}
+        </p>
         {cloudRuntime?.message ? (
           <p className="text-[11px] text-white/55" data-testid="hww-cloud-runtime-message">
             {cloudRuntime.message}
@@ -828,8 +839,7 @@ function WorkbenchPreviewPanel({
         </Button>
         {!cloudRuntimeRequestEnabled ? (
           <p className="text-[11px] text-white/55" data-testid="hww-cloud-runtime-disabled-copy">
-            Enable local_mock provider for POC runs. Production cloud runtime is intentionally not
-            wired here.
+            No cloud runtime has been provisioned yet.
           </p>
         ) : null}
         {cloudRuntimeJobError ? (

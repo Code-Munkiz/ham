@@ -562,7 +562,12 @@ def _cloud_runtime_worker_entry() -> BuilderWorkerCapabilityEntry:
     fit = "Cloud runtime POC control-plane path; no production sandbox lifecycle in this phase."
     setup = "Set HAM_BUILDER_CLOUD_RUNTIME_PROVIDER=local_mock for safe simulation in dev/test."
     if provider_mode == "cloud_run_poc":
-        setup = "cloud_run_poc interface is declared, but provisioning is intentionally unsupported in this PR."
+        if provider_status == "disabled":
+            setup = "Enable HAM_BUILDER_CLOUD_RUNTIME_GCP_ENABLED=true to activate cloud_run_poc planning."
+        elif provider_status == "unavailable":
+            setup = "Set HAM_BUILDER_CLOUD_RUNTIME_GCP_PROJECT and HAM_BUILDER_CLOUD_RUNTIME_GCP_REGION for plan-only POC."
+        else:
+            setup = "cloud_run_poc is plan-only in this PR. No cloud resources are provisioned by default."
     return BuilderWorkerCapabilityEntry(
         worker_kind="cloud_runtime_worker",
         provider="builder_cloud_runtime",
