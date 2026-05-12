@@ -6,7 +6,7 @@ import shlex
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal, cast
 from urllib.parse import urlsplit, urlunsplit
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -16,6 +16,9 @@ from src.api.clerk_gate import get_ham_clerk_actor
 from src.api.dependencies.workspace import require_perm
 from src.ham.builder_zip_intake import ZipSafetyError, validate_zip_upload
 from src.ham.clerk_auth import HamActor
+from src.ham.harness_capabilities import HARNESS_CAPABILITIES
+from src.ham.worker_adapters.claude_agent_adapter import check_claude_agent_readiness
+from src.ham.worker_adapters.cursor_adapter import check_cursor_readiness
 from src.ham.workspace_models import WorkspaceContext
 from src.ham.workspace_perms import PERM_WORKSPACE_READ, PERM_WORKSPACE_WRITE
 from src.persistence.builder_source_store import (
@@ -333,6 +336,198 @@ class BuilderActivityItem(BaseModel):
     runtime_session_id: str | None = None
     preview_endpoint_id: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+BuilderWorkerStatus = Literal["available", "needs_connection", "unavailable", "disabled", "unknown"]
+
+
+class BuilderWorkerCapabilityEntry(BaseModel):
+    worker_kind: str
+    provider: str
+    display_name: str
+    status: BuilderWorkerStatus
+    capabilities: list[str] = Field(default_factory=list)
+    environment_fit: str
+    required_setup: str
+    settings_href: str | None = None
+    last_checked_at: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+def _to_worker_status(raw: str | None) -> BuilderWorkerStatus:
+    value = str(raw or "").strip().lower()
+    if value in {"available", "needs_connection", "unavailable", "disabled", "unknown"}:
+        return cast(BuilderWorkerStatus, value)
+    return "unknown"
+
+
+def _cursor_cloud_agent_entry() -> BuilderWorkerCapabilityEntry:
+    now = _utc_now_iso()
+    readiness = check_cursor_readiness()
+    status: BuilderWorkerStatus = "needs_connection"
+    if readiness.status == "ready":
+        status = "available"
+    elif readiness.status == "unavailable":
+        status = "unavailable"
+    row = HARNESS_CAPABILITIES.get("cursor_cloud_agent")
+    metadata: dict[str, Any] = {
+        "source": "cursor_readiness",
+        "harness_provider": "cursor_cloud_agent",
+        "readiness_status": readiness.status,
+    }
+    if row is not None:
+        metadata["registry_status"] = row.registry_status
+        metadata["supports_operator_launch"] = bool(row.supports_operator_launch)
+    return BuilderWorkerCapabilityEntry(
+        worker_kind="cursor_cloud_agent",
+        provider="cursor_cloud_agent",
+        display_name="Cursor Cloud Agent",
+        status=status,
+        capabilities=["plan", "edit_code", "run_tests", "open_pr"],
+        environment_fit="Hosted/cloud coding runs against remote repositories.",
+        required_setup="Add a Cursor API key in Connected Tools to enable cloud agent runs.",
+        settings_href="/workspace/settings?section=integrations",
+        last_checked_at=now,
+        metadata=metadata,
+    )
+
+
+def _cursor_local_sdk_entry() -> BuilderWorkerCapabilityEntry:
+    now = _utc_now_iso()
+    profile = os.environ.get("HAM_CURSOR_SDK_BRIDGE_ENABLED", "").strip().lower()
+    enabled = profile in {"1", "true", "yes", "on"}
+    status: BuilderWorkerStatus = "disabled" if not enabled else "unknown"
+    return BuilderWorkerCapabilityEntry(
+        worker_kind="cursor_local_sdk",
+        provider="cursor_sdk_bridge",
+        display_name="Cursor Local SDK Bridge",
+        status=status,
+        capabilities=["status_stream", "event_projection"],
+        environment_fit="Optional local/bridge telemetry path for Cursor-native status streams.",
+        required_setup="Enable HAM_CURSOR_SDK_BRIDGE_ENABLED and configure provider credentials.",
+        settings_href="/workspace/settings?section=integrations",
+        last_checked_at=now,
+        metadata={
+            "source": "env_flag",
+            "bridge_enabled": enabled,
+        },
+    )
+
+
+def _claude_agent_entry(actor: HamActor | None) -> BuilderWorkerCapabilityEntry:
+    now = _utc_now_iso()
+    readiness = check_claude_agent_readiness(actor)
+    status: BuilderWorkerStatus = "unknown"
+    if readiness.status == "ready":
+        status = "available"
+    elif readiness.status == "needs_sign_in":
+        status = "needs_connection"
+    elif readiness.status == "unavailable":
+        status = "unavailable"
+    return BuilderWorkerCapabilityEntry(
+        worker_kind="claude_agent",
+        provider="claude_agent_sdk",
+        display_name="Claude Agent",
+        status=status,
+        capabilities=["plan", "edit_code", "run_tests"],
+        environment_fit="Server-side Claude Agent SDK with BYOK auth channels.",
+        required_setup="Install claude-agent-sdk on host and connect Anthropic/Bedrock/Vertex auth.",
+        settings_href="/workspace/settings?section=integrations",
+        last_checked_at=now,
+        metadata={
+            "source": "claude_agent_readiness",
+            "sdk_available": bool(readiness.sdk_available),
+            "sdk_version": readiness.sdk_version,
+            "readiness_status": readiness.status,
+        },
+    )
+
+
+def _factory_droid_entry() -> BuilderWorkerCapabilityEntry:
+    now = _utc_now_iso()
+    token_present = bool((os.environ.get("HAM_DROID_EXEC_TOKEN") or "").strip())
+    row = HARNESS_CAPABILITIES.get("factory_droid")
+    return BuilderWorkerCapabilityEntry(
+        worker_kind="factory_droid",
+        provider="factory_droid",
+        display_name="Factory Droid",
+        status="available" if token_present else "unknown",
+        capabilities=["edit_code", "run_tests"],
+        environment_fit="Local bounded workflow execution on registered project roots.",
+        required_setup="Configure HAM_DROID_EXEC_TOKEN and keep allowlisted droid workflows enabled.",
+        settings_href="/workspace/settings?section=integrations",
+        last_checked_at=now,
+        metadata={
+            "source": "env_and_registry",
+            "token_configured": token_present,
+            "registry_status": row.registry_status if row is not None else "unknown",
+        },
+    )
+
+
+def _local_runtime_entry(*, workspace_id: str, project_id: str) -> BuilderWorkerCapabilityEntry:
+    now = _utc_now_iso()
+    preview = _build_preview_status_payload(workspace_id=workspace_id, project_id=project_id)
+    profile = get_builder_run_profile_store().get_active_local_run_profile(
+        workspace_id=workspace_id,
+        project_id=project_id,
+    )
+    preview_status = str(preview.get("status") or "").strip().lower()
+    status: BuilderWorkerStatus = "needs_connection"
+    if preview_status == "ready":
+        status = "available"
+    elif preview_status == "error":
+        status = "unavailable"
+    elif profile is not None and profile.status == "disabled":
+        status = "disabled"
+    elif profile is None and preview_status == "not_connected":
+        status = "needs_connection"
+    return BuilderWorkerCapabilityEntry(
+        worker_kind="local_runtime",
+        provider="builder_local_runtime",
+        display_name="Local Runtime",
+        status=_to_worker_status(status),
+        capabilities=["local_preview_registration", "local_run_profile"],
+        environment_fit="Operator-run local dev server + loopback preview URL registration.",
+        required_setup="Save a local run profile and connect a safe localhost preview URL.",
+        settings_href=None,
+        last_checked_at=now,
+        metadata={
+            "source": "builder_preview_and_run_profile",
+            "preview_status": preview_status or "unknown",
+            "run_profile_status": profile.status if profile is not None else "not_configured",
+            "runtime_session_id": preview.get("runtime_session_id"),
+            "preview_endpoint_id": preview.get("preview_endpoint_id"),
+        },
+    )
+
+
+def _hermes_planner_entry() -> BuilderWorkerCapabilityEntry:
+    return BuilderWorkerCapabilityEntry(
+        worker_kind="hermes_planner",
+        provider="hermes_supervisor",
+        display_name="Hermes Planner",
+        status="available",
+        capabilities=["plan", "critique", "route"],
+        environment_fit="Built-in HAM supervisory planning and critique loops.",
+        required_setup="No additional setup for read-only planner visibility.",
+        settings_href="/workspace/settings?section=agents",
+        last_checked_at=_utc_now_iso(),
+        metadata={
+            "source": "static_control_plane",
+        },
+    )
+
+
+def _build_worker_capabilities(*, workspace_id: str, project_id: str, actor: HamActor | None) -> list[BuilderWorkerCapabilityEntry]:
+    return [
+        _cursor_cloud_agent_entry(),
+        _cursor_local_sdk_entry(),
+        _claude_agent_entry(actor),
+        _factory_droid_entry(),
+        _local_runtime_entry(workspace_id=workspace_id, project_id=project_id),
+        _hermes_planner_entry(),
+    ]
 
 
 _SENSITIVE_VALUE_RE = re.compile(r"(token|secret|password|passwd|api[_-]?key|bearer|authorization)", re.IGNORECASE)
@@ -861,6 +1056,25 @@ async def cancel_builder_visual_edit_request(
         "workspace_id": ctx.workspace_id,
         "project_id": project_id,
         "visual_edit_request": cancelled.model_dump(mode="json"),
+    }
+
+
+@router.get("/api/workspaces/{workspace_id}/projects/{project_id}/builder/worker-capabilities")
+async def get_builder_worker_capabilities(
+    project_id: str,
+    ctx: Annotated[WorkspaceContext, Depends(require_perm(PERM_WORKSPACE_READ))],
+    actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)] = None,
+) -> dict[str, Any]:
+    _project_in_workspace_or_404(project_id=project_id, workspace_id=ctx.workspace_id)
+    entries = _build_worker_capabilities(
+        workspace_id=ctx.workspace_id,
+        project_id=project_id,
+        actor=actor,
+    )
+    return {
+        "workspace_id": ctx.workspace_id,
+        "project_id": project_id,
+        "workers": [entry.model_dump(mode="json") for entry in entries],
     }
 
 

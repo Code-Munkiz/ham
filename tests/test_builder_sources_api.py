@@ -522,3 +522,102 @@ def test_builder_usage_events_scope_enforced(tmp_path: Path) -> None:
     set_project_store_for_tests(None)
     set_builder_source_store_for_tests(None)
     set_builder_usage_event_store_for_tests(None)
+
+
+def test_builder_worker_capabilities_returns_known_worker_kinds(tmp_path: Path) -> None:
+    ws_store = InMemoryWorkspaceStore()
+    ws_id = "ws_aaaaaaaaaaaaaaaa"
+    _seed_workspace(
+        ws_store,
+        workspace_id=ws_id,
+        org_id="org_a",
+        owner_user_id="user_a",
+        slug="alpha",
+    )
+    project_store = ProjectStore(store_path=tmp_path / "projects.json")
+    project = project_store.make_record(name="alpha-project", root=str(tmp_path), metadata={"workspace_id": ws_id})
+    project_store.register(project)
+    set_project_store_for_tests(project_store)
+    set_builder_source_store_for_tests(BuilderSourceStore(store_path=tmp_path / "builder_sources.json"))
+    app = _build_app(actor=_actor("user_a", org_id="org_a"), ws_store=ws_store)
+    client = TestClient(app)
+
+    res = client.get(f"/api/workspaces/{ws_id}/projects/{project.id}/builder/worker-capabilities")
+    assert res.status_code == 200, res.text
+    payload = res.json()
+    assert payload["workspace_id"] == ws_id
+    assert payload["project_id"] == project.id
+    workers = payload["workers"]
+    assert [row["worker_kind"] for row in workers] == [
+        "cursor_cloud_agent",
+        "cursor_local_sdk",
+        "claude_agent",
+        "factory_droid",
+        "local_runtime",
+        "hermes_planner",
+    ]
+    for row in workers:
+        assert row["status"] in {"available", "needs_connection", "unavailable", "disabled", "unknown"}
+        assert "capabilities" in row
+        assert "required_setup" in row
+        assert "environment_fit" in row
+
+    set_project_store_for_tests(None)
+    set_builder_source_store_for_tests(None)
+
+
+def test_builder_worker_capabilities_does_not_expose_secrets(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HAM_DROID_EXEC_TOKEN", "super-secret-token-value")
+    ws_store = InMemoryWorkspaceStore()
+    ws_id = "ws_aaaaaaaaaaaaaaaa"
+    _seed_workspace(ws_store, workspace_id=ws_id, org_id="org_a", owner_user_id="user_a", slug="alpha")
+    project_store = ProjectStore(store_path=tmp_path / "projects.json")
+    project = project_store.make_record(name="proj-a", root=str(tmp_path), metadata={"workspace_id": ws_id})
+    project_store.register(project)
+    set_project_store_for_tests(project_store)
+    set_builder_source_store_for_tests(BuilderSourceStore(store_path=tmp_path / "builder_sources.json"))
+    client = TestClient(_build_app(actor=_actor("user_a", org_id="org_a"), ws_store=ws_store))
+
+    res = client.get(f"/api/workspaces/{ws_id}/projects/{project.id}/builder/worker-capabilities")
+    assert res.status_code == 200, res.text
+    body = res.text.lower()
+    assert "super-secret-token-value" not in body
+    assert "api_key" not in body
+    assert "authorization" not in body
+
+    set_project_store_for_tests(None)
+    set_builder_source_store_for_tests(None)
+
+
+def test_builder_worker_capabilities_enforces_scope_and_auth(tmp_path: Path, monkeypatch) -> None:
+    ws_store = InMemoryWorkspaceStore()
+    ws_a = "ws_aaaaaaaaaaaaaaaa"
+    ws_b = "ws_bbbbbbbbbbbbbbbb"
+    _seed_workspace(ws_store, workspace_id=ws_a, org_id="org_a", owner_user_id="user_a", slug="alpha")
+    _seed_workspace(ws_store, workspace_id=ws_b, org_id="org_b", owner_user_id="user_b", slug="beta")
+    project_store = ProjectStore(store_path=tmp_path / "projects.json")
+    p_a = project_store.make_record(name="proj-a", root=str(tmp_path), metadata={"workspace_id": ws_a})
+    p_b = project_store.make_record(name="proj-b", root=str(tmp_path), metadata={"workspace_id": ws_b})
+    project_store.register(p_a)
+    project_store.register(p_b)
+    set_project_store_for_tests(project_store)
+    set_builder_source_store_for_tests(BuilderSourceStore(store_path=tmp_path / "builder_sources.json"))
+    client = TestClient(_build_app(actor=_actor("user_a", org_id="org_a"), ws_store=ws_store))
+    forbidden = client.get(f"/api/workspaces/{ws_b}/projects/{p_b.id}/builder/worker-capabilities")
+    wrong_project_workspace = client.get(
+        f"/api/workspaces/{ws_a}/projects/{p_b.id}/builder/worker-capabilities"
+    )
+    ok = client.get(f"/api/workspaces/{ws_a}/projects/{p_a.id}/builder/worker-capabilities")
+    assert forbidden.status_code == 403
+    assert wrong_project_workspace.status_code == 404
+    assert ok.status_code == 200
+
+    monkeypatch.setenv("HAM_CLERK_REQUIRE_AUTH", "true")
+    monkeypatch.delenv("HAM_LOCAL_DEV_WORKSPACE_BYPASS", raising=False)
+    unauth = TestClient(_build_app(actor=None, ws_store=ws_store))
+    unauth_res = unauth.get(f"/api/workspaces/{ws_a}/projects/{p_a.id}/builder/worker-capabilities")
+    assert unauth_res.status_code == 401
+    assert unauth_res.json()["detail"]["error"]["code"] == "CLERK_SESSION_REQUIRED"
+
+    set_project_store_for_tests(None)
+    set_builder_source_store_for_tests(None)

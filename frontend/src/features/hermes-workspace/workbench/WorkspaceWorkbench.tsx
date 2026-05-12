@@ -26,6 +26,7 @@ import {
   type LocalRunProfilePayload,
   type LocalRunProfileResponse,
   type BuilderPreviewStatus,
+  type BuilderWorkerCapability,
   type BuilderProjectSourceRecord,
   type BuilderSourceSnapshotRecord,
   createBuilderVisualEditRequest,
@@ -35,6 +36,7 @@ import {
   getBuilderCloudRuntime,
   getBuilderLocalRunProfile,
   getBuilderPreviewStatus,
+  getBuilderWorkerCapabilities,
   listBuilderVisualEditRequests,
   listBuilderImportJobs,
   listBuilderProjectSources,
@@ -262,6 +264,8 @@ function WorkbenchPreviewPanel({
   const [error, setError] = React.useState<string | null>(null);
   const [activity, setActivity] = React.useState<BuilderActivityItem[]>([]);
   const [activityError, setActivityError] = React.useState<string | null>(null);
+  const [workers, setWorkers] = React.useState<BuilderWorkerCapability[]>([]);
+  const [workersError, setWorkersError] = React.useState<string | null>(null);
   const [previewUrlInput, setPreviewUrlInput] = React.useState("http://localhost:3000");
   const [submitBusy, setSubmitBusy] = React.useState(false);
   const [disconnectBusy, setDisconnectBusy] = React.useState(false);
@@ -358,6 +362,24 @@ function WorkbenchPreviewPanel({
     }
   }, [workspaceId, projectId]);
 
+  const refreshWorkers = React.useCallback(async () => {
+    const ws = workspaceId?.trim() || "";
+    const pid = projectId?.trim() || "";
+    if (!ws || !pid) {
+      setWorkers([]);
+      setWorkersError(null);
+      return;
+    }
+    try {
+      const payload = await getBuilderWorkerCapabilities(ws, pid);
+      setWorkers(payload.workers || []);
+      setWorkersError(null);
+    } catch (e) {
+      setWorkers([]);
+      setWorkersError(e instanceof Error ? e.message : String(e));
+    }
+  }, [workspaceId, projectId]);
+
   const refresh = React.useCallback(async () => {
     const ws = workspaceId?.trim() || "";
     const pid = projectId?.trim() || "";
@@ -380,6 +402,7 @@ function WorkbenchPreviewPanel({
       await refreshActivity();
       await refreshRunProfile();
       await refreshVisualEditRequests();
+      await refreshWorkers();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg);
@@ -389,7 +412,14 @@ function WorkbenchPreviewPanel({
     } finally {
       setLoading(false);
     }
-  }, [workspaceId, projectId, refreshActivity, refreshRunProfile, refreshVisualEditRequests]);
+  }, [
+    workspaceId,
+    projectId,
+    refreshActivity,
+    refreshRunProfile,
+    refreshVisualEditRequests,
+    refreshWorkers,
+  ]);
 
   React.useEffect(() => {
     void refresh();
@@ -742,6 +772,61 @@ function WorkbenchPreviewPanel({
           <p className="text-amber-200/90" data-testid="hww-cloud-runtime-error">
             Could not load cloud runtime status: {cloudRuntimeError}
           </p>
+        ) : null}
+      </div>
+      <div
+        className="space-y-2 rounded-lg border border-white/[0.08] bg-black/25 p-3"
+        data-testid="hww-worker-capability-section"
+      >
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">
+          Builder workers
+        </p>
+        <p className="text-[11px] text-white/60">
+          Read-only worker readiness. This view does not launch workers.
+        </p>
+        {workersError ? (
+          <p className="text-amber-200/90" data-testid="hww-worker-capability-error">
+            Could not load worker capabilities: {workersError}
+          </p>
+        ) : null}
+        {!workersError && workers.length === 0 ? (
+          <p className="text-white/55" data-testid="hww-worker-capability-empty">
+            No worker capability records available yet.
+          </p>
+        ) : null}
+        {!workersError && workers.length > 0 ? (
+          <ul className="space-y-1.5" data-testid="hww-worker-capability-list">
+            {workers.map((worker) => {
+              const statusTone =
+                worker.status === "available"
+                  ? "text-emerald-300 border-emerald-500/30 bg-emerald-500/10"
+                  : worker.status === "needs_connection"
+                    ? "text-amber-200 border-amber-400/30 bg-amber-500/10"
+                    : worker.status === "disabled"
+                      ? "text-white/60 border-white/[0.16] bg-white/[0.06]"
+                      : "text-rose-200 border-rose-400/30 bg-rose-500/10";
+              return (
+                <li
+                  key={worker.worker_kind}
+                  className="rounded-md border border-white/[0.08] bg-black/20 px-2 py-1.5"
+                  data-testid="hww-worker-capability-item"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="truncate text-[11px] text-white/85">{worker.display_name}</p>
+                    <span
+                      className={cn(
+                        "rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide",
+                        statusTone,
+                      )}
+                    >
+                      {worker.status.replace("_", " ")}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-[11px] text-white/50">{worker.environment_fit}</p>
+                </li>
+              );
+            })}
+          </ul>
         ) : null}
       </div>
       {preview?.status === "ready" && previewUrl ? (
