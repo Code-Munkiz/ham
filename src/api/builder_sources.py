@@ -4,12 +4,15 @@ import os
 import re
 import shlex
 import uuid
+from ipaddress import ip_address
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Any, Literal, cast
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import urljoin, urlsplit, urlunsplit
 
+import httpx
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import Request, Response
 from pydantic import BaseModel, Field
 
 from src.api.clerk_gate import get_ham_clerk_actor
@@ -62,6 +65,9 @@ _ZIP_ERROR_MESSAGES = {
     "ZIP_INVALID": "ZIP archive is invalid or unsafe.",
     "ZIP_EMPTY": "ZIP archive is empty.",
 }
+_PREVIEW_PROXY_ALLOWED_HOST_SUFFIXES = (".run.app",)
+_PREVIEW_PROXY_TIMEOUT_SECONDS = 8.0
+_PREVIEW_PROXY_MAX_BYTES = 2 * 1024 * 1024
 
 
 def _project_workspace_id(record: ProjectRecord) -> str | None:
@@ -150,6 +156,111 @@ def _sanitize_local_preview_url(raw_url: str | None) -> str | None:
     return urlunsplit((parts.scheme, f"{netloc_host}:{parts.port}", parts.path or "/", "", ""))
 
 
+def _is_blocked_proxy_host(host: str) -> bool:
+    name = host.strip().lower()
+    if not name:
+        return True
+    if name in {"localhost", "127.0.0.1", "::1"}:
+        return True
+    try:
+        ip = ip_address(name)
+    except ValueError:
+        ip = None
+    if ip is not None and (
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_multicast
+        or ip.is_reserved
+        or ip.is_unspecified
+    ):
+        return True
+    return False
+
+
+def _safe_trusted_proxy_host(raw: Any) -> str | None:
+    text = str(raw or "").strip().lower()
+    if not text:
+        return None
+    if _SENSITIVE_VALUE_RE.search(text):
+        return None
+    if "://" in text or "/" in text:
+        return None
+    return text[:200]
+
+
+def _sanitize_cloud_proxy_upstream_url(*, raw_url: str | None, trusted_host: str | None = None) -> str | None:
+    text = str(raw_url or "").strip()
+    if not text:
+        return None
+    try:
+        parts = urlsplit(text)
+    except ValueError:
+        return None
+    if parts.scheme != "https":
+        return None
+    if parts.username or parts.password:
+        return None
+    if parts.query or parts.fragment:
+        return None
+    host = (parts.hostname or "").strip().lower()
+    if _is_blocked_proxy_host(host):
+        return None
+    allowed = host.endswith(_PREVIEW_PROXY_ALLOWED_HOST_SUFFIXES)
+    if not allowed and trusted_host:
+        allowed = host == trusted_host
+    if not allowed:
+        return None
+    path = parts.path or "/"
+    netloc = parts.netloc
+    if ":" in host and not host.startswith("["):
+        netloc = netloc.replace(host, f"[{host}]")
+    return urlunsplit(("https", netloc, path, "", ""))
+
+
+def _cloud_proxy_preview_url(*, workspace_id: str, project_id: str) -> str:
+    return f"/api/workspaces/{workspace_id}/projects/{project_id}/builder/preview-proxy/"
+
+
+def _cloud_proxy_endpoint_or_none(*, workspace_id: str, project_id: str) -> PreviewEndpoint | None:
+    runtime = get_builder_runtime_store().get_latest_runtime_session(
+        workspace_id=workspace_id,
+        project_id=project_id,
+        mode="cloud",
+    )
+    if runtime is None:
+        return None
+    endpoint = get_builder_runtime_store().get_active_preview_endpoint(
+        workspace_id=workspace_id,
+        project_id=project_id,
+        runtime_session_id=runtime.id,
+    )
+    if endpoint is None:
+        return None
+    if str(endpoint.access_mode or "").strip().lower() != "proxy":
+        return None
+    if str(endpoint.status or "").strip().lower() != "ready":
+        return None
+    return endpoint
+
+
+async def _proxy_upstream_fetch(*, method: str, url: str, headers: dict[str, str]) -> httpx.Response:
+    timeout = httpx.Timeout(_PREVIEW_PROXY_TIMEOUT_SECONDS)
+    async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
+        return await client.request(method=method, url=url, headers=headers)
+
+
+def _build_proxy_forward_headers(request_headers: Any) -> dict[str, str]:
+    out: dict[str, str] = {}
+    accept = str(request_headers.get("accept") or "").strip()
+    if accept:
+        out["accept"] = accept[:240]
+    user_agent = str(request_headers.get("user-agent") or "").strip()
+    if user_agent:
+        out["user-agent"] = user_agent[:240]
+    return out
+
+
 def _derive_preview_status(
     *,
     runtime_status: str | None,
@@ -203,17 +314,41 @@ def _build_preview_status_payload(*, workspace_id: str, project_id: str) -> dict
             project_id=project_id,
             runtime_session_id=runtime.id,
         )
-    safe_preview_url = _sanitize_local_preview_url(endpoint.url if endpoint is not None else None)
-    status, message = _derive_preview_status(
-        runtime_status=runtime.status if runtime is not None else None,
-        runtime_health=runtime.health if runtime is not None else None,
-        endpoint_status=endpoint.status if endpoint is not None else None,
-        safe_preview_url=safe_preview_url,
-    )
+    mode = (runtime.mode if runtime is not None else "local") or "local"
+    safe_preview_url: str | None = None
+    if mode == "cloud":
+        trusted_host = _safe_trusted_proxy_host((endpoint.metadata or {}).get("trusted_proxy_host")) if endpoint else None
+        safe_upstream = _sanitize_cloud_proxy_upstream_url(
+            raw_url=endpoint.url if endpoint is not None else None,
+            trusted_host=trusted_host,
+        )
+        runtime_status = str(runtime.status or "").strip().lower() if runtime is not None else ""
+        endpoint_status = str(endpoint.status or "").strip().lower() if endpoint is not None else ""
+        if safe_upstream and endpoint is not None and endpoint_status == "ready" and str(endpoint.access_mode or "").strip().lower() == "proxy":
+            safe_preview_url = _cloud_proxy_preview_url(workspace_id=workspace_id, project_id=project_id)
+            status = "ready"
+            message = "Preview is ready via authenticated cloud proxy."
+        elif runtime_status in {"queued", "provisioning", "running"}:
+            status = "building"
+            message = "Cloud runtime is provisioning. Preview will appear once the proxy endpoint is ready."
+        elif runtime_status in {"failed", "unsupported"}:
+            status = "error"
+            message = "Cloud preview is unavailable."
+        else:
+            status = "waiting"
+            message = "Cloud preview status is waiting for endpoint readiness."
+    else:
+        safe_preview_url = _sanitize_local_preview_url(endpoint.url if endpoint is not None else None)
+        status, message = _derive_preview_status(
+            runtime_status=runtime.status if runtime is not None else None,
+            runtime_health=runtime.health if runtime is not None else None,
+            endpoint_status=endpoint.status if endpoint is not None else None,
+            safe_preview_url=safe_preview_url,
+        )
     return {
         "project_id": project_id,
         "workspace_id": workspace_id,
-        "mode": "local",
+        "mode": mode,
         "status": status,
         "health": runtime.health if runtime is not None else "unknown",
         "preview_url": safe_preview_url if status == "ready" else None,
@@ -1059,6 +1194,117 @@ async def get_builder_preview_status(
 ) -> dict[str, Any]:
     _project_in_workspace_or_404(project_id=project_id, workspace_id=ctx.workspace_id)
     return _build_preview_status_payload(workspace_id=ctx.workspace_id, project_id=project_id)
+
+
+@router.api_route(
+    "/api/workspaces/{workspace_id}/projects/{project_id}/builder/preview-proxy/{path:path}",
+    methods=["GET", "HEAD"],
+)
+async def get_builder_preview_proxy(
+    project_id: str,
+    path: str,
+    request: Request,
+    ctx: Annotated[WorkspaceContext, Depends(require_perm(PERM_WORKSPACE_READ))],
+) -> Response:
+    _project_in_workspace_or_404(project_id=project_id, workspace_id=ctx.workspace_id)
+    endpoint = _cloud_proxy_endpoint_or_none(workspace_id=ctx.workspace_id, project_id=project_id)
+    if endpoint is None:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": {
+                    "code": "PREVIEW_PROXY_NOT_CONFIGURED",
+                    "message": "Cloud preview proxy endpoint is not configured for this project.",
+                }
+            },
+        )
+    trusted_host = _safe_trusted_proxy_host((endpoint.metadata or {}).get("trusted_proxy_host"))
+    upstream_base = _sanitize_cloud_proxy_upstream_url(raw_url=endpoint.url, trusted_host=trusted_host)
+    if upstream_base is None:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": {
+                    "code": "PREVIEW_PROXY_UNSAFE_UPSTREAM",
+                    "message": "Configured cloud preview upstream URL is not allowed.",
+                }
+            },
+        )
+    upstream_parts = urlsplit(upstream_base)
+    prefix = upstream_parts.path.rstrip("/")
+    suffix = "/" + path.lstrip("/") if path else "/"
+    target_path = (prefix + suffix) if prefix else suffix
+    upstream_url = urlunsplit(
+        (
+            upstream_parts.scheme,
+            upstream_parts.netloc,
+            target_path,
+            str(request.url.query or ""),
+            "",
+        )
+    )
+    headers = _build_proxy_forward_headers(request.headers)
+    method = request.method.upper()
+    try:
+        upstream_response = await _proxy_upstream_fetch(method=method, url=upstream_url, headers=headers)
+        if upstream_response.status_code in {301, 302, 303, 307, 308}:
+            location = str(upstream_response.headers.get("location") or "").strip()
+            if location:
+                redirect_url = urljoin(upstream_url, location)
+                safe_redirect = _sanitize_cloud_proxy_upstream_url(raw_url=redirect_url, trusted_host=trusted_host)
+                if safe_redirect is None:
+                    raise HTTPException(
+                        status_code=422,
+                        detail={
+                            "error": {
+                                "code": "PREVIEW_PROXY_UNSAFE_UPSTREAM",
+                                "message": "Upstream redirect target is not allowed.",
+                            }
+                        },
+                    )
+                upstream_response = await _proxy_upstream_fetch(method=method, url=safe_redirect, headers=headers)
+    except HTTPException:
+        raise
+    except httpx.TimeoutException as exc:
+        raise HTTPException(
+            status_code=504,
+            detail={
+                "error": {
+                    "code": "PREVIEW_PROXY_TIMEOUT",
+                    "message": "Cloud preview upstream timed out.",
+                }
+            },
+        ) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "error": {
+                    "code": "PREVIEW_PROXY_UPSTREAM_UNAVAILABLE",
+                    "message": "Cloud preview upstream is unavailable.",
+                }
+            },
+        ) from exc
+    body = upstream_response.content or b""
+    if len(body) > _PREVIEW_PROXY_MAX_BYTES:
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "error": {
+                    "code": "PREVIEW_PROXY_UPSTREAM_UNAVAILABLE",
+                    "message": "Cloud preview upstream response exceeded size limits.",
+                }
+            },
+        )
+    response_headers: dict[str, str] = {}
+    content_type = str(upstream_response.headers.get("content-type") or "").strip()
+    if content_type:
+        response_headers["content-type"] = content_type[:240]
+    return Response(
+        content=(b"" if method == "HEAD" else body),
+        status_code=upstream_response.status_code,
+        headers=response_headers,
+    )
 
 
 @router.get("/api/workspaces/{workspace_id}/projects/{project_id}/builder/activity")
