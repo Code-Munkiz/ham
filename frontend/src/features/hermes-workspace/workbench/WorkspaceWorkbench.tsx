@@ -585,7 +585,9 @@ function WorkbenchPreviewPanel({
           className="text-[11px]"
           data-testid="hww-visual-edit-toggle"
           disabled={!visualEditReady}
-          title={visualEditReady ? "Capture a visual target from preview." : "Preview must be ready."}
+          title={
+            visualEditReady ? "Capture a visual target from preview." : "Preview must be ready."
+          }
           onClick={() => {
             if (!visualEditReady) return;
             setVisualEditNotice(null);
@@ -1103,7 +1105,10 @@ function WorkbenchPreviewPanel({
           </p>
         )}
         {visualEditModeActive ? (
-          <p className="text-[11px] text-emerald-200/90" data-testid="hww-visual-edit-mode-active-copy">
+          <p
+            className="text-[11px] text-emerald-200/90"
+            data-testid="hww-visual-edit-mode-active-copy"
+          >
             Edit Mode active. Click the preview to capture a target.
           </p>
         ) : null}
