@@ -169,6 +169,11 @@ DEFAULT_TOOL_PRUNE_PLACEHOLDER = "[Old tool output cleared to save context space
 # DOM/console output size limits, and feature toggles for downloads/form submits.
 # **FOR MAINTAINERS**: Adjust these only if you've measured context window pressure
 # or latency issues during browser operations. Higher limits increase token usage.
+# 
+# MAX_STEPS specifically: The 25-step limit is a heuristic to prevent runaway
+# browser automation loops. Each step = one action (click, type, navigate, etc.).
+# The loop breaks when exceeded, returning any accumulated output. This protects
+# against token exhaustion and hanging processes during agentic browser sessions.
 DEFAULT_BROWSER_MAX_STEPS = 25
 DEFAULT_BROWSER_STEP_TIMEOUT_MS = 10_000
 DEFAULT_BROWSER_MAX_DOM_CHARS = 8_000
