@@ -850,32 +850,34 @@ export function WorkspaceChatComposer({
         />
       ) : null}
       {onPlanWithCodingAgents ? (
+        // Demoted: conversational auto-preview is now the primary path
+        // (WorkspaceChatScreen.send() fires previewCodingConductor for
+        // coding-intent messages automatically). This button stays only as
+        // an explicit manual fallback for users who already have a draft
+        // in the composer and want to force-preview without sending.
         <Button
           type="button"
-          variant="outline"
+          variant="ghost"
           size="sm"
-          title="Plan with coding agents — uses the message above"
-          aria-label="Plan with coding agents"
+          title="Plan with coding agents (manual) — uses the message above"
+          aria-label="Plan with coding agents (manual)"
           data-hww-coding-plan-action
+          data-hww-coding-plan-priority="manual-fallback"
           disabled={
             disabled || sending || voiceBusy || uploadsPending || Boolean(codingPlanActionBusy)
           }
           className={cn(
-            "h-8 shrink-0 gap-1 border-cyan-400/25 bg-white/[0.02] px-2 text-[11px] font-medium text-cyan-200/90",
-            "hover:border-cyan-400/40 hover:bg-cyan-500/[0.08] hover:text-cyan-50",
-            "disabled:pointer-events-none disabled:opacity-40",
-            composerToolbarDensity === "tight" && "max-w-[7rem] px-1.5",
+            "h-7 w-7 shrink-0 p-0 text-white/35 hover:bg-white/[0.04] hover:text-cyan-200/80",
+            "disabled:pointer-events-none disabled:opacity-30",
           )}
           onClick={() => void onPlanWithCodingAgents()}
         >
           {codingPlanActionBusy ? (
             <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden />
           ) : (
-            <Sparkles className="h-3.5 w-3.5 shrink-0 text-cyan-200/85" aria-hidden />
+            <Sparkles className="h-3.5 w-3.5 shrink-0" aria-hidden />
           )}
-          <span className={cn("min-w-0 truncate", composerToolbarDensity === "tight" && "sr-only")}>
-            Plan with coding agents
-          </span>
+          <span className="sr-only">Plan with coding agents (manual)</span>
         </Button>
       ) : null}
       <div

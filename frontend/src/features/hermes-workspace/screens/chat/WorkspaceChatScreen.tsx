@@ -67,6 +67,7 @@ import { WorkspaceChatEmptyState, WORKSPACE_CHAT_SUGGESTIONS } from "./Workspace
 import { WorkspaceChatMessageList, type HwwMsgRow } from "./WorkspaceChatMessageList";
 import { WorkspaceChatComposer } from "./WorkspaceChatComposer";
 import { CodingPlanCard } from "./coding-plan/CodingPlanCard";
+import { isLikelyCodingIntent } from "./coding-plan/codingIntent";
 import type {
   ComposerExportPdfState,
   ComposerGenerateImageState,
@@ -1957,6 +1958,13 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
           : isV1
             ? String((outboundUser as HamChatUserContentV1).text ?? "").trim()
             : "";
+      // Conversational conductor: if the user's normal text looks like a
+      // coding/build/repo task, fire a background preview so the CodingPlanCard
+      // appears below the thread without requiring a separate "Plan with
+      // coding agents" click. Preview only — no launch.
+      if (!missionModeId && nlProbeText && isLikelyCodingIntent(nlProbeText)) {
+        void triggerAutoCodingPlanPreview(nlProbeText);
+      }
       if (!missionModeId && nlProbeText) {
         const trimmedNl = nlProbeText;
         const nlIntent = parseWorkspaceImageGenerationIntent(trimmedNl);
@@ -2743,6 +2751,42 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       setCodingPlanLoading(false);
     }
   }, [input, projectId]);
+
+  // Conversational conductor: fired automatically from send() when the user's
+  // message looks like a coding/build/repo task. Unlike the manual button this
+  // is silent on failure (no toast) — auto-preview is best-effort and must
+  // never compete with the chat reply. No launch is ever triggered here; the
+  // user still has to approve in CodingPlanCard / ManagedBuildApprovalPanel.
+  const autoCodingPlanInFlightRef = React.useRef(false);
+  const lastAutoCodingPromptRef = React.useRef<string>("");
+  const triggerAutoCodingPlanPreview = React.useCallback(
+    async (prompt: string) => {
+      const draft = prompt.trim();
+      if (!draft) return;
+      if (autoCodingPlanInFlightRef.current) return;
+      if (lastAutoCodingPromptRef.current === draft) return;
+      lastAutoCodingPromptRef.current = draft;
+      autoCodingPlanInFlightRef.current = true;
+      setCodingPlanInlineError(null);
+      setCodingPlanLoading(true);
+      setCodingPlanPreview(null);
+      try {
+        const payload = await previewCodingConductor({
+          user_prompt: draft,
+          project_id: projectId ?? undefined,
+        });
+        setCodingPlanPreview(payload);
+        setCodingPlanPrompt(draft);
+      } catch {
+        // Silent: auto preview is best-effort. Manual button remains available
+        // as the explicit fallback.
+      } finally {
+        setCodingPlanLoading(false);
+        autoCodingPlanInFlightRef.current = false;
+      }
+    },
+    [projectId],
+  );
 
   React.useEffect(() => {
     if (input.trim()) setCodingPlanInlineError(null);
