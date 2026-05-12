@@ -287,6 +287,21 @@ export type BuilderImportJobRecord = {
   metadata: Record<string, unknown>;
 };
 
+export type BuilderPreviewStatus = {
+  project_id: string;
+  workspace_id: string;
+  mode: "local";
+  status: "not_connected" | "waiting" | "building" | "ready" | "error";
+  health: "unknown" | "healthy" | "unhealthy" | string;
+  preview_url: string | null;
+  message: string | null;
+  updated_at: string;
+  source_snapshot_id: string | null;
+  runtime_session_id: string | null;
+  preview_endpoint_id: string | null;
+  logs_hint: string | null;
+};
+
 export async function listBuilderProjectSources(
   workspaceId: string,
   projectId: string,
@@ -376,6 +391,19 @@ export async function postBuilderZipImportJob(
     project_source: BuilderProjectSourceRecord;
     source_snapshot: BuilderSourceSnapshotRecord;
   }>;
+}
+
+export async function getBuilderPreviewStatus(
+  workspaceId: string,
+  projectId: string,
+): Promise<BuilderPreviewStatus> {
+  const res = await hamApiFetch(
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/projects/${encodeURIComponent(projectId)}/builder/preview-status`,
+  );
+  if (!res.ok) {
+    throw new Error((await hamApiErrorDetailMessage(res)) || `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<BuilderPreviewStatus>;
 }
 
 /** Text-to-image (Phase 2G.1+) — mediated by HAM backend only. */

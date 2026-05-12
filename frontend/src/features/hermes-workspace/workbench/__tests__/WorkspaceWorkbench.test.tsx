@@ -8,12 +8,14 @@ const {
   listBuilderProjectSourcesMock,
   listBuilderSourceSnapshotsMock,
   listBuilderImportJobsMock,
+  getBuilderPreviewStatusMock,
 } = vi.hoisted(() => ({
   fetchWorkspaceToolsMock: vi.fn(),
   isLocalRuntimeConfiguredMock: vi.fn(() => false),
   listBuilderProjectSourcesMock: vi.fn(),
   listBuilderSourceSnapshotsMock: vi.fn(),
   listBuilderImportJobsMock: vi.fn(),
+  getBuilderPreviewStatusMock: vi.fn(),
 }));
 
 vi.mock("@/lib/ham/api", async (importOriginal) => {
@@ -24,6 +26,7 @@ vi.mock("@/lib/ham/api", async (importOriginal) => {
     listBuilderProjectSources: (...args: unknown[]) => listBuilderProjectSourcesMock(...args),
     listBuilderSourceSnapshots: (...args: unknown[]) => listBuilderSourceSnapshotsMock(...args),
     listBuilderImportJobs: (...args: unknown[]) => listBuilderImportJobsMock(...args),
+    getBuilderPreviewStatus: (...args: unknown[]) => getBuilderPreviewStatusMock(...args),
   };
 });
 
@@ -63,6 +66,20 @@ describe("WorkspaceWorkbench", () => {
       workspace_id: "ws_abc",
       import_jobs: [],
     });
+    getBuilderPreviewStatusMock.mockResolvedValue({
+      project_id: "proj_abc",
+      workspace_id: "ws_abc",
+      mode: "local",
+      status: "not_connected",
+      health: "unknown",
+      preview_url: null,
+      message: "Local preview runtime is not connected.",
+      updated_at: "2026-01-01T00:00:00Z",
+      source_snapshot_id: null,
+      runtime_session_id: null,
+      preview_endpoint_id: null,
+      logs_hint: null,
+    });
   });
 
   it("select Preview by default and switches panel content", () => {
@@ -81,6 +98,75 @@ describe("WorkspaceWorkbench", () => {
     expect(screen.getByTestId("hww-workbench-tab-code").getAttribute("data-active")).toBe("true");
   });
 
+  it("Preview shows not-connected state and no iframe", async () => {
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-preview-status-copy")).toHaveTextContent("not connected");
+    });
+    expect(screen.getByTestId("hww-preview-no-iframe")).toBeInTheDocument();
+    expect(screen.queryByTestId("hww-preview-iframe")).toBeNull();
+    expect(screen.getByTestId("hww-preview-open-new-tab")).toBeDisabled();
+  });
+
+  it("Preview renders iframe only when status is ready with preview_url", async () => {
+    getBuilderPreviewStatusMock.mockResolvedValue({
+      project_id: "proj_abc",
+      workspace_id: "ws_abc",
+      mode: "local",
+      status: "ready",
+      health: "healthy",
+      preview_url: "http://127.0.0.1:3000/",
+      message: "Preview is ready.",
+      updated_at: "2026-01-01T00:00:00Z",
+      source_snapshot_id: "ssnp_1",
+      runtime_session_id: "rtms_1",
+      preview_endpoint_id: "prve_1",
+      logs_hint: null,
+    });
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-preview-iframe")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("hww-preview-open-new-tab")).not.toBeDisabled();
+  });
+
+  it("Preview refresh triggers status fetch call", async () => {
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(getBuilderPreviewStatusMock.mock.calls.length).toBeGreaterThan(0);
+    });
+    const before = getBuilderPreviewStatusMock.mock.calls.length;
+    fireEvent.click(screen.getByTestId("hww-preview-refresh"));
+    await waitFor(() => {
+      expect(getBuilderPreviewStatusMock.mock.calls.length).toBeGreaterThan(before);
+    });
+  });
+
+  it("Preview error state shows safe copy", async () => {
+    getBuilderPreviewStatusMock.mockRejectedValue(new Error("HTTP 500"));
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-preview-state-error")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("hww-preview-no-iframe")).toBeInTheDocument();
+  });
+
   it("Share and Publish are disabled (not wired)", () => {
     render(
       <MemoryRouter>
@@ -97,8 +183,7 @@ describe("WorkspaceWorkbench", () => {
         <WorkspaceWorkbench />
       </MemoryRouter>,
     );
-    expect(screen.getByText(/No preview yet/i)).toBeInTheDocument();
-    expect(screen.getByText(/not wired in this shell/i)).toBeInTheDocument();
+    expect(screen.getByTestId("hww-preview-state-no-project")).toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId("hww-workbench-tab-database"));
     expect(screen.getByText(/not available in this placeholder/i)).toBeInTheDocument();
@@ -254,5 +339,19 @@ describe("WorkspaceWorkbench", () => {
     expect(screen.getByTestId("hww-project-source-latest-job")).toHaveTextContent(
       "ZIP_PATH_TRAVERSAL",
     );
+  });
+
+  it("Preview tab keeps expected labels and no terminal tab", () => {
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench />
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId("hww-workbench-tab-preview")).toBeInTheDocument();
+    expect(screen.getByTestId("hww-workbench-tab-code")).toBeInTheDocument();
+    expect(screen.getByTestId("hww-workbench-tab-database")).toBeInTheDocument();
+    expect(screen.getByTestId("hww-workbench-tab-storage")).toBeInTheDocument();
+    expect(screen.getByTestId("hww-workbench-tab-settings")).toBeInTheDocument();
+    expect(screen.queryByTestId("hww-workbench-tab-terminal")).toBeNull();
   });
 });

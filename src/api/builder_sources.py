@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import os
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Any
+from urllib.parse import urlsplit, urlunsplit
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
@@ -18,6 +20,7 @@ from src.persistence.builder_source_store import (
     SourceSnapshot,
     get_builder_source_store,
 )
+from src.persistence.builder_runtime_store import get_builder_runtime_store
 from src.persistence.project_store import get_project_store
 from src.registry.projects import ProjectRecord
 
@@ -97,6 +100,61 @@ def _safe_zip_error_message(code: str) -> str:
     return _ZIP_ERROR_MESSAGES.get(code, "ZIP import failed.")
 
 
+def _utc_now_iso() -> str:
+    return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _sanitize_local_preview_url(raw_url: str | None) -> str | None:
+    text = str(raw_url or "").strip()
+    if not text:
+        return None
+    try:
+        parts = urlsplit(text)
+    except ValueError:
+        return None
+    if parts.scheme != "http":
+        return None
+    host = (parts.hostname or "").strip().lower()
+    if host not in {"localhost", "127.0.0.1", "::1"}:
+        return None
+    if parts.port is None:
+        return None
+    return urlunsplit((parts.scheme, f"{host}:{parts.port}", parts.path or "/", "", ""))
+
+
+def _derive_preview_status(
+    *,
+    runtime_status: str | None,
+    runtime_health: str | None,
+    endpoint_status: str | None,
+    safe_preview_url: str | None,
+) -> tuple[str, str]:
+    rs = str(runtime_status or "").strip().lower()
+    rh = str(runtime_health or "").strip().lower()
+    es = str(endpoint_status or "").strip().lower()
+    if not rs:
+        return ("not_connected", "Local preview runtime is not connected.")
+    if rs in {"failed", "stopped", "expired"}:
+        return ("error", "Local preview runtime is not available.")
+    if rh == "unhealthy":
+        return ("error", "Local preview runtime is unhealthy.")
+    if rs == "starting":
+        return ("building", "Local preview runtime is starting.")
+    if rs == "waiting":
+        return ("waiting", "Local preview runtime is waiting for work.")
+    if rs == "not_connected":
+        return ("not_connected", "Local preview runtime is not connected.")
+    if rs == "running" and es == "ready" and safe_preview_url:
+        return ("ready", "Preview is ready.")
+    if rs == "running" and es in {"provisioning", ""}:
+        return ("building", "Local preview endpoint is provisioning.")
+    if rs == "running" and es in {"unavailable", "revoked"}:
+        return ("error", "Local preview endpoint is unavailable.")
+    if rs == "running" and es == "ready" and not safe_preview_url:
+        return ("error", "Preview URL is unavailable due to safety policy.")
+    return ("waiting", "Local preview status is waiting for endpoint readiness.")
+
+
 @router.get("/api/workspaces/{workspace_id}/projects/{project_id}/builder/sources")
 async def list_project_sources(
     project_id: str,
@@ -145,6 +203,52 @@ async def list_import_jobs(
         "project_id": project_id,
         "workspace_id": ctx.workspace_id,
         "import_jobs": [r.model_dump(mode="json") for r in rows],
+    }
+
+
+@router.get("/api/workspaces/{workspace_id}/projects/{project_id}/builder/preview-status")
+async def get_builder_preview_status(
+    project_id: str,
+    ctx: Annotated[WorkspaceContext, Depends(require_perm(PERM_WORKSPACE_READ))],
+) -> dict[str, Any]:
+    _project_in_workspace_or_404(project_id=project_id, workspace_id=ctx.workspace_id)
+    source_rows = get_builder_source_store().list_project_sources(
+        workspace_id=ctx.workspace_id,
+        project_id=project_id,
+    )
+    active_snapshot_id = next((row.active_snapshot_id for row in source_rows if row.active_snapshot_id), None)
+    runtime_rows = get_builder_runtime_store().list_runtime_sessions(
+        workspace_id=ctx.workspace_id,
+        project_id=project_id,
+    )
+    endpoint_rows = get_builder_runtime_store().list_preview_endpoints(
+        workspace_id=ctx.workspace_id,
+        project_id=project_id,
+    )
+    runtime = runtime_rows[0] if runtime_rows else None
+    endpoint = None
+    if runtime is not None:
+        endpoint = next((row for row in endpoint_rows if row.runtime_session_id == runtime.id), None)
+    safe_preview_url = _sanitize_local_preview_url(endpoint.url if endpoint is not None else None)
+    status, message = _derive_preview_status(
+        runtime_status=runtime.status if runtime is not None else None,
+        runtime_health=runtime.health if runtime is not None else None,
+        endpoint_status=endpoint.status if endpoint is not None else None,
+        safe_preview_url=safe_preview_url,
+    )
+    return {
+        "project_id": project_id,
+        "workspace_id": ctx.workspace_id,
+        "mode": "local",
+        "status": status,
+        "health": runtime.health if runtime is not None else "unknown",
+        "preview_url": safe_preview_url if status == "ready" else None,
+        "message": message,
+        "updated_at": runtime.updated_at if runtime is not None else _utc_now_iso(),
+        "source_snapshot_id": runtime.snapshot_id if runtime and runtime.snapshot_id else active_snapshot_id,
+        "runtime_session_id": runtime.id if runtime is not None else None,
+        "preview_endpoint_id": endpoint.id if endpoint is not None else None,
+        "logs_hint": None,
     }
 
 
