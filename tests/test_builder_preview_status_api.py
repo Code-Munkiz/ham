@@ -18,7 +18,12 @@ from src.persistence.builder_runtime_store import (
     RuntimeSession,
     set_builder_runtime_store_for_tests,
 )
-from src.persistence.builder_source_store import BuilderSourceStore, set_builder_source_store_for_tests
+from src.persistence.builder_source_store import (
+    BuilderSourceStore,
+    ProjectSource,
+    SourceSnapshot,
+    set_builder_source_store_for_tests,
+)
 from src.persistence.project_store import ProjectStore, set_project_store_for_tests
 from src.persistence.workspace_store import InMemoryWorkspaceStore
 
@@ -102,6 +107,93 @@ def test_preview_status_no_runtime_returns_not_connected(tmp_path: Path) -> None
     assert body["status"] == "not_connected"
     assert body["preview_url"] is None
     assert body["runtime_session_id"] is None
+
+    set_project_store_for_tests(None)
+    set_builder_source_store_for_tests(None)
+    set_builder_runtime_store_for_tests(None)
+
+
+def test_preview_status_active_snapshot_cloud_not_configured_copy(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "cloud_run_poc")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_EXPERIMENTS_ENABLED", "false")
+    ws_store = InMemoryWorkspaceStore()
+    ws_id = "ws_aaaaaaaaaaaaaaaa"
+    _seed_workspace(ws_store, workspace_id=ws_id, org_id="org_a", owner_user_id="user_a", slug="alpha")
+    project_store = ProjectStore(store_path=tmp_path / "projects.json")
+    project = project_store.make_record(name="proj-a", root=str(tmp_path), metadata={"workspace_id": ws_id})
+    project_store.register(project)
+    set_project_store_for_tests(project_store)
+    builder_store = BuilderSourceStore(store_path=tmp_path / "builder_sources.json")
+    src = builder_store.upsert_project_source(
+        ProjectSource(workspace_id=ws_id, project_id=project.id, kind="chat_scaffold"),
+    )
+    snap = builder_store.upsert_source_snapshot(
+        SourceSnapshot(
+            workspace_id=ws_id,
+            project_id=project.id,
+            project_source_id=src.id,
+            artifact_uri="builder-artifact://bzip_test",
+            digest_sha256="a" * 64,
+        ),
+    )
+    src.active_snapshot_id = snap.id
+    builder_store.upsert_project_source(src)
+    set_builder_source_store_for_tests(builder_store)
+    set_builder_runtime_store_for_tests(BuilderRuntimeStore(store_path=tmp_path / "builder_runtime.json"))
+
+    client = TestClient(_build_app(actor=_actor("user_a", org_id="org_a"), ws_store=ws_store))
+    res = client.get(f"/api/workspaces/{ws_id}/projects/{project.id}/builder/preview-status")
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["mode"] == "cloud"
+    assert body["status"] == "waiting"
+    assert "not configured" in body["message"].lower()
+    assert body["preview_url"] is None
+
+    set_project_store_for_tests(None)
+    set_builder_source_store_for_tests(None)
+    set_builder_runtime_store_for_tests(None)
+
+
+def test_preview_status_active_snapshot_preparing_when_cloud_experiments_ready(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "cloud_run_poc")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_EXPERIMENTS_ENABLED", "true")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_ENABLED", "true")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_PROJECT", "proj-safe")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_REGION", "us-central1")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_DRY_RUN", "true")
+    ws_store = InMemoryWorkspaceStore()
+    ws_id = "ws_aaaaaaaaaaaaaaaa"
+    _seed_workspace(ws_store, workspace_id=ws_id, org_id="org_a", owner_user_id="user_a", slug="alpha")
+    project_store = ProjectStore(store_path=tmp_path / "projects.json")
+    project = project_store.make_record(name="proj-a", root=str(tmp_path), metadata={"workspace_id": ws_id})
+    project_store.register(project)
+    set_project_store_for_tests(project_store)
+    builder_store = BuilderSourceStore(store_path=tmp_path / "builder_sources.json")
+    src = builder_store.upsert_project_source(
+        ProjectSource(workspace_id=ws_id, project_id=project.id, kind="chat_scaffold"),
+    )
+    snap = builder_store.upsert_source_snapshot(
+        SourceSnapshot(
+            workspace_id=ws_id,
+            project_id=project.id,
+            project_source_id=src.id,
+            artifact_uri="builder-artifact://bzip_test",
+            digest_sha256="a" * 64,
+        ),
+    )
+    src.active_snapshot_id = snap.id
+    builder_store.upsert_project_source(src)
+    set_builder_source_store_for_tests(builder_store)
+    set_builder_runtime_store_for_tests(BuilderRuntimeStore(store_path=tmp_path / "builder_runtime.json"))
+
+    client = TestClient(_build_app(actor=_actor("user_a", org_id="org_a"), ws_store=ws_store))
+    res = client.get(f"/api/workspaces/{ws_id}/projects/{project.id}/builder/preview-status")
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["mode"] == "cloud"
+    assert body["status"] == "building"
+    assert "preparing" in body["message"].lower()
 
     set_project_store_for_tests(None)
     set_builder_source_store_for_tests(None)

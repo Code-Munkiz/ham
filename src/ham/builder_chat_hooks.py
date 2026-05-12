@@ -69,6 +69,19 @@ def run_builder_happy_path_hook(
         return None, meta
     meta.update(summary)
     if summary.get("scaffolded"):
+        from src.ham.builder_chat_cloud_runtime import maybe_enqueue_chat_scaffold_cloud_runtime_job
+
+        sid = str(summary.get("source_snapshot_id") or "").strip()
+        if sid:
+            enqueue_meta = maybe_enqueue_chat_scaffold_cloud_runtime_job(
+                workspace_id=ws,
+                project_id=pid,
+                source_snapshot_id=sid,
+                session_id=session_id,
+                requested_by=created_by,
+            )
+            if enqueue_meta:
+                meta.update(enqueue_meta)
         return (
             "I'll create the initial project source and prepare the Workbench.\n\n",
             meta,

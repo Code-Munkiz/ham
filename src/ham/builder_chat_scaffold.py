@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import re
+import uuid
 import zipfile
 from io import BytesIO
 from pathlib import Path
@@ -89,8 +90,11 @@ def _build_react_scaffold_files(user_plain: str) -> dict[str, str]:
             f"    <main className=\"app-shell\">\n"
             f"      <h1>{title}</h1>\n"
             "      <p className=\"muted\">\n"
-            "        Scaffold created from your chat request. Run{' '}\n"
-            "        <code>npm install</code> then <code>npm run dev</code> locally when you are ready.\n"
+            "        Scaffold created from your chat request. HAM will attach a cloud preview when the preview\n"
+            "        environment is ready. Use the Code tab to browse source files.\n"
+            "      </p>\n"
+            "      <p className=\"muted developer-hint\">\n"
+            "        Developer: you may run <code>npm install</code> and <code>npm run dev</code> locally if needed.\n"
             "      </p>\n"
             "    </main>\n"
             "  );\n"
@@ -114,8 +118,11 @@ def _build_react_scaffold_files(user_plain: str) -> dict[str, str]:
         ),
         "README.md": (
             f"# {title}\n\n"
-            "This is a small Vite + React scaffold produced by HAM chat.\n"
-            "It is not running in the cloud yet — connect a local preview when you are ready.\n"
+            "This is a small Vite + React scaffold produced by HAM chat.\n\n"
+            "- **Preview:** HAM attaches a cloud preview when the preview environment is ready (see the Workbench Preview tab).\n"
+            "- **Code:** Source files are listed under the Workbench Code tab.\n\n"
+            "### Developer (optional)\n\n"
+            "For local debugging you can run `npm install` and `npm run dev` on your machine.\n"
         ),
     }
 
@@ -143,6 +150,33 @@ def _bounded_files(user_plain: str) -> dict[str, str]:
 def _fingerprint(session_id: str, user_plain: str) -> str:
     payload = f"{session_id}\n{user_plain.strip()}"
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:24]
+
+
+def materialize_inline_files_as_zip_artifact(
+    *,
+    workspace_id: str,
+    project_id: str,
+    files: dict[str, str],
+) -> tuple[str, int]:
+    """Write a bounded ZIP to the builder artifact dir; return (builder-artifact:// URI, zip byte size)."""
+    artifact_id = f"bzip_{uuid.uuid4().hex}"
+    root = _artifact_root()
+    target_dir = root / workspace_id / project_id
+    target_dir.mkdir(parents=True, exist_ok=True)
+    zip_path = target_dir / f"{artifact_id}.zip"
+    buf = BytesIO()
+    with zipfile.ZipFile(buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for rel, text in sorted(files.items()):
+            norm = rel.replace("\\", "/").lstrip("/")
+            if not norm or ".." in norm.split("/"):
+                continue
+            zf.writestr(norm, text.encode("utf-8"))
+    payload = buf.getvalue()
+    max_zip = 50 * 1024 * 1024
+    if len(payload) > max_zip:
+        raise ValueError("artifact_zip_too_large")
+    zip_path.write_bytes(payload)
+    return f"builder-artifact://{artifact_id}", len(payload)
 
 
 def _existing_fingerprint_hit(
@@ -193,6 +227,11 @@ def maybe_chat_scaffold_for_turn(
         )
 
     digest = hashlib.sha256(json.dumps(files, sort_keys=True).encode("utf-8")).hexdigest()
+    artifact_uri, zip_size = materialize_inline_files_as_zip_artifact(
+        workspace_id=ws,
+        project_id=pid,
+        files=files,
+    )
     store = get_builder_source_store()
 
     job = store.create_import_job(
@@ -237,8 +276,8 @@ def maybe_chat_scaffold_for_turn(
         project_id=pid,
         project_source_id=source.id,
         digest_sha256=digest,
-        size_bytes=total_bytes,
-        artifact_uri="",
+        size_bytes=zip_size,
+        artifact_uri=artifact_uri,
         manifest={
             "kind": _MANIFEST_KIND_INLINE,
             "file_count": len(entries_manifest),
@@ -260,7 +299,7 @@ def maybe_chat_scaffold_for_turn(
         import_job_id=job.id,
         phase="materialized",
         source_snapshot_id=snapshot.id,
-        stats={"file_count": len(files), "inline_bytes": total_bytes},
+        stats={"file_count": len(files), "inline_bytes": total_bytes, "artifact_zip_bytes": zip_size},
     )
     job_done = store.upsert_import_job(
         job_done.model_copy(

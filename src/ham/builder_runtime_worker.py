@@ -213,7 +213,7 @@ def get_runtime_job_lifecycle_status(
             message = "Cloud runtime provider accepted the request."
         elif str(polled.get("provider_state") or "") == "planned":
             phase = "preview_pending"
-            message = "Cloud runtime is in plan-only mode; preview is pending."
+            message = "Cloud runtime is in dry-run or plan phase; no live preview URL yet."
         elif str(polled.get("provider_state") or "") == "invalid_config":
             phase = "failed"
             message = "Cloud runtime config is incomplete."
@@ -303,7 +303,9 @@ def execute_cloud_runtime_job(job: CloudRuntimeJob) -> CloudRuntimeExecutionResu
         if gcp_result.status == "planned":
             runtime.status = "provisioning"
             runtime.health = "unknown"
-            runtime.message = "Cloud runtime provider is configured for plan-only POC. No cloud runtime has been provisioned yet."
+            runtime.message = (
+                "Cloud runtime dry-run completed. No live service was provisioned; preview URL is not available yet."
+            )
             runtime.updated_at = _utc_now_iso()
             runtime = runtime_store.upsert_runtime_session(runtime)
             job.runtime_session_id = runtime.id
@@ -311,7 +313,7 @@ def execute_cloud_runtime_job(job: CloudRuntimeJob) -> CloudRuntimeExecutionResu
             job.phase = "completed"
             job.error_code = None
             job.error_message = None
-            job.logs_summary = "cloud_run_poc dry-run plan created. No provisioning was executed."
+            job.logs_summary = "cloud_run_poc dry-run plan created. No live Cloud Run provisioning was executed."
             job.completed_at = _utc_now_iso()
             job.updated_at = job.completed_at
             usage_event = {

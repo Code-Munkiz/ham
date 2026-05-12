@@ -311,7 +311,7 @@ function WorkbenchPreviewPanel({
   >("offline");
   const [workers, setWorkers] = React.useState<BuilderWorkerCapability[]>([]);
   const [workersError, setWorkersError] = React.useState<string | null>(null);
-  const [previewUrlInput, setPreviewUrlInput] = React.useState("http://localhost:3000");
+  const [previewUrlInput, setPreviewUrlInput] = React.useState("");
   const [submitBusy, setSubmitBusy] = React.useState(false);
   const [disconnectBusy, setDisconnectBusy] = React.useState(false);
   const [runProfile, setRunProfile] = React.useState<LocalRunProfileResponse | null>(null);
@@ -353,7 +353,7 @@ function WorkbenchPreviewPanel({
     install_command: "",
     build_command: "",
     test_command: "",
-    expected_preview_url: "http://localhost:3000",
+    expected_preview_url: "",
   });
   const [snapshots, setSnapshots] = React.useState<BuilderSourceSnapshotRecord[]>([]);
   const [previewViewport, setPreviewViewport] = React.useState<"desktop" | "mobile">("desktop");
@@ -568,6 +568,10 @@ function WorkbenchPreviewPanel({
     previewPhase = "error";
   } else if (preview?.status === "ready" && previewUrl) {
     previewPhase = "ready";
+  } else if (preview?.mode === "cloud" && preview?.status === "building") {
+    previewPhase = "starting";
+  } else if (preview?.mode === "cloud" && preview?.status === "waiting" && hasBackendSource) {
+    previewPhase = "source_ready";
   } else if (preview?.status === "waiting") {
     previewPhase = "starting";
   } else if (hasBackendSource && preview?.status === "not_connected") {
@@ -634,17 +638,31 @@ function WorkbenchPreviewPanel({
           }
         : previewPhase === "source_ready"
           ? {
-              title: "Source is ready. Preparing preview…",
-              subtitle: cloudPreviewDisconnected
-                ? "Cloud preview is not connected in this environment."
-                : "Connect a local preview URL when your dev server is running, or open Advanced for diagnostics.",
+              title:
+                preview?.mode === "cloud"
+                  ? preview?.message || "Preparing your cloud preview…"
+                  : "Source is ready. Preparing preview…",
+              subtitle:
+                preview?.mode === "cloud"
+                  ? cloudPreviewDisconnected
+                    ? preview?.message || "Cloud preview is not configured in this environment."
+                    : "Source files are visible in the Code tab. Your preview will load here when the environment is ready."
+                  : cloudPreviewDisconnected
+                    ? "Cloud preview is not connected in this environment."
+                    : "Connect a local preview URL when your dev server is running, or open Advanced for diagnostics.",
             }
           : previewPhase === "starting"
             ? {
-                title: "Starting preview environment…",
-                subtitle: activity[0]?.title
-                  ? `Latest: ${activity[0].title}`
-                  : "Provisioning or waiting for a preview URL.",
+                title:
+                  preview?.mode === "cloud" && preview?.message
+                    ? preview.message
+                    : "Starting preview environment…",
+                subtitle:
+                  preview?.mode === "cloud"
+                    ? "Source files are visible in the Code tab."
+                    : activity[0]?.title
+                      ? `Latest: ${activity[0].title}`
+                      : "Provisioning or waiting for a preview URL.",
               }
             : previewPhase === "error"
               ? {
@@ -804,7 +822,7 @@ function WorkbenchPreviewPanel({
           >
             <div className="relative w-full flex-1" data-testid="hww-preview-frame-wrap">
               <iframe
-                title="Local preview"
+                title="App preview"
                 src={previewUrl}
                 className={cn(
                   "min-h-[280px] w-full flex-1 rounded-md border border-white/[0.12] bg-black/20",
@@ -954,7 +972,7 @@ function WorkbenchPreviewPanel({
                 type="url"
                 value={previewUrlInput}
                 onChange={(e) => setPreviewUrlInput(e.target.value)}
-                placeholder="http://localhost:3000"
+                placeholder="http://localhost:3000 (local dev only)"
                 className="w-full rounded-md border border-white/[0.12] bg-black/40 px-2 py-1.5 text-[11px] text-white/90"
                 data-testid="hww-preview-url-input"
               />

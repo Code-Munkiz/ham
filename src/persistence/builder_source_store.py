@@ -96,6 +96,7 @@ class BuilderSourceStoreProtocol(Protocol):
         phase: str,
         status: str,
         project_source_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> ImportJob: ...
     def mark_import_job_running(self, *, import_job_id: str, phase: str) -> ImportJob: ...
     def mark_import_job_succeeded(
@@ -200,6 +201,7 @@ class BuilderSourceStore:
         phase: str,
         status: str,
         project_source_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> ImportJob:
         record = ImportJob(
             workspace_id=workspace_id,
@@ -208,6 +210,7 @@ class BuilderSourceStore:
             phase=phase,
             status=status,
             project_source_id=project_source_id,
+            metadata=dict(metadata or {}),
         )
         return self.upsert_import_job(record)
 

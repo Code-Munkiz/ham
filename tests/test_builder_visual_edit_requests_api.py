@@ -226,7 +226,7 @@ def test_visual_edit_request_does_not_mutate_sources_or_execute_worker(
         called["worker"] = True
         raise AssertionError("worker execution should not run for visual edit request")
 
-    monkeypatch.setattr("src.api.builder_sources.execute_cloud_runtime_job", _unexpected)
+    monkeypatch.setattr("src.ham.builder_runtime_worker.execute_cloud_runtime_job", _unexpected)
     before_sources = source_store.list_project_sources(workspace_id=ws_id, project_id=project_id)
     before_snapshots = source_store.list_source_snapshots(workspace_id=ws_id, project_id=project_id)
     client = TestClient(_build_app(actor=_actor("user_a", org_id="org_a"), ws_store=ws_store))
