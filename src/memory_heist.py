@@ -197,10 +197,14 @@ DEFAULT_BROWSER_MAX_NETWORK_EVENTS = 200
 DEFAULT_BROWSER_ALLOW_FILE_DOWNLOAD = False
 DEFAULT_BROWSER_ALLOW_FORM_SUBMIT = False
 DEFAULT_BROWSER_ADAPTER = "playwright"
-   172|# Security note for maintainers: File downloads and form submits are disabled by default to prevent
-   173|# unexpected side effects during autonomous browser automation. Enable these options only when
-   174|# explicit user intent has been captured and validated through HAM's action approval flows.
 
+# Browser automation defaults: These settings govern autonomous browser interactions in agent sessions.
+# **FOR MAINTAINERS:** Default values balance context efficiency with effective browser control.
+# Adjusting these values will require corresponding updates in sessions.py, chat.py, and the browser
+# session implementation to ensure consistency. See DEFAULT_BROWSER_* constants above for field purposes.
+# Security note for maintainers: File downloads and form submits are disabled by default to prevent
+# unexpected side effects during autonomous browser automation. Enable these options only when
+# explicit user intent has been captured and validated through HAM's action approval flows.
 INSTRUCTION_INVISIBLE_CHARS = (
     "\u200b",  # zero-width space
     "\u200c",  # zero-width non-joiner
@@ -536,6 +540,9 @@ class ProjectContext:
     - **Relevance filtering**: If enabled, `_relevance_results` and `_relevance_metadata`
       are dynamically attached via `discover()`. Access these via the `relevance_results`
       and `relevance_metadata` properties to handle AttributeError gracefully.
+    - **Performance guidance**: Large workspace scans can be expensive; consider enabling
+      relevance filtering to reduce context size. The `file_count` and `tree` fields provide
+      lightweight workspace summaries without loading full file contents.
 
     This dataclass is serializable for caching and is the single source of project truth
     passed to Swarm agents for prompt injection. Keep fields aligned across discover(),
@@ -557,6 +564,10 @@ class ProjectContext:
     - Git snapshots are captured once and marked immutable for consistency
     - For large workspaces, file_count and tree avoid full file content loading
     - `instruction_files` are discovered hierarchically and deduplicated by content hash
+    
+    **Security best practice**: All context inputs are treated as potentially untrusted.
+    Instruction files are sanitized for invisible characters and prompt-injection phrases.
+    Config files are validated through ConfigTrustValidator before inclusion in context.
     """
     cwd: Path
     current_date: str
