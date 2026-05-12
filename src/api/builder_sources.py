@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import re
+import shlex
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -23,6 +24,7 @@ from src.persistence.builder_source_store import (
     get_builder_source_store,
 )
 from src.persistence.builder_runtime_store import PreviewEndpoint, get_builder_runtime_store
+from src.persistence.builder_run_profile_store import LocalRunProfile, get_builder_run_profile_store
 from src.persistence.project_store import get_project_store
 from src.registry.projects import ProjectRecord
 
@@ -203,10 +205,55 @@ def _build_preview_status_payload(*, workspace_id: str, project_id: str) -> dict
     }
 
 
+def _validated_snapshot_id(*, workspace_id: str, project_id: str, source_snapshot_id: str | None) -> str | None:
+    if source_snapshot_id is None:
+        return None
+    snapshot_rows = get_builder_source_store().list_source_snapshots(
+        workspace_id=workspace_id,
+        project_id=project_id,
+    )
+    known_snapshot_ids = {row.id for row in snapshot_rows}
+    if source_snapshot_id not in known_snapshot_ids:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": {
+                    "code": "SOURCE_SNAPSHOT_NOT_FOUND",
+                    "message": f"Unknown source_snapshot_id {source_snapshot_id!r} for this project.",
+                }
+            },
+        )
+    return source_snapshot_id
+
+
+def _serialize_local_run_profile(profile: LocalRunProfile | None, *, workspace_id: str, project_id: str) -> dict[str, Any]:
+    configured = bool(profile and profile.status in {"configured", "draft"})
+    return {
+        "workspace_id": workspace_id,
+        "project_id": project_id,
+        "configured": configured,
+        "status": profile.status if profile is not None else "not_configured",
+        "profile": profile.model_dump(mode="json") if profile is not None else None,
+    }
+
+
 class LocalPreviewRegisterRequest(BaseModel):
     preview_url: str
     source_snapshot_id: str | None = None
     display_name: str | None = None
+
+
+class LocalRunProfilePayload(BaseModel):
+    source_snapshot_id: str | None = None
+    display_name: str = "Local run profile"
+    working_directory: str = "."
+    install_command: str | None = None
+    dev_command: str
+    build_command: str | None = None
+    test_command: str | None = None
+    expected_preview_url: str | None = None
+    status: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class BuilderActivityItem(BaseModel):
@@ -245,6 +292,109 @@ def _safe_stats(stats: dict[str, Any]) -> dict[str, int]:
             out[key] = max(0, value)
     return out
 
+
+_COMMAND_META_RE = re.compile(r"(;|&&|\|\||\||>|<|`|\$\(|\r|\n)")
+_DISALLOWED_COMMANDS = {"rm", "del", "format", "shutdown", "powershell", "pwsh"}
+_WORKDIR_DRIVE_RE = re.compile(r"^[a-zA-Z]:")
+
+
+def _normalize_working_directory(raw: str | None) -> str:
+    text = str(raw or "").strip().replace("\\", "/")
+    if not text:
+        return "."
+    if len(text) > 180:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": {"code": "LOCAL_RUN_WORKDIR_INVALID", "message": "Working directory is too long."}},
+        )
+    if text.startswith("/") or text.startswith("\\") or text.startswith("//") or _WORKDIR_DRIVE_RE.match(text):
+        raise HTTPException(
+            status_code=422,
+            detail={"error": {"code": "LOCAL_RUN_WORKDIR_INVALID", "message": "Working directory must be project-relative."}},
+        )
+    parts = [seg for seg in text.split("/") if seg not in {"", "."}]
+    if any(seg == ".." for seg in parts):
+        raise HTTPException(
+            status_code=422,
+            detail={"error": {"code": "LOCAL_RUN_WORKDIR_INVALID", "message": "Path traversal is not allowed in working_directory."}},
+        )
+    normalized = "/".join(parts)
+    return normalized or "."
+
+
+def _parse_command_argv(raw: str | None, *, field_name: str, required: bool = False) -> list[str] | None:
+    text = str(raw or "").strip()
+    if not text:
+        if required:
+            raise HTTPException(
+                status_code=422,
+                detail={"error": {"code": "LOCAL_RUN_COMMAND_INVALID", "message": f"{field_name} is required."}},
+            )
+        return None
+    if len(text) > 240:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": {"code": "LOCAL_RUN_COMMAND_INVALID", "message": f"{field_name} is too long."}},
+        )
+    if _COMMAND_META_RE.search(text):
+        raise HTTPException(
+            status_code=422,
+            detail={"error": {"code": "LOCAL_RUN_COMMAND_INVALID", "message": f"{field_name} contains unsupported shell metacharacters."}},
+        )
+    try:
+        argv = shlex.split(text, posix=True)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": {"code": "LOCAL_RUN_COMMAND_INVALID", "message": f"{field_name} could not be parsed."}},
+        ) from exc
+    if not argv:
+        if required:
+            raise HTTPException(
+                status_code=422,
+                detail={"error": {"code": "LOCAL_RUN_COMMAND_INVALID", "message": f"{field_name} is required."}},
+            )
+        return None
+    if len(argv) > 24 or any((not arg) or len(arg) > 120 for arg in argv):
+        raise HTTPException(
+            status_code=422,
+            detail={"error": {"code": "LOCAL_RUN_COMMAND_INVALID", "message": f"{field_name} exceeds argument safety limits."}},
+        )
+    command_name = argv[0].split("/")[-1].split("\\")[-1].lower()
+    if command_name in _DISALLOWED_COMMANDS:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": {"code": "LOCAL_RUN_COMMAND_INVALID", "message": f"{field_name} command is not allowed for local run profile."}},
+        )
+    if command_name in {"curl", "wget"} and any("|" in arg for arg in argv[1:]):
+        raise HTTPException(
+            status_code=422,
+            detail={"error": {"code": "LOCAL_RUN_COMMAND_INVALID", "message": f"{field_name} contains an unsafe download pattern."}},
+        )
+    return argv
+
+
+def _sanitize_metadata(raw: dict[str, Any]) -> dict[str, Any]:
+    safe: dict[str, Any] = {}
+    for idx, (key, value) in enumerate(raw.items()):
+        if idx >= 20:
+            break
+        key_text = str(key).strip()[:64]
+        if not key_text:
+            continue
+        if _SENSITIVE_VALUE_RE.search(key_text):
+            continue
+        if isinstance(value, bool) or value is None:
+            safe[key_text] = value
+        elif isinstance(value, int):
+            safe[key_text] = value
+        elif isinstance(value, float):
+            safe[key_text] = round(value, 6)
+        else:
+            text = _safe_text(str(value), fallback="")
+            if text:
+                safe[key_text] = text
+    return safe
 
 def _build_activity_items(*, workspace_id: str, project_id: str) -> list[BuilderActivityItem]:
     source_store = get_builder_source_store()
@@ -357,6 +507,33 @@ def _build_activity_items(*, workspace_id: str, project_id: str) -> list[Builder
             )
         )
 
+    run_profile_store = get_builder_run_profile_store()
+    for profile in run_profile_store.list_local_run_profiles(workspace_id=workspace_id, project_id=project_id):
+        if profile.status == "configured":
+            title = "Local run profile configured"
+            status = "ready"
+        elif profile.status == "disabled":
+            title = "Local run profile cleared"
+            status = "stopped"
+        else:
+            title = "Local run profile draft"
+            status = "info"
+        items.append(
+            BuilderActivityItem(
+                id=f"act_{profile.id}",
+                kind="runtime_status",
+                status=status,
+                title=title,
+                message=title,
+                timestamp=profile.updated_at,
+                snapshot_id=profile.source_snapshot_id,
+                metadata={
+                    "working_directory": profile.working_directory,
+                    "expected_preview_url": profile.expected_preview_url,
+                },
+            )
+        )
+
     items.sort(key=lambda row: (row.timestamp, row.id), reverse=True)
     return items
 
@@ -435,6 +612,95 @@ async def get_builder_activity(
     }
 
 
+@router.get("/api/workspaces/{workspace_id}/projects/{project_id}/builder/local-run-profile")
+async def get_builder_local_run_profile(
+    project_id: str,
+    ctx: Annotated[WorkspaceContext, Depends(require_perm(PERM_WORKSPACE_READ))],
+) -> dict[str, Any]:
+    _project_in_workspace_or_404(project_id=project_id, workspace_id=ctx.workspace_id)
+    profile = get_builder_run_profile_store().get_active_local_run_profile(
+        workspace_id=ctx.workspace_id,
+        project_id=project_id,
+    )
+    return _serialize_local_run_profile(profile, workspace_id=ctx.workspace_id, project_id=project_id)
+
+
+@router.put("/api/workspaces/{workspace_id}/projects/{project_id}/builder/local-run-profile")
+async def put_builder_local_run_profile(
+    project_id: str,
+    body: LocalRunProfilePayload,
+    ctx: Annotated[WorkspaceContext, Depends(require_perm(PERM_WORKSPACE_WRITE))],
+    actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)] = None,
+) -> dict[str, Any]:
+    _project_in_workspace_or_404(project_id=project_id, workspace_id=ctx.workspace_id)
+    profile_store = get_builder_run_profile_store()
+    existing = profile_store.get_active_local_run_profile(
+        workspace_id=ctx.workspace_id,
+        project_id=project_id,
+    )
+    source_snapshot_id = _validated_snapshot_id(
+        workspace_id=ctx.workspace_id,
+        project_id=project_id,
+        source_snapshot_id=body.source_snapshot_id,
+    )
+    expected_preview_url = _sanitize_local_preview_url(body.expected_preview_url)
+    if body.expected_preview_url and expected_preview_url is None:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": {
+                    "code": "LOCAL_RUN_PREVIEW_URL_INVALID",
+                    "message": "expected_preview_url must be a safe local loopback http URL with explicit port.",
+                }
+            },
+        )
+    status = str(body.status or "configured").strip().lower()
+    if status not in {"draft", "configured", "disabled"}:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": {"code": "LOCAL_RUN_PROFILE_STATUS_INVALID", "message": "status must be draft, configured, or disabled."}},
+        )
+    install_argv = _parse_command_argv(body.install_command, field_name="install_command")
+    dev_argv = _parse_command_argv(body.dev_command, field_name="dev_command", required=True) or []
+    build_argv = _parse_command_argv(body.build_command, field_name="build_command")
+    test_argv = _parse_command_argv(body.test_command, field_name="test_command")
+    if existing is None:
+        profile = LocalRunProfile(
+            workspace_id=ctx.workspace_id,
+            project_id=project_id,
+            dev_command_argv=dev_argv,
+            created_by=actor.user_id if actor is not None else None,
+        )
+    else:
+        profile = existing
+    profile.source_snapshot_id = source_snapshot_id
+    profile.display_name = _safe_text(body.display_name, fallback="Local run profile")
+    profile.working_directory = _normalize_working_directory(body.working_directory)
+    profile.install_command_argv = install_argv
+    profile.dev_command_argv = dev_argv
+    profile.build_command_argv = build_argv
+    profile.test_command_argv = test_argv
+    profile.expected_preview_url = expected_preview_url
+    profile.execution_mode = "local_only"
+    profile.status = status
+    profile.metadata = _sanitize_metadata(body.metadata)
+    saved = profile_store.upsert_local_run_profile(profile)
+    return _serialize_local_run_profile(saved, workspace_id=ctx.workspace_id, project_id=project_id)
+
+
+@router.delete("/api/workspaces/{workspace_id}/projects/{project_id}/builder/local-run-profile")
+async def delete_builder_local_run_profile(
+    project_id: str,
+    ctx: Annotated[WorkspaceContext, Depends(require_perm(PERM_WORKSPACE_WRITE))],
+) -> dict[str, Any]:
+    _project_in_workspace_or_404(project_id=project_id, workspace_id=ctx.workspace_id)
+    cleared = get_builder_run_profile_store().clear_active_local_run_profile(
+        workspace_id=ctx.workspace_id,
+        project_id=project_id,
+    )
+    return _serialize_local_run_profile(cleared, workspace_id=ctx.workspace_id, project_id=project_id)
+
+
 @router.post("/api/workspaces/{workspace_id}/projects/{project_id}/builder/local-preview")
 async def register_local_preview(
     project_id: str,
@@ -453,23 +719,11 @@ async def register_local_preview(
                 }
             },
         )
-    source_snapshot_id = body.source_snapshot_id
-    if source_snapshot_id is not None:
-        snapshot_rows = get_builder_source_store().list_source_snapshots(
-            workspace_id=ctx.workspace_id,
-            project_id=project_id,
-        )
-        known_snapshot_ids = {row.id for row in snapshot_rows}
-        if source_snapshot_id not in known_snapshot_ids:
-            raise HTTPException(
-                status_code=404,
-                detail={
-                    "error": {
-                        "code": "SOURCE_SNAPSHOT_NOT_FOUND",
-                        "message": f"Unknown source_snapshot_id {source_snapshot_id!r} for this project.",
-                    }
-                },
-            )
+    source_snapshot_id = _validated_snapshot_id(
+        workspace_id=ctx.workspace_id,
+        project_id=project_id,
+        source_snapshot_id=body.source_snapshot_id,
+    )
     runtime_store = get_builder_runtime_store()
     runtime = runtime_store.upsert_local_runtime_session(
         workspace_id=ctx.workspace_id,

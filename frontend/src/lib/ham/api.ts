@@ -308,6 +308,49 @@ export type BuilderLocalPreviewRegisterRequest = {
   display_name?: string | null;
 };
 
+export type LocalRunProfileStatus = "not_configured" | "draft" | "configured" | "disabled";
+
+export type LocalRunProfile = {
+  id: string;
+  workspace_id: string;
+  project_id: string;
+  source_snapshot_id: string | null;
+  display_name: string;
+  working_directory: string;
+  install_command_argv: string[] | null;
+  dev_command_argv: string[];
+  build_command_argv: string[] | null;
+  test_command_argv: string[] | null;
+  expected_preview_url: string | null;
+  execution_mode: "local_only";
+  status: Exclude<LocalRunProfileStatus, "not_configured">;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+  metadata: Record<string, unknown>;
+};
+
+export type LocalRunProfilePayload = {
+  source_snapshot_id?: string | null;
+  display_name: string;
+  working_directory: string;
+  install_command?: string | null;
+  dev_command: string;
+  build_command?: string | null;
+  test_command?: string | null;
+  expected_preview_url?: string | null;
+  status?: "draft" | "configured" | "disabled" | null;
+  metadata?: Record<string, unknown>;
+};
+
+export type LocalRunProfileResponse = {
+  workspace_id: string;
+  project_id: string;
+  configured: boolean;
+  status: LocalRunProfileStatus;
+  profile: LocalRunProfile | null;
+};
+
 export type BuilderActivityKind =
   | "source_import"
   | "source_snapshot"
@@ -449,6 +492,52 @@ export async function getBuilderPreviewStatus(
     throw new Error((await hamApiErrorDetailMessage(res)) || `HTTP ${res.status}`);
   }
   return res.json() as Promise<BuilderPreviewStatus>;
+}
+
+export async function getBuilderLocalRunProfile(
+  workspaceId: string,
+  projectId: string,
+): Promise<LocalRunProfileResponse> {
+  const res = await hamApiFetch(
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/projects/${encodeURIComponent(projectId)}/builder/local-run-profile`,
+  );
+  if (!res.ok) {
+    throw new Error((await hamApiErrorDetailMessage(res)) || `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<LocalRunProfileResponse>;
+}
+
+export async function saveBuilderLocalRunProfile(
+  workspaceId: string,
+  projectId: string,
+  body: LocalRunProfilePayload,
+): Promise<LocalRunProfileResponse> {
+  const res = await hamApiFetch(
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/projects/${encodeURIComponent(projectId)}/builder/local-run-profile`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+  if (!res.ok) {
+    throw new Error((await hamApiErrorDetailMessage(res)) || `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<LocalRunProfileResponse>;
+}
+
+export async function deleteBuilderLocalRunProfile(
+  workspaceId: string,
+  projectId: string,
+): Promise<LocalRunProfileResponse> {
+  const res = await hamApiFetch(
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/projects/${encodeURIComponent(projectId)}/builder/local-run-profile`,
+    { method: "DELETE" },
+  );
+  if (!res.ok) {
+    throw new Error((await hamApiErrorDetailMessage(res)) || `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<LocalRunProfileResponse>;
 }
 
 export async function postBuilderLocalPreview(
