@@ -498,6 +498,8 @@ class ProjectContext:
     # Git state snapshots: captured once per discover() call for consistent context.
     # git_status_snapshot shows working branch state (status --short), git_diff_snapshot shows staged/unstaged changes,
     # git_log_snapshot shows recent commit history (oneline). All are None if not a git repo.
+    # NOTE: These fields are set during ProjectContext.discover() and should not be modified after creation
+    # to ensure consistent context throughout the agent's operation.
     git_status_snapshot: str | None = None
     git_diff_snapshot: str | None = None
     git_log_snapshot: str | None = None
