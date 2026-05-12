@@ -208,3 +208,24 @@ def test_sandbox_provider_fake_failure_reports_error_without_preview(tmp_path: P
     assert activity.status_code == 200
     assert any(row["title"] == "Cloud runtime failed" for row in activity.json()["items"])
     _cleanup()
+
+
+def test_sandbox_provider_non_dry_run_defaults_to_fake_failure(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "sandbox_provider")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_EXPERIMENTS_ENABLED", "true")
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_ENABLED", "true")
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_PROVIDER", "e2b")
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_DRY_RUN", "false")
+    monkeypatch.delenv("HAM_BUILDER_SANDBOX_FAKE_MODE", raising=False)
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_API_KEY", "test-secret-api-key")
+    client, ws_id, project_id, snapshot_id = _seed_context(tmp_path)
+    res = client.post(
+        f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime/jobs",
+        json={"source_snapshot_id": snapshot_id},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["job"]["status"] == "failed"
+    assert body["preview_status"]["status"] != "ready"
+    assert body["preview_status"]["preview_url"] is None
+    _cleanup()
