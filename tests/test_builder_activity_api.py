@@ -29,6 +29,11 @@ from src.persistence.builder_source_store import (
     SourceSnapshot,
     set_builder_source_store_for_tests,
 )
+from src.persistence.builder_visual_edit_request_store import (
+    BuilderVisualEditRequestStore,
+    VisualEditRequest,
+    set_builder_visual_edit_request_store_for_tests,
+)
 from src.persistence.project_store import ProjectStore, set_project_store_for_tests
 from src.persistence.workspace_store import InMemoryWorkspaceStore
 
@@ -103,6 +108,9 @@ def _seed_context(tmp_path: Path) -> tuple[TestClient, str, str]:
     project_store.register(project)
     set_project_store_for_tests(project_store)
     set_builder_source_store_for_tests(BuilderSourceStore(store_path=tmp_path / "builder_sources.json"))
+    set_builder_visual_edit_request_store_for_tests(
+        BuilderVisualEditRequestStore(store_path=tmp_path / "builder_visual_edit_requests.json")
+    )
     set_builder_runtime_store_for_tests(BuilderRuntimeStore(store_path=tmp_path / "builder_runtime.json"))
     set_builder_run_profile_store_for_tests(BuilderRunProfileStore(store_path=tmp_path / "builder_run_profiles.json"))
     client = TestClient(_build_app(actor=_actor("user_a", org_id="org_a"), ws_store=ws_store))
@@ -112,6 +120,7 @@ def _seed_context(tmp_path: Path) -> tuple[TestClient, str, str]:
 def _cleanup() -> None:
     set_project_store_for_tests(None)
     set_builder_source_store_for_tests(None)
+    set_builder_visual_edit_request_store_for_tests(None)
     set_builder_runtime_store_for_tests(None)
     set_builder_run_profile_store_for_tests(None)
 
@@ -271,6 +280,26 @@ def test_activity_includes_local_run_profile_events(tmp_path: Path) -> None:
     res = client.get(f"/api/workspaces/{ws_id}/projects/{project_id}/builder/activity")
     assert res.status_code == 200
     assert any(row["title"] == "Local run profile configured" for row in res.json()["items"])
+    _cleanup()
+
+
+def test_activity_includes_visual_edit_requests(tmp_path: Path) -> None:
+    client, ws_id, project_id = _seed_context(tmp_path)
+    visual_edit_store = BuilderVisualEditRequestStore(store_path=tmp_path / "builder_visual_edit_requests.json")
+    set_builder_visual_edit_request_store_for_tests(visual_edit_store)
+    visual_edit_store.upsert_visual_edit_request(
+        VisualEditRequest(
+            workspace_id=ws_id,
+            project_id=project_id,
+            instruction="Move CTA near header",
+            status="queued",
+        )
+    )
+    res = client.get(f"/api/workspaces/{ws_id}/projects/{project_id}/builder/activity")
+    assert res.status_code == 200
+    rows = [row for row in res.json()["items"] if row.get("title") == "Visual edit request saved"]
+    assert len(rows) == 1
+    assert rows[0]["status"] == "queued"
     _cleanup()
 
 

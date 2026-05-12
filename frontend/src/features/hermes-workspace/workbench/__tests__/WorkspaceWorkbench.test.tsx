@@ -510,7 +510,38 @@ describe("WorkspaceWorkbench", () => {
       expect(screen.getByTestId("hww-visual-edit-section")).toBeInTheDocument();
     });
     expect(screen.getByTestId("hww-visual-edit-disabled-copy")).toBeInTheDocument();
-    expect(screen.getByTestId("hww-visual-edit-submit")).toBeDisabled();
+    expect(screen.getByTestId("hww-visual-edit-toggle")).toBeDisabled();
+    expect(screen.getByTestId("hww-visual-edit-target-empty")).toBeInTheDocument();
+  });
+
+  it("Visual edit mode captures preview click target", async () => {
+    getBuilderPreviewStatusMock.mockResolvedValue({
+      project_id: "proj_abc",
+      workspace_id: "ws_abc",
+      mode: "local",
+      status: "ready",
+      health: "healthy",
+      preview_url: "http://127.0.0.1:3000/",
+      message: "Preview is ready.",
+      updated_at: "2026-01-01T00:00:00Z",
+      source_snapshot_id: "ssnp_1",
+      runtime_session_id: "rtms_1",
+      preview_endpoint_id: "prve_1",
+      logs_hint: null,
+    });
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    const toggle = await screen.findByTestId("hww-visual-edit-toggle");
+    expect(toggle).not.toBeDisabled();
+    fireEvent.click(toggle);
+    const overlay = await screen.findByTestId("hww-visual-edit-overlay");
+    fireEvent.click(overlay, { clientX: 100, clientY: 120 });
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-visual-edit-target-summary")).toBeInTheDocument();
+    });
   });
 
   it("Visual edit request submits contract when preview is ready", async () => {
@@ -533,6 +564,11 @@ describe("WorkspaceWorkbench", () => {
         <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
       </MemoryRouter>,
     );
+    fireEvent.click(await screen.findByTestId("hww-visual-edit-toggle"));
+    fireEvent.click(await screen.findByTestId("hww-visual-edit-overlay"), {
+      clientX: 120,
+      clientY: 140,
+    });
     fireEvent.change(await screen.findByTestId("hww-visual-edit-instruction"), {
       target: { value: "Move save button to top right" },
     });
@@ -544,15 +580,26 @@ describe("WorkspaceWorkbench", () => {
       expect(createBuilderVisualEditRequestMock).toHaveBeenCalledWith("ws_abc", "proj_abc", {
         instruction: "Move save button to top right",
         route: "/",
+        preview_url_kind: "local",
+        target: {
+          x: expect.any(Number),
+          y: expect.any(Number),
+          width: 1,
+          height: 1,
+          viewport_width: expect.any(Number),
+          viewport_height: expect.any(Number),
+          device_mode: expect.stringMatching(/desktop|mobile/),
+        },
         selector_hints: [".toolbar .save-btn"],
+        bbox: { x: expect.any(Number), y: expect.any(Number), width: 1, height: 1 },
         runtime_session_id: "rtms_1",
         preview_endpoint_id: "prve_1",
         source_snapshot_id: "ssnp_1",
-        status: "draft",
+        status: "queued",
       });
     });
     expect(screen.getByTestId("hww-visual-edit-success")).toHaveTextContent(
-      "Visual edit request saved. Agent execution is not connected yet.",
+      "Edit request saved. Agent execution is not connected yet.",
     );
   });
 
