@@ -127,6 +127,11 @@ INSTRUCTION_DOT_FILES = ("SWARM.md", "instructions.md")
 # These constants cap the size of instruction documents loaded into agent prompts
 # to prevent context overflow while preserving critical project guidance.
 # Adjust values carefully: larger values consume more context window token budget.
+# Rationale: 4K chars per file balances comprehensive guidance with token efficiency;
+# 12K total allows ~3 medium instruction docs (SWARM.md, AGENTS.md, etc.) without
+# overwhelming the context window; 8K diff captures meaningful changes; 4K summary
+# fits cleanly in additional context slots. **FOR MAINTAINERS**: Monitor token usage
+# during agent runs and adjust if production workloads require different bounds.
 MAX_INSTRUCTION_FILE_CHARS = 4_000
 MAX_TOTAL_INSTRUCTION_CHARS = 12_000
 MAX_DIFF_CHARS = 8_000
