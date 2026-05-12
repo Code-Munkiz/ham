@@ -554,10 +554,19 @@ def test_builder_worker_capabilities_returns_known_worker_kinds(tmp_path: Path) 
         "claude_agent",
         "factory_droid",
         "local_runtime",
+        "cloud_runtime_worker",
         "hermes_planner",
     ]
     for row in workers:
-        assert row["status"] in {"available", "needs_connection", "unavailable", "disabled", "unknown"}
+        assert row["status"] in {
+            "available",
+            "needs_connection",
+            "unavailable",
+            "disabled",
+            "unknown",
+            "available_mock",
+            "available_poc",
+        }
         assert "capabilities" in row
         assert "required_setup" in row
         assert "environment_fit" in row

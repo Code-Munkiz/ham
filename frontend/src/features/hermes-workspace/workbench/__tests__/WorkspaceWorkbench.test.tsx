@@ -11,6 +11,7 @@ const {
   getBuilderPreviewStatusMock,
   getBuilderActivityMock,
   getBuilderCloudRuntimeMock,
+  createBuilderCloudRuntimeJobMock,
   getBuilderWorkerCapabilitiesMock,
   getBuilderLocalRunProfileMock,
   listBuilderVisualEditRequestsMock,
@@ -28,6 +29,7 @@ const {
   getBuilderPreviewStatusMock: vi.fn(),
   getBuilderActivityMock: vi.fn(),
   getBuilderCloudRuntimeMock: vi.fn(),
+  createBuilderCloudRuntimeJobMock: vi.fn(),
   getBuilderWorkerCapabilitiesMock: vi.fn(),
   getBuilderLocalRunProfileMock: vi.fn(),
   listBuilderVisualEditRequestsMock: vi.fn(),
@@ -49,6 +51,7 @@ vi.mock("@/lib/ham/api", async (importOriginal) => {
     getBuilderPreviewStatus: (...args: unknown[]) => getBuilderPreviewStatusMock(...args),
     getBuilderActivity: (...args: unknown[]) => getBuilderActivityMock(...args),
     getBuilderCloudRuntime: (...args: unknown[]) => getBuilderCloudRuntimeMock(...args),
+    createBuilderCloudRuntimeJob: (...args: unknown[]) => createBuilderCloudRuntimeJobMock(...args),
     getBuilderWorkerCapabilities: (...args: unknown[]) => getBuilderWorkerCapabilitiesMock(...args),
     getBuilderLocalRunProfile: (...args: unknown[]) => getBuilderLocalRunProfileMock(...args),
     listBuilderVisualEditRequests: (...args: unknown[]) =>
@@ -128,6 +131,53 @@ describe("WorkspaceWorkbench", () => {
       source_snapshot_id: null,
       metadata: {},
     });
+    createBuilderCloudRuntimeJobMock.mockResolvedValue({
+      job: {
+        id: "crjb_1",
+        workspace_id: "ws_abc",
+        project_id: "proj_abc",
+        source_snapshot_id: null,
+        runtime_session_id: "rtms_cloud_1",
+        status: "succeeded",
+        phase: "completed",
+        provider: "local_mock",
+        requested_by: "user_a",
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-01T00:00:00Z",
+        completed_at: "2026-01-01T00:00:00Z",
+        error_code: null,
+        error_message: null,
+        logs_summary: "mock",
+        metadata: {},
+      },
+      runtime_session: { id: "rtms_cloud_1" },
+      cloud_runtime: {
+        workspace_id: "ws_abc",
+        project_id: "proj_abc",
+        mode: "cloud",
+        status: "running",
+        message: "Cloud runtime POC simulated. No real sandbox/build executed.",
+        updated_at: "2026-01-01T00:00:00Z",
+        runtime_session_id: "rtms_cloud_1",
+        source_snapshot_id: null,
+        metadata: {},
+      },
+      preview_status: {
+        project_id: "proj_abc",
+        workspace_id: "ws_abc",
+        mode: "local",
+        status: "not_connected",
+        health: "unknown",
+        preview_url: null,
+        message: "Local preview runtime is not connected.",
+        updated_at: "2026-01-01T00:00:00Z",
+        source_snapshot_id: null,
+        runtime_session_id: null,
+        preview_endpoint_id: null,
+        logs_hint: null,
+      },
+      activity_item: null,
+    });
     getBuilderWorkerCapabilitiesMock.mockResolvedValue({
       workspace_id: "ws_abc",
       project_id: "proj_abc",
@@ -155,6 +205,18 @@ describe("WorkspaceWorkbench", () => {
           settings_href: null,
           last_checked_at: "2026-01-01T00:00:00Z",
           metadata: {},
+        },
+        {
+          worker_kind: "cloud_runtime_worker",
+          provider: "builder_cloud_runtime",
+          display_name: "Cloud Runtime Worker (POC)",
+          status: "available_mock",
+          capabilities: ["request_runtime_job", "read_job_status"],
+          environment_fit: "Cloud runtime POC control-plane path.",
+          required_setup: "Set local_mock provider.",
+          settings_href: "/workspace/settings?section=integrations",
+          last_checked_at: "2026-01-01T00:00:00Z",
+          metadata: { provider_mode: "local_mock" },
         },
       ],
     });
@@ -374,7 +436,61 @@ describe("WorkspaceWorkbench", () => {
     });
     expect(screen.getByTestId("hww-cloud-runtime-status")).toHaveTextContent("unsupported");
     expect(screen.getByTestId("hww-cloud-runtime-message")).toHaveTextContent("not provisioned");
+    expect(screen.getByTestId("hww-cloud-runtime-section")).toHaveTextContent(
+      "control-plane path only",
+    );
     expect(screen.queryByText(/deployed successfully/i)).toBeNull();
+  });
+
+  it("Cloud runtime POC request button is disabled when provider is disabled", async () => {
+    getBuilderWorkerCapabilitiesMock.mockResolvedValueOnce({
+      workspace_id: "ws_abc",
+      project_id: "proj_abc",
+      workers: [
+        {
+          worker_kind: "cloud_runtime_worker",
+          provider: "builder_cloud_runtime",
+          display_name: "Cloud Runtime Worker (POC)",
+          status: "disabled",
+          capabilities: ["request_runtime_job", "read_job_status"],
+          environment_fit: "Cloud runtime POC control-plane path.",
+          required_setup: "Set local_mock provider.",
+          settings_href: null,
+          last_checked_at: "2026-01-01T00:00:00Z",
+          metadata: { provider_mode: "disabled" },
+        },
+      ],
+    });
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-cloud-runtime-request-poc")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("hww-cloud-runtime-request-poc")).toBeDisabled();
+    expect(screen.getByTestId("hww-cloud-runtime-disabled-copy")).toBeInTheDocument();
+  });
+
+  it("Cloud runtime POC request calls API and refreshes state", async () => {
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    const btn = await screen.findByTestId("hww-cloud-runtime-request-poc");
+    fireEvent.click(btn);
+    await waitFor(() => {
+      expect(createBuilderCloudRuntimeJobMock).toHaveBeenCalledWith("ws_abc", "proj_abc", {
+        source_snapshot_id: null,
+        metadata: { request_source: "workbench_preview_tab" },
+      });
+    });
+    expect(screen.getByTestId("hww-cloud-runtime-job-notice")).toHaveTextContent(
+      "No production sandbox/build execution was performed",
+    );
+    expect(screen.getByTestId("hww-cloud-runtime-latest-job")).toHaveTextContent("succeeded");
   });
 
   it("Preview renders compact builder worker statuses", async () => {
@@ -386,11 +502,13 @@ describe("WorkspaceWorkbench", () => {
     await waitFor(() => {
       expect(screen.getByTestId("hww-worker-capability-list")).toBeInTheDocument();
     });
-    expect(screen.getAllByTestId("hww-worker-capability-item").length).toBe(2);
+    expect(screen.getAllByTestId("hww-worker-capability-item").length).toBe(3);
     expect(screen.getByText("Cursor Cloud Agent")).toBeInTheDocument();
     expect(screen.getByText("Local Runtime")).toBeInTheDocument();
+    expect(screen.getByText("Cloud Runtime Worker (POC)")).toBeInTheDocument();
     expect(screen.getByText("needs connection")).toBeInTheDocument();
     expect(screen.getByText("available")).toBeInTheDocument();
+    expect(screen.getByText("available mock")).toBeInTheDocument();
   });
 
   it("Saving local run profile calls API and renders configured summary", async () => {
