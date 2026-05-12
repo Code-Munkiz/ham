@@ -25,6 +25,11 @@ from src.persistence.builder_source_store import (
 )
 from src.persistence.builder_runtime_store import PreviewEndpoint, get_builder_runtime_store
 from src.persistence.builder_run_profile_store import LocalRunProfile, get_builder_run_profile_store
+from src.persistence.builder_visual_edit_request_store import (
+    VisualEditRequest,
+    get_builder_visual_edit_request_store,
+)
+from src.persistence.builder_usage_event_store import get_builder_usage_event_store
 from src.persistence.project_store import get_project_store
 from src.registry.projects import ProjectRecord
 
@@ -256,6 +261,18 @@ class LocalRunProfilePayload(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class VisualEditRequestPayload(BaseModel):
+    source_snapshot_id: str | None = None
+    runtime_session_id: str | None = None
+    preview_endpoint_id: str | None = None
+    route: str | None = None
+    selector_hints: list[str] = Field(default_factory=list)
+    bbox: dict[str, Any] | None = None
+    instruction: str
+    status: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class BuilderActivityItem(BaseModel):
     id: str
     kind: str
@@ -296,6 +313,7 @@ def _safe_stats(stats: dict[str, Any]) -> dict[str, int]:
 _COMMAND_META_RE = re.compile(r"(;|&&|\|\||\||>|<|`|\$\(|\r|\n)")
 _DISALLOWED_COMMANDS = {"rm", "del", "format", "shutdown", "powershell", "pwsh"}
 _WORKDIR_DRIVE_RE = re.compile(r"^[a-zA-Z]:")
+_VISUAL_EDIT_ALLOWED_STATUS = {"draft", "queued", "processing", "resolved", "failed", "cancelled"}
 
 
 def _normalize_working_directory(raw: str | None) -> str:
@@ -395,6 +413,95 @@ def _sanitize_metadata(raw: dict[str, Any]) -> dict[str, Any]:
             if text:
                 safe[key_text] = text
     return safe
+
+
+def _sanitize_selector_hints(raw: list[str]) -> list[str]:
+    safe: list[str] = []
+    for value in raw:
+        if len(safe) >= 20:
+            break
+        text = " ".join(str(value).replace("\r", " ").replace("\n", " ").split())
+        if not text:
+            continue
+        if _SENSITIVE_VALUE_RE.search(text):
+            continue
+        safe.append(text[:120])
+    return safe
+
+
+def _sanitize_route(raw_route: str | None) -> str | None:
+    text = str(raw_route or "").strip()
+    if not text:
+        return None
+    text = text.replace("\r", "").replace("\n", "")
+    if len(text) > 240:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": {"code": "VISUAL_EDIT_ROUTE_INVALID", "message": "route is too long."}},
+        )
+    return text
+
+
+def _sanitize_visual_edit_bbox(raw: dict[str, Any] | None) -> dict[str, float] | None:
+    if raw is None:
+        return None
+    required = ("x", "y", "width", "height")
+    out: dict[str, float] = {}
+    for key in required:
+        value = raw.get(key)
+        if value is None:
+            continue
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise HTTPException(
+                status_code=422,
+                detail={"error": {"code": "VISUAL_EDIT_BBOX_INVALID", "message": "bbox values must be numeric."}},
+            )
+        numeric = float(value)
+        if numeric < 0 or numeric > 100000:
+            raise HTTPException(
+                status_code=422,
+                detail={"error": {"code": "VISUAL_EDIT_BBOX_INVALID", "message": "bbox values are out of allowed bounds."}},
+            )
+        out[key] = round(numeric, 4)
+    if not out:
+        return None
+    missing = [key for key in required if key not in out]
+    if missing:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": {"code": "VISUAL_EDIT_BBOX_INVALID", "message": "bbox requires x, y, width, and height."}},
+        )
+    return out
+
+
+def _normalize_visual_edit_status(raw_status: str | None) -> str:
+    text = str(raw_status or "draft").strip().lower()
+    if text not in _VISUAL_EDIT_ALLOWED_STATUS:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": {
+                    "code": "VISUAL_EDIT_STATUS_INVALID",
+                    "message": "status must be one of draft, queued, processing, resolved, failed, or cancelled.",
+                }
+            },
+        )
+    return text
+
+
+def _sanitize_visual_edit_instruction(raw_instruction: str) -> str:
+    text = " ".join(str(raw_instruction or "").replace("\r", " ").replace("\n", " ").split())
+    if not text:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": {"code": "VISUAL_EDIT_INSTRUCTION_INVALID", "message": "instruction is required."}},
+        )
+    if len(text) > 1200:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": {"code": "VISUAL_EDIT_INSTRUCTION_INVALID", "message": "instruction exceeds max length."}},
+        )
+    return text
 
 def _build_activity_items(*, workspace_id: str, project_id: str) -> list[BuilderActivityItem]:
     source_store = get_builder_source_store()
@@ -609,6 +716,104 @@ async def get_builder_activity(
         "workspace_id": ctx.workspace_id,
         "project_id": project_id,
         "items": [row.model_dump(mode="json") for row in items],
+    }
+
+
+@router.get("/api/workspaces/{workspace_id}/projects/{project_id}/builder/usage-events")
+async def list_builder_usage_events(
+    project_id: str,
+    ctx: Annotated[WorkspaceContext, Depends(require_perm(PERM_WORKSPACE_READ))],
+) -> dict[str, Any]:
+    _project_in_workspace_or_404(project_id=project_id, workspace_id=ctx.workspace_id)
+    rows = get_builder_usage_event_store().list_usage_events(
+        workspace_id=ctx.workspace_id,
+        project_id=project_id,
+    )
+    return {
+        "workspace_id": ctx.workspace_id,
+        "project_id": project_id,
+        "usage_events": [row.model_dump(mode="json") for row in rows],
+    }
+
+
+@router.get("/api/workspaces/{workspace_id}/projects/{project_id}/builder/visual-edit-requests")
+async def list_builder_visual_edit_requests(
+    project_id: str,
+    ctx: Annotated[WorkspaceContext, Depends(require_perm(PERM_WORKSPACE_READ))],
+) -> dict[str, Any]:
+    _project_in_workspace_or_404(project_id=project_id, workspace_id=ctx.workspace_id)
+    rows = get_builder_visual_edit_request_store().list_visual_edit_requests(
+        workspace_id=ctx.workspace_id,
+        project_id=project_id,
+    )
+    return {
+        "workspace_id": ctx.workspace_id,
+        "project_id": project_id,
+        "visual_edit_requests": [row.model_dump(mode="json") for row in rows],
+    }
+
+
+@router.post("/api/workspaces/{workspace_id}/projects/{project_id}/builder/visual-edit-requests")
+async def create_builder_visual_edit_request(
+    project_id: str,
+    body: VisualEditRequestPayload,
+    ctx: Annotated[WorkspaceContext, Depends(require_perm(PERM_WORKSPACE_WRITE))],
+    actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)] = None,
+) -> dict[str, Any]:
+    _project_in_workspace_or_404(project_id=project_id, workspace_id=ctx.workspace_id)
+    source_snapshot_id = _validated_snapshot_id(
+        workspace_id=ctx.workspace_id,
+        project_id=project_id,
+        source_snapshot_id=body.source_snapshot_id,
+    )
+    request = VisualEditRequest(
+        workspace_id=ctx.workspace_id,
+        project_id=project_id,
+        source_snapshot_id=source_snapshot_id,
+        runtime_session_id=str(body.runtime_session_id or "").strip() or None,
+        preview_endpoint_id=str(body.preview_endpoint_id or "").strip() or None,
+        route=_sanitize_route(body.route),
+        selector_hints=_sanitize_selector_hints(body.selector_hints),
+        bbox=_sanitize_visual_edit_bbox(body.bbox),
+        instruction=_sanitize_visual_edit_instruction(body.instruction),
+        status=_normalize_visual_edit_status(body.status),
+        created_by=actor.user_id if actor is not None else None,
+        metadata=_sanitize_metadata(body.metadata),
+    )
+    saved = get_builder_visual_edit_request_store().upsert_visual_edit_request(request)
+    return {
+        "workspace_id": ctx.workspace_id,
+        "project_id": project_id,
+        "visual_edit_request": saved.model_dump(mode="json"),
+    }
+
+
+@router.delete("/api/workspaces/{workspace_id}/projects/{project_id}/builder/visual-edit-requests/{request_id}")
+async def cancel_builder_visual_edit_request(
+    project_id: str,
+    request_id: str,
+    ctx: Annotated[WorkspaceContext, Depends(require_perm(PERM_WORKSPACE_WRITE))],
+) -> dict[str, Any]:
+    _project_in_workspace_or_404(project_id=project_id, workspace_id=ctx.workspace_id)
+    cancelled = get_builder_visual_edit_request_store().cancel_visual_edit_request(
+        workspace_id=ctx.workspace_id,
+        project_id=project_id,
+        request_id=request_id,
+    )
+    if cancelled is None:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": {
+                    "code": "VISUAL_EDIT_REQUEST_NOT_FOUND",
+                    "message": f"Unknown visual edit request {request_id!r}.",
+                }
+            },
+        )
+    return {
+        "workspace_id": ctx.workspace_id,
+        "project_id": project_id,
+        "visual_edit_request": cancelled.model_dump(mode="json"),
     }
 
 
