@@ -141,6 +141,11 @@ MAX_SUMMARY_CHARS = 4_000
 # NOTE: This placeholder may be removed entirely once no longer needed or replaced
 #       with actual implementation. Check sessions.py and compact_session() for current
 #       compaction logic before re-adding token-based limits.
+#
+# **FOR MAINTAINERS**: If restoring this constant, coordinate changes in:
+# - `sessions.py`: update `compact_session()` function to use the token limit
+# - `src/api/chat.py`: ensure stream handlers respect the limit boundary
+# - Performance testing: monitor completion latency and context window usage
 DEFAULT_SESSION_COMPACTION_MAX_TOKENS=***  # Placeholder: not currently used
 # This constant was planned for token-budget-based session compaction but was removed due to incomplete implementation.
 # When re-implementing, maintainers should: 1) Define a concrete token calculation strategy 2) Set appropriate limits (500-2000 recommended)
