@@ -71,7 +71,8 @@ vi.mock("@/lib/ham/api", async (importOriginal) => {
     ),
     previewCodingConductor: (...args: Parameters<typeof mod.previewCodingConductor>) =>
       previewCodingConductorMock(...args),
-    listHamProjects: (...args: Parameters<typeof mod.listHamProjects>) => listHamProjectsMock(...args),
+    listHamProjects: (...args: Parameters<typeof mod.listHamProjects>) =>
+      listHamProjectsMock(...args),
   };
 });
 

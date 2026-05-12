@@ -167,7 +167,9 @@ describe("ManagedBuildApprovalPanel", () => {
   it("calls preview endpoint with composer project id and prompt", async () => {
     previewMock.mockResolvedValueOnce(makePreview({ project_id: "project.scoped-chat" }));
 
-    render(<ManagedBuildApprovalPanel projectId="project.scoped-chat" userPrompt=" Wire tests. " />);
+    render(
+      <ManagedBuildApprovalPanel projectId="project.scoped-chat" userPrompt=" Wire tests. " />,
+    );
 
     fireEvent.click(screen.getByRole("button", { name: /preview this build/i }));
 

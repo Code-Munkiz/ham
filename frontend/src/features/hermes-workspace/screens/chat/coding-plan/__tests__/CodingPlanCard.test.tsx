@@ -68,7 +68,9 @@ describe("CodingPlanCard", () => {
       candidates: [],
     });
     renderWithDigest(p);
-    const ul = screen.getByRole("region").querySelector('[data-hww-coding-plan="response-blockers"]');
+    const ul = screen
+      .getByRole("region")
+      .querySelector('[data-hww-coding-plan="response-blockers"]');
     expect(ul).toBeTruthy();
     expect((ul as HTMLElement).textContent?.toLowerCase()).not.toContain("unknown project_id");
     expect((ul as HTMLElement).textContent ?? "").toMatch(/Choose or create a project/i);

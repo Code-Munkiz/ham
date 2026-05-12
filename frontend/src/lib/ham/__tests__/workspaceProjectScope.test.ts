@@ -34,7 +34,9 @@ describe("workspaceProjectScope", () => {
       "ws_c",
     );
 
-    expect(workspaceIdFromProjectRecord(rec({ id: "d", metadata: {}, workspace_id: "" }))).toBeNull();
+    expect(
+      workspaceIdFromProjectRecord(rec({ id: "d", metadata: {}, workspace_id: "" })),
+    ).toBeNull();
 
     expect(workspaceIdFromProjectRecord(rec({ id: "e", metadata: {} }))).toBeNull();
   });
@@ -48,7 +50,10 @@ describe("workspaceProjectScope", () => {
     ).toBe(true);
 
     expect(
-      projectRecordsHaveWorkspaceBinding([rec({ id: "b", metadata: {} }), rec({ id: "c", metadata: {} })]),
+      projectRecordsHaveWorkspaceBinding([
+        rec({ id: "b", metadata: {} }),
+        rec({ id: "c", metadata: {} }),
+      ]),
     ).toBe(false);
   });
 

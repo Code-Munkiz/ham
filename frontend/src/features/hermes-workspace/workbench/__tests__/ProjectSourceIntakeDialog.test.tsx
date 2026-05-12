@@ -88,9 +88,7 @@ describe("ProjectSourceIntakeDialog", () => {
       </MemoryRouter>,
     );
     expect(await screen.findByRole("heading", { name: /^Upload ZIP$/i })).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /Import repository.*Coming soon/i }),
-    ).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Import repository.*Coming soon/i })).toBeDisabled();
     expect(screen.getByTestId("hww-project-source-zip-upload-btn")).toBeDisabled();
     expect(screen.getByTestId("hww-project-source-repo-url-input")).toBeDisabled();
   });
