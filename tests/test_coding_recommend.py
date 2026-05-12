@@ -137,6 +137,21 @@ def _provider_candidate(out: Iterable[Candidate], kind: ProviderKind) -> Candida
         ("Implement a /api/coding/preview endpoint", "feature"),
         ("Fix the broken Cursor mission cancel button", "fix"),
         ("Tweak this file's import order", "single_file_edit"),
+        # Hyphenated -only shapes (managed-workspace smoke prompts in the wild
+        # use these); recommender maps comments_only -> factory_droid_build.
+        ("Make a comment-only change to the README.", "comments_only"),
+        ("docs-only update; no behavior change.", "comments_only"),
+        ("documentation-only tweak", "comments_only"),
+        (
+            "Smoke test only. Make a tiny documentation/comment-only change in the "
+            "managed workspace and create a managed snapshot. Do not change behavior, "
+            "dependencies, secrets, CI, or configuration.",
+            "comments_only",
+        ),
+        ("documentation/comment update", "comments_only"),
+        ("comment / docs polish", "comments_only"),
+        ("Create a managed snapshot for the staging workspace.", "comments_only"),
+        ("managed workspace build for a tiny docs tweak", "comments_only"),
         ("Hello", "unknown"),
         ("", "unknown"),
         ("    ", "unknown"),

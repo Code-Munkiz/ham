@@ -79,26 +79,55 @@ _RULES: Sequence[_Rule] = (
         0.85,
         "format_only",
     ),
+    # Hyphenated "-only" shapes — high precedence so prompts like
+    # "comment-only change" or "docs-only update" route to comments_only
+    # without needing a paired verb. These map to factory_droid_build via
+    # the recommender table for managed-workspace projects.
     _r(
-        r"\b(comments?|docstrings?|jsdoc)\b.{0,40}\b(add|update|fix|improve|write)\b",
+        r"\b(comments?[- ]only|documentation[- ]only|docs?[- ]only)\b",
+        "comments_only",
+        0.85,
+        "comments_only:hyphen-only",
+    ),
+    # Slash-combined shapes like "documentation/comment-only" or "comment/docs".
+    # Real-world smoke prompts often double up the noun for clarity.
+    _r(
+        r"\b(documentation\s*/\s*comments?|comments?\s*/\s*documentation|docs?\s*/\s*comments?|comments?\s*/\s*docs?)\b",
+        "comments_only",
+        0.85,
+        "comments_only:slash-combo",
+    ),
+    # Managed-workspace snapshot intent. By project policy a managed
+    # snapshot is a comments/docs-class action (no behavior change), so
+    # surface the factory_droid_build candidate via the comments_only cell
+    # and let the recommender / project flags raise blockers if anything
+    # else is missing.
+    _r(
+        r"\b(managed snapshot|managed workspace (build|snapshot)|create (a|the) (managed )?snapshot)\b",
+        "comments_only",
+        0.7,
+        "comments_only:managed-snapshot",
+    ),
+    _r(
+        r"\b(comments?|docstrings?|jsdoc)\b.{0,40}\b(add|update|fix|improve|write|make|create|introduce)\b",
         "comments_only",
         0.8,
         "comments_only",
     ),
     _r(
-        r"\b(add|update|fix|improve|write)\b.{0,40}\b(comments?|docstrings?|jsdoc)\b",
+        r"\b(add|update|fix|improve|write|make|create|introduce)\b.{0,40}\b(comments?|docstrings?|jsdoc)\b",
         "comments_only",
         0.8,
         "comments_only:reverse",
     ),
     _r(
-        r"\b(doc|docs|documentation|readme)\b.{0,40}\b(fix|update|improve|tidy|polish)\b",
+        r"\b(doc|docs|documentation|readme)\b.{0,40}\b(fix|update|improve|tidy|polish|make|create|introduce)\b",
         "doc_fix",
         0.75,
         "doc_fix",
     ),
     _r(
-        r"\b(fix|update|improve|tidy|polish)\b.{0,40}\b(doc|docs|documentation|readme)\b",
+        r"\b(fix|update|improve|tidy|polish|make|create|introduce)\b.{0,40}\b(doc|docs|documentation|readme)\b",
         "doc_fix",
         0.75,
         "doc_fix:reverse",

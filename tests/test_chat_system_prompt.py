@@ -72,3 +72,23 @@ def test_chat_system_prompt_assembly_carries_no_fabricated_execution_guard() -> 
     assert "No fabricated execution" in out
     assert "Plan with coding agents" in out
     assert "Completion-claim rule" in out
+
+
+def test_chat_system_prompt_forbids_delegate_task_for_coding_execution() -> None:
+    """Locks the conversational-conductor copy guard.
+
+    Live chat fabricated a ``delegate_task`` suggestion for a managed-workspace
+    smoke prompt. The Coding Plan card is the canonical surface for coding
+    execution; the prompt must explicitly forbid suggesting ``delegate_task`` /
+    Hermes skills / other vendored catalog adapters for that flow, and must
+    prefer the managed-workspace build approval copy.
+    """
+    base = _DEFAULT_CHAT_SYSTEM_PROMPT
+    # Anti-delegate-task lock.
+    assert "delegate_task" in base, (
+        "system prompt must explicitly forbid delegate_task as a coding-execution route"
+    )
+    assert "Do NOT suggest `delegate_task`" in base or "Do NOT suggest" in base
+    # Preferred copy for the managed-workspace build flow.
+    assert "managed workspace build" in base
+    assert "Review the plan below and approve when ready" in base

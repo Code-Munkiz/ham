@@ -661,6 +661,120 @@ def test_preferred_provider_does_not_bypass_blockers(
 
 
 # ---------------------------------------------------------------------------
+# Managed-workspace smoke prompt (regression: routed to no_agent before this fix)
+# ---------------------------------------------------------------------------
+
+
+_MANAGED_SMOKE_PROMPT = (
+    "Smoke test only. Make a tiny documentation/comment-only change in the "
+    "managed workspace and create a managed snapshot. Do not change behavior, "
+    "dependencies, secrets, CI, or configuration."
+)
+
+
+def test_preview_managed_smoke_prompt_recommends_factory_droid_build_when_ready(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_store: ProjectStore,
+    normie_actor: HamActor,
+    tmp_path: Path,
+    cleanup_overrides: None,
+) -> None:
+    """The verbatim live-chat smoke prompt that previously fell through to
+    ``no_agent`` / ``unknown`` must now route to ``factory_droid_build``
+    for a fully-ready managed_workspace project.
+
+    Regression captured: the legacy classifier required precise
+    ``(verb, comments|docstrings)`` proximity; the user's natural-language
+    "documentation/comment-only" did not match. Fix added hyphenated
+    "-only" and slash-combined shapes plus a "managed snapshot" hint."""
+    _make_build_ready(monkeypatch)
+    rec = _register_project(
+        isolated_store,
+        name="p_managed_smoke",
+        root=tmp_path,
+        build_lane_enabled=True,
+        output_target="managed_workspace",
+        workspace_id="ws_managed_smoke",
+    )
+    res = _post(_client(normie_actor), user_prompt=_MANAGED_SMOKE_PROMPT, project_id=rec.id)
+    assert res.status_code == 200, res.text
+    body = res.json()
+
+    # Routing lock.
+    assert body["task_kind"] == "comments_only", body
+    assert body["chosen"] is not None, body
+    assert body["chosen"]["provider"] == "factory_droid_build", body
+    # Managed-workspace target: no PR, no operator-only confirmation.
+    assert body["chosen"]["will_modify_code"] is True
+    assert body["chosen"]["will_open_pull_request"] is False
+    assert body["chosen"]["requires_operator"] is False
+    assert body["chosen"]["requires_confirmation"] is True
+    # Approve-able: no blockers on the chosen candidate.
+    assert body["chosen"]["available"] is True
+    assert body["chosen"]["blockers"] == []
+    # Approval contract: explicit accept required (PR #265 panel reads this).
+    assert body["approval_kind"] == "confirm_and_accept_pr"
+    # NOT a fallback any more.
+    assert body["task_kind"] != "unknown"
+    assert body["chosen"]["provider"] != "no_agent"
+    # Recommendation reason does not claim conversational fallback.
+    assert "conversational" not in body["recommendation_reason"].lower()
+
+    # Sanitisation: no secret values, env names, workflow ids, or runner internals.
+    _assert_no_secret_leakage(res.text)
+
+
+def test_preview_managed_smoke_prompt_shows_safe_blockers_when_workspace_missing(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_store: ProjectStore,
+    normie_actor: HamActor,
+    tmp_path: Path,
+    cleanup_overrides: None,
+) -> None:
+    """If the project has output_target=managed_workspace but no workspace_id,
+    the build candidate must surface a friendly blocker instead of falling
+    back to a conversational answer."""
+    _make_build_ready(monkeypatch)
+    rec = _register_project(
+        isolated_store,
+        name="p_managed_no_ws",
+        root=tmp_path,
+        build_lane_enabled=True,
+        output_target="managed_workspace",
+        workspace_id=None,
+    )
+    res = _post(_client(normie_actor), user_prompt=_MANAGED_SMOKE_PROMPT, project_id=rec.id)
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["task_kind"] == "comments_only"
+    build = next(c for c in body["candidates"] if c["provider"] == "factory_droid_build")
+    assert build["available"] is False
+    assert any("managed workspace" in b.lower() for b in build["blockers"])
+    # Blocker copy never names the env var, the workflow id, or the token.
+    for b in build["blockers"]:
+        assert "HAM_DROID_EXEC_TOKEN" not in b
+        assert "safe_edit_low" not in b
+        assert "argv" not in b.lower()
+
+
+def test_preview_managed_smoke_prompt_with_no_project_blocks_safely(
+    isolated_store: ProjectStore,
+    normie_actor: HamActor,
+    cleanup_overrides: None,
+) -> None:
+    """When project_id is omitted, factory_droid_build is blocked with
+    'Pick a project...' — not silently demoted to no_agent / conversational."""
+    res = _post(_client(normie_actor), user_prompt=_MANAGED_SMOKE_PROMPT)
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["task_kind"] == "comments_only"
+    build = next(c for c in body["candidates"] if c["provider"] == "factory_droid_build")
+    assert build["available"] is False
+    assert any("pick a project" in b.lower() for b in build["blockers"])
+    _assert_no_secret_leakage(res.text)
+
+
+# ---------------------------------------------------------------------------
 # Route inventory lock
 # ---------------------------------------------------------------------------
 
