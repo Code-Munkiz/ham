@@ -13,8 +13,9 @@
  *   "tell me about", greetings, brainstorms out).
  * - Require BOTH a coding/repo verb AND a coding/repo noun to fire.
  *   This avoids false positives like "build trust" or "create context"
- *   while still catching "Build me a Tetris game" (build + game) or
- *   "Refactor the persistence layer" (refactor + layer).
+ *   while still catching "Refactor the persistence layer" (refactor + layer).
+ * - Builder-style prompts ("build me a game/app/site/dashboard") are excluded
+ *   so they can route to the chat-native Builder Happy Path instead.
  *
  * NOTE: this classifier never decides routing or execution. It only
  * gates a preview HTTP call. The user must still approve any launch in
@@ -47,6 +48,11 @@ const POSITIVE_VERBS =
 // so the backend classifier remains the final word on routing.
 const POSITIVE_NOUNS =
   /\b(app|application|game|component|endpoint|route|api|feature|page|screen|service|module|script|tool|cli|website|site|bot|integration|workflow|pipeline|bug|issue|error|crash|regression|failure|test|tests|spec|fixture|repo|repository|code|codebase|file|files|class|method|function|hook|handler|layer|system|architecture|persistence|database|db|backend|frontend|stack|infra|infrastructure|pr|prs|pull request|merge request|branch|main|patch|commit|snapshot|comment|comments|docstring|docstrings|jsdoc|documentation|readme|docs|typo|typos|spelling|prettier|black|ruff|migration|seeder|config|env|secret|deploy|deployment|release|store|firestore|cache|queue|table|index|cluster|bucket)\b/i;
+
+// Workspace builder prompts (new app/site/game/dashboard/tracker) should
+// route to builder happy-path, not conversational coding-plan preview.
+const BUILDER_PROMPT =
+  /\b(build|create|make|generate|scaffold|turn)\b.{0,80}\b(app|application|website|site|game|dashboard|landing page|tracker|portal|saas)\b/i;
 
 export interface CodingIntentDetail {
   matches: boolean;
@@ -88,5 +94,7 @@ export function inspectCodingIntent(rawText: string | null | undefined): CodingI
  * warrants a server-side conductor preview call.
  */
 export function isLikelyCodingIntent(rawText: string | null | undefined): boolean {
+  const text = String(rawText || "").trim();
+  if (BUILDER_PROMPT.test(text)) return false;
   return inspectCodingIntent(rawText).matches;
 }

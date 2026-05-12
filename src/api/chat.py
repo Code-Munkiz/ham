@@ -400,7 +400,7 @@ You are **Ham**, the in-dashboard copilot for the Ham workspace UI—warm, conci
 
 **No fabricated execution. You have NO shell, NO git, NO build, NO push, NO PR, NO snapshot, NO cron, and NO filesystem tools in this chat.** You cannot edit files, create or amend git commits, push branches, open pull requests, capture managed-workspace snapshots, schedule cron jobs or systemd timers, run Droid, run Cursor, or modify env/secrets from this conversation. Never narrate or pretend you performed any of those actions. Never invent commit hashes (e.g. `abc1234`), file paths, run ids, snapshot ids, PR URLs, GCS object names, branch names, or "working tree clean" / "1 commit ahead" status. Never describe a chain like "I edited X, created commit Y, scheduled Z" — that is fabrication and is prohibited.
 
-**Route coding-execution intents to the real flow.** When the user asks to build, edit, ship, refactor, snapshot, commit, push, open a PR, generate a patch, or otherwise mutate code, do NOT attempt it. Instead say plainly that you can't run it from chat and direct them to **Plan with coding agents** (the chat composer button) which surfaces the **Coding Plan card** and, for projects with `output_target=managed_workspace`, the **Managed workspace build approval panel**. Approval there calls real APIs (`/api/coding/conductor/preview`, `/api/droid/build/preview`, `/api/droid/build/launch`) and produces a real `ControlPlaneRun`, snapshot id, preview URL, and changed-paths count. Without those server-issued ids, no completion claim is valid.
+**Route coding-execution intents to the real flow.** For obvious workspace-builder prompts (build/create/make/generate an app/site/game/dashboard/tracker), acknowledge the Builder Happy Path in chat instead of redirecting to Coding Plan. For repo mutation tasks (edit/refactor/snapshot/commit/push/open PR/patch this repository), do NOT attempt execution in chat. Instead direct users to **Plan with coding agents** (the chat composer button), which surfaces the **Coding Plan card** and, for projects with `output_target=managed_workspace`, the **Managed workspace build approval panel**. Approval there calls real APIs (`/api/coding/conductor/preview`, `/api/droid/build/preview`, `/api/droid/build/launch`) and produces a real `ControlPlaneRun`, snapshot id, preview URL, and changed-paths count. Without those server-issued ids, no completion claim is valid.
 
 **Completion-claim rule.** A statement like "done", "built", "shipped", "merged", "snapshotted", "committed", "pushed", or "scheduled" is permitted only when you are quoting a server-issued artifact that arrived in this turn (e.g. an explicit operator-result block with a `ham_run_id`, `snapshot_id`, `pr_url`, or `control_plane_run_id`). If you don't see such an artifact, the work did not happen — say so.
 
@@ -1317,6 +1317,9 @@ async def post_chat(
         last_user_plain=last_user_plain,
         ham_actor=ham_actor,
     )
+    builder_intent = str((builder_meta or {}).get("builder_intent") or "").strip().lower()
+    builder_intent = str((builder_meta or {}).get("builder_intent") or "").strip().lower()
+    builder_intent = str((builder_meta or {}).get("builder_intent") or "").strip().lower()
     or_override, litellm_hint_key, litellm_http_bypass = _resolve_chat_openrouter_route(
         body=body,
         ham_actor=ham_actor,
@@ -1327,7 +1330,11 @@ async def post_chat(
         body=body_eff,
         last_user_plain=last_user_plain,
     )
-    if body.enable_operator and body.messages[-1].role == "user":
+    if (
+        body.enable_operator
+        and body.messages[-1].role == "user"
+        and builder_intent != "build_or_create"
+    ):
         from src.persistence.project_store import get_project_store
 
         project_store = get_project_store()
@@ -1430,6 +1437,7 @@ def post_chat_stream(
         last_user_plain=last_user_plain,
         ham_actor=ham_actor,
     )
+    builder_intent = str((builder_meta or {}).get("builder_intent") or "").strip().lower()
     or_override, litellm_hint_key, litellm_http_bypass = _resolve_chat_openrouter_route(
         body=body,
         ham_actor=ham_actor,
@@ -1460,7 +1468,11 @@ def post_chat_stream(
     )
 
     try:
-        if body.enable_operator and body.messages[-1].role == "user":
+        if (
+            body.enable_operator
+            and body.messages[-1].role == "user"
+            and builder_intent != "build_or_create"
+        ):
             from src.persistence.project_store import get_project_store
 
             project_store = get_project_store()

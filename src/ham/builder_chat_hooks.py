@@ -86,4 +86,9 @@ def run_builder_happy_path_hook(
             "I'll create the initial project source and prepare the Workbench.\n\n",
             meta,
         )
+    if summary.get("deduplicated"):
+        return (
+            "I already prepared this builder project source from your recent prompt and will keep the Workbench in sync.\n\n",
+            meta,
+        )
     return None, meta

@@ -33,6 +33,9 @@ _ANSWER_PATTERNS = (
 _PLAN_PATTERNS = (
     r"\bhow should we\b",
     r"\bhow would we\b",
+    r"\bhow would you\b",
+    r"\bhow could you\b",
+    r"\bhow to build\b",
     r"\bhow might we\b",
     r"\bhow could we\b",
     r"\barchitecture\b",
@@ -66,6 +69,7 @@ _BUILD_PATTERNS = (
     r"\bmake a landing\b",
     r"\bmake a dashboard\b",
     r"\bmake a saas\b",
+    r"\bmake a .{0,40}\b(game|clone|website|site|dashboard|app|tracker|tool)\b",
     r"\bmake me an?\b",
     r"\bmake me a\b",
     r"\bi need (to build|a build)\b",
@@ -80,10 +84,14 @@ def classify_builder_chat_intent(user_plain: str) -> BuilderChatIntent:
     low = text.lower()
     if not low:
         return "answer_question"
+    if re.search(r"^\s*how\s+(would|could|should)\s+(you|we)\s+build\b", low):
+        return "plan_only"
     for pat in _DENY_BUILD:
         if re.search(pat, low):
             # Still allow explicit build verbs later in the same message.
             if not any(re.search(p, low) for p in _BUILD_PATTERNS):
+                if "make sense" in low:
+                    return "answer_question"
                 return "answer_question" if any(re.search(p, low) for p in _ANSWER_PATTERNS) else "plan_only"
     if any(re.search(p, low) for p in _ANSWER_PATTERNS) and not any(re.search(p, low) for p in _BUILD_PATTERNS):
         return "answer_question"
