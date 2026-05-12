@@ -4,7 +4,7 @@ import os
 import re
 from importlib import util
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -60,25 +60,129 @@ class GcpCloudRuntimeConfig:
     dry_run: bool
     gcp_project_present: bool
     gcp_region_present: bool
+    service_account_present: bool
+    image_present: bool
+    network_present: bool
+    timeout_seconds: int
+    max_seconds: int
 
 
 @dataclass
 class GcpCloudRuntimeResult:
-    status: Literal["planned", "unsupported", "invalid_config"]
+    status: Literal["planned", "accepted", "unsupported", "invalid_config"]
     error_code: str | None
     error_message: str | None
     warnings: list[str]
     plan: CloudRuntimePlan
+    provider_job_id: str | None = None
+    provider_state: str | None = None
+
+
+@runtime_checkable
+class GcpCloudRuntimeClientProtocol(Protocol):
+    def submit_cloud_run_job(
+        self,
+        *,
+        workspace_id: str,
+        project_id: str,
+        request_id: str,
+        region: str,
+        image_ref: str,
+        service_account_ref: str | None,
+        timeout_seconds: int,
+        metadata: dict[str, Any],
+    ) -> dict[str, Any]: ...
+
+
+class FakeGcpCloudRuntimeClient:
+    def submit_cloud_run_job(
+        self,
+        *,
+        workspace_id: str,
+        project_id: str,
+        request_id: str,
+        region: str,
+        image_ref: str,
+        service_account_ref: str | None,
+        timeout_seconds: int,
+        metadata: dict[str, Any],
+    ) -> dict[str, Any]:
+        _ = (
+            workspace_id,
+            project_id,
+            region,
+            image_ref,
+            service_account_ref,
+            timeout_seconds,
+            metadata,
+        )
+        return {
+            "provider_job_id": f"fake-crj-{request_id[-8:]}",
+            "provider_state": "accepted",
+        }
+
+
+class RealGcpCloudRuntimeClient:
+    def submit_cloud_run_job(
+        self,
+        *,
+        workspace_id: str,
+        project_id: str,
+        request_id: str,
+        region: str,
+        image_ref: str,
+        service_account_ref: str | None,
+        timeout_seconds: int,
+        metadata: dict[str, Any],
+    ) -> dict[str, Any]:
+        _ = workspace_id
+        _ = project_id
+        _ = metadata
+        spec = util.find_spec("google.cloud.run_v2")
+        if spec is None:
+            raise RuntimeError("CLOUD_RUNTIME_GCP_CLIENT_UNAVAILABLE")
+        module = __import__("google.cloud.run_v2", fromlist=["JobsClient", "RunJobRequest"])
+        jobs_client = module.JobsClient()
+        run_request = module.RunJobRequest(
+            name=f"projects/{project_id}/locations/{region}/jobs/{request_id}",
+        )
+        operation = jobs_client.run_job(request=run_request)
+        _ = image_ref
+        _ = service_account_ref
+        _ = timeout_seconds
+        operation_name = getattr(operation, "operation", None)
+        provider_job_id = getattr(operation_name, "name", None) or f"gcp-operation-{request_id[-8:]}"
+        return {
+            "provider_job_id": _safe_text(provider_job_id, limit=120),
+            "provider_state": "accepted",
+        }
+
+
+_CLIENT_OVERRIDE: list[GcpCloudRuntimeClientProtocol | None] = [None]
 
 
 def load_gcp_runtime_config() -> GcpCloudRuntimeConfig:
     gcp_project = str(os.environ.get("HAM_BUILDER_CLOUD_RUNTIME_GCP_PROJECT") or "").strip()
     gcp_region = str(os.environ.get("HAM_BUILDER_CLOUD_RUNTIME_GCP_REGION") or "").strip()
+    service_account = str(os.environ.get("HAM_BUILDER_CLOUD_RUNTIME_SERVICE_ACCOUNT") or "").strip()
+    image_ref = str(os.environ.get("HAM_BUILDER_CLOUD_RUNTIME_IMAGE") or "").strip()
+    network = str(os.environ.get("HAM_BUILDER_CLOUD_RUNTIME_NETWORK") or "").strip()
+    timeout_raw = str(os.environ.get("HAM_BUILDER_CLOUD_RUNTIME_TIMEOUT_SECONDS") or "").strip()
+    max_raw = str(os.environ.get("HAM_BUILDER_CLOUD_RUNTIME_MAX_SECONDS") or "").strip()
+    timeout_seconds = int(timeout_raw) if timeout_raw.isdigit() else 120
+    max_seconds = int(max_raw) if max_raw.isdigit() else 900
+    timeout_seconds = max(30, min(timeout_seconds, 1800))
+    max_seconds = max(timeout_seconds, min(max_seconds, 3600))
     return GcpCloudRuntimeConfig(
         enabled=_bool_env("HAM_BUILDER_CLOUD_RUNTIME_GCP_ENABLED", default=False),
         dry_run=_bool_env("HAM_BUILDER_CLOUD_RUNTIME_DRY_RUN", default=True),
         gcp_project_present=bool(gcp_project),
         gcp_region_present=bool(gcp_region),
+        service_account_present=bool(service_account),
+        image_present=bool(image_ref),
+        network_present=bool(network),
+        timeout_seconds=timeout_seconds,
+        max_seconds=max_seconds,
     )
 
 
@@ -94,6 +198,10 @@ def validate_config(config: GcpCloudRuntimeConfig) -> tuple[Literal["planned", "
         return "invalid_config", "CLOUD_RUNTIME_CONFIG_MISSING", warnings
     if config.dry_run:
         warnings.append("Cloud runtime provider is configured for plan-only POC.")
+    if not config.image_present:
+        warnings.append("Runtime image is not configured; provider defaults apply.")
+    if config.network_present:
+        warnings.append("Custom network is configured and may limit startup.")
     return "planned", None, warnings
 
 
@@ -107,7 +215,7 @@ def create_runtime_plan(*, job: CloudRuntimeJob, config: GcpCloudRuntimeConfig, 
         workspace_id=job.workspace_id,
         source_snapshot_id=job.source_snapshot_id,
         runtime_kind=runtime_kind,
-        image_ref="gcp-poc-builder-image:future",
+        image_ref="configured" if config.image_present else "provider-default",
         artifact_uri="builder-artifact://future",
         region="configured" if config.gcp_region_present else None,
         service_name=None,
@@ -121,7 +229,11 @@ def create_runtime_plan(*, job: CloudRuntimeJob, config: GcpCloudRuntimeConfig, 
                 "dry_run": config.dry_run,
                 "gcp_project_configured": config.gcp_project_present,
                 "gcp_region_configured": config.gcp_region_present,
+                "service_account_configured": config.service_account_present,
+                "network_configured": config.network_present,
                 "provider_mode": "cloud_run_poc",
+                "max_seconds": config.max_seconds,
+                "timeout_seconds": config.timeout_seconds,
             }
         ),
     )
@@ -151,7 +263,17 @@ def redact_provider_metadata(raw: dict[str, Any]) -> dict[str, Any]:
     return safe
 
 
-def request_runtime(job: CloudRuntimeJob) -> GcpCloudRuntimeResult:
+def _build_client() -> GcpCloudRuntimeClientProtocol:
+    if _CLIENT_OVERRIDE[0] is not None:
+        return _CLIENT_OVERRIDE[0]
+    return RealGcpCloudRuntimeClient()
+
+
+def set_gcp_cloud_runtime_client_for_tests(client: GcpCloudRuntimeClientProtocol | None) -> None:
+    _CLIENT_OVERRIDE[0] = client
+
+
+def submit_gcp_cloud_runtime_poc(job: CloudRuntimeJob) -> GcpCloudRuntimeResult:
     config = load_gcp_runtime_config()
     status, error_code, warnings = validate_config(config)
     plan = create_runtime_plan(job=job, config=config, status=status, warnings=warnings)
@@ -173,10 +295,26 @@ def request_runtime(job: CloudRuntimeJob) -> GcpCloudRuntimeResult:
             warnings=warnings,
             plan=plan,
         )
-    if util.find_spec("google.cloud.run_v2") is None:
+    client = _build_client()
+    project_value = str(os.environ.get("HAM_BUILDER_CLOUD_RUNTIME_GCP_PROJECT") or "").strip()
+    region_value = str(os.environ.get("HAM_BUILDER_CLOUD_RUNTIME_GCP_REGION") or "").strip()
+    image_value = str(os.environ.get("HAM_BUILDER_CLOUD_RUNTIME_IMAGE") or "").strip() or "gcr.io/ham/builder-poc:latest"
+    service_account_ref = str(os.environ.get("HAM_BUILDER_CLOUD_RUNTIME_SERVICE_ACCOUNT") or "").strip() or None
+    try:
+        response = client.submit_cloud_run_job(
+            workspace_id=job.workspace_id,
+            project_id=project_value,
+            request_id=job.id,
+            region=region_value,
+            image_ref=image_value,
+            service_account_ref=service_account_ref,
+            timeout_seconds=min(config.timeout_seconds, config.max_seconds),
+            metadata=redact_provider_metadata(job.metadata or {}),
+        )
+    except Exception as exc:
         code, message = normalize_provider_error(
-            "CLOUD_RUNTIME_GCP_CLIENT_UNAVAILABLE",
-            "GCP Cloud Run client libraries are unavailable for non-dry-run mode.",
+            "CLOUD_RUNTIME_PROVIDER_SUBMIT_FAILED",
+            f"Cloud runtime provider submit failed: {exc}",
         )
         plan.status = "unsupported"
         return GcpCloudRuntimeResult(
@@ -186,15 +324,18 @@ def request_runtime(job: CloudRuntimeJob) -> GcpCloudRuntimeResult:
             warnings=warnings,
             plan=plan,
         )
-    code, message = normalize_provider_error(
-        "CLOUD_RUNTIME_NOT_IMPLEMENTED",
-        "GCP provisioning is not implemented in this POC.",
-    )
-    plan.status = "unsupported"
+    provider_job_id = _safe_text(response.get("provider_job_id") or "", limit=120) or None
+    provider_state = _safe_text(response.get("provider_state") or "accepted", limit=40).lower()
     return GcpCloudRuntimeResult(
-        status="unsupported",
-        error_code=code,
-        error_message=message,
+        status="accepted",
+        error_code=None,
+        error_message=None,
         warnings=warnings,
         plan=plan,
+        provider_job_id=provider_job_id,
+        provider_state=provider_state,
     )
+
+
+def request_runtime(job: CloudRuntimeJob) -> GcpCloudRuntimeResult:
+    return submit_gcp_cloud_runtime_poc(job)

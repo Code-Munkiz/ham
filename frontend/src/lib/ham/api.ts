@@ -494,6 +494,9 @@ export type CloudRuntimeJobPhase =
   | "received"
   | "preparing"
   | "validating_source"
+  | "validating_config"
+  | "submitting_cloud_runtime"
+  | "provider_accepted"
   | "running_poc"
   | "completed"
   | "failed";

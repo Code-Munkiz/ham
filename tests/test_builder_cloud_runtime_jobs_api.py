@@ -9,6 +9,10 @@ from fastapi.testclient import TestClient
 from src.api.builder_sources import router as builder_sources_router
 from src.api.clerk_gate import get_ham_clerk_actor
 from src.api.dependencies.workspace import get_workspace_store
+from src.ham.builder_cloud_runtime_gcp import (
+    FakeGcpCloudRuntimeClient,
+    set_gcp_cloud_runtime_client_for_tests,
+)
 from src.ham.clerk_auth import HamActor
 from src.ham.workspace_models import WorkspaceMember, WorkspaceRecord
 from src.persistence.builder_runtime_job_store import (
@@ -118,6 +122,7 @@ def _cleanup() -> None:
     set_builder_runtime_store_for_tests(None)
     set_builder_runtime_job_store_for_tests(None)
     set_builder_usage_event_store_for_tests(None)
+    set_gcp_cloud_runtime_client_for_tests(None)
 
 
 def test_post_job_disabled_provider_returns_unsupported(tmp_path: Path, monkeypatch) -> None:
@@ -191,11 +196,63 @@ def test_post_job_cloud_run_poc_dry_run_creates_plan_without_provisioning(tmp_pa
     assert body["job"]["metadata"]["runtime_plan"]["status"] == "planned"
     assert body["job"]["metadata"]["runtime_plan"]["runtime_kind"] == "cloud_run_job"
     assert body["preview_status"]["preview_url"] is None
-    assert body["cloud_runtime"]["status"] == "queued"
+    assert body["cloud_runtime"]["status"] == "provisioning"
     usage = client.get(f"/api/workspaces/{ws_id}/projects/{project_id}/builder/usage-events")
     assert usage.status_code == 200
     names = {str(row.get("metadata", {}).get("event_name") or "") for row in usage.json()["usage_events"]}
     assert "cloud_runtime_plan_created" in names
+    _cleanup()
+
+
+def test_post_job_cloud_run_poc_real_path_accepted_with_fake_client(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "cloud_run_poc")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_ENABLED", "true")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_PROJECT", "proj-safe")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_REGION", "us-central1")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_DRY_RUN", "false")
+    set_gcp_cloud_runtime_client_for_tests(FakeGcpCloudRuntimeClient())
+    client, ws_id, project_id = _seed_context(tmp_path)
+    res = client.post(
+        f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime/jobs",
+        json={},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["job"]["status"] == "running"
+    assert body["job"]["phase"] == "provider_accepted"
+    assert body["job"]["runtime_session_id"]
+    assert body["runtime_session"]["status"] == "provisioning"
+    assert body["runtime_session"]["metadata"]["provider_job_id"]
+    usage = client.get(f"/api/workspaces/{ws_id}/projects/{project_id}/builder/usage-events")
+    assert usage.status_code == 200
+    names = {str(row.get("metadata", {}).get("event_name") or "") for row in usage.json()["usage_events"]}
+    assert "cloud_runtime_provider_request_accepted" in names
+    assert body["preview_status"]["preview_url"] is None
+    _cleanup()
+
+
+def test_post_job_cloud_run_poc_real_path_failure_maps_safe_error(tmp_path: Path, monkeypatch) -> None:
+    class _FailingClient:
+        def submit_cloud_run_job(self, **kwargs):  # type: ignore[no-untyped-def]
+            _ = kwargs
+            raise RuntimeError("provider submit exploded")
+
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "cloud_run_poc")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_ENABLED", "true")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_PROJECT", "proj-safe")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_REGION", "us-central1")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_DRY_RUN", "false")
+    set_gcp_cloud_runtime_client_for_tests(_FailingClient())
+    client, ws_id, project_id = _seed_context(tmp_path)
+    res = client.post(
+        f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime/jobs",
+        json={},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["job"]["status"] == "unsupported"
+    assert body["job"]["error_code"] == "CLOUD_RUNTIME_PROVIDER_SUBMIT_FAILED"
+    assert body["preview_status"]["preview_url"] is None
     _cleanup()
 
 

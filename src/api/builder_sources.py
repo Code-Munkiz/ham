@@ -260,7 +260,17 @@ def _serialize_local_run_profile(profile: LocalRunProfile | None, *, workspace_i
 
 _CLOUD_RUNTIME_STATES = {"queued", "provisioning", "running", "failed", "expired", "unsupported"}
 _CLOUD_RUNTIME_JOB_STATES = {"queued", "running", "succeeded", "failed", "cancelled", "unsupported"}
-_CLOUD_RUNTIME_JOB_PHASES = {"received", "preparing", "validating_source", "running_poc", "completed", "failed"}
+_CLOUD_RUNTIME_JOB_PHASES = {
+    "received",
+    "preparing",
+    "validating_source",
+    "validating_config",
+    "submitting_cloud_runtime",
+    "provider_accepted",
+    "running_poc",
+    "completed",
+    "failed",
+}
 
 
 def _serialize_cloud_runtime(
@@ -960,6 +970,8 @@ def _build_activity_items(*, workspace_id: str, project_id: str) -> list[Builder
         title = "Cloud runtime job queued"
         if job.status == "running":
             title = "Cloud runtime job running"
+            if job.phase == "provider_accepted":
+                title = "Cloud runtime provider accepted request"
         elif job.status == "succeeded":
             title = "Cloud runtime job completed"
         elif job.status in {"failed", "unsupported"}:
