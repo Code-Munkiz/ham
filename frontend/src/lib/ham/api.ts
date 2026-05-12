@@ -240,6 +240,144 @@ export async function postChatUploadAttachment(file: File): Promise<{
   }>;
 }
 
+export type BuilderProjectSourceRecord = {
+  id: string;
+  project_id: string;
+  workspace_id: string;
+  kind: string;
+  status: string;
+  display_name: string;
+  origin_ref: string;
+  active_snapshot_id: string | null;
+  created_at: string;
+  updated_at: string;
+  created_by: string;
+  metadata: Record<string, unknown>;
+};
+
+export type BuilderSourceSnapshotRecord = {
+  id: string;
+  project_id: string;
+  workspace_id: string;
+  project_source_id: string;
+  status: string;
+  digest_sha256: string;
+  size_bytes: number;
+  artifact_uri: string;
+  manifest: Record<string, unknown>;
+  created_at: string;
+  created_by: string;
+  metadata: Record<string, unknown>;
+};
+
+export type BuilderImportJobRecord = {
+  id: string;
+  project_id: string;
+  workspace_id: string;
+  project_source_id: string | null;
+  source_snapshot_id: string | null;
+  phase: string;
+  status: string;
+  error_code: string | null;
+  error_message: string | null;
+  stats: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+  created_by: string;
+  metadata: Record<string, unknown>;
+};
+
+export async function listBuilderProjectSources(
+  workspaceId: string,
+  projectId: string,
+): Promise<{
+  project_id: string;
+  workspace_id: string;
+  sources: BuilderProjectSourceRecord[];
+}> {
+  const res = await hamApiFetch(
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/projects/${encodeURIComponent(projectId)}/builder/sources`,
+  );
+  if (!res.ok) {
+    throw new Error((await hamApiErrorDetailMessage(res)) || `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<{
+    project_id: string;
+    workspace_id: string;
+    sources: BuilderProjectSourceRecord[];
+  }>;
+}
+
+export async function listBuilderSourceSnapshots(
+  workspaceId: string,
+  projectId: string,
+): Promise<{
+  project_id: string;
+  workspace_id: string;
+  source_snapshots: BuilderSourceSnapshotRecord[];
+}> {
+  const res = await hamApiFetch(
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/projects/${encodeURIComponent(projectId)}/builder/source-snapshots`,
+  );
+  if (!res.ok) {
+    throw new Error((await hamApiErrorDetailMessage(res)) || `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<{
+    project_id: string;
+    workspace_id: string;
+    source_snapshots: BuilderSourceSnapshotRecord[];
+  }>;
+}
+
+export async function listBuilderImportJobs(
+  workspaceId: string,
+  projectId: string,
+): Promise<{
+  project_id: string;
+  workspace_id: string;
+  import_jobs: BuilderImportJobRecord[];
+}> {
+  const res = await hamApiFetch(
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/projects/${encodeURIComponent(projectId)}/builder/import-jobs`,
+  );
+  if (!res.ok) {
+    throw new Error((await hamApiErrorDetailMessage(res)) || `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<{
+    project_id: string;
+    workspace_id: string;
+    import_jobs: BuilderImportJobRecord[];
+  }>;
+}
+
+export async function postBuilderZipImportJob(
+  workspaceId: string,
+  projectId: string,
+  file: File,
+): Promise<{
+  import_job: BuilderImportJobRecord;
+  project_source: BuilderProjectSourceRecord;
+  source_snapshot: BuilderSourceSnapshotRecord;
+}> {
+  const body = new FormData();
+  body.append("file", file, file.name);
+  const res = await hamApiFetch(
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/projects/${encodeURIComponent(projectId)}/builder/import-jobs/zip`,
+    {
+      method: "POST",
+      body,
+    },
+  );
+  if (!res.ok) {
+    throw new Error((await hamApiErrorDetailMessage(res)) || `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<{
+    import_job: BuilderImportJobRecord;
+    project_source: BuilderProjectSourceRecord;
+    source_snapshot: BuilderSourceSnapshotRecord;
+  }>;
+}
+
 /** Text-to-image (Phase 2G.1+) — mediated by HAM backend only. */
 export async function postHamGeneratedImage(body: {
   prompt: string;

@@ -87,6 +87,33 @@ class BuilderSourceStoreProtocol(Protocol):
     def upsert_project_source(self, record: ProjectSource) -> ProjectSource: ...
     def upsert_source_snapshot(self, record: SourceSnapshot) -> SourceSnapshot: ...
     def upsert_import_job(self, record: ImportJob) -> ImportJob: ...
+    def create_import_job(
+        self,
+        *,
+        workspace_id: str,
+        project_id: str,
+        created_by: str,
+        phase: str,
+        status: str,
+        project_source_id: str | None = None,
+    ) -> ImportJob: ...
+    def mark_import_job_running(self, *, import_job_id: str, phase: str) -> ImportJob: ...
+    def mark_import_job_succeeded(
+        self,
+        *,
+        import_job_id: str,
+        phase: str,
+        source_snapshot_id: str,
+        stats: dict[str, Any] | None = None,
+    ) -> ImportJob: ...
+    def mark_import_job_failed(
+        self,
+        *,
+        import_job_id: str,
+        phase: str,
+        error_code: str,
+        error_message: str,
+    ) -> ImportJob: ...
 
 
 class BuilderSourceStore:
@@ -163,6 +190,79 @@ class BuilderSourceStore:
         raw["import_jobs"] = rows
         self._save_raw(raw)
         return record
+
+    def create_import_job(
+        self,
+        *,
+        workspace_id: str,
+        project_id: str,
+        created_by: str,
+        phase: str,
+        status: str,
+        project_source_id: str | None = None,
+    ) -> ImportJob:
+        record = ImportJob(
+            workspace_id=workspace_id,
+            project_id=project_id,
+            created_by=created_by,
+            phase=phase,
+            status=status,
+            project_source_id=project_source_id,
+        )
+        return self.upsert_import_job(record)
+
+    def mark_import_job_running(self, *, import_job_id: str, phase: str) -> ImportJob:
+        record = self._require_import_job(import_job_id)
+        record.phase = phase
+        record.status = "running"
+        record.error_code = None
+        record.error_message = None
+        record.updated_at = _utc_now_iso()
+        return self.upsert_import_job(record)
+
+    def mark_import_job_succeeded(
+        self,
+        *,
+        import_job_id: str,
+        phase: str,
+        source_snapshot_id: str,
+        stats: dict[str, Any] | None = None,
+    ) -> ImportJob:
+        record = self._require_import_job(import_job_id)
+        record.phase = phase
+        record.status = "succeeded"
+        record.source_snapshot_id = source_snapshot_id
+        record.error_code = None
+        record.error_message = None
+        record.stats = dict(stats or {})
+        record.updated_at = _utc_now_iso()
+        return self.upsert_import_job(record)
+
+    def mark_import_job_failed(
+        self,
+        *,
+        import_job_id: str,
+        phase: str,
+        error_code: str,
+        error_message: str,
+    ) -> ImportJob:
+        record = self._require_import_job(import_job_id)
+        record.phase = phase
+        record.status = "failed"
+        record.error_code = str(error_code or "ZIP_INVALID")
+        record.error_message = str(error_message or "Import failed.")
+        record.updated_at = _utc_now_iso()
+        return self.upsert_import_job(record)
+
+    def _require_import_job(self, import_job_id: str) -> ImportJob:
+        for item in self._load_raw().get("import_jobs", []):
+            try:
+                rec = ImportJob.model_validate(item)
+            except ValidationError:
+                continue
+            if rec.id == import_job_id:
+                return rec
+        raise KeyError(f"Unknown import job id: {import_job_id}")
 
     def _load_raw(self) -> dict[str, Any]:
         if not self._path.is_file():

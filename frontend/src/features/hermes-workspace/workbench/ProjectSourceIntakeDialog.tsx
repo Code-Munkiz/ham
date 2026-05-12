@@ -9,7 +9,11 @@ import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
-import { fetchWorkspaceTools, postChatUploadAttachment } from "@/lib/ham/api";
+import {
+  fetchWorkspaceTools,
+  postBuilderZipImportJob,
+  postChatUploadAttachment,
+} from "@/lib/ham/api";
 import { workspaceFileAdapter } from "../adapters/filesAdapter";
 import { isLocalRuntimeConfigured } from "../adapters/localRuntime";
 
@@ -27,6 +31,9 @@ type ToolDiscoveryResponse = {
 export type ProjectSourceIntakeDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  projectId?: string | null;
+  workspaceId?: string | null;
+  onZipImported?: () => void;
 };
 
 function githubConnectionFromPayload(
@@ -41,15 +48,23 @@ function githubConnectionFromPayload(
   return "off";
 }
 
-export function ProjectSourceIntakeDialog({ open, onOpenChange }: ProjectSourceIntakeDialogProps) {
+export function ProjectSourceIntakeDialog({
+  open,
+  onOpenChange,
+  projectId = null,
+  workspaceId = null,
+  onZipImported,
+}: ProjectSourceIntakeDialogProps) {
   const [toolsPayload, setToolsPayload] = React.useState<ToolDiscoveryResponse | null>(null);
   const [toolsError, setToolsError] = React.useState<string | null>(null);
   const [workspaceBusy, setWorkspaceBusy] = React.useState(false);
   const [chatBusy, setChatBusy] = React.useState(false);
+  const [zipBusy, setZipBusy] = React.useState(false);
   const [statusLines, setStatusLines] = React.useState<string[]>([]);
 
   const wsInputRef = React.useRef<HTMLInputElement>(null);
   const chatInputRef = React.useRef<HTMLInputElement>(null);
+  const zipInputRef = React.useRef<HTMLInputElement>(null);
 
   const localRuntimeReady = isLocalRuntimeConfigured();
   const ghConn = githubConnectionFromPayload(toolsPayload);
@@ -127,6 +142,30 @@ export function ProjectSourceIntakeDialog({ open, onOpenChange }: ProjectSourceI
       appendStatus(`Chat attachment failed: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setChatBusy(false);
+    }
+  };
+
+  const onZipSelected = async (ev: React.ChangeEvent<HTMLInputElement>) => {
+    const file = ev.target.files?.[0];
+    ev.target.value = "";
+    if (!file) return;
+    const ws = workspaceId?.trim() || "";
+    const pid = projectId?.trim() || "";
+    if (!ws || !pid) {
+      appendStatus("ZIP import unavailable: missing active workspace or project.");
+      return;
+    }
+    setZipBusy(true);
+    try {
+      const response = await postBuilderZipImportJob(ws, pid, file);
+      appendStatus(
+        `ZIP imported: ${file.name} (${response.import_job.status}, snapshot ${response.source_snapshot.id})`,
+      );
+      onZipImported?.();
+    } catch (e) {
+      appendStatus(`ZIP import failed: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setZipBusy(false);
     }
   };
 
@@ -254,17 +293,32 @@ export function ProjectSourceIntakeDialog({ open, onOpenChange }: ProjectSourceI
           <section className="rounded-lg border border-white/[0.08] bg-black/25 p-3">
             <h3 className="text-[12px] font-semibold text-white/88">Upload ZIP</h3>
             <p className="mt-1 text-[11px] text-white/45">
-              ZIP extraction and bulk project ingest are not implemented in the API.
+              Upload a project ZIP to create a scoped source snapshot for this project.
             </p>
+            <input
+              ref={zipInputRef}
+              type="file"
+              accept=".zip,application/zip"
+              className="hidden"
+              data-testid="hww-project-source-zip-input"
+              onChange={(e) => void onZipSelected(e)}
+            />
             <Button
               type="button"
               size="sm"
               variant="secondary"
-              disabled
+              disabled={zipBusy || !workspaceId?.trim() || !projectId?.trim()}
               className="mt-2 text-[11px]"
+              data-testid="hww-project-source-zip-upload-btn"
+              onClick={() => zipInputRef.current?.click()}
             >
-              Upload ZIP — Coming soon
+              {zipBusy ? "Uploading ZIP…" : "Choose ZIP for project source"}
             </Button>
+            {!workspaceId?.trim() || !projectId?.trim() ? (
+              <p className="mt-2 text-[11px] text-amber-200/80">
+                Select an active workspace and project in chat before importing ZIP source.
+              </p>
+            ) : null}
           </section>
 
           <section className="rounded-lg border border-white/[0.08] bg-black/25 p-3">

@@ -2,9 +2,18 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
-const { fetchWorkspaceToolsMock, isLocalRuntimeConfiguredMock } = vi.hoisted(() => ({
+const {
+  fetchWorkspaceToolsMock,
+  isLocalRuntimeConfiguredMock,
+  listBuilderProjectSourcesMock,
+  listBuilderSourceSnapshotsMock,
+  listBuilderImportJobsMock,
+} = vi.hoisted(() => ({
   fetchWorkspaceToolsMock: vi.fn(),
   isLocalRuntimeConfiguredMock: vi.fn(() => false),
+  listBuilderProjectSourcesMock: vi.fn(),
+  listBuilderSourceSnapshotsMock: vi.fn(),
+  listBuilderImportJobsMock: vi.fn(),
 }));
 
 vi.mock("@/lib/ham/api", async (importOriginal) => {
@@ -12,6 +21,9 @@ vi.mock("@/lib/ham/api", async (importOriginal) => {
   return {
     ...mod,
     fetchWorkspaceTools: (...args: unknown[]) => fetchWorkspaceToolsMock(...args),
+    listBuilderProjectSources: (...args: unknown[]) => listBuilderProjectSourcesMock(...args),
+    listBuilderSourceSnapshots: (...args: unknown[]) => listBuilderSourceSnapshotsMock(...args),
+    listBuilderImportJobs: (...args: unknown[]) => listBuilderImportJobsMock(...args),
   };
 });
 
@@ -36,6 +48,21 @@ describe("WorkspaceWorkbench", () => {
   beforeEach(() => {
     fetchWorkspaceToolsMock.mockResolvedValue(toolsOk());
     isLocalRuntimeConfiguredMock.mockReturnValue(false);
+    listBuilderProjectSourcesMock.mockResolvedValue({
+      project_id: "proj_abc",
+      workspace_id: "ws_abc",
+      sources: [],
+    });
+    listBuilderSourceSnapshotsMock.mockResolvedValue({
+      project_id: "proj_abc",
+      workspace_id: "ws_abc",
+      source_snapshots: [],
+    });
+    listBuilderImportJobsMock.mockResolvedValue({
+      project_id: "proj_abc",
+      workspace_id: "ws_abc",
+      import_jobs: [],
+    });
   });
 
   it("select Preview by default and switches panel content", () => {
@@ -82,7 +109,7 @@ describe("WorkspaceWorkbench", () => {
     fireEvent.click(screen.getByTestId("hww-workbench-tab-storage"));
     const storagePanel = screen.getByTestId("hww-workbench-panel-storage");
     expect(within(storagePanel).getByTestId("hww-add-project-source")).toBeInTheDocument();
-    expect(screen.getByText(/No cloud project blob store yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/Select an active workspace and project/i)).toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId("hww-workbench-tab-settings"));
     const settingsPanel = screen.getByTestId("hww-workbench-panel-settings");
@@ -137,5 +164,95 @@ describe("WorkspaceWorkbench", () => {
         expect(screen.queryByTestId("hww-project-source-dialog")).not.toBeInTheDocument();
       });
     }
+  });
+
+  it("Project Source shows empty state for active project/workspace", async () => {
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByTestId("hww-workbench-tab-storage"));
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-project-source-empty-state")).toBeInTheDocument();
+    });
+  });
+
+  it("Project Source renders source list and latest failed import", async () => {
+    listBuilderProjectSourcesMock.mockResolvedValue({
+      project_id: "proj_abc",
+      workspace_id: "ws_abc",
+      sources: [
+        {
+          id: "psrc_1",
+          project_id: "proj_abc",
+          workspace_id: "ws_abc",
+          kind: "zip_upload",
+          status: "ready",
+          display_name: "sample.zip",
+          origin_ref: "zip_upload",
+          active_snapshot_id: "ssnp_1",
+          created_at: "2026-01-01T00:00:00Z",
+          updated_at: "2026-01-01T00:00:00Z",
+          created_by: "user_a",
+          metadata: {},
+        },
+      ],
+    });
+    listBuilderSourceSnapshotsMock.mockResolvedValue({
+      project_id: "proj_abc",
+      workspace_id: "ws_abc",
+      source_snapshots: [
+        {
+          id: "ssnp_1",
+          project_id: "proj_abc",
+          workspace_id: "ws_abc",
+          project_source_id: "psrc_1",
+          status: "materialized",
+          digest_sha256: "abc",
+          size_bytes: 1234,
+          artifact_uri: "builder-artifact://bzip_1",
+          manifest: {},
+          created_at: "2026-01-01T00:00:00Z",
+          created_by: "user_a",
+          metadata: {},
+        },
+      ],
+    });
+    listBuilderImportJobsMock.mockResolvedValue({
+      project_id: "proj_abc",
+      workspace_id: "ws_abc",
+      import_jobs: [
+        {
+          id: "ijob_1",
+          project_id: "proj_abc",
+          workspace_id: "ws_abc",
+          project_source_id: "psrc_1",
+          source_snapshot_id: "ssnp_1",
+          phase: "failed",
+          status: "failed",
+          error_code: "ZIP_PATH_TRAVERSAL",
+          error_message: "ZIP contains unsafe path traversal entries.",
+          stats: {},
+          created_at: "2026-01-01T00:00:00Z",
+          updated_at: "2026-01-01T00:00:00Z",
+          created_by: "user_a",
+          metadata: {},
+        },
+      ],
+    });
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByTestId("hww-workbench-tab-storage"));
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-project-source-list")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("hww-project-source-active-snapshot")).toHaveTextContent("ssnp_1");
+    expect(screen.getByTestId("hww-project-source-latest-job")).toHaveTextContent(
+      "ZIP_PATH_TRAVERSAL",
+    );
   });
 });

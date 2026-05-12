@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import io
+import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -45,6 +47,14 @@ def _build_app(*, actor: HamActor | None, ws_store: InMemoryWorkspaceStore) -> F
     app.dependency_overrides[get_ham_clerk_actor] = _override_actor
     app.dependency_overrides[get_workspace_store] = _override_workspace_store
     return app
+
+
+def _zip_bytes(entries: dict[str, bytes]) -> bytes:
+    buff = io.BytesIO()
+    with zipfile.ZipFile(buff, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for name, body in entries.items():
+            zf.writestr(name, body)
+    return buff.getvalue()
 
 
 def _seed_workspace(
@@ -190,6 +200,136 @@ def test_builder_sources_requires_session_when_auth_enforced(
     res = client.get(f"/api/workspaces/{ws_id}/projects/{project.id}/builder/sources")
     assert res.status_code == 401
     assert res.json()["detail"]["error"]["code"] == "CLERK_SESSION_REQUIRED"
+
+    set_project_store_for_tests(None)
+    set_builder_source_store_for_tests(None)
+
+
+def test_builder_zip_import_success_creates_records(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    ws_store = InMemoryWorkspaceStore()
+    ws_id = "ws_aaaaaaaaaaaaaaaa"
+    _seed_workspace(ws_store, workspace_id=ws_id, org_id="org_a", owner_user_id="user_a", slug="alpha")
+
+    project_store = ProjectStore(store_path=tmp_path / "projects.json")
+    project = project_store.make_record(name="proj-a", root=str(tmp_path), metadata={"workspace_id": ws_id})
+    project_store.register(project)
+    set_project_store_for_tests(project_store)
+    set_builder_source_store_for_tests(BuilderSourceStore(store_path=tmp_path / "builder_sources.json"))
+
+    app = _build_app(actor=_actor("user_a", org_id="org_a"), ws_store=ws_store)
+    client = TestClient(app)
+    payload = _zip_bytes({"src/main.py": b"print('ok')\n"})
+
+    res = client.post(
+        f"/api/workspaces/{ws_id}/projects/{project.id}/builder/import-jobs/zip",
+        files={"file": ("sample.zip", payload, "application/zip")},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["import_job"]["status"] == "succeeded"
+    assert body["project_source"]["kind"] == "zip_upload"
+    assert body["source_snapshot"]["digest_sha256"]
+
+    listed_sources = client.get(f"/api/workspaces/{ws_id}/projects/{project.id}/builder/sources")
+    listed_snapshots = client.get(f"/api/workspaces/{ws_id}/projects/{project.id}/builder/source-snapshots")
+    listed_jobs = client.get(f"/api/workspaces/{ws_id}/projects/{project.id}/builder/import-jobs")
+    assert listed_sources.status_code == 200
+    assert listed_snapshots.status_code == 200
+    assert listed_jobs.status_code == 200
+    assert len(listed_sources.json()["sources"]) == 1
+    assert len(listed_snapshots.json()["source_snapshots"]) == 1
+    assert listed_jobs.json()["import_jobs"][0]["status"] == "succeeded"
+
+    set_project_store_for_tests(None)
+    set_builder_source_store_for_tests(None)
+
+
+def test_builder_zip_import_rejects_traversal_and_records_failure(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    ws_store = InMemoryWorkspaceStore()
+    ws_id = "ws_aaaaaaaaaaaaaaaa"
+    _seed_workspace(ws_store, workspace_id=ws_id, org_id="org_a", owner_user_id="user_a", slug="alpha")
+    project_store = ProjectStore(store_path=tmp_path / "projects.json")
+    project = project_store.make_record(name="proj-a", root=str(tmp_path), metadata={"workspace_id": ws_id})
+    project_store.register(project)
+    set_project_store_for_tests(project_store)
+    set_builder_source_store_for_tests(BuilderSourceStore(store_path=tmp_path / "builder_sources.json"))
+
+    app = _build_app(actor=_actor("user_a", org_id="org_a"), ws_store=ws_store)
+    client = TestClient(app)
+    payload = _zip_bytes({"../../evil.py": b"x"})
+    res = client.post(
+        f"/api/workspaces/{ws_id}/projects/{project.id}/builder/import-jobs/zip",
+        files={"file": ("bad.zip", payload, "application/zip")},
+    )
+    assert res.status_code == 400
+    assert res.json()["detail"]["error"]["code"] == "ZIP_PATH_TRAVERSAL"
+
+    jobs = client.get(f"/api/workspaces/{ws_id}/projects/{project.id}/builder/import-jobs").json()["import_jobs"]
+    assert jobs[0]["status"] == "failed"
+    assert jobs[0]["error_code"] == "ZIP_PATH_TRAVERSAL"
+
+    set_project_store_for_tests(None)
+    set_builder_source_store_for_tests(None)
+
+
+def test_builder_zip_import_rejects_absolute_and_size_caps(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    monkeypatch.setenv("HAM_BUILDER_ZIP_MAX_FILE_COUNT", "1")
+    monkeypatch.setenv("HAM_BUILDER_ZIP_MAX_ENTRY_BYTES", "256")
+    ws_store = InMemoryWorkspaceStore()
+    ws_id = "ws_aaaaaaaaaaaaaaaa"
+    _seed_workspace(ws_store, workspace_id=ws_id, org_id="org_a", owner_user_id="user_a", slug="alpha")
+    project_store = ProjectStore(store_path=tmp_path / "projects.json")
+    project = project_store.make_record(name="proj-a", root=str(tmp_path), metadata={"workspace_id": ws_id})
+    project_store.register(project)
+    set_project_store_for_tests(project_store)
+    set_builder_source_store_for_tests(BuilderSourceStore(store_path=tmp_path / "builder_sources.json"))
+
+    app = _build_app(actor=_actor("user_a", org_id="org_a"), ws_store=ws_store)
+    client = TestClient(app)
+
+    abs_payload = _zip_bytes({"C:/windows/system.ini": b"x"})
+    abs_res = client.post(
+        f"/api/workspaces/{ws_id}/projects/{project.id}/builder/import-jobs/zip",
+        files={"file": ("abs.zip", abs_payload, "application/zip")},
+    )
+    assert abs_res.status_code == 400
+    assert abs_res.json()["detail"]["error"]["code"] == "ZIP_ABSOLUTE_PATH"
+
+    large_payload = _zip_bytes({"a.txt": b"x" * 2048})
+    large_res = client.post(
+        f"/api/workspaces/{ws_id}/projects/{project.id}/builder/import-jobs/zip",
+        files={"file": ("large.zip", large_payload, "application/zip")},
+    )
+    assert large_res.status_code == 400
+    assert large_res.json()["detail"]["error"]["code"] == "ZIP_ENTRY_TOO_LARGE"
+
+    set_project_store_for_tests(None)
+    set_builder_source_store_for_tests(None)
+
+
+def test_builder_zip_import_workspace_scope_enforced(tmp_path: Path) -> None:
+    ws_store = InMemoryWorkspaceStore()
+    ws_a = "ws_aaaaaaaaaaaaaaaa"
+    ws_b = "ws_bbbbbbbbbbbbbbbb"
+    _seed_workspace(ws_store, workspace_id=ws_a, org_id="org_a", owner_user_id="user_a", slug="alpha")
+    _seed_workspace(ws_store, workspace_id=ws_b, org_id="org_b", owner_user_id="user_b", slug="beta")
+    project_store = ProjectStore(store_path=tmp_path / "projects.json")
+    p_b = project_store.make_record(name="proj-b", root=str(tmp_path), metadata={"workspace_id": ws_b})
+    project_store.register(p_b)
+    set_project_store_for_tests(project_store)
+    set_builder_source_store_for_tests(BuilderSourceStore(store_path=tmp_path / "builder_sources.json"))
+    app = _build_app(actor=_actor("user_a", org_id="org_a"), ws_store=ws_store)
+    client = TestClient(app)
+
+    payload = _zip_bytes({"src/main.py": b"print('ok')"})
+    forbidden = client.post(
+        f"/api/workspaces/{ws_b}/projects/{p_b.id}/builder/import-jobs/zip",
+        files={"file": ("sample.zip", payload, "application/zip")},
+    )
+    assert forbidden.status_code == 403
 
     set_project_store_for_tests(None)
     set_builder_source_store_for_tests(None)

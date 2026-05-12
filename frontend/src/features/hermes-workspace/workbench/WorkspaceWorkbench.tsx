@@ -17,6 +17,14 @@ import {
   Share2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  type BuilderImportJobRecord,
+  type BuilderProjectSourceRecord,
+  type BuilderSourceSnapshotRecord,
+  listBuilderImportJobs,
+  listBuilderProjectSources,
+  listBuilderSourceSnapshots,
+} from "@/lib/ham/api";
 import { cn } from "@/lib/utils";
 import { ProjectSourceIntakeDialog } from "./ProjectSourceIntakeDialog";
 import { WorkbenchProjectSettingsPanel } from "./WorkbenchProjectSettingsPanel";
@@ -24,6 +32,7 @@ import { WorkbenchProjectSettingsPanel } from "./WorkbenchProjectSettingsPanel";
 export type WorkspaceWorkbenchProps = {
   /** Binds embedded settings/deep-links to the active Ham project from chat routing. */
   projectId?: string | null;
+  workspaceId?: string | null;
 };
 
 export type WorkspaceWorkbenchTabId = "preview" | "code" | "database" | "storage" | "settings";
@@ -36,9 +45,10 @@ const TABS: Array<{ id: WorkspaceWorkbenchTabId; label: string; icon: typeof Eye
   { id: "settings", label: "Settings", icon: Settings2 },
 ];
 
-export function WorkspaceWorkbench({ projectId = null }: WorkspaceWorkbenchProps) {
+export function WorkspaceWorkbench({ projectId = null, workspaceId = null }: WorkspaceWorkbenchProps) {
   const [activeTab, setActiveTab] = React.useState<WorkspaceWorkbenchTabId>("preview");
   const [projectSourceOpen, setProjectSourceOpen] = React.useState(false);
+  const [sourceRefreshKey, setSourceRefreshKey] = React.useState(0);
   const tabStripRef = React.useRef<HTMLDivElement | null>(null);
   const [workbenchTabBarMode, setWorkbenchTabBarMode] = React.useState<"labeled" | "icons">(
     "labeled",
@@ -192,11 +202,24 @@ export function WorkspaceWorkbench({ projectId = null }: WorkspaceWorkbenchProps
         ) : null}
         {activeTab === "database" ? <WorkbenchDatabasePanel /> : null}
         {activeTab === "storage" ? (
-          <WorkbenchStoragePanel onAddProjectSource={() => setProjectSourceOpen(true)} />
+          <WorkbenchStoragePanel
+            workspaceId={workspaceId}
+            projectId={projectId}
+            refreshKey={sourceRefreshKey}
+            onAddProjectSource={() => setProjectSourceOpen(true)}
+          />
         ) : null}
         {activeTab === "settings" ? <WorkbenchProjectSettingsPanel projectId={projectId} /> : null}
       </div>
-      <ProjectSourceIntakeDialog open={projectSourceOpen} onOpenChange={setProjectSourceOpen} />
+      <ProjectSourceIntakeDialog
+        open={projectSourceOpen}
+        onOpenChange={setProjectSourceOpen}
+        projectId={projectId}
+        workspaceId={workspaceId}
+        onZipImported={() => {
+          setSourceRefreshKey((prev) => prev + 1);
+        }}
+      />
     </aside>
   );
 }
@@ -278,20 +301,119 @@ function WorkbenchDatabasePanel() {
   );
 }
 
-function WorkbenchStoragePanel({ onAddProjectSource }: { onAddProjectSource: () => void }) {
+type WorkbenchStoragePanelProps = {
+  workspaceId?: string | null;
+  projectId?: string | null;
+  refreshKey: number;
+  onAddProjectSource: () => void;
+};
+
+function WorkbenchStoragePanel({
+  workspaceId = null,
+  projectId = null,
+  refreshKey,
+  onAddProjectSource,
+}: WorkbenchStoragePanelProps) {
+  const [sources, setSources] = React.useState<BuilderProjectSourceRecord[]>([]);
+  const [snapshots, setSnapshots] = React.useState<BuilderSourceSnapshotRecord[]>([]);
+  const [jobs, setJobs] = React.useState<BuilderImportJobRecord[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  const [loadError, setLoadError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    const ws = workspaceId?.trim() || "";
+    const pid = projectId?.trim() || "";
+    if (!ws || !pid) {
+      setSources([]);
+      setSnapshots([]);
+      setJobs([]);
+      setLoadError(null);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    setLoadError(null);
+    void (async () => {
+      try {
+        const [sourcesRes, snapshotsRes, jobsRes] = await Promise.all([
+          listBuilderProjectSources(ws, pid),
+          listBuilderSourceSnapshots(ws, pid),
+          listBuilderImportJobs(ws, pid),
+        ]);
+        if (cancelled) return;
+        setSources(sourcesRes.sources || []);
+        setSnapshots(snapshotsRes.source_snapshots || []);
+        setJobs(jobsRes.import_jobs || []);
+      } catch (e) {
+        if (cancelled) return;
+        setLoadError(e instanceof Error ? e.message : String(e));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaceId, projectId, refreshKey]);
+
+  const latestJob = jobs[0] ?? null;
+  const activeSource = sources.find((s) => s.active_snapshot_id) ?? null;
+  const activeSnapshot =
+    activeSource && activeSource.active_snapshot_id
+      ? snapshots.find((s) => s.id === activeSource.active_snapshot_id) || null
+      : null;
+
   return (
     <MutedPanel>
       <p className="text-[13px] font-medium text-white/88">Project source</p>
-      <p className="text-white/55">
-        No cloud project blob store yet. Use{" "}
-        <span className="font-medium text-white/65">Add project source</span> for local workspace
-        uploads (local API) or chat attachments. ZIP ingestion is not supported.
-      </p>
+      {!workspaceId?.trim() || !projectId?.trim() ? (
+        <p className="text-white/55">
+          Select an active workspace and project in chat to manage source snapshots.
+        </p>
+      ) : null}
+      {loading ? <p className="text-white/45">Loading source records…</p> : null}
+      {loadError ? (
+        <p className="text-amber-200/90" data-testid="hww-project-source-load-error">
+          Could not load project source records: {loadError}
+        </p>
+      ) : null}
+      {!loading && !loadError && workspaceId?.trim() && projectId?.trim() && sources.length === 0 ? (
+        <p className="text-white/55" data-testid="hww-project-source-empty-state">
+          No project source connected yet. Upload a ZIP to create your first source snapshot.
+        </p>
+      ) : null}
+      {sources.length > 0 ? (
+        <div className="rounded-lg border border-white/[0.08] bg-black/25 p-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Sources</p>
+          <ul className="mt-2 space-y-1 text-[11px] text-white/75" data-testid="hww-project-source-list">
+            {sources.map((source) => (
+              <li key={source.id}>
+                {source.display_name || source.kind}{" "}
+                <span className="text-white/45">({source.kind}, {source.status})</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {activeSnapshot ? (
+        <p className="text-white/55" data-testid="hww-project-source-active-snapshot">
+          Active snapshot: <span className="text-white/70">{activeSnapshot.id}</span> (
+          {activeSnapshot.size_bytes.toLocaleString()} bytes)
+        </p>
+      ) : null}
+      {latestJob ? (
+        <p className="text-white/55" data-testid="hww-project-source-latest-job">
+          Latest import:{" "}
+          <span className="text-white/70">
+            {latestJob.status} / {latestJob.phase}
+          </span>
+          {latestJob.error_code ? (
+            <span className="text-amber-200/90"> ({latestJob.error_code}: {latestJob.error_message})</span>
+          ) : null}
+        </p>
+      ) : null}
       <div className="flex flex-wrap gap-2 pt-1">
         <AddProjectSourceButton onClick={onAddProjectSource} />
-        <Button type="button" size="sm" variant="secondary" disabled className="text-[11px]">
-          Upload ZIP — Coming soon
-        </Button>
       </div>
     </MutedPanel>
   );
