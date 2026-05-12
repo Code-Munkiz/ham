@@ -427,3 +427,83 @@ def test_register_local_preview_scope_enforced(tmp_path: Path) -> None:
     set_project_store_for_tests(None)
     set_builder_source_store_for_tests(None)
     set_builder_runtime_store_for_tests(None)
+
+
+def test_cloud_runtime_get_returns_unsupported_when_not_requested(tmp_path: Path) -> None:
+    ws_store, ws_id, _, project_id = _seed_project_context(tmp_path)
+    client = TestClient(_build_app(actor=_actor("user_a", org_id="org_a"), ws_store=ws_store))
+    res = client.get(f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime")
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["mode"] == "cloud"
+    assert body["status"] == "unsupported"
+    assert body["runtime_session_id"] is None
+    set_project_store_for_tests(None)
+    set_builder_source_store_for_tests(None)
+    set_builder_runtime_store_for_tests(None)
+
+
+def test_cloud_runtime_request_tracks_state_without_execution(tmp_path: Path, monkeypatch) -> None:
+    import subprocess
+
+    ws_store, ws_id, _, project_id = _seed_project_context(tmp_path)
+    client = TestClient(_build_app(actor=_actor("user_a", org_id="org_a"), ws_store=ws_store))
+
+    def _boom(*args, **kwargs):  # type: ignore[no-untyped-def]
+        raise AssertionError("cloud runtime stub must not execute processes")
+
+    monkeypatch.setattr(subprocess, "run", _boom)
+    monkeypatch.setattr(subprocess, "Popen", _boom)
+    post = client.post(
+        f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime/request",
+        json={"status": "provisioning", "metadata": {"note": "queued request"}},
+    )
+    assert post.status_code == 200, post.text
+    assert post.json()["cloud_runtime"]["status"] == "provisioning"
+    get = client.get(f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime")
+    assert get.status_code == 200, get.text
+    assert get.json()["status"] == "provisioning"
+    assert get.json()["runtime_session_id"]
+    set_project_store_for_tests(None)
+    set_builder_source_store_for_tests(None)
+    set_builder_runtime_store_for_tests(None)
+
+
+def test_cloud_runtime_delete_marks_stub_expired(tmp_path: Path) -> None:
+    ws_store, ws_id, _, project_id = _seed_project_context(tmp_path)
+    client = TestClient(_build_app(actor=_actor("user_a", org_id="org_a"), ws_store=ws_store))
+    reg = client.post(
+        f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime/request",
+        json={"status": "running"},
+    )
+    assert reg.status_code == 200, reg.text
+    delete = client.delete(f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime")
+    assert delete.status_code == 200, delete.text
+    assert delete.json()["cloud_runtime"]["status"] == "expired"
+    set_project_store_for_tests(None)
+    set_builder_source_store_for_tests(None)
+    set_builder_runtime_store_for_tests(None)
+
+
+def test_cloud_runtime_scope_enforced(tmp_path: Path) -> None:
+    ws_store = InMemoryWorkspaceStore()
+    ws_a = "ws_aaaaaaaaaaaaaaaa"
+    ws_b = "ws_bbbbbbbbbbbbbbbb"
+    _seed_workspace(ws_store, workspace_id=ws_a, org_id="org_a", owner_user_id="user_a", slug="alpha")
+    _seed_workspace(ws_store, workspace_id=ws_b, org_id="org_b", owner_user_id="user_b", slug="beta")
+    project_store = ProjectStore(store_path=tmp_path / "projects.json")
+    p_a = project_store.make_record(name="proj-a", root=str(tmp_path), metadata={"workspace_id": ws_a})
+    p_b = project_store.make_record(name="proj-b", root=str(tmp_path), metadata={"workspace_id": ws_b})
+    project_store.register(p_a)
+    project_store.register(p_b)
+    set_project_store_for_tests(project_store)
+    set_builder_source_store_for_tests(BuilderSourceStore(store_path=tmp_path / "builder_sources.json"))
+    set_builder_runtime_store_for_tests(BuilderRuntimeStore(store_path=tmp_path / "builder_runtime.json"))
+    client = TestClient(_build_app(actor=_actor("user_a", org_id="org_a"), ws_store=ws_store))
+    forbidden = client.get(f"/api/workspaces/{ws_b}/projects/{p_b.id}/builder/cloud-runtime")
+    wrong_project_workspace = client.get(f"/api/workspaces/{ws_a}/projects/{p_b.id}/builder/cloud-runtime")
+    assert forbidden.status_code == 403
+    assert wrong_project_workspace.status_code == 404
+    set_project_store_for_tests(None)
+    set_builder_source_store_for_tests(None)
+    set_builder_runtime_store_for_tests(None)

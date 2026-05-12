@@ -84,6 +84,17 @@ class BuilderRuntimeStoreProtocol(Protocol):
         runtime_session_id: str,
     ) -> PreviewEndpoint | None: ...
     def clear_local_preview(self, *, workspace_id: str, project_id: str) -> tuple[RuntimeSession | None, PreviewEndpoint | None]: ...
+    def get_latest_runtime_session(self, *, workspace_id: str, project_id: str, mode: str | None = None) -> RuntimeSession | None: ...
+    def request_cloud_runtime_session(
+        self,
+        *,
+        workspace_id: str,
+        project_id: str,
+        source_snapshot_id: str | None,
+        requested_by: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> RuntimeSession: ...
+    def clear_cloud_runtime(self, *, workspace_id: str, project_id: str) -> RuntimeSession | None: ...
 
 
 class BuilderRuntimeStore:
@@ -175,6 +186,19 @@ class BuilderRuntimeStore:
             return row
         return None
 
+    def get_latest_runtime_session(
+        self,
+        *,
+        workspace_id: str,
+        project_id: str,
+        mode: str | None = None,
+    ) -> RuntimeSession | None:
+        for row in self.list_runtime_sessions(workspace_id=workspace_id, project_id=project_id):
+            if mode is not None and row.mode != mode:
+                continue
+            return row
+        return None
+
     def get_active_preview_endpoint(
         self,
         *,
@@ -209,6 +233,59 @@ class BuilderRuntimeStore:
             endpoint.last_checked_at = _utc_now_iso()
             self.upsert_preview_endpoint(endpoint)
         return runtime, endpoint
+
+    def request_cloud_runtime_session(
+        self,
+        *,
+        workspace_id: str,
+        project_id: str,
+        source_snapshot_id: str | None,
+        requested_by: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> RuntimeSession:
+        existing = self.get_latest_runtime_session(
+            workspace_id=workspace_id,
+            project_id=project_id,
+            mode="cloud",
+        )
+        if existing is None:
+            existing = RuntimeSession(
+                workspace_id=workspace_id,
+                project_id=project_id,
+                mode="cloud",
+            )
+        existing.mode = "cloud"
+        existing.status = "queued"
+        existing.health = "unknown"
+        existing.snapshot_id = source_snapshot_id
+        existing.message = "Cloud runtime request recorded. Provisioning is not implemented yet."
+        if not existing.started_at:
+            existing.started_at = _utc_now_iso()
+        existing.updated_at = _utc_now_iso()
+        existing.metadata = {
+            "requested_at": existing.updated_at,
+            **(existing.metadata or {}),
+            **(metadata or {}),
+        }
+        if requested_by:
+            existing.metadata["requested_by"] = requested_by
+        return self.upsert_runtime_session(existing)
+
+    def clear_cloud_runtime(self, *, workspace_id: str, project_id: str) -> RuntimeSession | None:
+        runtime = self.get_latest_runtime_session(
+            workspace_id=workspace_id,
+            project_id=project_id,
+            mode="cloud",
+        )
+        if runtime is None:
+            return None
+        runtime.status = "expired"
+        runtime.health = "unknown"
+        runtime.message = "Cloud runtime request cleared. Provisioning is not implemented yet."
+        runtime.updated_at = _utc_now_iso()
+        runtime.preview_endpoint_id = None
+        runtime.metadata = {**(runtime.metadata or {}), "cleared_at": runtime.updated_at}
+        return self.upsert_runtime_session(runtime)
 
     def _load_raw(self) -> dict[str, Any]:
         if not self._path.is_file():

@@ -428,6 +428,32 @@ export type BuilderActivityResponse = {
   items: BuilderActivityItem[];
 };
 
+export type BuilderCloudRuntimeState =
+  | "queued"
+  | "provisioning"
+  | "running"
+  | "failed"
+  | "expired"
+  | "unsupported";
+
+export type BuilderCloudRuntimeStatus = {
+  workspace_id: string;
+  project_id: string;
+  mode: "cloud";
+  status: BuilderCloudRuntimeState;
+  message: string | null;
+  updated_at: string;
+  runtime_session_id: string | null;
+  source_snapshot_id: string | null;
+  metadata: Record<string, unknown>;
+};
+
+export type BuilderCloudRuntimeRequestPayload = {
+  source_snapshot_id?: string | null;
+  status?: BuilderCloudRuntimeState | null;
+  metadata?: Record<string, unknown>;
+};
+
 export async function listBuilderProjectSources(
   workspaceId: string,
   projectId: string,
@@ -701,6 +727,56 @@ export async function cancelBuilderVisualEditRequest(
     project_id: string;
     visual_edit_request: BuilderVisualEditRequest;
   }>;
+}
+
+export async function getBuilderCloudRuntime(
+  workspaceId: string,
+  projectId: string,
+): Promise<BuilderCloudRuntimeStatus> {
+  const res = await hamApiFetch(
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/projects/${encodeURIComponent(projectId)}/builder/cloud-runtime`,
+  );
+  if (!res.ok) {
+    throw new Error((await hamApiErrorDetailMessage(res)) || `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<BuilderCloudRuntimeStatus>;
+}
+
+export async function requestBuilderCloudRuntime(
+  workspaceId: string,
+  projectId: string,
+  body: BuilderCloudRuntimeRequestPayload,
+): Promise<{ runtime: Record<string, unknown>; cloud_runtime: BuilderCloudRuntimeStatus }> {
+  const res = await hamApiFetch(
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/projects/${encodeURIComponent(projectId)}/builder/cloud-runtime/request`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+  if (!res.ok) {
+    throw new Error((await hamApiErrorDetailMessage(res)) || `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<{
+    runtime: Record<string, unknown>;
+    cloud_runtime: BuilderCloudRuntimeStatus;
+  }>;
+}
+
+export async function deleteBuilderCloudRuntime(
+  workspaceId: string,
+  projectId: string,
+): Promise<{ cloud_runtime: BuilderCloudRuntimeStatus }> {
+  const res = await hamApiFetch(
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/projects/${encodeURIComponent(projectId)}/builder/cloud-runtime`,
+    { method: "DELETE" },
+  );
+  if (!res.ok) {
+    throw new Error((await hamApiErrorDetailMessage(res)) || `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<{ cloud_runtime: BuilderCloudRuntimeStatus }>;
+}
 }
 
 /** Text-to-image (Phase 2G.1+) — mediated by HAM backend only. */
