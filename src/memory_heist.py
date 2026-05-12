@@ -164,14 +164,19 @@ DEFAULT_SESSION_TOOL_PRUNE_CHARS = 200
 # - MAX_DOM_CHARS/MAX_CONSOLE_CHARS: caps on captured DOM/html and console output size
 # - MAX_NETWORK_EVENTS: limit network request/response logging
 DEFAULT_TOOL_PRUNE_PLACEHOLDER = "[Old tool output cleared to save context space]"
+# Default values for browser automation policy. These constants define the bounds
+# for autonomous browser interactions: max steps before timeout, per-step timeout,
+# DOM/console output size limits, and feature toggles for downloads/form submits.
+# **FOR MAINTAINERS**: Adjust these only if you've measured context window pressure
+# or latency issues during browser operations. Higher limits increase token usage.
 DEFAULT_BROWSER_MAX_STEPS = 25
 DEFAULT_BROWSER_STEP_TIMEOUT_MS = 10_000
 DEFAULT_BROWSER_MAX_DOM_CHARS = 8_000
 DEFAULT_BROWSER_MAX_CONSOLE_CHARS = 4_000
 DEFAULT_BROWSER_MAX_NETWORK_EVENTS = 200
 DEFAULT_BROWSER_ALLOW_FILE_DOWNLOAD = False
-   170|DEFAULT_BROWSER_ALLOW_FORM_SUBMIT = False
-   171|DEFAULT_BROWSER_ADAPTER = "playwright"
+DEFAULT_BROWSER_ALLOW_FORM_SUBMIT = False
+DEFAULT_BROWSER_ADAPTER = "playwright"
    172|# Security note for maintainers: File downloads and form submits are disabled by default to prevent
    173|# unexpected side effects during autonomous browser automation. Enable these options only when
    174|# explicit user intent has been captured and validated through HAM's action approval flows.
