@@ -133,7 +133,9 @@ MAX_SUMMARY_CHARS = 4_000
 # minimum session messages to preserve in history, and tool output pruning
 # WARNING: DEFAULT_SESSION_COMPACTION_MAX_TOKENS was removed due to incomplete
 # implementation. Current session handling uses alternative compaction strategies.
-DEFAULT_SESSION_COMPACTION_MAX_TOKENS=***
+# TODO: Consider re-adding this constant if token-based session compaction is re-implemented.
+#       When added, recommend a value between 500-2000 tokens depending on use case.
+DEFAULT_SESSION_COMPACTION_MAX_TOKENS = None  # Placeholder: not currently used
 DEFAULT_SESSION_COMPACTION_PRESERVE = 4
 DEFAULT_SESSION_TOOL_PRUNE_CHARS = 200
 # Session browser defaults: browser interaction controls including step limits,
