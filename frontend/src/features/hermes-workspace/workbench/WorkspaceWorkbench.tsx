@@ -45,7 +45,10 @@ const TABS: Array<{ id: WorkspaceWorkbenchTabId; label: string; icon: typeof Eye
   { id: "settings", label: "Settings", icon: Settings2 },
 ];
 
-export function WorkspaceWorkbench({ projectId = null, workspaceId = null }: WorkspaceWorkbenchProps) {
+export function WorkspaceWorkbench({
+  projectId = null,
+  workspaceId = null,
+}: WorkspaceWorkbenchProps) {
   const [activeTab, setActiveTab] = React.useState<WorkspaceWorkbenchTabId>("preview");
   const [projectSourceOpen, setProjectSourceOpen] = React.useState(false);
   const [sourceRefreshKey, setSourceRefreshKey] = React.useState(0);
@@ -377,7 +380,11 @@ function WorkbenchStoragePanel({
           Could not load project source records: {loadError}
         </p>
       ) : null}
-      {!loading && !loadError && workspaceId?.trim() && projectId?.trim() && sources.length === 0 ? (
+      {!loading &&
+      !loadError &&
+      workspaceId?.trim() &&
+      projectId?.trim() &&
+      sources.length === 0 ? (
         <p className="text-white/55" data-testid="hww-project-source-empty-state">
           No project source connected yet. Upload a ZIP to create your first source snapshot.
         </p>
@@ -385,11 +392,16 @@ function WorkbenchStoragePanel({
       {sources.length > 0 ? (
         <div className="rounded-lg border border-white/[0.08] bg-black/25 p-3">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Sources</p>
-          <ul className="mt-2 space-y-1 text-[11px] text-white/75" data-testid="hww-project-source-list">
+          <ul
+            className="mt-2 space-y-1 text-[11px] text-white/75"
+            data-testid="hww-project-source-list"
+          >
             {sources.map((source) => (
               <li key={source.id}>
                 {source.display_name || source.kind}{" "}
-                <span className="text-white/45">({source.kind}, {source.status})</span>
+                <span className="text-white/45">
+                  ({source.kind}, {source.status})
+                </span>
               </li>
             ))}
           </ul>
@@ -408,7 +420,10 @@ function WorkbenchStoragePanel({
             {latestJob.status} / {latestJob.phase}
           </span>
           {latestJob.error_code ? (
-            <span className="text-amber-200/90"> ({latestJob.error_code}: {latestJob.error_message})</span>
+            <span className="text-amber-200/90">
+              {" "}
+              ({latestJob.error_code}: {latestJob.error_message})
+            </span>
           ) : null}
         </p>
       ) : null}
