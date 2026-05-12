@@ -495,6 +495,9 @@ class ProjectContext:
     cwd: Path
     current_date: str
     platform_info: str
+    # Git state snapshots: captured once per discover() call for consistent context.
+    # git_status_snapshot shows working branch state (status --short), git_diff_snapshot shows staged/unstaged changes,
+    # git_log_snapshot shows recent commit history (oneline). All are None if not a git repo.
     git_status_snapshot: str | None = None
     git_diff_snapshot: str | None = None
     git_log_snapshot: str | None = None
