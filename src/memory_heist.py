@@ -131,7 +131,9 @@ MAX_SUMMARY_CHARS = 4_000
 
 # Session compaction defaults: maximum tokens for compacted session history,
 # minimum session messages to preserve in history, and tool output pruning
-DEFAULT_SESSION_COMPACTION_MAX_TOKENS = 10_000
+# WARNING: DEFAULT_SESSION_COMPACTION_MAX_TOKENS was removed due to incomplete
+# implementation. Current session handling uses alternative compaction strategies.
+DEFAULT_SESSION_COMPACTION_MAX_TOKENS=***
 DEFAULT_SESSION_COMPACTION_PRESERVE = 4
 DEFAULT_SESSION_TOOL_PRUNE_CHARS = 200
 DEFAULT_TOOL_PRUNE_PLACEHOLDER = "[Old tool output cleared to save context space]"
@@ -467,6 +469,18 @@ def _deep_merge(target: dict, source: dict) -> None:
 
 @dataclass
 class ProjectContext:
+    """Main context object that agents consume for project understanding.
+    
+    This dataclass assembles workspace state including:
+    - Git information (status, diff, log)
+    - Instruction files (SWARM.md, AGENTS.md, etc.)
+    - Merged project config from .ham hierarchy
+    - File system scan results (file count, tree structure)
+    - Platform and date information
+    
+    All fields except cwd, current_date, and platform_info are optional/empty
+    by default to allow partial construction in tests or special cases.
+    """
     cwd: Path
     current_date: str
     platform_info: str
