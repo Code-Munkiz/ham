@@ -308,6 +308,45 @@ export type BuilderLocalPreviewRegisterRequest = {
   display_name?: string | null;
 };
 
+export type BuilderActivityKind =
+  | "source_import"
+  | "source_snapshot"
+  | "preview_connected"
+  | "preview_disconnected"
+  | "preview_error"
+  | "runtime_status";
+
+export type BuilderActivityStatus =
+  | "queued"
+  | "running"
+  | "succeeded"
+  | "failed"
+  | "ready"
+  | "stopped"
+  | "error"
+  | "info";
+
+export type BuilderActivityItem = {
+  id: string;
+  kind: BuilderActivityKind;
+  status: BuilderActivityStatus;
+  title: string;
+  message: string;
+  timestamp: string;
+  source_id: string | null;
+  snapshot_id: string | null;
+  import_job_id: string | null;
+  runtime_session_id: string | null;
+  preview_endpoint_id: string | null;
+  metadata: Record<string, unknown>;
+};
+
+export type BuilderActivityResponse = {
+  workspace_id: string;
+  project_id: string;
+  items: BuilderActivityItem[];
+};
+
 export async function listBuilderProjectSources(
   workspaceId: string,
   projectId: string,
@@ -451,6 +490,19 @@ export async function deleteBuilderLocalPreview(
     throw new Error((await hamApiErrorDetailMessage(res)) || `HTTP ${res.status}`);
   }
   return res.json() as Promise<{ preview_status: BuilderPreviewStatus }>;
+}
+
+export async function getBuilderActivity(
+  workspaceId: string,
+  projectId: string,
+): Promise<BuilderActivityResponse> {
+  const res = await hamApiFetch(
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/projects/${encodeURIComponent(projectId)}/builder/activity`,
+  );
+  if (!res.ok) {
+    throw new Error((await hamApiErrorDetailMessage(res)) || `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<BuilderActivityResponse>;
 }
 
 /** Text-to-image (Phase 2G.1+) — mediated by HAM backend only. */

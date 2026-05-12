@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -8,7 +9,7 @@ from typing import Annotated, Any
 from urllib.parse import urlsplit, urlunsplit
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from src.api.clerk_gate import get_ham_clerk_actor
 from src.api.dependencies.workspace import require_perm
@@ -208,6 +209,158 @@ class LocalPreviewRegisterRequest(BaseModel):
     display_name: str | None = None
 
 
+class BuilderActivityItem(BaseModel):
+    id: str
+    kind: str
+    status: str
+    title: str
+    message: str
+    timestamp: str
+    source_id: str | None = None
+    snapshot_id: str | None = None
+    import_job_id: str | None = None
+    runtime_session_id: str | None = None
+    preview_endpoint_id: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+_SENSITIVE_VALUE_RE = re.compile(r"(token|secret|password|passwd|api[_-]?key|bearer|authorization)", re.IGNORECASE)
+
+
+def _safe_text(value: str | None, *, fallback: str) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return fallback
+    text = " ".join(raw.replace("\r", " ").replace("\n", " ").split())
+    if _SENSITIVE_VALUE_RE.search(text):
+        return fallback
+    return text[:240]
+
+
+def _safe_stats(stats: dict[str, Any]) -> dict[str, int]:
+    out: dict[str, int] = {}
+    for key in ("file_count", "dir_count", "compressed_bytes", "uncompressed_bytes"):
+        value = stats.get(key)
+        if isinstance(value, int):
+            out[key] = max(0, value)
+    return out
+
+
+def _build_activity_items(*, workspace_id: str, project_id: str) -> list[BuilderActivityItem]:
+    source_store = get_builder_source_store()
+    runtime_store = get_builder_runtime_store()
+    items: list[BuilderActivityItem] = []
+
+    for job in source_store.list_import_jobs(workspace_id=workspace_id, project_id=project_id):
+        title = "Source import queued"
+        if job.status == "running":
+            title = "Validating source archive"
+        elif job.status == "succeeded":
+            title = "Source snapshot created"
+        elif job.status == "failed":
+            title = "Source import failed"
+        message = _safe_text(job.error_message, fallback="Source import failed.") if job.status == "failed" else title
+        items.append(
+            BuilderActivityItem(
+                id=f"act_{job.id}",
+                kind="source_import",
+                status=job.status if job.status in {"queued", "running", "succeeded", "failed"} else "info",
+                title=title,
+                message=message,
+                timestamp=job.updated_at or job.created_at,
+                source_id=job.project_source_id,
+                snapshot_id=job.source_snapshot_id,
+                import_job_id=job.id,
+                metadata=_safe_stats(job.stats),
+            )
+        )
+
+    for snapshot in source_store.list_source_snapshots(workspace_id=workspace_id, project_id=project_id):
+        snapshot_status = "succeeded" if snapshot.status == "materialized" else "error"
+        snapshot_title = "Source snapshot materialized" if snapshot.status == "materialized" else "Source snapshot invalid"
+        items.append(
+            BuilderActivityItem(
+                id=f"act_{snapshot.id}",
+                kind="source_snapshot",
+                status=snapshot_status,
+                title=snapshot_title,
+                message=snapshot_title,
+                timestamp=snapshot.created_at,
+                source_id=snapshot.project_source_id,
+                snapshot_id=snapshot.id,
+                metadata={"size_bytes": max(0, int(snapshot.size_bytes))},
+            )
+        )
+
+    for runtime in runtime_store.list_runtime_sessions(workspace_id=workspace_id, project_id=project_id):
+        runtime_status = runtime.status.lower().strip()
+        if runtime_status in {"running", "starting", "waiting"}:
+            title = "Local preview connected"
+            status = "ready" if runtime_status == "running" else "running"
+            kind = "runtime_status"
+        elif runtime_status in {"stopped", "expired"}:
+            title = "Local preview disconnected"
+            status = "stopped"
+            kind = "preview_disconnected"
+        else:
+            title = "Local preview runtime error"
+            status = "error"
+            kind = "preview_error"
+        items.append(
+            BuilderActivityItem(
+                id=f"act_{runtime.id}",
+                kind=kind,
+                status=status,
+                title=title,
+                message=_safe_text(runtime.message, fallback=title),
+                timestamp=runtime.updated_at,
+                snapshot_id=runtime.snapshot_id,
+                runtime_session_id=runtime.id,
+                metadata={"health": runtime.health, "mode": runtime.mode},
+            )
+        )
+
+    for endpoint in runtime_store.list_preview_endpoints(workspace_id=workspace_id, project_id=project_id):
+        endpoint_status = endpoint.status.lower().strip()
+        if endpoint_status == "ready":
+            kind = "preview_connected"
+            status = "ready"
+            title = "Local preview connected"
+        elif endpoint_status in {"revoked", "unavailable"}:
+            kind = "preview_disconnected" if endpoint_status == "revoked" else "preview_error"
+            status = "stopped" if endpoint_status == "revoked" else "error"
+            title = (
+                "Local preview disconnected"
+                if endpoint_status == "revoked"
+                else "Preview endpoint unavailable"
+            )
+        else:
+            kind = "runtime_status"
+            status = "running"
+            title = "Local preview endpoint provisioning"
+        safe_url = _sanitize_local_preview_url(endpoint.url)
+        items.append(
+            BuilderActivityItem(
+                id=f"act_{endpoint.id}",
+                kind=kind,
+                status=status,
+                title=title,
+                message=title,
+                timestamp=endpoint.last_checked_at or _utc_now_iso(),
+                runtime_session_id=endpoint.runtime_session_id,
+                preview_endpoint_id=endpoint.id,
+                metadata={
+                    "access_mode": endpoint.access_mode,
+                    "status": endpoint.status,
+                    "preview_url": safe_url if safe_url else None,
+                },
+            )
+        )
+
+    items.sort(key=lambda row: (row.timestamp, row.id), reverse=True)
+    return items
+
+
 @router.get("/api/workspaces/{workspace_id}/projects/{project_id}/builder/sources")
 async def list_project_sources(
     project_id: str,
@@ -266,6 +419,20 @@ async def get_builder_preview_status(
 ) -> dict[str, Any]:
     _project_in_workspace_or_404(project_id=project_id, workspace_id=ctx.workspace_id)
     return _build_preview_status_payload(workspace_id=ctx.workspace_id, project_id=project_id)
+
+
+@router.get("/api/workspaces/{workspace_id}/projects/{project_id}/builder/activity")
+async def get_builder_activity(
+    project_id: str,
+    ctx: Annotated[WorkspaceContext, Depends(require_perm(PERM_WORKSPACE_READ))],
+) -> dict[str, Any]:
+    _project_in_workspace_or_404(project_id=project_id, workspace_id=ctx.workspace_id)
+    items = _build_activity_items(workspace_id=ctx.workspace_id, project_id=project_id)
+    return {
+        "workspace_id": ctx.workspace_id,
+        "project_id": project_id,
+        "items": [row.model_dump(mode="json") for row in items],
+    }
 
 
 @router.post("/api/workspaces/{workspace_id}/projects/{project_id}/builder/local-preview")
