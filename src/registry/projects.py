@@ -18,11 +18,8 @@ class ProjectRecord(BaseModel):
     # Output target for the Build Lane post-exec step.
     #
     # - "managed_workspace" (default): the live-beta target. The droid edits a
-    #   HAM-managed project workspace and the post-exec step snapshots the
-    #   change into HAM-owned storage. No git, no gh, no GitHub install
-    #   required. The :class:`ManagedWorkspaceStubAdapter` returns a structured
-    #   ``MANAGED_WORKSPACE_NOT_IMPLEMENTED`` failure until PR-B lands the
-    #   real snapshot adapter; nothing user-visible is wired today.
+    #   HAM-managed project workspace; the runner adapter snapshots the updated
+    #   tree to HAM-managed object storage (no gh, optional GCS bucket).
     # - "github_pr": the connected-repo target. The droid edits a local git
     #   clone and the post-exec step opens a real pull request via
     #   ``gh pr create``. Requires ``github_repo``, a runner-side GitHub App /
@@ -36,8 +33,6 @@ class ProjectRecord(BaseModel):
     # ``github_repo`` is meaningful only when ``output_target == "github_pr"``.
     github_repo: str | None = None
     # ``workspace_id`` and ``managed_storage_uri`` are populated only when
-    # ``output_target == "managed_workspace"``; both remain ``None`` in PR-A
-    # because the managed snapshot path is a stub. PR-B will require
-    # ``workspace_id`` and lazy-allocate ``managed_storage_uri`` on first build.
+    # ``output_target == "managed_workspace"``.
     workspace_id: str | None = None
     managed_storage_uri: str | None = None

@@ -696,15 +696,14 @@ def _decide_build_status(
     exit_code: int | None,
     build_outcome: DroidBuildOutcome | None,
     build_err: str | None,
+    output_ref: dict[str, Any] | None,
 ) -> tuple[bool, str | None]:
     """Compute ``(build_ok, blocking_reason)`` for a build-lane run.
 
     A build is ``ok`` only when the adapter reported a terminal success state
     for its target. ``github_pr`` success = ``pr_opened`` / ``nothing_to_change``.
-    ``managed_workspace`` has no success state in PR-A (the stub adapter
-    always returns failure with ``MANAGED_WORKSPACE_NOT_IMPLEMENTED``), so
-    ``build_ok`` is always ``False`` and the blocking message reflects the
-    runner-side error summary when present.
+    ``managed_workspace`` success = runner ``output_ref["neutral_outcome"]`` is
+    ``succeeded`` or ``nothing_to_change`` after droid succeeds.
     """
     if timed_out:
         return False, "droid exec timed out"
@@ -712,8 +711,14 @@ def _decide_build_status(
         return False, f"droid exec failed (exit {exit_code})"
     if not ok_exec:
         return False, "droid exec did not succeed"
+    if target == "managed_workspace":
+        ref = dict(output_ref or {})
+        neo = str(ref.get("neutral_outcome") or "").strip()
+        if neo in {"succeeded", "nothing_to_change"}:
+            return True, None
+        return False, (build_err or "managed workspace snapshot failed")
     if target != "github_pr":
-        return False, (build_err or "managed workspace output target not implemented")
+        return False, (build_err or "unknown output_target")
     if build_outcome is None:
         return False, (build_err or "runner did not report a build outcome")
     if build_outcome not in {"pr_opened", "nothing_to_change"}:
@@ -1008,6 +1013,7 @@ def execute_droid_build_workflow_remote(
         exit_code=rec.exit_code,
         build_outcome=build_outcome,
         build_err=build_err,
+        output_ref=resolved_output_ref,
     )
 
     audit_payload = {

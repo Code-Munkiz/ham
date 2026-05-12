@@ -1,12 +1,14 @@
 """Output-target abstraction for the Build Lane post-exec step.
 
 This module introduces a small, target-neutral interface that the runner
-service uses after a successful ``droid exec``. Today only the GitHub-PR
-adapter has a real implementation; the managed-workspace adapter is a
-deliberate stub returning a structured ``MANAGED_WORKSPACE_NOT_IMPLEMENTED``
-failure until PR-B lands the snapshot store + GCS upload + diff/preview API.
+service uses after a successful ``droid exec``. The GitHub-PR adapter
+implements the connected-repository path via ``git`` / ``gh``; the
+managed-workspace adapter snapshots the constrained working tree to
+HAM-managed storage (Cloud Storage manifests + indexed rows).
+
 
 Why an abstraction at all
+
 -------------------------
 
 The live-beta HAM product is Replit/Manus-shaped: users sign up, create a
@@ -31,16 +33,16 @@ Shape contract
   PR-shaped :class:`src.ham.droid_runner.build_lane.BuildLaneResult` type
   is preserved as the GitHub-PR-specific internal result and lifted into
   the new :class:`OutputResult` shape by :func:`_legacy_to_output_result`.
-- :class:`ManagedWorkspaceStubAdapter` is the inert stub. It performs no
-  IO, opens no PR, writes no snapshot. It always returns
-  ``build_outcome="failed"`` with ``error_summary="MANAGED_WORKSPACE_NOT_IMPLEMENTED"``.
+- :class:`ManagedWorkspaceAdapter` persists a working-tree snapshot to the
+  configured object store (GCS when configured) plus a :class:`ProjectSnapshot`
+  index row.
 
 Safety notes
 ------------
 
 - No subprocess invocations live in this module directly. Both adapters
   rely on the runner-side :data:`SubprocessRunner` seam already exercised
-  in tests; the stub never spawns a subprocess.
+  in tests (the snapshot adapter itself does not spawn subprocesses).
 - No GitHub credential lookup happens here. ``gh`` / git auth lives on
   the runner host and is configured out-of-band.
 - ``OutputResult`` is structured and finite — no unbounded strings.
@@ -260,20 +262,8 @@ class GithubPrAdapter:
 
 
 @dataclass(frozen=True)
-class ManagedWorkspaceStubAdapter:
-    """Inert managed-workspace adapter.
-
-    Performs zero IO. Always returns a structured failure with
-    ``error_summary == MANAGED_WORKSPACE_NOT_IMPLEMENTED`` so the runner
-    service and HAM API surface a stable, machine-readable signal that
-    the managed snapshot path has not yet been implemented (PR-B scope).
-
-    The stub deliberately ignores ``runner`` — the managed adapter has no
-    subprocess pipeline in PR-A. PR-B replaces this with a real adapter
-    that computes a diff against the head snapshot, uploads changed files
-    to per-tenant Cloud Storage, writes a :class:`ProjectSnapshot` row,
-    and atomically updates ``head.json``.
-    """
+class ManagedWorkspaceAdapter:
+    """Managed snapshot adapter: materialize GCS manifests + snapshot store rows."""
 
     target: OutputTarget = "managed_workspace"
 
@@ -283,15 +273,10 @@ class ManagedWorkspaceStubAdapter:
         *,
         runner: SubprocessRunner | None = None,
     ) -> OutputResult:
-        # Defensive: PR-B should not silently accept stub mode, so we surface
-        # a clear, stable error code rather than pretending success.
-        del runner  # intentionally unused in PR-A
-        return OutputResult(
-            target="managed_workspace",
-            build_outcome="failed",
-            target_ref={},
-            error_summary=MANAGED_WORKSPACE_NOT_IMPLEMENTED,
-        )
+        del runner  # no subprocess work in this adapter
+        from src.ham.managed_workspace.workspace_adapter import emit_managed_workspace_snapshot
+
+        return emit_managed_workspace_snapshot(common)
 
 
 # ---------------------------------------------------------------------------
@@ -311,7 +296,7 @@ def select_output_adapter(output_target: str | None) -> OutputAdapter:
     if target == "github_pr":
         return GithubPrAdapter()
     if target == "managed_workspace":
-        return ManagedWorkspaceStubAdapter()
+        return ManagedWorkspaceAdapter()
     raise ValueError(f"unknown output_target: {output_target!r}")
 
 
@@ -320,7 +305,7 @@ __all__ = [
     "BuildOutcome",
     "GithubPrAdapter",
     "MANAGED_WORKSPACE_NOT_IMPLEMENTED",
-    "ManagedWorkspaceStubAdapter",
+    "ManagedWorkspaceAdapter",
     "OutputAdapter",
     "OutputResult",
     "OutputTarget",
