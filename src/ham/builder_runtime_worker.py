@@ -16,6 +16,7 @@ from src.ham.builder_cloud_runtime_gcp import (
     safe_proxy_upstream_from_provider,
 )
 from src.persistence.builder_runtime_job_store import CloudRuntimeJob
+from src.persistence.builder_source_store import get_builder_source_store
 from src.persistence.builder_runtime_store import PreviewEndpoint, RuntimeSession, get_builder_runtime_store
 
 CloudRuntimeProviderMode = Literal["disabled", "local_mock", "cloud_run_poc"]
@@ -60,6 +61,65 @@ class CloudRuntimeLifecycleStatus:
     updated_at: str
     provider_status: str | None
     logs_summary: str | None
+
+
+def _resolve_source_handoff(job: CloudRuntimeJob) -> dict[str, Any]:
+    snapshot_id = str(job.source_snapshot_id or "").strip()
+    if not snapshot_id:
+        return {
+            "handoff_status": "planned",
+            "source_snapshot_id": None,
+            "source_ref": None,
+            "artifact_uri": None,
+            "cleanup_after": None,
+            "expires_at": None,
+            "warnings": ["No source snapshot provided. Runtime handoff will use provider defaults."],
+            "error_code": None,
+            "error_message": None,
+        }
+    rows = get_builder_source_store().list_source_snapshots(
+        workspace_id=job.workspace_id,
+        project_id=job.project_id,
+    )
+    snapshot = next((row for row in rows if row.id == snapshot_id), None)
+    if snapshot is None:
+        return {
+            "handoff_status": "failed",
+            "source_snapshot_id": snapshot_id,
+            "source_ref": None,
+            "artifact_uri": None,
+            "cleanup_after": None,
+            "expires_at": None,
+            "warnings": [],
+            "error_code": "SOURCE_SNAPSHOT_NOT_FOUND",
+            "error_message": "Source snapshot was not found for this project.",
+        }
+    artifact_uri = str(snapshot.artifact_uri or "").strip()
+    if not artifact_uri.startswith("builder-artifact://"):
+        return {
+            "handoff_status": "failed",
+            "source_snapshot_id": snapshot_id,
+            "source_ref": None,
+            "artifact_uri": None,
+            "cleanup_after": None,
+            "expires_at": None,
+            "warnings": [],
+            "error_code": "CLOUD_RUNTIME_SOURCE_HANDOFF_MISSING_ARTIFACT",
+            "error_message": "Source snapshot has no safe artifact reference for handoff.",
+        }
+    expires_at = _utc_now_iso()
+    source_ref = f"{snapshot.id}:{(snapshot.digest_sha256 or 'no-digest')[:16]}"
+    return {
+        "handoff_status": "planned",
+        "source_snapshot_id": snapshot_id,
+        "source_ref": source_ref,
+        "artifact_uri": artifact_uri,
+        "cleanup_after": "provider_default",
+        "expires_at": expires_at,
+        "warnings": [],
+        "error_code": None,
+        "error_message": None,
+    }
 
 
 def get_runtime_job_lifecycle_status(
@@ -137,9 +197,27 @@ def execute_cloud_runtime_job(job: CloudRuntimeJob) -> CloudRuntimeExecutionResu
         return CloudRuntimeExecutionResult(job=job, runtime_session=None, usage_event=None)
 
     if mode == "cloud_run_poc":
-        job.phase = "validating_config"
+        job.phase = "validating_source"
         job.status = "running"
         job.updated_at = _utc_now_iso()
+        source_handoff = _resolve_source_handoff(job)
+        job.metadata = {
+            **(job.metadata or {}),
+            "source_handoff": redact_provider_metadata(source_handoff),
+            "source_handoff_status": str(source_handoff.get("handoff_status") or "planned"),
+        }
+        job.phase = "validating_config"
+        if source_handoff.get("handoff_status") == "failed":
+            job.status = "unsupported"
+            job.phase = "failed"
+            job.error_code = str(source_handoff.get("error_code") or "CLOUD_RUNTIME_SOURCE_HANDOFF_FAILED")
+            job.error_message = str(
+                source_handoff.get("error_message") or "Cloud runtime source handoff failed safely."
+            )
+            job.logs_summary = "Cloud runtime source handoff failed before provider submission."
+            job.completed_at = _utc_now_iso()
+            job.updated_at = job.completed_at
+            return CloudRuntimeExecutionResult(job=job, runtime_session=None, usage_event=None)
         job.phase = "submitting_cloud_runtime"
         gcp_result = request_gcp_runtime(job)
         runtime = runtime_store.request_cloud_runtime_session(
@@ -157,10 +235,7 @@ def execute_cloud_runtime_job(job: CloudRuntimeJob) -> CloudRuntimeExecutionResu
                 }
             ),
         )
-        job.metadata = {
-            **(job.metadata or {}),
-            "runtime_plan": gcp_result.plan.model_dump(mode="json"),
-        }
+        job.metadata = {**(job.metadata or {}), "runtime_plan": gcp_result.plan.model_dump(mode="json")}
         if gcp_result.status == "planned":
             runtime.status = "provisioning"
             runtime.health = "unknown"
@@ -190,6 +265,7 @@ def execute_cloud_runtime_job(job: CloudRuntimeJob) -> CloudRuntimeExecutionResu
                     "job_id": job.id,
                     "provider_mode": "cloud_run_poc",
                     "dry_run": bool(gcp_result.plan.metadata.get("dry_run")),
+                    "source_handoff_status": str(source_handoff.get("handoff_status") or "planned"),
                 },
             }
             return CloudRuntimeExecutionResult(job=job, runtime_session=runtime, usage_event=usage_event)
@@ -259,6 +335,7 @@ def execute_cloud_runtime_job(job: CloudRuntimeJob) -> CloudRuntimeExecutionResu
                     "event_name": "cloud_runtime_provider_request_accepted",
                     "job_id": job.id,
                     "provider_mode": "cloud_run_poc",
+                    "source_handoff_status": str(source_handoff.get("handoff_status") or "planned"),
                 },
             }
             return CloudRuntimeExecutionResult(job=job, runtime_session=runtime, usage_event=usage_event)

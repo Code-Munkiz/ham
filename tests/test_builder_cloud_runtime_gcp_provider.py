@@ -21,6 +21,13 @@ def _job() -> CloudRuntimeJob:
         project_id="proj_aaaaaaaaaaaaaaaa",
         source_snapshot_id="ssnp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         provider="cloud_run_poc",
+        metadata={
+            "source_handoff": {
+                "handoff_status": "planned",
+                "artifact_uri": "builder-artifact://bzip_test",
+                "source_ref": "ssnp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:aaaaaaaaaaaaaaaa",
+            }
+        },
     )
 
 
@@ -166,3 +173,19 @@ def test_normalize_lifecycle_status_maps_provider_states() -> None:
     assert normalize_lifecycle_status("accepted") == "provider_accepted"
     assert normalize_lifecycle_status("running") == "running"
     assert normalize_lifecycle_status("ready") == "ready"
+
+
+def test_request_runtime_rejects_missing_source_handoff_artifact(monkeypatch) -> None:
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_ENABLED", "true")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_PROJECT", "my-internal-project")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_REGION", "us-central1")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_DRY_RUN", "false")
+    set_gcp_cloud_runtime_client_for_tests(FakeGcpCloudRuntimeClient())
+    bad = _job()
+    bad.metadata = {"source_handoff": {"handoff_status": "failed", "artifact_uri": ""}}
+    try:
+        result = request_runtime(bad)
+        assert result.status == "unsupported"
+        assert result.error_code == "CLOUD_RUNTIME_SOURCE_HANDOFF_FAILED"
+    finally:
+        set_gcp_cloud_runtime_client_for_tests(None)

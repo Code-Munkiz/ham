@@ -125,6 +125,30 @@ def _cleanup() -> None:
     set_gcp_cloud_runtime_client_for_tests(None)
 
 
+def _seed_source_snapshot(
+    tmp_path: Path,
+    *,
+    workspace_id: str,
+    project_id: str,
+    artifact_uri: str = "builder-artifact://bzip_test",
+) -> SourceSnapshot:
+    source_store = BuilderSourceStore(store_path=tmp_path / "builder_sources.json")
+    source = source_store.upsert_project_source(
+        ProjectSource(workspace_id=workspace_id, project_id=project_id, kind="zip_upload")
+    )
+    snapshot = source_store.upsert_source_snapshot(
+        SourceSnapshot(
+            workspace_id=workspace_id,
+            project_id=project_id,
+            project_source_id=source.id,
+            artifact_uri=artifact_uri,
+            digest_sha256="a" * 64,
+        )
+    )
+    set_builder_source_store_for_tests(source_store)
+    return snapshot
+
+
 def test_post_job_disabled_provider_returns_unsupported(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "disabled")
     client, ws_id, project_id = _seed_context(tmp_path)
@@ -184,9 +208,10 @@ def test_post_job_cloud_run_poc_dry_run_creates_plan_without_provisioning(tmp_pa
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_REGION", "us-central1")
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_DRY_RUN", "true")
     client, ws_id, project_id = _seed_context(tmp_path)
+    snapshot = _seed_source_snapshot(tmp_path, workspace_id=ws_id, project_id=project_id)
     res = client.post(
         f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime/jobs",
-        json={},
+        json={"source_snapshot_id": snapshot.id},
     )
     assert res.status_code == 200, res.text
     body = res.json()
@@ -195,6 +220,8 @@ def test_post_job_cloud_run_poc_dry_run_creates_plan_without_provisioning(tmp_pa
     assert body["job"]["phase"] == "completed"
     assert body["job"]["metadata"]["runtime_plan"]["status"] == "planned"
     assert body["job"]["metadata"]["runtime_plan"]["runtime_kind"] == "cloud_run_job"
+    assert body["job"]["metadata"]["runtime_plan"]["artifact_uri"] == "builder-artifact://bzip_test"
+    assert body["job"]["metadata"]["source_handoff_status"] == "planned"
     assert body["preview_status"]["preview_url"] is None
     assert body["cloud_runtime"]["status"] == "provisioning"
     usage = client.get(f"/api/workspaces/{ws_id}/projects/{project_id}/builder/usage-events")
@@ -212,9 +239,10 @@ def test_post_job_cloud_run_poc_real_path_accepted_with_fake_client(tmp_path: Pa
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_DRY_RUN", "false")
     set_gcp_cloud_runtime_client_for_tests(FakeGcpCloudRuntimeClient())
     client, ws_id, project_id = _seed_context(tmp_path)
+    snapshot = _seed_source_snapshot(tmp_path, workspace_id=ws_id, project_id=project_id)
     res = client.post(
         f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime/jobs",
-        json={},
+        json={"source_snapshot_id": snapshot.id},
     )
     assert res.status_code == 200, res.text
     body = res.json()
@@ -223,10 +251,12 @@ def test_post_job_cloud_run_poc_real_path_accepted_with_fake_client(tmp_path: Pa
     assert body["job"]["runtime_session_id"]
     assert body["runtime_session"]["status"] == "provisioning"
     assert body["runtime_session"]["metadata"]["provider_job_id"]
+    assert body["job"]["metadata"]["source_handoff_status"] == "planned"
     usage = client.get(f"/api/workspaces/{ws_id}/projects/{project_id}/builder/usage-events")
     assert usage.status_code == 200
     names = {str(row.get("metadata", {}).get("event_name") or "") for row in usage.json()["usage_events"]}
     assert "cloud_runtime_provider_request_accepted" in names
+    assert "source_handoff_requested" in names
     assert body["preview_status"]["preview_url"] is None
     _cleanup()
 
@@ -244,9 +274,10 @@ def test_post_job_cloud_run_poc_real_path_failure_maps_safe_error(tmp_path: Path
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_DRY_RUN", "false")
     set_gcp_cloud_runtime_client_for_tests(_FailingClient())
     client, ws_id, project_id = _seed_context(tmp_path)
+    snapshot = _seed_source_snapshot(tmp_path, workspace_id=ws_id, project_id=project_id)
     res = client.post(
         f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime/jobs",
-        json={},
+        json={"source_snapshot_id": snapshot.id},
     )
     assert res.status_code == 200, res.text
     body = res.json()
@@ -296,6 +327,32 @@ def test_post_job_rejects_snapshot_from_other_project(tmp_path: Path, monkeypatc
     )
     assert res.status_code == 404
     assert res.json()["detail"]["error"]["code"] == "SOURCE_SNAPSHOT_NOT_FOUND"
+    _cleanup()
+
+
+def test_post_job_source_handoff_missing_artifact_fails_safely(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "cloud_run_poc")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_ENABLED", "true")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_PROJECT", "proj-safe")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_REGION", "us-central1")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_DRY_RUN", "false")
+    set_gcp_cloud_runtime_client_for_tests(FakeGcpCloudRuntimeClient())
+    client, ws_id, project_id = _seed_context(tmp_path)
+    snapshot = _seed_source_snapshot(
+        tmp_path,
+        workspace_id=ws_id,
+        project_id=project_id,
+        artifact_uri="",
+    )
+    res = client.post(
+        f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime/jobs",
+        json={"source_snapshot_id": snapshot.id},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["job"]["status"] == "unsupported"
+    assert body["job"]["error_code"] == "CLOUD_RUNTIME_SOURCE_HANDOFF_MISSING_ARTIFACT"
+    assert body["preview_status"]["preview_url"] is None
     _cleanup()
 
 
@@ -424,7 +481,11 @@ def test_get_job_status_redacts_and_bounds_logs(tmp_path: Path, monkeypatch) -> 
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_DRY_RUN", "false")
     set_gcp_cloud_runtime_client_for_tests(_SensitiveLogClient())
     client, ws_id, project_id = _seed_context(tmp_path)
-    create = client.post(f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime/jobs", json={})
+    snapshot = _seed_source_snapshot(tmp_path, workspace_id=ws_id, project_id=project_id)
+    create = client.post(
+        f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime/jobs",
+        json={"source_snapshot_id": snapshot.id},
+    )
     assert create.status_code == 200, create.text
     job_id = create.json()["job"]["id"]
     res = client.get(

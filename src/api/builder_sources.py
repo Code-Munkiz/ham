@@ -1169,6 +1169,8 @@ def _build_activity_items(*, workspace_id: str, project_id: str) -> list[Builder
     ):
         status = job.status if job.status in _CLOUD_RUNTIME_JOB_STATES else "info"
         title = "Cloud runtime job queued"
+        if job.phase == "validating_source":
+            title = "Cloud runtime source handoff planned"
         if job.status == "running":
             title = "Cloud runtime job running"
             if job.phase == "provider_accepted":
@@ -1177,6 +1179,8 @@ def _build_activity_items(*, workspace_id: str, project_id: str) -> list[Builder
             title = "Cloud runtime job completed"
         elif job.status in {"failed", "unsupported"}:
             title = "Cloud runtime job failed"
+            if str((job.metadata or {}).get("source_handoff_status") or "").lower() == "failed":
+                title = "Cloud runtime source handoff failed"
         elif job.status == "cancelled":
             title = "Cloud runtime job cancelled"
         message = _safe_text(job.error_message, fallback=job.logs_summary or title)
@@ -1733,6 +1737,22 @@ async def create_builder_cloud_runtime_job(
             metadata={"event_name": "cloud_runtime_job_requested", "job_id": job.id},
         )
     )
+    if source_snapshot_id:
+        get_builder_usage_event_store().append_usage_event(
+            UsageEvent(
+                workspace_id=ctx.workspace_id,
+                project_id=project_id,
+                category="worker_job",
+                quantity=1,
+                unit="count",
+                attribution=UsageEventAttribution(
+                    provider="builder_cloud_runtime",
+                    worker_provider=provider_mode,
+                    source_snapshot_id=source_snapshot_id,
+                ),
+                metadata={"event_name": "source_handoff_requested", "job_id": job.id},
+            )
+        )
     result = execute_cloud_runtime_job(job)
     saved_job = job_store.upsert_cloud_runtime_job(result.job)
     runtime = result.runtime_session
