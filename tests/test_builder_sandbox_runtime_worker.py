@@ -1,0 +1,210 @@
+from __future__ import annotations
+
+from datetime import UTC, datetime
+from pathlib import Path
+
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from src.api.builder_sources import router as builder_sources_router
+from src.api.clerk_gate import get_ham_clerk_actor
+from src.api.dependencies.workspace import get_workspace_store
+from src.ham.clerk_auth import HamActor
+from src.ham.workspace_models import WorkspaceMember, WorkspaceRecord
+from src.persistence.builder_runtime_job_store import BuilderRuntimeJobStore, set_builder_runtime_job_store_for_tests
+from src.persistence.builder_runtime_store import BuilderRuntimeStore, set_builder_runtime_store_for_tests
+from src.persistence.builder_source_store import (
+    BuilderSourceStore,
+    ProjectSource,
+    SourceSnapshot,
+    set_builder_source_store_for_tests,
+)
+from src.persistence.builder_usage_event_store import BuilderUsageEventStore, set_builder_usage_event_store_for_tests
+from src.persistence.project_store import ProjectStore, set_project_store_for_tests
+from src.persistence.workspace_store import InMemoryWorkspaceStore
+
+
+def _actor(user_id: str, *, org_id: str | None, org_role: str | None = "org:admin") -> HamActor:
+    return HamActor(
+        user_id=user_id,
+        org_id=org_id,
+        session_id=f"sess_{user_id}",
+        email=f"{user_id}@example.com",
+        permissions=frozenset(),
+        org_role=org_role,
+        raw_permission_claim=None,
+    )
+
+
+def _build_app(*, actor: HamActor | None, ws_store: InMemoryWorkspaceStore) -> FastAPI:
+    app = FastAPI()
+    app.include_router(builder_sources_router)
+
+    async def _override_actor() -> HamActor | None:
+        return actor
+
+    def _override_workspace_store() -> InMemoryWorkspaceStore:
+        return ws_store
+
+    app.dependency_overrides[get_ham_clerk_actor] = _override_actor
+    app.dependency_overrides[get_workspace_store] = _override_workspace_store
+    return app
+
+
+def _seed_workspace(
+    store: InMemoryWorkspaceStore,
+    *,
+    workspace_id: str,
+    org_id: str | None,
+    owner_user_id: str,
+    slug: str,
+) -> None:
+    now = datetime.now(UTC)
+    store.create_workspace(
+        WorkspaceRecord(
+            workspace_id=workspace_id,
+            org_id=org_id,
+            owner_user_id=owner_user_id,
+            name=slug,
+            slug=slug,
+            description="",
+            status="active",
+            created_by=owner_user_id,
+            created_at=now,
+            updated_at=now,
+        )
+    )
+    store.upsert_member(
+        WorkspaceMember(
+            workspace_id=workspace_id,
+            user_id=owner_user_id,
+            role="owner",
+            added_by=owner_user_id,
+            added_at=now,
+        )
+    )
+
+
+def _seed_context(tmp_path: Path) -> tuple[TestClient, str, str, str]:
+    ws_store = InMemoryWorkspaceStore()
+    ws_id = "ws_aaaaaaaaaaaaaaaa"
+    _seed_workspace(ws_store, workspace_id=ws_id, org_id="org_a", owner_user_id="user_a", slug="alpha")
+    project_store = ProjectStore(store_path=tmp_path / "projects.json")
+    project = project_store.make_record(name="proj-a", root=str(tmp_path), metadata={"workspace_id": ws_id})
+    project_store.register(project)
+    set_project_store_for_tests(project_store)
+
+    source_store = BuilderSourceStore(store_path=tmp_path / "builder_sources.json")
+    src = source_store.upsert_project_source(ProjectSource(workspace_id=ws_id, project_id=project.id, kind="chat_scaffold"))
+    snap = source_store.upsert_source_snapshot(
+        SourceSnapshot(
+            workspace_id=ws_id,
+            project_id=project.id,
+            project_source_id=src.id,
+            artifact_uri="builder-artifact://bzip_test",
+            digest_sha256="a" * 64,
+        )
+    )
+    src.active_snapshot_id = snap.id
+    source_store.upsert_project_source(src)
+    set_builder_source_store_for_tests(source_store)
+    set_builder_runtime_store_for_tests(BuilderRuntimeStore(store_path=tmp_path / "builder_runtime.json"))
+    set_builder_runtime_job_store_for_tests(BuilderRuntimeJobStore(store_path=tmp_path / "builder_runtime_jobs.json"))
+    set_builder_usage_event_store_for_tests(BuilderUsageEventStore(store_path=tmp_path / "builder_usage_events.json"))
+    client = TestClient(_build_app(actor=_actor("user_a", org_id="org_a"), ws_store=ws_store))
+    return client, ws_id, project.id, snap.id
+
+
+def _cleanup() -> None:
+    set_project_store_for_tests(None)
+    set_builder_source_store_for_tests(None)
+    set_builder_runtime_store_for_tests(None)
+    set_builder_runtime_job_store_for_tests(None)
+    set_builder_usage_event_store_for_tests(None)
+
+
+def test_sandbox_provider_disabled_returns_config_missing(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "sandbox_provider")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_EXPERIMENTS_ENABLED", "true")
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_ENABLED", "false")
+    client, ws_id, project_id, _ = _seed_context(tmp_path)
+    res = client.get(f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime")
+    assert res.status_code == 200, res.text
+    assert res.json()["status"] == "config_missing"
+    _cleanup()
+
+
+def test_sandbox_provider_dry_run_creates_runtime_without_ready_preview(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "sandbox_provider")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_EXPERIMENTS_ENABLED", "true")
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_ENABLED", "true")
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_PROVIDER", "e2b")
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_DRY_RUN", "true")
+    client, ws_id, project_id, snapshot_id = _seed_context(tmp_path)
+    res = client.post(
+        f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime/jobs",
+        json={"source_snapshot_id": snapshot_id},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["job"]["provider"] == "sandbox_provider"
+    assert body["job"]["status"] == "succeeded"
+    assert body["runtime_session"]["status"] == "provisioning"
+    assert body["runtime_session"]["preview_endpoint_id"] is None
+    assert body["preview_status"]["status"] != "ready"
+    assert body["preview_status"]["preview_url"] is None
+    _cleanup()
+
+
+def test_sandbox_provider_fake_success_creates_proxy_ready_preview(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "sandbox_provider")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_EXPERIMENTS_ENABLED", "true")
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_ENABLED", "true")
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_PROVIDER", "e2b")
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_DRY_RUN", "false")
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_FAKE_MODE", "success")
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_API_KEY", "test-secret-api-key")
+    client, ws_id, project_id, snapshot_id = _seed_context(tmp_path)
+    res = client.post(
+        f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime/jobs",
+        json={"source_snapshot_id": snapshot_id},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["job"]["status"] == "succeeded"
+    assert body["runtime_session"]["status"] == "running"
+    assert body["runtime_session"]["preview_endpoint_id"]
+    assert body["preview_status"]["status"] == "ready"
+    assert body["preview_status"]["preview_url"] == (
+        f"/api/workspaces/{ws_id}/projects/{project_id}/builder/preview-proxy/"
+    )
+    raw = res.text.lower()
+    assert "test-secret-api-key" not in raw
+    assert "token=" not in raw
+    assert "ham-sandbox-" not in raw
+    _cleanup()
+
+
+def test_sandbox_provider_fake_failure_reports_error_without_preview(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "sandbox_provider")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_EXPERIMENTS_ENABLED", "true")
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_ENABLED", "true")
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_PROVIDER", "e2b")
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_DRY_RUN", "false")
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_FAKE_MODE", "failure")
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_API_KEY", "test-secret-api-key")
+    client, ws_id, project_id, snapshot_id = _seed_context(tmp_path)
+    res = client.post(
+        f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime/jobs",
+        json={"source_snapshot_id": snapshot_id},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["job"]["status"] == "failed"
+    assert body["job"]["error_code"] == "SANDBOX_PREVIEW_START_FAILED"
+    assert body["preview_status"]["status"] != "ready"
+    assert body["preview_status"]["preview_url"] is None
+    activity = client.get(f"/api/workspaces/{ws_id}/projects/{project_id}/builder/activity")
+    assert activity.status_code == 200
+    assert any(row["title"] == "Cloud runtime failed" for row in activity.json()["items"])
+    _cleanup()
