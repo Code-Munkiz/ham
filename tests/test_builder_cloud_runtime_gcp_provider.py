@@ -3,7 +3,10 @@ from __future__ import annotations
 from src.ham.builder_cloud_runtime_gcp import (
     CloudRuntimePlan,
     FakeGcpCloudRuntimeClient,
+    get_runtime_job_status,
     load_gcp_runtime_config,
+    normalize_lifecycle_status,
+    redact_runtime_logs,
     redact_provider_metadata,
     request_runtime,
     set_gcp_cloud_runtime_client_for_tests,
@@ -128,3 +131,38 @@ def test_plan_model_is_strict() -> None:
         runtime_kind="cloud_run_job",
     )
     assert plan.preview_strategy == "none"
+
+
+def test_get_runtime_job_status_dry_run_returns_planned_without_logs(monkeypatch) -> None:
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_ENABLED", "true")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_PROJECT", "proj-safe")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_REGION", "us-central1")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_DRY_RUN", "true")
+    payload = get_runtime_job_status(provider_job_id="fake-crj-123")
+    assert payload["provider_state"] == "planned"
+    assert payload["logs_summary"] is None
+
+
+def test_get_runtime_job_status_reads_fake_client_when_enabled(monkeypatch) -> None:
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_ENABLED", "true")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_PROJECT", "proj-safe")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_REGION", "us-central1")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_DRY_RUN", "false")
+    set_gcp_cloud_runtime_client_for_tests(FakeGcpCloudRuntimeClient())
+    try:
+        payload = get_runtime_job_status(provider_job_id="fake-crj-123")
+        assert payload["provider_state"] in {"running", "provisioning"}
+        assert payload["error_code"] is None
+    finally:
+        set_gcp_cloud_runtime_client_for_tests(None)
+
+
+def test_redact_runtime_logs_masks_sensitive_tokens() -> None:
+    assert redact_runtime_logs("token=abc123") == "log output redacted due to sensitive content"
+    assert redact_runtime_logs("safe log line") == "safe log line"
+
+
+def test_normalize_lifecycle_status_maps_provider_states() -> None:
+    assert normalize_lifecycle_status("accepted") == "provider_accepted"
+    assert normalize_lifecycle_status("running") == "running"
+    assert normalize_lifecycle_status("ready") == "ready"

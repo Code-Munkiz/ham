@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import {
   type BuilderActivityItem,
   type CloudRuntimeJob,
+  type CloudRuntimeLifecycleStatus,
   type BuilderCloudRuntimeStatus,
   type BuilderImportJobRecord,
   type BuilderVisualEditRequest,
@@ -36,9 +37,11 @@ import {
   deleteBuilderLocalPreview,
   getBuilderActivity,
   getBuilderCloudRuntime,
+  getBuilderCloudRuntimeJobStatus,
   getBuilderLocalRunProfile,
   getBuilderPreviewStatus,
   getBuilderWorkerCapabilities,
+  listBuilderCloudRuntimeJobs,
   listBuilderVisualEditRequests,
   listBuilderImportJobs,
   listBuilderProjectSources,
@@ -291,6 +294,8 @@ function WorkbenchPreviewPanel({
   const [cloudRuntimeLatestJob, setCloudRuntimeLatestJob] = React.useState<CloudRuntimeJob | null>(
     null,
   );
+  const [cloudRuntimeLifecycle, setCloudRuntimeLifecycle] =
+    React.useState<CloudRuntimeLifecycleStatus | null>(null);
   const [runProfileForm, setRunProfileForm] = React.useState<LocalRunProfilePayload>({
     display_name: "Local run profile",
     working_directory: ".",
@@ -394,6 +399,8 @@ function WorkbenchPreviewPanel({
     if (!ws || !pid) {
       setPreview(null);
       setActivity([]);
+      setCloudRuntimeLatestJob(null);
+      setCloudRuntimeLifecycle(null);
       setError(null);
       setActivityError(null);
       setLoading(false);
@@ -404,8 +411,17 @@ function WorkbenchPreviewPanel({
     try {
       const previewPayload = await getBuilderPreviewStatus(ws, pid);
       const cloudPayload = await getBuilderCloudRuntime(ws, pid);
+      const cloudJobsPayload = await listBuilderCloudRuntimeJobs(ws, pid);
       setPreview(previewPayload);
       setCloudRuntime(cloudPayload);
+      const latestJob = cloudJobsPayload.jobs?.[0] || null;
+      setCloudRuntimeLatestJob(latestJob);
+      if (latestJob?.id) {
+        const jobStatus = await getBuilderCloudRuntimeJobStatus(ws, pid, latestJob.id);
+        setCloudRuntimeLifecycle(jobStatus.lifecycle);
+      } else {
+        setCloudRuntimeLifecycle(null);
+      }
       setCloudRuntimeError(null);
       await refreshActivity();
       await refreshRunProfile();
@@ -416,6 +432,8 @@ function WorkbenchPreviewPanel({
       setError(msg);
       setPreview(null);
       setCloudRuntime(null);
+      setCloudRuntimeLatestJob(null);
+      setCloudRuntimeLifecycle(null);
       setCloudRuntimeError(msg);
     } finally {
       setLoading(false);
@@ -782,6 +800,9 @@ function WorkbenchPreviewPanel({
           Cloud runtime execution is not production-ready. This POC validates the control-plane path
           only.
         </p>
+        <p className="text-[11px] text-white/55" data-testid="hww-cloud-runtime-refresh-copy">
+          Status is refreshed on demand. Live streaming is not connected yet.
+        </p>
         <p className="text-[11px] text-white/55" data-testid="hww-cloud-runtime-status">
           Status: {cloudRuntime?.status || "unsupported"}
         </p>
@@ -801,6 +822,37 @@ function WorkbenchPreviewPanel({
             Latest job: {cloudRuntimeLatestJob.status} / {cloudRuntimeLatestJob.phase}
           </p>
         ) : null}
+        {cloudRuntimeLifecycle ? (
+          <p className="text-[11px] text-white/55" data-testid="hww-cloud-runtime-lifecycle">
+            Lifecycle: {cloudRuntimeLifecycle.phase}
+            {cloudRuntimeLifecycle.provider_status
+              ? ` · ${cloudRuntimeLifecycle.provider_status}`
+              : ""}
+            {cloudRuntimeLifecycle.logs_summary ? ` · ${cloudRuntimeLifecycle.logs_summary}` : ""}
+          </p>
+        ) : null}
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          className="text-[11px]"
+          data-testid="hww-cloud-runtime-refresh-status"
+          disabled={!ws || !pid || !cloudRuntimeLatestJob?.id || loading}
+          onClick={() => {
+            if (!ws || !pid || !cloudRuntimeLatestJob?.id) return;
+            setCloudRuntimeError(null);
+            void getBuilderCloudRuntimeJobStatus(ws, pid, cloudRuntimeLatestJob.id)
+              .then((payload) => {
+                setCloudRuntimeLifecycle(payload.lifecycle);
+                setPreview(payload.preview_status);
+              })
+              .catch((err) => {
+                setCloudRuntimeError(err instanceof Error ? err.message : String(err));
+              });
+          }}
+        >
+          Refresh cloud runtime status
+        </Button>
         <Button
           type="button"
           size="sm"
@@ -819,6 +871,7 @@ function WorkbenchPreviewPanel({
             })
               .then((payload) => {
                 setCloudRuntimeLatestJob(payload.job);
+                setCloudRuntimeLifecycle(null);
                 setCloudRuntime(payload.cloud_runtime);
                 setPreview(payload.preview_status);
                 setCloudRuntimeJobNotice(

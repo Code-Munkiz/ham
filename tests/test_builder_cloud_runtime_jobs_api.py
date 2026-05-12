@@ -334,6 +334,112 @@ def test_get_job_not_found_returns_404(tmp_path: Path, monkeypatch) -> None:
     _cleanup()
 
 
+def test_get_job_status_not_found_returns_404(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "disabled")
+    client, ws_id, project_id = _seed_context(tmp_path)
+    res = client.get(
+        f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime/jobs/crjb_missing/status"
+    )
+    assert res.status_code == 404
+    assert res.json()["detail"]["error"]["code"] == "CLOUD_RUNTIME_JOB_NOT_FOUND"
+    _cleanup()
+
+
+def test_get_job_status_scoped_to_project_and_workspace(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "local_mock")
+    ws_store = InMemoryWorkspaceStore()
+    ws_a = "ws_aaaaaaaaaaaaaaaa"
+    ws_b = "ws_bbbbbbbbbbbbbbbb"
+    _seed_workspace(ws_store, workspace_id=ws_a, org_id="org_a", owner_user_id="user_a", slug="alpha")
+    _seed_workspace(ws_store, workspace_id=ws_b, org_id="org_b", owner_user_id="user_b", slug="beta")
+    project_store = ProjectStore(store_path=tmp_path / "projects.json")
+    p_a = project_store.make_record(name="proj-a", root=str(tmp_path), metadata={"workspace_id": ws_a})
+    p_b = project_store.make_record(name="proj-b", root=str(tmp_path), metadata={"workspace_id": ws_b})
+    project_store.register(p_a)
+    project_store.register(p_b)
+    set_project_store_for_tests(project_store)
+    set_builder_source_store_for_tests(BuilderSourceStore(store_path=tmp_path / "builder_sources.json"))
+    set_builder_runtime_store_for_tests(BuilderRuntimeStore(store_path=tmp_path / "builder_runtime.json"))
+    set_builder_runtime_job_store_for_tests(
+        BuilderRuntimeJobStore(store_path=tmp_path / "builder_runtime_jobs.json")
+    )
+    set_builder_usage_event_store_for_tests(
+        BuilderUsageEventStore(store_path=tmp_path / "builder_usage_events.json")
+    )
+    owner_client = TestClient(_build_app(actor=_actor("user_a", org_id="org_a"), ws_store=ws_store))
+    create = owner_client.post(f"/api/workspaces/{ws_a}/projects/{p_a.id}/builder/cloud-runtime/jobs", json={})
+    assert create.status_code == 200, create.text
+    job_id = create.json()["job"]["id"]
+    foreign_actor = TestClient(_build_app(actor=_actor("user_b", org_id="org_b"), ws_store=ws_store))
+    forbidden = foreign_actor.get(
+        f"/api/workspaces/{ws_a}/projects/{p_a.id}/builder/cloud-runtime/jobs/{job_id}/status"
+    )
+    wrong_workspace = owner_client.get(
+        f"/api/workspaces/{ws_b}/projects/{p_a.id}/builder/cloud-runtime/jobs/{job_id}/status"
+    )
+    assert forbidden.status_code == 403
+    assert wrong_workspace.status_code == 403
+    _cleanup()
+
+
+def test_get_job_status_disabled_provider_returns_safe_payload(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "disabled")
+    client, ws_id, project_id = _seed_context(tmp_path)
+    create = client.post(f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime/jobs", json={})
+    assert create.status_code == 200, create.text
+    job_id = create.json()["job"]["id"]
+    res = client.get(
+        f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime/jobs/{job_id}/status"
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["lifecycle"]["phase"] == "failed"
+    assert "disabled" in body["lifecycle"]["message"].lower()
+    assert body["preview_status"]["preview_url"] is None
+    assert "api_key" not in str(body).lower()
+    _cleanup()
+
+
+def test_get_job_status_redacts_and_bounds_logs(tmp_path: Path, monkeypatch) -> None:
+    class _SensitiveLogClient(FakeGcpCloudRuntimeClient):
+        def poll_cloud_run_job(self, *, project_id: str, region: str, provider_job_id: str) -> dict[str, str]:
+            _ = (project_id, region, provider_job_id)
+            return {"provider_state": "running", "provider_status": "token=secret running"}
+
+        def get_cloud_run_job_logs_summary(
+            self,
+            *,
+            project_id: str,
+            region: str,
+            provider_job_id: str,
+            max_chars: int,
+        ) -> str:
+            _ = (project_id, region, provider_job_id)
+            return ("secret_key=abc " * 80)[: max_chars * 2]
+
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "cloud_run_poc")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_ENABLED", "true")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_PROJECT", "proj-safe")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_REGION", "us-central1")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_DRY_RUN", "false")
+    set_gcp_cloud_runtime_client_for_tests(_SensitiveLogClient())
+    client, ws_id, project_id = _seed_context(tmp_path)
+    create = client.post(f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime/jobs", json={})
+    assert create.status_code == 200, create.text
+    job_id = create.json()["job"]["id"]
+    res = client.get(
+        f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime/jobs/{job_id}/status"
+    )
+    assert res.status_code == 200, res.text
+    lifecycle = res.json()["lifecycle"]
+    assert lifecycle["phase"] in {"running", "provisioning", "provider_accepted", "preview_pending"}
+    assert "secret_key" not in str(lifecycle).lower()
+    assert "token=" not in str(lifecycle).lower()
+    if lifecycle["logs_summary"]:
+        assert len(str(lifecycle["logs_summary"])) <= 240
+    _cleanup()
+
+
 def test_post_job_does_not_execute_shell_or_processes(tmp_path: Path, monkeypatch) -> None:
     import subprocess
 
@@ -348,6 +454,27 @@ def test_post_job_does_not_execute_shell_or_processes(tmp_path: Path, monkeypatc
     res = client.post(f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime/jobs", json={})
     assert res.status_code == 200, res.text
     assert res.json()["job"]["status"] == "succeeded"
+    _cleanup()
+
+
+def test_get_job_status_does_not_execute_shell_or_processes(tmp_path: Path, monkeypatch) -> None:
+    import subprocess
+
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "disabled")
+
+    def _boom(*args, **kwargs):  # type: ignore[no-untyped-def]
+        raise AssertionError("Cloud runtime status route must not execute shell commands")
+
+    monkeypatch.setattr(subprocess, "run", _boom)
+    monkeypatch.setattr(subprocess, "Popen", _boom)
+    client, ws_id, project_id = _seed_context(tmp_path)
+    create = client.post(f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime/jobs", json={})
+    assert create.status_code == 200, create.text
+    job_id = create.json()["job"]["id"]
+    res = client.get(
+        f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime/jobs/{job_id}/status"
+    )
+    assert res.status_code == 200, res.text
     _cleanup()
 
 
