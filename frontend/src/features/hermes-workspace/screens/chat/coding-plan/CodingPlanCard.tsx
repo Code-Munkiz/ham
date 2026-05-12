@@ -21,9 +21,7 @@ export type CodingPlanCardProps = {
   className?: string;
 };
 
-function shouldShowManagedBuildApproval(
-  payload: CodingConductorPreviewPayload,
-): boolean {
+function shouldShowManagedBuildApproval(payload: CodingConductorPreviewPayload): boolean {
   const chosen = payload.chosen;
   if (!chosen || chosen.provider !== "factory_droid_build" || !chosen.available) {
     return false;

@@ -3398,10 +3398,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
                     className={codingPlanInlineError ? "mt-2" : ""}
                     data-hww-coding-plan-card-wrap
                   >
-                    <CodingPlanCard
-                      payload={codingPlanPreview}
-                      userPrompt={codingPlanPrompt}
-                    />
+                    <CodingPlanCard payload={codingPlanPreview} userPrompt={codingPlanPrompt} />
                   </div>
                 ) : null}
               </div>

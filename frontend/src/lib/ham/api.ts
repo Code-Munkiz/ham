@@ -896,7 +896,9 @@ export async function previewDroidBuild(
   return res.json() as Promise<DroidBuildPreviewPayload>;
 }
 
-export async function launchDroidBuild(body: DroidBuildLaunchRequest): Promise<DroidBuildLaunchPayload> {
+export async function launchDroidBuild(
+  body: DroidBuildLaunchRequest,
+): Promise<DroidBuildLaunchPayload> {
   const res = await hamApiFetch("/api/droid/build/launch", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

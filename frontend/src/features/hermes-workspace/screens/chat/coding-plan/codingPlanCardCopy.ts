@@ -22,8 +22,7 @@ export const CODING_PLAN_NO_LAUNCH_FOOTER =
 
 export const CODING_PLAN_LAUNCH_DISABLED_TITLE = "Launch approval is coming in a later step.";
 
-export const MANAGED_BUILD_APPROVAL_HEADLINE =
-  "Approve a managed workspace build";
+export const MANAGED_BUILD_APPROVAL_HEADLINE = "Approve a managed workspace build";
 
 export const MANAGED_BUILD_APPROVAL_BODY =
   "HAM will run a low-risk edit pass and capture a managed workspace snapshot you can review before anything is shared.";

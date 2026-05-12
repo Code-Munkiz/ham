@@ -12,8 +12,7 @@ import type {
 } from "@/lib/ham/api";
 
 vi.mock("@/lib/ham/api", async () => {
-  const actual =
-    await vi.importActual<typeof import("@/lib/ham/api")>("@/lib/ham/api");
+  const actual = await vi.importActual<typeof import("@/lib/ham/api")>("@/lib/ham/api");
   return {
     ...actual,
     previewDroidBuild: vi.fn(),
@@ -32,8 +31,7 @@ function makePreview(over: Partial<DroidBuildPreviewPayload> = {}): DroidBuildPr
     project_id: "project.app-f53b52",
     project_name: "Honey Ham",
     user_prompt: "Tidy README typos.",
-    summary:
-      "This action proposes a low-risk managed workspace snapshot: docs and comments only.",
+    summary: "This action proposes a low-risk managed workspace snapshot: docs and comments only.",
     proposal_digest: "a".repeat(64),
     base_revision: "rev-test",
     is_readonly: false,
@@ -136,12 +134,8 @@ describe("CodingPlanCard managed workspace branch", () => {
     p.project.has_github_repo = true;
     p.project.has_workspace_id = false;
     const { container } = render(<CodingPlanCard payload={p} userPrompt="x" />);
-    expect(
-      container.querySelector('[data-hww-coding-plan="managed-build-approval"]'),
-    ).toBeNull();
-    expect(
-      container.querySelector('[data-hww-coding-plan="launch-cta-disabled"]'),
-    ).not.toBeNull();
+    expect(container.querySelector('[data-hww-coding-plan="managed-build-approval"]')).toBeNull();
+    expect(container.querySelector('[data-hww-coding-plan="launch-cta-disabled"]')).not.toBeNull();
   });
 
   it("does NOT render the managed panel when chosen provider is not factory_droid_build", () => {
@@ -149,9 +143,7 @@ describe("CodingPlanCard managed workspace branch", () => {
     p.chosen = candidate({ provider: "cursor_cloud", will_open_pull_request: true });
     p.candidates = [p.chosen];
     const { container } = render(<CodingPlanCard payload={p} userPrompt="x" />);
-    expect(
-      container.querySelector('[data-hww-coding-plan="managed-build-approval"]'),
-    ).toBeNull();
+    expect(container.querySelector('[data-hww-coding-plan="managed-build-approval"]')).toBeNull();
   });
 
   it("renders the managed panel for managed_workspace factory_droid_build", () => {
@@ -160,9 +152,7 @@ describe("CodingPlanCard managed workspace branch", () => {
     expect(
       container.querySelector('[data-hww-coding-plan="managed-build-approval"]'),
     ).not.toBeNull();
-    expect(
-      container.querySelector('[data-hww-coding-plan="launch-cta-disabled"]'),
-    ).toBeNull();
+    expect(container.querySelector('[data-hww-coding-plan="launch-cta-disabled"]')).toBeNull();
     assertNoForbiddenTokens(container as unknown as HTMLElement);
   });
 });

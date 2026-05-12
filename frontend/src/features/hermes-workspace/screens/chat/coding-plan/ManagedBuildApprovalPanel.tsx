@@ -90,8 +90,7 @@ export function ManagedBuildApprovalPanel({
       });
       setState({ phase: "previewed", preview, approved: false });
     } catch (err) {
-      const msg =
-        err instanceof Error ? err.message : "Preview failed. Try again in a moment.";
+      const msg = err instanceof Error ? err.message : "Preview failed. Try again in a moment.";
       setState({ phase: "failed", message: shortenHamApiErrorMessage(msg) });
     }
   }, [canStart, projectId, trimmedPrompt]);
@@ -117,15 +116,13 @@ export function ManagedBuildApprovalPanel({
         setState({
           phase: "failed",
           message:
-            shortenHamApiErrorMessage(result.error_summary || "")
-            || "The build did not complete.",
+            shortenHamApiErrorMessage(result.error_summary || "") || "The build did not complete.",
         });
         return;
       }
       setState({ phase: "succeeded", result });
     } catch (err) {
-      const msg =
-        err instanceof Error ? err.message : "Build failed. Try again in a moment.";
+      const msg = err instanceof Error ? err.message : "Build failed. Try again in a moment.";
       setState({ phase: "failed", message: shortenHamApiErrorMessage(msg) });
     }
   }, [state]);
@@ -171,9 +168,7 @@ export function ManagedBuildApprovalPanel({
           <p className="mt-1 text-[11px] leading-snug text-white/70">
             {MANAGED_BUILD_APPROVAL_BODY}
           </p>
-          <p className="mt-1 text-[10px] leading-snug text-white/50">
-            {MANAGED_BUILD_NO_PR_NOTE}
-          </p>
+          <p className="mt-1 text-[10px] leading-snug text-white/50">{MANAGED_BUILD_NO_PR_NOTE}</p>
           <div className="mt-2">
             <button
               type="button"
@@ -196,9 +191,7 @@ export function ManagedBuildApprovalPanel({
       {previewed && (state.phase === "previewed" || isLaunching) ? (
         <div className="mt-2 grid gap-2 text-[11px] text-white/75">
           <p data-hww-coding-plan="managed-build-summary">{previewed.summary}</p>
-          <p className="text-[10px] text-white/50">
-            {MANAGED_BUILD_NO_PR_NOTE}
-          </p>
+          <p className="text-[10px] text-white/50">{MANAGED_BUILD_NO_PR_NOTE}</p>
           <label
             className="mt-1 flex cursor-pointer items-start gap-2"
             data-hww-coding-plan="managed-build-approve-checkbox"
