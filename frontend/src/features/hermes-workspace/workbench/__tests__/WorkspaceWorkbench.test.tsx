@@ -11,6 +11,7 @@ const {
   getBuilderPreviewStatusMock,
   getBuilderActivityMock,
   getBuilderCloudRuntimeMock,
+  getBuilderWorkerCapabilitiesMock,
   getBuilderLocalRunProfileMock,
   listBuilderVisualEditRequestsMock,
   createBuilderVisualEditRequestMock,
@@ -27,6 +28,7 @@ const {
   getBuilderPreviewStatusMock: vi.fn(),
   getBuilderActivityMock: vi.fn(),
   getBuilderCloudRuntimeMock: vi.fn(),
+  getBuilderWorkerCapabilitiesMock: vi.fn(),
   getBuilderLocalRunProfileMock: vi.fn(),
   listBuilderVisualEditRequestsMock: vi.fn(),
   createBuilderVisualEditRequestMock: vi.fn(),
@@ -47,6 +49,7 @@ vi.mock("@/lib/ham/api", async (importOriginal) => {
     getBuilderPreviewStatus: (...args: unknown[]) => getBuilderPreviewStatusMock(...args),
     getBuilderActivity: (...args: unknown[]) => getBuilderActivityMock(...args),
     getBuilderCloudRuntime: (...args: unknown[]) => getBuilderCloudRuntimeMock(...args),
+    getBuilderWorkerCapabilities: (...args: unknown[]) => getBuilderWorkerCapabilitiesMock(...args),
     getBuilderLocalRunProfile: (...args: unknown[]) => getBuilderLocalRunProfileMock(...args),
     listBuilderVisualEditRequests: (...args: unknown[]) =>
       listBuilderVisualEditRequestsMock(...args),
@@ -124,6 +127,36 @@ describe("WorkspaceWorkbench", () => {
       runtime_session_id: null,
       source_snapshot_id: null,
       metadata: {},
+    });
+    getBuilderWorkerCapabilitiesMock.mockResolvedValue({
+      workspace_id: "ws_abc",
+      project_id: "proj_abc",
+      workers: [
+        {
+          worker_kind: "cursor_cloud_agent",
+          provider: "cursor_cloud_agent",
+          display_name: "Cursor Cloud Agent",
+          status: "needs_connection",
+          capabilities: ["plan", "edit_code", "run_tests", "open_pr"],
+          environment_fit: "Hosted/cloud coding runs against remote repositories.",
+          required_setup: "Connect Cursor API key.",
+          settings_href: "/workspace/settings?section=integrations",
+          last_checked_at: "2026-01-01T00:00:00Z",
+          metadata: {},
+        },
+        {
+          worker_kind: "local_runtime",
+          provider: "builder_local_runtime",
+          display_name: "Local Runtime",
+          status: "available",
+          capabilities: ["local_preview_registration", "local_run_profile"],
+          environment_fit: "Operator-run local dev server + loopback preview URL registration.",
+          required_setup: "Save profile and connect preview URL.",
+          settings_href: null,
+          last_checked_at: "2026-01-01T00:00:00Z",
+          metadata: {},
+        },
+      ],
     });
     getBuilderLocalRunProfileMock.mockResolvedValue({
       workspace_id: "ws_abc",
@@ -342,6 +375,22 @@ describe("WorkspaceWorkbench", () => {
     expect(screen.getByTestId("hww-cloud-runtime-status")).toHaveTextContent("unsupported");
     expect(screen.getByTestId("hww-cloud-runtime-message")).toHaveTextContent("not provisioned");
     expect(screen.queryByText(/deployed successfully/i)).toBeNull();
+  });
+
+  it("Preview renders compact builder worker statuses", async () => {
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-worker-capability-list")).toBeInTheDocument();
+    });
+    expect(screen.getAllByTestId("hww-worker-capability-item").length).toBe(2);
+    expect(screen.getByText("Cursor Cloud Agent")).toBeInTheDocument();
+    expect(screen.getByText("Local Runtime")).toBeInTheDocument();
+    expect(screen.getByText("needs connection")).toBeInTheDocument();
+    expect(screen.getByText("available")).toBeInTheDocument();
   });
 
   it("Saving local run profile calls API and renders configured summary", async () => {

@@ -454,6 +454,32 @@ export type BuilderCloudRuntimeRequestPayload = {
   metadata?: Record<string, unknown>;
 };
 
+export type BuilderWorkerCapabilityStatus =
+  | "available"
+  | "needs_connection"
+  | "unavailable"
+  | "disabled"
+  | "unknown";
+
+export type BuilderWorkerCapability = {
+  worker_kind: string;
+  provider: string;
+  display_name: string;
+  status: BuilderWorkerCapabilityStatus;
+  capabilities: string[];
+  environment_fit: string;
+  required_setup: string;
+  settings_href: string | null;
+  last_checked_at: string | null;
+  metadata: Record<string, unknown>;
+};
+
+export type BuilderWorkerCapabilitiesResponse = {
+  workspace_id: string;
+  project_id: string;
+  workers: BuilderWorkerCapability[];
+};
+
 export async function listBuilderProjectSources(
   workspaceId: string,
   projectId: string,
@@ -677,6 +703,19 @@ export async function listBuilderVisualEditRequests(
     project_id: string;
     visual_edit_requests: BuilderVisualEditRequest[];
   }>;
+}
+
+export async function getBuilderWorkerCapabilities(
+  workspaceId: string,
+  projectId: string,
+): Promise<BuilderWorkerCapabilitiesResponse> {
+  const res = await hamApiFetch(
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/projects/${encodeURIComponent(projectId)}/builder/worker-capabilities`,
+  );
+  if (!res.ok) {
+    throw new Error((await hamApiErrorDetailMessage(res)) || `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<BuilderWorkerCapabilitiesResponse>;
 }
 
 export async function createBuilderVisualEditRequest(
