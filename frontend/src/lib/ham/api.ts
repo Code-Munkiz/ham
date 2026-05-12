@@ -902,7 +902,11 @@ export async function listBuilderCloudRuntimeJobs(
   if (!res.ok) {
     throw new Error((await hamApiErrorDetailMessage(res)) || `HTTP ${res.status}`);
   }
-  return res.json() as Promise<{ workspace_id: string; project_id: string; jobs: CloudRuntimeJob[] }>;
+  return res.json() as Promise<{
+    workspace_id: string;
+    project_id: string;
+    jobs: CloudRuntimeJob[];
+  }>;
 }
 
 /** Text-to-image (Phase 2G.1+) — mediated by HAM backend only. */

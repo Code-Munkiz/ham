@@ -288,7 +288,9 @@ function WorkbenchPreviewPanel({
   const [cloudRuntimeJobBusy, setCloudRuntimeJobBusy] = React.useState(false);
   const [cloudRuntimeJobError, setCloudRuntimeJobError] = React.useState<string | null>(null);
   const [cloudRuntimeJobNotice, setCloudRuntimeJobNotice] = React.useState<string | null>(null);
-  const [cloudRuntimeLatestJob, setCloudRuntimeLatestJob] = React.useState<CloudRuntimeJob | null>(null);
+  const [cloudRuntimeLatestJob, setCloudRuntimeLatestJob] = React.useState<CloudRuntimeJob | null>(
+    null,
+  );
   const [runProfileForm, setRunProfileForm] = React.useState<LocalRunProfilePayload>({
     display_name: "Local run profile",
     working_directory: ".",
@@ -442,7 +444,8 @@ function WorkbenchPreviewPanel({
       preview?.status === "error"),
   );
   const visualEditReady = Boolean(ws && pid && preview?.status === "ready" && previewUrl);
-  const cloudRuntimeWorker = workers.find((row) => row.worker_kind === "cloud_runtime_worker") || null;
+  const cloudRuntimeWorker =
+    workers.find((row) => row.worker_kind === "cloud_runtime_worker") || null;
   const cloudRuntimeProviderStatus = (cloudRuntimeWorker?.status || "disabled").toLowerCase();
   const cloudRuntimeRequestEnabled = ["available_mock", "available_poc"].includes(
     cloudRuntimeProviderStatus,
@@ -873,11 +876,11 @@ function WorkbenchPreviewPanel({
                   ? "text-emerald-300 border-emerald-500/30 bg-emerald-500/10"
                   : worker.status === "available_mock" || worker.status === "available_poc"
                     ? "text-sky-200 border-sky-400/30 bg-sky-500/10"
-                  : worker.status === "needs_connection"
-                    ? "text-amber-200 border-amber-400/30 bg-amber-500/10"
-                    : worker.status === "disabled"
-                      ? "text-white/60 border-white/[0.16] bg-white/[0.06]"
-                      : "text-rose-200 border-rose-400/30 bg-rose-500/10";
+                    : worker.status === "needs_connection"
+                      ? "text-amber-200 border-amber-400/30 bg-amber-500/10"
+                      : worker.status === "disabled"
+                        ? "text-white/60 border-white/[0.16] bg-white/[0.06]"
+                        : "text-rose-200 border-rose-400/30 bg-rose-500/10";
               return (
                 <li
                   key={worker.worker_kind}
