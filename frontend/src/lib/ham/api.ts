@@ -351,6 +351,44 @@ export type LocalRunProfileResponse = {
   profile: LocalRunProfile | null;
 };
 
+export type VisualEditRequestStatus =
+  | "draft"
+  | "queued"
+  | "processing"
+  | "resolved"
+  | "failed"
+  | "cancelled";
+
+export type BuilderVisualEditRequest = {
+  id: string;
+  workspace_id: string;
+  project_id: string;
+  source_snapshot_id: string | null;
+  runtime_session_id: string | null;
+  preview_endpoint_id: string | null;
+  route: string | null;
+  selector_hints: string[];
+  bbox: { x: number; y: number; width: number; height: number } | null;
+  instruction: string;
+  status: VisualEditRequestStatus;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+  metadata: Record<string, unknown>;
+};
+
+export type CreateBuilderVisualEditRequestPayload = {
+  source_snapshot_id?: string | null;
+  runtime_session_id?: string | null;
+  preview_endpoint_id?: string | null;
+  route?: string | null;
+  selector_hints?: string[];
+  bbox?: { x: number; y: number; width: number; height: number } | null;
+  instruction: string;
+  status?: VisualEditRequestStatus;
+  metadata?: Record<string, unknown>;
+};
+
 export type BuilderActivityKind =
   | "source_import"
   | "source_snapshot"
@@ -592,6 +630,77 @@ export async function getBuilderActivity(
     throw new Error((await hamApiErrorDetailMessage(res)) || `HTTP ${res.status}`);
   }
   return res.json() as Promise<BuilderActivityResponse>;
+}
+
+export async function listBuilderVisualEditRequests(
+  workspaceId: string,
+  projectId: string,
+): Promise<{
+  workspace_id: string;
+  project_id: string;
+  visual_edit_requests: BuilderVisualEditRequest[];
+}> {
+  const res = await hamApiFetch(
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/projects/${encodeURIComponent(projectId)}/builder/visual-edit-requests`,
+  );
+  if (!res.ok) {
+    throw new Error((await hamApiErrorDetailMessage(res)) || `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<{
+    workspace_id: string;
+    project_id: string;
+    visual_edit_requests: BuilderVisualEditRequest[];
+  }>;
+}
+
+export async function createBuilderVisualEditRequest(
+  workspaceId: string,
+  projectId: string,
+  body: CreateBuilderVisualEditRequestPayload,
+): Promise<{
+  workspace_id: string;
+  project_id: string;
+  visual_edit_request: BuilderVisualEditRequest;
+}> {
+  const res = await hamApiFetch(
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/projects/${encodeURIComponent(projectId)}/builder/visual-edit-requests`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+  if (!res.ok) {
+    throw new Error((await hamApiErrorDetailMessage(res)) || `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<{
+    workspace_id: string;
+    project_id: string;
+    visual_edit_request: BuilderVisualEditRequest;
+  }>;
+}
+
+export async function cancelBuilderVisualEditRequest(
+  workspaceId: string,
+  projectId: string,
+  requestId: string,
+): Promise<{
+  workspace_id: string;
+  project_id: string;
+  visual_edit_request: BuilderVisualEditRequest;
+}> {
+  const res = await hamApiFetch(
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/projects/${encodeURIComponent(projectId)}/builder/visual-edit-requests/${encodeURIComponent(requestId)}`,
+    { method: "DELETE" },
+  );
+  if (!res.ok) {
+    throw new Error((await hamApiErrorDetailMessage(res)) || `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<{
+    workspace_id: string;
+    project_id: string;
+    visual_edit_request: BuilderVisualEditRequest;
+  }>;
 }
 
 /** Text-to-image (Phase 2G.1+) — mediated by HAM backend only. */

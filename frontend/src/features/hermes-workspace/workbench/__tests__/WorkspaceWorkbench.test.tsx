@@ -11,6 +11,8 @@ const {
   getBuilderPreviewStatusMock,
   getBuilderActivityMock,
   getBuilderLocalRunProfileMock,
+  listBuilderVisualEditRequestsMock,
+  createBuilderVisualEditRequestMock,
   saveBuilderLocalRunProfileMock,
   deleteBuilderLocalRunProfileMock,
   postBuilderLocalPreviewMock,
@@ -24,6 +26,8 @@ const {
   getBuilderPreviewStatusMock: vi.fn(),
   getBuilderActivityMock: vi.fn(),
   getBuilderLocalRunProfileMock: vi.fn(),
+  listBuilderVisualEditRequestsMock: vi.fn(),
+  createBuilderVisualEditRequestMock: vi.fn(),
   saveBuilderLocalRunProfileMock: vi.fn(),
   deleteBuilderLocalRunProfileMock: vi.fn(),
   postBuilderLocalPreviewMock: vi.fn(),
@@ -41,6 +45,8 @@ vi.mock("@/lib/ham/api", async (importOriginal) => {
     getBuilderPreviewStatus: (...args: unknown[]) => getBuilderPreviewStatusMock(...args),
     getBuilderActivity: (...args: unknown[]) => getBuilderActivityMock(...args),
     getBuilderLocalRunProfile: (...args: unknown[]) => getBuilderLocalRunProfileMock(...args),
+    listBuilderVisualEditRequests: (...args: unknown[]) => listBuilderVisualEditRequestsMock(...args),
+    createBuilderVisualEditRequest: (...args: unknown[]) => createBuilderVisualEditRequestMock(...args),
     saveBuilderLocalRunProfile: (...args: unknown[]) => saveBuilderLocalRunProfileMock(...args),
     deleteBuilderLocalRunProfile: (...args: unknown[]) => deleteBuilderLocalRunProfileMock(...args),
     postBuilderLocalPreview: (...args: unknown[]) => postBuilderLocalPreviewMock(...args),
@@ -109,6 +115,32 @@ describe("WorkspaceWorkbench", () => {
       configured: false,
       status: "not_configured",
       profile: null,
+    });
+    listBuilderVisualEditRequestsMock.mockResolvedValue({
+      workspace_id: "ws_abc",
+      project_id: "proj_abc",
+      visual_edit_requests: [],
+    });
+    createBuilderVisualEditRequestMock.mockResolvedValue({
+      workspace_id: "ws_abc",
+      project_id: "proj_abc",
+      visual_edit_request: {
+        id: "vedit_1",
+        workspace_id: "ws_abc",
+        project_id: "proj_abc",
+        source_snapshot_id: null,
+        runtime_session_id: "rtms_1",
+        preview_endpoint_id: "prve_1",
+        route: "/",
+        selector_hints: ["button.save"],
+        bbox: null,
+        instruction: "Change the CTA text",
+        status: "draft",
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-01T00:00:00Z",
+        created_by: "user_a",
+        metadata: {},
+      },
     });
     saveBuilderLocalRunProfileMock.mockResolvedValue({
       workspace_id: "ws_abc",
@@ -210,6 +242,62 @@ describe("WorkspaceWorkbench", () => {
     expect(screen.getByTestId("hww-preview-activity-section")).toBeInTheDocument();
     expect(screen.getByTestId("hww-preview-activity-empty")).toBeInTheDocument();
     expect(screen.queryByText(/build stream/i)).toBeNull();
+  });
+
+  it("Visual edit request stays disabled when preview not ready", async () => {
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-visual-edit-section")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("hww-visual-edit-disabled-copy")).toBeInTheDocument();
+    expect(screen.getByTestId("hww-visual-edit-submit")).toBeDisabled();
+  });
+
+  it("Visual edit request submits contract when preview is ready", async () => {
+    getBuilderPreviewStatusMock.mockResolvedValue({
+      project_id: "proj_abc",
+      workspace_id: "ws_abc",
+      mode: "local",
+      status: "ready",
+      health: "healthy",
+      preview_url: "http://127.0.0.1:3000/",
+      message: "Preview is ready.",
+      updated_at: "2026-01-01T00:00:00Z",
+      source_snapshot_id: "ssnp_1",
+      runtime_session_id: "rtms_1",
+      preview_endpoint_id: "prve_1",
+      logs_hint: null,
+    });
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    fireEvent.change(await screen.findByTestId("hww-visual-edit-instruction"), {
+      target: { value: "Move save button to top right" },
+    });
+    fireEvent.change(screen.getByTestId("hww-visual-edit-selector-hints"), {
+      target: { value: ".toolbar .save-btn" },
+    });
+    fireEvent.click(screen.getByTestId("hww-visual-edit-submit"));
+    await waitFor(() => {
+      expect(createBuilderVisualEditRequestMock).toHaveBeenCalledWith("ws_abc", "proj_abc", {
+        instruction: "Move save button to top right",
+        route: "/",
+        selector_hints: [".toolbar .save-btn"],
+        runtime_session_id: "rtms_1",
+        preview_endpoint_id: "prve_1",
+        source_snapshot_id: "ssnp_1",
+        status: "draft",
+      });
+    });
+    expect(screen.getByTestId("hww-visual-edit-success")).toHaveTextContent(
+      "Visual edit request saved. Agent execution is not connected yet.",
+    );
   });
 
   it("Preview renders local run profile section with not configured status", async () => {

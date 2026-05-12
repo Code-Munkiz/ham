@@ -16,7 +16,12 @@ from src.ham.workspace_models import WorkspaceMember, WorkspaceRecord
 from src.persistence.builder_source_store import (
     BuilderSourceStore,
     ProjectSource,
+    SourceSnapshot,
     set_builder_source_store_for_tests,
+)
+from src.persistence.builder_visual_edit_request_store import (
+    BuilderVisualEditRequestStore,
+    set_builder_visual_edit_request_store_for_tests,
 )
 from src.persistence.project_store import ProjectStore, set_project_store_for_tests
 from src.persistence.workspace_store import InMemoryWorkspaceStore
@@ -333,3 +338,97 @@ def test_builder_zip_import_workspace_scope_enforced(tmp_path: Path) -> None:
 
     set_project_store_for_tests(None)
     set_builder_source_store_for_tests(None)
+
+
+def test_visual_edit_requests_create_list_cancel_and_sanitize(tmp_path: Path) -> None:
+    ws_store = InMemoryWorkspaceStore()
+    ws_id = "ws_aaaaaaaaaaaaaaaa"
+    _seed_workspace(ws_store, workspace_id=ws_id, org_id="org_a", owner_user_id="user_a", slug="alpha")
+    project_store = ProjectStore(store_path=tmp_path / "projects.json")
+    project = project_store.make_record(name="proj-a", root=str(tmp_path), metadata={"workspace_id": ws_id})
+    project_store.register(project)
+    set_project_store_for_tests(project_store)
+    source_store = BuilderSourceStore(store_path=tmp_path / "builder_sources.json")
+    source = source_store.upsert_project_source(ProjectSource(workspace_id=ws_id, project_id=project.id))
+    snap = source_store.upsert_source_snapshot(
+        SourceSnapshot(workspace_id=ws_id, project_id=project.id, project_source_id=source.id)
+    )
+    set_builder_source_store_for_tests(source_store)
+    set_builder_visual_edit_request_store_for_tests(
+        BuilderVisualEditRequestStore(store_path=tmp_path / "builder_visual_edit_requests.json")
+    )
+
+    app = _build_app(actor=_actor("user_a", org_id="org_a"), ws_store=ws_store)
+    client = TestClient(app)
+    created = client.post(
+        f"/api/workspaces/{ws_id}/projects/{project.id}/builder/visual-edit-requests",
+        json={
+            "source_snapshot_id": snap.id,
+            "runtime_session_id": "rtms_123",
+            "preview_endpoint_id": "prve_123",
+            "route": "/dashboard",
+            "selector_hints": [".panel .save", "secret=token"],
+            "bbox": {"x": 10, "y": 20, "width": 120, "height": 42},
+            "instruction": "Move Save button above the form",
+            "status": "queued",
+            "metadata": {"note": "safe", "api_key": "should-drop"},
+        },
+    )
+    assert created.status_code == 200, created.text
+    row = created.json()["visual_edit_request"]
+    assert row["source_snapshot_id"] == snap.id
+    assert row["status"] == "queued"
+    assert row["selector_hints"] == [".panel .save"]
+    assert row["metadata"] == {"note": "safe"}
+    assert row["bbox"] == {"x": 10.0, "y": 20.0, "width": 120.0, "height": 42.0}
+
+    listed = client.get(f"/api/workspaces/{ws_id}/projects/{project.id}/builder/visual-edit-requests")
+    assert listed.status_code == 200, listed.text
+    assert len(listed.json()["visual_edit_requests"]) == 1
+
+    cancelled = client.delete(
+        f"/api/workspaces/{ws_id}/projects/{project.id}/builder/visual-edit-requests/{row['id']}"
+    )
+    assert cancelled.status_code == 200, cancelled.text
+    assert cancelled.json()["visual_edit_request"]["status"] == "cancelled"
+
+    set_project_store_for_tests(None)
+    set_builder_source_store_for_tests(None)
+    set_builder_visual_edit_request_store_for_tests(None)
+
+
+def test_visual_edit_request_rejects_invalid_instruction_and_bbox(tmp_path: Path) -> None:
+    ws_store = InMemoryWorkspaceStore()
+    ws_id = "ws_aaaaaaaaaaaaaaaa"
+    _seed_workspace(ws_store, workspace_id=ws_id, org_id="org_a", owner_user_id="user_a", slug="alpha")
+    project_store = ProjectStore(store_path=tmp_path / "projects.json")
+    project = project_store.make_record(name="proj-a", root=str(tmp_path), metadata={"workspace_id": ws_id})
+    project_store.register(project)
+    set_project_store_for_tests(project_store)
+    set_builder_source_store_for_tests(BuilderSourceStore(store_path=tmp_path / "builder_sources.json"))
+    set_builder_visual_edit_request_store_for_tests(
+        BuilderVisualEditRequestStore(store_path=tmp_path / "builder_visual_edit_requests.json")
+    )
+    app = _build_app(actor=_actor("user_a", org_id="org_a"), ws_store=ws_store)
+    client = TestClient(app)
+
+    bad_instruction = client.post(
+        f"/api/workspaces/{ws_id}/projects/{project.id}/builder/visual-edit-requests",
+        json={"instruction": "  "},
+    )
+    assert bad_instruction.status_code == 422
+    assert bad_instruction.json()["detail"]["error"]["code"] == "VISUAL_EDIT_INSTRUCTION_INVALID"
+
+    bad_bbox = client.post(
+        f"/api/workspaces/{ws_id}/projects/{project.id}/builder/visual-edit-requests",
+        json={
+            "instruction": "Move logo",
+            "bbox": {"x": 1, "y": 2, "width": 100},
+        },
+    )
+    assert bad_bbox.status_code == 422
+    assert bad_bbox.json()["detail"]["error"]["code"] == "VISUAL_EDIT_BBOX_INVALID"
+
+    set_project_store_for_tests(None)
+    set_builder_source_store_for_tests(None)
+    set_builder_visual_edit_request_store_for_tests(None)
