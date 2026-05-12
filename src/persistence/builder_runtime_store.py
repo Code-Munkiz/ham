@@ -62,6 +62,28 @@ class BuilderRuntimeStoreProtocol(Protocol):
     def list_preview_endpoints(self, *, workspace_id: str, project_id: str) -> list[PreviewEndpoint]: ...
     def upsert_runtime_session(self, record: RuntimeSession) -> RuntimeSession: ...
     def upsert_preview_endpoint(self, record: PreviewEndpoint) -> PreviewEndpoint: ...
+    def upsert_local_runtime_session(
+        self,
+        *,
+        workspace_id: str,
+        project_id: str,
+        source_snapshot_id: str | None,
+        message: str | None = None,
+    ) -> RuntimeSession: ...
+    def get_active_runtime_session(
+        self,
+        *,
+        workspace_id: str,
+        project_id: str,
+    ) -> RuntimeSession | None: ...
+    def get_active_preview_endpoint(
+        self,
+        *,
+        workspace_id: str,
+        project_id: str,
+        runtime_session_id: str,
+    ) -> PreviewEndpoint | None: ...
+    def clear_local_preview(self, *, workspace_id: str, project_id: str) -> tuple[RuntimeSession | None, PreviewEndpoint | None]: ...
 
 
 class BuilderRuntimeStore:
@@ -115,6 +137,78 @@ class BuilderRuntimeStore:
         raw["preview_endpoints"] = rows
         self._save_raw(raw)
         return record
+
+    def upsert_local_runtime_session(
+        self,
+        *,
+        workspace_id: str,
+        project_id: str,
+        source_snapshot_id: str | None,
+        message: str | None = None,
+    ) -> RuntimeSession:
+        existing = self.get_active_runtime_session(workspace_id=workspace_id, project_id=project_id)
+        if existing is None:
+            existing = RuntimeSession(
+                workspace_id=workspace_id,
+                project_id=project_id,
+            )
+        existing.mode = "local"
+        existing.status = "running"
+        existing.health = "healthy"
+        existing.snapshot_id = source_snapshot_id
+        existing.message = message
+        if not existing.started_at:
+            existing.started_at = _utc_now_iso()
+        existing.expires_at = None
+        existing.updated_at = _utc_now_iso()
+        return self.upsert_runtime_session(existing)
+
+    def get_active_runtime_session(
+        self,
+        *,
+        workspace_id: str,
+        project_id: str,
+    ) -> RuntimeSession | None:
+        for row in self.list_runtime_sessions(workspace_id=workspace_id, project_id=project_id):
+            if row.status in {"stopped", "expired"}:
+                continue
+            return row
+        return None
+
+    def get_active_preview_endpoint(
+        self,
+        *,
+        workspace_id: str,
+        project_id: str,
+        runtime_session_id: str,
+    ) -> PreviewEndpoint | None:
+        for row in self.list_preview_endpoints(workspace_id=workspace_id, project_id=project_id):
+            if row.runtime_session_id != runtime_session_id:
+                continue
+            if row.status in {"revoked", "unavailable"}:
+                continue
+            return row
+        return None
+
+    def clear_local_preview(self, *, workspace_id: str, project_id: str) -> tuple[RuntimeSession | None, PreviewEndpoint | None]:
+        runtime = self.get_active_runtime_session(workspace_id=workspace_id, project_id=project_id)
+        endpoint: PreviewEndpoint | None = None
+        if runtime is not None:
+            endpoint = self.get_active_preview_endpoint(
+                workspace_id=workspace_id,
+                project_id=project_id,
+                runtime_session_id=runtime.id,
+            )
+            runtime.status = "stopped"
+            runtime.health = "unknown"
+            runtime.updated_at = _utc_now_iso()
+            runtime.preview_endpoint_id = None
+            self.upsert_runtime_session(runtime)
+        if endpoint is not None:
+            endpoint.status = "revoked"
+            endpoint.last_checked_at = _utc_now_iso()
+            self.upsert_preview_endpoint(endpoint)
+        return runtime, endpoint
 
     def _load_raw(self) -> dict[str, Any]:
         if not self._path.is_file():

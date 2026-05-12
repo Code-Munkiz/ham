@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -271,6 +272,157 @@ def test_preview_status_requires_session_when_auth_enforced(tmp_path: Path, monk
     res = client.get(f"/api/workspaces/{ws_id}/projects/{project.id}/builder/preview-status")
     assert res.status_code == 401
     assert res.json()["detail"]["error"]["code"] == "CLERK_SESSION_REQUIRED"
+
+    set_project_store_for_tests(None)
+    set_builder_source_store_for_tests(None)
+    set_builder_runtime_store_for_tests(None)
+
+
+def _seed_project_context(tmp_path: Path) -> tuple[InMemoryWorkspaceStore, str, ProjectStore, str]:
+    ws_store = InMemoryWorkspaceStore()
+    ws_id = "ws_aaaaaaaaaaaaaaaa"
+    _seed_workspace(ws_store, workspace_id=ws_id, org_id="org_a", owner_user_id="user_a", slug="alpha")
+    project_store = ProjectStore(store_path=tmp_path / "projects.json")
+    project = project_store.make_record(name="proj-a", root=str(tmp_path), metadata={"workspace_id": ws_id})
+    project_store.register(project)
+    set_project_store_for_tests(project_store)
+    set_builder_source_store_for_tests(BuilderSourceStore(store_path=tmp_path / "builder_sources.json"))
+    set_builder_runtime_store_for_tests(BuilderRuntimeStore(store_path=tmp_path / "builder_runtime.json"))
+    return ws_store, ws_id, project_store, project.id
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://localhost:3000",
+        "http://127.0.0.1:5173",
+        "http://[::1]:3000",
+    ],
+)
+def test_register_local_preview_accepts_safe_loopback_urls(tmp_path: Path, url: str) -> None:
+    ws_store, ws_id, _, project_id = _seed_project_context(tmp_path)
+    client = TestClient(_build_app(actor=_actor("user_a", org_id="org_a"), ws_store=ws_store))
+    res = client.post(
+        f"/api/workspaces/{ws_id}/projects/{project_id}/builder/local-preview",
+        json={"preview_url": url},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["preview_status"]["status"] == "ready"
+    assert body["preview_status"]["preview_url"].startswith("http://")
+
+    set_project_store_for_tests(None)
+    set_builder_source_store_for_tests(None)
+    set_builder_runtime_store_for_tests(None)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://example.com",
+        "file:///tmp/index.html",
+        "javascript:alert(1)",
+        "http://user:pass@localhost:3000",
+        "http://localhost",
+    ],
+)
+def test_register_local_preview_rejects_unsafe_urls(tmp_path: Path, url: str) -> None:
+    ws_store, ws_id, _, project_id = _seed_project_context(tmp_path)
+    client = TestClient(_build_app(actor=_actor("user_a", org_id="org_a"), ws_store=ws_store))
+    res = client.post(
+        f"/api/workspaces/{ws_id}/projects/{project_id}/builder/local-preview",
+        json={"preview_url": url},
+    )
+    assert res.status_code == 400
+    assert res.json()["detail"]["error"]["code"] == "LOCAL_PREVIEW_URL_INVALID"
+
+    set_project_store_for_tests(None)
+    set_builder_source_store_for_tests(None)
+    set_builder_runtime_store_for_tests(None)
+
+
+def test_register_local_preview_strips_query_and_fragment(tmp_path: Path) -> None:
+    ws_store, ws_id, _, project_id = _seed_project_context(tmp_path)
+    client = TestClient(_build_app(actor=_actor("user_a", org_id="org_a"), ws_store=ws_store))
+    res = client.post(
+        f"/api/workspaces/{ws_id}/projects/{project_id}/builder/local-preview",
+        json={"preview_url": "http://localhost:3000/path?token=secret#frag"},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["preview_status"]["preview_url"] == "http://localhost:3000/path"
+
+    set_project_store_for_tests(None)
+    set_builder_source_store_for_tests(None)
+    set_builder_runtime_store_for_tests(None)
+
+
+def test_clear_local_preview_returns_not_connected(tmp_path: Path) -> None:
+    ws_store, ws_id, _, project_id = _seed_project_context(tmp_path)
+    client = TestClient(_build_app(actor=_actor("user_a", org_id="org_a"), ws_store=ws_store))
+    reg = client.post(
+        f"/api/workspaces/{ws_id}/projects/{project_id}/builder/local-preview",
+        json={"preview_url": "http://localhost:3000"},
+    )
+    assert reg.status_code == 200
+    clear = client.delete(f"/api/workspaces/{ws_id}/projects/{project_id}/builder/local-preview")
+    assert clear.status_code == 200, clear.text
+    assert clear.json()["preview_status"]["status"] == "not_connected"
+    assert clear.json()["preview_status"]["preview_url"] is None
+
+    set_project_store_for_tests(None)
+    set_builder_source_store_for_tests(None)
+    set_builder_runtime_store_for_tests(None)
+
+
+def test_preview_status_ready_after_registration(tmp_path: Path) -> None:
+    ws_store, ws_id, _, project_id = _seed_project_context(tmp_path)
+    client = TestClient(_build_app(actor=_actor("user_a", org_id="org_a"), ws_store=ws_store))
+    reg = client.post(
+        f"/api/workspaces/{ws_id}/projects/{project_id}/builder/local-preview",
+        json={"preview_url": "http://127.0.0.1:3000"},
+    )
+    assert reg.status_code == 200
+    status_res = client.get(f"/api/workspaces/{ws_id}/projects/{project_id}/builder/preview-status")
+    assert status_res.status_code == 200
+    assert status_res.json()["status"] == "ready"
+    assert status_res.json()["preview_url"] == "http://127.0.0.1:3000/"
+
+    set_project_store_for_tests(None)
+    set_builder_source_store_for_tests(None)
+    set_builder_runtime_store_for_tests(None)
+
+
+def test_register_local_preview_scope_enforced(tmp_path: Path) -> None:
+    ws_store = InMemoryWorkspaceStore()
+    ws_a = "ws_aaaaaaaaaaaaaaaa"
+    ws_b = "ws_bbbbbbbbbbbbbbbb"
+    _seed_workspace(ws_store, workspace_id=ws_a, org_id="org_a", owner_user_id="user_a", slug="alpha")
+    _seed_workspace(ws_store, workspace_id=ws_b, org_id="org_b", owner_user_id="user_b", slug="beta")
+    project_store = ProjectStore(store_path=tmp_path / "projects.json")
+    p_a = project_store.make_record(name="proj-a", root=str(tmp_path), metadata={"workspace_id": ws_a})
+    p_b = project_store.make_record(name="proj-b", root=str(tmp_path), metadata={"workspace_id": ws_b})
+    project_store.register(p_a)
+    project_store.register(p_b)
+    set_project_store_for_tests(project_store)
+    set_builder_source_store_for_tests(BuilderSourceStore(store_path=tmp_path / "builder_sources.json"))
+    set_builder_runtime_store_for_tests(BuilderRuntimeStore(store_path=tmp_path / "builder_runtime.json"))
+    client = TestClient(_build_app(actor=_actor("user_a", org_id="org_a"), ws_store=ws_store))
+    forbidden = client.post(
+        f"/api/workspaces/{ws_b}/projects/{p_b.id}/builder/local-preview",
+        json={"preview_url": "http://localhost:3000"},
+    )
+    wrong_project_workspace = client.post(
+        f"/api/workspaces/{ws_a}/projects/{p_b.id}/builder/local-preview",
+        json={"preview_url": "http://localhost:3000"},
+    )
+    ok = client.post(
+        f"/api/workspaces/{ws_a}/projects/{p_a.id}/builder/local-preview",
+        json={"preview_url": "http://localhost:3000"},
+    )
+    assert forbidden.status_code == 403
+    assert wrong_project_workspace.status_code == 404
+    assert ok.status_code == 200
 
     set_project_store_for_tests(None)
     set_builder_source_store_for_tests(None)
