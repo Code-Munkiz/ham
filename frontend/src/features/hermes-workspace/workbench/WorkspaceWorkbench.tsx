@@ -19,6 +19,7 @@ import {
 import { Button } from "@/components/ui/button";
 import {
   type BuilderActivityItem,
+  type CloudRuntimeJob,
   type BuilderCloudRuntimeStatus,
   type BuilderImportJobRecord,
   type BuilderVisualEditRequest,
@@ -29,6 +30,7 @@ import {
   type BuilderWorkerCapability,
   type BuilderProjectSourceRecord,
   type BuilderSourceSnapshotRecord,
+  createBuilderCloudRuntimeJob,
   createBuilderVisualEditRequest,
   deleteBuilderLocalRunProfile,
   deleteBuilderLocalPreview,
@@ -283,6 +285,10 @@ function WorkbenchPreviewPanel({
   const [visualEditNotice, setVisualEditNotice] = React.useState<string | null>(null);
   const [cloudRuntime, setCloudRuntime] = React.useState<BuilderCloudRuntimeStatus | null>(null);
   const [cloudRuntimeError, setCloudRuntimeError] = React.useState<string | null>(null);
+  const [cloudRuntimeJobBusy, setCloudRuntimeJobBusy] = React.useState(false);
+  const [cloudRuntimeJobError, setCloudRuntimeJobError] = React.useState<string | null>(null);
+  const [cloudRuntimeJobNotice, setCloudRuntimeJobNotice] = React.useState<string | null>(null);
+  const [cloudRuntimeLatestJob, setCloudRuntimeLatestJob] = React.useState<CloudRuntimeJob | null>(null);
   const [runProfileForm, setRunProfileForm] = React.useState<LocalRunProfilePayload>({
     display_name: "Local run profile",
     working_directory: ".",
@@ -436,6 +442,11 @@ function WorkbenchPreviewPanel({
       preview?.status === "error"),
   );
   const visualEditReady = Boolean(ws && pid && preview?.status === "ready" && previewUrl);
+  const cloudRuntimeWorker = workers.find((row) => row.worker_kind === "cloud_runtime_worker") || null;
+  const cloudRuntimeProviderStatus = (cloudRuntimeWorker?.status || "disabled").toLowerCase();
+  const cloudRuntimeRequestEnabled = ["available_mock", "available_poc"].includes(
+    cloudRuntimeProviderStatus,
+  );
   return (
     <MutedPanel>
       <div className="flex flex-wrap items-center gap-2">
@@ -757,15 +768,75 @@ function WorkbenchPreviewPanel({
           Cloud runtime
         </p>
         <p className="text-[11px] text-white/60">
-          Cloud runtime is not provisioned yet. Request tracking is available now; provisioning and
-          execution are coming soon.
+          Cloud runtime execution is not production-ready. This POC validates the control-plane path
+          only.
         </p>
         <p className="text-[11px] text-white/55" data-testid="hww-cloud-runtime-status">
           Status: {cloudRuntime?.status || "unsupported"}
         </p>
+        <p className="text-[11px] text-white/55" data-testid="hww-cloud-runtime-provider-status">
+          Provider: {cloudRuntimeProviderStatus.replace("_", " ")}
+        </p>
         {cloudRuntime?.message ? (
           <p className="text-[11px] text-white/55" data-testid="hww-cloud-runtime-message">
             {cloudRuntime.message}
+          </p>
+        ) : null}
+        {cloudRuntimeLatestJob ? (
+          <p className="text-[11px] text-white/55" data-testid="hww-cloud-runtime-latest-job">
+            Latest job: {cloudRuntimeLatestJob.status} / {cloudRuntimeLatestJob.phase}
+          </p>
+        ) : null}
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          className="text-[11px]"
+          data-testid="hww-cloud-runtime-request-poc"
+          disabled={!ws || !pid || !cloudRuntimeRequestEnabled || cloudRuntimeJobBusy}
+          onClick={() => {
+            if (!ws || !pid || !cloudRuntimeRequestEnabled) return;
+            setCloudRuntimeJobBusy(true);
+            setCloudRuntimeJobError(null);
+            setCloudRuntimeJobNotice(null);
+            void createBuilderCloudRuntimeJob(ws, pid, {
+              source_snapshot_id: preview?.source_snapshot_id || null,
+              metadata: { request_source: "workbench_preview_tab" },
+            })
+              .then((payload) => {
+                setCloudRuntimeLatestJob(payload.job);
+                setCloudRuntime(payload.cloud_runtime);
+                setPreview(payload.preview_status);
+                setCloudRuntimeJobNotice(
+                  "Cloud runtime POC job recorded. No production sandbox/build execution was performed.",
+                );
+                void refreshActivity();
+                void refreshWorkers();
+              })
+              .catch((err) => {
+                setCloudRuntimeJobError(err instanceof Error ? err.message : String(err));
+              })
+              .finally(() => {
+                setCloudRuntimeJobBusy(false);
+              });
+          }}
+        >
+          {cloudRuntimeJobBusy ? "Requesting…" : "Request cloud runtime POC"}
+        </Button>
+        {!cloudRuntimeRequestEnabled ? (
+          <p className="text-[11px] text-white/55" data-testid="hww-cloud-runtime-disabled-copy">
+            Enable local_mock provider for POC runs. Production cloud runtime is intentionally not
+            wired here.
+          </p>
+        ) : null}
+        {cloudRuntimeJobError ? (
+          <p className="text-amber-200/90" data-testid="hww-cloud-runtime-job-error">
+            Could not request cloud runtime POC: {cloudRuntimeJobError}
+          </p>
+        ) : null}
+        {cloudRuntimeJobNotice ? (
+          <p className="text-emerald-200/90" data-testid="hww-cloud-runtime-job-notice">
+            {cloudRuntimeJobNotice}
           </p>
         ) : null}
         {cloudRuntimeError ? (
@@ -800,6 +871,8 @@ function WorkbenchPreviewPanel({
               const statusTone =
                 worker.status === "available"
                   ? "text-emerald-300 border-emerald-500/30 bg-emerald-500/10"
+                  : worker.status === "available_mock" || worker.status === "available_poc"
+                    ? "text-sky-200 border-sky-400/30 bg-sky-500/10"
                   : worker.status === "needs_connection"
                     ? "text-amber-200 border-amber-400/30 bg-amber-500/10"
                     : worker.status === "disabled"

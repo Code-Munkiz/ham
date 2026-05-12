@@ -14,6 +14,11 @@ from pydantic import BaseModel, Field
 
 from src.api.clerk_gate import get_ham_clerk_actor
 from src.api.dependencies.workspace import require_perm
+from src.ham.builder_runtime_worker import (
+    execute_cloud_runtime_job,
+    get_cloud_runtime_provider_capability_status,
+    get_cloud_runtime_provider_mode,
+)
 from src.ham.builder_zip_intake import ZipSafetyError, validate_zip_upload
 from src.ham.clerk_auth import HamActor
 from src.ham.harness_capabilities import HARNESS_CAPABILITIES
@@ -28,11 +33,19 @@ from src.persistence.builder_source_store import (
 )
 from src.persistence.builder_runtime_store import PreviewEndpoint, get_builder_runtime_store
 from src.persistence.builder_run_profile_store import LocalRunProfile, get_builder_run_profile_store
+from src.persistence.builder_runtime_job_store import (
+    CloudRuntimeJob,
+    get_builder_runtime_job_store,
+)
 from src.persistence.builder_visual_edit_request_store import (
     VisualEditRequest,
     get_builder_visual_edit_request_store,
 )
-from src.persistence.builder_usage_event_store import get_builder_usage_event_store
+from src.persistence.builder_usage_event_store import (
+    UsageEvent,
+    UsageEventAttribution,
+    get_builder_usage_event_store,
+)
 from src.persistence.project_store import get_project_store
 from src.registry.projects import ProjectRecord
 
@@ -246,6 +259,8 @@ def _serialize_local_run_profile(profile: LocalRunProfile | None, *, workspace_i
 
 
 _CLOUD_RUNTIME_STATES = {"queued", "provisioning", "running", "failed", "expired", "unsupported"}
+_CLOUD_RUNTIME_JOB_STATES = {"queued", "running", "succeeded", "failed", "cancelled", "unsupported"}
+_CLOUD_RUNTIME_JOB_PHASES = {"received", "preparing", "validating_source", "running_poc", "completed", "failed"}
 
 
 def _serialize_cloud_runtime(
@@ -323,6 +338,11 @@ class CloudRuntimeRequestPayload(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class CloudRuntimeJobPayload(BaseModel):
+    source_snapshot_id: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class BuilderActivityItem(BaseModel):
     id: str
     kind: str
@@ -338,7 +358,15 @@ class BuilderActivityItem(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
-BuilderWorkerStatus = Literal["available", "needs_connection", "unavailable", "disabled", "unknown"]
+BuilderWorkerStatus = Literal[
+    "available",
+    "needs_connection",
+    "unavailable",
+    "disabled",
+    "unknown",
+    "available_mock",
+    "available_poc",
+]
 
 
 class BuilderWorkerCapabilityEntry(BaseModel):
@@ -356,7 +384,15 @@ class BuilderWorkerCapabilityEntry(BaseModel):
 
 def _to_worker_status(raw: str | None) -> BuilderWorkerStatus:
     value = str(raw or "").strip().lower()
-    if value in {"available", "needs_connection", "unavailable", "disabled", "unknown"}:
+    if value in {
+        "available",
+        "needs_connection",
+        "unavailable",
+        "disabled",
+        "unknown",
+        "available_mock",
+        "available_poc",
+    }:
         return cast(BuilderWorkerStatus, value)
     return "unknown"
 
@@ -519,6 +555,33 @@ def _hermes_planner_entry() -> BuilderWorkerCapabilityEntry:
     )
 
 
+def _cloud_runtime_worker_entry() -> BuilderWorkerCapabilityEntry:
+    provider_mode = get_cloud_runtime_provider_mode()
+    provider_status = get_cloud_runtime_provider_capability_status()
+    status = _to_worker_status(provider_status)
+    fit = "Cloud runtime POC control-plane path; no production sandbox lifecycle in this phase."
+    setup = "Set HAM_BUILDER_CLOUD_RUNTIME_PROVIDER=local_mock for safe simulation in dev/test."
+    if provider_mode == "cloud_run_poc":
+        setup = "cloud_run_poc interface is declared, but provisioning is intentionally unsupported in this PR."
+    return BuilderWorkerCapabilityEntry(
+        worker_kind="cloud_runtime_worker",
+        provider="builder_cloud_runtime",
+        display_name="Cloud Runtime Worker (POC)",
+        status=status,
+        capabilities=["request_runtime_job", "read_job_status"],
+        environment_fit=fit,
+        required_setup=setup,
+        settings_href="/workspace/settings?section=integrations",
+        last_checked_at=_utc_now_iso(),
+        metadata={
+            "source": "builder_runtime_worker",
+            "provider_mode": provider_mode,
+            "provider_status": provider_status,
+            "production_ready": False,
+        },
+    )
+
+
 def _build_worker_capabilities(*, workspace_id: str, project_id: str, actor: HamActor | None) -> list[BuilderWorkerCapabilityEntry]:
     return [
         _cursor_cloud_agent_entry(),
@@ -526,6 +589,7 @@ def _build_worker_capabilities(*, workspace_id: str, project_id: str, actor: Ham
         _claude_agent_entry(actor),
         _factory_droid_entry(),
         _local_runtime_entry(workspace_id=workspace_id, project_id=project_id),
+        _cloud_runtime_worker_entry(),
         _hermes_planner_entry(),
     ]
 
@@ -883,6 +947,39 @@ def _build_activity_items(*, workspace_id: str, project_id: str) -> list[Builder
             )
         )
 
+    for job in get_builder_runtime_job_store().list_cloud_runtime_jobs(
+        workspace_id=workspace_id,
+        project_id=project_id,
+    ):
+        status = job.status if job.status in _CLOUD_RUNTIME_JOB_STATES else "info"
+        title = "Cloud runtime job queued"
+        if job.status == "running":
+            title = "Cloud runtime job running"
+        elif job.status == "succeeded":
+            title = "Cloud runtime job completed"
+        elif job.status in {"failed", "unsupported"}:
+            title = "Cloud runtime job failed"
+        elif job.status == "cancelled":
+            title = "Cloud runtime job cancelled"
+        message = _safe_text(job.error_message, fallback=job.logs_summary or title)
+        items.append(
+            BuilderActivityItem(
+                id=f"act_{job.id}",
+                kind="runtime_status",
+                status=status,
+                title=title,
+                message=message,
+                timestamp=job.updated_at,
+                snapshot_id=job.source_snapshot_id,
+                runtime_session_id=job.runtime_session_id,
+                metadata={
+                    "provider": job.provider,
+                    "phase": job.phase,
+                    "job_id": job.id,
+                },
+            )
+        )
+
     items.sort(key=lambda row: (row.timestamp, row.id), reverse=True)
     return items
 
@@ -1223,6 +1320,124 @@ async def request_builder_cloud_runtime(
             workspace_id=ctx.workspace_id,
             project_id=project_id,
         ),
+    }
+
+
+@router.post("/api/workspaces/{workspace_id}/projects/{project_id}/builder/cloud-runtime/jobs")
+async def create_builder_cloud_runtime_job(
+    project_id: str,
+    body: CloudRuntimeJobPayload,
+    ctx: Annotated[WorkspaceContext, Depends(require_perm(PERM_WORKSPACE_WRITE))],
+    actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)] = None,
+) -> dict[str, Any]:
+    _project_in_workspace_or_404(project_id=project_id, workspace_id=ctx.workspace_id)
+    source_snapshot_id = _validated_snapshot_id(
+        workspace_id=ctx.workspace_id,
+        project_id=project_id,
+        source_snapshot_id=body.source_snapshot_id,
+    )
+    provider_mode = get_cloud_runtime_provider_mode()
+    job = CloudRuntimeJob(
+        workspace_id=ctx.workspace_id,
+        project_id=project_id,
+        source_snapshot_id=source_snapshot_id,
+        provider=provider_mode,
+        requested_by=actor.user_id if actor is not None else None,
+        status="queued",
+        phase="received",
+        metadata=_sanitize_metadata(body.metadata),
+    )
+    job_store = get_builder_runtime_job_store()
+    job = job_store.upsert_cloud_runtime_job(job)
+    get_builder_usage_event_store().append_usage_event(
+        UsageEvent(
+            workspace_id=ctx.workspace_id,
+            project_id=project_id,
+            category="worker_job",
+            quantity=1,
+            unit="count",
+            attribution=UsageEventAttribution(
+                provider="builder_cloud_runtime",
+                worker_provider=provider_mode,
+                source_snapshot_id=source_snapshot_id,
+            ),
+            metadata={"event_name": "cloud_runtime_job_requested", "job_id": job.id},
+        )
+    )
+    result = execute_cloud_runtime_job(job)
+    saved_job = job_store.upsert_cloud_runtime_job(result.job)
+    runtime = result.runtime_session
+    if result.usage_event is not None:
+        get_builder_usage_event_store().append_usage_event(
+            UsageEvent(
+                workspace_id=ctx.workspace_id,
+                project_id=project_id,
+                category=result.usage_event["category"],
+                quantity=result.usage_event["quantity"],
+                unit=result.usage_event["unit"],
+                attribution=UsageEventAttribution.from_raw(result.usage_event["attribution"]),
+                metadata=result.usage_event["metadata"],
+            )
+        )
+    return {
+        "job": saved_job.model_dump(mode="json"),
+        "runtime_session": runtime.model_dump(mode="json") if runtime is not None else None,
+        "cloud_runtime": _serialize_cloud_runtime(
+            runtime,
+            workspace_id=ctx.workspace_id,
+            project_id=project_id,
+        ),
+        "preview_status": _build_preview_status_payload(
+            workspace_id=ctx.workspace_id,
+            project_id=project_id,
+        ),
+        "activity_item": _build_activity_items(workspace_id=ctx.workspace_id, project_id=project_id)[0],
+    }
+
+
+@router.get("/api/workspaces/{workspace_id}/projects/{project_id}/builder/cloud-runtime/jobs")
+async def list_builder_cloud_runtime_jobs(
+    project_id: str,
+    ctx: Annotated[WorkspaceContext, Depends(require_perm(PERM_WORKSPACE_READ))],
+) -> dict[str, Any]:
+    _project_in_workspace_or_404(project_id=project_id, workspace_id=ctx.workspace_id)
+    jobs = get_builder_runtime_job_store().list_cloud_runtime_jobs(
+        workspace_id=ctx.workspace_id,
+        project_id=project_id,
+    )
+    return {
+        "workspace_id": ctx.workspace_id,
+        "project_id": project_id,
+        "jobs": [row.model_dump(mode="json") for row in jobs],
+    }
+
+
+@router.get("/api/workspaces/{workspace_id}/projects/{project_id}/builder/cloud-runtime/jobs/{job_id}")
+async def get_builder_cloud_runtime_job(
+    project_id: str,
+    job_id: str,
+    ctx: Annotated[WorkspaceContext, Depends(require_perm(PERM_WORKSPACE_READ))],
+) -> dict[str, Any]:
+    _project_in_workspace_or_404(project_id=project_id, workspace_id=ctx.workspace_id)
+    job = get_builder_runtime_job_store().get_cloud_runtime_job(
+        workspace_id=ctx.workspace_id,
+        project_id=project_id,
+        job_id=job_id,
+    )
+    if job is None:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": {
+                    "code": "CLOUD_RUNTIME_JOB_NOT_FOUND",
+                    "message": f"Unknown cloud runtime job {job_id!r}.",
+                }
+            },
+        )
+    return {
+        "workspace_id": ctx.workspace_id,
+        "project_id": project_id,
+        "job": job.model_dump(mode="json"),
     }
 
 
