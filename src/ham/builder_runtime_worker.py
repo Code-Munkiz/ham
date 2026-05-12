@@ -6,8 +6,11 @@ from datetime import UTC, datetime
 from typing import Any, Literal
 
 from src.ham.builder_cloud_runtime_gcp import (
+    get_runtime_job_status as get_gcp_runtime_job_status,
     load_gcp_runtime_config,
+    normalize_lifecycle_status,
     redact_provider_metadata,
+    redact_runtime_logs,
     request_runtime as request_gcp_runtime,
     safe_proxy_host_from_upstream,
     safe_proxy_upstream_from_provider,
@@ -48,6 +51,74 @@ class CloudRuntimeExecutionResult:
     job: CloudRuntimeJob
     runtime_session: RuntimeSession | None
     usage_event: dict[str, Any] | None
+
+
+@dataclass
+class CloudRuntimeLifecycleStatus:
+    phase: str
+    message: str
+    updated_at: str
+    provider_status: str | None
+    logs_summary: str | None
+
+
+def get_runtime_job_lifecycle_status(
+    *,
+    job: CloudRuntimeJob,
+    runtime_session: RuntimeSession | None,
+) -> CloudRuntimeLifecycleStatus:
+    now = _utc_now_iso()
+    provider_status: str | None = None
+    logs_summary: str | None = redact_runtime_logs(job.logs_summary or "", max_chars=240)
+    phase = "queued"
+    message = "Cloud runtime job is queued."
+    if job.provider == "disabled":
+        phase = "failed"
+        message = "Cloud runtime provider is disabled."
+    elif job.provider == "local_mock":
+        if job.status == "succeeded":
+            phase = "ready"
+            message = "Local mock cloud runtime completed."
+        elif job.status in {"failed", "unsupported"}:
+            phase = "failed"
+            message = "Local mock cloud runtime failed."
+        else:
+            phase = "running"
+            message = "Local mock cloud runtime is running."
+    elif job.provider == "cloud_run_poc":
+        provider_job_id = str((job.metadata or {}).get("provider_job_id") or "").strip() or None
+        polled = get_gcp_runtime_job_status(provider_job_id=provider_job_id)
+        provider_status = polled.get("provider_status")
+        if polled.get("logs_summary"):
+            logs_summary = redact_runtime_logs(str(polled.get("logs_summary") or ""), max_chars=240)
+        provider_state = normalize_lifecycle_status(str(polled.get("provider_state") or ""))
+        if provider_state in {"ready", "running", "provisioning"}:
+            phase = provider_state
+            message = "Cloud runtime lifecycle status refreshed."
+        elif provider_state in {"failed", "expired"}:
+            phase = provider_state
+            message = "Cloud runtime lifecycle reported failure."
+        elif provider_state == "provider_accepted":
+            phase = "provider_accepted"
+            message = "Cloud runtime provider accepted the request."
+        elif str(polled.get("provider_state") or "") == "planned":
+            phase = "preview_pending"
+            message = "Cloud runtime is in plan-only mode; preview is pending."
+        elif str(polled.get("provider_state") or "") == "invalid_config":
+            phase = "failed"
+            message = "Cloud runtime config is incomplete."
+        if runtime_session is not None and runtime_session.preview_endpoint_id and phase == "running":
+            phase = "preview_pending"
+            message = "Cloud runtime preview endpoint exists but is not ready yet."
+    if runtime_session is not None and runtime_session.status in {"expired", "failed", "unsupported"}:
+        phase = "failed" if runtime_session.status != "expired" else "expired"
+    return CloudRuntimeLifecycleStatus(
+        phase=phase,
+        message=message,
+        updated_at=job.updated_at or now,
+        provider_status=provider_status,
+        logs_summary=logs_summary,
+    )
 
 
 def execute_cloud_runtime_job(job: CloudRuntimeJob) -> CloudRuntimeExecutionResult:

@@ -4,7 +4,7 @@ import os
 import re
 from importlib import util
 from dataclasses import dataclass
-from typing import Any, Literal, Protocol, runtime_checkable
+from typing import Any, Literal, Protocol, cast, runtime_checkable
 from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -95,6 +95,23 @@ class GcpCloudRuntimeClientProtocol(Protocol):
         metadata: dict[str, Any],
     ) -> dict[str, Any]: ...
 
+    def poll_cloud_run_job(
+        self,
+        *,
+        project_id: str,
+        region: str,
+        provider_job_id: str,
+    ) -> dict[str, Any]: ...
+
+    def get_cloud_run_job_logs_summary(
+        self,
+        *,
+        project_id: str,
+        region: str,
+        provider_job_id: str,
+        max_chars: int,
+    ) -> str: ...
+
 
 class FakeGcpCloudRuntimeClient:
     def submit_cloud_run_job(
@@ -123,6 +140,27 @@ class FakeGcpCloudRuntimeClient:
             "provider_state": "accepted",
             "preview_upstream_url": f"https://ham-preview-{request_id[-8:]}.run.app",
         }
+
+    def poll_cloud_run_job(
+        self,
+        *,
+        project_id: str,
+        region: str,
+        provider_job_id: str,
+    ) -> dict[str, Any]:
+        _ = (project_id, region, provider_job_id)
+        return {"provider_state": "running", "provider_status": "runtime is provisioning"}
+
+    def get_cloud_run_job_logs_summary(
+        self,
+        *,
+        project_id: str,
+        region: str,
+        provider_job_id: str,
+        max_chars: int,
+    ) -> str:
+        _ = (project_id, region, provider_job_id)
+        return "Build started. Installing dependencies. Boot sequence in progress."[:max_chars]
 
 
 class RealGcpCloudRuntimeClient:
@@ -159,6 +197,27 @@ class RealGcpCloudRuntimeClient:
             "provider_job_id": _safe_text(provider_job_id, limit=120),
             "provider_state": "accepted",
         }
+
+    def poll_cloud_run_job(
+        self,
+        *,
+        project_id: str,
+        region: str,
+        provider_job_id: str,
+    ) -> dict[str, Any]:
+        _ = (project_id, region, provider_job_id)
+        raise RuntimeError("CLOUD_RUNTIME_POLL_NOT_IMPLEMENTED")
+
+    def get_cloud_run_job_logs_summary(
+        self,
+        *,
+        project_id: str,
+        region: str,
+        provider_job_id: str,
+        max_chars: int,
+    ) -> str:
+        _ = (project_id, region, provider_job_id, max_chars)
+        raise RuntimeError("CLOUD_RUNTIME_LOGS_NOT_IMPLEMENTED")
 
 
 _CLIENT_OVERRIDE: list[GcpCloudRuntimeClientProtocol | None] = [None]
@@ -297,6 +356,32 @@ def safe_proxy_host_from_upstream(raw_url: str | None) -> str | None:
     return host or None
 
 
+def redact_runtime_logs(raw_text: str | None, *, max_chars: int = 240) -> str | None:
+    text = _safe_text(raw_text or "", limit=max_chars)
+    if not text:
+        return None
+    if _SENSITIVE_KEY_RE.search(text):
+        return "log output redacted due to sensitive content"
+    return text
+
+
+def normalize_lifecycle_status(raw_state: str | None) -> str:
+    state = str(raw_state or "").strip().lower()
+    if state in {"accepted", "queued"}:
+        return "provider_accepted"
+    if state in {"provisioning", "starting"}:
+        return "provisioning"
+    if state in {"running", "active"}:
+        return "running"
+    if state in {"ready", "healthy"}:
+        return "ready"
+    if state in {"failed", "error"}:
+        return "failed"
+    if state in {"expired", "stopped"}:
+        return "expired"
+    return "provisioning"
+
+
 def _build_client() -> GcpCloudRuntimeClientProtocol:
     if _CLIENT_OVERRIDE[0] is not None:
         return _CLIENT_OVERRIDE[0]
@@ -377,3 +462,74 @@ def submit_gcp_cloud_runtime_poc(job: CloudRuntimeJob) -> GcpCloudRuntimeResult:
 
 def request_runtime(job: CloudRuntimeJob) -> GcpCloudRuntimeResult:
     return submit_gcp_cloud_runtime_poc(job)
+
+
+def get_runtime_job_status(*, provider_job_id: str | None, max_chars: int = 180) -> dict[str, Any]:
+    config = load_gcp_runtime_config()
+    if not config.enabled:
+        return {
+            "provider_state": "unsupported",
+            "provider_status": "cloud runtime provider disabled",
+            "logs_summary": None,
+            "error_code": "CLOUD_RUNTIME_PROVIDER_DISABLED",
+        }
+    if config.dry_run:
+        return {
+            "provider_state": "planned",
+            "provider_status": "plan-only dry-run; no live runtime polling",
+            "logs_summary": None,
+            "error_code": None,
+        }
+    if not config.gcp_project_present or not config.gcp_region_present:
+        return {
+            "provider_state": "invalid_config",
+            "provider_status": "missing project/region for cloud runtime polling",
+            "logs_summary": None,
+            "error_code": "CLOUD_RUNTIME_CONFIG_MISSING",
+        }
+    if not provider_job_id:
+        return {
+            "provider_state": "provider_accepted",
+            "provider_status": "provider job id pending",
+            "logs_summary": None,
+            "error_code": None,
+        }
+    project_value = str(os.environ.get("HAM_BUILDER_CLOUD_RUNTIME_GCP_PROJECT") or "").strip()
+    region_value = str(os.environ.get("HAM_BUILDER_CLOUD_RUNTIME_GCP_REGION") or "").strip()
+    client = _build_client()
+    try:
+        polled = cast(
+            dict[str, Any],
+            client.poll_cloud_run_job(
+                project_id=project_value,
+                region=region_value,
+                provider_job_id=provider_job_id,
+            ),
+        )
+    except (RuntimeError, ValueError, TypeError) as exc:
+        return {
+            "provider_state": "failed",
+            "provider_status": redact_runtime_logs(f"poll failed: {exc}", max_chars=max_chars),
+            "logs_summary": None,
+            "error_code": "CLOUD_RUNTIME_POLL_FAILED",
+        }
+    logs_summary: str | None = None
+    try:
+        raw_logs = cast(
+            str,
+            client.get_cloud_run_job_logs_summary(
+                project_id=project_value,
+                region=region_value,
+                provider_job_id=provider_job_id,
+                max_chars=max_chars,
+            ),
+        )
+        logs_summary = redact_runtime_logs(raw_logs, max_chars=max_chars)
+    except (RuntimeError, ValueError, TypeError):
+        logs_summary = None
+    return {
+        "provider_state": normalize_lifecycle_status(polled.get("provider_state")),
+        "provider_status": redact_runtime_logs(str(polled.get("provider_status") or ""), max_chars=max_chars),
+        "logs_summary": logs_summary,
+        "error_code": None,
+    }

@@ -522,6 +522,26 @@ export type CloudRuntimeJob = {
   metadata: Record<string, unknown>;
 };
 
+export type CloudRuntimeLifecyclePhase =
+  | "queued"
+  | "validating_config"
+  | "submitting"
+  | "provider_accepted"
+  | "provisioning"
+  | "running"
+  | "preview_pending"
+  | "ready"
+  | "failed"
+  | "expired";
+
+export type CloudRuntimeLifecycleStatus = {
+  phase: CloudRuntimeLifecyclePhase;
+  message: string;
+  updated_at: string;
+  provider_status: string | null;
+  logs_summary: string | null;
+};
+
 export type CreateCloudRuntimeJobPayload = {
   source_snapshot_id?: string | null;
   metadata?: Record<string, unknown>;
@@ -909,6 +929,34 @@ export async function listBuilderCloudRuntimeJobs(
     workspace_id: string;
     project_id: string;
     jobs: CloudRuntimeJob[];
+  }>;
+}
+
+export async function getBuilderCloudRuntimeJobStatus(
+  workspaceId: string,
+  projectId: string,
+  jobId: string,
+): Promise<{
+  workspace_id: string;
+  project_id: string;
+  job: CloudRuntimeJob;
+  runtime_session: Record<string, unknown> | null;
+  preview_status: BuilderPreviewStatus;
+  lifecycle: CloudRuntimeLifecycleStatus;
+}> {
+  const res = await hamApiFetch(
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/projects/${encodeURIComponent(projectId)}/builder/cloud-runtime/jobs/${encodeURIComponent(jobId)}/status`,
+  );
+  if (!res.ok) {
+    throw new Error((await hamApiErrorDetailMessage(res)) || `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<{
+    workspace_id: string;
+    project_id: string;
+    job: CloudRuntimeJob;
+    runtime_session: Record<string, unknown> | null;
+    preview_status: BuilderPreviewStatus;
+    lifecycle: CloudRuntimeLifecycleStatus;
   }>;
 }
 

@@ -21,6 +21,7 @@ from src.ham.builder_runtime_worker import (
     execute_cloud_runtime_job,
     get_cloud_runtime_provider_capability_status,
     get_cloud_runtime_provider_mode,
+    get_runtime_job_lifecycle_status,
 )
 from src.ham.builder_zip_intake import ZipSafetyError, validate_zip_upload
 from src.ham.clerk_auth import HamActor
@@ -259,6 +260,19 @@ def _build_proxy_forward_headers(request_headers: Any) -> dict[str, str]:
     if user_agent:
         out["user-agent"] = user_agent[:240]
     return out
+
+
+def _runtime_session_by_id(*, workspace_id: str, project_id: str, runtime_session_id: str | None) -> Any | None:
+    rid = str(runtime_session_id or "").strip()
+    if not rid:
+        return None
+    for row in get_builder_runtime_store().list_runtime_sessions(
+        workspace_id=workspace_id,
+        project_id=project_id,
+    ):
+        if row.id == rid:
+            return row
+    return None
 
 
 def _derive_preview_status(
@@ -1701,6 +1715,54 @@ async def get_builder_cloud_runtime_job(
         "workspace_id": ctx.workspace_id,
         "project_id": project_id,
         "job": job.model_dump(mode="json"),
+    }
+
+
+@router.get("/api/workspaces/{workspace_id}/projects/{project_id}/builder/cloud-runtime/jobs/{job_id}/status")
+async def get_builder_cloud_runtime_job_status(
+    project_id: str,
+    job_id: str,
+    ctx: Annotated[WorkspaceContext, Depends(require_perm(PERM_WORKSPACE_READ))],
+) -> dict[str, Any]:
+    _project_in_workspace_or_404(project_id=project_id, workspace_id=ctx.workspace_id)
+    job = get_builder_runtime_job_store().get_cloud_runtime_job(
+        workspace_id=ctx.workspace_id,
+        project_id=project_id,
+        job_id=job_id,
+    )
+    if job is None:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": {
+                    "code": "CLOUD_RUNTIME_JOB_NOT_FOUND",
+                    "message": f"Unknown cloud runtime job {job_id!r}.",
+                }
+            },
+        )
+    runtime = _runtime_session_by_id(
+        workspace_id=ctx.workspace_id,
+        project_id=project_id,
+        runtime_session_id=job.runtime_session_id,
+    )
+    preview_status = _build_preview_status_payload(
+        workspace_id=ctx.workspace_id,
+        project_id=project_id,
+    )
+    lifecycle = get_runtime_job_lifecycle_status(job=job, runtime_session=runtime)
+    return {
+        "workspace_id": ctx.workspace_id,
+        "project_id": project_id,
+        "job": job.model_dump(mode="json"),
+        "runtime_session": runtime.model_dump(mode="json") if runtime is not None else None,
+        "preview_status": preview_status,
+        "lifecycle": {
+            "phase": lifecycle.phase,
+            "message": lifecycle.message,
+            "updated_at": lifecycle.updated_at,
+            "provider_status": lifecycle.provider_status,
+            "logs_summary": lifecycle.logs_summary,
+        },
     }
 
 
