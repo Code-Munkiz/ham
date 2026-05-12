@@ -2,9 +2,35 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from src.ham.clerk_auth import HamActor
+
+
+def _builder_ack_prefix(last_user_plain: str) -> str:
+    """Generate prompt-specific builder acknowledgement copy."""
+    text = (last_user_plain or "").strip().lower()
+    product = ""
+    m = re.search(
+        r"\b(?:build|create|make|generate|scaffold)\b.{0,60}\b"
+        r"(game|app|application|website|site|dashboard|landing\s*page|tracker|portal|saas|tool|clone)\b",
+        text,
+    )
+    if m:
+        noun = m.group(1).strip()
+        qualifier = ""
+        qm = re.search(r"\b(like|similar to|clone of|style)\s+(\w[\w\s]{0,30})", text)
+        if qm:
+            qualifier = f"{qm.group(2).strip().title()}-style "
+        elif re.search(r"\b(tetris|snake|pong|chess|sudoku|wordle)\b", text):
+            found = re.search(r"\b(tetris|snake|pong|chess|sudoku|wordle)\b", text)
+            if found:
+                qualifier = f"{found.group(1).title()}-style "
+        product = f"a {qualifier}browser {noun}" if noun == "game" else f"a {qualifier}{noun}"
+    if product:
+        return f"I'll create {product} project and prepare the Workbench.\n\n"
+    return "I'll create the initial project source and prepare the Workbench.\n\n"
 
 
 def resolve_effective_chat_project_id(
@@ -83,7 +109,7 @@ def run_builder_happy_path_hook(
             if enqueue_meta:
                 meta.update(enqueue_meta)
         return (
-            "I'll create the initial project source and prepare the Workbench.\n\n",
+            _builder_ack_prefix(last_user_plain),
             meta,
         )
     if summary.get("deduplicated"):
