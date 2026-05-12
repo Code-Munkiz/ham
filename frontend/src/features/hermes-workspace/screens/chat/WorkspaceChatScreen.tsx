@@ -1974,7 +1974,8 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
             ? String((outboundUser as HamChatUserContentV1).text ?? "").trim()
             : "";
       // Conversational conductor: if the user's normal text looks like a
-      // coding/build/repo task, fire a background preview so the CodingPlanCard
+      // repo coding task (not a new app/site/game builder prompt), fire a
+      // background preview so the CodingPlanCard
       // appears below the thread without requiring a separate "Plan with
       // coding agents" click. Preview only — no launch.
       if (!missionModeId && nlProbeText && isLikelyCodingIntent(nlProbeText)) {

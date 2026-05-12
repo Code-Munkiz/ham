@@ -175,6 +175,32 @@ def test_chat_stream_non_cursor_turn_persists_streamed_assistant_when_operator_d
     assert "Blocked:" not in msgs[-1]["content"]
 
 
+def test_chat_stream_build_intent_bypasses_operator_fallback(mock_mode: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    def _builder_hook(**_kwargs):  # type: ignore[no-untyped-def]
+        return (
+            "I'll create the initial project source and prepare the Workbench.\n\n",
+            {"builder_intent": "build_or_create", "scaffolded": True},
+        )
+
+    def _unexpected_operator(*_args, **_kwargs):  # type: ignore[no-untyped-def]
+        raise AssertionError("operator fallback must not run for build_or_create intent")
+
+    monkeypatch.setattr("src.api.chat.run_builder_happy_path_hook", _builder_hook)
+    monkeypatch.setattr("src.api.chat.process_operator_turn", _unexpected_operator)
+    monkeypatch.setattr("src.api.chat.process_agent_router_turn", _unexpected_operator)
+
+    res = client.post(
+        "/api/chat/stream",
+        json={"messages": [{"role": "user", "content": "build me a game like Tetris"}], "enable_operator": True},
+    )
+    assert res.status_code == 200, res.text
+    events = _parse_ndjson(res.text)
+    done = [e for e in events if e.get("type") == "done"][0]
+    assert done.get("operator_result") is None
+    assert done.get("builder", {}).get("builder_intent") == "build_or_create"
+    assert "prepare the Workbench" in done["messages"][-1]["content"]
+
+
 def test_chat_stream_local_repo_ops_not_forced_into_mission_route_when_operator_disabled(
     mock_mode: None,
     monkeypatch: pytest.MonkeyPatch,
