@@ -139,7 +139,8 @@ export function ProjectSourceIntakeDialog({
     try {
       let uploaded = 0;
       for (const file of Array.from(files)) {
-        const relative = (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name;
+        const relative =
+          (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name;
         const safeName = relative.replace(/\\/g, "/").replace(/^\/+/, "");
         const form = new FormData();
         form.append("file", file, safeName);
@@ -245,9 +246,7 @@ export function ProjectSourceIntakeDialog({
             <h3 className="text-[12px] font-semibold text-white/88">
               Upload workspace/local files
             </h3>
-            <p className="mt-1 text-[11px] text-white/45">
-              Add selected files to workspace disk.
-            </p>
+            <p className="mt-1 text-[11px] text-white/45">Add selected files to workspace disk.</p>
             <p className="mt-1 text-[11px] text-white/45">
               Writes through your <span className="text-white/55">connected local HAM API</span>{" "}
               into <span className="font-medium text-white/60">HAM_WORKSPACE_ROOT</span> (or the
@@ -302,7 +301,10 @@ export function ProjectSourceIntakeDialog({
             >
               {workspaceBusy ? "Uploading…" : "Choose project folder"}
             </Button>
-            <p className="mt-2 text-[11px] text-white/45" data-testid="hww-project-source-folder-copy">
+            <p
+              className="mt-2 text-[11px] text-white/45"
+              data-testid="hww-project-source-folder-copy"
+            >
               Folder upload keeps relative paths on workspace disk when supported by your browser.
               If folder picking is unavailable, zip your project root and upload the ZIP.
             </p>
@@ -348,7 +350,10 @@ export function ProjectSourceIntakeDialog({
             >
               {chatBusy ? "Uploading…" : "Choose file for chat attachment"}
             </Button>
-            <p className="mt-2 text-[11px] text-white/45" data-testid="hww-project-source-chat-import-copy">
+            <p
+              className="mt-2 text-[11px] text-white/45"
+              data-testid="hww-project-source-chat-import-copy"
+            >
               Import from existing chat attachments is not wired yet.
             </p>
           </section>

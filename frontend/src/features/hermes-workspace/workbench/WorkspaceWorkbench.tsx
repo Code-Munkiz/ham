@@ -500,9 +500,11 @@ function WorkbenchPreviewPanel({
     workers.find((row) => row.worker_kind === "cloud_runtime_worker") || null;
   const cloudRuntimeProviderStatus = (cloudRuntimeWorker?.status || "disabled").toLowerCase();
   const cloudRuntimeState = cloudRuntime?.status || "disabled";
-  const cloudRuntimeRequestEnabled = ["dry_run_ready", "provider_ready", "provider_accepted"].includes(
-    cloudRuntimeState,
-  );
+  const cloudRuntimeRequestEnabled = [
+    "dry_run_ready",
+    "provider_ready",
+    "provider_accepted",
+  ].includes(cloudRuntimeState);
   const cloudRuntimeProviderCopy =
     cloudRuntimeState === "experiment_not_enabled"
       ? "Cloud runtime experiments are not enabled."
@@ -853,7 +855,8 @@ function WorkbenchPreviewPanel({
         </p>
         {(cloudRuntimeState === "experiment_not_enabled" || cloudRuntimeState === "disabled") && (
           <p className="text-[11px] text-white/55" data-testid="hww-cloud-runtime-setup-copy">
-            Enable HAM_BUILDER_CLOUD_RUNTIME_EXPERIMENTS_ENABLED or configure cloud_run_poc provider.
+            Enable HAM_BUILDER_CLOUD_RUNTIME_EXPERIMENTS_ENABLED or configure cloud_run_poc
+            provider.
           </p>
         )}
         {cloudRuntime?.message ? (
@@ -941,7 +944,10 @@ function WorkbenchPreviewPanel({
           {cloudRuntimeJobBusy ? "Requesting…" : "Request cloud runtime POC"}
         </Button>
         {!preview?.source_snapshot_id ? (
-          <p className="text-[11px] text-white/55" data-testid="hww-cloud-runtime-source-required-copy">
+          <p
+            className="text-[11px] text-white/55"
+            data-testid="hww-cloud-runtime-source-required-copy"
+          >
             Add a project source ZIP or folder before requesting cloud runtime.
           </p>
         ) : null}

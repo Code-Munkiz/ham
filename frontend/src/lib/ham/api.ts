@@ -3832,7 +3832,9 @@ export async function ensureProjectIdForWorkspaceRoot(
   const hit = projects.find((p) => p.root.replace(/\/$/, "") === norm);
   if (hit) {
     if (workspaceScope) {
-      const boundWorkspace = String(hit.metadata?.workspace_id || hit.metadata?.workspaceId || "").trim();
+      const boundWorkspace = String(
+        hit.metadata?.workspace_id || hit.metadata?.workspaceId || "",
+      ).trim();
       if (!boundWorkspace || boundWorkspace !== workspaceScope) {
         await patchHamProjectMetadata(hit.id, { workspace_id: workspaceScope });
       }
