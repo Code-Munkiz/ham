@@ -19,8 +19,10 @@ import {
 import { Button } from "@/components/ui/button";
 import {
   type BuilderImportJobRecord,
+  type BuilderPreviewStatus,
   type BuilderProjectSourceRecord,
   type BuilderSourceSnapshotRecord,
+  getBuilderPreviewStatus,
   listBuilderImportJobs,
   listBuilderProjectSources,
   listBuilderSourceSnapshots,
@@ -199,7 +201,9 @@ export function WorkspaceWorkbench({
         data-testid={`hww-workbench-panel-${activeTab}`}
         className="hww-scroll min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-3"
       >
-        {activeTab === "preview" ? <WorkbenchPreviewPanel /> : null}
+        {activeTab === "preview" ? (
+          <WorkbenchPreviewPanel workspaceId={workspaceId} projectId={projectId} />
+        ) : null}
         {activeTab === "code" ? (
           <WorkbenchCodePanel onAddProjectSource={() => setProjectSourceOpen(true)} />
         ) : null}
@@ -231,14 +235,110 @@ function MutedPanel({ children }: { children: React.ReactNode }) {
   return <div className="space-y-3 text-[12px] leading-relaxed text-white/70">{children}</div>;
 }
 
-function WorkbenchPreviewPanel() {
+function WorkbenchPreviewPanel({
+  workspaceId = null,
+  projectId = null,
+}: {
+  workspaceId?: string | null;
+  projectId?: string | null;
+}) {
+  const [preview, setPreview] = React.useState<BuilderPreviewStatus | null>(null);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  const refresh = React.useCallback(async () => {
+    const ws = workspaceId?.trim() || "";
+    const pid = projectId?.trim() || "";
+    if (!ws || !pid) {
+      setPreview(null);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const payload = await getBuilderPreviewStatus(ws, pid);
+      setPreview(payload);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setPreview(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [workspaceId, projectId]);
+
+  React.useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  const previewUrl = preview?.status === "ready" ? preview.preview_url : null;
   return (
     <MutedPanel>
-      <p className="text-[13px] font-medium text-white/88">No preview yet.</p>
-      <p className="text-white/55">
-        Ask HAM to build or connect a project to generate a preview. Live site preview is not wired
-        in this shell.
-      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          className="text-[11px]"
+          data-testid="hww-preview-refresh"
+          onClick={() => {
+            void refresh();
+          }}
+          disabled={loading}
+        >
+          {loading ? "Refreshing…" : "Refresh status"}
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          className="text-[11px]"
+          data-testid="hww-preview-open-new-tab"
+          disabled={!previewUrl}
+          onClick={() => {
+            if (previewUrl) window.open(previewUrl, "_blank", "noopener,noreferrer");
+          }}
+        >
+          Open in new tab
+        </Button>
+      </div>
+      {!workspaceId?.trim() || !projectId?.trim() ? (
+        <p className="text-white/55" data-testid="hww-preview-state-no-project">
+          Select an active workspace and project in chat to check preview status.
+        </p>
+      ) : null}
+      {error ? (
+        <p className="text-amber-200/90" data-testid="hww-preview-state-error">
+          Could not load preview status: {error}
+        </p>
+      ) : null}
+      {preview ? (
+        <p className="text-white/55" data-testid="hww-preview-status-copy">
+          {preview.message || "Preview status unavailable."}
+          {preview.source_snapshot_id && preview.status !== "ready" ? (
+            <span className="text-white/45"> Source is connected; runtime is not ready.</span>
+          ) : null}
+        </p>
+      ) : null}
+      {preview?.status === "ready" && previewUrl ? (
+        <iframe
+          title="Local preview"
+          src={previewUrl}
+          className="min-h-[320px] w-full rounded-lg border border-white/[0.12] bg-black/20"
+          data-testid="hww-preview-iframe"
+          sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
+        />
+      ) : (
+        <p className="text-white/45" data-testid="hww-preview-no-iframe">
+          Live preview is not connected yet.
+        </p>
+      )}
+      {preview?.status === "error" ? (
+        <Button type="button" size="sm" variant="secondary" disabled className="text-[11px]">
+          Ask HAM to fix — Coming soon
+        </Button>
+      ) : null}
     </MutedPanel>
   );
 }
