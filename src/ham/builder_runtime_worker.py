@@ -33,6 +33,56 @@ def get_cloud_runtime_provider_mode() -> CloudRuntimeProviderMode:
     return "disabled"
 
 
+def _is_experiments_enabled() -> bool:
+    raw = str(os.environ.get("HAM_BUILDER_CLOUD_RUNTIME_EXPERIMENTS_ENABLED") or "").strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
+def get_cloud_runtime_experiment_status() -> tuple[str, str]:
+    mode = get_cloud_runtime_provider_mode()
+    experiments_enabled = _is_experiments_enabled()
+    if not experiments_enabled and mode == "disabled":
+        return (
+            "experiment_not_enabled",
+            "Cloud runtime experiments are not enabled in this environment.",
+        )
+    if mode == "disabled":
+        return (
+            "disabled",
+            "Cloud runtime experiments are enabled, but no provider is selected.",
+        )
+    if mode == "local_mock":
+        return (
+            "provider_ready",
+            "Cloud runtime local mock is ready for experimentation.",
+        )
+    cfg = load_gcp_runtime_config()
+    if not experiments_enabled:
+        return (
+            "experiment_not_enabled",
+            "Cloud runtime experiments are not enabled in this environment.",
+        )
+    if not cfg.enabled:
+        return (
+            "config_missing",
+            "Cloud runtime provider needs configuration before it can run.",
+        )
+    if not cfg.gcp_project_present or not cfg.gcp_region_present:
+        return (
+            "config_missing",
+            "Cloud runtime provider needs configuration before it can run.",
+        )
+    if cfg.dry_run:
+        return (
+            "dry_run_ready",
+            "Cloud runtime dry-run mode is configured and ready.",
+        )
+    return (
+        "provider_ready",
+        "Cloud runtime provider is configured for experimentation.",
+    )
+
+
 def get_cloud_runtime_provider_capability_status() -> str:
     mode = get_cloud_runtime_provider_mode()
     if mode == "local_mock":
@@ -163,7 +213,7 @@ def get_runtime_job_lifecycle_status(
             message = "Cloud runtime provider accepted the request."
         elif str(polled.get("provider_state") or "") == "planned":
             phase = "preview_pending"
-            message = "Cloud runtime is in plan-only mode; preview is pending."
+            message = "Cloud runtime is in dry-run or plan phase; no live preview URL yet."
         elif str(polled.get("provider_state") or "") == "invalid_config":
             phase = "failed"
             message = "Cloud runtime config is incomplete."
@@ -186,17 +236,31 @@ def execute_cloud_runtime_job(job: CloudRuntimeJob) -> CloudRuntimeExecutionResu
     runtime_store = get_builder_runtime_store()
     job.provider = mode
     job.updated_at = _utc_now_iso()
+    experiment_status, _ = get_cloud_runtime_experiment_status()
 
     if mode == "disabled":
         job.status = "unsupported"
         job.phase = "failed"
-        job.error_code = "CLOUD_RUNTIME_PROVIDER_DISABLED"
-        job.error_message = "Cloud runtime provider is disabled."
+        if experiment_status == "experiment_not_enabled":
+            job.error_code = "CLOUD_RUNTIME_EXPERIMENT_NOT_ENABLED"
+            job.error_message = "Cloud runtime experiments are not enabled."
+        else:
+            job.error_code = "CLOUD_RUNTIME_PROVIDER_DISABLED"
+            job.error_message = "Cloud runtime provider is disabled."
         job.logs_summary = "No execution performed. Enable local_mock for control-plane verification."
         job.completed_at = job.updated_at
         return CloudRuntimeExecutionResult(job=job, runtime_session=None, usage_event=None)
 
     if mode == "cloud_run_poc":
+        if experiment_status == "experiment_not_enabled":
+            job.status = "unsupported"
+            job.phase = "failed"
+            job.error_code = "CLOUD_RUNTIME_EXPERIMENT_NOT_ENABLED"
+            job.error_message = "Cloud runtime experiments are not enabled."
+            job.logs_summary = "No execution performed. Enable experiment mode before cloud runtime requests."
+            job.completed_at = _utc_now_iso()
+            job.updated_at = job.completed_at
+            return CloudRuntimeExecutionResult(job=job, runtime_session=None, usage_event=None)
         job.phase = "validating_source"
         job.status = "running"
         job.updated_at = _utc_now_iso()
@@ -239,7 +303,9 @@ def execute_cloud_runtime_job(job: CloudRuntimeJob) -> CloudRuntimeExecutionResu
         if gcp_result.status == "planned":
             runtime.status = "provisioning"
             runtime.health = "unknown"
-            runtime.message = "Cloud runtime provider is configured for plan-only POC. No cloud runtime has been provisioned yet."
+            runtime.message = (
+                "Cloud runtime dry-run completed. No live service was provisioned; preview URL is not available yet."
+            )
             runtime.updated_at = _utc_now_iso()
             runtime = runtime_store.upsert_runtime_session(runtime)
             job.runtime_session_id = runtime.id
@@ -247,7 +313,7 @@ def execute_cloud_runtime_job(job: CloudRuntimeJob) -> CloudRuntimeExecutionResu
             job.phase = "completed"
             job.error_code = None
             job.error_message = None
-            job.logs_summary = "cloud_run_poc dry-run plan created. No provisioning was executed."
+            job.logs_summary = "cloud_run_poc dry-run plan created. No live Cloud Run provisioning was executed."
             job.completed_at = _utc_now_iso()
             job.updated_at = job.completed_at
             usage_event = {

@@ -82,6 +82,10 @@ from src.ham.execution_mode import (
     browser_runtime_available,
     resolve_execution_mode,
 )
+from src.ham.builder_chat_hooks import (
+    resolve_effective_chat_project_id,
+    run_builder_happy_path_hook,
+)
 from src.ham.operator_audit import append_operator_action_audit
 from src.ham.transcription_config import resolve_transcription_openai_api_key_for_actor
 from src.ham.ui_actions import split_assistant_ui_actions, ui_actions_system_instructions
@@ -174,6 +178,7 @@ class ChatResponse(BaseModel):
     active_agent: ChatActiveAgentMeta | None = None
     operator_result: dict[str, Any] | None = None
     execution_mode: dict[str, Any] | None = None
+    builder: dict[str, Any] | None = None
 
 
 class ChatSessionAppendTurnIn(BaseModel):
@@ -301,12 +306,26 @@ def _resolve_chat_clerk_context(
     *,
     route: str,
 ) -> tuple[HamActor | None, str | None]:
-    """Clerk session on ``Authorization`` when operator auth or email enforcement is on; HAM tokens on ``X-Ham-Operator-Authorization``."""
+    """Clerk session on ``Authorization`` when operator auth or email enforcement is on; HAM tokens on ``X-Ham-Operator-Authorization``.
+
+    Falls back to synthetic local-dev actor when ``HAM_LOCAL_DEV_WORKSPACE_BYPASS``
+    is enabled and no Clerk session is available (allows builder scaffold to resolve
+    workspace/project without Clerk credentials in local dev).
+    """
     ham_hdr = resolve_ham_operator_authorization_header(
         authorization=authorization,
         x_ham_operator_authorization=x_ham_operator_authorization,
     )
     actor = enforce_clerk_session_and_email_for_request(authorization, route=route)
+    if actor is None:
+        from src.api.dependencies.workspace import (
+            LOCAL_DEV_BYPASS_ENV,
+            synthetic_local_dev_actor,
+        )
+
+        bypass_raw = (os.environ.get(LOCAL_DEV_BYPASS_ENV) or "").strip().lower()
+        if bypass_raw in ("1", "true", "yes", "on"):
+            actor = synthetic_local_dev_actor()
     return actor, ham_hdr
 
 
@@ -395,7 +414,7 @@ You are **Ham**, the in-dashboard copilot for the Ham workspace UI—warm, conci
 
 **No fabricated execution. You have NO shell, NO git, NO build, NO push, NO PR, NO snapshot, NO cron, and NO filesystem tools in this chat.** You cannot edit files, create or amend git commits, push branches, open pull requests, capture managed-workspace snapshots, schedule cron jobs or systemd timers, run Droid, run Cursor, or modify env/secrets from this conversation. Never narrate or pretend you performed any of those actions. Never invent commit hashes (e.g. `abc1234`), file paths, run ids, snapshot ids, PR URLs, GCS object names, branch names, or "working tree clean" / "1 commit ahead" status. Never describe a chain like "I edited X, created commit Y, scheduled Z" — that is fabrication and is prohibited.
 
-**Route coding-execution intents to the real flow.** When the user asks to build, edit, ship, refactor, snapshot, commit, push, open a PR, generate a patch, or otherwise mutate code, do NOT attempt it. Instead say plainly that you can't run it from chat and direct them to **Plan with coding agents** (the chat composer button) which surfaces the **Coding Plan card** and, for projects with `output_target=managed_workspace`, the **Managed workspace build approval panel**. Approval there calls real APIs (`/api/coding/conductor/preview`, `/api/droid/build/preview`, `/api/droid/build/launch`) and produces a real `ControlPlaneRun`, snapshot id, preview URL, and changed-paths count. Without those server-issued ids, no completion claim is valid.
+**Route coding-execution intents to the real flow.** For obvious workspace-builder prompts (build/create/make/generate an app/site/game/dashboard/tracker), acknowledge the Builder Happy Path in chat — say something like "I'll create a [specific] project and prepare the Workbench." Do NOT redirect builder prompts to Coding Plan, managed missions, or Cloud Agent launch. Do NOT say "Launch a managed mission" or "Let me launch a Cloud Agent" for builder prompts. For repo mutation tasks (edit/refactor/snapshot/commit/push/open PR/patch this repository), do NOT attempt execution in chat. Instead direct users to **Plan with coding agents** (the chat composer button), which surfaces the **Coding Plan card** and, for projects with `output_target=managed_workspace`, the **Managed workspace build approval panel**. Approval there calls real APIs (`/api/coding/conductor/preview`, `/api/droid/build/preview`, `/api/droid/build/launch`) and produces a real `ControlPlaneRun`, snapshot id, preview URL, and changed-paths count. Without those server-issued ids, no completion claim is valid.
 
 **Completion-claim rule.** A statement like "done", "built", "shipped", "merged", "snapshotted", "committed", "pushed", or "scheduled" is permitted only when you are quoting a server-issued artifact that arrived in this turn (e.g. an explicit operator-result block with a `ham_run_id`, `snapshot_id`, `pr_url`, or `control_plane_run_id`). If you don't see such an artifact, the work did not happen — say so.
 
@@ -488,6 +507,40 @@ def _append_workbench_to_messages(
         }
     else:
         out.insert(0, {"role": "system", "content": block})
+    return out
+
+
+_BUILDER_TURN_SYSTEM_INJECTION = (
+    "**Builder turn override.** The user's message was classified as a greenfield builder prompt "
+    "(build/create/make/generate an app, site, game, dashboard, tracker, or similar). "
+    "This is a workspace Builder turn. You MUST:\n"
+    "- Acknowledge the builder action concisely and product-specifically.\n"
+    "- Do NOT say \"Launch a managed mission.\"\n"
+    "- Do NOT say \"Let me launch a Cloud Agent.\"\n"
+    "- Do NOT say \"Use the Plan with coding agents button.\"\n"
+    "- Do NOT say \"I can't build directly from chat.\"\n"
+    "- Do NOT redirect to Coding Plan, managed missions, or Cloud Agent launch.\n"
+    "- Do NOT claim the full app/game is completed unless source/runtime actually succeeded.\n"
+    "- Keep the response concise: confirm the builder action is in progress and mention the Workbench."
+)
+
+
+def _inject_builder_turn_system(
+    llm_messages: list[dict[str, Any]],
+    builder_intent: str,
+) -> list[dict[str, Any]]:
+    """Inject per-turn system guidance when builder_intent is build_or_create."""
+    if builder_intent != "build_or_create":
+        return llm_messages
+    out = [dict(m) for m in llm_messages]
+    if out and out[0].get("role") == "system":
+        first = (out[0].get("content") or "").strip()
+        out[0] = {
+            "role": "system",
+            "content": f"{first}\n\n{_BUILDER_TURN_SYSTEM_INJECTION}".strip(),
+        }
+    else:
+        out.insert(0, {"role": "system", "content": _BUILDER_TURN_SYSTEM_INJECTION})
     return out
 
 
@@ -1292,24 +1345,42 @@ async def post_chat(
     )
     store = _chat_store
     aid = ham_actor.user_id if ham_actor is not None else None
+    effective_pid = resolve_effective_chat_project_id(
+        workspace_id=body.workspace_id,
+        project_id=body.project_id,
+        ham_actor=ham_actor,
+    )
+    body_eff = body.model_copy(update={"project_id": effective_pid or body.project_id})
     sid, llm_messages, active_meta, last_user_plain = _messages_for_completion(
-        body,
+        body_eff,
         user_id=_scoped_user_id(ham_actor, _normalized_workspace_id(body.workspace_id)),
         attachment_user_id=aid,
         llm_attachment_user_id=aid,
         authenticated_actor_user_id=aid,
     )
+    builder_prefix, builder_meta = run_builder_happy_path_hook(
+        workspace_id=body.workspace_id,
+        project_id=(body_eff.project_id or "").strip() or None,
+        session_id=sid,
+        last_user_plain=last_user_plain,
+        ham_actor=ham_actor,
+    )
+    builder_intent = str((builder_meta or {}).get("builder_intent") or "").strip().lower()
     or_override, litellm_hint_key, litellm_http_bypass = _resolve_chat_openrouter_route(
         body=body,
         ham_actor=ham_actor,
     )
-    execution_mode = _execution_mode_payload(body, last_user_plain=last_user_plain)
+    execution_mode = _execution_mode_payload(body_eff, last_user_plain=last_user_plain)
     execution_mode = _apply_browser_bridge_for_turn(
         execution_mode=execution_mode,
-        body=body,
+        body=body_eff,
         last_user_plain=last_user_plain,
     )
-    if body.enable_operator and body.messages[-1].role == "user":
+    if (
+        body.enable_operator
+        and body.messages[-1].role == "user"
+        and builder_intent != "build_or_create"
+    ):
         from src.persistence.project_store import get_project_store
 
         project_store = get_project_store()
@@ -1317,7 +1388,7 @@ async def post_chat(
             process_operator_turn(
                 user_text=last_user_plain,
                 project_store=project_store,
-                default_project_id=body.project_id,
+                default_project_id=body_eff.project_id,
                 operator_payload=body.operator,
                 ham_operator_authorization=ham_op_hdr,
                 ham_actor=ham_actor,
@@ -1326,7 +1397,7 @@ async def post_chat(
             else process_agent_router_turn(
                 user_text=last_user_plain,
                 project_store=project_store,
-                default_project_id=body.project_id,
+                default_project_id=body_eff.project_id,
                 ham_operator_authorization=ham_op_hdr,
                 ham_actor=ham_actor,
             )
@@ -1334,6 +1405,8 @@ async def post_chat(
         if op is not None and op.handled:
             _record_operator_audit(body=body, op=op, ham_actor=ham_actor, route="post_chat")
             msg = format_operator_assistant_message(op)
+            if builder_prefix:
+                msg = f"{builder_prefix}{msg}"
             store.append_turns(sid, [ChatTurn(role="assistant", content=msg)])
             return ChatResponse(
                 session_id=sid,
@@ -1342,7 +1415,9 @@ async def post_chat(
                 active_agent=ChatActiveAgentMeta.model_validate(active_meta) if active_meta else None,
                 operator_result=op.model_dump(mode="json"),
                 execution_mode=execution_mode,
+                builder=builder_meta,
             )
+    llm_messages = _inject_builder_turn_system(llm_messages, builder_intent)
     try:
         assistant_raw = complete_chat_turn(
             llm_messages,
@@ -1361,6 +1436,8 @@ async def post_chat(
         if body.enable_ui_actions
         else (assistant_raw, [])
     )
+    if builder_prefix:
+        assistant_visible = f"{builder_prefix}{assistant_visible}"
     store.append_turns(sid, [ChatTurn(role="assistant", content=assistant_visible)])
     return ChatResponse(
         session_id=sid,
@@ -1369,6 +1446,7 @@ async def post_chat(
         active_agent=ChatActiveAgentMeta.model_validate(active_meta) if active_meta else None,
         operator_result=None,
         execution_mode=execution_mode,
+        builder=builder_meta,
     )
 
 
@@ -1386,13 +1464,27 @@ def post_chat_stream(
     )
     store = _chat_store
     aid = ham_actor.user_id if ham_actor is not None else None
+    effective_pid = resolve_effective_chat_project_id(
+        workspace_id=body.workspace_id,
+        project_id=body.project_id,
+        ham_actor=ham_actor,
+    )
+    body_eff = body.model_copy(update={"project_id": effective_pid or body.project_id})
     sid, llm_messages, stream_active_meta, last_user_plain = _messages_for_completion(
-        body,
+        body_eff,
         user_id=_scoped_user_id(ham_actor, _normalized_workspace_id(body.workspace_id)),
         attachment_user_id=aid,
         llm_attachment_user_id=aid,
         authenticated_actor_user_id=aid,
     )
+    builder_prefix, builder_meta = run_builder_happy_path_hook(
+        workspace_id=body.workspace_id,
+        project_id=(body_eff.project_id or "").strip() or None,
+        session_id=sid,
+        last_user_plain=last_user_plain,
+        ham_actor=ham_actor,
+    )
+    builder_intent = str((builder_meta or {}).get("builder_intent") or "").strip().lower()
     or_override, litellm_hint_key, litellm_http_bypass = _resolve_chat_openrouter_route(
         body=body,
         ham_actor=ham_actor,
@@ -1415,15 +1507,19 @@ def post_chat_stream(
             _release_stream_session(sid)
             stream_lock_claimed = False
 
-    stream_execution_mode = _execution_mode_payload(body, last_user_plain=last_user_plain)
+    stream_execution_mode = _execution_mode_payload(body_eff, last_user_plain=last_user_plain)
     stream_execution_mode = _apply_browser_bridge_for_turn(
         execution_mode=stream_execution_mode,
-        body=body,
+        body=body_eff,
         last_user_plain=last_user_plain,
     )
 
     try:
-        if body.enable_operator and body.messages[-1].role == "user":
+        if (
+            body.enable_operator
+            and body.messages[-1].role == "user"
+            and builder_intent != "build_or_create"
+        ):
             from src.persistence.project_store import get_project_store
 
             project_store = get_project_store()
@@ -1431,7 +1527,7 @@ def post_chat_stream(
                 process_operator_turn(
                     user_text=last_user_plain,
                     project_store=project_store,
-                    default_project_id=body.project_id,
+                    default_project_id=body_eff.project_id,
                     operator_payload=body.operator,
                     ham_operator_authorization=ham_op_hdr,
                     ham_actor=ham_actor,
@@ -1440,7 +1536,7 @@ def post_chat_stream(
                 else process_agent_router_turn(
                     user_text=last_user_plain,
                     project_store=project_store,
-                    default_project_id=body.project_id,
+                    default_project_id=body_eff.project_id,
                     ham_operator_authorization=ham_op_hdr,
                     ham_actor=ham_actor,
                 )
@@ -1448,6 +1544,8 @@ def post_chat_stream(
             if op is not None and op.handled:
                 _record_operator_audit(body=body, op=op, ham_actor=ham_actor, route="post_chat_stream")
                 msg = format_operator_assistant_message(op)
+                if builder_prefix:
+                    msg = f"{builder_prefix}{msg}"
                 store.append_turns(sid, [ChatTurn(role="assistant", content=msg)])
                 msgs = store.list_messages(sid)
                 op_dict = op.model_dump(mode="json")
@@ -1465,6 +1563,8 @@ def post_chat_stream(
                         }
                         if stream_active_meta:
                             payload["active_agent"] = stream_active_meta
+                        if builder_meta is not None:
+                            payload["builder"] = builder_meta
                         yield json.dumps(payload) + "\n"
                     finally:
                         release_stream_lock()
@@ -1479,10 +1579,14 @@ def post_chat_stream(
                 )
 
         assistant_turn_id = str(uuid4())
+        llm_messages = _inject_builder_turn_system(llm_messages, builder_intent)
 
         def ndjson_gen():
             yield json.dumps({"type": "session", "session_id": sid}) + "\n"
             pieces: list[str] = []
+            if builder_prefix:
+                pieces.append(builder_prefix)
+                yield json.dumps({"type": "delta", "text": builder_prefix}) + "\n"
             stream_completed = False
             chars_since_checkpoint = 0
             checkpoint_started = False
@@ -1571,6 +1675,8 @@ def post_chat_stream(
                         }
                         if stream_active_meta:
                             payload_err["active_agent"] = stream_active_meta
+                        if builder_meta is not None:
+                            payload_err["builder"] = builder_meta
                         yield json.dumps(payload_err) + "\n"
                     except KeyError:
                         yield json.dumps(
@@ -1601,6 +1707,8 @@ def post_chat_stream(
                     }
                     if stream_active_meta:
                         payload["active_agent"] = stream_active_meta
+                    if builder_meta is not None:
+                        payload["builder"] = builder_meta
                     yield json.dumps(payload) + "\n"
                 except KeyError:
                     yield json.dumps(

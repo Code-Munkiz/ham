@@ -292,7 +292,7 @@ describe("WorkspaceChatScreen conversational coding conductor", () => {
     vi.restoreAllMocks();
   });
 
-  it("auto-fires conductor preview when normal-send text looks like a coding task", async () => {
+  it("auto-fires conductor preview when normal-send text looks like a repo coding task", async () => {
     previewCodingConductorMock.mockResolvedValue(samplePreviewPayload);
     chatStreamMock.mockImplementation(async () => ({ ok: true }));
     getStreamAuthMock.mockResolvedValue(undefined);
@@ -300,11 +300,11 @@ describe("WorkspaceChatScreen conversational coding conductor", () => {
 
     await waitFor(() => expect(screen.getByTestId("hww-command-panel")).toBeInTheDocument());
 
-    await typeAndSend(container, "Build me a Space Tetris game");
+    await typeAndSend(container, "Refactor the persistence layer in the HAM repo");
 
     await waitFor(() => {
       expect(previewCodingConductorMock).toHaveBeenCalledWith({
-        user_prompt: "Build me a Space Tetris game",
+        user_prompt: "Refactor the persistence layer in the HAM repo",
         project_id: CHAT_W1_PROJECT_ID,
       });
     });
@@ -313,6 +313,20 @@ describe("WorkspaceChatScreen conversational coding conductor", () => {
       expect(container.querySelector("[data-hww-coding-plan-strip]")).not.toBeNull();
       expect(container.querySelector('[data-hww-coding-plan="card"]')).not.toBeNull();
     });
+  });
+
+  it("does NOT auto-fire conductor preview for chat-native builder prompts", async () => {
+    previewCodingConductorMock.mockResolvedValue(samplePreviewPayload);
+    chatStreamMock.mockImplementation(async () => ({ ok: true }));
+    getStreamAuthMock.mockResolvedValue(undefined);
+    const { container } = renderChat();
+
+    await waitFor(() => expect(screen.getByTestId("hww-command-panel")).toBeInTheDocument());
+
+    await typeAndSend(container, "Build me a game like Tetris");
+    await new Promise((r) => setTimeout(r, 50));
+    expect(previewCodingConductorMock).not.toHaveBeenCalled();
+    expect(container.querySelector('[data-hww-coding-plan="card"]')).toBeNull();
   });
 
   it("does NOT auto-fire conductor preview for conceptual / explain prompts", async () => {

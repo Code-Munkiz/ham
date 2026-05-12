@@ -160,12 +160,15 @@ def test_post_job_disabled_provider_returns_unsupported(tmp_path: Path, monkeypa
     body = res.json()
     assert body["job"]["status"] == "unsupported"
     assert body["job"]["provider"] == "disabled"
-    assert body["job"]["error_code"] == "CLOUD_RUNTIME_PROVIDER_DISABLED"
-    assert body["cloud_runtime"]["status"] == "unsupported"
+    assert body["job"]["error_code"] == "CLOUD_RUNTIME_EXPERIMENT_NOT_ENABLED"
+    assert body["cloud_runtime"]["status"] == "experiment_not_enabled"
     _cleanup()
 
 
-def test_post_job_cloud_run_poc_disabled_by_env_returns_provider_disabled(tmp_path: Path, monkeypatch) -> None:
+def test_post_job_cloud_run_poc_without_experiment_flag_returns_experiment_not_enabled(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "cloud_run_poc")
     monkeypatch.delenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_ENABLED", raising=False)
     client, ws_id, project_id = _seed_context(tmp_path)
@@ -177,14 +180,15 @@ def test_post_job_cloud_run_poc_disabled_by_env_returns_provider_disabled(tmp_pa
     body = res.json()
     assert body["job"]["provider"] == "cloud_run_poc"
     assert body["job"]["status"] == "unsupported"
-    assert body["job"]["error_code"] == "CLOUD_RUNTIME_PROVIDER_DISABLED"
-    assert body["cloud_runtime"]["status"] == "unsupported"
+    assert body["job"]["error_code"] == "CLOUD_RUNTIME_EXPERIMENT_NOT_ENABLED"
+    assert body["cloud_runtime"]["status"] == "experiment_not_enabled"
     assert body["preview_status"]["preview_url"] is None
     _cleanup()
 
 
 def test_post_job_cloud_run_poc_missing_config_returns_config_missing(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "cloud_run_poc")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_EXPERIMENTS_ENABLED", "true")
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_ENABLED", "true")
     monkeypatch.delenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_PROJECT", raising=False)
     monkeypatch.delenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_REGION", raising=False)
@@ -197,12 +201,13 @@ def test_post_job_cloud_run_poc_missing_config_returns_config_missing(tmp_path: 
     body = res.json()
     assert body["job"]["status"] == "unsupported"
     assert body["job"]["error_code"] == "CLOUD_RUNTIME_CONFIG_MISSING"
-    assert body["cloud_runtime"]["status"] == "unsupported"
+    assert body["cloud_runtime"]["status"] == "failed"
     _cleanup()
 
 
 def test_post_job_cloud_run_poc_dry_run_creates_plan_without_provisioning(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "cloud_run_poc")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_EXPERIMENTS_ENABLED", "true")
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_ENABLED", "true")
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_PROJECT", "proj-safe")
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_REGION", "us-central1")
@@ -223,7 +228,7 @@ def test_post_job_cloud_run_poc_dry_run_creates_plan_without_provisioning(tmp_pa
     assert body["job"]["metadata"]["runtime_plan"]["artifact_uri"] == "builder-artifact://bzip_test"
     assert body["job"]["metadata"]["source_handoff_status"] == "planned"
     assert body["preview_status"]["preview_url"] is None
-    assert body["cloud_runtime"]["status"] == "provisioning"
+    assert body["cloud_runtime"]["status"] == "provider_ready"
     usage = client.get(f"/api/workspaces/{ws_id}/projects/{project_id}/builder/usage-events")
     assert usage.status_code == 200
     names = {str(row.get("metadata", {}).get("event_name") or "") for row in usage.json()["usage_events"]}
@@ -233,6 +238,7 @@ def test_post_job_cloud_run_poc_dry_run_creates_plan_without_provisioning(tmp_pa
 
 def test_post_job_cloud_run_poc_real_path_accepted_with_fake_client(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "cloud_run_poc")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_EXPERIMENTS_ENABLED", "true")
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_ENABLED", "true")
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_PROJECT", "proj-safe")
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_REGION", "us-central1")
@@ -268,6 +274,7 @@ def test_post_job_cloud_run_poc_real_path_failure_maps_safe_error(tmp_path: Path
             raise RuntimeError("provider submit exploded")
 
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "cloud_run_poc")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_EXPERIMENTS_ENABLED", "true")
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_ENABLED", "true")
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_PROJECT", "proj-safe")
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_REGION", "us-central1")
@@ -301,7 +308,7 @@ def test_post_job_local_mock_completes_safely_without_preview_url(tmp_path: Path
     assert body["job"]["runtime_session_id"]
     assert body["runtime_session"] is not None
     assert body["preview_status"]["preview_url"] is None
-    assert body["cloud_runtime"]["status"] == "running"
+    assert body["cloud_runtime"]["status"] == "provider_ready"
     _cleanup()
 
 
@@ -332,6 +339,7 @@ def test_post_job_rejects_snapshot_from_other_project(tmp_path: Path, monkeypatc
 
 def test_post_job_source_handoff_missing_artifact_fails_safely(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "cloud_run_poc")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_EXPERIMENTS_ENABLED", "true")
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_ENABLED", "true")
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_PROJECT", "proj-safe")
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_REGION", "us-central1")
@@ -475,6 +483,7 @@ def test_get_job_status_redacts_and_bounds_logs(tmp_path: Path, monkeypatch) -> 
             return ("secret_key=abc " * 80)[: max_chars * 2]
 
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "cloud_run_poc")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_EXPERIMENTS_ENABLED", "true")
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_ENABLED", "true")
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_PROJECT", "proj-safe")
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_REGION", "us-central1")
@@ -565,6 +574,7 @@ def test_usage_events_written_for_requested_and_completed(tmp_path: Path, monkey
 
 def test_cloud_run_poc_response_does_not_leak_env_values(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "cloud_run_poc")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_EXPERIMENTS_ENABLED", "true")
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_ENABLED", "true")
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_PROJECT", "my-sensitive-project-name")
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_REGION", "us-west2")

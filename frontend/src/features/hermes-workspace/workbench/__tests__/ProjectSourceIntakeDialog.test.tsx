@@ -91,6 +91,7 @@ describe("ProjectSourceIntakeDialog", () => {
     expect(
       screen.getByRole("button", { name: /Import repository.*Coming soon/i }),
     ).toBeDisabled();
+    expect(screen.getByTestId("hww-project-source-zip-upload-btn")).toBeDisabled();
     expect(screen.getByTestId("hww-project-source-repo-url-input")).toBeDisabled();
   });
 });

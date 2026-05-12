@@ -18,7 +18,12 @@ from src.persistence.builder_runtime_store import (
     RuntimeSession,
     set_builder_runtime_store_for_tests,
 )
-from src.persistence.builder_source_store import BuilderSourceStore, set_builder_source_store_for_tests
+from src.persistence.builder_source_store import (
+    BuilderSourceStore,
+    ProjectSource,
+    SourceSnapshot,
+    set_builder_source_store_for_tests,
+)
 from src.persistence.project_store import ProjectStore, set_project_store_for_tests
 from src.persistence.workspace_store import InMemoryWorkspaceStore
 
@@ -102,6 +107,93 @@ def test_preview_status_no_runtime_returns_not_connected(tmp_path: Path) -> None
     assert body["status"] == "not_connected"
     assert body["preview_url"] is None
     assert body["runtime_session_id"] is None
+
+    set_project_store_for_tests(None)
+    set_builder_source_store_for_tests(None)
+    set_builder_runtime_store_for_tests(None)
+
+
+def test_preview_status_active_snapshot_cloud_not_configured_copy(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "cloud_run_poc")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_EXPERIMENTS_ENABLED", "false")
+    ws_store = InMemoryWorkspaceStore()
+    ws_id = "ws_aaaaaaaaaaaaaaaa"
+    _seed_workspace(ws_store, workspace_id=ws_id, org_id="org_a", owner_user_id="user_a", slug="alpha")
+    project_store = ProjectStore(store_path=tmp_path / "projects.json")
+    project = project_store.make_record(name="proj-a", root=str(tmp_path), metadata={"workspace_id": ws_id})
+    project_store.register(project)
+    set_project_store_for_tests(project_store)
+    builder_store = BuilderSourceStore(store_path=tmp_path / "builder_sources.json")
+    src = builder_store.upsert_project_source(
+        ProjectSource(workspace_id=ws_id, project_id=project.id, kind="chat_scaffold"),
+    )
+    snap = builder_store.upsert_source_snapshot(
+        SourceSnapshot(
+            workspace_id=ws_id,
+            project_id=project.id,
+            project_source_id=src.id,
+            artifact_uri="builder-artifact://bzip_test",
+            digest_sha256="a" * 64,
+        ),
+    )
+    src.active_snapshot_id = snap.id
+    builder_store.upsert_project_source(src)
+    set_builder_source_store_for_tests(builder_store)
+    set_builder_runtime_store_for_tests(BuilderRuntimeStore(store_path=tmp_path / "builder_runtime.json"))
+
+    client = TestClient(_build_app(actor=_actor("user_a", org_id="org_a"), ws_store=ws_store))
+    res = client.get(f"/api/workspaces/{ws_id}/projects/{project.id}/builder/preview-status")
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["mode"] == "cloud"
+    assert body["status"] == "waiting"
+    assert "not configured" in body["message"].lower()
+    assert body["preview_url"] is None
+
+    set_project_store_for_tests(None)
+    set_builder_source_store_for_tests(None)
+    set_builder_runtime_store_for_tests(None)
+
+
+def test_preview_status_active_snapshot_preparing_when_cloud_experiments_ready(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "cloud_run_poc")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_EXPERIMENTS_ENABLED", "true")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_ENABLED", "true")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_PROJECT", "proj-safe")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_REGION", "us-central1")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_DRY_RUN", "true")
+    ws_store = InMemoryWorkspaceStore()
+    ws_id = "ws_aaaaaaaaaaaaaaaa"
+    _seed_workspace(ws_store, workspace_id=ws_id, org_id="org_a", owner_user_id="user_a", slug="alpha")
+    project_store = ProjectStore(store_path=tmp_path / "projects.json")
+    project = project_store.make_record(name="proj-a", root=str(tmp_path), metadata={"workspace_id": ws_id})
+    project_store.register(project)
+    set_project_store_for_tests(project_store)
+    builder_store = BuilderSourceStore(store_path=tmp_path / "builder_sources.json")
+    src = builder_store.upsert_project_source(
+        ProjectSource(workspace_id=ws_id, project_id=project.id, kind="chat_scaffold"),
+    )
+    snap = builder_store.upsert_source_snapshot(
+        SourceSnapshot(
+            workspace_id=ws_id,
+            project_id=project.id,
+            project_source_id=src.id,
+            artifact_uri="builder-artifact://bzip_test",
+            digest_sha256="a" * 64,
+        ),
+    )
+    src.active_snapshot_id = snap.id
+    builder_store.upsert_project_source(src)
+    set_builder_source_store_for_tests(builder_store)
+    set_builder_runtime_store_for_tests(BuilderRuntimeStore(store_path=tmp_path / "builder_runtime.json"))
+
+    client = TestClient(_build_app(actor=_actor("user_a", org_id="org_a"), ws_store=ws_store))
+    res = client.get(f"/api/workspaces/{ws_id}/projects/{project.id}/builder/preview-status")
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["mode"] == "cloud"
+    assert body["status"] == "building"
+    assert "preparing" in body["message"].lower()
 
     set_project_store_for_tests(None)
     set_builder_source_store_for_tests(None)
@@ -472,14 +564,14 @@ def test_register_local_preview_scope_enforced(tmp_path: Path) -> None:
     set_builder_runtime_store_for_tests(None)
 
 
-def test_cloud_runtime_get_returns_unsupported_when_not_requested(tmp_path: Path) -> None:
+def test_cloud_runtime_get_returns_experiment_not_enabled_by_default(tmp_path: Path) -> None:
     ws_store, ws_id, _, project_id = _seed_project_context(tmp_path)
     client = TestClient(_build_app(actor=_actor("user_a", org_id="org_a"), ws_store=ws_store))
     res = client.get(f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime")
     assert res.status_code == 200, res.text
     body = res.json()
     assert body["mode"] == "cloud"
-    assert body["status"] == "unsupported"
+    assert body["status"] == "experiment_not_enabled"
     assert body["runtime_session_id"] is None
     set_project_store_for_tests(None)
     set_builder_source_store_for_tests(None)
@@ -502,11 +594,50 @@ def test_cloud_runtime_request_tracks_state_without_execution(tmp_path: Path, mo
         json={"status": "provisioning", "metadata": {"note": "queued request"}},
     )
     assert post.status_code == 200, post.text
-    assert post.json()["cloud_runtime"]["status"] == "provisioning"
+    assert post.json()["cloud_runtime"]["status"] == "provider_ready"
     get = client.get(f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime")
     assert get.status_code == 200, get.text
-    assert get.json()["status"] == "provisioning"
+    assert get.json()["status"] == "provider_ready"
     assert get.json()["runtime_session_id"]
+    set_project_store_for_tests(None)
+    set_builder_source_store_for_tests(None)
+    set_builder_runtime_store_for_tests(None)
+
+
+def test_cloud_runtime_get_returns_config_missing_for_cloud_provider_without_required_config(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "cloud_run_poc")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_EXPERIMENTS_ENABLED", "true")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_ENABLED", "true")
+    monkeypatch.delenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_PROJECT", raising=False)
+    monkeypatch.delenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_REGION", raising=False)
+    ws_store, ws_id, _, project_id = _seed_project_context(tmp_path)
+    client = TestClient(_build_app(actor=_actor("user_a", org_id="org_a"), ws_store=ws_store))
+    res = client.get(f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime")
+    assert res.status_code == 200, res.text
+    assert res.json()["status"] == "config_missing"
+    set_project_store_for_tests(None)
+    set_builder_source_store_for_tests(None)
+    set_builder_runtime_store_for_tests(None)
+
+
+def test_cloud_runtime_get_returns_dry_run_ready_when_experiment_configured(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "cloud_run_poc")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_EXPERIMENTS_ENABLED", "true")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_ENABLED", "true")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_PROJECT", "proj-safe")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_REGION", "us-central1")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_DRY_RUN", "true")
+    ws_store, ws_id, _, project_id = _seed_project_context(tmp_path)
+    client = TestClient(_build_app(actor=_actor("user_a", org_id="org_a"), ws_store=ws_store))
+    res = client.get(f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime")
+    assert res.status_code == 200, res.text
+    assert res.json()["status"] == "dry_run_ready"
     set_project_store_for_tests(None)
     set_builder_source_store_for_tests(None)
     set_builder_runtime_store_for_tests(None)

@@ -180,11 +180,17 @@ class BuilderRuntimeStore:
         workspace_id: str,
         project_id: str,
     ) -> RuntimeSession | None:
+        candidates: list[RuntimeSession] = []
         for row in self.list_runtime_sessions(workspace_id=workspace_id, project_id=project_id):
             if row.status in {"stopped", "expired"}:
                 continue
-            return row
-        return None
+            candidates.append(row)
+        if not candidates:
+            return None
+        for row in candidates:
+            if row.mode == "cloud":
+                return row
+        return candidates[0]
 
     def get_latest_runtime_session(
         self,

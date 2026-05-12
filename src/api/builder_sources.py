@@ -13,15 +13,16 @@ from typing import Annotated, Any, Literal, cast
 from urllib.parse import urljoin, urlsplit, urlunsplit
 
 import httpx
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi import Request, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from src.api.clerk_gate import get_ham_clerk_actor
 from src.api.dependencies.workspace import require_perm
+from src.ham.builder_cloud_runtime_job_runner import run_persist_builder_cloud_runtime_job
 from src.ham.builder_runtime_worker import (
-    execute_cloud_runtime_job,
+    get_cloud_runtime_experiment_status,
     get_cloud_runtime_provider_capability_status,
     get_cloud_runtime_provider_mode,
     get_runtime_job_lifecycle_status,
@@ -40,10 +41,7 @@ from src.persistence.builder_source_store import (
 )
 from src.persistence.builder_runtime_store import PreviewEndpoint, get_builder_runtime_store
 from src.persistence.builder_run_profile_store import LocalRunProfile, get_builder_run_profile_store
-from src.persistence.builder_runtime_job_store import (
-    CloudRuntimeJob,
-    get_builder_runtime_job_store,
-)
+from src.persistence.builder_runtime_job_store import get_builder_runtime_job_store
 from src.persistence.builder_visual_edit_request_store import (
     VisualEditRequest,
     get_builder_visual_edit_request_store,
@@ -136,6 +134,44 @@ def _project_in_workspace_or_404(*, project_id: str, workspace_id: str) -> Proje
             },
         )
     return record
+
+
+def _source_snapshot_for_project_or_404(
+    *,
+    workspace_id: str,
+    project_id: str,
+    snapshot_id: str,
+) -> SourceSnapshot:
+    _project_in_workspace_or_404(project_id=project_id, workspace_id=workspace_id)
+    sid = str(snapshot_id or "").strip()
+    if not sid:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": {"code": "SNAPSHOT_NOT_FOUND", "message": "Unknown source snapshot."}},
+        )
+    for row in get_builder_source_store().list_source_snapshots(
+        workspace_id=workspace_id,
+        project_id=project_id,
+    ):
+        if row.id == sid:
+            return row
+    raise HTTPException(
+        status_code=404,
+        detail={"error": {"code": "SNAPSHOT_NOT_FOUND", "message": "Unknown source snapshot."}},
+    )
+
+
+_SNAPSHOT_LISTING_CAP = 512
+_SNAPSHOT_CONTENT_MAX_BYTES = 262_144
+
+
+def _artifact_stem_from_uri(artifact_uri: str) -> str | None:
+    text = str(artifact_uri or "").strip()
+    prefix = "builder-artifact://"
+    if text.startswith(prefix):
+        stem = text[len(prefix) :].strip()
+        return stem or None
+    return None
 
 
 def _artifact_root() -> Path:
@@ -378,6 +414,37 @@ def _build_preview_status_payload(*, workspace_id: str, project_id: str) -> dict
         workspace_id=workspace_id,
         project_id=project_id,
     )
+    if active_snapshot_id and runtime is None:
+        experiment_status, _experiment_message = get_cloud_runtime_experiment_status()
+        if experiment_status in {"experiment_not_enabled", "disabled", "config_missing"}:
+            return {
+                "project_id": project_id,
+                "workspace_id": workspace_id,
+                "mode": "cloud",
+                "status": "waiting",
+                "health": "unknown",
+                "preview_url": None,
+                "message": "Cloud preview is not configured in this environment.",
+                "updated_at": _utc_now_iso(),
+                "source_snapshot_id": active_snapshot_id,
+                "runtime_session_id": None,
+                "preview_endpoint_id": None,
+                "logs_hint": None,
+            }
+        return {
+            "project_id": project_id,
+            "workspace_id": workspace_id,
+            "mode": "cloud",
+            "status": "building",
+            "health": "unknown",
+            "preview_url": None,
+            "message": "Preparing your cloud preview…",
+            "updated_at": _utc_now_iso(),
+            "source_snapshot_id": active_snapshot_id,
+            "runtime_session_id": None,
+            "preview_endpoint_id": None,
+            "logs_hint": None,
+        }
     endpoint = None
     if runtime is not None:
         endpoint = runtime_store.get_active_preview_endpoint(
@@ -401,7 +468,12 @@ def _build_preview_status_payload(*, workspace_id: str, project_id: str) -> dict
             message = "Preview is ready via authenticated cloud proxy."
         elif runtime_status in {"queued", "provisioning", "running"}:
             status = "building"
-            message = "Cloud runtime is provisioning. Preview will appear once the proxy endpoint is ready."
+            if runtime_status == "queued":
+                message = "Starting preview environment…"
+            elif runtime_status == "provisioning":
+                message = "Preview environment is starting…"
+            else:
+                message = "Cloud runtime is running; preview will appear when the proxy endpoint is ready."
         elif runtime_status in {"failed", "unsupported"}:
             status = "error"
             message = "Cloud preview is unavailable."
@@ -464,7 +536,24 @@ def _serialize_local_run_profile(profile: LocalRunProfile | None, *, workspace_i
     }
 
 
-_CLOUD_RUNTIME_STATES = {"queued", "provisioning", "running", "failed", "expired", "unsupported"}
+_CLOUD_RUNTIME_STATES = {
+    "queued",
+    "provisioning",
+    "running",
+    "failed",
+    "expired",
+    "unsupported",
+}
+_CLOUD_RUNTIME_VIEW_STATES = {
+    "disabled",
+    "experiment_not_enabled",
+    "config_missing",
+    "dry_run_ready",
+    "provider_ready",
+    "provider_accepted",
+    "failed",
+    "expired",
+}
 _CLOUD_RUNTIME_JOB_STATES = {"queued", "running", "succeeded", "failed", "cancelled", "unsupported"}
 _CLOUD_RUNTIME_JOB_PHASES = {
     "received",
@@ -485,24 +574,40 @@ def _serialize_cloud_runtime(
     workspace_id: str,
     project_id: str,
 ) -> dict[str, Any]:
+    experiment_status, experiment_message = get_cloud_runtime_experiment_status()
     if runtime is None:
         return {
             "workspace_id": workspace_id,
             "project_id": project_id,
             "mode": "cloud",
-            "status": "unsupported",
-            "message": "Cloud runtime is not provisioned yet. Request tracking only is available.",
+            "status": experiment_status,
+            "message": experiment_message,
             "updated_at": _utc_now_iso(),
             "runtime_session_id": None,
             "source_snapshot_id": None,
-            "metadata": {},
+            "metadata": {
+                "provider_mode": get_cloud_runtime_provider_mode(),
+                "provider_capability_status": get_cloud_runtime_provider_capability_status(),
+            },
         }
-    status = str(runtime.status or "").strip().lower()
-    if status not in _CLOUD_RUNTIME_STATES:
-        status = "unsupported"
+    runtime_status = str(runtime.status or "").strip().lower()
+    status = "provider_ready"
+    if runtime_status in {"failed", "unsupported"}:
+        status = "failed"
+    elif runtime_status in {"expired", "stopped"}:
+        status = "expired"
+    elif runtime_status == "provisioning":
+        provider_job_id = str((runtime.metadata or {}).get("provider_job_id") or "").strip()
+        status = "provider_accepted" if provider_job_id else "provider_ready"
+    elif runtime_status == "queued":
+        status = "provider_ready"
+    elif runtime_status == "running":
+        status = "provider_ready"
+    if status not in _CLOUD_RUNTIME_VIEW_STATES:
+        status = "failed"
     message = _safe_text(
         runtime.message,
-        fallback="Cloud runtime request tracked. Provisioning/execution is coming soon.",
+        fallback=experiment_message,
     )
     return {
         "workspace_id": workspace_id,
@@ -541,6 +646,8 @@ class VisualEditRequestPayload(BaseModel):
     runtime_session_id: str | None = None
     preview_endpoint_id: str | None = None
     route: str | None = None
+    preview_url_kind: Literal["local", "cloud_proxy", "unknown"] | None = None
+    target: dict[str, Any] | None = None
     selector_hints: list[str] = Field(default_factory=list)
     bbox: dict[str, Any] | None = None
     instruction: str
@@ -774,10 +881,16 @@ def _hermes_planner_entry() -> BuilderWorkerCapabilityEntry:
 def _cloud_runtime_worker_entry() -> BuilderWorkerCapabilityEntry:
     provider_mode = get_cloud_runtime_provider_mode()
     provider_status = get_cloud_runtime_provider_capability_status()
+    experiment_status, _ = get_cloud_runtime_experiment_status()
     status = _to_worker_status(provider_status)
     fit = "Cloud runtime POC control-plane path; no production sandbox lifecycle in this phase."
     setup = "Set HAM_BUILDER_CLOUD_RUNTIME_PROVIDER=local_mock for safe simulation in dev/test."
-    if provider_mode == "cloud_run_poc":
+    if experiment_status == "experiment_not_enabled":
+        setup = (
+            "Set HAM_BUILDER_CLOUD_RUNTIME_EXPERIMENTS_ENABLED=true, "
+            "or configure HAM_BUILDER_CLOUD_RUNTIME_PROVIDER for explicit POC tests."
+        )
+    elif provider_mode == "cloud_run_poc":
         if provider_status == "disabled":
             setup = "Enable HAM_BUILDER_CLOUD_RUNTIME_GCP_ENABLED=true to activate cloud_run_poc planning."
         elif provider_status == "unavailable":
@@ -944,6 +1057,7 @@ def _sanitize_metadata(raw: dict[str, Any]) -> dict[str, Any]:
 
 def _sanitize_selector_hints(raw: list[str]) -> list[str]:
     safe: list[str] = []
+    seen: set[str] = set()
     for value in raw:
         if len(safe) >= 20:
             break
@@ -952,7 +1066,11 @@ def _sanitize_selector_hints(raw: list[str]) -> list[str]:
             continue
         if _SENSITIVE_VALUE_RE.search(text):
             continue
-        safe.append(text[:120])
+        normalized = text[:120]
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        safe.append(normalized)
     return safe
 
 
@@ -961,12 +1079,71 @@ def _sanitize_route(raw_route: str | None) -> str | None:
     if not text:
         return None
     text = text.replace("\r", "").replace("\n", "")
+    if "://" in text:
+        try:
+            parts = urlsplit(text)
+            text = parts.path or "/"
+        except ValueError:
+            text = "/"
+    else:
+        text = text.split("?", 1)[0].split("#", 1)[0]
+    text = text.strip() or "/"
+    if not text.startswith("/"):
+        text = "/" + text
     if len(text) > 240:
         raise HTTPException(
             status_code=422,
             detail={"error": {"code": "VISUAL_EDIT_ROUTE_INVALID", "message": "route is too long."}},
         )
     return text
+
+
+def _sanitize_preview_url_kind(raw: str | None) -> str | None:
+    text = str(raw or "").strip().lower()
+    if not text:
+        return None
+    if text not in {"local", "cloud_proxy", "unknown"}:
+        return "unknown"
+    return text
+
+
+def _sanitize_visual_edit_target(raw: dict[str, Any] | None) -> dict[str, Any] | None:
+    if raw is None:
+        return None
+    safe: dict[str, Any] = {}
+    numeric_fields = ("x", "y", "width", "height", "viewport_width", "viewport_height")
+    for key in numeric_fields:
+        value = raw.get(key)
+        if value is None:
+            continue
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise HTTPException(
+                status_code=422,
+                detail={"error": {"code": "VISUAL_EDIT_TARGET_INVALID", "message": f"{key} must be numeric."}},
+            )
+        num = float(value)
+        if num < 0 or num > 100000:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "error": {
+                        "code": "VISUAL_EDIT_TARGET_INVALID",
+                        "message": f"{key} is out of allowed bounds.",
+                    }
+                },
+            )
+        safe[key] = round(num, 4)
+    device_mode = str(raw.get("device_mode") or "").strip().lower()
+    if device_mode in {"desktop", "mobile"}:
+        safe["device_mode"] = device_mode
+    selector_hints = _sanitize_selector_hints(list(raw.get("selector_hints") or []))
+    if selector_hints:
+        safe["selector_hints"] = selector_hints
+    for text_key in ("element_text", "tag_name", "aria_label"):
+        text = _safe_text(raw.get(text_key), fallback="")
+        if text and not _SENSITIVE_VALUE_RE.search(text):
+            safe[text_key] = text[:160]
+    return safe or None
 
 
 def _sanitize_visual_edit_bbox(raw: dict[str, Any] | None) -> dict[str, float] | None:
@@ -1036,6 +1213,9 @@ def _build_activity_items(*, workspace_id: str, project_id: str) -> list[Builder
     items: list[BuilderActivityItem] = []
 
     for job in source_store.list_import_jobs(workspace_id=workspace_id, project_id=project_id):
+        meta = job.metadata or {}
+        custom_title = str(meta.get("activity_title") or "").strip()
+        custom_message = str(meta.get("activity_message") or "").strip()
         title = "Source import queued"
         if job.status == "running":
             title = "Validating source archive"
@@ -1043,7 +1223,11 @@ def _build_activity_items(*, workspace_id: str, project_id: str) -> list[Builder
             title = "Source snapshot created"
         elif job.status == "failed":
             title = "Source import failed"
+        if custom_title:
+            title = custom_title
         message = _safe_text(job.error_message, fallback="Source import failed.") if job.status == "failed" else title
+        if custom_message and job.status != "failed":
+            message = custom_message
         items.append(
             BuilderActivityItem(
                 id=f"act_{job.id}",
@@ -1207,6 +1391,41 @@ def _build_activity_items(*, workspace_id: str, project_id: str) -> list[Builder
             )
         )
 
+    for request in get_builder_visual_edit_request_store().list_visual_edit_requests(
+        workspace_id=workspace_id,
+        project_id=project_id,
+    ):
+        request_status = request.status.strip().lower()
+        if request_status in {"draft", "queued", "processing"}:
+            if request_status == "processing":
+                status = "running"
+            else:
+                status = "queued"
+            title = "Visual edit request saved"
+        elif request_status == "resolved":
+            status = "succeeded"
+            title = "Visual edit request resolved"
+        elif request_status in {"failed", "cancelled"}:
+            status = "failed" if request_status == "failed" else "stopped"
+            title = "Visual edit request closed"
+        else:
+            status = "info"
+            title = "Visual edit request updated"
+        items.append(
+            BuilderActivityItem(
+                id=f"act_{request.id}",
+                kind="runtime_status",
+                status=status,
+                title=title,
+                message=_safe_text(request.instruction, fallback=title),
+                timestamp=request.updated_at,
+                snapshot_id=request.source_snapshot_id,
+                runtime_session_id=request.runtime_session_id,
+                preview_endpoint_id=request.preview_endpoint_id,
+                metadata={"visual_edit_request_id": request.id, "status": request.status},
+            )
+        )
+
     items.sort(key=lambda row: (row.timestamp, row.id), reverse=True)
     return items
 
@@ -1242,6 +1461,150 @@ async def list_source_snapshots(
         "project_id": project_id,
         "workspace_id": ctx.workspace_id,
         "source_snapshots": [r.model_dump(mode="json") for r in rows],
+    }
+
+
+@router.post("/api/workspaces/{workspace_id}/builder/default-project")
+async def ensure_default_builder_project_route(
+    ctx: Annotated[WorkspaceContext, Depends(require_perm(PERM_WORKSPACE_WRITE))],
+) -> dict[str, Any]:
+    from src.ham.builder_default_project import ensure_default_builder_project as _ensure_default_builder
+
+    rec = _ensure_default_builder(ctx.workspace_id)
+    return {
+        "workspace_id": ctx.workspace_id,
+        "project_id": rec.id,
+        "project": rec.model_dump(mode="json"),
+    }
+
+
+@router.get(
+    "/api/workspaces/{workspace_id}/projects/{project_id}/builder/source-snapshots/{snapshot_id}/files",
+)
+async def list_builder_snapshot_files(
+    project_id: str,
+    snapshot_id: str,
+    ctx: Annotated[WorkspaceContext, Depends(require_perm(PERM_WORKSPACE_READ))],
+) -> dict[str, Any]:
+    snap = _source_snapshot_for_project_or_404(
+        workspace_id=ctx.workspace_id,
+        project_id=project_id,
+        snapshot_id=snapshot_id,
+    )
+    manifest = snap.manifest or {}
+    files_out: list[dict[str, Any]] = []
+    kind = str(manifest.get("kind") or "")
+    if kind == "inline_text_bundle":
+        entries = manifest.get("entries")
+        if isinstance(entries, list):
+            for e in entries[:_SNAPSHOT_LISTING_CAP]:
+                if isinstance(e, dict) and isinstance(e.get("path"), str):
+                    files_out.append(
+                        {"path": e["path"], "size_bytes": int(e.get("size_bytes") or 0)},
+                    )
+    else:
+        entries = manifest.get("entries")
+        if isinstance(entries, list):
+            for e in entries[:_SNAPSHOT_LISTING_CAP]:
+                if isinstance(e, dict) and isinstance(e.get("path"), str):
+                    files_out.append(
+                        {
+                            "path": e["path"],
+                            "size_bytes": int(e.get("size_bytes") or 0),
+                            "is_dir": bool(e.get("is_dir")),
+                        },
+                    )
+    return {
+        "workspace_id": ctx.workspace_id,
+        "project_id": project_id,
+        "source_snapshot_id": snap.id,
+        "files": files_out,
+    }
+
+
+@router.get(
+    "/api/workspaces/{workspace_id}/projects/{project_id}/builder/source-snapshots/{snapshot_id}/files/content",
+)
+async def read_builder_snapshot_file_content(
+    ctx: Annotated[WorkspaceContext, Depends(require_perm(PERM_WORKSPACE_READ))],
+    project_id: str,
+    snapshot_id: str,
+    path: str = Query(..., min_length=1, max_length=2048),
+) -> dict[str, Any]:
+    from src.ham.builder_chat_scaffold import (
+        load_zip_bytes_for_snapshot,
+        read_inline_snapshot_file,
+        read_zip_snapshot_file_bytes,
+    )
+
+    snap = _source_snapshot_for_project_or_404(
+        workspace_id=ctx.workspace_id,
+        project_id=project_id,
+        snapshot_id=snapshot_id,
+    )
+    manifest = snap.manifest or {}
+    kind = str(manifest.get("kind") or "")
+
+
+    if kind == "inline_text_bundle":
+        hit = read_inline_snapshot_file(snapshot=snap, rel_path=path)
+        if hit is None:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "error": {
+                        "code": "FILE_NOT_FOUND",
+                        "message": "File not found in snapshot.",
+                    },
+                },
+            )
+        text, nbytes = hit
+        return {
+            "path": path.replace("\\", "/").lstrip("/"),
+            "encoding": "utf-8",
+            "content": text,
+            "size_bytes": nbytes,
+        }
+    stem = _artifact_stem_from_uri(snap.artifact_uri) or str(
+        (snap.metadata or {}).get("artifact_id") or "",
+    ).strip()
+    if not stem:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": {"code": "ARTIFACT_NOT_FOUND", "message": "Snapshot has no artifact."}},
+        )
+    zbytes = load_zip_bytes_for_snapshot(
+        workspace_id=ctx.workspace_id,
+        project_id=project_id,
+        artifact_id=stem,
+    )
+    if zbytes is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": {"code": "ARTIFACT_NOT_FOUND", "message": "ZIP artifact missing."}},
+        )
+    raw = read_zip_snapshot_file_bytes(
+        zip_bytes=zbytes,
+        rel_path=path,
+        max_out=_SNAPSHOT_CONTENT_MAX_BYTES,
+    )
+    if raw is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": {"code": "FILE_NOT_FOUND", "message": "File not found in archive."}},
+        )
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        raise HTTPException(
+            status_code=415,
+            detail={"error": {"code": "BINARY_FILE", "message": "Binary files are not shown."}},
+        ) from None
+    return {
+        "path": path.replace("\\", "/").lstrip("/"),
+        "encoding": "utf-8",
+        "content": text,
+        "size_bytes": len(raw),
     }
 
 
@@ -1483,6 +1846,30 @@ async def create_builder_visual_edit_request(
         project_id=project_id,
         source_snapshot_id=body.source_snapshot_id,
     )
+    target = _sanitize_visual_edit_target(body.target)
+    preview_url_kind = _sanitize_preview_url_kind(body.preview_url_kind)
+    selector_hints = _sanitize_selector_hints(body.selector_hints)
+    target_selector_hints = _sanitize_selector_hints(
+        list((target or {}).get("selector_hints") or []) if target is not None else []
+    )
+    merged_selector_hints = _sanitize_selector_hints(selector_hints + target_selector_hints)
+    bbox = _sanitize_visual_edit_bbox(body.bbox)
+    if bbox is None and target is not None and all(
+        key in target for key in ("x", "y", "width", "height")
+    ):
+        bbox = _sanitize_visual_edit_bbox(
+            {
+                "x": target.get("x"),
+                "y": target.get("y"),
+                "width": target.get("width"),
+                "height": target.get("height"),
+            }
+        )
+    safe_metadata = _sanitize_metadata(body.metadata)
+    if target is not None:
+        safe_metadata["target"] = target
+    if preview_url_kind is not None:
+        safe_metadata["preview_url_kind"] = preview_url_kind
     request = VisualEditRequest(
         workspace_id=ctx.workspace_id,
         project_id=project_id,
@@ -1490,12 +1877,12 @@ async def create_builder_visual_edit_request(
         runtime_session_id=str(body.runtime_session_id or "").strip() or None,
         preview_endpoint_id=str(body.preview_endpoint_id or "").strip() or None,
         route=_sanitize_route(body.route),
-        selector_hints=_sanitize_selector_hints(body.selector_hints),
-        bbox=_sanitize_visual_edit_bbox(body.bbox),
+        selector_hints=merged_selector_hints,
+        bbox=bbox,
         instruction=_sanitize_visual_edit_instruction(body.instruction),
         status=_normalize_visual_edit_status(body.status),
         created_by=actor.user_id if actor is not None else None,
-        metadata=_sanitize_metadata(body.metadata),
+        metadata=safe_metadata,
     )
     saved = get_builder_visual_edit_request_store().upsert_visual_edit_request(request)
     return {
@@ -1714,65 +2101,13 @@ async def create_builder_cloud_runtime_job(
         project_id=project_id,
         source_snapshot_id=body.source_snapshot_id,
     )
-    provider_mode = get_cloud_runtime_provider_mode()
-    job = CloudRuntimeJob(
+    saved_job, runtime = run_persist_builder_cloud_runtime_job(
         workspace_id=ctx.workspace_id,
         project_id=project_id,
         source_snapshot_id=source_snapshot_id,
-        provider=provider_mode,
         requested_by=actor.user_id if actor is not None else None,
-        status="queued",
-        phase="received",
         metadata=_sanitize_metadata(body.metadata),
     )
-    job_store = get_builder_runtime_job_store()
-    job = job_store.upsert_cloud_runtime_job(job)
-    get_builder_usage_event_store().append_usage_event(
-        UsageEvent(
-            workspace_id=ctx.workspace_id,
-            project_id=project_id,
-            category="worker_job",
-            quantity=1,
-            unit="count",
-            attribution=UsageEventAttribution(
-                provider="builder_cloud_runtime",
-                worker_provider=provider_mode,
-                source_snapshot_id=source_snapshot_id,
-            ),
-            metadata={"event_name": "cloud_runtime_job_requested", "job_id": job.id},
-        )
-    )
-    if source_snapshot_id:
-        get_builder_usage_event_store().append_usage_event(
-            UsageEvent(
-                workspace_id=ctx.workspace_id,
-                project_id=project_id,
-                category="worker_job",
-                quantity=1,
-                unit="count",
-                attribution=UsageEventAttribution(
-                    provider="builder_cloud_runtime",
-                    worker_provider=provider_mode,
-                    source_snapshot_id=source_snapshot_id,
-                ),
-                metadata={"event_name": "source_handoff_requested", "job_id": job.id},
-            )
-        )
-    result = execute_cloud_runtime_job(job)
-    saved_job = job_store.upsert_cloud_runtime_job(result.job)
-    runtime = result.runtime_session
-    if result.usage_event is not None:
-        get_builder_usage_event_store().append_usage_event(
-            UsageEvent(
-                workspace_id=ctx.workspace_id,
-                project_id=project_id,
-                category=result.usage_event["category"],
-                quantity=result.usage_event["quantity"],
-                unit=result.usage_event["unit"],
-                attribution=UsageEventAttribution.from_raw(result.usage_event["attribution"]),
-                metadata=result.usage_event["metadata"],
-            )
-        )
     return {
         "job": saved_job.model_dump(mode="json"),
         "runtime_session": runtime.model_dump(mode="json") if runtime is not None else None,

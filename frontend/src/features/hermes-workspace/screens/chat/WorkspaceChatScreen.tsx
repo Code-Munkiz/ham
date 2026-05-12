@@ -12,6 +12,7 @@ import {
   appendChatSessionTurns,
   createChatSession,
   downloadChatSessionPdf,
+  ensureBuilderDefaultProject,
   ensureProjectIdForWorkspaceRoot,
   fetchChatComposerPreference,
   fetchChatCapabilities,
@@ -611,6 +612,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   const executionModePreference: "auto" | "browser" | "machine" | "chat" = "auto";
   const [executionMode, setExecutionMode] = React.useState<HamChatExecutionMode | null>(null);
   const [projectId, setProjectId] = React.useState<string | null>(null);
+  const [workbenchBounce, setWorkbenchBounce] = React.useState(0);
   const [codingPlanPreview, setCodingPlanPreview] =
     React.useState<CodingConductorPreviewPayload | null>(null);
   const [codingPlanPrompt, setCodingPlanPrompt] = React.useState<string>("");
@@ -1430,6 +1432,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     const ws = activeWorkspaceId?.trim() || "";
     if (!ws) {
       setProjectId(null);
+      setHamProjectId(null);
       return () => {
         cancelled = true;
       };
@@ -1443,7 +1446,15 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         if (!chosen && !projectRecordsHaveWorkspaceBinding(projects)) {
           const ctx = await fetchContextEngine();
           if (cancelled) return;
-          chosen = await ensureProjectIdForWorkspaceRoot(ctx.cwd);
+          chosen = await ensureProjectIdForWorkspaceRoot(ctx.cwd, ws);
+        }
+        if (!chosen) {
+          try {
+            const out = await ensureBuilderDefaultProject(ws);
+            if (!cancelled) chosen = out.project_id;
+          } catch {
+            // Fall through; builder default is best-effort alongside /api/projects picks.
+          }
         }
         if (cancelled) return;
 
@@ -1982,7 +1993,8 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
             ? String((outboundUser as HamChatUserContentV1).text ?? "").trim()
             : "";
       // Conversational conductor: if the user's normal text looks like a
-      // coding/build/repo task, fire a background preview so the CodingPlanCard
+      // repo coding task (not a new app/site/game builder prompt), fire a
+      // background preview so the CodingPlanCard
       // appears below the thread without requiring a separate "Plan with
       // coding agents" click. Preview only — no launch.
       if (!missionModeId && nlProbeText && isLikelyCodingIntent(nlProbeText)) {
@@ -2498,6 +2510,10 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         setSessionId(res.session_id);
         writeWorkspaceLastChatSessionId(requestWorkspaceId, res.session_id);
         setExecutionMode(res.execution_mode ?? null);
+        const b = res.builder;
+        if (b && (b.scaffolded === true || b.deduplicated === true)) {
+          setWorkbenchBounce((x) => x + 1);
+        }
         browserSessionFollowThroughRef.current = res.execution_mode?.selected_mode === "browser";
         const normalizedMessages = res.messages.some((m) => m.role === "user")
           ? res.messages
@@ -3698,7 +3714,11 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
           "min-h-[260px] max-h-[48vh] md:max-h-none md:h-full md:min-h-0 md:min-w-[420px] md:flex-1",
         )}
       >
-        <WorkspaceWorkbench projectId={projectId} workspaceId={activeWorkspaceId} />
+        <WorkspaceWorkbench
+          projectId={projectId}
+          workspaceId={activeWorkspaceId}
+          workbenchRefreshSignal={workbenchBounce}
+        />
       </div>
     </div>
   );

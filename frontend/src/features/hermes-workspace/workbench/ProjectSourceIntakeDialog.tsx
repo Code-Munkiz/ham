@@ -63,6 +63,7 @@ export function ProjectSourceIntakeDialog({
   const [statusLines, setStatusLines] = React.useState<string[]>([]);
 
   const wsInputRef = React.useRef<HTMLInputElement>(null);
+  const folderInputRef = React.useRef<HTMLInputElement>(null);
   const chatInputRef = React.useRef<HTMLInputElement>(null);
   const zipInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -125,6 +126,39 @@ export function ProjectSourceIntakeDialog({
           );
         }
       }
+    } finally {
+      setWorkspaceBusy(false);
+    }
+  };
+
+  const onWorkspaceFolderSelected = async (ev: React.ChangeEvent<HTMLInputElement>) => {
+    const files = ev.target.files;
+    ev.target.value = "";
+    if (!files?.length) return;
+    setWorkspaceBusy(true);
+    try {
+      let uploaded = 0;
+      for (const file of Array.from(files)) {
+        const relative =
+          (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name;
+        const safeName = relative.replace(/\\/g, "/").replace(/^\/+/, "");
+        const form = new FormData();
+        form.append("file", file, safeName);
+        const { ok, bridge, error } = await workspaceFileAdapter.postFormData(form);
+        if (ok) {
+          uploaded += 1;
+        } else {
+          const bridgeDetail =
+            bridge.status === "pending" && "detail" in bridge ? bridge.detail : undefined;
+          appendStatus(
+            `Folder upload failed (${safeName}): ${error ?? bridgeDetail ?? "unknown error"}`,
+          );
+          return;
+        }
+      }
+      appendStatus(
+        `Project folder uploaded to workspace disk (${uploaded} files). Create a ZIP import for source snapshot.`,
+      );
     } finally {
       setWorkspaceBusy(false);
     }
@@ -210,8 +244,9 @@ export function ProjectSourceIntakeDialog({
         <div className="mt-4 space-y-4 text-[12px] leading-relaxed text-white/70">
           <section className="rounded-lg border border-white/[0.08] bg-black/25 p-3">
             <h3 className="text-[12px] font-semibold text-white/88">
-              Upload files (local workspace)
+              Upload workspace/local files
             </h3>
+            <p className="mt-1 text-[11px] text-white/45">Add selected files to workspace disk.</p>
             <p className="mt-1 text-[11px] text-white/45">
               Writes through your <span className="text-white/55">connected local HAM API</span>{" "}
               into <span className="font-medium text-white/60">HAM_WORKSPACE_ROOT</span> (or the
@@ -235,6 +270,15 @@ export function ProjectSourceIntakeDialog({
               data-testid="hww-project-source-workspace-file-input"
               onChange={(e) => void onWorkspaceFilesSelected(e)}
             />
+            <input
+              ref={folderInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              data-testid="hww-project-source-workspace-folder-input"
+              onChange={(e) => void onWorkspaceFolderSelected(e)}
+              {...({ webkitdirectory: "true", directory: "true" } as Record<string, string>)}
+            />
             <Button
               type="button"
               size="sm"
@@ -246,6 +290,24 @@ export function ProjectSourceIntakeDialog({
             >
               {workspaceBusy ? "Uploading…" : "Choose files for workspace disk"}
             </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              className="mt-2 ml-2 text-[11px]"
+              disabled={!localRuntimeReady || workspaceBusy}
+              data-testid="hww-project-source-workspace-folder-btn"
+              onClick={() => folderInputRef.current?.click()}
+            >
+              {workspaceBusy ? "Uploading…" : "Choose project folder"}
+            </Button>
+            <p
+              className="mt-2 text-[11px] text-white/45"
+              data-testid="hww-project-source-folder-copy"
+            >
+              Folder upload keeps relative paths on workspace disk when supported by your browser.
+              If folder picking is unavailable, zip your project root and upload the ZIP.
+            </p>
             {!localRuntimeReady ? (
               <p className="mt-2 text-[11px] text-amber-200/80">
                 Local API not configured. Set your local runtime URL in{" "}
@@ -267,8 +329,8 @@ export function ProjectSourceIntakeDialog({
             </h3>
             <p className="mt-1 text-[11px] text-white/45">
               Uses <span className="font-medium text-white/60">POST /api/chat/attachments</span>.
-              Stored for use with chat messages —{" "}
-              <span className="text-white/50">not a full project mount on disk.</span>
+              Upload as chat attachment —{" "}
+              <span className="text-white/50">not a project source snapshot.</span>
             </p>
             <input
               ref={chatInputRef}
@@ -288,12 +350,18 @@ export function ProjectSourceIntakeDialog({
             >
               {chatBusy ? "Uploading…" : "Choose file for chat attachment"}
             </Button>
+            <p
+              className="mt-2 text-[11px] text-white/45"
+              data-testid="hww-project-source-chat-import-copy"
+            >
+              Import from existing chat attachments is not wired yet.
+            </p>
           </section>
 
           <section className="rounded-lg border border-white/[0.08] bg-black/25 p-3">
             <h3 className="text-[12px] font-semibold text-white/88">Upload ZIP</h3>
             <p className="mt-1 text-[11px] text-white/45">
-              Upload a project ZIP to create a scoped source snapshot for this project.
+              Recommended for full projects: zip your project root and upload it here.
             </p>
             <input
               ref={zipInputRef}
