@@ -20,8 +20,8 @@ from pydantic import BaseModel, Field
 
 from src.api.clerk_gate import get_ham_clerk_actor
 from src.api.dependencies.workspace import require_perm
+from src.ham.builder_cloud_runtime_job_runner import run_persist_builder_cloud_runtime_job
 from src.ham.builder_runtime_worker import (
-    execute_cloud_runtime_job,
     get_cloud_runtime_experiment_status,
     get_cloud_runtime_provider_capability_status,
     get_cloud_runtime_provider_mode,
@@ -41,10 +41,7 @@ from src.persistence.builder_source_store import (
 )
 from src.persistence.builder_runtime_store import PreviewEndpoint, get_builder_runtime_store
 from src.persistence.builder_run_profile_store import LocalRunProfile, get_builder_run_profile_store
-from src.persistence.builder_runtime_job_store import (
-    CloudRuntimeJob,
-    get_builder_runtime_job_store,
-)
+from src.persistence.builder_runtime_job_store import get_builder_runtime_job_store
 from src.persistence.builder_visual_edit_request_store import (
     VisualEditRequest,
     get_builder_visual_edit_request_store,
@@ -412,6 +409,37 @@ def _build_preview_status_payload(*, workspace_id: str, project_id: str) -> dict
         workspace_id=workspace_id,
         project_id=project_id,
     )
+    if active_snapshot_id and runtime is None:
+        experiment_status, _experiment_message = get_cloud_runtime_experiment_status()
+        if experiment_status in {"experiment_not_enabled", "disabled", "config_missing"}:
+            return {
+                "project_id": project_id,
+                "workspace_id": workspace_id,
+                "mode": "cloud",
+                "status": "waiting",
+                "health": "unknown",
+                "preview_url": None,
+                "message": "Cloud preview is not configured in this environment.",
+                "updated_at": _utc_now_iso(),
+                "source_snapshot_id": active_snapshot_id,
+                "runtime_session_id": None,
+                "preview_endpoint_id": None,
+                "logs_hint": None,
+            }
+        return {
+            "project_id": project_id,
+            "workspace_id": workspace_id,
+            "mode": "cloud",
+            "status": "building",
+            "health": "unknown",
+            "preview_url": None,
+            "message": "Preparing your cloud preview…",
+            "updated_at": _utc_now_iso(),
+            "source_snapshot_id": active_snapshot_id,
+            "runtime_session_id": None,
+            "preview_endpoint_id": None,
+            "logs_hint": None,
+        }
     endpoint = None
     if runtime is not None:
         endpoint = runtime_store.get_active_preview_endpoint(
@@ -435,7 +463,12 @@ def _build_preview_status_payload(*, workspace_id: str, project_id: str) -> dict
             message = "Preview is ready via authenticated cloud proxy."
         elif runtime_status in {"queued", "provisioning", "running"}:
             status = "building"
-            message = "Cloud runtime is provisioning. Preview will appear once the proxy endpoint is ready."
+            if runtime_status == "queued":
+                message = "Starting preview environment…"
+            elif runtime_status == "provisioning":
+                message = "Preview environment is starting…"
+            else:
+                message = "Cloud runtime is running; preview will appear when the proxy endpoint is ready."
         elif runtime_status in {"failed", "unsupported"}:
             status = "error"
             message = "Cloud preview is unavailable."
@@ -2063,65 +2096,13 @@ async def create_builder_cloud_runtime_job(
         project_id=project_id,
         source_snapshot_id=body.source_snapshot_id,
     )
-    provider_mode = get_cloud_runtime_provider_mode()
-    job = CloudRuntimeJob(
+    saved_job, runtime = run_persist_builder_cloud_runtime_job(
         workspace_id=ctx.workspace_id,
         project_id=project_id,
         source_snapshot_id=source_snapshot_id,
-        provider=provider_mode,
         requested_by=actor.user_id if actor is not None else None,
-        status="queued",
-        phase="received",
         metadata=_sanitize_metadata(body.metadata),
     )
-    job_store = get_builder_runtime_job_store()
-    job = job_store.upsert_cloud_runtime_job(job)
-    get_builder_usage_event_store().append_usage_event(
-        UsageEvent(
-            workspace_id=ctx.workspace_id,
-            project_id=project_id,
-            category="worker_job",
-            quantity=1,
-            unit="count",
-            attribution=UsageEventAttribution(
-                provider="builder_cloud_runtime",
-                worker_provider=provider_mode,
-                source_snapshot_id=source_snapshot_id,
-            ),
-            metadata={"event_name": "cloud_runtime_job_requested", "job_id": job.id},
-        )
-    )
-    if source_snapshot_id:
-        get_builder_usage_event_store().append_usage_event(
-            UsageEvent(
-                workspace_id=ctx.workspace_id,
-                project_id=project_id,
-                category="worker_job",
-                quantity=1,
-                unit="count",
-                attribution=UsageEventAttribution(
-                    provider="builder_cloud_runtime",
-                    worker_provider=provider_mode,
-                    source_snapshot_id=source_snapshot_id,
-                ),
-                metadata={"event_name": "source_handoff_requested", "job_id": job.id},
-            )
-        )
-    result = execute_cloud_runtime_job(job)
-    saved_job = job_store.upsert_cloud_runtime_job(result.job)
-    runtime = result.runtime_session
-    if result.usage_event is not None:
-        get_builder_usage_event_store().append_usage_event(
-            UsageEvent(
-                workspace_id=ctx.workspace_id,
-                project_id=project_id,
-                category=result.usage_event["category"],
-                quantity=result.usage_event["quantity"],
-                unit=result.usage_event["unit"],
-                attribution=UsageEventAttribution.from_raw(result.usage_event["attribution"]),
-                metadata=result.usage_event["metadata"],
-            )
-        )
     return {
         "job": saved_job.model_dump(mode="json"),
         "runtime_session": runtime.model_dump(mode="json") if runtime is not None else None,

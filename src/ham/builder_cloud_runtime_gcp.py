@@ -516,7 +516,7 @@ def get_runtime_job_status(*, provider_job_id: str | None, max_chars: int = 180)
     if config.dry_run:
         return {
             "provider_state": "planned",
-            "provider_status": "plan-only dry-run; no live runtime polling",
+            "provider_status": "Dry-run mode: no live Cloud Run execution; preview URL not provisioned.",
             "logs_summary": None,
             "error_code": None,
         }

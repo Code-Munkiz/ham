@@ -290,7 +290,7 @@ export type BuilderImportJobRecord = {
 export type BuilderPreviewStatus = {
   project_id: string;
   workspace_id: string;
-  mode: "local";
+  mode: "local" | "cloud";
   status: "not_connected" | "waiting" | "building" | "ready" | "error";
   health: "unknown" | "healthy" | "unhealthy" | string;
   preview_url: string | null;
