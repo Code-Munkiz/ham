@@ -10,6 +10,9 @@ const {
   listBuilderImportJobsMock,
   getBuilderPreviewStatusMock,
   getBuilderActivityMock,
+  getBuilderLocalRunProfileMock,
+  saveBuilderLocalRunProfileMock,
+  deleteBuilderLocalRunProfileMock,
   postBuilderLocalPreviewMock,
   deleteBuilderLocalPreviewMock,
 } = vi.hoisted(() => ({
@@ -20,6 +23,9 @@ const {
   listBuilderImportJobsMock: vi.fn(),
   getBuilderPreviewStatusMock: vi.fn(),
   getBuilderActivityMock: vi.fn(),
+  getBuilderLocalRunProfileMock: vi.fn(),
+  saveBuilderLocalRunProfileMock: vi.fn(),
+  deleteBuilderLocalRunProfileMock: vi.fn(),
   postBuilderLocalPreviewMock: vi.fn(),
   deleteBuilderLocalPreviewMock: vi.fn(),
 }));
@@ -34,6 +40,9 @@ vi.mock("@/lib/ham/api", async (importOriginal) => {
     listBuilderImportJobs: (...args: unknown[]) => listBuilderImportJobsMock(...args),
     getBuilderPreviewStatus: (...args: unknown[]) => getBuilderPreviewStatusMock(...args),
     getBuilderActivity: (...args: unknown[]) => getBuilderActivityMock(...args),
+    getBuilderLocalRunProfile: (...args: unknown[]) => getBuilderLocalRunProfileMock(...args),
+    saveBuilderLocalRunProfile: (...args: unknown[]) => saveBuilderLocalRunProfileMock(...args),
+    deleteBuilderLocalRunProfile: (...args: unknown[]) => deleteBuilderLocalRunProfileMock(...args),
     postBuilderLocalPreview: (...args: unknown[]) => postBuilderLocalPreviewMock(...args),
     deleteBuilderLocalPreview: (...args: unknown[]) => deleteBuilderLocalPreviewMock(...args),
   };
@@ -93,6 +102,45 @@ describe("WorkspaceWorkbench", () => {
       workspace_id: "ws_abc",
       project_id: "proj_abc",
       items: [],
+    });
+    getBuilderLocalRunProfileMock.mockResolvedValue({
+      workspace_id: "ws_abc",
+      project_id: "proj_abc",
+      configured: false,
+      status: "not_configured",
+      profile: null,
+    });
+    saveBuilderLocalRunProfileMock.mockResolvedValue({
+      workspace_id: "ws_abc",
+      project_id: "proj_abc",
+      configured: true,
+      status: "configured",
+      profile: {
+        id: "rprf_1",
+        workspace_id: "ws_abc",
+        project_id: "proj_abc",
+        source_snapshot_id: null,
+        display_name: "Local run profile",
+        working_directory: ".",
+        install_command_argv: ["npm", "install"],
+        dev_command_argv: ["npm", "run", "dev"],
+        build_command_argv: ["npm", "run", "build"],
+        test_command_argv: ["npm", "test"],
+        expected_preview_url: "http://localhost:5173/",
+        execution_mode: "local_only",
+        status: "configured",
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-01T00:00:00Z",
+        created_by: "user_a",
+        metadata: {},
+      },
+    });
+    deleteBuilderLocalRunProfileMock.mockResolvedValue({
+      workspace_id: "ws_abc",
+      project_id: "proj_abc",
+      configured: false,
+      status: "disabled",
+      profile: null,
     });
     postBuilderLocalPreviewMock.mockResolvedValue({
       runtime_session: {},
@@ -162,6 +210,96 @@ describe("WorkspaceWorkbench", () => {
     expect(screen.getByTestId("hww-preview-activity-section")).toBeInTheDocument();
     expect(screen.getByTestId("hww-preview-activity-empty")).toBeInTheDocument();
     expect(screen.queryByText(/build stream/i)).toBeNull();
+  });
+
+  it("Preview renders local run profile section with not configured status", async () => {
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-local-run-profile-section")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("hww-local-run-profile-status")).toHaveTextContent("Not configured");
+    expect(screen.queryByTestId("hww-local-run-profile-use-preview-url")).toBeNull();
+    expect(screen.queryByText(/running build/i)).toBeNull();
+  });
+
+  it("Saving local run profile calls API and renders configured summary", async () => {
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    fireEvent.change(await screen.findByTestId("hww-local-run-profile-dev-command"), {
+      target: { value: "npm run dev" },
+    });
+    fireEvent.change(screen.getByTestId("hww-local-run-profile-working-directory"), {
+      target: { value: "." },
+    });
+    fireEvent.change(screen.getByTestId("hww-local-run-profile-expected-preview-url"), {
+      target: { value: "http://localhost:5173" },
+    });
+    fireEvent.click(screen.getByTestId("hww-local-run-profile-save"));
+    await waitFor(() => {
+      expect(saveBuilderLocalRunProfileMock).toHaveBeenCalled();
+    });
+    expect(await screen.findByTestId("hww-local-run-profile-summary")).toHaveTextContent("npm run dev");
+    expect(screen.getByTestId("hww-local-run-profile-use-preview-url")).toBeInTheDocument();
+  });
+
+  it("Local run profile clear action calls delete helper", async () => {
+    getBuilderLocalRunProfileMock.mockResolvedValue({
+      workspace_id: "ws_abc",
+      project_id: "proj_abc",
+      configured: true,
+      status: "configured",
+      profile: {
+        id: "rprf_1",
+        workspace_id: "ws_abc",
+        project_id: "proj_abc",
+        source_snapshot_id: null,
+        display_name: "Local run profile",
+        working_directory: ".",
+        install_command_argv: null,
+        dev_command_argv: ["npm", "run", "dev"],
+        build_command_argv: null,
+        test_command_argv: null,
+        expected_preview_url: "http://localhost:3000/",
+        execution_mode: "local_only",
+        status: "configured",
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-01T00:00:00Z",
+        created_by: "user_a",
+        metadata: {},
+      },
+    });
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-local-run-profile-clear")).not.toBeDisabled();
+    });
+    fireEvent.click(screen.getByTestId("hww-local-run-profile-clear"));
+    await waitFor(() => {
+      expect(deleteBuilderLocalRunProfileMock).toHaveBeenCalledWith("ws_abc", "proj_abc");
+    });
+  });
+
+  it("Local run profile save error renders safe copy", async () => {
+    saveBuilderLocalRunProfileMock.mockRejectedValueOnce(new Error("LOCAL_RUN_COMMAND_INVALID"));
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    fireEvent.click(await screen.findByTestId("hww-local-run-profile-save"));
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-local-run-profile-error")).toBeInTheDocument();
+    });
   });
 
   it("Preview renders activity timeline entries from API", async () => {

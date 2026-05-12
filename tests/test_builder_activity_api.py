@@ -17,6 +17,11 @@ from src.persistence.builder_runtime_store import (
     RuntimeSession,
     set_builder_runtime_store_for_tests,
 )
+from src.persistence.builder_run_profile_store import (
+    BuilderRunProfileStore,
+    LocalRunProfile,
+    set_builder_run_profile_store_for_tests,
+)
 from src.persistence.builder_source_store import (
     BuilderSourceStore,
     ImportJob,
@@ -98,6 +103,7 @@ def _seed_context(tmp_path: Path) -> tuple[TestClient, str, str]:
     set_project_store_for_tests(project_store)
     set_builder_source_store_for_tests(BuilderSourceStore(store_path=tmp_path / "builder_sources.json"))
     set_builder_runtime_store_for_tests(BuilderRuntimeStore(store_path=tmp_path / "builder_runtime.json"))
+    set_builder_run_profile_store_for_tests(BuilderRunProfileStore(store_path=tmp_path / "builder_run_profiles.json"))
     client = TestClient(_build_app(actor=_actor("user_a", org_id="org_a"), ws_store=ws_store))
     return client, ws_id, project.id
 
@@ -106,6 +112,7 @@ def _cleanup() -> None:
     set_project_store_for_tests(None)
     set_builder_source_store_for_tests(None)
     set_builder_runtime_store_for_tests(None)
+    set_builder_run_profile_store_for_tests(None)
 
 
 def test_activity_empty_returns_items_empty(tmp_path: Path) -> None:
@@ -243,4 +250,24 @@ def test_activity_ordering_newest_first(tmp_path: Path) -> None:
     items = res.json()["items"]
     assert len(items) >= 2
     assert items[0]["timestamp"] >= items[1]["timestamp"]
+    _cleanup()
+
+
+def test_activity_includes_local_run_profile_events(tmp_path: Path) -> None:
+    client, ws_id, project_id = _seed_context(tmp_path)
+    run_store = BuilderRunProfileStore(store_path=tmp_path / "builder_run_profiles.json")
+    run_store.upsert_local_run_profile(
+        LocalRunProfile(
+            workspace_id=ws_id,
+            project_id=project_id,
+            display_name="Vite dev",
+            working_directory=".",
+            dev_command_argv=["npm", "run", "dev"],
+            status="configured",
+        )
+    )
+    set_builder_run_profile_store_for_tests(run_store)
+    res = client.get(f"/api/workspaces/{ws_id}/projects/{project_id}/builder/activity")
+    assert res.status_code == 200
+    assert any(row["title"] == "Local run profile configured" for row in res.json()["items"])
     _cleanup()

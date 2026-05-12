@@ -20,16 +20,21 @@ import { Button } from "@/components/ui/button";
 import {
   type BuilderActivityItem,
   type BuilderImportJobRecord,
+  type LocalRunProfilePayload,
+  type LocalRunProfileResponse,
   type BuilderPreviewStatus,
   type BuilderProjectSourceRecord,
   type BuilderSourceSnapshotRecord,
+  deleteBuilderLocalRunProfile,
   deleteBuilderLocalPreview,
   getBuilderActivity,
+  getBuilderLocalRunProfile,
   getBuilderPreviewStatus,
   listBuilderImportJobs,
   listBuilderProjectSources,
   listBuilderSourceSnapshots,
   postBuilderLocalPreview,
+  saveBuilderLocalRunProfile,
 } from "@/lib/ham/api";
 import { cn } from "@/lib/utils";
 import { ProjectSourceIntakeDialog } from "./ProjectSourceIntakeDialog";
@@ -254,6 +259,18 @@ function WorkbenchPreviewPanel({
   const [previewUrlInput, setPreviewUrlInput] = React.useState("http://localhost:3000");
   const [submitBusy, setSubmitBusy] = React.useState(false);
   const [disconnectBusy, setDisconnectBusy] = React.useState(false);
+  const [runProfile, setRunProfile] = React.useState<LocalRunProfileResponse | null>(null);
+  const [runProfileBusy, setRunProfileBusy] = React.useState(false);
+  const [runProfileError, setRunProfileError] = React.useState<string | null>(null);
+  const [runProfileForm, setRunProfileForm] = React.useState<LocalRunProfilePayload>({
+    display_name: "Local run profile",
+    working_directory: ".",
+    dev_command: "npm run dev",
+    install_command: "",
+    build_command: "",
+    test_command: "",
+    expected_preview_url: "http://localhost:3000",
+  });
 
   const refreshActivity = React.useCallback(async () => {
     const ws = workspaceId?.trim() || "";
@@ -270,6 +287,39 @@ function WorkbenchPreviewPanel({
     } catch (e) {
       setActivity([]);
       setActivityError(e instanceof Error ? e.message : String(e));
+    }
+  }, [workspaceId, projectId]);
+
+  const refreshRunProfile = React.useCallback(async () => {
+    const ws = workspaceId?.trim() || "";
+    const pid = projectId?.trim() || "";
+    if (!ws || !pid) {
+      setRunProfile(null);
+      setRunProfileError(null);
+      return;
+    }
+    try {
+      const payload = await getBuilderLocalRunProfile(ws, pid);
+      setRunProfile(payload);
+      setRunProfileError(null);
+      if (payload.profile) {
+        const profile = payload.profile;
+        setRunProfileForm({
+          display_name: profile.display_name || "Local run profile",
+          working_directory: profile.working_directory || ".",
+          dev_command: (profile.dev_command_argv || []).join(" "),
+          install_command: (profile.install_command_argv || []).join(" "),
+          build_command: (profile.build_command_argv || []).join(" "),
+          test_command: (profile.test_command_argv || []).join(" "),
+          expected_preview_url: profile.expected_preview_url || "",
+          source_snapshot_id: profile.source_snapshot_id || null,
+          status: profile.status,
+          metadata: profile.metadata || {},
+        });
+      }
+    } catch (e) {
+      setRunProfile(null);
+      setRunProfileError(e instanceof Error ? e.message : String(e));
     }
   }, [workspaceId, projectId]);
 
@@ -290,6 +340,7 @@ function WorkbenchPreviewPanel({
       const previewPayload = await getBuilderPreviewStatus(ws, pid);
       setPreview(previewPayload);
       await refreshActivity();
+      await refreshRunProfile();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg);
@@ -297,7 +348,7 @@ function WorkbenchPreviewPanel({
     } finally {
       setLoading(false);
     }
-  }, [workspaceId, projectId, refreshActivity]);
+  }, [workspaceId, projectId, refreshActivity, refreshRunProfile]);
 
   React.useEffect(() => {
     void refresh();
@@ -435,6 +486,183 @@ function WorkbenchPreviewPanel({
           </Button>
         </form>
       ) : null}
+      <div
+        className="space-y-2 rounded-lg border border-white/[0.08] bg-black/25 p-3"
+        data-testid="hww-local-run-profile-section"
+      >
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">
+          Local run profile
+        </p>
+        <p className="text-[11px] text-white/60">
+          This saves local run instructions only. HAM will not execute commands in this step.
+        </p>
+        <p className="text-[11px] text-white/55">
+          Start the app yourself for now, then connect its local preview URL.
+        </p>
+        <p className="text-[11px] text-white/65" data-testid="hww-local-run-profile-status">
+          Status:{" "}
+          {runProfile?.status === "configured"
+            ? "Configured"
+            : runProfile?.status === "disabled"
+              ? "Disabled"
+              : "Not configured"}
+        </p>
+        {runProfile?.profile ? (
+          <p className="text-[11px] text-white/55" data-testid="hww-local-run-profile-summary">
+            {runProfile.profile.display_name}: {runProfile.profile.working_directory} ·{" "}
+            {(runProfile.profile.dev_command_argv || []).join(" ")}
+          </p>
+        ) : null}
+        {runProfileError ? (
+          <p className="text-amber-200/90" data-testid="hww-local-run-profile-error">
+            Could not load local run profile: {runProfileError}
+          </p>
+        ) : null}
+        <form
+          className="grid gap-2 md:grid-cols-2"
+          data-testid="hww-local-run-profile-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!ws || !pid) return;
+            setRunProfileBusy(true);
+            setRunProfileError(null);
+            const payload: LocalRunProfilePayload = {
+              display_name: runProfileForm.display_name || "Local run profile",
+              working_directory: runProfileForm.working_directory || ".",
+              dev_command: runProfileForm.dev_command || "",
+              install_command: runProfileForm.install_command || "",
+              build_command: runProfileForm.build_command || "",
+              test_command: runProfileForm.test_command || "",
+              expected_preview_url: runProfileForm.expected_preview_url || "",
+              source_snapshot_id: runProfileForm.source_snapshot_id || null,
+              status: "configured",
+              metadata: runProfileForm.metadata || {},
+            };
+            void saveBuilderLocalRunProfile(ws, pid, payload)
+              .then((saved) => {
+                setRunProfile(saved);
+                void refreshActivity();
+              })
+              .catch((err) => {
+                setRunProfileError(err instanceof Error ? err.message : String(err));
+              })
+              .finally(() => {
+                setRunProfileBusy(false);
+              });
+          }}
+        >
+          <input
+            type="text"
+            value={runProfileForm.display_name}
+            onChange={(e) => setRunProfileForm((prev) => ({ ...prev, display_name: e.target.value }))}
+            placeholder="Local run profile"
+            className="w-full rounded-md border border-white/[0.12] bg-black/40 px-2 py-1.5 text-[11px] text-white/90"
+            data-testid="hww-local-run-profile-display-name"
+          />
+          <input
+            type="text"
+            value={runProfileForm.working_directory}
+            onChange={(e) => setRunProfileForm((prev) => ({ ...prev, working_directory: e.target.value }))}
+            placeholder="."
+            className="w-full rounded-md border border-white/[0.12] bg-black/40 px-2 py-1.5 text-[11px] text-white/90"
+            data-testid="hww-local-run-profile-working-directory"
+          />
+          <input
+            type="text"
+            value={runProfileForm.dev_command}
+            onChange={(e) => setRunProfileForm((prev) => ({ ...prev, dev_command: e.target.value }))}
+            placeholder="npm run dev"
+            className="w-full rounded-md border border-white/[0.12] bg-black/40 px-2 py-1.5 text-[11px] text-white/90"
+            data-testid="hww-local-run-profile-dev-command"
+          />
+          <input
+            type="text"
+            value={runProfileForm.install_command || ""}
+            onChange={(e) => setRunProfileForm((prev) => ({ ...prev, install_command: e.target.value }))}
+            placeholder="npm install (optional)"
+            className="w-full rounded-md border border-white/[0.12] bg-black/40 px-2 py-1.5 text-[11px] text-white/90"
+            data-testid="hww-local-run-profile-install-command"
+          />
+          <input
+            type="text"
+            value={runProfileForm.build_command || ""}
+            onChange={(e) => setRunProfileForm((prev) => ({ ...prev, build_command: e.target.value }))}
+            placeholder="npm run build (optional)"
+            className="w-full rounded-md border border-white/[0.12] bg-black/40 px-2 py-1.5 text-[11px] text-white/90"
+            data-testid="hww-local-run-profile-build-command"
+          />
+          <input
+            type="text"
+            value={runProfileForm.test_command || ""}
+            onChange={(e) => setRunProfileForm((prev) => ({ ...prev, test_command: e.target.value }))}
+            placeholder="npm test (optional)"
+            className="w-full rounded-md border border-white/[0.12] bg-black/40 px-2 py-1.5 text-[11px] text-white/90"
+            data-testid="hww-local-run-profile-test-command"
+          />
+          <input
+            type="url"
+            value={runProfileForm.expected_preview_url || ""}
+            onChange={(e) =>
+              setRunProfileForm((prev) => ({ ...prev, expected_preview_url: e.target.value }))
+            }
+            placeholder="http://localhost:5173 (optional)"
+            className="w-full rounded-md border border-white/[0.12] bg-black/40 px-2 py-1.5 text-[11px] text-white/90 md:col-span-2"
+            data-testid="hww-local-run-profile-expected-preview-url"
+          />
+          <div className="flex flex-wrap items-center gap-2 md:col-span-2">
+            <Button
+              type="submit"
+              size="sm"
+              variant="secondary"
+              className="text-[11px]"
+              data-testid="hww-local-run-profile-save"
+              disabled={runProfileBusy || !ws || !pid}
+            >
+              {runProfileBusy ? "Saving…" : "Save local run profile"}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              className="text-[11px]"
+              data-testid="hww-local-run-profile-clear"
+              disabled={runProfileBusy || !ws || !pid || !runProfile?.profile}
+              onClick={() => {
+                if (!ws || !pid) return;
+                setRunProfileBusy(true);
+                setRunProfileError(null);
+                void deleteBuilderLocalRunProfile(ws, pid)
+                  .then((payload) => {
+                    setRunProfile(payload);
+                    void refreshActivity();
+                  })
+                  .catch((err) => {
+                    setRunProfileError(err instanceof Error ? err.message : String(err));
+                  })
+                  .finally(() => {
+                    setRunProfileBusy(false);
+                  });
+              }}
+            >
+              Clear profile
+            </Button>
+            {runProfile?.profile?.expected_preview_url ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                className="text-[11px]"
+                data-testid="hww-local-run-profile-use-preview-url"
+                onClick={() => {
+                  setPreviewUrlInput(runProfile.profile?.expected_preview_url || "http://localhost:3000");
+                }}
+              >
+                Use as preview URL
+              </Button>
+            ) : null}
+          </div>
+        </form>
+      </div>
       {preview?.status === "ready" && previewUrl ? (
         <>
           <div className="rounded-md border border-white/[0.08] bg-black/25 px-2 py-1 text-[11px] text-white/70">
