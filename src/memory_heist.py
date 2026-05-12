@@ -167,8 +167,11 @@ DEFAULT_BROWSER_MAX_DOM_CHARS = 8_000
 DEFAULT_BROWSER_MAX_CONSOLE_CHARS = 4_000
 DEFAULT_BROWSER_MAX_NETWORK_EVENTS = 200
 DEFAULT_BROWSER_ALLOW_FILE_DOWNLOAD = False
-DEFAULT_BROWSER_ALLOW_FORM_SUBMIT = False
-DEFAULT_BROWSER_ADAPTER = "playwright"
+   170|DEFAULT_BROWSER_ALLOW_FORM_SUBMIT = False
+   171|DEFAULT_BROWSER_ADAPTER = "playwright"
+   172|# Security note for maintainers: File downloads and form submits are disabled by default to prevent
+   173|# unexpected side effects during autonomous browser automation. Enable these options only when
+   174|# explicit user intent has been captured and validated through HAM's action approval flows.
 
 INSTRUCTION_INVISIBLE_CHARS = (
     "\u200b",  # zero-width space
