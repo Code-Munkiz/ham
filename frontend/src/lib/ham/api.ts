@@ -921,7 +921,9 @@ export function subscribeBuilderActivityStream(
                 }
               } else if (m.event === "heartbeat") {
                 try {
-                  callbacks.onHeartbeat?.(JSON.parse(m.data) as { ts?: string; connection_state?: string });
+                  callbacks.onHeartbeat?.(
+                    JSON.parse(m.data) as { ts?: string; connection_state?: string },
+                  );
                 } catch {
                   callbacks.onHeartbeat?.({});
                 }
@@ -931,7 +933,10 @@ export function subscribeBuilderActivityStream(
             }
             break;
           }
-          const parsed = parseBuilderActivitySseChunk(carry, decoder.decode(value, { stream: true }));
+          const parsed = parseBuilderActivitySseChunk(
+            carry,
+            decoder.decode(value, { stream: true }),
+          );
           carry = parsed.carry;
           for (const m of parsed.messages) {
             if (m.event === "activity") {
