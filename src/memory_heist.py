@@ -130,8 +130,14 @@ def _walk_tree(
 # the agent prompt to prevent context overflow while preserving critical guidance.
 
 INSTRUCTION_FILENAMES = ("SWARM.md", "SWARM.local.md", "AGENTS.md")
+# NOTE: These are the primary instruction files that define agent project context.
+# SWARM.md: Main project instructions loaded for all HAM agents
+# SWARM.local.md: Local overrides for the specific workspace
+# AGENTS.md: Additional agent-specific guidance (see /home/user/ham/AGENTS.md)
 INSTRUCTION_DOT_DIR = ".ham"
 INSTRUCTION_DOT_FILES = ("SWARM.md", "instructions.md")
+# NOTE: Files in .ham/ directory are fallback instructions when root-level instruction files are absent.
+# These allow per-project instruction configuration separate from workspace root.
 
 # Instruction file content limits (chars)
 # These constants cap the size of instruction documents loaded into agent prompts
