@@ -487,6 +487,21 @@ def _deep_merge(target: dict, source: dict) -> None:
 class ProjectContext:
     """Main context object that agents consume for project understanding.
     
+    **Maintainer notes:**
+    - **Immutable after discovery()**: Git snapshots and other context fields are once-off
+      snapshots captured during `discover()`. Never mutate these after construction to avoid
+      inconsistent agent visibility of repo state.
+    - **Optional fields**: `git_*_snapshot`, `instruction_files`, `config`, `tree` are all
+      optional/empty by default for test stubs, but `discover()` populates them fully.
+      `cwd`, `current_date`, and `platform_info` are required and always set.
+    - **Relevance filtering**: If enabled, `_relevance_results` and `_relevance_metadata`
+      are dynamically attached via `discover()`. Access these via the `relevance_results`
+      and `relevance_metadata` properties to handle AttributeError gracefully.
+
+    This dataclass is serializable for caching and is the single source of project truth
+    passed to Swarm agents for prompt injection. Keep fields aligned across discover(),
+    render(), and any caching mechanisms.
+    
     This dataclass assembles workspace state including:
     - Git information (status, diff, log)
     - Instruction files (SWARM.md, AGENTS.md, etc.)
