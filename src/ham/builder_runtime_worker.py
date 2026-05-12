@@ -64,6 +64,10 @@ def execute_cloud_runtime_job(job: CloudRuntimeJob) -> CloudRuntimeExecutionResu
         return CloudRuntimeExecutionResult(job=job, runtime_session=None, usage_event=None)
 
     if mode == "cloud_run_poc":
+        job.phase = "validating_config"
+        job.status = "running"
+        job.updated_at = _utc_now_iso()
+        job.phase = "submitting_cloud_runtime"
         gcp_result = request_gcp_runtime(job)
         runtime = runtime_store.request_cloud_runtime_session(
             workspace_id=job.workspace_id,
@@ -76,6 +80,7 @@ def execute_cloud_runtime_job(job: CloudRuntimeJob) -> CloudRuntimeExecutionResu
                     "cloud_runtime_job_id": job.id,
                     "runtime_plan_status": gcp_result.plan.status,
                     "dry_run": bool(gcp_result.plan.metadata.get("dry_run")),
+                    "provider_job_id": gcp_result.provider_job_id,
                 }
             ),
         )
@@ -84,7 +89,7 @@ def execute_cloud_runtime_job(job: CloudRuntimeJob) -> CloudRuntimeExecutionResu
             "runtime_plan": gcp_result.plan.model_dump(mode="json"),
         }
         if gcp_result.status == "planned":
-            runtime.status = "queued"
+            runtime.status = "provisioning"
             runtime.health = "unknown"
             runtime.message = "Cloud runtime provider is configured for plan-only POC. No cloud runtime has been provisioned yet."
             runtime.updated_at = _utc_now_iso()
@@ -112,6 +117,47 @@ def execute_cloud_runtime_job(job: CloudRuntimeJob) -> CloudRuntimeExecutionResu
                     "job_id": job.id,
                     "provider_mode": "cloud_run_poc",
                     "dry_run": bool(gcp_result.plan.metadata.get("dry_run")),
+                },
+            }
+            return CloudRuntimeExecutionResult(job=job, runtime_session=runtime, usage_event=usage_event)
+        if gcp_result.status == "accepted":
+            runtime.status = "provisioning"
+            runtime.health = "unknown"
+            runtime.message = "Cloud runtime provider accepted the request. Preview will appear only after a real preview endpoint exists."
+            runtime.updated_at = _utc_now_iso()
+            runtime.metadata = {
+                **(runtime.metadata or {}),
+                "provider_job_id": gcp_result.provider_job_id,
+                "provider_state": gcp_result.provider_state or "accepted",
+            }
+            runtime = runtime_store.upsert_runtime_session(runtime)
+            job.runtime_session_id = runtime.id
+            job.status = "running"
+            job.phase = "provider_accepted"
+            job.error_code = None
+            job.error_message = None
+            job.logs_summary = "cloud_run_poc submit accepted by provider. Runtime provisioning is pending."
+            job.completed_at = None
+            job.updated_at = _utc_now_iso()
+            job.metadata = {
+                **job.metadata,
+                "provider_job_id": gcp_result.provider_job_id,
+                "provider_state": gcp_result.provider_state or "accepted",
+            }
+            usage_event = {
+                "category": "worker_job",
+                "quantity": 1,
+                "unit": "count",
+                "attribution": {
+                    "provider": "builder_cloud_runtime",
+                    "worker_provider": "cloud_run_poc",
+                    "source_snapshot_id": job.source_snapshot_id,
+                    "runtime_session_id": runtime.id,
+                },
+                "metadata": {
+                    "event_name": "cloud_runtime_provider_request_accepted",
+                    "job_id": job.id,
+                    "provider_mode": "cloud_run_poc",
                 },
             }
             return CloudRuntimeExecutionResult(job=job, runtime_session=runtime, usage_event=usage_event)
