@@ -51,6 +51,15 @@ def test_managed_mission_feed_live_stream_hook_uses_fetch_sse_not_event_source()
     assert "fetchManagedMissionFeed" in hook
 
 
+def test_builder_activity_stream_subscription_uses_fetch_sse_not_event_source() -> None:
+    api_ts = Path("frontend/src/lib/ham/api.ts").read_text(encoding="utf-8")
+    assert "export function subscribeBuilderActivityStream" in api_ts
+    assert "builder/activity/stream" in api_ts
+    assert "text/event-stream" in api_ts
+    assert "mergeClerkAuthBearerIfNeeded" in api_ts
+    assert "new EventSource" not in api_ts
+
+
 def test_managed_mission_feed_surfaces_use_live_stream_hook_not_direct_feed_fetch() -> None:
     chat = Path("frontend/src/features/hermes-workspace/screens/chat/WorkspaceChatScreen.tsx").read_text(encoding="utf-8")
     assert "useManagedMissionFeedLiveStream" in chat

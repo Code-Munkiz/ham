@@ -854,33 +854,132 @@ export async function getBuilderActivity(
   return res.json() as Promise<BuilderActivityResponse>;
 }
 
+/** Split SSE buffer on double-newline frame boundaries (managed-mission feed pattern). */
+function parseBuilderActivitySseChunk(
+  carry: string,
+  chunk: string,
+): { carry: string; messages: { event: string; data: string }[] } {
+  const buf = carry + chunk;
+  const parts = buf.split("\n\n");
+  const nextCarry = parts.pop() ?? "";
+  const messages: { event: string; data: string }[] = [];
+  for (const block of parts) {
+    const lines = block.split("\n").filter((l) => l.length > 0);
+    let ev = "message";
+    const dataLines: string[] = [];
+    for (const ln of lines) {
+      if (ln.startsWith("event:")) ev = ln.slice(6).trim();
+      else if (ln.startsWith("data:")) dataLines.push(ln.slice(5).trimStart());
+    }
+    if (dataLines.length) messages.push({ event: ev, data: dataLines.join("\n") });
+  }
+  return { carry: nextCarry, messages };
+}
+
+/**
+ * Builder activity SSE via fetch + ReadableStream so Clerk-strict APIs receive
+ * Authorization Bearer (native EventSource cannot set custom headers).
+ */
 export function subscribeBuilderActivityStream(
   workspaceId: string,
   projectId: string,
   callbacks: BuilderActivityStreamCallbacks,
 ): { close: () => void } {
-  const url = `/api/workspaces/${encodeURIComponent(workspaceId)}/projects/${encodeURIComponent(projectId)}/builder/activity/stream`;
-  const stream = new EventSource(url, { withCredentials: true });
-  stream.onopen = () => callbacks.onOpen?.();
-  stream.onerror = () => callbacks.onError?.();
-  stream.addEventListener("activity", (event: MessageEvent<string>) => {
-    try {
-      const payload = JSON.parse(event.data) as BuilderActivityStreamEvent;
-      callbacks.onActivity(payload);
-    } catch {
-      // Ignore malformed stream events and keep fallback polling available.
+  const path = `/api/workspaces/${encodeURIComponent(workspaceId)}/projects/${encodeURIComponent(projectId)}/builder/activity/stream`;
+  const ctl = { cancelled: false as boolean, ac: null as AbortController | null };
+
+  void (async () => {
+    let errorBackoffMs = 900;
+    while (!ctl.cancelled) {
+      ctl.ac = new AbortController();
+      const signal = ctl.ac.signal;
+      try {
+        const headers = new Headers();
+        headers.set("Accept", "text/event-stream");
+        await mergeClerkAuthBearerIfNeeded(headers);
+        const res = await fetch(apiUrl(path), { credentials: "include", headers, signal });
+        if (!res.ok || !res.body) {
+          throw new Error(`builder_activity_stream_http_${res.status}`);
+        }
+        callbacks.onOpen?.();
+        errorBackoffMs = 900;
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let carry = "";
+        let sawDone = false;
+        while (!ctl.cancelled) {
+          const { value, done } = await reader.read();
+          if (done) {
+            const flushed = parseBuilderActivitySseChunk(carry, decoder.decode());
+            carry = flushed.carry;
+            for (const m of flushed.messages) {
+              if (m.event === "activity") {
+                try {
+                  callbacks.onActivity(JSON.parse(m.data) as BuilderActivityStreamEvent);
+                } catch {
+                  /* ignore malformed */
+                }
+              } else if (m.event === "heartbeat") {
+                try {
+                  callbacks.onHeartbeat?.(
+                    JSON.parse(m.data) as { ts?: string; connection_state?: string },
+                  );
+                } catch {
+                  callbacks.onHeartbeat?.({});
+                }
+              } else if (m.event === "done") {
+                sawDone = true;
+              }
+            }
+            break;
+          }
+          const parsed = parseBuilderActivitySseChunk(
+            carry,
+            decoder.decode(value, { stream: true }),
+          );
+          carry = parsed.carry;
+          for (const m of parsed.messages) {
+            if (m.event === "activity") {
+              try {
+                callbacks.onActivity(JSON.parse(m.data) as BuilderActivityStreamEvent);
+              } catch {
+                /* ignore malformed */
+              }
+            } else if (m.event === "heartbeat") {
+              try {
+                callbacks.onHeartbeat?.(
+                  JSON.parse(m.data) as { ts?: string; connection_state?: string },
+                );
+              } catch {
+                callbacks.onHeartbeat?.({});
+              }
+            } else if (m.event === "done") {
+              sawDone = true;
+            }
+          }
+        }
+        if (ctl.cancelled) break;
+        await new Promise<void>((r) => setTimeout(r, sawDone ? 450 : 900));
+      } catch (e: unknown) {
+        const aborted =
+          ctl.cancelled ||
+          (e instanceof DOMException && e.name === "AbortError") ||
+          (e instanceof Error && e.name === "AbortError");
+        if (aborted) break;
+        callbacks.onError?.();
+        await new Promise<void>((r) => setTimeout(r, errorBackoffMs));
+        errorBackoffMs = Math.min(8500, Math.floor(errorBackoffMs * 1.55));
+      }
     }
-  });
-  stream.addEventListener("heartbeat", (event: MessageEvent<string>) => {
-    try {
-      const payload = JSON.parse(event.data) as { ts?: string; connection_state?: string };
-      callbacks.onHeartbeat?.(payload);
-    } catch {
-      callbacks.onHeartbeat?.({});
-    }
-  });
+    ctl.ac?.abort();
+    ctl.ac = null;
+  })();
+
   return {
-    close: () => stream.close(),
+    close: () => {
+      ctl.cancelled = true;
+      ctl.ac?.abort();
+    },
   };
 }
 

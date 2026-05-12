@@ -10,8 +10,8 @@
  */
 import "@testing-library/jest-dom/vitest";
 
-// jsdom does not implement EventSource. The workspace workbench opens activity streams
-// when a workspace + project are bound — stub it so chat screen tests mount cleanly.
+// jsdom does not implement EventSource. Stub for any legacy or incidental EventSource use;
+// builder activity streams use fetch + ReadableStream (Clerk Bearer).
 if (typeof globalThis.EventSource === "undefined") {
   globalThis.EventSource = class EventSourceStub {
     readonly CONNECTING = 0;
