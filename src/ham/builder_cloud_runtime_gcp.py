@@ -271,6 +271,11 @@ def create_runtime_plan(*, job: CloudRuntimeJob, config: GcpCloudRuntimeConfig, 
     runtime_kind: Literal["cloud_run_job", "cloud_run_service", "unsupported"] = "unsupported"
     if status == "planned":
         runtime_kind = "cloud_run_job"
+    source_handoff = job.metadata.get("source_handoff") if isinstance(job.metadata, dict) else {}
+    source_handoff = source_handoff if isinstance(source_handoff, dict) else {}
+    source_ref = _safe_text(source_handoff.get("source_ref") or "", limit=120)
+    artifact_uri = _safe_text(source_handoff.get("artifact_uri") or "", limit=200)
+    handoff_status = _safe_text(source_handoff.get("handoff_status") or "planned", limit=40)
     return CloudRuntimePlan(
         provider="cloud_run_poc",
         project_id=job.project_id,
@@ -278,7 +283,7 @@ def create_runtime_plan(*, job: CloudRuntimeJob, config: GcpCloudRuntimeConfig, 
         source_snapshot_id=job.source_snapshot_id,
         runtime_kind=runtime_kind,
         image_ref="configured" if config.image_present else "provider-default",
-        artifact_uri="builder-artifact://future",
+        artifact_uri=artifact_uri or "builder-artifact://future",
         region="configured" if config.gcp_region_present else None,
         service_name=None,
         job_name=f"ham-builder-{job.workspace_id[:8]}-{job.project_id[:8]}-{job.id[-6:]}",
@@ -296,6 +301,8 @@ def create_runtime_plan(*, job: CloudRuntimeJob, config: GcpCloudRuntimeConfig, 
                 "provider_mode": "cloud_run_poc",
                 "max_seconds": config.max_seconds,
                 "timeout_seconds": config.timeout_seconds,
+                "source_handoff_status": handoff_status,
+                "source_ref": source_ref or None,
             }
         ),
     )
@@ -406,7 +413,33 @@ def submit_gcp_cloud_runtime_poc(job: CloudRuntimeJob) -> GcpCloudRuntimeResult:
             warnings=warnings,
             plan=plan,
         )
+    source_handoff = job.metadata.get("source_handoff") if isinstance(job.metadata, dict) else {}
+    source_handoff = source_handoff if isinstance(source_handoff, dict) else {}
+    handoff_status = _safe_text(source_handoff.get("handoff_status") or "planned", limit=40).lower()
+    artifact_uri = _safe_text(source_handoff.get("artifact_uri") or "", limit=200)
+    if handoff_status in {"failed", "unsupported"} or not artifact_uri:
+        code, message = normalize_provider_error(
+            "CLOUD_RUNTIME_SOURCE_HANDOFF_FAILED",
+            "Cloud runtime source handoff is missing a safe artifact reference.",
+        )
+        plan.status = "unsupported"
+        plan.metadata = {
+            **plan.metadata,
+            "source_handoff_status": "failed",
+        }
+        return GcpCloudRuntimeResult(
+            status="unsupported",
+            error_code=code,
+            error_message=message,
+            warnings=warnings,
+            plan=plan,
+        )
     if config.dry_run:
+        plan.metadata = {
+            **plan.metadata,
+            "source_handoff_status": "planned",
+            "handoff_status": "planned",
+        }
         return GcpCloudRuntimeResult(
             status="planned",
             error_code=None,
@@ -428,7 +461,14 @@ def submit_gcp_cloud_runtime_poc(job: CloudRuntimeJob) -> GcpCloudRuntimeResult:
             image_ref=image_value,
             service_account_ref=service_account_ref,
             timeout_seconds=min(config.timeout_seconds, config.max_seconds),
-            metadata=redact_provider_metadata(job.metadata or {}),
+            metadata=redact_provider_metadata(
+                {
+                    **(job.metadata or {}),
+                    "source_ref": source_handoff.get("source_ref"),
+                    "artifact_uri": artifact_uri,
+                    "handoff_status": "planned",
+                }
+            ),
         )
     except (RuntimeError, ValueError, TypeError) as exc:
         code, message = normalize_provider_error(
