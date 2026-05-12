@@ -171,7 +171,7 @@ class FakeSandboxRuntimeProvider:
 def load_sandbox_runtime_config() -> SandboxRuntimeConfig:
     provider = str(os.environ.get("HAM_BUILDER_SANDBOX_PROVIDER") or "").strip().lower() or "e2b"
     fake_mode_raw = str(os.environ.get("HAM_BUILDER_SANDBOX_FAKE_MODE") or "").strip().lower()
-    fake_mode: Literal["success", "failure"] = "failure" if fake_mode_raw == "failure" else "success"
+    fake_mode: Literal["success", "failure"] = "success" if fake_mode_raw == "success" else "failure"
     return SandboxRuntimeConfig(
         enabled=_bool_env("HAM_BUILDER_SANDBOX_ENABLED", default=False),
         provider=provider,
