@@ -131,7 +131,71 @@ def test_post_job_disabled_provider_returns_unsupported(tmp_path: Path, monkeypa
     body = res.json()
     assert body["job"]["status"] == "unsupported"
     assert body["job"]["provider"] == "disabled"
+    assert body["job"]["error_code"] == "CLOUD_RUNTIME_PROVIDER_DISABLED"
     assert body["cloud_runtime"]["status"] == "unsupported"
+    _cleanup()
+
+
+def test_post_job_cloud_run_poc_disabled_by_env_returns_provider_disabled(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "cloud_run_poc")
+    monkeypatch.delenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_ENABLED", raising=False)
+    client, ws_id, project_id = _seed_context(tmp_path)
+    res = client.post(
+        f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime/jobs",
+        json={},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["job"]["provider"] == "cloud_run_poc"
+    assert body["job"]["status"] == "unsupported"
+    assert body["job"]["error_code"] == "CLOUD_RUNTIME_PROVIDER_DISABLED"
+    assert body["cloud_runtime"]["status"] == "unsupported"
+    assert body["preview_status"]["preview_url"] is None
+    _cleanup()
+
+
+def test_post_job_cloud_run_poc_missing_config_returns_config_missing(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "cloud_run_poc")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_ENABLED", "true")
+    monkeypatch.delenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_PROJECT", raising=False)
+    monkeypatch.delenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_REGION", raising=False)
+    client, ws_id, project_id = _seed_context(tmp_path)
+    res = client.post(
+        f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime/jobs",
+        json={},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["job"]["status"] == "unsupported"
+    assert body["job"]["error_code"] == "CLOUD_RUNTIME_CONFIG_MISSING"
+    assert body["cloud_runtime"]["status"] == "unsupported"
+    _cleanup()
+
+
+def test_post_job_cloud_run_poc_dry_run_creates_plan_without_provisioning(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "cloud_run_poc")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_ENABLED", "true")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_PROJECT", "proj-safe")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_REGION", "us-central1")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_DRY_RUN", "true")
+    client, ws_id, project_id = _seed_context(tmp_path)
+    res = client.post(
+        f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime/jobs",
+        json={},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["job"]["provider"] == "cloud_run_poc"
+    assert body["job"]["status"] == "succeeded"
+    assert body["job"]["phase"] == "completed"
+    assert body["job"]["metadata"]["runtime_plan"]["status"] == "planned"
+    assert body["job"]["metadata"]["runtime_plan"]["runtime_kind"] == "cloud_run_job"
+    assert body["preview_status"]["preview_url"] is None
+    assert body["cloud_runtime"]["status"] == "queued"
+    usage = client.get(f"/api/workspaces/{ws_id}/projects/{project_id}/builder/usage-events")
+    assert usage.status_code == 200
+    names = {str(row.get("metadata", {}).get("event_name") or "") for row in usage.json()["usage_events"]}
+    assert "cloud_runtime_plan_created" in names
     _cleanup()
 
 
@@ -251,6 +315,21 @@ def test_usage_events_written_for_requested_and_completed(tmp_path: Path, monkey
     names = {str(row.get("metadata", {}).get("event_name") or "") for row in usage.json()["usage_events"]}
     assert "cloud_runtime_job_requested" in names
     assert "cloud_runtime_poc_completed" in names
+    _cleanup()
+
+
+def test_cloud_run_poc_response_does_not_leak_env_values(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "cloud_run_poc")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_ENABLED", "true")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_PROJECT", "my-sensitive-project-name")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_REGION", "us-west2")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_DRY_RUN", "true")
+    client, ws_id, project_id = _seed_context(tmp_path)
+    res = client.post(f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime/jobs", json={})
+    assert res.status_code == 200, res.text
+    body_text = res.text.lower()
+    assert "my-sensitive-project-name" not in body_text
+    assert "us-west2" not in body_text
     _cleanup()
 
 

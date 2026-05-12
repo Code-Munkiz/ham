@@ -471,6 +471,45 @@ describe("WorkspaceWorkbench", () => {
     });
     expect(screen.getByTestId("hww-cloud-runtime-request-poc")).toBeDisabled();
     expect(screen.getByTestId("hww-cloud-runtime-disabled-copy")).toBeInTheDocument();
+    expect(screen.getByTestId("hww-cloud-runtime-provider-copy")).toHaveTextContent(
+      "Provider disabled by default",
+    );
+  });
+
+  it("Cloud runtime card shows config-missing/unavailable provider state", async () => {
+    getBuilderWorkerCapabilitiesMock.mockResolvedValueOnce({
+      workspace_id: "ws_abc",
+      project_id: "proj_abc",
+      workers: [
+        {
+          worker_kind: "cloud_runtime_worker",
+          provider: "builder_cloud_runtime",
+          display_name: "Cloud Runtime Worker (POC)",
+          status: "unavailable",
+          capabilities: ["request_runtime_job", "read_job_status"],
+          environment_fit: "Cloud runtime POC control-plane path.",
+          required_setup: "Set GCP project + region.",
+          settings_href: null,
+          last_checked_at: "2026-01-01T00:00:00Z",
+          metadata: { provider_mode: "cloud_run_poc" },
+        },
+      ],
+    });
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-cloud-runtime-provider-status")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("hww-cloud-runtime-provider-status")).toHaveTextContent(
+      "unavailable",
+    );
+    expect(screen.getByTestId("hww-cloud-runtime-provider-copy")).toHaveTextContent(
+      "Provider unavailable",
+    );
+    expect(screen.getByTestId("hww-cloud-runtime-request-poc")).toBeDisabled();
   });
 
   it("Cloud runtime POC request calls API and refreshes state", async () => {
