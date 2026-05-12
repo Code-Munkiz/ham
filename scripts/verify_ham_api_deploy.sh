@@ -4,6 +4,10 @@
 #   ./scripts/verify_ham_api_deploy.sh 'https://YOUR-SERVICE-xxxxx.run.app' 'https://YOUR-PREVIEW.vercel.app'
 # Second arg defaults to http://localhost:3000 (must be allowed by the API CORS config if testing a remote URL).
 #
+# When the API has HAM_CLERK_REQUIRE_AUTH=true, set a short-lived dashboard session JWT so agent + chat probes run:
+#   HAM_VERIFY_CLERK_SESSION_JWT='eyJ...' ./scripts/verify_ham_api_deploy.sh 'https://YOUR-SERVICE.run.app' 'https://YOUR-PREVIEW.vercel.app'
+# If unset and GET /api/projects/.../agents returns 401 CLERK_SESSION_REQUIRED, POST /api/chat checks are skipped after CORS preflight (partial OK).
+#
 # If the API should use a real upstream (Hermes http / OpenRouter), responses must NOT contain the mock phrase.
 # Set HAM_VERIFY_ALLOW_MOCK=1 to skip that check (intentional mock deployments only).
 set -euo pipefail
@@ -11,6 +15,12 @@ set -euo pipefail
 BASE="${1:?Usage: $0 <HAM_API_BASE_URL> [Origin URL]}"
 ORIGIN="${2:-http://localhost:3000}"
 BASE="${BASE%/}"
+
+CLERK_AUTH_CURL=()
+if [[ -n "${HAM_VERIFY_CLERK_SESSION_JWT:-}" ]]; then
+  CLERK_AUTH_CURL=(-H "Authorization: Bearer ${HAM_VERIFY_CLERK_SESSION_JWT}")
+fi
+SKIP_CLERK_CHAT=0
 
 hdrs="$(mktemp)"
 body="$(mktemp)"
@@ -32,18 +42,61 @@ if cap.get("project_agent_profiles_read") is not True:
   exit 1
 fi
 
-echo "== GET ${BASE}/api/projects/__ham_deploy_verify__/agents (expect structured PROJECT_NOT_FOUND 404)"
-code_agents="$(curl -sS -o "$body" -w '%{http_code}' "${BASE}/api/projects/__ham_deploy_verify__/agents")"
-if [[ "$code_agents" != "404" ]]; then
-  echo "Expected HTTP 404 for unknown project_id, got ${code_agents}. Body:" >&2
-  cat "$body" >&2 || true
+# Workspace builder (Workbench): deployed OpenAPI must advertise full builder_sources surface; missing paths mean an old image even when /api/status is 200.
+echo "== GET ${BASE}/openapi.json (workspace builder route parity)"
+code_open="$(curl -sS -o "$body" -w '%{http_code}' "${BASE}/openapi.json")"
+if [[ "$code_open" != "200" ]]; then
+  echo "Expected HTTP 200 from openapi.json, got ${code_open}. Cannot verify builder parity." >&2
   exit 1
 fi
-if ! grep -q "PROJECT_NOT_FOUND" "$body"; then
-  echo "Agent Builder route missing or wrong API: expected JSON with PROJECT_NOT_FOUND, got:" >&2
+VERIFY_OPENAPI_FILE="$body" python3 -c '
+import importlib
+import json
+import os
+from pathlib import Path
+
+_sys = importlib.import_module("sys")
+path = Path(os.environ["VERIFY_OPENAPI_FILE"])
+data = json.loads(path.read_text(encoding="utf-8"))
+openapi_paths = list((data.get("paths") or {}).keys())
+path_keys = frozenset(openapi_paths)
+required = (
+    "/api/workspaces/{workspace_id}/builder/default-project",
+    "/api/workspaces/{workspace_id}/projects/{project_id}/builder/activity/stream",
+    "/api/workspaces/{workspace_id}/projects/{project_id}/builder/cloud-runtime",
+)
+missing = [r for r in required if r not in path_keys]
+if missing:
+    found_builder = sorted(p for p in openapi_paths if "/builder/" in p)
+    print("Hosted API OpenAPI missing expected workspace-builder paths:", missing, file=_sys.stderr)
+    print("Builder paths advertised on server (subset):", found_builder[:32], file=_sys.stderr)
+    print("Fix: redeploy ham-api Docker image from current main so builder_sources routes are mounted.", file=_sys.stderr)
+    raise SystemExit(1)
+'
+echo "openapi builder parity OK (default-project, activity/stream, cloud-runtime)"
+
+echo "== GET ${BASE}/api/projects/__ham_deploy_verify__/agents (expect structured PROJECT_NOT_FOUND 404)"
+code_agents="$(curl -sS -o "$body" -w '%{http_code}' "${CLERK_AUTH_CURL[@]}" "${BASE}/api/projects/__ham_deploy_verify__/agents")"
+if [[ "$code_agents" == "404" ]]; then
+  if ! grep -q "PROJECT_NOT_FOUND" "$body"; then
+    echo "Agent Builder route missing or wrong API: expected JSON with PROJECT_NOT_FOUND, got:" >&2
+    cat "$body" >&2 || true
+    echo >&2
+    echo "If body is {\"detail\":\"Not Found\"}, the running image has no GET /api/projects/{{id}}/agents — rebuild/redeploy. Also set VITE_HAM_API_BASE to the API origin only (no /api suffix)." >&2
+    exit 1
+  fi
+elif [[ "$code_agents" == "401" ]] && grep -q "CLERK_SESSION_REQUIRED" "$body"; then
+  if [[ -n "${HAM_VERIFY_CLERK_SESSION_JWT:-}" ]]; then
+    echo "Expected 404 after Clerk auth, got 401. Body:" >&2
+    cat "$body" >&2 || true
+    exit 1
+  fi
+  echo "WARN: Clerk auth required (CLERK_SESSION_REQUIRED); skipping agent + chat POST probes." >&2
+  echo "       Re-run with HAM_VERIFY_CLERK_SESSION_JWT='<Clerk session JWT>' for full checks." >&2
+  SKIP_CLERK_CHAT=1
+else
+  echo "Unexpected HTTP ${code_agents} for unknown project_id agents probe. Body:" >&2
   cat "$body" >&2 || true
-  echo >&2
-  echo "If body is {\"detail\":\"Not Found\"}, the running image has no GET /api/projects/{{id}}/agents — rebuild/redeploy. Also set VITE_HAM_API_BASE to the API origin only (no /api suffix)." >&2
   exit 1
 fi
 
@@ -68,9 +121,36 @@ if [[ -z "$acao" ]]; then
 fi
 echo "$acao"
 
+# Dashboard Workspace chat uses POST /api/chat/stream — preflight should succeed before authenticated POST probes.
+echo "== OPTIONS ${BASE}/api/chat/stream (preflight, Origin: ${ORIGIN}, headers: content-type + accept)"
+code_so="$(
+  curl -sS -D "$hdrs" -o "$body" -w '%{http_code}' -X OPTIONS "${BASE}/api/chat/stream" \
+    -H "Origin: ${ORIGIN}" \
+    -H "Access-Control-Request-Method: POST" \
+    -H "Access-Control-Request-Headers: content-type, accept"
+)"
+if [[ "$code_so" != "200" ]]; then
+  echo "OPTIONS /api/chat/stream expected HTTP 200, got ${code_so}. Body:" >&2
+  cat "$body" >&2 || true
+  exit 1
+fi
+acao_so="$(grep -i '^access-control-allow-origin:' "$hdrs" | tr -d '\r' || true)"
+if [[ -z "$acao_so" ]]; then
+  echo "Missing Access-Control-Allow-Origin on OPTIONS /api/chat/stream." >&2
+  exit 1
+fi
+echo "$acao_so"
+
+if [[ "$SKIP_CLERK_CHAT" == "1" ]]; then
+  echo "Partial OK (status + OpenAPI builder parity + OPTIONS CORS for /api/chat and /api/chat/stream)."
+  exit 0
+fi
+
 echo "== POST ${BASE}/api/chat (Origin: ${ORIGIN})"
 code_post="$(
-  curl -sS -D "$hdrs" -o "$body" -w '%{http_code}' -X POST "${BASE}/api/chat" \
+  curl -sS -D "$hdrs" -o "$body" -w '%{http_code}' \
+    "${CLERK_AUTH_CURL[@]}" \
+    -X POST "${BASE}/api/chat" \
     -H "Origin: ${ORIGIN}" \
     -H "Content-Type: application/json" \
     -d '{"messages":[{"role":"user","content":"deploy verify"}]}'
@@ -94,29 +174,11 @@ if [[ -z "${HAM_VERIFY_ALLOW_MOCK:-}" ]] && grep -q "Mock assistant reply" "$bod
   exit 1
 fi
 
-# Dashboard Workspace chat calls POST /api/chat/stream (NDJSON), not only /api/chat.
-echo "== OPTIONS ${BASE}/api/chat/stream (preflight, Origin: ${ORIGIN}, headers: content-type + accept)"
-code_so="$(
-  curl -sS -D "$hdrs" -o "$body" -w '%{http_code}' -X OPTIONS "${BASE}/api/chat/stream" \
-    -H "Origin: ${ORIGIN}" \
-    -H "Access-Control-Request-Method: POST" \
-    -H "Access-Control-Request-Headers: content-type, accept"
-)"
-if [[ "$code_so" != "200" ]]; then
-  echo "OPTIONS /api/chat/stream expected HTTP 200, got ${code_so}. Body:" >&2
-  cat "$body" >&2 || true
-  exit 1
-fi
-acao_so="$(grep -i '^access-control-allow-origin:' "$hdrs" | tr -d '\r' || true)"
-if [[ -z "$acao_so" ]]; then
-  echo "Missing Access-Control-Allow-Origin on OPTIONS /api/chat/stream." >&2
-  exit 1
-fi
-echo "$acao_so"
-
 echo "== POST ${BASE}/api/chat/stream (Origin + Accept — matches browser)"
 code_stream="$(
-  curl -sS --max-time 120 -D "$hdrs" -o "$body" -w '%{http_code}' -X POST "${BASE}/api/chat/stream" \
+  curl -sS --max-time 120 -D "$hdrs" -o "$body" -w '%{http_code}' \
+    "${CLERK_AUTH_CURL[@]}" \
+    -X POST "${BASE}/api/chat/stream" \
     -H "Origin: ${ORIGIN}" \
     -H "Content-Type: application/json" \
     -H "Accept: application/x-ndjson, application/json" \
