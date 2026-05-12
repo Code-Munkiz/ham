@@ -87,7 +87,8 @@ describe("ProjectSourceIntakeDialog", () => {
         <ProjectSourceIntakeDialog open onOpenChange={() => {}} />
       </MemoryRouter>,
     );
-    expect(await screen.findByText(/Upload ZIP — Coming soon/i)).toBeInTheDocument();
+    expect(await screen.findByText("Upload ZIP")).toBeInTheDocument();
+    expect(screen.getByTestId("hww-project-source-zip-upload-btn")).toBeDisabled();
     expect(screen.getByTestId("hww-project-source-repo-url-input")).toBeDisabled();
   });
 });

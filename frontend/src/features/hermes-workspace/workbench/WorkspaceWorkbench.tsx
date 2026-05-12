@@ -651,7 +651,7 @@ function WorkbenchPreviewPanel({
                     ? "Cloud preview is not connected in this environment."
                     : "Connect a local preview URL when your dev server is running, or open Advanced for diagnostics.",
             }
-        : previewPhase === "starting"
+          : previewPhase === "starting"
             ? {
                 title:
                   preview?.mode === "cloud" && preview?.message
