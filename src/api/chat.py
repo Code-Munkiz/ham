@@ -306,12 +306,26 @@ def _resolve_chat_clerk_context(
     *,
     route: str,
 ) -> tuple[HamActor | None, str | None]:
-    """Clerk session on ``Authorization`` when operator auth or email enforcement is on; HAM tokens on ``X-Ham-Operator-Authorization``."""
+    """Clerk session on ``Authorization`` when operator auth or email enforcement is on; HAM tokens on ``X-Ham-Operator-Authorization``.
+
+    Falls back to synthetic local-dev actor when ``HAM_LOCAL_DEV_WORKSPACE_BYPASS``
+    is enabled and no Clerk session is available (allows builder scaffold to resolve
+    workspace/project without Clerk credentials in local dev).
+    """
     ham_hdr = resolve_ham_operator_authorization_header(
         authorization=authorization,
         x_ham_operator_authorization=x_ham_operator_authorization,
     )
     actor = enforce_clerk_session_and_email_for_request(authorization, route=route)
+    if actor is None:
+        from src.api.dependencies.workspace import (
+            LOCAL_DEV_BYPASS_ENV,
+            synthetic_local_dev_actor,
+        )
+
+        bypass_raw = (os.environ.get(LOCAL_DEV_BYPASS_ENV) or "").strip().lower()
+        if bypass_raw in ("1", "true", "yes", "on"):
+            actor = synthetic_local_dev_actor()
     return actor, ham_hdr
 
 
@@ -400,7 +414,7 @@ You are **Ham**, the in-dashboard copilot for the Ham workspace UI—warm, conci
 
 **No fabricated execution. You have NO shell, NO git, NO build, NO push, NO PR, NO snapshot, NO cron, and NO filesystem tools in this chat.** You cannot edit files, create or amend git commits, push branches, open pull requests, capture managed-workspace snapshots, schedule cron jobs or systemd timers, run Droid, run Cursor, or modify env/secrets from this conversation. Never narrate or pretend you performed any of those actions. Never invent commit hashes (e.g. `abc1234`), file paths, run ids, snapshot ids, PR URLs, GCS object names, branch names, or "working tree clean" / "1 commit ahead" status. Never describe a chain like "I edited X, created commit Y, scheduled Z" — that is fabrication and is prohibited.
 
-**Route coding-execution intents to the real flow.** For obvious workspace-builder prompts (build/create/make/generate an app/site/game/dashboard/tracker), acknowledge the Builder Happy Path in chat instead of redirecting to Coding Plan. For repo mutation tasks (edit/refactor/snapshot/commit/push/open PR/patch this repository), do NOT attempt execution in chat. Instead direct users to **Plan with coding agents** (the chat composer button), which surfaces the **Coding Plan card** and, for projects with `output_target=managed_workspace`, the **Managed workspace build approval panel**. Approval there calls real APIs (`/api/coding/conductor/preview`, `/api/droid/build/preview`, `/api/droid/build/launch`) and produces a real `ControlPlaneRun`, snapshot id, preview URL, and changed-paths count. Without those server-issued ids, no completion claim is valid.
+**Route coding-execution intents to the real flow.** For obvious workspace-builder prompts (build/create/make/generate an app/site/game/dashboard/tracker), acknowledge the Builder Happy Path in chat — say something like "I'll create a [specific] project and prepare the Workbench." Do NOT redirect builder prompts to Coding Plan, managed missions, or Cloud Agent launch. Do NOT say "Launch a managed mission" or "Let me launch a Cloud Agent" for builder prompts. For repo mutation tasks (edit/refactor/snapshot/commit/push/open PR/patch this repository), do NOT attempt execution in chat. Instead direct users to **Plan with coding agents** (the chat composer button), which surfaces the **Coding Plan card** and, for projects with `output_target=managed_workspace`, the **Managed workspace build approval panel**. Approval there calls real APIs (`/api/coding/conductor/preview`, `/api/droid/build/preview`, `/api/droid/build/launch`) and produces a real `ControlPlaneRun`, snapshot id, preview URL, and changed-paths count. Without those server-issued ids, no completion claim is valid.
 
 **Completion-claim rule.** A statement like "done", "built", "shipped", "merged", "snapshotted", "committed", "pushed", or "scheduled" is permitted only when you are quoting a server-issued artifact that arrived in this turn (e.g. an explicit operator-result block with a `ham_run_id`, `snapshot_id`, `pr_url`, or `control_plane_run_id`). If you don't see such an artifact, the work did not happen — say so.
 
@@ -493,6 +507,40 @@ def _append_workbench_to_messages(
         }
     else:
         out.insert(0, {"role": "system", "content": block})
+    return out
+
+
+_BUILDER_TURN_SYSTEM_INJECTION = (
+    "**Builder turn override.** The user's message was classified as a greenfield builder prompt "
+    "(build/create/make/generate an app, site, game, dashboard, tracker, or similar). "
+    "This is a workspace Builder turn. You MUST:\n"
+    "- Acknowledge the builder action concisely and product-specifically.\n"
+    "- Do NOT say \"Launch a managed mission.\"\n"
+    "- Do NOT say \"Let me launch a Cloud Agent.\"\n"
+    "- Do NOT say \"Use the Plan with coding agents button.\"\n"
+    "- Do NOT say \"I can't build directly from chat.\"\n"
+    "- Do NOT redirect to Coding Plan, managed missions, or Cloud Agent launch.\n"
+    "- Do NOT claim the full app/game is completed unless source/runtime actually succeeded.\n"
+    "- Keep the response concise: confirm the builder action is in progress and mention the Workbench."
+)
+
+
+def _inject_builder_turn_system(
+    llm_messages: list[dict[str, Any]],
+    builder_intent: str,
+) -> list[dict[str, Any]]:
+    """Inject per-turn system guidance when builder_intent is build_or_create."""
+    if builder_intent != "build_or_create":
+        return llm_messages
+    out = [dict(m) for m in llm_messages]
+    if out and out[0].get("role") == "system":
+        first = (out[0].get("content") or "").strip()
+        out[0] = {
+            "role": "system",
+            "content": f"{first}\n\n{_BUILDER_TURN_SYSTEM_INJECTION}".strip(),
+        }
+    else:
+        out.insert(0, {"role": "system", "content": _BUILDER_TURN_SYSTEM_INJECTION})
     return out
 
 
@@ -1369,6 +1417,7 @@ async def post_chat(
                 execution_mode=execution_mode,
                 builder=builder_meta,
             )
+    llm_messages = _inject_builder_turn_system(llm_messages, builder_intent)
     try:
         assistant_raw = complete_chat_turn(
             llm_messages,
@@ -1530,6 +1579,7 @@ def post_chat_stream(
                 )
 
         assistant_turn_id = str(uuid4())
+        llm_messages = _inject_builder_turn_system(llm_messages, builder_intent)
 
         def ndjson_gen():
             yield json.dumps({"type": "session", "session_id": sid}) + "\n"

@@ -52,6 +52,8 @@ def main() -> None:
     # Local dashboard/dev: never verify Clerk JWTs here (.env may set REQUIRE_AUTH / email gate).
     os.environ["HAM_CLERK_REQUIRE_AUTH"] = "false"
     os.environ["HAM_CLERK_ENFORCE_EMAIL_RESTRICTIONS"] = "false"
+    # Enable workspace context bypass so /api/me and workspace routes resolve without Clerk JWT.
+    os.environ.setdefault("HAM_LOCAL_DEV_WORKSPACE_BYPASS", "true")
 
     host = (os.environ.get("HAM_API_HOST") or "127.0.0.1").strip()
     port = int((os.environ.get("PORT") or os.environ.get("HAM_API_PORT") or "8000").strip())
