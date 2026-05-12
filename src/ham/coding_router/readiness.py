@@ -248,11 +248,14 @@ def _project_flags(project_id: str | None) -> ProjectFlags:
         return ProjectFlags(found=False, project_id=pid)
     if rec is None:
         return ProjectFlags(found=False, project_id=pid)
+    target = (getattr(rec, "output_target", None) or "managed_workspace").strip()
     return ProjectFlags(
         found=True,
         project_id=rec.id,
         build_lane_enabled=bool(getattr(rec, "build_lane_enabled", False)),
         has_github_repo=bool((getattr(rec, "github_repo", None) or "").strip()),
+        output_target=target or None,
+        has_workspace_id=bool((getattr(rec, "workspace_id", None) or "").strip()),
     )
 
 

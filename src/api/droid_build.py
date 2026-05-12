@@ -13,13 +13,20 @@ shape.
 Fail-closed gates (in the order checked):
 
 1. Clerk session required (router-level dep).
-2. Caller must be a workspace operator (``actor_is_workspace_operator``).
-3. Project must exist.
-4. Project must have ``build_lane_enabled=True``.
-5. Project must have ``github_repo`` configured.
-6. Launch must include ``confirmed=True`` and ``accept_pr=True``.
-7. Proposal digest + base revision must match the prior preview.
-8. ``HAM_DROID_EXEC_TOKEN`` must be configured on the API host.
+2. Project must exist and have ``build_lane_enabled=True``.
+3. Project's ``output_target``-specific required fields:
+   * ``github_pr`` → ``github_repo`` configured.
+   * ``managed_workspace`` → ``workspace_id`` assigned.
+4. Target-aware build approver:
+   * ``github_pr`` → caller must be a workspace operator
+     (``actor_is_workspace_operator`` against ``HAM_WORKSPACE_OPERATOR_EMAILS``).
+   * ``managed_workspace`` → caller must be the workspace ``owner`` or
+     ``admin`` on the project's ``workspace_id`` (resolved through
+     :func:`resolve_workspace_context`).
+5. Launch must include ``confirmed=True``; ``accept_pr=True`` is required
+   only for ``github_pr``.
+6. Proposal digest + base revision must match the prior preview.
+7. ``HAM_DROID_EXEC_TOKEN`` must be configured on the API host.
 
 If any gate fails, the route returns a structured error and **never** touches
 the runner, never spawns ``droid``, never opens a PR, and never writes to the
@@ -44,6 +51,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from src.api.clerk_gate import get_ham_clerk_actor
+from src.api.dependencies.workspace import get_workspace_store
 from src.ham.clerk_auth import HamActor
 from src.ham.clerk_operator import actor_is_workspace_operator
 from src.ham.droid_workflows.preview_launch import (
@@ -52,8 +60,14 @@ from src.ham.droid_workflows.preview_launch import (
     verify_launch_against_preview,
 )
 from src.ham.droid_workflows.registry import REGISTRY_REVISION, get_workflow
+from src.ham.workspace_resolver import (
+    WorkspaceForbidden,
+    WorkspaceNotFound,
+    resolve_workspace_context,
+)
 from src.persistence.control_plane_run import DroidBuildOutcome
 from src.persistence.project_store import get_project_store
+from src.persistence.workspace_store import WorkspaceStore
 
 # Hardcoded server-side. NEVER read from the client. NEVER echoed in a response field.
 _BUILD_WORKFLOW_ID = "safe_edit_low"
@@ -108,6 +122,104 @@ def _require_workspace_operator(actor: HamActor | None) -> None:
                 "error": {
                     "code": "WORKSPACE_OPERATOR_REQUIRED",
                     "message": "This action requires a workspace operator.",
+                }
+            },
+        )
+
+
+_BUILD_APPROVER_ROLES: frozenset[str] = frozenset({"owner", "admin"})
+
+
+def _require_build_approver(
+    actor: HamActor | None,
+    rec: Any,
+    store: WorkspaceStore,
+) -> None:
+    """Target-aware build approval gate.
+
+    - ``output_target == "github_pr"`` keeps the strict global gate
+      (``actor_is_workspace_operator`` against ``HAM_WORKSPACE_OPERATOR_EMAILS``).
+      Opening a real PR still requires a deployment-wide operator.
+    - ``output_target == "managed_workspace"`` instead requires a
+      Clerk-authenticated caller whose workspace role on the project's
+      ``workspace_id`` is ``owner`` or ``admin``. Members and viewers
+      cannot approve managed builds; the global operator allowlist is
+      not consulted on this path.
+
+    Fails closed with structured 403 / 422 codes that never echo the
+    operator allowlist, token env names, or runner URLs.
+    """
+    target = (getattr(rec, "output_target", None) or "managed_workspace").strip()
+    if target == "github_pr":
+        _require_workspace_operator(actor)
+        return
+    if target != "managed_workspace":
+        # Defensive: unknown target — refuse rather than silently fall through.
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": {
+                    "code": "BUILD_LANE_PROJECT_UNSUPPORTED_OUTPUT_TARGET",
+                    "message": "This project has an unsupported build output target.",
+                }
+            },
+        )
+    if actor is None or not (actor.user_id or "").strip():
+        raise HTTPException(
+            status_code=401,
+            detail={
+                "error": {
+                    "code": "CLERK_SESSION_REQUIRED",
+                    "message": "Sign in to approve a managed workspace build.",
+                }
+            },
+        )
+    workspace_id = (getattr(rec, "workspace_id", None) or "").strip()
+    if not workspace_id:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": {
+                    "code": "BUILD_LANE_PROJECT_MISSING_WORKSPACE_ID",
+                    "message": (
+                        "This project is configured for managed workspace builds "
+                        "but has no workspace assigned yet."
+                    ),
+                }
+            },
+        )
+    try:
+        ctx = resolve_workspace_context(actor, workspace_id, store)
+    except WorkspaceNotFound as exc:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": {
+                    "code": "WORKSPACE_NOT_FOUND",
+                    "message": str(exc) or "Workspace not found.",
+                }
+            },
+        ) from exc
+    except WorkspaceForbidden as exc:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": {
+                    "code": "HAM_PERMISSION_DENIED",
+                    "message": str(exc) or "You do not have access to this workspace.",
+                }
+            },
+        ) from exc
+    if (ctx.role or "").strip().lower() not in _BUILD_APPROVER_ROLES:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": {
+                    "code": "HAM_PERMISSION_DENIED",
+                    "message": (
+                        "Only a workspace owner or admin can approve a managed "
+                        "workspace build."
+                    ),
                 }
             },
         )
@@ -293,8 +405,17 @@ class DroidBuildLaunchBody(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-def _user_facing_summary() -> str:
+def _user_facing_summary(output_target: str) -> str:
     """Sanitized preview summary — never exposes workflow id, argv, or token env."""
+    target = (output_target or "").strip()
+    if target == "managed_workspace":
+        return (
+            "This action proposes a low-risk managed workspace snapshot: "
+            "documentation, comments, and non-behavioral edits only. "
+            "HAM will capture a preview snapshot for you to review before "
+            "anything is published. No CI configuration or business logic "
+            "will be modified."
+        )
     return (
         "This action proposes a low-risk pull request: documentation, comments, "
         "and non-behavioral edits only. You will review and approve the PR on "
@@ -307,11 +428,12 @@ def _user_facing_summary() -> str:
 async def preview_droid_build(
     body: DroidBuildPreviewBody,
     ham_actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
+    workspace_store: Annotated[WorkspaceStore, Depends(get_workspace_store)],
 ) -> dict[str, Any]:
     """Preview a build (low-risk PR-opening) workflow. No execution; returns a digest."""
     _build_workflow_or_500()
-    _require_workspace_operator(ham_actor)
     rec = _require_build_lane_project(body.project_id)
+    _require_build_approver(ham_actor, rec, workspace_store)
     prev = build_droid_preview(
         workflow_id=_BUILD_WORKFLOW_ID,
         project_id=rec.id,
@@ -337,7 +459,7 @@ async def preview_droid_build(
         "project_id": rec.id,
         "project_name": rec.name,
         "user_prompt": prev.user_prompt,
-        "summary": _user_facing_summary(),
+        "summary": _user_facing_summary(project_output_target),
         "proposal_digest": prev.proposal_digest,
         "base_revision": prev.base_revision,
         "is_readonly": False,
@@ -351,6 +473,7 @@ async def preview_droid_build(
 async def launch_droid_build(
     body: DroidBuildLaunchBody,
     ham_actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
+    workspace_store: Annotated[WorkspaceStore, Depends(get_workspace_store)],
 ) -> dict[str, Any]:
     """Launch the previewed build. Digest-verified; gated by token + accept_pr + confirmed."""
     if not body.confirmed:
@@ -364,8 +487,8 @@ async def launch_droid_build(
             },
         )
     _build_workflow_or_500()
-    _require_workspace_operator(ham_actor)
     rec = _require_build_lane_project(body.project_id)
+    _require_build_approver(ham_actor, rec, workspace_store)
     project_output_target = (
         getattr(rec, "output_target", None) or "managed_workspace"
     )

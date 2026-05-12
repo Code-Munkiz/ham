@@ -133,12 +133,16 @@ def _register_project(
     root: Path,
     build_lane_enabled: bool = False,
     github_repo: str | None = None,
+    output_target: str = "github_pr",
+    workspace_id: str | None = None,
 ) -> Any:
     rec = store.make_record(name=name, root=str(root))
     rec = rec.model_copy(
         update={
             "build_lane_enabled": build_lane_enabled,
             "github_repo": github_repo,
+            "output_target": output_target,
+            "workspace_id": workspace_id,
         }
     )
     return store.register(rec)

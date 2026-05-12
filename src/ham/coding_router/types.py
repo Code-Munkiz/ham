@@ -63,12 +63,17 @@ class ProjectFlags:
 
     None of these fields carry secret values. ``has_github_repo`` is a bool
     derived from ``ProjectRecord.github_repo`` and never echoes the repo name.
+    ``output_target`` is the project's configured Build Lane output target
+    ("managed_workspace" or "github_pr") and lets the recommender pick the
+    right blocker copy (managed projects do not need a GitHub repo).
     """
 
     found: bool
     project_id: str | None
     build_lane_enabled: bool = False
     has_github_repo: bool = False
+    output_target: str | None = None
+    has_workspace_id: bool = False
 
 
 @dataclass(frozen=True)
@@ -113,6 +118,8 @@ class WorkspaceReadiness:
                 "project_id": self.project.project_id,
                 "build_lane_enabled": self.project.build_lane_enabled,
                 "has_github_repo": self.project.has_github_repo,
+                "output_target": self.project.output_target,
+                "has_workspace_id": self.project.has_workspace_id,
             },
         }
 

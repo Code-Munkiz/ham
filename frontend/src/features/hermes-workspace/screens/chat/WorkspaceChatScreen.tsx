@@ -606,6 +606,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   const [projectId, setProjectId] = React.useState<string | null>(null);
   const [codingPlanPreview, setCodingPlanPreview] =
     React.useState<CodingConductorPreviewPayload | null>(null);
+  const [codingPlanPrompt, setCodingPlanPrompt] = React.useState<string>("");
   const [codingPlanLoading, setCodingPlanLoading] = React.useState(false);
   const [codingPlanInlineError, setCodingPlanInlineError] = React.useState<string | null>(null);
   const composerTextareaRef = React.useRef<HTMLTextAreaElement | null>(null);
@@ -2734,6 +2735,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         project_id: projectId ?? undefined,
       });
       setCodingPlanPreview(payload);
+      setCodingPlanPrompt(draft);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Could not load coding plan.";
       toast.error(shortenHamApiErrorMessage(msg));
@@ -3396,7 +3398,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
                     className={codingPlanInlineError ? "mt-2" : ""}
                     data-hww-coding-plan-card-wrap
                   >
-                    <CodingPlanCard payload={codingPlanPreview} />
+                    <CodingPlanCard payload={codingPlanPreview} userPrompt={codingPlanPrompt} />
                   </div>
                 ) : null}
               </div>

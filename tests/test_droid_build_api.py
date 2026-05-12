@@ -707,3 +707,267 @@ def test_token_env_name_is_never_in_responses(
     )
     assert lr.status_code == 503
     assert "HAM_DROID_EXEC_TOKEN".lower() not in lr.text.lower()
+
+
+# ---------------------------------------------------------------------------
+# Managed workspace gates — workspace owner/admin (NOT global operator) can
+# approve managed_workspace builds from the chat plan card; members/viewers
+# cannot; missing workspace_id is structured-422.
+# ---------------------------------------------------------------------------
+
+
+from datetime import UTC, datetime  # noqa: E402
+
+from src.api.dependencies.workspace import get_workspace_store  # noqa: E402
+from src.ham.workspace_models import (  # noqa: E402
+    OrgRecord,
+    WorkspaceMember,
+    WorkspaceRecord,
+)
+from src.persistence.workspace_store import (  # noqa: E402
+    InMemoryWorkspaceStore,
+    new_workspace_id,
+)
+
+
+def _seed_managed_workspace(
+    *,
+    role: str,
+    user_id: str,
+    email: str | None = "owner@example.test",
+) -> tuple[InMemoryWorkspaceStore, str, HamActor]:
+    """Build an in-memory workspace store with a single workspace and one member."""
+    store = InMemoryWorkspaceStore()
+    now = datetime.now(UTC)
+    org_id = "org_managed"
+    store.upsert_org(
+        OrgRecord(org_id=org_id, name="Managed", clerk_slug="managed", created_at=now),
+    )
+    ws_id = new_workspace_id()
+    store.create_workspace(
+        WorkspaceRecord(
+            workspace_id=ws_id,
+            org_id=org_id,
+            owner_user_id=user_id if role == "owner" else "user_root",
+            name="Honey Ham",
+            slug="honey-ham",
+            description="",
+            created_by=user_id,
+            created_at=now,
+            updated_at=now,
+        ),
+    )
+    store.upsert_member(
+        WorkspaceMember(
+            user_id=user_id,
+            workspace_id=ws_id,
+            role=role,
+            added_by=user_id,
+            added_at=now,
+        ),
+    )
+    actor = HamActor(
+        user_id=user_id,
+        org_id=org_id,
+        session_id="sess_managed",
+        email=email,
+        permissions=frozenset(),
+        org_role="org:member",
+        raw_permission_claim=None,
+    )
+    return store, ws_id, actor
+
+
+def _register_managed_build_project(
+    project_store: ProjectStore,
+    *,
+    name: str,
+    root: Path,
+    workspace_id: str | None,
+) -> ProjectRecord:
+    rec = project_store.make_record(name=name, root=str(root), description="")
+    rec = rec.model_copy(
+        update={
+            "build_lane_enabled": True,
+            "github_repo": None,
+            "output_target": "managed_workspace",
+            "workspace_id": workspace_id,
+        }
+    )
+    return project_store.register(rec)
+
+
+def _override_store(store: InMemoryWorkspaceStore) -> None:
+    fastapi_app.dependency_overrides[get_workspace_store] = lambda: store
+
+
+def test_managed_preview_succeeds_for_workspace_owner(
+    isolated_store: ProjectStore,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    cleanup_overrides: None,
+) -> None:
+    monkeypatch.setenv("HAM_CLERK_REQUIRE_AUTH", "true")
+    monkeypatch.delenv("HAM_WORKSPACE_OPERATOR_EMAILS", raising=False)
+    ws_store, ws_id, actor = _seed_managed_workspace(role="owner", user_id="user_owner")
+    _override_store(ws_store)
+    root = tmp_path / "r"
+    root.mkdir()
+    rec = _register_managed_build_project(
+        isolated_store, name="p_mw_owner", root=root, workspace_id=ws_id,
+    )
+    res = _client(actor).post(
+        "/api/droid/build/preview",
+        json={"project_id": rec.id, "user_prompt": "Tidy README typos."},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["output_target"] == "managed_workspace"
+    assert body["will_open_pull_request"] is False
+    assert "snapshot" in body["summary"].lower()
+    assert "pull request" not in body["summary"].lower()
+
+
+def test_managed_preview_succeeds_for_workspace_admin(
+    isolated_store: ProjectStore,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    cleanup_overrides: None,
+) -> None:
+    monkeypatch.setenv("HAM_CLERK_REQUIRE_AUTH", "true")
+    ws_store, ws_id, actor = _seed_managed_workspace(role="admin", user_id="user_admin")
+    _override_store(ws_store)
+    root = tmp_path / "r"
+    root.mkdir()
+    rec = _register_managed_build_project(
+        isolated_store, name="p_mw_admin", root=root, workspace_id=ws_id,
+    )
+    res = _client(actor).post(
+        "/api/droid/build/preview",
+        json={"project_id": rec.id, "user_prompt": "Tidy README typos."},
+    )
+    assert res.status_code == 200, res.text
+
+
+def test_managed_preview_rejects_workspace_member(
+    isolated_store: ProjectStore,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    cleanup_overrides: None,
+) -> None:
+    monkeypatch.setenv("HAM_CLERK_REQUIRE_AUTH", "true")
+    ws_store, ws_id, actor = _seed_managed_workspace(role="member", user_id="user_member")
+    _override_store(ws_store)
+    root = tmp_path / "r"
+    root.mkdir()
+    rec = _register_managed_build_project(
+        isolated_store, name="p_mw_member", root=root, workspace_id=ws_id,
+    )
+    res = _client(actor).post(
+        "/api/droid/build/preview",
+        json={"project_id": rec.id, "user_prompt": "Tidy README typos."},
+    )
+    assert res.status_code == 403
+    assert res.json()["detail"]["error"]["code"] == "HAM_PERMISSION_DENIED"
+
+
+def test_managed_preview_rejects_when_workspace_id_missing(
+    isolated_store: ProjectStore,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    cleanup_overrides: None,
+) -> None:
+    monkeypatch.setenv("HAM_CLERK_REQUIRE_AUTH", "true")
+    ws_store, _, actor = _seed_managed_workspace(role="owner", user_id="user_x")
+    _override_store(ws_store)
+    root = tmp_path / "r"
+    root.mkdir()
+    rec = _register_managed_build_project(
+        isolated_store, name="p_mw_nows", root=root, workspace_id=None,
+    )
+    res = _client(actor).post(
+        "/api/droid/build/preview",
+        json={"project_id": rec.id, "user_prompt": "Tidy README."},
+    )
+    assert res.status_code == 422
+    assert (
+        res.json()["detail"]["error"]["code"]
+        == "BUILD_LANE_PROJECT_MISSING_WORKSPACE_ID"
+    )
+
+
+def test_managed_launch_does_not_require_accept_pr(
+    isolated_store: ProjectStore,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    cleanup_overrides: None,
+) -> None:
+    monkeypatch.setenv("HAM_CLERK_REQUIRE_AUTH", "true")
+    monkeypatch.setenv("HAM_DROID_EXEC_TOKEN", "test-only-not-deployed")
+    ws_store, ws_id, actor = _seed_managed_workspace(role="owner", user_id="user_owner2")
+    _override_store(ws_store)
+    root = tmp_path / "r"
+    root.mkdir()
+    rec = _register_managed_build_project(
+        isolated_store, name="p_mw_l", root=root, workspace_id=ws_id,
+    )
+    client = _client(actor)
+    pv = _make_preview(client, rec.id, "Tidy README.")
+    with patch(
+        "src.api.droid_build.execute_droid_build_workflow",
+        return_value=_make_outcome(
+            pr_url=None,
+            pr_branch=None,
+            pr_commit_sha=None,
+            build_outcome=None,
+            summary="Snapshot captured.",
+            output_target="managed_workspace",
+            output_ref={
+                "snapshot_id": "snap_abc",
+                "preview_url": "https://snapshots.example.test/p/abc",
+                "changed_paths_count": 3,
+                "neutral_outcome": "snapshot_published",
+            },
+        ),
+    ):
+        res = client.post(
+            "/api/droid/build/launch",
+            json={
+                "project_id": rec.id,
+                "user_prompt": "Tidy README.",
+                "proposal_digest": pv["proposal_digest"],
+                "base_revision": pv["base_revision"],
+                "confirmed": True,
+                "accept_pr": False,
+            },
+        )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["ok"] is True
+    assert body["output_target"] == "managed_workspace"
+    assert body["will_open_pull_request"] is False
+    assert body["output_ref"]["snapshot_id"] == "snap_abc"
+
+
+def test_managed_launch_unauthenticated_is_401(
+    isolated_store: ProjectStore,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    cleanup_overrides: None,
+) -> None:
+    monkeypatch.setenv("HAM_CLERK_REQUIRE_AUTH", "true")
+    ws_store, ws_id, _ = _seed_managed_workspace(role="owner", user_id="user_owner3")
+    _override_store(ws_store)
+    root = tmp_path / "r"
+    root.mkdir()
+    rec = _register_managed_build_project(
+        isolated_store, name="p_mw_unauth", root=root, workspace_id=ws_id,
+    )
+    res = TestClient(app).post(
+        "/api/droid/build/preview",
+        json={"project_id": rec.id, "user_prompt": "Tidy README."},
+    )
+    assert res.status_code == 401
+    raw = res.text.lower()
+    assert "ham_droid_exec_token" not in raw
+    assert "safe_edit_low" not in raw

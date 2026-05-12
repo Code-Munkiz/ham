@@ -135,11 +135,20 @@ def _candidate(
     base_confidence: float,
     readiness: ProviderReadiness,
     extra_blockers: tuple[str, ...] = (),
+    project: ProjectFlags | None = None,
 ) -> Candidate:
     blockers: list[str] = []
     blockers.extend(readiness.blockers)
     blockers.extend(extra_blockers)
-    safety = _SAFETY[provider]
+    safety = dict(_SAFETY[provider])
+    # Managed-workspace Factory Droid Build never opens a GitHub PR and
+    # never requires the global workspace-operator role — workspace
+    # owners/admins approve their own builds from the chat plan card.
+    if provider == "factory_droid_build" and project is not None:
+        target = (project.output_target or "managed_workspace").strip()
+        if target == "managed_workspace":
+            safety["will_open_pull_request"] = False
+            safety["requires_operator"] = False
     return Candidate(
         provider=provider,
         confidence=base_confidence,
@@ -167,11 +176,19 @@ def _project_blockers_for(provider: ProviderKind, project: ProjectFlags) -> tupl
         else:
             if not project.build_lane_enabled:
                 blockers.append(
-                    "Build lane is disabled for this project. A workspace operator must "
-                    "enable it in Settings."
+                    "Build lane is disabled for this project. A workspace owner or admin "
+                    "must enable it in project settings."
                 )
-            if not project.has_github_repo:
-                blockers.append("This project has no GitHub repository configured.")
+            target = (project.output_target or "managed_workspace").strip()
+            if target == "github_pr":
+                if not project.has_github_repo:
+                    blockers.append("This project has no GitHub repository configured.")
+            elif target == "managed_workspace":
+                if not project.has_workspace_id:
+                    blockers.append(
+                        "This project has no managed workspace assigned yet. "
+                        "Pick a workspace before building."
+                    )
     return tuple(blockers)
 
 
@@ -206,6 +223,7 @@ def recommend(
                 base_confidence=base,
                 readiness=pr,
                 extra_blockers=extra,
+                project=proj,
             )
         )
 
@@ -219,6 +237,7 @@ def recommend(
                 base_confidence=0.3,
                 readiness=_readiness_for(readiness, "no_agent"),
                 extra_blockers=(),
+                project=proj,
             )
         )
 
