@@ -380,11 +380,7 @@ describe("WorkspaceWorkbench", () => {
       },
     });
     subscribeBuilderActivityStreamMock.mockImplementation(
-      (
-        _workspaceId: string,
-        _projectId: string,
-        callbacks: { onOpen?: () => void },
-      ) => {
+      (_workspaceId: string, _projectId: string, callbacks: { onOpen?: () => void }) => {
         callbacks.onOpen?.();
         return { close: vi.fn() };
       },
@@ -432,7 +428,11 @@ describe("WorkspaceWorkbench", () => {
   it("Activity stream updates activity items from live events", async () => {
     let callbacks: { onActivity: (payload: any) => void; onOpen?: () => void } | null = null;
     subscribeBuilderActivityStreamMock.mockImplementation(
-      (_workspaceId: string, _projectId: string, cb: { onActivity: (payload: any) => void; onOpen?: () => void }) => {
+      (
+        _workspaceId: string,
+        _projectId: string,
+        cb: { onActivity: (payload: any) => void; onOpen?: () => void },
+      ) => {
         callbacks = cb;
         cb.onOpen?.();
         return { close: vi.fn() };
