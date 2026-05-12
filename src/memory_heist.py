@@ -135,7 +135,10 @@ MAX_SUMMARY_CHARS = 4_000
 # implementation. Current session handling uses alternative compaction strategies.
 # TODO: Consider re-adding this constant if token-based session compaction is re-implemented.
 #       When added, recommend a value between 500-2000 tokens depending on use case.
-DEFAULT_SESSION_COMPACTION_MAX_TOKENS = None  # Placeholder: not currently used
+# NOTE: This placeholder may be removed entirely once no longer needed or replaced
+#       with actual implementation. Check sessions.py and compact_session() for current
+#       compaction logic before re-adding token-based limits.
+DEFAULT_SESSION_COMPACTION_MAX_TOKENS=***  # Placeholder: not currently used
 DEFAULT_SESSION_COMPACTION_PRESERVE = 4
 DEFAULT_SESSION_TOOL_PRUNE_CHARS = 200
 # Session browser defaults: browser interaction controls including step limits,
