@@ -45,8 +45,10 @@ vi.mock("@/lib/ham/api", async (importOriginal) => {
     getBuilderPreviewStatus: (...args: unknown[]) => getBuilderPreviewStatusMock(...args),
     getBuilderActivity: (...args: unknown[]) => getBuilderActivityMock(...args),
     getBuilderLocalRunProfile: (...args: unknown[]) => getBuilderLocalRunProfileMock(...args),
-    listBuilderVisualEditRequests: (...args: unknown[]) => listBuilderVisualEditRequestsMock(...args),
-    createBuilderVisualEditRequest: (...args: unknown[]) => createBuilderVisualEditRequestMock(...args),
+    listBuilderVisualEditRequests: (...args: unknown[]) =>
+      listBuilderVisualEditRequestsMock(...args),
+    createBuilderVisualEditRequest: (...args: unknown[]) =>
+      createBuilderVisualEditRequestMock(...args),
     saveBuilderLocalRunProfile: (...args: unknown[]) => saveBuilderLocalRunProfileMock(...args),
     deleteBuilderLocalRunProfile: (...args: unknown[]) => deleteBuilderLocalRunProfileMock(...args),
     postBuilderLocalPreview: (...args: unknown[]) => postBuilderLocalPreviewMock(...args),

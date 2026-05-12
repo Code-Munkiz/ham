@@ -266,7 +266,9 @@ function WorkbenchPreviewPanel({
   const [runProfile, setRunProfile] = React.useState<LocalRunProfileResponse | null>(null);
   const [runProfileBusy, setRunProfileBusy] = React.useState(false);
   const [runProfileError, setRunProfileError] = React.useState<string | null>(null);
-  const [visualEditRequests, setVisualEditRequests] = React.useState<BuilderVisualEditRequest[]>([]);
+  const [visualEditRequests, setVisualEditRequests] = React.useState<BuilderVisualEditRequest[]>(
+    [],
+  );
   const [visualEditInstruction, setVisualEditInstruction] = React.useState("");
   const [visualEditSelectorHints, setVisualEditSelectorHints] = React.useState("");
   const [visualEditRoute, setVisualEditRoute] = React.useState("/");
@@ -777,7 +779,9 @@ function WorkbenchPreviewPanel({
             void createBuilderVisualEditRequest(ws, pid, payload)
               .then(() => {
                 setVisualEditInstruction("");
-                setVisualEditNotice("Visual edit request saved. Agent execution is not connected yet.");
+                setVisualEditNotice(
+                  "Visual edit request saved. Agent execution is not connected yet.",
+                );
                 void refreshVisualEditRequests();
               })
               .catch((err) => {
