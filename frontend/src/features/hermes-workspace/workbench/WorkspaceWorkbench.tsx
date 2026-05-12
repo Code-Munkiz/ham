@@ -42,6 +42,7 @@ import {
   getBuilderPreviewStatus,
   getBuilderWorkerCapabilities,
   listBuilderCloudRuntimeJobs,
+  subscribeBuilderActivityStream,
   listBuilderVisualEditRequests,
   listBuilderImportJobs,
   listBuilderProjectSources,
@@ -269,6 +270,9 @@ function WorkbenchPreviewPanel({
   const [error, setError] = React.useState<string | null>(null);
   const [activity, setActivity] = React.useState<BuilderActivityItem[]>([]);
   const [activityError, setActivityError] = React.useState<string | null>(null);
+  const [activityStreamState, setActivityStreamState] = React.useState<
+    "live" | "reconnecting" | "offline"
+  >("offline");
   const [workers, setWorkers] = React.useState<BuilderWorkerCapability[]>([]);
   const [workersError, setWorkersError] = React.useState<string | null>(null);
   const [previewUrlInput, setPreviewUrlInput] = React.useState("http://localhost:3000");
@@ -450,6 +454,31 @@ function WorkbenchPreviewPanel({
   React.useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  React.useEffect(() => {
+    const wsId = workspaceId?.trim() || "";
+    const project = projectId?.trim() || "";
+    if (!wsId || !project) {
+      setActivityStreamState("offline");
+      return;
+    }
+    setActivityStreamState("reconnecting");
+    const sub = subscribeBuilderActivityStream(wsId, project, {
+      onOpen: () => setActivityStreamState("live"),
+      onActivity: (payload) => {
+        setActivity(payload.items || []);
+        setActivityError(null);
+        setActivityStreamState("live");
+      },
+      onHeartbeat: () => setActivityStreamState("live"),
+      onError: () => {
+        setActivityStreamState("offline");
+        setActivityError((prev) => prev || "Live activity stream disconnected. Refresh manually.");
+        void refreshActivity();
+      },
+    });
+    return () => sub.close();
+  }, [workspaceId, projectId, refreshActivity]);
 
   const previewUrl = preview?.status === "ready" ? preview.preview_url : null;
   const ws = workspaceId?.trim() || "";
@@ -1107,6 +1136,17 @@ function WorkbenchPreviewPanel({
       >
         <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">
           Builder activity
+        </p>
+        <p className="text-[11px] text-white/55" data-testid="hww-preview-activity-stream-copy">
+          Activity updates live when connected. Build log streaming is not connected yet.
+        </p>
+        <p className="text-[11px] text-white/55" data-testid="hww-preview-activity-stream-state">
+          Live status:{" "}
+          {activityStreamState === "live"
+            ? "Live"
+            : activityStreamState === "reconnecting"
+              ? "Reconnecting"
+              : "Offline / refresh manually"}
         </p>
         {activityError ? (
           <p className="text-amber-200/90" data-testid="hww-preview-activity-error">

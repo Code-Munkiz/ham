@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -270,4 +271,91 @@ def test_activity_includes_local_run_profile_events(tmp_path: Path) -> None:
     res = client.get(f"/api/workspaces/{ws_id}/projects/{project_id}/builder/activity")
     assert res.status_code == 200
     assert any(row["title"] == "Local run profile configured" for row in res.json()["items"])
+    _cleanup()
+
+
+def test_activity_stream_emits_activity_snapshot(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HAM_BUILDER_ACTIVITY_STREAM_MAX_SECONDS", "5")
+    monkeypatch.setenv("HAM_BUILDER_ACTIVITY_STREAM_MAX_EVENTS", "4")
+    client, ws_id, project_id = _seed_context(tmp_path)
+    with client.stream(
+        "GET",
+        f"/api/workspaces/{ws_id}/projects/{project_id}/builder/activity/stream",
+    ) as res:
+        assert res.status_code == 200, res.text
+        assert res.headers.get("content-type", "").startswith("text/event-stream")
+        lines = list(res.iter_lines())
+    assert any("event: activity" in line for line in lines)
+    data_line = next(line for line in lines if line.startswith("data: "))
+    payload = json.loads(data_line.replace("data: ", "", 1))
+    assert payload["workspace_id"] == ws_id
+    assert payload["project_id"] == project_id
+    assert isinstance(payload.get("items"), list)
+    _cleanup()
+
+
+def test_activity_stream_scope_enforced_and_no_cross_project_leakage(tmp_path: Path) -> None:
+    ws_store = InMemoryWorkspaceStore()
+    ws_a = "ws_aaaaaaaaaaaaaaaa"
+    ws_b = "ws_bbbbbbbbbbbbbbbb"
+    _seed_workspace(ws_store, workspace_id=ws_a, org_id="org_a", owner_user_id="user_a", slug="alpha")
+    _seed_workspace(ws_store, workspace_id=ws_b, org_id="org_b", owner_user_id="user_b", slug="beta")
+    project_store = ProjectStore(store_path=tmp_path / "projects.json")
+    p_a = project_store.make_record(name="proj-a", root=str(tmp_path), metadata={"workspace_id": ws_a})
+    p_b = project_store.make_record(name="proj-b", root=str(tmp_path), metadata={"workspace_id": ws_b})
+    project_store.register(p_a)
+    project_store.register(p_b)
+    set_project_store_for_tests(project_store)
+    set_builder_source_store_for_tests(BuilderSourceStore(store_path=tmp_path / "builder_sources.json"))
+    set_builder_runtime_store_for_tests(BuilderRuntimeStore(store_path=tmp_path / "builder_runtime.json"))
+    set_builder_run_profile_store_for_tests(BuilderRunProfileStore(store_path=tmp_path / "builder_run_profiles.json"))
+    foreign_client = TestClient(_build_app(actor=_actor("user_b", org_id="org_b"), ws_store=ws_store))
+    forbidden = foreign_client.get(f"/api/workspaces/{ws_a}/projects/{p_a.id}/builder/activity/stream")
+    owner_client = TestClient(_build_app(actor=_actor("user_a", org_id="org_a"), ws_store=ws_store))
+    wrong_project_workspace = owner_client.get(
+        f"/api/workspaces/{ws_a}/projects/{p_b.id}/builder/activity/stream"
+    )
+    assert forbidden.status_code == 403
+    assert wrong_project_workspace.status_code == 404
+    _cleanup()
+
+
+def test_activity_stream_heartbeat_and_done_events(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HAM_BUILDER_ACTIVITY_STREAM_MAX_SECONDS", "5")
+    monkeypatch.setenv("HAM_BUILDER_ACTIVITY_STREAM_MAX_EVENTS", "4")
+    monkeypatch.setenv("HAM_BUILDER_ACTIVITY_STREAM_POLL_SECONDS", "0.5")
+    client, ws_id, project_id = _seed_context(tmp_path)
+    with client.stream(
+        "GET",
+        f"/api/workspaces/{ws_id}/projects/{project_id}/builder/activity/stream",
+    ) as res:
+        assert res.status_code == 200, res.text
+        lines = list(res.iter_lines())
+    assert any("event: heartbeat" in line for line in lines)
+    assert any("event: done" in line for line in lines)
+    _cleanup()
+
+
+def test_activity_stream_does_not_emit_sensitive_error_text(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HAM_BUILDER_ACTIVITY_STREAM_MAX_SECONDS", "5")
+    monkeypatch.setenv("HAM_BUILDER_ACTIVITY_STREAM_MAX_EVENTS", "4")
+    client, ws_id, project_id = _seed_context(tmp_path)
+    source_store = BuilderSourceStore(store_path=tmp_path / "builder_sources.json")
+    source_store.upsert_import_job(
+        ImportJob(
+            workspace_id=ws_id,
+            project_id=project_id,
+            status="failed",
+            error_message="token=abc123 secret_key=xyz",
+        )
+    )
+    set_builder_source_store_for_tests(source_store)
+    with client.stream(
+        "GET",
+        f"/api/workspaces/{ws_id}/projects/{project_id}/builder/activity/stream",
+    ) as res:
+        assert res.status_code == 200, res.text
+        body = "\n".join(list(res.iter_lines())).lower()
+    assert "token=abc123" not in body
+    assert "secret_key" not in body
     _cleanup()

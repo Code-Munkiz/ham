@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import json
 import os
 import re
 import shlex
@@ -13,6 +15,7 @@ from urllib.parse import urljoin, urlsplit, urlunsplit
 import httpx
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi import Request, Response
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from src.api.clerk_gate import get_ham_clerk_actor
@@ -69,6 +72,31 @@ _ZIP_ERROR_MESSAGES = {
 _PREVIEW_PROXY_ALLOWED_HOST_SUFFIXES = (".run.app",)
 _PREVIEW_PROXY_TIMEOUT_SECONDS = 8.0
 _PREVIEW_PROXY_MAX_BYTES = 2 * 1024 * 1024
+_ACTIVITY_STREAM_MAX_ITEMS = 24
+_ACTIVITY_STREAM_MAX_EVENTS = 64
+_ACTIVITY_STREAM_MAX_PAYLOAD_BYTES = 24 * 1024
+
+
+def _int_env(name: str, default: int, *, min_value: int, max_value: int) -> int:
+    raw = str(os.environ.get(name) or "").strip()
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        return default
+    return max(min_value, min(max_value, value))
+
+
+def _float_env(name: str, default: float, *, min_value: float, max_value: float) -> float:
+    raw = str(os.environ.get(name) or "").strip()
+    if not raw:
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        return default
+    return max(min_value, min(max_value, value))
 
 
 def _project_workspace_id(record: ProjectRecord) -> str | None:
@@ -273,6 +301,30 @@ def _runtime_session_by_id(*, workspace_id: str, project_id: str, runtime_sessio
         if row.id == rid:
             return row
     return None
+
+
+def _sse_pack(event_name: str, payload: dict[str, Any]) -> bytes:
+    return (
+        f"event: {event_name}\ndata: "
+        + json.dumps(payload, separators=(",", ":"), default=str)
+        + "\n\n"
+    ).encode("utf-8")
+
+
+def _activity_stream_payload(*, workspace_id: str, project_id: str) -> dict[str, Any]:
+    items = _build_activity_items(workspace_id=workspace_id, project_id=project_id)[:_ACTIVITY_STREAM_MAX_ITEMS]
+    payload: dict[str, Any] = {
+        "workspace_id": workspace_id,
+        "project_id": project_id,
+        "connection_state": "live",
+        "items": [row.model_dump(mode="json") for row in items],
+    }
+    encoded = json.dumps(payload, separators=(",", ":"), default=str).encode("utf-8")
+    while len(encoded) > _ACTIVITY_STREAM_MAX_PAYLOAD_BYTES and payload["items"]:
+        payload["items"] = payload["items"][:-1]
+        encoded = json.dumps(payload, separators=(",", ":"), default=str).encode("utf-8")
+    payload["stream_cursor"] = f"{len(payload['items'])}:{(payload['items'][0]['id'] if payload['items'] else 'none')}"
+    return payload
 
 
 def _derive_preview_status(
@@ -1333,6 +1385,46 @@ async def get_builder_activity(
         "project_id": project_id,
         "items": [row.model_dump(mode="json") for row in items],
     }
+
+
+@router.get("/api/workspaces/{workspace_id}/projects/{project_id}/builder/activity/stream")
+async def stream_builder_activity(
+    project_id: str,
+    ctx: Annotated[WorkspaceContext, Depends(require_perm(PERM_WORKSPACE_READ))],
+) -> StreamingResponse:
+    _project_in_workspace_or_404(project_id=project_id, workspace_id=ctx.workspace_id)
+    max_seconds = _float_env("HAM_BUILDER_ACTIVITY_STREAM_MAX_SECONDS", 25.0, min_value=5.0, max_value=120.0)
+    poll_seconds = _float_env("HAM_BUILDER_ACTIVITY_STREAM_POLL_SECONDS", 1.5, min_value=0.5, max_value=5.0)
+    max_events = _int_env("HAM_BUILDER_ACTIVITY_STREAM_MAX_EVENTS", _ACTIVITY_STREAM_MAX_EVENTS, min_value=4, max_value=256)
+
+    async def _gen() -> Any:
+        started = datetime.now(UTC)
+        events_sent = 0
+        last_cursor: str | None = None
+        while events_sent < max_events:
+            payload = _activity_stream_payload(workspace_id=ctx.workspace_id, project_id=project_id)
+            cursor = str(payload.get("stream_cursor") or "")
+            if cursor != last_cursor:
+                yield _sse_pack("activity", payload)
+                last_cursor = cursor
+                events_sent += 1
+            else:
+                yield _sse_pack("heartbeat", {"ts": _utc_now_iso(), "connection_state": "live"})
+                events_sent += 1
+            elapsed = (datetime.now(UTC) - started).total_seconds()
+            if elapsed >= max_seconds:
+                break
+            await asyncio.sleep(poll_seconds)
+        yield _sse_pack("done", {"reason": "stream_closed", "ts": _utc_now_iso()})
+
+    return StreamingResponse(
+        _gen(),
+        media_type="text/event-stream",
+        headers={
+            "cache-control": "no-cache",
+            "x-accel-buffering": "no",
+        },
+    )
 
 
 @router.get("/api/workspaces/{workspace_id}/projects/{project_id}/builder/usage-events")
