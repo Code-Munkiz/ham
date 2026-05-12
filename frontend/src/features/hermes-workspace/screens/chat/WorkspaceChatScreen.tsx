@@ -12,6 +12,7 @@ import {
   appendChatSessionTurns,
   createChatSession,
   downloadChatSessionPdf,
+  ensureBuilderDefaultProject,
   ensureProjectIdForWorkspaceRoot,
   fetchChatComposerPreference,
   fetchChatCapabilities,
@@ -605,6 +606,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   const executionModePreference: "auto" | "browser" | "machine" | "chat" = "auto";
   const [executionMode, setExecutionMode] = React.useState<HamChatExecutionMode | null>(null);
   const [projectId, setProjectId] = React.useState<string | null>(null);
+  const [workbenchBounce, setWorkbenchBounce] = React.useState(0);
   const [codingPlanPreview, setCodingPlanPreview] =
     React.useState<CodingConductorPreviewPayload | null>(null);
   const [codingPlanPrompt, setCodingPlanPrompt] = React.useState<string>("");
@@ -1428,16 +1430,24 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     }
     void (async () => {
       try {
-        const ctx = await fetchContextEngine();
-        const id = await ensureProjectIdForWorkspaceRoot(ctx.cwd, activeWorkspaceId);
+        const out = await ensureBuilderDefaultProject(activeWorkspaceId);
         if (!c) {
-          setProjectId(id);
-          setHamProjectId(id);
+          setProjectId(out.project_id);
+          setHamProjectId(out.project_id);
         }
       } catch {
-        if (!c) {
-          setProjectId(null);
-          setHamProjectId(null);
+        try {
+          const ctx = await fetchContextEngine();
+          const id = await ensureProjectIdForWorkspaceRoot(ctx.cwd, activeWorkspaceId);
+          if (!c) {
+            setProjectId(id);
+            setHamProjectId(id);
+          }
+        } catch {
+          if (!c) {
+            setProjectId(null);
+            setHamProjectId(null);
+          }
         }
       }
     })();
@@ -2480,6 +2490,10 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         setSessionId(res.session_id);
         writeWorkspaceLastChatSessionId(requestWorkspaceId, res.session_id);
         setExecutionMode(res.execution_mode ?? null);
+        const b = res.builder;
+        if (b && (b.scaffolded === true || b.deduplicated === true)) {
+          setWorkbenchBounce((x) => x + 1);
+        }
         browserSessionFollowThroughRef.current = res.execution_mode?.selected_mode === "browser";
         const normalizedMessages = res.messages.some((m) => m.role === "user")
           ? res.messages
@@ -3662,7 +3676,11 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
           "min-h-[260px] max-h-[48vh] md:max-h-none md:h-full md:min-h-0 md:min-w-[420px] md:flex-1",
         )}
       >
-        <WorkspaceWorkbench projectId={projectId} workspaceId={activeWorkspaceId} />
+        <WorkspaceWorkbench
+          projectId={projectId}
+          workspaceId={activeWorkspaceId}
+          workbenchRefreshSignal={workbenchBounce}
+        />
       </div>
     </div>
   );

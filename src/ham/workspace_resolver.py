@@ -27,6 +27,7 @@ source of truth — claim spoofing would still be blocked at step 4).
 
 from __future__ import annotations
 
+import os
 from collections.abc import Mapping
 from typing import Protocol
 
@@ -155,6 +156,31 @@ def resolve_workspace_context(
     """
     if not isinstance(workspace_id, str) or not workspace_id.strip():
         raise WorkspaceForbidden("workspace_id is required.")
+
+    # Frontend local UI QA workspace (Vite bypass) — no persisted row; allow
+    # only with explicit local-dev bypass + synthetic dev actor.
+    _bypass_raw = (os.environ.get("HAM_LOCAL_DEV_WORKSPACE_BYPASS") or "").strip().lower()
+    _bypass = _bypass_raw in ("1", "true", "yes", "on")
+    if (
+        _bypass
+        and workspace_id == "local-dev-workspace"
+        and actor.user_id in {"local_dev_user", "dev-local-user"}
+    ):
+        perms = perms_for_role("owner")
+        return WorkspaceContext(
+            workspace_id=workspace_id,
+            org_id=None,
+            actor_user_id=actor.user_id,
+            actor_email=actor.email,
+            role="owner",
+            perms=perms,
+            org_role=actor.org_role,
+            raw={
+                "membership_source": "local_dev_virtual_workspace",
+                "claim_source": actor.raw_permission_claim,
+            },
+        )
+
     workspace = store.get_workspace(workspace_id)
     if workspace is None or workspace.status != "active":
         raise WorkspaceNotFound(
