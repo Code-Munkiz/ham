@@ -18,11 +18,13 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
+  type BuilderActivityItem,
   type BuilderImportJobRecord,
   type BuilderPreviewStatus,
   type BuilderProjectSourceRecord,
   type BuilderSourceSnapshotRecord,
   deleteBuilderLocalPreview,
+  getBuilderActivity,
   getBuilderPreviewStatus,
   listBuilderImportJobs,
   listBuilderProjectSources,
@@ -247,31 +249,55 @@ function WorkbenchPreviewPanel({
   const [preview, setPreview] = React.useState<BuilderPreviewStatus | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [activity, setActivity] = React.useState<BuilderActivityItem[]>([]);
+  const [activityError, setActivityError] = React.useState<string | null>(null);
   const [previewUrlInput, setPreviewUrlInput] = React.useState("http://localhost:3000");
   const [submitBusy, setSubmitBusy] = React.useState(false);
   const [disconnectBusy, setDisconnectBusy] = React.useState(false);
+
+  const refreshActivity = React.useCallback(async () => {
+    const ws = workspaceId?.trim() || "";
+    const pid = projectId?.trim() || "";
+    if (!ws || !pid) {
+      setActivity([]);
+      setActivityError(null);
+      return;
+    }
+    try {
+      const activityPayload = await getBuilderActivity(ws, pid);
+      setActivity(activityPayload.items || []);
+      setActivityError(null);
+    } catch (e) {
+      setActivity([]);
+      setActivityError(e instanceof Error ? e.message : String(e));
+    }
+  }, [workspaceId, projectId]);
 
   const refresh = React.useCallback(async () => {
     const ws = workspaceId?.trim() || "";
     const pid = projectId?.trim() || "";
     if (!ws || !pid) {
       setPreview(null);
+      setActivity([]);
       setError(null);
+      setActivityError(null);
       setLoading(false);
       return;
     }
     setLoading(true);
     setError(null);
     try {
-      const payload = await getBuilderPreviewStatus(ws, pid);
-      setPreview(payload);
+      const previewPayload = await getBuilderPreviewStatus(ws, pid);
+      setPreview(previewPayload);
+      await refreshActivity();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg);
       setPreview(null);
     } finally {
       setLoading(false);
     }
-  }, [workspaceId, projectId]);
+  }, [workspaceId, projectId, refreshActivity]);
 
   React.useEffect(() => {
     void refresh();
@@ -330,6 +356,7 @@ function WorkbenchPreviewPanel({
             void deleteBuilderLocalPreview(ws, pid)
               .then((res) => {
                 setPreview(res.preview_status);
+                void refreshActivity();
               })
               .catch((e) => {
                 setError(e instanceof Error ? e.message : String(e));
@@ -374,6 +401,7 @@ function WorkbenchPreviewPanel({
             })
               .then((res) => {
                 setPreview(res.preview_status);
+                void refreshActivity();
               })
               .catch((err) => {
                 setError(err instanceof Error ? err.message : String(err));
@@ -430,6 +458,59 @@ function WorkbenchPreviewPanel({
           Ask HAM to fix — Coming soon
         </Button>
       ) : null}
+      <div
+        className="space-y-2 rounded-lg border border-white/[0.08] bg-black/25 p-3"
+        data-testid="hww-preview-activity-section"
+      >
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">
+          Builder activity
+        </p>
+        {activityError ? (
+          <p className="text-amber-200/90" data-testid="hww-preview-activity-error">
+            Could not load activity: {activityError}
+          </p>
+        ) : null}
+        {!activityError && activity.length === 0 ? (
+          <p className="text-white/55" data-testid="hww-preview-activity-empty">
+            No builder activity yet. Source imports and preview changes will appear here.
+          </p>
+        ) : null}
+        {!activityError && activity.length > 0 ? (
+          <ul className="space-y-2" data-testid="hww-preview-activity-list">
+            {activity.map((item) => (
+              <li
+                key={item.id}
+                className="rounded-md border border-white/[0.07] bg-black/20 px-2 py-1.5"
+                data-testid="hww-preview-activity-item"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span
+                      className={cn(
+                        "h-2 w-2 shrink-0 rounded-full",
+                        item.status === "failed" || item.status === "error"
+                          ? "bg-rose-400"
+                          : item.status === "ready" || item.status === "succeeded"
+                            ? "bg-emerald-400"
+                            : "bg-amber-300",
+                      )}
+                    />
+                    <span className="truncate text-[11px] text-white/85">{item.title}</span>
+                  </div>
+                  <span className="rounded border border-white/[0.12] px-1.5 py-0.5 text-[10px] uppercase text-white/65">
+                    {item.status}
+                  </span>
+                </div>
+                <p className="mt-1 text-[11px] text-white/55">{item.message}</p>
+                <p className="mt-1 text-[10px] text-white/40">
+                  {item.timestamp}
+                  {item.snapshot_id ? ` · snapshot ${item.snapshot_id}` : ""}
+                </p>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
     </MutedPanel>
   );
 }

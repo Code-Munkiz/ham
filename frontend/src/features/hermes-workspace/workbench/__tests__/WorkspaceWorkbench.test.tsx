@@ -9,6 +9,7 @@ const {
   listBuilderSourceSnapshotsMock,
   listBuilderImportJobsMock,
   getBuilderPreviewStatusMock,
+  getBuilderActivityMock,
   postBuilderLocalPreviewMock,
   deleteBuilderLocalPreviewMock,
 } = vi.hoisted(() => ({
@@ -18,6 +19,7 @@ const {
   listBuilderSourceSnapshotsMock: vi.fn(),
   listBuilderImportJobsMock: vi.fn(),
   getBuilderPreviewStatusMock: vi.fn(),
+  getBuilderActivityMock: vi.fn(),
   postBuilderLocalPreviewMock: vi.fn(),
   deleteBuilderLocalPreviewMock: vi.fn(),
 }));
@@ -31,6 +33,7 @@ vi.mock("@/lib/ham/api", async (importOriginal) => {
     listBuilderSourceSnapshots: (...args: unknown[]) => listBuilderSourceSnapshotsMock(...args),
     listBuilderImportJobs: (...args: unknown[]) => listBuilderImportJobsMock(...args),
     getBuilderPreviewStatus: (...args: unknown[]) => getBuilderPreviewStatusMock(...args),
+    getBuilderActivity: (...args: unknown[]) => getBuilderActivityMock(...args),
     postBuilderLocalPreview: (...args: unknown[]) => postBuilderLocalPreviewMock(...args),
     deleteBuilderLocalPreview: (...args: unknown[]) => deleteBuilderLocalPreviewMock(...args),
   };
@@ -85,6 +88,11 @@ describe("WorkspaceWorkbench", () => {
       runtime_session_id: null,
       preview_endpoint_id: null,
       logs_hint: null,
+    });
+    getBuilderActivityMock.mockResolvedValue({
+      workspace_id: "ws_abc",
+      project_id: "proj_abc",
+      items: [],
     });
     postBuilderLocalPreviewMock.mockResolvedValue({
       runtime_session: {},
@@ -151,6 +159,88 @@ describe("WorkspaceWorkbench", () => {
     expect(screen.queryByTestId("hww-preview-iframe")).toBeNull();
     expect(screen.getByTestId("hww-preview-open-new-tab")).toBeDisabled();
     expect(screen.getByTestId("hww-preview-connect-form")).toBeInTheDocument();
+    expect(screen.getByTestId("hww-preview-activity-section")).toBeInTheDocument();
+    expect(screen.getByTestId("hww-preview-activity-empty")).toBeInTheDocument();
+    expect(screen.queryByText(/build stream/i)).toBeNull();
+  });
+
+  it("Preview renders activity timeline entries from API", async () => {
+    getBuilderActivityMock.mockResolvedValue({
+      workspace_id: "ws_abc",
+      project_id: "proj_abc",
+      items: [
+        {
+          id: "act_1",
+          kind: "source_import",
+          status: "succeeded",
+          title: "Source snapshot created",
+          message: "Source snapshot created",
+          timestamp: "2026-01-01T00:00:00Z",
+          source_id: "psrc_1",
+          snapshot_id: "ssnp_1",
+          import_job_id: "ijob_1",
+          runtime_session_id: null,
+          preview_endpoint_id: null,
+          metadata: {},
+        },
+        {
+          id: "act_2",
+          kind: "preview_connected",
+          status: "ready",
+          title: "Local preview connected",
+          message: "Local preview connected",
+          timestamp: "2026-01-01T00:01:00Z",
+          source_id: null,
+          snapshot_id: null,
+          import_job_id: null,
+          runtime_session_id: "rtms_1",
+          preview_endpoint_id: "prve_1",
+          metadata: {},
+        },
+      ],
+    });
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-preview-activity-list")).toBeInTheDocument();
+    });
+    expect(screen.getAllByTestId("hww-preview-activity-item").length).toBe(2);
+    expect(screen.getAllByText("Source snapshot created").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Local preview connected").length).toBeGreaterThan(0);
+  });
+
+  it("Preview activity failed item shows safe copy", async () => {
+    getBuilderActivityMock.mockResolvedValue({
+      workspace_id: "ws_abc",
+      project_id: "proj_abc",
+      items: [
+        {
+          id: "act_failed",
+          kind: "source_import",
+          status: "failed",
+          title: "Source import failed",
+          message: "Source import failed.",
+          timestamp: "2026-01-01T00:00:00Z",
+          source_id: null,
+          snapshot_id: null,
+          import_job_id: "ijob_2",
+          runtime_session_id: null,
+          preview_endpoint_id: null,
+          metadata: {},
+        },
+      ],
+    });
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByText("Source import failed.")).toBeInTheDocument();
+    });
   });
 
   it("Preview connect form submits localhost URL and renders ready iframe", async () => {
@@ -207,9 +297,11 @@ describe("WorkspaceWorkbench", () => {
       expect(getBuilderPreviewStatusMock.mock.calls.length).toBeGreaterThan(0);
     });
     const before = getBuilderPreviewStatusMock.mock.calls.length;
+    const beforeActivity = getBuilderActivityMock.mock.calls.length;
     fireEvent.click(screen.getByTestId("hww-preview-refresh"));
     await waitFor(() => {
       expect(getBuilderPreviewStatusMock.mock.calls.length).toBeGreaterThan(before);
+      expect(getBuilderActivityMock.mock.calls.length).toBeGreaterThan(beforeActivity);
     });
   });
 
