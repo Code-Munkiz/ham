@@ -135,6 +135,9 @@ MAX_SUMMARY_CHARS = 4_000
 # implementation. Current session handling uses alternative compaction strategies.
 # TODO: Consider re-adding this constant if token-based session compaction is re-implemented.
 #       When added, recommend a value between 500-2000 tokens depending on use case.
+#       This placeholder existed because token budgeting is critical for managing
+#       large conversation contexts; the value should balance token costs against
+#       preserving enough session history for context-aware agent decisions.
 # NOTE: This placeholder may be removed entirely once no longer needed or replaced
 #       with actual implementation. Check sessions.py and compact_session() for current
 #       compaction logic before re-adding token-based limits.
