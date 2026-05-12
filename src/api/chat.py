@@ -1318,8 +1318,6 @@ async def post_chat(
         ham_actor=ham_actor,
     )
     builder_intent = str((builder_meta or {}).get("builder_intent") or "").strip().lower()
-    builder_intent = str((builder_meta or {}).get("builder_intent") or "").strip().lower()
-    builder_intent = str((builder_meta or {}).get("builder_intent") or "").strip().lower()
     or_override, litellm_hint_key, litellm_http_bypass = _resolve_chat_openrouter_route(
         body=body,
         ham_actor=ham_actor,
