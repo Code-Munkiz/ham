@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from pathlib import PurePosixPath
 from urllib.parse import unquote
 
+from starlette.datastructures import UploadFile
+
 _WINDOWS_DEVICE_NAMES = {
     "CON",
     "PRN",
@@ -83,6 +85,38 @@ class ZipSafetyError(Exception):
         self.message = message
 
 
+def default_zip_intake_caps() -> ZipIntakeCaps:
+    """Caps for ZIP intake (env-tunable); shared by validation and upload size guards."""
+    return ZipIntakeCaps(
+        max_compressed_bytes=_int_env("HAM_BUILDER_ZIP_MAX_COMPRESSED_BYTES", 20 * 1024 * 1024),
+        max_uncompressed_bytes=_int_env(
+            "HAM_BUILDER_ZIP_MAX_UNCOMPRESSED_BYTES",
+            100 * 1024 * 1024,
+        ),
+        max_file_count=_int_env("HAM_BUILDER_ZIP_MAX_FILE_COUNT", 2000),
+        max_entry_bytes=_int_env("HAM_BUILDER_ZIP_MAX_ENTRY_BYTES", 10 * 1024 * 1024),
+        max_path_length=_int_env("HAM_BUILDER_ZIP_MAX_PATH_LENGTH", 240),
+        max_manifest_entries=_int_env("HAM_BUILDER_ZIP_MAX_MANIFEST_ENTRIES", 200),
+    )
+
+
+async def read_zip_upload_bytes(upload: UploadFile, *, caps: ZipIntakeCaps | None = None) -> bytes:
+    """Read multipart ZIP into memory without exceeding ``max_compressed_bytes`` (DoS guard)."""
+    limits = caps or default_zip_intake_caps()
+    max_b = limits.max_compressed_bytes
+    data = bytearray()
+    while True:
+        if len(data) > max_b:
+            raise ZipSafetyError("ZIP_TOO_LARGE", "ZIP exceeds maximum compressed size.")
+        chunk = await upload.read(min(1024 * 1024, max_b + 1 - len(data)))
+        if not chunk:
+            break
+        data.extend(chunk)
+    if len(data) > max_b:
+        raise ZipSafetyError("ZIP_TOO_LARGE", "ZIP exceeds maximum compressed size.")
+    return bytes(data)
+
+
 def _is_symlink(info: zipfile.ZipInfo) -> bool:
     mode = info.external_attr >> 16
     return stat.S_IFMT(mode) == stat.S_IFLNK
@@ -118,17 +152,7 @@ def _has_unsafe_segment(name: str) -> bool:
 
 
 def validate_zip_upload(payload: bytes, caps: ZipIntakeCaps | None = None) -> ZipValidationResult:
-    limits = caps or ZipIntakeCaps(
-        max_compressed_bytes=_int_env("HAM_BUILDER_ZIP_MAX_COMPRESSED_BYTES", 20 * 1024 * 1024),
-        max_uncompressed_bytes=_int_env(
-            "HAM_BUILDER_ZIP_MAX_UNCOMPRESSED_BYTES",
-            100 * 1024 * 1024,
-        ),
-        max_file_count=_int_env("HAM_BUILDER_ZIP_MAX_FILE_COUNT", 2000),
-        max_entry_bytes=_int_env("HAM_BUILDER_ZIP_MAX_ENTRY_BYTES", 10 * 1024 * 1024),
-        max_path_length=_int_env("HAM_BUILDER_ZIP_MAX_PATH_LENGTH", 240),
-        max_manifest_entries=_int_env("HAM_BUILDER_ZIP_MAX_MANIFEST_ENTRIES", 200),
-    )
+    limits = caps or default_zip_intake_caps()
     compressed_bytes = len(payload)
     if compressed_bytes <= 0:
         raise ZipSafetyError("ZIP_EMPTY", "ZIP payload is empty.")
