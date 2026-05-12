@@ -23,11 +23,14 @@ Hard guarantees (locked by tests):
 
 from __future__ import annotations
 
+import logging
 import uuid
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
+
+_LOG = logging.getLogger(__name__)
 
 from src.api.clerk_gate import get_ham_clerk_actor
 from src.ham.clerk_auth import HamActor
@@ -235,6 +238,30 @@ async def post_coding_conductor_preview(
         response_blockers.append(
             f"Unknown project_id {body.project_id!r}. Pick an existing project."
         )
+
+    chosen_provider = chosen.provider if chosen is not None else None
+    chosen_blocker_count = len(chosen.blockers) if chosen is not None else 0
+    chosen_available = bool(chosen is not None and not chosen.blockers)
+    approval_kind_value = _APPROVAL_KIND[chosen.provider] if chosen else "none"
+    _LOG.info(
+        "coding_conductor_preview decision: task_kind=%s task_confidence=%.2f "
+        "project_found=%s project_id_present=%s build_lane_enabled=%s "
+        "output_target=%s has_workspace_id=%s "
+        "chosen_provider=%s chosen_available=%s chosen_blocker_count=%d "
+        "approval_kind=%s requires_approval=%s",
+        task.kind,
+        task.confidence,
+        snapshot.project.found,
+        bool(snapshot.project.project_id),
+        snapshot.project.build_lane_enabled,
+        snapshot.project.output_target or "none",
+        snapshot.project.has_workspace_id,
+        chosen_provider or "none",
+        chosen_available,
+        chosen_blocker_count,
+        approval_kind_value,
+        chosen is not None and chosen.requires_confirmation,
+    )
 
     return {
         "kind": "coding_conductor_preview",

@@ -775,6 +775,111 @@ def test_preview_managed_smoke_prompt_with_no_project_blocks_safely(
 
 
 # ---------------------------------------------------------------------------
+# Diagnostic log shape (Cloud Run-observable; no secrets, no env names, no
+# workflow ids, no provider internals).
+# ---------------------------------------------------------------------------
+
+
+def test_preview_emits_diagnostic_info_log_with_safe_shape(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_store: ProjectStore,
+    normie_actor: HamActor,
+    tmp_path: Path,
+    cleanup_overrides: None,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Each preview emits one INFO line so operators can observe the decision
+    shape from Cloud Run logs without inspecting response bodies.
+
+    The line MUST include ``task_kind``, ``chosen_provider``, ``approval_kind``,
+    project flags, and a blocker count; it MUST NOT include any prompt text,
+    secret value, env name, workflow id, runner URL, or argv string.
+    """
+    _make_build_ready(monkeypatch)
+    rec = _register_project(
+        isolated_store,
+        name="p_diag_log",
+        root=tmp_path,
+        build_lane_enabled=True,
+        output_target="managed_workspace",
+        workspace_id="ws_diag_log",
+    )
+    with caplog.at_level("INFO", logger="src.api.coding_conductor"):
+        res = _post(_client(normie_actor), user_prompt=_MANAGED_SMOKE_PROMPT, project_id=rec.id)
+    assert res.status_code == 200, res.text
+
+    diag_records = [r for r in caplog.records if "coding_conductor_preview" in r.getMessage()]
+    assert len(diag_records) == 1, (
+        f"expected exactly one diagnostic line, got {len(diag_records)}: "
+        f"{[r.getMessage() for r in diag_records]}"
+    )
+    msg = diag_records[0].getMessage()
+    # Decision-shape fields are present and human-grep-able.
+    for token in (
+        "task_kind=comments_only",
+        "chosen_provider=factory_droid_build",
+        "chosen_available=True",
+        "chosen_blocker_count=0",
+        "approval_kind=confirm_and_accept_pr",
+        "output_target=managed_workspace",
+        "has_workspace_id=True",
+        "build_lane_enabled=True",
+        "project_found=True",
+        "requires_approval=True",
+    ):
+        assert token in msg, f"diagnostic line missing {token!r}: {msg}"
+    # Forbidden tokens: anything that would leak prompt text, secrets, env
+    # names, workflow ids, runner internals, or auth headers.
+    forbidden_in_log = (
+        "Smoke test only",
+        "documentation/comment",
+        "managed snapshot.",
+        "HAM_DROID_EXEC_TOKEN",
+        "HAM_DROID_RUNNER_URL",
+        "HAM_DROID_RUNNER_TOKEN",
+        "CURSOR_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "safe_edit_low",
+        "readonly_repo_audit",
+        "--auto low",
+        "argv",
+        "http://",
+        "https://",
+        "Bearer ",
+        "test-only-not-deployed",
+        "ws_diag_log",
+        "p_diag_log",
+        "user_prompt=",
+        "preview_id=",
+    )
+    for token in forbidden_in_log:
+        assert token not in msg, (
+            f"diagnostic line leaks {token!r}: {msg}"
+        )
+
+
+def test_preview_diagnostic_log_for_no_agent_fallback_is_redacted(
+    isolated_store: ProjectStore,
+    normie_actor: HamActor,
+    cleanup_overrides: None,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """When no project_id is supplied and host is empty, the diagnostic line
+    must still emit and must still be free of any sensitive content."""
+    with caplog.at_level("INFO", logger="src.api.coding_conductor"):
+        res = _post(_client(normie_actor), user_prompt="hello there")
+    assert res.status_code == 200
+    diag_records = [r for r in caplog.records if "coding_conductor_preview" in r.getMessage()]
+    assert len(diag_records) == 1
+    msg = diag_records[0].getMessage()
+    assert "project_found=False" in msg
+    assert "project_id_present=False" in msg
+    assert "chosen_provider" in msg
+    # Free-text prompt content never appears in the log line.
+    assert "hello there" not in msg
+
+
+# ---------------------------------------------------------------------------
 # Route inventory lock
 # ---------------------------------------------------------------------------
 
