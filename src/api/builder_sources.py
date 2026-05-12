@@ -242,6 +242,47 @@ def _serialize_local_run_profile(profile: LocalRunProfile | None, *, workspace_i
     }
 
 
+_CLOUD_RUNTIME_STATES = {"queued", "provisioning", "running", "failed", "expired", "unsupported"}
+
+
+def _serialize_cloud_runtime(
+    runtime: Any | None,
+    *,
+    workspace_id: str,
+    project_id: str,
+) -> dict[str, Any]:
+    if runtime is None:
+        return {
+            "workspace_id": workspace_id,
+            "project_id": project_id,
+            "mode": "cloud",
+            "status": "unsupported",
+            "message": "Cloud runtime is not provisioned yet. Request tracking only is available.",
+            "updated_at": _utc_now_iso(),
+            "runtime_session_id": None,
+            "source_snapshot_id": None,
+            "metadata": {},
+        }
+    status = str(runtime.status or "").strip().lower()
+    if status not in _CLOUD_RUNTIME_STATES:
+        status = "unsupported"
+    message = _safe_text(
+        runtime.message,
+        fallback="Cloud runtime request tracked. Provisioning/execution is coming soon.",
+    )
+    return {
+        "workspace_id": workspace_id,
+        "project_id": project_id,
+        "mode": "cloud",
+        "status": status,
+        "message": message,
+        "updated_at": runtime.updated_at or _utc_now_iso(),
+        "runtime_session_id": runtime.id,
+        "source_snapshot_id": runtime.snapshot_id,
+        "metadata": runtime.metadata or {},
+    }
+
+
 class LocalPreviewRegisterRequest(BaseModel):
     preview_url: str
     source_snapshot_id: str | None = None
@@ -269,6 +310,12 @@ class VisualEditRequestPayload(BaseModel):
     selector_hints: list[str] = Field(default_factory=list)
     bbox: dict[str, Any] | None = None
     instruction: str
+    status: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class CloudRuntimeRequestPayload(BaseModel):
+    source_snapshot_id: str | None = None
     status: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
@@ -904,6 +951,84 @@ async def delete_builder_local_run_profile(
         project_id=project_id,
     )
     return _serialize_local_run_profile(cleared, workspace_id=ctx.workspace_id, project_id=project_id)
+
+
+@router.get("/api/workspaces/{workspace_id}/projects/{project_id}/builder/cloud-runtime")
+async def get_builder_cloud_runtime(
+    project_id: str,
+    ctx: Annotated[WorkspaceContext, Depends(require_perm(PERM_WORKSPACE_READ))],
+) -> dict[str, Any]:
+    _project_in_workspace_or_404(project_id=project_id, workspace_id=ctx.workspace_id)
+    runtime = get_builder_runtime_store().get_latest_runtime_session(
+        workspace_id=ctx.workspace_id,
+        project_id=project_id,
+        mode="cloud",
+    )
+    return _serialize_cloud_runtime(runtime, workspace_id=ctx.workspace_id, project_id=project_id)
+
+
+@router.post("/api/workspaces/{workspace_id}/projects/{project_id}/builder/cloud-runtime/request")
+async def request_builder_cloud_runtime(
+    project_id: str,
+    body: CloudRuntimeRequestPayload,
+    ctx: Annotated[WorkspaceContext, Depends(require_perm(PERM_WORKSPACE_WRITE))],
+    actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)] = None,
+) -> dict[str, Any]:
+    _project_in_workspace_or_404(project_id=project_id, workspace_id=ctx.workspace_id)
+    source_snapshot_id = _validated_snapshot_id(
+        workspace_id=ctx.workspace_id,
+        project_id=project_id,
+        source_snapshot_id=body.source_snapshot_id,
+    )
+    requested_status = str(body.status or "").strip().lower()
+    if requested_status and requested_status not in _CLOUD_RUNTIME_STATES:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": {
+                    "code": "CLOUD_RUNTIME_STATUS_INVALID",
+                    "message": "status must be queued, provisioning, running, failed, expired, or unsupported.",
+                }
+            },
+        )
+    runtime = get_builder_runtime_store().request_cloud_runtime_session(
+        workspace_id=ctx.workspace_id,
+        project_id=project_id,
+        source_snapshot_id=source_snapshot_id,
+        requested_by=actor.user_id if actor is not None else None,
+        metadata=_sanitize_metadata(body.metadata),
+    )
+    if requested_status and requested_status != "queued":
+        runtime.status = requested_status
+        runtime.updated_at = _utc_now_iso()
+        runtime = get_builder_runtime_store().upsert_runtime_session(runtime)
+    return {
+        "runtime": runtime.model_dump(mode="json"),
+        "cloud_runtime": _serialize_cloud_runtime(
+            runtime,
+            workspace_id=ctx.workspace_id,
+            project_id=project_id,
+        ),
+    }
+
+
+@router.delete("/api/workspaces/{workspace_id}/projects/{project_id}/builder/cloud-runtime")
+async def delete_builder_cloud_runtime(
+    project_id: str,
+    ctx: Annotated[WorkspaceContext, Depends(require_perm(PERM_WORKSPACE_WRITE))],
+) -> dict[str, Any]:
+    _project_in_workspace_or_404(project_id=project_id, workspace_id=ctx.workspace_id)
+    runtime = get_builder_runtime_store().clear_cloud_runtime(
+        workspace_id=ctx.workspace_id,
+        project_id=project_id,
+    )
+    return {
+        "cloud_runtime": _serialize_cloud_runtime(
+            runtime,
+            workspace_id=ctx.workspace_id,
+            project_id=project_id,
+        )
+    }
 
 
 @router.post("/api/workspaces/{workspace_id}/projects/{project_id}/builder/local-preview")

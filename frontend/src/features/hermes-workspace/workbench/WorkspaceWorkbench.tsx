@@ -19,6 +19,7 @@ import {
 import { Button } from "@/components/ui/button";
 import {
   type BuilderActivityItem,
+  type BuilderCloudRuntimeStatus,
   type BuilderImportJobRecord,
   type BuilderVisualEditRequest,
   type CreateBuilderVisualEditRequestPayload,
@@ -31,6 +32,7 @@ import {
   deleteBuilderLocalRunProfile,
   deleteBuilderLocalPreview,
   getBuilderActivity,
+  getBuilderCloudRuntime,
   getBuilderLocalRunProfile,
   getBuilderPreviewStatus,
   listBuilderVisualEditRequests,
@@ -275,6 +277,8 @@ function WorkbenchPreviewPanel({
   const [visualEditBusy, setVisualEditBusy] = React.useState(false);
   const [visualEditError, setVisualEditError] = React.useState<string | null>(null);
   const [visualEditNotice, setVisualEditNotice] = React.useState<string | null>(null);
+  const [cloudRuntime, setCloudRuntime] = React.useState<BuilderCloudRuntimeStatus | null>(null);
+  const [cloudRuntimeError, setCloudRuntimeError] = React.useState<string | null>(null);
   const [runProfileForm, setRunProfileForm] = React.useState<LocalRunProfilePayload>({
     display_name: "Local run profile",
     working_directory: ".",
@@ -369,7 +373,10 @@ function WorkbenchPreviewPanel({
     setError(null);
     try {
       const previewPayload = await getBuilderPreviewStatus(ws, pid);
+      const cloudPayload = await getBuilderCloudRuntime(ws, pid);
       setPreview(previewPayload);
+      setCloudRuntime(cloudPayload);
+      setCloudRuntimeError(null);
       await refreshActivity();
       await refreshRunProfile();
       await refreshVisualEditRequests();
@@ -377,6 +384,8 @@ function WorkbenchPreviewPanel({
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg);
       setPreview(null);
+      setCloudRuntime(null);
+      setCloudRuntimeError(msg);
     } finally {
       setLoading(false);
     }
@@ -709,6 +718,31 @@ function WorkbenchPreviewPanel({
             ) : null}
           </div>
         </form>
+      </div>
+      <div
+        className="space-y-2 rounded-lg border border-white/[0.08] bg-black/25 p-3"
+        data-testid="hww-cloud-runtime-section"
+      >
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">
+          Cloud runtime
+        </p>
+        <p className="text-[11px] text-white/60">
+          Cloud runtime is not provisioned yet. Request tracking is available now; provisioning and
+          execution are coming soon.
+        </p>
+        <p className="text-[11px] text-white/55" data-testid="hww-cloud-runtime-status">
+          Status: {cloudRuntime?.status || "unsupported"}
+        </p>
+        {cloudRuntime?.message ? (
+          <p className="text-[11px] text-white/55" data-testid="hww-cloud-runtime-message">
+            {cloudRuntime.message}
+          </p>
+        ) : null}
+        {cloudRuntimeError ? (
+          <p className="text-amber-200/90" data-testid="hww-cloud-runtime-error">
+            Could not load cloud runtime status: {cloudRuntimeError}
+          </p>
+        ) : null}
       </div>
       {preview?.status === "ready" && previewUrl ? (
         <>

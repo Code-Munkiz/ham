@@ -10,6 +10,7 @@ const {
   listBuilderImportJobsMock,
   getBuilderPreviewStatusMock,
   getBuilderActivityMock,
+  getBuilderCloudRuntimeMock,
   getBuilderLocalRunProfileMock,
   listBuilderVisualEditRequestsMock,
   createBuilderVisualEditRequestMock,
@@ -25,6 +26,7 @@ const {
   listBuilderImportJobsMock: vi.fn(),
   getBuilderPreviewStatusMock: vi.fn(),
   getBuilderActivityMock: vi.fn(),
+  getBuilderCloudRuntimeMock: vi.fn(),
   getBuilderLocalRunProfileMock: vi.fn(),
   listBuilderVisualEditRequestsMock: vi.fn(),
   createBuilderVisualEditRequestMock: vi.fn(),
@@ -44,6 +46,7 @@ vi.mock("@/lib/ham/api", async (importOriginal) => {
     listBuilderImportJobs: (...args: unknown[]) => listBuilderImportJobsMock(...args),
     getBuilderPreviewStatus: (...args: unknown[]) => getBuilderPreviewStatusMock(...args),
     getBuilderActivity: (...args: unknown[]) => getBuilderActivityMock(...args),
+    getBuilderCloudRuntime: (...args: unknown[]) => getBuilderCloudRuntimeMock(...args),
     getBuilderLocalRunProfile: (...args: unknown[]) => getBuilderLocalRunProfileMock(...args),
     listBuilderVisualEditRequests: (...args: unknown[]) =>
       listBuilderVisualEditRequestsMock(...args),
@@ -110,6 +113,17 @@ describe("WorkspaceWorkbench", () => {
       workspace_id: "ws_abc",
       project_id: "proj_abc",
       items: [],
+    });
+    getBuilderCloudRuntimeMock.mockResolvedValue({
+      workspace_id: "ws_abc",
+      project_id: "proj_abc",
+      mode: "cloud",
+      status: "unsupported",
+      message: "Cloud runtime is not provisioned yet. Request tracking only is available.",
+      updated_at: "2026-01-01T00:00:00Z",
+      runtime_session_id: null,
+      source_snapshot_id: null,
+      metadata: {},
     });
     getBuilderLocalRunProfileMock.mockResolvedValue({
       workspace_id: "ws_abc",
@@ -314,6 +328,20 @@ describe("WorkspaceWorkbench", () => {
     expect(screen.getByTestId("hww-local-run-profile-status")).toHaveTextContent("Not configured");
     expect(screen.queryByTestId("hww-local-run-profile-use-preview-url")).toBeNull();
     expect(screen.queryByText(/running build/i)).toBeNull();
+  });
+
+  it("Preview renders honest cloud runtime placeholder copy", async () => {
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-cloud-runtime-section")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("hww-cloud-runtime-status")).toHaveTextContent("unsupported");
+    expect(screen.getByTestId("hww-cloud-runtime-message")).toHaveTextContent("not provisioned");
+    expect(screen.queryByText(/deployed successfully/i)).toBeNull();
   });
 
   it("Saving local run profile calls API and renders configured summary", async () => {
