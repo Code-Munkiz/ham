@@ -393,6 +393,49 @@ def test_preview_status_ready_after_registration(tmp_path: Path) -> None:
     set_builder_runtime_store_for_tests(None)
 
 
+def test_preview_status_cloud_proxy_ready_returns_ham_proxy_url(tmp_path: Path) -> None:
+    ws_store = InMemoryWorkspaceStore()
+    ws_id = "ws_aaaaaaaaaaaaaaaa"
+    _seed_workspace(ws_store, workspace_id=ws_id, org_id="org_a", owner_user_id="user_a", slug="alpha")
+    project_store = ProjectStore(store_path=tmp_path / "projects.json")
+    project = project_store.make_record(name="proj-a", root=str(tmp_path), metadata={"workspace_id": ws_id})
+    project_store.register(project)
+    set_project_store_for_tests(project_store)
+    set_builder_source_store_for_tests(BuilderSourceStore(store_path=tmp_path / "builder_sources.json"))
+    runtime_store = BuilderRuntimeStore(store_path=tmp_path / "builder_runtime.json")
+    runtime = runtime_store.upsert_runtime_session(
+        RuntimeSession(
+            workspace_id=ws_id,
+            project_id=project.id,
+            mode="cloud",
+            status="running",
+            health="unknown",
+        )
+    )
+    runtime_store.upsert_preview_endpoint(
+        PreviewEndpoint(
+            workspace_id=ws_id,
+            project_id=project.id,
+            runtime_session_id=runtime.id,
+            access_mode="proxy",
+            status="ready",
+            url="https://ham-preview-123.run.app/",
+            metadata={"trusted_proxy_host": "ham-preview-123.run.app"},
+        )
+    )
+    set_builder_runtime_store_for_tests(runtime_store)
+    client = TestClient(_build_app(actor=_actor("user_a", org_id="org_a"), ws_store=ws_store))
+    res = client.get(f"/api/workspaces/{ws_id}/projects/{project.id}/builder/preview-status")
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["mode"] == "cloud"
+    assert body["status"] == "ready"
+    assert body["preview_url"] == f"/api/workspaces/{ws_id}/projects/{project.id}/builder/preview-proxy/"
+    set_project_store_for_tests(None)
+    set_builder_source_store_for_tests(None)
+    set_builder_runtime_store_for_tests(None)
+
+
 def test_register_local_preview_scope_enforced(tmp_path: Path) -> None:
     ws_store = InMemoryWorkspaceStore()
     ws_a = "ws_aaaaaaaaaaaaaaaa"

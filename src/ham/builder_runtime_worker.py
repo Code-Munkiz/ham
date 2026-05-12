@@ -9,9 +9,11 @@ from src.ham.builder_cloud_runtime_gcp import (
     load_gcp_runtime_config,
     redact_provider_metadata,
     request_runtime as request_gcp_runtime,
+    safe_proxy_host_from_upstream,
+    safe_proxy_upstream_from_provider,
 )
 from src.persistence.builder_runtime_job_store import CloudRuntimeJob
-from src.persistence.builder_runtime_store import RuntimeSession, get_builder_runtime_store
+from src.persistence.builder_runtime_store import PreviewEndpoint, RuntimeSession, get_builder_runtime_store
 
 CloudRuntimeProviderMode = Literal["disabled", "local_mock", "cloud_run_poc"]
 
@@ -130,6 +132,34 @@ def execute_cloud_runtime_job(job: CloudRuntimeJob) -> CloudRuntimeExecutionResu
                 "provider_job_id": gcp_result.provider_job_id,
                 "provider_state": gcp_result.provider_state or "accepted",
             }
+            runtime = runtime_store.upsert_runtime_session(runtime)
+            preview_endpoint = runtime_store.get_active_preview_endpoint(
+                workspace_id=job.workspace_id,
+                project_id=job.project_id,
+                runtime_session_id=runtime.id,
+            )
+            if preview_endpoint is None:
+                preview_endpoint = PreviewEndpoint(
+                    workspace_id=job.workspace_id,
+                    project_id=job.project_id,
+                    runtime_session_id=runtime.id,
+                )
+            preview_endpoint.access_mode = "proxy"
+            preview_endpoint.status = "provisioning"
+            preview_endpoint.last_checked_at = _utc_now_iso()
+            preview_endpoint.metadata = {
+                **(preview_endpoint.metadata or {}),
+                "provider": "gcp_cloud_run_poc",
+                "provider_job_id": gcp_result.provider_job_id,
+                "trusted_proxy_host": safe_proxy_host_from_upstream(gcp_result.preview_upstream_url),
+            }
+            if (gcp_result.provider_state or "").lower() == "ready":
+                safe_upstream = safe_proxy_upstream_from_provider(gcp_result.preview_upstream_url)
+                if safe_upstream:
+                    preview_endpoint.status = "ready"
+                    preview_endpoint.url = safe_upstream
+            preview_endpoint = runtime_store.upsert_preview_endpoint(preview_endpoint)
+            runtime.preview_endpoint_id = preview_endpoint.id
             runtime = runtime_store.upsert_runtime_session(runtime)
             job.runtime_session_id = runtime.id
             job.status = "running"

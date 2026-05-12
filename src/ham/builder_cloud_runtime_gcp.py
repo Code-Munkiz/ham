@@ -5,6 +5,7 @@ import re
 from importlib import util
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol, runtime_checkable
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -76,6 +77,7 @@ class GcpCloudRuntimeResult:
     plan: CloudRuntimePlan
     provider_job_id: str | None = None
     provider_state: str | None = None
+    preview_upstream_url: str | None = None
 
 
 @runtime_checkable
@@ -119,6 +121,7 @@ class FakeGcpCloudRuntimeClient:
         return {
             "provider_job_id": f"fake-crj-{request_id[-8:]}",
             "provider_state": "accepted",
+            "preview_upstream_url": f"https://ham-preview-{request_id[-8:]}.run.app",
         }
 
 
@@ -263,6 +266,37 @@ def redact_provider_metadata(raw: dict[str, Any]) -> dict[str, Any]:
     return safe
 
 
+def safe_proxy_upstream_from_provider(raw_url: str | None) -> str | None:
+    text = str(raw_url or "").strip()
+    if not text:
+        return None
+    try:
+        parts = urlsplit(text)
+    except ValueError:
+        return None
+    if parts.scheme != "https":
+        return None
+    if parts.username or parts.password:
+        return None
+    host = (parts.hostname or "").strip().lower()
+    if not host.endswith(".run.app"):
+        return None
+    if parts.query or parts.fragment:
+        return None
+    return text
+
+
+def safe_proxy_host_from_upstream(raw_url: str | None) -> str | None:
+    safe_url = safe_proxy_upstream_from_provider(raw_url)
+    if not safe_url:
+        return None
+    try:
+        host = (urlsplit(safe_url).hostname or "").strip().lower()
+    except ValueError:
+        return None
+    return host or None
+
+
 def _build_client() -> GcpCloudRuntimeClientProtocol:
     if _CLIENT_OVERRIDE[0] is not None:
         return _CLIENT_OVERRIDE[0]
@@ -311,7 +345,7 @@ def submit_gcp_cloud_runtime_poc(job: CloudRuntimeJob) -> GcpCloudRuntimeResult:
             timeout_seconds=min(config.timeout_seconds, config.max_seconds),
             metadata=redact_provider_metadata(job.metadata or {}),
         )
-    except Exception as exc:
+    except (RuntimeError, ValueError, TypeError) as exc:
         code, message = normalize_provider_error(
             "CLOUD_RUNTIME_PROVIDER_SUBMIT_FAILED",
             f"Cloud runtime provider submit failed: {exc}",
@@ -326,6 +360,9 @@ def submit_gcp_cloud_runtime_poc(job: CloudRuntimeJob) -> GcpCloudRuntimeResult:
         )
     provider_job_id = _safe_text(response.get("provider_job_id") or "", limit=120) or None
     provider_state = _safe_text(response.get("provider_state") or "accepted", limit=40).lower()
+    preview_upstream_url = safe_proxy_upstream_from_provider(
+        _safe_text(response.get("preview_upstream_url") or "", limit=240) or None
+    )
     return GcpCloudRuntimeResult(
         status="accepted",
         error_code=None,
@@ -334,6 +371,7 @@ def submit_gcp_cloud_runtime_poc(job: CloudRuntimeJob) -> GcpCloudRuntimeResult:
         plan=plan,
         provider_job_id=provider_job_id,
         provider_state=provider_state,
+        preview_upstream_url=preview_upstream_url,
     )
 
 
