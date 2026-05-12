@@ -61,6 +61,21 @@ function assertNoForbiddenTokens(node: HTMLElement) {
 }
 
 describe("CodingPlanCard", () => {
+  it("sanitizes unknown project blocker copy for user-facing conductor text", () => {
+    const p = payload({
+      blockers: ["Unknown project_id 'project.app-f53b52'. Pick an existing project."],
+      chosen: null,
+      candidates: [],
+    });
+    renderWithDigest(p);
+    const ul = screen
+      .getByRole("region")
+      .querySelector('[data-hww-coding-plan="response-blockers"]');
+    expect(ul).toBeTruthy();
+    expect((ul as HTMLElement).textContent?.toLowerCase()).not.toContain("unknown project_id");
+    expect((ul as HTMLElement).textContent ?? "").toMatch(/Choose or create a project/i);
+  });
+
   it("renders chosen provider label and recommendation reason", () => {
     const chosen = candidate({
       provider: "cursor_cloud",

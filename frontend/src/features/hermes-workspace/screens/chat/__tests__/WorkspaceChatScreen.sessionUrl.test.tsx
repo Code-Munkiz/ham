@@ -40,6 +40,14 @@ vi.mock("@/lib/ham/api", async (importOriginal) => {
         model_id: body.model_id,
       }),
     ),
+    listHamProjects: vi.fn(async () => ({ projects: [] })),
+    fetchContextEngine: vi.fn(
+      async () =>
+        ({
+          cwd: "/tmp/repo",
+        }) as unknown as import("@/lib/ham/types").ContextEnginePayload,
+    ),
+    ensureProjectIdForWorkspaceRoot: vi.fn(async () => null),
   };
 });
 

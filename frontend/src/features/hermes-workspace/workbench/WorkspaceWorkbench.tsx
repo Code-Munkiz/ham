@@ -52,6 +52,7 @@ import {
   postBuilderLocalPreview,
   saveBuilderLocalRunProfile,
 } from "@/lib/ham/api";
+import { sanitizeWorkbenchProjectAccessMessage } from "@/lib/ham/workbenchProjectMessages";
 import { cn } from "@/lib/utils";
 import { ProjectSourceIntakeDialog } from "./ProjectSourceIntakeDialog";
 import { WorkbenchProjectSettingsPanel } from "./WorkbenchProjectSettingsPanel";
@@ -896,7 +897,7 @@ function WorkbenchPreviewPanel({
                   ? "Project record not found. Refresh workspace or create a new project."
                   : sanitizePreviewFetchError(error || preview?.message || "") ||
                     (error
-                      ? String(error)
+                      ? sanitizeWorkbenchProjectAccessMessage(String(error))
                       : preview?.message || "Something went wrong. Open Advanced for details.")}
               </p>
             ) : null}
@@ -1576,7 +1577,7 @@ function WorkbenchPreviewPanel({
             </p>
             {activityError ? (
               <p className="text-amber-200/90" data-testid="hww-preview-activity-error">
-                Could not load activity: {activityError}
+                Could not load activity: {sanitizeWorkbenchProjectAccessMessage(activityError)}
               </p>
             ) : null}
             {!activityError && activity.length === 0 ? (

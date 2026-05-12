@@ -145,6 +145,38 @@ def test_builder_sources_lists_empty_arrays_and_shapes(tmp_path: Path) -> None:
     set_builder_source_store_for_tests(None)
 
 
+def test_builder_sources_accepts_workspace_id_on_project_record_without_metadata(tmp_path: Path) -> None:
+    """Firestore-shaped ProjectRecord keeps workspace_id top-level without duplicating metadata."""
+    ws_store = InMemoryWorkspaceStore()
+    ws_id = "ws_abcdabcdabcd01"
+    _seed_workspace(
+        ws_store,
+        workspace_id=ws_id,
+        org_id="org_a",
+        owner_user_id="user_a",
+        slug="alpha",
+    )
+
+    project_store = ProjectStore(store_path=tmp_path / "projects.json")
+    project = project_store.make_record(
+        name="alpha-project", root=str(tmp_path), metadata={}
+    ).model_copy(update={"workspace_id": ws_id})
+    project_store.register(project)
+    set_project_store_for_tests(project_store)
+
+    set_builder_source_store_for_tests(BuilderSourceStore(store_path=tmp_path / "builder_sources.json"))
+    app = _build_app(actor=_actor("user_a", org_id="org_a"), ws_store=ws_store)
+    client = TestClient(app)
+
+    sources_res = client.get(f"/api/workspaces/{ws_id}/projects/{project.id}/builder/sources")
+
+    assert sources_res.status_code == 200, sources_res.text
+    assert sources_res.json()["workspace_id"] == ws_id
+
+    set_project_store_for_tests(None)
+    set_builder_source_store_for_tests(None)
+
+
 def test_builder_sources_workspace_project_scope_enforced(tmp_path: Path) -> None:
     ws_store = InMemoryWorkspaceStore()
     ws_a = "ws_aaaaaaaaaaaaaaaa"

@@ -149,6 +149,8 @@ export interface ProjectRecord {
   root: string;
   description: string;
   metadata: Record<string, unknown>;
+  /** Present on hosted/registry records; mirrored in metadata for some stores. */
+  workspace_id?: string | null;
 }
 
 /** From `GET /api/cursor/credentials-status` — never includes the full secret. */

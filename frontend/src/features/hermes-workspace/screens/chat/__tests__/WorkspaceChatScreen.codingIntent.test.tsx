@@ -29,12 +29,14 @@ const {
   previewCodingConductorMock,
   chatStreamMock,
   getStreamAuthMock,
+  listHamProjectsMock,
 } = vi.hoisted(() => ({
   mockUseHamWorkspace: vi.fn(),
   fetchChatSessionMock: vi.fn(),
   previewCodingConductorMock: vi.fn(),
   chatStreamMock: vi.fn(),
   getStreamAuthMock: vi.fn(),
+  listHamProjectsMock: vi.fn(),
 }));
 
 vi.mock("@/lib/ham/HamWorkspaceContext", () => ({
@@ -69,6 +71,8 @@ vi.mock("@/lib/ham/api", async (importOriginal) => {
     ),
     previewCodingConductor: (...args: Parameters<typeof mod.previewCodingConductor>) =>
       previewCodingConductorMock(...args),
+    listHamProjects: (...args: Parameters<typeof mod.listHamProjects>) =>
+      listHamProjectsMock(...args),
   };
 });
 
@@ -148,6 +152,8 @@ function mockMatchMedia(matches: boolean) {
     })),
   });
 }
+
+const CHAT_W1_PROJECT_ID = "project.chat-test-w1-scoped";
 
 const samplePreviewPayload = {
   kind: "coding_conductor_preview" as const,
@@ -250,6 +256,11 @@ async function typeAndSend(container: HTMLElement, text: string) {
 
 describe("WorkspaceChatScreen conversational coding conductor", () => {
   beforeEach(() => {
+    try {
+      sessionStorage.clear();
+    } catch {
+      /* ignore */
+    }
     globalThis.ResizeObserver = class {
       observe(): void {}
       unobserve(): void {}
@@ -263,6 +274,19 @@ describe("WorkspaceChatScreen conversational coding conductor", () => {
     previewCodingConductorMock.mockReset();
     chatStreamMock.mockReset();
     getStreamAuthMock.mockReset();
+    listHamProjectsMock.mockReset();
+    listHamProjectsMock.mockImplementation(async () => ({
+      projects: [
+        {
+          id: CHAT_W1_PROJECT_ID,
+          version: "1.0.0",
+          name: "Scoped Chat",
+          root: "/repo",
+          description: "",
+          metadata: { workspace_id: "w1" },
+        },
+      ],
+    }));
   });
 
   afterEach(() => {
@@ -282,7 +306,7 @@ describe("WorkspaceChatScreen conversational coding conductor", () => {
     await waitFor(() => {
       expect(previewCodingConductorMock).toHaveBeenCalledWith({
         user_prompt: "Refactor the persistence layer in the HAM repo",
-        project_id: undefined,
+        project_id: CHAT_W1_PROJECT_ID,
       });
     });
     // CodingPlanCard appears below the thread.
@@ -332,6 +356,42 @@ describe("WorkspaceChatScreen conversational coding conductor", () => {
     await typeAndSend(container, "Hi!");
     await new Promise((r) => setTimeout(r, 50));
     expect(previewCodingConductorMock).not.toHaveBeenCalled();
+  });
+
+  it("surfaces workspace project gate when nothing maps to the active workspace", async () => {
+    listHamProjectsMock.mockReset();
+    listHamProjectsMock.mockResolvedValue({
+      projects: [
+        {
+          id: "p_other_ws_only",
+          version: "1.0.0",
+          name: "Other WS",
+          root: "/r",
+          description: "",
+          metadata: { workspace_id: "other_ws" },
+        },
+      ],
+    });
+    previewCodingConductorMock.mockResolvedValue(samplePreviewPayload);
+    chatStreamMock.mockImplementation(async () => ({ ok: true }));
+    getStreamAuthMock.mockResolvedValue(undefined);
+    const { container } = renderChat();
+
+    await waitFor(() => expect(listHamProjectsMock).toHaveBeenCalled());
+    // Wait until async project-scope resolution settles (avoid racing preview with stale projectId).
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-preview-state-no-project")).toBeInTheDocument();
+    });
+
+    await typeAndSend(container, "Refactor the checkout persistence layer");
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/Choose or create a project linked to this workspace first/i),
+      ).toBeInTheDocument();
+    });
+    expect(previewCodingConductorMock).not.toHaveBeenCalled();
+    assertNoForbiddenTokens(container);
   });
 
   it("never launches a provider build from auto-preview (launch CTA stays disabled)", async () => {
@@ -391,7 +451,7 @@ describe("WorkspaceChatScreen conversational coding conductor", () => {
     await waitFor(() => {
       expect(previewCodingConductorMock).toHaveBeenCalledWith({
         user_prompt: "Inspect the runner",
-        project_id: undefined,
+        project_id: CHAT_W1_PROJECT_ID,
       });
     });
   });

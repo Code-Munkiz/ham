@@ -11,13 +11,17 @@ import { WorkspaceHamProjectProvider } from "../../../WorkspaceHamProjectContext
 import type { HamWorkspaceContextValue } from "@/lib/ham/HamWorkspaceContext";
 import type { HamWorkspaceSummary } from "@/lib/ham/workspaceApi";
 
-const { mockUseHamWorkspace, fetchChatSessionMock, previewCodingConductorMock } = vi.hoisted(
-  () => ({
-    mockUseHamWorkspace: vi.fn(),
-    fetchChatSessionMock: vi.fn(),
-    previewCodingConductorMock: vi.fn(),
-  }),
-);
+const {
+  mockUseHamWorkspace,
+  fetchChatSessionMock,
+  previewCodingConductorMock,
+  listHamProjectsMock,
+} = vi.hoisted(() => ({
+  mockUseHamWorkspace: vi.fn(),
+  fetchChatSessionMock: vi.fn(),
+  previewCodingConductorMock: vi.fn(),
+  listHamProjectsMock: vi.fn(),
+}));
 
 vi.mock("@/lib/ham/HamWorkspaceContext", () => ({
   useHamWorkspace: mockUseHamWorkspace,
@@ -51,6 +55,8 @@ vi.mock("@/lib/ham/api", async (importOriginal) => {
     ),
     previewCodingConductor: (...args: Parameters<typeof mod.previewCodingConductor>) =>
       previewCodingConductorMock(...args),
+    listHamProjects: (...args: Parameters<typeof mod.listHamProjects>) =>
+      listHamProjectsMock(...args),
   };
 });
 
@@ -118,6 +124,8 @@ function mockMatchMedia(matches: boolean) {
     })),
   });
 }
+
+const CHAT_W1_PROJECT_ID = "project.chat-plan-w1-scoped";
 
 const samplePreviewPayload = {
   kind: "coding_conductor_preview" as const,
@@ -195,6 +203,19 @@ describe("WorkspaceChatScreen composer-driven coding plan", () => {
     } as unknown as typeof ResizeObserver;
     mockMatchMedia(true);
     previewCodingConductorMock.mockReset();
+    listHamProjectsMock.mockReset();
+    listHamProjectsMock.mockImplementation(async () => ({
+      projects: [
+        {
+          id: CHAT_W1_PROJECT_ID,
+          version: "1.0.0",
+          name: "Scoped Chat",
+          root: "/repo",
+          description: "",
+          metadata: { workspace_id: "w1" },
+        },
+      ],
+    }));
   });
 
   afterEach(() => {
@@ -230,7 +251,7 @@ describe("WorkspaceChatScreen composer-driven coding plan", () => {
     await waitFor(() => {
       expect(previewCodingConductorMock).toHaveBeenCalledWith({
         user_prompt: "Audit the persistence layer.",
-        project_id: undefined,
+        project_id: CHAT_W1_PROJECT_ID,
       });
     });
 
@@ -256,6 +277,36 @@ describe("WorkspaceChatScreen composer-driven coding plan", () => {
         "Describe what you want HAM to build or inspect first.",
       );
     });
+    expect(previewCodingConductorMock).not.toHaveBeenCalled();
+  });
+
+  it("blocks manual plan when no project is linked to this workspace", async () => {
+    listHamProjectsMock.mockReset();
+    listHamProjectsMock.mockResolvedValue({
+      projects: [
+        {
+          id: "proj_elsewhere",
+          version: "1.0.0",
+          name: "Elsewhere",
+          root: "/repo",
+          description: "",
+          metadata: { workspace_id: "other_ws" },
+        },
+      ],
+    });
+    const { container } = renderChat();
+
+    await waitFor(() => expect(screen.getByTestId("hww-command-panel")).toBeInTheDocument());
+
+    const ta = container.querySelector("#hww-chat-composer") as HTMLTextAreaElement;
+    fireEvent.change(ta, { target: { value: "Improve auth." } });
+    fireEvent.click(container.querySelector("[data-hww-coding-plan-action]") as HTMLElement);
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(/Choose or create a project linked to this workspace first/i),
+      ).toBeInTheDocument(),
+    );
     expect(previewCodingConductorMock).not.toHaveBeenCalled();
   });
 
