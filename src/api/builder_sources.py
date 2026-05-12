@@ -30,6 +30,7 @@ from src.persistence.builder_visual_edit_request_store import (
     get_builder_visual_edit_request_store,
 )
 from src.persistence.project_store import get_project_store
+from src.persistence.builder_usage_event_store import get_builder_usage_event_store
 from src.registry.projects import ProjectRecord
 
 router = APIRouter(tags=["builder-sources"])
@@ -718,19 +719,29 @@ async def get_builder_activity(
     }
 
 
+<<<<<<< HEAD
 @router.get("/api/workspaces/{workspace_id}/projects/{project_id}/builder/visual-edit-requests")
 async def list_builder_visual_edit_requests(
+=======
+@router.get("/api/workspaces/{workspace_id}/projects/{project_id}/builder/usage-events")
+async def list_builder_usage_events(
+>>>>>>> 2f5c3bae (feat(builder): add usage event contract)
     project_id: str,
     ctx: Annotated[WorkspaceContext, Depends(require_perm(PERM_WORKSPACE_READ))],
 ) -> dict[str, Any]:
     _project_in_workspace_or_404(project_id=project_id, workspace_id=ctx.workspace_id)
+<<<<<<< HEAD
     rows = get_builder_visual_edit_request_store().list_visual_edit_requests(
+=======
+    rows = get_builder_usage_event_store().list_usage_events(
+>>>>>>> 2f5c3bae (feat(builder): add usage event contract)
         workspace_id=ctx.workspace_id,
         project_id=project_id,
     )
     return {
         "workspace_id": ctx.workspace_id,
         "project_id": project_id,
+<<<<<<< HEAD
         "visual_edit_requests": [row.model_dump(mode="json") for row in rows],
     }
 
@@ -796,6 +807,9 @@ async def cancel_builder_visual_edit_request(
         "workspace_id": ctx.workspace_id,
         "project_id": project_id,
         "visual_edit_request": cancelled.model_dump(mode="json"),
+=======
+        "usage_events": [row.model_dump(mode="json") for row in rows],
+>>>>>>> 2f5c3bae (feat(builder): add usage event contract)
     }
 
 
