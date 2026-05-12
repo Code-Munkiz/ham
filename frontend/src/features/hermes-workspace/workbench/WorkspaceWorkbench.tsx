@@ -554,7 +554,9 @@ function WorkbenchPreviewPanel({
           <input
             type="text"
             value={runProfileForm.display_name}
-            onChange={(e) => setRunProfileForm((prev) => ({ ...prev, display_name: e.target.value }))}
+            onChange={(e) =>
+              setRunProfileForm((prev) => ({ ...prev, display_name: e.target.value }))
+            }
             placeholder="Local run profile"
             className="w-full rounded-md border border-white/[0.12] bg-black/40 px-2 py-1.5 text-[11px] text-white/90"
             data-testid="hww-local-run-profile-display-name"
@@ -562,7 +564,9 @@ function WorkbenchPreviewPanel({
           <input
             type="text"
             value={runProfileForm.working_directory}
-            onChange={(e) => setRunProfileForm((prev) => ({ ...prev, working_directory: e.target.value }))}
+            onChange={(e) =>
+              setRunProfileForm((prev) => ({ ...prev, working_directory: e.target.value }))
+            }
             placeholder="."
             className="w-full rounded-md border border-white/[0.12] bg-black/40 px-2 py-1.5 text-[11px] text-white/90"
             data-testid="hww-local-run-profile-working-directory"
@@ -570,7 +574,9 @@ function WorkbenchPreviewPanel({
           <input
             type="text"
             value={runProfileForm.dev_command}
-            onChange={(e) => setRunProfileForm((prev) => ({ ...prev, dev_command: e.target.value }))}
+            onChange={(e) =>
+              setRunProfileForm((prev) => ({ ...prev, dev_command: e.target.value }))
+            }
             placeholder="npm run dev"
             className="w-full rounded-md border border-white/[0.12] bg-black/40 px-2 py-1.5 text-[11px] text-white/90"
             data-testid="hww-local-run-profile-dev-command"
@@ -578,7 +584,9 @@ function WorkbenchPreviewPanel({
           <input
             type="text"
             value={runProfileForm.install_command || ""}
-            onChange={(e) => setRunProfileForm((prev) => ({ ...prev, install_command: e.target.value }))}
+            onChange={(e) =>
+              setRunProfileForm((prev) => ({ ...prev, install_command: e.target.value }))
+            }
             placeholder="npm install (optional)"
             className="w-full rounded-md border border-white/[0.12] bg-black/40 px-2 py-1.5 text-[11px] text-white/90"
             data-testid="hww-local-run-profile-install-command"
@@ -586,7 +594,9 @@ function WorkbenchPreviewPanel({
           <input
             type="text"
             value={runProfileForm.build_command || ""}
-            onChange={(e) => setRunProfileForm((prev) => ({ ...prev, build_command: e.target.value }))}
+            onChange={(e) =>
+              setRunProfileForm((prev) => ({ ...prev, build_command: e.target.value }))
+            }
             placeholder="npm run build (optional)"
             className="w-full rounded-md border border-white/[0.12] bg-black/40 px-2 py-1.5 text-[11px] text-white/90"
             data-testid="hww-local-run-profile-build-command"
@@ -594,7 +604,9 @@ function WorkbenchPreviewPanel({
           <input
             type="text"
             value={runProfileForm.test_command || ""}
-            onChange={(e) => setRunProfileForm((prev) => ({ ...prev, test_command: e.target.value }))}
+            onChange={(e) =>
+              setRunProfileForm((prev) => ({ ...prev, test_command: e.target.value }))
+            }
             placeholder="npm test (optional)"
             className="w-full rounded-md border border-white/[0.12] bg-black/40 px-2 py-1.5 text-[11px] text-white/90"
             data-testid="hww-local-run-profile-test-command"
@@ -654,7 +666,9 @@ function WorkbenchPreviewPanel({
                 className="text-[11px]"
                 data-testid="hww-local-run-profile-use-preview-url"
                 onClick={() => {
-                  setPreviewUrlInput(runProfile.profile?.expected_preview_url || "http://localhost:3000");
+                  setPreviewUrlInput(
+                    runProfile.profile?.expected_preview_url || "http://localhost:3000",
+                  );
                 }}
               >
                 Use as preview URL

@@ -245,7 +245,9 @@ describe("WorkspaceWorkbench", () => {
     await waitFor(() => {
       expect(saveBuilderLocalRunProfileMock).toHaveBeenCalled();
     });
-    expect(await screen.findByTestId("hww-local-run-profile-summary")).toHaveTextContent("npm run dev");
+    expect(await screen.findByTestId("hww-local-run-profile-summary")).toHaveTextContent(
+      "npm run dev",
+    );
     expect(screen.getByTestId("hww-local-run-profile-use-preview-url")).toBeInTheDocument();
   });
 
