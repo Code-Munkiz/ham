@@ -19,16 +19,14 @@ from src.persistence.builder_source_store import (
     SourceSnapshot,
     set_builder_source_store_for_tests,
 )
-<<<<<<< HEAD
 from src.persistence.builder_visual_edit_request_store import (
     BuilderVisualEditRequestStore,
     set_builder_visual_edit_request_store_for_tests,
-=======
+)
 from src.persistence.builder_usage_event_store import (
     BuilderUsageEventStore,
     UsageEvent,
     set_builder_usage_event_store_for_tests,
->>>>>>> 2f5c3bae (feat(builder): add usage event contract)
 )
 from src.persistence.project_store import ProjectStore, set_project_store_for_tests
 from src.persistence.workspace_store import InMemoryWorkspaceStore
@@ -347,7 +345,6 @@ def test_builder_zip_import_workspace_scope_enforced(tmp_path: Path) -> None:
     set_builder_source_store_for_tests(None)
 
 
-<<<<<<< HEAD
 def test_visual_edit_requests_create_list_cancel_and_sanitize(tmp_path: Path) -> None:
     ws_store = InMemoryWorkspaceStore()
     ws_id = "ws_aaaaaaaaaaaaaaaa"
@@ -440,7 +437,8 @@ def test_visual_edit_request_rejects_invalid_instruction_and_bbox(tmp_path: Path
     set_project_store_for_tests(None)
     set_builder_source_store_for_tests(None)
     set_builder_visual_edit_request_store_for_tests(None)
-=======
+
+
 def test_builder_usage_events_lists_scoped_records(tmp_path: Path) -> None:
     ws_store = InMemoryWorkspaceStore()
     ws_id = "ws_aaaaaaaaaaaaaaaa"
@@ -524,4 +522,3 @@ def test_builder_usage_events_scope_enforced(tmp_path: Path) -> None:
     set_project_store_for_tests(None)
     set_builder_source_store_for_tests(None)
     set_builder_usage_event_store_for_tests(None)
->>>>>>> 2f5c3bae (feat(builder): add usage event contract)
