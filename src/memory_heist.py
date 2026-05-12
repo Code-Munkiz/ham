@@ -115,16 +115,23 @@ def _walk_tree(
 # ---------------------------------------------------------------------------
 # Instruction file discovery (hierarchical, deduped)
 # ---------------------------------------------------------------------------
+# Constants for instruction file loading limits and session compaction.
+# These values control how much instruction document content is loaded into
+# the agent prompt to prevent context overflow while preserving critical guidance.
 
 INSTRUCTION_FILENAMES = ("SWARM.md", "SWARM.local.md", "AGENTS.md")
 INSTRUCTION_DOT_DIR = ".ham"
 INSTRUCTION_DOT_FILES = ("SWARM.md", "instructions.md")
 
+# Instruction file content limits (chars)
 MAX_INSTRUCTION_FILE_CHARS = 4_000
 MAX_TOTAL_INSTRUCTION_CHARS = 12_000
 MAX_DIFF_CHARS = 8_000
 MAX_SUMMARY_CHARS = 4_000
-DEFAULT_SESSION_COMPACTION_MAX_TOKENS = 8_000
+
+# Session compaction defaults: maximum tokens for compacted session history,
+# minimum session messages to preserve in history, and tool output pruning
+DEFAULT_SESSION_COMPACTION_MAX_TOKENS = 10_000
 DEFAULT_SESSION_COMPACTION_PRESERVE = 4
 DEFAULT_SESSION_TOOL_PRUNE_CHARS = 200
 DEFAULT_TOOL_PRUNE_PLACEHOLDER = "[Old tool output cleared to save context space]"
