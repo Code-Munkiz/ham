@@ -4,6 +4,16 @@ memory_heist.py — Context-awareness primitives for the Ham developer swarm.
 Provides filesystem mapping, hierarchical config discovery, instruction file
 loading, git state capture, session compaction, and prompt context building.
 Use with Ham or other Python tooling that needs repo-grounded prompt context.
+
+**Module overview for maintainers:**
+- This module implements the "memory heist" concept: assembling a deterministic,
+  snapshot-based view of the project repository for agent context
+- Key components: ProjectContext (discovered workspace state), SessionMemory
+  (conversation compaction), and various discovery utilities
+- The "heist" metaphor: gathering repo intelligence (git state, config, files)
+  into a coherent context payload that agents consume
+- All context snapshots are captured once at discovery time and marked immutable
+  to ensure consistent agent visibility throughout operation
 """
 
 from __future__ import annotations
