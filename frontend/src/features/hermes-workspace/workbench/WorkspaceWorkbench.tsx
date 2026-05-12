@@ -258,6 +258,11 @@ function MutedPanel({ children }: { children: React.ReactNode }) {
   return <div className="space-y-3 text-[12px] leading-relaxed text-white/70">{children}</div>;
 }
 
+function isProjectNotFoundError(message: string | null): boolean {
+  const text = (message || "").toLowerCase();
+  return text.includes("unknown project_id") || text.includes("project_not_found");
+}
+
 function WorkbenchPreviewPanel({
   workspaceId = null,
   projectId = null,
@@ -494,17 +499,20 @@ function WorkbenchPreviewPanel({
   const cloudRuntimeWorker =
     workers.find((row) => row.worker_kind === "cloud_runtime_worker") || null;
   const cloudRuntimeProviderStatus = (cloudRuntimeWorker?.status || "disabled").toLowerCase();
-  const cloudRuntimeRequestEnabled = ["available_mock", "available_poc"].includes(
-    cloudRuntimeProviderStatus,
+  const cloudRuntimeState = cloudRuntime?.status || "disabled";
+  const cloudRuntimeRequestEnabled = ["dry_run_ready", "provider_ready", "provider_accepted"].includes(
+    cloudRuntimeState,
   );
   const cloudRuntimeProviderCopy =
-    cloudRuntimeProviderStatus === "available_poc"
-      ? "Cloud runtime provider is configured for plan-only POC."
-      : cloudRuntimeProviderStatus === "available_mock"
-        ? "Cloud runtime local mock is available for safe control-plane testing."
-        : cloudRuntimeProviderStatus === "unavailable"
-          ? "Provider unavailable: set required GCP config for plan-only mode."
-          : "Provider disabled by default.";
+    cloudRuntimeState === "experiment_not_enabled"
+      ? "Cloud runtime experiments are not enabled."
+      : cloudRuntimeState === "config_missing"
+        ? "Cloud runtime provider needs configuration before it can run."
+        : cloudRuntimeState === "dry_run_ready"
+          ? "Cloud runtime dry-run path is ready for safe experimentation."
+          : cloudRuntimeState === "provider_ready" || cloudRuntimeState === "provider_accepted"
+            ? "Cloud runtime experiment provider is ready."
+            : "Cloud runtime experiments are disabled by default.";
   return (
     <MutedPanel>
       <div className="flex flex-wrap items-center gap-2">
@@ -563,12 +571,14 @@ function WorkbenchPreviewPanel({
       </div>
       {!workspaceId?.trim() || !projectId?.trim() ? (
         <p className="text-white/55" data-testid="hww-preview-state-no-project">
-          Select an active workspace and project in chat to check preview status.
+          No project selected. Create or select a project to use Builder tools.
         </p>
       ) : null}
       {error ? (
         <p className="text-amber-200/90" data-testid="hww-preview-state-error">
-          Could not load preview status: {error}
+          {isProjectNotFoundError(error)
+            ? "Project record not found. Refresh workspace or create a new project."
+            : `Could not load preview status: ${error}`}
         </p>
       ) : null}
       {preview ? (
@@ -833,7 +843,7 @@ function WorkbenchPreviewPanel({
           Status is refreshed on demand. Live streaming is not connected yet.
         </p>
         <p className="text-[11px] text-white/55" data-testid="hww-cloud-runtime-status">
-          Status: {cloudRuntime?.status || "unsupported"}
+          Status: {cloudRuntimeState}
         </p>
         <p className="text-[11px] text-white/55" data-testid="hww-cloud-runtime-provider-status">
           Provider: {cloudRuntimeProviderStatus.replace("_", " ")}
@@ -841,6 +851,11 @@ function WorkbenchPreviewPanel({
         <p className="text-[11px] text-white/55" data-testid="hww-cloud-runtime-provider-copy">
           {cloudRuntimeProviderCopy}
         </p>
+        {(cloudRuntimeState === "experiment_not_enabled" || cloudRuntimeState === "disabled") && (
+          <p className="text-[11px] text-white/55" data-testid="hww-cloud-runtime-setup-copy">
+            Enable HAM_BUILDER_CLOUD_RUNTIME_EXPERIMENTS_ENABLED or configure cloud_run_poc provider.
+          </p>
+        )}
         {cloudRuntime?.message ? (
           <p className="text-[11px] text-white/55" data-testid="hww-cloud-runtime-message">
             {cloudRuntime.message}
@@ -888,7 +903,13 @@ function WorkbenchPreviewPanel({
           variant="secondary"
           className="text-[11px]"
           data-testid="hww-cloud-runtime-request-poc"
-          disabled={!ws || !pid || !cloudRuntimeRequestEnabled || cloudRuntimeJobBusy}
+          disabled={
+            !ws ||
+            !pid ||
+            !cloudRuntimeRequestEnabled ||
+            cloudRuntimeJobBusy ||
+            !preview?.source_snapshot_id
+          }
           onClick={() => {
             if (!ws || !pid || !cloudRuntimeRequestEnabled) return;
             setCloudRuntimeJobBusy(true);
@@ -919,9 +940,18 @@ function WorkbenchPreviewPanel({
         >
           {cloudRuntimeJobBusy ? "Requesting…" : "Request cloud runtime POC"}
         </Button>
+        {!preview?.source_snapshot_id ? (
+          <p className="text-[11px] text-white/55" data-testid="hww-cloud-runtime-source-required-copy">
+            Add a project source ZIP or folder before requesting cloud runtime.
+          </p>
+        ) : null}
         {!cloudRuntimeRequestEnabled ? (
           <p className="text-[11px] text-white/55" data-testid="hww-cloud-runtime-disabled-copy">
-            No cloud runtime has been provisioned yet.
+            {cloudRuntimeState === "experiment_not_enabled"
+              ? "Cloud runtime experiments are not enabled in this environment."
+              : cloudRuntimeState === "config_missing"
+                ? "Cloud runtime provider needs configuration before it can run."
+                : "Cloud runtime experiments are not enabled."}
           </p>
         ) : null}
         {cloudRuntimeJobError ? (
@@ -936,7 +966,9 @@ function WorkbenchPreviewPanel({
         ) : null}
         {cloudRuntimeError ? (
           <p className="text-amber-200/90" data-testid="hww-cloud-runtime-error">
-            Could not load cloud runtime status: {cloudRuntimeError}
+            {isProjectNotFoundError(cloudRuntimeError)
+              ? "Project record not found. Refresh workspace or create a new project."
+              : `Could not load cloud runtime status: ${cloudRuntimeError}`}
           </p>
         ) : null}
       </div>

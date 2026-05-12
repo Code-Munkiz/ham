@@ -22,6 +22,7 @@ from src.api.clerk_gate import get_ham_clerk_actor
 from src.api.dependencies.workspace import require_perm
 from src.ham.builder_runtime_worker import (
     execute_cloud_runtime_job,
+    get_cloud_runtime_experiment_status,
     get_cloud_runtime_provider_capability_status,
     get_cloud_runtime_provider_mode,
     get_runtime_job_lifecycle_status,
@@ -459,7 +460,24 @@ def _serialize_local_run_profile(profile: LocalRunProfile | None, *, workspace_i
     }
 
 
-_CLOUD_RUNTIME_STATES = {"queued", "provisioning", "running", "failed", "expired", "unsupported"}
+_CLOUD_RUNTIME_STATES = {
+    "queued",
+    "provisioning",
+    "running",
+    "failed",
+    "expired",
+    "unsupported",
+}
+_CLOUD_RUNTIME_VIEW_STATES = {
+    "disabled",
+    "experiment_not_enabled",
+    "config_missing",
+    "dry_run_ready",
+    "provider_ready",
+    "provider_accepted",
+    "failed",
+    "expired",
+}
 _CLOUD_RUNTIME_JOB_STATES = {"queued", "running", "succeeded", "failed", "cancelled", "unsupported"}
 _CLOUD_RUNTIME_JOB_PHASES = {
     "received",
@@ -480,24 +498,40 @@ def _serialize_cloud_runtime(
     workspace_id: str,
     project_id: str,
 ) -> dict[str, Any]:
+    experiment_status, experiment_message = get_cloud_runtime_experiment_status()
     if runtime is None:
         return {
             "workspace_id": workspace_id,
             "project_id": project_id,
             "mode": "cloud",
-            "status": "unsupported",
-            "message": "Cloud runtime is not provisioned yet. Request tracking only is available.",
+            "status": experiment_status,
+            "message": experiment_message,
             "updated_at": _utc_now_iso(),
             "runtime_session_id": None,
             "source_snapshot_id": None,
-            "metadata": {},
+            "metadata": {
+                "provider_mode": get_cloud_runtime_provider_mode(),
+                "provider_capability_status": get_cloud_runtime_provider_capability_status(),
+            },
         }
-    status = str(runtime.status or "").strip().lower()
-    if status not in _CLOUD_RUNTIME_STATES:
-        status = "unsupported"
+    runtime_status = str(runtime.status or "").strip().lower()
+    status = "provider_ready"
+    if runtime_status in {"failed", "unsupported"}:
+        status = "failed"
+    elif runtime_status in {"expired", "stopped"}:
+        status = "expired"
+    elif runtime_status == "provisioning":
+        provider_job_id = str((runtime.metadata or {}).get("provider_job_id") or "").strip()
+        status = "provider_accepted" if provider_job_id else "provider_ready"
+    elif runtime_status == "queued":
+        status = "provider_ready"
+    elif runtime_status == "running":
+        status = "provider_ready"
+    if status not in _CLOUD_RUNTIME_VIEW_STATES:
+        status = "failed"
     message = _safe_text(
         runtime.message,
-        fallback="Cloud runtime request tracked. Provisioning/execution is coming soon.",
+        fallback=experiment_message,
     )
     return {
         "workspace_id": workspace_id,
@@ -769,10 +803,16 @@ def _hermes_planner_entry() -> BuilderWorkerCapabilityEntry:
 def _cloud_runtime_worker_entry() -> BuilderWorkerCapabilityEntry:
     provider_mode = get_cloud_runtime_provider_mode()
     provider_status = get_cloud_runtime_provider_capability_status()
+    experiment_status, _ = get_cloud_runtime_experiment_status()
     status = _to_worker_status(provider_status)
     fit = "Cloud runtime POC control-plane path; no production sandbox lifecycle in this phase."
     setup = "Set HAM_BUILDER_CLOUD_RUNTIME_PROVIDER=local_mock for safe simulation in dev/test."
-    if provider_mode == "cloud_run_poc":
+    if experiment_status == "experiment_not_enabled":
+        setup = (
+            "Set HAM_BUILDER_CLOUD_RUNTIME_EXPERIMENTS_ENABLED=true, "
+            "or configure HAM_BUILDER_CLOUD_RUNTIME_PROVIDER for explicit POC tests."
+        )
+    elif provider_mode == "cloud_run_poc":
         if provider_status == "disabled":
             setup = "Enable HAM_BUILDER_CLOUD_RUNTIME_GCP_ENABLED=true to activate cloud_run_poc planning."
         elif provider_status == "unavailable":

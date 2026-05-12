@@ -135,8 +135,8 @@ describe("WorkspaceWorkbench", () => {
       workspace_id: "ws_abc",
       project_id: "proj_abc",
       mode: "cloud",
-      status: "unsupported",
-      message: "Cloud runtime is not provisioned yet. Request tracking only is available.",
+      status: "experiment_not_enabled",
+      message: "Cloud runtime experiments are not enabled in this environment.",
       updated_at: "2026-01-01T00:00:00Z",
       runtime_session_id: null,
       source_snapshot_id: null,
@@ -425,6 +425,23 @@ describe("WorkspaceWorkbench", () => {
     expect(screen.queryByText(/build stream/i)).toBeNull();
   });
 
+  it("No project state does not call builder preview APIs", async () => {
+    getBuilderPreviewStatusMock.mockClear();
+    getBuilderCloudRuntimeMock.mockClear();
+    listBuilderCloudRuntimeJobsMock.mockClear();
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-preview-state-no-project")).toBeInTheDocument();
+    });
+    expect(getBuilderPreviewStatusMock).not.toHaveBeenCalled();
+    expect(getBuilderCloudRuntimeMock).not.toHaveBeenCalled();
+    expect(listBuilderCloudRuntimeJobsMock).not.toHaveBeenCalled();
+  });
+
   it("Activity stream updates activity items from live events", async () => {
     let callbacks: { onActivity: (payload: any) => void; onOpen?: () => void } | null = null;
     subscribeBuilderActivityStreamMock.mockImplementation(
@@ -579,8 +596,12 @@ describe("WorkspaceWorkbench", () => {
     await waitFor(() => {
       expect(screen.getByTestId("hww-cloud-runtime-section")).toBeInTheDocument();
     });
-    expect(screen.getByTestId("hww-cloud-runtime-status")).toHaveTextContent("unsupported");
-    expect(screen.getByTestId("hww-cloud-runtime-message")).toHaveTextContent("not provisioned");
+    expect(screen.getByTestId("hww-cloud-runtime-status")).toHaveTextContent(
+      "experiment_not_enabled",
+    );
+    expect(screen.getByTestId("hww-cloud-runtime-message")).toHaveTextContent(
+      "not enabled in this environment",
+    );
     expect(screen.getByTestId("hww-cloud-runtime-section")).toHaveTextContent(
       "control-plane path only",
     );
@@ -617,11 +638,22 @@ describe("WorkspaceWorkbench", () => {
     expect(screen.getByTestId("hww-cloud-runtime-request-poc")).toBeDisabled();
     expect(screen.getByTestId("hww-cloud-runtime-disabled-copy")).toBeInTheDocument();
     expect(screen.getByTestId("hww-cloud-runtime-provider-copy")).toHaveTextContent(
-      "Provider disabled by default",
+      "experiments are not enabled",
     );
   });
 
   it("Cloud runtime card shows config-missing/unavailable provider state", async () => {
+    getBuilderCloudRuntimeMock.mockResolvedValueOnce({
+      workspace_id: "ws_abc",
+      project_id: "proj_abc",
+      mode: "cloud",
+      status: "config_missing",
+      message: "Cloud runtime provider needs configuration before it can run.",
+      updated_at: "2026-01-01T00:00:00Z",
+      runtime_session_id: null,
+      source_snapshot_id: null,
+      metadata: {},
+    });
     getBuilderWorkerCapabilitiesMock.mockResolvedValueOnce({
       workspace_id: "ws_abc",
       project_id: "proj_abc",
@@ -652,12 +684,37 @@ describe("WorkspaceWorkbench", () => {
       "unavailable",
     );
     expect(screen.getByTestId("hww-cloud-runtime-provider-copy")).toHaveTextContent(
-      "Provider unavailable",
+      "needs configuration",
     );
     expect(screen.getByTestId("hww-cloud-runtime-request-poc")).toBeDisabled();
   });
 
   it("Cloud runtime POC request calls API and refreshes state", async () => {
+    getBuilderPreviewStatusMock.mockResolvedValueOnce({
+      project_id: "proj_abc",
+      workspace_id: "ws_abc",
+      mode: "local",
+      status: "ready",
+      health: "healthy",
+      preview_url: "http://127.0.0.1:3000/",
+      message: "Preview is ready.",
+      updated_at: "2026-01-01T00:00:00Z",
+      source_snapshot_id: "ssnp_1",
+      runtime_session_id: "rtms_1",
+      preview_endpoint_id: "prve_1",
+      logs_hint: null,
+    });
+    getBuilderCloudRuntimeMock.mockResolvedValueOnce({
+      workspace_id: "ws_abc",
+      project_id: "proj_abc",
+      mode: "cloud",
+      status: "provider_ready",
+      message: "Cloud runtime provider is configured for experimentation.",
+      updated_at: "2026-01-01T00:00:00Z",
+      runtime_session_id: null,
+      source_snapshot_id: "ssnp_1",
+      metadata: {},
+    });
     render(
       <MemoryRouter>
         <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
@@ -667,7 +724,7 @@ describe("WorkspaceWorkbench", () => {
     fireEvent.click(btn);
     await waitFor(() => {
       expect(createBuilderCloudRuntimeJobMock).toHaveBeenCalledWith("ws_abc", "proj_abc", {
-        source_snapshot_id: null,
+        source_snapshot_id: "ssnp_1",
         metadata: { request_source: "workbench_preview_tab" },
       });
     });
@@ -927,6 +984,22 @@ describe("WorkspaceWorkbench", () => {
     expect(screen.getByTestId("hww-preview-no-iframe")).toBeInTheDocument();
   });
 
+  it("Unknown project errors render safe guidance copy", async () => {
+    getBuilderPreviewStatusMock.mockRejectedValueOnce(
+      new Error("Unknown project_id 'project.app-f53b52'."),
+    );
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="project.app-f53b52" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-preview-state-error")).toHaveTextContent(
+        "Project record not found. Refresh workspace or create a new project.",
+      );
+    });
+  });
+
   it("Preview connect failure renders safe error copy", async () => {
     postBuilderLocalPreviewMock.mockRejectedValueOnce(new Error("LOCAL_PREVIEW_URL_INVALID"));
     render(
@@ -1053,6 +1126,9 @@ describe("WorkspaceWorkbench", () => {
       expect(buttons.length).toBe(1);
       fireEvent.click(buttons[0]!);
       expect(await screen.findByTestId("hww-project-source-dialog")).toBeInTheDocument();
+      expect(screen.getByText(/Recommended for full projects/i)).toBeInTheDocument();
+      expect(screen.getByTestId("hww-project-source-workspace-folder-btn")).toBeInTheDocument();
+      expect(screen.getByTestId("hww-project-source-chat-import-copy")).toBeInTheDocument();
       fireEvent.click(screen.getByRole("button", { name: "Close" }));
       await waitFor(() => {
         expect(screen.queryByTestId("hww-project-source-dialog")).not.toBeInTheDocument();
