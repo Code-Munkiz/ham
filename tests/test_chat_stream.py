@@ -239,7 +239,7 @@ def test_chat_stream_gateway_failure_done_with_safe_assistant_and_signal(
     assert events[0]["type"] == "session"
     assert events[-1]["type"] == "done"
     done = events[-1]
-    assert done.get("gateway_error") == {"code": "UPSTREAM_REJECTED"}
+    assert done.get("gateway_error") == {"code": "UPSTREAM_REJECTED", "upstream_http_status": 503}
     msgs = done["messages"]
     assistants = [m for m in msgs if m["role"] == "assistant"]
     assert len(assistants) == 1
@@ -269,7 +269,7 @@ def test_chat_stream_openrouter_model_rejected_done_with_safe_assistant_and_sign
     events = _parse_ndjson(res.text)
     assert events[-1]["type"] == "done"
     done = events[-1]
-    assert done.get("gateway_error") == {"code": "OPENROUTER_MODEL_REJECTED"}
+    assert done.get("gateway_error") == {"code": "OPENROUTER_MODEL_REJECTED", "upstream_http_status": 400}
     msgs = done["messages"]
     assistants = [m for m in msgs if m["role"] == "assistant"]
     assert len(assistants) == 1

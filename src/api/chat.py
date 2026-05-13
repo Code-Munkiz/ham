@@ -1664,6 +1664,10 @@ def post_chat_stream(
                     assistant_visible_err = format_gateway_error_user_message(exc)
                     try:
                         store.upsert_assistant_turn(sid, assistant_turn_id, assistant_visible_err)
+                        gateway_err: dict[str, Any] = {"code": exc.code}
+                        http_st = getattr(exc, "http_status", None)
+                        if isinstance(http_st, int):
+                            gateway_err["upstream_http_status"] = http_st
                         payload_err: dict[str, Any] = {
                             "type": "done",
                             "session_id": sid,
@@ -1671,7 +1675,7 @@ def post_chat_stream(
                             "actions": [],
                             "operator_result": None,
                             "execution_mode": stream_execution_mode,
-                            "gateway_error": {"code": exc.code},
+                            "gateway_error": gateway_err,
                         }
                         if stream_active_meta:
                             payload_err["active_agent"] = stream_active_meta
