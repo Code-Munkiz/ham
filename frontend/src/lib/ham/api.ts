@@ -2822,7 +2822,7 @@ export interface HamChatResponse {
   operator_result?: HamOperatorResult | null;
   execution_mode?: HamChatExecutionMode | null;
   /** Present on terminal `done` when the model gateway failed after retries; safe text is in `messages`. */
-  gateway_error?: { code: string };
+  gateway_error?: { code: string; upstream_http_status?: number };
   /** Builder happy-path metadata (intent, scaffold summaries) when workspace chat triggers it. */
   builder?: Record<string, unknown> | null;
 }
@@ -3133,7 +3133,7 @@ export type HamChatStreamEvent =
       operator_result?: HamOperatorResult | null;
       execution_mode?: HamChatExecutionMode | null;
       /** Structured signal when the assistant turn ended in a gateway failure (safe copy in `messages`). */
-      gateway_error?: { code: string };
+      gateway_error?: { code: string; upstream_http_status?: number };
       builder?: Record<string, unknown> | null;
     }
   | { type: "error"; code: string; message: string };

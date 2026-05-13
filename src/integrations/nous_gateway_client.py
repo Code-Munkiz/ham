@@ -80,6 +80,31 @@ def format_gateway_error_user_message(exc: GatewayCallError) -> str:
             "Try a shorter question or retry."
         )
     if exc.code == "UPSTREAM_REJECTED":
+        st = getattr(exc, "http_status", None)
+        if st in {401, 403}:
+            return (
+                f"The model gateway refused authorization (HTTP {st}). "
+                "An operator should verify Hermes gateway credentials (HERMES_GATEWAY_API_KEY) and that "
+                "HERMES_GATEWAY_BASE_URL reaches the intended Hermes instance."
+            )
+        if st == 404:
+            return (
+                "The model gateway endpoint was not found (HTTP 404). "
+                "Verify HERMES_GATEWAY_BASE_URL and that Hermes exposes OpenAI-compatible /v1/chat/completions."
+            )
+        if st == 422:
+            return (
+                "The model gateway rejected the request or model id (HTTP 422). "
+                "Verify HERMES_GATEWAY_MODEL matches a model your Hermes server accepts."
+            )
+        if st == 429:
+            return (
+                "The model gateway rate-limited this request (HTTP 429). Try again in a moment."
+            )
+        if st is not None and st >= 500:
+            return (
+                "The model gateway returned a server error. Try again shortly or contact support if it continues."
+            )
         return "The model gateway rejected the request. Try again or contact support if it continues."
     if exc.code == "OPENROUTER_MODEL_REJECTED":
         return (
