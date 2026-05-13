@@ -1,6 +1,7 @@
 """HTTP Hermes gateway: optional HAM_CHAT_FALLBACK_MODEL retry on overload responses."""
 from __future__ import annotations
 
+import copy
 import json
 from unittest.mock import patch
 from typing import Any
@@ -40,12 +41,14 @@ class _FakeHttpxClient:
         *,
         reset_monotonic_before_indices: frozenset[int] | None = None,
         monotonic_state: list[float] | None = None,
+        captured_messages_snapshots: list[list[dict[str, Any]]] | None = None,
     ) -> None:
         self._responses = list(responses)
         self._i = 0
         self.models_seen: list[str] = []
         self._reset_mono_before = reset_monotonic_before_indices or frozenset()
         self._mono_state = monotonic_state
+        self._captured_messages = captured_messages_snapshots
 
     def __enter__(self) -> _FakeHttpxClient:
         return self
@@ -62,6 +65,8 @@ class _FakeHttpxClient:
         json: dict[str, Any] | None = None,
     ) -> _FakeStreamResp:
         assert json is not None
+        if self._captured_messages is not None:
+            self._captured_messages.append(copy.deepcopy(json["messages"]))
         if self._i in self._reset_mono_before and self._mono_state is not None:
             self._mono_state[0] = 0.0
         self.models_seen.append(str(json["model"]))
@@ -298,3 +303,39 @@ def test_http_no_fallback_on_400(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_gateway_call_error_backward_compatible_http_status() -> None:
     err = GatewayCallError("UPSTREAM_REJECTED", "Gateway HTTP 500")
     assert err.http_status is None
+
+
+def test_http_context_budget_sent_upstream_excludes_boilerplate_assistant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("HERMES_GATEWAY_MODE", "http")
+    monkeypatch.setenv("HERMES_GATEWAY_BASE_URL", "http://10.0.0.1:8642")
+    monkeypatch.setenv("HERMES_GATEWAY_MODEL", "m1")
+    monkeypatch.delenv("HAM_CHAT_FALLBACK_MODEL", raising=False)
+    monkeypatch.setenv("HAM_HERMES_HTTP_CONTEXT_MAX_CHARS", "100000")
+
+    boiler = (
+        "The model gateway rejected the request. Try again or contact support if it continues."
+    )
+    history = [
+        {"role": "system", "content": "sys"},
+        {"role": "user", "content": "prior"},
+        {"role": "assistant", "content": boiler},
+        {"role": "user", "content": "next"},
+        {"role": "assistant", "content": boiler},
+        {"role": "user", "content": "last"},
+    ]
+    snaps: list[list[dict[str, Any]]] = []
+
+    fake = _FakeHttpxClient(
+        [(200, [_sse_line("ok"), "data: [DONE]"])],
+        captured_messages_snapshots=snaps,
+    )
+
+    with patch("src.integrations.nous_gateway_client.httpx.Client", return_value=fake):
+        complete_chat_turn(history)
+
+    assert len(snaps) == 1
+    upstream_roles = [m.get("role") for m in snaps[0]]
+    assert upstream_roles.count("assistant") == 0
+    assert json.dumps(snaps[0]).count("model gateway rejected") == 0

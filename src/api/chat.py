@@ -179,6 +179,7 @@ class ChatResponse(BaseModel):
     operator_result: dict[str, Any] | None = None
     execution_mode: dict[str, Any] | None = None
     builder: dict[str, Any] | None = None
+    hermes_http_context_budget: dict[str, Any] | None = None
 
 
 class ChatSessionAppendTurnIn(BaseModel):
@@ -1418,12 +1419,14 @@ async def post_chat(
                 builder=builder_meta,
             )
     llm_messages = _inject_builder_turn_system(llm_messages, builder_intent)
+    budget_diag_rest: dict[str, Any] = {}
     try:
         assistant_raw = complete_chat_turn(
             llm_messages,
             openrouter_model_override=or_override,
             openrouter_litellm_api_key=litellm_hint_key,
             force_openrouter_litellm_route=litellm_http_bypass,
+            gateway_context_budget_diag=budget_diag_rest,
         )
     except GatewayCallError as exc:
         raise HTTPException(
@@ -1447,6 +1450,7 @@ async def post_chat(
         operator_result=None,
         execution_mode=execution_mode,
         builder=builder_meta,
+        hermes_http_context_budget=dict(budget_diag_rest) if budget_diag_rest else None,
     )
 
 
@@ -1612,6 +1616,7 @@ def post_chat_stream(
 
             try:
                 stream_msgs: list[dict[str, Any]] = llm_messages
+                budget_diag_stream: dict[str, Any] = {}
                 terminal_exc: GatewayCallError | None = None
                 for retry_pass in range(2):
                     terminal_exc = None
@@ -1621,6 +1626,7 @@ def post_chat_stream(
                             openrouter_model_override=or_override,
                             openrouter_litellm_api_key=litellm_hint_key,
                             force_openrouter_litellm_route=litellm_http_bypass,
+                            gateway_context_budget_diag=budget_diag_stream,
                         ):
                             pieces.append(part)
                             chars_since_checkpoint += len(part)
@@ -1681,6 +1687,8 @@ def post_chat_stream(
                             payload_err["active_agent"] = stream_active_meta
                         if builder_meta is not None:
                             payload_err["builder"] = builder_meta
+                        if budget_diag_stream:
+                            payload_err["hermes_http_context_budget"] = dict(budget_diag_stream)
                         yield json.dumps(payload_err) + "\n"
                     except KeyError:
                         yield json.dumps(
@@ -1713,6 +1721,8 @@ def post_chat_stream(
                         payload["active_agent"] = stream_active_meta
                     if builder_meta is not None:
                         payload["builder"] = builder_meta
+                    if budget_diag_stream:
+                        payload["hermes_http_context_budget"] = dict(budget_diag_stream)
                     yield json.dumps(payload) + "\n"
                 except KeyError:
                     yield json.dumps(
