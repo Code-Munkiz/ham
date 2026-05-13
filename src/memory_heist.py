@@ -814,6 +814,11 @@ class Message:
 class SessionMemory:
     messages: list[Message] = field(default_factory=list)
     session_id: str = field(default_factory=lambda: f"session-{int(time.time() * 1000)}")
+    # `compact_max_tokens` defaults to `DEFAULT_SESSION_COMPACTION_MAX_TOKENS`, which is currently a
+    # placeholder (see lines 204-225 in module constants). The actual token threshold used in practice
+    # comes from project config (`memory_heist.session_compaction_max_tokens`) or falls back to this
+    # unused placeholder. Current session compaction uses character-based heuristics instead of token
+    # counting. This field is set via `configure_from_project_config()` which respects config overrides.
     compact_max_tokens: int = DEFAULT_SESSION_COMPACTION_MAX_TOKENS
     compact_preserve: int = DEFAULT_SESSION_COMPACTION_PRESERVE
     tool_prune_chars: int = DEFAULT_SESSION_TOOL_PRUNE_CHARS
