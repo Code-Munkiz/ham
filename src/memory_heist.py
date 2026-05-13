@@ -65,6 +65,10 @@ INTERESTING_EXTENSIONS = frozenset({
     ".py", ".rs", ".ts", ".tsx", ".js", ".jsx", ".json", ".yaml", ".yml",
     ".toml", ".md", ".sh", ".sql", ".go", ".java", ".c", ".cpp", ".h",
 })
+# **FOR MAINTAINERS**: This set controls which file extensions are included in workspace scans.
+# Extensions are selected for high signal-to-noise ratio: source code, configs, docs, and scripts.
+# Adding a new extension: ensure it's commonly source/config content (not binary/asset files).
+# If expanding, monitor scan performance on large repos with many assets (images, binaries).
 
 
 @dataclass(frozen=True)
