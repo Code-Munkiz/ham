@@ -160,6 +160,10 @@ MAX_INSTRUCTION_FILE_CHARS = 4_000
 MAX_TOTAL_INSTRUCTION_CHARS = 12_000
 MAX_DIFF_CHARS = 8_000
 MAX_SUMMARY_CHARS = 4_000
+# **FOR MAINTAINERS**: These char limits cap instruction documents and context payloads in agent prompts.
+# They must be tuned together: MAX_TOTAL must accommodate all instruction files, while MAX_DIFF + MAX_SUMMARY
+# must fit within remaining context budget after instructions. Typical LLM contexts (128K tokens) can
+# handle these limits, but production workloads may require adjustments based on actual token consumption.
 # NOTE: These bounds work together as a unit. Changing one constant may require
 # proportional adjustments to others to maintain balanced token allocation.
 # For example, increasing MAX_TOTAL_INSTRUCTION_CHARS should be accompanied by
