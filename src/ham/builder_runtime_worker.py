@@ -21,6 +21,7 @@ from src.ham.builder_sandbox_provider import (
     SandboxSourceFile,
     SandboxRuntimeState,
     build_sandbox_runtime_provider,
+    classify_sandbox_provider_error,
     load_sandbox_runtime_config,
     sandbox_preview_host,
     sandbox_provider_is_supported,
@@ -161,6 +162,52 @@ class CloudRuntimeLifecycleStatus:
     updated_at: str
     provider_status: str | None
     logs_summary: str | None
+
+
+def _sandbox_diag_payload(
+    *,
+    job: CloudRuntimeJob,
+    lifecycle_stage: str,
+    error_code: str | None,
+    error_message: str | None,
+    exception_class: str | None,
+    retry_count: int,
+    retryable: bool,
+) -> dict[str, Any]:
+    return {
+        "job_id": job.id,
+        "snapshot_id": job.source_snapshot_id,
+        "lifecycle_stage": lifecycle_stage,
+        "exception_class": exception_class,
+        "normalized_error_code": error_code,
+        "normalized_error_message": error_message,
+        "retry_count": retry_count,
+        "retryable": retryable,
+    }
+
+
+def _set_sandbox_diag(
+    *,
+    job: CloudRuntimeJob,
+    runtime: RuntimeSession,
+    lifecycle_stage: str,
+    error_code: str | None,
+    error_message: str | None,
+    exception_class: str | None,
+    retry_count: int,
+    retryable: bool,
+) -> None:
+    diagnostics = _sandbox_diag_payload(
+        job=job,
+        lifecycle_stage=lifecycle_stage,
+        error_code=error_code,
+        error_message=error_message,
+        exception_class=exception_class,
+        retry_count=retry_count,
+        retryable=retryable,
+    )
+    job.metadata = {**(job.metadata or {}), "sandbox_diagnostics": diagnostics}
+    runtime.metadata = {**(runtime.metadata or {}), "sandbox_diagnostics": diagnostics}
 
 
 def _resolve_source_handoff(job: CloudRuntimeJob) -> dict[str, Any]:
@@ -680,32 +727,53 @@ def execute_cloud_runtime_job(job: CloudRuntimeJob) -> CloudRuntimeExecutionResu
             job.updated_at = job.completed_at
             return CloudRuntimeExecutionResult(job=job, runtime_session=runtime, usage_event=None)
         provider = build_sandbox_runtime_provider(config=cfg)
-        try:
-            state = provider.create_sandbox(state=state, config=cfg)
+        lifecycle_stage = "create_sandbox"
+        exception_class: str | None = None
+        retry_count = 0
+        retryable = False
+        while True:
+            try:
+                lifecycle_stage = "create_sandbox"
+                state = provider.create_sandbox(state=state, config=cfg)
+                break
+            except Exception as exc:  # pragma: no cover - defensive adapter guard
+                classified = classify_sandbox_provider_error(error=exc, lifecycle_stage=lifecycle_stage)
+                exception_class = classified.exception_class
+                retryable = bool(classified.retryable)
+                if retryable and retry_count < 1:
+                    retry_count += 1
+                    continue
+                state = SandboxRuntimeState(
+                    **{
+                        **state.__dict__,
+                        "status": "failed",
+                        "updated_at": _utc_now_iso(),
+                        "error_code": classified.error_code,
+                        "error_message": classified.error_message,
+                    }
+                )
+                break
+        if state.status != "failed":
+            lifecycle_stage = "upload_source"
             state = provider.upload_source(
                 state=state,
                 source_ref=str(source_handoff.get("source_ref") or ""),
                 artifact_uri=str(source_handoff.get("artifact_uri") or ""),
                 files=source_files,
             )
+        if state.status != "failed":
+            lifecycle_stage = "install"
             state = provider.run_command(state=state, command=["npm", "install"], stage="install")
+        if state.status != "failed":
+            lifecycle_stage = "start"
             state = provider.run_command(
                 state=state,
                 command=["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", str(cfg.default_port)],
                 stage="start",
             )
+        if state.status != "failed":
+            lifecycle_stage = "health"
             state = provider.start_preview_server(state=state, port=cfg.default_port)
-        except Exception as exc:  # pragma: no cover - defensive adapter guard
-            err_code, err_message = provider.normalize_error(error=exc)
-            state = SandboxRuntimeState(
-                **{
-                    **state.__dict__,
-                    "status": "failed",
-                    "updated_at": _utc_now_iso(),
-                    "error_code": err_code,
-                    "error_message": err_message,
-                }
-            )
         if state.status != "ready":
             runtime.status = "failed"
             runtime.health = "unhealthy"
@@ -716,6 +784,16 @@ def execute_cloud_runtime_job(job: CloudRuntimeJob) -> CloudRuntimeExecutionResu
                 "sandbox_provider": cfg.provider,
                 "sandbox_id": state.sandbox_id,
             }
+            _set_sandbox_diag(
+                job=job,
+                runtime=runtime,
+                lifecycle_stage=lifecycle_stage,
+                error_code=state.error_code or "SANDBOX_PROVIDER_ERROR",
+                error_message=state.error_message or "Cloud sandbox provider request failed safely.",
+                exception_class=exception_class,
+                retry_count=retry_count,
+                retryable=retryable,
+            )
             runtime = runtime_store.upsert_runtime_session(runtime)
             job.runtime_session_id = runtime.id
             job.status = "failed"
@@ -740,10 +818,21 @@ def execute_cloud_runtime_job(job: CloudRuntimeJob) -> CloudRuntimeExecutionResu
         upstream_url = provider.get_preview_url(state=state, port=cfg.default_port)
         safe_upstream = safe_proxy_upstream_from_provider(upstream_url)
         if safe_upstream is None:
+            lifecycle_stage = "persist"
             runtime.status = "failed"
             runtime.health = "unhealthy"
             runtime.message = "Sandbox provider returned an unsafe preview upstream URL."
             runtime.updated_at = _utc_now_iso()
+            _set_sandbox_diag(
+                job=job,
+                runtime=runtime,
+                lifecycle_stage=lifecycle_stage,
+                error_code="SANDBOX_PREVIEW_URL_UNSAFE",
+                error_message="Sandbox provider returned an unsafe preview upstream URL.",
+                exception_class=exception_class,
+                retry_count=retry_count,
+                retryable=False,
+            )
             runtime = runtime_store.upsert_runtime_session(runtime)
             job.runtime_session_id = runtime.id
             job.status = "failed"
@@ -776,6 +865,16 @@ def execute_cloud_runtime_job(job: CloudRuntimeJob) -> CloudRuntimeExecutionResu
             "sandbox_provider": cfg.provider,
             "sandbox_id": state.sandbox_id,
         }
+        _set_sandbox_diag(
+            job=job,
+            runtime=runtime,
+            lifecycle_stage="persist",
+            error_code=None,
+            error_message=None,
+            exception_class=exception_class,
+            retry_count=retry_count,
+            retryable=False,
+        )
         runtime = runtime_store.upsert_runtime_session(runtime)
         job.runtime_session_id = runtime.id
         job.status = "succeeded"

@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
+import httpx
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -255,6 +256,38 @@ class _InjectedExplodingProvider:
         return ("SANDBOX_PROVIDER_ERROR", "Sandbox provider operation failed safely.")
 
 
+class _InjectedCreateTransportFailureProvider(_InjectedExplodingProvider):
+    def __init__(self) -> None:
+        self.create_attempts = 0
+
+    def create_sandbox(self, *, state: SandboxRuntimeState, config: SandboxRuntimeConfig) -> SandboxRuntimeState:
+        _ = state, config
+        self.create_attempts += 1
+        raise httpx.RemoteProtocolError("server disconnected without sending a response")
+
+
+class _InjectedCreateTransportRetryProvider(_InjectedLiveProvider):
+    def __init__(self) -> None:
+        super().__init__(mode="success")
+        self.create_attempts = 0
+
+    def create_sandbox(self, *, state: SandboxRuntimeState, config: SandboxRuntimeConfig) -> SandboxRuntimeState:
+        self.create_attempts += 1
+        if self.create_attempts == 1:
+            raise httpx.RemoteProtocolError("transient protocol failure")
+        return super().create_sandbox(state=state, config=config)
+
+
+class _InjectedCreateAuthFailureProvider(_InjectedExplodingProvider):
+    def __init__(self) -> None:
+        self.create_attempts = 0
+
+    def create_sandbox(self, *, state: SandboxRuntimeState, config: SandboxRuntimeConfig) -> SandboxRuntimeState:
+        _ = state, config
+        self.create_attempts += 1
+        raise RuntimeError("api key rejected by provider")
+
+
 class _FakeHttpResponse:
     def __init__(self, status_code: int, headers: dict[str, str] | None = None) -> None:
         self.status_code = status_code
@@ -490,6 +523,116 @@ def test_sandbox_provider_unexpected_exception_is_normalized(tmp_path: Path, mon
     assert body["runtime_session"]["status"] == "failed"
     assert "provisioning is not implemented yet" not in (body["runtime_session"]["message"] or "").lower()
     assert body["preview_status"]["status"] != "ready"
+    assert body["preview_status"]["preview_url"] is None
+    _cleanup()
+
+
+def test_sandbox_provider_create_transport_failure_records_stage_metadata(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "sandbox_provider")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_EXPERIMENTS_ENABLED", "true")
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_ENABLED", "true")
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_PROVIDER", "e2b")
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_DRY_RUN", "false")
+    monkeypatch.delenv("HAM_BUILDER_SANDBOX_FAKE_MODE", raising=False)
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_API_KEY", "test-secret-api-key")
+    injected = _InjectedCreateTransportFailureProvider()
+    set_sandbox_runtime_provider_factory_for_tests(lambda _cfg: injected)
+    client, ws_id, project_id, snapshot_id = _seed_context(tmp_path)
+    res = client.post(
+        f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime/jobs",
+        json={"source_snapshot_id": snapshot_id},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    diag = body["job"]["metadata"]["sandbox_diagnostics"]
+    assert body["job"]["status"] == "failed"
+    assert body["job"]["error_code"] == "SANDBOX_CREATE_TRANSPORT_ERROR"
+    assert diag["lifecycle_stage"] == "create_sandbox"
+    assert diag["exception_class"] == "RemoteProtocolError"
+    assert diag["retry_count"] == 1
+    assert diag["retryable"] is True
+    assert body["preview_status"]["preview_url"] is None
+    assert injected.create_attempts == 2
+    _cleanup()
+
+
+def test_sandbox_provider_create_transport_retry_then_success(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "sandbox_provider")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_EXPERIMENTS_ENABLED", "true")
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_ENABLED", "true")
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_PROVIDER", "e2b")
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_DRY_RUN", "false")
+    monkeypatch.delenv("HAM_BUILDER_SANDBOX_FAKE_MODE", raising=False)
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_API_KEY", "test-secret-api-key")
+    injected = _InjectedCreateTransportRetryProvider()
+    set_sandbox_runtime_provider_factory_for_tests(lambda _cfg: injected)
+    client, ws_id, project_id, snapshot_id = _seed_context(tmp_path)
+    res = client.post(
+        f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime/jobs",
+        json={"source_snapshot_id": snapshot_id},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    diag = body["job"]["metadata"]["sandbox_diagnostics"]
+    assert body["job"]["status"] == "succeeded"
+    assert body["preview_status"]["status"] == "ready"
+    assert body["preview_status"]["preview_url"] == (
+        f"/api/workspaces/{ws_id}/projects/{project_id}/builder/preview-proxy/"
+    )
+    assert diag["lifecycle_stage"] == "persist"
+    assert diag["retry_count"] == 1
+    assert injected.create_attempts == 2
+    _cleanup()
+
+
+def test_sandbox_provider_create_auth_error_is_not_retried(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "sandbox_provider")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_EXPERIMENTS_ENABLED", "true")
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_ENABLED", "true")
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_PROVIDER", "e2b")
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_DRY_RUN", "false")
+    monkeypatch.delenv("HAM_BUILDER_SANDBOX_FAKE_MODE", raising=False)
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_API_KEY", "test-secret-api-key")
+    injected = _InjectedCreateAuthFailureProvider()
+    set_sandbox_runtime_provider_factory_for_tests(lambda _cfg: injected)
+    client, ws_id, project_id, snapshot_id = _seed_context(tmp_path)
+    res = client.post(
+        f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime/jobs",
+        json={"source_snapshot_id": snapshot_id},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    diag = body["job"]["metadata"]["sandbox_diagnostics"]
+    assert body["job"]["status"] == "failed"
+    assert body["job"]["error_code"] == "SANDBOX_AUTH_FAILED"
+    assert diag["retryable"] is False
+    assert diag["retry_count"] == 0
+    assert injected.create_attempts == 1
+    assert body["preview_status"]["preview_url"] is None
+    _cleanup()
+
+
+def test_sandbox_provider_health_failure_has_non_create_stage_metadata(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "sandbox_provider")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_EXPERIMENTS_ENABLED", "true")
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_ENABLED", "true")
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_PROVIDER", "e2b")
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_DRY_RUN", "false")
+    monkeypatch.delenv("HAM_BUILDER_SANDBOX_FAKE_MODE", raising=False)
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_API_KEY", "test-secret-api-key")
+    set_sandbox_runtime_provider_factory_for_tests(lambda _cfg: _InjectedLiveProvider(mode="timeout"))
+    client, ws_id, project_id, snapshot_id = _seed_context(tmp_path)
+    res = client.post(
+        f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime/jobs",
+        json={"source_snapshot_id": snapshot_id},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    diag = body["job"]["metadata"]["sandbox_diagnostics"]
+    assert body["job"]["status"] == "failed"
+    assert body["job"]["error_code"] == "SANDBOX_PREVIEW_HEALTHCHECK_FAILED"
+    assert diag["lifecycle_stage"] == "health"
+    assert diag["retry_count"] == 0
     assert body["preview_status"]["preview_url"] is None
     _cleanup()
 
