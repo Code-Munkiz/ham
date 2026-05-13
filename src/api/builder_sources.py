@@ -1072,6 +1072,53 @@ def _sanitize_metadata(raw: dict[str, Any]) -> dict[str, Any]:
     return safe
 
 
+_SAFE_SANDBOX_DIAGNOSTIC_FIELDS = {
+    "lifecycle_stage",
+    "exception_class",
+    "normalized_error_code",
+    "normalized_error_message",
+    "retry_count",
+    "retryable",
+}
+
+
+def _safe_sandbox_diagnostics(metadata: dict[str, Any] | None) -> dict[str, Any]:
+    payload = (metadata or {}).get("sandbox_diagnostics")
+    if not isinstance(payload, dict):
+        return {}
+    out: dict[str, Any] = {}
+    for key in _SAFE_SANDBOX_DIAGNOSTIC_FIELDS:
+        value = payload.get(key)
+        if key == "retry_count":
+            if isinstance(value, bool):
+                continue
+            if isinstance(value, int):
+                out[key] = max(0, value)
+            elif isinstance(value, str):
+                text = value.strip()
+                if text.isdigit():
+                    out[key] = max(0, int(text))
+            continue
+        if key == "retryable":
+            if isinstance(value, bool):
+                out[key] = value
+            elif isinstance(value, str):
+                lowered = value.strip().lower()
+                if lowered in {"true", "false"}:
+                    out[key] = lowered == "true"
+            continue
+        text = _safe_text(value, fallback="")
+        if text:
+            out[key] = text
+    return out
+
+
+def _serialize_cloud_runtime_job(record: Any) -> dict[str, Any]:
+    row = record.model_dump(mode="json")
+    row["sandbox_diagnostics"] = _safe_sandbox_diagnostics(row.get("metadata"))
+    return row
+
+
 def _sanitize_selector_hints(raw: list[str]) -> list[str]:
     safe: list[str] = []
     seen: set[str] = set()
@@ -2204,7 +2251,7 @@ async def create_builder_cloud_runtime_job(
         metadata=_sanitize_metadata(body.metadata),
     )
     return {
-        "job": saved_job.model_dump(mode="json"),
+        "job": _serialize_cloud_runtime_job(saved_job),
         "runtime_session": runtime.model_dump(mode="json") if runtime is not None else None,
         "cloud_runtime": _serialize_cloud_runtime(
             runtime,
@@ -2232,7 +2279,7 @@ async def list_builder_cloud_runtime_jobs(
     return {
         "workspace_id": ctx.workspace_id,
         "project_id": project_id,
-        "jobs": [row.model_dump(mode="json") for row in jobs],
+        "jobs": [_serialize_cloud_runtime_job(row) for row in jobs],
     }
 
 
@@ -2261,7 +2308,7 @@ async def get_builder_cloud_runtime_job(
     return {
         "workspace_id": ctx.workspace_id,
         "project_id": project_id,
-        "job": job.model_dump(mode="json"),
+        "job": _serialize_cloud_runtime_job(job),
     }
 
 
@@ -2300,9 +2347,10 @@ async def get_builder_cloud_runtime_job_status(
     return {
         "workspace_id": ctx.workspace_id,
         "project_id": project_id,
-        "job": job.model_dump(mode="json"),
+        "job": _serialize_cloud_runtime_job(job),
         "runtime_session": runtime.model_dump(mode="json") if runtime is not None else None,
         "preview_status": preview_status,
+        "sandbox_diagnostics": _safe_sandbox_diagnostics(job.metadata),
         "lifecycle": {
             "phase": lifecycle.phase,
             "message": lifecycle.message,
