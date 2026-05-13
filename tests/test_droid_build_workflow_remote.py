@@ -28,7 +28,10 @@ from src.integrations.droid_runner_client import (
     RemoteDroidBuildResult,
     RemoteRunnerError,
 )
-from src.persistence.control_plane_run import ControlPlaneRunStore
+from src.persistence.control_plane_run import (
+    ControlPlaneRunStore,
+    set_control_plane_run_store_for_tests,
+)
 from src.tools.droid_executor import DroidExecutionRecord
 
 
@@ -305,3 +308,70 @@ def test_build_remote_rejects_unknown_workflow(
     assert out.ok is False
     assert out.pr_url is None
     assert out.build_outcome is None
+
+
+def test_build_remote_uses_env_aware_singleton_when_store_not_injected(
+    project_root: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When no `control_plane_run_store` is passed, the executor must dispatch
+    through the env-aware singleton (`get_control_plane_run_store`) so a
+    Firestore-configured host actually persists rows to Firestore instead of
+    silently using the file-backed default."""
+
+    runs_dir = tmp_path / "runs"
+    monkeypatch.setenv("HAM_CONTROL_PLANE_RUNS_DIR", str(runs_dir))
+    monkeypatch.delenv("HAM_CONTROL_PLANE_RUN_STORE_BACKEND", raising=False)
+    injected = ControlPlaneRunStore(base_dir=runs_dir)
+    set_control_plane_run_store_for_tests(injected)
+    try:
+        with patch(
+            "src.ham.droid_workflows.preview_launch.run_droid_build_argv",
+            return_value=_remote_result(),
+        ):
+            out = execute_droid_build_workflow_remote(
+                workflow_id="safe_edit_low",
+                project_root=project_root,
+                user_prompt="Tidy docs",
+                project_id="project.pilot",
+                proposal_digest="9" * 64,
+            )
+        assert out.ham_run_id is not None
+        run = injected.get(out.ham_run_id)
+        assert run is not None, "row must land in the env-aware singleton"
+        assert run.build_outcome == "pr_opened"
+        assert run.workflow_id == "safe_edit_low"
+    finally:
+        set_control_plane_run_store_for_tests(None)
+
+
+def test_build_remote_injected_store_wins_over_singleton(
+    project_root: Path,
+    store: ControlPlaneRunStore,
+    tmp_path: Path,
+) -> None:
+    """Explicit `control_plane_run_store=` must still take precedence over the
+    env-aware singleton, so existing tests and any caller that wants to inject
+    a custom store keep working."""
+
+    other = ControlPlaneRunStore(base_dir=tmp_path / "other-runs")
+    set_control_plane_run_store_for_tests(other)
+    try:
+        with patch(
+            "src.ham.droid_workflows.preview_launch.run_droid_build_argv",
+            return_value=_remote_result(),
+        ):
+            out = execute_droid_build_workflow_remote(
+                workflow_id="safe_edit_low",
+                project_root=project_root,
+                user_prompt="Tidy docs",
+                project_id="project.pilot",
+                proposal_digest="8" * 64,
+                control_plane_run_store=store,
+            )
+        assert out.ham_run_id is not None
+        assert store.get(out.ham_run_id) is not None
+        assert other.get(out.ham_run_id) is None
+    finally:
+        set_control_plane_run_store_for_tests(None)
