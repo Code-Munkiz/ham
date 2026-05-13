@@ -1021,6 +1021,59 @@ describe("WorkspaceWorkbench", () => {
     expect(screen.getByTestId("hww-preview-open-new-tab")).not.toBeDisabled();
   });
 
+  it("Cloud preview normalizes proxy path to same-origin /api route", async () => {
+    getBuilderPreviewStatusMock.mockResolvedValue({
+      project_id: "proj_abc",
+      workspace_id: "ws_abc",
+      mode: "cloud",
+      status: "ready",
+      health: "healthy",
+      preview_url: "workspaces/ws_abc/projects/proj_abc/builder/preview-proxy/",
+      message: "Preview is ready via authenticated cloud proxy.",
+      updated_at: "2026-01-01T00:00:00Z",
+      source_snapshot_id: "ssnp_1",
+      runtime_session_id: "rtms_cloud_1",
+      preview_endpoint_id: "prve_cloud_1",
+      logs_hint: null,
+    });
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    const iframe = await screen.findByTestId("hww-preview-iframe");
+    expect(iframe).toHaveAttribute(
+      "src",
+      "/api/workspaces/ws_abc/projects/proj_abc/builder/preview-proxy/",
+    );
+  });
+
+  it("Cloud preview blocks unsafe absolute upstream URL from iframe", async () => {
+    getBuilderPreviewStatusMock.mockResolvedValue({
+      project_id: "proj_abc",
+      workspace_id: "ws_abc",
+      mode: "cloud",
+      status: "ready",
+      health: "healthy",
+      preview_url: "https://provider.e2b.app/",
+      message: "Preview is ready via authenticated cloud proxy.",
+      updated_at: "2026-01-01T00:00:00Z",
+      source_snapshot_id: "ssnp_1",
+      runtime_session_id: "rtms_cloud_1",
+      preview_endpoint_id: "prve_cloud_1",
+      logs_hint: null,
+    });
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.queryByTestId("hww-preview-iframe")).toBeNull();
+    });
+    expect(screen.getByTestId("hww-preview-open-new-tab")).toBeDisabled();
+  });
+
   it("Preview refresh triggers status fetch call", async () => {
     render(
       <MemoryRouter>
