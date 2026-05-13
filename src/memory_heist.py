@@ -164,6 +164,11 @@ INSTRUCTION_DOT_FILES = ("SWARM.md", "instructions.md")
 # The sum of all context payloads (instructions + git_diff + git_summary) should stay well
 # below typical LLM context limits (e.g., 128K tokens) to reserve room for agent responses.
 MAX_INSTRUCTION_FILE_CHARS = 4_000
+# For maintainers: This 4K limit was chosen as a balance between providing
+# meaningful instruction content (typical SWARM.md files are 1-3K chars) and
+# conserving context window tokens for other critical information (git state,
+# file listings, conversation history). Adjust only if you've measured token
+# pressure during production runs.
 MAX_TOTAL_INSTRUCTION_CHARS = 12_000
 MAX_DIFF_CHARS = 8_000
 MAX_SUMMARY_CHARS = 4_000
