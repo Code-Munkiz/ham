@@ -14,6 +14,7 @@ from src.api.browser_runtime import router as browser_runtime_router
 from src.api.capability_directory import router as capability_directory_router
 from src.api.capability_library import router as capability_library_router
 from src.api.chat import router as chat_router
+from src.api.claude_agent_build import router as claude_agent_build_router
 from src.api.clerk_gate import get_ham_clerk_actor
 from src.api.coding_agents import router as coding_agents_router
 from src.api.coding_conductor import router as coding_conductor_router
@@ -140,6 +141,7 @@ app.include_router(coding_agents_router)
 app.include_router(control_plane_runs_router)
 app.include_router(droid_audit_router)
 app.include_router(droid_build_router)
+app.include_router(claude_agent_build_router)
 app.include_router(coding_readiness_router)
 app.include_router(coding_conductor_router)
 app.include_router(models_catalog_router)
@@ -163,9 +165,8 @@ app.include_router(tts_router)
 # disable without redeploying the rest of the API. v1 endpoints are NOT
 # affected either way.
 _workspace_routes_enabled = (
-    (os.environ.get("HAM_WORKSPACE_ROUTES_ENABLED") or "true").strip().lower()
-    in ("1", "true", "yes", "on")
-)
+    os.environ.get("HAM_WORKSPACE_ROUTES_ENABLED") or "true"
+).strip().lower() in ("1", "true", "yes", "on")
 if _workspace_routes_enabled:
     from src.api.workspace_chat_composer_preference import (
         router as workspace_chat_composer_preference_router,
@@ -276,8 +277,7 @@ async def list_profiles(
 ) -> dict:
     return {
         "profiles": [
-            DEFAULT_PROFILE_REGISTRY.get(pid).model_dump()
-            for pid in DEFAULT_PROFILE_REGISTRY.ids()
+            DEFAULT_PROFILE_REGISTRY.get(pid).model_dump() for pid in DEFAULT_PROFILE_REGISTRY.ids()
         ]
     }
 
@@ -288,8 +288,7 @@ async def list_droids(
 ) -> dict:
     return {
         "droids": [
-            DEFAULT_DROID_REGISTRY.get(did).model_dump()
-            for did in DEFAULT_DROID_REGISTRY.ids()
+            DEFAULT_DROID_REGISTRY.get(did).model_dump() for did in DEFAULT_DROID_REGISTRY.ids()
         ]
     }
 

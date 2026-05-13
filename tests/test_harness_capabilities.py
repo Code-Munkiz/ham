@@ -23,8 +23,12 @@ def test_registry_keys_and_implemented() -> None:
         "claude_agent",
         "opencode_cli",
     }
-    assert IMPLEMENTED_PROVIDERS == {"cursor_cloud_agent", "factory_droid"}
-    assert PLANNED_CANDIDATE_PROVIDERS == {"claude_code", "claude_agent", "opencode_cli"}
+    assert IMPLEMENTED_PROVIDERS == {
+        "cursor_cloud_agent",
+        "factory_droid",
+        "claude_agent",
+    }
+    assert PLANNED_CANDIDATE_PROVIDERS == {"claude_code", "opencode_cli"}
     oc = get_harness_capability("opencode_cli")
     assert oc is not None
     assert oc.implemented is False
@@ -33,6 +37,11 @@ def test_registry_keys_and_implemented() -> None:
     assert cc is not None
     assert cc.implemented is False
     assert cc.registry_status == "planned_candidate"
+    ca = get_harness_capability("claude_agent")
+    assert ca is not None
+    assert ca.implemented is True
+    assert ca.registry_status == "implemented"
+    assert ca.audit_sink == "claude_agent_jsonl"
     for p in ControlPlaneProvider:
         row = get_harness_capability(p.value)
         assert row is not None
@@ -66,9 +75,15 @@ def test_planned_candidates_are_not_launchable() -> None:
 
 
 def test_implemented_providers_are_launchable() -> None:
-    """The two implemented providers must remain launchable."""
+    """All implemented providers must remain launchable."""
     assert is_provider_launchable("cursor_cloud_agent") is True
     assert is_provider_launchable("factory_droid") is True
+    assert is_provider_launchable("claude_agent") is True
+
+
+def test_claude_agent_in_control_plane_enum() -> None:
+    """claude_agent is a first-class ControlPlaneProvider after Mission 2 promotion."""
+    assert "claude_agent" in {p.value for p in ControlPlaneProvider}
 
 
 def test_get_unknown_returns_none() -> None:

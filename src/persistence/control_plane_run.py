@@ -79,6 +79,7 @@ def cap_status_reason(s: str | None) -> str:
 class ControlPlaneProvider(str, Enum):
     cursor_cloud_agent = "cursor_cloud_agent"
     factory_droid = "factory_droid"
+    claude_agent = "claude_agent"
 
 
 ControlPlaneStatus = Literal["running", "succeeded", "failed", "unknown"]
@@ -88,9 +89,7 @@ ControlPlaneStatus = Literal["running", "succeeded", "failed", "unknown"]
 _CURS_SUCCEEDED = frozenset(
     s.upper() for s in ("FINISHED", "COMPLETED", "SUCCEEDED", "SUCCESS", "DONE")
 )
-_CURS_FAILED = frozenset(
-    s.upper() for s in ("FAILED", "ERROR", "CANCELLED", "CANCELED", "ERRORED")
-)
+_CURS_FAILED = frozenset(s.upper() for s in ("FAILED", "ERROR", "CANCELLED", "CANCELED", "ERRORED"))
 _CURS_RUNNING = frozenset(
     s.upper()
     for s in (
@@ -481,9 +480,7 @@ def build_control_plane_run_store() -> ControlPlaneRunStoreProtocol:
     =firestore`` selects :class:`FirestoreControlPlaneRunStore` (lazy-imported
     so the SDK is not required for local dev).
     """
-    backend = (
-        os.environ.get(_CONTROL_PLANE_RUN_STORE_BACKEND_ENV) or ""
-    ).strip().lower()
+    backend = (os.environ.get(_CONTROL_PLANE_RUN_STORE_BACKEND_ENV) or "").strip().lower()
     if backend == "firestore":
         from src.persistence.firestore_control_plane_run_store import (  # noqa: PLC0415
             FirestoreControlPlaneRunStore,
@@ -492,8 +489,7 @@ def build_control_plane_run_store() -> ControlPlaneRunStoreProtocol:
         return FirestoreControlPlaneRunStore()
     if backend not in ("", "file"):
         _LOG.warning(
-            "Unknown HAM_CONTROL_PLANE_RUN_STORE_BACKEND=%r; "
-            "falling back to file backend.",
+            "Unknown HAM_CONTROL_PLANE_RUN_STORE_BACKEND=%r; falling back to file backend.",
             backend,
         )
     return ControlPlaneRunStore()

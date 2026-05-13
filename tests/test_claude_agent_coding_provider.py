@@ -1,18 +1,18 @@
-"""Tests for the Mission 1 ``claude_agent`` coding-router provider scaffold.
+"""Tests for the ``claude_agent`` coding-router provider.
 
 These tests lock that:
 
-- The provider is disabled by default.
+- The provider is disabled by default (Mission 2 unchanged from Mission 1).
 - When enabled, readiness presence + auth detection is delegated to the
   existing worker-adapter (mocked here so tests do not require the
   ``claude-agent-sdk`` package or any real Anthropic credentials).
 - Blocker / reason / operator-signal strings are normie-safe (no env names,
   secret values, URLs, or internal workflow ids).
-- The provider is registered in the harness-capability registry as a
-  planned candidate that is **not** launchable and **not** part of the
-  ``ControlPlaneProvider`` enum.
-- The conductor recommender never selects ``claude_agent`` because it is
-  not in ``_BASE_CONFIDENCE``.
+- The provider is registered in the harness-capability registry as an
+  implemented launchable provider AND is part of the ``ControlPlaneProvider``
+  enum (Mission 2 promotion).
+- The conductor recommender includes ``claude_agent`` as a candidate for
+  ``single_file_edit`` task kinds when readiness reports it available.
 """
 
 from __future__ import annotations
@@ -40,12 +40,8 @@ from src.ham.harness_capabilities import (
 )
 from src.persistence.control_plane_run import ControlPlaneProvider
 
-_FAKE_READINESS_PATH = (
-    "src.ham.coding_router.claude_agent_provider.check_claude_agent_readiness"
-)
-_FAKE_COARSE_PATH = (
-    "src.ham.coding_router.claude_agent_provider.claude_agent_coarse_provider"
-)
+_FAKE_READINESS_PATH = "src.ham.coding_router.claude_agent_provider.check_claude_agent_readiness"
+_FAKE_COARSE_PATH = "src.ham.coding_router.claude_agent_provider.claude_agent_coarse_provider"
 
 
 class _FakeWorkerReadiness:
@@ -110,10 +106,17 @@ def test_readiness_configured_when_enabled_sdk_and_auth(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("CLAUDE_AGENT_ENABLED", "1")
-    with patch(
-        _FAKE_READINESS_PATH,
-        return_value=_FakeWorkerReadiness(sdk_available=True, authenticated=True),
-    ), patch(_FAKE_COARSE_PATH, return_value="anthropic_direct"):
+    with (
+        patch(
+            _FAKE_READINESS_PATH,
+            return_value=_FakeWorkerReadiness(sdk_available=True, authenticated=True),
+        ),
+        patch(_FAKE_COARSE_PATH, return_value="anthropic_direct"),
+        patch(
+            "src.ham.coding_router.claude_agent_provider.claude_agent_mission_auth_configured",
+            return_value=True,
+        ),
+    ):
         pr = build_claude_agent_readiness(actor=None, include_operator_details=False)
     assert pr.available is True
     assert pr.blockers == ()
@@ -122,14 +125,15 @@ def test_readiness_configured_when_enabled_sdk_and_auth(
 def test_readiness_does_not_leak_secret_values(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv(
-        "ANTHROPIC_API_KEY", "claude-agent-test-canary-not-a-real-key"
-    )
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "claude-agent-test-canary-not-a-real-key")
     monkeypatch.setenv("CLAUDE_AGENT_ENABLED", "1")
-    with patch(
-        _FAKE_READINESS_PATH,
-        return_value=_FakeWorkerReadiness(sdk_available=True, authenticated=True),
-    ), patch(_FAKE_COARSE_PATH, return_value="anthropic_direct"):
+    with (
+        patch(
+            _FAKE_READINESS_PATH,
+            return_value=_FakeWorkerReadiness(sdk_available=True, authenticated=True),
+        ),
+        patch(_FAKE_COARSE_PATH, return_value="anthropic_direct"),
+    ):
         pr = build_claude_agent_readiness(actor=None, include_operator_details=True)
     rendered = json.dumps(dataclasses.asdict(pr))
     assert "claude-agent-test-canary-not-a-real-key" not in rendered
@@ -137,54 +141,67 @@ def test_readiness_does_not_leak_secret_values(
     assert "CLAUDE_AGENT_ENABLED" not in rendered
 
 
-def test_disabled_adapter_refuses_to_execute() -> None:
+def test_disabled_provider_returns_disabled_status() -> None:
     result = launch_claude_agent_coding(project_id="proj-1", user_prompt="do anything")
-    assert result.status == "not_implemented"
+    assert result.status == "disabled"
     assert isinstance(result.reason, str) and result.reason
-    assert is_provider_launchable("claude_agent") is False
+    # claude_agent is now an implemented provider; launchability is gated by
+    # env, not by the registry shape.
+    assert is_provider_launchable("claude_agent") is True
 
 
 def test_claude_agent_in_harness_capabilities_registry() -> None:
     assert "claude_agent" in HARNESS_CAPABILITIES
     row = HARNESS_CAPABILITIES["claude_agent"]
-    assert row.implemented is False
-    assert row.registry_status == "planned_candidate"
-    assert row.audit_sink is None
-    assert "claude_agent" not in {p.value for p in ControlPlaneProvider}
+    assert row.implemented is True
+    assert row.registry_status == "implemented"
+    assert row.audit_sink is not None
+    assert "claude_agent" in {p.value for p in ControlPlaneProvider}
 
 
 def test_claude_agent_status_appears_in_coding_readiness_collator(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("CLAUDE_AGENT_ENABLED", raising=False)
-    snap = collate_readiness(
-        actor=None, project_id=None, include_operator_details=False
-    )
+    snap = collate_readiness(actor=None, project_id=None, include_operator_details=False)
     entries = [p for p in snap.providers if p.provider == "claude_agent"]
     assert len(entries) == 1
     assert entries[0].available is False
 
 
-def test_claude_agent_never_recommended_by_conductor(
+def test_claude_agent_recommended_for_single_file_edit_when_launchable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv("CLAUDE_AGENT_ENABLED", raising=False)
-    snap = collate_readiness(
-        actor=None, project_id=None, include_operator_details=False
-    )
-    prompts: tuple[tuple[str, str], ...] = (
-        ("explain how the cache works", "explain"),
-        ("audit this repo for security issues", "audit"),
-        ("fix the failing login bug", "fix"),
-        ("refactor the user store", "refactor"),
-    )
-    for prompt, _expected_kind_hint in prompts:
-        task = classify_task(prompt)
-        candidates = recommend(task, snap)
-        for c in candidates:
-            assert c.provider != "claude_agent", (
-                f"recommender selected claude_agent for {prompt!r}"
-            )
+    """When readiness reports claude_agent as available, the recommender
+    must include it as a viable candidate for ``single_file_edit`` task
+    kinds. We mock readiness so the test never touches the real Anthropic
+    SDK or environment.
+    """
+    monkeypatch.setenv("CLAUDE_AGENT_ENABLED", "1")
+    with (
+        patch(
+            _FAKE_READINESS_PATH,
+            return_value=_FakeWorkerReadiness(sdk_available=True, authenticated=True),
+        ),
+        patch(_FAKE_COARSE_PATH, return_value="anthropic_direct"),
+        patch(
+            "src.ham.coding_router.claude_agent_provider.claude_agent_mission_auth_configured",
+            return_value=True,
+        ),
+    ):
+        snap = collate_readiness(actor=None, project_id=None, include_operator_details=False)
+    task = classify_task("Tweak this file's import order.")
+    assert task.kind == "single_file_edit"
+    candidates = recommend(task, snap)
+    claude_agent_candidates = [c for c in candidates if c.provider == "claude_agent"]
+    assert len(claude_agent_candidates) == 1
+    ca = claude_agent_candidates[0]
+    # When readiness mocks claude_agent as ready and the project flags do
+    # not block it, the candidate must be approve-able.
+    assert ca.blockers == ()
+    # Confidence for single_file_edit must be high enough to land in the
+    # candidate list (recommender table sets >= 0.5 for this cell).
+    assert ca.confidence >= 0.5
 
 
 def test_claude_agent_blocker_strings_are_normie_safe() -> None:

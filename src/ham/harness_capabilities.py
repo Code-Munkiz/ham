@@ -26,7 +26,7 @@ HarnessFamily: TypeAlias = Literal[
     "local_subprocess",
     "local_cli_planned",
 ]
-AuditSinkLiteral: TypeAlias = Literal["cursor_jsonl", "droid_jsonl"]
+AuditSinkLiteral: TypeAlias = Literal["cursor_jsonl", "droid_jsonl", "claude_agent_jsonl"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -130,26 +130,25 @@ def _rows() -> dict[str, HarnessCapabilityRow]:
         ),
         "claude_agent": HarnessCapabilityRow(
             provider="claude_agent",
-            display_name="Claude Agent (planned)",
-            harness_family="local_cli_planned",
-            registry_status="planned_candidate",
-            implemented=False,
+            display_name="Claude Agent",
+            harness_family="local_subprocess",
+            registry_status="implemented",
+            implemented=True,
             requires_local_root=True,
             requires_remote_repo=False,
-            supports_operator_preview=False,
-            supports_operator_launch=False,
+            supports_operator_preview=True,
+            supports_operator_launch=True,
             supports_status_poll=False,
             supports_follow_up=False,
-            returns_stable_external_id=False,
+            returns_stable_external_id=True,
             requires_provider_side_auth=True,
-            audit_sink=None,
-            digest_family="TBD (not wired)",
-            base_revision_source="TBD (not wired)",
-            status_mapping="TBD; not map_cursor_raw_status",
+            audit_sink="claude_agent_jsonl",
+            digest_family="claude_agent_v1",
+            base_revision_source="CLAUDE_AGENT_REGISTRY_REVISION",
+            status_mapping="claude_agent_run_status_to_ham_status",
             topology_note=(
-                "Planned: Claude Agent SDK in a HAM-controlled backend runner, emitting "
-                "managed_workspace snapshots through the existing GCS + Firestore path. "
-                "Disabled by default. Not in ControlPlaneProvider enum; no HAM runtime yet."
+                "Implemented in-process via claude_agent_sdk Python; emits "
+                "managed_workspace snapshots; gated by HAM_CLAUDE_AGENT_EXEC_TOKEN."
             ),
         ),
         "opencode_cli": HarnessCapabilityRow(

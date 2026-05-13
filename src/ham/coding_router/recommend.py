@@ -37,7 +37,7 @@ _REASON: dict[ProviderKind, str] = {
     "factory_droid_build": "Low-risk pull request with a minimal diff.",
     "cursor_cloud": "Repo-wide context; opens a pull request you review.",
     "claude_code": "Single-file local edit handled directly on this host.",
-    "claude_agent": "Disabled provider (visible for transparency).",
+    "claude_agent": "Single-file edit handled by Claude Agent against the managed workspace.",
 }
 
 # Static safety flags per provider (kept here, not in readiness, because
@@ -69,7 +69,7 @@ _SAFETY: dict[ProviderKind, dict[str, bool]] = {
         "will_open_pull_request": False,
     },
     "claude_agent": {
-        "requires_operator": True,
+        "requires_operator": False,
         "requires_confirmation": True,
         "will_open_pull_request": False,
     },
@@ -120,6 +120,7 @@ _BASE_CONFIDENCE: dict[str, dict[ProviderKind, float]] = {
     },
     "single_file_edit": {
         "claude_code": 0.7,
+        "claude_agent": 0.6,
         "cursor_cloud": 0.5,
     },
     "unknown": {

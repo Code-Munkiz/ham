@@ -66,7 +66,7 @@ _LABEL: dict[ProviderKind, str] = {
     "factory_droid_build": "Low-risk pull request",
     "cursor_cloud": "Cursor pull request",
     "claude_code": "Local single-file edit",
-    "claude_agent": "Claude Agent (preview, disabled)",
+    "claude_agent": "Managed workspace edit (Claude Agent)",
 }
 
 # Managed-workspace flavor of ``factory_droid_build``: the provider id is the
@@ -84,7 +84,7 @@ _OUTPUT_KIND: dict[ProviderKind, str] = {
     "factory_droid_build": "pull_request",
     "cursor_cloud": "pull_request",
     "claude_code": "mission",
-    "claude_agent": "report",
+    "claude_agent": "mission",
 }
 
 _WILL_MODIFY_CODE: dict[ProviderKind, bool] = {
@@ -93,7 +93,7 @@ _WILL_MODIFY_CODE: dict[ProviderKind, bool] = {
     "factory_droid_build": True,
     "cursor_cloud": True,
     "claude_code": True,
-    "claude_agent": False,
+    "claude_agent": True,
 }
 
 _APPROVAL_KIND: dict[ProviderKind, str] = {
@@ -102,17 +102,13 @@ _APPROVAL_KIND: dict[ProviderKind, str] = {
     "factory_droid_build": "confirm_and_accept_pr",
     "cursor_cloud": "confirm",
     "claude_code": "confirm",
-    "claude_agent": "none",
+    "claude_agent": "confirm",
 }
 
 
 def _candidate_to_public_dict(c: Candidate) -> dict[str, Any]:
-    is_managed_build = (
-        c.provider == "factory_droid_build" and not c.will_open_pull_request
-    )
-    label = (
-        _FACTORY_DROID_BUILD_MANAGED_LABEL if is_managed_build else _LABEL[c.provider]
-    )
+    is_managed_build = c.provider == "factory_droid_build" and not c.will_open_pull_request
+    label = _FACTORY_DROID_BUILD_MANAGED_LABEL if is_managed_build else _LABEL[c.provider]
     # The recommender's per-provider reason is written for the GitHub PR
     # variant; swap to managed-workspace copy when the candidate is the
     # managed flavor so chat copy stays consistent with the label.
