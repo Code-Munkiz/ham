@@ -60,11 +60,13 @@ from src.ham.droid_workflows.preview_launch import (
     verify_launch_against_preview,
 )
 from src.ham.droid_workflows.registry import REGISTRY_REVISION, get_workflow
+from src.ham.managed_workspace.paths import managed_working_dir
 from src.ham.workspace_resolver import (
     WorkspaceForbidden,
     WorkspaceNotFound,
     resolve_workspace_context,
 )
+from src.registry.projects import ProjectRecord
 from src.persistence.control_plane_run import DroidBuildOutcome
 from src.persistence.project_store import get_project_store
 from src.persistence.workspace_store import WorkspaceStore
@@ -87,6 +89,34 @@ router = APIRouter(
 # ---------------------------------------------------------------------------
 # Internal helpers (all gates fail closed before any executor call).
 # ---------------------------------------------------------------------------
+
+
+def _project_output_target(rec: ProjectRecord) -> str:
+    return (getattr(rec, "output_target", None) or "managed_workspace").strip()
+
+
+def _effective_runner_cwd(rec: ProjectRecord) -> Path:
+    """Canonical runner cwd for this project.
+
+    For ``output_target=managed_workspace`` projects the build always runs in
+    ``<HAM_MANAGED_WORKSPACE_ROOT>/managed/<workspace_id>/<project_id>/working``
+    regardless of whatever legacy ``project.root`` value is on file. This keeps
+    the strict cwd validation honest (the runner's allow-list +
+    ``MANAGED_WORKSPACE_CWD_MISMATCH`` check still apply) and prevents
+    legacy ``root=/app`` records from leaking into managed-workspace builds.
+
+    ``github_pr`` projects continue to use ``project.root`` verbatim.
+    """
+    target = _project_output_target(rec)
+    if target == "managed_workspace":
+        wid = (getattr(rec, "workspace_id", None) or "").strip()
+        pid = (rec.id or "").strip()
+        if wid and pid:
+            try:
+                return managed_working_dir(wid, pid)
+            except ValueError:
+                pass
+    return Path(rec.root)
 
 
 def _build_workflow_or_500() -> Any:
@@ -434,11 +464,13 @@ async def preview_droid_build(
     _build_workflow_or_500()
     rec = _require_build_lane_project(body.project_id)
     _require_build_approver(ham_actor, rec, workspace_store)
+    project_output_target = _project_output_target(rec)
     prev = build_droid_preview(
         workflow_id=_BUILD_WORKFLOW_ID,
         project_id=rec.id,
-        project_root=Path(rec.root),
+        project_root=_effective_runner_cwd(rec),
         user_prompt=body.user_prompt,
+        output_target=project_output_target,
     )
     if not prev.ok:
         raise HTTPException(
@@ -450,9 +482,6 @@ async def preview_droid_build(
                 }
             },
         )
-    project_output_target = (
-        getattr(rec, "output_target", None) or "managed_workspace"
-    )
     will_open_pr = project_output_target == "github_pr"
     return {
         "kind": "droid_build_preview",
@@ -489,9 +518,7 @@ async def launch_droid_build(
     _build_workflow_or_500()
     rec = _require_build_lane_project(body.project_id)
     _require_build_approver(ham_actor, rec, workspace_store)
-    project_output_target = (
-        getattr(rec, "output_target", None) or "managed_workspace"
-    )
+    project_output_target = _project_output_target(rec)
     # ``accept_pr`` is required only when the project's output target opens
     # a real PR. Managed-workspace projects do not open a PR (PR-A: stub;
     # PR-B: snapshot); PR-B will introduce its own ``accept_snapshot``
@@ -506,7 +533,7 @@ async def launch_droid_build(
                 }
             },
         )
-    root = Path(rec.root)
+    root = _effective_runner_cwd(rec)
     v_err = verify_launch_against_preview(
         workflow_id=_BUILD_WORKFLOW_ID,
         project_id=rec.id,
@@ -514,6 +541,7 @@ async def launch_droid_build(
         user_prompt=body.user_prompt,
         proposal_digest=body.proposal_digest,
         base_revision=body.base_revision,
+        output_target=project_output_target,
     )
     if v_err:
         raise HTTPException(

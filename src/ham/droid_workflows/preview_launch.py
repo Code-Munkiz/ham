@@ -17,6 +17,7 @@ from src.ham.droid_workflows.registry import (
     get_workflow,
     list_workflow_ids,
 )
+from src.ham.managed_workspace.paths import ham_managed_workspace_root
 from src.integrations.droid_runner_client import (
     RemoteRunnerError,
     run_droid_argv,
@@ -105,6 +106,37 @@ def custom_droid_exists(project_root: Path, name: str) -> bool:
     return p.is_file()
 
 
+def _managed_workspace_root_blocker(root: Path) -> str | None:
+    """For ``output_target=managed_workspace`` runs the cwd lives on the runner,
+    not on this ham-api pod, so ``is_dir()`` is meaningless here. Instead we
+    enforce that the resolved path is exactly one ``managed/<wid>/<pid>/working``
+    leaf under ``HAM_MANAGED_WORKSPACE_ROOT``. The strict cwd allow-list +
+    ``MANAGED_WORKSPACE_CWD_MISMATCH`` check on the runner remain authoritative.
+    """
+    try:
+        resolved = root.expanduser().resolve(strict=False)
+    except (OSError, RuntimeError):
+        return "Invalid managed-workspace project root."
+    try:
+        managed_prefix = (ham_managed_workspace_root() / "managed").resolve(strict=False)
+    except (OSError, RuntimeError):
+        return "Invalid HAM_MANAGED_WORKSPACE_ROOT."
+    try:
+        rel = resolved.relative_to(managed_prefix)
+    except ValueError:
+        return (
+            "Managed-workspace project root is not under "
+            f"{managed_prefix}. Got: {resolved}"
+        )
+    parts = rel.parts
+    if len(parts) != 3 or parts[-1] != "working":
+        return (
+            "Managed-workspace project root must end with "
+            "'<workspace_id>/<project_id>/working'."
+        )
+    return None
+
+
 def build_exec_argv(wf: DroidWorkflowDefinition, cwd: Path, user_focus: str) -> list[str]:
     if "{user_focus}" not in wf.prompt_template:
         raise ValueError("prompt_template must include {user_focus}")
@@ -160,6 +192,7 @@ def build_droid_preview(
     project_id: str,
     project_root: Path,
     user_prompt: str,
+    output_target: str = "github_pr",
 ) -> DroidPreviewResult:
     wf = get_workflow(workflow_id)
     if wf is None:
@@ -178,21 +211,40 @@ def build_droid_preview(
             user_prompt=None,
         )
     root = project_root.expanduser().resolve()
-    if not root.is_dir():
-        return DroidPreviewResult(
-            ok=False,
-            blocking_reason=f"Project root is not a directory: {root}",
-            workflow_id=workflow_id,
-            project_id=project_id,
-            cwd=None,
-            tier=wf.tier,
-            mutates=wf.mutates,
-            proposal_digest=None,
-            base_revision=None,
-            runner_id=_runner_id(),
-            summary_preview=None,
-            user_prompt=None,
-        )
+    target = (output_target or "").strip()
+    if target == "managed_workspace":
+        managed_blocker = _managed_workspace_root_blocker(root)
+        if managed_blocker is not None:
+            return DroidPreviewResult(
+                ok=False,
+                blocking_reason=managed_blocker,
+                workflow_id=workflow_id,
+                project_id=project_id,
+                cwd=None,
+                tier=wf.tier,
+                mutates=wf.mutates,
+                proposal_digest=None,
+                base_revision=None,
+                runner_id=_runner_id(),
+                summary_preview=None,
+                user_prompt=None,
+            )
+    else:
+        if not root.is_dir():
+            return DroidPreviewResult(
+                ok=False,
+                blocking_reason=f"Project root is not a directory: {root}",
+                workflow_id=workflow_id,
+                project_id=project_id,
+                cwd=None,
+                tier=wf.tier,
+                mutates=wf.mutates,
+                proposal_digest=None,
+                base_revision=None,
+                runner_id=_runner_id(),
+                summary_preview=None,
+                user_prompt=None,
+            )
 
     focus = _sanitize_user_focus(user_prompt)
     if not focus:
@@ -211,7 +263,11 @@ def build_droid_preview(
             user_prompt=None,
         )
 
-    if wf.custom_droid_name and not custom_droid_exists(root, wf.custom_droid_name):
+    if (
+        target != "managed_workspace"
+        and wf.custom_droid_name
+        and not custom_droid_exists(root, wf.custom_droid_name)
+    ):
         return DroidPreviewResult(
             ok=False,
             blocking_reason=(
@@ -292,6 +348,7 @@ def verify_launch_against_preview(
     user_prompt: str,
     proposal_digest: str,
     base_revision: str,
+    output_target: str = "github_pr",
 ) -> str | None:
     if base_revision != REGISTRY_REVISION:
         return f"Stale droid_base_revision: expected {REGISTRY_REVISION!r}, got {base_revision!r}."
@@ -299,8 +356,14 @@ def verify_launch_against_preview(
     if wf is None:
         return f"Unknown workflow_id {workflow_id!r}."
     root = project_root.expanduser().resolve()
-    if not root.is_dir():
-        return f"Invalid project root: {root}"
+    target = (output_target or "").strip()
+    if target == "managed_workspace":
+        managed_blocker = _managed_workspace_root_blocker(root)
+        if managed_blocker is not None:
+            return managed_blocker
+    else:
+        if not root.is_dir():
+            return f"Invalid project root: {root}"
     focus = _sanitize_user_focus(user_prompt)
     expected = compute_proposal_digest(
         workflow_id=workflow_id,
@@ -310,7 +373,11 @@ def verify_launch_against_preview(
     )
     if expected != proposal_digest.strip():
         return "proposal_digest mismatch — re-run preview before launch."
-    if wf.custom_droid_name and not custom_droid_exists(root, wf.custom_droid_name):
+    if (
+        target != "managed_workspace"
+        and wf.custom_droid_name
+        and not custom_droid_exists(root, wf.custom_droid_name)
+    ):
         return f"Custom Droid `{wf.custom_droid_name}` missing under `.factory/droids/`."
     return None
 
