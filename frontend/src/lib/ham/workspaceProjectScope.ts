@@ -1,6 +1,8 @@
 import type { ProjectRecord } from "@/lib/ham/types";
 
 export function workspaceIdFromProjectRecord(rec: ProjectRecord): string | null {
+  const top = rec.workspace_id;
+  if (typeof top === "string" && top.trim()) return top.trim();
   const meta = rec.metadata ?? {};
   const metaDirect =
     typeof meta.workspace_id === "string"
@@ -9,8 +11,6 @@ export function workspaceIdFromProjectRecord(rec: ProjectRecord): string | null 
         ? meta.workspaceId.trim()
         : "";
   if (metaDirect) return metaDirect;
-  const top = rec.workspace_id;
-  if (typeof top === "string" && top.trim()) return top.trim();
   return null;
 }
 

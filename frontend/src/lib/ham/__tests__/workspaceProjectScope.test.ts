@@ -19,20 +19,36 @@ function rec(over: Partial<ProjectRecord> & Pick<ProjectRecord, "id">): ProjectR
 }
 
 describe("workspaceProjectScope", () => {
-  it("workspaceIdFromProjectRecord reads metadata.workspace_id, camelCase alias, then top-level", () => {
+  it("workspaceIdFromProjectRecord prefers top-level workspace_id; falls back to metadata legacy keys", () => {
     expect(
       workspaceIdFromProjectRecord(
-        rec({ id: "a", metadata: { workspace_id: "ws_a " }, workspace_id: "ignored" }),
+        rec({ id: "a", metadata: { workspace_id: "ws_legacy" }, workspace_id: " ws_top " }),
       ),
-    ).toBe("ws_a");
+    ).toBe("ws_top");
 
     expect(
-      workspaceIdFromProjectRecord(rec({ id: "b", metadata: { workspaceId: " ws_b " } })),
+      workspaceIdFromProjectRecord(
+        rec({ id: "a2", metadata: { workspaceId: "ws_legacy_camel" }, workspace_id: "ws_top2" }),
+      ),
+    ).toBe("ws_top2");
+
+    expect(
+      workspaceIdFromProjectRecord(rec({ id: "b", metadata: { workspace_id: " ws_b " } })),
     ).toBe("ws_b");
+
+    expect(
+      workspaceIdFromProjectRecord(rec({ id: "b2", metadata: { workspaceId: " ws_b2 " } })),
+    ).toBe("ws_b2");
 
     expect(workspaceIdFromProjectRecord(rec({ id: "c", metadata: {}, workspace_id: "ws_c" }))).toBe(
       "ws_c",
     );
+
+    expect(
+      workspaceIdFromProjectRecord(
+        rec({ id: "c2", metadata: { workspace_id: "ws_legacy_only" }, workspace_id: "" }),
+      ),
+    ).toBe("ws_legacy_only");
 
     expect(
       workspaceIdFromProjectRecord(rec({ id: "d", metadata: {}, workspace_id: "" })),
