@@ -7,6 +7,10 @@ import {
   type DroidBuildLaunchPayload,
   type DroidBuildPreviewPayload,
 } from "@/lib/ham/api";
+import {
+  assertManagedBuildSmokePreflight,
+  SmokePreflightError,
+} from "@/lib/ham/managedBuildSmokePreflight";
 import { cn } from "@/lib/utils";
 
 import {
@@ -84,12 +88,20 @@ export function ManagedBuildApprovalPanel({
     if (!canStart) return;
     setState({ phase: "previewing" });
     try {
+      await assertManagedBuildSmokePreflight();
       const preview = await previewDroidBuild({
         project_id: projectId,
         user_prompt: trimmedPrompt,
       });
       setState({ phase: "previewed", preview, approved: false });
     } catch (err) {
+      if (err instanceof SmokePreflightError) {
+        setState({
+          phase: "failed",
+          message: `${err.code}: ${err.message}`,
+        });
+        return;
+      }
       const msg = err instanceof Error ? err.message : "Preview failed. Try again in a moment.";
       setState({ phase: "failed", message: shortenHamApiErrorMessage(msg) });
     }
@@ -104,6 +116,7 @@ export function ManagedBuildApprovalPanel({
     const preview = state.preview;
     setState({ phase: "launching", preview });
     try {
+      await assertManagedBuildSmokePreflight();
       const result = await launchDroidBuild({
         project_id: preview.project_id,
         user_prompt: preview.user_prompt,
@@ -122,6 +135,13 @@ export function ManagedBuildApprovalPanel({
       }
       setState({ phase: "succeeded", result });
     } catch (err) {
+      if (err instanceof SmokePreflightError) {
+        setState({
+          phase: "failed",
+          message: `${err.code}: ${err.message}`,
+        });
+        return;
+      }
       const msg = err instanceof Error ? err.message : "Build failed. Try again in a moment.";
       setState({ phase: "failed", message: shortenHamApiErrorMessage(msg) });
     }

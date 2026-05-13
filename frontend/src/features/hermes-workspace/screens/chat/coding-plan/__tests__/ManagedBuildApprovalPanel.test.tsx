@@ -20,6 +20,22 @@ vi.mock("@/lib/ham/api", async () => {
   };
 });
 
+vi.mock("@/lib/ham/managedBuildSmokePreflight", async () => {
+  const actual = await vi.importActual<
+    typeof import("@/lib/ham/managedBuildSmokePreflight")
+  >("@/lib/ham/managedBuildSmokePreflight");
+  return {
+    ...actual,
+    assertManagedBuildSmokePreflight: vi.fn(async () => ({
+      host: "ham-nine-mu.vercel.app",
+      statusUrl: "https://ham-nine-mu.vercel.app/api/status",
+      version: "0.1.0",
+      runCount: 0,
+      traceContext: "test-trace;o=1",
+    })),
+  };
+});
+
 import * as api from "@/lib/ham/api";
 
 const previewMock = api.previewDroidBuild as unknown as ReturnType<typeof vi.fn>;
