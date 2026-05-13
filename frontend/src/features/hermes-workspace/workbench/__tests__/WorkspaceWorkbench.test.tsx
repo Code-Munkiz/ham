@@ -1021,6 +1021,34 @@ describe("WorkspaceWorkbench", () => {
     expect(screen.getByTestId("hww-preview-open-new-tab")).not.toBeDisabled();
   });
 
+  it("Preview iframe fills and stays contained in preview canvas", async () => {
+    getBuilderPreviewStatusMock.mockResolvedValue({
+      project_id: "proj_abc",
+      workspace_id: "ws_abc",
+      mode: "cloud",
+      status: "ready",
+      health: "healthy",
+      preview_url: "workspaces/ws_abc/projects/proj_abc/builder/preview-proxy/",
+      message: "Preview is ready via authenticated cloud proxy.",
+      updated_at: "2026-01-01T00:00:00Z",
+      source_snapshot_id: "ssnp_1",
+      runtime_session_id: "rtms_cloud_1",
+      preview_endpoint_id: "prve_cloud_1",
+      logs_hint: null,
+    });
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    const iframe = await screen.findByTestId("hww-preview-iframe");
+    const frameWrap = screen.getByTestId("hww-preview-frame-wrap");
+    const canvas = screen.getByTestId("hww-preview-canvas");
+    expect(iframe).toHaveClass("block", "h-full", "w-full");
+    expect(frameWrap).toHaveClass("min-h-0", "overflow-hidden");
+    expect(canvas).toHaveClass("overflow-hidden");
+  });
+
   it("Cloud preview normalizes proxy path to same-origin /api route", async () => {
     getBuilderPreviewStatusMock.mockResolvedValue({
       project_id: "proj_abc",

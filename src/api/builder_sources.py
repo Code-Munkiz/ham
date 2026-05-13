@@ -1657,11 +1657,7 @@ async def get_builder_preview_status(
     return _build_preview_status_payload(workspace_id=ctx.workspace_id, project_id=project_id)
 
 
-@router.api_route(
-    "/api/workspaces/{workspace_id}/projects/{project_id}/builder/preview-proxy/{path:path}",
-    methods=["GET", "HEAD"],
-)
-async def get_builder_preview_proxy(
+async def _serve_builder_preview_proxy(
     project_id: str,
     path: str,
     request: Request,
@@ -1765,6 +1761,41 @@ async def get_builder_preview_proxy(
         content=(b"" if method == "HEAD" else body),
         status_code=upstream_response.status_code,
         headers=response_headers,
+    )
+
+
+@router.api_route(
+    "/api/workspaces/{workspace_id}/projects/{project_id}/builder/preview-proxy/",
+    methods=["GET", "HEAD"],
+)
+async def get_builder_preview_proxy_root(
+    project_id: str,
+    request: Request,
+    ctx: Annotated[WorkspaceContext, Depends(require_perm(PERM_WORKSPACE_READ))],
+) -> Response:
+    return await _serve_builder_preview_proxy(
+        project_id=project_id,
+        path="",
+        request=request,
+        ctx=ctx,
+    )
+
+
+@router.api_route(
+    "/api/workspaces/{workspace_id}/projects/{project_id}/builder/preview-proxy/{path:path}",
+    methods=["GET", "HEAD"],
+)
+async def get_builder_preview_proxy(
+    project_id: str,
+    path: str,
+    request: Request,
+    ctx: Annotated[WorkspaceContext, Depends(require_perm(PERM_WORKSPACE_READ))],
+) -> Response:
+    return await _serve_builder_preview_proxy(
+        project_id=project_id,
+        path=path,
+        request=request,
+        ctx=ctx,
     )
 
 
