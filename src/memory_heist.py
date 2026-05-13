@@ -290,6 +290,14 @@ INSTRUCTION_INVISIBLE_CHARS = (
     "\u200d",  # zero-width joiner
     "\ufeff",  # byte order mark
 )
+# **FOR MAINTAINERS**: These invisible characters enable "invisible char" prompt injection attacks.
+# Zero-width characters can bypass text-based security filters while still appearing in rendered text.
+# Example: An attacker could insert "\u200bignore previous instructions\u200b" to slip past simple
+# pattern matching. This set is the canonical list used by _scan_instruction_content() to strip
+# these characters before processing instruction files. **Security note**: If adding new characters,
+# ensure they're covered by both this tuple AND any security regex patterns that scan prompt inputs.
+# Also update _scan_instruction_content() to strip the new character from INSTRUCTION_INVISIBLE_CHARS.
+# Test any additions with: python -c "print(repr('\u200b'.join(['hello', 'world'])))"
 INSTRUCTION_THREAT_PATTERNS = (
     "ignore previous instructions",
     "disregard previous instructions",
