@@ -133,12 +133,12 @@ describe("codingPlanCardCopy", () => {
   });
 
   it("cardLabelForCandidate falls back to per-provider label for non-build providers", () => {
-    expect(
-      cardLabelForCandidate({ provider: "no_agent", will_open_pull_request: false }),
-    ).toBe("Conversational answer");
-    expect(
-      cardLabelForCandidate({ provider: "cursor_cloud", will_open_pull_request: true }),
-    ).toBe("Cursor pull request");
+    expect(cardLabelForCandidate({ provider: "no_agent", will_open_pull_request: false })).toBe(
+      "Conversational answer",
+    );
+    expect(cardLabelForCandidate({ provider: "cursor_cloud", will_open_pull_request: true })).toBe(
+      "Cursor pull request",
+    );
   });
 
   it("CODING_PLAN_NO_LAUNCH_FOOTER mentions no action launched + later step", () => {
