@@ -140,6 +140,10 @@ INSTRUCTION_FILENAMES = ("SWARM.md", "SWARM.local.md", "AGENTS.md")
 # SWARM.md: Main project instructions loaded for all HAM agents
 # SWARM.local.md: Local overrides for the specific workspace
 # AGENTS.md: Additional agent-specific guidance (see /home/user/ham/AGENTS.md)
+# SECURITY NOTE: These files are read untrusted - content is sanitized via
+# _scan_instruction_content() which strips zero-width chars and flags
+# prompt-injection patterns like "ignore previous instructions" (see INSTRUCTION_THREAT_PATTERNS).
+# If adding new instruction file names here, ensure they are also covered by sanitization.
 INSTRUCTION_DOT_DIR = ".ham"
 INSTRUCTION_DOT_FILES = ("SWARM.md", "instructions.md")
 # NOTE: Files in .ham/ directory are fallback instructions when root-level instruction files are absent.
