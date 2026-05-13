@@ -695,7 +695,7 @@ def execute_cloud_runtime_job(job: CloudRuntimeJob) -> CloudRuntimeExecutionResu
                 stage="start",
             )
             state = provider.start_preview_server(state=state, port=cfg.default_port)
-        except (RuntimeError, ValueError) as exc:  # pragma: no cover - defensive adapter guard
+        except Exception as exc:  # pragma: no cover - defensive adapter guard
             err_code, err_message = provider.normalize_error(error=exc)
             state = SandboxRuntimeState(
                 **{

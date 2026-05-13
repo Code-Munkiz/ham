@@ -213,6 +213,48 @@ class _InjectedLiveProvider:
         return ("SANDBOX_PROVIDER_ERROR", "Sandbox provider operation failed safely.")
 
 
+class _InjectedExplodingProvider:
+    def create_sandbox(self, *, state: SandboxRuntimeState, config: SandboxRuntimeConfig) -> SandboxRuntimeState:
+        _ = state, config
+        raise Exception("provider transport failure")
+
+    def upload_source(
+        self,
+        *,
+        state: SandboxRuntimeState,
+        source_ref: str,
+        artifact_uri: str,
+        files: list[SandboxSourceFile],
+    ) -> SandboxRuntimeState:
+        _ = source_ref, artifact_uri, files
+        return state
+
+    def run_command(self, *, state: SandboxRuntimeState, command: list[str], stage: str) -> SandboxRuntimeState:
+        _ = command, stage
+        return state
+
+    def start_preview_server(self, *, state: SandboxRuntimeState, port: int) -> SandboxRuntimeState:
+        _ = port
+        return state
+
+    def get_preview_url(self, *, state: SandboxRuntimeState, port: int) -> str | None:
+        _ = port
+        return state.preview_upstream_url
+
+    def get_status(self, *, state: SandboxRuntimeState) -> str:
+        return state.status
+
+    def get_logs_summary(self, *, state: SandboxRuntimeState) -> str | None:
+        return state.logs_summary
+
+    def stop_sandbox(self, *, state: SandboxRuntimeState) -> SandboxRuntimeState:
+        return state
+
+    def normalize_error(self, *, error: Exception) -> tuple[str, str]:
+        _ = error
+        return ("SANDBOX_PROVIDER_ERROR", "Sandbox provider operation failed safely.")
+
+
 class _FakeHttpResponse:
     def __init__(self, status_code: int, headers: dict[str, str] | None = None) -> None:
         self.status_code = status_code
@@ -422,6 +464,31 @@ def test_sandbox_provider_live_adapter_timeout_normalizes_without_ready_preview(
     body = res.json()
     assert body["job"]["status"] == "failed"
     assert body["job"]["error_code"] == "SANDBOX_PREVIEW_HEALTHCHECK_FAILED"
+    assert body["preview_status"]["status"] != "ready"
+    assert body["preview_status"]["preview_url"] is None
+    _cleanup()
+
+
+def test_sandbox_provider_unexpected_exception_is_normalized(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "sandbox_provider")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_EXPERIMENTS_ENABLED", "true")
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_ENABLED", "true")
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_PROVIDER", "e2b")
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_DRY_RUN", "false")
+    monkeypatch.delenv("HAM_BUILDER_SANDBOX_FAKE_MODE", raising=False)
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_API_KEY", "test-secret-api-key")
+    set_sandbox_runtime_provider_factory_for_tests(lambda _cfg: _InjectedExplodingProvider())
+    client, ws_id, project_id, snapshot_id = _seed_context(tmp_path)
+    res = client.post(
+        f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime/jobs",
+        json={"source_snapshot_id": snapshot_id},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["job"]["status"] == "failed"
+    assert body["job"]["error_code"] == "SANDBOX_PROVIDER_ERROR"
+    assert body["runtime_session"]["status"] == "failed"
+    assert "provisioning is not implemented yet" not in (body["runtime_session"]["message"] or "").lower()
     assert body["preview_status"]["status"] != "ready"
     assert body["preview_status"]["preview_url"] is None
     _cleanup()
