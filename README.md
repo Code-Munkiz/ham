@@ -39,3 +39,5 @@ Activate that venv when you run the API, or use `.venv/bin/python -m uvicorn ...
 - `src/swarm_agency.py` — Hermes-supervised role context assembly (no CrewAI; orchestration is Hermes-led)
 [Smoke test snapshot: managed workspace change marker @ 2026-05-12]
 # Smoke test documentation update - DO NOT REMOVE
+
+This is a smoke test documentation change appended by the agent workflow.
