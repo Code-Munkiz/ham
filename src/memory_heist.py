@@ -620,6 +620,11 @@ class ProjectContext:
       but this is expected behavior for cache persistence (cached contexts pre-filtered).
     - **Thread safety**: `ProjectContext` is immutable after construction except for the dynamic
       relevance attributes. Use `discover()` to create new instances rather than mutating existing ones.
+    - **Immutability guarantee**: All snapshot fields (`git_status_snapshot`, `git_diff_snapshot`,
+      `git_log_snapshot`, `workspace_snapshot`) are set once during `discover()` and never modified
+      thereafter. This guarantees consistent agent visibility — agents rely on these snapshots as
+      immutable truth for the discovery point-in-time. Modifying snapshots post-discovery introduces
+      race conditions and context inconsistency between agents sharing the same instance.
 
     **Usage patterns for maintainers:**
     1. Create context via `ProjectContext.discover()` to populate all fields
