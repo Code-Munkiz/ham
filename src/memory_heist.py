@@ -179,6 +179,8 @@ DEFAULT_SESSION_COMPACTION_MAX_TOKENS=***  # Placeholder: not currently used
 # default for backward compatibility. The value should align with HAM's context window management strategy.
 DEFAULT_SESSION_COMPACTION_PRESERVE = 4
 DEFAULT_SESSION_TOOL_PRUNE_CHARS = 200
+# Note: DEFAULT_SESSION_COMPACTION_MAX_TOKENS placeholder is unused - current
+# session compaction doesn't rely on token budgeting. See lines 158-179 for details.
 # Session browser defaults: browser interaction controls including step limits,
 # timeouts, and DOM/output constraints. These ensure browser automation stays
 # within acceptable token budgets and execution time bounds.
