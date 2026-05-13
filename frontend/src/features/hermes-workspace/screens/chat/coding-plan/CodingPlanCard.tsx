@@ -8,10 +8,10 @@ import {
   CODING_PLAN_LAUNCH_DISABLED_TITLE,
   CODING_PLAN_NO_LAUNCH_FOOTER,
   approvalCopyForCard,
+  cardLabelForCandidate,
   confidenceBadgeForCard,
   emptyStateHeadlineForCard,
   outputKindCopyForCard,
-  providerLabelForCard,
   taskKindDisplayForCard,
 } from "./codingPlanCardCopy";
 import { ManagedBuildApprovalPanel } from "./ManagedBuildApprovalPanel";
@@ -76,7 +76,7 @@ function CandidateRow({
     >
       <div className="flex items-center gap-2">
         <span className="text-[12px] font-semibold text-white/90">
-          {providerLabelForCard(candidate.provider)}
+          {cardLabelForCandidate(candidate)}
         </span>
         <span className={BADGE_CLASS}>{outputKindCopyForCard(candidate.output_kind)}</span>
         {candidate.available ? null : (

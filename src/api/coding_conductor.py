@@ -68,6 +68,15 @@ _LABEL: dict[ProviderKind, str] = {
     "claude_code": "Local single-file edit",
 }
 
+# Managed-workspace flavor of ``factory_droid_build``: the provider id is the
+# same, but the output is a managed snapshot, not a PR. The label/reason must
+# reflect that so chat copy does not read "Low-risk pull request" for a flow
+# that never opens a PR.
+_FACTORY_DROID_BUILD_MANAGED_LABEL = "Managed workspace build"
+_FACTORY_DROID_BUILD_MANAGED_REASON = (
+    "Managed workspace build with a minimal diff and a preview snapshot."
+)
+
 _OUTPUT_KIND: dict[ProviderKind, str] = {
     "no_agent": "answer",
     "factory_droid_audit": "report",
@@ -94,11 +103,21 @@ _APPROVAL_KIND: dict[ProviderKind, str] = {
 
 
 def _candidate_to_public_dict(c: Candidate) -> dict[str, Any]:
+    is_managed_build = (
+        c.provider == "factory_droid_build" and not c.will_open_pull_request
+    )
+    label = (
+        _FACTORY_DROID_BUILD_MANAGED_LABEL if is_managed_build else _LABEL[c.provider]
+    )
+    # The recommender's per-provider reason is written for the GitHub PR
+    # variant; swap to managed-workspace copy when the candidate is the
+    # managed flavor so chat copy stays consistent with the label.
+    reason = _FACTORY_DROID_BUILD_MANAGED_REASON if is_managed_build else c.reason
     return {
         "provider": c.provider,
-        "label": _LABEL[c.provider],
+        "label": label,
         "available": not c.blockers,
-        "reason": c.reason,
+        "reason": reason,
         "blockers": list(c.blockers),
         "confidence": round(c.confidence, 4),
         "output_kind": _OUTPUT_KIND[c.provider],

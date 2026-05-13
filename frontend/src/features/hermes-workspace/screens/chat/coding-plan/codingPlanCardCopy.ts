@@ -49,6 +49,12 @@ const PROVIDER_LABEL: Record<CodingConductorProviderKind, string> = {
   claude_code: "Local single-file edit",
 };
 
+// Managed-workspace flavor of ``factory_droid_build``: same provider id,
+// different output (managed snapshot, not a PR). Mirrors the server-side
+// ``_FACTORY_DROID_BUILD_MANAGED_LABEL`` in ``src/api/coding_conductor.py``
+// so chat copy stays consistent across the API and UI.
+export const FACTORY_DROID_BUILD_MANAGED_LABEL = "Managed workspace build";
+
 const OUTPUT_KIND_COPY: Record<CodingConductorOutputKind, string> = {
   answer: "An answer in chat",
   report: "A read-only report",
@@ -84,6 +90,25 @@ export function providerLabelForCard(p: CodingConductorProviderKind): string {
   return PROVIDER_LABEL[p];
 }
 
+/**
+ * Label for a specific candidate. ``factory_droid_build`` carries two
+ * flavors: the github_pr variant (opens a PR) keeps the "Low-risk pull
+ * request" label; the managed_workspace variant uses
+ * ``Managed workspace build`` because the output is a snapshot, not a PR.
+ * Derivation is purely from ``provider`` + ``will_open_pull_request`` to
+ * mirror the server-side mapping in ``src/api/coding_conductor.py`` and
+ * keep the frontend deterministic regardless of any stale ``label`` field
+ * on the candidate.
+ */
+export function cardLabelForCandidate(
+  c: Pick<CodingConductorCandidate, "provider" | "will_open_pull_request">,
+): string {
+  if (c.provider === "factory_droid_build" && !c.will_open_pull_request) {
+    return FACTORY_DROID_BUILD_MANAGED_LABEL;
+  }
+  return PROVIDER_LABEL[c.provider];
+}
+
 export function outputKindCopyForCard(o: CodingConductorOutputKind): string {
   return OUTPUT_KIND_COPY[o];
 }
@@ -103,7 +128,7 @@ export function confidenceBadgeForCard(confidence: number): "high" | "medium" | 
 }
 
 export function emptyStateHeadlineForCard(payload: CodingConductorPreviewPayload): string {
-  if (payload.chosen) return providerLabelForCard(payload.chosen.provider);
+  if (payload.chosen) return cardLabelForCandidate(payload.chosen);
   if (payload.task_kind === "unknown") {
     return "HAM isn't sure which provider to use";
   }

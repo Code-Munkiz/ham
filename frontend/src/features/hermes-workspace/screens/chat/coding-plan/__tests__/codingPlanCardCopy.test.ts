@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   CODING_PLAN_NO_LAUNCH_FOOTER,
+  FACTORY_DROID_BUILD_MANAGED_LABEL,
   FORBIDDEN_CARD_TOKENS,
   approvalCopyForCard,
+  cardLabelForCandidate,
   confidenceBadgeForCard,
   emptyStateHeadlineForCard,
   isLaunchableInThisPhase,
@@ -114,6 +116,29 @@ describe("codingPlanCardCopy", () => {
         will_open_pull_request: false,
       }),
     ).toBe(false);
+  });
+
+  it("cardLabelForCandidate switches to managed copy when will_open_pull_request is false", () => {
+    const managed = cardLabelForCandidate({
+      provider: "factory_droid_build",
+      will_open_pull_request: false,
+    });
+    expect(managed).toBe(FACTORY_DROID_BUILD_MANAGED_LABEL);
+
+    const githubPr = cardLabelForCandidate({
+      provider: "factory_droid_build",
+      will_open_pull_request: true,
+    });
+    expect(githubPr).toBe("Low-risk pull request");
+  });
+
+  it("cardLabelForCandidate falls back to per-provider label for non-build providers", () => {
+    expect(
+      cardLabelForCandidate({ provider: "no_agent", will_open_pull_request: false }),
+    ).toBe("Conversational answer");
+    expect(
+      cardLabelForCandidate({ provider: "cursor_cloud", will_open_pull_request: true }),
+    ).toBe("Cursor pull request");
   });
 
   it("CODING_PLAN_NO_LAUNCH_FOOTER mentions no action launched + later step", () => {
