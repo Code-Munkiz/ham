@@ -198,6 +198,20 @@ def test_get_snapshot_missing_returns_none() -> None:
     assert fs.get_snapshot("project.pilot", "no-such-snap") is None
 
 
+def test_get_snapshot_malformed_doc_returns_none() -> None:
+    """Malformed Firestore payloads must not crash read APIs (list_snapshots already skips)."""
+    fc = _FakeFirestoreClient()
+    fs = FirestoreProjectSnapshotStore(client=fc, collection="snaps_unit")
+    doc_id = "project.pilot___snap-bad"
+    fc.docs.setdefault("snaps_unit", {})[doc_id] = {
+        "project_id": "project.pilot",
+        "snapshot_id": "snap-bad",
+        # Missing required fields / wrong types for ProjectSnapshot
+        "created_at": "not-a-datetime",
+    }
+    assert fs.get_snapshot("project.pilot", "snap-bad") is None
+
+
 def test_satisfies_protocol_shape() -> None:
     """`ProjectSnapshotStore` is a structural Protocol; verify method shape."""
     fs = FirestoreProjectSnapshotStore(client=_FakeFirestoreClient())

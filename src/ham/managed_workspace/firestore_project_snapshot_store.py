@@ -147,4 +147,12 @@ class FirestoreProjectSnapshotStore(ProjectSnapshotStore):
         data = snap.to_dict() or {}
         if str(data.get("project_id") or "") != project_id.strip():
             return None
-        return ProjectSnapshot.model_validate(data)
+        try:
+            return ProjectSnapshot.model_validate(data)
+        except ValidationError as exc:
+            _LOG.warning(
+                "ham_managed_snapshots: get_snapshot skip malformed (%s): %s",
+                type(exc).__name__,
+                exc,
+            )
+            return None
