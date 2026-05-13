@@ -293,6 +293,19 @@ function sanitizePreviewFetchError(message: string | null): string | null {
   return raw;
 }
 
+function normalizePreviewUrl(preview: BuilderPreviewStatus | null): string | null {
+  if (!preview || preview.status !== "ready") return null;
+  const raw = (preview.preview_url || "").trim();
+  if (!raw) return null;
+  if (preview.mode === "local") return raw;
+  if (/^https?:\/\//i.test(raw)) return null;
+  const withoutSlash = raw.replace(/^\/+/, "");
+  if (!withoutSlash) return null;
+  if (withoutSlash.startsWith("api/")) return `/${withoutSlash}`;
+  if (withoutSlash.startsWith("workspaces/")) return `/api/${withoutSlash}`;
+  return null;
+}
+
 function WorkbenchPreviewPanel({
   workspaceId = null,
   projectId = null,
@@ -549,7 +562,7 @@ function WorkbenchPreviewPanel({
     return () => sub.close();
   }, [workspaceId, projectId, refreshActivity]);
 
-  const previewUrl = preview?.status === "ready" ? preview.preview_url : null;
+  const previewUrl = normalizePreviewUrl(preview);
   const ws = workspaceId?.trim() || "";
   const pid = projectId?.trim() || "";
   const hasBackendSource = snapshots.length > 0 || Boolean(preview?.source_snapshot_id);
