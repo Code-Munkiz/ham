@@ -137,7 +137,7 @@ def test_readiness_returns_stable_envelope_with_no_project(
     # disabled (default test posture) treats the caller as operator. The
     # operator-vs-normie path is locked by the dedicated tests below.
     assert isinstance(body["is_operator"], bool)
-    assert isinstance(body["providers"], list) and len(body["providers"]) == 5
+    assert isinstance(body["providers"], list) and len(body["providers"]) == 6
     kinds = {p["provider"] for p in body["providers"]}
     assert kinds == {
         "no_agent",
@@ -145,6 +145,7 @@ def test_readiness_returns_stable_envelope_with_no_project(
         "factory_droid_build",
         "cursor_cloud",
         "claude_code",
+        "claude_agent",
     }
     assert body["project"]["found"] is False
     assert body["project"]["project_id"] is None

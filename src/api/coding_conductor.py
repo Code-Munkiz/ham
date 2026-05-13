@@ -66,6 +66,7 @@ _LABEL: dict[ProviderKind, str] = {
     "factory_droid_build": "Low-risk pull request",
     "cursor_cloud": "Cursor pull request",
     "claude_code": "Local single-file edit",
+    "claude_agent": "Claude Agent (preview, disabled)",
 }
 
 # Managed-workspace flavor of ``factory_droid_build``: the provider id is the
@@ -83,6 +84,7 @@ _OUTPUT_KIND: dict[ProviderKind, str] = {
     "factory_droid_build": "pull_request",
     "cursor_cloud": "pull_request",
     "claude_code": "mission",
+    "claude_agent": "report",
 }
 
 _WILL_MODIFY_CODE: dict[ProviderKind, bool] = {
@@ -91,6 +93,7 @@ _WILL_MODIFY_CODE: dict[ProviderKind, bool] = {
     "factory_droid_build": True,
     "cursor_cloud": True,
     "claude_code": True,
+    "claude_agent": False,
 }
 
 _APPROVAL_KIND: dict[ProviderKind, str] = {
@@ -99,6 +102,7 @@ _APPROVAL_KIND: dict[ProviderKind, str] = {
     "factory_droid_build": "confirm_and_accept_pr",
     "cursor_cloud": "confirm",
     "claude_code": "confirm",
+    "claude_agent": "none",
 }
 
 

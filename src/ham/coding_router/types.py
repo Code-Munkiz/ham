@@ -21,6 +21,7 @@ ProviderKind = Literal[
     "factory_droid_build",
     "cursor_cloud",
     "claude_code",
+    "claude_agent",
 ]
 
 TaskKind = Literal[

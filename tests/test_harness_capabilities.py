@@ -20,10 +20,11 @@ def test_registry_keys_and_implemented() -> None:
         "cursor_cloud_agent",
         "factory_droid",
         "claude_code",
+        "claude_agent",
         "opencode_cli",
     }
     assert IMPLEMENTED_PROVIDERS == {"cursor_cloud_agent", "factory_droid"}
-    assert PLANNED_CANDIDATE_PROVIDERS == {"claude_code", "opencode_cli"}
+    assert PLANNED_CANDIDATE_PROVIDERS == {"claude_code", "claude_agent", "opencode_cli"}
     oc = get_harness_capability("opencode_cli")
     assert oc is not None
     assert oc.implemented is False

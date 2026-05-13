@@ -128,6 +128,30 @@ def _rows() -> dict[str, HarnessCapabilityRow]:
             topology_note="Planned: local Claude Code CLI subprocess on a registered project root. "
             "Not in ControlPlaneProvider enum; no HAM runtime; not launchable.",
         ),
+        "claude_agent": HarnessCapabilityRow(
+            provider="claude_agent",
+            display_name="Claude Agent (planned)",
+            harness_family="local_cli_planned",
+            registry_status="planned_candidate",
+            implemented=False,
+            requires_local_root=True,
+            requires_remote_repo=False,
+            supports_operator_preview=False,
+            supports_operator_launch=False,
+            supports_status_poll=False,
+            supports_follow_up=False,
+            returns_stable_external_id=False,
+            requires_provider_side_auth=True,
+            audit_sink=None,
+            digest_family="TBD (not wired)",
+            base_revision_source="TBD (not wired)",
+            status_mapping="TBD; not map_cursor_raw_status",
+            topology_note=(
+                "Planned: Claude Agent SDK in a HAM-controlled backend runner, emitting "
+                "managed_workspace snapshots through the existing GCS + Firestore path. "
+                "Disabled by default. Not in ControlPlaneProvider enum; no HAM runtime yet."
+            ),
+        ),
         "opencode_cli": HarnessCapabilityRow(
             provider="opencode_cli",
             display_name="OpenCode CLI (planned)",

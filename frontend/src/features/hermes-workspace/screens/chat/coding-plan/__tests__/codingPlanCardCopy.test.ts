@@ -6,6 +6,7 @@ import {
   FORBIDDEN_CARD_TOKENS,
   approvalCopyForCard,
   cardLabelForCandidate,
+  claudeAgentStatusCopy,
   confidenceBadgeForCard,
   emptyStateHeadlineForCard,
   isLaunchableInThisPhase,
@@ -25,6 +26,7 @@ const PROVIDERS: CodingConductorProviderKind[] = [
   "factory_droid_build",
   "cursor_cloud",
   "claude_code",
+  "claude_agent",
 ];
 
 const OUTPUTS: CodingConductorOutputKind[] = ["answer", "report", "pull_request", "mission"];
@@ -145,5 +147,20 @@ describe("codingPlanCardCopy", () => {
     const lower = CODING_PLAN_NO_LAUNCH_FOOTER.toLowerCase();
     expect(lower).toContain("no action has been launched yet");
     expect(lower).toContain("later step");
+  });
+});
+
+describe("CLAUDE_AGENT_STATUS_COPY", () => {
+  it("returns a non-empty string for every readiness state", () => {
+    const states = [
+      "disabled",
+      "not_configured",
+      "sdk_missing",
+      "runner_unavailable",
+      "configured",
+    ] as const;
+    for (const s of states) {
+      expect(claudeAgentStatusCopy(s).length).toBeGreaterThan(0);
+    }
   });
 });

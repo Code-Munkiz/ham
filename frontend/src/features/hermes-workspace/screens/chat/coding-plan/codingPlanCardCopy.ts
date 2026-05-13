@@ -60,7 +60,27 @@ const PROVIDER_LABEL: Record<CodingConductorProviderKind, string> = {
   factory_droid_build: "Low-risk pull request",
   cursor_cloud: "Cursor pull request",
   claude_code: "Local single-file edit",
+  claude_agent: "Claude Agent (preview)",
 };
+
+export type ClaudeAgentReadinessState =
+  | "disabled"
+  | "not_configured"
+  | "sdk_missing"
+  | "runner_unavailable"
+  | "configured";
+
+export const CLAUDE_AGENT_STATUS_COPY: Record<ClaudeAgentReadinessState, string> = {
+  disabled: "Claude Agent is not configured yet.",
+  not_configured: "Claude Agent can help with codebase edits once configured.",
+  sdk_missing: "Claude Agent SDK is not installed on this server yet.",
+  runner_unavailable: "Claude Agent runner is not reachable right now.",
+  configured: "HAM will recommend Claude Agent when it is the right tool.",
+};
+
+export function claudeAgentStatusCopy(state: ClaudeAgentReadinessState): string {
+  return CLAUDE_AGENT_STATUS_COPY[state];
+}
 
 // Managed-workspace flavor of ``factory_droid_build``: same provider id,
 // different output (managed snapshot, not a PR). Mirrors the server-side

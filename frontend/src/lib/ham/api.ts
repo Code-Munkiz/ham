@@ -1885,7 +1885,8 @@ export type CodingConductorProviderKind =
   | "factory_droid_audit"
   | "factory_droid_build"
   | "cursor_cloud"
-  | "claude_code";
+  | "claude_code"
+  | "claude_agent";
 
 export type CodingConductorOutputKind = "answer" | "report" | "pull_request" | "mission";
 

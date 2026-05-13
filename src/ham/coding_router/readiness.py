@@ -20,6 +20,9 @@ import os
 import shutil
 from typing import TYPE_CHECKING
 
+from src.ham.coding_router.claude_agent_provider import (
+    build_claude_agent_readiness as _build_claude_agent_readiness,
+)
 from src.ham.coding_router.types import (
     ProjectFlags,
     ProviderReadiness,
@@ -284,6 +287,9 @@ def collate_readiness(
         _build_build_readiness(include_operator_details=include_operator_details),
         _build_cursor_readiness(include_operator_details=include_operator_details),
         _build_claude_readiness(actor, include_operator_details=include_operator_details),
+        _build_claude_agent_readiness(
+            actor, include_operator_details=include_operator_details
+        ),
     )
     return WorkspaceReadiness(
         is_operator=include_operator_details,
