@@ -87,6 +87,15 @@ class SandboxRuntimeState:
     expires_at: str | None
 
 
+@dataclass(frozen=True)
+class SandboxErrorClassification:
+    error_code: str
+    error_message: str
+    retryable: bool
+    exception_class: str
+    lifecycle_stage: str
+
+
 @runtime_checkable
 class SandboxRuntimeProvider(Protocol):
     def create_sandbox(self, *, state: SandboxRuntimeState, config: SandboxRuntimeConfig) -> SandboxRuntimeState: ...
@@ -486,14 +495,8 @@ class E2BSandboxRuntimeProvider:
         return SandboxRuntimeState(**{**state.__dict__, "status": "stopped", "updated_at": _utc_now_iso()})
 
     def normalize_error(self, *, error: Exception) -> tuple[str, str]:
-        text = str(error or "").strip().lower()
-        if "timeout" in text:
-            return ("SANDBOX_OPERATION_TIMEOUT", "Sandbox operation timed out.")
-        if "api" in text and "key" in text:
-            return ("SANDBOX_PROVIDER_AUTH_FAILED", "Sandbox provider authentication failed.")
-        if "unavailable" in text or "not found" in text:
-            return ("SANDBOX_PROVIDER_UNAVAILABLE", "Sandbox provider is unavailable.")
-        return ("SANDBOX_PROVIDER_ERROR", "Sandbox provider operation failed safely.")
+        classified = classify_sandbox_provider_error(error=error, lifecycle_stage="unknown")
+        return (classified.error_code, classified.error_message)
 
 
 _PROVIDER_FACTORY_OVERRIDE: list[Any | None] = [None]
@@ -514,3 +517,66 @@ def build_sandbox_runtime_provider(*, config: SandboxRuntimeConfig) -> SandboxRu
 
 def set_sandbox_runtime_provider_factory_for_tests(factory: Any | None) -> None:
     _PROVIDER_FACTORY_OVERRIDE[0] = factory
+
+
+def classify_sandbox_provider_error(*, error: Exception, lifecycle_stage: str) -> SandboxErrorClassification:
+    text = str(error or "").strip().lower()
+    exc_class = type(error).__name__
+    is_transport = isinstance(error, (httpx.RemoteProtocolError, httpx.TransportError, httpx.ConnectError))
+    is_timeout = isinstance(error, (httpx.ReadTimeout, httpx.TimeoutException)) or "timeout" in text
+
+    if lifecycle_stage == "create_sandbox" and (is_transport or is_timeout):
+        return SandboxErrorClassification(
+            error_code="SANDBOX_CREATE_TRANSPORT_ERROR",
+            error_message="Sandbox provider create_sandbox transport/protocol failure.",
+            retryable=True,
+            exception_class=exc_class,
+            lifecycle_stage=lifecycle_stage,
+        )
+    if "template" in text and ("invalid" in text or "not found" in text):
+        return SandboxErrorClassification(
+            error_code="SANDBOX_TEMPLATE_INVALID",
+            error_message="Sandbox provider template is invalid.",
+            retryable=False,
+            exception_class=exc_class,
+            lifecycle_stage=lifecycle_stage,
+        )
+    if "api" in text and "key" in text:
+        return SandboxErrorClassification(
+            error_code="SANDBOX_AUTH_FAILED",
+            error_message="Sandbox provider authentication failed.",
+            retryable=False,
+            exception_class=exc_class,
+            lifecycle_stage=lifecycle_stage,
+        )
+    if "config" in text and ("missing" in text or "invalid" in text):
+        return SandboxErrorClassification(
+            error_code="SANDBOX_CONFIG_MISSING",
+            error_message="Sandbox provider configuration is invalid or missing.",
+            retryable=False,
+            exception_class=exc_class,
+            lifecycle_stage=lifecycle_stage,
+        )
+    if "unavailable" in text or "not found" in text:
+        return SandboxErrorClassification(
+            error_code="SANDBOX_PROVIDER_UNAVAILABLE",
+            error_message="Sandbox provider is unavailable.",
+            retryable=False,
+            exception_class=exc_class,
+            lifecycle_stage=lifecycle_stage,
+        )
+    if is_timeout:
+        return SandboxErrorClassification(
+            error_code="SANDBOX_OPERATION_TIMEOUT",
+            error_message="Sandbox operation timed out.",
+            retryable=False,
+            exception_class=exc_class,
+            lifecycle_stage=lifecycle_stage,
+        )
+    return SandboxErrorClassification(
+        error_code="SANDBOX_PROVIDER_ERROR",
+        error_message="Sandbox provider operation failed safely.",
+        retryable=False,
+        exception_class=exc_class,
+        lifecycle_stage=lifecycle_stage,
+    )
