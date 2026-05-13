@@ -47,6 +47,9 @@ from typing import Any
 # =============================================================================
 # CORE ENUMS AND CONSTANTS
 # =============================================================================
+# Author: HAM-X Team | Last Review: Phase 5 Trust Validation Module
+# File: config_trust.py - Trust evaluation and scoring logic module
+# Purpose: Manages trust scoring, validation, and decision-making for instructions
 
 class TrustLevel(str, Enum):
     """Trust score classification."""
