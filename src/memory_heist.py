@@ -173,6 +173,14 @@ MAX_SUMMARY_CHARS = 4_000
 # - `sessions.py`: update `compact_session()` function to use the token limit
 # - `src/api/chat.py`: ensure stream handlers respect the limit boundary
 # - Performance testing: monitor completion latency and context window usage
+#
+# **MAINTAINER NOTES FOR TOKEN-BASED COMPACTION:**
+# This constant is a placeholder awaiting re-implementation. Token-based session compaction
+# would allow precise control over context window usage by counting actual tokens rather than
+# character counts. When restoring, consider: 1) Token estimation accuracy vs character-count simplicity,
+# 2) Whether to use tokenizers (e.g., tiktoken, tokenizers) for accurate estimates,
+# 3) Trade-offs between memory efficiency and code complexity. Current implementation
+# relies on character-based heuristics (see compact_max_tokens in SessionMemory).
 DEFAULT_SESSION_COMPACTION_MAX_TOKENS=***  # Placeholder: not currently used
 # This constant was planned for token-budget-based session compaction but was removed due to incomplete implementation.
 # When re-implementing, maintainers should: 1) Define a concrete token calculation strategy 2) Set appropriate limits (500-2000 recommended)
@@ -564,11 +572,26 @@ class ProjectContext:
     - **Performance guidance**: Large workspace scans can be expensive; consider enabling
       relevance filtering to reduce context size. The `file_count` and `tree` fields provide
       lightweight workspace summaries without loading full file contents.
+    - **Serialization**: This class is JSON-serializable for caching purposes. The `_relevance_results`
+      and `_relevance_metadata` attributes are dynamically attached and may not serialize correctly,
+      but this is expected behavior for cache persistence (cached contexts pre-filtered).
+    - **Thread safety**: `ProjectContext` is immutable after construction except for the dynamic
+      relevance attributes. Use `discover()` to create new instances rather than mutating existing ones.
+
+    **Usage patterns for maintainers:**
+    1. Create context via `ProjectContext.discover()` to populate all fields
+    2. Render via `.render()` for LLM prompt injection
+    3. Pass to Swarm agents as the single source of project truth
+    4. Cache serialized snapshots (exclude dynamic relevance fields for persistence)
+    5. Never modify git_*_snapshot fields after discovery — they represent a point-in-time view
+    - **Performance warning**: Full `discover()` with relevance filtering can be slow for large repos.
+      For dashboards or lightweight contexts, consider using `context_engine_dashboard_payload()` which
+      returns a pre-serializable dict instead of the full object.
 
     This dataclass is serializable for caching and is the single source of project truth
     passed to Swarm agents for prompt injection. Keep fields aligned across discover(),
     render(), and any caching mechanisms.
-    
+
     This dataclass assembles workspace state including:
     - Git information (status, diff, log)
     - Instruction files (SWARM.md, AGENTS.md, etc.)
