@@ -174,6 +174,9 @@ DEFAULT_SESSION_COMPACTION_MAX_TOKENS=***  # Placeholder: not currently used
 # This constant was planned for token-budget-based session compaction but was removed due to incomplete implementation.
 # When re-implementing, maintainers should: 1) Define a concrete token calculation strategy 2) Set appropriate limits (500-2000 recommended)
 # 3) Update sessions.py/compact_session() accordingly. See git history if this approach proves necessary.
+# NOTE TO MAINTAINERS: This placeholder slot exists at line 173 for future restoration. Before re-adding token-based limits,
+# verify current compaction strategy in SessionMemory.configure_from_project_config() (lines 758-783) which still uses this
+# default for backward compatibility. The value should align with HAM's context window management strategy.
 DEFAULT_SESSION_COMPACTION_PRESERVE = 4
 DEFAULT_SESSION_TOOL_PRUNE_CHARS = 200
 # Session browser defaults: browser interaction controls including step limits,
