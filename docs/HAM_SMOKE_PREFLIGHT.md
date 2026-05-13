@@ -13,7 +13,7 @@ approval checkbox -> Approve and build path).
 The Vercel project that owns it is the one linked at the repo root via
 `.vercel/project.json` (project id `prj_a1RTNyQAqlBaWGqWIrBlFrwiOYN9`, project
 name `ham`). Its `vercel.json` (both `./vercel.json` and `./frontend/vercel.json`)
-proxies `/api/*` to Cloud Run at `https://ham-api-vlryahjzwa-uc.a.run.app`.
+proxies `/api/*` to Cloud Run at `https://ham-api-13856606312.us-central1.run.app`.
 
 ## Stale URL: what it was, why it kept reappearing
 

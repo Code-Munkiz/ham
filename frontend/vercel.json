@@ -3,15 +3,15 @@
   "rewrites": [
     {
       "source": "/api/workspaces/:workspaceId/projects/:projectId/builder/preview-proxy/:path*",
-      "destination": "https://ham-api-vlryahjzwa-uc.a.run.app/api/workspaces/:workspaceId/projects/:projectId/builder/preview-proxy/:path*"
+      "destination": "https://ham-api-13856606312.us-central1.run.app/api/workspaces/:workspaceId/projects/:projectId/builder/preview-proxy/:path*"
     },
     {
       "source": "/api/workspaces/:workspaceId/projects/:projectId/builder/preview-proxy/",
-      "destination": "https://ham-api-vlryahjzwa-uc.a.run.app/api/workspaces/:workspaceId/projects/:projectId/builder/preview-proxy/"
+      "destination": "https://ham-api-13856606312.us-central1.run.app/api/workspaces/:workspaceId/projects/:projectId/builder/preview-proxy/"
     },
     {
       "source": "/api/:path*",
-      "destination": "https://ham-api-vlryahjzwa-uc.a.run.app/api/:path*"
+      "destination": "https://ham-api-13856606312.us-central1.run.app/api/:path*"
     },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
