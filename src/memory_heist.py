@@ -234,6 +234,10 @@ DEFAULT_BROWSER_ADAPTER = "playwright"
 # Security note for maintainers: File downloads and form submits are disabled by default to prevent
 # unexpected side effects during autonomous browser automation. Enable these options only when
 # explicit user intent has been captured and validated through HAM's action approval flows.
+# NOTE TO NEW MAINTAINERS: These constants directly impact token budget usage - higher DOM/console
+# limits and more steps increase context window consumption proportionally. When tuning, test with
+# representative agent workloads and monitor completion latency. **Key relationship**: MAX_STEPS *
+# MAX_DOM_CHARS provides the maximum browser-related token footprint per session step.
 INSTRUCTION_INVISIBLE_CHARS = (
     "\u200b",  # zero-width space
     "\u200c",  # zero-width non-joiner
