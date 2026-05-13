@@ -57,6 +57,9 @@ IGNORE_DIRS = frozenset({
 # **FOR MAINTAINERS**: IGNORE_DIRS excludes common VCS, build artifacts, and environment dirs
 # from workspace scans. Adding a new dir here requires verifying it doesn't contain source
 # files that agents need to see. If unsure, add the dir to .gitignore first.
+# Security note: Adding a directory here prevents agents from seeing its contents entirely,
+# which can improve context focus but may hide important configuration files (e.g., .env, secrets).
+# Always audit new additions for sensitive material exposure risks.
 
 INTERESTING_EXTENSIONS = frozenset({
     ".py", ".rs", ".ts", ".tsx", ".js", ".jsx", ".json", ".yaml", ".yml",
