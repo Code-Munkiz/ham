@@ -95,6 +95,18 @@ def _project_output_target(rec: ProjectRecord) -> str:
     return (getattr(rec, "output_target", None) or "managed_workspace").strip()
 
 
+class _ManagedWorkspaceConfigError(Exception):
+    """Raised when a managed-workspace project cannot resolve to a canonical
+    runner cwd because ``workspace_id`` / ``id`` is missing or malformed.
+
+    In production the ``BUILD_LANE_PROJECT_MISSING_WORKSPACE_ID`` gate in
+    :func:`_require_build_approver` fires first, so callers never see this
+    error. It exists as belt-and-suspenders defence-in-depth so the helper
+    cannot silently fall back to a legacy ``project.root`` (e.g. ``/app``)
+    when invoked outside the normal request flow.
+    """
+
+
 def _effective_runner_cwd(rec: ProjectRecord) -> Path:
     """Canonical runner cwd for this project.
 
@@ -106,16 +118,30 @@ def _effective_runner_cwd(rec: ProjectRecord) -> Path:
     legacy ``root=/app`` records from leaking into managed-workspace builds.
 
     ``github_pr`` projects continue to use ``project.root`` verbatim.
+
+    Raises :class:`_ManagedWorkspaceConfigError` when a managed project lacks
+    a usable ``workspace_id`` or ``id``. Callers in this module never see the
+    exception because the ``MISSING_WORKSPACE_ID`` gate fires earlier; the
+    raise keeps the helper safe for any future call site.
     """
     target = _project_output_target(rec)
     if target == "managed_workspace":
         wid = (getattr(rec, "workspace_id", None) or "").strip()
         pid = (rec.id or "").strip()
-        if wid and pid:
-            try:
-                return managed_working_dir(wid, pid)
-            except ValueError:
-                pass
+        if not wid:
+            raise _ManagedWorkspaceConfigError(
+                "Managed-workspace project is missing workspace_id."
+            )
+        if not pid:
+            raise _ManagedWorkspaceConfigError(
+                "Managed-workspace project is missing project id."
+            )
+        try:
+            return managed_working_dir(wid, pid)
+        except ValueError as exc:
+            raise _ManagedWorkspaceConfigError(
+                "Managed-workspace project has invalid identifiers."
+            ) from exc
     return Path(rec.root)
 
 
