@@ -217,6 +217,9 @@ DEFAULT_SESSION_COMPACTION_PRESERVE = 4
 # Minimum number of session messages to preserve after compaction.
 # This ensures historical context isn't completely discarded when
 # compacting conversation sessions for context window management.
+# **FOR MAINTAINERS**: This interacts with DEFAULT_BROWSER_MAX_NETWORK_EVENTS (200) to
+# control overall session payload size. The 4-message minimum is chosen as the smallest
+# viable context set for maintaining conversation continuity (user intent + prior actions).
 DEFAULT_SESSION_TOOL_PRUNE_CHARS = 200
 # Note: DEFAULT_SESSION_COMPACTION_MAX_TOKENS placeholder is unused - current
 # session compaction doesn't rely on token budgeting. See lines 158-179 for details.
