@@ -667,6 +667,15 @@ class ProjectContext:
     **Security best practice**: All context inputs are treated as potentially untrusted.
     Instruction files are sanitized for invisible characters and prompt-injection phrases.
     Config files are validated through ConfigTrustValidator before inclusion in context.
+    
+    **FIELD CATEGORIES AND LIFECYCLES FOR MAINTAINERS:**
+    - **Required (never optional):** `cwd`, `current_date`, `platform_info` - always populated by discover().
+    - **Git state snapshots:** `git_status_snapshot`, `git_diff_snapshot`, `git_log_snapshot` - captured once
+      during discover() to reflect repo state at a specific point-in-time. Never modify after discovery.
+    - **Content fields:** `instruction_files`, `config` - may be empty for test stubs, fully populated in production.
+    - **Scan summary:** `file_count`, `tree` - lightweight workspace overview without full file contents.
+    - **Dynamic (runtime-only):** `_relevance_results`, `_relevance_metadata` - attached during discover() for
+      relevance filtering only, not serialized to cache.
     """
     cwd: Path
     current_date: str
