@@ -525,6 +525,14 @@ def _validated_snapshot_id(*, workspace_id: str, project_id: str, source_snapsho
     return source_snapshot_id
 
 
+def _active_snapshot_id(*, workspace_id: str, project_id: str) -> str | None:
+    source_rows = get_builder_source_store().list_project_sources(
+        workspace_id=workspace_id,
+        project_id=project_id,
+    )
+    return next((row.active_snapshot_id for row in source_rows if row.active_snapshot_id), None)
+
+
 def _serialize_local_run_profile(profile: LocalRunProfile | None, *, workspace_id: str, project_id: str) -> dict[str, Any]:
     configured = bool(profile and profile.status in {"configured", "draft"})
     return {
@@ -2110,6 +2118,10 @@ async def request_builder_cloud_runtime(
         project_id=project_id,
         source_snapshot_id=body.source_snapshot_id,
     )
+    effective_snapshot_id = source_snapshot_id or _active_snapshot_id(
+        workspace_id=ctx.workspace_id,
+        project_id=project_id,
+    )
     requested_status = str(body.status or "").strip().lower()
     if requested_status and requested_status not in _CLOUD_RUNTIME_STATES:
         raise HTTPException(
@@ -2121,10 +2133,39 @@ async def request_builder_cloud_runtime(
                 }
             },
         )
+    provider_mode = get_cloud_runtime_provider_mode()
+    experiment_status, _ = get_cloud_runtime_experiment_status()
+    should_execute_job = (
+        requested_status in {"", "queued"}
+        and effective_snapshot_id is not None
+        and provider_mode != "disabled"
+        and experiment_status not in {"experiment_not_enabled", "disabled", "config_missing"}
+    )
+    if should_execute_job:
+        saved_job, runtime = run_persist_builder_cloud_runtime_job(
+            workspace_id=ctx.workspace_id,
+            project_id=project_id,
+            source_snapshot_id=effective_snapshot_id,
+            requested_by=actor.user_id if actor is not None else None,
+            metadata=_sanitize_metadata(body.metadata),
+        )
+        return {
+            "runtime": runtime.model_dump(mode="json") if runtime is not None else None,
+            "cloud_runtime": _serialize_cloud_runtime(
+                runtime,
+                workspace_id=ctx.workspace_id,
+                project_id=project_id,
+            ),
+            "job": saved_job.model_dump(mode="json"),
+            "preview_status": _build_preview_status_payload(
+                workspace_id=ctx.workspace_id,
+                project_id=project_id,
+            ),
+        }
     runtime = get_builder_runtime_store().request_cloud_runtime_session(
         workspace_id=ctx.workspace_id,
         project_id=project_id,
-        source_snapshot_id=source_snapshot_id,
+        source_snapshot_id=effective_snapshot_id,
         requested_by=actor.user_id if actor is not None else None,
         metadata=_sanitize_metadata(body.metadata),
     )

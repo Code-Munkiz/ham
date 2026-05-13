@@ -350,6 +350,31 @@ def test_sandbox_provider_fake_failure_reports_error_without_preview(tmp_path: P
     _cleanup()
 
 
+def test_cloud_runtime_request_executes_job_when_sandbox_enabled(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "sandbox_provider")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_EXPERIMENTS_ENABLED", "true")
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_ENABLED", "true")
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_PROVIDER", "e2b")
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_DRY_RUN", "false")
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_FAKE_MODE", "success")
+    monkeypatch.setenv("HAM_BUILDER_SANDBOX_API_KEY", "test-secret-api-key")
+    client, ws_id, project_id, snapshot_id = _seed_context(tmp_path)
+    res = client.post(
+        f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime/request",
+        json={"source_snapshot_id": snapshot_id, "metadata": {"request_source": "test"}},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["job"]["status"] == "succeeded"
+    assert body["runtime"]["status"] == "running"
+    assert body["preview_status"]["status"] == "ready"
+    assert body["preview_status"]["preview_url"] == (
+        f"/api/workspaces/{ws_id}/projects/{project_id}/builder/preview-proxy/"
+    )
+    assert "provisioning is not implemented yet" not in (body["runtime"].get("message") or "").lower()
+    _cleanup()
+
+
 def test_sandbox_provider_live_adapter_success_returns_proxy_only(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "sandbox_provider")
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_EXPERIMENTS_ENABLED", "true")
