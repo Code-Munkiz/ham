@@ -17,6 +17,7 @@ EXPECTED_PROVIDER_KEYS = {
     "cursor_cloud_agent",
     "factory_droid",
     "claude_code",
+    "claude_agent",
     "opencode_cli",
 }
 
@@ -51,12 +52,12 @@ def client() -> TestClient:
     return TestClient(app)
 
 
-def test_list_providers_returns_all_four_known_keys(client: TestClient) -> None:
+def test_list_providers_returns_all_five_known_keys(client: TestClient) -> None:
     res = client.get("/api/coding-agents/providers")
     assert res.status_code == 200, res.text
     body = res.json()
     assert body["kind"] == "coding_agent_provider_list"
-    assert body["count"] == 4
+    assert body["count"] == 5
     keys = {p["provider"] for p in body["providers"]}
     assert keys == EXPECTED_PROVIDER_KEYS
 
