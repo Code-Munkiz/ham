@@ -72,9 +72,9 @@ function makeLaunch(over: Partial<DroidBuildLaunchPayload> = {}): DroidBuildLaun
 function candidate(over: Partial<CodingConductorCandidate> = {}): CodingConductorCandidate {
   return {
     provider: "factory_droid_build",
-    label: "Low-risk pull request",
+    label: "Managed workspace build",
     available: true,
-    reason: "Low-risk edit pass.",
+    reason: "Managed workspace build with a minimal diff and a preview snapshot.",
     blockers: [],
     confidence: 0.85,
     output_kind: "pull_request",

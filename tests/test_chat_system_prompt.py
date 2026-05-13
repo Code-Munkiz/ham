@@ -40,6 +40,10 @@ def test_chat_system_prompt_includes_no_fabricated_execution_guard() -> None:
     """
     base = _DEFAULT_CHAT_SYSTEM_PROMPT
     # Capabilities lock: every banned tool surface is explicitly negated.
+    # Managed-workspace snapshots are intentionally NOT in the banned list:
+    # they are created when the user approves the Managed workspace build
+    # approval panel (a real API call), so denying them in the system
+    # prompt while the panel is rendered would contradict the actual flow.
     assert "No fabricated execution" in base
     for negated in (
         "NO shell",
@@ -47,11 +51,14 @@ def test_chat_system_prompt_includes_no_fabricated_execution_guard() -> None:
         "NO build",
         "NO push",
         "NO PR",
-        "NO snapshot",
         "NO cron",
         "NO filesystem tools",
     ):
         assert negated in base, f"missing negation: {negated!r}"
+    # The prompt must not blanket-deny snapshots while the approval panel
+    # is the legitimate chat-side path for creating them.
+    assert "NO snapshot" not in base
+    assert "capture managed-workspace snapshots" not in base
     # Routing lock: coding intents must point to the real flow.
     assert "Plan with coding agents" in base
     assert "Coding Plan card" in base
