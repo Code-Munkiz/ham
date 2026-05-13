@@ -251,6 +251,8 @@ DEFAULT_BROWSER_STEP_TIMEOUT_MS = 10_000
 DEFAULT_BROWSER_MAX_DOM_CHARS = 8_000
 DEFAULT_BROWSER_MAX_CONSOLE_CHARS = 4_000
 DEFAULT_BROWSER_MAX_NETWORK_EVENTS = 200
+# This limit caps logged network requests per browser session to prevent context bloat from high-traffic pages.
+# Each logged request typically consumes 50-200 tokens depending on URLs and payloads.
 DEFAULT_BROWSER_ALLOW_FILE_DOWNLOAD = False
 DEFAULT_BROWSER_ALLOW_FORM_SUBMIT = False
 DEFAULT_BROWSER_ADAPTER = "playwright"
