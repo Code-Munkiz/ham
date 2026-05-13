@@ -87,6 +87,12 @@ def format_gateway_error_user_message(exc: GatewayCallError) -> str:
                 "An operator should verify Hermes gateway credentials (HERMES_GATEWAY_API_KEY) and that "
                 "HERMES_GATEWAY_BASE_URL reaches the intended Hermes instance."
             )
+        if st == 413:
+            return (
+                "Your chat context is too large for the model gateway. "
+                "Older thread messages were trimmed for the next attempts; "
+                "starting a new chat clears the buildup if this persists."
+            )
         if st == 404:
             return (
                 "The model gateway endpoint was not found (HTTP 404). "
@@ -272,6 +278,7 @@ def stream_chat_turn(
     openrouter_model_override: str | None = None,
     openrouter_litellm_api_key: str | None = None,
     force_openrouter_litellm_route: bool = False,
+    gateway_context_budget_diag: dict[str, Any] | None = None,
 ) -> Iterator[str]:
     """
     Stream one completion as content deltas (OpenAI-style ``delta.content`` chunks).
@@ -352,13 +359,27 @@ def stream_chat_turn(
     primary = (os.environ.get("HERMES_GATEWAY_MODEL") or DEFAULT_MODEL).strip() or DEFAULT_MODEL
     fallback = (os.environ.get("HAM_CHAT_FALLBACK_MODEL") or "").strip()
 
+    from src.ham.hermes_http_context_budget import apply_hermes_http_context_budget
+
+    msgs_for_http, budget_result = apply_hermes_http_context_budget(messages)
+    if not msgs_for_http:
+        raise GatewayCallError(
+            "INVALID_REQUEST",
+            "Hermes gateway context budget removed every message.",
+        )
+    if gateway_context_budget_diag is not None:
+        gateway_context_budget_diag.clear()
+        gateway_context_budget_diag.update(budget_result.as_dict())
+    if budget_result.dropped_error_message_count > 0 or budget_result.truncated_for_gateway_budget:
+        logger.info("hermes_http_context_budget=%s", json.dumps(budget_result.as_dict()))
+
     primary_emitted_chunk = False
     try:
         for chunk in _iter_http_chat_completions(
             base=base,
             api_key=api_key,
             model=primary,
-            messages=messages,
+            messages=msgs_for_http,
             timeout_sec=timeout_sec,
         ):
             primary_emitted_chunk = True
@@ -380,7 +401,7 @@ def stream_chat_turn(
                 base=base,
                 api_key=api_key,
                 model=fallback,
-                messages=messages,
+                messages=msgs_for_http,
                 timeout_sec=timeout_sec,
             )
         else:
@@ -394,6 +415,7 @@ def complete_chat_turn(
     openrouter_model_override: str | None = None,
     openrouter_litellm_api_key: str | None = None,
     force_openrouter_litellm_route: bool = False,
+    gateway_context_budget_diag: dict[str, Any] | None = None,
 ) -> str:
     """
     Run one non-streaming completion. `messages` are OpenAI-style dicts with role + content.
@@ -408,5 +430,6 @@ def complete_chat_turn(
             openrouter_model_override=openrouter_model_override,
             openrouter_litellm_api_key=openrouter_litellm_api_key,
             force_openrouter_litellm_route=force_openrouter_litellm_route,
+            gateway_context_budget_diag=gateway_context_budget_diag,
         ),
     ).strip()
