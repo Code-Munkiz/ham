@@ -85,9 +85,7 @@ describe("isHostExemptFromSmokeCanonicalCheck", () => {
 
 describe("assertManagedBuildSmokePreflight", () => {
   it("passes on the canonical host when /api/status is healthy and trace-anchored", async () => {
-    const fetchImpl = makeFetch(
-      jsonResponse(healthyBody(), { traceContext: "abc123def456;o=1" }),
-    );
+    const fetchImpl = makeFetch(jsonResponse(healthyBody(), { traceContext: "abc123def456;o=1" }));
     const snap = await assertManagedBuildSmokePreflight({
       locationOverride: { host: DEFAULT_CANONICAL_HOST, origin: CANONICAL_ORIGIN },
       fetchImpl,

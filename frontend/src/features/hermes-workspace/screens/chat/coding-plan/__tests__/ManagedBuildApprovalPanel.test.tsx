@@ -21,9 +21,9 @@ vi.mock("@/lib/ham/api", async () => {
 });
 
 vi.mock("@/lib/ham/managedBuildSmokePreflight", async () => {
-  const actual = await vi.importActual<
-    typeof import("@/lib/ham/managedBuildSmokePreflight")
-  >("@/lib/ham/managedBuildSmokePreflight");
+  const actual = await vi.importActual<typeof import("@/lib/ham/managedBuildSmokePreflight")>(
+    "@/lib/ham/managedBuildSmokePreflight",
+  );
   return {
     ...actual,
     assertManagedBuildSmokePreflight: vi.fn(async () => ({

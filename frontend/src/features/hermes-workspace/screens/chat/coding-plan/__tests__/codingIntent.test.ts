@@ -5,7 +5,7 @@ import { inspectCodingIntent, isLikelyCodingIntent } from "../codingIntent";
 describe("isLikelyCodingIntent", () => {
   describe("positive matches", () => {
     const cases: ReadonlyArray<[string, string]> = [
-      ["Build me a Space Tetris game", "build + game"],
+      ["Fix the Space Tetris game scoring bug", "fix + game + bug (not builder happy-path)"],
       ["Refactor the persistence layer", "refactor + layer"],
       ["Audit the persistence layer", "audit + layer"],
       ["Fix the failing test in the runner", "fix + test"],
