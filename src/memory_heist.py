@@ -181,6 +181,9 @@ DEFAULT_SESSION_COMPACTION_MAX_TOKENS=***  # Placeholder: not currently used
 # verify current compaction strategy in SessionMemory.configure_from_project_config() (lines 758-783) which still uses this
 # default for backward compatibility. The value should align with HAM's context window management strategy.
 DEFAULT_SESSION_COMPACTION_PRESERVE = 4
+# Minimum number of session messages to preserve after compaction.
+# This ensures historical context isn't completely discarded when
+# compacting conversation sessions for context window management.
 DEFAULT_SESSION_TOOL_PRUNE_CHARS = 200
 # Note: DEFAULT_SESSION_COMPACTION_MAX_TOKENS placeholder is unused - current
 # session compaction doesn't rely on token budgeting. See lines 158-179 for details.
