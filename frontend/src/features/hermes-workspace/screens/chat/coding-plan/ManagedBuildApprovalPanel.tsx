@@ -18,12 +18,17 @@ import {
   MANAGED_BUILD_APPROVAL_CHECKBOX,
   MANAGED_BUILD_APPROVAL_HEADLINE,
   MANAGED_BUILD_FAILURE_HEADLINE,
+  MANAGED_BUILD_KEEP_BUILDING_CTA,
   MANAGED_BUILD_LAUNCH_BUSY,
   MANAGED_BUILD_LAUNCH_CTA,
   MANAGED_BUILD_NO_PR_NOTE,
   MANAGED_BUILD_PREVIEW_BUSY,
   MANAGED_BUILD_PREVIEW_CTA,
+  MANAGED_BUILD_PREVIEW_LINK,
   MANAGED_BUILD_SUCCESS_HEADLINE,
+  MANAGED_BUILD_TECHNICAL_DETAILS_SUMMARY,
+  MANAGED_BUILD_VIEW_CHANGES_LINK,
+  managedBuildChangedPathsLine,
 } from "./codingPlanCardCopy";
 
 export type ManagedBuildApprovalPanelProps = {
@@ -291,49 +296,77 @@ function ManagedBuildSuccessSummary({
   const previewUrl = readStringField(result.output_ref, "preview_url");
   const changedCount = readNumberField(result.output_ref, "changed_paths_count");
   const neutral = readStringField(result.output_ref, "neutral_outcome");
+  const changedLine =
+    typeof changedCount === "number" ? managedBuildChangedPathsLine(changedCount) : "";
+  const showTechnicalDetails = Boolean(snapshotId || neutral);
   return (
-    <div className="mt-2 grid gap-1.5 text-[11px] text-white/80">
-      <ul className="grid gap-0.5">
-        {snapshotId ? (
-          <li data-hww-coding-plan="managed-build-snapshot-id">
-            <span className="text-white/55">Snapshot id: </span>
-            <span className="font-mono text-white/85">{snapshotId}</span>
-          </li>
-        ) : null}
-        {previewUrl ? (
-          <li data-hww-coding-plan="managed-build-preview-url">
-            <a
-              href={previewUrl}
-              target="_blank"
-              rel="noreferrer noopener"
-              className="text-cyan-300/90 hover:text-cyan-200"
-            >
-              Open snapshot preview
-            </a>
-          </li>
-        ) : null}
-        {typeof changedCount === "number" ? (
-          <li data-hww-coding-plan="managed-build-changed-count">
-            <span className="text-white/55">Changed paths: </span>
-            <span className="text-white/85">{changedCount}</span>
-          </li>
-        ) : null}
-        {neutral ? (
-          <li data-hww-coding-plan="managed-build-neutral-outcome">
-            <span className="text-white/55">Outcome: </span>
-            <span className="text-white/85">{neutral}</span>
-          </li>
-        ) : null}
-      </ul>
+    <div className="mt-2 grid gap-2 text-[11px] text-white/80">
+      {previewUrl ? (
+        <div
+          className="flex flex-wrap items-center gap-x-2 gap-y-1"
+          data-hww-coding-plan="managed-build-success-actions"
+        >
+          <a
+            href={previewUrl}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="rounded-md border border-cyan-300/35 bg-cyan-300/[0.08] px-2.5 py-1 text-[11px] font-medium text-cyan-100 hover:bg-cyan-300/[0.14]"
+            data-hww-coding-plan="managed-build-preview-url"
+          >
+            {MANAGED_BUILD_PREVIEW_LINK}
+          </a>
+          <a
+            href={previewUrl}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="text-[11px] font-medium text-cyan-300/90 underline-offset-2 hover:text-cyan-200 hover:underline"
+            data-hww-coding-plan="managed-build-view-changes-url"
+          >
+            {MANAGED_BUILD_VIEW_CHANGES_LINK}
+          </a>
+        </div>
+      ) : null}
+      {changedLine ? (
+        <p
+          className="text-[10px] leading-snug text-white/55"
+          data-hww-coding-plan="managed-build-changed-count"
+        >
+          {changedLine}
+        </p>
+      ) : null}
+      {showTechnicalDetails ? (
+        <details
+          className="rounded border border-white/[0.06] bg-white/[0.02] px-2 py-1.5"
+          data-hww-coding-plan="managed-build-technical-details"
+        >
+          <summary className="cursor-pointer select-none text-[10px] font-medium tracking-wide text-white/45 hover:text-white/70">
+            {MANAGED_BUILD_TECHNICAL_DETAILS_SUMMARY}
+          </summary>
+          <ul className="mt-1.5 grid gap-1 text-[10px] text-white/70">
+            {snapshotId ? (
+              <li data-hww-coding-plan="managed-build-snapshot-id">
+                <span className="text-white/50">Snapshot id: </span>
+                <span className="font-mono text-white/85">{snapshotId}</span>
+              </li>
+            ) : null}
+            {neutral ? (
+              <li data-hww-coding-plan="managed-build-neutral-outcome">
+                <span className="text-white/50">Outcome: </span>
+                <span className="font-mono text-white/85">{neutral}</span>
+              </li>
+            ) : null}
+          </ul>
+        </details>
+      ) : null}
       <p className="text-[10px] leading-snug text-white/50">{MANAGED_BUILD_NO_PR_NOTE}</p>
       <div>
         <button
           type="button"
           onClick={onReset}
-          className="rounded-md border border-white/[0.1] bg-white/[0.04] px-2.5 py-1 text-[11px] font-medium text-white/75 hover:bg-white/[0.08]"
+          className="rounded-md border border-emerald-300/35 bg-emerald-300/[0.08] px-2.5 py-1 text-[11px] font-medium text-emerald-50 hover:bg-emerald-300/[0.14]"
           data-hww-coding-plan="managed-build-done"
         >
-          Done
+          {MANAGED_BUILD_KEEP_BUILDING_CTA}
         </button>
       </div>
     </div>

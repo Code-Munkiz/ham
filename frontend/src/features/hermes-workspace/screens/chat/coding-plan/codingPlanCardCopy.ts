@@ -35,8 +35,21 @@ export const MANAGED_BUILD_PREVIEW_BUSY = "Preparing preview…";
 export const MANAGED_BUILD_LAUNCH_CTA = "Approve and build";
 export const MANAGED_BUILD_LAUNCH_BUSY = "Building snapshot…";
 
-export const MANAGED_BUILD_SUCCESS_HEADLINE = "Managed workspace snapshot ready";
+export const MANAGED_BUILD_SUCCESS_HEADLINE = "Saved version created";
 export const MANAGED_BUILD_FAILURE_HEADLINE = "HAM could not finish the build";
+
+/** User-facing line for changed-path counts after a managed snapshot build. */
+export function managedBuildChangedPathsLine(count: number): string {
+  if (!Number.isFinite(count) || count < 0) return "";
+  if (count === 0) return "No files changed";
+  if (count === 1) return "1 file changed";
+  return `${count} files changed`;
+}
+
+export const MANAGED_BUILD_PREVIEW_LINK = "Preview";
+export const MANAGED_BUILD_VIEW_CHANGES_LINK = "View changes";
+export const MANAGED_BUILD_TECHNICAL_DETAILS_SUMMARY = "Technical details";
+export const MANAGED_BUILD_KEEP_BUILDING_CTA = "Keep building";
 
 export const MANAGED_BUILD_NO_PR_NOTE =
   "Managed workspace builds never open a pull request and never push to GitHub.";

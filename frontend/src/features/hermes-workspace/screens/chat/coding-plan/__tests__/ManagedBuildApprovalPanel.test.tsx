@@ -248,6 +248,16 @@ describe("ManagedBuildApprovalPanel", () => {
       expect(launchMock).toHaveBeenCalledTimes(1);
     });
 
+    expect(screen.getByText("Saved version created")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Preview" })).toHaveAttribute(
+      "href",
+      "https://snapshots.example.test/p/abc",
+    );
+    expect(screen.getByRole("link", { name: "View changes" })).toHaveAttribute(
+      "href",
+      "https://snapshots.example.test/p/abc",
+    );
+
     // Launch payload must use the previewed digest + accept_pr=true (back-compat).
     const launchArgs = launchMock.mock.calls[0]![0]!;
     expect(launchArgs).toMatchObject({
@@ -269,14 +279,10 @@ describe("ManagedBuildApprovalPanel", () => {
     )!.textContent;
     expect(snap).toContain("snap_abc");
     expect(
-      container
-        .querySelector('[data-hww-coding-plan="managed-build-preview-url"]')!
-        .querySelector("a")!
-        .getAttribute("href"),
-    ).toBe("https://snapshots.example.test/p/abc");
-    expect(
       container.querySelector('[data-hww-coding-plan="managed-build-changed-count"]')!.textContent,
-    ).toContain("3");
+    ).toContain("3 files changed");
+
+    expect(screen.getByRole("button", { name: /keep building/i })).toBeTruthy();
 
     assertNoForbiddenTokens(container as unknown as HTMLElement);
 
