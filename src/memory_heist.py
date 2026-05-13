@@ -142,9 +142,9 @@ INSTRUCTION_DOT_FILES = ("SWARM.md", "instructions.md")
 # NOTE: Files in .ham/ directory are fallback instructions when root-level instruction files are absent.
 # These allow per-project instruction configuration separate from workspace root.
 
-# Instruction file content limits (chars)
-# These constants cap the size of instruction documents loaded into agent prompts
-# to prevent context overflow while preserving critical project guidance.
+# Instruction file and context size limits (chars)
+# These constants cap the size of instruction documents and context payloads loaded into agent prompts
+# to prevent context overflow while preserving critical project guidance and git state.
 # Adjust values carefully: larger values consume more context window token budget.
 # Rationale: 4K chars per file balances comprehensive guidance with token efficiency;
 # 12K total allows ~3 medium instruction docs (SWARM.md, AGENTS.md, etc.) without
@@ -155,6 +155,10 @@ MAX_INSTRUCTION_FILE_CHARS = 4_000
 MAX_TOTAL_INSTRUCTION_CHARS = 12_000
 MAX_DIFF_CHARS = 8_000
 MAX_SUMMARY_CHARS = 4_000
+# NOTE: These bounds work together as a unit. Changing one constant may require
+# proportional adjustments to others to maintain balanced token allocation.
+# For example, increasing MAX_TOTAL_INSTRUCTION_CHARS should be accompanied by
+# reviewing MAX_DIFF_CHARS to avoid exhausting the context window with git state.
 
 # Session compaction defaults: maximum tokens for compacted session history,
 # minimum session messages to preserve in history, and tool output pruning
