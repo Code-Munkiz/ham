@@ -18,7 +18,7 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -28,6 +28,7 @@ from src.api.clerk_gate import get_ham_clerk_actor
 from src.api.server import app, fastapi_app
 from src.ham.claude_agent_runner.types import ClaudeAgentRunResult
 from src.ham.clerk_auth import HamActor
+from src.ham.managed_workspace.provisioning import ManagedWorkspaceSetupError
 
 
 _EXEC_TOKEN_CANARY = "test-token-canary"  # noqa: S105
@@ -601,3 +602,203 @@ def test_launch_does_not_leak_secret_values(
     blob = res.text
     assert anthropic_canary not in blob
     assert _EXEC_TOKEN_CANARY not in blob
+
+
+# ---------------------------------------------------------------------------
+# Workspace-provisioning failure tests (Mission 2.x)
+# ---------------------------------------------------------------------------
+
+
+def _raises_setup_error(**_kwargs: Any) -> None:
+    raise ManagedWorkspaceSetupError(
+        reason="read_only_filesystem",
+        detail="managed_root_read_only",
+    )
+
+
+def test_launch_returns_workspace_setup_failed_when_provisioning_raises(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_env: None,
+    actor: HamActor,
+    cleanup_overrides: None,
+) -> None:
+    monkeypatch.setenv("CLAUDE_AGENT_ENABLED", "1")
+    monkeypatch.setenv("HAM_CLAUDE_AGENT_EXEC_TOKEN", _EXEC_TOKEN_CANARY)
+    rec = _project_rec()
+    patches = _patch_gates(rec=rec)
+    digest = _preview_digest(rec.id, "tidy README")
+
+    saved: list[Any] = []
+
+    def _fake_save(run: Any, *, project_root_for_mirror: str | None = None) -> None:
+        saved.append(run)
+
+    fake_store = SimpleNamespace(save=_fake_save)
+
+    try:
+        with (
+            patch.object(build_api, "ensure_managed_working_tree", _raises_setup_error),
+            patch.object(build_api, "get_control_plane_run_store", lambda: fake_store),
+        ):
+            res = _client(actor).post(
+                "/api/claude-agent/build/launch",
+                json={
+                    "project_id": rec.id,
+                    "user_prompt": "tidy README",
+                    "proposal_digest": digest,
+                    "base_revision": build_api.CLAUDE_AGENT_REGISTRY_REVISION,
+                    "confirmed": True,
+                },
+            )
+    finally:
+        _stop(patches)
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["ok"] is False
+    assert body["control_plane_status"] == "failed"
+    error_summary = body["error_summary"]
+    assert isinstance(error_summary, str) and error_summary
+    assert "/" not in error_summary
+    assert "/srv/" not in error_summary
+    assert "HAM_" not in error_summary
+    assert body["output_ref"] is None
+    assert len(saved) == 1
+    cp_run = saved[0]
+    assert cp_run.provider == "claude_agent"
+    assert cp_run.status == "failed"
+    assert cp_run.status_reason == "claude_agent:workspace_setup_failed"
+
+
+def test_launch_does_not_call_runner_when_provisioning_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_env: None,
+    actor: HamActor,
+    cleanup_overrides: None,
+) -> None:
+    monkeypatch.setenv("CLAUDE_AGENT_ENABLED", "1")
+    monkeypatch.setenv("HAM_CLAUDE_AGENT_EXEC_TOKEN", _EXEC_TOKEN_CANARY)
+    rec = _project_rec()
+    patches = _patch_gates(rec=rec)
+    digest = _preview_digest(rec.id, "tidy README")
+
+    mock_runner = MagicMock()
+    fake_store = SimpleNamespace(save=lambda *a, **k: None)
+    snapshot_mock = MagicMock()
+
+    try:
+        with (
+            patch.object(build_api, "ensure_managed_working_tree", _raises_setup_error),
+            patch.object(build_api, "run_claude_agent_mission", mock_runner),
+            patch.object(build_api, "emit_managed_workspace_snapshot", snapshot_mock),
+            patch.object(build_api, "get_control_plane_run_store", lambda: fake_store),
+        ):
+            res = _client(actor).post(
+                "/api/claude-agent/build/launch",
+                json={
+                    "project_id": rec.id,
+                    "user_prompt": "tidy README",
+                    "proposal_digest": digest,
+                    "base_revision": build_api.CLAUDE_AGENT_REGISTRY_REVISION,
+                    "confirmed": True,
+                },
+            )
+    finally:
+        _stop(patches)
+    assert res.status_code == 200, res.text
+    mock_runner.assert_not_called()
+    snapshot_mock.assert_not_called()
+
+
+def test_launch_calls_runner_only_after_working_tree_exists(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_env: None,
+    actor: HamActor,
+    tmp_path: Path,
+    cleanup_overrides: None,
+) -> None:
+    monkeypatch.setenv("CLAUDE_AGENT_ENABLED", "1")
+    monkeypatch.setenv("HAM_CLAUDE_AGENT_EXEC_TOKEN", _EXEC_TOKEN_CANARY)
+    monkeypatch.setenv("HAM_MANAGED_WORKSPACE_ROOT", str(tmp_path / "ham-workspaces"))
+    rec = _project_rec()
+    patches = _patch_gates(rec=rec)
+    digest = _preview_digest(rec.id, "tidy README")
+
+    cwd_was_dir: list[bool] = []
+
+    async def _fake_run(**kwargs: Any) -> ClaudeAgentRunResult:
+        project_root = kwargs["project_root"]
+        cwd_was_dir.append(Path(project_root).is_dir())
+        return ClaudeAgentRunResult(
+            status="success",
+            assistant_summary="ok.",
+            duration_seconds=0.1,
+        )
+
+    fake_snap = SimpleNamespace(
+        build_outcome="succeeded",
+        target_ref={"snapshot_id": "snap_ok"},
+        error_summary=None,
+    )
+    fake_store = SimpleNamespace(save=lambda *a, **k: None)
+
+    try:
+        with (
+            patch.object(build_api, "run_claude_agent_mission", _fake_run),
+            patch.object(build_api, "emit_managed_workspace_snapshot", lambda common: fake_snap),
+            patch.object(build_api, "get_control_plane_run_store", lambda: fake_store),
+        ):
+            res = _client(actor).post(
+                "/api/claude-agent/build/launch",
+                json={
+                    "project_id": rec.id,
+                    "user_prompt": "tidy README",
+                    "proposal_digest": digest,
+                    "base_revision": build_api.CLAUDE_AGENT_REGISTRY_REVISION,
+                    "confirmed": True,
+                },
+            )
+    finally:
+        _stop(patches)
+    assert res.status_code == 200, res.text
+    assert cwd_was_dir == [True]
+
+
+def test_launch_workspace_setup_failed_does_not_emit_snapshot_or_pr(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_env: None,
+    actor: HamActor,
+    cleanup_overrides: None,
+) -> None:
+    monkeypatch.setenv("CLAUDE_AGENT_ENABLED", "1")
+    monkeypatch.setenv("HAM_CLAUDE_AGENT_EXEC_TOKEN", _EXEC_TOKEN_CANARY)
+    rec = _project_rec()
+    patches = _patch_gates(rec=rec)
+    digest = _preview_digest(rec.id, "tidy README")
+
+    snapshot_mock = MagicMock()
+    fake_store = SimpleNamespace(save=lambda *a, **k: None)
+
+    try:
+        with (
+            patch.object(build_api, "ensure_managed_working_tree", _raises_setup_error),
+            patch.object(build_api, "emit_managed_workspace_snapshot", snapshot_mock),
+            patch.object(build_api, "get_control_plane_run_store", lambda: fake_store),
+        ):
+            res = _client(actor).post(
+                "/api/claude-agent/build/launch",
+                json={
+                    "project_id": rec.id,
+                    "user_prompt": "tidy README",
+                    "proposal_digest": digest,
+                    "base_revision": build_api.CLAUDE_AGENT_REGISTRY_REVISION,
+                    "confirmed": True,
+                },
+            )
+    finally:
+        _stop(patches)
+    assert res.status_code == 200, res.text
+    snapshot_mock.assert_not_called()
+    body = res.json()
+    assert "snapshot_id" not in (body.get("output_ref") or {})
+    assert "preview_url" not in (body.get("output_ref") or {})
+    assert body["will_open_pull_request"] is False

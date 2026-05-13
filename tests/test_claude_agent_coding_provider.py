@@ -19,8 +19,10 @@ from __future__ import annotations
 
 import dataclasses
 import json
+from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -222,3 +224,123 @@ def _asdict_for_blob(value: Any) -> Any:
     if dataclasses.is_dataclass(value):
         return dataclasses.asdict(value)
     return value
+
+
+# ---------------------------------------------------------------------------
+# Workspace-provisioning failure tests (Mission 2.x)
+# ---------------------------------------------------------------------------
+
+
+def _project_rec(
+    *,
+    project_id: str = "project.claude-abc123",
+    output_target: str = "managed_workspace",
+    workspace_id: str | None = "ws_claude",
+) -> Any:
+    return SimpleNamespace(
+        id=project_id,
+        name="p_claude",
+        output_target=output_target,
+        workspace_id=workspace_id,
+        build_lane_enabled=True,
+        root="/tmp/p_claude",
+    )
+
+
+def _raises_setup_error(**_kwargs: Any) -> None:
+    from src.ham.managed_workspace.provisioning import ManagedWorkspaceSetupError
+
+    raise ManagedWorkspaceSetupError(
+        reason="read_only_filesystem",
+        detail="managed_root_read_only",
+    )
+
+
+def test_launch_claude_agent_coding_returns_workspace_setup_failed_when_provisioning_raises(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("CLAUDE_AGENT_ENABLED", "1")
+    monkeypatch.setenv("HAM_MANAGED_WORKSPACE_ROOT", str(tmp_path / "ham-workspaces"))
+    rec = _project_rec()
+    fake_store_proj = SimpleNamespace(get_project=lambda pid: rec)
+
+    saved: list[Any] = []
+
+    def _fake_save(run: Any, *, project_root_for_mirror: str | None = None) -> None:
+        saved.append(run)
+
+    fake_cp_store = SimpleNamespace(save=_fake_save)
+
+    with (
+        patch(
+            "src.persistence.project_store.get_project_store",
+            return_value=fake_store_proj,
+        ),
+        patch(
+            "src.ham.managed_workspace.provisioning.ensure_managed_working_tree",
+            _raises_setup_error,
+        ),
+        patch(
+            "src.persistence.control_plane_run.get_control_plane_run_store",
+            return_value=fake_cp_store,
+        ),
+    ):
+        result = launch_claude_agent_coding(
+            project_id=rec.id,
+            user_prompt="tidy README",
+        )
+    assert result.status == "failure"
+    assert isinstance(result.ham_run_id, str) and result.ham_run_id
+    assert isinstance(result.reason, str) and result.reason
+    assert "/" not in result.reason
+    assert "HAM_" not in result.reason
+    assert len(saved) == 1
+    cp_run = saved[0]
+    assert cp_run.provider == "claude_agent"
+    assert cp_run.status == "failed"
+    assert cp_run.status_reason == "claude_agent:workspace_setup_failed"
+
+
+def test_launch_claude_agent_coding_does_not_call_runner_when_provisioning_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("CLAUDE_AGENT_ENABLED", "1")
+    monkeypatch.setenv("HAM_MANAGED_WORKSPACE_ROOT", str(tmp_path / "ham-workspaces"))
+    rec = _project_rec()
+    fake_store_proj = SimpleNamespace(get_project=lambda pid: rec)
+    fake_cp_store = SimpleNamespace(save=lambda *a, **k: None)
+
+    mock_runner = MagicMock()
+    snapshot_mock = MagicMock()
+
+    with (
+        patch(
+            "src.persistence.project_store.get_project_store",
+            return_value=fake_store_proj,
+        ),
+        patch(
+            "src.ham.managed_workspace.provisioning.ensure_managed_working_tree",
+            _raises_setup_error,
+        ),
+        patch(
+            "src.persistence.control_plane_run.get_control_plane_run_store",
+            return_value=fake_cp_store,
+        ),
+        patch(
+            "src.ham.claude_agent_runner.run_claude_agent_mission",
+            mock_runner,
+        ),
+        patch(
+            "src.ham.managed_workspace.workspace_adapter.emit_managed_workspace_snapshot",
+            snapshot_mock,
+        ),
+    ):
+        result = launch_claude_agent_coding(
+            project_id=rec.id,
+            user_prompt="tidy README",
+        )
+    assert result.status == "failure"
+    mock_runner.assert_not_called()
+    snapshot_mock.assert_not_called()

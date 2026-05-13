@@ -43,6 +43,10 @@ from src.ham.claude_agent_runner import (
 from src.ham.clerk_auth import HamActor
 from src.ham.droid_runner.build_lane_output import PostExecCommon
 from src.ham.managed_workspace.paths import managed_working_dir
+from src.ham.managed_workspace.provisioning import (
+    ManagedWorkspaceSetupError,
+    ensure_managed_working_tree,
+)
 from src.ham.managed_workspace.workspace_adapter import emit_managed_workspace_snapshot
 from src.ham.worker_adapters.claude_agent_adapter import (
     _redact_diagnostic_text,
@@ -247,6 +251,79 @@ def _created_by(actor: HamActor | None) -> dict[str, Any] | None:
     return d
 
 
+def _persist_workspace_setup_failed(
+    *,
+    rec: Any,
+    ham_actor: HamActor | None,
+    project_root: Path,
+    proposal_digest: str,
+    setup_error: ManagedWorkspaceSetupError,
+) -> dict[str, Any]:
+    """Persist a single terminal control-plane row for a provisioning failure.
+
+    The runner is **not** invoked, no snapshot is emitted, and no PR is
+    opened. The new ``claude_agent:workspace_setup_failed`` status_reason
+    is emitted directly here so the runner taxonomy in
+    :func:`_status_from_run` stays unchanged.
+    """
+    error_summary = _redact_diagnostic_text(setup_error.detail, cap=2000)
+    now = utc_now_iso()
+    ham_run_id = new_ham_run_id()
+    project_root_str = str(project_root.resolve())
+    change_id = uuid.uuid4().hex
+    cp_run = ControlPlaneRun(
+        ham_run_id=ham_run_id,
+        provider="claude_agent",
+        action_kind="launch",
+        project_id=rec.id,
+        created_by=_created_by(ham_actor),
+        created_at=now,
+        updated_at=now,
+        committed_at=now,
+        started_at=now,
+        finished_at=now,
+        last_observed_at=now,
+        status="failed",
+        status_reason="claude_agent:workspace_setup_failed",
+        proposal_digest=proposal_digest,
+        base_revision=CLAUDE_AGENT_REGISTRY_REVISION,
+        external_id=change_id,
+        workflow_id=None,
+        summary=None,
+        error_summary=cap_error_summary(error_summary),
+        last_provider_status=None,
+        audit_ref=None,
+        project_root=project_root_str,
+        pr_url=None,
+        pr_branch=None,
+        pr_commit_sha=None,
+        build_outcome=None,
+        output_target="managed_workspace",
+        output_ref=None,
+    )
+    try:
+        get_control_plane_run_store().save(cp_run, project_root_for_mirror=project_root_str)
+    except Exception as exc:
+        _LOG.warning(
+            "claude_agent_build control-plane save failed (%s)",
+            type(exc).__name__,
+        )
+    return {
+        "kind": "claude_agent_build_launch",
+        "project_id": rec.id,
+        "ok": False,
+        "ham_run_id": ham_run_id,
+        "control_plane_status": "failed",
+        "summary": None,
+        "error_summary": error_summary,
+        "is_readonly": False,
+        "will_open_pull_request": False,
+        "requires_approval": True,
+        "output_target": "managed_workspace",
+        "output_ref": None,
+    }
+
+
 def _status_from_run(run_status: str, snapshot_outcome: str | None) -> tuple[str, str]:
     if run_status == "success":
         if snapshot_outcome == "succeeded":
@@ -375,6 +452,19 @@ async def launch_claude_agent_build(
     _require_claude_agent_exec_token()
 
     project_root = _project_managed_root(rec)
+    try:
+        ensure_managed_working_tree(
+            workspace_id=getattr(rec, "workspace_id", None),
+            project_id=rec.id,
+        )
+    except ManagedWorkspaceSetupError as exc:
+        return _persist_workspace_setup_failed(
+            rec=rec,
+            ham_actor=ham_actor,
+            project_root=project_root,
+            proposal_digest=body.proposal_digest,
+            setup_error=exc,
+        )
     policy = ClaudeAgentPermissionPolicy(project_root=project_root)
     change_id = uuid.uuid4().hex
 

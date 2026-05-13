@@ -144,6 +144,10 @@ def launch_claude_agent_coding(  # noqa: C901
         )
         from src.ham.droid_runner.build_lane_output import PostExecCommon
         from src.ham.managed_workspace.paths import managed_working_dir
+        from src.ham.managed_workspace.provisioning import (
+            ManagedWorkspaceSetupError,
+            ensure_managed_working_tree,
+        )
         from src.ham.managed_workspace.workspace_adapter import (
             emit_managed_workspace_snapshot,
         )
@@ -165,6 +169,57 @@ def launch_claude_agent_coding(  # noqa: C901
                     f"managed-workspace project misconfigured: {type(exc).__name__}",
                     cap=400,
                 ),
+            )
+
+        try:
+            ensure_managed_working_tree(workspace_id=wid, project_id=pid)
+        except ManagedWorkspaceSetupError as exc:
+            error_summary = _redact_diagnostic_text(exc.detail, cap=2000)
+            now = utc_now_iso()
+            ham_run_id = new_ham_run_id()
+            project_root_str = str(Path(project_root).resolve())
+            change_id = uuid.uuid4().hex
+            cp_run = ControlPlaneRun(
+                ham_run_id=ham_run_id,
+                provider="claude_agent",
+                action_kind="launch",
+                project_id=rec.id,
+                created_by=None,
+                created_at=now,
+                updated_at=now,
+                committed_at=now,
+                started_at=now,
+                finished_at=now,
+                last_observed_at=now,
+                status="failed",
+                status_reason="claude_agent:workspace_setup_failed",
+                proposal_digest="",
+                base_revision=CLAUDE_AGENT_REGISTRY_REVISION,
+                external_id=change_id,
+                workflow_id=None,
+                summary=None,
+                error_summary=cap_error_summary(error_summary),
+                last_provider_status=None,
+                audit_ref=None,
+                project_root=project_root_str,
+                pr_url=None,
+                pr_branch=None,
+                pr_commit_sha=None,
+                build_outcome=None,
+                output_target="managed_workspace",
+                output_ref=None,
+            )
+            try:
+                get_control_plane_run_store().save(cp_run, project_root_for_mirror=project_root_str)
+            except Exception as save_exc:
+                _LOG.warning(
+                    "claude_agent_provider control-plane save failed (%s)",
+                    type(save_exc).__name__,
+                )
+            return ClaudeAgentLaunchResult(
+                status="failure",
+                reason=error_summary,
+                ham_run_id=ham_run_id,
             )
 
         policy = ClaudeAgentPermissionPolicy(project_root=project_root)
