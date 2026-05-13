@@ -189,6 +189,10 @@ DEFAULT_SESSION_TOOL_PRUNE_CHARS = 200
 # - STEP_TIMEOUT_MS: per-action timeout in milliseconds (10s default)
 # - MAX_DOM_CHARS/MAX_CONSOLE_CHARS: caps on captured DOM/html and console output size
 # - MAX_NETWORK_EVENTS: limit network request/response logging
+# **FOR MAINTAINERS**: These browser policy defaults are merged into SessionMemory 
+# configuration via `browser_policy_from_config()` and used by browser automation 
+# agents to prevent runaway sessions and excessive token consumption. Adjust all
+# five related constants together if your token budget requirements change.
 DEFAULT_TOOL_PRUNE_PLACEHOLDER = "[Old tool output cleared to save context space]"
 # Default values for browser automation policy. These constants define the bounds
 # for autonomous browser interactions: max steps before timeout, per-step timeout,
