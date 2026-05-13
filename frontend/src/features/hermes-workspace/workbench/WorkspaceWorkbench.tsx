@@ -834,7 +834,10 @@ function WorkbenchPreviewPanel({
               previewViewport === "mobile" ? "items-center" : "",
             )}
           >
-            <div className="relative min-h-0 w-full flex-1 overflow-hidden" data-testid="hww-preview-frame-wrap">
+            <div
+              className="relative min-h-0 w-full flex-1 overflow-hidden"
+              data-testid="hww-preview-frame-wrap"
+            >
               <iframe
                 title="App preview"
                 src={previewUrl}
