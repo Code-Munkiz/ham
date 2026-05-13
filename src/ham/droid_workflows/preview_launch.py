@@ -34,6 +34,7 @@ from src.persistence.control_plane_run import (
     cap_summary,
     droid_build_outcome_to_ham_status,
     droid_outcome_to_ham_status,
+    get_control_plane_run_store,
     new_ham_run_id,
     utc_now_iso,
 )
@@ -873,8 +874,15 @@ def execute_droid_build_workflow_remote(
 
     Never invoked from chat or the audit lane: the only caller is
     :func:`src.api.droid_build.execute_droid_build_workflow`.
+
+    When the caller does not inject a store, fall back to the env-aware
+    singleton (:func:`get_control_plane_run_store`) so production hosts that
+    set ``HAM_CONTROL_PLANE_RUN_STORE_BACKEND=firestore`` persist managed-build
+    rows to Firestore instead of the ephemeral file-backed default. Tests still
+    inject ``control_plane_run_store`` explicitly, and
+    ``set_control_plane_run_store_for_tests(...)`` can swap the singleton.
     """
-    st = control_plane_run_store or ControlPlaneRunStore()
+    st = control_plane_run_store or get_control_plane_run_store()
     digest_key = (proposal_digest or "").strip() or ("0" * 64)
     pid_s = (project_id or "").strip()
 
