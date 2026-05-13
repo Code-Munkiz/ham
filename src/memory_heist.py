@@ -191,9 +191,14 @@ MAX_SUMMARY_CHARS = 4_000
 # 3) Trade-offs between memory efficiency and code complexity. Current implementation
 # relies on character-based heuristics (see compact_max_tokens in SessionMemory).
 DEFAULT_SESSION_COMPACTION_MAX_TOKENS=***  # Placeholder: not currently used
-# This constant was planned for token-budget-based session compaction but was removed due to incomplete implementation.
-# When re-implementing, maintainers should: 1) Define a concrete token calculation strategy 2) Set appropriate limits (500-2000 recommended)
-# 3) Update sessions.py/compact_session() accordingly. See git history if this approach proves necessary.
+# This placeholder constant WAS intended for token-based session compaction to precisely control
+# conversation length by counting actual tokens rather than character estimates. A value between
+# 500-2000 tokens was recommended depending on use case to balance token costs vs context preservation.
+# However, this feature was removed due to incomplete implementation (see lines 170-176).
+# Current session handling uses character-based heuristics via SessionMemory.compact_max_tokens instead,
+# which is simpler but less precise for token budgeting. **FOR MAINTAINERS**: Before re-adding token-based
+# limits, verify whether the simpler character approach meets your needs or if precise token budgeting
+# is required. If needed, update compaction logic in sessions.py before activating this constant.
 # NOTE TO MAINTAINERS: This placeholder slot exists at line 173 for future restoration. Before re-adding token-based limits,
 # verify current compaction strategy in SessionMemory.configure_from_project_config() (lines 758-783) which still uses this
 # default for backward compatibility. The value should align with HAM's context window management strategy.
