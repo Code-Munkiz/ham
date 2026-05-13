@@ -685,7 +685,7 @@ function WorkbenchPreviewPanel({
                 }
               : { title: "", subtitle: "" };
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3 text-[12px] leading-relaxed text-white/70">
+    <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden text-[12px] leading-relaxed text-white/70">
       <div className="flex flex-wrap items-center gap-2">
         <Button
           type="button"
@@ -830,16 +830,16 @@ function WorkbenchPreviewPanel({
         {previewPhase === "ready" && previewUrl ? (
           <div
             className={cn(
-              "flex min-h-0 w-full flex-1 flex-col p-2",
+              "flex min-h-0 w-full flex-1 flex-col overflow-hidden p-2",
               previewViewport === "mobile" ? "items-center" : "",
             )}
           >
-            <div className="relative w-full flex-1" data-testid="hww-preview-frame-wrap">
+            <div className="relative min-h-0 w-full flex-1 overflow-hidden" data-testid="hww-preview-frame-wrap">
               <iframe
                 title="App preview"
                 src={previewUrl}
                 className={cn(
-                  "min-h-[280px] w-full flex-1 rounded-md border border-white/[0.12] bg-black/20",
+                  "block h-full min-h-0 w-full rounded-md border border-white/[0.12] bg-black/20",
                   previewViewport === "mobile" ? "max-w-[390px]" : "",
                 )}
                 data-testid="hww-preview-iframe"
