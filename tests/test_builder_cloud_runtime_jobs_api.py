@@ -384,15 +384,15 @@ def test_list_and_get_jobs_are_scoped_and_sorted(tmp_path: Path, monkeypatch) ->
     assert listed.status_code == 200
     rows = listed.json()["jobs"]
     assert rows[0]["id"] == second.id
-    assert rows[0]["sandbox_diagnostics"] == {}
+    assert rows[0]["runtime_diagnostics"] == {}
     detail = client.get(f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime/jobs/{first.id}")
     assert detail.status_code == 200
     assert detail.json()["job"]["id"] == first.id
-    assert detail.json()["job"]["sandbox_diagnostics"] == {}
+    assert detail.json()["job"]["runtime_diagnostics"] == {}
     _cleanup()
 
 
-def test_jobs_endpoints_expose_only_safe_sandbox_diagnostics(tmp_path: Path, monkeypatch) -> None:
+def test_jobs_endpoints_expose_only_safe_runtime_diagnostics(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "disabled")
     client, ws_id, project_id = _seed_context(tmp_path)
     job_store = BuilderRuntimeJobStore(store_path=tmp_path / "builder_runtime_jobs.json")
@@ -402,15 +402,15 @@ def test_jobs_endpoints_expose_only_safe_sandbox_diagnostics(tmp_path: Path, mon
         status="failed",
         phase="failed",
         metadata={
-            "sandbox_diagnostics": {
+            "runtime_diagnostics": {
                 "lifecycle_stage": "create_sandbox",
                 "exception_class": "RemoteProtocolError",
-                "normalized_error_code": "SANDBOX_CREATE_TRANSPORT_ERROR",
-                "normalized_error_message": "Sandbox provider create_sandbox transport/protocol failure.",
+                "normalized_error_code": "GCP_GKE_RUNTIME_PROVIDER_ERROR",
+                "normalized_error_message": "GCP GKE runtime provider operation failed safely.",
                 "retry_count": 1,
                 "retryable": True,
                 "api_key": "do-not-leak",
-                "upstream_url": "https://3000-abc.e2b.app/",
+                "upstream_url": "https://3000-abc.evil-runtime.example/",
             }
         },
     )
@@ -421,20 +421,20 @@ def test_jobs_endpoints_expose_only_safe_sandbox_diagnostics(tmp_path: Path, mon
     assert listed.status_code == 200, listed.text
     row = listed.json()["jobs"][0]
     assert row["id"] == saved.id
-    assert row["sandbox_diagnostics"] == {
+    assert row["runtime_diagnostics"] == {
         "lifecycle_stage": "create_sandbox",
         "exception_class": "RemoteProtocolError",
-        "normalized_error_code": "SANDBOX_CREATE_TRANSPORT_ERROR",
-        "normalized_error_message": "Sandbox provider create_sandbox transport/protocol failure.",
+        "normalized_error_code": "GCP_GKE_RUNTIME_PROVIDER_ERROR",
+        "normalized_error_message": "GCP GKE runtime provider operation failed safely.",
         "retry_count": 1,
         "retryable": True,
     }
-    assert "api_key" not in str(row["sandbox_diagnostics"]).lower()
-    assert "e2b.app" not in str(row["sandbox_diagnostics"]).lower()
+    assert "api_key" not in str(row["runtime_diagnostics"]).lower()
+    assert "evil-runtime.example" not in str(row["runtime_diagnostics"]).lower()
 
     detail = client.get(f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime/jobs/{saved.id}")
     assert detail.status_code == 200, detail.text
-    assert detail.json()["job"]["sandbox_diagnostics"] == row["sandbox_diagnostics"]
+    assert detail.json()["job"]["runtime_diagnostics"] == row["runtime_diagnostics"]
     _cleanup()
 
 
@@ -509,12 +509,12 @@ def test_get_job_status_disabled_provider_returns_safe_payload(tmp_path: Path, m
     assert body["lifecycle"]["phase"] == "failed"
     assert "disabled" in body["lifecycle"]["message"].lower()
     assert body["preview_status"]["preview_url"] is None
-    assert body["sandbox_diagnostics"] == {}
+    assert body["runtime_diagnostics"] == {}
     assert "api_key" not in str(body).lower()
     _cleanup()
 
 
-def test_get_job_status_exposes_safe_sandbox_diagnostics(tmp_path: Path, monkeypatch) -> None:
+def test_get_job_status_exposes_safe_runtime_diagnostics(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "disabled")
     client, ws_id, project_id = _seed_context(tmp_path)
     job_store = BuilderRuntimeJobStore(store_path=tmp_path / "builder_runtime_jobs.json")
@@ -525,11 +525,11 @@ def test_get_job_status_exposes_safe_sandbox_diagnostics(tmp_path: Path, monkeyp
             status="failed",
             phase="failed",
             metadata={
-                "sandbox_diagnostics": {
+                "runtime_diagnostics": {
                     "lifecycle_stage": "create_sandbox",
                     "exception_class": "RemoteProtocolError",
-                    "normalized_error_code": "SANDBOX_CREATE_TRANSPORT_ERROR",
-                    "normalized_error_message": "Sandbox provider create_sandbox transport/protocol failure.",
+                    "normalized_error_code": "GCP_GKE_RUNTIME_PROVIDER_ERROR",
+                    "normalized_error_message": "GCP GKE runtime provider operation failed safely.",
                     "retry_count": "1",
                     "retryable": "true",
                     "token": "drop-me",
@@ -543,15 +543,15 @@ def test_get_job_status_exposes_safe_sandbox_diagnostics(tmp_path: Path, monkeyp
     )
     assert res.status_code == 200, res.text
     body = res.json()
-    assert body["sandbox_diagnostics"] == {
+    assert body["runtime_diagnostics"] == {
         "lifecycle_stage": "create_sandbox",
         "exception_class": "RemoteProtocolError",
-        "normalized_error_code": "SANDBOX_CREATE_TRANSPORT_ERROR",
-        "normalized_error_message": "Sandbox provider create_sandbox transport/protocol failure.",
+        "normalized_error_code": "GCP_GKE_RUNTIME_PROVIDER_ERROR",
+        "normalized_error_message": "GCP GKE runtime provider operation failed safely.",
         "retry_count": 1,
         "retryable": True,
     }
-    assert "token" not in str(body["sandbox_diagnostics"]).lower()
+    assert "token" not in str(body["runtime_diagnostics"]).lower()
     _cleanup()
 
 

@@ -345,7 +345,7 @@ def safe_proxy_upstream_from_provider(raw_url: str | None) -> str | None:
     if parts.username or parts.password:
         return None
     host = (parts.hostname or "").strip().lower()
-    if not (host.endswith(".run.app") or host.endswith(".e2b.app")):
+    if not host.endswith(".run.app"):
         return None
     if parts.query or parts.fragment:
         return None

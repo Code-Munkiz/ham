@@ -67,7 +67,7 @@ _ZIP_ERROR_MESSAGES = {
     "ZIP_INVALID": "ZIP archive is invalid or unsafe.",
     "ZIP_EMPTY": "ZIP archive is empty.",
 }
-_PREVIEW_PROXY_ALLOWED_HOST_SUFFIXES = (".run.app", ".e2b.app")
+_PREVIEW_PROXY_ALLOWED_HOST_SUFFIXES = (".run.app",)
 _PREVIEW_PROXY_TIMEOUT_SECONDS = 8.0
 _PREVIEW_PROXY_MAX_BYTES = 2 * 1024 * 1024
 _ACTIVITY_STREAM_MAX_ITEMS = 24
@@ -905,15 +905,21 @@ def _cloud_runtime_worker_entry() -> BuilderWorkerCapabilityEntry:
             setup = "Set HAM_BUILDER_CLOUD_RUNTIME_GCP_PROJECT and HAM_BUILDER_CLOUD_RUNTIME_GCP_REGION for plan-only POC."
         else:
             setup = "cloud_run_poc is plan-only in this PR. No cloud resources are provisioned by default."
-    elif provider_mode == "sandbox_provider":
+    elif provider_mode == "gcp_gke_sandbox":
         if provider_status == "disabled":
-            setup = "Set HAM_BUILDER_SANDBOX_ENABLED=true and HAM_BUILDER_SANDBOX_PROVIDER=e2b|daytona."
-        elif provider_status == "needs_connection":
-            setup = "Set HAM_BUILDER_SANDBOX_API_KEY when non-dry-run sandbox provider mode is enabled."
+            setup = (
+                "Set HAM_BUILDER_GCP_RUNTIME_ENABLED=true plus scaffold vars "
+                "(project, region, cluster, namespace prefix, bucket, runner image)."
+            )
         elif provider_status == "unavailable":
-            setup = "Choose a supported sandbox provider (e2b or daytona)."
+            setup = (
+                "Complete HAM_BUILDER_GCP_PROJECT_ID / REGION / GKE_CLUSTER / "
+                "GKE_NAMESPACE_PREFIX / PREVIEW_SOURCE_BUCKET / PREVIEW_RUNNER_IMAGE."
+            )
         else:
-            setup = "Sandbox provider is available. For live E2B, set HAM_BUILDER_SANDBOX_PROVIDER=e2b and disable dry-run."
+            setup = (
+                "gcp_gke_sandbox is scaffolding only: dry-run or explicit fake mode until live GKE preview lands."
+            )
     return BuilderWorkerCapabilityEntry(
         worker_kind="cloud_runtime_worker",
         provider="builder_cloud_runtime",
@@ -1072,7 +1078,7 @@ def _sanitize_metadata(raw: dict[str, Any]) -> dict[str, Any]:
     return safe
 
 
-_SAFE_SANDBOX_DIAGNOSTIC_FIELDS = {
+_SAFE_RUNTIME_DIAGNOSTIC_FIELDS = {
     "lifecycle_stage",
     "exception_class",
     "normalized_error_code",
@@ -1082,12 +1088,14 @@ _SAFE_SANDBOX_DIAGNOSTIC_FIELDS = {
 }
 
 
-def _safe_sandbox_diagnostics(metadata: dict[str, Any] | None) -> dict[str, Any]:
-    payload = (metadata or {}).get("sandbox_diagnostics")
+def _safe_runtime_diagnostics(metadata: dict[str, Any] | None) -> dict[str, Any]:
+    payload = (metadata or {}).get("runtime_diagnostics")
+    if not isinstance(payload, dict):
+        payload = (metadata or {}).get("sandbox_diagnostics")
     if not isinstance(payload, dict):
         return {}
     out: dict[str, Any] = {}
-    for key in _SAFE_SANDBOX_DIAGNOSTIC_FIELDS:
+    for key in _SAFE_RUNTIME_DIAGNOSTIC_FIELDS:
         value = payload.get(key)
         if key == "retry_count":
             if isinstance(value, bool):
@@ -1113,9 +1121,14 @@ def _safe_sandbox_diagnostics(metadata: dict[str, Any] | None) -> dict[str, Any]
     return out
 
 
+def _safe_sandbox_diagnostics(metadata: dict[str, Any] | None) -> dict[str, Any]:
+    """Deprecated alias — use `_safe_runtime_diagnostics`."""
+    return _safe_runtime_diagnostics(metadata)
+
+
 def _serialize_cloud_runtime_job(record: Any) -> dict[str, Any]:
     row = record.model_dump(mode="json")
-    row["sandbox_diagnostics"] = _safe_sandbox_diagnostics(row.get("metadata"))
+    row["runtime_diagnostics"] = _safe_runtime_diagnostics(row.get("metadata"))
     return row
 
 
@@ -2350,7 +2363,7 @@ async def get_builder_cloud_runtime_job_status(
         "job": _serialize_cloud_runtime_job(job),
         "runtime_session": runtime.model_dump(mode="json") if runtime is not None else None,
         "preview_status": preview_status,
-        "sandbox_diagnostics": _safe_sandbox_diagnostics(job.metadata),
+        "runtime_diagnostics": _safe_runtime_diagnostics(job.metadata),
         "lifecycle": {
             "phase": lifecycle.phase,
             "message": lifecycle.message,
