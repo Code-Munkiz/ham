@@ -51,9 +51,12 @@ from src.memory_heist_cache import discovery_cache
 IGNORE_DIRS = frozenset({
     ".git", ".hg", ".svn", "node_modules", "__pycache__", ".venv", "venv",
     ".tox", ".mypy_cache", ".pytest_cache", "dist", "build", ".next",
-    ".nuxt", "target", "out", ".idea", ".vs", ".vscode",
+    ".nuxt", ".vs", ".vscode",
     ".sessions", ".hermes",
 })
+# **FOR MAINTAINERS**: IGNORE_DIRS excludes common VCS, build artifacts, and environment dirs
+# from workspace scans. Adding a new dir here requires verifying it doesn't contain source
+# files that agents need to see. If unsure, add the dir to .gitignore first.
 
 INTERESTING_EXTENSIONS = frozenset({
     ".py", ".rs", ".ts", ".tsx", ".js", ".jsx", ".json", ".yaml", ".yml",
