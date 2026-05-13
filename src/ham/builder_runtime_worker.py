@@ -20,17 +20,17 @@ from src.ham.builder_cloud_runtime_gcp import (
 from src.ham.builder_sandbox_provider import (
     SandboxSourceFile,
     SandboxRuntimeState,
-    build_sandbox_runtime_provider,
-    classify_sandbox_provider_error,
-    load_sandbox_runtime_config,
-    sandbox_preview_host,
-    sandbox_provider_is_supported,
+    build_gcp_gke_runtime_provider,
+    classify_builder_runtime_error,
+    gcp_gke_runtime_config_complete,
+    load_gcp_gke_runtime_config,
+    runtime_preview_host,
 )
 from src.persistence.builder_runtime_job_store import CloudRuntimeJob
 from src.persistence.builder_source_store import get_builder_source_store
 from src.persistence.builder_runtime_store import PreviewEndpoint, RuntimeSession, get_builder_runtime_store
 
-CloudRuntimeProviderMode = Literal["disabled", "local_mock", "cloud_run_poc", "sandbox_provider"]
+CloudRuntimeProviderMode = Literal["disabled", "local_mock", "cloud_run_poc", "gcp_gke_sandbox"]
 
 
 def _utc_now_iso() -> str:
@@ -39,7 +39,7 @@ def _utc_now_iso() -> str:
 
 def get_cloud_runtime_provider_mode() -> CloudRuntimeProviderMode:
     raw = str(os.environ.get("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER") or "").strip().lower()
-    if raw in {"local_mock", "cloud_run_poc", "sandbox_provider"}:
+    if raw in {"local_mock", "cloud_run_poc", "gcp_gke_sandbox"}:
         return raw
     return "disabled"
 
@@ -67,8 +67,8 @@ def get_cloud_runtime_experiment_status() -> tuple[str, str]:
             "provider_ready",
             "Cloud runtime local mock is ready for experimentation.",
         )
-    if mode == "sandbox_provider":
-        cfg = load_sandbox_runtime_config()
+    if mode == "gcp_gke_sandbox":
+        cfg = load_gcp_gke_runtime_config()
         if not experiments_enabled:
             return (
                 "experiment_not_enabled",
@@ -77,26 +77,26 @@ def get_cloud_runtime_experiment_status() -> tuple[str, str]:
         if not cfg.enabled:
             return (
                 "config_missing",
-                "Cloud sandbox provider is not enabled in this environment.",
+                "GCP GKE runtime is not enabled in this environment.",
             )
-        if not sandbox_provider_is_supported(cfg.provider):
+        if not gcp_gke_runtime_config_complete(cfg):
             return (
                 "config_missing",
-                "Cloud sandbox provider must be configured to e2b or daytona.",
+                "GCP GKE runtime scaffold configuration is incomplete.",
             )
-        if not cfg.dry_run and not cfg.api_key_present:
+        if not cfg.dry_run and not cfg.fake_mode_explicit:
             return (
                 "config_missing",
-                "Cloud sandbox provider is missing required API key configuration.",
+                "Live GCP GKE sandbox runtime is not implemented yet; use dry-run or explicit fake mode for tests.",
             )
         if cfg.dry_run:
             return (
                 "dry_run_ready",
-                "Cloud sandbox provider dry-run mode is configured and ready.",
+                "GCP GKE runtime dry-run scaffold is configured and ready.",
             )
         return (
             "provider_ready",
-            "Cloud sandbox provider is configured for live runtime experimentation.",
+            "GCP GKE runtime fake mode is configured for controlled tests.",
         )
     cfg = load_gcp_runtime_config()
     if not experiments_enabled:
@@ -136,14 +136,14 @@ def get_cloud_runtime_provider_capability_status() -> str:
         if not cfg.gcp_project_present or not cfg.gcp_region_present:
             return "unavailable"
         return "available_poc"
-    if mode == "sandbox_provider":
-        cfg = load_sandbox_runtime_config()
+    if mode == "gcp_gke_sandbox":
+        cfg = load_gcp_gke_runtime_config()
         if not cfg.enabled:
             return "disabled"
-        if not sandbox_provider_is_supported(cfg.provider):
+        if not gcp_gke_runtime_config_complete(cfg):
             return "unavailable"
-        if not cfg.dry_run and not cfg.api_key_present:
-            return "needs_connection"
+        if not cfg.dry_run and not cfg.fake_mode_explicit:
+            return "unavailable"
         return "available_poc"
     return "disabled"
 
@@ -164,7 +164,7 @@ class CloudRuntimeLifecycleStatus:
     logs_summary: str | None
 
 
-def _sandbox_diag_payload(
+def _runtime_diag_payload(
     *,
     job: CloudRuntimeJob,
     lifecycle_stage: str,
@@ -186,7 +186,7 @@ def _sandbox_diag_payload(
     }
 
 
-def _set_sandbox_diag(
+def _set_runtime_diag(
     *,
     job: CloudRuntimeJob,
     runtime: RuntimeSession,
@@ -197,7 +197,7 @@ def _set_sandbox_diag(
     retry_count: int,
     retryable: bool,
 ) -> None:
-    diagnostics = _sandbox_diag_payload(
+    diagnostics = _runtime_diag_payload(
         job=job,
         lifecycle_stage=lifecycle_stage,
         error_code=error_code,
@@ -206,8 +206,8 @@ def _set_sandbox_diag(
         retry_count=retry_count,
         retryable=retryable,
     )
-    job.metadata = {**(job.metadata or {}), "sandbox_diagnostics": diagnostics}
-    runtime.metadata = {**(runtime.metadata or {}), "sandbox_diagnostics": diagnostics}
+    job.metadata = {**(job.metadata or {}), "runtime_diagnostics": diagnostics}
+    runtime.metadata = {**(runtime.metadata or {}), "runtime_diagnostics": diagnostics}
 
 
 def _resolve_source_handoff(job: CloudRuntimeJob) -> dict[str, Any]:
@@ -376,19 +376,19 @@ def get_runtime_job_lifecycle_status(
         if runtime_session is not None and runtime_session.preview_endpoint_id and phase == "running":
             phase = "preview_pending"
             message = "Cloud runtime preview endpoint exists but is not ready yet."
-    elif job.provider == "sandbox_provider":
+    elif job.provider == "gcp_gke_sandbox":
         if job.status in {"failed", "unsupported"}:
             phase = "failed"
-            message = "Cloud sandbox runtime failed."
+            message = "GCP GKE sandbox runtime failed."
         elif runtime_session is not None and runtime_session.preview_endpoint_id:
             phase = "ready"
-            message = "Cloud sandbox preview proxy is ready."
+            message = "GCP GKE sandbox preview proxy is ready."
         elif job.status == "succeeded":
             phase = "preview_pending"
-            message = "Cloud sandbox runtime completed dry-run planning. Preview was not started."
+            message = "GCP GKE sandbox runtime completed dry-run planning. Preview was not started."
         else:
             phase = "running"
-            message = "Cloud sandbox runtime is provisioning."
+            message = "GCP GKE sandbox runtime is provisioning."
     if runtime_session is not None and runtime_session.status in {"expired", "failed", "unsupported"}:
         phase = "failed" if runtime_session.status != "expired" else "expired"
     return CloudRuntimeLifecycleStatus(
@@ -589,32 +589,36 @@ def execute_cloud_runtime_job(job: CloudRuntimeJob) -> CloudRuntimeExecutionResu
         job.updated_at = job.completed_at
         return CloudRuntimeExecutionResult(job=job, runtime_session=runtime, usage_event=None)
 
-    if mode == "sandbox_provider":
+    if mode == "gcp_gke_sandbox":
         if experiment_status == "experiment_not_enabled":
             job.status = "unsupported"
             job.phase = "failed"
             job.error_code = "CLOUD_RUNTIME_EXPERIMENT_NOT_ENABLED"
             job.error_message = "Cloud runtime experiments are not enabled."
-            job.logs_summary = "No execution performed. Enable experiment mode before sandbox runtime requests."
+            job.logs_summary = (
+                "No execution performed. Enable experiment mode before GCP GKE sandbox runtime requests."
+            )
             job.completed_at = _utc_now_iso()
             job.updated_at = job.completed_at
             return CloudRuntimeExecutionResult(job=job, runtime_session=None, usage_event=None)
-        cfg = load_sandbox_runtime_config()
-        if not cfg.enabled or not sandbox_provider_is_supported(cfg.provider):
+        cfg = load_gcp_gke_runtime_config()
+        if not cfg.enabled or not gcp_gke_runtime_config_complete(cfg):
             job.status = "unsupported"
             job.phase = "failed"
-            job.error_code = "SANDBOX_PROVIDER_CONFIG_MISSING"
-            job.error_message = "Cloud sandbox provider is not configured."
-            job.logs_summary = "No execution performed. Configure sandbox provider settings."
+            job.error_code = "GCP_GKE_RUNTIME_CONFIG_MISSING"
+            job.error_message = "GCP GKE runtime scaffold is not configured."
+            job.logs_summary = "No execution performed. Configure GCP GKE runtime scaffold env vars."
             job.completed_at = _utc_now_iso()
             job.updated_at = job.completed_at
             return CloudRuntimeExecutionResult(job=job, runtime_session=None, usage_event=None)
-        if not cfg.dry_run and not cfg.api_key_present:
+        if not cfg.dry_run and not cfg.fake_mode_explicit:
             job.status = "unsupported"
             job.phase = "failed"
-            job.error_code = "SANDBOX_PROVIDER_API_KEY_MISSING"
-            job.error_message = "Cloud sandbox provider API key is missing."
-            job.logs_summary = "No execution performed. Add API key configuration before non-dry-run requests."
+            job.error_code = "GCP_GKE_RUNTIME_LIVE_NOT_IMPLEMENTED"
+            job.error_message = "Live GCP GKE sandbox runtime is not implemented yet."
+            job.logs_summary = (
+                "No execution performed. Enable dry-run or explicit fake mode until live GKE lands."
+            )
             job.completed_at = _utc_now_iso()
             job.updated_at = job.completed_at
             return CloudRuntimeExecutionResult(job=job, runtime_session=None, usage_event=None)
@@ -626,16 +630,18 @@ def execute_cloud_runtime_job(job: CloudRuntimeJob) -> CloudRuntimeExecutionResu
             **(job.metadata or {}),
             "source_handoff": redact_provider_metadata(source_handoff),
             "source_handoff_status": str(source_handoff.get("handoff_status") or "planned"),
-            "provider_mode": "sandbox_provider",
-            "sandbox_provider": cfg.provider,
+            "provider_mode": "gcp_gke_sandbox",
+            "workload_runtime": cfg.provider,
             "dry_run": cfg.dry_run,
         }
         if source_handoff.get("handoff_status") == "failed":
             job.status = "unsupported"
             job.phase = "failed"
-            job.error_code = str(source_handoff.get("error_code") or "SANDBOX_SOURCE_HANDOFF_FAILED")
-            job.error_message = str(source_handoff.get("error_message") or "Sandbox source handoff failed safely.")
-            job.logs_summary = "Sandbox runtime source handoff failed before provider simulation."
+            job.error_code = str(source_handoff.get("error_code") or "GCP_GKE_SOURCE_HANDOFF_FAILED")
+            job.error_message = str(
+                source_handoff.get("error_message") or "GCP GKE runtime source handoff failed safely."
+            )
+            job.logs_summary = "GCP GKE runtime source handoff failed before workload simulation."
             job.completed_at = _utc_now_iso()
             job.updated_at = job.completed_at
             return CloudRuntimeExecutionResult(job=job, runtime_session=None, usage_event=None)
@@ -646,8 +652,8 @@ def execute_cloud_runtime_job(job: CloudRuntimeJob) -> CloudRuntimeExecutionResu
             requested_by=job.requested_by,
             metadata=redact_provider_metadata(
                 {
-                    "provider_mode": "sandbox_provider",
-                    "sandbox_provider": cfg.provider,
+                    "provider_mode": "gcp_gke_sandbox",
+                    "workload_runtime": cfg.provider,
                     "cloud_runtime_job_id": job.id,
                     "dry_run": cfg.dry_run,
                 }
@@ -673,9 +679,7 @@ def execute_cloud_runtime_job(job: CloudRuntimeJob) -> CloudRuntimeExecutionResu
         if cfg.dry_run:
             runtime.status = "provisioning"
             runtime.health = "unknown"
-            runtime.message = (
-                "Cloud sandbox dry-run completed. No live sandbox preview was started."
-            )
+            runtime.message = "GCP GKE runtime dry-run completed. No workload preview was started."
             runtime.updated_at = _utc_now_iso()
             runtime = runtime_store.upsert_runtime_session(runtime)
             job.runtime_session_id = runtime.id
@@ -684,7 +688,7 @@ def execute_cloud_runtime_job(job: CloudRuntimeJob) -> CloudRuntimeExecutionResu
             job.error_code = None
             job.error_message = None
             job.logs_summary = (
-                "sandbox_provider dry-run plan created. No live sandbox execution was performed."
+                "gcp_gke_sandbox dry-run plan created. No live Kubernetes workload was executed."
             )
             job.completed_at = _utc_now_iso()
             job.updated_at = job.completed_at
@@ -694,14 +698,14 @@ def execute_cloud_runtime_job(job: CloudRuntimeJob) -> CloudRuntimeExecutionResu
                 "unit": "count",
                 "attribution": {
                     "provider": "builder_cloud_runtime",
-                    "worker_provider": "sandbox_provider",
+                    "worker_provider": "gcp_gke_sandbox",
                     "source_snapshot_id": job.source_snapshot_id,
                     "runtime_session_id": runtime.id,
                 },
                 "metadata": {
-                    "event_name": "sandbox_runtime_plan_created",
+                    "event_name": "gcp_gke_runtime_plan_created",
                     "job_id": job.id,
-                    "sandbox_provider": cfg.provider,
+                    "workload_runtime": cfg.provider,
                     "dry_run": True,
                 },
             }
@@ -714,45 +718,39 @@ def execute_cloud_runtime_job(job: CloudRuntimeJob) -> CloudRuntimeExecutionResu
         if source_files_error:
             runtime.status = "failed"
             runtime.health = "unhealthy"
-            runtime.message = "Cloud sandbox source payload is unavailable."
+            runtime.message = "GCP GKE runtime source payload is unavailable."
             runtime.updated_at = _utc_now_iso()
             runtime = runtime_store.upsert_runtime_session(runtime)
             job.runtime_session_id = runtime.id
             job.status = "failed"
             job.phase = "failed"
             job.error_code = source_files_error
-            job.error_message = "Cloud sandbox source payload is unavailable."
-            job.logs_summary = "Sandbox source materialization failed before provider call."
+            job.error_message = "GCP GKE runtime source payload is unavailable."
+            job.logs_summary = "GCP GKE runtime source materialization failed before workload simulation."
             job.completed_at = _utc_now_iso()
             job.updated_at = job.completed_at
             return CloudRuntimeExecutionResult(job=job, runtime_session=runtime, usage_event=None)
-        provider = build_sandbox_runtime_provider(config=cfg)
+        provider = build_gcp_gke_runtime_provider(config=cfg)
         lifecycle_stage = "create_sandbox"
         exception_class: str | None = None
         retry_count = 0
         retryable = False
-        while True:
-            try:
-                lifecycle_stage = "create_sandbox"
-                state = provider.create_sandbox(state=state, config=cfg)
-                break
-            except Exception as exc:  # pragma: no cover - defensive adapter guard
-                classified = classify_sandbox_provider_error(error=exc, lifecycle_stage=lifecycle_stage)
-                exception_class = classified.exception_class
-                retryable = bool(classified.retryable)
-                if retryable and retry_count < 1:
-                    retry_count += 1
-                    continue
-                state = SandboxRuntimeState(
-                    **{
-                        **state.__dict__,
-                        "status": "failed",
-                        "updated_at": _utc_now_iso(),
-                        "error_code": classified.error_code,
-                        "error_message": classified.error_message,
-                    }
-                )
-                break
+        try:
+            lifecycle_stage = "create_sandbox"
+            state = provider.create_sandbox(state=state, config=cfg)
+        except Exception as exc:  # pragma: no cover - defensive adapter guard
+            classified = classify_builder_runtime_error(error=exc, lifecycle_stage=lifecycle_stage)
+            exception_class = classified.exception_class
+            retryable = bool(classified.retryable)
+            state = SandboxRuntimeState(
+                **{
+                    **state.__dict__,
+                    "status": "failed",
+                    "updated_at": _utc_now_iso(),
+                    "error_code": classified.error_code,
+                    "error_message": classified.error_message,
+                }
+            )
         if state.status != "failed":
             lifecycle_stage = "upload_source"
             state = provider.upload_source(
@@ -777,19 +775,19 @@ def execute_cloud_runtime_job(job: CloudRuntimeJob) -> CloudRuntimeExecutionResu
         if state.status != "ready":
             runtime.status = "failed"
             runtime.health = "unhealthy"
-            runtime.message = state.error_message or "Cloud sandbox provider request failed safely."
+            runtime.message = state.error_message or "GCP GKE runtime workload simulation failed safely."
             runtime.updated_at = _utc_now_iso()
             runtime.metadata = {
                 **(runtime.metadata or {}),
-                "sandbox_provider": cfg.provider,
-                "sandbox_id": state.sandbox_id,
+                "workload_runtime": cfg.provider,
+                "workload_id": state.sandbox_id,
             }
-            _set_sandbox_diag(
+            _set_runtime_diag(
                 job=job,
                 runtime=runtime,
                 lifecycle_stage=lifecycle_stage,
-                error_code=state.error_code or "SANDBOX_PROVIDER_ERROR",
-                error_message=state.error_message or "Cloud sandbox provider request failed safely.",
+                error_code=state.error_code or "GCP_GKE_RUNTIME_PROVIDER_ERROR",
+                error_message=state.error_message or "GCP GKE runtime workload simulation failed safely.",
                 exception_class=exception_class,
                 retry_count=retry_count,
                 retryable=retryable,
@@ -798,9 +796,9 @@ def execute_cloud_runtime_job(job: CloudRuntimeJob) -> CloudRuntimeExecutionResu
             job.runtime_session_id = runtime.id
             job.status = "failed"
             job.phase = "failed"
-            job.error_code = state.error_code or "SANDBOX_PROVIDER_ERROR"
-            job.error_message = state.error_message or "Cloud sandbox provider request failed safely."
-            job.logs_summary = provider.get_logs_summary(state=state) or "Sandbox provider simulation failed."
+            job.error_code = state.error_code or "GCP_GKE_RUNTIME_PROVIDER_ERROR"
+            job.error_message = state.error_message or "GCP GKE runtime workload simulation failed safely."
+            job.logs_summary = provider.get_logs_summary(state=state) or "GCP GKE runtime simulation failed."
             job.completed_at = _utc_now_iso()
             job.updated_at = job.completed_at
             return CloudRuntimeExecutionResult(job=job, runtime_session=runtime, usage_event=None)
@@ -821,14 +819,14 @@ def execute_cloud_runtime_job(job: CloudRuntimeJob) -> CloudRuntimeExecutionResu
             lifecycle_stage = "persist"
             runtime.status = "failed"
             runtime.health = "unhealthy"
-            runtime.message = "Sandbox provider returned an unsafe preview upstream URL."
+            runtime.message = "GCP GKE runtime returned an unsafe preview upstream URL."
             runtime.updated_at = _utc_now_iso()
-            _set_sandbox_diag(
+            _set_runtime_diag(
                 job=job,
                 runtime=runtime,
                 lifecycle_stage=lifecycle_stage,
-                error_code="SANDBOX_PREVIEW_URL_UNSAFE",
-                error_message="Sandbox provider returned an unsafe preview upstream URL.",
+                error_code="GCP_GKE_PREVIEW_URL_UNSAFE",
+                error_message="GCP GKE runtime returned an unsafe preview upstream URL.",
                 exception_class=exception_class,
                 retry_count=retry_count,
                 retryable=False,
@@ -837,8 +835,8 @@ def execute_cloud_runtime_job(job: CloudRuntimeJob) -> CloudRuntimeExecutionResu
             job.runtime_session_id = runtime.id
             job.status = "failed"
             job.phase = "failed"
-            job.error_code = "SANDBOX_PREVIEW_URL_UNSAFE"
-            job.error_message = "Sandbox provider returned an unsafe preview upstream URL."
+            job.error_code = "GCP_GKE_PREVIEW_URL_UNSAFE"
+            job.error_message = "GCP GKE runtime returned an unsafe preview upstream URL."
             job.logs_summary = provider.get_logs_summary(state=state)
             job.completed_at = _utc_now_iso()
             job.updated_at = job.completed_at
@@ -849,23 +847,23 @@ def execute_cloud_runtime_job(job: CloudRuntimeJob) -> CloudRuntimeExecutionResu
         preview_endpoint.last_checked_at = _utc_now_iso()
         preview_endpoint.metadata = {
             **(preview_endpoint.metadata or {}),
-            "provider": "sandbox_provider",
-            "sandbox_provider": cfg.provider,
-            "sandbox_id": state.sandbox_id,
-            "trusted_proxy_host": sandbox_preview_host(safe_upstream),
+            "provider": "gcp_gke_sandbox",
+            "workload_runtime": cfg.provider,
+            "workload_id": state.sandbox_id,
+            "trusted_proxy_host": runtime_preview_host(safe_upstream),
         }
         preview_endpoint = runtime_store.upsert_preview_endpoint(preview_endpoint)
         runtime.preview_endpoint_id = preview_endpoint.id
         runtime.status = "running"
         runtime.health = "healthy"
-        runtime.message = "Cloud sandbox preview is ready via authenticated cloud proxy."
+        runtime.message = "GCP GKE sandbox preview is ready via authenticated HAM proxy."
         runtime.updated_at = _utc_now_iso()
         runtime.metadata = {
             **(runtime.metadata or {}),
-            "sandbox_provider": cfg.provider,
-            "sandbox_id": state.sandbox_id,
+            "workload_runtime": cfg.provider,
+            "workload_id": state.sandbox_id,
         }
-        _set_sandbox_diag(
+        _set_runtime_diag(
             job=job,
             runtime=runtime,
             lifecycle_stage="persist",
@@ -890,14 +888,14 @@ def execute_cloud_runtime_job(job: CloudRuntimeJob) -> CloudRuntimeExecutionResu
             "unit": "count",
             "attribution": {
                 "provider": "builder_cloud_runtime",
-                "worker_provider": "sandbox_provider",
+                "worker_provider": "gcp_gke_sandbox",
                 "source_snapshot_id": job.source_snapshot_id,
                 "runtime_session_id": runtime.id,
             },
             "metadata": {
-                "event_name": "sandbox_runtime_preview_ready",
+                "event_name": "gcp_gke_runtime_preview_ready",
                 "job_id": job.id,
-                "sandbox_provider": cfg.provider,
+                "workload_runtime": cfg.provider,
                 "dry_run": False,
             },
         }

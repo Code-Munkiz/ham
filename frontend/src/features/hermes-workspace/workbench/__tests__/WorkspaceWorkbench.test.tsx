@@ -1083,7 +1083,7 @@ describe("WorkspaceWorkbench", () => {
       mode: "cloud",
       status: "ready",
       health: "healthy",
-      preview_url: "https://provider.e2b.app/",
+      preview_url: "https://provider.example.com/",
       message: "Preview is ready via authenticated cloud proxy.",
       updated_at: "2026-01-01T00:00:00Z",
       source_snapshot_id: "ssnp_1",
