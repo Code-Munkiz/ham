@@ -184,6 +184,13 @@ MAX_SUMMARY_CHARS = 4_000
 # proportional adjustments to others to maintain balanced token allocation.
 # For example, increasing MAX_TOTAL_INSTRUCTION_CHARS should be accompanied by
 # reviewing MAX_DIFF_CHARS to avoid exhausting the context window with git state.
+#
+# KEY RELATIONSHIPS (for budget calculations):
+# - Total context payload = MAX_TOTAL_INSTRUCTION_CHARS + MAX_DIFF_CHARS + MAX_SUMMARY_CHARS
+# - Total = 12K + 8K + 4K = 24K chars (~6K tokens at 4 chars/token average)
+# - This leaves ~122K tokens headroom for agent responses in a 128K context window
+# - When adjusting MAX_SUMMARY_CHARS (git commit summary), remember it's designed for
+#   concise changelog-like output (~10-15 commits), not full diff details (handled by MAX_DIFF_CHARS)
 
 # Session compaction defaults: maximum tokens for compacted session history,
 # minimum session messages to preserve in history, and tool output pruning
