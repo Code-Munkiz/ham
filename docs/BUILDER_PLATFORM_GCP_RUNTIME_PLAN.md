@@ -59,3 +59,5 @@ Automation in this repo does **not** perform cloud env cleanup unless explicitly
 ## Next implementation slice
 
 **GCP-native preview worker** design and spike: durable job handoff from `CloudRuntimeJob` to a worker that (later) provisions/updates preview pods, records health, and drives `PreviewEndpoint` + proxy-only URLs — still with no raw upstream exposure and with mandatory TTL.
+
+Operator-facing **manual spike scaffolding** (YAML renderer, runner Dockerfile skeleton, packaging/upload helpers — **no live Kubernetes API** from CI/tests): [`GCP_NATIVE_PREVIEW_WORKER_SPIKE.md`](GCP_NATIVE_PREVIEW_WORKER_SPIKE.md).
