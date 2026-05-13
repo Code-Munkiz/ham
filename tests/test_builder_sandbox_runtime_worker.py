@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+import os
 from pathlib import Path
 
 import httpx
@@ -302,6 +303,17 @@ class _FakeSandboxCommands:
 class _FakeSandboxRef:
     def __init__(self) -> None:
         self.commands = _FakeSandboxCommands()
+
+
+class _CapturingSandbox:
+    captured_kwargs: dict[str, object] | None = None
+
+    @classmethod
+    def create(cls, **kwargs):  # type: ignore[no-untyped-def]
+        cls.captured_kwargs = dict(kwargs)
+        obj = cls()
+        obj.sandbox_id = "sandbox_capture"
+        return obj
 
 
 def _sandbox_state() -> SandboxRuntimeState:
@@ -640,6 +652,34 @@ def test_sandbox_provider_health_failure_has_non_create_stage_metadata(tmp_path:
 def test_e2b_dependency_declared_in_requirements() -> None:
     req = Path("requirements.txt").read_text(encoding="utf-8").lower()
     assert "e2b>=2.21.0" in req
+
+
+def test_e2b_create_sandbox_passes_explicit_api_key_without_env_mutation(monkeypatch) -> None:
+    provider = E2BSandboxRuntimeProvider(api_key="test-key", template_id="tmpl_123")
+    monkeypatch.setenv("E2B_API_KEY", "keep-existing")
+    monkeypatch.setattr(provider, "_require_sdk", lambda: _CapturingSandbox)
+    state = _sandbox_state()
+    state.sandbox_id = None
+    cfg = SandboxRuntimeConfig(
+        enabled=True,
+        provider="e2b",
+        dry_run=False,
+        default_port=3000,
+        ttl_seconds=120,
+        install_timeout_seconds=120,
+        start_timeout_seconds=120,
+        fake_mode="failure",
+        fake_mode_explicit=False,
+        api_key_present=True,
+    )
+
+    next_state = provider.create_sandbox(state=state, config=cfg)
+
+    assert next_state.sandbox_id == "sandbox_capture"
+    assert _CapturingSandbox.captured_kwargs is not None
+    assert _CapturingSandbox.captured_kwargs["api_key"] == "test-key"
+    assert _CapturingSandbox.captured_kwargs["template"] == "tmpl_123"
+    assert os.environ.get("E2B_API_KEY") == "keep-existing"
 
 
 def test_sandbox_provider_missing_sdk_fails_closed(tmp_path: Path, monkeypatch) -> None:

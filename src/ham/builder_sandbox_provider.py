@@ -276,22 +276,16 @@ class E2BSandboxRuntimeProvider:
     def create_sandbox(self, *, state: SandboxRuntimeState, config: SandboxRuntimeConfig) -> SandboxRuntimeState:
         Sandbox = self._require_sdk()
         template = self._template_id or str(os.environ.get("HAM_BUILDER_SANDBOX_E2B_TEMPLATE") or "").strip() or None
-        previous = os.environ.get("E2B_API_KEY")
-        os.environ["E2B_API_KEY"] = self._api_key
-        try:
-            kwargs: dict[str, Any] = {
-                "timeout": int(config.ttl_seconds),
-                "secure": False,
-                "allow_internet_access": True,
-            }
-            if template:
-                kwargs["template"] = template
-            sandbox = Sandbox.create(**kwargs)
-        finally:
-            if previous is None:
-                os.environ.pop("E2B_API_KEY", None)
-            else:
-                os.environ["E2B_API_KEY"] = previous
+        kwargs: dict[str, Any] = {
+            "timeout": int(config.ttl_seconds),
+            "secure": False,
+            "allow_internet_access": True,
+            # Prefer explicit SDK parameter over global env mutation.
+            "api_key": self._api_key,
+        }
+        if template:
+            kwargs["template"] = template
+        sandbox = Sandbox.create(**kwargs)
         sandbox_id = str(getattr(sandbox, "sandbox_id", "") or "").strip()
         if not sandbox_id:
             raise RuntimeError("E2B_SANDBOX_ID_MISSING")
