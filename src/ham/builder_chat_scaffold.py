@@ -21,6 +21,7 @@ from src.persistence.builder_source_store import (
 )
 
 _MANIFEST_KIND_INLINE = "inline_text_bundle"
+_CHAT_SCAFFOLD_FINGERPRINT_VERSION = "v2"
 _MAX_TOTAL_TEXT = 200_000
 _MAX_FILE_BYTES = 60_000
 _MAX_FILES = 24
@@ -650,7 +651,7 @@ def _bounded_files(user_plain: str) -> dict[str, str]:
 
 
 def _fingerprint(session_id: str, user_plain: str) -> str:
-    payload = f"{session_id}\n{user_plain.strip()}"
+    payload = f"{_CHAT_SCAFFOLD_FINGERPRINT_VERSION}\n{session_id}\n{user_plain.strip()}"
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:24]
 
 

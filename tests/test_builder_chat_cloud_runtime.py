@@ -255,6 +255,33 @@ def test_chat_scaffold_dedupe_includes_source_snapshot_id(tmp_path: Path, monkey
     _cleanup()
 
 
+def test_chat_scaffold_fingerprint_version_busts_old_dedupe(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
+    set_builder_source_store_for_tests(store)
+    first = maybe_chat_scaffold_for_turn(
+        workspace_id="ws_a",
+        project_id="pr_a",
+        session_id="sess_ver",
+        last_user_plain="build me a game like Tetris",
+        created_by="user_1",
+    )
+    assert first and first.get("scaffolded") is True
+    first_snapshot = str(first.get("source_snapshot_id") or "")
+    monkeypatch.setattr("src.ham.builder_chat_scaffold._CHAT_SCAFFOLD_FINGERPRINT_VERSION", "v3")
+    second = maybe_chat_scaffold_for_turn(
+        workspace_id="ws_a",
+        project_id="pr_a",
+        session_id="sess_ver",
+        last_user_plain="build me a game like Tetris",
+        created_by="user_1",
+    )
+    assert second and second.get("scaffolded") is True
+    second_snapshot = str(second.get("source_snapshot_id") or "")
+    assert second_snapshot and second_snapshot != first_snapshot
+    _cleanup()
+
+
 def test_chat_scaffold_enqueue_retries_after_failed_terminal_job(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "gcp_gke_sandbox")
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_EXPERIMENTS_ENABLED", "true")
