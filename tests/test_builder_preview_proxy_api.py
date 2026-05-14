@@ -304,6 +304,54 @@ def test_preview_proxy_cookie_rejected_when_expired(tmp_path: Path, monkeypatch)
     _cleanup()
 
 
+def test_proxy_accepts_clerk_session_cookie_without_authorization(tmp_path: Path, monkeypatch) -> None:
+    async def _fake_fetch(*, method: str, url: str, headers: dict[str, str]) -> httpx.Response:
+        _ = (method, url, headers)
+        return httpx.Response(200, content=b"<html>ok</html>", headers={"content-type": "text/html"})
+
+    monkeypatch.setattr("src.api.builder_sources._proxy_upstream_fetch", _fake_fetch)
+    monkeypatch.setattr("src.api.builder_sources.verify_clerk_session_jwt", lambda _tok: _actor("user_a", org_id="org_a"))
+    monkeypatch.setattr("src.api.builder_sources.require_ham_clerk_email_allowed", lambda *_args, **_kwargs: None)
+    ws_store = InMemoryWorkspaceStore()
+    ws_id = "ws_aaaaaaaaaaaaaaaa"
+    _seed_workspace(ws_store, workspace_id=ws_id, org_id="org_a", owner_user_id="user_a", slug="alpha")
+    project_store = ProjectStore(store_path=tmp_path / "projects.json")
+    project = project_store.make_record(name="proj-a", root=str(tmp_path), metadata={"workspace_id": ws_id})
+    project_store.register(project)
+    set_project_store_for_tests(project_store)
+    set_builder_source_store_for_tests(BuilderSourceStore(store_path=tmp_path / "builder_sources.json"))
+    runtime_store = BuilderRuntimeStore(store_path=tmp_path / "builder_runtime.json")
+    runtime = runtime_store.upsert_runtime_session(
+        RuntimeSession(
+            workspace_id=ws_id,
+            project_id=project.id,
+            mode="cloud",
+            status="running",
+            health="unknown",
+        )
+    )
+    runtime_store.upsert_preview_endpoint(
+        PreviewEndpoint(
+            workspace_id=ws_id,
+            project_id=project.id,
+            runtime_session_id=runtime.id,
+            access_mode="proxy",
+            status="ready",
+            url="https://ham-preview-123.run.app/base",
+            metadata={"trusted_proxy_host": "ham-preview-123.run.app"},
+        )
+    )
+    set_builder_runtime_store_for_tests(runtime_store)
+    client = TestClient(_build_app(actor=None, ws_store=ws_store))
+    res = client.get(
+        f"/api/workspaces/{ws_id}/projects/{project.id}/builder/preview-proxy/",
+        cookies={"__session": "fake"},
+    )
+    assert res.status_code == 200
+    assert "<html>ok</html>" in res.text
+    _cleanup()
+
+
 @pytest.mark.parametrize(
     "upstream",
     [

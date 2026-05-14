@@ -32,7 +32,8 @@ from src.ham.builder_runtime_worker import (
     get_runtime_job_lifecycle_status,
 )
 from src.ham.builder_zip_intake import ZipSafetyError, read_zip_upload_bytes, validate_zip_upload
-from src.ham.clerk_auth import HamActor
+from src.ham.clerk_auth import HamActor, verify_clerk_session_jwt
+from src.ham.clerk_email_access import require_ham_clerk_email_allowed
 from src.ham.harness_capabilities import HARNESS_CAPABILITIES
 from src.ham.worker_adapters.claude_agent_adapter import check_claude_agent_readiness
 from src.ham.worker_adapters.cursor_adapter import check_cursor_readiness
@@ -355,6 +356,11 @@ def _preview_proxy_session_ttl_seconds() -> int:
     )
 
 
+def _clerk_session_cookie_name() -> str:
+    raw = str(os.environ.get("HAM_CLERK_SESSION_COOKIE_NAME") or "").strip()
+    return raw or "__session"
+
+
 def _preview_proxy_session_secret_bytes() -> bytes:
     # Prefer dedicated secret; fallback to existing service secret so signatures remain
     # valid across Cloud Run instances without broad env rewrites.
@@ -510,6 +516,18 @@ async def require_preview_proxy_ctx(
         return _require_preview_proxy_read_perm(
             _resolve_workspace_context_or_http(actor=actor, workspace_id=workspace_id, store=store)
         )
+    clerk_cookie_name = _clerk_session_cookie_name()
+    clerk_cookie = str(request.cookies.get(clerk_cookie_name) or "").strip()
+    if clerk_cookie:
+        try:
+            cookie_actor = verify_clerk_session_jwt(clerk_cookie)
+            require_ham_clerk_email_allowed(cookie_actor, route=f"{request.method} {request.url.path}")
+        except HTTPException:
+            cookie_actor = None
+        if cookie_actor is not None:
+            return _require_preview_proxy_read_perm(
+                _resolve_workspace_context_or_http(actor=cookie_actor, workspace_id=workspace_id, store=store)
+            )
     cookie_token = request.cookies.get(_PREVIEW_PROXY_SESSION_COOKIE_NAME)
     claims = _decode_preview_proxy_session_token(cookie_token)
     if claims is None or not _preview_proxy_session_claim_match(
