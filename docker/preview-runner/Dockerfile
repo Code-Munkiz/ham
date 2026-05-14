@@ -2,18 +2,22 @@
 
 FROM node:22-bookworm-slim
 
-RUN groupadd --gid 1000 hamnode \
-    && useradd --uid 1000 --gid hamnode --shell /bin/bash --create-home hamnode \
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends python3 python3-pip unzip ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip3 install --no-cache-dir --break-system-packages google-cloud-storage \
     && mkdir -p /workspace /tmp/npm-cache \
-    && chown -R hamnode:hamnode /workspace /tmp/npm-cache
+    && chown -R node:node /workspace /tmp/npm-cache
 
 WORKDIR /workspace
 
 ENV NPM_CONFIG_CACHE=/tmp/npm-cache
 
+COPY docker/preview-runner/download_preview_source.py /usr/local/bin/ham-preview-download-source.py
 COPY docker/preview-runner/entrypoint.sh /usr/local/bin/ham-preview-entrypoint.sh
-RUN chmod 0555 /usr/local/bin/ham-preview-entrypoint.sh
+RUN sed -i 's/\r$//' /usr/local/bin/ham-preview-entrypoint.sh \
+    && chmod 0555 /usr/local/bin/ham-preview-entrypoint.sh /usr/local/bin/ham-preview-download-source.py
 
-USER hamnode
+USER node
 
 ENTRYPOINT ["/usr/local/bin/ham-preview-entrypoint.sh"]
