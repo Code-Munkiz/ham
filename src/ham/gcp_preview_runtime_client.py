@@ -34,10 +34,13 @@ def _parse_label_expires(value: str | None) -> datetime | None:
     if parsed is not None:
         return parsed
     text = str(value or "").strip()
-    if "T" not in text or not text.endswith("Z"):
+    if not text:
+        return None
+    text_upper = text.upper()
+    if "T" not in text_upper or not text_upper.endswith("Z"):
         return None
     # Support manifest-safe label values like 2026-05-14T04-39-04Z.
-    date_part, time_part = text[:-1].split("T", maxsplit=1)
+    date_part, time_part = text_upper[:-1].split("T", maxsplit=1)
     bits = time_part.split("-")
     if len(bits) != 3:
         return None

@@ -183,3 +183,48 @@ def test_live_client_cleanup_parses_manifest_safe_expiry_label(monkeypatch) -> N
     assert result.deleted_pods == 1
     assert result.deleted_services == 1
     assert "pod:pod1" in deleted
+
+
+def test_live_client_cleanup_parses_lowercase_manifest_safe_expiry_label(monkeypatch) -> None:
+    client = LiveGkePreviewRuntimeClient()
+    deleted: list[str] = []
+
+    def _del_pod(self, *, pod_ref: PreviewPodRef):  # type: ignore[no-untyped-def]
+        deleted.append(f"pod:{pod_ref.pod_name}")
+        return True
+
+    def _del_svc(self, *, pod_ref: PreviewPodRef):  # type: ignore[no-untyped-def]
+        deleted.append(f"svc:{pod_ref.service_name}")
+        return True
+
+    client.delete_preview_pod = MethodType(_del_pod, client)  # type: ignore[method-assign]
+    client.delete_preview_service = MethodType(_del_svc, client)  # type: ignore[method-assign]
+
+    now = datetime.now(UTC).replace(microsecond=0)
+    expired_label = (
+        (now - timedelta(minutes=2))
+        .isoformat()
+        .replace("+00:00", "Z")
+        .replace(":", "-")
+        .lower()
+    )
+    result = client.cleanup_owned_expired_resources(
+        resources=[
+            PreviewPodRef(
+                namespace="ns",
+                pod_name="pod-lower",
+                service_name="svc-lower",
+                labels={
+                    "ham.workspace_id": "ws",
+                    "ham.project_id": "proj",
+                    "ham.expires_at": expired_label,
+                },
+            )
+        ],
+        workspace_id="ws",
+        project_id="proj",
+        now_iso=now.isoformat().replace("+00:00", "Z"),
+    )
+    assert result.deleted_pods == 1
+    assert result.deleted_services == 1
+    assert "pod:pod-lower" in deleted
