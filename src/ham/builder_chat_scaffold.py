@@ -49,7 +49,7 @@ def _build_tetris_scaffold_files(*, title: str, safe_pkg: str) -> dict[str, str]
                 "version": "0.0.1",
                 "type": "module",
                 "scripts": {
-                    "dev": "vite",
+                    "dev": "vite build && vite preview",
                     "build": "vite build",
                     "preview": "vite preview",
                 },
