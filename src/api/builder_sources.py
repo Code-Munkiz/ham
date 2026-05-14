@@ -329,6 +329,34 @@ def _cloud_proxy_preview_url(*, workspace_id: str, project_id: str) -> str:
     return f"/api/workspaces/{workspace_id}/projects/{project_id}/builder/preview-proxy/"
 
 
+def _supersede_active_cloud_runtime_jobs(
+    *,
+    workspace_id: str,
+    project_id: str,
+    reason: str,
+) -> int:
+    store = get_builder_runtime_job_store()
+    changed = 0
+    for job in store.list_cloud_runtime_jobs(workspace_id=workspace_id, project_id=project_id):
+        status = str(job.status or "").strip().lower()
+        if status not in {"queued", "running"}:
+            continue
+        now_iso = _utc_now_iso()
+        job.status = "cancelled"
+        job.phase = "failed"
+        job.completed_at = now_iso
+        job.updated_at = now_iso
+        job.error_code = "CLOUD_RUNTIME_JOB_SUPERSEDED"
+        job.error_message = reason
+        job.logs_summary = "Cloud runtime job superseded before fresh retry."
+        job.metadata = {**(job.metadata or {}), "superseded_at": now_iso, "supersede_reason": reason}
+        store.upsert_cloud_runtime_job(job)
+        changed += 1
+    if changed > 0:
+        get_builder_runtime_store().clear_cloud_runtime(workspace_id=workspace_id, project_id=project_id)
+    return changed
+
+
 def _cloud_proxy_endpoint_or_none(*, workspace_id: str, project_id: str) -> PreviewEndpoint | None:
     runtime = get_builder_runtime_store().get_latest_runtime_session(
         workspace_id=workspace_id,
@@ -705,11 +733,13 @@ class VisualEditRequestPayload(BaseModel):
 class CloudRuntimeRequestPayload(BaseModel):
     source_snapshot_id: str | None = None
     status: str | None = None
+    force_new: bool = False
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class CloudRuntimeJobPayload(BaseModel):
     source_snapshot_id: str | None = None
+    force_new: bool = False
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -2246,6 +2276,7 @@ async def request_builder_cloud_runtime(
                 }
             },
         )
+    force_new = bool(body.force_new)
     provider_mode = get_cloud_runtime_provider_mode()
     experiment_status, _ = get_cloud_runtime_experiment_status()
     should_execute_job = (
@@ -2254,13 +2285,22 @@ async def request_builder_cloud_runtime(
         and provider_mode != "disabled"
         and experiment_status not in {"experiment_not_enabled", "disabled", "config_missing"}
     )
+    if force_new:
+        _supersede_active_cloud_runtime_jobs(
+            workspace_id=ctx.workspace_id,
+            project_id=project_id,
+            reason="Superseded by explicit force_new cloud runtime request.",
+        )
     if should_execute_job:
+        metadata = _sanitize_metadata(body.metadata)
+        if force_new:
+            metadata = {**metadata, "force_new": True}
         saved_job, runtime = run_persist_builder_cloud_runtime_job(
             workspace_id=ctx.workspace_id,
             project_id=project_id,
             source_snapshot_id=effective_snapshot_id,
             requested_by=actor.user_id if actor is not None else None,
-            metadata=_sanitize_metadata(body.metadata),
+            metadata=metadata,
         )
         return {
             "runtime": runtime.model_dump(mode="json") if runtime is not None else None,
@@ -2280,7 +2320,7 @@ async def request_builder_cloud_runtime(
         project_id=project_id,
         source_snapshot_id=effective_snapshot_id,
         requested_by=actor.user_id if actor is not None else None,
-        metadata=_sanitize_metadata(body.metadata),
+        metadata={**_sanitize_metadata(body.metadata), **({"force_new": True} if force_new else {})},
     )
     if requested_status and requested_status != "queued":
         runtime.status = requested_status
@@ -2304,17 +2344,27 @@ async def create_builder_cloud_runtime_job(
     actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)] = None,
 ) -> dict[str, Any]:
     _project_in_workspace_or_404(project_id=project_id, workspace_id=ctx.workspace_id)
+    force_new = bool(body.force_new)
     source_snapshot_id = _validated_snapshot_id(
         workspace_id=ctx.workspace_id,
         project_id=project_id,
         source_snapshot_id=body.source_snapshot_id,
     )
+    if force_new:
+        _supersede_active_cloud_runtime_jobs(
+            workspace_id=ctx.workspace_id,
+            project_id=project_id,
+            reason="Superseded by explicit force_new cloud runtime job request.",
+        )
+    metadata = _sanitize_metadata(body.metadata)
+    if force_new:
+        metadata = {**metadata, "force_new": True}
     saved_job, runtime = run_persist_builder_cloud_runtime_job(
         workspace_id=ctx.workspace_id,
         project_id=project_id,
         source_snapshot_id=source_snapshot_id,
         requested_by=actor.user_id if actor is not None else None,
-        metadata=_sanitize_metadata(body.metadata),
+        metadata=metadata,
     )
     return {
         "job": _serialize_cloud_runtime_job(saved_job),

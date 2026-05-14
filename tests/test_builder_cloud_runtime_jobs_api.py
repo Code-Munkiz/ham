@@ -27,7 +27,11 @@ from src.persistence.builder_runtime_job_store import (
     CloudRuntimeJob,
     set_builder_runtime_job_store_for_tests,
 )
-from src.persistence.builder_runtime_store import BuilderRuntimeStore, set_builder_runtime_store_for_tests
+from src.persistence.builder_runtime_store import (
+    BuilderRuntimeStore,
+    RuntimeSession,
+    set_builder_runtime_store_for_tests,
+)
 from src.persistence.builder_source_store import (
     BuilderSourceStore,
     ProjectSource,
@@ -388,6 +392,48 @@ def test_cloud_runtime_request_route_uses_live_gke_provider_when_gates_true(tmp_
     assert latest["status"] == "succeeded"
     assert latest["metadata"]["source_bundle"]["uri"].startswith("gs://")
     assert body["cloud_runtime"]["status"] == "provider_ready"
+    _cleanup()
+
+
+def test_cloud_runtime_request_force_new_supersedes_active_job(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "local_mock")
+    client, ws_id, project_id = _seed_context(tmp_path)
+    snapshot = _seed_source_snapshot(tmp_path, workspace_id=ws_id, project_id=project_id)
+    job_store = BuilderRuntimeJobStore(store_path=tmp_path / "builder_runtime_jobs.json")
+    running = job_store.upsert_cloud_runtime_job(
+        CloudRuntimeJob(
+            workspace_id=ws_id,
+            project_id=project_id,
+            status="running",
+            phase="preview_pending",
+            provider="gcp_gke_sandbox",
+        )
+    )
+    set_builder_runtime_job_store_for_tests(job_store)
+    runtime_store = BuilderRuntimeStore(store_path=tmp_path / "builder_runtime.json")
+    runtime_store.upsert_runtime_session(
+        RuntimeSession(
+            workspace_id=ws_id,
+            project_id=project_id,
+            mode="cloud",
+            status="running",
+            health="unknown",
+        )
+    )
+    set_builder_runtime_store_for_tests(runtime_store)
+
+    res = client.post(
+        f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime/request",
+        json={"status": "queued", "force_new": True, "source_snapshot_id": snapshot.id},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["job"]["id"] != running.id
+    assert body["runtime"]["status"] == "running"
+    updated_old = job_store.get_cloud_runtime_job(workspace_id=ws_id, project_id=project_id, job_id=running.id)
+    assert updated_old is not None
+    assert updated_old.status == "cancelled"
+    assert updated_old.error_code == "CLOUD_RUNTIME_JOB_SUPERSEDED"
     _cleanup()
 
 

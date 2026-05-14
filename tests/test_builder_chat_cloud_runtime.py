@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from src.ham.builder_chat_cloud_runtime import maybe_enqueue_chat_scaffold_cloud_runtime_job
@@ -257,6 +258,64 @@ def test_chat_scaffold_enqueue_retries_after_failed_terminal_job(tmp_path: Path,
     assert second.get("cloud_runtime_job_deduplicated") is False
     assert str(second.get("cloud_runtime_job_id") or "") != first_job_id
     assert _RecordingRuntimeClient.created_pods >= 2
+    _cleanup()
+
+
+def test_chat_scaffold_enqueue_supersedes_stale_active_job(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "cloud_run_poc")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_EXPERIMENTS_ENABLED", "true")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_ENABLED", "true")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_PROJECT", "proj-x")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_GCP_REGION", "us-central1")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_DRY_RUN", "false")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_STALE_JOB_SECONDS", "60")
+    monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    set_gcp_cloud_runtime_client_for_tests(FakeGcpCloudRuntimeClient())
+    set_builder_source_store_for_tests(BuilderSourceStore(store_path=tmp_path / "sources.json"))
+    job_store = BuilderRuntimeJobStore(store_path=tmp_path / "jobs.json")
+    set_builder_runtime_job_store_for_tests(job_store)
+    set_builder_runtime_store_for_tests(BuilderRuntimeStore(store_path=tmp_path / "runtime.json"))
+    set_builder_usage_event_store_for_tests(BuilderUsageEventStore(store_path=tmp_path / "usage.json"))
+
+    summary = maybe_chat_scaffold_for_turn(
+        workspace_id="ws_a",
+        project_id="pr_a",
+        session_id="sess_stale",
+        last_user_plain="build me a game like Tetris",
+        created_by="user_1",
+    )
+    sid = str((summary or {}).get("source_snapshot_id") or "")
+    first = maybe_enqueue_chat_scaffold_cloud_runtime_job(
+        workspace_id="ws_a",
+        project_id="pr_a",
+        source_snapshot_id=sid,
+        session_id="sess_stale",
+        requested_by="user_1",
+    )
+    first_job_id = str(first.get("cloud_runtime_job_id") or "")
+    first_job = job_store.get_cloud_runtime_job(workspace_id="ws_a", project_id="pr_a", job_id=first_job_id)
+    assert first_job is not None
+    first_job.status = "running"
+    first_job.phase = "preview_pending"
+    first_job.updated_at = (datetime.now(UTC) - timedelta(minutes=30)).replace(microsecond=0).isoformat().replace(
+        "+00:00", "Z"
+    )
+    job_store.upsert_cloud_runtime_job(first_job)
+
+    second = maybe_enqueue_chat_scaffold_cloud_runtime_job(
+        workspace_id="ws_a",
+        project_id="pr_a",
+        source_snapshot_id=sid,
+        session_id="sess_stale",
+        requested_by="user_1",
+    )
+    second_job_id = str(second.get("cloud_runtime_job_id") or "")
+    assert second.get("cloud_runtime_job_deduplicated") is False
+    assert second_job_id != first_job_id
+    stale_row = job_store.get_cloud_runtime_job(workspace_id="ws_a", project_id="pr_a", job_id=first_job_id)
+    assert stale_row is not None
+    assert stale_row.status == "cancelled"
+    assert stale_row.error_code == "CLOUD_RUNTIME_JOB_SUPERSEDED"
     _cleanup()
 
 
