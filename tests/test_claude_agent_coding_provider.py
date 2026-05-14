@@ -302,6 +302,129 @@ def test_launch_claude_agent_coding_returns_workspace_setup_failed_when_provisio
     assert cp_run.status_reason == "claude_agent:workspace_setup_failed"
 
 
+def test_launch_claude_agent_coding_returns_output_requires_review_when_runner_would_delete_files(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("CLAUDE_AGENT_ENABLED", "1")
+    monkeypatch.delenv("HAM_CLAUDE_AGENT_ALLOW_DELETIONS", raising=False)
+    monkeypatch.setenv("HAM_MANAGED_WORKSPACE_ROOT", str(tmp_path / "ham-workspaces"))
+    rec = _project_rec()
+    fake_store_proj = SimpleNamespace(get_project=lambda pid: rec)
+
+    saved: list[Any] = []
+
+    def _fake_save(run: Any, *, project_root_for_mirror: str | None = None) -> None:
+        saved.append(run)
+
+    fake_cp_store = SimpleNamespace(save=_fake_save)
+
+    from src.ham.claude_agent_runner.types import ClaudeAgentRunResult
+
+    async def _fake_run(**_kwargs: Any) -> ClaudeAgentRunResult:
+        return ClaudeAgentRunResult(
+            status="success",
+            assistant_summary="cleaned.",
+            duration_seconds=0.1,
+        )
+
+    snapshot_mock = MagicMock()
+
+    with (
+        patch(
+            "src.persistence.project_store.get_project_store",
+            return_value=fake_store_proj,
+        ),
+        patch(
+            "src.persistence.control_plane_run.get_control_plane_run_store",
+            return_value=fake_cp_store,
+        ),
+        patch(
+            "src.ham.claude_agent_runner.run_claude_agent_mission",
+            _fake_run,
+        ),
+        patch(
+            "src.ham.managed_workspace.workspace_adapter.compute_deleted_paths_against_parent",
+            lambda common: ("README.md",),
+        ),
+        patch(
+            "src.ham.managed_workspace.workspace_adapter.emit_managed_workspace_snapshot",
+            snapshot_mock,
+        ),
+    ):
+        result = launch_claude_agent_coding(
+            project_id=rec.id,
+            user_prompt="tidy README",
+        )
+    assert result.status == "failure"
+    assert "Claude Agent proposed deleting files" in result.reason
+    assert isinstance(result.ham_run_id, str) and result.ham_run_id
+    snapshot_mock.assert_not_called()
+    assert len(saved) == 1
+    cp_run = saved[0]
+    assert cp_run.provider == "claude_agent"
+    assert cp_run.status == "failed"
+    assert cp_run.status_reason == "claude_agent:output_requires_review"
+    assert cp_run.output_ref is None
+
+
+def test_launch_claude_agent_coding_output_requires_review_allow_override_env_lets_emit_proceed(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("CLAUDE_AGENT_ENABLED", "1")
+    monkeypatch.setenv("HAM_CLAUDE_AGENT_ALLOW_DELETIONS", "1")
+    monkeypatch.setenv("HAM_MANAGED_WORKSPACE_ROOT", str(tmp_path / "ham-workspaces"))
+    rec = _project_rec()
+    fake_store_proj = SimpleNamespace(get_project=lambda pid: rec)
+    fake_cp_store = SimpleNamespace(save=lambda *a, **k: None)
+
+    from src.ham.claude_agent_runner.types import ClaudeAgentRunResult
+
+    async def _fake_run(**_kwargs: Any) -> ClaudeAgentRunResult:
+        return ClaudeAgentRunResult(
+            status="success",
+            assistant_summary="cleaned.",
+            duration_seconds=0.1,
+        )
+
+    fake_snap = SimpleNamespace(
+        build_outcome="succeeded",
+        target_ref={"snapshot_id": "snap_emit_ok"},
+        error_summary=None,
+    )
+    snapshot_mock = MagicMock(return_value=fake_snap)
+
+    with (
+        patch(
+            "src.persistence.project_store.get_project_store",
+            return_value=fake_store_proj,
+        ),
+        patch(
+            "src.persistence.control_plane_run.get_control_plane_run_store",
+            return_value=fake_cp_store,
+        ),
+        patch(
+            "src.ham.claude_agent_runner.run_claude_agent_mission",
+            _fake_run,
+        ),
+        patch(
+            "src.ham.managed_workspace.workspace_adapter.compute_deleted_paths_against_parent",
+            lambda common: ("X",),
+        ),
+        patch(
+            "src.ham.managed_workspace.workspace_adapter.emit_managed_workspace_snapshot",
+            snapshot_mock,
+        ),
+    ):
+        result = launch_claude_agent_coding(
+            project_id=rec.id,
+            user_prompt="tidy README",
+        )
+    snapshot_mock.assert_called_once()
+    assert result.status == "success"
+
+
 def test_launch_claude_agent_coding_does_not_call_runner_when_provisioning_fails(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

@@ -47,7 +47,10 @@ from src.ham.managed_workspace.provisioning import (
     ManagedWorkspaceSetupError,
     ensure_managed_working_tree,
 )
-from src.ham.managed_workspace.workspace_adapter import emit_managed_workspace_snapshot
+from src.ham.managed_workspace.workspace_adapter import (
+    compute_deleted_paths_against_parent,
+    emit_managed_workspace_snapshot,
+)
 from src.ham.worker_adapters.claude_agent_adapter import (
     _redact_diagnostic_text,
     check_claude_agent_readiness,
@@ -324,6 +327,82 @@ def _persist_workspace_setup_failed(
     }
 
 
+def _persist_output_requires_review(
+    *,
+    rec: Any,
+    ham_actor: HamActor | None,
+    project_root: Path,
+    proposal_digest: str,
+    deleted_paths: tuple[str, ...],
+    change_id: str,
+    ham_run_id: str,
+) -> dict[str, Any]:
+    preview = ", ".join(deleted_paths[:5])
+    suffix = "" if len(deleted_paths) <= 5 else f" (+{len(deleted_paths) - 5} more)"
+    plural = "s" if len(deleted_paths) != 1 else ""
+    error_summary_raw = (
+        f"output_requires_review: {len(deleted_paths)} file{plural} "
+        f"would be deleted: {preview}{suffix}"
+    )
+    error_summary = _redact_diagnostic_text(error_summary_raw, cap=2000)
+    summary_text = (
+        "Claude Agent proposed deleting files, so HAM stopped before saving this version."
+    )
+    now = utc_now_iso()
+    project_root_str = str(project_root.resolve())
+    cp_run = ControlPlaneRun(
+        ham_run_id=ham_run_id,
+        provider="claude_agent",
+        action_kind="launch",
+        project_id=rec.id,
+        created_by=_created_by(ham_actor),
+        created_at=now,
+        updated_at=now,
+        committed_at=now,
+        started_at=now,
+        finished_at=now,
+        last_observed_at=now,
+        status="failed",
+        status_reason="claude_agent:output_requires_review",
+        proposal_digest=proposal_digest,
+        base_revision=CLAUDE_AGENT_REGISTRY_REVISION,
+        external_id=change_id,
+        workflow_id=None,
+        summary=cap_summary(summary_text),
+        error_summary=cap_error_summary(error_summary),
+        last_provider_status=None,
+        audit_ref=None,
+        project_root=project_root_str,
+        pr_url=None,
+        pr_branch=None,
+        pr_commit_sha=None,
+        build_outcome=None,
+        output_target="managed_workspace",
+        output_ref=None,
+    )
+    try:
+        get_control_plane_run_store().save(cp_run, project_root_for_mirror=project_root_str)
+    except Exception as exc:
+        _LOG.warning(
+            "claude_agent_build control-plane save failed (%s)",
+            type(exc).__name__,
+        )
+    return {
+        "kind": "claude_agent_build_launch",
+        "project_id": rec.id,
+        "ok": False,
+        "ham_run_id": ham_run_id,
+        "control_plane_status": "failed",
+        "summary": summary_text,
+        "error_summary": error_summary,
+        "is_readonly": False,
+        "will_open_pull_request": False,
+        "requires_approval": True,
+        "output_target": "managed_workspace",
+        "output_ref": None,
+    }
+
+
 def _status_from_run(run_status: str, snapshot_outcome: str | None) -> tuple[str, str]:
     if run_status == "success":
         if snapshot_outcome == "succeeded":
@@ -467,6 +546,7 @@ async def launch_claude_agent_build(
         )
     policy = ClaudeAgentPermissionPolicy(project_root=project_root)
     change_id = uuid.uuid4().hex
+    ham_run_id = new_ham_run_id()
 
     run_result = await run_claude_agent_mission(
         project_root=project_root,
@@ -488,6 +568,17 @@ async def launch_claude_agent_build(
             pr_inputs=None,
             workspace_id=getattr(rec, "workspace_id", None),
         )
+        would_be_deleted = compute_deleted_paths_against_parent(common)
+        if would_be_deleted and not _truthy_env("HAM_CLAUDE_AGENT_ALLOW_DELETIONS"):
+            return _persist_output_requires_review(
+                rec=rec,
+                ham_actor=ham_actor,
+                project_root=project_root,
+                proposal_digest=body.proposal_digest,
+                deleted_paths=would_be_deleted,
+                change_id=change_id,
+                ham_run_id=ham_run_id,
+            )
         try:
             snap = emit_managed_workspace_snapshot(common)
         except Exception as exc:
@@ -529,7 +620,6 @@ async def launch_claude_agent_build(
         error_summary = None
 
     now = utc_now_iso()
-    ham_run_id = new_ham_run_id()
     project_root_str = str(project_root.resolve())
     cp_run = ControlPlaneRun(
         ham_run_id=ham_run_id,

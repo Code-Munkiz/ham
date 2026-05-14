@@ -6,6 +6,7 @@ import os
 import zipfile
 from io import BytesIO
 from pathlib import Path
+from typing import Any
 
 import pytest
 from starlette.testclient import TestClient
@@ -19,6 +20,7 @@ from src.ham.managed_workspace.snapshot_store import (
     set_project_snapshot_store_for_tests,
 )
 from src.ham.managed_workspace.workspace_adapter import (
+    compute_deleted_paths_against_parent,
     emit_managed_workspace_snapshot,
     managed_workspace_runtime,
     reset_managed_workspace_runtime,
@@ -82,6 +84,113 @@ def test_emit_first_snapshot_writes_manifest_and_head(tmp_path: Path) -> None:
 
     ss = stor.read_object(f"{wid}/{pid}/snapshots/{sid}/files/src/hello.txt")
     assert ss == b"world"
+
+
+def test_compute_deleted_paths_against_parent_returns_empty_for_first_run(
+    tmp_path: Path,
+) -> None:
+    stor = DictSnapshotObjectStorage()
+    managed_workspace_runtime().object_storage = stor
+    set_project_snapshot_store_for_tests(MemoryProjectSnapshotStore())
+
+    wid = "wsdel"
+    pid = "projdel-first"
+    work = _layout(tmp_path, wid, pid)
+
+    common = PostExecCommon(
+        project_id=pid,
+        project_root=work,
+        summary=None,
+        change_id="corr-del-first",
+        workspace_id=wid,
+    )
+    assert compute_deleted_paths_against_parent(common) == ()
+
+
+def test_compute_deleted_paths_against_parent_detects_single_deletion(
+    tmp_path: Path,
+) -> None:
+    stor = DictSnapshotObjectStorage()
+    managed_workspace_runtime().object_storage = stor
+    set_project_snapshot_store_for_tests(MemoryProjectSnapshotStore())
+
+    wid = "wsdel"
+    pid = "projdel-detect"
+    work = _layout(tmp_path, wid, pid)
+    (work / "a.txt").write_text("alpha", encoding="utf-8")
+    (work / "b.txt").write_text("beta", encoding="utf-8")
+    (work / "c.txt").write_text("gamma", encoding="utf-8")
+
+    common = PostExecCommon(
+        project_id=pid,
+        project_root=work,
+        summary=None,
+        change_id="corr-del-detect",
+        workspace_id=wid,
+    )
+
+    assert emit_managed_workspace_snapshot(common).build_outcome == "succeeded"
+
+    (work / "c.txt").unlink()
+
+    deleted = compute_deleted_paths_against_parent(common)
+    assert deleted == ("c.txt",)
+
+
+def test_compute_deleted_paths_against_parent_is_pure_no_gcs_writes(
+    tmp_path: Path,
+) -> None:
+    writes: list[tuple[str, bytes]] = []
+
+    class _CapturingStorage(DictSnapshotObjectStorage):
+        def write_object(
+            self,
+            object_path: str,
+            data: bytes,
+            *,
+            content_type: str | None = None,
+        ) -> None:
+            writes.append((object_path, data))
+            super().write_object(object_path, data, content_type=content_type)
+
+    stor = _CapturingStorage()
+    managed_workspace_runtime().object_storage = stor
+
+    snap_calls: list[Any] = []
+
+    class _CapturingSnapshotStore(MemoryProjectSnapshotStore):
+        def put_snapshot(self, row: Any) -> None:
+            snap_calls.append(row)
+            super().put_snapshot(row)
+
+    ms = _CapturingSnapshotStore()
+    set_project_snapshot_store_for_tests(ms)
+
+    wid = "wsdel"
+    pid = "projdel-pure"
+    work = _layout(tmp_path, wid, pid)
+    (work / "k.txt").write_text("k", encoding="utf-8")
+
+    common = PostExecCommon(
+        project_id=pid,
+        project_root=work,
+        summary=None,
+        change_id="corr-del-pure",
+        workspace_id=wid,
+    )
+
+    assert emit_managed_workspace_snapshot(common).build_outcome == "succeeded"
+
+    writes_before = list(writes)
+    snap_calls_before = list(snap_calls)
+
+    (work / "k.txt").unlink()
+
+    deleted = compute_deleted_paths_against_parent(common)
+    assert deleted == ("k.txt",)
+
+    assert writes == writes_before
+    assert snap_calls == snap_calls_before
 
 
 def test_emit_second_snapshot_nothing_to_change(tmp_path: Path) -> None:

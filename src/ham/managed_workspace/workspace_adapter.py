@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -22,6 +23,9 @@ from src.ham.managed_workspace.snapshot_store import get_project_snapshot_store
 
 if TYPE_CHECKING:
     from src.ham.droid_runner.build_lane_output import OutputResult, PostExecCommon
+
+
+_LOG = logging.getLogger(__name__)
 
 
 MANAGED_SNAPSHOT_STORAGE_REQUIRED = "MANAGED_SNAPSHOT_STORAGE_REQUIRED"
@@ -259,3 +263,70 @@ def emit_managed_workspace_snapshot(common: PostExecCommon) -> OutputResult:
         },
         error_summary=None,
     )
+
+
+def compute_deleted_paths_against_parent(common: PostExecCommon) -> tuple[str, ...]:
+    """Compute, without writing anything, the sorted POSIX paths that would be
+    recorded as deleted by emit_managed_workspace_snapshot(common).
+
+    Returns () when there is no parent snapshot (first run for this project),
+    when the working tree is missing or empty (no diff possible), or when the
+    parent manifest cannot be read.
+
+    Pure: performs no GCS writes, does not advance head.json, does not persist
+    a ProjectSnapshot row. Safe to call before emit_managed_workspace_snapshot()
+    as a dry-run probe.
+    """
+    rt = managed_workspace_runtime()
+    sto = rt.object_storage or snapshot_object_storage_from_env()
+    if sto is None:
+        return ()
+
+    wid = common.workspace_id.strip() if common.workspace_id else ""
+    pid = common.project_id.strip() if common.project_id else ""
+    if not wid or not pid:
+        return ()
+
+    try:
+        expected = managed_working_dir(wid, pid).resolve(strict=False)
+    except ValueError:
+        return ()
+
+    resolved_root = common.project_root.expanduser().resolve(strict=False)
+    if resolved_root.resolve() != expected.resolve():
+        return ()
+    if not resolved_root.is_dir():
+        return ()
+
+    try:
+        parent_snapshot_id = _read_parent_snapshot_ids(sto, workspace_id=wid, project_id=pid)
+    except Exception as exc:
+        _LOG.warning(
+            "compute_deleted_paths_against_parent head read raised %s",
+            type(exc).__name__,
+        )
+        return ()
+    if not parent_snapshot_id:
+        return ()
+
+    try:
+        prev_manifest = _read_manifest(
+            sto,
+            f"{_snap_prefix(wid, pid, parent_snapshot_id)}/manifest.json",
+        )
+    except Exception as exc:
+        _LOG.warning(
+            "compute_deleted_paths_against_parent manifest read raised %s",
+            type(exc).__name__,
+        )
+        return ()
+    if prev_manifest is None:
+        return ()
+
+    current_files = posix_paths_under(resolved_root)
+    if not current_files:
+        return ()
+
+    prev_hashes = {f.path: f.sha256 for f in prev_manifest.files}
+    deleted = sorted(set(prev_hashes) - set(current_files))
+    return tuple(deleted)

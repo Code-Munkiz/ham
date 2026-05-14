@@ -763,6 +763,421 @@ def test_launch_calls_runner_only_after_working_tree_exists(
     assert cwd_was_dir == [True]
 
 
+def _delete_guard_runner_success(**_kwargs: Any) -> Any:
+    async def _go() -> ClaudeAgentRunResult:
+        return ClaudeAgentRunResult(
+            status="success",
+            assistant_summary="cleaned up.",
+            duration_seconds=0.1,
+            sdk_version="0.1.0",
+        )
+
+    return _go()
+
+
+def test_launch_returns_output_requires_review_when_runner_would_delete_files(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_env: None,
+    actor: HamActor,
+    cleanup_overrides: None,
+) -> None:
+    monkeypatch.setenv("CLAUDE_AGENT_ENABLED", "1")
+    monkeypatch.setenv("HAM_CLAUDE_AGENT_EXEC_TOKEN", _EXEC_TOKEN_CANARY)
+    rec = _project_rec()
+    patches = _patch_gates(rec=rec)
+    digest = _preview_digest(rec.id, "tidy README")
+
+    saved: list[Any] = []
+
+    def _fake_save(run: Any, *, project_root_for_mirror: str | None = None) -> None:
+        saved.append(run)
+
+    fake_store = SimpleNamespace(save=_fake_save)
+
+    async def _fake_run(**_kwargs: Any) -> ClaudeAgentRunResult:
+        return ClaudeAgentRunResult(
+            status="success",
+            assistant_summary="cleaned up.",
+            duration_seconds=0.1,
+        )
+
+    snapshot_mock = MagicMock()
+
+    try:
+        with (
+            patch.object(build_api, "run_claude_agent_mission", _fake_run),
+            patch.object(
+                build_api,
+                "compute_deleted_paths_against_parent",
+                lambda common: ("README.md",),
+            ),
+            patch.object(build_api, "emit_managed_workspace_snapshot", snapshot_mock),
+            patch.object(build_api, "get_control_plane_run_store", lambda: fake_store),
+        ):
+            res = _client(actor).post(
+                "/api/claude-agent/build/launch",
+                json={
+                    "project_id": rec.id,
+                    "user_prompt": "tidy README",
+                    "proposal_digest": digest,
+                    "base_revision": build_api.CLAUDE_AGENT_REGISTRY_REVISION,
+                    "confirmed": True,
+                },
+            )
+    finally:
+        _stop(patches)
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["ok"] is False
+    assert body["control_plane_status"] == "failed"
+    assert "Claude Agent proposed deleting files" in (body["summary"] or "")
+    error_summary = body["error_summary"] or ""
+    assert "output_requires_review" in error_summary
+    assert "README.md" in error_summary
+    snapshot_mock.assert_not_called()
+
+
+def test_launch_output_requires_review_does_not_call_emit_or_advance_head(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_env: None,
+    actor: HamActor,
+    cleanup_overrides: None,
+) -> None:
+    monkeypatch.setenv("CLAUDE_AGENT_ENABLED", "1")
+    monkeypatch.setenv("HAM_CLAUDE_AGENT_EXEC_TOKEN", _EXEC_TOKEN_CANARY)
+    rec = _project_rec()
+    patches = _patch_gates(rec=rec)
+    digest = _preview_digest(rec.id, "tidy README")
+
+    fake_store = SimpleNamespace(save=lambda *a, **k: None)
+    snapshot_mock = MagicMock()
+
+    async def _fake_run(**_kwargs: Any) -> ClaudeAgentRunResult:
+        return ClaudeAgentRunResult(
+            status="success",
+            assistant_summary="ok.",
+            duration_seconds=0.1,
+        )
+
+    try:
+        with (
+            patch.object(build_api, "run_claude_agent_mission", _fake_run),
+            patch.object(
+                build_api,
+                "compute_deleted_paths_against_parent",
+                lambda common: ("README.md", "docs/index.md"),
+            ),
+            patch.object(build_api, "emit_managed_workspace_snapshot", snapshot_mock),
+            patch.object(build_api, "get_control_plane_run_store", lambda: fake_store),
+        ):
+            res = _client(actor).post(
+                "/api/claude-agent/build/launch",
+                json={
+                    "project_id": rec.id,
+                    "user_prompt": "tidy README",
+                    "proposal_digest": digest,
+                    "base_revision": build_api.CLAUDE_AGENT_REGISTRY_REVISION,
+                    "confirmed": True,
+                },
+            )
+    finally:
+        _stop(patches)
+    assert res.status_code == 200, res.text
+    snapshot_mock.assert_not_called()
+
+
+def test_launch_output_requires_review_persists_single_control_plane_run_with_new_status_reason(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_env: None,
+    actor: HamActor,
+    cleanup_overrides: None,
+) -> None:
+    monkeypatch.setenv("CLAUDE_AGENT_ENABLED", "1")
+    monkeypatch.setenv("HAM_CLAUDE_AGENT_EXEC_TOKEN", _EXEC_TOKEN_CANARY)
+    rec = _project_rec()
+    patches = _patch_gates(rec=rec)
+    digest = _preview_digest(rec.id, "tidy README")
+
+    saved: list[Any] = []
+
+    def _fake_save(run: Any, *, project_root_for_mirror: str | None = None) -> None:
+        saved.append(run)
+
+    fake_store = SimpleNamespace(save=_fake_save)
+
+    async def _fake_run(**_kwargs: Any) -> ClaudeAgentRunResult:
+        return ClaudeAgentRunResult(
+            status="success",
+            assistant_summary="ok.",
+            duration_seconds=0.1,
+        )
+
+    try:
+        with (
+            patch.object(build_api, "run_claude_agent_mission", _fake_run),
+            patch.object(
+                build_api,
+                "compute_deleted_paths_against_parent",
+                lambda common: ("README.md",),
+            ),
+            patch.object(build_api, "emit_managed_workspace_snapshot", MagicMock()),
+            patch.object(build_api, "get_control_plane_run_store", lambda: fake_store),
+        ):
+            res = _client(actor).post(
+                "/api/claude-agent/build/launch",
+                json={
+                    "project_id": rec.id,
+                    "user_prompt": "tidy README",
+                    "proposal_digest": digest,
+                    "base_revision": build_api.CLAUDE_AGENT_REGISTRY_REVISION,
+                    "confirmed": True,
+                },
+            )
+    finally:
+        _stop(patches)
+    assert res.status_code == 200, res.text
+    assert len(saved) == 1
+    cp_run = saved[0]
+    assert cp_run.status == "failed"
+    assert cp_run.status_reason == "claude_agent:output_requires_review"
+    assert cp_run.output_ref is None
+    assert cp_run.pr_url is None
+
+
+def test_launch_output_requires_review_allow_override_env_lets_emit_proceed(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_env: None,
+    actor: HamActor,
+    cleanup_overrides: None,
+) -> None:
+    monkeypatch.setenv("CLAUDE_AGENT_ENABLED", "1")
+    monkeypatch.setenv("HAM_CLAUDE_AGENT_EXEC_TOKEN", _EXEC_TOKEN_CANARY)
+    monkeypatch.setenv("HAM_CLAUDE_AGENT_ALLOW_DELETIONS", "1")
+    rec = _project_rec()
+    patches = _patch_gates(rec=rec)
+    digest = _preview_digest(rec.id, "tidy README")
+
+    fake_store = SimpleNamespace(save=lambda *a, **k: None)
+    fake_snap = SimpleNamespace(
+        build_outcome="succeeded",
+        target_ref={"snapshot_id": "snap_emit_ok"},
+        error_summary=None,
+    )
+    snapshot_mock = MagicMock(return_value=fake_snap)
+
+    async def _fake_run(**_kwargs: Any) -> ClaudeAgentRunResult:
+        return ClaudeAgentRunResult(
+            status="success",
+            assistant_summary="ok.",
+            duration_seconds=0.1,
+        )
+
+    try:
+        with (
+            patch.object(build_api, "run_claude_agent_mission", _fake_run),
+            patch.object(
+                build_api,
+                "compute_deleted_paths_against_parent",
+                lambda common: ("X",),
+            ),
+            patch.object(build_api, "emit_managed_workspace_snapshot", snapshot_mock),
+            patch.object(build_api, "get_control_plane_run_store", lambda: fake_store),
+        ):
+            res = _client(actor).post(
+                "/api/claude-agent/build/launch",
+                json={
+                    "project_id": rec.id,
+                    "user_prompt": "tidy README",
+                    "proposal_digest": digest,
+                    "base_revision": build_api.CLAUDE_AGENT_REGISTRY_REVISION,
+                    "confirmed": True,
+                },
+            )
+    finally:
+        _stop(patches)
+    assert res.status_code == 200, res.text
+    snapshot_mock.assert_called_once()
+    body = res.json()
+    assert body["ok"] is True
+
+
+def test_launch_non_delete_doc_change_still_emits_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_env: None,
+    actor: HamActor,
+    cleanup_overrides: None,
+) -> None:
+    monkeypatch.setenv("CLAUDE_AGENT_ENABLED", "1")
+    monkeypatch.setenv("HAM_CLAUDE_AGENT_EXEC_TOKEN", _EXEC_TOKEN_CANARY)
+    rec = _project_rec()
+    patches = _patch_gates(rec=rec)
+    digest = _preview_digest(rec.id, "tidy README")
+
+    fake_store = SimpleNamespace(save=lambda *a, **k: None)
+    fake_snap = SimpleNamespace(
+        build_outcome="succeeded",
+        target_ref={"snapshot_id": "snap_ok_nodel"},
+        error_summary=None,
+    )
+    snapshot_mock = MagicMock(return_value=fake_snap)
+
+    async def _fake_run(**_kwargs: Any) -> ClaudeAgentRunResult:
+        return ClaudeAgentRunResult(
+            status="success",
+            assistant_summary="ok.",
+            duration_seconds=0.1,
+        )
+
+    saved: list[Any] = []
+
+    def _fake_save(run: Any, *, project_root_for_mirror: str | None = None) -> None:
+        saved.append(run)
+
+    fake_store = SimpleNamespace(save=_fake_save)
+
+    try:
+        with (
+            patch.object(build_api, "run_claude_agent_mission", _fake_run),
+            patch.object(
+                build_api,
+                "compute_deleted_paths_against_parent",
+                lambda common: (),
+            ),
+            patch.object(build_api, "emit_managed_workspace_snapshot", snapshot_mock),
+            patch.object(build_api, "get_control_plane_run_store", lambda: fake_store),
+        ):
+            res = _client(actor).post(
+                "/api/claude-agent/build/launch",
+                json={
+                    "project_id": rec.id,
+                    "user_prompt": "tidy README",
+                    "proposal_digest": digest,
+                    "base_revision": build_api.CLAUDE_AGENT_REGISTRY_REVISION,
+                    "confirmed": True,
+                },
+            )
+    finally:
+        _stop(patches)
+    assert res.status_code == 200, res.text
+    snapshot_mock.assert_called_once()
+    body = res.json()
+    assert body["ok"] is True
+    assert len(saved) == 1
+    assert saved[0].status_reason == "claude_agent:snapshot_emitted"
+
+
+def test_launch_output_requires_review_does_not_open_pr_or_set_output_ref(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_env: None,
+    actor: HamActor,
+    cleanup_overrides: None,
+) -> None:
+    monkeypatch.setenv("CLAUDE_AGENT_ENABLED", "1")
+    monkeypatch.setenv("HAM_CLAUDE_AGENT_EXEC_TOKEN", _EXEC_TOKEN_CANARY)
+    rec = _project_rec()
+    patches = _patch_gates(rec=rec)
+    digest = _preview_digest(rec.id, "tidy README")
+
+    fake_store = SimpleNamespace(save=lambda *a, **k: None)
+
+    async def _fake_run(**_kwargs: Any) -> ClaudeAgentRunResult:
+        return ClaudeAgentRunResult(
+            status="success",
+            assistant_summary="ok.",
+            duration_seconds=0.1,
+        )
+
+    try:
+        with (
+            patch.object(build_api, "run_claude_agent_mission", _fake_run),
+            patch.object(
+                build_api,
+                "compute_deleted_paths_against_parent",
+                lambda common: ("README.md",),
+            ),
+            patch.object(build_api, "emit_managed_workspace_snapshot", MagicMock()),
+            patch.object(build_api, "get_control_plane_run_store", lambda: fake_store),
+        ):
+            res = _client(actor).post(
+                "/api/claude-agent/build/launch",
+                json={
+                    "project_id": rec.id,
+                    "user_prompt": "tidy README",
+                    "proposal_digest": digest,
+                    "base_revision": build_api.CLAUDE_AGENT_REGISTRY_REVISION,
+                    "confirmed": True,
+                },
+            )
+    finally:
+        _stop(patches)
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["will_open_pull_request"] is False
+    assert body["output_ref"] is None
+
+
+def test_launch_output_requires_review_does_not_leak_secret_values(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_env: None,
+    actor: HamActor,
+    cleanup_overrides: None,
+) -> None:
+    anthropic_canary = "claude-agent-test-canary-not-a-real-key"
+    monkeypatch.setenv("CLAUDE_AGENT_ENABLED", "1")
+    monkeypatch.setenv("HAM_CLAUDE_AGENT_EXEC_TOKEN", _EXEC_TOKEN_CANARY)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", anthropic_canary)
+    rec = _project_rec()
+    patches = _patch_gates(rec=rec)
+    digest = _preview_digest(rec.id, "tidy README")
+
+    saved: list[Any] = []
+
+    def _fake_save(run: Any, *, project_root_for_mirror: str | None = None) -> None:
+        saved.append(run)
+
+    fake_store = SimpleNamespace(save=_fake_save)
+
+    async def _fake_run(**_kwargs: Any) -> ClaudeAgentRunResult:
+        return ClaudeAgentRunResult(
+            status="success",
+            assistant_summary="ok.",
+            duration_seconds=0.1,
+        )
+
+    try:
+        with (
+            patch.object(build_api, "run_claude_agent_mission", _fake_run),
+            patch.object(
+                build_api,
+                "compute_deleted_paths_against_parent",
+                lambda common: ("README.md",),
+            ),
+            patch.object(build_api, "emit_managed_workspace_snapshot", MagicMock()),
+            patch.object(build_api, "get_control_plane_run_store", lambda: fake_store),
+        ):
+            res = _client(actor).post(
+                "/api/claude-agent/build/launch",
+                json={
+                    "project_id": rec.id,
+                    "user_prompt": "tidy README",
+                    "proposal_digest": digest,
+                    "base_revision": build_api.CLAUDE_AGENT_REGISTRY_REVISION,
+                    "confirmed": True,
+                },
+            )
+    finally:
+        _stop(patches)
+    assert res.status_code == 200, res.text
+    blob = res.text
+    assert anthropic_canary not in blob
+    assert _EXEC_TOKEN_CANARY not in blob
+    assert len(saved) == 1
+    cp_run = saved[0]
+    persisted_blob = f"{cp_run.summary or ''} {cp_run.error_summary or ''}"
+    assert anthropic_canary not in persisted_blob
+    assert _EXEC_TOKEN_CANARY not in persisted_blob
+
+
 def test_launch_workspace_setup_failed_does_not_emit_snapshot_or_pr(
     monkeypatch: pytest.MonkeyPatch,
     isolated_env: None,

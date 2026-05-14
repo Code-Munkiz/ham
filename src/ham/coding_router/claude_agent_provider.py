@@ -149,6 +149,7 @@ def launch_claude_agent_coding(  # noqa: C901
             ensure_managed_working_tree,
         )
         from src.ham.managed_workspace.workspace_adapter import (
+            compute_deleted_paths_against_parent,
             emit_managed_workspace_snapshot,
         )
         from src.persistence.control_plane_run import (
@@ -224,6 +225,7 @@ def launch_claude_agent_coding(  # noqa: C901
 
         policy = ClaudeAgentPermissionPolicy(project_root=project_root)
         change_id = uuid.uuid4().hex
+        ham_run_id = new_ham_run_id()
 
         async def _do_run() -> Any:
             return await run_claude_agent_mission(
@@ -248,6 +250,69 @@ def launch_claude_agent_coding(  # noqa: C901
                 pr_inputs=None,
                 workspace_id=wid,
             )
+            would_be_deleted = compute_deleted_paths_against_parent(common)
+            if would_be_deleted and not _truthy_env("HAM_CLAUDE_AGENT_ALLOW_DELETIONS"):
+                preview = ", ".join(would_be_deleted[:5])
+                suffix = (
+                    "" if len(would_be_deleted) <= 5 else f" (+{len(would_be_deleted) - 5} more)"
+                )
+                plural = "s" if len(would_be_deleted) != 1 else ""
+                error_summary_raw = (
+                    f"output_requires_review: {len(would_be_deleted)} file{plural} "
+                    f"would be deleted: {preview}{suffix}"
+                )
+                review_error_summary = _redact_diagnostic_text(error_summary_raw, cap=2000)
+                review_summary_text = (
+                    "Claude Agent proposed deleting files, so HAM stopped "
+                    "before saving this version."
+                )
+                review_now = utc_now_iso()
+                review_project_root_str = str(Path(project_root).resolve())
+                review_cp_run = ControlPlaneRun(
+                    ham_run_id=ham_run_id,
+                    provider="claude_agent",
+                    action_kind="launch",
+                    project_id=rec.id,
+                    created_by=None,
+                    created_at=review_now,
+                    updated_at=review_now,
+                    committed_at=review_now,
+                    started_at=review_now,
+                    finished_at=review_now,
+                    last_observed_at=review_now,
+                    status="failed",
+                    status_reason="claude_agent:output_requires_review",
+                    proposal_digest="",
+                    base_revision=CLAUDE_AGENT_REGISTRY_REVISION,
+                    external_id=change_id,
+                    workflow_id=None,
+                    summary=cap_summary(review_summary_text),
+                    error_summary=cap_error_summary(review_error_summary),
+                    last_provider_status=None,
+                    audit_ref=None,
+                    project_root=review_project_root_str,
+                    pr_url=None,
+                    pr_branch=None,
+                    pr_commit_sha=None,
+                    build_outcome=None,
+                    output_target="managed_workspace",
+                    output_ref=None,
+                )
+                try:
+                    get_control_plane_run_store().save(
+                        review_cp_run,
+                        project_root_for_mirror=review_project_root_str,
+                    )
+                except Exception as save_exc:
+                    _LOG.warning(
+                        "claude_agent_provider control-plane save failed (%s)",
+                        type(save_exc).__name__,
+                    )
+                return ClaudeAgentLaunchResult(
+                    status="failure",
+                    reason=review_summary_text,
+                    ham_run_id=ham_run_id,
+                )
             try:
                 snap = emit_managed_workspace_snapshot(common)
             except Exception as exc:
@@ -283,7 +348,6 @@ def launch_claude_agent_coding(  # noqa: C901
             error_summary = None
 
         now = utc_now_iso()
-        ham_run_id = new_ham_run_id()
         project_root_str = str(Path(project_root).resolve())
         cp_run = ControlPlaneRun(
             ham_run_id=ham_run_id,
