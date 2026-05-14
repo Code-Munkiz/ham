@@ -152,6 +152,11 @@ INSTRUCTION_DOT_DIR = ".ham"
 INSTRUCTION_DOT_FILES = ("SWARM.md", "instructions.md")
 # NOTE: Files in .ham/ directory are fallback instructions when root-level instruction files are absent.
 # These allow per-project instruction configuration separate from workspace root.
+# Discovery order: root-level instruction files (SWARM.md, AGENTS.md) are checked first;
+# .ham/ files are loaded only if no root-level matches are found. This enables project-level
+# customization while keeping defaults at the repo root. **FOR MAINTAINERS**: When adding
+# new instruction file names here, also update INSTRUCTION_FILENAMES tuple and ensure
+# the new names are covered by sanitization in _scan_instruction_content().
 
 # Instruction file and context size limits (chars)
 # These constants cap the size of instruction documents and context payloads loaded into agent prompts
