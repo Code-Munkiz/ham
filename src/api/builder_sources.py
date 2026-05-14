@@ -392,6 +392,43 @@ def _emit_preview_proxy_diag(payload: dict[str, Any]) -> None:
     _LOG.warning(line)
 
 
+def _classify_proxy_upstream_error(exc: Exception) -> str:
+    text = str(exc).strip().lower()
+    if isinstance(exc, httpx.TimeoutException):
+        return "connect_timeout"
+    if "name or service not known" in text or "temporary failure in name resolution" in text:
+        return "dns_failed"
+    if "connection refused" in text:
+        return "connection_refused"
+    if "timed out" in text or "timeout" in text:
+        return "connect_timeout"
+    return "http_error"
+
+
+def _emit_preview_proxy_upstream_diag(
+    *,
+    workspace_id: str,
+    project_id: str,
+    runtime_session_id: str | None,
+    endpoint_id: str | None,
+    proxy_target_present: bool,
+    upstream_connect_status: str,
+    upstream_http_status: int | None = None,
+) -> None:
+    _emit_preview_proxy_diag(
+        {
+            "route": "preview_proxy_upstream",
+            "workspace_id": _diag_str(workspace_id),
+            "project_id": _diag_str(project_id),
+            "runtime_session_id": _diag_str(runtime_session_id),
+            "endpoint_id": _diag_str(endpoint_id),
+            "proxy_target_present": bool(proxy_target_present),
+            "upstream_connect_status": _diag_str(upstream_connect_status),
+            "upstream_http_status": upstream_http_status,
+        }
+    )
+
+
 def _clerk_session_cookie_name() -> str:
     raw = str(os.environ.get("HAM_CLERK_SESSION_COOKIE_NAME") or "").strip()
     return raw or "__session"
@@ -781,6 +818,15 @@ async def _serve_builder_preview_proxy(
     _project_in_workspace_or_404(project_id=project_id, workspace_id=ctx.workspace_id)
     endpoint = _cloud_proxy_endpoint_or_none(workspace_id=ctx.workspace_id, project_id=project_id)
     if endpoint is None:
+        _emit_preview_proxy_upstream_diag(
+            workspace_id=ctx.workspace_id,
+            project_id=project_id,
+            runtime_session_id=None,
+            endpoint_id=None,
+            proxy_target_present=False,
+            upstream_connect_status="no_endpoint",
+            upstream_http_status=404,
+        )
         raise HTTPException(
             status_code=404,
             detail={
@@ -803,6 +849,15 @@ async def _serve_builder_preview_proxy(
         allow_internal=allow_internal,
     )
     if upstream_base is None:
+        _emit_preview_proxy_upstream_diag(
+            workspace_id=ctx.workspace_id,
+            project_id=project_id,
+            runtime_session_id=str(endpoint.runtime_session_id or "").strip() or None,
+            endpoint_id=endpoint.id,
+            proxy_target_present=False,
+            upstream_connect_status="unsafe_upstream",
+            upstream_http_status=422,
+        )
         raise HTTPException(
             status_code=422,
             detail={
@@ -829,6 +884,15 @@ async def _serve_builder_preview_proxy(
     method = request.method.upper()
     try:
         upstream_response = await _proxy_upstream_fetch(method=method, url=upstream_url, headers=headers)
+        _emit_preview_proxy_upstream_diag(
+            workspace_id=ctx.workspace_id,
+            project_id=project_id,
+            runtime_session_id=str(endpoint.runtime_session_id or "").strip() or None,
+            endpoint_id=endpoint.id,
+            proxy_target_present=True,
+            upstream_connect_status="ok",
+            upstream_http_status=upstream_response.status_code,
+        )
         if upstream_response.status_code in {301, 302, 303, 307, 308}:
             location = str(upstream_response.headers.get("location") or "").strip()
             if location:
@@ -839,6 +903,15 @@ async def _serve_builder_preview_proxy(
                     allow_internal=allow_internal,
                 )
                 if safe_redirect is None:
+                    _emit_preview_proxy_upstream_diag(
+                        workspace_id=ctx.workspace_id,
+                        project_id=project_id,
+                        runtime_session_id=str(endpoint.runtime_session_id or "").strip() or None,
+                        endpoint_id=endpoint.id,
+                        proxy_target_present=False,
+                        upstream_connect_status="unsafe_upstream",
+                        upstream_http_status=422,
+                    )
                     raise HTTPException(
                         status_code=422,
                         detail={
@@ -852,6 +925,15 @@ async def _serve_builder_preview_proxy(
     except HTTPException:
         raise
     except httpx.TimeoutException as exc:
+        _emit_preview_proxy_upstream_diag(
+            workspace_id=ctx.workspace_id,
+            project_id=project_id,
+            runtime_session_id=str(endpoint.runtime_session_id or "").strip() or None,
+            endpoint_id=endpoint.id,
+            proxy_target_present=True,
+            upstream_connect_status="connect_timeout",
+            upstream_http_status=None,
+        )
         raise HTTPException(
             status_code=504,
             detail={
@@ -862,6 +944,15 @@ async def _serve_builder_preview_proxy(
             },
         ) from exc
     except httpx.HTTPError as exc:
+        _emit_preview_proxy_upstream_diag(
+            workspace_id=ctx.workspace_id,
+            project_id=project_id,
+            runtime_session_id=str(endpoint.runtime_session_id or "").strip() or None,
+            endpoint_id=endpoint.id,
+            proxy_target_present=True,
+            upstream_connect_status=_classify_proxy_upstream_error(exc),
+            upstream_http_status=None,
+        )
         raise HTTPException(
             status_code=502,
             detail={
