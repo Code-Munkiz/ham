@@ -13,6 +13,13 @@ from src.ham.builder_cloud_runtime_gcp import (
     FakeGcpCloudRuntimeClient,
     set_gcp_cloud_runtime_client_for_tests,
 )
+from src.ham.gcp_preview_runtime_client import (
+    CleanupResult,
+    PreviewPodRef,
+    PreviewPodStatus,
+    set_gke_runtime_client_factory_for_tests,
+)
+from src.ham.gcp_preview_source_bundle import SourceBundleUploadOutcome, set_source_bundle_uploader_factory_for_tests
 from src.ham.clerk_auth import HamActor
 from src.ham.workspace_models import WorkspaceMember, WorkspaceRecord
 from src.persistence.builder_runtime_job_store import (
@@ -123,6 +130,71 @@ def _cleanup() -> None:
     set_builder_runtime_job_store_for_tests(None)
     set_builder_usage_event_store_for_tests(None)
     set_gcp_cloud_runtime_client_for_tests(None)
+    set_source_bundle_uploader_factory_for_tests(None)
+    set_gke_runtime_client_factory_for_tests(None)
+
+
+class _RecordingBundleUploader:
+    def upload_bundle(self, *, bucket: str, object_name: str, payload: bytes) -> SourceBundleUploadOutcome:
+        return SourceBundleUploadOutcome(
+            uri=f"gs://{bucket}/{object_name}",
+            uploaded=True,
+            sha256="d" * 64,
+            file_count=0,
+            byte_size=len(payload),
+        )
+
+
+class _RecordingRuntimeClient:
+    created = 0
+
+    def create_preview_pod(self, *, manifest: dict):
+        _ = manifest
+        self.__class__.created += 1
+        return PreviewPodRef(
+            namespace="ham-builder-preview-spike",
+            pod_name="ham-preview-pod-test",
+            labels={"ham.workspace_id": "ws_aaaaaaaaaaaaaaaa", "ham.project_id": "project.builder-test"},
+        )
+
+    def get_pod_status(self, *, pod_ref: PreviewPodRef) -> PreviewPodStatus:
+        _ = pod_ref
+        return PreviewPodStatus(phase="Running", ready=True)
+
+    def poll_pod_ready(self, *, pod_ref: PreviewPodRef, timeout_seconds: int) -> PreviewPodStatus:
+        _ = pod_ref, timeout_seconds
+        return PreviewPodStatus(phase="Running", ready=True)
+
+    def get_pod_logs_summary(self, *, pod_ref: PreviewPodRef, max_chars: int = 240) -> str | None:
+        _ = pod_ref, max_chars
+        return "runner ready"
+
+    def delete_preview_pod(self, *, pod_ref: PreviewPodRef) -> bool:
+        _ = pod_ref
+        return True
+
+    def create_preview_service(self, *, pod_ref: PreviewPodRef, manifest: dict | None = None) -> str | None:
+        _ = pod_ref, manifest
+        return "ham-preview-svc-test"
+
+    def delete_preview_service(self, *, pod_ref: PreviewPodRef) -> bool:
+        _ = pod_ref
+        return True
+
+    def cleanup_owned_expired_resources(
+        self,
+        *,
+        resources: list[PreviewPodRef],
+        workspace_id: str,
+        project_id: str,
+        now_iso: str,
+    ) -> CleanupResult:
+        _ = resources, workspace_id, project_id, now_iso
+        return CleanupResult(deleted_pods=0, deleted_services=0, skipped=0, cleanup_status="success")
+
+    def normalize_error(self, *, error: Exception) -> tuple[str, str]:
+        _ = error
+        return ("GCP_GKE_RUNTIME_CLIENT_ERROR", "runtime client failed")
 
 
 def _seed_source_snapshot(
@@ -143,6 +215,13 @@ def _seed_source_snapshot(
             project_source_id=source.id,
             artifact_uri=artifact_uri,
             digest_sha256="a" * 64,
+            manifest={
+                "kind": "inline_text_bundle",
+                "inline_files": {
+                    "package.json": '{"name":"api-test","private":true}',
+                    "src/main.tsx": "console.log('ok')",
+                },
+            },
         )
     )
     set_builder_source_store_for_tests(source_store)
@@ -264,6 +343,50 @@ def test_post_job_cloud_run_poc_real_path_accepted_with_fake_client(tmp_path: Pa
     assert "cloud_runtime_provider_request_accepted" in names
     assert "source_handoff_requested" in names
     assert body["preview_status"]["preview_url"] is None
+    _cleanup()
+
+
+def test_cloud_runtime_request_route_uses_live_gke_provider_when_gates_true(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "gcp_gke_sandbox")
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_EXPERIMENTS_ENABLED", "true")
+    monkeypatch.setenv("HAM_BUILDER_GCP_RUNTIME_ENABLED", "true")
+    monkeypatch.setenv("HAM_BUILDER_GCP_RUNTIME_DRY_RUN", "false")
+    monkeypatch.setenv("HAM_BUILDER_GCP_RUNTIME_LIVE_K8S_ENABLED", "true")
+    monkeypatch.setenv("HAM_BUILDER_GCP_RUNTIME_LIVE_BUNDLE_UPLOAD", "true")
+    monkeypatch.setenv("HAM_BUILDER_GCP_PROJECT_ID", "proj-safe")
+    monkeypatch.setenv("HAM_BUILDER_GCP_REGION", "us-central1")
+    monkeypatch.setenv("HAM_BUILDER_GKE_CLUSTER", "cluster-safe")
+    monkeypatch.setenv("HAM_BUILDER_GKE_NAMESPACE_PREFIX", "ham-builder-preview")
+    monkeypatch.setenv("HAM_BUILDER_PREVIEW_SOURCE_BUCKET", "bucket-safe")
+    monkeypatch.setenv(
+        "HAM_BUILDER_PREVIEW_RUNNER_IMAGE",
+        "us-central1-docker.pkg.dev/proj-safe/ham/ham-preview-runner:test",
+    )
+
+    _RecordingRuntimeClient.created = 0
+    set_source_bundle_uploader_factory_for_tests(lambda: _RecordingBundleUploader())
+    set_gke_runtime_client_factory_for_tests(lambda: _RecordingRuntimeClient())
+    client, ws_id, project_id = _seed_context(tmp_path)
+    snapshot = _seed_source_snapshot(tmp_path, workspace_id=ws_id, project_id=project_id)
+
+    res = client.post(
+        f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime/request",
+        json={"source_snapshot_id": snapshot.id, "status": "queued"},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    runtime = body["runtime"]
+    assert runtime["mode"] == "cloud"
+    assert runtime["status"] == "running"
+    assert "Provisioning is not implemented yet" not in str(runtime.get("message") or "")
+    assert _RecordingRuntimeClient.created >= 1
+    jobs = client.get(f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime/jobs")
+    assert jobs.status_code == 200, jobs.text
+    latest = jobs.json()["jobs"][0]
+    assert latest["provider"] == "gcp_gke_sandbox"
+    assert latest["status"] == "running"
+    assert latest["metadata"]["source_bundle"]["uri"].startswith("gs://")
+    assert body["cloud_runtime"]["status"] == "provider_ready"
     _cleanup()
 
 
