@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import hashlib
+import hmac
 import json
 import os
 import re
 import shlex
+import time
 import uuid
 from ipaddress import ip_address
 from datetime import UTC, datetime
@@ -19,7 +23,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from src.api.clerk_gate import get_ham_clerk_actor
-from src.api.dependencies.workspace import require_perm
+from src.api.dependencies.workspace import get_workspace_store, require_perm
 from src.ham.builder_cloud_runtime_job_runner import run_persist_builder_cloud_runtime_job
 from src.ham.builder_runtime_worker import (
     get_cloud_runtime_experiment_status,
@@ -34,6 +38,12 @@ from src.ham.worker_adapters.claude_agent_adapter import check_claude_agent_read
 from src.ham.worker_adapters.cursor_adapter import check_cursor_readiness
 from src.ham.workspace_models import WorkspaceContext
 from src.ham.workspace_perms import PERM_WORKSPACE_READ, PERM_WORKSPACE_WRITE
+from src.ham.workspace_resolver import (
+    WorkspaceForbidden,
+    WorkspaceNotFound,
+    WorkspaceResolveError,
+    resolve_workspace_context,
+)
 from src.persistence.builder_source_store import (
     ProjectSource,
     SourceSnapshot,
@@ -52,6 +62,7 @@ from src.persistence.builder_usage_event_store import (
     get_builder_usage_event_store,
 )
 from src.persistence.project_store import get_project_store
+from src.persistence.workspace_store import WorkspaceStore
 from src.registry.projects import ProjectRecord
 
 router = APIRouter(tags=["builder-sources"])
@@ -70,6 +81,8 @@ _ZIP_ERROR_MESSAGES = {
 _PREVIEW_PROXY_ALLOWED_HOST_SUFFIXES = (".run.app",)
 _PREVIEW_PROXY_TIMEOUT_SECONDS = 8.0
 _PREVIEW_PROXY_MAX_BYTES = 2 * 1024 * 1024
+_PREVIEW_PROXY_SESSION_COOKIE_NAME = "ham_preview_proxy_session"
+_PREVIEW_PROXY_SESSION_TTL_SECONDS = 600
 _ACTIVITY_STREAM_MAX_ITEMS = 24
 _ACTIVITY_STREAM_MAX_EVENTS = 64
 _ACTIVITY_STREAM_MAX_PAYLOAD_BYTES = 24 * 1024
@@ -327,6 +340,206 @@ def _sanitize_cloud_proxy_upstream_url(
 
 def _cloud_proxy_preview_url(*, workspace_id: str, project_id: str) -> str:
     return f"/api/workspaces/{workspace_id}/projects/{project_id}/builder/preview-proxy/"
+
+
+def _preview_proxy_cookie_path(*, workspace_id: str, project_id: str) -> str:
+    return f"/api/workspaces/{workspace_id}/projects/{project_id}/builder/preview-proxy/"
+
+
+def _preview_proxy_session_ttl_seconds() -> int:
+    return _int_env(
+        "HAM_BUILDER_PREVIEW_PROXY_SESSION_TTL_SECONDS",
+        _PREVIEW_PROXY_SESSION_TTL_SECONDS,
+        min_value=60,
+        max_value=900,
+    )
+
+
+def _preview_proxy_session_secret_bytes() -> bytes:
+    # Prefer dedicated secret; fallback to existing service secret so signatures remain
+    # valid across Cloud Run instances without broad env rewrites.
+    for key in (
+        "HAM_PREVIEW_PROXY_SESSION_SECRET",
+        "HAM_CONNECTED_TOOLS_CREDENTIAL_ENCRYPTION_KEY",
+    ):
+        raw = str(os.environ.get(key) or "").strip()
+        if raw:
+            return raw.encode("utf-8")
+    return b"ham-preview-proxy-dev-secret"
+
+
+def _b64url_encode(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).decode("ascii").rstrip("=")
+
+
+def _b64url_decode(text: str) -> bytes:
+    padded = text + ("=" * ((4 - (len(text) % 4)) % 4))
+    return base64.urlsafe_b64decode(padded.encode("ascii"))
+
+
+def _sign_preview_proxy_session_token(payload_b64: str) -> str:
+    mac = hmac.new(
+        _preview_proxy_session_secret_bytes(),
+        payload_b64.encode("utf-8"),
+        hashlib.sha256,
+    ).digest()
+    return _b64url_encode(mac)
+
+
+def _mint_preview_proxy_session_token(
+    *,
+    workspace_id: str,
+    project_id: str,
+    actor_user_id: str,
+    org_id: str | None,
+    actor_email: str | None,
+    org_role: str | None,
+) -> tuple[str, int]:
+    now = int(time.time())
+    exp = now + _preview_proxy_session_ttl_seconds()
+    payload = {
+        "v": 1,
+        "workspace_id": workspace_id,
+        "project_id": project_id,
+        "actor_user_id": actor_user_id,
+        "org_id": str(org_id or "").strip() or None,
+        "actor_email": str(actor_email or "").strip() or None,
+        "org_role": str(org_role or "").strip() or None,
+        "exp": exp,
+        "nonce": uuid.uuid4().hex,
+    }
+    payload_b64 = _b64url_encode(json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8"))
+    sig_b64 = _sign_preview_proxy_session_token(payload_b64)
+    return f"{payload_b64}.{sig_b64}", exp
+
+
+def _decode_preview_proxy_session_token(token: str | None) -> dict[str, Any] | None:
+    raw = str(token or "").strip()
+    if not raw or "." not in raw:
+        return None
+    payload_b64, sig_b64 = raw.split(".", 1)
+    if not payload_b64 or not sig_b64:
+        return None
+    expected = _sign_preview_proxy_session_token(payload_b64)
+    if not hmac.compare_digest(expected, sig_b64):
+        return None
+    try:
+        payload_obj = json.loads(_b64url_decode(payload_b64).decode("utf-8"))
+    except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload_obj, dict):
+        return None
+    exp_raw = payload_obj.get("exp")
+    try:
+        exp = int(exp_raw)
+    except (TypeError, ValueError):
+        return None
+    if exp < int(time.time()):
+        return None
+    return payload_obj
+
+
+def _preview_proxy_session_claim_match(
+    *,
+    claims: dict[str, Any],
+    workspace_id: str,
+    project_id: str,
+) -> bool:
+    claim_ws = str(claims.get("workspace_id") or "").strip()
+    claim_project = str(claims.get("project_id") or "").strip()
+    claim_user = str(claims.get("actor_user_id") or "").strip()
+    if not claim_ws or not claim_project or not claim_user:
+        return False
+    return claim_ws == workspace_id and claim_project == project_id
+
+
+def _preview_proxy_actor_from_claims(claims: dict[str, Any]) -> HamActor | None:
+    user_id = str(claims.get("actor_user_id") or "").strip()
+    if not user_id:
+        return None
+    return HamActor(
+        user_id=user_id,
+        org_id=str(claims.get("org_id") or "").strip() or None,
+        session_id=f"preview_proxy_cookie_{str(claims.get('nonce') or '').strip()[:32]}",
+        email=str(claims.get("actor_email") or "").strip() or None,
+        permissions=frozenset(),
+        org_role=str(claims.get("org_role") or "").strip() or None,
+        raw_permission_claim="preview_proxy_cookie",
+    )
+
+
+def _resolve_workspace_context_or_http(
+    *,
+    actor: HamActor,
+    workspace_id: str,
+    store: WorkspaceStore,
+) -> WorkspaceContext:
+    try:
+        return resolve_workspace_context(actor, workspace_id, store)
+    except (WorkspaceForbidden, WorkspaceNotFound) as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.http_payload()) from exc
+    except WorkspaceResolveError as exc:  # pragma: no cover - defensive
+        raise HTTPException(status_code=exc.status_code, detail=exc.http_payload()) from exc
+
+
+def _require_preview_proxy_read_perm(ctx: WorkspaceContext) -> WorkspaceContext:
+    if PERM_WORKSPACE_READ not in ctx.perms:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": {
+                    "code": "HAM_PERMISSION_DENIED",
+                    "message": f"This action requires the {PERM_WORKSPACE_READ!r} permission.",
+                    "required_perm": PERM_WORKSPACE_READ,
+                    "actor_role": ctx.role,
+                    "workspace_id": ctx.workspace_id,
+                }
+            },
+        )
+    return ctx
+
+
+async def require_preview_proxy_ctx(
+    workspace_id: str,
+    project_id: str,
+    request: Request,
+    actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)] = None,
+    store: Annotated[WorkspaceStore, Depends(get_workspace_store)] = None,  # type: ignore[assignment]
+) -> WorkspaceContext:
+    if actor is not None:
+        return _require_preview_proxy_read_perm(
+            _resolve_workspace_context_or_http(actor=actor, workspace_id=workspace_id, store=store)
+        )
+    cookie_token = request.cookies.get(_PREVIEW_PROXY_SESSION_COOKIE_NAME)
+    claims = _decode_preview_proxy_session_token(cookie_token)
+    if claims is None or not _preview_proxy_session_claim_match(
+        claims=claims,
+        workspace_id=workspace_id,
+        project_id=project_id,
+    ):
+        raise HTTPException(
+            status_code=401,
+            detail={
+                "error": {
+                    "code": "PREVIEW_PROXY_SESSION_REQUIRED",
+                    "message": "Preview authentication required. Refresh the preview session and try again.",
+                }
+            },
+        )
+    cookie_actor = _preview_proxy_actor_from_claims(claims)
+    if cookie_actor is None:
+        raise HTTPException(
+            status_code=401,
+            detail={
+                "error": {
+                    "code": "PREVIEW_PROXY_SESSION_REQUIRED",
+                    "message": "Preview authentication required. Refresh the preview session and try again.",
+                }
+            },
+        )
+    return _require_preview_proxy_read_perm(
+        _resolve_workspace_context_or_http(actor=cookie_actor, workspace_id=workspace_id, store=store)
+    )
 
 
 def _supersede_active_cloud_runtime_jobs(
@@ -1794,11 +2007,58 @@ async def get_builder_preview_status(
     return _build_preview_status_payload(workspace_id=ctx.workspace_id, project_id=project_id)
 
 
+@router.post("/api/workspaces/{workspace_id}/projects/{project_id}/builder/preview-proxy/session")
+async def create_builder_preview_proxy_session(
+    project_id: str,
+    response: Response,
+    ctx: Annotated[WorkspaceContext, Depends(require_perm(PERM_WORKSPACE_READ))],
+) -> dict[str, Any]:
+    _project_in_workspace_or_404(project_id=project_id, workspace_id=ctx.workspace_id)
+    endpoint = _cloud_proxy_endpoint_or_none(workspace_id=ctx.workspace_id, project_id=project_id)
+    if endpoint is None:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": {
+                    "code": "PREVIEW_PROXY_NOT_CONFIGURED",
+                    "message": "Cloud preview proxy endpoint is not configured for this project.",
+                }
+            },
+        )
+    token, exp = _mint_preview_proxy_session_token(
+        workspace_id=ctx.workspace_id,
+        project_id=project_id,
+        actor_user_id=ctx.actor_user_id,
+        org_id=ctx.org_id,
+        actor_email=ctx.actor_email,
+        org_role=ctx.org_role,
+    )
+    ttl = _preview_proxy_session_ttl_seconds()
+    cookie_path = _preview_proxy_cookie_path(workspace_id=ctx.workspace_id, project_id=project_id)
+    response.set_cookie(
+        key=_PREVIEW_PROXY_SESSION_COOKIE_NAME,
+        value=token,
+        max_age=ttl,
+        expires=ttl,
+        path=cookie_path,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+    )
+    expires_at = datetime.fromtimestamp(exp, tz=UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return {
+        "workspace_id": ctx.workspace_id,
+        "project_id": project_id,
+        "status": "ready",
+        "expires_at": expires_at,
+    }
+
+
 async def _serve_builder_preview_proxy(
     project_id: str,
     path: str,
     request: Request,
-    ctx: Annotated[WorkspaceContext, Depends(require_perm(PERM_WORKSPACE_READ))],
+    ctx: Annotated[WorkspaceContext, Depends(require_preview_proxy_ctx)],
 ) -> Response:
     _project_in_workspace_or_404(project_id=project_id, workspace_id=ctx.workspace_id)
     endpoint = _cloud_proxy_endpoint_or_none(workspace_id=ctx.workspace_id, project_id=project_id)
@@ -1922,7 +2182,7 @@ async def _serve_builder_preview_proxy(
 async def get_builder_preview_proxy_root(
     project_id: str,
     request: Request,
-    ctx: Annotated[WorkspaceContext, Depends(require_perm(PERM_WORKSPACE_READ))],
+    ctx: Annotated[WorkspaceContext, Depends(require_preview_proxy_ctx)],
 ) -> Response:
     return await _serve_builder_preview_proxy(
         project_id=project_id,
@@ -1940,7 +2200,7 @@ async def get_builder_preview_proxy(
     project_id: str,
     path: str,
     request: Request,
-    ctx: Annotated[WorkspaceContext, Depends(require_perm(PERM_WORKSPACE_READ))],
+    ctx: Annotated[WorkspaceContext, Depends(require_preview_proxy_ctx)],
 ) -> Response:
     return await _serve_builder_preview_proxy(
         project_id=project_id,

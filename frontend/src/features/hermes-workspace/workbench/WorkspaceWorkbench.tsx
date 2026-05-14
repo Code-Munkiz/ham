@@ -31,6 +31,7 @@ import {
   type BuilderWorkerCapability,
   type BuilderProjectSourceRecord,
   type BuilderSourceSnapshotRecord,
+  createBuilderPreviewProxySession,
   createBuilderVisualEditRequest,
   deleteBuilderLocalRunProfile,
   deleteBuilderLocalPreview,
@@ -360,6 +361,11 @@ function WorkbenchPreviewPanel({
   );
   const [cloudRuntimeLifecycle, setCloudRuntimeLifecycle] =
     React.useState<CloudRuntimeLifecycleStatus | null>(null);
+  const [previewProxySessionKey, setPreviewProxySessionKey] = React.useState<string | null>(null);
+  const [previewProxySessionMinting, setPreviewProxySessionMinting] = React.useState(false);
+  const [previewProxySessionError, setPreviewProxySessionError] = React.useState<string | null>(
+    null,
+  );
   const [runProfileForm, setRunProfileForm] = React.useState<LocalRunProfilePayload>({
     display_name: "Local run profile",
     working_directory: ".",
@@ -632,6 +638,65 @@ function WorkbenchPreviewPanel({
     Boolean(ws && pid && activeSourceSnapshotId) &&
     cloudRuntimeRequestEnabled &&
     !cloudPreviewHealthy;
+  const previewProxySessionCandidateKey =
+    ws && pid && previewUrl && preview?.mode === "cloud" && preview?.status === "ready"
+      ? [
+          ws,
+          pid,
+          preview.runtime_session_id || "",
+          preview.preview_endpoint_id || "",
+          previewUrl,
+        ].join("|")
+      : null;
+  const cloudPreviewProxyNeedsSession =
+    preview?.mode === "cloud" && preview?.status === "ready" && Boolean(previewUrl);
+  const canRenderPreviewIframe =
+    preview?.status === "ready" &&
+    Boolean(previewUrl) &&
+    (!cloudPreviewProxyNeedsSession ||
+      (previewProxySessionKey === previewProxySessionCandidateKey && !previewProxySessionError));
+
+  React.useEffect(() => {
+    if (!cloudPreviewProxyNeedsSession || !previewProxySessionCandidateKey || !ws || !pid) {
+      setPreviewProxySessionMinting(false);
+      setPreviewProxySessionError(null);
+      setPreviewProxySessionKey(null);
+      return;
+    }
+    if (previewProxySessionKey === previewProxySessionCandidateKey) {
+      return;
+    }
+    let cancelled = false;
+    setPreviewProxySessionMinting(true);
+    setPreviewProxySessionError(null);
+    void createBuilderPreviewProxySession(ws, pid)
+      .then(() => {
+        if (!cancelled) {
+          setPreviewProxySessionKey(previewProxySessionCandidateKey);
+          setPreviewProxySessionError(null);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setPreviewProxySessionKey(null);
+          setPreviewProxySessionError(err instanceof Error ? err.message : String(err));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setPreviewProxySessionMinting(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    cloudPreviewProxyNeedsSession,
+    previewProxySessionCandidateKey,
+    previewProxySessionKey,
+    ws,
+    pid,
+  ]);
   const cloudRuntimeProviderCopy =
     cloudRuntimeState === "experiment_not_enabled"
       ? "Cloud runtime experiments are not enabled."
@@ -835,7 +900,7 @@ function WorkbenchPreviewPanel({
           previewPhase === "ready" && previewViewport === "mobile" ? "items-center" : "",
         )}
       >
-        {previewPhase === "ready" && previewUrl ? (
+        {canRenderPreviewIframe && previewUrl ? (
           <div
             className={cn(
               "flex min-h-0 w-full flex-1 flex-col overflow-hidden p-2",
@@ -910,6 +975,22 @@ function WorkbenchPreviewPanel({
                 data-testid="hww-preview-primary-subtitle"
               >
                 {primaryState.subtitle}
+              </p>
+            ) : null}
+            {previewPhase === "ready" && preview?.mode === "cloud" && previewProxySessionMinting ? (
+              <p
+                className="max-w-md text-[12px] text-white/60"
+                data-testid="hww-preview-auth-pending"
+              >
+                Preview authentication in progress…
+              </p>
+            ) : null}
+            {previewPhase === "ready" && preview?.mode === "cloud" && previewProxySessionError ? (
+              <p
+                className="max-w-md text-[12px] text-amber-200/90"
+                data-testid="hww-preview-auth-error"
+              >
+                Preview authentication failed. Refresh status and try again.
               </p>
             ) : null}
             {previewPhase === "error" ? (
