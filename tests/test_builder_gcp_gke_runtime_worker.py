@@ -18,6 +18,11 @@ from src.ham.builder_sandbox_provider import (
     set_sandbox_runtime_provider_factory_for_tests,
 )
 from src.ham.gcp_preview_source_bundle import set_source_bundle_uploader_factory_for_tests
+from src.ham.gcp_preview_runtime_client import (
+    PreviewPodRef,
+    PreviewPodStatus,
+    set_gke_runtime_client_factory_for_tests,
+)
 from src.ham.workspace_models import WorkspaceMember, WorkspaceRecord
 from src.persistence.builder_runtime_job_store import BuilderRuntimeJobStore, set_builder_runtime_job_store_for_tests
 from src.persistence.builder_runtime_store import BuilderRuntimeStore, set_builder_runtime_store_for_tests
@@ -168,6 +173,7 @@ def _cleanup() -> None:
     set_builder_usage_event_store_for_tests(None)
     set_sandbox_runtime_provider_factory_for_tests(None)
     set_source_bundle_uploader_factory_for_tests(None)
+    set_gke_runtime_client_factory_for_tests(None)
 
 
 class _InjectedLiveProvider:
@@ -287,6 +293,60 @@ class _RecordingBundleUploader:
         )
 
 
+class _RecordingRuntimeClient:
+    manifests: list[dict] = []
+
+    def create_preview_pod(self, *, manifest: dict):
+        self.manifests.append(manifest)
+        md = manifest.get("metadata") or {}
+        return PreviewPodRef(
+            namespace=str(md.get("namespace") or "ham-builder-preview-spike"),
+            pod_name=str(md.get("name") or "pod"),
+            labels={str(k): str(v) for k, v in (md.get("labels") or {}).items()},
+        )
+
+    def get_pod_status(self, *, pod_ref: PreviewPodRef) -> PreviewPodStatus:
+        _ = pod_ref
+        return PreviewPodStatus(phase="Running", ready=True)
+
+    def poll_pod_ready(self, *, pod_ref: PreviewPodRef, timeout_seconds: int) -> PreviewPodStatus:
+        _ = pod_ref, timeout_seconds
+        return PreviewPodStatus(phase="Running", ready=True)
+
+    def get_pod_logs_summary(self, *, pod_ref: PreviewPodRef, max_chars: int = 240) -> str | None:
+        _ = pod_ref, max_chars
+        return "runtime client fake logs"
+
+    def delete_preview_pod(self, *, pod_ref: PreviewPodRef) -> bool:
+        _ = pod_ref
+        return True
+
+    def create_preview_service(self, *, pod_ref: PreviewPodRef, manifest: dict | None = None) -> str | None:
+        _ = pod_ref, manifest
+        return None
+
+    def delete_preview_service(self, *, pod_ref: PreviewPodRef) -> bool:
+        _ = pod_ref
+        return True
+
+    def cleanup_owned_expired_resources(
+        self,
+        *,
+        resources: list[PreviewPodRef],
+        workspace_id: str,
+        project_id: str,
+        now_iso: str,
+    ):
+        _ = resources, workspace_id, project_id, now_iso
+        from src.ham.gcp_preview_runtime_client import CleanupResult
+
+        return CleanupResult(deleted_pods=0, deleted_services=0, skipped=0, cleanup_status="success")
+
+    def normalize_error(self, *, error: Exception) -> tuple[str, str]:
+        _ = error
+        return ("GCP_GKE_RUNTIME_CLIENT_ERROR", "runtime client failed")
+
+
 def test_e2b_dependency_removed_from_requirements() -> None:
     req = Path("requirements.txt").read_text(encoding="utf-8").lower()
     assert "e2b" not in req
@@ -404,6 +464,28 @@ def test_gcp_gke_uses_injected_source_bundle_uploader(tmp_path: Path, monkeypatc
         _cleanup()
 
 
+def test_gcp_gke_passes_source_bundle_uri_into_runtime_client_manifest(tmp_path: Path, monkeypatch) -> None:
+    _apply_gcp_gke_scaffold(monkeypatch, dry_run=False, fake_mode="success")
+    _RecordingRuntimeClient.manifests = []
+    set_gke_runtime_client_factory_for_tests(lambda: _RecordingRuntimeClient())
+    client, ws_id, project_id, snap_id = _seed_context(tmp_path)
+    try:
+        body = client.post(
+            f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime/jobs",
+            json={"source_snapshot_id": snap_id},
+        ).json()
+        assert body["job"]["status"] == "succeeded"
+        assert _RecordingRuntimeClient.manifests
+        manifest = _RecordingRuntimeClient.manifests[0]
+        envs = manifest["spec"]["containers"][0]["env"]
+        source_uri = next((e["value"] for e in envs if e["name"] == "PREVIEW_SOURCE_URI"), "")
+        assert source_uri.startswith("gs://ham-builder-sources-test/")
+        runtime_resource = body["job"]["metadata"]["runtime_resource"]
+        assert runtime_resource["pod_phase"] == "Running"
+    finally:
+        _cleanup()
+
+
 def test_gcp_gke_fake_failure_reports_error_without_preview(tmp_path: Path, monkeypatch) -> None:
     _apply_gcp_gke_scaffold(monkeypatch, dry_run=False, fake_mode="failure")
     client, ws_id, project_id, snap_id = _seed_context(tmp_path)
@@ -418,6 +500,21 @@ def test_gcp_gke_fake_failure_reports_error_without_preview(tmp_path: Path, monk
             params={"source_snapshot_id": snap_id},
         ).json()
         assert preview["preview_url"] in {None, ""}
+    finally:
+        _cleanup()
+
+
+def test_gcp_gke_live_client_gate_without_impl_fails_safely(tmp_path: Path, monkeypatch) -> None:
+    _apply_gcp_gke_scaffold(monkeypatch, dry_run=False, fake_mode="success")
+    monkeypatch.setenv("HAM_BUILDER_GCP_RUNTIME_LIVE_K8S_ENABLED", "true")
+    client, ws_id, project_id, snap_id = _seed_context(tmp_path)
+    try:
+        body = client.post(
+            f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime/jobs",
+            json={"source_snapshot_id": snap_id},
+        ).json()
+        assert body["job"]["status"] == "failed"
+        assert body["job"]["error_code"] == "GCP_GKE_RUNTIME_CLIENT_ERROR"
     finally:
         _cleanup()
 
