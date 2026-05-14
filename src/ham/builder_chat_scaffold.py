@@ -179,18 +179,18 @@ def materialize_inline_files_as_zip_artifact(
     return f"builder-artifact://{artifact_id}", len(payload)
 
 
-def _existing_fingerprint_hit(
+def _existing_fingerprint_snapshot_id(
     *,
     workspace_id: str,
     project_id: str,
     fingerprint: str,
-) -> bool:
+) -> str | None:
     store = get_builder_source_store()
     for snap in store.list_source_snapshots(workspace_id=workspace_id, project_id=project_id):
         meta = snap.metadata or {}
         if str(meta.get("chat_scaffold_fingerprint") or "") == fingerprint:
-            return True
-    return False
+            return snap.id
+    return None
 
 
 def maybe_chat_scaffold_for_turn(
@@ -209,8 +209,18 @@ def maybe_chat_scaffold_for_turn(
     if classify_builder_chat_intent(last_user_plain) != "build_or_create":
         return None
     fp = _fingerprint(session_id, last_user_plain)
-    if _existing_fingerprint_hit(workspace_id=ws, project_id=pid, fingerprint=fp):
-        return {"builder_intent": "build_or_create", "scaffolded": False, "deduplicated": True}
+    existing_snapshot_id = _existing_fingerprint_snapshot_id(
+        workspace_id=ws,
+        project_id=pid,
+        fingerprint=fp,
+    )
+    if existing_snapshot_id:
+        return {
+            "builder_intent": "build_or_create",
+            "scaffolded": False,
+            "deduplicated": True,
+            "source_snapshot_id": existing_snapshot_id,
+        }
 
     files = _bounded_files(last_user_plain)
     entries_manifest: list[dict[str, Any]] = []

@@ -56,6 +56,10 @@ def maybe_enqueue_chat_scaffold_cloud_runtime_job(
     for row in store.list_cloud_runtime_jobs(workspace_id=workspace_id, project_id=project_id):
         meta = row.metadata or {}
         if str(meta.get("chat_scaffold_dedupe_key") or "") == dedupe_key:
+            status = str(row.status or "").strip().lower()
+            # Allow retries when a prior deduped job ended in a terminal error state.
+            if status in {"failed", "unsupported", "cancelled"}:
+                continue
             return {
                 "cloud_runtime_job_id": row.id,
                 "cloud_runtime_job_deduplicated": True,
