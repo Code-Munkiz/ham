@@ -725,6 +725,12 @@ class ProjectContext:
     instruction_files: list[InstructionFile] = field(default_factory=list)
     config: ProjectConfig = field(default_factory=ProjectConfig)
     # **FOR MAINTAINERS**: file_count and tree provide a lightweight workspace overview.
+    # **KEY MAINTAINER NOTE**: The file_count field is computed from the scan_workspace() result
+    # (excluding IGNORE_DIRS and filtering to INTERESTING_EXTENSIONS), while tree is a string
+    # representation limited to max_depth=3. Both are computed once during discover() and serve
+    # as complementary workspace summaries: file_count for quick cardinality checks, tree for
+    # structural navigation. Never change file_count after discover() — it represents the scan
+    # snapshot state, not current disk state.
     # file_count is the total number of indexed files (respects IGNORE_DIRS and INTERESTING_EXTENSIONS).
     # tree is a human-readable directory tree (max_depth=3 by default) showing structure without content.
     # Together they give agents a quick map of the repo layout without loading full file contents.
