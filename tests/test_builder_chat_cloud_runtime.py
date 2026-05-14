@@ -173,6 +173,7 @@ def test_chat_scaffold_tetris_prompt_generates_playable_game_sources(tmp_path: P
     app_tsx = str(inline_files.get("src/App.tsx") or "")
     styles_css = str(inline_files.get("src/styles.css") or "")
     readme = str(inline_files.get("README.md") or "")
+    vite_config = str(inline_files.get("vite.config.ts") or "")
     assert "const BOARD_WIDTH = 10;" in app_tsx
     assert "const BOARD_HEIGHT = 20;" in app_tsx
     assert "function clearLines(board: Board)" in app_tsx
@@ -180,6 +181,7 @@ def test_chat_scaffold_tetris_prompt_generates_playable_game_sources(tmp_path: P
     assert "Line clear scoring, levels, and game over + restart" in readme
     assert ".board {" in styles_css
     assert ".game-over {" in styles_css
+    assert "hmr: false" in vite_config
     assert "Scaffold created from your chat request." not in app_tsx
     _cleanup()
 

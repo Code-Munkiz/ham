@@ -434,7 +434,7 @@ class LiveGkePreviewRuntimeClient:
         except urlerror.HTTPError as exc:
             if exc.code == 404:
                 return None
-            return _redact_logs(str(exc.reason))[: max(0, max_chars)]
+            return None
         except Exception:
             return None
         return _redact_logs(text)[: max(0, max_chars)]

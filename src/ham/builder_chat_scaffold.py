@@ -87,6 +87,17 @@ def _build_tetris_scaffold_files(*, title: str, safe_pkg: str) -> dict[str, str]
             "  </React.StrictMode>,\n"
             ");\n"
         ),
+        "vite.config.ts": (
+            "import { defineConfig } from \"vite\";\n"
+            "import react from \"@vitejs/plugin-react\";\n"
+            "\n"
+            "export default defineConfig({\n"
+            "  plugins: [react()],\n"
+            "  server: {\n"
+            "    hmr: false,\n"
+            "  },\n"
+            "});\n"
+        ),
         "src/App.tsx": (
             "import React, { useCallback, useEffect, useMemo, useState } from \"react\";\n"
             "\n"

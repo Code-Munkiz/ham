@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from types import MethodType
+from urllib import error as urlerror
 
 from src.ham.gcp_preview_runtime_client import (
     FakeGkePreviewRuntimeClient,
@@ -228,3 +229,23 @@ def test_live_client_cleanup_parses_lowercase_manifest_safe_expiry_label(monkeyp
     assert result.deleted_pods == 1
     assert result.deleted_services == 1
     assert "pod:pod-lower" in deleted
+
+
+def test_live_client_logs_summary_ignores_non_404_http_errors(monkeypatch) -> None:
+    client = LiveGkePreviewRuntimeClient()
+
+    def _fake_urlopen(*args, **kwargs):  # type: ignore[no-untyped-def]
+        _ = (args, kwargs)
+        raise urlerror.HTTPError(
+            url="https://example.test/log",
+            code=406,
+            msg="Not Acceptable",
+            hdrs=None,
+            fp=None,
+        )
+
+    monkeypatch.setattr("urllib.request.urlopen", _fake_urlopen)
+    monkeypatch.setattr(client, "_ensure_cluster_connection", lambda: ("kubernetes.default.svc", None))
+    monkeypatch.setattr(client, "_refresh_token", lambda: "token")
+    ref = PreviewPodRef(namespace="ns", pod_name="pod")
+    assert client.get_pod_logs_summary(pod_ref=ref) is None
