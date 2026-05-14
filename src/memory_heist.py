@@ -906,6 +906,15 @@ class SessionMemory:
         self.messages.append(Message(role=role, content=content, **kwargs))
 
     def estimate_tokens(self) -> int:
+        """Estimate token count using character-based approximation.
+        
+        **Note for maintainers**: This uses `len(content) // 4 + 1` as a rough
+        heuristic because actual token counting requires external libraries
+        (tiktoken, huggingface tokenizers). This estimate is sufficient for
+        session compaction thresholds where precision isn't critical. For
+        precise token counts, see TODO in DEFAULT_SESSION_COMPACTION_MAX_TOKENS
+        at line 205.
+        """
         return sum(len(m.content) // 4 + 1 for m in self.messages)
 
     def configure_from_project_config(self, config: ProjectConfig | dict[str, Any] | None) -> None:
