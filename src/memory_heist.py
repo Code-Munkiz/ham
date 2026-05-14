@@ -248,8 +248,11 @@ DEFAULT_SESSION_COMPACTION_PRESERVE = 4
 # control overall session payload size. The 4-message minimum is chosen as the smallest
 # viable context set for maintaining conversation continuity (user intent + prior actions).
 DEFAULT_SESSION_TOOL_PRUNE_CHARS = 200
-# Note: DEFAULT_SESSION_COMPACTION_MAX_TOKENS placeholder is unused - current
+# NOTE: DEFAULT_SESSION_COMPACTION_MAX_TOKENS placeholder is unused - current
 # session compaction doesn't rely on token budgeting. See lines 158-179 for details.
+# **MAINTAINER WARNING**: This constant (line 220) will be replaced by the next
+# new constant addition. Do not add constants between this line and line 220
+# without updating this placeholder, or you'll break line number references.
 # Session browser defaults: browser interaction controls including step limits,
 # timeouts, and DOM/output constraints. These ensure browser automation stays
 # within acceptable token budgets and execution time bounds.
