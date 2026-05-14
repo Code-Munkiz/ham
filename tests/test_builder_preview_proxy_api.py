@@ -147,6 +147,54 @@ def test_proxy_local_url_endpoint_is_not_proxied(tmp_path: Path) -> None:
     _cleanup()
 
 
+def test_proxy_uses_same_active_cloud_endpoint_selection_as_preview_status(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    async def _fake_fetch(*, method: str, url: str, headers: dict[str, str]) -> httpx.Response:
+        _ = (method, url, headers)
+        return httpx.Response(200, content=b"<html>ok</html>", headers={"content-type": "text/html"})
+
+    monkeypatch.setattr("src.api.builder_sources._proxy_upstream_fetch", _fake_fetch)
+    client, ws_id, project_id, runtime_store = _seed_context(tmp_path)
+    expired = RuntimeSession(
+        workspace_id=ws_id,
+        project_id=project_id,
+        mode="cloud",
+        status="expired",
+        health="unknown",
+    )
+    expired.updated_at = "2026-05-14T16:40:00Z"
+    runtime_store.upsert_runtime_session(expired)
+    active = RuntimeSession(
+        workspace_id=ws_id,
+        project_id=project_id,
+        mode="cloud",
+        status="running",
+        health="healthy",
+    )
+    active.updated_at = "2026-05-14T16:30:00Z"
+    runtime_store.upsert_runtime_session(active)
+    runtime_store.upsert_preview_endpoint(
+        PreviewEndpoint(
+            workspace_id=ws_id,
+            project_id=project_id,
+            runtime_session_id=active.id,
+            access_mode="proxy",
+            status="ready",
+            url="https://ham-preview-123.run.app/",
+            metadata={"trusted_proxy_host": "ham-preview-123.run.app"},
+        )
+    )
+    status = client.get(f"/api/workspaces/{ws_id}/projects/{project_id}/builder/preview-status")
+    assert status.status_code == 200, status.text
+    assert status.json()["status"] == "ready"
+    assert status.json()["preview_url"] == f"/api/workspaces/{ws_id}/projects/{project_id}/builder/preview-proxy/"
+    res = client.get(f"/api/workspaces/{ws_id}/projects/{project_id}/builder/preview-proxy/")
+    assert res.status_code == 200, res.text
+    _cleanup()
+
+
 def test_preview_proxy_session_mint_sets_http_only_cookie(tmp_path: Path) -> None:
     client, ws_id, project_id, runtime_store = _seed_context(tmp_path)
     runtime = _seed_cloud_runtime(runtime_store, ws_id=ws_id, project_id=project_id)

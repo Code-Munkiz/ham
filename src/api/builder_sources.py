@@ -921,18 +921,31 @@ def _supersede_active_cloud_runtime_jobs(
     return changed
 
 
-def _cloud_proxy_endpoint_or_none(*, workspace_id: str, project_id: str) -> PreviewEndpoint | None:
-    runtime = get_builder_runtime_store().get_latest_runtime_session(
+def _active_cloud_runtime_and_endpoint(
+    *,
+    workspace_id: str,
+    project_id: str,
+) -> tuple[Any | None, PreviewEndpoint | None]:
+    runtime = get_builder_runtime_store().get_active_runtime_session(
         workspace_id=workspace_id,
         project_id=project_id,
-        mode="cloud",
     )
     if runtime is None:
-        return None
+        return None, None
+    if str(runtime.mode or "").strip().lower() != "cloud":
+        return None, None
     endpoint = get_builder_runtime_store().get_active_preview_endpoint(
         workspace_id=workspace_id,
         project_id=project_id,
         runtime_session_id=runtime.id,
+    )
+    return runtime, endpoint
+
+
+def _cloud_proxy_endpoint_or_none(*, workspace_id: str, project_id: str) -> PreviewEndpoint | None:
+    _runtime, endpoint = _active_cloud_runtime_and_endpoint(
+        workspace_id=workspace_id,
+        project_id=project_id,
     )
     if endpoint is None:
         return None
