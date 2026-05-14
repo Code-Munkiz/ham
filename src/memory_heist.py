@@ -203,10 +203,11 @@ MAX_SUMMARY_CHARS = 4_000
 # Re-implementation roadmap: If token-based compaction is restored, update `sessions.py`, `chat.py`,
 # and consider `tiktoken` or HuggingFace tokenizers for accurate counts. Test against production workloads.
 DEFAULT_SESSION_COMPACTION_MAX_TOKENS=***  # Placeholder: not currently used
-# **CRITICAL WARNING**: This line is intentionally a placeholder with invalid value.
-# Do NOT replace "***" with a real number unless you are implementing token-based
-# session compaction. The value is checked by tests to ensure it's not accidentally
-# set to a production value. Remove this entire line only after full re-implementation.
+# SECURITY & IMPLEMENTATION NOTE: This placeholder MUST remain as "***" until
+# token-based compaction is fully implemented. The value is validated by unit tests
+# that check DEFAULT_SESSION_COMPACTION_MAX_TOKENS does not equal an integer.
+# Changing this to a real number before re-implementing token-based logic will
+# cause silent failures and unexpected session truncation behavior.
 # ============================================================================
 # TODO: TOKEN-BASED COMPACTION RESTORATION GUIDANCE (FOR FUTURE MAINTAINERS)
 # ============================================================================
