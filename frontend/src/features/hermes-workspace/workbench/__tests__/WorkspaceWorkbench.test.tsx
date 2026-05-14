@@ -11,6 +11,7 @@ const {
   getBuilderPreviewStatusMock,
   getBuilderActivityMock,
   getBuilderCloudRuntimeMock,
+  createBuilderPreviewProxySessionMock,
   listBuilderCloudRuntimeJobsMock,
   getBuilderCloudRuntimeJobStatusMock,
   subscribeBuilderActivityStreamMock,
@@ -32,6 +33,7 @@ const {
   getBuilderPreviewStatusMock: vi.fn(),
   getBuilderActivityMock: vi.fn(),
   getBuilderCloudRuntimeMock: vi.fn(),
+  createBuilderPreviewProxySessionMock: vi.fn(),
   listBuilderCloudRuntimeJobsMock: vi.fn(),
   getBuilderCloudRuntimeJobStatusMock: vi.fn(),
   subscribeBuilderActivityStreamMock: vi.fn(),
@@ -57,6 +59,8 @@ vi.mock("@/lib/ham/api", async (importOriginal) => {
     getBuilderPreviewStatus: (...args: unknown[]) => getBuilderPreviewStatusMock(...args),
     getBuilderActivity: (...args: unknown[]) => getBuilderActivityMock(...args),
     getBuilderCloudRuntime: (...args: unknown[]) => getBuilderCloudRuntimeMock(...args),
+    createBuilderPreviewProxySession: (...args: unknown[]) =>
+      createBuilderPreviewProxySessionMock(...args),
     listBuilderCloudRuntimeJobs: (...args: unknown[]) => listBuilderCloudRuntimeJobsMock(...args),
     getBuilderCloudRuntimeJobStatus: (...args: unknown[]) =>
       getBuilderCloudRuntimeJobStatusMock(...args),
@@ -145,6 +149,12 @@ describe("WorkspaceWorkbench", () => {
       runtime_session_id: null,
       source_snapshot_id: null,
       metadata: {},
+    });
+    createBuilderPreviewProxySessionMock.mockResolvedValue({
+      workspace_id: "ws_abc",
+      project_id: "proj_abc",
+      status: "ready",
+      expires_at: "2026-01-01T00:10:00Z",
     });
     listBuilderCloudRuntimeJobsMock.mockResolvedValue({
       workspace_id: "ws_abc",
@@ -1161,6 +1171,61 @@ describe("WorkspaceWorkbench", () => {
       "src",
       "/api/workspaces/ws_abc/projects/proj_abc/builder/preview-proxy/",
     );
+  });
+
+  it("Cloud preview mints proxy session before iframe render", async () => {
+    getBuilderPreviewStatusMock.mockResolvedValue({
+      project_id: "proj_abc",
+      workspace_id: "ws_abc",
+      mode: "cloud",
+      status: "ready",
+      health: "healthy",
+      preview_url: "workspaces/ws_abc/projects/proj_abc/builder/preview-proxy/",
+      message: "Preview is ready via authenticated cloud proxy.",
+      updated_at: "2026-01-01T00:00:00Z",
+      source_snapshot_id: "ssnp_1",
+      runtime_session_id: "rtms_cloud_1",
+      preview_endpoint_id: "prve_cloud_1",
+      logs_hint: null,
+    });
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(createBuilderPreviewProxySessionMock).toHaveBeenCalledWith("ws_abc", "proj_abc");
+    });
+    expect(await screen.findByTestId("hww-preview-iframe")).toBeInTheDocument();
+  });
+
+  it("Cloud preview session mint failure shows safe auth error without iframe", async () => {
+    getBuilderPreviewStatusMock.mockResolvedValue({
+      project_id: "proj_abc",
+      workspace_id: "ws_abc",
+      mode: "cloud",
+      status: "ready",
+      health: "healthy",
+      preview_url: "workspaces/ws_abc/projects/proj_abc/builder/preview-proxy/",
+      message: "Preview is ready via authenticated cloud proxy.",
+      updated_at: "2026-01-01T00:00:00Z",
+      source_snapshot_id: "ssnp_1",
+      runtime_session_id: "rtms_cloud_1",
+      preview_endpoint_id: "prve_cloud_1",
+      logs_hint: null,
+    });
+    createBuilderPreviewProxySessionMock.mockRejectedValueOnce(
+      new Error("PREVIEW_PROXY_SESSION_REQUIRED"),
+    );
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-preview-auth-error")).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId("hww-preview-iframe")).toBeNull();
   });
 
   it("Cloud preview blocks unsafe absolute upstream URL from iframe", async () => {

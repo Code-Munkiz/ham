@@ -756,6 +756,25 @@ export async function getBuilderPreviewStatus(
   return res.json() as Promise<BuilderPreviewStatus>;
 }
 
+export async function createBuilderPreviewProxySession(
+  workspaceId: string,
+  projectId: string,
+): Promise<{ workspace_id: string; project_id: string; status: string; expires_at: string }> {
+  const res = await hamApiFetch(
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/projects/${encodeURIComponent(projectId)}/builder/preview-proxy/session`,
+    { method: "POST" },
+  );
+  if (!res.ok) {
+    throw new Error((await hamApiErrorDetailMessage(res)) || `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<{
+    workspace_id: string;
+    project_id: string;
+    status: string;
+    expires_at: string;
+  }>;
+}
+
 export async function getBuilderLocalRunProfile(
   workspaceId: string,
   projectId: string,
