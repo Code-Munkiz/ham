@@ -295,3 +295,51 @@ def test_public_dict_never_leaks_secrets(
     assert "sk-ant-test-only" not in blob
     assert "cur_" + "y" * 40 not in blob
     assert "runner.example/private" not in blob
+
+
+# ---------------------------------------------------------------------------
+# OpenCode readiness collator
+# ---------------------------------------------------------------------------
+
+
+def test_opencode_readiness_reports_available_when_fully_configured(
+    monkeypatch: pytest.MonkeyPatch, isolated_store: ProjectStore
+) -> None:
+    """Env gates on + CLI present + auth set → snapshot's opencode_cli row available."""
+    from src.ham.worker_adapters import opencode_adapter as _opencode_adapter
+
+    monkeypatch.setenv("HAM_OPENCODE_ENABLED", "1")
+    monkeypatch.setenv("HAM_OPENCODE_EXECUTION_ENABLED", "1")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-opencode-canary")
+    monkeypatch.setattr(
+        _opencode_adapter.shutil,
+        "which",
+        lambda name: "/usr/local/bin/opencode" if name == "opencode" else None,
+    )
+    _opencode_adapter.reset_opencode_readiness_cache()
+    snap = collate_readiness()
+    oc = _provider(snap, "opencode_cli")
+    assert oc.available is True
+    assert oc.blockers == ()
+
+
+def test_opencode_readiness_blockers_normie_safe(
+    monkeypatch: pytest.MonkeyPatch, isolated_store: ProjectStore
+) -> None:
+    """Mirror the per-builder lock at the collator level for defence-in-depth."""
+    monkeypatch.delenv("HAM_OPENCODE_ENABLED", raising=False)
+    monkeypatch.delenv("HAM_OPENCODE_EXECUTION_ENABLED", raising=False)
+    snap = collate_readiness()
+    oc = _provider(snap, "opencode_cli")
+    for blocker in oc.blockers:
+        for forbidden in (
+            "HAM_OPENCODE_ENABLED",
+            "HAM_OPENCODE_EXECUTION_ENABLED",
+            "OPENROUTER_API_KEY",
+            "ANTHROPIC_API_KEY",
+            "/usr/",
+            "http://",
+            "https://",
+            "subprocess",
+        ):
+            assert forbidden not in blocker, (forbidden, blocker)

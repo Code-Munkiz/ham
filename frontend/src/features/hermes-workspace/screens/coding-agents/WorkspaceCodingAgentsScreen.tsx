@@ -1,6 +1,6 @@
 import * as React from "react";
 import { Link } from "react-router-dom";
-import { Bot, Plus, RefreshCw, ScanLine } from "lucide-react";
+import { Bot, Plus, RefreshCw, ScanLine, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -13,6 +13,7 @@ import {
 import {
   buildPreview,
   fetchCursorReadiness,
+  fetchOpencodeReadinessForCodingAgentsScreen,
   launchNewCodingTask,
   validateNewCodingTaskForm,
   type CodingAgentReadiness,
@@ -68,6 +69,8 @@ export function WorkspaceCodingAgentsScreen() {
   const [readiness, setReadiness] = React.useState<CodingAgentReadiness>("needs_setup");
   const [readinessError, setReadinessError] = React.useState<string | null>(null);
   const [readinessLoading, setReadinessLoading] = React.useState(true);
+  const [opencodeReadiness, setOpencodeReadiness] =
+    React.useState<CodingAgentReadiness>("needs_setup");
 
   const [projects, setProjects] = React.useState<ProjectRecord[]>([]);
   const [projectsError, setProjectsError] = React.useState<string | null>(null);
@@ -81,14 +84,16 @@ export function WorkspaceCodingAgentsScreen() {
     setReadinessLoading(true);
     setReadinessError(null);
     setProjectsError(null);
-    const [r, p] = await Promise.all([
+    const [r, p, oc] = await Promise.all([
       fetchCursorReadiness(),
       listHamProjects().catch((e: unknown) => ({
         projects: [] as ProjectRecord[],
         _error: e instanceof Error ? e.message : String(e),
       })),
+      fetchOpencodeReadinessForCodingAgentsScreen(),
     ]);
     setReadiness(r.readiness);
+    setOpencodeReadiness(oc);
     if (r.error) setReadinessError(r.error);
     if ("_error" in p && p._error) {
       setProjectsError(p._error);
@@ -213,6 +218,7 @@ export function WorkspaceCodingAgentsScreen() {
         readinessError={readinessError}
         readinessLoading={readinessLoading}
         droidReady={droidReady}
+        opencodeReadiness={opencodeReadiness}
       />
 
       {projectsError && (
@@ -363,11 +369,13 @@ function ProviderRow({
   readinessError,
   readinessLoading,
   droidReady,
+  opencodeReadiness,
 }: {
   readiness: CodingAgentReadiness;
   readinessError: string | null;
   readinessLoading: boolean;
   droidReady: boolean;
+  opencodeReadiness: CodingAgentReadiness;
 }) {
   return (
     <section className="flex flex-wrap items-center gap-3 rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-card)] px-4 py-3 shadow-[0_12px_40px_var(--theme-shadow)]">
@@ -387,6 +395,14 @@ function ProviderRow({
         <ScanLine className="h-4 w-4 text-[var(--theme-accent)]" />
         <span className="text-sm font-semibold text-[var(--theme-text)]">Factory Droid</span>
         <CodingAgentReadinessPill readiness={droidReady ? "ready" : "needs_setup"} />
+      </div>
+      <span className="text-[var(--theme-muted)]">·</span>
+      <div className="flex items-center gap-2">
+        <Sparkles className="h-4 w-4 text-[var(--theme-accent)]" />
+        <span className="text-sm font-semibold text-[var(--theme-text)]">
+          {CODING_AGENT_LABELS.opencodeProviderName}
+        </span>
+        <CodingAgentReadinessPill readiness={opencodeReadiness} />
       </div>
       {readinessError && <span className="text-[11px] text-amber-300/80">{readinessError}</span>}
     </section>

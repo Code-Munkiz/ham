@@ -1886,7 +1886,8 @@ export type CodingConductorProviderKind =
   | "factory_droid_build"
   | "cursor_cloud"
   | "claude_code"
-  | "claude_agent";
+  | "claude_agent"
+  | "opencode_cli";
 
 export type CodingConductorOutputKind = "answer" | "report" | "pull_request" | "mission";
 

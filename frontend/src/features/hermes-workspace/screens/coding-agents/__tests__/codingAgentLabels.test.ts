@@ -35,6 +35,12 @@ describe("CODING_AGENT_LABELS — locked product copy", () => {
     expect(CODING_AGENT_LABELS.auditReadOnlyPill).toContain("Read-only");
     expect(CODING_AGENT_LABELS.chooserCursorTitle).toContain("Cursor");
     expect(CODING_AGENT_LABELS.chooserDroidTitle).toContain("Factory Droid");
+    expect(CODING_AGENT_LABELS.chooserOpencodeTitle).toContain("OpenCode");
+  });
+
+  it("comingSoonNote mentions OpenCode brand without leaking the internal id", () => {
+    expect(CODING_AGENT_LABELS.comingSoonNote).toContain("OpenCode");
+    expect(CODING_AGENT_LABELS.comingSoonNote.toLowerCase()).not.toContain("opencode_cli");
   });
 
   it("uses friendly copy for audit failure / no-project / load-failed states", () => {

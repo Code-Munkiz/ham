@@ -46,6 +46,7 @@ _BLOCKER_DISABLED = "OpenCode provider is disabled on this host."
 _BLOCKER_CLI_MISSING = "OpenCode CLI is not installed on this host."
 _BLOCKER_AUTH_MISSING = "OpenCode has no model-provider credentials configured."
 _BLOCKER_NOT_IMPLEMENTED = "OpenCode live execution is not yet enabled on this host."
+_BLOCKER_EXECUTION_DISABLED = "OpenCode execution is paused for this host. An admin must enable it."
 
 
 def _truthy_env(name: str) -> bool:
@@ -506,18 +507,23 @@ def build_opencode_readiness(
 ) -> ProviderReadiness:
     """Return ProviderReadiness for the opencode_cli coding-router provider.
 
-    Mission 2 leaves the recommender hard-exclusion intact: the provider
-    is never marked ``available=True`` from this builder because the
-    conductor surfaces are gated on configured readiness + the explicit
-    HAM_OPENCODE_EXECUTION_ENABLED env flag. Promoting OpenCode into the
-    recommender ranks is Mission 3 work.
+    Reports ``available=True`` only when all of:
+    - ``HAM_OPENCODE_ENABLED`` is truthy
+    - ``HAM_OPENCODE_EXECUTION_ENABLED`` is truthy
+    - :func:`check_opencode_readiness` returns ``OpenCodeStatus.CONFIGURED``
     """
-    if not _truthy_env(OPENCODE_ENABLED_ENV_NAME):
+    enabled = _truthy_env(OPENCODE_ENABLED_ENV_NAME)
+    execution_enabled = _truthy_env(OPENCODE_EXECUTION_ENABLED_ENV_NAME)
+    if not enabled:
         return ProviderReadiness(
             provider="opencode_cli",
             available=False,
             blockers=(_BLOCKER_DISABLED,),
-            operator_signals=(("enabled=false",) if include_operator_details else ()),
+            operator_signals=(
+                ("enabled=false", f"execution_enabled={'true' if execution_enabled else 'false'}")
+                if include_operator_details
+                else ()
+            ),
         )
     readiness = check_opencode_readiness(actor)
     blockers: list[str] = []
@@ -527,19 +533,22 @@ def build_opencode_readiness(
         blockers.append(_BLOCKER_AUTH_MISSING)
     elif readiness.status != OpenCodeStatus.CONFIGURED:
         blockers.append(_BLOCKER_NOT_IMPLEMENTED)
-    if not blockers:
-        blockers.append(_BLOCKER_NOT_IMPLEMENTED)
+    if not execution_enabled and not blockers:
+        blockers.append(_BLOCKER_EXECUTION_DISABLED)
+
+    available = enabled and execution_enabled and readiness.status == OpenCodeStatus.CONFIGURED
 
     operator_signals: tuple[str, ...] = ()
     if include_operator_details:
         operator_signals = (
             "enabled=true",
+            f"execution_enabled={'true' if execution_enabled else 'false'}",
             f"cli_present={'true' if readiness.cli_present else 'false'}",
             f"status={readiness.status.value}",
         )
     return ProviderReadiness(
         provider="opencode_cli",
-        available=False,
+        available=available,
         blockers=tuple(blockers),
         operator_signals=operator_signals,
     )

@@ -258,6 +258,61 @@ def test_response_body_does_not_expose_internal_workflow_ids(
     assert "readonly_repo_audit" not in blob
 
 
+def test_readiness_api_includes_opencode_provider_entry_when_available(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_store: ProjectStore,
+    normie_actor: HamActor,
+    cleanup_overrides: None,
+) -> None:
+    """Env gates on + CLI present + auth set → opencode_cli entry is available."""
+    from src.ham.worker_adapters import opencode_adapter as _opencode_adapter
+
+    monkeypatch.setenv("HAM_OPENCODE_ENABLED", "1")
+    monkeypatch.setenv("HAM_OPENCODE_EXECUTION_ENABLED", "1")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-opencode-canary")
+    monkeypatch.setattr(
+        _opencode_adapter.shutil,
+        "which",
+        lambda name: "/usr/local/bin/opencode" if name == "opencode" else None,
+    )
+    _opencode_adapter.reset_opencode_readiness_cache()
+    res = _client(normie_actor).get("/api/coding/readiness")
+    assert res.status_code == 200, res.text
+    body = res.json()
+    oc = next(p for p in body["providers"] if p["provider"] == "opencode_cli")
+    assert oc["available"] is True
+    assert oc["blockers"] == []
+    # Secret value canary never leaks into the response body.
+    assert "test-opencode-canary" not in res.text
+
+
+def test_readiness_api_opencode_blockers_normie_safe(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_store: ProjectStore,
+    normie_actor: HamActor,
+    cleanup_overrides: None,
+) -> None:
+    """Lock: opencode_cli blocker copy never names env vars or runner internals."""
+    monkeypatch.delenv("HAM_OPENCODE_ENABLED", raising=False)
+    monkeypatch.delenv("HAM_OPENCODE_EXECUTION_ENABLED", raising=False)
+    res = _client(normie_actor).get("/api/coding/readiness")
+    assert res.status_code == 200
+    body = res.json()
+    oc = next(p for p in body["providers"] if p["provider"] == "opencode_cli")
+    for blocker in oc["blockers"]:
+        for forbidden in (
+            "HAM_OPENCODE_ENABLED",
+            "HAM_OPENCODE_EXECUTION_ENABLED",
+            "OPENROUTER_API_KEY",
+            "ANTHROPIC_API_KEY",
+            "/usr/",
+            "http://",
+            "https://",
+            "subprocess",
+        ):
+            assert forbidden not in blocker, (forbidden, blocker)
+
+
 def test_no_launch_endpoint_under_coding_namespace() -> None:
     """Lock: there is no launch / dispatch / execute route under /api/coding.
 

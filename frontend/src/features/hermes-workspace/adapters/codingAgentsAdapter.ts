@@ -13,6 +13,7 @@
 import {
   fetchCursorCredentialsStatus,
   fetchDroidAuditRuns,
+  hamApiFetch,
   launchCursorAgent,
   launchDroidAudit,
   previewDroidAudit,
@@ -202,6 +203,28 @@ export interface LaunchOutcome {
   ok: boolean;
   cursorAgentId: string | null;
   errorMessage: string | null;
+}
+
+/**
+ * Probe the server-side coding readiness for the OpenCode lane.
+ *
+ * Hits ``GET /api/coding/readiness`` and reports a normie-friendly
+ * "ready" / "needs_setup" flag based on the ``opencode_cli`` provider
+ * entry. Any error path resolves to ``needs_setup`` so the UI never
+ * crashes; the user can install / configure OpenCode and refresh.
+ */
+export async function fetchOpencodeReadinessForCodingAgentsScreen(): Promise<CodingAgentReadiness> {
+  try {
+    const res = await hamApiFetch("/api/coding/readiness");
+    if (!res.ok) return "needs_setup";
+    const body = (await res.json()) as {
+      providers?: Array<{ provider: string; available: boolean }>;
+    };
+    const row = (body.providers ?? []).find((p) => p.provider === "opencode_cli");
+    return row?.available ? "ready" : "needs_setup";
+  } catch {
+    return "needs_setup";
+  }
 }
 
 export async function fetchCursorReadiness(): Promise<{

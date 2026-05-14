@@ -400,3 +400,118 @@ def test_build_opencode_readiness_blockers_are_normie_safe(
             "subprocess",
         ):
             assert forbidden not in blocker, (forbidden, blocker)
+
+
+# ---------------------------------------------------------------------------
+# Promotion: readiness available when fully configured
+# ---------------------------------------------------------------------------
+
+
+def test_build_opencode_readiness_reports_available_when_fully_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(OPENCODE_ENABLED_ENV_NAME, "1")
+    monkeypatch.setenv("HAM_OPENCODE_EXECUTION_ENABLED", "1")
+    monkeypatch.setenv("OPENROUTER_API_KEY", _AUTH_CANARY)
+    _patch_which_present(monkeypatch)
+    pr = build_opencode_readiness(actor=None, include_operator_details=False)
+    assert pr.provider == "opencode_cli"
+    assert pr.available is True
+    assert pr.blockers == ()
+
+
+def test_build_opencode_readiness_reports_execution_disabled_blocker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ENABLED gate on, EXECUTION_ENABLED gate off + readiness CONFIGURED."""
+    monkeypatch.setenv(OPENCODE_ENABLED_ENV_NAME, "1")
+    monkeypatch.delenv("HAM_OPENCODE_EXECUTION_ENABLED", raising=False)
+    monkeypatch.setenv("OPENROUTER_API_KEY", _AUTH_CANARY)
+    _patch_which_present(monkeypatch)
+    pr = build_opencode_readiness(actor=None, include_operator_details=False)
+    assert pr.provider == "opencode_cli"
+    assert pr.available is False
+    assert pr.blockers
+    for blocker in pr.blockers:
+        for forbidden in (
+            "HAM_OPENCODE_ENABLED",
+            "HAM_OPENCODE_EXECUTION_ENABLED",
+            "OPENROUTER_API_KEY",
+            "ANTHROPIC_API_KEY",
+            "/usr/",
+            "http://",
+            "https://",
+            "subprocess",
+        ):
+            assert forbidden not in blocker, (forbidden, blocker)
+
+
+def test_recommender_promotes_opencode_when_all_gates_pass_and_managed_workspace(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Both env gates + CONFIGURED readiness + managed_workspace project → opencode in candidates."""
+    from src.ham.coding_router.types import ProjectFlags, WorkspaceReadiness
+
+    monkeypatch.setenv(OPENCODE_ENABLED_ENV_NAME, "1")
+    monkeypatch.setenv("HAM_OPENCODE_EXECUTION_ENABLED", "1")
+    monkeypatch.setenv("OPENROUTER_API_KEY", _AUTH_CANARY)
+    _patch_which_present(monkeypatch)
+    base = collate_readiness(actor=None, project_id=None, include_operator_details=False)
+    # Wrap snapshot with a managed_workspace project so the recommender gate passes.
+    managed_proj = ProjectFlags(
+        found=True,
+        project_id="project.demo-managed",
+        build_lane_enabled=True,
+        has_github_repo=False,
+        output_target="managed_workspace",
+        has_workspace_id=True,
+    )
+    snap = WorkspaceReadiness(
+        is_operator=base.is_operator,
+        providers=base.providers,
+        project=managed_proj,
+    )
+    for prompt in (
+        "Build a new feature for the chat panel.",
+        "Refactor this function to be more readable.",
+        "Add docstrings to ham_run_id helpers.",
+    ):
+        task = classify_task(prompt)
+        candidates = recommend(task, snap, project=managed_proj)
+        oc = [c for c in candidates if c.provider == "opencode_cli"]
+        assert len(oc) == 1, (prompt, [c.provider for c in candidates])
+        assert not oc[0].blockers, (prompt, oc[0].blockers)
+
+
+def test_recommender_drops_opencode_when_output_target_is_github_pr(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Full env gates + CONFIGURED readiness + project output_target=github_pr → no opencode."""
+    from src.ham.coding_router.types import ProjectFlags, WorkspaceReadiness
+
+    monkeypatch.setenv(OPENCODE_ENABLED_ENV_NAME, "1")
+    monkeypatch.setenv("HAM_OPENCODE_EXECUTION_ENABLED", "1")
+    monkeypatch.setenv("OPENROUTER_API_KEY", _AUTH_CANARY)
+    _patch_which_present(monkeypatch)
+    base = collate_readiness(actor=None, project_id=None, include_operator_details=False)
+    github_proj = ProjectFlags(
+        found=True,
+        project_id="project.demo-github",
+        build_lane_enabled=True,
+        has_github_repo=True,
+        output_target="github_pr",
+        has_workspace_id=False,
+    )
+    snap = WorkspaceReadiness(
+        is_operator=base.is_operator,
+        providers=base.providers,
+        project=github_proj,
+    )
+    for prompt in (
+        "Build a new feature for the chat panel.",
+        "Refactor this function to be more readable.",
+    ):
+        task = classify_task(prompt)
+        candidates = recommend(task, snap, project=github_proj)
+        for c in candidates:
+            assert c.provider != "opencode_cli", (prompt, c.provider)

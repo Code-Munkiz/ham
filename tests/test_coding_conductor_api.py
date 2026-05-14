@@ -902,3 +902,230 @@ def test_no_launch_endpoint_under_coding_namespace() -> None:
         for _, methods in routes:
             for m in methods:
                 assert m in ("GET", "POST", "HEAD"), f"unexpected verb {m} on {p}"
+
+
+# ---------------------------------------------------------------------------
+# OpenCode lane in conductor preview
+# ---------------------------------------------------------------------------
+
+
+def _make_opencode_ready(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Configure env + adapter so opencode_cli readiness reports available."""
+    from src.ham.worker_adapters import opencode_adapter as _opencode_adapter
+
+    monkeypatch.setenv("HAM_OPENCODE_ENABLED", "1")
+    monkeypatch.setenv("HAM_OPENCODE_EXECUTION_ENABLED", "1")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-opencode-canary")
+    monkeypatch.setattr(
+        _opencode_adapter.shutil,
+        "which",
+        lambda name: "/usr/local/bin/opencode" if name == "opencode" else None,
+    )
+    _opencode_adapter.reset_opencode_readiness_cache()
+
+
+def test_preview_managed_workspace_feature_includes_opencode_candidate_when_ready(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_store: ProjectStore,
+    normie_actor: HamActor,
+    tmp_path: Path,
+    cleanup_overrides: None,
+) -> None:
+    _make_build_ready(monkeypatch)
+    _make_opencode_ready(monkeypatch)
+    rec = _register_project(
+        isolated_store,
+        name="p_opencode_feature",
+        root=tmp_path,
+        build_lane_enabled=True,
+        output_target="managed_workspace",
+        workspace_id="ws_opencode_a",
+    )
+    # Use a comments_only task so factory_droid_build is in the table
+    # alongside opencode_cli; the plan locks that Droid stays chosen here.
+    res = _post(
+        _client(normie_actor),
+        user_prompt="Add docstrings to ham_run_id helpers.",
+        project_id=rec.id,
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    providers = {c["provider"] for c in body["candidates"]}
+    assert "opencode_cli" in providers
+    assert "factory_droid_build" in providers
+    oc = next(c for c in body["candidates"] if c["provider"] == "opencode_cli")
+    assert oc["available"] is True
+    assert oc["blockers"] == []
+    assert oc["will_open_pull_request"] is False
+    # Chosen stays factory_droid_build (Droid-first ranking policy).
+    assert body["chosen"] is not None
+    assert body["chosen"]["provider"] == "factory_droid_build"
+
+
+def test_preview_opencode_not_in_candidates_when_output_target_github_pr(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_store: ProjectStore,
+    normie_actor: HamActor,
+    tmp_path: Path,
+    cleanup_overrides: None,
+) -> None:
+    _make_opencode_ready(monkeypatch)
+    rec = _register_project(
+        isolated_store,
+        name="p_opencode_github",
+        root=tmp_path,
+        build_lane_enabled=True,
+        github_repo="Code-Munkiz/ham",
+        output_target="github_pr",
+    )
+    res = _post(
+        _client(normie_actor),
+        user_prompt="Build a new feature for the chat panel.",
+        project_id=rec.id,
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    providers = {c["provider"] for c in body["candidates"]}
+    assert "opencode_cli" not in providers
+
+
+def test_preview_opencode_not_in_candidates_when_env_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_store: ProjectStore,
+    normie_actor: HamActor,
+    tmp_path: Path,
+    cleanup_overrides: None,
+) -> None:
+    """Readiness probe configured but env gates not set → opencode_cli absent."""
+    from src.ham.worker_adapters import opencode_adapter as _opencode_adapter
+
+    monkeypatch.delenv("HAM_OPENCODE_ENABLED", raising=False)
+    monkeypatch.delenv("HAM_OPENCODE_EXECUTION_ENABLED", raising=False)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-opencode-canary")
+    monkeypatch.setattr(
+        _opencode_adapter.shutil,
+        "which",
+        lambda name: "/usr/local/bin/opencode" if name == "opencode" else None,
+    )
+    _opencode_adapter.reset_opencode_readiness_cache()
+
+    rec = _register_project(
+        isolated_store,
+        name="p_opencode_envoff",
+        root=tmp_path,
+        build_lane_enabled=True,
+        output_target="managed_workspace",
+        workspace_id="ws_opencode_off",
+    )
+    res = _post(
+        _client(normie_actor),
+        user_prompt="Build a new feature for the chat panel.",
+        project_id=rec.id,
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    providers = {c["provider"] for c in body["candidates"]}
+    assert "opencode_cli" not in providers
+
+
+def test_preview_opencode_preferred_provider_promotes_when_approveable(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_store: ProjectStore,
+    normie_actor: HamActor,
+    tmp_path: Path,
+    cleanup_overrides: None,
+) -> None:
+    _make_opencode_ready(monkeypatch)
+    rec = _register_project(
+        isolated_store,
+        name="p_opencode_prefer",
+        root=tmp_path,
+        build_lane_enabled=True,
+        output_target="managed_workspace",
+        workspace_id="ws_opencode_prefer",
+    )
+    res = _post(
+        _client(normie_actor),
+        user_prompt="Refactor the chat router.",
+        project_id=rec.id,
+        extra={"preferred_provider": "opencode_cli"},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["chosen"] is not None
+    assert body["chosen"]["provider"] == "opencode_cli"
+    assert body["chosen"]["available"] is True
+
+
+def test_preview_opencode_preferred_provider_cannot_bypass_managed_workspace_gate(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_store: ProjectStore,
+    normie_actor: HamActor,
+    tmp_path: Path,
+    cleanup_overrides: None,
+) -> None:
+    _make_opencode_ready(monkeypatch)
+    rec = _register_project(
+        isolated_store,
+        name="p_opencode_prefer_block",
+        root=tmp_path,
+        build_lane_enabled=True,
+        github_repo="Code-Munkiz/ham",
+        output_target="github_pr",
+    )
+    res = _post(
+        _client(normie_actor),
+        user_prompt="Refactor the chat router.",
+        project_id=rec.id,
+        extra={"preferred_provider": "opencode_cli"},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    providers = {c["provider"] for c in body["candidates"]}
+    assert "opencode_cli" not in providers
+    if body["chosen"] is not None:
+        assert body["chosen"]["provider"] != "opencode_cli"
+
+
+def test_preview_body_never_leaks_opencode_env_names(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_store: ProjectStore,
+    normie_actor: HamActor,
+    tmp_path: Path,
+    cleanup_overrides: None,
+) -> None:
+    _make_opencode_ready(monkeypatch)
+    monkeypatch.setenv("HAM_OPENCODE_EXEC_TOKEN", "test-opencode-exec-token-canary")
+    monkeypatch.setenv("XDG_DATA_HOME", "/tmp/should-not-appear")
+    rec = _register_project(
+        isolated_store,
+        name="p_opencode_sanitise",
+        root=tmp_path,
+        build_lane_enabled=True,
+        output_target="managed_workspace",
+        workspace_id="ws_opencode_sanitise",
+    )
+    for prompt in (
+        "Build a new feature for the chat panel.",
+        "Refactor the chat router.",
+        "Add docstrings to ham_run_id helpers.",
+        "Fix typos in the README.",
+    ):
+        res = _post(_client(normie_actor), user_prompt=prompt, project_id=rec.id)
+        assert res.status_code == 200, res.text
+        blob = res.text
+        lower = blob.lower()
+        for forbidden in (
+            "HAM_OPENCODE_ENABLED",
+            "HAM_OPENCODE_EXEC_TOKEN",
+            "HAM_OPENCODE_EXECUTION_ENABLED",
+            "OPENROUTER_API_KEY",
+            "XDG_DATA_HOME",
+            "opencode serve",
+            "test-opencode-canary",
+            "test-opencode-exec-token-canary",
+        ):
+            assert forbidden not in blob, f"response leaks {forbidden!r}: {blob}"
+            assert forbidden.lower() not in lower, (
+                f"response leaks {forbidden!r}: {blob}"
+            )

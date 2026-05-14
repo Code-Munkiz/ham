@@ -61,6 +61,7 @@ const PROVIDER_LABEL: Record<CodingConductorProviderKind, string> = {
   cursor_cloud: "Cursor pull request",
   claude_code: "Local single-file edit",
   claude_agent: "Claude Agent (preview)",
+  opencode_cli: "OpenCode managed workspace build",
 };
 
 export type ClaudeAgentReadinessState =

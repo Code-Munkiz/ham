@@ -27,6 +27,7 @@ const PROVIDERS: CodingConductorProviderKind[] = [
   "cursor_cloud",
   "claude_code",
   "claude_agent",
+  "opencode_cli",
 ];
 
 const OUTPUTS: CodingConductorOutputKind[] = ["answer", "report", "pull_request", "mission"];

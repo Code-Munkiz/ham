@@ -9,6 +9,7 @@ import {
   deriveDroidRunStatus,
   droidRunStatusLabel,
   fetchDroidAuditRunsForProject,
+  fetchOpencodeReadinessForCodingAgentsScreen,
   launchDroidAuditFlow,
   launchNewCodingTask,
   previewDroidAuditFlow,
@@ -599,5 +600,47 @@ describe("launchDroidAuditFlow", () => {
     });
     expect(out.ok).toBe(false);
     expect(out.errorMessage).toBe(CODING_AGENT_LABELS.auditDeploymentNotReady);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// OpenCode readiness helper
+// ---------------------------------------------------------------------------
+
+describe("fetchOpencodeReadinessForCodingAgentsScreen", () => {
+  function makeResponse(body: unknown, ok = true, status = 200): Response {
+    return new Response(JSON.stringify(body), {
+      status,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  it("returns 'ready' when the API reports opencode_cli available", async () => {
+    vi.spyOn(api, "hamApiFetch").mockResolvedValue(
+      makeResponse({
+        providers: [
+          { provider: "no_agent", available: true },
+          { provider: "opencode_cli", available: true },
+        ],
+      }),
+    );
+    const out = await fetchOpencodeReadinessForCodingAgentsScreen();
+    expect(out).toBe("ready");
+  });
+
+  it("returns 'needs_setup' when the API reports opencode_cli unavailable", async () => {
+    vi.spyOn(api, "hamApiFetch").mockResolvedValue(
+      makeResponse({
+        providers: [{ provider: "opencode_cli", available: false }],
+      }),
+    );
+    const out = await fetchOpencodeReadinessForCodingAgentsScreen();
+    expect(out).toBe("needs_setup");
+  });
+
+  it("returns 'needs_setup' when hamApiFetch throws", async () => {
+    vi.spyOn(api, "hamApiFetch").mockRejectedValue(new Error("network down"));
+    const out = await fetchOpencodeReadinessForCodingAgentsScreen();
+    expect(out).toBe("needs_setup");
   });
 });

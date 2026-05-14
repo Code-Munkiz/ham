@@ -95,7 +95,14 @@ export const CODING_AGENT_LABELS = {
 
   /** Secondary mention only — never primary. */
   comingSoonNote:
-    "More coding agents are on the way. Today you can hand off to Cursor or run an approved audit with Factory Droid.",
+    "You can hand off to Cursor, run an approved audit with Factory Droid, or build with OpenCode (open / bring-your-own model) when it's configured.",
+
+  chooserOpencodeTitle: "OpenCode — open / bring-your-own model build",
+  chooserOpencodeBody:
+    "Build in a managed workspace using your own model credentials. Best when you want to try a different model or run open-weight builds.",
+  opencodeProviderName: "OpenCode",
+  opencodeReadinessNotConfigured: "OpenCode is not configured on this host yet.",
+  opencodeReadinessReady: "Ready when configured",
 } as const;
 
 export type CodingAgentLabels = typeof CODING_AGENT_LABELS;

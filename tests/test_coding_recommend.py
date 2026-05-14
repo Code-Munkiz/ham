@@ -394,3 +394,160 @@ def test_recommend_output_never_leaks_internals(task_kind: str, prompt: str) -> 
         assert forbidden not in blob, (
             f"task={task_kind!r}: candidate output leaks {forbidden!r}: {blob}"
         )
+
+
+# ---------------------------------------------------------------------------
+# OpenCode lane eligibility (managed_workspace + env gates + readiness)
+# ---------------------------------------------------------------------------
+
+
+def _readiness_with_opencode_available(
+    *,
+    audit: bool = True,
+    build: bool = False,
+    cursor: bool = False,
+    claude: bool = False,
+    opencode_available: bool = True,
+    project: ProjectFlags | None = None,
+) -> WorkspaceReadiness:
+    """Build a readiness snapshot including an opencode_cli row."""
+    base = _readiness(audit=audit, build=build, cursor=cursor, claude=claude, project=project)
+    oc_row = ProviderReadiness(
+        provider="opencode_cli",
+        available=opencode_available,
+        blockers=() if opencode_available else ("OpenCode is not configured on this host yet.",),
+    )
+    return WorkspaceReadiness(
+        is_operator=base.is_operator,
+        providers=(*base.providers, oc_row),
+        project=base.project,
+    )
+
+
+def _managed_project(
+    *,
+    found: bool = True,
+    build_lane_enabled: bool = True,
+    has_workspace_id: bool = True,
+) -> ProjectFlags:
+    return ProjectFlags(
+        found=found,
+        project_id="project.demo-managed" if found else None,
+        build_lane_enabled=build_lane_enabled,
+        has_github_repo=False,
+        output_target="managed_workspace",
+        has_workspace_id=has_workspace_id,
+    )
+
+
+def test_recommend_opencode_appears_for_feature_when_ready_and_managed_workspace(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("HAM_OPENCODE_ENABLED", "1")
+    monkeypatch.setenv("HAM_OPENCODE_EXECUTION_ENABLED", "1")
+    proj = _managed_project()
+    out = recommend(
+        classify_task("Build a new feature for the chat panel.", project_id=proj.project_id),
+        _readiness_with_opencode_available(project=proj),
+        project=proj,
+    )
+    oc = _provider_candidate(out, "opencode_cli")
+    assert oc is not None
+    assert not oc.blockers
+    assert oc.requires_operator is False
+    assert oc.will_open_pull_request is False
+
+
+def test_recommend_opencode_never_overtakes_factory_droid_build(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("HAM_OPENCODE_ENABLED", "1")
+    monkeypatch.setenv("HAM_OPENCODE_EXECUTION_ENABLED", "1")
+    proj = _managed_project()
+    out = recommend(
+        classify_task("Add docstrings to ham_run_id helpers.", project_id=proj.project_id),
+        _readiness_with_opencode_available(build=True, project=proj),
+        project=proj,
+    )
+    approveable = [c for c in out if not c.blockers]
+    assert approveable, [c.provider for c in out]
+    assert approveable[0].provider == "factory_droid_build"
+    # opencode_cli is still in candidates, just not the top approve-able one.
+    assert any(c.provider == "opencode_cli" for c in out)
+
+
+def test_recommend_opencode_excluded_when_output_target_is_github_pr(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("HAM_OPENCODE_ENABLED", "1")
+    monkeypatch.setenv("HAM_OPENCODE_EXECUTION_ENABLED", "1")
+    proj = _project(found=True, has_github_repo=True, output_target="github_pr")
+    out = recommend(
+        classify_task("Build a new feature.", project_id=proj.project_id),
+        _readiness_with_opencode_available(project=proj),
+        project=proj,
+    )
+    for c in out:
+        assert c.provider != "opencode_cli", c.provider
+
+
+def test_recommend_opencode_excluded_when_env_gates_off(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("HAM_OPENCODE_ENABLED", raising=False)
+    monkeypatch.delenv("HAM_OPENCODE_EXECUTION_ENABLED", raising=False)
+    proj = _managed_project()
+    out = recommend(
+        classify_task("Build a new feature.", project_id=proj.project_id),
+        _readiness_with_opencode_available(project=proj),
+        project=proj,
+    )
+    for c in out:
+        assert c.provider != "opencode_cli", c.provider
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "Explain how chat-first works.",
+        "Audit the API for risks.",
+        "Run a security review on the API.",
+        "Do an architecture report for src/api.",
+        "hello",
+    ],
+)
+def test_recommend_opencode_excluded_for_audit_and_explain(
+    monkeypatch: pytest.MonkeyPatch, prompt: str
+) -> None:
+    monkeypatch.setenv("HAM_OPENCODE_ENABLED", "1")
+    monkeypatch.setenv("HAM_OPENCODE_EXECUTION_ENABLED", "1")
+    proj = _managed_project()
+    out = recommend(
+        classify_task(prompt, project_id=proj.project_id),
+        _readiness_with_opencode_available(project=proj),
+        project=proj,
+    )
+    for c in out:
+        assert c.provider != "opencode_cli", (prompt, c.provider)
+
+
+def test_recommend_opencode_output_never_leaks_internals(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("HAM_OPENCODE_ENABLED", "1")
+    monkeypatch.setenv("HAM_OPENCODE_EXECUTION_ENABLED", "1")
+    proj = _managed_project()
+    out = recommend(
+        classify_task("Refactor the chat router.", project_id=proj.project_id),
+        _readiness_with_opencode_available(project=proj),
+        project=proj,
+    )
+    blob = json.dumps([c.__dict__ for c in out], default=str).lower()
+    for forbidden in (
+        *_FORBIDDEN_TOKENS,
+        "ham_opencode_enabled",
+        "ham_opencode_execution_enabled",
+        "openrouter_api_key",
+        "opencode serve",
+    ):
+        assert forbidden not in blob, blob

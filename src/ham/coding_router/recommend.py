@@ -45,7 +45,7 @@ _REASON: dict[ProviderKind, str] = {
     "cursor_cloud": "Repo-wide context; opens a pull request you review.",
     "claude_code": "Single-file local edit handled directly on this host.",
     "claude_agent": "Single-file edit handled by Claude Agent against the managed workspace.",
-    "opencode_cli": "OpenCode-managed edit (scaffolded; not yet executable on this host).",
+    "opencode_cli": "OpenCode managed-workspace edit using your own model.",
 }
 
 # Static safety flags per provider (kept here, not in readiness, because
@@ -107,39 +107,43 @@ _BASE_CONFIDENCE: dict[str, dict[ProviderKind, float]] = {
     "doc_fix": {
         "factory_droid_build": 0.8,
         "cursor_cloud": 0.55,
+        "opencode_cli": 0.45,
     },
     "comments_only": {
         "factory_droid_build": 0.8,
         "cursor_cloud": 0.55,
+        "opencode_cli": 0.45,
     },
     "format_only": {
         "factory_droid_build": 0.8,
+        "opencode_cli": 0.45,
     },
     "typo_only": {
         "factory_droid_build": 0.85,
+        "opencode_cli": 0.45,
     },
     "feature": {
         "cursor_cloud": 0.8,
+        "opencode_cli": 0.55,
     },
     "fix": {
         "cursor_cloud": 0.7,
         "claude_code": 0.5,
+        "opencode_cli": 0.45,
     },
     "refactor": {
         "cursor_cloud": 0.8,
+        "opencode_cli": 0.55,
     },
     "multi_file_edit": {
         "cursor_cloud": 0.85,
+        "opencode_cli": 0.55,
     },
     "single_file_edit": {
         "claude_code": 0.7,
         "claude_agent": 0.6,
         "cursor_cloud": 0.5,
-        # opencode_cli base confidence is intentionally near zero so it is
-        # never preferred over a configured Claude Agent or Cursor lane.
-        # The hard exclusion below ensures it is also dropped entirely
-        # while the env gate is off or readiness != configured.
-        "opencode_cli": 0.0,
+        "opencode_cli": 0.45,
     },
     "unknown": {
         "no_agent": 0.4,
@@ -214,7 +218,33 @@ def _project_blockers_for(provider: ProviderKind, project: ProjectFlags) -> tupl
                         "This project has no managed workspace assigned yet. "
                         "Pick a workspace before building."
                     )
+    if provider == "opencode_cli":
+        blockers.extend(_opencode_project_blockers(project))
     return tuple(blockers)
+
+
+def _opencode_project_blockers(project: ProjectFlags) -> list[str]:
+    """OpenCode-specific project blockers; mirrors Factory Droid Build."""
+    blockers: list[str] = []
+    if not project.found:
+        blockers.append("Pick a project before launching an OpenCode build.")
+        return blockers
+    target = (project.output_target or "managed_workspace").strip()
+    if target != "managed_workspace":
+        blockers.append(
+            "OpenCode requires a managed workspace project; this project "
+            "opens GitHub pull requests instead."
+        )
+    elif not project.has_workspace_id:
+        blockers.append(
+            "This project has no managed workspace assigned yet. Pick a workspace before building."
+        )
+    if not project.build_lane_enabled:
+        blockers.append(
+            "Build lane is disabled for this project. A workspace owner or admin "
+            "must enable it in project settings."
+        )
+    return blockers
 
 
 def _approveable_first(c: Candidate) -> tuple[int, float]:
@@ -266,28 +296,35 @@ def recommend(
             )
         )
 
-    out = _exclude_opencode_while_disabled(out, readiness)
+    out = _exclude_opencode_when_ineligible(out, readiness, proj)
     out.sort(key=_approveable_first)
     return out
 
 
-def _exclude_opencode_while_disabled(
+def _exclude_opencode_when_ineligible(
     candidates: list[Candidate],
     readiness: WorkspaceReadiness,
+    project: ProjectFlags,
 ) -> list[Candidate]:
-    """Drop ``opencode_cli`` from the candidate list while disabled or unconfigured.
+    """Drop ``opencode_cli`` from the candidate list when the lane is ineligible.
 
-    Mission 1 invariant: the OpenCode lane is wired into the conductor for
-    forward compatibility but is never recommended until both
-    ``HAM_OPENCODE_ENABLED`` is truthy AND its readiness row reports
-    available. This guard is defence-in-depth on top of the per-provider
-    blocker copy; even if a future readiness builder regresses, the
-    recommender refuses to surface opencode_cli to the chat card while
-    the env gate is off.
+    OpenCode appears in the recommender output only when **all** of the
+    following are true:
+
+    - ``HAM_OPENCODE_ENABLED`` is truthy
+    - ``HAM_OPENCODE_EXECUTION_ENABLED`` is truthy
+    - the opencode_cli readiness row reports ``available=True``
+    - the project's ``output_target`` is ``managed_workspace``
+
+    Otherwise the candidate is filtered out entirely. This is
+    defence-in-depth on top of the per-provider blocker copy; even if a
+    future readiness builder regresses, the recommender refuses to surface
+    opencode_cli to the chat card while any gate is off.
     """
-    gate_on = _truthy_env("HAM_OPENCODE_ENABLED")
+    gate_on = _truthy_env("HAM_OPENCODE_ENABLED") and _truthy_env("HAM_OPENCODE_EXECUTION_ENABLED")
     oc_row = _readiness_for(readiness, "opencode_cli")
-    if gate_on and oc_row.available:
+    target = (project.output_target or "").strip()
+    if gate_on and oc_row.available and target == "managed_workspace":
         return candidates
     return [c for c in candidates if c.provider != "opencode_cli"]
 
