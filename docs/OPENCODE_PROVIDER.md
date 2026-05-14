@@ -368,12 +368,63 @@ Every terminal launch branch writes one `ControlPlaneRun` with
 | `opencode:snapshot_emitted` | snapshot succeeded |
 | `opencode:nothing_to_change` | runner returned no `changed_paths` |
 | `opencode:output_requires_review` | deletion guard tripped |
-| `opencode:provider_not_configured` | readiness check failed at launch entry |
+| `opencode:provider_not_configured` | readiness check failed at launch entry, OR the runner could not resolve an explicit backend-configured model before spawning |
 | `opencode:execution_disabled` | `HAM_OPENCODE_EXECUTION_ENABLED` off |
 | `opencode:serve_unavailable` | spawned `opencode serve` failed health-poll |
 | `opencode:permission_denied` | runner aborted because policy denied tool |
 | `opencode:workspace_setup_failed` | `ensure_managed_working_tree` raised |
+| `opencode:session_no_completion` | OpenCode subprocess / SSE stream ended without emitting a recognised completion envelope. No GCS snapshot is written, the project ``head.json`` is not advanced, and no successful ``ProjectSnapshot`` row is created |
 | `opencode:runner_error` | any other runner failure |
+
+### Explicit model / provider decision
+
+The runner enforces an explicit backend-resolved model/provider before
+spawning OpenCode. Resolution order:
+
+1. The ``model`` argument passed by the caller (the build route forwards
+   the optional ``model`` body field).
+2. ``HAM_OPENCODE_DEFAULT_MODEL`` environment variable.
+
+If neither resolves to a non-empty string the runner returns
+``status="provider_not_configured"`` **before** ``opencode serve`` is
+spawned and the launch core persists one terminal ``ControlPlaneRun``
+with ``status_reason="opencode:provider_not_configured"``. The model
+value is never reflected in response bodies or operator-visible logs;
+only its *source* (``caller`` / ``env`` / ``unset``) is logged.
+
+### ControlPlaneRun store consistency
+
+The read API (``GET /api/control-plane-runs``) resolves its backend
+through :func:`src.persistence.control_plane_run.get_control_plane_run_store`
+— the same factory the OpenCode / Claude Agent / Cursor write paths use.
+This keeps the file-backed (default) and Firestore-backed
+(``HAM_CONTROL_PLANE_RUN_STORE_BACKEND=firestore``) deployments coherent
+between writers and operator reads on the same revision.
+
+### Structured lifecycle logging
+
+`src.ham.opencode_runner.runner` and `src.api.opencode_build` emit
+redacted INFO logs at each lifecycle boundary:
+
+| Event | Logger |
+|---|---|
+| launch request accepted | `src.api.opencode_build` |
+| workspace root / provisioning ready | `src.api.opencode_build` |
+| `opencode serve` spawn attempted | `src.ham.opencode_runner.runner` |
+| `opencode serve` ready / not ready | `src.ham.opencode_runner.runner` |
+| auth injection attempted / succeeded / failed | `src.ham.opencode_runner.runner` |
+| session create attempted / succeeded / failed | `src.ham.opencode_runner.runner` |
+| SSE stream started / ended | `src.ham.opencode_runner.runner` |
+| permission request received / decided | `src.ham.opencode_runner.runner` |
+| subprocess exit code (when observable) | `src.ham.opencode_runner.runner` |
+| completion envelope received | `src.ham.opencode_runner.runner` |
+| completion envelope missing (WARNING) | `src.ham.opencode_runner.runner` |
+
+The WARNING on missing completion carries only the safe fields
+(`ham_run_id`, `provider`, `project_id`, `workspace_id`, `route`,
+`proposal_digest`, `exit_code`, `elapsed_ms`, `event_count`,
+`last_event_type`). The raw user prompt and provider key values are
+never logged.
 
 `provider_not_configured` and `execution_disabled` may be returned as a
 plain 503 envelope without persisting a row (matches Claude Agent's
@@ -398,6 +449,8 @@ and the corresponding guard-bypass test.
 | `HAM_OPENCODE_EXECUTION_ENABLED` | live execution (Mission 2) | unset (execution disabled) |
 | `HAM_OPENCODE_EXEC_TOKEN` | `Authorization: Bearer …` on launch route | unset (launch returns `OPENCODE_LANE_UNCONFIGURED`) |
 | `HAM_OPENCODE_ALLOW_DELETIONS` | bypass deletion guard | unset (guard active) |
+| `HAM_OPENCODE_DEFAULT_MODEL` | backend-resolved fallback when the launch body does not pin a `model` | unset (runner returns `provider_not_configured` if caller also passes no `model`) |
+| `HAM_CONTROL_PLANE_RUN_STORE_BACKEND` | choose `ControlPlaneRun` store backend (`firestore` for the hosted store, `file` / unset for the file-backed default) | unset (file-backed) |
 
 ### First-smoke plan
 

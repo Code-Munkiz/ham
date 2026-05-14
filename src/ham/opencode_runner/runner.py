@@ -16,6 +16,7 @@ never invoked from the test process.
 from __future__ import annotations
 
 import logging
+import os
 import shutil
 import time
 from collections.abc import Callable, Iterable, Mapping
@@ -56,6 +57,51 @@ HEALTH_POLL_INTERVAL_S = 0.5
 RUNNER_DEFAULT_DEADLINE_S = 600.0
 ASSISTANT_SUMMARY_CAP = 4000
 ERROR_SUMMARY_CAP = 2000
+
+# Backend-only default model selector. Read by the runner before spawning so
+# HAM can fail closed with ``provider_not_configured`` if neither an explicit
+# ``model`` argument nor this env was set. Never exposed to the browser; the
+# value is read but only its presence is logged.
+OPENCODE_DEFAULT_MODEL_ENV = "HAM_OPENCODE_DEFAULT_MODEL"
+
+
+def _safe_log_fields(
+    log_context: Mapping[str, Any] | None,
+    extra: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Compose a redacted, JSON-safe dict for lifecycle logs.
+
+    Only string/bool/int/None values are forwarded; everything else is
+    coerced via ``type(value).__name__`` so secrets that may have been
+    threaded by accident never reach the log surface as values.
+    """
+    fields: dict[str, Any] = {}
+    for source in (log_context, extra):
+        if not source:
+            continue
+        for key, value in source.items():
+            if value is None or isinstance(value, (bool, int, str)):
+                fields[str(key)] = value
+            else:
+                fields[str(key)] = type(value).__name__
+    return fields
+
+
+def _resolve_model_decision(
+    model: str | None,
+) -> tuple[str | None, str]:
+    """Return ``(resolved_model_or_None, decision_source)``.
+
+    The resolved model is ``None`` only when no explicit choice was made.
+    ``decision_source`` is one of ``"caller"``, ``"env"``, or ``"unset"`` and
+    is safe to log (it never contains the model id itself).
+    """
+    if model and str(model).strip():
+        return str(model).strip(), "caller"
+    env_value = (os.environ.get(OPENCODE_DEFAULT_MODEL_ENV) or "").strip()
+    if env_value:
+        return env_value, "env"
+    return None, "unset"
 
 
 EventStreamFactory = Callable[[OpenCodeServeClient, str], Iterable[dict[str, Any]]]
@@ -180,6 +226,7 @@ def _consume_run(  # noqa: C901
     event_stream: Iterable[dict[str, Any]],
     deadline_s: float,
     permission_timeout_s: float,
+    log_context: Mapping[str, Any] | None = None,
 ) -> OpenCodeRunResult:
     started = time.monotonic()
     deadline = started + deadline_s
@@ -191,8 +238,17 @@ def _consume_run(  # noqa: C901
     denied = 0
     last_error: str | None = None
     saw_complete = False
+    event_count = 0
+    last_event_type: str | None = None
+
+    _LOG.info(
+        "opencode_runner.sse_stream_started %s",
+        _safe_log_fields(log_context, {"session_id": session_id}),
+    )
 
     for parsed in consume_events(event_stream):
+        event_count += 1
+        last_event_type = type(parsed).__name__
         if isinstance(parsed, ServerConnected):
             continue
         if isinstance(parsed, AssistantMessageChunk):
@@ -210,12 +266,26 @@ def _consume_run(  # noqa: C901
             continue
         if isinstance(parsed, PermissionRequest):
             tool_calls += 1
+            _LOG.info(
+                "opencode_runner.permission_request_received %s",
+                _safe_log_fields(
+                    log_context,
+                    {
+                        "category": (parsed.category or "")[:64],
+                        "tool": (parsed.tool or "")[:64],
+                    },
+                ),
+            )
             decision = _handle_permission_request(
                 event=parsed,
                 project_root=project_root,
                 client=client,
                 requested_at=time.monotonic(),
                 timeout_s=permission_timeout_s,
+            )
+            _LOG.info(
+                "opencode_runner.permission_request_decided %s",
+                _safe_log_fields(log_context, {"decision": decision}),
             )
             if decision == "deny":
                 denied += 1
@@ -233,9 +303,27 @@ def _consume_run(  # noqa: C901
             break
 
     duration = max(time.monotonic() - started, 0.0)
+    elapsed_ms = int(duration * 1000)
     assistant_summary = _cap(_redact("".join(assistant_text)), ASSISTANT_SUMMARY_CAP)
 
+    base_log_fields = _safe_log_fields(
+        log_context,
+        {
+            "event_count": event_count,
+            "last_event_type": last_event_type or "none",
+            "elapsed_ms": elapsed_ms,
+            "tool_calls": tool_calls,
+            "denied_tool_calls": denied,
+            "changed_count": len(set(changed)),
+            "deleted_count": len(set(deleted)),
+        },
+    )
+
     if last_error is not None:
+        _LOG.info(
+            "opencode_runner.sse_stream_ended status=session_error %s",
+            base_log_fields,
+        )
         return OpenCodeRunResult(
             status="runner_error",
             changed_paths=tuple(sorted(set(changed))),
@@ -248,20 +336,56 @@ def _consume_run(  # noqa: C901
             duration_seconds=duration,
         )
 
-    status = "success" if saw_complete else "runner_error"
-    error_summary = None if saw_complete else "OpenCode session ended without completion event."
+    if saw_complete:
+        _LOG.info(
+            "opencode_runner.completion_envelope_received %s",
+            base_log_fields,
+        )
+        return OpenCodeRunResult(
+            status="success",
+            changed_paths=tuple(sorted(set(changed))),
+            deleted_paths=tuple(sorted(set(deleted))),
+            assistant_summary=assistant_summary,
+            tool_calls_count=tool_calls,
+            denied_tool_calls_count=denied,
+            error_kind=None,
+            error_summary=None,
+            duration_seconds=duration,
+        )
+
+    # No completion envelope. Decide whether HAM saw all-denied tool calls
+    # (operator policy is the cause) or a true protocol-level no-completion
+    # (subprocess / SSE dropped without emitting ``session.idle``).
     if denied > 0 and not changed and not deleted:
-        status = "permission_denied"
-        error_summary = "All OpenCode tool calls were denied by HAM policy."
+        _LOG.info(
+            "opencode_runner.sse_stream_ended status=permission_denied %s",
+            base_log_fields,
+        )
+        return OpenCodeRunResult(
+            status="permission_denied",
+            changed_paths=(),
+            deleted_paths=(),
+            assistant_summary=assistant_summary,
+            tool_calls_count=tool_calls,
+            denied_tool_calls_count=denied,
+            error_kind="permission_denied",
+            error_summary="All OpenCode tool calls were denied by HAM policy.",
+            duration_seconds=duration,
+        )
+
+    _LOG.warning(
+        "opencode_runner.completion_envelope_missing %s",
+        base_log_fields,
+    )
     return OpenCodeRunResult(
-        status=status,
+        status="session_no_completion",
         changed_paths=tuple(sorted(set(changed))),
         deleted_paths=tuple(sorted(set(deleted))),
         assistant_summary=assistant_summary,
         tool_calls_count=tool_calls,
         denied_tool_calls_count=denied,
-        error_kind=None if status == "success" else "incomplete",
-        error_summary=None if status == "success" else error_summary,
+        error_kind="session_no_completion",
+        error_summary="OpenCode session ended without a completion envelope.",
         duration_seconds=duration,
     )
 
@@ -274,7 +398,7 @@ def _cleanup_xdg(*paths: Path) -> None:
             _LOG.debug("opencode_runner.cleanup_raised %s", type(exc).__name__)
 
 
-def run_opencode_mission(
+def run_opencode_mission(  # noqa: C901
     *,
     project_root: Path,
     user_prompt: str,
@@ -288,6 +412,7 @@ def run_opencode_mission(
     deadline_s: float = RUNNER_DEFAULT_DEADLINE_S,
     permission_timeout_s: float = DEFAULT_PERMISSION_TIMEOUT_S,
     binary: str = "opencode",
+    log_context: Mapping[str, Any] | None = None,
 ) -> OpenCodeRunResult:
     """Drive one OpenCode mission against a freshly-spawned ``opencode serve``.
 
@@ -299,14 +424,41 @@ def run_opencode_mission(
     inside :func:`build_isolated_env` and credentials flow only through
     the spawned process's env mapping plus the optional
     ``PUT /auth/:id`` HTTP injection below.
+
+    ``log_context`` carries pre-redacted safe identifiers (``ham_run_id``,
+    ``provider``, ``project_id``, ``workspace_id``, ``route``,
+    ``proposal_digest``) so lifecycle log lines (INFO + the no-completion
+    WARNING) can be correlated to a control-plane row without re-deriving
+    the values inside the runner.
     """
     del actor
+
+    resolved_model, model_source = _resolve_model_decision(model)
+    if resolved_model is None:
+        _LOG.warning(
+            "opencode_runner.provider_not_configured %s",
+            _safe_log_fields(log_context, {"reason": "model_unset"}),
+        )
+        return OpenCodeRunResult(
+            status="provider_not_configured",
+            error_kind="provider_not_configured",
+            error_summary="No explicit OpenCode model/provider was configured for this launch.",
+        )
+
+    _LOG.info(
+        "opencode_runner.run_starting %s",
+        _safe_log_fields(log_context, {"model_source": model_source}),
+    )
 
     isolated = build_isolated_env(
         project_root=project_root,
         actor_creds=actor_creds,
     )
     if not isolated.auth_present():
+        _LOG.warning(
+            "opencode_runner.auth_missing %s",
+            _safe_log_fields(log_context, None),
+        )
         _cleanup_xdg(isolated.xdg_data_home, isolated.xdg_config_home)
         return OpenCodeRunResult(
             status="auth_missing",
@@ -317,6 +469,10 @@ def run_opencode_mission(
     process: ServeProcess | None = None
     client: OpenCodeServeClient | None = None
     try:
+        _LOG.info(
+            "opencode_runner.serve_spawn_attempted %s",
+            _safe_log_fields(log_context, None),
+        )
         process = spawn_opencode_serve(
             host=isolated.host,
             port=isolated.port,
@@ -331,11 +487,24 @@ def run_opencode_mission(
             client_factory=http_client_factory,
         )
         if not _poll_health(client):
+            exit_code = (
+                process.handle.poll()
+                if process is not None and process.handle is not None
+                else None
+            )
+            _LOG.warning(
+                "opencode_runner.serve_not_ready %s",
+                _safe_log_fields(log_context, {"exit_code": exit_code}),
+            )
             return OpenCodeRunResult(
                 status="serve_unavailable",
                 error_kind="health_timeout",
                 error_summary="opencode serve did not become healthy within deadline.",
             )
+        _LOG.info(
+            "opencode_runner.serve_ready %s",
+            _safe_log_fields(log_context, None),
+        )
 
         # Provider creds are already exposed via the spawned env + inline
         # config substitution. The runtime PUT /auth call is a no-op
@@ -344,19 +513,33 @@ def run_opencode_mission(
             env_key = f"{provider_id.upper()}_API_KEY"
             if not isolated.env.get(env_key):
                 continue
+            _LOG.info(
+                "opencode_runner.auth_injection_attempted %s",
+                _safe_log_fields(log_context, {"provider_id": provider_id}),
+            )
             try:
                 client.put_auth(provider_id, {"type": "api", "key": "{env:" + env_key + "}"})
             except Exception as exc:  # noqa: BLE001
-                _LOG.debug(
-                    "opencode_runner.put_auth_raised provider=%s err=%s",
-                    provider_id,
-                    type(exc).__name__,
+                _LOG.warning(
+                    "opencode_runner.auth_injection_failed %s",
+                    _safe_log_fields(
+                        log_context,
+                        {"provider_id": provider_id, "err": type(exc).__name__},
+                    ),
                 )
 
+        _LOG.info(
+            "opencode_runner.session_create_attempted %s",
+            _safe_log_fields(log_context, None),
+        )
         try:
             session_resp = client.create_session(title="HAM OpenCode mission")
             session_body: Any = session_resp.json() if hasattr(session_resp, "json") else {}
         except Exception as exc:  # noqa: BLE001
+            _LOG.warning(
+                "opencode_runner.session_create_failed %s",
+                _safe_log_fields(log_context, {"err": type(exc).__name__}),
+            )
             return OpenCodeRunResult(
                 status="runner_error",
                 error_kind="session_create_failed",
@@ -370,6 +553,10 @@ def run_opencode_mission(
             str(session_body.get("id", "")).strip() if isinstance(session_body, dict) else ""
         )
         if not session_id:
+            _LOG.warning(
+                "opencode_runner.session_missing_id %s",
+                _safe_log_fields(log_context, None),
+            )
             return OpenCodeRunResult(
                 status="runner_error",
                 error_kind="session_missing_id",
@@ -380,10 +567,14 @@ def run_opencode_mission(
             client.prompt_async(
                 session_id,
                 agent=agent,
-                model=model,
+                model=resolved_model,
                 prompt=user_prompt,
             )
         except Exception as exc:  # noqa: BLE001
+            _LOG.warning(
+                "opencode_runner.prompt_failed %s",
+                _safe_log_fields(log_context, {"err": type(exc).__name__}),
+            )
             return OpenCodeRunResult(
                 status="runner_error",
                 error_kind="prompt_failed",
@@ -403,7 +594,17 @@ def run_opencode_mission(
             event_stream=event_stream,
             deadline_s=deadline_s,
             permission_timeout_s=permission_timeout_s,
+            log_context=log_context,
         )
+
+        exit_code = (
+            process.handle.poll() if process is not None and process.handle is not None else None
+        )
+        if exit_code is not None:
+            _LOG.info(
+                "opencode_runner.subprocess_exited %s",
+                _safe_log_fields(log_context, {"exit_code": exit_code}),
+            )
 
         # Belt-and-suspenders teardown.
         try:
@@ -416,7 +617,10 @@ def run_opencode_mission(
             _LOG.debug("opencode_runner.dispose_raised %s", type(exc).__name__)
         return result
     except Exception as exc:  # noqa: BLE001
-        _LOG.warning("opencode_runner.run_raised %s", type(exc).__name__)
+        _LOG.warning(
+            "opencode_runner.run_raised %s",
+            _safe_log_fields(log_context, {"err": type(exc).__name__}),
+        )
         return OpenCodeRunResult(
             status="runner_error",
             error_kind=type(exc).__name__,

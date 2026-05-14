@@ -20,6 +20,14 @@ OpenCodeRunStatus = Literal[
     "runner_error",
     "disabled",
     "auth_missing",
+    # Set when an explicit backend-resolved model/provider was not configured
+    # for the launch. Returned before ``opencode serve`` is spawned so the
+    # subprocess never starts in this branch.
+    "provider_not_configured",
+    # Set when the OpenCode subprocess / SSE stream ended without emitting a
+    # recognised completion envelope (no ``session.idle``, no ``session.error``).
+    # Mapped by callers to ``status_reason="opencode:session_no_completion"``.
+    "session_no_completion",
 ]
 
 

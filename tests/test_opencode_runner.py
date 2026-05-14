@@ -43,6 +43,17 @@ from src.ham.opencode_runner.server_process import ServeProcess
 _AUTH_CANARY = "opencode-test-canary-not-a-real-key"
 
 
+@pytest.fixture(autouse=True)
+def _default_opencode_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pin a fake default model so the runner's provider-not-configured gate
+    does not fail closed in tests that don't exercise the gate directly.
+
+    Tests that want to exercise the gate can ``monkeypatch.delenv`` this name
+    inside their own bodies.
+    """
+    monkeypatch.setenv("HAM_OPENCODE_DEFAULT_MODEL", "opencode-test-fake/model")
+
+
 # ---------------------------------------------------------------------------
 # Permission broker
 # ---------------------------------------------------------------------------

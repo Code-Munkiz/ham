@@ -428,6 +428,10 @@ def _status_from_run(run_status: str, snapshot_outcome: str | None) -> tuple[str
         return "failed", "opencode:serve_unavailable"
     if run_status == "auth_missing":
         return "failed", "opencode:provider_not_configured"
+    if run_status == "provider_not_configured":
+        return "failed", "opencode:provider_not_configured"
+    if run_status == "session_no_completion":
+        return "failed", "opencode:session_no_completion"
     if run_status == "timeout":
         return "failed", "opencode:runner_error"
     return "failed", "opencode:runner_error"
@@ -665,6 +669,23 @@ def _run_opencode_launch_core(
     change_id = uuid.uuid4().hex
     project_root = _project_managed_root(rec)
 
+    workspace_id = (getattr(rec, "workspace_id", None) or "").strip() or None
+    log_context: dict[str, Any] = {
+        "ham_run_id": ham_run_id,
+        "provider": "opencode_cli",
+        "route": "/api/opencode/build/launch",
+        "project_id": rec.id,
+        "workspace_id": workspace_id,
+        # Identifies the preview without echoing user content; safe to log.
+        "proposal_digest": proposal_digest,
+    }
+
+    _LOG.info(
+        "opencode_build.launch_request_accepted ham_run_id=%s project_id=%s",
+        ham_run_id,
+        rec.id,
+    )
+
     try:
         ensure_managed_working_tree(
             workspace_id=getattr(rec, "workspace_id", None),
@@ -681,11 +702,18 @@ def _run_opencode_launch_core(
             change_id=change_id,
         )
 
+    _LOG.info(
+        "opencode_build.workspace_setup_ready ham_run_id=%s project_id=%s",
+        ham_run_id,
+        rec.id,
+    )
+
     run_result = run_opencode_mission(
         project_root=project_root,
         user_prompt=user_prompt,
         model=model,
         actor=ham_actor,
+        log_context=log_context,
     )
 
     snapshot_outcome: str | None = None

@@ -96,6 +96,10 @@ def _status_reason_from_run(run_status: str, snapshot_outcome: str | None) -> tu
         return "failed", "opencode:serve_unavailable"
     if run_status == "auth_missing":
         return "failed", "opencode:provider_not_configured"
+    if run_status == "provider_not_configured":
+        return "failed", "opencode:provider_not_configured"
+    if run_status == "session_no_completion":
+        return "failed", "opencode:session_no_completion"
     if run_status == "disabled":
         return "failed", "opencode:execution_disabled"
     return "failed", "opencode:runner_error"
@@ -211,10 +215,18 @@ def launch_opencode_coding(  # noqa: C901
                 utc_now_iso=utc_now_iso,
             )
 
+        log_context = {
+            "ham_run_id": ham_run_id,
+            "provider": "opencode_cli",
+            "route": "coding_router.launch_opencode_coding",
+            "project_id": rec.id,
+            "workspace_id": wid,
+        }
         run_result = run_opencode_mission(
             project_root=project_root,
             user_prompt=user_prompt or "",
             actor=actor,
+            log_context=log_context,
         )
 
         snapshot_outcome: str | None = None
@@ -348,6 +360,13 @@ def launch_opencode_coding(  # noqa: C901
                 status="serve_unavailable",
                 reason="opencode:serve_unavailable",
                 summary=error_summary or "opencode serve did not become healthy.",
+                ham_run_id=ham_run_id,
+            )
+        if status_reason == "opencode:provider_not_configured":
+            return OpenCodeLaunchResult(
+                status="provider_not_configured",
+                reason="opencode:provider_not_configured",
+                summary=error_summary or "OpenCode provider was not configured for this launch.",
                 ham_run_id=ham_run_id,
             )
         return OpenCodeLaunchResult(

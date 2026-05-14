@@ -13,14 +13,38 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from src.api.clerk_gate import get_ham_clerk_actor
 from src.ham.clerk_auth import HamActor
-from src.persistence.control_plane_run import ControlPlaneRun, ControlPlaneRunStore
+from src.persistence.control_plane_run import (
+    ControlPlaneRun,
+    ControlPlaneRunStoreProtocol,
+    get_control_plane_run_store,
+)
 
 _UUID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
     re.I,
 )
 
-_store = ControlPlaneRunStore()
+# Optional module-level override consulted before the configured backend.
+# Production deployments leave this ``None`` so the read path resolves the
+# same store the OpenCode / Claude Agent / Cursor write paths use via
+# :func:`get_control_plane_run_store` (file by default, Firestore when
+# ``HAM_CONTROL_PLANE_RUN_STORE_BACKEND=firestore``). The symbol is kept so
+# legacy tests that ``monkeypatch.setattr(cpr_api, "_store", ...)`` keep
+# working without further changes.
+_store: ControlPlaneRunStoreProtocol | None = None
+
+
+def _get_store() -> ControlPlaneRunStoreProtocol:
+    """Return the test-injected store if any, else the configured backend.
+
+    Routes must call this on every request so a write made through the
+    Firestore-backed store is visible to operator reads on the same
+    deployment.
+    """
+    if _store is not None:
+        return _store
+    return get_control_plane_run_store()
+
 
 router = APIRouter(prefix="/api/control-plane-runs", tags=["control-plane-runs"])
 
@@ -45,7 +69,9 @@ def _public_run(r: ControlPlaneRun) -> dict[str, Any]:
         "finished_at": r.finished_at,
         "last_observed_at": r.last_observed_at,
         "last_provider_status": r.last_provider_status,
-        "audit_ref": r.audit_ref.model_dump(mode="json", exclude_none=True) if r.audit_ref else None,
+        "audit_ref": r.audit_ref.model_dump(mode="json", exclude_none=True)
+        if r.audit_ref
+        else None,
     }
 
 
@@ -68,7 +94,9 @@ def _get_project_or_404(project_id: str) -> None:
 @router.get("")
 async def list_control_plane_runs(
     _ham_gate: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
-    project_id: str = Query(..., min_length=1, max_length=180, description="Registered HAM project id (required)"),
+    project_id: str = Query(
+        ..., min_length=1, max_length=180, description="Registered HAM project id (required)"
+    ),
     provider: str | None = Query(
         default=None,
         max_length=64,
@@ -78,7 +106,7 @@ async def list_control_plane_runs(
 ) -> dict[str, Any]:
     _get_project_or_404(project_id)
     prov = (provider or "").strip() or None
-    runs = _store.list_for_project(project_id, provider=prov, limit=limit)
+    runs = _get_store().list_for_project(project_id, provider=prov, limit=limit)
     return {
         "kind": "control_plane_run_list",
         "project_id": project_id.strip(),
@@ -103,7 +131,7 @@ async def get_control_plane_run(
                 }
             },
         )
-    r = _store.get(ham_run_id.strip())
+    r = _get_store().get(ham_run_id.strip())
     if r is None:
         raise HTTPException(
             status_code=404,
