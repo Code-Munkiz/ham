@@ -218,17 +218,28 @@ MAX_SUMMARY_CHARS = 4_000
 # 3) Trade-offs between memory efficiency and code complexity. Current implementation
 # relies on character-based heuristics (see compact_max_tokens in SessionMemory).
 DEFAULT_SESSION_COMPACTION_MAX_TOKENS=***  # Placeholder: not currently used
-# This placeholder constant WAS intended for token-based session compaction to precisely control
-# conversation length by counting actual tokens rather than character estimates. A value between
-# 500-2000 tokens was recommended depending on use case to balance token costs vs context preservation.
-# However, this feature was removed due to incomplete implementation (see lines 170-176).
-# Current session handling uses character-based heuristics via SessionMemory.compact_max_tokens instead,
-# which is simpler but less precise for token budgeting. **FOR MAINTAINERS**: Before re-adding token-based
-# limits, verify whether the simpler character approach meets your needs or if precise token budgeting
-# is required. If needed, update compaction logic in sessions.py before activating this constant.
-# NOTE TO MAINTAINERS: This placeholder slot exists at line 173 for future restoration. Before re-adding token-based limits,
-# verify current compaction strategy in SessionMemory.configure_from_project_config() (lines 758-783) which still uses this
-# default for backward compatibility. The value should align with HAM's context window management strategy.
+# ============================================================================
+# TODO: TOKEN-BASED COMPACTION RESTORATION GUIDANCE (FOR FUTURE MAINTAINERS)
+# ============================================================================
+# 
+# This constant was removed from active use because the original token-based session
+# compaction feature had an incomplete implementation. The current compaction logic 
+# in `SessionMemory.compact()` (line 936-954) uses character-based heuristics 
+# (`len(content) // 4 + 1`) instead of actual token counting.
+#
+# BEFORE RE-IMPLEMENTING TOKEN-BASED COMPACTION:
+# 1. First assess whether the simpler character-based approach (line 899, 934, 944)
+#    meets your token-budget needs for your specific use case.
+# 2. If token-based compaction is required, update:
+#    - `sessions.py`: Modify `compact_session()` to integrate actual token counting
+#    - `src/api/chat.py`: Ensure stream handlers respect token-based limits
+#    - Add proper token estimation via tiktoken or HuggingFace tokenizers
+# 3. Update this placeholder with a concrete value between 500-2000 tokens.
+#
+# RECOMMENDATION: Character-based counting is simpler and sufficient for most cases.
+# Use token-based methods only if you need precise token budget control (e.g.,
+# working near context window limits or optimizing for specific tokenizers).
+# ============================================================================
 DEFAULT_SESSION_COMPACTION_PRESERVE = 4
 # Minimum number of session messages to preserve after compaction.
 # This ensures historical context isn't completely discarded when
