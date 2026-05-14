@@ -772,9 +772,7 @@ describe("WorkspaceWorkbench", () => {
         metadata: { request_source: "workbench_preview_retry" },
       });
     });
-    expect(screen.getByTestId("hww-cloud-runtime-job-notice")).toHaveTextContent(
-      "Retry started",
-    );
+    expect(screen.getByTestId("hww-cloud-runtime-job-notice")).toHaveTextContent("Retry started");
   });
 
   it("Cloud runtime retry remains disabled without an active source snapshot", async () => {
@@ -875,7 +873,11 @@ describe("WorkspaceWorkbench", () => {
     const refreshButton = await screen.findByTestId("hww-cloud-runtime-refresh-status");
     fireEvent.click(refreshButton);
     await waitFor(() => {
-      expect(getBuilderCloudRuntimeJobStatusMock).toHaveBeenCalledWith("ws_abc", "proj_abc", "crjb_1");
+      expect(getBuilderCloudRuntimeJobStatusMock).toHaveBeenCalledWith(
+        "ws_abc",
+        "proj_abc",
+        "crjb_1",
+      );
     });
     expect(requestBuilderCloudRuntimeMock).not.toHaveBeenCalled();
   });

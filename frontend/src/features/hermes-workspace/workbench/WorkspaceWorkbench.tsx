@@ -1287,11 +1287,7 @@ function WorkbenchPreviewPanel({
               className="text-[11px]"
               data-testid="hww-cloud-runtime-request-poc"
               disabled={
-                !ws ||
-                !pid ||
-                !cloudRetryEnabled ||
-                cloudRuntimeJobBusy ||
-                !activeSourceSnapshotId
+                !ws || !pid || !cloudRetryEnabled || cloudRuntimeJobBusy || !activeSourceSnapshotId
               }
               onClick={() => {
                 if (!ws || !pid || !cloudRetryEnabled || !activeSourceSnapshotId) return;
@@ -1304,7 +1300,7 @@ function WorkbenchPreviewPanel({
                   updated_at: new Date().toISOString(),
                   provider_status: null,
                   logs_summary: null,
-                })
+                });
                 void requestBuilderCloudRuntime(ws, pid, {
                   source_snapshot_id: activeSourceSnapshotId,
                   force_new: true,
@@ -1350,7 +1346,10 @@ function WorkbenchPreviewPanel({
               </p>
             ) : null}
             {cloudPreviewHealthy ? (
-              <p className="text-[11px] text-white/55" data-testid="hww-cloud-runtime-retry-healthy-copy">
+              <p
+                className="text-[11px] text-white/55"
+                data-testid="hww-cloud-runtime-retry-healthy-copy"
+              >
                 Preview is already healthy. Use Refresh status for polling-only checks.
               </p>
             ) : null}
