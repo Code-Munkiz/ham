@@ -269,3 +269,168 @@ will mint a `ham_run_id`, build a `PostExecCommon`, persist a
 `ControlPlaneRun` with `provider="opencode_cli"`,
 `output_target="managed_workspace"`, and a redacted `status_reason`
 from the taxonomy in §7.
+
+## 14. Mission 2 architecture (live execution)
+
+Mission 2 lands the gated `opencode serve` runner adapter, the live
+preview + launch routes, and a mocked-end-to-end test suite. The lane
+stays dormant at runtime until **both** `HAM_OPENCODE_ENABLED` and
+`HAM_OPENCODE_EXECUTION_ENABLED` are truthy. No CLI invocation, no
+model call, no GCS / Firestore / Cloud Run write happens in test runs.
+The Factory Droid and Claude Agent lanes are unaffected; Mission 3.1's
+deletion guard is mirrored bit-for-bit for the OpenCode path.
+
+### Server lifecycle
+
+```text
+1. ensure_managed_working_tree(workspace_id, project_id)     # Mission 2.x
+2. mint ham_run_id + change_id
+3. spawn opencode serve --hostname 127.0.0.1 --port <ephemeral>
+   with XDG_DATA_HOME / XDG_CONFIG_HOME pointing at per-run tempdirs
+   and OPENCODE_SERVER_PASSWORD set to a per-run random token
+4. poll GET /global/health for up to 30 s (500 ms intervals)
+5. PUT /auth/<provider> with HAM-resolved creds for each present env key
+6. POST /session  -> session_id
+7. POST /session/<id>/prompt_async with the user's prompt
+8. consume GET /event SSE; broker each session.permission.requested
+   through the deny-by-default policy below
+9. on session.idle (or HAM-side deadline), POST /session/<id>/abort
+   then POST /instance/dispose, then SIGTERM → SIGKILL the process
+10. reap orphan children; remove XDG tempdirs; return OpenCodeRunResult
+```
+
+All credential resolution happens inside `build_isolated_env`. Env
+values flow only through the spawned process's env mapping and the
+optional `PUT /auth/:id` HTTP call; HAM never logs or echoes a secret
+value, including in test runs.
+
+### HTTP client + Basic auth
+
+`OpenCodeServeClient` wraps `httpx.Client` with a Basic-auth tuple
+(`opencode:<per-run-password>`). All endpoints used by the runner are
+explicitly enumerated: `GET /global/health`, `PUT /auth/:id`,
+`POST /session`, `POST /session/:id/prompt_async`, `POST
+/session/:id/permissions/:permissionID`, `POST /session/:id/abort`,
+`POST /instance/dispose`. `POST /session/:id/init` is **not** used —
+the upstream API table no longer lists it.
+
+### SSE event consumer
+
+Event payloads are parsed by Pydantic models with
+`model_config = ConfigDict(extra="allow")` so unknown fields and unknown
+event types do not crash the consumer. Known event-type discriminators
+today:
+
+| `type` | Pydantic class | What HAM does |
+|---|---|---|
+| `server.connected` | `ServerConnected` | log only |
+| `message.part.updated` | `AssistantMessageChunk` | accumulate text |
+| `message.tool.start` | `ToolCallStart` | log only |
+| `file.changed` | `FileChange` | record changed / deleted path |
+| `session.permission.requested` | `PermissionRequest` | broker → allow/deny |
+| `session.idle` | `SessionComplete` | mark mission done |
+| `session.error` | `SessionError` | capture diagnostics |
+| anything else | `UnknownEvent` | log warning, continue |
+
+The SSE event JSON schemas are **not** published on the OpenCode docs
+page; HAM must regenerate types from `/doc` at the pinned binary tag
+during the first integration smoke. Pydantic `extra="allow"` is the
+forward-compat hedge against drift.
+
+### Permission broker policy
+
+Pure logic in `src/ham/opencode_runner/permission_broker.py`. Default
+deny-by-default categories:
+
+| Category | Default | Notes |
+|---|---|---|
+| `read`, `glob`, `grep`, `list`, `lsp`, `todowrite` | allow | safe metadata reads |
+| `edit`, `skill` | allow only inside project root | escapes denied |
+| `bash`, `external_directory`, `task` | deny | beta posture |
+| `webfetch`, `websearch` | deny | shorthand-only categories |
+| anything else | deny | fail-closed default |
+
+Bash denylist (applied even if `bash` is ever loosened):
+`rm *`, `rm -rf *`, `find * -delete`, `git push *`, `git push --force*`,
+`gcloud *`, `kubectl *`, `aws *`, `ssh *`, `scp *`, `curl *`, `wget *`.
+
+A 30 s HAM-side permission-request deadline auto-denies a request that
+sits unanswered — upstream OpenCode does not document a server-side
+timeout for unanswered permission events.
+
+### ControlPlaneRun status_reason map
+
+Every terminal launch branch writes one `ControlPlaneRun` with
+`provider="opencode_cli"`, `audit_ref=None`, and one of:
+
+| `status_reason` | When |
+|---|---|
+| `opencode:snapshot_emitted` | snapshot succeeded |
+| `opencode:nothing_to_change` | runner returned no `changed_paths` |
+| `opencode:output_requires_review` | deletion guard tripped |
+| `opencode:provider_not_configured` | readiness check failed at launch entry |
+| `opencode:execution_disabled` | `HAM_OPENCODE_EXECUTION_ENABLED` off |
+| `opencode:serve_unavailable` | spawned `opencode serve` failed health-poll |
+| `opencode:permission_denied` | runner aborted because policy denied tool |
+| `opencode:workspace_setup_failed` | `ensure_managed_working_tree` raised |
+| `opencode:runner_error` | any other runner failure |
+
+`provider_not_configured` and `execution_disabled` may be returned as a
+plain 503 envelope without persisting a row (matches Claude Agent's
+pattern of not persisting purely-disabled gate hits).
+
+### Mission 3.1 alignment
+
+The deletion guard at the snapshot boundary
+(`compute_deleted_paths_against_parent`) is reused verbatim for the
+OpenCode path. If any path would be deleted and
+`HAM_OPENCODE_ALLOW_DELETIONS` is not truthy, HAM persists one terminal
+`ControlPlaneRun` with `status_reason="opencode:output_requires_review"`
+and **does not** call `emit_managed_workspace_snapshot`. This invariant
+is locked by `tests/test_opencode_build_api.py::test_launch_persists_output_requires_review_on_deletion`
+and the corresponding guard-bypass test.
+
+### Env / gate matrix
+
+| Env | Required for | Default |
+|---|---|---|
+| `HAM_OPENCODE_ENABLED` | provider visible in readiness / conductor | unset (lane disabled) |
+| `HAM_OPENCODE_EXECUTION_ENABLED` | live execution (Mission 2) | unset (execution disabled) |
+| `HAM_OPENCODE_EXEC_TOKEN` | `Authorization: Bearer …` on launch route | unset (launch returns `OPENCODE_LANE_UNCONFIGURED`) |
+| `HAM_OPENCODE_ALLOW_DELETIONS` | bypass deletion guard | unset (guard active) |
+
+### First-smoke plan
+
+Out of scope for this commit. When the first live smoke is authorized:
+
+1. Deploy the API image (with the `opencode` binary installed at a
+   pinned tag) to a staging Cloud Run revision.
+2. Set `HAM_OPENCODE_ENABLED=1`, `HAM_OPENCODE_EXECUTION_ENABLED=1`,
+   and an `HAM_OPENCODE_EXEC_TOKEN` issued via Secret Manager.
+3. Issue a preview against a sandbox managed-workspace project; confirm
+   the response carries a 64-char digest and no host-path leakage.
+4. Issue a launch with the digest; confirm a `ControlPlaneRun` row
+   with `status="succeeded"` and `status_reason="opencode:snapshot_emitted"`
+   or `opencode:nothing_to_change`.
+5. Capture the first-run SSE event payloads from `/doc` against the
+   Pydantic models in `event_consumer.py`; lock any drift in a
+   follow-up PR.
+
+### Risks before first live smoke
+
+- SSE event JSON schemas remain integration-time risk. Pydantic
+  `extra="allow"` is defensive but the discriminator names themselves
+  could change.
+- Permission-request timeout is currently 30 s; needs operational
+  tuning after the first real run.
+- `opencode serve` binary version pinning: HAM must document the
+  minimum supported version once the first smoke succeeds.
+- Containerized child-process reaping (`bash` / MCP subprocesses)
+  needs OS-level verification under Cloud Run.
+
+### Mission 3 forward pointer
+
+Mission 3 lifts OpenCode into the HAM agent-builder UX (custom builder
+profiles backed by OpenCode agent definitions). The runner package is
+shaped so a future caller can pass a custom permission policy and a
+custom config blob without touching the gated build route surface.
