@@ -194,6 +194,11 @@ MAX_SUMMARY_CHARS = 4_000
 
 # Session compaction defaults: maximum tokens for compacted session history,
 # minimum session messages to preserve in history, and tool output pruning
+# 
+# DEPRECATION NOTE: DEFAULT_SESSION_COMPACTION_MAX_TOKENS (see line 220) was removed
+# because the token-based compaction feature had an incomplete implementation.
+# Current session handling uses simpler character-based counts (len(content)//4+1)
+# which provides approximate token estimation without external dependencies.
 # WARNING: DEFAULT_SESSION_COMPACTION_MAX_TOKENS was removed due to incomplete
 # implementation. Current session handling uses alternative compaction strategies.
 # TODO: Consider re-adding this constant if token-based session compaction is re-implemented.
