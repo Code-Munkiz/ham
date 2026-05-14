@@ -20,6 +20,8 @@ Properties locked by tests:
 
 from __future__ import annotations
 
+import os
+
 from src.ham.coding_router.types import (
     Candidate,
     CodingTask,
@@ -28,6 +30,11 @@ from src.ham.coding_router.types import (
     ProviderReadiness,
     WorkspaceReadiness,
 )
+
+
+def _truthy_env(name: str) -> bool:
+    return (os.environ.get(name) or "").strip().lower() in ("1", "true", "yes", "on")
+
 
 # Reasons (human-facing copy). These appear in candidate.reason and never
 # leak provider internals.
@@ -38,6 +45,7 @@ _REASON: dict[ProviderKind, str] = {
     "cursor_cloud": "Repo-wide context; opens a pull request you review.",
     "claude_code": "Single-file local edit handled directly on this host.",
     "claude_agent": "Single-file edit handled by Claude Agent against the managed workspace.",
+    "opencode_cli": "OpenCode-managed edit (scaffolded; not yet executable on this host).",
 }
 
 # Static safety flags per provider (kept here, not in readiness, because
@@ -69,6 +77,11 @@ _SAFETY: dict[ProviderKind, dict[str, bool]] = {
         "will_open_pull_request": False,
     },
     "claude_agent": {
+        "requires_operator": False,
+        "requires_confirmation": True,
+        "will_open_pull_request": False,
+    },
+    "opencode_cli": {
         "requires_operator": False,
         "requires_confirmation": True,
         "will_open_pull_request": False,
@@ -122,6 +135,11 @@ _BASE_CONFIDENCE: dict[str, dict[ProviderKind, float]] = {
         "claude_code": 0.7,
         "claude_agent": 0.6,
         "cursor_cloud": 0.5,
+        # opencode_cli base confidence is intentionally near zero so it is
+        # never preferred over a configured Claude Agent or Cursor lane.
+        # The hard exclusion below ensures it is also dropped entirely
+        # while the env gate is off or readiness != configured.
+        "opencode_cli": 0.0,
     },
     "unknown": {
         "no_agent": 0.4,
@@ -248,8 +266,30 @@ def recommend(
             )
         )
 
+    out = _exclude_opencode_while_disabled(out, readiness)
     out.sort(key=_approveable_first)
     return out
+
+
+def _exclude_opencode_while_disabled(
+    candidates: list[Candidate],
+    readiness: WorkspaceReadiness,
+) -> list[Candidate]:
+    """Drop ``opencode_cli`` from the candidate list while disabled or unconfigured.
+
+    Mission 1 invariant: the OpenCode lane is wired into the conductor for
+    forward compatibility but is never recommended until both
+    ``HAM_OPENCODE_ENABLED`` is truthy AND its readiness row reports
+    available. This guard is defence-in-depth on top of the per-provider
+    blocker copy; even if a future readiness builder regresses, the
+    recommender refuses to surface opencode_cli to the chat card while
+    the env gate is off.
+    """
+    gate_on = _truthy_env("HAM_OPENCODE_ENABLED")
+    oc_row = _readiness_for(readiness, "opencode_cli")
+    if gate_on and oc_row.available:
+        return candidates
+    return [c for c in candidates if c.provider != "opencode_cli"]
 
 
 __all__ = ["recommend"]

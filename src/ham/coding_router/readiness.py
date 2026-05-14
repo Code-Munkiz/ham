@@ -23,6 +23,9 @@ from typing import TYPE_CHECKING
 from src.ham.coding_router.claude_agent_provider import (
     build_claude_agent_readiness as _build_claude_agent_readiness,
 )
+from src.ham.coding_router.opencode_provider import (
+    build_opencode_readiness as _build_opencode_readiness,
+)
 from src.ham.coding_router.types import (
     ProjectFlags,
     ProviderReadiness,
@@ -288,6 +291,9 @@ def collate_readiness(
         _build_cursor_readiness(include_operator_details=include_operator_details),
         _build_claude_readiness(actor, include_operator_details=include_operator_details),
         _build_claude_agent_readiness(
+            actor, include_operator_details=include_operator_details
+        ),
+        _build_opencode_readiness(
             actor, include_operator_details=include_operator_details
         ),
     )

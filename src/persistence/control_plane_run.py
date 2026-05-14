@@ -80,6 +80,12 @@ class ControlPlaneProvider(str, Enum):
     cursor_cloud_agent = "cursor_cloud_agent"
     factory_droid = "factory_droid"
     claude_agent = "claude_agent"
+    # Mission 1 scaffold — added for symmetry with the harness capability
+    # registry. The provider is wired into shared tables (readiness,
+    # recommender, conductor copy, connected tools) but its launch shim
+    # in :mod:`src.api.opencode_build` is HTTP 503 and never persists a
+    # ``ControlPlaneRun`` row today. Live execution lands in Mission 2.
+    opencode_cli = "opencode_cli"
 
 
 ControlPlaneStatus = Literal["running", "succeeded", "failed", "unknown"]

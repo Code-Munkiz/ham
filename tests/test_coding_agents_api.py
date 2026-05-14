@@ -92,12 +92,18 @@ def test_implemented_providers_are_implemented_and_launchable(client: TestClient
 def test_planned_candidates_are_not_implemented_and_not_launchable(client: TestClient) -> None:
     res = client.get("/api/coding-agents/providers")
     rows = {p["provider"]: p for p in res.json()["providers"]}
-    for key in ("claude_code", "opencode_cli"):
-        assert rows[key]["implemented"] is False, key
-        assert rows[key]["registry_status"] == "planned_candidate", key
-        assert rows[key]["launchable"] is False, key
-        assert rows[key]["audit_sink"] is None, key
-        assert rows[key]["harness_family"] == "local_cli_planned", key
+    assert rows["claude_code"]["implemented"] is False
+    assert rows["claude_code"]["registry_status"] == "planned_candidate"
+    assert rows["claude_code"]["launchable"] is False
+    assert rows["claude_code"]["audit_sink"] is None
+    assert rows["claude_code"]["harness_family"] == "local_cli_planned"
+    # opencode_cli is scaffolded (Mission 1): wired into shared registries
+    # but not yet launchable; live execution lands in Mission 2.
+    assert rows["opencode_cli"]["implemented"] is False
+    assert rows["opencode_cli"]["registry_status"] == "scaffolded"
+    assert rows["opencode_cli"]["launchable"] is False
+    assert rows["opencode_cli"]["audit_sink"] is None
+    assert rows["opencode_cli"]["harness_family"] == "local_cli_planned"
 
 
 def test_launchable_set_matches_implemented_and_supports_launch(client: TestClient) -> None:

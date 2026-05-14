@@ -28,11 +28,17 @@ def test_registry_keys_and_implemented() -> None:
         "factory_droid",
         "claude_agent",
     }
-    assert PLANNED_CANDIDATE_PROVIDERS == {"claude_code", "opencode_cli"}
+    assert PLANNED_CANDIDATE_PROVIDERS == {"claude_code"}
     oc = get_harness_capability("opencode_cli")
     assert oc is not None
     assert oc.implemented is False
-    assert oc.registry_status == "planned_candidate"
+    assert oc.registry_status == "scaffolded"
+    assert oc.integration_modes == {
+        "serve": "planned_primary",
+        "acp": "planned_fast_follow",
+        "cli": "diagnostic_only",
+    }
+    assert oc.capabilities.get("live_execution") is False
     cc = get_harness_capability("claude_code")
     assert cc is not None
     assert cc.implemented is False
@@ -45,6 +51,9 @@ def test_registry_keys_and_implemented() -> None:
     for p in ControlPlaneProvider:
         row = get_harness_capability(p.value)
         assert row is not None
+        if row.registry_status == "scaffolded":
+            assert row.implemented is False
+            continue
         assert row.implemented is True
         assert row.audit_sink is not None
 
@@ -72,6 +81,12 @@ def test_planned_candidates_are_not_launchable() -> None:
         assert is_provider_launchable(key) is False, key
     assert is_provider_launchable("nope_harness") is False
     assert is_provider_launchable("") is False
+
+
+def test_scaffolded_providers_are_not_launchable() -> None:
+    """Scaffolded providers (e.g. opencode_cli) are wired into shared tables but
+    not yet executable, so is_provider_launchable() must still return False."""
+    assert is_provider_launchable("opencode_cli") is False
 
 
 def test_implemented_providers_are_launchable() -> None:

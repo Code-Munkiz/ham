@@ -4,10 +4,11 @@ Read-only harness capability registry (vocabulary only).
 This module mirrors ``docs/HARNESS_PROVIDER_CONTRACT.md`` — no dispatch, no provider
 runtime imports, and no Claude Code / OpenCode (or other) launch implementation.
 
-The ``claude_code`` and ``opencode_cli`` rows stay ``planned_candidate`` until a
-provider adapter PR lands. ``opencode_cli`` further depends on real-host verification
-(``docs/OPENCODE_VERIFICATION.md``) and a go/conditional-go decision; do not treat
-either as implemented in HAM before that.
+The ``claude_code`` row stays ``planned_candidate`` until a provider adapter PR
+lands. ``opencode_cli`` is ``scaffolded``: the readiness adapter, disabled launch
+shim, and conductor wiring exist, but live execution does not. See
+``docs/OPENCODE_PROVIDER.md`` for the Mission 1/2/3 plan and
+``docs/OPENCODE_VERIFICATION.md`` if/when it is added.
 
 Planned / candidate rows use ``registry_status=planned_candidate`` and ``implemented=False``;
 ``ControlPlaneRun`` / ``ControlPlaneProvider`` may not include such providers until wired.
@@ -20,7 +21,7 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Final, Literal, Mapping, TypeAlias
 
-RegistryStatus: TypeAlias = Literal["implemented", "planned_candidate"]
+RegistryStatus: TypeAlias = Literal["implemented", "planned_candidate", "scaffolded"]
 HarnessFamily: TypeAlias = Literal[
     "remote_http_agent",
     "local_subprocess",
@@ -55,6 +56,11 @@ class HarnessCapabilityRow:
     base_revision_source: str
     status_mapping: str
     topology_note: str
+    # Optional forward-compat fields. Default-empty mappings keep existing rows
+    # constructible without per-row updates; new rows (e.g. opencode_cli) populate
+    # these to advertise capability plans and per-integration-mode posture.
+    capabilities: Mapping[str, object] = MappingProxyType({})
+    integration_modes: Mapping[str, str] = MappingProxyType({})
 
 
 def _rows() -> dict[str, HarnessCapabilityRow]:
@@ -153,27 +159,48 @@ def _rows() -> dict[str, HarnessCapabilityRow]:
         ),
         "opencode_cli": HarnessCapabilityRow(
             provider="opencode_cli",
-            display_name="OpenCode CLI (planned)",
+            display_name="OpenCode CLI (scaffolded)",
             harness_family="local_cli_planned",
-            registry_status="planned_candidate",
+            # Mission 1: readiness adapter + disabled launch shim + conductor wiring
+            # exist, but no live execution path is wired. Promote to ``implemented``
+            # only after Mission 2 (serve adapter, per-run XDG isolation, SSE
+            # permission interception, HAM-enforced deletion guard) lands.
+            registry_status="scaffolded",
             implemented=False,
             requires_local_root=True,
             requires_remote_repo=False,
-            # Intended v1 per architecture planning — not available in HAM until implemented;
-            # operator preview / launch flags reflect the v1 intent only and stay gated by
-            # ``implemented=False`` until a real adapter lands.
-            supports_operator_preview=True,
-            supports_operator_launch=True,
+            supports_operator_preview=False,
+            supports_operator_launch=False,
             supports_status_poll=False,
             supports_follow_up=False,
             returns_stable_external_id=False,
             requires_provider_side_auth=True,
             audit_sink=None,
-            digest_family="TBD (not wired)",
-            base_revision_source="TBD (not wired)",
-            status_mapping="TBD exit- or event-based; not map_cursor_raw_status",
-            topology_note="Planned: bounded subprocess (e.g. opencode run). No TUI/serve orchestration. "
-            "Not in ControlPlaneProvider enum; no HAM runtime yet.",
+            digest_family="TBD (Mission 2)",
+            base_revision_source="TBD (Mission 2)",
+            status_mapping="TBD event-based via opencode serve SSE; not map_cursor_raw_status",
+            topology_note=(
+                "Scaffolded: Mission 2 targets ``opencode serve`` (HTTP/OpenAPI) with per-run "
+                "XDG_DATA_HOME isolation, SSE permission interception, and HAM-enforced "
+                "deletion guard at the snapshot-promotion boundary. ACP NDJSON adapter is "
+                "fast-follow; plain CLI/TUI is diagnostic only."
+            ),
+            capabilities=MappingProxyType(
+                {
+                    "managed_workspace": "planned",
+                    "github_pr": "later",
+                    "custom_builder_profiles": "planned",
+                    "local_or_byom_models": "planned",
+                    "live_execution": False,
+                }
+            ),
+            integration_modes=MappingProxyType(
+                {
+                    "serve": "planned_primary",
+                    "acp": "planned_fast_follow",
+                    "cli": "diagnostic_only",
+                }
+            ),
         ),
     }
 

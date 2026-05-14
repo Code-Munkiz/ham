@@ -22,6 +22,7 @@ ProviderKind = Literal[
     "cursor_cloud",
     "claude_code",
     "claude_agent",
+    "opencode_cli",
 ]
 
 TaskKind = Literal[

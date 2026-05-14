@@ -62,6 +62,11 @@ from src.ham.worker_adapters.claude_agent_adapter import (
     run_claude_agent_sdk_smoke,
 )
 from src.ham.worker_adapters.cursor_adapter import check_cursor_readiness
+from src.ham.worker_adapters.opencode_adapter import (
+    OpenCodeStatus,
+    check_opencode_readiness,
+    reset_opencode_readiness_cache,
+)
 from src.llm_client import normalized_openrouter_api_key, openrouter_api_key_is_plausible
 from src.persistence.connected_tool_credentials import (
     ConnectedCredentialSaveFailed,
@@ -483,6 +488,52 @@ def _claude_agent_status_and_meta(actor: HamActor | None) -> tuple[ToolStatus, O
     )
 
 
+def _opencode_status_and_meta(
+    actor: HamActor | None,
+) -> tuple[ToolStatus, Optional[str], dict[str, bool]]:
+    """Map opencode_adapter readiness onto a Connected Tools entry.
+
+    Returns ``(ToolStatus, setup_hint, integration_modes)``. ``integration_modes``
+    is the forward-compat sub-dict from the adapter; the registry consumer
+    is free to render it or ignore it.
+    """
+    try:
+        readiness = check_opencode_readiness(actor)
+    except Exception:
+        return (
+            ToolStatus.error,
+            "Something went wrong while checking OpenCode.",
+            {"serve": False, "acp": False, "cli": False},
+        )
+
+    if readiness.status == OpenCodeStatus.DISABLED:
+        return (
+            ToolStatus.off,
+            "OpenCode is disabled on this host. Contact your workspace operator.",
+            dict(readiness.integration_modes),
+        )
+    if readiness.status == OpenCodeStatus.CLI_MISSING:
+        return (
+            ToolStatus.not_found,
+            "Install the OpenCode CLI on this host, then scan again.",
+            dict(readiness.integration_modes),
+        )
+    if readiness.status == OpenCodeStatus.PROVIDER_AUTH_MISSING:
+        return (
+            ToolStatus.needs_sign_in,
+            "Connect a model provider (OpenRouter / Anthropic / OpenAI / Groq) to use OpenCode.",
+            dict(readiness.integration_modes),
+        )
+    # CONFIGURED — but Mission 1 has no live executor yet. Surface as a
+    # not_found state with a Mission 2 hint so we never look "ready" from
+    # the dashboard while no runner exists.
+    return (
+        ToolStatus.not_found,
+        "OpenCode is detected but live execution is not yet wired (Mission 2).",
+        dict(readiness.integration_modes),
+    )
+
+
 def _comfyui_status(cloud: bool) -> ToolStatus:
     try:
         from src.ham.comfyui_provider_adapter import (  # noqa: PLC0415
@@ -527,6 +578,7 @@ def _build_tool_registry(actor: HamActor | None = None) -> list[ToolEntry]:
     claude_agent_status, claude_agent_hint, claude_agent_version = _claude_agent_status_and_meta(
         actor,
     )
+    opencode_status, opencode_hint, _opencode_modes = _opencode_status_and_meta(actor)
     oai_stt_status = _openai_transcription_tool_status(actor)
     cursor_is_operator = actor_is_workspace_operator(actor)
     cursor_safe_actions = (
@@ -616,6 +668,23 @@ def _build_tool_registry(actor: HamActor | None = None) -> list[ToolEntry]:
             credential_preview=get_connected_tool_masked_preview(actor, "claude_agent_sdk"),
             last_checked_at=now,
             safe_actions=["check_status", "connect", "disconnect"],
+        ),
+        ToolEntry(
+            id="opencode_cli",
+            label="OpenCode",
+            # Mission 1 scaffold: presence-only readiness, no live execution.
+            # Live exec lands in Mission 2 via opencode serve; see
+            # docs/OPENCODE_PROVIDER.md.
+            category=ToolCategory.coding,
+            status=opencode_status,
+            connection=_connection_for_status(opencode_status),
+            enabled=_tool_enabled_for_status(opencode_status),
+            source=ToolSource.this_computer if not cloud else ToolSource.unknown,
+            capabilities=["plan", "edit_code", "run_tests"],
+            setup_hint=opencode_hint,
+            connect_kind=ConnectKind.local_scan,
+            last_checked_at=now,
+            safe_actions=["check_status"],
         ),
         ToolEntry(
             id="openai_transcription",
@@ -827,6 +896,7 @@ def workspace_tools_scan(
     _actor: object = Depends(get_ham_clerk_actor),
 ) -> ToolDiscoveryResponse:
     reset_claude_agent_readiness_cache()
+    reset_opencode_readiness_cache()
     return workspace_tools(_actor)  # type: ignore[arg-type]
 
 
