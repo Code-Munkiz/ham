@@ -434,3 +434,119 @@ Mission 3 lifts OpenCode into the HAM agent-builder UX (custom builder
 profiles backed by OpenCode agent definitions). The runner package is
 shaped so a future caller can pass a custom permission policy and a
 custom config blob without touching the gated build route surface.
+
+## 15. Runtime prerequisites (Mission 2.x)
+
+Mission 2.x installs the OpenCode binary in the ham-api Cloud Run image
+so the Mission 2 runner has a real `opencode` on `PATH`. The image
+change is dormant at runtime: all four env gates in the matrix below
+remain unset, so the lane stays disabled until an operator explicitly
+authorizes a deploy.
+
+### Pinned version
+
+- Tag: [`v1.14.49`](https://github.com/anomalyco/opencode/releases/tag/v1.14.49) (2026-05-13).
+- Single source of truth: `OPENCODE_PINNED_VERSION` in
+  `src/ham/opencode_runner/version_pin.py`. Bump the Python constant
+  and the Dockerfile `ARG OPENCODE_VERSION` together;
+  `tests/test_opencode_version_pin.py` fails CI fast on drift.
+
+### Install method
+
+- Direct GitHub release tarball
+  (`opencode-linux-x64.tar.gz`, glibc x86_64) downloaded inside the
+  Dockerfile.
+- SHA-256 verified with `sha256sum -c` before extraction
+  (`OPENCODE_PINNED_LINUX_X64_SHA256` mirrored from the Python pin).
+- A build-time `opencode --version` gate fails the image build if the
+  installed binary's version string does not contain the pinned triple
+  (permissive regex tolerant of `1.14.49`, `v1.14.49`, or
+  `opencode 1.14.49` output formats).
+- No npm / Bun / Homebrew toolchain on the image; the Bun-compiled
+  binary is self-contained.
+
+### Install location
+
+`/usr/local/bin/opencode` — matches `shutil.which("opencode")` in
+`src/ham/worker_adapters/opencode_adapter.py` and the default `$PATH`
+for the Cloud Run runtime user.
+
+### Deterministic ENV set by the image
+
+| Env | Value | Why |
+|---|---|---|
+| `OPENCODE_DISABLE_AUTOUPDATE` | `1` | Keep the pinned binary pinned; no silent in-place upgrades. |
+| `OPENCODE_DISABLE_MODELS_FETCH` | `1` | Skip the models.dev catalog fetch on startup; mission runs supply provider config explicitly. |
+| `OPENCODE_DISABLE_CLAUDE_CODE` | `1` | Don't auto-detect the bundled Claude Code CLI; HAM owns the Claude Agent lane separately. |
+
+These names are documented assumptions from upstream research; the
+first authorized smoke must verify they actually disable the behaviors
+named, and if upstream renames any of them the Dockerfile + this doc
+must be updated together.
+
+### Why `opencode serve` is still the primary integration
+
+The image change only puts the binary on `PATH`; live execution still
+goes through the `opencode serve` runner described in §14 of this
+document. There is no separate "OpenCode sidecar" container, and the
+adapter never invokes `opencode run` or the TUI.
+
+### Runtime prerequisites for future deploy
+
+- **`tini` / `dumb-init` reaper**: not wired in this commit. The
+  Dockerfile's `ENTRYPOINT` is unchanged. `opencode serve` spawns
+  bash/MCP children, so a reaper as PID 1 is required before any live
+  Cloud Run revision is exposed to real traffic. Tracked as a separate
+  authorized mission.
+- **Cloud Run env**: a future revision must set
+  `HAM_OPENCODE_ENABLED=1`, `HAM_OPENCODE_EXECUTION_ENABLED=1`, and
+  `HAM_OPENCODE_EXEC_TOKEN=<secret>` (issued via Secret Manager). All
+  three remain unset on the live revision today.
+- **BYOK / backend provider keys**: Connected Tools BYOK records or
+  HAM-managed provider keys (e.g. `OPENROUTER_API_KEY`) must be
+  present for the runner to inject them via `PUT /auth/:id`. The image
+  itself ships no keys.
+- **Outbound network**: model-provider egress is already in place for
+  the Claude Agent lane; OpenCode reuses the same posture.
+
+### Env gates still required before execution
+
+| Env | Required for | Default |
+|---|---|---|
+| `HAM_OPENCODE_ENABLED` | provider visible in readiness / conductor | unset |
+| `HAM_OPENCODE_EXECUTION_ENABLED` | live execution (Mission 2) | unset |
+| `HAM_OPENCODE_EXEC_TOKEN` | `Authorization: Bearer …` on launch route | unset |
+| `HAM_OPENCODE_ALLOW_DELETIONS` | bypass Mission 3.1 deletion guard | unset |
+
+### First-smoke checklist
+
+1. Deploy a new Cloud Run revision built from this Dockerfile; verify
+   `/api/status` returns 200.
+2. Confirm `POST /api/opencode/build/preview` returns 503 with
+   `detail.reason="opencode:execution_disabled"` while
+   `HAM_OPENCODE_EXECUTION_ENABLED` is unset.
+3. Operator authorizes the three gate env vars
+   (`HAM_OPENCODE_ENABLED`, `HAM_OPENCODE_EXECUTION_ENABLED`,
+   `HAM_OPENCODE_EXEC_TOKEN`) on the revision; redeploy.
+4. Re-issue preview; confirm a digest-bearing response and no host-path
+   leakage.
+5. Issue a launch against a sandbox managed-workspace project.
+6. Confirm a `ControlPlaneRun` row with
+   `status_reason="opencode:snapshot_emitted"` (or
+   `opencode:nothing_to_change`) and a clean Mission 3.1 deletion-guard
+   record.
+7. Capture and compare the first-run SSE event payloads against the
+   Pydantic models in `event_consumer.py`; pin any drift in a follow-up.
+
+### Risks not yet retired
+
+- The `opencode --version` output format is assumed to contain the
+  pinned semver triple; the permissive regex hedges against minor
+  format changes but a major format change will fail the build by
+  design.
+- `tini` / reaper still not wired; long-running revisions may leak
+  zombie children spawned by OpenCode tools until that lands.
+- SSE event JSON schemas remain integration-time risk (Mission 2 doc,
+  unchanged here).
+- `OPENCODE_DISABLE_*` env names are documented assumptions; the first
+  smoke must verify upstream still honors each name and behavior.

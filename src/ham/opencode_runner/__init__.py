@@ -47,6 +47,7 @@ from .server_process import (
     shutdown_serve,
     spawn_opencode_serve,
 )
+from .version_pin import OPENCODE_PINNED_LINUX_X64_SHA256, OPENCODE_PINNED_VERSION
 from .workspace_isolation import IsolatedServeEnv, build_isolated_env
 
 __all__ = [
@@ -58,6 +59,8 @@ __all__ = [
     "FileChange",
     "HttpClientFactory",
     "IsolatedServeEnv",
+    "OPENCODE_PINNED_LINUX_X64_SHA256",
+    "OPENCODE_PINNED_VERSION",
     "OpenCodeRunResult",
     "OpenCodeRunStatus",
     "OpenCodeServeClient",

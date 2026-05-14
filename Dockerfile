@@ -27,6 +27,25 @@ RUN apt-get update \
 RUN npm install -g @anthropic-ai/claude-code \
     && command -v claude
 
+# Pinned OpenCode runtime (Mission 2.x): download verified tarball from
+# github.com/anomalyco/opencode, install the Bun-compiled binary at
+# /usr/local/bin/opencode, and gate the build on `opencode --version`.
+ARG OPENCODE_VERSION=1.14.49
+ARG OPENCODE_LINUX_X64_SHA256=0b373d64650073df36616af189c18cecaa3d5cd19ae2121300cafed1efa54b11
+RUN set -eux; \
+    cd /tmp; \
+    curl -fsSL -o opencode.tar.gz \
+        "https://github.com/anomalyco/opencode/releases/download/v${OPENCODE_VERSION}/opencode-linux-x64.tar.gz"; \
+    echo "${OPENCODE_LINUX_X64_SHA256}  opencode.tar.gz" | sha256sum -c -; \
+    tar -xzf opencode.tar.gz; \
+    install -m 0755 opencode /usr/local/bin/opencode; \
+    rm -rf /tmp/opencode /tmp/opencode.tar.gz; \
+    /usr/local/bin/opencode --version | grep -Eq "(^|[[:space:]v])${OPENCODE_VERSION}([[:space:]]|$)"; \
+    command -v opencode
+ENV OPENCODE_DISABLE_AUTOUPDATE=1 \
+    OPENCODE_DISABLE_MODELS_FETCH=1 \
+    OPENCODE_DISABLE_CLAUDE_CODE=1
+
 COPY requirements.txt .
 # Browser runtime: pip installs `playwright` but browsers are a separate download.
 # --with-deps pulls Debian packages Chromium needs in slim images.
