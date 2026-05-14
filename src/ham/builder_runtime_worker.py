@@ -26,10 +26,14 @@ from src.ham.builder_sandbox_provider import (
     load_gcp_gke_runtime_config,
     runtime_preview_host,
 )
+from src.ham.gcp_preview_runtime_client import (
+    build_gke_runtime_client,
+)
 from src.ham.gcp_preview_source_bundle import (
     build_source_bundle_uploader,
     package_source_files_to_zip,
 )
+from src.ham.gcp_preview_worker_manifest import build_gke_preview_pod_manifest
 from src.persistence.builder_runtime_job_store import CloudRuntimeJob
 from src.persistence.builder_source_store import get_builder_source_store
 from src.persistence.builder_runtime_store import PreviewEndpoint, RuntimeSession, get_builder_runtime_store
@@ -791,6 +795,93 @@ def execute_cloud_runtime_job(job: CloudRuntimeJob) -> CloudRuntimeExecutionResu
             job.completed_at = _utc_now_iso()
             job.updated_at = job.completed_at
             return CloudRuntimeExecutionResult(job=job, runtime_session=runtime, usage_event=None)
+        gke_client = build_gke_runtime_client()
+        gke_resource = None
+        pod_status = None
+        pod_logs_summary = None
+        try:
+            lifecycle_stage = "render_manifest"
+            manifest = build_gke_preview_pod_manifest(
+                workspace_id=job.workspace_id,
+                project_id=job.project_id,
+                runtime_session_id=runtime.id,
+                namespace=f"{str(os.environ.get('HAM_BUILDER_GKE_NAMESPACE_PREFIX') or 'ham-builder-preview').strip()}-spike",
+                bundle_gs_uri=str(source_handoff.get("artifact_uri") or ""),
+                runner_image=str(os.environ.get("HAM_BUILDER_PREVIEW_RUNNER_IMAGE") or ""),
+                preview_port=cfg.default_port,
+                ttl_seconds=cfg.ttl_seconds,
+            )
+            lifecycle_stage = "create_preview_pod"
+            gke_resource = gke_client.create_preview_pod(manifest=manifest)
+            lifecycle_stage = "wait_for_pod_ready"
+            pod_status = gke_client.poll_pod_ready(
+                pod_ref=gke_resource,
+                timeout_seconds=cfg.start_timeout_seconds,
+            )
+            lifecycle_stage = "collect_logs"
+            pod_logs_summary = gke_client.get_pod_logs_summary(pod_ref=gke_resource, max_chars=240)
+        except Exception as exc:  # pragma: no cover - defensive guard
+            err_code, err_msg = gke_client.normalize_error(error=exc)
+            runtime.status = "failed"
+            runtime.health = "unhealthy"
+            runtime.message = err_msg
+            runtime.updated_at = _utc_now_iso()
+            _set_runtime_diag(
+                job=job,
+                runtime=runtime,
+                lifecycle_stage=lifecycle_stage,
+                error_code=err_code,
+                error_message=err_msg,
+                exception_class=type(exc).__name__,
+                retry_count=0,
+                retryable=False,
+            )
+            runtime = runtime_store.upsert_runtime_session(runtime)
+            job.runtime_session_id = runtime.id
+            job.status = "failed"
+            job.phase = "failed"
+            job.error_code = err_code
+            job.error_message = err_msg
+            job.logs_summary = pod_logs_summary or "GCP GKE runtime client lifecycle failed."
+            job.completed_at = _utc_now_iso()
+            job.updated_at = job.completed_at
+            return CloudRuntimeExecutionResult(job=job, runtime_session=runtime, usage_event=None)
+        if pod_status is None or not pod_status.ready:
+            runtime.status = "failed"
+            runtime.health = "unhealthy"
+            runtime.message = (pod_status.error_message if pod_status else "Preview pod did not become ready.")
+            runtime.updated_at = _utc_now_iso()
+            _set_runtime_diag(
+                job=job,
+                runtime=runtime,
+                lifecycle_stage="wait_for_pod_ready",
+                error_code=(pod_status.error_code if pod_status else "GCP_GKE_POD_NOT_READY"),
+                error_message=(pod_status.error_message if pod_status else "Preview pod did not become ready."),
+                exception_class=None,
+                retry_count=0,
+                retryable=False,
+            )
+            runtime = runtime_store.upsert_runtime_session(runtime)
+            job.runtime_session_id = runtime.id
+            job.status = "failed"
+            job.phase = "failed"
+            job.error_code = pod_status.error_code if pod_status else "GCP_GKE_POD_NOT_READY"
+            job.error_message = pod_status.error_message if pod_status else "Preview pod did not become ready."
+            job.logs_summary = pod_logs_summary or "GCP GKE runtime pod was not ready."
+            job.completed_at = _utc_now_iso()
+            job.updated_at = job.completed_at
+            return CloudRuntimeExecutionResult(job=job, runtime_session=runtime, usage_event=None)
+        job.metadata = {
+            **(job.metadata or {}),
+            "runtime_resource": redact_provider_metadata(
+                {
+                    "namespace": gke_resource.namespace if gke_resource else None,
+                    "pod_name": gke_resource.pod_name if gke_resource else None,
+                    "pod_phase": pod_status.phase if pod_status else None,
+                    "cleanup_status": "pending",
+                }
+            ),
+        }
         provider = build_gcp_gke_runtime_provider(config=cfg)
         lifecycle_stage = "create_sandbox"
         exception_class: str | None = None
@@ -859,7 +950,7 @@ def execute_cloud_runtime_job(job: CloudRuntimeJob) -> CloudRuntimeExecutionResu
             job.phase = "failed"
             job.error_code = state.error_code or "GCP_GKE_RUNTIME_PROVIDER_ERROR"
             job.error_message = state.error_message or "GCP GKE runtime workload simulation failed safely."
-            job.logs_summary = provider.get_logs_summary(state=state) or "GCP GKE runtime simulation failed."
+            job.logs_summary = provider.get_logs_summary(state=state) or pod_logs_summary or "GCP GKE runtime simulation failed."
             job.completed_at = _utc_now_iso()
             job.updated_at = job.completed_at
             return CloudRuntimeExecutionResult(job=job, runtime_session=runtime, usage_event=None)
@@ -940,7 +1031,7 @@ def execute_cloud_runtime_job(job: CloudRuntimeJob) -> CloudRuntimeExecutionResu
         job.phase = "completed"
         job.error_code = None
         job.error_message = None
-        job.logs_summary = provider.get_logs_summary(state=state)
+        job.logs_summary = provider.get_logs_summary(state=state) or pod_logs_summary
         job.completed_at = _utc_now_iso()
         job.updated_at = job.completed_at
         usage_event = {
