@@ -219,6 +219,36 @@ def test_proxy_safe_run_app_host_accepted_and_headers_stripped(tmp_path: Path, m
     _cleanup()
 
 
+def test_proxy_accepts_provider_owned_internal_upstream_only_server_side(tmp_path: Path, monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    async def _fake_fetch(*, method: str, url: str, headers: dict[str, str]) -> httpx.Response:
+        captured["method"] = method
+        captured["url"] = url
+        captured["headers"] = headers
+        return httpx.Response(200, content=b"ok", headers={"content-type": "text/plain"})
+
+    monkeypatch.setattr("src.api.builder_sources._proxy_upstream_fetch", _fake_fetch)
+    client, ws_id, project_id, runtime_store = _seed_context(tmp_path)
+    runtime = _seed_cloud_runtime(runtime_store, ws_id=ws_id, project_id=project_id)
+    runtime_store.upsert_preview_endpoint(
+        PreviewEndpoint(
+            workspace_id=ws_id,
+            project_id=project_id,
+            runtime_session_id=runtime.id,
+            access_mode="proxy",
+            status="ready",
+            url="http://10.10.20.20:3000/",
+            metadata={"provider": "gcp_gke_sandbox", "internal_upstream": True},
+        )
+    )
+    res = client.get(f"/api/workspaces/{ws_id}/projects/{project_id}/builder/preview-proxy/")
+    assert res.status_code == 200, res.text
+    assert captured["method"] == "GET"
+    assert str(captured["url"]).startswith("http://10.10.20.20:3000/")
+    _cleanup()
+
+
 def test_proxy_timeout_maps_to_safe_error(tmp_path: Path, monkeypatch) -> None:
     async def _timeout_fetch(*, method: str, url: str, headers: dict[str, str]) -> httpx.Response:
         _ = (method, url, headers)
@@ -312,4 +342,26 @@ def test_proxy_does_not_execute_processes(tmp_path: Path, monkeypatch) -> None:
     )
     res = client.get(f"/api/workspaces/{ws_id}/projects/{project_id}/builder/preview-proxy/")
     assert res.status_code == 200
+    _cleanup()
+
+
+def test_proxy_rejects_internal_upstream_with_query_tokens_even_when_provider_owned(
+    tmp_path: Path,
+) -> None:
+    client, ws_id, project_id, runtime_store = _seed_context(tmp_path)
+    runtime = _seed_cloud_runtime(runtime_store, ws_id=ws_id, project_id=project_id)
+    runtime_store.upsert_preview_endpoint(
+        PreviewEndpoint(
+            workspace_id=ws_id,
+            project_id=project_id,
+            runtime_session_id=runtime.id,
+            access_mode="proxy",
+            status="ready",
+            url="http://10.10.20.20:3000/?token=secret",
+            metadata={"provider": "gcp_gke_sandbox", "internal_upstream": True},
+        )
+    )
+    res = client.get(f"/api/workspaces/{ws_id}/projects/{project_id}/builder/preview-proxy/")
+    assert res.status_code == 422
+    assert res.json()["detail"]["error"]["code"] == "PREVIEW_PROXY_UNSAFE_UPSTREAM"
     _cleanup()

@@ -159,11 +159,11 @@ class _RecordingRuntimeClient:
 
     def get_pod_status(self, *, pod_ref: PreviewPodRef) -> PreviewPodStatus:
         _ = pod_ref
-        return PreviewPodStatus(phase="Running", ready=True)
+        return PreviewPodStatus(phase="Running", ready=True, pod_ip="10.10.20.20")
 
     def poll_pod_ready(self, *, pod_ref: PreviewPodRef, timeout_seconds: int) -> PreviewPodStatus:
         _ = pod_ref, timeout_seconds
-        return PreviewPodStatus(phase="Running", ready=True)
+        return PreviewPodStatus(phase="Running", ready=True, pod_ip="10.10.20.20")
 
     def get_pod_logs_summary(self, *, pod_ref: PreviewPodRef, max_chars: int = 240) -> str | None:
         _ = pod_ref, max_chars
@@ -378,13 +378,14 @@ def test_cloud_runtime_request_route_uses_live_gke_provider_when_gates_true(tmp_
     runtime = body["runtime"]
     assert runtime["mode"] == "cloud"
     assert runtime["status"] == "running"
+    assert runtime["health"] == "healthy"
     assert "Provisioning is not implemented yet" not in str(runtime.get("message") or "")
     assert _RecordingRuntimeClient.created >= 1
     jobs = client.get(f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime/jobs")
     assert jobs.status_code == 200, jobs.text
     latest = jobs.json()["jobs"][0]
     assert latest["provider"] == "gcp_gke_sandbox"
-    assert latest["status"] == "running"
+    assert latest["status"] == "succeeded"
     assert latest["metadata"]["source_bundle"]["uri"].startswith("gs://")
     assert body["cloud_runtime"]["status"] == "provider_ready"
     _cleanup()

@@ -259,7 +259,25 @@ def _safe_trusted_proxy_host(raw: Any) -> str | None:
     return text[:200]
 
 
-def _sanitize_cloud_proxy_upstream_url(*, raw_url: str | None, trusted_host: str | None = None) -> str | None:
+def _allows_provider_owned_internal_upstream(*, runtime: Any | None, endpoint: PreviewEndpoint | None) -> bool:
+    if runtime is None or endpoint is None:
+        return False
+    if str(runtime.mode or "").strip().lower() != "cloud":
+        return False
+    if str(endpoint.runtime_session_id or "").strip() != str(runtime.id or "").strip():
+        return False
+    meta = endpoint.metadata or {}
+    provider = str(meta.get("provider") or "").strip().lower()
+    internal_flag = str(meta.get("internal_upstream") or "").strip().lower()
+    return provider == "gcp_gke_sandbox" and internal_flag in {"1", "true", "yes", "on"}
+
+
+def _sanitize_cloud_proxy_upstream_url(
+    *,
+    raw_url: str | None,
+    trusted_host: str | None = None,
+    allow_internal: bool = False,
+) -> str | None:
     text = str(raw_url or "").strip()
     if not text:
         return None
@@ -267,25 +285,44 @@ def _sanitize_cloud_proxy_upstream_url(*, raw_url: str | None, trusted_host: str
         parts = urlsplit(text)
     except ValueError:
         return None
-    if parts.scheme != "https":
+    scheme = str(parts.scheme or "").strip().lower()
+    if scheme not in {"https", "http"}:
+        return None
+    if scheme != "https" and not allow_internal:
         return None
     if parts.username or parts.password:
         return None
     if parts.query or parts.fragment:
         return None
     host = (parts.hostname or "").strip().lower()
-    if _is_blocked_proxy_host(host):
+    if not host:
         return None
+    if allow_internal:
+        try:
+            maybe_ip = ip_address(host)
+        except ValueError:
+            maybe_ip = None
+        is_internal = bool(
+            (maybe_ip is not None and (maybe_ip.is_private or maybe_ip.is_loopback or maybe_ip.is_link_local))
+            or host.endswith(".svc.cluster.local")
+        )
+        if not is_internal:
+            return None
+    else:
+        if _is_blocked_proxy_host(host):
+            return None
     allowed = host.endswith(_PREVIEW_PROXY_ALLOWED_HOST_SUFFIXES)
     if not allowed and trusted_host:
         allowed = host == trusted_host
+    if allow_internal:
+        allowed = True
     if not allowed:
         return None
     path = parts.path or "/"
     netloc = parts.netloc
     if ":" in host and not host.startswith("["):
         netloc = netloc.replace(host, f"[{host}]")
-    return urlunsplit(("https", netloc, path, "", ""))
+    return urlunsplit((scheme, netloc, path, "", ""))
 
 
 def _cloud_proxy_preview_url(*, workspace_id: str, project_id: str) -> str:
@@ -456,9 +493,11 @@ def _build_preview_status_payload(*, workspace_id: str, project_id: str) -> dict
     safe_preview_url: str | None = None
     if mode == "cloud":
         trusted_host = _safe_trusted_proxy_host((endpoint.metadata or {}).get("trusted_proxy_host")) if endpoint else None
+        allow_internal = _allows_provider_owned_internal_upstream(runtime=runtime, endpoint=endpoint)
         safe_upstream = _sanitize_cloud_proxy_upstream_url(
             raw_url=endpoint.url if endpoint is not None else None,
             trusted_host=trusted_host,
+            allow_internal=allow_internal,
         )
         runtime_status = str(runtime.status or "").strip().lower() if runtime is not None else ""
         endpoint_status = str(endpoint.status or "").strip().lower() if endpoint is not None else ""
@@ -1744,7 +1783,17 @@ async def _serve_builder_preview_proxy(
             },
         )
     trusted_host = _safe_trusted_proxy_host((endpoint.metadata or {}).get("trusted_proxy_host"))
-    upstream_base = _sanitize_cloud_proxy_upstream_url(raw_url=endpoint.url, trusted_host=trusted_host)
+    runtime = _runtime_session_by_id(
+        workspace_id=ctx.workspace_id,
+        project_id=project_id,
+        runtime_session_id=endpoint.runtime_session_id,
+    )
+    allow_internal = _allows_provider_owned_internal_upstream(runtime=runtime, endpoint=endpoint)
+    upstream_base = _sanitize_cloud_proxy_upstream_url(
+        raw_url=endpoint.url,
+        trusted_host=trusted_host,
+        allow_internal=allow_internal,
+    )
     if upstream_base is None:
         raise HTTPException(
             status_code=422,
@@ -1776,7 +1825,11 @@ async def _serve_builder_preview_proxy(
             location = str(upstream_response.headers.get("location") or "").strip()
             if location:
                 redirect_url = urljoin(upstream_url, location)
-                safe_redirect = _sanitize_cloud_proxy_upstream_url(raw_url=redirect_url, trusted_host=trusted_host)
+                safe_redirect = _sanitize_cloud_proxy_upstream_url(
+                    raw_url=redirect_url,
+                    trusted_host=trusted_host,
+                    allow_internal=allow_internal,
+                )
                 if safe_redirect is None:
                     raise HTTPException(
                         status_code=422,
