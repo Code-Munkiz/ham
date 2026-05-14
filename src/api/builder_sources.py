@@ -385,7 +385,7 @@ def _emit_preview_proxy_diag(payload: dict[str, Any]) -> None:
             safe[key] = value
         else:
             safe[key] = _diag_str(value, max_len=180)
-    _LOG.info("preview_proxy_auth_diag %s", json.dumps(safe, ensure_ascii=True, sort_keys=True))
+    _LOG.warning("preview_proxy_auth_diag %s", json.dumps(safe, ensure_ascii=True, sort_keys=True))
 
 
 def _clerk_session_cookie_name() -> str:
