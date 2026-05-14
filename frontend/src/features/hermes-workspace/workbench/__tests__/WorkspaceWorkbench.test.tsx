@@ -14,7 +14,7 @@ const {
   listBuilderCloudRuntimeJobsMock,
   getBuilderCloudRuntimeJobStatusMock,
   subscribeBuilderActivityStreamMock,
-  createBuilderCloudRuntimeJobMock,
+  requestBuilderCloudRuntimeMock,
   getBuilderWorkerCapabilitiesMock,
   getBuilderLocalRunProfileMock,
   listBuilderVisualEditRequestsMock,
@@ -35,7 +35,7 @@ const {
   listBuilderCloudRuntimeJobsMock: vi.fn(),
   getBuilderCloudRuntimeJobStatusMock: vi.fn(),
   subscribeBuilderActivityStreamMock: vi.fn(),
-  createBuilderCloudRuntimeJobMock: vi.fn(),
+  requestBuilderCloudRuntimeMock: vi.fn(),
   getBuilderWorkerCapabilitiesMock: vi.fn(),
   getBuilderLocalRunProfileMock: vi.fn(),
   listBuilderVisualEditRequestsMock: vi.fn(),
@@ -62,7 +62,7 @@ vi.mock("@/lib/ham/api", async (importOriginal) => {
       getBuilderCloudRuntimeJobStatusMock(...args),
     subscribeBuilderActivityStream: (...args: unknown[]) =>
       subscribeBuilderActivityStreamMock(...args),
-    createBuilderCloudRuntimeJob: (...args: unknown[]) => createBuilderCloudRuntimeJobMock(...args),
+    requestBuilderCloudRuntime: (...args: unknown[]) => requestBuilderCloudRuntimeMock(...args),
     getBuilderWorkerCapabilities: (...args: unknown[]) => getBuilderWorkerCapabilitiesMock(...args),
     getBuilderLocalRunProfile: (...args: unknown[]) => getBuilderLocalRunProfileMock(...args),
     listBuilderVisualEditRequests: (...args: unknown[]) =>
@@ -195,26 +195,8 @@ describe("WorkspaceWorkbench", () => {
         logs_summary: "build starting",
       },
     });
-    createBuilderCloudRuntimeJobMock.mockResolvedValue({
-      job: {
-        id: "crjb_1",
-        workspace_id: "ws_abc",
-        project_id: "proj_abc",
-        source_snapshot_id: null,
-        runtime_session_id: "rtms_cloud_1",
-        status: "succeeded",
-        phase: "completed",
-        provider: "local_mock",
-        requested_by: "user_a",
-        created_at: "2026-01-01T00:00:00Z",
-        updated_at: "2026-01-01T00:00:00Z",
-        completed_at: "2026-01-01T00:00:00Z",
-        error_code: null,
-        error_message: null,
-        logs_summary: "mock",
-        metadata: {},
-      },
-      runtime_session: { id: "rtms_cloud_1" },
+    requestBuilderCloudRuntimeMock.mockResolvedValue({
+      runtime: { id: "rtms_cloud_1" },
       cloud_runtime: {
         workspace_id: "ws_abc",
         project_id: "proj_abc",
@@ -666,7 +648,7 @@ describe("WorkspaceWorkbench", () => {
     expect(screen.queryByText(/deployed successfully/i)).toBeNull();
   });
 
-  it("Cloud runtime POC request button is disabled when provider is disabled", async () => {
+  it("Cloud runtime retry button is disabled when provider is disabled", async () => {
     getBuilderWorkerCapabilitiesMock.mockResolvedValueOnce({
       workspace_id: "ws_abc",
       project_id: "proj_abc",
@@ -749,7 +731,7 @@ describe("WorkspaceWorkbench", () => {
     expect(screen.getByTestId("hww-cloud-runtime-request-poc")).toBeDisabled();
   });
 
-  it("Cloud runtime POC request calls API and refreshes state", async () => {
+  it("Cloud runtime retry calls request endpoint with force_new", async () => {
     getBuilderPreviewStatusMock.mockResolvedValueOnce({
       project_id: "proj_abc",
       workspace_id: "ws_abc",
@@ -784,15 +766,118 @@ describe("WorkspaceWorkbench", () => {
     const btn = await screen.findByTestId("hww-cloud-runtime-request-poc");
     fireEvent.click(btn);
     await waitFor(() => {
-      expect(createBuilderCloudRuntimeJobMock).toHaveBeenCalledWith("ws_abc", "proj_abc", {
+      expect(requestBuilderCloudRuntimeMock).toHaveBeenCalledWith("ws_abc", "proj_abc", {
         source_snapshot_id: "ssnp_1",
-        metadata: { request_source: "workbench_preview_tab" },
+        force_new: true,
+        metadata: { request_source: "workbench_preview_retry" },
       });
     });
     expect(screen.getByTestId("hww-cloud-runtime-job-notice")).toHaveTextContent(
-      "No production sandbox/build execution was performed",
+      "Retry started",
     );
-    expect(screen.getByTestId("hww-cloud-runtime-latest-job")).toHaveTextContent("succeeded");
+  });
+
+  it("Cloud runtime retry remains disabled without an active source snapshot", async () => {
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    openPreviewDiagnostics();
+    const btn = await screen.findByTestId("hww-cloud-runtime-request-poc");
+    expect(btn).toBeDisabled();
+    expect(screen.getByTestId("hww-cloud-runtime-source-required-copy")).toBeInTheDocument();
+  });
+
+  it("Cloud runtime retry is disabled when preview is already healthy", async () => {
+    getBuilderPreviewStatusMock.mockResolvedValueOnce({
+      project_id: "proj_abc",
+      workspace_id: "ws_abc",
+      mode: "cloud",
+      status: "ready",
+      health: "healthy",
+      preview_url: "/api/workspaces/ws_abc/projects/proj_abc/builder/preview-proxy/",
+      message: "Cloud preview ready.",
+      updated_at: "2026-01-01T00:00:00Z",
+      source_snapshot_id: "ssnp_1",
+      runtime_session_id: "rtms_cloud_1",
+      preview_endpoint_id: "prve_cloud_1",
+      logs_hint: null,
+    });
+    getBuilderCloudRuntimeMock.mockResolvedValueOnce({
+      workspace_id: "ws_abc",
+      project_id: "proj_abc",
+      mode: "cloud",
+      status: "provider_ready",
+      message: "Cloud runtime provider is configured for experimentation.",
+      updated_at: "2026-01-01T00:00:00Z",
+      runtime_session_id: "rtms_cloud_1",
+      source_snapshot_id: "ssnp_1",
+      metadata: {},
+    });
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    openPreviewDiagnostics();
+    const btn = await screen.findByTestId("hww-cloud-runtime-request-poc");
+    expect(btn).toBeDisabled();
+    expect(screen.getByTestId("hww-cloud-runtime-retry-healthy-copy")).toBeInTheDocument();
+  });
+
+  it("Refresh cloud runtime status remains poll-only", async () => {
+    requestBuilderCloudRuntimeMock.mockClear();
+    getBuilderPreviewStatusMock.mockResolvedValueOnce({
+      project_id: "proj_abc",
+      workspace_id: "ws_abc",
+      mode: "cloud",
+      status: "building",
+      health: "unknown",
+      preview_url: null,
+      message: "Cloud runtime is provisioning.",
+      updated_at: "2026-01-01T00:00:00Z",
+      source_snapshot_id: "ssnp_1",
+      runtime_session_id: "rtms_cloud_1",
+      preview_endpoint_id: null,
+      logs_hint: null,
+    });
+    listBuilderCloudRuntimeJobsMock.mockResolvedValueOnce({
+      workspace_id: "ws_abc",
+      project_id: "proj_abc",
+      jobs: [
+        {
+          id: "crjb_1",
+          workspace_id: "ws_abc",
+          project_id: "proj_abc",
+          source_snapshot_id: "ssnp_1",
+          runtime_session_id: "rtms_cloud_1",
+          status: "running",
+          phase: "provider_accepted",
+          provider: "cloud_run_poc",
+          requested_by: "user_a",
+          created_at: "2026-01-01T00:00:00Z",
+          updated_at: "2026-01-01T00:00:00Z",
+          completed_at: null,
+          error_code: null,
+          error_message: null,
+          logs_summary: "provisioning",
+          metadata: {},
+        },
+      ],
+    });
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    openPreviewDiagnostics();
+    const refreshButton = await screen.findByTestId("hww-cloud-runtime-refresh-status");
+    fireEvent.click(refreshButton);
+    await waitFor(() => {
+      expect(getBuilderCloudRuntimeJobStatusMock).toHaveBeenCalledWith("ws_abc", "proj_abc", "crjb_1");
+    });
+    expect(requestBuilderCloudRuntimeMock).not.toHaveBeenCalled();
   });
 
   it("Preview renders compact builder worker statuses", async () => {

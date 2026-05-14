@@ -489,6 +489,7 @@ export type BuilderCloudRuntimeRequestState =
 
 export type BuilderCloudRuntimeRequestPayload = {
   source_snapshot_id?: string | null;
+  force_new?: boolean;
   status?: BuilderCloudRuntimeRequestState | null;
   metadata?: Record<string, unknown>;
 };
@@ -583,6 +584,7 @@ export type CloudRuntimeLifecycleStatus = {
 
 export type CreateCloudRuntimeJobPayload = {
   source_snapshot_id?: string | null;
+  force_new?: boolean;
   metadata?: Record<string, unknown>;
 };
 
