@@ -17,6 +17,7 @@ from src.ham.builder_sandbox_provider import (
     SandboxSourceFile,
     set_sandbox_runtime_provider_factory_for_tests,
 )
+from src.ham.gcp_preview_source_bundle import set_source_bundle_uploader_factory_for_tests
 from src.ham.workspace_models import WorkspaceMember, WorkspaceRecord
 from src.persistence.builder_runtime_job_store import BuilderRuntimeJobStore, set_builder_runtime_job_store_for_tests
 from src.persistence.builder_runtime_store import BuilderRuntimeStore, set_builder_runtime_store_for_tests
@@ -166,6 +167,7 @@ def _cleanup() -> None:
     set_builder_runtime_job_store_for_tests(None)
     set_builder_usage_event_store_for_tests(None)
     set_sandbox_runtime_provider_factory_for_tests(None)
+    set_source_bundle_uploader_factory_for_tests(None)
 
 
 class _InjectedLiveProvider:
@@ -269,6 +271,22 @@ class _InjectedCreateAuthFailureProvider(_InjectedExplodingProvider):
         raise RuntimeError("api key rejected by provider")
 
 
+class _RecordingBundleUploader:
+    calls: list[tuple[str, str, int]] = []
+
+    def upload_bundle(self, *, bucket: str, object_name: str, payload: bytes):
+        self.calls.append((bucket, object_name, len(payload)))
+        from src.ham.gcp_preview_source_bundle import SourceBundleUploadOutcome
+
+        return SourceBundleUploadOutcome(
+            uri=f"gs://{bucket}/{object_name}",
+            uploaded=True,
+            sha256="b" * 64,
+            file_count=0,
+            byte_size=len(payload),
+        )
+
+
 def test_e2b_dependency_removed_from_requirements() -> None:
     req = Path("requirements.txt").read_text(encoding="utf-8").lower()
     assert "e2b" not in req
@@ -345,6 +363,12 @@ def test_gcp_gke_fake_success_creates_proxy_ready_preview(tmp_path: Path, monkey
         ).json()
         assert body["job"]["provider"] == "gcp_gke_sandbox"
         assert body["job"]["status"] == "succeeded"
+        handoff = body["job"]["metadata"]["source_handoff"]
+        assert str(handoff["artifact_uri"]).startswith("gs://ham-builder-sources-test/")
+        assert str(handoff["source_ref"]).startswith("bundle:")
+        source_bundle = body["job"]["metadata"]["source_bundle"]
+        assert source_bundle["uploaded"] is False
+        assert source_bundle["file_count"] >= 1
         sess = body["runtime_session"]
         assert sess["preview_endpoint_id"]
         preview = client.get(
@@ -355,6 +379,27 @@ def test_gcp_gke_fake_success_creates_proxy_ready_preview(tmp_path: Path, monkey
         assert url
         assert url.endswith("/builder/preview-proxy/")
         assert "ham-gke-preview" not in url.lower()
+    finally:
+        _cleanup()
+
+
+def test_gcp_gke_uses_injected_source_bundle_uploader(tmp_path: Path, monkeypatch) -> None:
+    _apply_gcp_gke_scaffold(monkeypatch, dry_run=False, fake_mode="success")
+    _RecordingBundleUploader.calls = []
+    set_source_bundle_uploader_factory_for_tests(lambda: _RecordingBundleUploader())
+    client, ws_id, project_id, snap_id = _seed_context(tmp_path)
+    try:
+        body = client.post(
+            f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime/jobs",
+            json={"source_snapshot_id": snap_id},
+        ).json()
+        source_bundle = body["job"]["metadata"]["source_bundle"]
+        assert source_bundle["uploaded"] is True
+        assert _RecordingBundleUploader.calls
+        bucket, object_name, payload_size = _RecordingBundleUploader.calls[0]
+        assert bucket == "ham-builder-sources-test"
+        assert object_name.endswith("/preview-source.zip")
+        assert payload_size > 0
     finally:
         _cleanup()
 

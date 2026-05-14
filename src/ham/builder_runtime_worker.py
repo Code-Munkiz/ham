@@ -26,6 +26,10 @@ from src.ham.builder_sandbox_provider import (
     load_gcp_gke_runtime_config,
     runtime_preview_host,
 )
+from src.ham.gcp_preview_source_bundle import (
+    build_source_bundle_uploader,
+    package_source_files_to_zip,
+)
 from src.persistence.builder_runtime_job_store import CloudRuntimeJob
 from src.persistence.builder_source_store import get_builder_source_store
 from src.persistence.builder_runtime_store import PreviewEndpoint, RuntimeSession, get_builder_runtime_store
@@ -727,6 +731,63 @@ def execute_cloud_runtime_job(job: CloudRuntimeJob) -> CloudRuntimeExecutionResu
             job.error_code = source_files_error
             job.error_message = "GCP GKE runtime source payload is unavailable."
             job.logs_summary = "GCP GKE runtime source materialization failed before workload simulation."
+            job.completed_at = _utc_now_iso()
+            job.updated_at = job.completed_at
+            return CloudRuntimeExecutionResult(job=job, runtime_session=runtime, usage_event=None)
+        bundle_package = None
+        bundle_outcome = None
+        upload_error_code: str | None = None
+        upload_error_message: str | None = None
+        try:
+            bundle_package = package_source_files_to_zip(
+                files=source_files,
+                workspace_id=job.workspace_id,
+                project_id=job.project_id,
+                runtime_job_id=job.id,
+            )
+            uploader = build_source_bundle_uploader()
+            bucket_name = str(os.environ.get("HAM_BUILDER_PREVIEW_SOURCE_BUCKET") or "").strip()
+            if not bucket_name:
+                raise ValueError("HAM_BUILDER_PREVIEW_SOURCE_BUCKET is missing")
+            bundle_outcome = uploader.upload_bundle(
+                bucket=bucket_name,
+                object_name=bundle_package.object_name,
+                payload=bundle_package.payload,
+            )
+            source_handoff = {
+                **source_handoff,
+                "artifact_uri": bundle_outcome.uri,
+                "source_ref": f"bundle:{bundle_package.sha256[:16]}",
+            }
+            job.metadata = {
+                **(job.metadata or {}),
+                "source_bundle": redact_provider_metadata(
+                    {
+                        "uri": bundle_outcome.uri,
+                        "uploaded": bundle_outcome.uploaded,
+                        "sha256": bundle_package.sha256,
+                        "byte_size": bundle_outcome.byte_size,
+                        "file_count": bundle_package.file_count,
+                        "object_name": bundle_package.object_name,
+                    }
+                ),
+                "source_handoff": redact_provider_metadata(source_handoff),
+            }
+        except Exception as exc:  # pragma: no cover - defensive guard
+            upload_error_code = "GCP_GKE_SOURCE_BUNDLE_UPLOAD_FAILED"
+            upload_error_message = f"GCP GKE source bundle upload failed safely: {type(exc).__name__}."
+        if upload_error_code:
+            runtime.status = "failed"
+            runtime.health = "unhealthy"
+            runtime.message = upload_error_message or "GCP GKE source bundle upload failed safely."
+            runtime.updated_at = _utc_now_iso()
+            runtime = runtime_store.upsert_runtime_session(runtime)
+            job.runtime_session_id = runtime.id
+            job.status = "failed"
+            job.phase = "failed"
+            job.error_code = upload_error_code
+            job.error_message = upload_error_message
+            job.logs_summary = "GCP GKE runtime source bundle upload failed before workload simulation."
             job.completed_at = _utc_now_iso()
             job.updated_at = job.completed_at
             return CloudRuntimeExecutionResult(job=job, runtime_session=runtime, usage_event=None)
