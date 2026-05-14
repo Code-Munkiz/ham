@@ -314,11 +314,11 @@ class _RecordingRuntimeClient:
 
     def get_pod_status(self, *, pod_ref: PreviewPodRef) -> PreviewPodStatus:
         _ = pod_ref
-        return PreviewPodStatus(phase="Running", ready=True)
+        return PreviewPodStatus(phase="Running", ready=True, pod_ip="10.10.10.10")
 
     def poll_pod_ready(self, *, pod_ref: PreviewPodRef, timeout_seconds: int) -> PreviewPodStatus:
         _ = pod_ref, timeout_seconds
-        return PreviewPodStatus(phase="Running", ready=True)
+        return PreviewPodStatus(phase="Running", ready=True, pod_ip="10.10.10.10")
 
     def get_pod_logs_summary(self, *, pod_ref: PreviewPodRef, max_chars: int = 240) -> str | None:
         _ = pod_ref, max_chars
@@ -553,15 +553,16 @@ def test_gcp_gke_live_gate_with_injected_runtime_client_returns_pending_proxy(
             f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime/jobs",
             json={"source_snapshot_id": snap_id},
         ).json()
-        assert body["job"]["status"] == "running"
+        assert body["job"]["status"] == "succeeded"
         assert body["runtime_session"]["status"] == "running"
-        assert body["runtime_session"]["preview_endpoint_id"] in {None, ""}
+        assert body["runtime_session"]["health"] == "healthy"
+        assert body["runtime_session"]["preview_endpoint_id"]
         preview = client.get(
             f"/api/workspaces/{ws_id}/projects/{project_id}/builder/preview-status",
             params={"source_snapshot_id": snap_id},
         ).json()
-        assert preview["preview_url"] in {None, ""}
-        assert preview["status"] in {"building", "waiting"}
+        assert preview["preview_url"] == f"/api/workspaces/{ws_id}/projects/{project_id}/builder/preview-proxy/"
+        assert preview["status"] == "ready"
     finally:
         _cleanup()
 

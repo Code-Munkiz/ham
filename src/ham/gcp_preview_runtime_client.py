@@ -79,6 +79,7 @@ class PreviewPodStatus:
     ready: bool
     error_code: str | None = None
     error_message: str | None = None
+    pod_ip: str | None = None
 
 
 @dataclass(frozen=True)
@@ -152,7 +153,7 @@ class FakeGkePreviewRuntimeClient:
                 error_message="Preview pod was not found.",
             )
         if pod["ready"]:
-            return PreviewPodStatus(phase="Running", ready=True)
+            return PreviewPodStatus(phase="Running", ready=True, pod_ip="10.0.0.10")
         return PreviewPodStatus(
             phase="Failed",
             ready=False,
@@ -366,6 +367,7 @@ class LiveGkePreviewRuntimeClient:
             raise
         status = payload.get("status") or {}
         phase = str(status.get("phase") or "Unknown")
+        pod_ip = str(status.get("podIP") or "").strip() or None
         conditions = status.get("conditions") or []
         ready = False
         for item in conditions:
@@ -373,7 +375,7 @@ class LiveGkePreviewRuntimeClient:
                 ready = True
                 break
         if ready:
-            return PreviewPodStatus(phase=phase or "Running", ready=True)
+            return PreviewPodStatus(phase=phase or "Running", ready=True, pod_ip=pod_ip)
         if phase in {"Failed", "Unknown"}:
             return PreviewPodStatus(
                 phase=phase,
@@ -381,7 +383,7 @@ class LiveGkePreviewRuntimeClient:
                 error_code="GCP_GKE_POD_FAILED",
                 error_message="Preview pod entered a failed phase.",
             )
-        return PreviewPodStatus(phase=phase, ready=False)
+        return PreviewPodStatus(phase=phase, ready=False, pod_ip=pod_ip)
 
     def poll_pod_ready(self, *, pod_ref: PreviewPodRef, timeout_seconds: int) -> PreviewPodStatus:
         start = time.monotonic()

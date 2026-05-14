@@ -921,10 +921,43 @@ def execute_cloud_runtime_job(job: CloudRuntimeJob) -> CloudRuntimeExecutionResu
             ),
         }
         if live_mode_requested:
+            upstream_url: str | None = None
+            if pod_status and pod_status.pod_ip:
+                upstream_url = f"http://{pod_status.pod_ip}:{cfg.default_port}/"
+            elif gke_resource is not None and service_name:
+                upstream_url = f"http://{service_name}.{gke_resource.namespace}.svc.cluster.local/"
+            preview_endpoint: PreviewEndpoint | None = None
+            if upstream_url:
+                preview_endpoint = runtime_store.get_active_preview_endpoint(
+                    workspace_id=job.workspace_id,
+                    project_id=job.project_id,
+                    runtime_session_id=runtime.id,
+                )
+                if preview_endpoint is None:
+                    preview_endpoint = PreviewEndpoint(
+                        workspace_id=job.workspace_id,
+                        project_id=job.project_id,
+                        runtime_session_id=runtime.id,
+                    )
+                preview_endpoint.access_mode = "proxy"
+                preview_endpoint.status = "ready"
+                preview_endpoint.url = upstream_url
+                preview_endpoint.last_checked_at = _utc_now_iso()
+                preview_endpoint.metadata = {
+                    **(preview_endpoint.metadata or {}),
+                    "provider": "gcp_gke_sandbox",
+                    "internal_upstream": True,
+                    "workload_runtime": cfg.provider,
+                    "trusted_proxy_host": None,
+                }
+                preview_endpoint = runtime_store.upsert_preview_endpoint(preview_endpoint)
+                runtime.preview_endpoint_id = preview_endpoint.id
             runtime.status = "running"
-            runtime.health = "unknown"
+            runtime.health = "healthy" if preview_endpoint is not None else "unknown"
             runtime.message = (
-                "GCP GKE pod is running. Preview proxy endpoint remains pending until a safe upstream link is available."
+                "GCP GKE pod is running and preview proxy endpoint is ready."
+                if preview_endpoint is not None
+                else "GCP GKE pod is running. Preview proxy endpoint remains pending until a safe upstream link is available."
             )
             runtime.updated_at = _utc_now_iso()
             runtime.metadata = {
@@ -954,13 +987,20 @@ def execute_cloud_runtime_job(job: CloudRuntimeJob) -> CloudRuntimeExecutionResu
             )
             runtime = runtime_store.upsert_runtime_session(runtime)
             job.runtime_session_id = runtime.id
-            job.status = "running"
-            job.phase = "preview_pending"
+            job.status = "succeeded" if preview_endpoint is not None else "running"
+            job.phase = "completed" if preview_endpoint is not None else "preview_pending"
             job.error_code = None
             job.error_message = None
-            job.logs_summary = pod_logs_summary or "GCP GKE runtime pod started; preview proxy not yet linked."
-            job.completed_at = None
-            job.updated_at = _utc_now_iso()
+            job.logs_summary = (
+                pod_logs_summary
+                or (
+                    "GCP GKE runtime pod started and preview proxy endpoint linked."
+                    if preview_endpoint is not None
+                    else "GCP GKE runtime pod started; preview proxy not yet linked."
+                )
+            )
+            job.completed_at = _utc_now_iso() if preview_endpoint is not None else None
+            job.updated_at = job.completed_at or _utc_now_iso()
             usage_event = {
                 "category": "worker_job",
                 "quantity": 1,
@@ -972,7 +1012,11 @@ def execute_cloud_runtime_job(job: CloudRuntimeJob) -> CloudRuntimeExecutionResu
                     "runtime_session_id": runtime.id,
                 },
                 "metadata": {
-                    "event_name": "gcp_gke_runtime_pod_ready_pending_proxy",
+                    "event_name": (
+                        "gcp_gke_runtime_preview_proxy_ready"
+                        if preview_endpoint is not None
+                        else "gcp_gke_runtime_pod_ready_pending_proxy"
+                    ),
                     "job_id": job.id,
                     "workload_runtime": cfg.provider,
                     "dry_run": False,
